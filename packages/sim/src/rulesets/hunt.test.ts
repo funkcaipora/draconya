@@ -15,6 +15,7 @@ import { DEFAULT_DIFFICULTY_NAME, huntListings } from '../hunt/catalogue.js';
 import { FORWARD } from '../area.js';
 import { MonsterRuntime, monsterSubject } from '../monster/monster.js';
 import { distance } from '../monster/step.js';
+import type { GridPoint } from '../monster/step.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
 import { MAX_PENDING_DOMAIN_EVENTS, SNAPSHOT_FORMAT_VERSION, Session } from '../session.js';
@@ -386,6 +387,17 @@ function start(
 function run(session: Session, durationMs: number, stepMs: number): void {
   const steps = Math.floor(durationMs / stepMs);
   for (let i = 0; i < steps && session.ended === null; i++) session.advanceBy(stepMs);
+}
+
+/**
+ * "Planta" o monstro num tile: a posição E o `home` (#655). Um teste que reposiciona um monstro
+ * inerte (`aggroRadius: 0`) só mudando `position` deixa o `home` no spawn de verdade, e o monstro
+ * — sem ninguém à vista e fora do spawn — volta para lá andando (`Monster::updateIdleStatus`).
+ * Plantar diz ao motor que ESTE é o ponto de spawn dele.
+ */
+function plant(monster: MonsterRuntime, at: { x: number; y: number; z?: number }): void {
+  monster.position = at;
+  Object.assign(monster, { home: at });
 }
 
 describe('entrada', () => {
@@ -9575,6 +9587,10 @@ describe('IA de monstro do TFS: chance, defesa e troca de alvo (#518)', () => {
       if (monster === undefined) throw new Error('sem monstro nesta cena');
       // Fixa o ponto de partida: o que se mede é a TROCA por tempo, não a aquisição inicial.
       monster.targetId = a.id;
+      // O passo aleatório (#655) também sorteia (`shuffledCardinals`, três `integer` por passo), e
+      // este monstro — com alvo mas sem passo até ele, preso na salinha — o daria a cada segundo.
+      // Um último passo "no futuro" o impede: o assunto aqui é o sorteio do REROLL, isolado.
+      monster.lastMoveAtMs = Number.MAX_SAFE_INTEGER;
       rng.integerCalls = 0;
 
       // Cinco vencimentos de `targetChange` (5 × 1 000 ms), `chance: 1` — sempre reroll.
@@ -10458,12 +10474,24 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
     // Empurra o HP para a faixa de fuga (runOnHealth 300) sem depender de sorteio de dano.
     monster.receiveDamage(alwaysFireball.health - 250);
     session.drainEvents();
-    const positionBefore = { ...monster.position };
 
     const events: DomainEvent[] = [];
+    const hero = session.participants[0];
+    if (hero === undefined) throw new Error('sem herói nesta cena');
+    let firstFlee: { heroAt: GridPoint; from: GridPoint; to: GridPoint } | null = null;
     for (let t = 0; t < 6_000 && session.ended === null; t += 100) {
+      const heroAt = { x: hero.position.x, y: hero.position.y };
       session.advanceBy(100);
-      events.push(...session.drainEvents());
+      const drained = session.drainEvents();
+      events.push(...drained);
+      if (firstFlee === null) {
+        for (const e of drained) {
+          if (e.kind === 'creature-moved' && e.creatureId === monster.subject) {
+            firstFlee = { heroAt, from: e.from, to: e.to };
+            break;
+          }
+        }
+      }
     }
     // Nenhum corpo a corpo enquanto foge.
     expect(events.some((e) => e.kind === 'creature-hit' && e.source === 'melee'
@@ -10472,10 +10500,14 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
     expect(events.some(
       (e) => e.kind === 'monster-ability-cast' && e.abilityId === 'fireball',
     )).toBe(true);
-    // E ele se afastou do herói (fleeStep), em vez de ficar colado.
-    const distanceBefore = Math.abs(positionBefore.x) + Math.abs(positionBefore.y);
-    const distanceAfter = Math.abs(monster.position.x) + Math.abs(monster.position.y);
-    expect(distanceAfter).toBeGreaterThanOrEqual(distanceBefore);
+    // E ele se afastou do herói (fleeStep), em vez de ficar colado: o PRIMEIRO passo dele não
+    // aproxima. Só o primeiro — encurralado na quina da salinha, o monstro que não tem mais
+    // passo de fuga anda ao acaso (#655, `doRandomStep`: `!hasFollowPath`), e onde ele está seis
+    // segundos depois já não diz nada sobre a fuga.
+    expect(firstFlee).not.toBeNull();
+    if (firstFlee === null) return;
+    expect(distance(firstFlee.to, firstFlee.heroAt))
+      .toBeGreaterThanOrEqual(distance(firstFlee.from, firstFlee.heroAt));
   });
 
   it('o campo de fogo do Dragon Lord (#520) cobre os MESMOS 21 tiles da bola — `source: \'monster\'` (achado da revisão do #536)', () => {
@@ -11281,15 +11313,23 @@ describe('monstro evita campo que não pode atravessar (M29-05)', () => {
     return { session, hero, ruleset };
   };
 
-  it('sem arma de alcance, o herói nunca alcança o monstro preso — ele fica atrás do fogo para sempre', () => {
+  it('sem arma de alcance, o herói nunca alcança o monstro preso — ele anda ao acaso atrás do fogo, e nunca o cruza', () => {
     const { session, ruleset } = setup(false);
-    run(session, 20_000, 100);
     const monster = ruleset.monsters[0];
-    // Só o `x` importa: o monstro pode oscilar em y dentro da própria coluna sem NUNCA cruzar a
-    // parede (em x=3), e é isso — não a posição inteira — que prova que ele não atravessou.
-    expect(monster?.position.x).toBe(4);
-    expect(monster?.lastStepBlocked).toBe(true);
-    expect(monster?.ignoresFieldDamage).toBe(false);
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+    let randomSteps = 0;
+    for (let t = 0; t < 20_000; t += 100) {
+      const before = monster.lastMoveAtMs;
+      session.advanceBy(100);
+      // Preso (alvo à vista, sem passo até ele), o monstro cai no `doRandomStep` do Canary (#655):
+      // sorteia um passo cardinal a cada segundo — e o passo dele é o único jeito de `x` mudar.
+      if (monster.randomStepping && monster.lastMoveAtMs !== before) randomSteps += 1;
+      // O `x` é o que prova que ele não atravessou a parede (em x=3): a posição inteira oscila,
+      // porque o passo aleatório o tira do tile de origem.
+      expect(monster.position.x).toBeGreaterThanOrEqual(4);
+    }
+    expect(randomSteps).toBeGreaterThan(3);
+    expect(monster.ignoresFieldDamage).toBe(false);
   });
 
   it('com uma wand de alcance 3, o dano à distância concede UMA passagem pelo fogo (TFS/Canary `ignoreFieldDamage`)', () => {
@@ -11963,9 +12003,9 @@ describe('reflexo e cleave do equipamento (#552, M30-05)', () => {
     // Herói em (1, 1): `a` a leste é o alvo, `b` em (2, 2) é o tile ao SUL do alvo — o que o
     // cleave de um alvo na mesma linha acerta. `c` longe, fora de tudo.
     hero.position = { x: 1, y: 1, z: hero.position.z };
-    a.position = { x: 2, y: 1 };
-    b.position = { x: 2, y: 2 };
-    c.position = { x: 4, y: 3 };
+    plant(a, { x: 2, y: 1 });
+    plant(b, { x: 2, y: 2 });
+    plant(c, { x: 4, y: 3 });
     vi.mocked(resolveDamage).mockClear();
     run(session, 4_000, 100);
 
@@ -12001,9 +12041,9 @@ describe('reflexo e cleave do equipamento (#552, M30-05)', () => {
     const [a, b, c] = ruleset.monsters;
     if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
     hero.position = { x: 1, y: 1, z: hero.position.z };
-    a.position = { x: 2, y: 1 };
-    b.position = { x: 2, y: 2 };
-    c.position = { x: 4, y: 3 };
+    plant(a, { x: 2, y: 1 });
+    plant(b, { x: 2, y: 2 });
+    plant(c, { x: 4, y: 3 });
     vi.mocked(resolveDamage).mockClear();
     run(session, 4_000, 100);
 
@@ -14229,7 +14269,7 @@ describe('linha de visão (#553)', () => {
     // Hero entra em (2,3) — o primeiro tile da rota. O alvo do outro lado da parede, a
     // distância 6 (o alcance do bow), com a parede de x=5 exatamente no meio da linha.
     expect(hero.position).toEqual({ x: 2, y: 3, z: 7 });
-    target.position = { x: 8, y: 3, z: 7 };
+    plant(target, { x: 8, y: 3, z: 7 });
     const healthBefore = target.health;
     run(session, 10_000, 100);
     const events = session.drainEvents();
@@ -14243,7 +14283,7 @@ describe('linha de visão (#553)', () => {
     session.advanceBy(50);
     const target = ruleset.monsters[0];
     if (target === undefined) throw new Error('sem monstro nesta hunt');
-    target.position = { x: 4, y: 3, z: 7 }; // mesmo lado do hero (2,3); nada entre os dois
+    plant(target, { x: 4, y: 3, z: 7 }); // mesmo lado do hero (2,3); nada entre os dois
     run(session, 10_000, 100);
     const events = session.drainEvents();
     expect(events.some((e) => e.kind === 'shot')).toBe(true);
@@ -14256,11 +14296,11 @@ describe('linha de visão (#553)', () => {
     session.drainEvents();
     const target = ruleset.monsters[0];
     if (target === undefined) throw new Error('sem monstro nesta hunt');
-    target.position = { x: 8, y: 3, z: 7 };
+    plant(target, { x: 8, y: 3, z: 7 });
     run(session, 2_000, 100);
     expect(session.drainEvents().some((e) => e.kind === 'shot')).toBe(false);
     // Sai da sombra da parede: mesma distância, sem obstáculo na linha.
-    target.position = { x: 8, y: 1, z: 7 };
+    plant(target, { x: 8, y: 1, z: 7 });
     run(session, 10_000, 100);
     expect(session.drainEvents().some((e) => e.kind === 'shot')).toBe(true);
   });
@@ -14308,8 +14348,8 @@ describe('linha de visão (#553)', () => {
     session.drainEvents();
     const [primary, splash] = ruleset.monsters;
     if (primary === undefined || splash === undefined) throw new Error('faltou monstro nesta hunt');
-    primary.position = { x: 4, y: 3, z: 7 }; // mesmo lado do hero (2,3): visão livre
-    splash.position = { x: 6, y: 3, z: 7 }; // outro lado da parede (x=5): dentro da forma (±2)
+    plant(primary, { x: 4, y: 3, z: 7 }); // mesmo lado do hero (2,3): visão livre
+    plant(splash, { x: 6, y: 3, z: 7 }); // outro lado da parede (x=5): dentro da forma (±2)
     const primaryHealthBefore = primary.health;
     const splashHealthBefore = splash.health;
     run(session, 5_000, 100);
@@ -14343,7 +14383,7 @@ describe('linha de visão (#553)', () => {
     // OUTRO lado dela (6,3) — a linha (4,3)→(6,3) cruza a parede em x=5. Sem visão, a postura
     // não deve recuar (posição não muda).
     hero.position = { x: 4, y: 3, z: 7 };
-    target.position = { x: 6, y: 3, z: 7 };
+    plant(target, { x: 6, y: 3, z: 7 });
     const before = { ...hero.position };
     run(session, 3_000, 100);
     expect(hero.position).toEqual(before);
@@ -15132,5 +15172,325 @@ describe('dança de alvo (#543, staticAttack sem tick, `Monster::getDanceStep`)'
     const resumedMonster = (resumed.ruleset as HuntRuleset).monsters[0];
     if (resumedMonster === undefined) throw new Error('sem monstro');
     expect(resumedMonster.danceArmed).toBe(true);
+  });
+});
+
+describe('volta ao spawn, ocioso e passo aleatório (#655, Canary `Monster::getNextStep`)', () => {
+  // Um rato de HP absurdo e sem ataque: o assunto aqui é ONDE ele está, não quem vence — e o
+  // herói fica CONGELADO (`cancelEvents`) e é movido à mão, para o teste dizer exatamente quando
+  // ele entra e sai da área de visão (`aggroRadius` 8) do monstro.
+  const wanderer = {
+    ...rat, id: 'wanderer', name: 'Wanderer', health: 1_000_000, attack: 0, aggroRadius: 8,
+  };
+
+  // --- corredor largo: o monstro nasce longe do herói ---------------------------------------
+  const wall = '#'.repeat(30);
+  const row = `#${'.'.repeat(28)}#`;
+  const corridorMap = { id: 'arena', z: 7, grid: [wall, row, row, row, wall] };
+  const corridorRoute = {
+    id: 'arena-loop', mapId: 'arena',
+    tiles: [{ x: 1, y: 2, z: 7 }, { x: 2, y: 2, z: 7 }],
+    spawnPoints: [{
+      routeIndex: 0, radius: 1, at: { x: 20, y: 2, z: 7 }, monsterId: 'wanderer', respawnDelayMs: 30_000,
+    }],
+  };
+  const corridorContent = () => content({
+    maps: [corridorMap], routes: [corridorRoute], monsters: [wanderer],
+  });
+
+  const corridor = () => {
+    const started = start({ loaded: corridorContent() });
+    started.session.advanceBy(50); // o monstro nasce, no spawn (20, 2)
+    started.session.cancelEvents(started.hero.id);
+    const monster = started.ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+    return { ...started, monster };
+  };
+
+  /** Eventos `creature-moved` do monstro, datados pelo instante lógico do `advanceBy` que os trouxe. */
+  const movesOf = (session: Session, subject: string, durationMs: number, stepMs: number) => {
+    const moves: Array<{ atMs: number; from: GridPoint; to: GridPoint }> = [];
+    for (let t = 0; t < durationMs && session.ended === null; t += stepMs) {
+      session.advanceBy(stepMs);
+      for (const e of session.drainEvents()) {
+        if (e.kind === 'creature-moved' && e.creatureId === subject) {
+          moves.push({ atMs: session.nowMs, from: e.from, to: e.to });
+        }
+      }
+    }
+    return moves;
+  };
+
+  it('ocioso: no spawn, sem ninguém à vista e sem condição, o monstro não dá um passo — por minutos', () => {
+    const { session, monster } = corridor();
+    expect(monster.position).toEqual({ x: 20, y: 2, z: 7 });
+    session.drainEvents();
+    expect(movesOf(session, monster.subject, 180_000, 1_000)).toHaveLength(0);
+    expect(monster.position).toEqual({ x: 20, y: 2, z: 7 });
+    expect(monster.lastMoveAtMs).toBeNull();
+    expect(monster.walkingBack).toBe(false);
+    expect(monster.randomStepping).toBe(false);
+  });
+
+  it('o alvo sai da área de visão: o monstro larga o alvo, VOLTA ao spawn e fica ocioso lá', () => {
+    const { session, hero, monster } = corridor();
+    // O herói entra na visão (6 tiles): o monstro acorda, escolhe o alvo e vem.
+    hero.position = { x: 14, y: 2, z: 7 };
+    monster.contribution.record(hero.id, 10);
+    run(session, 4_000, 100);
+    expect(monster.targetId).toBe(hero.id);
+    expect(monster.position.x).toBeLessThan(20);
+    expect(monster.walkingBack).toBe(false);
+
+    // O herói some da visão (14 tiles): a lista de alvos esvazia, ele larga o alvo e volta.
+    hero.position = { x: 1, y: 2, z: 7 };
+    run(session, 1_000, 100);
+    expect(monster.targetId).toBeNull();
+    expect(monster.walkingBack).toBe(true);
+    run(session, 30_000, 100);
+    // Chegou EXATAMENTE ao home — e ocioso: `Creature::onIdleStatus` esquece quem bateu nele.
+    expect(monster.position).toEqual({ x: 20, y: 2, z: 7 });
+    expect(monster.contribution.actorCount).toBe(0);
+    expect(monster.targetId).toBeNull();
+    // Ocioso de novo: nenhum passo mais.
+    const lastMove = monster.lastMoveAtMs;
+    session.drainEvents();
+    expect(movesOf(session, monster.subject, 20_000, 1_000)).toHaveLength(0);
+    expect(monster.lastMoveAtMs).toBe(lastMove);
+  });
+
+  it('a volta é UM tile por vencimento, sempre em direção ao home — nunca ao acaso', () => {
+    const { session, hero, monster } = corridor();
+    hero.position = { x: 14, y: 2, z: 7 };
+    run(session, 4_000, 100);
+    hero.position = { x: 1, y: 2, z: 7 };
+    session.drainEvents();
+    const rngBefore = session.rng.getState();
+    const moves = movesOf(session, monster.subject, 30_000, 100);
+    expect(moves.length).toBeGreaterThan(0);
+    for (const move of moves) {
+      expect(distance(move.to, { x: 20, y: 2 })).toBeLessThan(distance(move.from, { x: 20, y: 2 }));
+    }
+    // A volta não sorteia nada: a semente da sessão fica intocada.
+    expect(session.rng.getState()).toEqual(rngBefore);
+  });
+
+  it('a volta e o ocioso valem IGUAL a 1 Hz e a 20 Hz (invariante 2) — o snapshot inteiro coincide', () => {
+    const scenario = (stepMs: number) => {
+      const { session, hero, monster } = corridor();
+      hero.position = { x: 14, y: 2, z: 7 };
+      monster.contribution.record(hero.id, 10);
+      run(session, 4_000, stepMs);
+      hero.position = { x: 1, y: 2, z: 7 };
+      run(session, 31_000, stepMs);
+      return { snapshot: session.snapshot(), monster: monster.getState() };
+    };
+    const twentyHz = scenario(50);
+    const oneHz = scenario(1_000);
+    expect(oneHz.monster.position).toEqual({ x: 20, y: 2, z: 7 });
+    expect(oneHz.monster).toEqual(twentyHz.monster);
+    expect(oneHz.snapshot).toEqual(twentyHz.snapshot);
+  });
+
+  it('um snapshot NO MEIO da volta retoma e chega ao mesmo lugar, com o mesmo estado (restauração)', () => {
+    const loaded = corridorContent();
+    const build = () => {
+      const started = start({ loaded });
+      started.session.advanceBy(50);
+      started.session.cancelEvents(started.hero.id);
+      const monster = started.ruleset.monsters[0];
+      if (monster === undefined) throw new Error('sem monstro nesta cena');
+      started.hero.position = { x: 14, y: 2, z: 7 };
+      monster.contribution.record(started.hero.id, 10);
+      run(started.session, 4_000, 100);
+      started.hero.position = { x: 1, y: 2, z: 7 };
+      run(started.session, 1_500, 100);
+      return { ...started, monster };
+    };
+    const straight = build();
+    const interrupted = build();
+    expect(interrupted.monster.walkingBack).toBe(true);
+    expect(interrupted.monster.position.x).toBeLessThan(20);
+
+    const snapshot = JSON.parse(JSON.stringify(interrupted.session.snapshot())) as SessionSnapshot;
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, new Rng(snapshot.rng),
+    );
+    const resumedMonster = (resumed.ruleset as HuntRuleset).monsters[0];
+    if (resumedMonster === undefined) throw new Error('sem monstro na retomada');
+    expect(resumedMonster.walkingBack).toBe(true);
+    // O herói da retomada continua fora da visão: o cenário é sobre o monstro.
+    const resumedHero = resumed.participants[0];
+    if (resumedHero === undefined) throw new Error('sem herói na retomada');
+    resumedHero.position = { x: 1, y: 2, z: 7 };
+    resumed.cancelEvents(resumedHero.id);
+
+    run(straight.session, 30_000, 100);
+    run(resumed, 30_000, 100);
+    expect(resumedMonster.position).toEqual({ x: 20, y: 2, z: 7 });
+    expect(resumedMonster.getState()).toEqual(straight.monster.getState());
+  });
+
+  it('com uma condição ativa o monstro NÃO fica ocioso: anda ao acaso no spawn, e volta e sossega quando ela some', () => {
+    const { session, monster } = corridor();
+    // Dura mais que a janela de observação; o teste a remove à mão, sem o evento de vencimento.
+    monster.conditions.apply({ key: 'burning', expiresAtMs: session.nowMs + 600_000 });
+    session.drainEvents();
+    const moves = movesOf(session, monster.subject, 30_000, 100);
+    expect(moves.length).toBeGreaterThan(2);
+    // Cada passo é cardinal e o intervalo entre eles respeita o segundo mínimo.
+    for (const move of moves) expect(Math.abs(move.to.x - move.from.x) + Math.abs(move.to.y - move.from.y)).toBe(1);
+    for (let i = 1; i < moves.length; i++) {
+      expect((moves[i]?.atMs ?? 0) - (moves[i - 1]?.atMs ?? 0)).toBeGreaterThanOrEqual(1_000);
+    }
+    expect(monster.randomStepping).toBe(true);
+
+    // A condição some: sem ninguém à vista e fora do spawn, ele volta — e fica ocioso no home.
+    monster.conditions.remove('burning');
+    run(session, 60_000, 100);
+    expect(monster.position).toEqual({ x: 20, y: 2, z: 7 });
+    expect(monster.walkingBack).toBe(false);
+    const lastMove = monster.lastMoveAtMs;
+    session.drainEvents();
+    expect(movesOf(session, monster.subject, 20_000, 1_000)).toHaveLength(0);
+    expect(monster.lastMoveAtMs).toBe(lastMove);
+  });
+
+  // --- monstro com alvo à vista mas sem passo até ele: o corredor selado ----------------------
+  // O herói está em cima (y=1); o monstro num corredor selado embaixo (y=3), com uma parede
+  // inteira entre os dois. O passo guloso o põe sob o herói (x=4) e ali ele empaca: N, NE e NO são
+  // parede. É o `!hasFollowPath && getFollowCreature()` do Canary — e é onde `doRandomStep` roda.
+  const sealedRow = `#${'.'.repeat(7)}#`;
+  const sealedWall = '#'.repeat(9);
+  const sealedMap = {
+    id: 'arena', z: 7, grid: [sealedWall, sealedRow, sealedWall, sealedRow, sealedWall],
+  };
+  const sealedRoute = {
+    id: 'arena-loop', mapId: 'arena',
+    tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+    spawnPoints: [{
+      routeIndex: 0, radius: 1, at: { x: 4, y: 3, z: 7 }, monsterId: 'wanderer', respawnDelayMs: 30_000,
+    }],
+  };
+  const sealedContent = () => content({
+    maps: [sealedMap], routes: [sealedRoute], monsters: [wanderer],
+  });
+  const sealed = () => {
+    const started = start({ loaded: sealedContent() });
+    started.session.advanceBy(50);
+    started.session.cancelEvents(started.hero.id);
+    started.hero.position = { x: 4, y: 1, z: 7 };
+    const monster = started.ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+    return { ...started, monster };
+  };
+
+  it('com alvo à vista e sem passo até ele, anda ao acaso — um passo cardinal, no máximo um por segundo', () => {
+    const { session, monster } = sealed();
+    session.drainEvents();
+    const moves = movesOf(session, monster.subject, 40_000, 100);
+    // O guloso só empurra rumo a x=4; qualquer passo que SE AFASTA de x=4 é sorteio.
+    const random = moves.filter((m) => Math.abs(m.to.x - 4) > Math.abs(m.from.x - 4));
+    expect(random.length).toBeGreaterThan(5);
+    for (const move of random) {
+      expect(Math.abs(move.to.x - move.from.x) + Math.abs(move.to.y - move.from.y)).toBe(1);
+    }
+    // O intervalo é medido desde o ÚLTIMO PASSO, qualquer que ele seja (o guloso de volta ao x=4
+    // também conta) — então entre dois sorteios há sempre pelo menos um segundo.
+    for (let i = 1; i < random.length; i++) {
+      expect((random[i]?.atMs ?? 0) - (random[i - 1]?.atMs ?? 0)).toBeGreaterThanOrEqual(1_000);
+    }
+    // E o passo que sortearam é o primeiro depois de 1000 ms do passo anterior — nunca antes.
+    const all = moves.map((m) => m.atMs);
+    for (const move of random) {
+      const previous = all.filter((t) => t < move.atMs).at(-1);
+      if (previous !== undefined) expect(move.atMs - previous).toBeGreaterThanOrEqual(1_000);
+    }
+    expect(monster.lastStepBlocked).toBe(true);
+  });
+
+  it('sortear é SEMPRE de três em três: cada passo aleatório consome exatamente 3 `rng.integer`', () => {
+    // `shuffledCardinals` = Fisher-Yates completo dos 4 cardeais (`std::ranges::shuffle` no
+    // Canary): 3 sorteios por tentativa, com tile livre ou não. Nada mais no cenário sorteia.
+    class CountingRng extends Rng {
+      integerCalls = 0;
+
+      override integer(min: number, max: number): number {
+        this.integerCalls++;
+        return super.integer(min, max);
+      }
+    }
+    const rng = new CountingRng(Rng.fromSeed('random-step-draws').getState());
+    const ruleset = createHuntRuleset(sealedContent(), 'arena', 'cautious');
+    const session = new Session({
+      id: 'random-step-draws', contentVersion: sealedContent().version, ruleset, rng, createdAtMs: 0,
+    });
+    const hero = new CharacterRuntime({ ...character().getState(), id: 'hero' });
+    session.enter(hero);
+    session.advanceBy(50);
+    session.cancelEvents(hero.id);
+    hero.position = { x: 4, y: 1, z: 7 };
+    rng.integerCalls = 0;
+    run(session, 30_000, 100);
+    expect(rng.integerCalls).toBeGreaterThan(0);
+    expect(rng.integerCalls % 3).toBe(0);
+  });
+
+  it('o passo aleatório vale IGUAL a 1 Hz e a 20 Hz, e a semente é a mesma', () => {
+    const scenario = (stepMs: number) => {
+      const { session, monster } = sealed();
+      run(session, 40_000, stepMs);
+      return { snapshot: session.snapshot(), monster: monster.getState() };
+    };
+    const twentyHz = scenario(50);
+    const oneHz = scenario(1_000);
+    expect(oneHz.monster.lastMoveAtMs).not.toBeUndefined();
+    expect(oneHz.monster).toEqual(twentyHz.monster);
+    expect(oneHz.snapshot).toEqual(twentyHz.snapshot);
+  });
+
+  it('um snapshot no meio do passo aleatório retoma com a MESMA sequência de passos (restauração)', () => {
+    const loaded = sealedContent();
+    // Até o instante em que o passo aleatório acabou de ligar a flag: o guloso a desliga no passo
+    // seguinte (`doFollowCreature`), então o snapshot precisa ser tirado NESSE vencimento.
+    const build = () => {
+      const started = sealed();
+      for (let t = 0; t < 30_000 && !started.monster.randomStepping; t += 100) started.session.advanceBy(100);
+      return started;
+    };
+    const straight = build();
+    const interrupted = build();
+    expect(interrupted.monster.randomStepping).toBe(true);
+
+    const snapshot = JSON.parse(JSON.stringify(interrupted.session.snapshot())) as SessionSnapshot;
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, new Rng(snapshot.rng),
+    );
+    const resumedMonster = (resumed.ruleset as HuntRuleset).monsters[0];
+    if (resumedMonster === undefined) throw new Error('sem monstro na retomada');
+    expect(resumedMonster.lastMoveAtMs).toBe(interrupted.monster.lastMoveAtMs);
+    expect(resumedMonster.randomStepping).toBe(true);
+    const resumedHero = resumed.participants[0];
+    if (resumedHero === undefined) throw new Error('sem herói na retomada');
+    resumedHero.position = { x: 4, y: 1, z: 7 };
+    resumed.cancelEvents(resumedHero.id);
+
+    run(straight.session, 20_000, 100);
+    run(resumed, 20_000, 100);
+    expect(resumedMonster.getState()).toEqual(straight.monster.getState());
+    expect(resumed.rng.getState()).toEqual(straight.session.rng.getState());
+  });
+
+  it('apanhar ENQUANTO anda ao acaso arma o bypass de campo — mesmo sem `lastStepBlocked` (Canary `drainHealth`)', () => {
+    const { session, monster } = sealed();
+    for (let t = 0; t < 30_000 && !monster.randomStepping; t += 100) session.advanceBy(100);
+    expect(monster.randomStepping).toBe(true);
+    // Com `lastStepBlocked` desligado, só o `randomStepping` explica o bypass.
+    monster.lastStepBlocked = false;
+    monster.noteDamageTaken(3);
+    expect(monster.ignoresFieldDamage).toBe(true);
+    // E quando a perseguição volta (o guloso o recoloca sob o herói), a flag desliga.
+    session.advanceBy(600);
+    expect(monster.randomStepping).toBe(false);
   });
 });

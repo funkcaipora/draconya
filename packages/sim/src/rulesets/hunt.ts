@@ -92,14 +92,14 @@ import type { BotActuator, BotView, CompiledBot, CompiledSlot, CooldownOfAction 
 import { compileAutomations } from '../automation.js';
 import type { AutomationActuator, CompiledAutomations } from '../automation.js';
 import {
-  MonsterRuntime, canMonsterEnterField, chooseTarget, decideMonsterAction, isMonsterFleeing,
-  monsterSubject, nearestPrey,
+  MonsterRuntime, canMonsterEnterField, chooseTarget, decideMonsterAction, decideUnengagedMove,
+  isInSpawnRange, isMonsterFleeing, monsterSubject, nearestPrey,
 } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
 import { abilityBlockFlags, abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
 import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
 import {
-  PUSH_DIRECTIONS, danceStep, distance, fleeStep, greedyStep, sameFloor,
+  danceStep, distance, fleeStep, greedyStep, sameFloor, shuffledCardinals,
 } from '../monster/step.js';
 import { isSightClear } from '../line-of-sight.js';
 import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from '../targeting.js';
@@ -3950,13 +3950,18 @@ export class HuntRuleset implements Ruleset {
    *   (`isOpponent`). Vazio, é a MESMA referência de `session.participants` de antes desta
    *   issue: zero alocação e zero sorteio a mais quando ninguém invocou.
    */
-  #chooseMonsterTarget(session: Session, monster: MonsterRuntime, definition: Monster): string | null {
+  #chooseMonsterTarget(
+    session: Session, monster: MonsterRuntime, definition: Monster,
+    knownSummons?: readonly Prey[],
+  ): string | null {
     if (typeof monster.masterId === 'string') {
       const owner = findById(session.participants, monster.masterId);
       if (owner === null || !owner.alive) return null;
       return this.attackTargetOf(owner)?.subject ?? null;
     }
-    const summons = this.#playerSummonPrey();
+    // `knownSummons` (#655): quem já calculou a lista (o passo, que a reaproveita para a área de
+    // visão) a entrega em vez de varrer `#monsters` de novo.
+    const summons = knownSummons ?? this.#playerSummonPrey();
     const prey: readonly Prey[] = summons.length === 0
       ? session.participants
       : [...session.participants, ...summons];
@@ -5768,9 +5773,10 @@ const slots = bot.groups.get(group);
       // de magia, por mana.
       this.#noteAttackBlock(character, outcome);
       // O bypass de campo (M29-05, TFS/Canary `Monster::drainHealth`): levar dano ESTANDO preso
-      // (`lastStepBlocked`) concede UMA passagem pelo campo que o prendia — nunca de graça, e
-      // nunca ao andar livre. Zero de dano (`chance: 0`/overkill de mira que já matou) não arma.
-      if (monster.lastStepBlocked && applied.healthDamage > 0) monster.ignoresFieldDamage = true;
+      // (`lastStepBlocked`) ou andando ao acaso (`randomStepping`, #655) concede UMA passagem
+      // pelo campo que o prendia — nunca de graça, e nunca ao andar livre. Zero de dano
+      // (`chance: 0`/overkill de mira que já matou) não arma.
+      monster.noteDamageTaken(applied.healthDamage);
       // O DPS soma o APLICADO (#431), pela mesma razão do `#land`: a manopla do overkill não
       // entra na conta do dano causado.
       session.creditDamage(character.id, applied.healthDamage);
@@ -6210,7 +6216,7 @@ const slots = bot.groups.get(group);
     // de condição/campo: no Canary TODO dano passa por um único cano (`Creature::drainHealth`),
     // então um monstro preso que leva dano de um campo em que PODE pisar (ex.: fogo, enquanto
     // preso atrás de um de veneno) também ganha a passagem temporária pelo campo que o prende.
-    if (target.lastStepBlocked && applied.healthDamage > 0) target.ignoresFieldDamage = true;
+    target.noteDamageTaken(applied.healthDamage);
     session.emit({
       kind: 'creature-hit', creatureId: target.subject, attackerId: attacker,
       // `manaDamage` (#547): sempre zero aqui — monstro não tem mana —, mas a soma mantém o
@@ -7343,16 +7349,21 @@ const slots = bot.groups.get(group);
     // `CharacterRuntime` já satisfaz `Prey` — id, posição e vida. Montar um vetor novo a cada
     // evento era uma alocação por monstro por vencimento, e com 5.000 instâncias isso é o
     // coletor rodando o tempo todo — `#chooseMonsterTarget`/`#preyById` preservam isso quando
-    // não há invocação de personagem (#598): a mesma referência de `session.participants`.
-    monster.targetId = this.#chooseMonsterTarget(session, monster, definition);
+    // não há invocação de personagem (#598): a mesma referência de `session.participants`. As
+    // invocações de personagem são calculadas UMA vez e servem à escolha do alvo E à área de
+    // visão de `decideUnengagedMove` (#655).
+    const summons = typeof monster.masterId === 'string' ? NO_PLAYER_SUMMONS : this.#playerSummonPrey();
+    monster.targetId = this.#chooseMonsterTarget(session, monster, definition, summons);
     const target = this.#preyById(session, monster.targetId);
+    const blocked = this.#blockedForMonster(monster, definition);
     const action = decideMonsterAction(
-      monster, target, definition, this.#blockedForMonster(monster, definition),
+      monster, target, definition, blocked,
       (from, to) => isSightClear(this.#world.map, from, to),
     );
     // Preso: tinha alvo vivo e a decisão não achou passo, nem aproximando nem fugindo. É o dado
     // que `#land`/`#applyHits` consultam ao aplicar dano, para armar o bypass acima.
-    monster.lastStepBlocked = target !== null && target.alive && action.kind === 'idle';
+    const liveTarget = target !== null && target.alive ? target : null;
+    monster.lastStepBlocked = liveTarget !== null && action.kind === 'idle';
 
     // O passo reagenda sempre: um monstro parado precisa continuar acordando para descobrir
     // que o alvo se mexeu. É a única cadência que roda mesmo sem nada a fazer — e o ritmo é
@@ -7365,14 +7376,41 @@ const slots = bot.groups.get(group);
     // bypass que `#blockedForMonster` acabou de usar para aprovar `action.to` — resetar antes
     // apagaria a concessão bem na hora em que o commit precisa dela. O bypass continua valendo
     // por UMA decisão só, tenha sido usado ou não: é exatamente por isso que o reset abaixo
-    // roda sempre, incondicionalmente, depois do passo.
-    const result = action.kind === 'step' || action.kind === 'retreat'
-      ? this.#step(session, monster, action.to, subject)
-      : null;
+    // roda sempre, incondicionalmente, depois do passo — exceto nos ramos em que o Canary não o
+    // gasta (abaixo).
+    let result: MoveResult | null = null;
+    let keepsFieldBypass = false;
+    if (action.kind === 'step' || action.kind === 'retreat') {
+      // `Monster::doFollowCreature` (`monster.cpp:2530`): quem persegue deixa de andar ao acaso.
+      monster.randomStepping = false;
+      result = this.#step(session, monster, action.to, subject);
+    } else if (action.kind === 'attack') {
+      // Colado (ou ao alcance): o `getFollowCreature() && hasFollowPath` do Canary também vale
+      // sem passo a dar, e é ele que roda `doFollowCreature` — e desliga o passo aleatório.
+      monster.randomStepping = false;
+    } else {
+      // Sem perseguição (#655): `updateIdleStatus` + os ramos `doWalkBack`/`doRandomStep` de
+      // `Monster::getNextStep`. Ver `decideUnengagedMove`.
+      const move = decideUnengagedMove(
+        monster, definition, liveTarget, session.participants, summons, blocked,
+        this.#blockedForRandomStep(monster, definition), session.nowMs, session.rng,
+      );
+      if (move.kind === 'idle') {
+        // `Monster::setIdle(true)` → `Creature::onIdleStatus`: quem ficou ocioso no spawn esquece
+        // quem bateu nele (`damageMap.clear()`, `lastHitCreatureId = 0`).
+        if (monster.contribution.actorCount > 0) monster.contribution.clear();
+      }
+      // O passo aleatório, o ocioso e a invocação parada não gastam o bypass de campo — só
+      // `doFollowCreature` e `doWalkBack` o zeram, quando não há passo (`monster.cpp:2511,2536`).
+      keepsFieldBypass = move.kind !== 'walk-back';
+      if ((move.kind === 'walk-back' || move.kind === 'random-step') && move.to !== null) {
+        result = this.#step(session, monster, move.to, subject);
+      }
+    }
     // O bypass de campo (M29-05) vale por UMA decisão — a que acabou de rodar, tenha usado ou
     // não —, e é consumido aqui, como o Canary o gasta no primeiro recálculo de caminho depois
     // de concedido (`Monster::doWalkBack`/`doFollowCreature`).
-    monster.ignoresFieldDamage = false;
+    if (!keepsFieldBypass) monster.ignoresFieldDamage = false;
     const cadence = result !== null && result.ok
       ? result.durationMs
       : movementDuration(this.#world, monster, monster.position, this.#at(monster));
@@ -7723,6 +7761,7 @@ const slots = bot.groups.get(group);
     );
     const applied = applyDamageOutcome(monster, outcome, null);
     recordDamage(monster.contribution, character.id, applied.healthDamage);
+    monster.noteDamageTaken(applied.healthDamage);
     session.emit({
       kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
       amount: applied.healthDamage + applied.manaDamage, source: 'melee', position: this.#at(monster),
@@ -7831,6 +7870,7 @@ const slots = bot.groups.get(group);
     const creditId = typeof attacker.masterId === 'string' ? attacker.masterId : attacker.subject;
     const applied = applyDamageOutcome(target, outcome, null);
     recordDamage(target.contribution, creditId, applied.healthDamage);
+    target.noteDamageTaken(applied.healthDamage);
     session.emit({
       kind: 'creature-hit', creatureId: target.subject, attackerId: attacker.subject,
       amount: applied.healthDamage + applied.manaDamage, source, position: this.#at(target),
@@ -8025,6 +8065,11 @@ const slots = bot.groups.get(group);
     if (mover instanceof MonsterRuntime) this.#clearPushableOccupant(session, mover, target);
     const result = move(this.#world, mover, target);
     if (result.ok) {
+      // O instante do último passo do MONSTRO (#655, `Creature::lastStep`): o passo aleatório o
+      // lê para respeitar o intervalo mínimo. É gravado aqui porque `#step` é o único ponto por
+      // onde toda posição muda — perseguição, volta ao spawn, passo aleatório, dança e empurrão
+      // (`#pushAside`) —, e o Canary o grava em qualquer deslocamento do próprio monstro.
+      if (mover instanceof MonsterRuntime) mover.lastMoveAtMs = session.nowMs;
       // A direção do personagem (#155): é de onde saem onda, cleave e feixe. Só o passo a
       // escreve, e só a do personagem — o monstro não lança magia.
       if (mover instanceof CharacterRuntime) {
@@ -8108,25 +8153,16 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * Empurra para um tile cardinal livre, em ordem embaralhada pelo `session.rng` — Fisher-Yates
-   * completo dos 4 índices de `PUSH_DIRECTIONS`, o mesmo desenho do parcial de `#creditStock`
-   * mais abaixo — e tenta cada um pelo MESMO `#step` de qualquer outro passo (§10.2 da
-   * referência de domínio: nunca atribuir a posição da vítima diretamente, sempre pelo mesmo
-   * `MovementSystem`). `rollDrunk: false`: o empurrão é
-   * força EXTERNA, não a decisão de movimento do empurrado — ele não rola a própria condição
-   * por ter sido empurrado. Devolve `false`, sem NENHUM efeito, quando os quatro recusam
+   * Empurra para um tile cardinal livre, em ordem embaralhada pelo `session.rng` — o
+   * Fisher-Yates completo de `shuffledCardinals` (o mesmo do passo aleatório, #655), parente do
+   * parcial de `#creditStock` mais abaixo — e tenta cada um pelo MESMO `#step` de qualquer outro
+   * passo (§10.2 da referência de domínio: nunca atribuir a posição da vítima diretamente,
+   * sempre pelo mesmo `MovementSystem`). `rollDrunk: false`: o empurrão é força EXTERNA, não a
+   * decisão de movimento do empurrado — ele não rola a própria condição por ter sido empurrado. Devolve `false`, sem NENHUM efeito, quando os quatro recusam
    * (parede, fora do mapa, outro ocupante, campo que ele mesmo não cruza) — quem chama esmaga.
    */
   #pushAside(session: Session, occupant: MonsterRuntime): boolean {
-    const order = [0, 1, 2, 3];
-    for (let i = order.length - 1; i > 0; i -= 1) {
-      const pick = session.rng.integer(0, i);
-      const chosen = order[pick] as number;
-      order[pick] = order[i] as number;
-      order[i] = chosen;
-    }
-    for (const index of order) {
-      const direction = PUSH_DIRECTIONS[index] as GridPoint;
+    for (const direction of shuffledCardinals(session.rng)) {
       const candidate = {
         ...occupant.position, x: occupant.position.x + direction.x, y: occupant.position.y + direction.y,
       };
@@ -8873,7 +8909,7 @@ const slots = bot.groups.get(group);
     recordDamage(monster.contribution, character.id, applied.healthDamage);
     // O bypass de campo (M29-05) — ver o comentário gêmeo em `#applyHits`, o mesmo mecanismo
     // pelo caminho de golpe corpo a corpo/wand.
-    if (monster.lastStepBlocked && applied.healthDamage > 0) monster.ignoresFieldDamage = true;
+    monster.noteDamageTaken(applied.healthDamage);
     this.#markCombatActive(session, character.id);
     // A definição única de "em combate" (#625): ataque DADO — o espelho de `#applyMonsterHit`,
     // que marca o RECEBIDO. Ver a nota de distinção com `Runner.lastCombatActionAtMs` acima.
@@ -10486,6 +10522,36 @@ const slots = bot.groups.get(group);
     this.#fieldMonster = monster;
     this.#fieldDefinition = definition;
     return this.#monsterBlocked;
+  }
+
+  /**
+   * `Monster::canWalkTo` (#655, `monster.cpp:3216-3227`), o predicado do passo ALEATÓRIO — mais
+   * estrito que `#monsterBlocked`: o raio de spawn vale, tile com criatura recusa MESMO que ela
+   * seja empurrável (o Canary confere `getTopVisibleCreature == nullptr` antes de qualquer
+   * empurrão), e tile de teleporte recusa (`TILESTATE_TELEPORT` em `Tile::queryAdd`). Escada e
+   * parede já recusam em `canOccupy`. O campo segue a mesma regra do passo guloso — `queryAdd`
+   * roda com `FLAG_IGNOREFIELDDAMAGE`, cujo `!(getIgnoreFieldDamage() || canWalkOnFieldType())`
+   * é exatamente `canMonsterEnterField`.
+   *
+   * Lê o monstro e a definição dos MESMOS campos que `#monsterBlocked` — quem chama já passou por
+   * `#blockedForMonster` neste evento —, para não alocar uma closure por passo.
+   */
+  readonly #randomStepBlocked: Blocked = (x, y) => {
+    const monster = this.#fieldMonster as MonsterRuntime;
+    if (!isInSpawnRange(monster, x, y)) return true;
+    this.#probe.x = x;
+    this.#probe.y = y;
+    if (canOccupy(this.#world, monster, this.#probe) !== null) return true;
+    const z = this.#floorOf(monster);
+    if (this.#world.teleportAt(x, y, z) !== null) return true;
+    return this.#fieldBlocksMonster(monster, this.#fieldDefinition as Monster, x, y);
+  };
+
+  #blockedForRandomStep(monster: MonsterRuntime, definition: Monster): Blocked {
+    this.#mover = monster;
+    this.#fieldMonster = monster;
+    this.#fieldDefinition = definition;
+    return this.#randomStepBlocked;
   }
 
   /**

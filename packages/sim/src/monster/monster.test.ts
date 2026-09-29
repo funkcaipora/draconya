@@ -5,7 +5,8 @@ import { Fields } from '../fields.js';
 import type { TileFieldState } from '../fields.js';
 import { Rng } from '../rng.js';
 import {
-  MonsterRuntime, canMonsterEnterField, chooseTarget, decideMonsterAction, isMonsterFleeing, type Prey,
+  MonsterRuntime, RANDOM_STEP_INTERVAL_MS, canMonsterEnterField, chooseTarget, decideMonsterAction,
+  decideUnengagedMove, isInSpawnLocation, isInSpawnRange, isMonsterFleeing, type Prey,
 } from './monster.js';
 
 const rat: Monster = {
@@ -64,14 +65,37 @@ describe('chooseTarget', () => {
       .toBe('alive');
   });
 
-  it('gives up only past the leash, and never when it is zero', () => {
-    // Zero é "nunca desiste": um monstro que larga o alvo no meio de uma hunt AFK faria o
-    // jogador voltar e encontrar tudo parado, sem explicação.
+  it('gives up past the leash while the target is in view, and never on the leash when it is zero', () => {
+    // Zero é "sem o limite EXTRA do leash": dentro da área de visão o monstro segue o alvo até
+    // onde ele estiver do `home`. O leash só corta o alvo que ainda está à vista, mas longe do
+    // ponto de origem.
     const monster = monsterAt(0, 0, { targetId: 'runner' });
-    expect(chooseTarget(monster, [prey('runner', 50, 0)], rat, rng, 0)).toBe('runner');
+    expect(chooseTarget(monster, [prey('runner', 3, 0)], rat, rng, 0)).toBe('runner');
 
-    const leashed = { ...rat, leashRadius: 5 };
-    expect(chooseTarget(monster, [prey('runner', 50, 0)], leashed, rng, 0)).toBeNull();
+    const leashed = { ...rat, leashRadius: 2 };
+    expect(chooseTarget(monster, [prey('runner', 3, 0)], leashed, rng, 0)).toBeNull();
+  });
+
+  describe('a retenção acaba na área de visão (#655, Canary `Creature::onCreatureMove` → `onCreatureDisappear`)', () => {
+    it('larga o alvo que saiu do `aggroRadius`, mesmo com leash zero — a lista de alvos esvazia', () => {
+      // `rat.aggroRadius` é 4: o alvo retido a 5 tiles saiu do `canSee`. É o que esvazia a lista
+      // de alvos do Canary e liga a volta ao spawn; sem este corte, com leash 0 o monstro
+      // persegue para sempre e a volta nunca dispara.
+      const monster = monsterAt(0, 0, { targetId: 'runner' });
+      expect(chooseTarget(monster, [prey('runner', 4, 0)], rat, rng, 0)).toBe('runner');
+      expect(chooseTarget(monster, [prey('runner', 5, 0)], rat, rng, 0)).toBeNull();
+    });
+
+    it('e escolhe outro dentro da área de visão, se houver', () => {
+      const monster = monsterAt(0, 0, { targetId: 'runner' });
+      expect(chooseTarget(monster, [prey('runner', 9, 0), prey('near', 2, 0)], rat, rng, 0))
+        .toBe('near');
+    });
+
+    it('a distância é a do MONSTRO (não a do home): quem o arrasta para longe do spawn ainda é retido', () => {
+      const monster = monsterAt(30, 0, { targetId: 'runner', home: { x: 0, y: 0 } });
+      expect(chooseTarget(monster, [prey('runner', 33, 0)], rat, rng, 0)).toBe('runner');
+    });
   });
 
   describe('invisibilidade (#559/#592, ADR 0041 d.2)', () => {
@@ -748,5 +772,300 @@ describe('decideMonsterAction evita campo que não pode atravessar (M29-05)', ()
       monster, prey('p', 5, 0), avoidsFire, blockedByField(fields, monster, avoidsFire),
     );
     expect(action).toEqual({ kind: 'step', to: { x: 1, y: 0 } });
+  });
+});
+
+describe('MonsterRuntime: estado da volta ao spawn e do passo aleatório (#655)', () => {
+  it('nasce sem volta, sem passo aleatório e sem passo dado — e o snapshot NÃO carrega o default', () => {
+    const monster = monsterAt(3, 3);
+    expect(monster.walkingBack).toBe(false);
+    expect(monster.randomStepping).toBe(false);
+    expect(monster.lastMoveAtMs).toBeNull();
+    const state = monster.getState();
+    expect('walkingBack' in state).toBe(false);
+    expect('randomStepping' in state).toBe(false);
+    expect('lastMoveAtMs' in state).toBe(false);
+  });
+
+  it('round-trips os três campos pelo snapshot — sem eles, a hunt retomada esquece a volta', () => {
+    const monster = monsterAt(3, 3);
+    monster.walkingBack = true;
+    monster.randomStepping = true;
+    monster.lastMoveAtMs = 4_250;
+    const restored = new MonsterRuntime(JSON.parse(JSON.stringify(monster.getState())) as never);
+    expect(restored.walkingBack).toBe(true);
+    expect(restored.randomStepping).toBe(true);
+    expect(restored.lastMoveAtMs).toBe(4_250);
+  });
+
+  it('lastMoveAtMs 0 (andou no instante zero) NÃO é "nunca andou"', () => {
+    const monster = monsterAt(3, 3);
+    monster.lastMoveAtMs = 0;
+    expect(new MonsterRuntime(monster.getState()).lastMoveAtMs).toBe(0);
+  });
+});
+
+describe('noteDamageTaken (#655, Canary `Monster::drainHealth`, `monster.cpp:3450`)', () => {
+  it('sem passo até o alvo (lastStepBlocked) e com dano, arma o bypass de campo', () => {
+    const monster = monsterAt(0, 0);
+    monster.lastStepBlocked = true;
+    monster.noteDamageTaken(5);
+    expect(monster.ignoresFieldDamage).toBe(true);
+  });
+
+  it('andando ao acaso (randomStepping) e com dano, arma o bypass — a metade nova da condição', () => {
+    const monster = monsterAt(0, 0);
+    monster.randomStepping = true;
+    monster.noteDamageTaken(1);
+    expect(monster.ignoresFieldDamage).toBe(true);
+  });
+
+  it('dano zero não arma, e andar livre (nenhuma das duas flags) tampouco', () => {
+    const stuck = monsterAt(0, 0);
+    stuck.lastStepBlocked = true;
+    stuck.randomStepping = true;
+    stuck.noteDamageTaken(0);
+    expect(stuck.ignoresFieldDamage).toBe(false);
+
+    const free = monsterAt(0, 0);
+    free.noteDamageTaken(500);
+    expect(free.ignoresFieldDamage).toBe(false);
+  });
+});
+
+describe('isInSpawnLocation / isInSpawnRange (#655, Canary `monster.cpp:1562`, `3323`)', () => {
+  it('está no spawn quando (x, y) e o andar coincidem com o home', () => {
+    expect(isInSpawnLocation(monsterAt(3, 3))).toBe(true);
+    expect(isInSpawnLocation(monsterAt(4, 3, { home: { x: 3, y: 3 } }))).toBe(false);
+    expect(isInSpawnLocation(monsterAt(3, 3, { position: { x: 3, y: 3, z: 10 }, home: { x: 3, y: 3, z: 11 } })))
+      .toBe(false);
+  });
+
+  it('sem `z` de um dos lados o andar não desempata — compatível com snapshot anterior', () => {
+    expect(isInSpawnLocation(monsterAt(3, 3, { position: { x: 3, y: 3, z: 10 }, home: { x: 3, y: 3 } })))
+      .toBe(true);
+  });
+
+  it('invocação não tem spawn: `spawnMonster.expired()` no Canary, sempre "no spawn"', () => {
+    expect(isInSpawnLocation(monsterAt(9, 9, { home: { x: 0, y: 0 }, masterId: 7 }))).toBe(true);
+    expect(isInSpawnRange(monsterAt(900, 900, { home: { x: 0, y: 0 }, masterId: 'hero' }), 900, 900)).toBe(true);
+  });
+
+  it('o raio de spawn é o quadrado de 50 tiles (`deSpawnRadius`) em torno do home', () => {
+    const monster = monsterAt(0, 0, { home: { x: 100, y: 100 } });
+    expect(isInSpawnRange(monster, 150, 150)).toBe(true);
+    expect(isInSpawnRange(monster, 50, 50)).toBe(true);
+    expect(isInSpawnRange(monster, 151, 100)).toBe(false);
+    expect(isInSpawnRange(monster, 100, 49)).toBe(false);
+  });
+});
+
+describe('decideUnengagedMove (#655, Canary `Monster::updateIdleStatus` + `getNextStep`)', () => {
+  // `rat.aggroRadius` é 4: quem está a 5+ tiles NÃO está na área de visão do monstro.
+  const noPrey: readonly Prey[] = [];
+  const decide = (
+    monster: MonsterRuntime, opts: {
+      target?: Prey | null; participants?: readonly Prey[]; summons?: readonly Prey[];
+      blocked?: (x: number, y: number) => boolean; nowMs?: number; rng?: { integer(min: number, max: number): number };
+    } = {},
+  ) => decideUnengagedMove(
+    monster, rat, opts.target ?? null, opts.participants ?? noPrey, opts.summons ?? noPrey,
+    opts.blocked ?? open, opts.blocked ?? open, opts.nowMs ?? 0, opts.rng ?? rng,
+  );
+  const countingRng = new Rng({ a: 1, b: 2, c: 3, d: 4 });
+  /** Estoura se sorteado — prova que o ramo não consome nada. */
+  const explodingRng = { integer: (): number => { throw new Error('sorteio inesperado'); } };
+
+  describe('ocioso (`isIdle`, `monster.cpp:1521-1560`)', () => {
+    it('no spawn, sem ninguém à vista e sem condição: ocioso — não anda, não sorteia', () => {
+      const monster = monsterAt(0, 0);
+      const action = decideUnengagedMove(
+        monster, rat, null, [prey('far', 9, 0)], noPrey, open, open, 5_000, explodingRng,
+      );
+      expect(action).toEqual({ kind: 'idle' });
+      expect(monster.walkingBack).toBe(false);
+      expect(monster.randomStepping).toBe(false);
+    });
+
+    it('quem morreu não conta como alguém à vista', () => {
+      const action = decide(monsterAt(0, 0), { participants: [prey('dead', 1, 0, false)] });
+      expect(action.kind).toBe('idle');
+    });
+
+    it('a área de visão é o `aggroRadius`: a 4 tiles ainda vê (não ocioso), a 5 já não', () => {
+      // Alguém à vista SEM ser alvo (aqui `target` é null): não ocioso — e sem volta, no spawn,
+      // resta o passo aleatório. É a diferença entre "lista de alvos vazia" e "sem alvo".
+      const seen = decide(monsterAt(0, 0), { participants: [prey('p', 4, 0)] });
+      expect(seen.kind).toBe('random-step');
+      const unseen = decide(monsterAt(0, 0), { participants: [prey('p', 5, 0)] });
+      expect(unseen.kind).toBe('idle');
+    });
+
+    it('as invocações de personagem também enchem a lista de alvos', () => {
+      const action = decide(monsterAt(0, 0), { summons: [prey('m:9', 2, 0)] });
+      expect(action.kind).toBe('random-step');
+    });
+
+    it('com QUALQUER condição ativa nunca fica ocioso — `conditions.empty()` no Canary', () => {
+      const burning = monsterAt(0, 0, { conditions: [{ key: 'burning', expiresAtMs: 60_000 }] });
+      const action = decide(burning);
+      // No spawn e sem volta ligada: cai no passo aleatório.
+      expect(action.kind).toBe('random-step');
+      expect(burning.walkingBack).toBe(false);
+      expect(burning.randomStepping).toBe(true);
+    });
+
+    it('com condição, fora do spawn e sem ninguém à vista, a volta NÃO liga (só `updateIdleStatus` sem condição liga)', () => {
+      const burning = monsterAt(2, 0, {
+        home: { x: 0, y: 0 }, conditions: [{ key: 'burning', expiresAtMs: 60_000 }],
+      });
+      const action = decide(burning);
+      expect(action.kind).toBe('random-step');
+      expect(burning.walkingBack).toBe(false);
+    });
+  });
+
+  describe('volta ao spawn (`doWalkBack`, `monster.cpp:2501-2526`)', () => {
+    it('sem alvo, ninguém à vista e fora do spawn: liga a volta e dá o passo rumo ao home', () => {
+      const monster = monsterAt(3, 0, { home: { x: 0, y: 0 } });
+      const action = decide(monster, { rng: explodingRng });
+      expect(action).toEqual({ kind: 'walk-back', to: { x: 2, y: 0 } });
+      expect(monster.walkingBack).toBe(true);
+    });
+
+    it('chegando ao home a volta desliga, e o vencimento seguinte deixa o monstro ocioso', () => {
+      const monster = monsterAt(1, 0, { home: { x: 0, y: 0 } });
+      expect(decide(monster, { rng: explodingRng })).toEqual({ kind: 'walk-back', to: { x: 0, y: 0 } });
+      monster.position = { x: 0, y: 0 };
+      // Já no home e sem ninguém à vista: `updateIdleStatus` o deixa ocioso ANTES de qualquer
+      // `getNextStep` — a volta ligada não anda nem desliga (o Canary também nem chega lá).
+      expect(decide(monster, { rng: explodingRng })).toEqual({ kind: 'idle' });
+      expect(monster.walkingBack).toBe(true);
+    });
+
+    it('acordado no home com a volta ainda ligada: `distance == 0` a desliga, sem passo', () => {
+      // Um alvo apareceu (lista não vazia → não ocioso), a volta seguia ligada, e o monstro
+      // já está no home: `doWalkBack` desliga a flag e não anda.
+      const monster = monsterAt(0, 0, { home: { x: 0, y: 0 } });
+      monster.walkingBack = true;
+      const action = decide(monster, { target: prey('p', 3, 0), rng: explodingRng });
+      expect(action).toEqual({ kind: 'walk-back', to: null });
+      expect(monster.walkingBack).toBe(false);
+    });
+
+    it('sem passo até o home (parede): desliga a volta e não anda — o seguinte religa', () => {
+      const monster = monsterAt(3, 0, { home: { x: 0, y: 0 } });
+      const walled = (x: number): boolean => x <= 2;
+      const action = decide(monster, { blocked: walled, rng: explodingRng });
+      expect(action).toEqual({ kind: 'walk-back', to: null });
+      expect(monster.walkingBack).toBe(false);
+      // No vencimento seguinte, o `updateIdleStatus` religa (ninguém à vista, fora do spawn).
+      expect(decide(monster, { blocked: walled, rng: explodingRng })).toEqual({ kind: 'walk-back', to: null });
+    });
+
+    it('a volta SOBREVIVE a um alvo que aparece no meio dela — só `doWalkBack` a desliga', () => {
+      // O quirk do Canary: `isWalkingBack` fica ligada. Um monstro que já voltava, acha um alvo,
+      // perde o caminho até ele — e volta a andar rumo ao spawn em vez de andar ao acaso.
+      const monster = monsterAt(3, 0, { home: { x: 0, y: 0 } });
+      monster.walkingBack = true;
+      const action = decide(monster, { target: prey('p', 4, 0), rng: explodingRng });
+      expect(action).toEqual({ kind: 'walk-back', to: { x: 2, y: 0 } });
+    });
+
+    it('com alvo (lista de alvos NÃO vazia) e a volta desligada, NÃO liga a volta', () => {
+      const monster = monsterAt(3, 0, { home: { x: 0, y: 0 } });
+      const action = decide(monster, { target: prey('p', 4, 0) });
+      expect(action.kind).toBe('random-step');
+      expect(monster.walkingBack).toBe(false);
+    });
+
+    it('a volta não consome sorteio nenhum', () => {
+      const monster = monsterAt(7, 3, { home: { x: 0, y: 0 } });
+      const before = countingRng.getState();
+      decide(monster, { rng: countingRng });
+      expect(countingRng.getState()).toEqual(before);
+    });
+  });
+
+  describe('passo aleatório (`doRandomStep`, `monster.cpp:2494-2499`)', () => {
+    const someone = prey('p', 5, 3);
+
+    it('com alvo e sem passo até ele, sorteia UM passo cardinal e liga `randomStepping`', () => {
+      const monster = monsterAt(3, 3);
+      const action = decide(monster, { target: someone, participants: [someone] });
+      expect(action.kind).toBe('random-step');
+      if (action.kind !== 'random-step' || action.to === null) throw new Error('sem passo');
+      expect(Math.abs(action.to.x - 3) + Math.abs(action.to.y - 3)).toBe(1);
+      expect(monster.randomStepping).toBe(true);
+    });
+
+    it('nunca antes de 1000 ms desde o último passo — e nem liga a flag', () => {
+      const monster = monsterAt(3, 3);
+      monster.lastMoveAtMs = 10_000;
+      const early = decide(monster, {
+        target: someone, nowMs: 10_000 + RANDOM_STEP_INTERVAL_MS - 1, rng: explodingRng,
+      });
+      expect(early).toEqual({ kind: 'random-step', to: null });
+      expect(monster.randomStepping).toBe(false);
+
+      const due = decide(monster, { target: someone, nowMs: 10_000 + RANDOM_STEP_INTERVAL_MS });
+      expect(due.kind).toBe('random-step');
+      if (due.kind !== 'random-step') throw new Error('ramo errado');
+      expect(due.to).not.toBeNull();
+      expect(monster.randomStepping).toBe(true);
+    });
+
+    it('nunca andou (`lastMoveAtMs` nulo): o primeiro passo vale de imediato', () => {
+      const monster = monsterAt(3, 3);
+      expect(decide(monster, { target: someone, nowMs: 0 }).kind).toBe('random-step');
+      expect(monster.randomStepping).toBe(true);
+    });
+
+    it('cercado: liga a flag, consome os três sorteios e não anda', () => {
+      const monster = monsterAt(3, 3);
+      const calls: Array<[number, number]> = [];
+      const spy = { integer: (min: number, max: number): number => { calls.push([min, max]); return min; } };
+      const action = decideUnengagedMove(
+        monster, rat, someone, [someone], noPrey, () => true, () => true, 0, spy,
+      );
+      expect(action).toEqual({ kind: 'random-step', to: null });
+      expect(monster.randomStepping).toBe(true);
+      expect(calls).toHaveLength(3);
+    });
+
+    it('usa o predicado ESTRITO (`randomBlocked`), não o do passo guloso', () => {
+      // O guloso deixa passar tile com criatura empurrável; o `canWalkTo` do Canary não.
+      const monster = monsterAt(3, 3);
+      const action = decideUnengagedMove(
+        monster, rat, someone, [someone], noPrey, open, () => true, 0, rng,
+      );
+      expect(action).toEqual({ kind: 'random-step', to: null });
+    });
+
+    it('alguém à vista em OUTRO andar: não ocioso e anda ao acaso (Canary `canSee` com z)', () => {
+      const monster = monsterAt(0, 0, { position: { x: 0, y: 0, z: 10 }, home: { x: 0, y: 0, z: 10 } });
+      const otherFloor: Prey = { id: 'p', position: { x: 1, y: 0, z: 11 }, alive: true, health: 100 };
+      const action = decide(monster, { participants: [otherFloor] });
+      expect(action.kind).toBe('random-step');
+      // Na superfície, o subsolo não é visível: ocioso.
+      const surface = monsterAt(0, 0, { position: { x: 0, y: 0, z: 7 }, home: { x: 0, y: 0, z: 7 } });
+      const below: Prey = { id: 'p', position: { x: 0, y: 0, z: 8 }, alive: true, health: 100 };
+      expect(decide(surface, { participants: [below] }).kind).toBe('idle');
+    });
+  });
+
+  describe('invocação (`isSummon`)', () => {
+    it('sem alvo fica parada — seguir o mestre não é modelado, e a volta ao spawn não se aplica', () => {
+      const summon = monsterAt(5, 5, { home: { x: 0, y: 0 }, masterId: 3 });
+      expect(decide(summon, { rng: explodingRng })).toEqual({ kind: 'still' });
+      expect(summon.walkingBack).toBe(false);
+    });
+
+    it('com alvo e sem passo até ele, anda ao acaso como qualquer monstro', () => {
+      const summon = monsterAt(5, 5, { home: { x: 0, y: 0 }, masterId: 3 });
+      const action = decide(summon, { target: prey('p', 7, 5) });
+      expect(action.kind).toBe('random-step');
+      expect(summon.walkingBack).toBe(false);
+    });
   });
 });
