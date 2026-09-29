@@ -2392,9 +2392,10 @@ export const monsterSchema = z.strictObject({
    * do Canary/TFS, `monster.immunities[].condition`). `paralyze`/`drunk` e as oito DOTs
    * (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY`: `bleeding`, `poison`, `burning`…): a condição não é
    * ADICIONADA — `#applyConditionTo` (`sim/rulesets/hunt.ts`) recusa antes de entrar, a mesma
-   * forma que a supressão de `drunk` por anel já usa, e só quando ela vem de um COMBATE (magia,
-   * runa, ability) contra outro alvo — `Combat::CombatConditionFunc` do Canary; campo de tile e
-   * auto-aplicação não consultam a imunidade. `invisible` é o CASO especial que o Canary também
+   * forma que a supressão de `drunk` por anel já usa, e só quando o chamador é um COMBATE (magia,
+   * runa, ability — `fromCombat`) contra outro alvo — `Combat::CombatConditionFunc` do Canary;
+   * campo de tile, auto-aplicação e o que entra por `addCondition` direto (os charms
+   * Cripple/Numb) não consultam a imunidade. `invisible` é o CASO especial que o Canary também
    * trata à parte: `Monster::canSeeInvisibility() { return isImmune(CONDITION_INVISIBLE); }` — a
    * MESMA imunidade vira "enxerga quem está invisível", nunca "não pode ficar invisível".
    * `chooseTarget` (`sim/monster/monster.ts`) lê esta chave para decidir se o monstro seleciona
@@ -4584,8 +4585,10 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
    * ausente no alvo não é erro: a magia sai igual, sem efeito nenhum a remover.
    *
    * `area` (#592, Cancel Invisibility: `combat:setArea(createCombatArea(AREA_CIRCLE3X3))`) é a
-   * forma centrada no LANÇADOR cujos MONSTROS perdem as chaves — nunca os aliados na área, fora
-   * do recorte desta issue (§12). Ausente é o dispel de sempre, só no `recipient`.
+   * forma centrada no LANÇADOR — `AREA_CIRCLE3X3` é o círculo de RAIO 3 (37 tiles), não o 3x3 do
+   * nome — cujos MONSTROS perdem as chaves: nunca o lançador nem os aliados, porque o `combat` do
+   * script é agressivo por default e `Combat::CombatFunc` (`combat.cpp:1562`/`1610`) exclui o
+   * lançador (#559). Ausente é o dispel de sempre, só no `recipient`.
    */
   z.object({
     kind: z.literal('dispel'),
