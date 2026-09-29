@@ -366,6 +366,15 @@ primeira vez que uma sessão faz uma linha de item deixar de existir. Na Cidade,
 `goldDelta` em `aggregates` — antes sempre zerado, porque equipar e escolher vocação nunca
 mexiam em gold.
 
+**A morte é a segunda exceção nomeada (#571, ADR 0042 decisão 4): ela também destrói item**, pelo
+mesmo `removedInstances`. `Blessings.PlayerDeath` do Canary larga o item perdido no cadáver do
+jogador; o Draconya não tem item no chão (ADR 0037, Alternativas), então a instância é apagada do
+banco pelo `jobs` na mesma transação da linha de ledger, e o extrato registra um evento
+`item-lost-on-death` por instância. A bag de reposição (`origin: 'death-replacement'`, a única
+origem nova desde `market`) entra pelo caminho de sempre — `acquired` + `equipment`. **Está
+DESLIGADA no conteúdo real** (`deathPenalty.itemLoss.enabled: false`) até o dono decidir entre
+destruir e manter "nunca perde item": ver `docs/product/death.md`, "Perda de item na morte".
+
 ### A tela (#161, ADR 0026 decisão 7)
 
 A coluna da DIREITA do OTClient: o **painel do set** (`EquipmentPanel`) com os dez slots no

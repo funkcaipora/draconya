@@ -166,3 +166,43 @@ continua em aberto — `options.promoted` em `applyDeathPenalty` segue como pont
 estado por trás.
 
 A questão de perda de item (decisão 4) não muda: segue aberta, sem captura aplicável.
+
+## Emenda — 2026-09-29: perda de item implementada (#571), DESLIGADA até a decisão do dono
+
+A #571 implementa a decisão 4 inteira — o mecanismo de `Blessings.PlayerDeath`/`DropLoot`, o
+consumo do Amulet of Loss, a bag de reposição e o registro no extrato — em
+`packages/sim/src/item-loss.ts`, mas o conteúdo real a entrega **desligada**:
+`deathPenalty.itemLoss.enabled: false` em `packages/content/data/progression/baseline.json`.
+
+**Por que desligada, e não com o valor "provisório" da decisão 4.** O texto original deste ADR
+tratava "destruir e registrar" como o valor provisório do perfil até o dono responder; a emenda de
+2026-09-25 (e o comentário "Atualização de decisão" da própria #571) revogou isso: sem captura
+do Huntera não há o que copiar, a issue fica BLOQUEADA aguardando a decisão DIRETA do dono, e a
+implementação mantém "nunca perde item" (`docs/product/death.md` §3.8) até ela chegar. Destruir é
+irreversível para o jogador — não há cadáver para recuperar o item —, então entregar o mecanismo
+LIGADO por padrão seria decidir pelo dono na direção que não tem volta; entregá-lo desligado
+deixa a decisão como ela estava e a reduz a um booleano. É a mesma disciplina do `combat-v1`
+(ADR 0031): o comportamento de produto fica marcado até o dono decidir, e o contrato de dado
+(`itemLoss`, `protectsOnDeath`, o evento `item-lost-on-death`) é fixado por este ADR.
+
+**O que ligar significa.** Trocar `enabled` para `true`: a morte passa a sortear cada item vestido
+(100/70/45/25/10/0 % por contagem de bênçãos, um décimo disso para quem não é container), destruir
+o que cair — com o conteúdo da mochila —, entregar uma bag a quem ficou sem mochila e gastar o
+Amulet of Loss vestido. Nada mais muda: sem migração (o conteúdo é fixado por sessão, invariante
+7) e sem estado novo no snapshot. **Decidir por "nunca perde item"** é apagar o bloco `itemLoss` do
+conteúdo e fechar a #571 como divergência de produto registrada.
+
+**Fidelidade verificada contra o Canary (`47dfd51`)**, incluindo o que o texto do ADR não dizia:
+a perda roda ANTES da penalidade de XP e do consumo das bênçãos (`Creature::onDeath` chama
+`dropCorpse` antes de `death()`); o Amulet of Loss só protege no slot do pescoço e é consumido
+DEPOIS da penalidade — mesmo com cinco bênçãos, e não quando o personagem tem vocação e o level
+rebaixado ficou abaixo do Adventurer's Blessing (`Player::death`, `willNotLoseBless`); a aljava é
+container para a regra (a flag `container` do cliente, não o `items.xml`) e perde com a chance
+cheia; a bag de reposição vem mesmo com o personagem protegido.
+
+**Adventurer's Blessing.** O Canary concede as cinco bênçãos regulares AUTOMATICAMENTE abaixo do
+level 21 com vocação; a #570 modelou isso como preço zero (`blessingPricing.freeBelowLevel`) — a
+bênção é comprada de graça, não concedida. A perda de item lê o mesmo bitmask que a penalidade de
+XP, então enquanto aquele desenho valer um personagem de level < 21 que não comprou as bênçãos
+grátis teria 100% de chance na mochila, com a chave ligada. Não é decisão desta issue, e fica
+registrado aqui para quem ligar a chave.
