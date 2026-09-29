@@ -36,6 +36,19 @@ export function effectPhaseAt(phases: readonly number[], elapsedMs: number): num
  * o modo sem arte é o que CI e o cliente de carga rodam, e um efeito que não aparece nele é
  * indistinguível de um efeito que não chegou.
  */
+/**
+ * A fase de um objeto animado que roda em laço (#666): água, fogo e fontes não acabam, e todos
+ * os tiles do mesmo objeto andam no mesmo compasso — o relógio é global, como no cliente do
+ * Tibia. `0` para objeto sem animação.
+ */
+export function loopPhaseAt(phases: readonly number[], nowMs: number): number {
+  if (phases.length <= 1) return 0;
+  let total = 0;
+  for (const duration of phases) total += duration;
+  if (total <= 0) return 0;
+  return effectPhaseAt(phases, ((nowMs % total) + total) % total) ?? 0;
+}
+
 export const FALLBACK_EFFECT_PHASES: readonly number[] = [300];
 
 /** O projétil leva isto por tile de distância EUCLIDIANA — a fórmula do OTClient v8. */

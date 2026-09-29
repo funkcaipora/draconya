@@ -21,6 +21,9 @@ import { loadWorldLinks, loadWorldPlaces } from '../world/world-places.js';
 import type { LinkIndex, WorldPlaces } from '../world/world-places.js';
 import { loadCreatureSource } from '../world/world-creatures.js';
 import type { CreatureSource } from '../world/world-creatures.js';
+import { loadLightMap } from '../world/world-lights.js';
+import type { LightMap } from '../world/world-lights.js';
+import { WorldLightLayer } from './WorldLightLayer.js';
 import { WorldPlacesLayer } from './WorldPlacesLayer.js';
 import type { OverlayLayers } from './WorldPlacesLayer.js';
 import { useBrowserPack } from './useBrowserPack.js';
@@ -58,6 +61,10 @@ export function WorldExplorer() {
   const [links, setLinks] = useState<LinkIndex | null>(null);
   const [layers, setLayers] = useState<OverlayLayers>({ houses: true, zones: false, links: true });
   const [showCreatures, setShowCreatures] = useState(true);
+  const [lights, setLights] = useState<LightMap | null>(null);
+  const [lighting, setLighting] = useState(true);
+  /** O escuro da superfície: 0 é meio-dia, 0,7 é noite. O subsolo é escuro de qualquer jeito. */
+  const [surfaceDark, setSurfaceDark] = useState(0);
   /** As criaturas do mapa, lidas pelo laço do Pixi a cada quadro — por isso numa ref. */
   const creaturesRef = useRef<CreatureSource | null>(null);
   const showCreaturesRef = useRef(true);
@@ -104,7 +111,7 @@ export function WorldExplorer() {
 
     void (async () => {
       const mounted = await mountViewport(parent, {
-        pack: null, book, camera: () => cameraRef.current,
+        pack: null, book, camera: () => cameraRef.current, animateObjects: true,
         creatures: () => {
           const source = creaturesRef.current;
           if (source === null || !showCreaturesRef.current) return [];
@@ -122,10 +129,12 @@ export function WorldExplorer() {
       sceneRef.current = scene;
       mounted.setScene(scene);
       setStatus('ready');
-      const [source, placesFile, linkIndex, creatureSource] = await Promise.all([
+      const [source, placesFile, linkIndex, creatureSource, lightMap] = await Promise.all([
         loadMinimapSource(baseUrl), loadWorldPlaces(baseUrl), loadWorldLinks(baseUrl), loadCreatureSource(baseUrl),
+        loadLightMap(baseUrl),
       ]);
       if (cancelled) return;
+      setLights(lightMap);
       creaturesRef.current = creatureSource;
       setMinimap(source);
       setPlaces(placesFile);
@@ -278,6 +287,7 @@ export function WorldExplorer() {
         onPointerCancel={onPointerUp}
         onPointerLeave={() => { setHover(''); }}
       />
+      <WorldLightLayer holder={holder} cameraRef={cameraRef} lights={lights} surface={surfaceDark} enabled={lighting} />
       <WorldPlacesLayer holder={holder} cameraRef={cameraRef} sceneRef={sceneRef} links={links} layers={layers} />
       <aside className="world-explorer__panel">
         <h1 className="world-explorer__title">Mapa do mundo</h1>
@@ -307,7 +317,15 @@ export function WorldExplorer() {
           <label><input type="checkbox" checked={layers.zones} onChange={() => { toggleLayer('zones'); }} /> zonas</label>
           <label><input type="checkbox" checked={layers.links} onChange={() => { toggleLayer('links'); }} /> escadas</label>
           <label><input type="checkbox" checked={showCreatures} onChange={() => { setShowCreatures((on) => !on); }} /> criaturas</label>
+          <label><input type="checkbox" checked={lighting} onChange={() => { setLighting((on) => !on); }} /> luz</label>
         </div>
+        <label className="world-explorer__daylight">
+          noite
+          <input
+            type="range" min={0} max={0.8} step={0.1} value={surfaceDark} aria-label="Escuro da superfície"
+            onChange={(event) => { setSurfaceDark(Number(event.target.value)); }}
+          />
+        </label>
         <p className="world-explorer__hover" data-testid="explorer-hover">{hover}</p>
         {minimap !== null && (
           <>
