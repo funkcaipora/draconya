@@ -293,6 +293,22 @@ const AUTOMATION = 'bot-automation';
 const AUTOMATION_INTERVAL_MS = 1_000;
 
 type ExitReason = 'manual-exit' | 'exit-rule';
+
+/**
+ * A saída pendente de um personagem, como o hospedeiro a apresenta (#802): o motivo, em que fase
+ * ela está e o instante LÓGICO em que ela conclui — o mais cedo que o ruleset a deixa terminar
+ * SE nenhum golpe novo empurrar a trava de combate. É leitura pura do que já está agendado
+ * (`EXIT_COUNTDOWN`) e do carimbo de combate: nada aqui é estado novo nem entra no snapshot.
+ *
+ * - `countdown`: a contagem VISUAL do `exitDelayMs` corre e o personagem está fora de combate;
+ * - `in-combat`: o personagem lutou há menos de `IN_FIGHT_WINDOW_MS` — a saída só conclui quando
+ *   a janela vence (`CONDITION_INFIGHT` do Canary, #625).
+ */
+export interface ExitStatus {
+  readonly reason: ExitReason;
+  readonly phase: 'countdown' | 'in-combat';
+  readonly untilMs: number;
+}
 /**
  * As condições (#155, CMB-07): o vencimento e o tique periódico. Eventos da fila (invariante 2),
  * nunca acumulador. `subject` é `<targetId>/<key>`: um cancelamento por condição, sem varrer a
@@ -2946,8 +2962,52 @@ export class HuntRuleset implements Ruleset {
     });
   }
 
+  /**
+   * O jogador pede para sair (#802): o `leave-hunt` do socket chega aqui, e a sessão só termina
+   * quando `#finishExit` concluir — depois do `exitDelayMs` e fora da janela de combate (#625).
+   * Pedir de novo enquanto uma saída está pendente é ignorado, e não reinicia a contagem.
+   */
   requestExit(session: Session, characterId: string): void {
     this.#beginExit(session, characterId, 'manual-exit');
+  }
+
+  /**
+   * O jogador desiste da saída que pediu (#802). Devolve `true` se havia uma saída MANUAL
+   * pendente e ela foi desfeita; `false` (e nada muda) se não havia nenhuma, ou se a pendente é a
+   * de uma regra do bot — essa é a decisão da configuração dele, e a regra a dispararia de novo
+   * no ciclo seguinte enquanto a condição valer.
+   *
+   * O Canary não tem "logout pendente": recusa na hora quando o personagem está em combate
+   * (`RETURNVALUE_YOUMAYNOTLOGOUTDURINGAFIGHT`) e o jogador simplesmente tenta de novo depois.
+   * A espera é a forma do Draconya de fazer esse "tenta de novo" pelo jogador, e cancelá-la é só
+   * parar de tentar — não muda nenhuma regra de combate nem de trava.
+   *
+   * O `EXIT_COUNTDOWN` agendado é CANCELADO, e não apenas ignorado quando vencer: um pedido novo
+   * logo depois agendaria um segundo, e o velho concluiria a saída antes da hora do novo.
+   */
+  cancelExit(session: Session, characterId: string): boolean {
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined || runner.pendingExit !== 'manual-exit') return false;
+    session.cancelEvent(EXIT_COUNTDOWN, characterId);
+    runner.pendingExit = null;
+    return true;
+  }
+
+  /** A saída pendente do personagem, ou `null` (ver `ExitStatus`). Só lê. */
+  exitStatus(session: Session, characterId: string): ExitStatus | null {
+    const reason = this.#runners.get(characterId)?.pendingExit ?? null;
+    if (reason === null) return null;
+    const lastCombatAtMs = findById(session.participants, characterId)?.lastCombatActionAtMs ?? null;
+    const dueAtMs = session.dueAtOf(EXIT_COUNTDOWN, characterId) ?? session.nowMs;
+    if (lastCombatAtMs !== null && isInFight(session.nowMs, lastCombatAtMs)) {
+      // O evento agendado pode estar ANTES do fim da janela (um golpe novo só é relido quando ele
+      // vence, `#finishExit`): o que vale para o jogador é o mais tardio dos dois.
+      return {
+        reason, phase: 'in-combat',
+        untilMs: Math.max(dueAtMs, lastCombatAtMs + IN_FIGHT_WINDOW_MS),
+      };
+    }
+    return { reason, phase: 'countdown', untilMs: dueAtMs };
   }
 
   #newRunner(

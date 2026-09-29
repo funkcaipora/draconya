@@ -238,6 +238,17 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   também o decaimento de imbuement fora de combate (#606): uma segunda fórmula de "em combate"
   em outro lugar seria a mesma divergência que `Skills.merge`/`Bestiary.merge` evitam vivendo
   cada um num arquivo só.
+- **A saída que o jogador pede tem três pontos de entrada no ruleset (#802).** `requestExit` é o
+  pedido (o `leave-hunt` do socket chama ESTE, e não mais `session.end`/`session.leave`);
+  `cancelExit` desfaz a saída MANUAL pendente (devolve `false` sem mexer em nada se não há uma, ou
+  se a pendente é a de uma regra do bot — que dispararia de novo no ciclo seguinte) e **cancela o
+  evento `EXIT_COUNTDOWN` agendado**, porque só zerar `pendingExit` deixaria o evento velho vencer
+  depois de um pedido novo e concluir a saída antes da hora dele; `exitStatus` é a leitura pura do
+  que o hospedeiro apresenta (`{ reason, phase, untilMs }`): a fase é `in-combat` quando o carimbo
+  de combate está dentro da janela, e `untilMs` é o MAIS TARDIO entre o `EXIT_COUNTDOWN` agendado
+  (`session.dueAtOf`) e o fim da janela — o evento só relê um golpe novo quando vence, mas o que o
+  jogador precisa ver já é o prazo empurrado. `exitStatus` não guarda estado nenhum (nada novo no
+  snapshot) e só varre a fila enquanto há saída pendente.
 - **A postura anda pelo `#step`, como todo mundo.** `movement.ts` segue sendo o único escritor de
   posição (FUN-69) e `pnpm source-policy` reprova o contrário. Recuar é `fleeStep`, que é o passo
   guloso com a ameaça espelhada — não um segundo algoritmo de desvio.
