@@ -623,6 +623,10 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
     // A munição abstrata debita gold por tiro (ADR 0026 d.3), e o abate prova que a hunt rodou.
     expect(firstHunt.aggregates.kills).toBeGreaterThan(0);
 
+    // A hunt do teste luta sem parar, e o `leave-hunt` em combate espera 60 s sem golpe (#802,
+    // `CONDITION_INFIGHT` do Canary): o assunto deste teste é o extrato, não a trava — ela tem
+    // teste próprio em `game/leave-hunt.test.ts`. Sem golpe recente a saída conclui na hora.
+    if (cityHero !== undefined) cityHero.lastCombatActionAtMs = null;
     inbox.send({ type: 'leave-hunt' });
     await until(() => inbox.last('session-state')?.sessionType === 'city', 'the first return to City');
     inbox.close();

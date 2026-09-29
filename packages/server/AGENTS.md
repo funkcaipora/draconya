@@ -287,7 +287,29 @@ snapshot; resposta perdida repete o mesmo `(session_id, seq)`, sem novo crédito
 personagem e o devolve à Cidade; quem sai por dentro do `sim` (`member-left`: morte, regra de
 saída) entra em `hosted.departures` no ciclo — que é síncrono — e `#settleDepartures` grava
 depois, haja ou não visualizador; `leave-hunt` com mais de um dono é `leave`, não `end`; e
-`#replace` só apaga a sessão quando não sobra ninguém dela. Uma sessão retomada com N traz os
+`#replace` só apaga a sessão quando não sobra ninguém dela.
+
+**`leave-hunt` PEDE a saída, não a executa (#802).** `#requestLeaveHunt` chama `requestExit` do
+ruleset, e a sessão só termina quando o `sim` concluir — depois do `exitDelayMs` e fora da janela
+de combate de 60 s (#625). O host faz a metade de I/O: quando o `sim` encerra a sessão a
+sucessão de sempre (`#succeed`) grava o extrato e leva o personagem à Cidade; quando ele tira um
+membro da party (`member-left`), `#settleDepartures` faz o mesmo por ele. Três armadilhas:
+
+- **Quem encerra FORA do ciclo dispara a sucessão.** O ciclo pula a sessão que já acabou, então o
+  `requestExit` que conclui na hora (solo, sem delay, fora de combate) tem de chamar `#succeed`
+  ele mesmo — como o `#partyEndVote`. E o `member-left` de uma party é drenado na hora
+  (`#presentMoves` + `#settleDepartures`), não no próximo ciclo: o ciclo só apresenta depois de
+  vencer o período do tick, e a resposta do `leave-hunt` sempre foi imediata.
+- **O `SessionBuilder` recebe o personagem que JÁ saiu (`departed`).** Quem sai por dentro do
+  `sim` não está mais em `from.participants`; sem o quarto argumento o construtor devolvia `null`,
+  o host caía no `release`, e o `release` de uma sessão privada a ENCERRA — a saída de UM membro
+  (morte, regra, ou este `leave-hunt`) acabava a party inteira com `manual-exit`. `leave-hunt.test.ts`
+  usa o construtor de produção justamente porque o stub dos outros testes esconde isto.
+- **`exit-pending` é apresentação, com gatilho por assinatura** (`sentExit`, motivo|fase|prazo —
+  nunca o `remainingMs`, que encolhe a cada ciclo) e sem nada quando ninguém olha (invariante 3).
+  Sai no `session-attach` só se há saída pendente. Morte, `party-member-lost` e a drenagem NÃO
+  passam por aqui e seguem encerrando direto — nenhuma carrega a intenção de sair.
+ Uma sessão retomada com N traz os
 outros membros: a conta de cada um vem do snapshot DELE, e o lease é registrado antes de
 qualquer coisa local existir — senão o lease expira, o login seguinte resolve para outro nó, e
 a cópia do snapshot revive a mesma sessão duas vezes.

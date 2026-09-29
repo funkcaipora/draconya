@@ -564,6 +564,14 @@ describe.runIf(ready)('critério de saída do M20 (§5, ADR 0035)', () => {
     }
 
     // --- 10. o líder (Premium) sai; o mais antigo (Free) assume e o limite cai (D2, D8) ---
+    // A hunt do teste luta sem parar, e o `leave-hunt` em combate espera 60 s sem golpe (#802,
+    // `CONDITION_INFIGHT` do Canary): o assunto deste teste é o extrato, não a trava — ela tem
+    // teste próprio em `game/leave-hunt.test.ts`. Sem golpe recente a saída conclui na hora.
+    const [gameNode] = [...games];
+    const leaving = gameNode?.host?.sessionFor(leader.characterId)?.participants
+      .find((participant) => participant.id === leader.characterId);
+    expect(leaving).toBeDefined();
+    if (leaving !== undefined) leaving.lastCombatActionAtMs = null;
     inbox.send({ type: 'leave-hunt' });
     const ended = await inbox.waitForNext('session-ended');
     expect(ended.reason).toBe('manual-exit');
