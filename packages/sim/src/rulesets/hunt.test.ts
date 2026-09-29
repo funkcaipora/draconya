@@ -5112,8 +5112,22 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
           .map(([, defender, , , , nowMs]) => ({
             defense: defender.defense, mitigation: defender.defenseMitigation, nowMs: nowMs ?? 0,
           })),
+        trace: traceOfCalls(),
       };
     };
+    /**
+     * Golpes do herói e golpes do monstro NA ORDEM em que o resolver os viu — a ordem de dois
+     * eventos no mesmo ms é o que os empates da janela de ataque medem.
+     */
+    interface TraceEntry { readonly kind: 'swing' | 'hit'; readonly nowMs: number; readonly defense?: unknown }
+    const traceOfCalls = (): TraceEntry[] => vi.mocked(resolveDamage).mock.calls
+      .flatMap(([intent, defender, , , , nowMs]): TraceEntry[] => {
+        if (intent.source === 'basic-attack') return [{ kind: 'swing', nowMs: nowMs ?? 0 }];
+        if (intent.source === 'monster-attack') {
+          return [{ kind: 'hit', nowMs: nowMs ?? 0, defense: defender.defense }];
+        }
+        return [];
+      });
     const swingsOf = (mode: Mode, combatDef: object) => play(
       mode, defenseContent({ monsters: [immuneRat], combat: [combatDef as typeof combat] }), comEspada,
     ).swings.map((swing) => swing.rawDamage);
@@ -5240,6 +5254,159 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
       expect(rapido.kills).toBeGreaterThan(0);
       expect(rapido.lastAttackAtMs).not.toBeNull();
       expect(rapido.shielding).toBeDefined();
+    });
+
+    describe('a janela de ataque no empate com o golpe do monstro e entre sessões (#550, revisão do PR #808)', () => {
+      const espadaEEscudo: InventoryState = {
+        backpack: [],
+        equipped: {
+          hand: { instanceId: 'w1', itemId: 'sword', quantity: 1 },
+          shield: { instanceId: 's1', itemId: 'shield', quantity: 1 },
+        },
+      };
+      // A skill de escudo que NUNCA sobe (o custo do próximo nível é astronômico): a defesa de
+      // cada golpe é um número fixo — 22 cheia, 11 no ofensivo, 17 no balanceado —, e o teste lê a
+      // janela, não o treino do bloqueio.
+      const fixedShielding = { ...shielding, curve: { base: 1_000_000_000, factor: 1 } };
+      const fixedContent = (monsters: readonly object[] = [immuneRat]) => defenseContent({
+        monsters: monsters as RawContent['monsters'],
+        skills: [...skills, fixedShielding], combat: [combatV3],
+      });
+
+      // Um corredor de um tile de largura: o herói fica PARADO na ponta (x=1) e o rato nasce a
+      // oito tiles, com aggro para andar até ele — o único jeito de o monstro CHEGAR depois de o
+      // herói já estar esperando (o spawn adjacente põe o herói na frente da fila).
+      const corridorMap = { id: 'arena', z: 7, grid: ['#'.repeat(12), `#${'.'.repeat(10)}#`, '#'.repeat(12)] };
+      const corridorRoute = {
+        id: 'arena-loop', mapId: 'arena',
+        // Vai até x=9 e volta por x=2: o laço fecha (o último tile é adjacente ao primeiro).
+        tiles: [...Array.from({ length: 9 }, (_, i) => 1 + i), ...Array.from({ length: 7 }, (_, i) => 8 - i)]
+          .map((x) => ({ x, y: 1, z: 7 })),
+        spawnPoints: [{ routeIndex: 8, radius: 1, monsterId: 'rat', respawnDelayMs: 1_000_000 }],
+      };
+      /** O herói parado no corredor, o rato andando até ele: devolve o rastro dos golpes. */
+      const walkIn = (mode: Mode, walker: object, ms: number) => {
+        vi.mocked(resolveDamage).mockClear();
+        const loaded = defenseContent({
+          monsters: [walker as RawContent['monsters'][number]],
+          skills: [...skills, fixedShielding], combat: [combatV3],
+          maps: [corridorMap], routes: [corridorRoute],
+        });
+        const { session, hero } = start({ loaded, health: 50_000, inventory: espadaEEscudo });
+        hero.setFightMode(mode);
+        session.cancelEvent('player-step', hero.id);
+        run(session, ms, 100);
+        return traceOfCalls();
+      };
+      const walkingRat = { ...immuneRat, aggroRadius: 20 };
+      type Trace = readonly TraceEntry[];
+      /**
+       * Lê do rastro o que o Canary daria a cada golpe recebido: `lastAttack` é o último golpe do
+       * herói ANTES dele na ordem do resolver; a janela é aberta se ele foi há menos de 2 s, ou se
+       * foi há exatamente 2 s e o golpe seguinte do herói cai neste mesmo ms — quem bate sem parar
+       * nunca a fecha. `tie` marca o segundo caso, o que a comparação estrita fechava.
+       */
+      const readWindows = (trace: Trace) => {
+        const out: { nowMs: number; defense: unknown; open: boolean; tie: boolean }[] = [];
+        let last: number | null = null;
+        trace.forEach((entry, index) => {
+          if (entry.kind === 'swing') { last = entry.nowMs; return; }
+          const elapsed = last === null ? Infinity : entry.nowMs - last;
+          const swingDueNow = trace.slice(index + 1)
+            .find((next) => next.kind === 'swing')?.nowMs === entry.nowMs;
+          const tie = elapsed === 2_000 && swingDueNow;
+          out.push({ nowMs: entry.nowMs, defense: entry.defense, open: elapsed < 2_000 || tie, tie });
+        });
+        return out;
+      };
+      const halved = { attack: 11, balanced: 17 } as const;
+
+      it('quem bate sem parar segue com a janela ABERTA no empate: a ordem da fila não decide a defesa', () => {
+        // O rato imune sobrevive a todo golpe, e o herói bate a cada 2 s sem parar. O rato que
+        // ANDOU até ele arma o golpe dele antes de o herói armar o próprio (`#onMonsterStep` arma
+        // as abilities antes do `#armPlayerAttack`), e as duas cadências de 2 s nascem no mesmo
+        // instante: dali em diante o golpe do monstro sai da fila ANTES do golpe do herói, no
+        // MESMO ms, todo ciclo. O Canary nunca fecha a janela de quem bate sem parar (o golpe
+        // seguinte corre `attackSpeed` MAIS a latência do despachante).
+        for (const mode of ['attack', 'balanced'] as const) {
+          const windows = readWindows(walkIn(mode, walkingRat, 30_000));
+          // Precondição: o cenário EXERCITA o empate (sem ele o teste passaria vazio).
+          expect(windows.filter((hit) => hit.tie).length, `${mode}: golpes no empate`).toBeGreaterThan(3);
+          for (const hit of windows) {
+            expect(hit.defense, `${mode} @${hit.nowMs}`).toEqual({
+              kind: 'shield', defense: hit.open ? halved[mode] : 22,
+            });
+          }
+          // O PRIMEIRO golpe do monstro chega antes de o herói bater: defesa cheia, sem carimbo.
+          expect(windows[0]?.defense).toEqual({ kind: 'shield', defense: 22 });
+        }
+      });
+
+      it('o carimbo de uma hunt NÃO atravessa para a seguinte: o mesmo herói, sessão nova, defesa cheia', () => {
+        // O `CharacterRuntime` é o MESMO objeto na transição (`createSessionBuilder`), e o relógio
+        // da sessão nova nasce em zero. Um carimbo de ~30 000 ms da primeira ficaria no futuro da
+        // segunda e a defesa seria pela metade enquanto o herói não bate — que aqui nunca (sem
+        // mana a vara não sai).
+        const comVara: InventoryState = {
+          backpack: [],
+          equipped: {
+            hand: { instanceId: 'w1', itemId: 'wand', quantity: 1 },
+            shield: { instanceId: 's1', itemId: 'shield', quantity: 1 },
+          },
+        };
+        const loaded = fixedContent([rat]);
+        const first = start({ loaded, difficulty: 'bold', health: 50_000, inventory: comVara });
+        // Mana de sobra na primeira hunt: a vara BATE, e o carimbo é gravado.
+        first.hero.maxMana = 100_000;
+        first.hero.mana = 100_000;
+        run(first.session, 30_000, 100);
+        const stamp = first.hero.lastAttackAtMs;
+        expect(stamp).not.toBeNull();
+        expect(stamp).toBeGreaterThan(20_000);
+
+        // Transição: sai da primeira e entra numa sessão NOVA, com o mesmo objeto.
+        first.session.leave('hero');
+        const second = createHuntSession({
+          id: 'session-2', content: loaded, huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+        });
+        // Sem mana: a vara não bate na segunda hunt, então o carimbo só pode vir da primeira.
+        first.hero.maxMana = 0;
+        first.hero.mana = 0;
+        vi.mocked(resolveDamage).mockClear();
+        second.enter(first.hero);
+        expect(second.nowMs).toBe(0);
+        expect(first.hero.lastAttackAtMs).toBeNull();
+
+        run(second, 10_000, 100);
+        const hits = vi.mocked(resolveDamage).mock.calls
+          .filter(([intent]) => intent.source === 'monster-attack');
+        expect(hits.length).toBeGreaterThan(0);
+        expect(vi.mocked(resolveDamage).mock.calls.some(([intent]) => intent.source === 'basic-attack'))
+          .toBe(false);
+        for (const [, defender] of hits) {
+          expect(defender.defense).toEqual({ kind: 'shield', defense: 22 });
+        }
+        expect(first.hero.lastAttackAtMs).toBeNull();
+      });
+
+      it('a entrada recusada (party cheia) não apaga a janela de quem continua na sessão de origem', () => {
+        const loaded = fixedContent([immuneRat]);
+        const origin = start({ loaded, difficulty: 'bold', health: 50_000, inventory: espadaEEscudo });
+        run(origin.session, 10_000, 100);
+        const stamp = origin.hero.lastAttackAtMs;
+        expect(stamp).not.toBeNull();
+
+        // A party de teste é de 4: lota a sessão de destino e tenta entrar com o herói.
+        const full = createHuntSession({
+          id: 'session-full', content: loaded, huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+          partyOptions: { leaderId: 'member-0', mode: 'split' },
+        });
+        for (let i = 0; i < 4; i += 1) {
+          full.enter(new CharacterRuntime({ ...character().getState(), id: `member-${i}` }));
+        }
+        expect(() => full.enter(origin.hero)).toThrow(PartyFullError);
+        expect(origin.hero.lastAttackAtMs).toBe(stamp);
+      });
     });
   });
 });

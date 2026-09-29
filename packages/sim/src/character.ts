@@ -292,8 +292,10 @@ export interface CharacterState {
    * balanceada (`attackedRecently`, `combat/fight-mode.ts`). Só o ruleset da hunt escreve, no
    * evento do golpe (invariante 9). Ausente é "nunca bateu nesta sessão" (fator 1,0) — o
    * relógio é da sessão, então não sobrevive à troca de sessão nem vai para o Postgres, só no
-   * snapshot QUENTE, para a hunt retomada não perder a janela. Sem bump de
-   * `SNAPSHOT_FORMAT_VERSION`, como `lastCombatActionAtMs`.
+   * snapshot QUENTE, para a hunt retomada não perder a janela. Na transição o personagem é o
+   * MESMO objeto e o relógio da sessão nova nasce em zero: por isso `Session.enter` zera o
+   * carimbo (o restore de snapshot não passa por `enter`, e a janela quente atravessa). Sem bump
+   * de `SNAPSHOT_FORMAT_VERSION`, como `lastCombatActionAtMs`.
    */
   readonly lastAttackAtMs?: number;
 }
@@ -456,8 +458,8 @@ export class CharacterRuntime {
    */
   fightMode: FightMode;
   /**
-   * Ver `CharacterState.lastAttackAtMs`. Só o ruleset da hunt escreve (invariante 9); `null` é
-   * "nunca bateu nesta sessão".
+   * Ver `CharacterState.lastAttackAtMs`. Só o ruleset da hunt escreve (invariante 9) e
+   * `Session.enter` zera; `null` é "nunca bateu nesta sessão".
    */
   lastAttackAtMs: number | null;
 

@@ -68,4 +68,41 @@ describe('attackedRecently — (agora − lastAttack) < getAttackSpeed()', () =>
     expect(attackedRecently(10_000, 10_999, 1_000)).toBe(true);
     expect(attackedRecently(10_000, 11_000, 1_000)).toBe(false);
   });
+
+  it('um carimbo NO FUTURO nunca é recente: o relógio é da sessão que o gravou (#550, revisão)', () => {
+    // 57 700 ms de uma hunt anterior lidos por uma sessão nova que está em 1 000 ms.
+    expect(attackedRecently(57_700, 1_000, 2_000)).toBe(false);
+    expect(attackedRecently(57_700, 1_000, 2_000, () => true)).toBe(false);
+    expect(attackedRecently(10_001, 10_000, 2_000)).toBe(false);
+  });
+
+  describe('o empate exato (agora − lastAttack == attackSpeed) só abre com o golpe do herói pendente', () => {
+    it('com o golpe agendado para este ms o empate é janela ABERTA — quem bate sem parar nunca a fecha', () => {
+      expect(attackedRecently(10_000, 12_000, 2_000, () => true)).toBe(true);
+      // Nos dois intervalos de conteúdo que o jogo usa, o empate é o mesmo múltiplo.
+      expect(attackedRecently(10_000, 11_000, 1_000, () => true)).toBe(true);
+    });
+
+    it('sem golpe pendente (o herói parou) o empate é a comparação estrita do Canary: fechada', () => {
+      expect(attackedRecently(10_000, 12_000, 2_000, () => false)).toBe(false);
+      expect(attackedRecently(10_000, 12_000, 2_000)).toBe(false);
+    });
+
+    it('a exceção é SÓ do empate: depois dele a janela fecha mesmo com golpe pendente', () => {
+      expect(attackedRecently(10_000, 12_001, 2_000, () => true)).toBe(false);
+      expect(attackedRecently(10_000, 30_000, 2_000, () => true)).toBe(false);
+    });
+
+    it('a fila só é consultada no empate exato — o golpe recebido comum não paga a varredura', () => {
+      let looked = 0;
+      const due = (): boolean => { looked += 1; return true; };
+      attackedRecently(null, 12_000, 2_000, due);
+      attackedRecently(10_000, 10_500, 2_000, due);
+      attackedRecently(10_000, 12_001, 2_000, due);
+      attackedRecently(57_700, 1_000, 2_000, due);
+      expect(looked).toBe(0);
+      attackedRecently(10_000, 12_000, 2_000, due);
+      expect(looked).toBe(1);
+    });
+  });
 });

@@ -6185,7 +6185,7 @@ const slots = bot.groups.get(group);
     const attacker = condition.sourceId ?? 'field';
     if (target instanceof CharacterRuntime) {
       const outcome = resolveDamage(
-        intent, this.#playerDefender(target, session.nowMs), 'pve', this.#options.combat, session.rng,
+        intent, this.#playerDefender(target, session), 'pve', this.#options.combat, session.rng,
         session.nowMs,
       );
       // CMB-08: o mana shield entra como estágio explícito, e o hit/atribuição usam o HP
@@ -7651,7 +7651,7 @@ const slots = bot.groups.get(group);
         this.#applyMonsterHitOnSummon(session, monster, character, result, source);
         continue;
       }
-      const defender = this.#playerDefender(character, session.nowMs);
+      const defender = this.#playerDefender(character, session);
       const result = resolveDamage(
         {
           rawDamage, source: 'monster-attack', damageType: ability.damageType,
@@ -8950,7 +8950,7 @@ const slots = bot.groups.get(group);
     session: Session, character: CharacterRuntime, monster: MonsterRuntime, reflected: ReflectedDamage,
   ): void {
     const outcome = resolveDamage(
-      reflectedDamageIntent(reflected), this.#playerDefender(character, session.nowMs), 'pve',
+      reflectedDamageIntent(reflected), this.#playerDefender(character, session), 'pve',
       this.#options.combat, session.rng, session.nowMs,
     );
     const applied = applyDamageOutcome(
@@ -10036,10 +10036,11 @@ const slots = bot.groups.get(group);
    * ela valesse menos que o número base.
    *
    * Recebe o personagem porque a armadura passou a depender de quem é — antes era constante. E
-   * `nowMs` (o relógio lógico da sessão) porque, no `combat-v3`, a defesa da postura ofensiva e
-   * balanceada depende de o personagem ter batido há pouco (M30-03, #550).
+   * a `session` (o relógio lógico e a fila) porque, no `combat-v3`, a defesa da postura ofensiva
+   * e balanceada depende de o personagem ter batido há pouco (M30-03, #550) — e o empate exato
+   * da janela olha se o golpe dele está agendado para este ms (ver `attackedRecently`).
    */
-  #playerDefender(character: CharacterRuntime, nowMs: number): Defender {
+  #playerDefender(character: CharacterRuntime, session: Session): Defender {
     // A resistência e a imunidade do EQUIPAMENTO (CMB-03), compiladas na hora do golpe a
     // partir dos poucos slots vestidos — não é varredura de tabela de resistência. `combat-v1`/
     // `v2` a usam inteira; o `combat-v3` (#552) tira dela a resistência, que vira `absorb`.
@@ -10073,7 +10074,7 @@ const slots = bot.groups.get(group);
         ...(reflect === undefined ? {} : { reflect: { reflector: 'player' as const, table: reflect } }),
         defense: {
           kind: shieldItem !== null ? 'shield' : weaponItem !== null ? 'weapon' : 'none',
-          defense: this.#playerDefenseV3(character, weaponItem, shieldItem, nowMs),
+          defense: this.#playerDefenseV3(character, weaponItem, shieldItem, session),
         },
         defenseMitigation: this.#playerMitigationV3(character, weaponItem, shieldItem),
         blockCharge,
@@ -10145,7 +10146,7 @@ const slots = bot.groups.get(group);
    * do Canary e devolve o piso correto para um Sorcerer/Druid sem escudo.
    */
   #playerDefenseV3(
-    character: CharacterRuntime, weaponItem: Item | null, shieldItem: Item | null, nowMs: number,
+    character: CharacterRuntime, weaponItem: Item | null, shieldItem: Item | null, session: Session,
   ): number {
     const fistFamily = this.#options.weaponFamilies.get('fist');
     const weaponFamily = weaponItem?.weapon?.family === undefined
@@ -10166,10 +10167,13 @@ const slots = bot.groups.get(group);
       shieldSkillLevel: this.#shieldSkillLevelOf(character),
       // A postura que o jogador escolheu (M30-03, #550) e a janela "bateu há menos de um
       // intervalo de ataque" — o `Player::getDefenseFactor(false)` do Canary, calculado contra o
-      // relógio LÓGICO da sessão, nunca contra o de parede (invariante 2).
+      // relógio LÓGICO da sessão, nunca contra o de parede (invariante 2). No empate exato o
+      // golpe do herói agendado para ESTE ms conta como já dado (`attackedRecently`): a fila é a
+      // verdade única do prazo, e olhá-la só acontece nesse ms, não a cada golpe recebido.
       fightMode: character.fightMode,
       recentlyAttacked: attackedRecently(
-        character.lastAttackAtMs, nowMs, this.#options.player.attackIntervalMs,
+        character.lastAttackAtMs, session.nowMs, this.#options.player.attackIntervalMs,
+        () => session.dueAtOf(PLAYER_ATTACK, character.id) === session.nowMs,
       ),
     });
   }

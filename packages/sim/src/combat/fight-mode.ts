@@ -71,6 +71,9 @@ export function mitigationFightFactorFor(fightMode: FightMode): number {
   }
 }
 
+/** O empate sem golpe pendente: a janela é a comparação estrita do Canary, sem exceção. */
+const NO_SWING_DUE = (): boolean => false;
+
 /**
  * `(OTSYS_TIME() - lastAttack) < getAttackSpeed()` — o jogador bateu há MENOS de um intervalo de
  * ataque? `lastAttackAtMs` é o instante LÓGICO da sessão em que o último golpe de arma saiu
@@ -79,10 +82,32 @@ export function mitigationFightFactorFor(fightMode: FightMode): number {
  * entre golpes, o `combat.player.attackIntervalMs` do conteúdo (2000 ms no Canary).
  *
  * Comparação ESTRITA, como a do Canary: exatamente um intervalo depois, o jogador já não está
- * "batendo" — o golpe seguinte é que reabre a janela.
+ * "batendo" — o golpe seguinte é que reabre a janela. Um carimbo NO FUTURO (`lastAttackAtMs >
+ * nowMs`) nunca é recente: o relógio é da sessão que o gravou, e um carimbo de outra sessão —
+ * cujo relógio já andou mais — não diz nada sobre esta (a entrada já o zera, ver `Session.enter`;
+ * isto é o cinto por cima do suspensório, para a função ser total em qualquer relógio).
+ *
+ * **O empate exato (`agora − lastAttack == attackSpeed`) tem uma exceção, e ela é do relógio
+ * discreto.** No Canary o golpe seguinte de quem bate sem parar corre `attackSpeed` DEPOIS do
+ * anterior MAIS a latência do despachante — nunca antes —, e um golpe de monstro só cai nessa
+ * fresta de poucos ms por ciclo: quem bate sem parar está, na prática, SEMPRE dentro da janela.
+ * Aqui o monstro e o herói que chegaram juntos batem no MESMO ms para sempre (as duas cadências
+ * nascem no mesmo instante), e a ordem de duas ações no mesmo ms é só a ordem da fila — sem esta
+ * exceção, o golpe que sai da fila ANTES do golpe do herói veria a janela fechada TODA vez, e o
+ * mesmo herói, com o mesmo monstro, teria a defesa cheia numa geometria e pela metade na outra.
+ * `swingDueNow` diz se o golpe do herói está agendado para ESTE ms e ainda não rodou: só então o
+ * empate conta como janela aberta. Sem golpe pendente (o herói parou) o empate é a comparação
+ * estrita de sempre — e o reflexo do PRÓPRIO golpe, que roda depois de o evento do golpe ter
+ * saído da fila, também a enxerga fechada, como o Canary (o carimbo é reescrito depois dele).
+ * É uma função (e não um booleano) porque olhar a fila custa uma varredura, e só o empate exato
+ * precisa dela.
  */
 export function attackedRecently(
   lastAttackAtMs: number | null, nowMs: number, attackSpeedMs: number,
+  swingDueNow: () => boolean = NO_SWING_DUE,
 ): boolean {
-  return lastAttackAtMs !== null && nowMs - lastAttackAtMs < attackSpeedMs;
+  if (lastAttackAtMs === null || lastAttackAtMs > nowMs) return false;
+  const elapsedMs = nowMs - lastAttackAtMs;
+  if (elapsedMs < attackSpeedMs) return true;
+  return elapsedMs === attackSpeedMs && swingDueNow();
 }
