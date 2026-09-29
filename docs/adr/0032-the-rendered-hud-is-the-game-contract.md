@@ -268,3 +268,20 @@ e gasto de gemas são lançamentos com `(session_id, seq)`; o saldo continua sen
 **11** (automação
 legítima): a barra é primeiro a vista do bot; o atalho manual é o extra, e o débito no uso existe
 porque o modo default do jogo é ninguém estar olhando.
+
+## Emenda — 2026-09-29: a postura de luta foi entregue pela M30-03 (#550), com outra forma
+
+A decisão 10 ("Postura é fight mode, e funciona") chega à tela pela issue #550, do plano de
+paridade com o Tibia (ADR 0037, ADR 0040 emenda de 2026-09-29), e três detalhes dela mudam:
+
+- **O nome e o dono do estado**: a intenção é `set-fight-mode` (C2S 35) e a postura mora em
+  `character.fight_mode` (um estado por personagem, com o default do Canary), NÃO na configuração
+  do bot nem sob o nome `set-stance` — o campo `stance` da config v2 fica no schema, sem efeito,
+  por compatibilidade (ADR 0014).
+- **Os fatores são os do Canary**, não os do TFS citados aqui (ofensiva/balanceada/defensiva =
+  ataque 1,0/0,75/0,5, defesa dinâmica, mitigação 0,8/1,0/1,2), e a postura entra no `combat-v3`
+  — o `combat-v2` que esta decisão reservava para ela nunca a levou (o v2 foi o dano de arma do
+  Canary, #522).
+- **O default é a ofensiva** (o `FIGHTMODE_ATTACK` do Canary), não "Balanceada" como a imagem
+  do kit destaca; a mecânica de caça é a do Canary (ADR 0037 d.6), e a imagem só decide o
+  desenho: três botões sob a capacidade do set, marcados com a postura que o servidor confirmou.

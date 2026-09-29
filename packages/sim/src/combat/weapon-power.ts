@@ -17,11 +17,18 @@
 //     faixa uniforme; só a fórmula de MÁXIMO/MÍNIMO de wand/rod não muda (ela já era uma faixa
 //     fixa do item, sem coeficiente nem `attackFactor`).
 //
+// A POSTURA (M30-03, #550): o `attackFactor` do `Weapons::getMaxWeaponDamage` é o
+// `Player::getAttackFactor` do modo de luta escolhido — 1.0 / 0.75 / 0.5 (`combat/fight-mode.ts`).
+// Só o `combat-v3` (e o v4 que o herda) o lê: `combat-v1`/`v2` continuam no 1.0 fixo que a
+// constante de conteúdo `weaponDamage.attackFactor` dava (a ofensiva), bit a bit (ADR 0031).
+//
 // Wand/rod NÃO passam por multiplicador de weapon skill: o perfil deles não tem `power`, e é
 // por construção, não por um `if` — o contrato de wand/rod é distinto do de spellPower (DT-02).
 
 import type { Combat, WeaponProfile } from '@draconya/content';
 import type { Rng } from '../rng.js';
+import { DEFAULT_FIGHT_MODE, attackFactorFor } from './fight-mode.js';
+import type { FightMode } from './fight-mode.js';
 import { isV3OrLater } from './profile.js';
 
 /**
@@ -92,6 +99,9 @@ function resolveWeaponPowerV1(
  * damage    = normalRandomInt(minDamage, maxDamage)
  * ```
  *
+ * `attackFactor` chega pronto de quem chama (`resolveWeaponPower`/`resolveWeaponHit` o resolvem
+ * pelo perfil e pela postura do personagem) — a função só multiplica.
+ *
  * `skillLevel` é o nível ABSOLUTO da skill — ao contrário do v1, o v2 NÃO subtrai
  * `skillStartingLevel`: o Canary multiplica pelo `attackSkill` bruto (`player->getWeaponSkill`/
  * `getSkillLevel(SKILL_DISTANCE)`), e um personagem nasce com skill 10, não 0.
@@ -118,7 +128,7 @@ function resolveWeaponPowerV1(
 function resolveWeaponPowerV2(
   formula: NonNullable<WeaponProfile['power']>, isDistance: boolean, level: number,
   skillLevel: number, rng: Rng, weaponDamage: NonNullable<Combat['weaponDamage']>,
-  vocationMultiplier: number, attackBonus = 0,
+  vocationMultiplier: number, attackFactor: number, attackBonus = 0,
 ): number {
   const attack = formula.base;
   const coefficient = isDistance ? weaponDamage.distanceCoefficient : weaponDamage.meleeCoefficient;
@@ -128,7 +138,7 @@ function resolveWeaponPowerV2(
   const maxRounded = !isDistance && attack <= 0
     ? 0
     : Math.round(
-      coefficient * weaponDamage.attackFactor * (attack + attackBonus) * skillLevel + levelTerm,
+      coefficient * attackFactor * (attack + attackBonus) * skillLevel + levelTerm,
     );
   // A assimetria do Canary (ver o comentário da função): corpo a corpo multiplica e trunca o
   // PRODUTO; distância trunca o MULTIPLICADOR antes de multiplicar — dois `static_cast<int32_t>`
@@ -138,6 +148,15 @@ function resolveWeaponPowerV2(
     : Math.trunc(maxRounded * vocationMultiplier);
   const minDamage = isDistance ? levelTerm : (attack > 0 ? levelTerm : 0);
   return normalRandomInt(rng, minDamage, maxDamage);
+}
+
+/**
+ * O `attackFactor` do golpe (M30-03, #550): a postura do personagem nos perfis que a conhecem
+ * (`combat-v3` em diante), 1.0 — a ofensiva — nos outros. É a ÚNICA porta por onde a postura
+ * entra na fórmula de arma, então `combat-v1`/`v2` não têm como lê-la por engano.
+ */
+function attackFactorOf(combat: Combat, fightMode: FightMode): number {
+  return isV3OrLater(combat.compatibilityProfile) ? attackFactorFor(fightMode) : 1;
 }
 
 /**
@@ -151,6 +170,9 @@ function resolveWeaponPowerV2(
  * `vocationMultiplier` é `vocation.meleeDamageMultiplier`/`distDamageMultiplier` — só o v2/v3 o
  * lê; o v1 nunca teve multiplicador de vocação, e passar `1` (o default) não muda nada nele.
  *
+ * `fightMode` é a postura do personagem (M30-03, #550): só o `combat-v3`/`v4` a lê, para o
+ * `attackFactor`; nos outros perfis o fator é 1.0, como a constante de conteúdo que existia.
+ *
  * Função PURA a menos do RNG da sessão.
  */
 export function resolveWeaponPower(
@@ -160,6 +182,7 @@ export function resolveWeaponPower(
   rng: Rng,
   combat?: Combat,
   vocationMultiplier = 1,
+  fightMode: FightMode = DEFAULT_FIGHT_MODE,
 ): number {
   const usesCanaryWeaponFormula = combat !== undefined
     && (combat.compatibilityProfile === 'combat-v2' || isV3OrLater(combat.compatibilityProfile))
@@ -182,7 +205,7 @@ export function resolveWeaponPower(
   if (usesCanaryWeaponFormula && combat?.weaponDamage !== undefined) {
     return resolveWeaponPowerV2(
       formula, profile.family === 'distance', level, skillLevel, rng, combat.weaponDamage,
-      vocationMultiplier,
+      vocationMultiplier, attackFactorOf(combat, fightMode),
     );
   }
   return resolveWeaponPowerV1(formula, level, skillLevel, rng);
@@ -207,16 +230,21 @@ export interface WeaponHit {
  * Só o `combat-v3` com arma que declara `element` entra no ramo novo. Qualquer outro caso —
  * v1, v2, v3 sem elemento, wand — faz exatamente a chamada de sempre ao `resolveWeaponPower`,
  * com os mesmos sorteios (ADR 0031), e aplica `damagePercent` (100 é identidade: `trunc` de um
- * inteiro). A postura do Draconya é do chamador e vale para as duas partes.
+ * inteiro). O `buff` de postura de MAGIA do Draconya (Blood Rage, Sharpshooter) é do chamador e
+ * vale para as duas partes; já a postura de LUTA (`fightMode`) entra aqui, no `attackFactor` do
+ * total — o Canary a multiplica DENTRO de `getWeaponDamage`, antes da divisão físico/elemento.
  */
 export function resolveWeaponHit(
   profile: WeaponProfile, level: number, skillLevel: number, rng: Rng,
   combat: Combat | undefined, vocationMultiplier: number, damagePercent: number,
+  fightMode: FightMode = DEFAULT_FIGHT_MODE,
 ): WeaponHit {
   const element = profile.element;
   if (combat === undefined || !isV3OrLater(combat.compatibilityProfile) || element === undefined
     || profile.power === undefined || combat.weaponDamage === undefined) {
-    const power = resolveWeaponPower(profile, level, skillLevel, rng, combat, vocationMultiplier);
+    const power = resolveWeaponPower(
+      profile, level, skillLevel, rng, combat, vocationMultiplier, fightMode,
+    );
     // `damagePercent` 100 devolve o poder intacto — inclusive o valor FRACIONÁRIO do v1, que
     // um `trunc` mudaria.
     return {
@@ -227,7 +255,7 @@ export function resolveWeaponHit(
   const physicalAttack = profile.power.base;
   const total = Math.trunc((resolveWeaponPowerV2(
     profile.power, false, level, skillLevel, rng, combat.weaponDamage, vocationMultiplier,
-    element.attack,
+    attackFactorOf(combat, fightMode), element.attack,
   ) * damagePercent) / 100);
   const combined = physicalAttack + element.attack;
   // `static_cast<int32_t>` por parte, como no Canary: a soma pode perder 1 ponto.

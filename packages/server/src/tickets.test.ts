@@ -330,6 +330,32 @@ describe.runIf(available)('session ticket', () => {
     });
   });
 
+  it('carries the fight mode of the character, and drops a value it cannot trust (#550)', async () => {
+    // A postura vem de `characters.fight_mode` e decide o dano/defesa da sessão desde o primeiro
+    // golpe: sem ela no ticket, quem escolheu a defensiva voltaria à ofensiva a cada login. Um
+    // valor torto vira AUSENTE — a sessão parte do `FIGHTMODE_ATTACK` do Canary —, nunca ticket
+    // recusado, a mesma régua do Premium.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+    for (const fightMode of ['attack', 'balanced', 'defense'] as const) {
+      const issued = await tickets.issue('a1', 'p1', { level: 1, xp: 0, fightMode });
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1')).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0, fightMode },
+      });
+      await tickets.revoke(issued.value.ticket, 'a1', 'p1');
+    }
+    const torto = await tickets.issue(
+      'a1', 'p1', { level: 1, xp: 0, fightMode: 'aggressive' } as unknown as InitialCharacter,
+    );
+    if (!torto.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(torto.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+      initialCharacter: { level: 1, xp: 0 },
+    });
+  });
+
   it('revoke frees the slot, the ticket and the reservation (#195)', async () => {
     // O `start` de uma party emite N e desfaz os k−1 quando o k-ésimo falha. Mutação que
     // mata: `revoke` sem o `SREM` do slot ativo — o terceiro personagem da conta continuaria

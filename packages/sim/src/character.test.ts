@@ -311,6 +311,48 @@ describe('lastCombatActionAtMs (#625)', () => {
   });
 });
 
+describe('fightMode e lastAttackAtMs (M30-03, #550)', () => {
+  it('nasce ofensivo, sem ter batido, e ambos ficam FORA do snapshot (o construtor os repõe)', () => {
+    const hero = new CharacterRuntime(state());
+    expect(hero.fightMode).toBe('attack');
+    expect(hero.lastAttackAtMs).toBeNull();
+    expect(hero.getState()).not.toHaveProperty('fightMode');
+    expect(hero.getState()).not.toHaveProperty('lastAttackAtMs');
+  });
+
+  it('setFightMode troca o modo e devolve se MUDOU — escolher o mesmo modo não escreve nada', () => {
+    const hero = new CharacterRuntime(state());
+    expect(hero.setFightMode('attack')).toBe(false);
+    expect(hero.setFightMode('defense')).toBe(true);
+    expect(hero.fightMode).toBe('defense');
+    expect(hero.setFightMode('defense')).toBe(false);
+    expect(hero.setFightMode('balanced')).toBe(true);
+    expect(hero.fightMode).toBe('balanced');
+  });
+
+  it('atravessa o snapshot quente com o modo e o instante do último golpe', () => {
+    const hero = new CharacterRuntime(state());
+    hero.setFightMode('balanced');
+    hero.lastAttackAtMs = 41_500;
+
+    expect(hero.getState()).toMatchObject({ fightMode: 'balanced', lastAttackAtMs: 41_500 });
+    const restored = new CharacterRuntime(
+      JSON.parse(JSON.stringify(hero.getState())) as CharacterState,
+    );
+    expect(restored.fightMode).toBe('balanced');
+    expect(restored.lastAttackAtMs).toBe(41_500);
+  });
+
+  it('o estado inicial do ticket entra pelo construtor', () => {
+    expect(new CharacterRuntime(state({ fightMode: 'defense' })).fightMode).toBe('defense');
+  });
+
+  it('um modo que não é um dos três vira o default do Canary, em vez de travar a sessão', () => {
+    const torto = state({ fightMode: 'aggressive' as unknown as 'attack' });
+    expect(new CharacterRuntime(torto).fightMode).toBe('attack');
+  });
+});
+
 describe('drainRemovedInstances (#724, ADR 0048 d.8)', () => {
   it('returns what sell-items/discard-item destroyed and empties the list', () => {
     const hero = new CharacterRuntime(state());

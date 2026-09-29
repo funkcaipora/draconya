@@ -22,56 +22,20 @@
 // `calculateMitigation`. Os dois são exclusivamente da Wheel — sem gema, os dois são zero, e
 // nenhuma fórmula aqui precisa deles ainda.
 //
-// `fightMode` é PARÂMETRO das três funções que o usam (`playerDefense`/`playerMitigation`), na
-// forma exata do switch do Canary — mas até a M30-03 ("postura de luta") ligar uma escolha real
-// por personagem, todo CHAMADOR em produção passa `'attack'` fixo. Não é uma aproximação: é a
-// MESMA decisão que `combat.weaponDamage.attackFactor` já tomou para o dano de arma do
-// `combat-v2` ("o Draconya não tem seletor de postura ainda... então o valor é uma CONSTANTE de
-// conteúdo fixada em 1,0 (ofensivo)", `schemas.ts`) — aqui a constante mora no CÓDIGO da função
-// pura em vez do conteúdo, porque a função já precisa do switch completo para quando a M30-03
-// ligar o estado de verdade, e reescrevê-la então é menos risco que espalhar um valor solto.
+// `fightMode` é PARÂMETRO das duas funções que o usam (`playerDefense`/`playerMitigation`), na
+// forma exata do switch do Canary, e desde a M30-03 (#550) é a POSTURA que o jogador escolheu
+// (`CharacterRuntime.fightMode`) — `combat/fight-mode.ts` guarda as três tabelas de fator.
 //
-// As duas fórmulas usam a versão ESTÁTICA dos fatores de postura do Canary — a que
-// `Player::getDefenseFactor(sendToClient = true)` devolve (0.5/0.75/1.0) —, não a variante
-// DINÂMICA que depende de `OTSYS_TIME() - lastAttack < getAttackSpeed()` (isto é, se o jogador
-// bateu "recentemente"). A variante dinâmica pede um relógio de "último ataque" que não existe
-// hoje no `CharacterRuntime`, e É esse relógio — não o valor do fator em si — que a M30-03
-// ("postura de luta") existe para desenhar. Reproduzir a metade estática da fórmula (que É o
-// que o Canary manda para o CLIENTE, e portanto documentada e estável) e deixar a metade
-// dinâmica para quem vai desenhar o estado dela é a mesma disciplina de `attackFactor`; inventar
-// um relógio de ataque só para esta issue duplicaria o que a M30-03 vai desenhar direito.
+// `playerDefense` usa a variante DINÂMICA do fator de defesa (`Player::getDefenseFactor(false)`,
+// a que `Creature::blockHit` chama): nos modos ofensivo e balanceado o fator é 0.5/0.75 enquanto
+// o jogador bateu há menos de um intervalo de ataque (`recentlyAttacked`) e 1.0 depois; o
+// defensivo é 1.0 sempre. QUEM CHAMA decide `recentlyAttacked` — comparando o relógio lógico da
+// sessão com o `lastAttackAtMs` do personagem (`attackedRecently`) —, e a função continua pura.
+// A variante ESTÁTICA (0.5/0.75/1.0 sem olhar o relógio) é só o que o Canary manda ao CLIENTE
+// para o painel de stats — apresentação, fora do resultado da caça.
 
-/**
- * A postura de luta do Canary (`fightMode` — ofensiva/equilibrada/defensiva). Sem seletor no
- * Draconya ainda (M30-03); todo chamador em produção passa `'attack'`.
- */
-export type FightMode = 'attack' | 'balanced' | 'defense';
-
-/**
- * O fator de postura ESTÁTICO de `Player::getDefenseFactor(sendToClient = true)`
- * (`player.cpp:853-870`) — o que o Canary manda ao cliente, e o que `playerDefense` usa (ver o
- * comentário do topo do arquivo sobre a metade dinâmica deixada para a M30-03).
- */
-function defenseFactorFor(fightMode: FightMode): number {
-  switch (fightMode) {
-    case 'attack': return 0.5;
-    case 'balanced': return 0.75;
-    case 'defense': return 1.0;
-  }
-}
-
-/**
- * O `fightFactor` de `Player::getCombatTacticsMitigation`/`PlayerWheel::calculateMitigation`
- * (`player.cpp:754-767`; `player_wheel.cpp:4074-4084`) — DIFERENTE do fator acima (mesma
- * postura, escala própria: 0.8/1.0/1.2).
- */
-function mitigationFightFactorFor(fightMode: FightMode): number {
-  switch (fightMode) {
-    case 'attack': return 0.8;
-    case 'balanced': return 1.0;
-    case 'defense': return 1.2;
-  }
-}
+import { defenseFactorFor, mitigationFightFactorFor } from './fight-mode.js';
+import type { FightMode } from './fight-mode.js';
 
 /** A arma na mão, para `playerDefense` (`Player::getWeaponSkill`/`getDefense`). */
 export interface PlayerDefenseWeapon {
@@ -108,6 +72,12 @@ export interface PlayerDefenseInput {
   /** `getSkillLevel(SKILL_SHIELD)` — em Draconya, a skill `shielding`. */
   readonly shieldSkillLevel: number;
   readonly fightMode: FightMode;
+  /**
+   * O jogador bateu há menos de um intervalo de ataque (`attackedRecently`,
+   * `combat/fight-mode.ts`)? É o `(OTSYS_TIME() - lastAttack) < getAttackSpeed()` de
+   * `Player::getDefenseFactor(false)` — só muda o fator nos modos ofensivo e balanceado.
+   */
+  readonly recentlyAttacked: boolean;
 }
 
 /**
@@ -157,8 +127,8 @@ export function playerDefense(input: PlayerDefenseInput): number {
     ? 0.16
     : (weapon !== undefined && weapon.defense > 0 ? 0.146 : 0.15);
 
-  const raw = (defenseSkill / 4 + 2.23) * defenseValue * defenseFactorFor(input.fightMode)
-    * defenseScalingFactor;
+  const raw = (defenseSkill / 4 + 2.23) * defenseValue
+    * defenseFactorFor(input.fightMode, input.recentlyAttacked) * defenseScalingFactor;
   // `int32_t Player::getDefense(...)` — o C++ trunca a conversão de `double` para inteiro.
   return Math.trunc(raw);
 }

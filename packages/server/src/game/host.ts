@@ -26,12 +26,12 @@ import type {
   Skill, Vocation,
 } from '@draconya/content';
 import {
-  blessingCost, containerRulesFor, hasBlessing, PartyFullError, shareCostsOf, skillFactorFor,
-  splitLootOf, withBlessing,
+  blessingCost, containerRulesFor, DEFAULT_FIGHT_MODE, hasBlessing, PartyFullError, shareCostsOf,
+  skillFactorFor, splitLootOf, withBlessing,
 } from '@draconya/sim';
 import type {
   AmmoRefusal, CarriedItem, CharacterRuntime, CharmAssignRefusal, CharmBestiaryEntry,
-  CharmRemoveRefusal, CharmUnlockRefusal, ConfigurePartyResult, ContainerRules, ExitStatus,
+  CharmRemoveRefusal, CharmUnlockRefusal, ConfigurePartyResult, ContainerRules, ExitStatus, FightMode,
   HuntRuleset,
   InventoryRefusal, InventoryResult, InventoryState, ItemRef, PartyBagChanged, PartyEndVoteResult,
   PartySettingsPatch, Place, PromoteRefusal, SlotRefusal, SlotState, TakeLootRefusal,
@@ -515,6 +515,9 @@ function playerStatsOf(
     // Promovido (#566, ADR 0042 decisão 1): o HUD troca o nome exibido pelo `promotion.name`
     // da vocação quando `true` — a resolução do nome é do cliente, que já tem o catálogo.
     promoted: character?.promoted ?? false,
+    // A postura de luta (#550, M30-03): o HUD marca o modo em vigor. `FIGHTMODE_ATTACK` — o do
+    // Canary — para quem ainda não tem personagem (o extrato de uma sessão sem dono).
+    fightMode: character?.fightMode ?? DEFAULT_FIGHT_MODE,
     // A munição escolhida por família (#152, ADR 0026 d.3). `null` é "a básica da família".
     ammo: {
       arrow: character?.ammo.get('arrow') ?? null,
@@ -568,6 +571,7 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
     && a.gold === b.gold
     && a.ammo.arrow === b.ammo.arrow
     && a.ammo.bolt === b.ammo.bolt
+    && a.fightMode === b.fightMode
     && staminaMinute(a.staminaMs) === staminaMinute(b.staminaMs)
     && a.speed === b.speed
     && sameSkills(a.skills, b.skills)
@@ -1634,6 +1638,12 @@ export class SessionHost {
         // INTENÇÃO (invariante 4): o cliente diz QUAL munição; o level e o catálogo são daqui.
         this.#requestSelectAmmo(viewer, message.ammoId);
         return;
+      case 'set-fight-mode':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL postura; os fatores de ataque, defesa e
+        // mitigação que ela liga são do `sim`, na sessão dona (invariante 9) — Cidade e hunt, como
+        // `select-ammo` (#550, M30-03).
+        this.#requestSetFightMode(viewer, message.mode);
+        return;
       case 'buy-blessing':
         // INTENÇÃO (invariante 4): o cliente diz QUAL bênção; preço por level, saldo e "já tem
         // esta bênção" são daqui — serviço de Cidade, dentro da sessão dona (#570, ADR 0052).
@@ -2387,6 +2397,28 @@ export class SessionHost {
       ? null
       : this.#options.vocations?.get(character.vocationId) ?? null;
     return playerStatsOf(character, this.#options.skillCatalog, vocation, this.#options.progression);
+  }
+
+  /**
+   * O jogador escolheu a postura de luta (#550, M30-03, ADR 0040) — o `Player::setFightMode` do
+   * Canary. INTENÇÃO: o cliente diz QUAL modo (o protocolo já fechou o vocabulário nos três do
+   * Canary); o efeito — o fator de ataque do dano de arma, o de defesa e o da mitigação — é do
+   * `sim`, lido pela sessão dona no golpe seguinte (invariante 9), nunca daqui. Aceita na
+   * Cidade e na hunt, na chegada, como `select-ammo`: não passa pelo ruleset, e a hunt
+   * desanexada continua com o modo que o jogador deixou.
+   *
+   * Escolher o modo em que já está não escreve nada e não reenvia nada — mas o cliente que mandou
+   * esperava a confirmação de sempre, então o `player-stats` sai igual (quem nunca a recebeu não
+   * tem como saber que o pedido chegou).
+   */
+  #requestSetFightMode(viewer: Viewer, mode: FightMode): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    if (character.setFightMode(mode)) this.#markDirty(character.id);
+    const stats = this.#statsOf(character);
+    hosted.sentStats.set(character.id, stats);
+    this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
   }
 
   /**
@@ -4527,6 +4559,10 @@ export class SessionHost {
       // personagem participou, nunca gatead por `=== 0` (a morte zera dentro da MESMA sessão,
       // e omitir a chave faria a bênção antiga do Postgres ressuscitar no próximo login).
       ...(owner === undefined ? {} : { blessings: owner.blessings }),
+      // E a postura de luta (#550, M30-03): ABSOLUTA e última-escrita-vence, sempre incluída quando
+      // o personagem participou — nunca gateada pelo default: voltar à ofensiva NESTA sessão é uma
+      // escolha real, e omitir a chave deixaria a postura antiga do Postgres ressuscitar no login.
+      ...(owner === undefined ? {} : { fightMode: owner.fightMode }),
       // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
       ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       // E os pontos de alma (#593): ABSOLUTO, última-escrita-vence — nunca fundido por máximo,
@@ -4619,6 +4655,9 @@ export class SessionHost {
       // As bênçãos (#570, ADR 0052): comprar na Cidade marca `dirty`, e sem este campo a compra
       // sumiria no logout como vocação/equipamento sumiam antes do #154. ABSOLUTO, como acima.
       blessings: owner.blessings,
+      // A postura de luta (#550): escolher na praça marca `dirty`, e sem este campo a escolha sumiria
+      // no logout. ABSOLUTA, como acima.
+      fightMode: owner.fightMode,
       equipment: equipmentOf(owner),
       layout: layoutOfState(owner.inventory.getState()),
       overlays: overlaysOfState(owner.inventory.getState()),

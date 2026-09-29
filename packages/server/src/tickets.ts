@@ -16,8 +16,8 @@
 import { randomBytes } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import { OutfitColors } from '@draconya/protocol';
-import { isCharacterStorageMap } from '@draconya/sim';
-import type { BestiaryState, CharacterStorageMap, CharmsState } from '@draconya/sim';
+import { isCharacterStorageMap, isFightMode } from '@draconya/sim';
+import type { BestiaryState, CharacterStorageMap, CharmsState, FightMode } from '@draconya/sim';
 import type { NodeStatus, SessionDirectory } from './directory.js';
 
 export interface TicketClaim {
@@ -201,6 +201,13 @@ export interface InitialCharacter {
    * `CharacterRuntime.promote()` aceitar (level ≥ 20, gold ≥ 20.000, ainda não promovido).
    */
   readonly promoted?: boolean;
+  /**
+   * A postura de luta (#550, M30-03, ADR 0040), lida de `characters.fight_mode`. Entra na sessão, e
+   * não só sai dela — sem isto, quem escolheu a defensiva voltaria à ofensiva a cada login. Ausente
+   * é quem nunca escolheu, ou ticket de um `api` anterior: a sessão parte do `FIGHTMODE_ATTACK` do
+   * Canary.
+   */
+  readonly fightMode?: FightMode;
   /**
    * Premium do personagem (ADR 0035 D3), já resolvido contra o relógio pelo `api` — a sessão
    * nunca compara datas, só lê um boolean. É o que decide o limite de venda automática do
@@ -685,6 +692,9 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     ...(typeof initial['vocation'] === 'string' && initial['vocation'].length > 0
       ? { vocation: initial['vocation'] }
       : {}),
+    // A postura de luta (#550): um dos três nomes ou AUSENTE, nunca ticket recusado — a mesma
+    // régua da vocação. Um valor torto (linha editada à mão) degrada para a ofensiva do Canary.
+    ...(isFightMode(initial['fightMode']) ? { fightMode: initial['fightMode'] } : {}),
     // Promovido (#566, ADR 0042 decisão 1): booleano ou AUSENTE, nunca ticket recusado — a
     // mesma régua do Premium. Um valor torto degrada para "não promovido" (o lado seguro).
     ...(typeof initial['promoted'] === 'boolean' ? { promoted: initial['promoted'] } : {}),

@@ -572,6 +572,31 @@ describe('entrada em curso: reversão e joinedAtMs (#397, ADR 0035 decisão 6)',
     expect(session.snapshot().joinedAtMs).toEqual({ a: 0, b: 1000 });
   });
 
+  it('entrar zera o carimbo do último golpe (relógio da sessão anterior), e o snapshot o preserva (#550)', () => {
+    // O `CharacterRuntime` atravessa a transição como o MESMO objeto e o relógio da sessão nova
+    // nasce em zero: um carimbo de 57 700 ms ficaria no futuro dela. Quem entra começa sem janela.
+    const hero = character('a');
+    hero.lastAttackAtMs = 57_700;
+    const session = new Session({
+      id: 'stamp', contentVersion: 'v1', ruleset: joinedRuleset(),
+      rng: Rng.fromSeed('stamp'), createdAtMs: 0,
+    });
+    session.enter(hero);
+    expect(hero.lastAttackAtMs).toBeNull();
+
+    // O restore NÃO passa por `enter`: o relógio é o mesmo, e a janela quente continua valendo.
+    hero.lastAttackAtMs = 700;
+    session.advanceBy(1_000);
+    const restored = Session.fromSnapshot(session.snapshot(), joinedRuleset(), Rng.fromSeed('r'));
+    expect(restored.participants[0]?.lastAttackAtMs).toBe(700);
+
+    // A entrada RECUSADA não toca o carimbo de quem continua na sessão de origem.
+    const stranger = character('refused');
+    stranger.lastAttackAtMs = 300;
+    expect(() => session.enter(stranger)).toThrow('party cheia');
+    expect(stranger.lastAttackAtMs).toBe(300);
+  });
+
   it('guarda o instante lógico da entrada e filtra o extrato por ele', () => {
     const session = new Session({
       id: 'receipt', contentVersion: 'v1', ruleset: joinedRuleset(),

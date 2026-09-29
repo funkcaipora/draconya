@@ -896,6 +896,107 @@ describe.runIf(ready)('as sete bênçãos chegam ao Postgres pelo extrato, e a m
   });
 });
 
+describe.runIf(ready)('a postura de luta atravessa o banco: extrato → coluna → ticket → sessão (#550, M30-03)', () => {
+  const fightModeOf = async (database: NonNullable<typeof db>, characterId: string): Promise<string> => {
+    const [row] = await database.database.db
+      .select({ fightMode: characters.fightMode }).from(characters).where(eq(characters.id, characterId));
+    if (row === undefined) throw new Error('personagem não encontrado');
+    return row.fightMode;
+  };
+
+  it('todo personagem nasce na ofensiva — o `FIGHTMODE_ATTACK` do Canary, o que ele já vivia', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    expect(await fightModeOf(database, characterId)).toBe('attack');
+    const repository = new DrizzleGameRepository(database.database.db);
+    expect((await repository.getCharacterById(characterId))?.fightMode).toBe('attack');
+  });
+
+  it('a última escrita vence, em qualquer direção — e o extrato sem o campo não toca na coluna', async () => {
+    // ABSOLUTA, como as bênçãos: não há ordem entre os três modos, então NADA de fusão por
+    // máximo. Mutação que mata: `greatest`/`coalesce` no ledger — a defensiva não voltaria à
+    // ofensiva, ou a primeira escrita ficaria para sempre.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const flush = () => writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), fightMode: 'defense' });
+    await flush();
+    expect(await fightModeOf(database, characterId)).toBe('defense');
+
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2, fightMode: 'balanced' });
+    await flush();
+    expect(await fightModeOf(database, characterId)).toBe('balanced');
+
+    // De volta à ofensiva: o `attack` também É uma escolha e persiste (não é "ausente").
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3, fightMode: 'attack' });
+    await flush();
+    expect(await fightModeOf(database, characterId)).toBe('attack');
+
+    // Extrato de Cidade sem o campo (nada mudou ali, ou nó anterior à issue): nenhuma escrita.
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 4, fightMode: 'defense' });
+    await flush();
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 5 });
+    await flush();
+    expect(await fightModeOf(database, characterId)).toBe('defense');
+  });
+
+  it('volta pelo ticket: a coluna vira `initialCharacter.fightMode`, que o `CharacterRuntime` lê', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), fightMode: 'balanced' });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+
+    const repository = new DrizzleGameRepository(database.database.db);
+    const character = await repository.getCharacterById(characterId);
+    if (character === null) throw new Error('the seeded character is missing');
+    const initial = initialCharacterOf(character, await repository.listItemInstances(characterId));
+    expect(initial.fightMode).toBe('balanced');
+    const runtime = createCitySessionFactory(testContent())(characterId, initial).participants[0];
+    expect(runtime?.fightMode).toBe('balanced');
+  });
+
+  it('o banco recusa um modo fora dos três — o CHECK vale mesmo se um caminho novo de escrita esquecer', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    await expect(database.database.db.update(characters)
+      .set({ fightMode: 'aggressive' }).where(eq(characters.id, characterId)))
+      .rejects.toThrow();
+    expect(await fightModeOf(database, characterId)).toBe('attack');
+  });
+
+  it('uma sessão de verdade que teve a postura trocada a grava ponta a ponta (host → extrato → ledger)', async () => {
+    // O contrato isolado está acima; este é o caminho real — `CharacterRuntime` → `#receiptFor` →
+    // `receipts.save` → o MESMO `writePendingReceipts` — sem simular o extrato à mão.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const [owner] = await database.database.db.select({ accountId: characters.accountId })
+      .from(characters).where(eq(characters.id, characterId));
+    if (owner === undefined) throw new Error('Missing test character');
+    const receipts = new ReceiptStore(redis);
+    const content = testContent();
+    const session = createHuntSession({
+      id: randomUUID(), content, huntId: TEST_HUNT.id, difficulty: 'cautious', createdAtMs: 0,
+    });
+    const character = createCitySessionFactory(content)(characterId).participants[0];
+    if (character === undefined) throw new Error('Missing test runtime');
+    session.enter(character);
+    const host = new SessionHost({
+      nodeId: 'fight-mode-test', contentVersion: content.version, logger, receipts,
+      createSession: () => session,
+    });
+    await host.prepare(characterId, undefined, owner.accountId);
+    character.setFightMode('defense');
+
+    expect(await host.drainAll()).toBe(1);
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+
+    expect(await fightModeOf(database, characterId)).toBe('defense');
+  });
+});
+
 describe.runIf(ready)('o estoque de supply/munição do loot chega ao Postgres pelo extrato, e drenar até zero PERSISTE (#520, revisão do #536)', () => {
   it('loot (+N) grava a coluna, e uma sessão que esgota o estoque grava {} em vez de deixar a coluna intocada', async () => {
     // O achado [blocker] da revisão: `supplyStock`/`ammunitionStock`, ao contrário de `ammo`

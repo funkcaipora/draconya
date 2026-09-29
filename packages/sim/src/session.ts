@@ -490,6 +490,16 @@ export class Session {
       this.#joinedAtMs.delete(character.id);
       throw error;
     }
+    // O carimbo do último golpe de arma (`lastAttackAtMs`, #550) está no relógio LÓGICO da sessão
+    // que o gravou — e este relógio nasce em zero. O personagem que atravessa uma transição é o
+    // MESMO objeto (`createSessionBuilder`), então sem este zero um carimbo de 57 700 ms da hunt
+    // anterior ficaria no FUTURO da nova, e `attackedRecently` o leria como "bateu há pouco" por
+    // quase um minuto: o resultado do combate dependeria de por onde o `CharacterRuntime` passou,
+    // e não do estado e da semente (invariante 3). Aqui, e não no `onEnter` de cada ruleset, para
+    // nenhuma sessão futura (quest, boss) esquecer; DEPOIS do `onEnter`, para a entrada recusada
+    // (party cheia) não apagar a janela de quem continua na sessão de origem. O restore de
+    // snapshot NÃO passa por `enter` — o relógio é o mesmo, e a janela quente atravessa.
+    character.lastAttackAtMs = null;
   }
 
   /**
