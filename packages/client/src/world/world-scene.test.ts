@@ -44,6 +44,21 @@ describe('createWorldScene', () => {
     expect(scene.loadedSectors()).toBe(1);
   });
 
+  it('metaAt devolve flags de zona e casa do setor que já chegou, sem pedir nada', async () => {
+    const net = manualFetch();
+    const scene = createWorldScene(INDEX, { fetchSector: net.fetchSector });
+    expect(scene.metaAt(32005, 32006, 7)).toBeNull();
+    expect(net.asked).toEqual([]);
+    scene.tileAt(32005, 32006, 7);
+    net.answer(sectorPath(7, 1000, 1000), encodeSector({ sx: 1000, sy: 1000, z: 7, tiles: [
+      { x: 5, y: 6, ground: 1, items: [], flags: 1, houseId: 77 },
+      { x: 6, y: 6, ground: 1, items: [], flags: 0 },
+    ] }));
+    await tick();
+    expect(scene.metaAt(32005, 32006, 7)).toEqual({ flags: 1, houseId: 77 });
+    expect(scene.metaAt(32006, 32006, 7)).toBeNull();
+  });
+
   it('não pede setor que o índice não tem, nem o mesmo setor duas vezes', () => {
     const net = manualFetch();
     const scene = createWorldScene(INDEX, { fetchSector: net.fetchSector });

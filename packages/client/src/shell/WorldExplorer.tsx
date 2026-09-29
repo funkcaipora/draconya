@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { TextureBook } from '../world/textures.js';
-import { TILE, zoomFor } from '../world/camera.js';
+import { TILE, tileAtScreen, viewFor, zoomFor } from '../world/camera.js';
 import {
   changeFloor, DEFAULT_CAMERA, dragBy, formatCamera, pan, parseCamera,
 } from '../world/explorer-camera.js';
@@ -17,6 +17,10 @@ import { mountViewport } from '../world/viewport.js';
 import type { ViewportHandle } from '../world/viewport.js';
 import { createWorldScene, loadWorldIndex, sectorFetcher } from '../world/world-scene.js';
 import type { WorldScene } from '../world/world-scene.js';
+import { loadWorldLinks, loadWorldPlaces } from '../world/world-places.js';
+import type { LinkIndex, WorldPlaces } from '../world/world-places.js';
+import { WorldPlacesLayer } from './WorldPlacesLayer.js';
+import type { OverlayLayers } from './WorldPlacesLayer.js';
 import { useBrowserPack } from './useBrowserPack.js';
 import { loadMinimapSource, WorldAtlas, WorldMinimap } from './WorldMaps.js';
 import type { MinimapSource } from './WorldMaps.js';
@@ -48,6 +52,11 @@ export function WorldExplorer() {
   const [goto, setGoto] = useState(formatCamera(initial));
   const [minimap, setMinimap] = useState<MinimapSource | null>(null);
   const [atlasOpen, setAtlasOpen] = useState(false);
+  const [places, setPlaces] = useState<WorldPlaces | null>(null);
+  const [links, setLinks] = useState<LinkIndex | null>(null);
+  const [layers, setLayers] = useState<OverlayLayers>({ houses: true, zones: false, links: true });
+  /** O que está sob o ponteiro: coordenada, casa e zona — a leitura da camada de lugares. */
+  const [hover, setHover] = useState<string>('');
   /** O teclado do explorador para quando o mapa-múndi está aberto — ele tem o dele. */
   const atlasOpenRef = useRef(false);
   atlasOpenRef.current = atlasOpen;
@@ -56,6 +65,8 @@ export function WorldExplorer() {
   const setCamera = (next: ExplorerCamera): void => {
     cameraRef.current = next;
     setCameraState(next);
+    // O que estava sob o ponteiro era de outro lugar.
+    setHover('');
   };
 
   // A URL guarda onde se está: recarregar ou mandar o link volta ao mesmo ponto.
@@ -96,8 +107,13 @@ export function WorldExplorer() {
       sceneRef.current = scene;
       mounted.setScene(scene);
       setStatus('ready');
-      const source = await loadMinimapSource(baseUrl);
-      if (!cancelled) setMinimap(source);
+      const [source, placesFile, linkIndex] = await Promise.all([
+        loadMinimapSource(baseUrl), loadWorldPlaces(baseUrl), loadWorldLinks(baseUrl),
+      ]);
+      if (cancelled) return;
+      setMinimap(source);
+      setPlaces(placesFile);
+      setLinks(linkIndex);
     })();
 
     const timer = setInterval(() => {
@@ -152,26 +168,71 @@ export function WorldExplorer() {
   }, []);
 
   /** O arrasto: a última posição do ponteiro enquanto o botão está apertado. */
-  const dragRef = useRef<{ x: number; y: number } | null>(null);
+  const dragRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  /** O tile sob um ponto da tela, no andar da câmera — a mesma inversa do clique no jogo. */
+  const tileUnder = (clientX: number, clientY: number): { x: number; y: number } | null => {
+    const parent = holder.current;
+    if (parent === null) return null;
+    const bounds = parent.getBoundingClientRect();
+    const zoom = zoomFor(parent.clientWidth, parent.clientHeight);
+    const view = viewFor(parent.clientWidth, parent.clientHeight, zoom);
+    return tileAtScreen({ x: (clientX - bounds.left) / zoom, y: (clientY - bounds.top) / zoom }, cameraRef.current, view);
+  };
+  const describe = (x: number, y: number, z: number): string => {
+    const parts = [`${x},${y},${z}`];
+    const meta = sceneRef.current?.metaAt(x, y, z) ?? null;
+    if (meta?.houseId !== undefined) {
+      const house = places?.houses.find((h) => h.id === meta.houseId);
+      parts.push(house === undefined ? `casa ${meta.houseId}` : `${house.name} (${house.size} sqm)`);
+    }
+    if (meta !== null && (meta.flags & 1) !== 0) parts.push('zona protegida');
+    const link = links?.from(x, y, z) ?? null;
+    if (link !== null) parts.push(`${LINK_NAMES[link.kind]} → ${link.to.join(',')}`);
+    return parts.join(' · ');
+  };
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
     if (!(event.target instanceof HTMLCanvasElement)) return;
-    dragRef.current = { x: event.clientX, y: event.clientY };
+    dragRef.current = { x: event.clientX, y: event.clientY, moved: false };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>): void => {
     const last = dragRef.current;
-    if (last === null) return;
+    if (last === null) {
+      const tile = tileUnder(event.clientX, event.clientY);
+      if (tile !== null) setHover(describe(tile.x, tile.y, cameraRef.current.z));
+      return;
+    }
+    const dx = event.clientX - last.x;
+    const dy = event.clientY - last.y;
+    if (!last.moved && Math.abs(dx) + Math.abs(dy) < 3) return;
     const parent = holder.current;
     const tilePx = TILE * (parent === null ? 1 : zoomFor(parent.clientWidth, parent.clientHeight));
-    dragRef.current = { x: event.clientX, y: event.clientY };
+    dragRef.current = { x: event.clientX, y: event.clientY, moved: true };
     // O arrasto escreve só na ref: é o laço do Pixi que lê. O estado de React acompanha no soltar.
-    cameraRef.current = dragBy(cameraRef.current, event.clientX - last.x, event.clientY - last.y, tilePx);
+    cameraRef.current = dragBy(cameraRef.current, dx, dy, tilePx);
   };
-  const onPointerUp = (): void => {
-    if (dragRef.current === null) return;
+  const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    const last = dragRef.current;
+    if (last === null) return;
     dragRef.current = null;
-    setCamera(roundCamera(cameraRef.current));
+    if (last.moved) { setCamera(roundCamera(cameraRef.current)); return; }
+    // Clique sem arrasto: numa escada, corda ou teleporte, vai para o destino dela.
+    const tile = tileUnder(event.clientX, event.clientY);
+    const link = tile === null ? null : links?.from(tile.x, tile.y, cameraRef.current.z) ?? null;
+    if (link !== null) {
+      const next = { x: link.to[0], y: link.to[1], z: link.to[2] };
+      setCamera(next);
+      setGoto(formatCamera(next));
+    }
   };
+  const goToTown = (id: string): void => {
+    const town = places?.towns.find((t) => String(t.id) === id);
+    if (town === undefined) return;
+    const next = { x: town.temple[0], y: town.temple[1], z: town.temple[2] };
+    setCamera(next);
+    setGoto(formatCamera(next));
+  };
+  const toggleLayer = (layer: keyof OverlayLayers): void => { setLayers((current) => ({ ...current, [layer]: !current[layer] })); };
 
   const pick = (x: number, y: number): void => {
     const next = { x, y, z: cameraRef.current.z };
@@ -194,7 +255,9 @@ export function WorldExplorer() {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        onPointerLeave={() => { setHover(''); }}
       />
+      <WorldPlacesLayer holder={holder} cameraRef={cameraRef} sceneRef={sceneRef} links={links} layers={layers} />
       <aside className="world-explorer__panel">
         <h1 className="world-explorer__title">Mapa do mundo</h1>
         <p className="world-explorer__coords" data-testid="explorer-coords">{formatCamera(camera)}</p>
@@ -203,6 +266,12 @@ export function WorldExplorer() {
           <span>andar {camera.z}</span>
           <button type="button" onClick={() => { setCamera(changeFloor(cameraRef.current, 1)); }}>Descer</button>
         </div>
+        {places !== null && (
+          <select aria-label="Ir para cidade" value="" onChange={(event) => { goToTown(event.target.value); }}>
+            <option value="">Ir para cidade…</option>
+            {places.towns.map((town) => <option key={town.id} value={town.id}>{town.name}</option>)}
+          </select>
+        )}
         <form className="world-explorer__goto" onSubmit={onGoto}>
           <input aria-label="Ir para x,y,z" value={goto} onChange={(event) => { setGoto(event.target.value); }} />
           <button type="submit">Ir</button>
@@ -212,6 +281,12 @@ export function WorldExplorer() {
             ? 'Mundo não gerado: rode pnpm map:world'
             : `${stats.loaded} setores · ${stats.pending} a caminho · ${stats.fps} fps`}
         </p>
+        <div className="world-explorer__layers">
+          <label><input type="checkbox" checked={layers.houses} onChange={() => { toggleLayer('houses'); }} /> casas</label>
+          <label><input type="checkbox" checked={layers.zones} onChange={() => { toggleLayer('zones'); }} /> zonas</label>
+          <label><input type="checkbox" checked={layers.links} onChange={() => { toggleLayer('links'); }} /> escadas</label>
+        </div>
+        <p className="world-explorer__hover" data-testid="explorer-hover">{hover}</p>
         {minimap !== null && (
           <>
             <WorldMinimap source={minimap} cameraRef={cameraRef} onPick={pick} />
@@ -231,6 +306,8 @@ export function WorldExplorer() {
     </div>
   );
 }
+
+const LINK_NAMES: Readonly<Record<string, string>> = { stairs: 'escada', ladder: 'escada de mão', rope: 'corda', teleport: 'teleporte' };
 
 function roundCamera(camera: ExplorerCamera): ExplorerCamera {
   return { x: Math.round(camera.x), y: Math.round(camera.y), z: camera.z };
