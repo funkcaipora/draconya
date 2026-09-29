@@ -1021,7 +1021,7 @@ export const itemSchema = z.strictObject({
    * Amulet of Loss (`ITEM_AMULETOFLOSS`, id 3057, `src/utils/utils_definitions.hpp:638` do
    * Canary): `Blessings.PlayerDeath` (`data/libs/systems/blessing.lua:82-99`) confere só o slot do
    * colar, então a flag só vale em item de `slot: 'neck'`. Protegido, NENHUM item é sorteado; e a
-   * morte consome UM colar assim (`Player::death`, `player.cpp:4213-4219`). Ausente é o item comum
+   * morte consome UM colar assim (`Player::death`, `player.cpp:4215-4219`). Ausente é o item comum
    * de sempre. É a MESMA leitura da regra do Canary, mas por dado em vez de por id fixo em código.
    */
   protectsOnDeath: z.boolean().default(false),
@@ -1311,7 +1311,7 @@ export type BlessingPricing = z.infer<typeof blessingPricingSchema>;
 
 /**
  * A perda de item na morte (#571, ADR 0042 decisão 4): `Blessings.PlayerDeath`/`DropLoot` do
- * Canary (`data/libs/systems/blessing.lua:36-46,82-126`). O mecanismo mora em
+ * Canary (`data/libs/systems/blessing.lua:36-46,82-118`). O mecanismo mora em
  * `packages/sim/src/item-loss.ts` — os números abaixo são os do Tibia, e são dado, não código.
  *
  * **`enabled` é a chave da decisão em aberto do dono** (ADR 0042, "Questões em aberto" e emenda de
@@ -1320,6 +1320,11 @@ export type BlessingPricing = z.infer<typeof blessingPricingSchema>;
  * não decidir entre destruir-e-registrar e manter "nunca perde item" (`docs/product/death.md`
  * §3.8), o mecanismo inteiro existe e é testado mas o conteúdo real o entrega DESLIGADO
  * (`enabled: false` → morte não toca em item nenhum). Ligar é trocar este `true` — sem código.
+ *
+ * Quem liga também decide a BOLSA (`satchel`): ela não tem equivalente no Tibia, o mecanismo a
+ * deixa de fora da perda, e o que o jogador guarda nela sobrevive a toda morte (`death.md`, "Em
+ * aberto"). Sem vocação, ou abaixo do level do Adventurer's Blessing com vocação, a morte também
+ * não perde item — as proteções do Canary/TFS, derivadas no `sim` (`item-loss.ts`).
  */
 export const itemLossSchema = z.strictObject({
   /** Liga a perda de item na morte. `false` é o "nunca perde item" provisório (ver acima). */
@@ -1332,7 +1337,7 @@ export const itemLossSchema = z.strictObject({
   lossPercentByBlessings: z.array(z.number().min(0).max(100)).min(1),
   /**
    * Item que NÃO é container perde a chance dividida por isto (`chance / 10` em `DropLoot`,
-   * `blessing.lua:112`): a mochila (e a aljava, que no cliente é container) leva o percentual
+   * `blessing.lua:109`): a mochila (e a aljava, que no cliente é container) leva o percentual
    * cheio, o resto um décimo dele. Tibia: 10.
    */
   nonContainerDivisor: z.number().positive(),
