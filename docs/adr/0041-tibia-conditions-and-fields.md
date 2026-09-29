@@ -108,8 +108,11 @@ A decisão 2 disse **o quê** (imunidade por condição é dado de monstro; imun
    Canary (`bleed`/`physical`, `fire`, `earth`/`poison`…) pela tabela de
    `luaMonsterTypeConditionImmunities`, e o `sim` casa uma DOT com a imunidade pelo tipo de dano do
    tique (`Combat::DamageToConditionType`). O portão é o do Canary: só o combate consulta a
-   imunidade (`Combat::CombatConditionFunc`), a auto-aplicação (`caster == target`) e o campo de
-   tile não. `outfit` (119 monstros) fica para o M44-03, que traz a condição.
+   imunidade — `Combat::CombatConditionFunc` é o único chamador que BLOQUEIA uma condição por
+   ela (`Monster::canSeeInvisibility` a lê para outro fim) —, e por isso o portão é **opt-in do
+   chamador de combate** no `sim` (`#applyConditionTo(..., fromCombat)`); a auto-aplicação
+   (`caster == target`), o campo de tile e o que entra por `addCondition` direto (charm
+   Cripple/Numb) não consultam. `outfit` (119 monstros) fica para o M44-03, que traz a condição.
 2. **Largar o alvo que ficou invisível é um evento agendado, não uma checagem por passo.** O
    `Creature::onThink` do Canary confere `canSeeCreature(alvo)` uma vez por 1000 ms numa fase
    sorteada por criatura, então quem perseguia o invisível ainda o ataca por até um segundo — e o

@@ -2261,12 +2261,19 @@ mecanismo morto.
   pela chave; a **DOT** casa pelo `damageType` do tique (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY`,
   a `Combat::DamageToConditionType` do Canary), então Inflict Wound (`physical`) não sangra um
   monstro imune a `bleeding`, Ignite (`fire`) não queima um imune a `burning`, e a imunidade é
-  POR condição — `burning` não protege de veneno. Duas fronteiras do Canary (`Combat::
-  CombatConditionFunc`, `combat.cpp:1079`, o ÚNICO chamador de `Monster::isImmune(ConditionType_t)`
-  em jogo): **`caster == target` pula a checagem** (a auto-aplicação nunca é barrada —
-  `condition.sourceId === target.subject`), e **o campo de tile não consulta a imunidade de
-  condição** (`MagicField::onStepInField` chama `addCondition` direto; o que zera o dano do campo
-  é a imunidade de DANO, que já existia) — `FIELD_TICK` tiqueta sem passar pelo portão.
+  POR condição — `burning` não protege de veneno. **O portão é opt-in do chamador**
+  (`#applyConditionTo(..., fromCombat)`): só a magia/runa (o DOT de `#castSpell`, a Paralyze Rune
+  de `#useSupply`) e a ability de monstro o ligam, porque no Canary `Combat::CombatConditionFunc`
+  (`combat.cpp:1079`) é o ÚNICO chamador de `Monster::isImmune(ConditionType_t)` que BLOQUEIA uma
+  condição (`Monster::canSeeInvisibility` a lê também, `monster.cpp:304`, mas para outro fim).
+  O que entra por `Creature::addCondition` direto — que só confere `isSuppress` — não consulta a
+  imunidade, e um chamador novo e não combativo nasce SEM o portão: o **campo de tile**
+  (`MagicField::onStepInField`; `FIELD_TICK` tiqueta sem passar por aqui, e o que zera o dano do
+  campo é a imunidade de DANO, que já existia), a **defesa que o monstro aplica em si**, e os
+  charms Cripple/Numb do Bestiário (`iobestiary.cpp:105-109`/`:144-152`: uma `ConditionSpeed`
+  paralyze adicionada ao monstro sem checar imunidade — Dragon Lord e as outras 1 244 imunidades
+  a `paralyze` continuam paralisáveis por eles). Dentro do combate, **`caster == target` pula a
+  checagem** (a auto-aplicação nunca é barrada — `condition.sourceId === target.subject`).
   **`invisible` NUNCA entra neste portão**: no Canary, a MESMA imunidade que
   bloquearia a condição em qualquer outro caso é repropositada —
   `Monster::canSeeInvisibility() { return isImmune(CONDITION_INVISIBLE); }` — para "este monstro
@@ -2304,18 +2311,38 @@ mecanismo morto.
   (`botCandidate`, `attackTarget` não fixado) cai na hora** — o targeting do bot é do Draconya
   (ADR 0037 d.2) e a eleição nunca escolhe um invisível —, **enquanto o alvo FIXADO pelo jogador
   segue até o think agendado** (`#scheduleVisibilityThinks` agenda um para o personagem): até lá o
-  golpe dele ainda sai e REVELA o monstro (abaixo). `setAttackTarget` recusa um monstro invisível
-  (o cliente do Tibia nem recebe a criatura para clicar nela) e a mira manual de runa/magia num
-  monstro invisível (`use-slot`/`use-item-on`) recusa `no-target`, como `Game::playerUseWithCreature`
-  (`game.cpp:6404`), que descarta o pedido quando `!player->canSeeCreature`.
+  golpe dele ainda sai e REVELA o monstro (abaixo). **O alvo eleito que fica invisível é limpo NO
+  EVENTO em que a invisibilidade começa** (`#scheduleVisibilityThinks`), e os leitores do alvo
+  (`#attackTargetOfRunner`/`#botCandidateOf`) devolvem `null` SEM escrever para o invisível não
+  fixado: eles são alcançáveis da apresentação (`slotStates`, só com visualizador anexado), e o
+  campo que o snapshot guarda não pode depender de alguém estar olhando (invariante 3).
+- **A mira MANUAL num monstro invisível é um substituto de apresentação, não uma regra do
+  Canary.** No Canary a proteção é do lado do CLIENTE: `ProtocolGame::canSee`
+  (`protocolgame.cpp:2381`) e as descrições de tile (`:2171`, `:2253`) descartam a criatura que
+  `Player::canSeeCreature` (`player.cpp:1409-1422`) não enxerga, então não há o que clicar — o
+  servidor não confere visibilidade nenhuma em `Game::playerSetAttackedCreature`
+  (`game.cpp:7001-7031`) nem em `Game::playerUseWithCreature` (`game.cpp:4853-5026`). O que ele
+  decide é o TILE
+  (`Spell::playerRuneSpellCheck`, `spells.cpp:704`): a runa que precisa de alvo (`needTarget`:
+  Sudden Death, Fireball, Paralyze…) recusa o tile sem criatura VISÍVEL
+  (`CANONLYUSETHISRUNEONCREATURES`), e a que não precisa (Great Fireball, Avalanche, os campos)
+  sai igual e atinge quem estiver lá, invisível inclusive — revelando-o. O cliente do Draconya
+  ainda DESENHA o monstro invisível (a apresentação não some com ele), então o clique nele chega:
+  `setAttackTarget`/`select-target` (host: `target-cancel`) e a mira de efeito de ALVO ÚNICO
+  (`use-slot`/`use-item-on`: dano ou DOT sem forma) o recusam `no-target`, e o efeito de
+  ÁREA/campo mira o TILE do monstro (`#resolveManualTarget`), como o jogador faria ali. É a
+  única recusa server-side desta seção; a matemática nos dois casos é a do Canary.
 - **O monstro invisível que leva dano REAL volta a ficar visível** — `Monster::drainHealth`
   (`monster.cpp:3454`: `if (isInvisible()) removeCondition(CONDITION_INVISIBLE)`), o cano de TODO
   dano de vida que um monstro sofre e que só é alcançado com `realDamage > 0`
-  (`Game::combatChangeHealth`, `game.cpp:8735`). No sim é `#revealOnDrain(session, monster,
-  applied.healthDamage)`, chamado depois de cada `applyDamageOutcome` num monstro (magia/runa,
-  golpe, tique de DOT e de campo, reflexo, golpe de invocação) — dano integralmente absorvido/
-  bloqueado ou `manadrain` não revela ninguém. A remoção passa por `#dispelConditions`, que
-  cancela o `condition-expire` pendente. **A invisibilidade do JOGADOR não cai por dano**: o
+  (`Game::combatChangeHealth`, `game.cpp:8735`). No sim é `#drainMonster(session, monster,
+  outcome, attacker)`, o cano ÚNICO do dano de vida num `MonsterRuntime` — golpe, magia/runa,
+  tique de DOT e de campo, reflexo, golpe de invocação —: ele aplica o `applyDamageOutcome` e, com
+  `healthDamage > 0`, arma o bypass de campo (`ignoresFieldDamage`, o outro efeito do
+  `drainHealth`) e revela o monstro; um ponto novo de dano num monstro entra por ele, e não pelo
+  `applyDamageOutcome` direto. Dano integralmente absorvido/bloqueado ou `manadrain` não revela
+  ninguém. A remoção passa por `#dispelConditions`, que cancela o `condition-expire` pendente.
+  **A invisibilidade do JOGADOR não cai por dano**: o
   Canary só tem esse comportamento em `Monster::drainHealth` (no motor, `src/`, só duas chamadas
   de `removeCondition(CONDITION_INVISIBLE)` existem: essa e o desequipar de item) — cai por prazo,
   por Cancel Invisibility ou pelo equipamento. É o que faz o Killer Rabbit (e ~107 monstros com a
@@ -2338,16 +2365,21 @@ mecanismo morto.
     `attacks` — o oposto de `drunk`, que só existe do lado do ATACANTE). Sem `duration`
     declarado, cai no mesmo default de 10 s que `speed`/`drunk` já usam.
 - **Cancel Invisibility** (paladin, level 26, 200 mana, Canary `data/scripts/spells/support/
-  cancel_invisibility.lua`) é `kind: 'dispel'` com `area` NOVO (`{ shape: 'circle', radius: 1,
-  centered: 'caster' }`, o `AREA_CIRCLE3X3` literal do Canary — a mesma convenção de raio que
-  `berserk.json` já usa, não a área "37 tiles" que o Mass Healing chama por engano de 3x3).
-  `dispel.area` é sempre centrado no LANÇADOR (`buildContent` recusa o resto, como a cura em
-  grupo); `#castSpell` entra pelo ramo self-origin de `#aimFor` — o mesmo que já colhia MONSTROS
-  para dano em área — e dispensa cada criatura da forma em vez do recipiente único de sempre:
-  os MONSTROS colhidos, **o próprio lançador e os aliados** dentro dela. `Combat::CombatFunc`
-  (`combat.cpp:1580`) só exclui o lançador quando o combate é AGRESSIVO (`!params.aggressive ||
-  caster != creature`), e o dispel não é — a versão da #592 só limpava os monstros (e o lançador
-  só quando não havia monstro nenhum na forma), o que divergia do Canary.
+  cancel_invisibility.lua`) é `kind: 'dispel'` com `area` NOVO (`{ shape: 'circle', radius: 3,
+  centered: 'caster' }`): o `AREA_CIRCLE3X3` do Canary (`data/scripts/lib/register_spells.lua:
+  372-380`) é o círculo de RAIO 3, os 37 tiles em linhas 3/5/7/7/7/5/3 que "Magia em área"
+  descreve e que o Mass Healing já usa — o "3X3" do nome é o raio, não o lado (a #592 o
+  copiou como raio 1, 9 tiles, e a #559 corrigiu). `dispel.area` é sempre centrado no LANÇADOR
+  (`buildContent` recusa o resto, como a cura em grupo); `#castSpell` entra pelo ramo self-origin
+  de `#aimFor` — o mesmo que já colhia MONSTROS para dano em área — e dispensa os MONSTROS
+  colhidos, em vez do recipiente único de sempre. **O lançador NÃO é dispensado**, nem os
+  aliados: `Combat::CombatFunc` (`combat.cpp:1562`/`1610`) só inclui o lançador quando
+  `!params.aggressive`, e o `combat` do script nunca chama `COMBAT_PARAM_AGGRESSIVE` — o
+  `spell:isAggressive(false)` é o `Spell::aggressive` do portão de proteção, outro campo —, então
+  vale o default do Canary (`CombatParams::aggressive = true`, `combat.hpp:106`): `caster !=
+  creature`. Outro jogador só entraria pelas regras de PvP (`canDoCombatWithExpertPvp`), que a
+  hunt não tem (invariante 8: instanciada, PvE). Um Paladin invisível pelo Invisibility segue
+  invisível depois do próprio Cancel Invisibility.
 - **A Paralyze Rune** (Druid, level 54, magic level 18, Canary `data/scripts/runes/
   paralyze_rune.lua`: `runeId(3165)`, `setFormula(-1, 0, -1, 0)`) é o primeiro supply a mirar um
   MONSTRO com uma condição — até aqui, `kind: 'condition'` (as quatro poções de postura) era
