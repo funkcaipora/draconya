@@ -234,9 +234,9 @@
       ],
       "regeneration": {
         "healthGain": 4,
-        "healthTicksMs": 5000000,
+        "healthTicksMs": 5000,
         "manaGain": 16,
-        "manaTicksMs": 5000000
+        "manaTicksMs": 5000
       }
     },
     "source": {
@@ -2188,9 +2188,9 @@
     "bonuses": {
       "regeneration": {
         "healthGain": 1,
-        "healthTicksMs": 3000000,
+        "healthTicksMs": 3000,
         "manaGain": 4,
-        "manaTicksMs": 3000000
+        "manaTicksMs": 3000
       }
     },
     "source": {
