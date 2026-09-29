@@ -1,0 +1,9 @@
+{
+  "id": "onyx-arrow",
+  "name": "Onyx Arrow",
+  "family": "arrow",
+  "attack": 38,
+  "price": 7,
+  "requires": { "level": 40 },
+  "_open": "Munição abstrata (gold no tiro, sem pilha): attack 38 e level 40 são do TibiaWiki; o preço 7 por tiro é provisório. Aparência: ícone 7365 e projétil (missile 23) auditados em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md)."
+}

@@ -1,0 +1,21 @@
+{
+  "id": "underworld-rod",
+  "name": "Underworld Rod",
+  "kind": "weapon",
+  "slot": "hand",
+  "weight": 29,
+  "value": 22000,
+  "requires": {
+    "level": 42,
+    "vocationId": "druid"
+  },
+  "weapon": {
+    "kind": "wand",
+    "family": "rod",
+    "range": 3,
+    "damageType": "death",
+    "manaPerHit": 13,
+    "damage": { "min": 73, "max": 91 }
+  },
+  "_open": "Underworld Rod (id 8082 do Canary / Tibia). Level 42, dano de morte 73-91, mana 13/golpe."
+}

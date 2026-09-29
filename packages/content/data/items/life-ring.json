@@ -1,0 +1,10 @@
+{
+  "id": "life-ring",
+  "name": "Life Ring",
+  "kind": "ring",
+  "slot": "finger",
+  "weight": 2,
+  "value": 100,
+  "ringEffect": { "kind": "regen-boost", "percent": 300 },
+  "_open": "Peso e preço provisórios — o PRD (§21) não fixa número de anel, e docs/reference/huntera-observed.md não observa nenhum. O BÔNUS (SV-16, +300% da regeneração base) é definitivo. appearanceId resolvido via /assets, conferido de olho a 32 px."
+}

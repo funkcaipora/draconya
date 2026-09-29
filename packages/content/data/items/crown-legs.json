@@ -1,0 +1,13 @@
+{
+  "id": "crown-legs",
+  "name": "Crown Legs",
+  "kind": "armor",
+  "slot": "legs",
+  "weight": 65,
+  "value": 12000,
+  "armor": 8,
+  "requires": {
+    "vocationId": ["knight", "paladin"]
+  },
+  "_open": "Kit level 200 (#524), Knight e Paladin. Armor 8 e weight 6500 (65 oz) do Canary `items.xml` id 3382 (`Knight;true, Paladin;true, Elite Knight, Royal Paladin`). Mesma armadura da Knight Legs — mais cara por ser item de quest, não de crafting/loot comum. `value` 12000: Alesar compra por esse preço (TibiaWiki via tibiascape.com/library/items/crown-legs), e bate com o `sell 12000` do Nah'Bob em `data-otservbr-global/npc/nah_bob.lua`."
+}

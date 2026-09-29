@@ -1,0 +1,9 @@
+{
+  "id": "royal-spear",
+  "name": "Royal Spear",
+  "kind": "other",
+  "weight": 25,
+  "value": 0,
+  "stackable": true,
+  "_open": "Loot do Dragon Lord (#520). No Tibia real é arma de ARREMESSO (`weaponType distance`, sem munição própria — o item em si é o projétil, consumido ao acertar): este catálogo não tem mecanismo de arma de arremesso (`WEAPON_KINDS` é melee/distance-com-munição-abstrata/wand), e modelar isso é fora do escopo da #520 — fica como item vendável/curiosidade, sem `weapon`. Canary `items.xml` id 7378 (`royal spear`): attack 35, range 3 (corrigido na revisão da #536 — a nota original citava range 6 do TibiaWiki via WebSearch, que contradizia a PRÓPRIA fonte local citada ao lado; o TFS `items.xml` local, id 7378, também confirma range 3), weight 2500 (25 oz), level 25; nenhum NPC compra (\"no NPC buys this item... market only\", TibiaWiki). `value` 0, fato do Tibia (ADR 0037 d.4). Divergência registrada em `docs/product/items.md`."
+}

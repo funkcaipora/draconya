@@ -1,0 +1,10 @@
+{
+  "id": "royal-helmet",
+  "name": "Royal Helmet",
+  "kind": "armor",
+  "slot": "head",
+  "weight": 48,
+  "value": 0,
+  "armor": 9,
+  "_open": "Kit level 200 (#524). Armor 9 e weight 4800 (48 oz) do Canary `items.xml` id 3392 — sem `level`/`vocation` no script de equip. `value` 0: nenhum NPC compra o Royal Helmet no Tibia real (TibiaWiki, via tibiascape.com/library/items/royal-helmet — \"no buy/sell offers\"); o schema trata 0 como \"não se vende\", e não copiamos o preço custom que o Nah'Bob do `data-otservbr-global` oferece (ADR 0037 d.4: preço de NPC é fato do Tibia, não da economia do OT server)."
+}

@@ -1,0 +1,33 @@
+{
+  "id": "rage-of-the-skies",
+  "name": "Rage of the Skies",
+  "description": "Causa dano de energia numa área de 11x11 ao seu redor.",
+  "vocationId": "sorcerer",
+  "minLevel": 55,
+  "manaCost": 600,
+  "group": "attack",
+  "groupCooldownMs": 4000,
+  "cooldownMs": 40000,
+  "secondaryGroup": {
+    "name": "focus",
+    "cooldownMs": 40000
+  },
+  "effect": {
+    "kind": "damage",
+    "basePower": 200,
+    "area": {
+      "shape": "circle",
+      "radius": 6,
+      "centered": "caster"
+    },
+    "damageType": "energy",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 7,
+      "skillMax": 14,
+      "baseMin": 0,
+      "baseMax": 0
+    }
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Fórmula e raio do Canary (`data/scripts/spells/attack/rage_of_the_skies.lua`, main, 2026-09-24): AREA_CIRCLE6X6 é raio 6, não 5."
+}

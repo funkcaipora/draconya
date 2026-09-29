@@ -6,7 +6,7 @@
 //   | como entra          | pelo menu, com dificuldade escolhida; instância criada na entrada |
 //   | o que encerra       | ação manual, regra de saída, ou morte (§14.8)                     |
 //   | o que a morte faz   | encerra — devolver à PZ é a FUN-38, do lado do servidor           |
-//   | como recompensa     | loot e XP por abate, bloqueados com stamina zero                  |
+//   | como recompensa     | loot, XP e abate no Bestiário, bloqueados com stamina zero        |
 //
 // Se a Guild War não couber nessa mesma interface depois, ela foi modelada em cima de hunt —
 // e descobrir isso na F5 custa semanas. É por isso que nada aqui pede método novo em
@@ -16,44 +16,80 @@
 // A instância é ISOLADA: mapa, rota e spawns são desta sessão e de mais ninguém. Não existe
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
 
-import { BOT_CATEGORIES, isBlocked } from '@draconya/content';
-import type {
-  BotAction, BotCategory, BotConfig, BotExitRule, Combat, Content, Hunt, HuntDifficulty,
-  Item, Monster, Progression, Route, Skill, Spell, SpawnPoint, Stamina, Supply, Tilemap,
-  Vocation,
+import {
+  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, ITEM_SLOTS, floorChangeAt, floorChangeToward,
+  isBlocked, migrateBotConfigV1,
 } from '@draconya/content';
-import type { CharacterRuntime } from '../character.js';
-import { NOT_IN_CATALOG, balanceOf, castSpell, useSupply } from '../casting.js';
-import type { CastResult, SpellAim, SpellTarget } from '../casting.js';
+import type {
+  AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, Combat,
+  CompiledWeaponFamily, Content, DamageType, FieldSpec, Hunt, HuntDifficulty, Item, ItemSlot,
+  Monster, MonsterAbility, MonsterDefense, MonsterTargetChange, PartyConfig, Progression,
+  ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
+  WeaponFamily, WeaponProfile,
+} from '@draconya/content';
+import { CharacterRuntime } from '../character.js';
+import { areaTiles, directionOf, isSelfOrigin, tileKey } from '../area.js';
+import type { AreaSource } from '../area.js';
+import {
+  NOT_IN_CATALOG, balanceOf, castSpell, executeHealing, groupCooldownKey,
+  ownPurse, spellCooldownKey, supplyCooldownKey, useSupply,
+} from '../casting.js';
+import type { CastRefused, CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
+import type { ConditionState } from '../conditions.js';
+import { conditionFromSpec, sameTick, specTickIntervalMs, tickOf } from '../conditions.js';
+import type { NormalizedTick } from '../conditions.js';
+import { Fields } from '../fields.js';
+import type { TileFieldState } from '../fields.js';
+import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
-import type { Defender } from '../combat/damage.js';
+import type { DamageOutcome, Defender } from '../combat/damage.js';
+import { applyDamageOutcome } from '../combat/outcome.js';
+import type { DefenseSource } from '../combat/defense.js';
+import { resolveWeaponPower } from '../combat/weapon-power.js';
+import { rollDistanceHit } from '../combat/distance-hit.js';
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
 import type { KillCredit, Victim } from '../death.js';
+import type { BestiaryConfig } from '../bestiary.js';
 import { Spawner } from '../hunt/spawner.js';
 import type { SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
-import type { LootItem } from '../loot.js';
-import type { CarriedItem } from '../inventory.js';
-import { compileBot } from '../bot.js';
-import type { BotActuator, BotView, CompiledBot } from '../bot.js';
 import {
-  MonsterRuntime, chooseTarget, decideMonsterAction, monsterSubject,
+  autoSellLimit, bagValue, canShareExperience, DEFAULT_SHARED_EXPERIENCE_RULES, reserveProportionally,
+  settleEntries, shareCostsOf, sharedExperiencePercent, splitEqually, splitLootOf, uniqueVocations,
+  xpByDamage, xpShare,
+} from '../party.js';
+import type { MemberCapacity, PartyBagState } from '../party.js';
+import type { LootAmmunition, LootItem, LootSupply } from '../loot.js';
+import type { CarriedItem, ContainerRules, EquipmentObserver, Wearer } from '../inventory.js';
+import { compileBot, percentOf } from '../bot.js';
+import type { BotActuator, BotView, CompiledBot, CompiledSlot, CooldownOfAction } from '../bot.js';
+import { compileAutomations } from '../automation.js';
+import type { AutomationActuator, CompiledAutomations } from '../automation.js';
+import {
+  MonsterRuntime, chooseTarget, decideMonsterAction, isMonsterFleeing, monsterSubject,
 } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
-import type { Blocked, GridPoint } from '../monster/step.js';
-import { distance, fleeStep, greedyStep } from '../monster/step.js';
-import { DEFAULT_TARGETING, countTargets, selectTarget } from '../targeting.js';
+import { abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
+import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
+import { distance, fleeStep, greedyStep, sameFloor } from '../monster/step.js';
+import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from '../targeting.js';
 import type { Targeting } from '../targeting.js';
-import { applyDeathPenalty, grantXp, statsForLevel } from '../progression.js';
+import {
+  applyDeathPenalty, applyExperienceBonus, grantXp, levelExperienceBonusPercent, statsForLevel,
+} from '../progression.js';
 import { Rng } from '../rng.js';
-import { TileOccupancy, canOccupy, move, place } from '../movement.js';
-import type { Movable, MoveResult } from '../movement.js';
+import { containerRulesFor } from '../inventory.js';
+import {
+  TileOccupancy, canOccupy, move, movementDuration, place, placeNear, tilesAround,
+} from '../movement.js';
+import type { Movable, MoveResult, WorldPoint } from '../movement.js';
+import type { RouteState } from '../route/walker.js';
 import { EventPriority } from '../schedule.js';
 import type { ScheduledEvent } from '../schedule.js';
-import { powerMultiplier } from '../skills.js';
+import { powerMultiplier, skillFactorFor } from '../skills.js';
 import { drainStamina, isExhausted } from '../stamina.js';
 import { RouteWalker } from '../route/walker.js';
-import type { RouteState } from '../route/walker.js';
+import { boundedPath, isAdjacentTo, isExactly } from '../route/pathfind.js';
 import { Session } from '../session.js';
 import type { Aggregates, EndReason, Receipt, Ruleset, SessionSnapshot } from '../session.js';
 
@@ -67,21 +103,169 @@ const PLAYER_STEP = 'player-step';
 const PLAYER_ATTACK = 'player-attack';
 const MONSTER_STEP = 'monster-step';
 const MONSTER_ATTACK = 'monster-attack';
+/**
+ * Uma ability DECLARADA do monstro (CMB-06). O subject é derivado (`m:<id>:<abilityId>`), e é
+ * ele que a morte cancela sem varrer a fila — `#onMonsterDied` conhece os ids pelo conteúdo.
+ *
+ * A básica legada continua em `MONSTER_ATTACK` com subject `m:<id>`: um snapshot de um nó
+ * anterior traz esses eventos, e tratá-los como ability básica é o que mantém a retomada
+ * compatível durante o deploy em rolagem.
+ */
+const MONSTER_ABILITY = 'monster-ability';
+const monsterAbilitySubject = (id: number, abilityId: string): string =>
+  `${monsterSubject(id)}:${abilityId}`;
+/**
+ * Uma DEFESA declarada de monstro (#518): mesmo desenho do `MONSTER_ABILITY`, subject derivado
+ * (`m:<id>:<defenseId>`) para a morte cancelar sem varrer a fila e para duas defesas do mesmo
+ * monstro, com cadências diferentes, não colidirem no mesmo (kind, subject).
+ */
+const MONSTER_DEFENSE = 'monster-defense';
+const monsterDefenseSubject = (id: number, defenseId: string): string =>
+  `${monsterSubject(id)}:${defenseId}`;
+/**
+ * A troca de alvo por tempo (#518). Só existe UMA por monstro — o subject é o `m:<id>` de
+ * sempre, e `resolveDeath` já a cancela junto do resto ao matar (`cancelEvents(subject)`).
+ */
+const MONSTER_TARGET_CHANGE = 'monster-target-change';
 const HEALTH_REGEN = 'health-regen';
 const MANA_REGEN = 'mana-regen';
 const SPAWN = 'spawn';
+/** O cadáver apodreceu (FUN-123): sai do chão. */
+const CORPSE = 'corpse';
 const EXIT_RULES = 'exit-rules';
+const EXIT_COUNTDOWN = 'exit-countdown';
 /**
- * Um evento POR CATEGORIA (FUN-84, §13.4/§13.5). Não existe prioridade global entre elas: uma
- * cura que executa não atrasa o ataque, porque são vencimentos independentes na mesma fila.
+ * O vencimento da votação de encerrar a hunt para todos (#432, ADR 0032 d.14). É um evento da
+ * fila no instante exato em que vence — nunca um contador por tick (invariante 2). O subject é
+ * fixo porque só existe uma votação por vez: re-propor cancela o vencimento anterior.
  */
-const BOT_EVENT: Readonly<Record<BotCategory, string>> = {
-  heal: 'bot-heal',
-  potion: 'bot-potion',
-  attack: 'bot-attack',
-  rune: 'bot-rune',
-  support: 'bot-support',
-};
+const END_VOTE_EXPIRE = 'end-vote-expire';
+const END_VOTE_SUBJECT = 'end-vote';
+/** A janela de aprovação, em tempo LÓGICO (ADR 0032 d.14). Conteúdo pode mudar sem ADR. */
+export const END_VOTE_WINDOW_MS = 60_000;
+
+/**
+ * O vencimento de um item equipado por TEMPO (ADR 0032 d.8): o anel que gasta por duração. É
+ * um evento da fila, agendado no equip e cancelado no desequip (invariante 2) — nunca um
+ * `remainingMs -= dtMs`. O subject é `<characterId>:<slot>`, o que permite cancelar por slot.
+ */
+const EQUIP_EXPIRE = 'equip-expire';
+function equipExpirySubject(characterId: string, slot: ItemSlot): string {
+  return `${characterId}:${slot}`;
+}
+
+/**
+ * O ciclo das automações do catálogo (AB-08, ADR 0032 d.9). Evento PERIÓDICO que se reagenda
+ * (como `monster-step`), nunca avaliação por tick: a 1 Hz desanexada o resultado é o mesmo da
+ * 10 Hz anexada (invariante 2, ADR 0020). O subject é o personagem; quem não habilitou
+ * automação nenhuma não agenda nada.
+ */
+const AUTOMATION = 'bot-automation';
+const AUTOMATION_INTERVAL_MS = 1_000;
+
+type ExitReason = 'manual-exit' | 'exit-rule';
+/**
+ * As condições (#155, CMB-07): o vencimento e o tique periódico. Eventos da fila (invariante 2),
+ * nunca acumulador. `subject` é `<targetId>/<key>`: um cancelamento por condição, sem varrer a
+ * fila. O alvo pode ser personagem ou monstro desde o CMB-07 — o id do monstro é `m:<id>`.
+ */
+const CONDITION_EXPIRE = 'condition-expire';
+const CONDITION_TICK = 'condition-tick';
+const conditionSubject = (targetId: string, key: string): string => `${targetId}/${key}`;
+/**
+ * Os campos de tile (CMB-07): um evento POR CAMPO. O tique aplica a condição a quem pisa nos
+ * tiles; o vencimento tira o campo. `subject` é `f:<id>`.
+ */
+const FIELD_TICK = 'field-tick';
+const FIELD_EXPIRE = 'field-expire';
+const fieldSubject = (fieldId: string): string => `f:${fieldId}`;
+/**
+ * No MESMO instante, o vencimento roda ANTES do tique — de condição e de campo. É a ordem
+ * documentada e testada: o tique do instante de expiração não acontece. A prioridade é explícita
+ * (e não a sequência de agendamento) porque relançar reagenda o vencimento depois do tique, e a
+ * ordem não pode depender de quem foi agendado por último.
+ */
+const EXPIRE_PRIORITY = EventPriority.Housekeeping;
+const TICK_PRIORITY = EventPriority.Housekeeping + 1;
+/**
+ * Um evento POR GRUPO de cooldown do conteúdo (AB-07, ADR 0032 d.2). Não existe prioridade
+ * global entre grupos: uma cura que executa não atrasa o ataque, porque são vencimentos
+ * independentes na mesma fila. Dentro de um grupo, a prioridade é a ordem do slot (RP-002).
+ */
+const botEvent = (group: string): string => `bot:${group}`;
+
+/** O prefixo que separa o evento de grupo do resto dos eventos do ruleset. */
+const BOT_GROUP_PREFIX = 'bot:';
+
+/**
+ * O tipo de entrada da configuração do bot (DT-02): v1 ou v2.
+ *
+ * A v2 é o vocabulário alvo; a v1 continua aceita porque o carregamento só liga a migração no
+ * AB-09 (#424) — até lá, `server`/`tools` entregam a config que o jogador salvou, e
+ * `migrateBotConfigV1` a normaliza no boundary. A união some no AB-09.
+ */
+type BotConfigInput = BotConfigV2 | BotConfig;
+
+/**
+ * Por que o disparo manual de um slot não aconteceu (AB-09, ADR 0032 d.3). Tipada porque o
+ * jogador merece saber qual foi — e porque o host traduz cada uma para o tooltip do slot.
+ *
+ * `not-in-catalog` cobre magia/item inexistente e os requisitos que o manual não passa
+ * (level, vocação): "essa ação não sai agora". O `magic-level-too-low` tem motivo PRÓPRIO
+ * desde a M24-12 (RF-02): a UI precisa dizer POR QUE a runa não rodou, e engolir o requisito
+ * de magic level no genérico fazia o jogador procurar o problema no saldo e no alvo.
+ */
+export type SlotRefusal =
+  | 'empty-slot' | 'wrong-set' | 'disabled' | 'not-in-catalog' | 'magic-level-too-low'
+  | 'not-enough-mana' | 'not-enough-gold' | 'not-enough-item' | 'no-target' | 'out-of-range'
+  | 'on-cooldown' | 'group-cooldown';
+
+/** O resultado do disparo manual: sucesso, ou recusa tipada com o prazo quando é cooldown. */
+export type SlotOutcome =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: SlotRefusal; readonly retryInMs: number };
+
+/**
+ * O estado de UM slot do conjunto ativo (AB-09, UC-BAR-003). É APRESENTAÇÃO: espelha a mesma
+ * elegibilidade de `#perform` sem mutar nada, e a contagem de consumível NÃO entra aqui — ela é
+ * do `inventory` (invariante 4).
+ */
+export interface SlotState {
+  readonly set: number;
+  readonly slot: number;
+  readonly state: 'ready' | 'cooldown' | 'blocked' | 'empty';
+  readonly remainingMs: number;
+  readonly reason?: SlotRefusal;
+}
+
+/**
+ * Traduz a recusa do atuador para a recusa do slot. É a salvaguarda de DT-08: `slotStates`
+ * calcula o mesmo motivo por outro caminho, e o teste prende que os dois coincidem.
+ */
+function refusalOf(result: CastRefused): SlotRefusal {
+  switch (result.reason) {
+    case 'not-in-catalog':
+    case 'level-too-low':
+    case 'wrong-vocation':
+      return 'not-in-catalog';
+    // Motivo PRÓPRIO (RF-02): o slot-state precisa distinguir o requisito de magic level do
+    // genérico, senão o cliente não consegue explicar por que a runa não rodou.
+    case 'magic-level-too-low': return 'magic-level-too-low';
+    case 'on-cooldown': return 'on-cooldown';
+    case 'group-cooldown': return 'group-cooldown';
+    case 'no-target': return 'no-target';
+    case 'out-of-range': return 'out-of-range';
+    case 'not-enough-mana': return 'not-enough-mana';
+    // O suprimento v2 é ABSTRATO: o "estoque" é o saldo, e a falta dele tem motivo próprio —
+    // `not-enough-item` fica reservado ao consumível FÍSICO (a carga de bênção de M22).
+    case 'not-enough-gold': return 'not-enough-gold';
+  }
+}
+
+/** A recusa do manual, montada num lugar só. */
+function refuse(reason: SlotRefusal, retryInMs: number): SlotOutcome {
+  return { ok: false, reason, retryInMs };
+}
 
 /**
  * De quanto em quanto tempo as regras de saída são avaliadas.
@@ -102,6 +286,189 @@ const EXIT_RULE_INTERVAL_MS = 250;
  */
 const SPAWN_RETRY_MS = 1000;
 
+/**
+ * Quanto tempo LÓGICO o lure pode ficar PARADO (§13.7, `#luring`) antes de retomar a rota mesmo
+ * sem a contagem ter caído abaixo de `min` (#527).
+ *
+ * A automação é do Draconya, não do TFS/Canary (ADR 0037 decisão 2) — este número não tem fonte
+ * de engine nenhuma para citar, é design nosso. Ele existe porque a densidade de agressão do
+ * Tibia de verdade (`aggroRadius` maior, `leashRadius: 0` — o Dragon nunca desiste) faz uma
+ * party parada numa zona cheia ATRAIR gente de fora do raio de busca continuamente: o abate local
+ * nunca esvazia por completo, porque enquanto ele cai um recém-chegado de longe substitui, e
+ * `perto` nunca cruza `lure.min` — a mesma regra que junta o bando também o mantém cheio para
+ * sempre, e o líder "PARADO NA ROTA" nunca mais anda (achado reproduzindo a QA do M28 com
+ * conteúdo real: a party ficava 29 minutos lógicos no mesmo tile, matando sem parar, sem nunca
+ * avançar). "A automação é legítima" (invariante 11) não significa "acampa para sempre": o bot
+ * que lidera PUXA — anda, junta, limpa, anda de novo —, nunca vira uma torre fixa. Dois minutos é
+ * generoso o bastante para esvaziar um aglomerado comum sem ser tão longo que a rota pare de
+ * progredir numa hunt cheia.
+ */
+const MAX_LURE_HOLD_MS = 120_000;
+
+/**
+ * Quanto tempo LÓGICO o "puxa à força" (acima) dura antes do lure poder reconsiderar a
+ * densidade de novo (#527). Sem isto, o `perto >= lure.max` do PRÓPRIO passo seguinte reengatilha
+ * o cerco na hora — a densidade de uma zona cheia não cai num tile só —, e o "resume" depois do
+ * teto durava um único passo antes de travar de novo pelos mesmos 120 s. Um minuto de rota é o
+ * bastante para o líder sair de verdade da zona (dezenas de tiles, na velocidade de qualquer
+ * personagem deste nível) antes do lure voltar a decidir.
+ */
+const LURE_FORCE_WALK_MS = 60_000;
+
+/**
+ * Quanto tempo LÓGICO quem foi empurrado (`#nudgeCompanion`) fica sem tentar reocupar o
+ * alcance de follow (#527). Achado reproduzindo a QA do M28: sem este prazo, o par (quem pediu
+ * passagem, quem cedeu) empatava para sempre — um saía do tile, e no PRÓPRIO vencimento
+ * seguinte do outro (a mesma cadência de passo, os dois eventos entrelaçados) ele reentrava
+ * nele antes de quem pediu conseguir passar. O prazo só precisa ser maior que uns poucos passos
+ * — o bastante para o líder atravessar o gargalo, não para o follow parecer quebrado.
+ */
+const NUDGE_YIELD_MS = 3_000;
+
+/**
+ * Válvula de ÚLTIMO RECURSO: quanto tempo LÓGICO um follow atravessando andar pode ficar sem
+ * progredir — mesmo depois de `#clearCompanionsAround` já ter tentado abrir espaço — antes de
+ * desistir e voltar para a PRÓPRIA rota (#527). Não é a saída corriqueira: a primeira versão
+ * disto usava 30 s, e quase toda travessia real esbarrava nele — o seguidor desistia do líder
+ * por um bloqueio de SEGUNDOS, exatamente o "abandona o líder e vai caçar sozinho em outro
+ * andar" que uma QA ao vivo flagrou (Tibia não separa a party assim). Quatro minutos é tempo
+ * mais que suficiente para qualquer bloqueio de companheiro se resolver — se ainda assim persiste,
+ * é parede ou monstro, e esperar para sempre não é melhor que seguir a rota.
+ */
+const MAX_CROSS_FLOOR_STUCK_MS = 240_000;
+
+/**
+ * A folga (tiles) ALÉM do `targetSearchRadius` de cada seguidor antes do líder considerar
+ * alguém "para trás demais" e segurar o passo da rota (#527). Achado numa QA ao vivo: um raio
+ * de regroup FIXO menor que `targetSearchRadius` (7 contra 8, a v1 desta constante) produzia
+ * um impasse mútuo — o seguidor, a distância 8, ainda está dentro do PRÓPRIO raio de follow
+ * (`d > radius` só desiste ALÉM de 8) e por isso `#holdFollow` continua tentando fechar a
+ * distância sozinho, ativamente, a cada vencimento; mas o líder, com um limiar MAIS APERTADO
+ * que o do seguidor, já achava "longe demais" e segurava — ninguém tinha motivo para se mexer
+ * mais rápido, e os dois só se resolviam pela válvula de último recurso (3 min) em vez do
+ * follow ativo do seguidor de fato alcançar. O limiar do líder tem que ser FOLGADO em relação
+ * ao do seguidor, não apertado: o líder só precisa segurar quando o seguidor JÁ desistiu de
+ * seguir sozinho (além do próprio raio) — dentro dele, o follow ativo do seguidor já resolve, e
+ * seguraria por segurar. Ver `#partyRegroupBlocked`.
+ */
+const PARTY_REGROUP_MARGIN = 0;
+
+/**
+ * A folga (tiles) ALÉM de `targetSearchRadius` antes do follow desistir por distância (#527).
+ * A distância RAW não é monotônica ao longo de um caminho do BFS limitado — um desvio em volta
+ * de parede pode aumentar a distância em linha reta antes de diminuir, e sem folga nenhuma o
+ * `d > radius` desistia exatamente no meio de uma travessia que o próprio BFS já tinha achado
+ * (achado com o bot config real: 8 → 9, um a mais que o `targetSearchRadius` padrão). Fixa e
+ * pequena, não "sempre que houver caminho em cache": uma primeira versão desta emenda soltava o
+ * teto de desistência por completo enquanto qualquer caminho velho existisse, e um seguidor
+ * genuinamente perdido nunca mais desistia — a coesão da varredura real desabou.
+ */
+const FOLLOW_UNREACHABLE_SLACK = 3;
+
+/**
+ * O raio MAIS APERTADO exigido antes do líder ATRAVESSAR ANDAR (#527) — nunca o mesmo do raio
+ * "normal" acima. Cruzar uma escada com um seguidor a 6 tiles de distância, no MESMO andar
+ * ainda, é o próprio cenário que gera "o líder sumiu escada acima e o seguidor foi atrás
+ * sozinho, sem saber que o resto ficou para trás" — o defeito original desta issue. Metade do
+ * raio normal é folga o bastante para o último passo antes da escada sem exigir todo mundo
+ * exatamente em cima do líder.
+ */
+const PARTY_REGROUP_FLOOR_CHANGE_RADIUS = 3;
+
+/**
+ * Válvula de ÚLTIMO RECURSO: quanto tempo LÓGICO o líder pode ficar esperando a party se juntar
+ * antes de seguir em frente de qualquer jeito (#527). Um seguidor genuinamente perdido (morto e
+ * saiu, preso numa parede que o motor nunca resolve, o que for) não pode travar o líder — e por
+ * extensão a hunt inteira — para sempre. Minutos, não segundos: regroup é para o caso comum de
+ * "ficou para trás lutando", que se resolve rápido; a válvula é só para quando não resolve.
+ */
+const MAX_REGROUP_WAIT_MS = 180_000;
+
+/**
+ * O raio (Chebyshev, a partir de quem segue) do BFS limitado do follow (#527, emenda ao ADR
+ * 0009, ADR 0037: o bot é automação própria — não precisa da fidelidade ao Tibia que o resto da
+ * simulação mantém). Achado numa QA ao vivo: um corredor em U onde os três candidatos do passo
+ * guloso (ADR 0009 — direção + dois vizinhos) eram todos parede, mas havia caminho livre pelo
+ * lado OPOSTO — o Sorcerer ficou 8 tiles do líder, visivelmente perto, sem nunca conseguir
+ * andar até lá, e só a válvula de regroup (3 min) liberava o líder. Trinta tiles cobre qualquer
+ * desvio plausível dentro do raio de regroup/busca de follow (7) com folga generosa, sem
+ * varrer o mapa inteiro a cada vencimento — é limitado por design, não "path-finding de verdade"
+ * (ADR 0009 continua valendo para a rota autorada, que nunca usa isto).
+ */
+const FOLLOW_PATHFIND_RADIUS = 30;
+
+/**
+ * Quanto tempo LÓGICO o passo guloso do follow precisa ficar empacado SEGUIDO antes do BFS
+ * limitado entrar (#527). Um monstro ou companheiro momentaneamente no caminho é o caso comum
+ * — resolve sozinho em segundos, andando ou morrendo —, e path-find nele produz um desvio
+ * inútil pela masmorra em vez de uma espera curta (achado varrendo o bot config real: a coesão
+ * da party PIOROU depois do BFS entrar sem este atraso — todo bloqueio passageiro virava rota
+ * alternativa). Só uma parede de VERDADE — o corredor em U de uma QA ao vivo, por exemplo —
+ * continua bloqueada além deste prazo; poucos segundos é curto o bastante para não atrasar
+ * visivelmente a travessia real, e longo o bastante para deixar um monstro/companheiro sair
+ * sozinho da frente antes de desviar.
+ */
+const FOLLOW_PATHFIND_DELAY_MS = 4_000;
+
+/**
+ * A mira de uma magia que não mira ninguém (cura). Congelada e compartilhada, como `NO_HITS`
+ * em `casting.ts`: uma cura por segundo por personagem não precisa alocar um vetor vazio.
+ */
+/** Até onde o segundo participante procura tile livre ao entrar (#203): o anel de `placeNear`. */
+const ENTRY_RADIUS = 3;
+
+function targetingOf(runner: Runner | undefined): Targeting {
+  return runner?.bot?.targeting ?? DEFAULT_TARGETING;
+}
+
+function runnerState(runner: Runner): RunnerState {
+  // Só os grupos do CONTEÚDO que estão AGENDADOS entram no snapshot. As chaves são strings, e o
+  // motor v2 ignora categorias v1 que um snapshot antigo traga (seção 7 do AB-07).
+  const botScheduled: string[] = [];
+  if (runner.bot !== undefined) {
+    for (const group of runner.bot.groups.keys()) {
+      if (runner.botReady[group] === false) botScheduled.push(group);
+    }
+  }
+  return {
+    route: runner.walker.getState(),
+    botScheduled,
+    luring: runner.running,
+    ringReplaced: runner.ringReplaced,
+    playerAttackReady: runner.playerAttackReady,
+    warnedExhausted: runner.warnedExhausted,
+    warnedFullBackpack: runner.warnedFullBackpack,
+    warnedNoGold: runner.warnedNoGold,
+    ...(runner.automationWarned.size === 0
+      ? {}
+      : { automationWarned: Object.fromEntries(runner.automationWarned) }),
+    ...(runner.attackTarget === null && runner.botCandidate === null
+      ? {}
+      : { chosenTarget: runner.attackTarget ?? runner.botCandidate }),
+    ...(runner.attackTarget === null || !runner.attackTargetPinned
+      ? {}
+      : { chosenTargetPinned: true }),
+    ...(runner.botConfig === undefined ? {} : { botConfig: runner.botConfig }),
+    ...(runner.pendingExit === null ? {} : { pendingExit: runner.pendingExit }),
+    ...(runner.followInterrupted ? { followInterrupted: true } : {}),
+    ...(runner.followTargetId === undefined ? {} : { followTargetId: runner.followTargetId }),
+    ...(runner.followReason === undefined ? {} : { followReason: runner.followReason }),
+    ...(runner.lastCombatActionAtMs === null ? {} : { lastCombatActionAtMs: runner.lastCombatActionAtMs }),
+    ...(runner.lureStoppedSinceMs === null ? {} : { lureStoppedSinceMs: runner.lureStoppedSinceMs }),
+    ...(runner.lureForceWalkUntilMs === null ? {} : { lureForceWalkUntilMs: runner.lureForceWalkUntilMs }),
+    ...(runner.nudgedUntilMs === null ? {} : { nudgedUntilMs: runner.nudgedUntilMs }),
+    ...(runner.crossFloorStuckSinceMs === null ? {} : { crossFloorStuckSinceMs: runner.crossFloorStuckSinceMs }),
+    ...(runner.sameTileStreak === 0 ? {} : { sameTileStreak: runner.sameTileStreak }),
+    ...(runner.regroupSinceMs === null ? {} : { regroupSinceMs: runner.regroupSinceMs }),
+  };
+}
+
+const NO_TILES: readonly WorldPoint[] = [];
+const NO_MEMBERS: readonly CharacterRuntime[] = [];
+const NO_SPELL_TARGETS: readonly SpellCastTarget[] = [];
+/** Nenhum candidato de party para a regra (alvo inválido, fora de alcance ou efeito self-only). */
+const NO_CANDIDATES: readonly CharacterRuntime[] = [];
+
 export type HuntDifficultyName = keyof Hunt['difficulties'];
 
 /** O `SpellTarget` do lado de quem o PREENCHE. Ver `HuntRuleset.#spellTarget`. */
@@ -117,8 +484,8 @@ export interface PlayerProfile {
   readonly attackRange: number;
   readonly armor: number;
   readonly dodgeChance: number;
-  /** Milissegundos por tile ao percorrer a rota. */
-  readonly stepDurationMs: number;
+  /** O tipo do golpe desarmado (CMB-03). Vem de `combat.player.damageType`. */
+  readonly damageType: DamageType;
 }
 
 /** O que uma regra de saída consegue enxergar. Estreito de propósito: regra não muda estado. */
@@ -153,7 +520,10 @@ export interface HuntExitRule {
  * isso `hp-below` carrega o percentual no id: duas regras de HP com limites diferentes
  * precisam ser distinguíveis na tela de retorno.
  */
-export function compileExitRules(rules: readonly BotExitRule[]): readonly HuntExitRule[] {
+export function compileExitRules(
+  rules: readonly BotExitRule[],
+  items: ReadonlyMap<string, Item>,
+): readonly HuntExitRule[] {
   return rules.map((rule) => {
     switch (rule.kind) {
       case 'hp-below': {
@@ -185,18 +555,35 @@ export function compileExitRules(rules: readonly BotExitRule[]): readonly HuntEx
       case 'party-member-lost':
         return {
           id: 'party-member-lost',
-          when: (view: HuntView) => {
-            // INERTE numa hunt de um, e por construção: o laço começa no segundo participante.
-            // Quando party existir (F3), "saiu" some da lista e "morreu" fica com `alive`
-            // falso — os dois casos que o §13.9 junta numa regra só.
-            for (let i = 1; i < view.participants.length; i += 1) {
-              if (!(view.participants[i] as CharacterRuntime).alive) return true;
-            }
-            return false;
+          // Não é predicado periódico (#193): dispara no `onLeave` de OUTRO membro — sair ou
+          // morrer, os dois casos que o §13.9 junta —, por `#onMemberLost`, pelo id. A view
+          // de cada runner leva só ele, então aqui não há o que olhar; e numa hunt de um não
+          // há de quem sair, por construção.
+          when: () => false,
+        };
+      case 'out-of-capacity':
+        return {
+          id: 'out-of-capacity',
+          when(view) {
+            const self = view.participants[0];
+            if (self === undefined || !self.alive) return false;
+            if (self.capacity <= 0) return false;
+            return self.inventory.weight(items) >= self.capacity;
           },
         };
     }
   });
+}
+
+/**
+ * A configuração tem algum slot do conjunto ativo com alvo != self? É a pergunta que
+ * `#armHealersOf` faz por participante (só cura/mana aceitam amigo; `validateBotConfigV2` já
+ * recusou qualquer outro alvo, e o parse preenche `self` quando ausente).
+ */
+function hasNonSelfHealRule(config: BotConfigV2): boolean {
+  const active = config.sets[config.activeSet];
+  if (active === undefined) return false;
+  return active.slots.some((slot) => slot !== null && (slot.target?.kind ?? 'self') !== 'self');
 }
 
 export interface HuntRulesetOptions {
@@ -208,15 +595,38 @@ export interface HuntRulesetOptions {
   readonly combat: Combat;
   readonly progression: Progression;
   readonly stamina: Stamina;
+  /**
+   * A tabela da party (#190, ADR 0027). Sempre presente: solo é party de um, e `xpShare`
+   * devolve a XP inteira sem ler a tabela.
+   */
+  readonly party: PartyConfig;
   readonly vocations: ReadonlyMap<string, Vocation>;
   /** Catálogo de magias (FUN-74). Vazio é uma hunt em que nenhuma magia sai. */
   readonly spells: ReadonlyMap<string, Spell>;
   /** Catálogo de supplies (FUN-77). Vazio é uma hunt sem poção. */
   readonly supplies: ReadonlyMap<string, Supply>;
+  /**
+   * Catálogo de munição (ADR 0026 d.3). A munição é ABSTRATA — uma seleção por família que
+   * debita gold no tiro; vazio é uma hunt em que arco e besta não atiram.
+   */
+  readonly ammunition: ReadonlyMap<string, Ammunition>;
   /** Skills que sobem por uso (FUN-75). Vazio é uma hunt em que nada sobe por fazer. */
   readonly skills: ReadonlyMap<string, Skill>;
   /** Catálogo de itens (FUN-76). O que a arma equipada bate sai daqui. */
   readonly items: ReadonlyMap<string, Item>;
+  /**
+   * As famílias de arma (CMB-05): a família do perfil aponta a skill e a prática, e a fórmula
+   * já vem compilada. Indexada no boot — nenhuma varredura de catálogo por golpe.
+   */
+  readonly weaponFamilies: ReadonlyMap<WeaponFamily, CompiledWeaponFamily>;
+  /** O perfil do golpe desarmado (CMB-05): o fallback de quem não tem arma. */
+  readonly unarmed: WeaponProfile;
+  /**
+   * Os marcos do Bestiário e o bônus por marco (§18, FUN-113). Ausente é uma hunt em que o
+   * abate conta, mas nenhum marco fecha e a XP sai sem bônus — o conteúdo de teste que não
+   * fala de progressão permanente. É a config quem define marco, não quem autoriza contar.
+   */
+  readonly bestiary?: BestiaryConfig;
   readonly player: PlayerProfile;
   readonly exitRules?: readonly HuntExitRule[];
   /**
@@ -227,10 +637,10 @@ export interface HuntRulesetOptions {
    * as regras de saída, porque elas são compostas a partir da configuração crua. Compilar aqui
    * dentro torna a divergência impossível de escrever.
    *
-   * **Sem configuração não há evento nenhum agendado** — o custo de cinco eventos por segundo
-   * por hunt só existe para quem configurou.
+   * **Sem configuração não há evento nenhum agendado** — o custo de um evento por grupo só
+   * existe para quem configurou.
    */
-  readonly botConfig?: BotConfig;
+  readonly botConfig?: BotConfigInput;
   /**
    * Substitui o atuador embutido (FUN-74/FUN-77).
    *
@@ -239,7 +649,14 @@ export interface HuntRulesetOptions {
    * um ruleset quiser outra política sem reescrever o resto.
    */
   readonly actuator?: BotActuator;
-  /** Cooldown de cada categoria, do conteúdo (§13.5: 1 s). Parâmetro, não constante. */
+  /**
+   * A configuração do bot de CADA participante, por id (#203, ADR 0027). `botConfig` continua
+   * sendo a do primeiro a entrar — o caminho solo; quem entra com id aqui usa a sua.
+   */
+  readonly botConfigs?: Readonly<Record<string, BotConfigInput>>;
+  /** A party desta instância (#191, ADR 0027). Ausente é solo. */
+  readonly partyOptions?: PartyOptionsInput;
+  /** Cooldown de FALLBACK de um grupo sem livro próprio (§13.5: 1 s). Parâmetro, não constante. */
   readonly botCooldownMs?: number;
   /**
    * Até onde o bot ENXERGA ao decidir para onde andar (FUN-85), do conteúdo. Não é o alcance
@@ -253,6 +670,194 @@ export interface HuntRulesetOptions {
   readonly premium?: boolean;
 }
 
+/** Um cadáver no chão (FUN-123): de que monstro, onde. O prazo dele é o evento `CORPSE` na fila. */
+export interface CorpseState {
+  readonly id: number;
+  readonly monsterId: string;
+  readonly position: WorldPoint;
+}
+
+/**
+ * Quem pode carregar uma condição (CMB-07): personagem ou monstro. Os dois têm `conditions`,
+ * posição e vida; o tique de dano de um DOT entra no mesmo pipeline para os dois.
+ */
+type ConditionTarget = CharacterRuntime | MonsterRuntime;
+
+/** Como a party divide loot e custo (ADR 0027 decisão 5). */
+export type PartyMode = 'split' | 'shared';
+
+/**
+ * Os dois eixos do líder, mais a config de loot (§4, §5, ADR 0035 decisão 1).
+ *
+ * Vive ao lado dos campos achatados de `PartyOptions` para quem preferir o bloco — a migração
+ * de `{ settings }` preenche os mesmos eixos. `collect`/`autoSell` só são lidos por `partySummary`
+ * nesta issue; o filtro e a venda de fato são do #395.
+ */
+export interface PartySettings {
+  readonly shareCosts: boolean;
+  readonly splitLoot: boolean;
+  /** `null` = coletar tudo. Filtro de fato é do #395. */
+  readonly collect: readonly string[] | null;
+  /** Ordem configurada; só os `limit` primeiros valem (aplicação de fato é do #395). */
+  readonly autoSell: readonly string[];
+}
+
+/**
+ * A party desta instância (#191). Ausente é solo. MUTÁVEL desde o #394 — antes era fixada na
+ * sessão; o líder muda por `configureParty`.
+ *
+ * `mode` continua como espelho LEGADO (o `host` o lê até o #400): nasce da combinação dos dois
+ * eixos e não é reescrito por `configureParty` — quem manda é `shareCosts`/`splitLoot`.
+ */
+export interface PartyOptions {
+  leaderId: string;
+  readonly mode: PartyMode;
+  shareCosts: boolean;
+  splitLoot: boolean;
+  collect: readonly string[] | null;
+  autoSell: readonly string[];
+  premiumByCharacter: Record<string, boolean>;
+}
+
+/**
+ * O que `HuntRulesetOptions`/`HuntSessionOptions`/`HuntRulesetState.partyOptions` aceitam: o
+ * formato novo (`PartyOptions`, achatado), o bloco `{ settings }` do desenho, OU o legado que
+ * `packages/server` ainda constrói com `mode` até o #400 modernizar o ticket.
+ */
+export type PartyOptionsInput =
+  | PartyOptions
+  | {
+      readonly leaderId: string;
+      readonly settings: PartySettings;
+      readonly premiumByCharacter?: Readonly<Record<string, boolean>>;
+    }
+  | {
+      readonly leaderId: string;
+      readonly mode: PartyMode;
+      readonly shareCosts?: boolean;
+      readonly splitLoot?: boolean;
+      readonly premiumByCharacter?: Readonly<Record<string, boolean>>;
+    };
+
+export type ConfigurePartyResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: 'not-leader' }
+  | { readonly ok: false; readonly reason: 'unknown-item'; readonly itemId: string }
+  | { readonly ok: false; readonly reason: 'unsellable-item'; readonly itemId: string };
+
+export interface PartySettingsPatch {
+  readonly shareCosts?: boolean;
+  readonly splitLoot?: boolean;
+  readonly collect?: readonly string[] | null;
+  readonly autoSell?: readonly string[];
+}
+
+/**
+ * A recusa da votação de encerrar (#432). `not-leader` cobre solo e quem não lidera — como
+ * `configureParty`, uma sessão sem party não tem líder para propor. `no-proposal` é aprovar ou
+ * recusar sem votação aberta; `not-member` é um id que não está presente.
+ */
+export type PartyEndVoteResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: 'not-leader' | 'not-member' | 'no-proposal' };
+
+/** O bloco PARTY dos Detalhes da Caçada (§32, ADR 0035 decisão 11). */
+export interface PartySummary {
+  readonly leaderId: string;
+  readonly shareCosts: boolean;
+  readonly splitLoot: boolean;
+  readonly members: readonly string[];
+  readonly uniqueVocations: number;
+  readonly xpPoolPercent: number;
+  readonly bagValue: number;
+  readonly bagWeight: number;
+  readonly autoSell: { readonly configured: number; readonly limit: number };
+}
+
+/** Migra o formato legado (`mode` + eixos opcionais) para os campos do `PartyOptions`. */
+function partySettingsFromLegacy(input: {
+  readonly mode: PartyMode;
+  readonly shareCosts?: boolean;
+  readonly splitLoot?: boolean;
+}): PartySettings {
+  return {
+    shareCosts: shareCostsOf(input),
+    splitLoot: splitLootOf(input),
+    collect: null,
+    autoSell: [],
+  };
+}
+
+/**
+ * Uma função só migra as duas entradas (construção E snapshot): o formato novo achatado, o
+ * bloco `{ settings }` ou o legado `{ mode }`. Sem bump de `SNAPSHOT_FORMAT_VERSION`.
+ */
+function normalizePartyOptions(input: PartyOptionsInput | undefined): PartyOptions | undefined {
+  if (input === undefined) return undefined;
+  const premiumByCharacter = { ...(input.premiumByCharacter ?? {}) };
+  const settings = (input as { readonly settings?: PartySettings }).settings;
+  if (settings !== undefined) {
+    return {
+      leaderId: input.leaderId,
+      mode: settings.shareCosts && settings.splitLoot ? 'shared' : 'split',
+      shareCosts: settings.shareCosts,
+      splitLoot: settings.splitLoot,
+      collect: settings.collect,
+      autoSell: [...settings.autoSell],
+      premiumByCharacter,
+    };
+  }
+  const flat = input as Partial<PartyOptions>;
+  if (flat.collect !== undefined || flat.autoSell !== undefined) {
+    // Já é o `PartyOptions` achatado — cópia, para o snapshot não compartilhar referência.
+    return {
+      leaderId: input.leaderId,
+      mode: (input as { readonly mode: PartyMode }).mode,
+      shareCosts: flat.shareCosts === true,
+      splitLoot: flat.splitLoot === true,
+      collect: flat.collect ?? null,
+      autoSell: [...(flat.autoSell ?? [])],
+      premiumByCharacter,
+    };
+  }
+  const legacy = input as {
+    readonly leaderId: string;
+    readonly mode: PartyMode;
+    readonly shareCosts?: boolean;
+    readonly splitLoot?: boolean;
+  };
+  const migrated = partySettingsFromLegacy(legacy);
+  return {
+    leaderId: legacy.leaderId,
+    mode: legacy.mode,
+    shareCosts: migrated.shareCosts,
+    splitLoot: migrated.splitLoot,
+    collect: migrated.collect,
+    autoSell: [...migrated.autoSell],
+    premiumByCharacter,
+  };
+}
+
+/**
+ * Nenhuma venda automática efetiva. Fica fora das opções porque o conjunto é derivado do
+ * líder a cada abate; criá-lo vazio é o que evita alocar um `Set` por item de quem não vende.
+ */
+const EMPTY_AUTO_SELL: ReadonlySet<string> = new Set();
+
+/**
+ * O formato ANTIGO da bolsa no snapshot (`gold: number`, `items: CarriedItem[]`), lido só
+ * pelo `restore` para migrar uma sessão em voo para entradas com `eligible: []` — o sentinel
+ * de "presentes no settlement" (D5, sem bump de `SNAPSHOT_FORMAT_VERSION`).
+ */
+interface LegacyPartyBagState {
+  readonly gold: number;
+  readonly items: readonly CarriedItem[];
+  readonly capacity: number;
+}
+
+const isLegacyBag = (bag: unknown): bag is LegacyPartyBagState =>
+  typeof (bag as LegacyPartyBagState).gold === 'number';
+
 export interface HuntRulesetState {
   readonly huntId: string;
   readonly difficulty: HuntDifficultyName;
@@ -260,6 +865,10 @@ export interface HuntRulesetState {
   readonly spawner: SpawnerState;
   readonly monsters: readonly MonsterState[];
   readonly nextCreatureId: number;
+  /** Os cadáveres no chão (FUN-123). Ausente é nenhum: snapshot anterior. */
+  readonly corpses?: readonly CorpseState[];
+  /** O próximo id de item de chão. Ausente é `1`: snapshot anterior à FUN-123. */
+  readonly nextGroundItemId?: number;
   readonly warnedExhausted: boolean;
   /** Ver `HuntRuleset.#warnedFullBackpack`. Ausente é `false`: snapshot anterior à FUN-88. */
   readonly warnedFullBackpack?: boolean;
@@ -275,20 +884,41 @@ export interface HuntRulesetState {
   /** Ver `HuntRuleset.#onPlayerAttack`. Ausente é `true`: engatilhado. */
   readonly playerAttackReady?: boolean;
   /**
-   * Quais categorias do bot estão AGENDADAS (FUN-84).
+   * Quais GRUPOS do bot estão AGENDADOS (AB-07).
    *
-   * Precisa entrar no snapshot pela mesma razão que `playerAttackReady`: o evento pendente da
-   * categoria está na fila serializada, e restaurar como "engatilhada" faria o próximo
-   * `#armBot` agendar um segundo — ação dobrada, que é a invariante que este par protege.
+   * Precisa entrar no snapshot pela mesma razão que `playerAttackReady`: o evento pendente do
+   * grupo está na fila serializada, e restaurar como "engatilhado" faria o próximo `#armBot`
+   * agendar um segundo — ação dobrada, que é a invariante que este par protege.
    *
-   * Ausente é "nenhuma agendada", que é o estado de um snapshot anterior a esta issue: lá não
-   * havia evento de bot na fila para conflitar.
+   * As chaves são os grupos do CONTEÚDO (ou as categorias v1 de um snapshot anterior, que o
+   * motor v2 ignora). Ausente é "nenhum agendado".
    */
-  readonly botScheduled?: readonly BotCategory[];
+  readonly botScheduled?: readonly string[];
   /** Ver `HuntRuleset.#running`. Ausente é `true`: o lure começa juntando (FUN-87). */
   readonly luring?: boolean;
   /** Ver `HuntRuleset.#ringReplaced`. Ausente é `null`: o dedo estava vazio. */
   readonly ringReplaced?: string | null;
+  /**
+   * O estado por PARTICIPANTE (#203, ADR 0027): caminhante, bot, lure, anel, golpe engatilhado
+   * e avisos de cada um. Os campos soltos acima continuam escritos — com o do primeiro — e são
+   * lidos quando esta chave falta: é o snapshot anterior, de um dono só, sem bump.
+   */
+  readonly runners?: Readonly<Record<string, RunnerState>>;
+  /** A party (#191): achatada no formato novo, ou o legado `{mode}` de um snapshot anterior. */
+  readonly partyOptions?: PartyOptionsInput;
+  /** A bolsa do modo compartilhado (#192). Só existe com `partyOptions.splitLoot`. */
+  readonly partyBag?: PartyBagState;
+  /**
+   * A votação de encerrar em curso (#432). Opcional: ausente é nenhuma votação, o estado de um
+   * snapshot anterior. O vencimento já vem na fila serializada; isto preserva quem já aprovou
+   * para uma sessão retomada no meio da janela não perder a contagem.
+   */
+  readonly endVote?: { readonly proposedAtMs: number; readonly approved: readonly string[] };
+  /**
+   * Os campos de tile ativos (CMB-07). Opcional: ausente é nenhum campo, que é o estado de um
+   * snapshot anterior a esta issue. Os eventos de tique e vencimento já vêm na fila serializada.
+   */
+  readonly fields?: readonly TileFieldState[];
   /**
    * A configuração do bot, CRUA (FUN-81).
    *
@@ -302,23 +932,274 @@ export interface HuntRulesetState {
    *
    * Opcional: snapshot gravado antes desta issue não tem a chave, e ausente é "sem bot" — que
    * é exatamente o que aquelas sessões tinham.
+   *
+   * O motor normaliza para v2 ao recompilar (DT-02): a v1 legível no snapshot não perde
+   * configuração.
    */
-  readonly botConfig?: BotConfig;
+  readonly botConfig?: BotConfigV2;
+}
+
+/**
+ * O que é de UM participante dentro da hunt (#203). Antes do M13 tudo isto era campo da
+ * classe, e a hunt recusava o segundo personagem; agora é um `Runner` por id, e os eventos —
+ * que já carregavam `subject` — encontram o seu.
+ */
+interface Runner {
+  walker: RouteWalker;
+  /** O bot vigente, MUTÁVEL: o jogador troca no meio da hunt e vale na hora (FUN-81). */
+  bot: CompiledBot | undefined;
+  /** A configuração v2 correspondente, para o snapshot. Anda junto com `bot`, sempre. */
+  botConfig: BotConfigV2 | undefined;
+  /**
+   * As automações do catálogo, compiladas (AB-08). Derivadas de `botConfig`, como o `bot`:
+   * `[]` é nenhuma, e é o que faz um runner sem automação habilitada não agendar o evento.
+   */
+  automations: CompiledAutomations;
+  /**
+   * O atuador das automações, montado UMA vez por runner (#420).
+   *
+   * Antes `#onAutomation` reconstruía o objeto com ~10 closures a cada ciclo (1 Hz mais cada
+   * golpe recebido); com 5.000 hunts isso é o coletor rodando o tempo todo. `undefined` só no
+   * runner descartável de `getState` sem participantes — não há automação a executar.
+   */
+  actuator: AutomationActuator | undefined;
+  /**
+   * Por automação (chave = `model`), a última chave `reason:itemId` que já foi registrada como
+   * `automation-blocked`. Só a TRANSIÇÃO registra: uma automação bloqueada por 8 h vale UMA
+   * linha no extrato, não 28.800. Ver `RunnerState.automationWarned`.
+   */
+  readonly automationWarned: Map<string, string>;
+  exitRules: readonly HuntExitRule[];
+  pendingExit: ExitReason | null;
+  /** Por GRUPO: `true` = ENGATILHADO (nenhum evento pendente), `false` = agendado. */
+  readonly botReady: Record<string, boolean>;
+  /** O golpe está engatilhado? Ver `#onPlayerAttack`. */
+  playerAttackReady: boolean;
+  /**
+   * O alvo de ATAQUE explícito, por subject do monstro (`m:<id>`): o override do jogador
+   * (AB-09, ADR 0032 d.5) e o alvo que o bot decide seguir (#480). É EXCLUSIVO — quem mandou
+   * seguir um não quer bater em outro no caminho —, e `setAttackTarget` é a única porta de
+   * escrita, o que põe jogador e bot no mesmo pipeline (#470).
+   *
+   * Separado de `botCandidate` (#470): antes os dois dividiam `chosenTarget` mais um booleano
+   * `chosenTargetPinned`, e a apresentação usava o alvo de ATAQUE — que é recortado pelo
+   * alcance da arma e fazia o alvo sumir da tela fora do corpo a corpo.
+   */
+  attackTarget: string | null;
+  /**
+   * O alvo de ataque foi PINADO pelo jogador (AB-09) ou apenas eleito pelo bot (#480)?
+   *
+   * O bot entra pela MESMA porta (`setAttackTarget`), mas com `pinned: false`: o alvo dele é
+   * uma eleição da política, e fora do alcance a política reassume — só o clique do jogador é
+   * exclusivo (ADR 0032 d.5). Sem esta distinção, o alvo que o auto-target guarda na tela
+   * travaria o corpo a corpo, que é justamente o que a #444 não pode regredir.
+   */
+  attackTargetPinned: boolean;
+  /**
+   * O candidato do AUTO-TARGET (#444): o melhor monstro na tela, escolhido pela política,
+   * quando não há alvo de ataque válido. É só a mira corrente — sai do alcance e a política
+   * reassume —, e `selectedTargetOf` o expõe para a apresentação independentemente do alcance
+   * da arma (RF-05).
+   */
+  botCandidate: string | null;
+  /** Está CORRENDO para juntar monstros (§13.7)? Começa juntando. */
+  running: boolean;
+  /**
+   * Desde QUANDO `running` é `false` sem interrupção (#527, `MAX_LURE_HOLD_MS`). `null` quando
+   * está correndo (o valor comum) ou sem lure configurado — só existe para o cerco não durar
+   * para sempre. Opcional no snapshot (ausente é `null`), sem bump de formato: um snapshot
+   * anterior a esta issue nunca tinha um cerco em curso mais longo que o normal.
+   */
+  lureStoppedSinceMs: number | null;
+  /**
+   * Até QUANDO o "puxa à força" ignora `lure.max` depois do teto de cerco estourar (#527,
+   * `LURE_FORCE_WALK_MS`). `null` fora desse trecho. Sem isto o `perto >= lure.max` do passo
+   * seguinte reengatilhava o cerco no mesmo tile em que o teto acabou de liberar o líder.
+   */
+  lureForceWalkUntilMs: number | null;
+  /**
+   * Até QUANDO este personagem foi EMPURRADO para abrir passagem (#527, `#nudgeCompanion`,
+   * `NUDGE_YIELD_MS`) e por isso não tenta reocupar o alcance de follow. Sem isto o seguidor
+   * empurrado volta a ficar adjacente ao alvo no PRÓPRIO vencimento seguinte — muitas vezes no
+   * MESMO tile de onde acabou de sair —, e o par (quem pediu passagem, quem cedeu) empata para
+   * sempre: um sai, o outro reentra, ninguém nunca passa.
+   */
+  nudgedUntilMs: number | null;
+  /**
+   * Desde QUANDO um follow atravessando andar está sem progredir (#527, válvula de último
+   * recurso, `MAX_CROSS_FLOOR_STUCK_MS`). `null` fora de uma travessia parada.
+   */
+  crossFloorStuckSinceMs: number | null;
+  /**
+   * Quantas vezes SEGUIDAS o passo da rota bateu `same-tile` (#527): o índice do walker um
+   * atrás da posição real (ver `#playerStep`). A primeira vez fecha sozinha sem `hold()`; a
+   * segunda vez SEGUIDA cai no `hold()` de sempre — a válvula que evita o índice girar um laço
+   * pequeno inteiro sem o personagem nunca dar um passo físico. Zera em qualquer outro
+   * resultado (passo de verdade, `not-adjacent`, companheiro, parede).
+   */
+  sameTileStreak: number;
+  /**
+   * Desde QUANDO o líder está esperando a party se juntar (#527, `PARTY_REGROUP_MARGIN`/
+   * `PARTY_REGROUP_FLOOR_CHANGE_RADIUS`, válvula `MAX_REGROUP_WAIT_MS`). `null` fora de uma
+   * espera — só o próprio líder escreve este campo.
+   */
+  regroupSinceMs: number | null;
+  /**
+   * Cache do caminho do BFS limitado do follow (#527, ADR 0009 emenda) — só usado quando o
+   * passo guloso emperra contra uma parede que exige rodear. `goal` é o tile mirado quando o
+   * caminho foi calculado; `path` é o resto do caminho (sem o tile já dado). Invalidado (`null`)
+   * assim que o alvo muda de tile, o passo guloso volta a resolver sozinho, ou o próximo tile
+   * do caminho deixa de estar livre. NUNCA persiste no snapshot — cache de desempenho puro.
+   */
+  followPath: { readonly goal: FloorPoint; readonly path: readonly GridPoint[] } | null;
+  /**
+   * Desde QUANDO o passo guloso do follow está empacado sem progredir (#527) — o BFS limitado
+   * só entra depois de `FOLLOW_PATHFIND_DELAY_MS` de bloqueio SEGUIDO, nunca na primeira falha.
+   * Um monstro ou companheiro momentaneamente no caminho é o caso comum, e resolve sozinho em
+   * segundos — path-find nele produzia desvios inúteis (achado varrendo o bot config real: a
+   * coesão da party PIOROU com o BFS sem este atraso, porque todo bloqueio passageiro virava
+   * um desvio pela masmorra em vez de uma espera curta). Parede de verdade continua sendo
+   * resolvida — só um pouco depois. `null` fora de um bloqueio. NUNCA persiste no snapshot.
+   */
+  followStuckSinceMs: number | null;
+  /** Que anel estava no dedo quando a máquina equipou o dela (§13.8). `null` = vazio. */
+  ringReplaced: string | null;
+  warnedExhausted: boolean;
+  warnedFullBackpack: boolean;
+  warnedNoGold: boolean;
+  /** Já reportamos `active:false` para este follow e ainda não retomou (§D10, "uma vez"). */
+  followInterrupted: boolean;
+  /**
+   * O alvo CONFIGURADO do follow, guardado no último `#reportFollow` (#401). Existe para o
+   * `followStateOf` devolver a verdade ATUAL a quem reconecta: o evento `follow-state` só é
+   * emitido na TRANSIÇÃO, e `kind: 'leader'` resolve o líder a cada vencimento — guardar o id
+   * aqui é o que dispensa uma segunda resolução de liderança no hospedeiro.
+   */
+  followTargetId: string | undefined;
+  /** Por que o follow está interrompido (#401): o `reason` do último `follow-state` inativo. */
+  followReason: 'dead' | 'left' | 'unreachable' | undefined;
+  /**
+   * O instante LÓGICO do último ataque ou cura A OUTRO PARTICIPANTE (§525, ADR 0027 emenda
+   * 2026-09-24/25): é o que `canShareExperience` lê como atividade (`Party::isPlayerActive` do
+   * TFS/Canary). `null` é "nunca agiu" — o mesmo que não ter entrada no `ticksMap` de lá.
+   * Escrito só por `#markCombatActive`, chamado dos MESMOS pontos que já creditam dano/cura
+   * para o DPS/HPS (#431) — `#land`, `#applyHits` sempre; `#emitHealed` só quando o RECIPIENTE
+   * não é o próprio healer (`Player::isPartner` exclui `player == this` nas duas engines antes
+   * de registrar atividade por cura — curar a si mesmo continua valendo para o HPS, só não para
+   * esta atividade). Um quinto ponto de escrita divergiria do que já é creditado em algum lugar.
+   */
+  lastCombatActionAtMs: number | null;
+}
+
+/**
+ * A reserva morde a mochila sem tocar em `inventory.ts` (§11, #396): um `Wearer` com a
+ * capacidade PESSOAL já descontada do que a party reservou. Objeto NOVO — nunca escreve
+ * `character.capacity` (invariante 9), e `Inventory.add` continua vendo o dono real depois.
+ */
+function withReservedCapacity(character: CharacterRuntime, reserved: number): Wearer {
+  return {
+    level: character.level,
+    vocationId: character.vocationId,
+    capacity: Math.max(0, character.capacity - reserved),
+  };
+}
+
+/** O `Runner` serializado. Ver `HuntRulesetState.runners`. */
+export interface RunnerState {
+  readonly route: RouteState;
+  readonly botScheduled: readonly string[];
+  readonly luring: boolean;
+  readonly ringReplaced: string | null;
+  readonly playerAttackReady: boolean;
+  readonly warnedExhausted: boolean;
+  readonly warnedFullBackpack: boolean;
+  readonly warnedNoGold: boolean;
+  /**
+   * Por automação, a última chave `reason:itemId` que já virou `automation-blocked` (AB-08,
+   * #420). Precisa entrar no snapshot: sem ele, uma hunt retomada volta a registrar o mesmo
+   * aviso a cada ciclo, que é o defeito que este campo fecha. Ausente é "nada avisado".
+   */
+  readonly automationWarned?: Readonly<Record<string, string>>;
+  /**
+   * O alvo selecionado (#444). Precisa entrar no snapshot: o alvo persiste no runner até
+   * morrer ou sair da tela, e a hunt retomada continua mirando nele. Ausente é "sem alvo" —
+   * snapshot anterior, que cai na política no primeiro evento.
+   *
+   * O NOME do campo é o do formato persistido e não mudou com o #470: na memória ele virou
+   * `attackTarget` + `botCandidate`, e `#runnerStateOf`/`#newRunner` fazem a tradução. Renomear
+   * a chave do snapshot exigiria bump de formato e tolerância de leitura por uma mudança que
+   * não altera o que é gravado (ADR 0014).
+   */
+  readonly chosenTarget?: string | null;
+  /** O alvo é do jogador (AB-09/#480) ou do auto-target (#444)? Ausente é auto (`false`). */
+  readonly chosenTargetPinned?: boolean;
+  readonly botConfig?: BotConfigV2;
+  readonly pendingExit?: ExitReason;
+  /**
+   * Já reportamos `active:false` para o follow deste participante (#398). Opcional e OMITIDO
+   * quando `false`: um snapshot de hunt sem follow configurado não muda de tamanho.
+   */
+  readonly followInterrupted?: boolean;
+  /** O alvo do follow (#401). Opcional: snapshot anterior a esta issue não o tem. */
+  readonly followTargetId?: string;
+  /** A razão da interrupção do follow (#401). Opcional pelo mesmo motivo. */
+  readonly followReason?: 'dead' | 'left' | 'unreachable';
+  /**
+   * O último ataque ou cura deste participante (§525). Ausente é "nunca" — a hunt retomada
+   * volta com a XP compartilhada avaliando este membro como INATIVO até ele agir de novo, o
+   * mesmo efeito conservador de um `ticksMap` vazio no TFS/Canary logo após um restart.
+   */
+  readonly lastCombatActionAtMs?: number;
+  /**
+   * Desde quando `luring` é `false` sem interrupção (#527, `MAX_LURE_HOLD_MS`). Ausente/`null` é
+   * "correndo, ou sem cerco em curso" — um snapshot anterior a esta issue nunca tinha isto, e o
+   * efeito é o mesmo: o cerco retomado começa contando do zero, nunca de um estouro que já
+   * tivesse acontecido antes do restart.
+   */
+  readonly lureStoppedSinceMs?: number | null;
+  /** Até quando o "puxa à força" vale (#527, `LURE_FORCE_WALK_MS`). Ausente/`null` é fora dele. */
+  readonly lureForceWalkUntilMs?: number | null;
+  /** Até quando o empurrão (#527, `#nudgeCompanion`) suspende o follow. Ausente/`null` é fora. */
+  readonly nudgedUntilMs?: number | null;
+  /** Desde quando a travessia de escada do follow está sem progredir (#527). Ausente/`null` é fora. */
+  readonly crossFloorStuckSinceMs?: number | null;
+  /** Quantas vezes SEGUIDAS o passo da rota bateu `same-tile` (#527). Ausente é zero. */
+  readonly sameTileStreak?: number;
+  /** Desde quando o líder espera a party se juntar (#527). Ausente/`null` é fora. */
+  readonly regroupSinceMs?: number | null;
 }
 
 export class HuntRuleset implements Ruleset {
   readonly type = 'hunt' as const;
 
   readonly #options: HuntRulesetOptions;
+  /** Um `Runner` por participante presente (#203). Ver `Runner`. */
+  readonly #runners = new Map<string, Runner>();
+  /** A party (#191): modo e líder. `undefined` é solo. Vem das opções ou do snapshot. */
+  #party: PartyOptions | undefined;
   /**
-   * O bot vigente. MUTÁVEL, ao contrário do resto das opções: o jogador troca a configuração
-   * no meio da hunt e ela passa a valer na hora (FUN-81, §13).
+   * A bolsa do modo compartilhado (#192, ADR 0027 decisão 5; #396): todo loot cai aqui, com
+   * capacidade igual à soma das capacidades DISPONÍVEIS dos presentes; em OVERWEIGHT o item com
+   * peso que não cabe fica no cadáver — não vai para a caixa do líder. `#bagWeight` é derivado e
+   * recalculado na retomada; `#bagSeq` dá o id das instâncias (`sessionId:bag:n`), que precisam
+   * ser únicas na sessão.
    */
-  #bot: CompiledBot | undefined;
-  /** A configuração crua correspondente, para o snapshot. Anda junto com `#bot`, sempre. */
-  #botConfig: BotConfig | undefined;
+  #bag: PartyBagState | null = null;
+  #bagWeight = 0;
+  #bagSeq = 0;
+  /** Alguém saiu e a cascata do §13.9 ainda não rodou (#193). Ver `onLeave`. */
+  #lossPending = false;
+  /**
+   * A votação de encerrar a hunt para todos (#432, ADR 0032 d.14), ou `null` sem votação.
+   * `approved` guarda quem já aprovou, na ordem; o vencimento é o evento `END_VOTE_EXPIRE`.
+   */
+  #endVote: { proposedAtMs: number; readonly approved: Set<string> } | null = null;
+  /**
+   * O que o `restore` leu e ainda não pôde materializar: os participantes só existem depois
+   * dele, e `onResume` é quem os casa com o estado. `legacy` é o snapshot de um dono só.
+   */
+  #pendingRunners: { readonly byId: Readonly<Record<string, RunnerState>> | null; readonly legacy: RunnerState | null } | null = null;
   readonly #difficulty: HuntDifficulty;
-  #exitRules: readonly HuntExitRule[];
   /**
    * As regras injetadas por quem montou o ruleset, separadas das do jogador.
    *
@@ -328,7 +1209,6 @@ export class HuntRuleset implements Ruleset {
    * voltar sem as regras de saída, e o teste de retomada pegou.
    */
   readonly #injectedExitRules: readonly HuntExitRule[];
-  #walker: RouteWalker;
   #spawner: Spawner;
   #monsters: MonsterRuntime[] = [];
   /**
@@ -340,76 +1220,44 @@ export class HuntRuleset implements Ruleset {
    */
   readonly #monsterBySubject = new Map<string, MonsterRuntime>();
   #nextCreatureId = 1;
-
+  /** Os cadáveres no chão, e o próximo id de item de chão (FUN-123). */
+  #corpses: CorpseState[] = [];
+  #nextGroundItemId = 1;
   /**
-   * Já avisou que a stamina zerou? A notícia sai UMA vez.
-   *
-   * O cenário comum é o jogador ausente: a hunt continua andando, gastando supply e não
-   * gerando nada (§10.2). Repetir o evento a cada tick encheria a lista curta da tela de
-   * retorno com a mesma linha até ela deixar de ser lista.
+   * Os campos de tile ativos (CMB-07), indexados por chave NUMÉRICA de tile. O `Tilemap` é
+   * conteúdo imutável; o campo é estado do ruleset (DT-01).
    */
-  #warnedExhausted = false;
-
-  /**
-   * Já avisou que a mochila encheu? A notícia sai UMA vez (FUN-88).
-   *
-   * Mesma razão do aviso de stamina: uma linha por item que não coube encheria a lista curta
-   * da tela de retorno, e o que o jogador precisa saber é que ela encheu.
-   */
-  #warnedFullBackpack = false;
-
-  /**
-   * Já avisou que o gold acabou? A notícia sai UMA vez, como a da stamina.
-   *
-   * §20.3 sem a regra de saída: o personagem FICA, não paga o supply e pode morrer. Isso é
-   * comportamento, não erro — mas é o tipo de coisa que o jogador ausente precisa encontrar na
-   * tela de retorno, senão a hunt que acabou em morte não tem explicação nenhuma.
-   *
-   * Uma vez, e não por recusa: a categoria de poção tenta a cada mudança do mundo, e uma linha
-   * por tentativa encheria a lista curta até ela deixar de ser lista.
-   */
-  #warnedNoGold = false;
+  #fields = new Fields();
 
   /** Até que instante lógico a stamina já foi cobrada. Ver `#burnStamina`. */
   #staminaAnchorMs = 0;
 
-  /** O golpe do personagem está engatilhado? Ver `#onPlayerAttack`. */
-  #playerAttackReady = true;
-
-  /**
-   * O personagem está CORRENDO para juntar monstros (§13.7, FUN-87)? Ver `#luring`.
-   *
-   * Começa em `true` porque o lure começa juntando: um personagem que nasce "lutando" com zero
-   * monstros ao redor pararia na rota esperando alguém aparecer.
-   */
-  #running = true;
-
-  /**
-   * Que anel estava no dedo quando a máquina equipou o dela (§13.8, FUN-87).
-   *
-   * `null` é "o dedo estava vazio". Precisa do snapshot: sem ele, uma hunt retomada com o anel
-   * equipado esqueceria o que restaurar, e o jogador acabaria a hunt sem o anel que era dele.
-   */
-  #ringReplaced: string | null = null;
-
-  /**
-   * Por categoria: `true` = ENGATILHADA (nenhum evento pendente), `false` = agendada.
-   *
-   * É a mesma invariante do `#playerAttackReady`, e pela mesma razão: uma categoria com
-   * evento pendente **e** reavaliação imediata é ação dobrada. Concentrar o agendamento em
-   * `#scheduleBot` é o que a torna impossível de escrever errado.
-   *
-   * Engatilhada é o estado de quem avaliou e não achou regra válida: em vez de queimar um
-   * evento por segundo esperando o mundo mudar, ela dorme até `#armBot`. Um bot configurado
-   * e sem nada a fazer custa ZERO.
-   */
-  readonly #botReady: Record<BotCategory, boolean> = {
-    heal: true, potion: true, attack: true, rune: true, support: true,
-  };
-
   /** A view do bot, reaproveitada (FUN-80): montar uma por avaliação é alocar por evento. */
   readonly #botView: BotView = {
-    self: null as unknown as CharacterRuntime, targetCount: 0, target: null,
+    self: null as unknown as CharacterRuntime, targetCount: 0, target: null, partyTarget: null,
+  };
+
+  /**
+   * Resolve grupo e chave de cooldown de uma ação do CONTEÚDO, uma vez por slot, na compilação
+   * (DT-01). Puro: só lê os catálogos fixados na sessão, nunca o disco (invariante 7).
+   *
+   * Magia de grupo tranca `group:<g>` (o `castSpell` já o aplica); ação sem grupo declarado cai
+   * no livro individual `spell:<id>`/`item:<id>`, para não inventar prioridade compartilhada
+   * (DT-06).
+   */
+  readonly #cooldownOf: CooldownOfAction = (action) => {
+    if (action.kind === 'spell') {
+      const spell = this.#options.spells.get(action.spellId);
+      const group = spell?.group;
+      return group === undefined
+        ? { group: `spell:${action.spellId}`, cooldownKey: spellCooldownKey(action.spellId) }
+        : { group, cooldownKey: groupCooldownKey(group) };
+    }
+    const supply = this.#options.supplies.get(action.supplyId);
+    const group = supply?.group;
+    return group === undefined
+      ? { group: `supply:${action.supplyId}`, cooldownKey: supplyCooldownKey(action.supplyId) }
+      : { group, cooldownKey: groupCooldownKey(group) };
   };
 
   /**
@@ -423,6 +1271,13 @@ export class HuntRuleset implements Ruleset {
   readonly #skillsByGain: Readonly<Record<Skill['gain']['on'], readonly Skill[]>>;
 
   /**
+   * A munição BÁSICA de cada família (ADR 0026 d.3): a primeira em ordem de id. É o padrão de
+   * quem nunca escolheu — o tiro usa a seleção da família, ou esta. Resolvida UMA vez, no
+   * boot da instância: nenhuma varredura de catálogo por tiro.
+   */
+  readonly #basicAmmo: ReadonlyMap<AmmoFamily, Ammunition>;
+
+  /**
    * A mira da magia, reaproveitada pela mesma razão que `#botView` (FUN-92).
    *
    * Três vetores que andam juntos e são limpos a cada lançamento: os alvos como `castSpell` os
@@ -434,6 +1289,14 @@ export class HuntRuleset implements Ruleset {
   readonly #spellTargets: MutableSpellTarget[] = [];
   /** Os monstros na mesma ordem de `#spellTargets`: é quem leva o dano de cada rolagem. */
   readonly #spellHits: MonsterRuntime[] = [];
+  /**
+   * Os ALIADOS de uma cura em área (#475, Mass Healing), na ordem dos participantes da sessão.
+   * Reaproveitado como `#spellHits`: a cura de grupo roda por lançamento, e o vetor novo só é
+   * o do evento. O conjurador entra nele, mas quem já o curou foi o `castSpell` — o laço pula.
+   */
+  readonly #healAllies: CharacterRuntime[] = [];
+  /** Os tiles da forma do último lançamento (#155), para o efeito por tile. Reaproveitado. */
+  #aimTiles: WorldPoint[] = [];
   readonly #aim: { distance: number; targets: readonly SpellTarget[] } = {
     distance: 0, targets: [],
   };
@@ -457,26 +1320,439 @@ export class HuntRuleset implements Ruleset {
       );
     }
     this.#options = options;
-    this.#botConfig = options.botConfig;
-    this.#bot = options.botConfig === undefined ? undefined : compileBot(options.botConfig);
+    this.#party = normalizePartyOptions(options.partyOptions);
+    if (this.#party?.splitLoot) this.#bag = { gold: [], items: [], capacity: 0, overweight: false };
     this.#difficulty = difficulty;
     this.#injectedExitRules = options.exitRules ?? [];
-    this.#exitRules = this.#composeExitRules(options.botConfig);
     this.#skillsByGain = {
       'melee-hit': [...options.skills.values()].filter((sk) => sk.gain.on === 'melee-hit'),
+      'distance-hit': [...options.skills.values()].filter((sk) => sk.gain.on === 'distance-hit'),
       'spell-cast': [...options.skills.values()].filter((sk) => sk.gain.on === 'spell-cast'),
+      'shield-block': [...options.skills.values()].filter((sk) => sk.gain.on === 'shield-block'),
     };
-    this.#walker = new RouteWalker(options.route);
     this.#spawner = new Spawner(options.route.spawnPoints.length, difficulty);
     this.#world = new TileOccupancy(options.map);
+    // A básica por família é a primeira em ordem de id (determinístico, sem varredura por tiro).
+    const basics = new Map<AmmoFamily, Ammunition>();
+    for (const ammo of [...options.ammunition.values()].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+      if (!basics.has(ammo.family)) basics.set(ammo.family, ammo);
+    }
+    this.#basicAmmo = basics;
   }
 
   get monsters(): readonly MonsterRuntime[] {
     return this.#monsters;
   }
 
+  /**
+   * O andar da instância. Monstro vive numa grade 2D; o `z` é do mapa, e quem monta o
+   * `session-state` precisa dele para pôr o monstro no mesmo andar do personagem (FUN-103).
+   */
+  get floor(): number {
+    return this.#world.map.z;
+  }
+
+  /** O mapa da instância (FUN-120): é o que o cliente busca para desenhar a hunt. */
+  get mapId(): string {
+    return this.#world.map.id;
+  }
+
+  get huntId(): string {
+    return this.#options.hunt.id;
+  }
+
+  get difficulty(): string {
+    return this.#options.difficulty;
+  }
+
+  attackTargetOf(character: CharacterRuntime): MonsterRuntime | null {
+    return this.#attackTarget(character);
+  }
+
+  /**
+   * Dispara um slot do conjunto ATIVO na hora, ignorando `when` e `auto` (AB-09, ADR 0032 d.3).
+   *
+   * Manual é manual: a elegibilidade natural é a mesma do bot (`#perform`), mas a condição do
+   * slot e a chave automática NÃO valem — o jogador apertou a tecla. `enabled: false` continua
+   * valendo (desligado é explícito). O `set` defasado é recusa, não "usa o ativo": o cliente
+   * disparou por uma barra que mudou (DT-03).
+   *
+   * Cooldown é conferido ANTES de executar, e a ação que não aconteceu não inicia cooldown
+   * nenhum — a ordem da elegibilidade é o ponto caro aqui.
+   */
+  useSlot(session: Session, characterId: string, set: number, slotIndex: number): SlotOutcome {
+    const character = findById(session.participants, characterId);
+    const runner = this.#runners.get(characterId);
+    if (character === null || !character.alive || runner === undefined) {
+      return refuse('not-in-catalog', 0);
+    }
+    const config = runner.botConfig;
+    if (config === undefined) return refuse('empty-slot', 0);
+    if (set !== config.activeSet) return refuse('wrong-set', 0);
+    const entry = config.sets[set]?.slots[slotIndex];
+    if (entry === null || entry === undefined) return refuse('empty-slot', 0);
+    if (entry.enabled === false) return refuse('disabled', 0);
+
+    const wait = this.#cooldownWaitOf(character, entry.do, session.nowMs);
+    if (wait > 0) return refuse('on-cooldown', wait);
+
+    const result = this.#perform(session, character, entry.do);
+    if (!result.ok) return refuse(refusalOf(result), result.retryInMs);
+    // A ação SAIU: o ciclo automático passa a respeitar o cooldown que ela acabou de iniciar.
+    this.#armBot(session, characterId);
+    return { ok: true };
+  }
+
+  /**
+   * O estado dos slots do conjunto ATIVO (AB-09), para o `slot-state`. PURO: não muta nada e
+   * não consome RNG — é a apresentação da mesma elegibilidade que `useSlot` executaria.
+   */
+  slotStates(session: Session, character: CharacterRuntime): readonly SlotState[] {
+    const config = this.#runners.get(character.id)?.botConfig;
+    const set = config?.activeSet ?? 0;
+    const out: SlotState[] = [];
+    for (let slot = 0; slot < BOT_SLOTS_PER_SET; slot += 1) {
+      const entry = config?.sets[set]?.slots[slot] ?? null;
+      if (entry === null) {
+        out.push({ set, slot, state: 'empty', remainingMs: 0 });
+        continue;
+      }
+      if (entry.enabled === false) {
+        out.push({ set, slot, state: 'blocked', remainingMs: 0, reason: 'disabled' });
+        continue;
+      }
+      const wait = this.#cooldownWaitOf(character, entry.do, session.nowMs);
+      if (wait > 0) {
+        out.push({ set, slot, state: 'cooldown', remainingMs: wait, reason: 'on-cooldown' });
+        continue;
+      }
+      out.push(this.#naturalStateOf(set, slot, character, entry.do));
+    }
+    return out;
+  }
+
+  /**
+   * O jogador escolheu um alvo clicando (AB-09, ADR 0032 d.5). `false` se não é monstro vivo —
+   * o host ignora em silêncio, como o `walk` recusado. O override vale para qualquer política e
+   * sobrepõe a busca enquanto o alvo vive (DT-05).
+   */
+  chooseTarget(session: Session, characterId: string, subject: string): boolean {
+    const monster = this.#monsterBySubject.get(subject);
+    if (monster === undefined || !monster.alive) return false;
+    const character = findById(session.participants, characterId);
+    if (character === null) return false;
+    this.setAttackTarget(character, monster);
+    return true;
+  }
+
+  /**
+   * O monstro vivo por subject, ou `null` (#470). É a ponte do host: o `select-target` chega
+   * com o id numérico do fio, e quem o traduz para o runtime é `#subjectOfCreature` do host;
+   * aqui ele resolve o subject validado no runtime que `setAttackTarget` recebe.
+   */
+  monsterBySubject(subject: string): MonsterRuntime | null {
+    const monster = this.#monsterBySubject.get(subject);
+    return monster !== undefined && monster.alive ? monster : null;
+  }
+
+  /**
+   * O alvo de ATAQUE explícito (#470): o jogador (AB-09) e o bot (#480). `null` limpa — é o
+   * cancelamento do `creatureId: 0`. É a ÚNICA porta de escrita do `attackTarget`, para jogador
+   * e bot não terem dois pipelines que divergem (§42: o bot manda os mesmos comandos).
+   *
+   * `pinned` distingue quem escreveu: o clique do jogador é EXCLUSIVO (fora do alcance não cai
+   * na política), a eleição do bot não é — ela é uma mirada corrente, e a política reassume
+   * quando ela sai do alcance. Quem chama com a assinatura de dois argumentos é o jogador, e
+   * por isso o padrão é `true`; o bot passa `false` explicitamente.
+   *
+   * Não valida: quem valida é quem resolve o runtime (o host contra o id do fio, o bot contra a
+   * política), e o alvo morto é limpo na primeira leitura por `#attackTargetOfRunner`.
+   */
+  setAttackTarget(
+    character: CharacterRuntime, target: MonsterRuntime | null, pinned = true,
+  ): void {
+    const runner = this.#runners.get(character.id);
+    if (runner === undefined) return;
+    runner.attackTarget = target === null ? null : target.subject;
+    runner.attackTargetPinned = target !== null && pinned;
+  }
+
+  /**
+   * O alvo SELECIONADO para a apresentação (#470, RF-05): o alvo de ataque se houver, senão o
+   * candidato do auto-target. **Não é recortado pelo alcance da arma** — é o que mantém o
+   * alvo na tela enquanto a criatura está viva e na sessão (o raio de busca), mesmo fora do
+   * corpo a corpo. Não muta: apresentação não escreve estado quente (invariante 3).
+   */
+  selectedTargetOf(character: CharacterRuntime): MonsterRuntime | null {
+    const runner = this.#runners.get(character.id);
+    if (runner === undefined) return null;
+    return this.#liveTargetOf(runner.attackTarget, character)
+      ?? this.#liveTargetOf(runner.botCandidate, character);
+  }
+
+  /** Os cadáveres no chão agora (FUN-123): quem reanexa precisa vê-los no `session-state`. */
+  get groundItems(): readonly CorpseState[] {
+    return this.#corpses;
+  }
+
+  /** Os campos de tile ativos agora (CMB-07): leitura para snapshot, host e teste. */
+  get fields(): readonly TileFieldState[] {
+    return this.#fields.getState();
+  }
+
+  /** O prazo de um cadáver venceu: sai do chão, e a tela fica sabendo. */
+  #onCorpseDecay(session: Session, subject: string): void {
+    const id = Number(subject);
+    const index = this.#corpses.findIndex((corpse) => corpse.id === id);
+    if (index === -1) return;
+    this.#corpses.splice(index, 1);
+    session.emit({ kind: 'ground-item-vanished', itemId: id });
+  }
+
+  /** O ambiente da hunt (FUN-121), do conteúdo — `cavern` no bueiro. Ausente é superfície. */
+  get ambience(): 'surface' | 'cavern' | undefined {
+    return this.#options.hunt.ambience;
+  }
+
+  /** A party desta instância (#191), ou `undefined` em solo. */
+  get party(): PartyOptions | undefined {
+    return this.#party;
+  }
+
+  /**
+   * Prévia pura do rateio da bolsa compartilhada (#354, SV-18): quanto cada presente receberia se a bolsa
+   * fosse liquidada AGORA — a MESMA conta de `#settle` (linha 2578), chamada como LEITURA, sem
+   * gravar nada e sem esvaziar a bolsa. `undefined` fora do modo `shared` (não há bolsa a ratear)
+   * e em solo (`#party` ausente) — D8: sistema/dado inexistente é omitido, nunca um zero fabricado.
+   */
+  partySpendingPreview(session: Session): ReadonlyMap<string, number> | undefined {
+    if (this.#party === undefined || !this.#party.splitLoot || this.#bag === null) return undefined;
+    const presentIds = session.participants.map((p) => p.id);
+    return settleEntries(this.#bag, presentIds, this.#options.items).shares;
+  }
+
+  /**
+   * Muda a configuração da party (D1, D2). Só o líder pode; a validação de catálogo acontece
+   * ANTES de qualquer mutação — ou tudo se aplica, ou nada (como `configureBot`, mas com recusa
+   * tipada porque aqui a recusa é visível ao jogador, não só um no-op silencioso).
+   *
+   * Chamado pelo host ENTRE avanços, a partir do opcode C2S `party-settings` (#400) — nunca
+   * dentro de `advanceBy` (invariante 2). O cliente manda intenção crua; quem valida é aqui.
+   */
+  configureParty(
+    session: Session, patch: PartySettingsPatch, byCharacterId: string,
+  ): ConfigurePartyResult {
+    const party = this.#party;
+    if (party === undefined || byCharacterId !== party.leaderId) {
+      return { ok: false, reason: 'not-leader' };
+    }
+    if (patch.collect !== undefined && patch.collect !== null) {
+      for (const itemId of patch.collect) {
+        if (!this.#options.items.has(itemId)) return { ok: false, reason: 'unknown-item', itemId };
+      }
+    }
+    if (patch.autoSell !== undefined) {
+      for (const itemId of patch.autoSell) {
+        const item = this.#options.items.get(itemId);
+        if (item === undefined) return { ok: false, reason: 'unknown-item', itemId };
+        if (item.value === 0) return { ok: false, reason: 'unsellable-item', itemId };
+      }
+    }
+    const next: PartySettings = {
+      shareCosts: patch.shareCosts ?? party.shareCosts,
+      splitLoot: patch.splitLoot ?? party.splitLoot,
+      collect: patch.collect === undefined ? party.collect : patch.collect,
+      autoSell: patch.autoSell ?? party.autoSell,
+    };
+    // Ligar: nasce vazia, igual ao construtor. Desligar: liquida com quem está presente AGORA
+    // vendendo entrada por entrada (#395) e descarta. Nada se perde: vira gold ou vai para o
+    // líder (`value: 0`, `unsold` de `settleEntries`).
+    if (next.splitLoot && !party.splitLoot) this.#bag = { gold: [], items: [], capacity: 0, overweight: false };
+    if (!next.splitLoot && party.splitLoot && this.#bag !== null) {
+      this.#settle(session, session.participants, 'toggle');
+      this.#bag = null;
+    }
+    party.shareCosts = next.shareCosts;
+    party.splitLoot = next.splitLoot;
+    party.collect = next.collect;
+    party.autoSell = next.autoSell;
+    // `configureParty` é um dos gatilhos do §13: ligar/desligar `splitLoot` muda o conjunto de
+    // reservas, e mudar a lista de coleta/venda muda o que entra — rebalanceia e emite.
+    this.#rebalanceBag(session);
+    return { ok: true };
+  }
+
+  /**
+   * O líder propõe encerrar a hunt para TODOS (#432, ADR 0032 d.14). Não encerra nada: abre uma
+   * votação com a própria aprovação do líder (quem propõe, aprova), agenda o vencimento de 60 s
+   * na fila e emite `party-end-vote`. Só o líder propõe; solo (sem party) não tem líder, como
+   * em `configureParty`.
+   *
+   * Re-propor REINICIA a janela: cancela o vencimento anterior e esvazia as aprovações, exceto a
+   * do líder. É a leitura literal de "o líder propõe" — quem propõe de novo está propondo de
+   * novo, não confirmando a proposta velha.
+   */
+  proposeEnd(session: Session, byLeaderId: string): PartyEndVoteResult {
+    const party = this.#party;
+    if (party === undefined || byLeaderId !== party.leaderId) {
+      return { ok: false, reason: 'not-leader' };
+    }
+    session.cancelEvent(END_VOTE_EXPIRE, END_VOTE_SUBJECT);
+    this.#endVote = { proposedAtMs: session.nowMs, approved: new Set([byLeaderId]) };
+    session.scheduleIn(END_VOTE_EXPIRE, END_VOTE_WINDOW_MS, {
+      priority: EventPriority.Housekeeping, subject: END_VOTE_SUBJECT,
+    });
+    this.#emitEndVote(session);
+    // Uma party que virou um só (todos os outros saíram): a proposta do líder já é o sim de
+    // TODOS os presentes, e a sessão encerra na hora.
+    this.#settleEndVote(session);
+    return { ok: true };
+  }
+
+  /**
+   * Um membro presente aprova a proposta em curso (#432). Quando o último presente aprova, a
+   * sessão encerra com `party-vote` — o settlement e os extratos saem pelo caminho de sempre
+   * (`onEnd` + `Session.end`). Sem proposta aberta é `no-proposal`; id ausente é `not-member`.
+   */
+  approveEnd(session: Session, characterId: string): PartyEndVoteResult {
+    const vote = this.#endVote;
+    if (vote === null) return { ok: false, reason: 'no-proposal' };
+    if (!session.participants.some((p) => p.id === characterId)) {
+      return { ok: false, reason: 'not-member' };
+    }
+    vote.approved.add(characterId);
+    this.#emitEndVote(session);
+    this.#settleEndVote(session);
+    return { ok: true };
+  }
+
+  /**
+   * Recusa a proposta em curso (#432): qualquer membro presente (ou o próprio líder) derruba a
+   * votação. Como uma recusa impede o "sim de todos", a proposta morre agora e a sessão segue
+   * exatamente como estava — o mesmo desfecho de expirar, sem esperar a janela.
+   */
+  cancelEnd(session: Session, byCharacterId: string): PartyEndVoteResult {
+    if (this.#endVote === null) return { ok: false, reason: 'no-proposal' };
+    if (!session.participants.some((p) => p.id === byCharacterId)) {
+      return { ok: false, reason: 'not-member' };
+    }
+    this.#clearEndVote(session);
+    return { ok: true };
+  }
+
+  /**
+   * O estado da votação para quem reconecta (#432). `undefined` sem party — não há votação
+   * fora de party. O getter é PURO (sem `emit`), como `partySummary`: o host o chama no attach.
+   */
+  endVoteState(): { active: boolean; proposedAtMs: number; approved: readonly string[] } | undefined {
+    if (this.#party === undefined) return undefined;
+    const vote = this.#endVote;
+    return {
+      active: vote !== null,
+      proposedAtMs: vote?.proposedAtMs ?? 0,
+      approved: vote === null ? [] : [...vote.approved],
+    };
+  }
+
+  #emitEndVote(session: Session): void {
+    if (this.#party === undefined) return;
+    const vote = this.#endVote;
+    session.emit({
+      kind: 'party-end-vote',
+      active: vote !== null,
+      proposedAtMs: vote?.proposedAtMs ?? 0,
+      approved: vote === null ? [] : [...vote.approved],
+    });
+  }
+
+  /** Derruba a votação e avisa; o vencimento agendado morre com ela. */
+  #clearEndVote(session: Session): void {
+    session.cancelEvent(END_VOTE_EXPIRE, END_VOTE_SUBJECT);
+    this.#endVote = null;
+    this.#emitEndVote(session);
+  }
+
+  /**
+   * Encerra se TODOS os presentes já aprovaram. É o único ponto que decide "o sim de todos": a
+   * aprovação, a entrada e a saída passam por aqui, e a comparação é contra os presentes AGORA —
+   * quem saiu deixa de contar (ver `onLeave`).
+   */
+  #settleEndVote(session: Session): void {
+    const vote = this.#endVote;
+    if (vote === null) return;
+    if (session.participants.some((p) => !vote.approved.has(p.id))) return;
+    session.cancelEvent(END_VOTE_EXPIRE, END_VOTE_SUBJECT);
+    this.#endVote = null;
+    this.#emitEndVote(session);
+    session.end('party-vote');
+  }
+
+  #onEndVoteExpire(session: Session): void {
+    // Sem votação é um vencimento órfão (re-propor cancela o anterior): ignorar é a degradação
+    // certa, e é o que mantém a fila de uma sessão retomada inofensiva.
+    if (this.#endVote === null) return;
+    this.#endVote = null;
+    this.#emitEndVote(session);
+  }
+
+  /**
+   * O premium de quem entrou DEPOIS da construção da sessão (#397). `#394` grava
+   * `premiumByCharacter` na criação; isto é o único jeito de escrevê-lo para um joiner — sem
+   * checagem de líder, porque premium é fato sobre o PRÓPRIO personagem, não configuração da
+   * party. Ausência de party é no-op: solo não tem `premiumByCharacter`.
+   */
+  setMemberPremium(session: Session, characterId: string, premium: boolean): void {
+    if (this.#party === undefined) return;
+    this.#party = {
+      ...this.#party,
+      premiumByCharacter: { ...this.#party.premiumByCharacter, [characterId]: premium },
+    };
+  }
+
+  /**
+   * O bloco PARTY dos Detalhes da Caçada (§32, ADR 0035 decisão 11). Getter PURO, sem `emit()`:
+   * o host o chama por ciclo, como `partySpendingPreview` (DT-03). `undefined` fora de party.
+   *
+   * `autoSell.limit` é o do PERSONAGEM líder (D3): o conteúdo manda os números, a sessão só lê.
+   * `autoSell.configured` é quantos ids o líder guardou — a aplicação de fato é do #395.
+   */
+  partySummary(session: Session): PartySummary | undefined {
+    const party = this.#party;
+    if (party === undefined) return undefined;
+    const present = session.participants.map((p) => ({ id: p.id, vocationId: this.#vocationOf(p)?.id ?? null }));
+    const unique = uniqueVocations(present);
+    // `sharedExperiencePercent` (party.ts) é a MESMA fórmula do Canary que `xpShare` usa ao
+    // pagar de verdade — ler qualquer outra conta aqui divergiria do que a party realmente
+    // recebe (§525).
+    const percent = sharedExperiencePercent(present);
+    const value = this.#bag === null ? 0 : bagValue(this.#bag, this.#options.items);
+    // O conteúdo sempre preenche (`partySchema` transforma com `{ free: 5, premium: 20 }`); o
+    // tipo é opcional por causa das fixtures antigas de `RawContent`.
+    const limit = autoSellLimit(
+      party.premiumByCharacter, party.leaderId, this.#options.party.autoSellItemTypes,
+    );
+    return {
+      leaderId: party.leaderId,
+      shareCosts: party.shareCosts,
+      splitLoot: party.splitLoot,
+      members: session.participants.map((p) => p.id),
+      uniqueVocations: unique,
+      xpPoolPercent: percent,
+      bagValue: value,
+      bagWeight: this.#bagWeight,
+      autoSell: { configured: party.autoSell.length, limit },
+    };
+  }
+
+  /** O índice na rota do PRIMEIRO participante (#203) — o solo de sempre; `-1` sem ninguém. */
   get routeIndex(): number {
-    return this.#walker.index;
+    const first = this.#runners.values().next().value as Runner | undefined;
+    return first?.walker.index ?? -1;
+  }
+
+  /** O índice na rota de um participante, para quem tem o id. */
+  routeIndexOf(characterId: string): number {
+    return this.#runners.get(characterId)?.walker.index ?? -1;
   }
 
   /**
@@ -491,14 +1767,21 @@ export class HuntRuleset implements Ruleset {
   }
 
   onEnter(session: Session, character: CharacterRuntime): void {
-    // Uma instância, um personagem — por enquanto, e de forma barulhenta.
-    //
-    // Party divide a rota (§14.7 fala em votação para trocar dificuldade), e sustentar isso
-    // pede um caminhante por participante. Aceitar o segundo em silêncio faria ele ficar
-    // parado no tile de entrada a hunt inteira, rendendo zero, sem nada explicando.
-    if (session.participants.length > 1) {
-      throw new Error('a hunt hospeda um personagem por instância; party é trabalho da F3');
+    // Recusa o (maxMembers + 1)-ésimo (§22, #397) ANTES de qualquer efeito colateral — criar o
+    // runner, resetar a ocupação do mundo — para que a reversão em `Session.enter` não precise
+    // desfazer nada além do próprio push. `character` já está em `session.participants`
+    // (empurrado por `Session.enter` antes de chamar `onEnter`): por isso o teste é `>`, não
+    // `>=`, contra o limite do CONTEÚDO da party (#392), não um valor fixo da issue.
+    if (this.#party !== undefined && session.participants.length > this.#options.party.maxMembers) {
+      throw new PartyFullError(this.#options.hunt.id, this.#options.party.maxMembers);
     }
+    // Um `Runner` por participante (#203): o caminhante, o bot e o resto do que era campo da
+    // classe quando a hunt hospedava um só. O bot é o DELE — por id, ou o da opção solo para
+    // o primeiro a entrar.
+    const config = this.#options.botConfigs?.[character.id]
+      ?? (this.#runners.size === 0 ? this.#options.botConfig : undefined);
+    const runner = this.#newRunner(config, undefined, character);
+    this.#runners.set(character.id, runner);
     // A colocação passa pela MESMA legalidade que um passo (FUN-69). O primeiro tile da rota
     // é validado no carregamento do conteúdo (FUN-9), então uma recusa aqui é conteúdo
     // quebrado — e falhar alto é melhor que entrar dentro de uma parede.
@@ -507,21 +1790,32 @@ export class HuntRuleset implements Ruleset {
     // este; contá-la aqui marcaria como ocupado um tile da hunt por uma coordenada de
     // cidade. Antes da FUN-72 isso era limpo por acidente, porque `place` liberava a origem.
     this.#world.reset(session.participants.filter((p) => p !== character));
-    // A duração do passo vem do CONTEÚDO e é copiada para a criatura, como `maxHealth` é: o
-    // sistema de movimento pergunta a quem anda, e quem anda não conhece o conteúdo.
-    character.stepDurationMs = this.#options.player.stepDurationMs;
-    // Capacidade vem da tabela, como `maxHealth` — e é reposta na entrada porque snapshot
-    // anterior ao inventário traz zero, e zero é "não carrega nada".
-    if (character.capacity <= 0) {
-      character.capacity = statsForLevel(
-        character.level, this.#vocationOf(character), this.#options.progression,
-      ).capacity;
-    }
-    const refused = place(this.#world, character, this.#walker.current);
+    // Velocidade e capacidade vêm da tabela, como `maxHealth` — e são repostas na entrada
+    // porque snapshot anterior traz zero: zero é "não carrega nada" e "não anda" (FUN-119).
+    // A velocidade soma o bônus de equipamento (#524: boots of haste) — o item já está no
+    // inventário do personagem neste ponto (veio do ticket/snapshot), e é por isso que somar
+    // aqui, e não depois, dá o mesmo resultado de quem calçou a bota ANTES de entrar na hunt.
+    const stats = statsForLevel(
+      character.level, this.#vocationOf(character), this.#options.progression,
+    );
+    character.speed = stats.speed + character.inventory.speedBonus(this.#options.items);
+    if (character.capacity <= 0) character.capacity = stats.capacity;
+    // Os containers ganham os tamanhos iniciais aqui (#160) — é onde o conteúdo existe, e é o
+    // que migra um snapshot anterior sem bump: nunca encolhe.
+    character.inventory.ensureContainers(this.#containerRules(character));
+    // Instala o observer e agenda o vencimento do que já está vestido (ADR 0032 d.8): a
+    // entrada fresca não passa por `equip`, e o anel que já vinha do ticket precisa vencer.
+    this.#armEquipment(session, character);
+    // O primeiro entra NO tile inicial da rota; o segundo em diante, no livre mais próximo —
+    // tile é exclusivo, e o `rejoinNearest` do primeiro passo o põe na rota (#203).
+    const at = runner.walker.current;
+    const refused = this.#runners.size === 1
+      ? place(this.#world, character, at)
+      : placeNear(this.#world, character, at, ENTRY_RADIUS);
     if (refused !== null) {
       throw new Error(
         `não dá para entrar na hunt "${this.#options.hunt.id}": o primeiro tile da rota ` +
-          `(${this.#walker.current.x},${this.#walker.current.y}) foi recusado — ${refused}`,
+          `(${at.x},${at.y}) foi recusado — ${refused}`,
       );
     }
     this.#occupancyStale = false;
@@ -537,7 +1831,7 @@ export class HuntRuleset implements Ruleset {
     this.#schedulePlayerAttack(session, character.id, 0);
     if (attackIntervalMs <= 0) throw new Error('attackIntervalMs must be positive');
 
-    const { healthPerSecond, manaPerSecond } = this.#options.progression.regen;
+    const { healthPerSecond, manaPerSecond } = this.#regenOf(character);
     // Taxa zero não é intervalo infinito: é "não regenera", e então não há evento nenhum.
     if (healthPerSecond > 0) {
       session.scheduleIn(HEALTH_REGEN, 0, {
@@ -548,16 +1842,181 @@ export class HuntRuleset implements Ruleset {
       session.scheduleIn(MANA_REGEN, 0, { priority: EventPriority.Upkeep, subject: character.id });
     }
 
-    for (let slot = 0; slot < this.#spawner.slots.length; slot++) {
-      session.scheduleIn(SPAWN, 0, { priority: EventPriority.Spawn, subject: String(slot) });
+    // Spawn e regras de saída são da INSTÂNCIA, não do participante (#203): entram na fila com
+    // o primeiro, e o segundo não os dobra.
+    if (this.#runners.size === 1) {
+      for (let slot = 0; slot < this.#spawner.slots.length; slot++) {
+        session.scheduleIn(SPAWN, 0, { priority: EventPriority.Spawn, subject: String(slot) });
+      }
+      session.scheduleIn(EXIT_RULES, EXIT_RULE_INTERVAL_MS, {
+        priority: EventPriority.Housekeeping,
+      });
     }
-    session.scheduleIn(EXIT_RULES, EXIT_RULE_INTERVAL_MS, {
-      priority: EventPriority.Housekeeping,
-    });
-    // Só categoria COM regra entra na fila (FUN-84). Um personagem sem bot configurado — que
-    // é todo mundo até a FUN-81 — não agenda nada, e os cinco eventos por segundo que a issue
-    // orça só existem para quem de fato configurou.
+    // Só grupo COM regra entra na fila (AB-07). Um personagem sem bot configurado não agenda
+    // nada, e os eventos por grupo só existem para quem de fato configurou.
+    this.#autoSelectTarget(session, character);
     this.#armBot(session, character.id);
+    // As automações (AB-08) seguem a mesma regra: só quem habilitou alguma entra na fila.
+    this.#armAutomations(session, character.id);
+    // Só depois de tudo pronto (runner armado, posição válida): quem já está OLHANDO a sessão
+    // precisa saber que a lotação mudou, e a bolsa precisa recalcular reserva por membro — um
+    // join em curso muda `ΣB` (#396) do mesmo jeito que uma saída muda. O aviso é incondicional
+    // em party (#397, DT-05): numa hunt tranquila o próximo evento de party pode nunca chegar
+    // antes do fim, e os outros presentes precisam ver o novo membro agora.
+    if (this.#party !== undefined) this.#emitPartyState(session);
+    // `onEnter` é gatilho do §13: quem entra muda a capacidade disponível (e a reserva) dos
+    // outros. Depois de tudo montado, para o participante novo já contar.
+    this.#rebalanceBag(session);
+  }
+
+  /**
+   * Um participante saiu de uma hunt que continua (#203, ADR 0027): desfaz o que a entrada fez.
+   * O tile é liberado; o `Runner` some — os eventos dele ainda na fila vencem, não encontram o
+   * personagem e não fazem nada, como os de um morto. Quem o tinha como alvo perde o alvo no
+   * próximo passo, porque a mira é recalculada a cada vencimento.
+   */
+  onLeave(session: Session, character: CharacterRuntime): void {
+    // REMONTA a ocupação no próximo evento, em vez de liberar `character.position`: numa
+    // transição quem sai já pode ter sido colocado no mapa de destino, e `TileOccupancy`
+    // guarda coordenada, não dono — é a armadilha da FUN-72, registrada no `onLeave` da Cidade.
+    this.#occupancyStale = true;
+    this.#runners.delete(character.id);
+    // Quem seguia `character` para de seguir AGORA (§D10, #398). É AQUI — e não de forma lazy
+    // no próximo `#holdFollow` — porque depois do `splice` de `Session.leave` morte e saída
+    // manual ficam indistinguíveis por presença, e `character.alive` só é confiável antes dele.
+    this.#interruptFollowersOf(session, character);
+    // O observer sai com ele: a Cidade não simula, e uma closure apontando para a sessão que
+    // ele deixou vazaria. A carga/duração dele não o segue (fora do escopo, §12).
+    character.inventory.setEquipmentObserver(null);
+    // As condições dele saem com ele (CMB-07): o vencimento de quem já saiu não fica órfão.
+    this.#cancelConditions(session, character);
+    // A bolsa é vendida e dividida COM quem sai (#192, ADR 0027 decisão 5): ele leva a parte
+    // do que caiu enquanto estava — `Session.leave` emite o extrato dele depois disto, e é o
+    // que põe o gold do settlement nele. A capacidade encolhe sem descartar nada: acima do
+    // teto a bolsa só para de aceitar, até o próximo settlement zerar.
+    if (this.#bag !== null) this.#settle(session, [...session.participants, character], 'leave');
+    // A votação de encerrar é dos PRESENTES (#432): quem sai deixa de contar. O vencimento
+    // continua correndo; se quem ficou já tinha aprovado todo, `#flushLoss` encerra — depois do
+    // extrato de quem saiu, pela mesma ordem que a cascata respeita.
+    if (this.#endVote !== null) this.#endVote.approved.delete(character.id);
+    // A cascata do §13.9 NÃO roda aqui: `Session.leave` ainda vai emitir o extrato de quem
+    // está saindo, e uma cascata dentro do `onLeave` emitiria os extratos dos outros ANTES
+    // do dele — `seq` fora de ordem e o `member-left` do primeiro depois dos demais. Fica
+    // pendente e roda logo depois: em `#depart` (saída decidida aqui) ou no próximo evento
+    // (saída pelo socket, que o hospedeiro chama direto).
+    this.#lossPending = true;
+  }
+
+  /**
+   * A cascata pendente do §13.9 e a liderança por TEMPO de party (#193, D9): `participants[0]`
+   * já é o mais antigo, e `leaderId` passa a ser reescrito quando o líder sai — não só lido com
+   * fallback. A troca entra no extrato (`leader-changed`) e o `party-state` avisa.
+   * Sem ninguém, nada a anunciar — a sessão encerra.
+   */
+  #flushLoss(session: Session, reason: 'death' | 'exit-rule' | 'manual-exit'): void {
+    if (!this.#lossPending) return;
+    this.#lossPending = false;
+    const cascaded = this.#onMemberLost(session);
+    if (session.participants.length === 0) {
+      // O motivo é o do ÚLTIMO a sair: se a cascata levou alguém, foi a regra dele.
+      if (session.ended === null) session.end(cascaded > 0 ? 'exit-rule' : reason);
+      return;
+    }
+    const party = this.#party;
+    if (party !== undefined && !session.participants.some((p) => p.id === party.leaderId)) {
+      const next = session.participants[0];
+      if (next !== undefined) {
+        party.leaderId = next.id;
+        session.record('leader-changed', next.id);
+      }
+    }
+    this.#emitPartyState(session);
+    // A saída pode ter completado o "sim de todos" (#432): quem ficou e já tinha aprovado
+    // encerra agora, depois do extrato de quem saiu.
+    this.#settleEndVote(session);
+  }
+
+  #emitPartyState(session: Session): void {
+    if (this.#party === undefined) return;
+    const leader = this.#leader(session);
+    session.emit({
+      kind: 'party-state',
+      leaderId: leader?.id ?? this.#party.leaderId,
+      members: session.participants.map((p) => ({ characterId: p.id, alive: p.alive })),
+    });
+  }
+
+  requestExit(session: Session, characterId: string): void {
+    this.#beginExit(session, characterId, 'manual-exit');
+  }
+
+  #newRunner(
+    config: BotConfigInput | undefined, state?: RunnerState, character?: CharacterRuntime,
+  ): Runner {
+    // A v1 é normalizada no boundary (DT-02): a config que o jogador salvou continua valendo, e
+    // o motor v2 só vê o vocabulário v2. Idempotente — um snapshot v2 volta só parseado.
+    const normalized = config === undefined ? undefined : migrateBotConfigV1(config);
+    const bot = normalized === undefined ? undefined : compileBot(normalized, this.#cooldownOf);
+    const runner: Runner = {
+      walker: new RouteWalker(this.#options.route, state?.route),
+      bot,
+      botConfig: normalized,
+      automations: compileAutomations(normalized?.automations ?? []),
+      actuator: undefined,
+      automationWarned: new Map(Object.entries(state?.automationWarned ?? {})),
+      exitRules: this.#composeExitRules(normalized),
+      pendingExit: state?.pendingExit ?? null,
+      botReady: {},
+      playerAttackReady: state?.playerAttackReady ?? true,
+      // O snapshot guarda um alvo só (#470): `chosenTargetPinned` dizia se ele era do
+      // jogador. Na memória ele vira `attackTarget` (explícito) ou `botCandidate` (auto).
+      attackTarget: state?.chosenTargetPinned === true ? (state.chosenTarget ?? null) : null,
+      botCandidate: state?.chosenTargetPinned === true ? null : (state?.chosenTarget ?? null),
+      attackTargetPinned: state?.chosenTargetPinned === true,
+      running: state?.luring ?? true,
+      lureStoppedSinceMs: state?.lureStoppedSinceMs ?? null,
+      lureForceWalkUntilMs: state?.lureForceWalkUntilMs ?? null,
+      nudgedUntilMs: state?.nudgedUntilMs ?? null,
+      crossFloorStuckSinceMs: state?.crossFloorStuckSinceMs ?? null,
+      sameTileStreak: state?.sameTileStreak ?? 0,
+      regroupSinceMs: state?.regroupSinceMs ?? null,
+      // Cache de caminho do follow (#527) — NUNCA persiste no snapshot: é um cache de
+      // desempenho puro (o BFS limitado é determinístico e barato de refazer), não um estado
+      // de jogo. Uma sessão restaurada recalcula na hora se precisar; nada observa a diferença.
+      followPath: null,
+      followStuckSinceMs: null,
+      ringReplaced: state?.ringReplaced ?? null,
+      warnedExhausted: state?.warnedExhausted ?? false,
+      warnedFullBackpack: state?.warnedFullBackpack ?? false,
+      warnedNoGold: state?.warnedNoGold ?? false,
+      followInterrupted: state?.followInterrupted ?? false,
+      followTargetId: state?.followTargetId,
+      followReason: state?.followReason,
+      lastCombatActionAtMs: state?.lastCombatActionAtMs ?? null,
+    };
+    // O atuador fecha sobre o PRÓPRIO runner (o `ringReplaced` das automações), então só pode
+    // ser montado depois que o objeto existe — e é a razão de ele não entrar no literal.
+    if (character !== undefined) runner.actuator = this.#automationActuatorFor(runner, character);
+    if (bot !== undefined) {
+      // Todo grupo começa ENGATILHADO. Só um snapshot v2 carrega chaves de grupo em
+      // `botScheduled`; as categorias v1 (`potion`, `attack`, `support`) colidiriam com nomes
+      // de grupo, e o motor v2 as re-engatilha — a fila restaurada de um snapshot v1 traz
+      // `bot-<categoria>`, que o motor v2 ignora.
+      for (const group of bot.groups.keys()) runner.botReady[group] = true;
+      if (state?.botConfig?.version === BOT_VOCABULARY_VERSION) {
+        for (const group of state.botScheduled) {
+          if (runner.botReady[group] !== undefined) runner.botReady[group] = false;
+        }
+      }
+    }
+    return runner;
+  }
+
+  /** O `Runner` de um participante presente. Lançar é certo: evento de quem saiu é filtrado antes. */
+  #runnerOf(characterId: string): Runner {
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined) throw new Error(`no runner for character ${characterId}`);
+    return runner;
   }
 
   /**
@@ -568,25 +2027,39 @@ export class HuntRuleset implements Ruleset {
    */
   onEvent(session: Session, event: ScheduledEvent): void {
     if (this.#occupancyStale) this.#rebuildOccupancy(session);
+    // Saída pelo socket (#193): a cascata roda no primeiro evento depois dela.
+    this.#flushLoss(session, 'manual-exit');
     this.#burnStamina(session);
 
     switch (event.kind) {
       case PLAYER_STEP: return this.#onPlayerStep(session, event.subject);
       case PLAYER_ATTACK: return this.#onPlayerAttack(session, event.subject);
-      case MONSTER_STEP: return this.#onMonsterAction(session, event.subject, 'step');
-      case MONSTER_ATTACK: return this.#onMonsterAction(session, event.subject, 'attack');
+      case MONSTER_STEP: return this.#onMonsterStep(session, event.subject);
+      case MONSTER_ATTACK: return this.#onMonsterAttack(session, event.subject);
+      case MONSTER_ABILITY: return this.#onMonsterAbility(session, event.subject);
+      case MONSTER_DEFENSE: return this.#onMonsterDefense(session, event.subject);
+      case MONSTER_TARGET_CHANGE: return this.#onMonsterTargetChange(session, event.subject);
       case HEALTH_REGEN: return this.#onRegen(session, event.subject, 'health');
       case MANA_REGEN: return this.#onRegen(session, event.subject, 'mana');
       case SPAWN: return this.#onSpawn(session, event.subject);
+      case CORPSE: return this.#onCorpseDecay(session, event.subject);
       case EXIT_RULES: return this.#onExitRules(session);
-      case BOT_EVENT.heal: return this.#onBot(session, 'heal', event.subject);
-      case BOT_EVENT.potion: return this.#onBot(session, 'potion', event.subject);
-      case BOT_EVENT.attack: return this.#onBot(session, 'attack', event.subject);
-      case BOT_EVENT.rune: return this.#onBot(session, 'rune', event.subject);
-      case BOT_EVENT.support: return this.#onBot(session, 'support', event.subject);
-      // Evento de um tipo que este ruleset não conhece. Acontece com snapshot gravado por uma
-      // versão que agendava algo que não existe mais; ignorar é a degradação certa.
-      default: return;
+      case EXIT_COUNTDOWN: return this.#onExitCountdown(session, event.subject);
+      case END_VOTE_EXPIRE: return this.#onEndVoteExpire(session);
+      case CONDITION_TICK: return this.#onConditionTick(session, event.subject);
+      case CONDITION_EXPIRE: return this.#onConditionExpire(session, event.subject);
+      case FIELD_TICK: return this.#onFieldTick(session, event.subject);
+      case FIELD_EXPIRE: return this.#onFieldExpire(session, event.subject);
+      case EQUIP_EXPIRE: return this.#onEquipExpire(session, event.subject);
+      case AUTOMATION: return this.#onAutomation(session, event.subject);
+      default:
+        // Um grupo do bot venceu (AB-07): `bot:<group>`. Um evento de tipo que este ruleset não
+        // conhece — inclusive `bot-<categoria>` de um snapshot v1 — é ignorado, que é a
+        // degradação certa.
+        if (event.kind.startsWith(BOT_GROUP_PREFIX)) {
+          return this.#onBot(session, event.kind.slice(BOT_GROUP_PREFIX.length), event.subject);
+        }
+        return;
     }
   }
 
@@ -606,8 +2079,9 @@ export class HuntRuleset implements Ruleset {
     for (const character of session.participants) {
       if (!character.alive) continue;
       const exhausted = drainStamina(character, dtMs, this.#options.stamina);
-      if (!exhausted || this.#warnedExhausted) continue;
-      this.#warnedExhausted = true;
+      const runner = this.#runners.get(character.id);
+      if (!exhausted || runner === undefined || runner.warnedExhausted) continue;
+      runner.warnedExhausted = true;
       // Vale a linha no extrato: daqui para a frente a hunt queima supply sem gerar nada, e
       // descobrir isso só pelo gold que sumiu é como o modo idle perde a confiança de quem
       // deixou o personagem rendendo.
@@ -629,12 +2103,23 @@ export class HuntRuleset implements Ruleset {
     const character = findById(session.participants, characterId);
     if (character === null || !character.alive) return;
 
-    const { healthPerSecond, manaPerSecond } = this.#options.progression.regen;
+    const { healthPerSecond, manaPerSecond } = this.#regenOf(character);
     const perSecond = what === 'health' ? healthPerSecond : manaPerSecond;
     if (perSecond <= 0) return;
 
-    if (what === 'health') character.heal(1);
-    else character.mana = Math.min(character.maxMana, character.mana + 1);
+    const ring = character.inventory.ringEffect(this.#options.items);
+    const bonusPercent = ring?.kind === 'regen-boost' ? ring.percent : 0;
+    const amount = Math.round(1 * (1 + bonusPercent / 100));
+
+    if (what === 'health') {
+      // Só a barra, sem `creature-healed` (FUN-109): um "+1" flutuando por segundo a hunt
+      // inteira é ruído, mas a barra precisa andar. E só quando REPÔS — de vida cheia, nada
+      // mudou, e um evento por segundo para dizer isso é o que uma hunt desanexada de oito
+      // horas não precisa produzir.
+      if (character.heal(amount) > 0) this.#emitCharacterHealth(session, character);
+    } else {
+      character.mana = Math.min(character.maxMana, character.mana + amount);
+    }
 
     // `r` por segundo é um evento a cada `1000 / r` ms. Escrever assim, em vez de somar
     // `r * dtMs / 1000` num acumulador fracionário, é o que mantém a conta exata: somar
@@ -655,55 +2140,187 @@ export class HuntRuleset implements Ruleset {
 
   #onCharacterDied(session: Session, character: CharacterRuntime): void {
     this.#world.vacate(character.position.x, character.position.y);
+    // Morto não tem condição: cancelar aqui impede o vencimento de uma condição dele ficar
+    // na fila até o fim da sessão (CMB-07).
+    this.#cancelConditions(session, character);
 
     // A penalidade sai AQUI, na morte, e não no encerramento: quem morre paga, e uma hunt que
-    // termina por saída manual ou por regra não custa XP nenhuma (§26.2).
+    // termina por saída manual ou por regra não custa XP nenhuma (§26.2). O Premium é do
+    // PERSONAGEM morto (D3); fora de party cai para o `premium` de sessão, como no solo.
+    const premium = this.#party?.premiumByCharacter[character.id] ?? this.#options.premium ?? false;
     const penalty = applyDeathPenalty(
       character,
-      { premium: this.#options.premium ?? false },
+      { premium },
       this.#vocationOf(character),
       this.#options.progression,
     );
     if (penalty.xpLost > 0) {
       // Entra no agregado como perda: o extrato é o que vira linha de ledger, e creditar a XP
       // ganha sem descontar a perdida daria ao jogador uma XP que ele não tem.
-      session.aggregates.xpGained -= penalty.xpLost;
+      session.credit(character.id, 'xpGained', -penalty.xpLost);
       session.record('xp-penalty', String(penalty.xpLost));
     }
     if (penalty.levelChange !== null) {
       session.record('level-down', `${penalty.levelChange.from} → ${penalty.levelChange.to}`);
+      // Descer de level reescreve `maxHealth` pela tabela (`retarget`), e a barra é anunciada
+      // de TODO lugar que a escreve (FUN-109). A vida é zero — ele morreu —, mas o máximo
+      // mudou, e o cliente que só recebeu o golpe fatal ficaria com um "0 / máximo do level
+      // antigo" até a reanexação.
+      this.#emitCharacterHealth(session, character);
     }
 
-    // Encerra quando não sobrou ninguém de pé. Com um personagem — o caso de hoje — é a
-    // morte dele; escrito assim, party não vira exceção espalhada quando chegar.
-    if (session.participants.some((p) => p.alive)) return;
-    session.end('death');
+    // Solo — ou party que virou solo —: a morte encerra a sessão (§26.1), como sempre. Em party
+    // (#193, ADR 0027 decisão 7) o morto SAI com o próprio extrato — penalidade dentro, e a
+    // cota do settlement (`onLeave`) — e a sessão continua para os outros.
+    if (session.participants.length <= 1) {
+      session.end('death');
+      return;
+    }
+    this.#depart(session, character.id, 'death');
   }
 
-  onEnd(_session: Session, _reason: EndReason): void {
-    // Nada a desfazer: a instância morre com a sessão, e o extrato é a `Session` que monta.
-    // Todo encerramento produz extrato, inclusive o que acontece sem ninguém assistindo —
-    // e é exatamente por isso que ele não depende de nada feito aqui.
+  /**
+   * Um membro sai por decisão do ruleset — morte ou regra de saída (#193): `leave` emite o
+   * extrato dele, e o hospedeiro recebe `member-left` com o extrato e o personagem, porque não
+   * foi ele quem chamou. O último a sair encerra a sessão com o motivo dele.
+   */
+  #depart(session: Session, characterId: string, reason: 'death' | ExitReason): void {
+    const departure = session.leave(characterId, reason);
+    if (departure === null) return;
+    session.emit({ kind: 'member-left', characterId, reason, departure });
+    this.#flushLoss(session, reason);
+  }
+
+  /**
+   * Alguém saiu: quem tem a regra `party-member-lost` sai também (§13.9), em cascata e na
+   * ordem de entrada. A lista é copiada porque cada `leave` a muda no meio do laço — iterar
+   * a viva pularia um membro. O próprio que saiu não está mais nela, por construção.
+   */
+  #onMemberLost(session: Session): number {
+    let cascaded = 0;
+    for (const member of [...session.participants]) {
+      const runner = this.#runners.get(member.id);
+      if (runner === undefined) continue;
+      if (!runner.exitRules.some((rule) => rule.id === 'party-member-lost')) continue;
+      session.record('exit-rule', 'party-member-lost');
+      const departure = session.leave(member.id, 'exit-rule');
+      if (departure === null) continue;
+      // O `onLeave` deste marcou pendência de novo; a cascata É este laço, então a limpa.
+      this.#lossPending = false;
+      session.emit({ kind: 'member-left', characterId: member.id, reason: 'exit-rule', departure });
+      cascaded += 1;
+    }
+    return cascaded;
+  }
+
+  onEnd(session: Session, _reason: EndReason): void {
+    // O observer morre com a sessão: os eventos dele não vão mais vencer, e a closure não pode
+    // segurar uma sessão encerrada.
+    for (const character of session.participants) {
+      character.inventory.setEquipmentObserver(null);
+    }
+    // A bolsa é vendida e dividida entre os presentes (#192); os extratos saem DEPOIS disto,
+    // com o gold dentro. Fora isso nada a desfazer: a instância morre com a sessão. Todo
+    // encerramento produz extrato, inclusive o que acontece sem ninguém assistindo — e é
+    // exatamente por isso que ele não depende de nada feito aqui.
+    if (this.#bag !== null) this.#settle(session, session.participants, 'end');
   }
 
   getState(): HuntRulesetState {
+    const runners: Record<string, RunnerState> = {};
+    for (const [id, runner] of this.#runners) runners[id] = runnerState(runner);
+    // Os campos soltos são os do PRIMEIRO runner (#203, DT-02): um nó anterior lendo este
+    // snapshot continua funcionando para o solo. Sem runner nenhum — sessão restaurada antes
+    // de `onResume`? não acontece; sessão vazia —, saem os defaults.
+    const first = this.#runners.values().next().value as Runner | undefined;
+    const solo = first === undefined
+      ? this.#newRunner(this.#options.botConfig)
+      : first;
+    const state = runnerState(solo);
     return {
       huntId: this.#options.hunt.id,
       difficulty: this.#options.difficulty,
-      route: this.#walker.getState(),
+      route: state.route,
       spawner: this.#spawner.getState(),
       monsters: this.#monsters.map((m) => m.getState()),
       nextCreatureId: this.#nextCreatureId,
-      warnedExhausted: this.#warnedExhausted,
-      warnedFullBackpack: this.#warnedFullBackpack,
-      warnedNoGold: this.#warnedNoGold,
+      corpses: [...this.#corpses],
+      fields: this.#fields.getState(),
+      nextGroundItemId: this.#nextGroundItemId,
+      warnedExhausted: state.warnedExhausted,
+      warnedFullBackpack: state.warnedFullBackpack,
+      warnedNoGold: state.warnedNoGold,
       staminaAnchorMs: this.#staminaAnchorMs,
-      playerAttackReady: this.#playerAttackReady,
-      botScheduled: BOT_CATEGORIES.filter((category) => !this.#botReady[category]),
-      luring: this.#running,
-      ringReplaced: this.#ringReplaced,
-      ...(this.#botConfig === undefined ? {} : { botConfig: this.#botConfig }),
+      playerAttackReady: state.playerAttackReady,
+      botScheduled: [...state.botScheduled],
+      luring: state.luring,
+      ringReplaced: state.ringReplaced,
+      ...(state.botConfig === undefined ? {} : { botConfig: state.botConfig }),
+      runners,
+      // Sempre no formato NOVO (achatado). O campo continua opcional e sem bump: um nó antigo
+      // que leia `partyOptions.mode`/`shareCosts`/`splitLoot` ainda encontra os três.
+      ...(this.#party === undefined ? {} : {
+        partyOptions: {
+          leaderId: this.#party.leaderId,
+          mode: this.#party.mode,
+          shareCosts: this.#party.shareCosts,
+          splitLoot: this.#party.splitLoot,
+          collect: this.#party.collect,
+          autoSell: this.#party.autoSell,
+          premiumByCharacter: this.#party.premiumByCharacter,
+        },
+      }),
+      ...(this.#bag === null ? {} : {
+        partyBag: {
+          gold: [...this.#bag.gold],
+          items: this.#bag.items.map((entry) => ({ item: entry.item, eligible: [...entry.eligible] })),
+          capacity: this.#bag.capacity,
+          overweight: this.#bag.overweight,
+        },
+      }),
+      ...(this.#endVote === null ? {} : {
+        endVote: {
+          proposedAtMs: this.#endVote.proposedAtMs,
+          approved: [...this.#endVote.approved],
+        },
+      }),
     };
+  }
+
+  /**
+   * Depois do `restore`, com os participantes de pé: os `Runner`s são casados com eles aqui
+   * (#203) — por id quando o snapshot os tem, ou o legado de um dono só para o único que há.
+   * Um snapshot anterior a #160 traz a lista plana: os containers ganham os tamanhos aqui.
+   */
+  onResume(session: Session): void {
+    const pending = this.#pendingRunners;
+    this.#pendingRunners = null;
+    for (const character of session.participants) {
+      character.inventory.ensureContainers(this.#containerRules(character));
+      // SÓ reinstala o observer (ADR 0032 d.8): a fila restaurada já tem o `EQUIP_EXPIRE`, e
+      // reagendar aqui duplicaria o evento e o item venceria cedo. Snapshot anterior sem o
+      // evento é degradação declarada — o item só volta a vencer quando for reequipado.
+      character.inventory.setEquipmentObserver(this.#equipmentObserver(session, character.id));
+      if (this.#runners.has(character.id)) continue;
+      const state = pending?.byId?.[character.id]
+        ?? (pending?.byId === null && session.participants.length === 1 ? pending.legacy : null)
+        ?? null;
+      // A configuração volta CRUA e é recompilada (FUN-81). Sem isto, uma hunt retomada roda
+      // sem bot: continua andando e matando com o ataque básico, então nada PARECE quebrado —
+      // o que some é a cura, e o jogador descobre pelo personagem morto. As regras de SAÍDA
+      // vêm junto, pela mesma razão.
+      this.#runners.set(character.id, this.#newRunner(state?.botConfig, state ?? undefined, character));
+      // O mundo mudou enquanto a sessão estava parada: o que estava ENGATILHADO reavalia agora.
+      // O que estava AGENDADO tem evento na fila restaurada e `#armBot` o pula — nunca os dois.
+      if (character.alive) {
+        this.#autoSelectTarget(session, character);
+        this.#armBot(session, character.id);
+      }
+    }
+    // A reserva é DERIVADA e não vai no snapshot (DT-02): o primeiro rebalanceamento depois de
+    // retomar sai daqui, quando os participantes já existem. Chamá-lo em `restore` quebraria
+    // porque lá `session.participants` ainda está vazio.
+    if (this.#bag !== null) this.#rebalanceBag(session);
   }
 
   restore(state: unknown): void {
@@ -720,48 +2337,88 @@ export class HuntRuleset implements Ruleset {
           `"${this.#options.hunt.id}/${this.#options.difficulty}"`,
       );
     }
-    this.#walker = new RouteWalker(this.#options.route, restored.route);
     this.#spawner = new Spawner(
       this.#options.route.spawnPoints.length,
       this.#difficulty,
       restored.spawner,
     );
     this.#monsters = restored.monsters.map((m) => new MonsterRuntime(m));
-    // Snapshot anterior à FUN-69 não traz a duração do passo; ela é do conteúdo, e repor
-    // daqui é o que impede um monstro restaurado de andar com duração zero.
+    // Snapshot anterior à FUN-119 não traz a velocidade; ela é do conteúdo, e repor daqui é
+    // o que impede um monstro restaurado de andar com velocidade zero.
     for (const monster of this.#monsters) {
-      if (monster.stepDurationMs > 0) continue;
-      monster.stepDurationMs = this.#options.monsters.get(monster.monsterId)?.stepDurationMs ?? 0;
+      if (monster.speed > 0) continue;
+      monster.speed = this.#options.monsters.get(monster.monsterId)?.speed ?? 0;
     }
     this.#monsterBySubject.clear();
     for (const monster of this.#monsters) {
       this.#monsterBySubject.set(monsterSubject(monster.id), monster);
     }
     this.#nextCreatureId = restored.nextCreatureId;
-    this.#warnedExhausted = restored.warnedExhausted;
-    this.#warnedFullBackpack = restored.warnedFullBackpack ?? false;
-    this.#warnedNoGold = restored.warnedNoGold ?? false;
+    // Os cadáveres voltam com o snapshot; o prazo de cada um é o evento `CORPSE`, que a fila
+    // da sessão já trouxe de volta (FUN-123).
+    this.#corpses = [...(restored.corpses ?? [])];
+    // Os campos voltam indexados por tile (CMB-07); os eventos de tique e vencimento já vêm na
+    // fila serializada. Ausente é nenhum — snapshot anterior a esta issue.
+    this.#fields = Fields.fromState(restored.fields);
+    this.#nextGroundItemId = restored.nextGroundItemId ?? 1;
     this.#staminaAnchorMs = restored.staminaAnchorMs;
-    this.#playerAttackReady = restored.playerAttackReady ?? true;
-    for (const category of BOT_CATEGORIES) {
-      this.#botReady[category] = !(restored.botScheduled ?? []).includes(category);
+    // Migração na LEITURA (DT-02): snapshot antigo traz `{mode}`, o novo traz os eixos. Sem bump.
+    this.#party = normalizePartyOptions(restored.partyOptions);
+    // A votação de encerrar volta com quem já aprovou (#432); o vencimento já está na fila do
+    // snapshot. Ausente é nenhuma votação — snapshot anterior a esta issue.
+    this.#endVote = restored.endVote === undefined
+      ? null
+      : { proposedAtMs: restored.endVote.proposedAtMs, approved: new Set(restored.endVote.approved) };
+    // A bolsa também migra na leitura (D5): o formato antigo (`gold: number`) vira entradas com
+    // `eligible: []`, o sentinel de "presentes no settlement" — a regra de hoje, para uma sessão
+    // em voo não perder nem confiscar o que já estava na bolsa.
+    const restoredBag = restored.partyBag as unknown;
+    this.#bag = restoredBag === undefined
+      ? (this.#party?.splitLoot ? { gold: [], items: [], capacity: 0, overweight: false } : null)
+      : isLegacyBag(restoredBag)
+        ? {
+            gold: restoredBag.gold > 0 ? [{ amount: restoredBag.gold, eligible: [] }] : [],
+            items: restoredBag.items.map((item) => ({ item, eligible: [] })),
+            capacity: restoredBag.capacity,
+            // Snapshot anterior ao #396: sem a flag, o primeiro rebalanceamento a recalcula.
+            overweight: false,
+          }
+        : {
+            gold: [...(restoredBag as PartyBagState).gold],
+            items: (restoredBag as PartyBagState).items.map(
+              (entry) => ({ item: entry.item, eligible: [...entry.eligible] }),
+            ),
+            capacity: (restoredBag as PartyBagState).capacity,
+            // Opcional na leitura: snapshot anterior ao #396 não tem a chave.
+            overweight: (restoredBag as PartyBagState).overweight ?? false,
+          };
+    // O peso é derivado; o próximo id de instância continua depois do maior que já existe.
+    this.#bagWeight = 0;
+    this.#bagSeq = 0;
+    for (const entry of this.#bag?.items ?? []) {
+      this.#bagWeight += (this.#options.items.get(entry.item.itemId)?.weight ?? 0) * entry.item.quantity;
+      const n = Number(entry.item.instanceId.split(':').at(-1));
+      if (Number.isFinite(n) && n >= this.#bagSeq) this.#bagSeq = n + 1;
     }
-    // Sem isto, uma hunt retomada no meio de um lure de vinte monstros recomeçaria "correndo"
-    // e continuaria juntando por cima do que já estava junto.
-    this.#running = restored.luring ?? true;
-    this.#ringReplaced = restored.ringReplaced ?? null;
-    // A configuração volta CRUA e é recompilada aqui (FUN-81). Sem isto, uma hunt retomada
-    // roda sem bot: continua andando e matando com o ataque básico, então nada PARECE
-    // quebrado — o que some é a cura, e o jogador descobre pelo personagem morto.
-    if (restored.botConfig !== undefined) {
-      this.#botConfig = restored.botConfig;
-      this.#bot = compileBot(restored.botConfig);
-      // As regras de SAÍDA também. Esquecê-las aqui foi um defeito de verdade: a hunt voltava
-      // curando de novo, mas sem a regra que a tirava de lá — e o jogador que configurou
-      // "sair abaixo de 20%" descobriria pelo personagem morto.
-      this.#exitRules = this.#composeExitRules(restored.botConfig);
-    }
-    // Os participantes ainda não existem: a `Session` os reconstrói depois desta chamada.
+    // O estado por participante espera `onResume` (#203): os participantes ainda não existem —
+    // a `Session` os reconstrói depois desta chamada. Sem `runners` é o snapshot de um dono
+    // só, e os campos soltos são dele. Sem isto, uma hunt retomada no meio de um lure de
+    // vinte monstros recomeçaria "correndo" e continuaria juntando por cima do que já estava.
+    this.#runners.clear();
+    this.#pendingRunners = {
+      byId: restored.runners ?? null,
+      legacy: {
+        route: restored.route,
+        botScheduled: restored.botScheduled ?? [],
+        luring: restored.luring ?? true,
+        ringReplaced: restored.ringReplaced ?? null,
+        playerAttackReady: restored.playerAttackReady ?? true,
+        warnedExhausted: restored.warnedExhausted,
+        warnedFullBackpack: restored.warnedFullBackpack ?? false,
+        warnedNoGold: restored.warnedNoGold ?? false,
+        ...(restored.botConfig === undefined ? {} : { botConfig: restored.botConfig }),
+      },
+    };
     // A ocupação é remontada no primeiro evento, quando todo mundo já está de pé.
     this.#occupancyStale = true;
   }
@@ -781,8 +2438,14 @@ export class HuntRuleset implements Ruleset {
     const request = this.#spawner.fill(
       slot,
       this.#difficulty,
-      (pointIndex) => (this.#options.route.spawnPoints[pointIndex] as SpawnPoint).at,
-      this.#spawnBlocked,
+      (pointIndex) => {
+        const point = this.#options.route.spawnPoints[pointIndex] as SpawnPoint;
+        return {
+          at: point.at, radius: point.radius,
+          ...(point.monsterId === undefined ? {} : { monsterId: point.monsterId }),
+        };
+      },
+      this.#spawnBlockedFor(session),
       session.rng,
     );
     if (request === null) {
@@ -803,11 +2466,14 @@ export class HuntRuleset implements Ruleset {
     const monster = new MonsterRuntime({
       id: this.#nextCreatureId++,
       monsterId: definition.id,
-      position: request.position,
-      home: request.position,
+      // O `z` do PONTO de spawn, não o do mapa (#519, hunt multiandar) — é o que faz um Dragon
+      // Lord nascer em z11 e não em z10. Numa hunt de andar único é o mesmo valor de sempre,
+      // porque todo ponto da rota vive no andar padrão do mapa.
+      position: { x: request.position.x, y: request.position.y, z: request.position.z },
+      home: { x: request.position.x, y: request.position.y, z: request.position.z },
       health: definition.health,
       targetId: null,
-      stepDurationMs: definition.stepDurationMs,
+      speed: definition.speed,
       cooldowns: {},
     });
     this.#monsters.push(monster);
@@ -818,12 +2484,45 @@ export class HuntRuleset implements Ruleset {
     this.#spawner.occupy(request.slot, monster.id);
 
     const subjectOf = monsterSubject(monster.id);
+    // DEPOIS do `place`: é ele que pode recusar o tile, e anunciar uma posição que ainda pode
+    // ser recusada publicaria um monstro onde ele não está (FUN-103). `#at` lê o andar de FATO
+    // do monstro (#519) — o do mapa só sobra para quem nunca declarou `z` (andar único).
+    session.emit({
+      kind: 'creature-appeared', creatureId: subjectOf, monsterId: definition.id,
+      position: this.#at(monster),
+      health: monster.health, maxHealth: definition.health,
+    });
     session.scheduleIn(MONSTER_STEP, 0, {
       priority: EventPriority.Movement, subject: subjectOf,
     });
-    this.#scheduleMonsterAttack(session, monster, 0);
-    // Nasceu colado no personagem: se o golpe dele estava engatilhado, sai agora.
-    this.#armPlayerAttack(session);
+    // A básica nasce engatilhada e vence AGORA, como sempre (CMB-06). As abilities DECLARADAS
+    // são armadas pelo primeiro passo, que já reavalia a distância — agendá-las aqui seria um
+    // evento por ability por monstro nascendo, para quase sempre não achar alvo.
+    if (definition.abilities.some((ability) => ability.id === BASIC_ABILITY_ID)) {
+      this.#scheduleMonsterAttack(session, monster, 0);
+    }
+    // As defesas (#518) não dependem de alvo — cura própria é um timer, não uma reação. Cada
+    // uma agenda a PRÓPRIA cadência, e a primeira chance só é rolada em `cadenceMs`: um
+    // monstro recém-nascido não se cura antes do primeiro vencimento, como o TFS não cura no
+    // instante em que nasce.
+    for (const defense of definition.defenses) {
+      this.#scheduleMonsterDefense(session, monster, defense, defense.cadenceMs);
+    }
+    // A troca de alvo (#518) é o mesmo desenho: um timer da instância do monstro, não uma
+    // reação ao passo. Só existe um por monstro — sem `Set` de agendados, como as abilities.
+    if (definition.targetChange !== undefined) {
+      session.scheduleIn(MONSTER_TARGET_CHANGE, definition.targetChange.intervalMs, {
+        priority: EventPriority.Attack, subject: subjectOf,
+      });
+    }
+    // Nasceu colado num personagem: se o golpe dele estava engatilhado, sai agora — de cada
+    // um que o tem ao alcance (#203). E o auto-target (#444) reavalia na hora: o monstro que
+    // acabou de surgir na tela vira alvo antes do próximo vencimento do bot.
+    for (const character of session.participants) {
+      this.#autoSelectTarget(session, character);
+      this.#armPlayerAttack(session, character);
+      this.#armBot(session, character.id);
+    }
   }
 
   /**
@@ -837,47 +2536,355 @@ export class HuntRuleset implements Ruleset {
   #onPlayerStep(session: Session, characterId: string): void {
     const character = findById(session.participants, characterId);
     if (character === null || !character.alive) return;
-    session.scheduleIn(PLAYER_STEP, this.#options.player.stepDurationMs, {
+    // Snapshot anterior à FUN-119 traz velocidade zero; a tabela repõe, com o bônus de
+    // equipamento (#524) — a mesma soma de `onEnter`, para quem calçou a bota antes do bump.
+    if (character.speed <= 0) {
+      character.speed = statsForLevel(
+        character.level, this.#vocationOf(character), this.#options.progression,
+      ).speed + character.inventory.speedBonus(this.#options.items);
+    }
+    // O vencimento seguinte é a duração do passo que este evento der — e, quando ele não der
+    // passo nenhum, a de um passo daqui (FUN-119): quem parou volta a olhar em volta no ritmo
+    // em que andaria. Agendar ANTES de decidir, com a duração de um passo daqui, dá o mesmo
+    // resultado para quem fica e adianta o de quem anda para chão mais lento; por isso o
+    // reagendamento fica no fim, com o que de fato aconteceu.
+    const stepped = this.#playerStep(session, character);
+    // Andou (ou parou para lutar): reavalia o alvo na tela da posição nova e acorda o bot —
+    // um monstro que entrou no raio de busca pode destravar a runa (#444).
+    this.#autoSelectTarget(session, character);
+    this.#armBot(session, character.id);
+    const cadence = stepped !== null && stepped.ok
+      ? stepped.durationMs
+      : movementDuration(this.#world, character, character.position, character.position);
+    session.scheduleIn(PLAYER_STEP, cadence, {
       priority: EventPriority.Movement, subject: characterId,
     });
+  }
+
+  /** O corpo do passo do personagem; devolve o passo dado, ou `null` quando ficou parado. */
+  #playerStep(session: Session, character: CharacterRuntime): MoveResult | null {
 
     // Para para lutar, e retoma DEPOIS no mesmo índice (FUN-42). Como ele para assim que há
     // monstro ao alcance, nunca pisa no tile de um: o combate começa antes do passo.
     //
     // Com LURE configurado (§13.7), quem decide parar deixa de ser "há um ao alcance" e passa a
     // ser a CONTAGEM: correr acumulando até `max`, limpar até cair abaixo de `min`.
-    if (this.#attackTarget(character) !== null && !this.#luring(character)) {
-      this.#walker.stop();
-      this.#armPlayerAttack(session);
-      return;
+    const runner = this.#runnerOf(character.id);
+    // **Exceto quando quem seguir está em OUTRO andar (#527).** Monstro ao alcance nunca falta
+    // perto de um spawn — é raro um seguidor chegar num andar novo sem NENHUM por perto — e
+    // parar para lutar aqui significa NUNCA reavaliar `#holdFollow` de novo, porque esta
+    // checagem vem ANTES dela a cada vencimento. Uma QA ao vivo com o plano de bot real
+    // flagrou exatamente isto: o Druid chegou sozinho num andar cheio de Dragon Lords, entrou
+    // em combate, e ficou "sentado" ali — sem nunca se mover — pelo resto da hunt, porque
+    // brigar sempre vencia da tentativa de voltar. Reunir a party pesa mais que uma luta que
+    // pode esperar; `#holdFollow` continua deixando `#armPlayerAttack` bater em quem estiver
+    // ao alcance da arma NO CAMINHO até a escada (ADR 0035 d.9) — isto só recusa GRUDAR ali.
+    if (
+      this.#attackTarget(character) !== null && !this.#luring(runner, character, session.nowMs)
+      && !this.#mustCrossFloorToFollow(session, runner, character)
+    ) {
+      runner.walker.stop();
+      this.#armPlayerAttack(session, character);
+      return null;
+    }
+
+    // Follow de membro (ADR 0035 d.9, §D10, #398): substitui a rota E a postura contra monstro
+    // enquanto ativo. O combate já rodou acima — é ele, não isto, que decide se o personagem
+    // para para bater; seguir não impede atacar quem estiver ao alcance da arma.
+    const follow = this.#holdFollow(session, runner, character);
+    if (follow !== false) {
+      this.#armPlayerAttack(session, character);
+      return follow;
     }
 
     // Ninguém ao alcance, e a postura pode mandar ele SAIR DA ROTA atrás do alvo (FUN-85).
     // Com `stand` — o padrão — isto não roda, e o comportamento é o de sempre.
-    if (this.#holdPosture(session, character)) {
-      this.#armPlayerAttack(session);
-      return;
+    const posture = this.#holdPosture(session, runner, character);
+    if (posture !== false) {
+      this.#armPlayerAttack(session, character);
+      return posture;
     }
 
     // Ninguém ao alcance: anda. Com postura `stand` o personagem NÃO persegue — ele percorre a
     // rota e deixa o monstro vir. É o que dispensa pathfinding dos dois lados (ADR 0009).
-    this.#walker.resume();
-    const to = this.#walker.step();
-    if (to === null) return;
-    const result = this.#step(session, character, to, character.id);
+    runner.walker.resume();
+    const to = runner.walker.step();
+    if (to === null) return null;
+    if (this.#partyRegroupBlocked(session, runner, character, to)) {
+      // O LÍDER esperando a party se juntar (#527) — achado numa QA ao vivo com o bot config
+      // real: sem haste igual entre vocações, quem não é o líder cai para trás em combate, e o
+      // líder — que nunca espera — seguia sozinho por dezenas de tiles antes de qualquer
+      // seguidor alcançar de novo, e às vezes atravessava andar com a party inteira ainda do
+      // outro lado. Segura o passo como faria com um tile bloqueado; ainda BATE em quem
+      // estiver ao alcance da arma (o combate roda ANTES disto, no topo de `#playerStep`) — só
+      // não avança sozinho.
+      runner.walker.hold();
+      return null;
+    }
+    if (this.#crossesAwayFromLeader(session, runner, character, to)) {
+      // A rota PRÓPRIA de um seguidor é um laço fechado (§14.4) — se ela cruza uma escada perto
+      // de onde o `d > radius` de `#holdFollow` desistiu (o líder ficou > 8 tiles no MESMO
+      // andar, longe o bastante para "fora de alcance", perto o bastante para o ÍNDICE da rota
+      // do seguidor continuar sendo o de perto da mesma escada), o laço passa pela MESMA escada
+      // TODA VOLTA — e sem esta recusa o seguidor atravessa sozinho, volta, atravessa nulo de
+      // novo, dezenas de vezes numa hunt de 10 min (#527, achado com o bot config REAL — sem
+      // lure em ninguém — onde Sorcerer/Druid caem para trás em combate com frequência bem
+      // maior que o config sintético deste teste supunha). `#holdFollow` sozinho (`d > radius`)
+      // só cobre "sem alvo alcançável"; ele NÃO impede a rota própria, que roda LOGO DEPOIS
+      // dele devolver `false`, de atravessar andar por conta própria — a rota não sabe onde o
+      // líder está. Recusar aqui é a mesma regra do ramo de travessia de `#holdFollow`, só que
+      // do lado de quem NÃO tem follow ativo agora: nunca um andar diferente do líder sem ele.
+      runner.walker.hold();
+      return null;
+    }
+    if (this.#isLeaderReservedTile(this.#leaderReservedTile(session, character), to)) {
+      // A PRÓPRIA rota deste seguidor tem a MESMA coordenada do próximo tile do líder num
+      // índice TOTALMENTE diferente do índice atual do líder (#527, achado numa QA ao vivo: a
+      // Darashia Dragon Lair repete um corredor estreito em (56,30)/(56,31) em três pontos da
+      // rota, cada um andando numa direção). `#holdFollow` já reserva o tile quando este
+      // personagem está seguindo ATIVAMENTE — mas aqui ele desistiu de seguir (`d > radius`) e
+      // caiu na rota própria, que não sabe nada sobre onde o líder está agora. Segura como um
+      // tile bloqueado; o vencimento seguinte tenta de novo, e por enquanto o corredor continua
+      // livre para o líder.
+      runner.walker.hold();
+      return null;
+    }
+    let result = this.#step(session, character, to, character.id);
     if (!result.ok) {
       if (result.reason === 'not-adjacent') {
-        // O personagem não está onde a rota acha que ele está — andou à mão (FUN-69) ou foi
-        // empurrado. Reentrar pelo tile mais próximo, em vez de segurar um índice que nunca
-        // mais vai ficar adjacente.
-        this.#walker.rejoinNearest(character.position);
+        // O personagem não está onde a rota acha que ele está — andou à mão (FUN-69), foi
+        // empurrado, ou vem de um follow que acabou de atravessar andar e pode deixá-lo longe
+        // de QUALQUER tile da rota (#527, `floorChangeToward`: o passo guloso livre até a
+        // escada não tem por que terminar perto da rota). `rejoinNearest` resincroniza o
+        // ÍNDICE para o tile mais próximo, mas NÃO move ninguém — se esse tile também não for
+        // adjacente, o vencimento seguinte cai no MESMO `not-adjacent` para sempre, resincroniza
+        // para o MESMO tile de novo, e nunca dá um passo de verdade (achado reproduzindo a QA
+        // do M28 com conteúdo real: o Paladin ficava preso repetindo o resync, imóvel, porque
+        // "voltar para a rota" nunca precisou fechar distância antes — um empurrão ou o
+        // `walk` manual deixam o personagem a um tile da rota, não a quatro). Fecha a
+        // distância com o MESMO passo guloso do resto do motor (ADR 0009) antes de confiar na
+        // rota nesta mesma chamada; sem caminho livre, o vencimento seguinte tenta de novo.
+        runner.walker.rejoinNearest(character.position);
+        const rejoined = runner.walker.current;
+        // SEMPRE tenta fechar a distância até o tile resincronizado — mesmo quando ele já está
+        // a distância 1 (#527, achado varrendo sementes: um `>` aqui deixava o caso "já
+        // adjacente" para o walker.step() do PRÓXIMO vencimento, que avança para `index + 1`,
+        // não para `rejoined` — um tile DIFERENTE, e não necessariamente adjacente à posição
+        // real. Um companheiro satisfeito, sem lutar, sentado exatamente no tile resincronizado
+        // não aparecia em NENHUM `#companionAt`/nudge, porque o passo nunca era de fato
+        // tentado). `distance === 0` (já em cima dele) não tem o que fechar.
+        if (distance(character.position, rejoined) > 0) {
+          const toward = greedyStep(character.position, rejoined, this.#blockedForGroundedStep(character));
+          if (toward !== null) {
+            result = this.#step(session, character, { ...toward, z: character.position.z }, character.id);
+          } else {
+            // Os três candidatos do passo guloso rumo à rota estão todos ocupados (#527, achado
+            // varrendo várias sementes com conteúdo real: a MESMA geometria de uma QA ao vivo —
+            // o líder tinha recuado para uma reentrância do mapa, e os TRÊS seguidores,
+            // satisfeitos a distância 1, ocupavam os TRÊS únicos tiles livres ao redor). Pedir
+            // passagem a um só não bastava — o próximo `greedyStep` ainda achava os outros dois.
+            this.#clearCompanionsAround(session, character, rejoined);
+          }
+        }
+      } else if (this.#companionAt(session, character, to)) {
+        // Um COMPANHEIRO parado na rota (#203): ele está lutando ali, e esperar seria ficar
+        // atrás dele a hunt inteira — foi o que aconteceu. Contorna com o passo guloso rumo
+        // ao tile seguinte; o vencimento seguinte reentra pela rota (`not-adjacent` →
+        // `rejoinNearest`). Cercado, segura como faria com um monstro.
+        const around = greedyStep(character.position, runner.walker.ahead(), this.#blockedForGroundedStep(character));
+        if (around === null) {
+          // Cercado dos dois lados: nem o tile original nem o contorno estão livres (#527,
+          // achado reproduzindo a QA do M28 com conteúdo real — um SEGUIDOR satisfeito a
+          // distância 1 do líder pode acabar parado bem em cima do próximo tile da rota dele,
+          // e os dois ficam parados para sempre, um esperando o outro sem que nenhum dos dois
+          // tenha motivo para se mexer). Em vez de segurar para sempre, pede ao(s)
+          // companheiro(s) que bloqueiam para abrir espaço — só quem não está ocupado com
+          // nada mais importante agora cede.
+          //
+          // **Só pede a TODOS os vizinhos (#527) quando há follow de verdade na hunt** — uma
+          // hunt de vários personagens andando a MESMA rota sem NENHUMA relação de líder
+          // (`follow.kind: 'none'` em todo mundo, como em `hunt.test.ts`, "party-member-lost
+          // com exitDelayMs") nudgear em GRUPO desvia quem está parado por um motivo PRÓPRIO
+          // (esperar um monstro chegar, por exemplo) de um bloqueio que nunca foi dele —
+          // achado quebrando um teste que já existia. Com follow configurado, o cerco por
+          // VÁRIOS seguidores satisfeitos ao redor do líder é o caso que motiva o grupo.
+          if (this.#hasActiveFollow(session)) {
+            this.#clearCompanionsAround(session, character, runner.walker.ahead());
+          } else {
+            this.#nudgeCompanion(session, character.position, to);
+          }
+          runner.walker.hold();
+        } else {
+          runner.walker.hold();
+          result = this.#step(session, character, { ...around, z: character.position.z }, character.id);
+        }
+      } else if (
+        result.reason === 'same-tile' && runner.sameTileStreak < 1
+        && (this.#hasActiveFollow(session) || session.participants.length === 1)
+      ) {
+        // O ÍNDICE do walker está UM ATRÁS da posição real do personagem — ele chegou neste
+        // tile por outro caminho (o fecha-distância do ramo `not-adjacent` acima, um empurrão,
+        // qualquer passo guloso que não passa por `walker.step()`) antes do walker achar que
+        // devia estar lá (#527, achado restaurando um snapshot ao vivo TRAVADO: o Knight
+        // ficava parado com `walker.index` sempre voltando ao MESMO valor — `walker.step()`
+        // pedia o PRÓXIMO tile, que já era onde o personagem estava, `move()` recusava por
+        // `same-tile`, e o `hold()` genérico do `else` abaixo desfazia o AVANÇO do índice,
+        // repetindo o MESMO passo recusado para sempre). O índice já avançou (`walker.step()`,
+        // no topo) para o tile onde o personagem JÁ ESTÁ — está CERTO ficar assim; `hold()`
+        // aqui seria o bug. **Só a PRIMEIRA vez seguida** (`sameTileStreak`, #527, achado
+        // varrendo `hunt.test.ts`: sem o limite, um laço pequeno e cheio de companheiros podia
+        // bater `same-tile` vencimento após vencimento, e o índice girava o laço INTEIRO sem o
+        // personagem nunca dar um passo físico — o desvio real de produção é sempre UM tile,
+        // nunca uma sequência).
+        //
+        // **Só com follow de verdade na hunt** (`#hasActiveFollow`, #527, achado quebrando dois
+        // testes que já existiam — `hunt.test.ts` "party-member-lost com exitDelayMs" e
+        // `darashia-dragon-lair.test.ts` o respawn de 90 s — nenhum dos dois com follow
+        // configurado): sem isto, o mesmo desvio de UM tile podia acontecer numa hunt SEM
+        // party, e desprender o índice mais cedo do que o `hold()` de sempre — mudando timing
+        // que esses testes fixam, sem relação nenhuma com o bug real (um seguidor atravessando
+        // andar atrás do líder). O caso de produção que motivou isto é sempre de follow; fora
+        // dele, `hold()` continua sendo o comportamento OBSERVADO e testado. Registrado como
+        // acompanhamento: uma hunt solo pode em teoria bater o MESMO desvio por outro caminho
+        // (um `walk` manual, por exemplo) e ficar presa — não coberto por este fix.
+        //
+        // A partir da segunda vez seguida, cai no `hold()` de sempre —
+        // parede/companheiro de verdade, não desvio de índice.
+        runner.sameTileStreak += 1;
       } else {
         // Rota bloqueada por monstro é normal, e o walker precisa saber: sem `hold` o índice
         // avançaria e o personagem "pularia" o tile ocupado na volta seguinte.
-        this.#walker.hold();
+        runner.walker.hold();
       }
     }
-    this.#armPlayerAttack(session);
+    // Fora do `same-tile` consecutivo é o único caso em que a sequência CONTINUA — qualquer
+    // outro resultado (passo de verdade, `not-adjacent`, companheiro, parede) zera a contagem
+    // (#527): a válvula de `sameTileStreak` existe para um desvio de índice PERSISTENTE, não
+    // para dois desvios de UM tile cada, minutos de simulação lógica à parte.
+    if (result.ok || result.reason !== 'same-tile') runner.sameTileStreak = 0;
+    this.#armPlayerAttack(session, character);
+    return result;
+  }
+
+  /**
+   * Há OUTRO participante vivo parado em `at`? É o bloqueio que se contorna, não se espera.
+   *
+   * Confere o andar (#519) antes de x/y: `at` vem de `runner.walker.ahead()`/`.step()`, um tile
+   * da ROTA — que já carrega o `z` de verdade, mesmo quando o TIPO aqui só promete `GridPoint`
+   * —, e a hunt hospeda um personagem só hoje (§14, Fase 3 traz party), então isto é código
+   * morto POR ENQUANTO. Sem a checagem, o dia em que a party entrar numa hunt multiandar faria
+   * um companheiro dois andares abaixo "bloquear" o walker por coincidência de (x, y) — os três
+   * andares da Darashia Dragon Lair compartilham a mesma caixa.
+   */
+  #companionAt(session: Session, self: CharacterRuntime, at: FloorPoint): boolean {
+    for (const other of session.participants) {
+      if (other === self || !other.alive) continue;
+      if (!sameFloor(other.position.z, at.z)) continue;
+      if (other.position.x === at.x && other.position.y === at.y) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Pede ao companheiro parado em `at` que abra espaço — o desempate de "cercado dos dois
+   * lados" que `#playerStep` usa quando NEM o tile original nem o contorno estão livres (#527).
+   *
+   * Só cede quem não está ocupado com algo mais importante AGORA: em combate (alcance da arma)
+   * a decisão de lutar continua sendo dele, e esta função não a atropela. Quem cede dá um passo
+   * guloso para LONGE de quem pediu passagem — `fleeStep`, o mesmo algoritmo de recuo do resto
+   * do motor (ADR 0009) — e o walker dele para: o vencimento seguinte de QUALQUER coisa que
+   * mova este personagem (rota, follow) reavalia normalmente a partir da posição nova. Sem
+   * efeito quando ninguém está no tile, quando quem está lá não pode ceder, ou quando não há
+   * para onde ceder (cercado de verdade, e aí `hold()` no chamador continua sendo o certo).
+   *
+   * **`nudgedUntilMs` é o que faz o passo pegar** (achado reproduzindo a QA do M28: sem ele, o
+   * par empatava para sempre — o empurrado saía do tile e, no PRÓPRIO vencimento seguinte,
+   * `#holdFollow` já o trazia de volta, muitas vezes para o MESMO tile, antes de quem pediu
+   * passagem conseguir atravessar). Enquanto vale, `#holdFollow` do empurrado devolve `false`
+   * — o mesmo que "inalcançável" — e ele anda a PRÓPRIA rota por um instante, o bastante para
+   * abrir espaço de verdade.
+   */
+  #nudgeCompanion(session: Session, requester: FloorPoint, at: FloorPoint): void {
+    const blocker = session.participants.find((other) => other.alive
+      && sameFloor(other.position.z, at.z) && other.position.x === at.x && other.position.y === at.y);
+    if (blocker === undefined || this.#attackTarget(blocker) !== null) return;
+    // Foge de QUEM PEDIU passagem, nunca do próprio tile — `at` é a posição atual do bloqueio,
+    // e fugir dela seria fugir de si mesmo (vetor nulo, `fleeStep` sempre devolveria `null`).
+    const base = this.#blockedForGroundedStep(blocker);
+    // O nudge NUNCA larga quem cedeu em cima do tile reservado do líder (#527) — sem isto, abrir
+    // espaço para UM bloqueio podia criar outro: empurrar alguém exatamente para onde o líder
+    // precisa pisar em seguida, a mesma trava com uma causa diferente.
+    const reserved = this.#leaderReservedTile(session, blocker);
+    const blocked: Blocked = (x, y, z, monsterId) => base(x, y, z, monsterId)
+      || this.#isLeaderReservedTile(reserved, { x, y, z: z ?? blocker.position.z });
+    let away = fleeStep(blocker.position, requester, blocked);
+    if (away === null) {
+      // `fleeStep` só tenta os três candidatos alinhados com a direção OPOSTA a quem pediu
+      // passagem (ADR 0009) — um companheiro encostado numa parede exatamente NESSA direção
+      // fica sem `away`, mesmo com tile livre em outra (#527, achado varrendo sementes com
+      // conteúdo real: Paladin preso num canto do mapa, o único lado livre não era o lado
+      // "para longe" do líder). Antes de desistir, tenta QUALQUER um dos oito vizinhos, em
+      // ordem fixa (determinística, como o resto do motor) — ceder para o lado também abre
+      // espaço, só o recuo reto é que não é obrigatório.
+      for (const tile of tilesAround(blocker.position, 1)) {
+        if (tile.x === blocker.position.x && tile.y === blocker.position.y) continue;
+        if (blocked(tile.x, tile.y)) continue;
+        away = tile;
+        break;
+      }
+    }
+    if (away === null) return;
+    const blockerRunner = this.#runnerOf(blocker.id);
+    blockerRunner.walker.stop();
+    const nudged = this.#step(session, blocker, { ...away, z: blocker.position.z }, blocker.id);
+    if (nudged.ok) blockerRunner.nudgedUntilMs = session.nowMs + NUDGE_YIELD_MS;
+  }
+
+  /**
+   * A versão em GRUPO de `#nudgeCompanion` (#527): pede a TODOS os companheiros vizinhos que
+   * estão NO CAMINHO rumo a `toward` — não só a um — que abram espaço, cada um fugindo de
+   * `requester`.
+   *
+   * Existe porque `#nudgeCompanion` sozinho resolve "um companheiro no caminho", mas não "a
+   * party inteira cercando o líder" — achado numa QA ao vivo e reproduzido varrendo várias
+   * sementes com conteúdo real: o líder numa reentrância do mapa, e os TRÊS seguidores,
+   * satisfeitos a distância 1, ocupando os TRÊS únicos tiles livres ao redor — os três
+   * candidatos que `greedyStep` tentaria, um por direção. Pedir passagem a um só nunca bastava:
+   * o `greedyStep` seguinte ainda encontrava os outros dois no caminho.
+   *
+   * **Só vizinhos que não pioram a distância até `toward`** — nunca os OITO (#527, achado
+   * quebrando um teste que já existia: nudgear um vizinho que está do lado OPOSTO do destino,
+   * fora do caminho, o desloca sem necessidade — um personagem parado ali por um motivo
+   * PRÓPRIO, como esperar um monstro chegar, saía do lugar por um bloqueio que nunca foi dele).
+   * Cada nudge é independente (mesma regra: só cede quem não está lutando agora), e um
+   * companheiro sem `away` válido simplesmente fica — não é erro, é "cercado de verdade" também
+   * para ele.
+   */
+  #clearCompanionsAround(session: Session, requester: CharacterRuntime, toward: FloorPoint): void {
+    const requesterDistance = distance(requester.position, toward);
+    for (const other of session.participants) {
+      if (other === requester || !other.alive) continue;
+      if (!sameFloor(other.position.z, requester.position.z)) continue;
+      if (distance(requester.position, other.position) !== 1) continue;
+      if (distance(other.position, toward) > requesterDistance) continue;
+      this.#nudgeCompanion(session, requester.position, other.position);
+    }
+  }
+
+  /**
+   * Existe follow de verdade nesta hunt agora — alguém com `botConfig.follow.kind !== 'none'`
+   * (#527)? É o que distingue "vários seguidores satisfeitos podem cercar o líder de propósito"
+   * (onde o nudge em GRUPO é o certo) de "vários personagens andam a mesma rota sem relação
+   * nenhuma entre si" (onde nudgear todo mundo ao redor desvia quem está parado por um motivo
+   * PRÓPRIO — achado quebrando um teste que já existia). `#runners` é examinado direto porque
+   * isto roda no caminho quente do passo; nenhuma alocação.
+   */
+  #hasActiveFollow(session: Session): boolean {
+    for (const character of session.participants) {
+      const runner = this.#runners.get(character.id);
+      if (runner?.botConfig?.follow !== undefined && runner.botConfig.follow.kind !== 'none') return true;
+    }
+    return false;
   }
 
   /**
@@ -894,8 +2901,8 @@ export class HuntRuleset implements Ruleset {
    * `not-adjacent` e `rejoinNearest` reentra pelo tile mais próximo. O caminho de volta já
    * existia, e é o mesmo de quem foi empurrado.
    */
-  #holdPosture(session: Session, character: CharacterRuntime): boolean {
-    const posture = this.#targeting.posture;
+  #holdPosture(session: Session, runner: Runner, character: CharacterRuntime): MoveResult | null | false {
+    const posture = targetingOf(runner).posture;
     if (posture.kind === 'stand') return false;
 
     const target = this.#approachTarget(character);
@@ -903,23 +2910,517 @@ export class HuntRuleset implements Ruleset {
 
     const from = character.position;
     const d = distance(from, target.position);
-    const blocked = this.#blockedFor(character);
-    // `follow` persegue até poder bater; `keep-distance` mira a distância configurada. Os dois
-    // são o mesmo cálculo com alvos diferentes, e escrever dois laços seria a mesma geometria
-    // divergindo na terceira mudança.
-    const want = posture.kind === 'follow' ? this.#options.player.attackRange : posture.tiles;
-    if (d === want) return true;
+    const blocked = this.#blockedForGroundedStep(character);
+    // `follow` persegue até poder bater (`d <= reach`), e quando já pode fica parado;
+    // `keep-distance` mira a distância configurada (aproxima se d > want, recua se d < want).
+    if (posture.kind === 'follow') {
+      const reach = this.#attackRangeOf(character);
+      if (d <= reach) return null;
+      const to = greedyStep(from, target.position, blocked);
+      if (to === null) return null;
+      runner.walker.stop();
+      return this.#step(session, character, { ...to, z: from.z }, character.id);
+    }
+
+    const want = posture.tiles;
+    // `null` é "a postura decidiu ficar parado": a cadência seguinte é a de um passo daqui.
+    if (d === want) return null;
 
     const to = d > want
       ? greedyStep(from, target.position, blocked)
       : fleeStep(from, target.position, blocked);
     // Empacado — cercado, ou contra a parede recuando. Esperar é o comportamento certo, e é o
     // mesmo que o passo guloso do monstro já faz (ADR 0009).
-    if (to === null) return true;
+    if (to === null) return null;
 
-    this.#walker.stop();
-    this.#step(session, character, { ...to, z: from.z }, character.id);
+    runner.walker.stop();
+    return this.#step(session, character, { ...to, z: from.z }, character.id);
+  }
+
+  /**
+   * Follow de membro (ADR 0035 d.9, §D10, #398). Passo guloso até ficar ADJACENTE (distância 1,
+   * Chebyshev — a mesma grade do resto do movimento) do alvo configurado; parado quando já está.
+   *
+   * `kind: 'leader'` resolve `#leader(session)` a CADA vencimento — nunca guarda o id — pela
+   * mesma razão de `#approachTarget` nunca guardar o monstro escolhido: a mira certa é a de
+   * agora. `#leader` já cai para o mais antigo presente quando o líder muda (#394), então uma
+   * troca de liderança no meio da hunt já reflete aqui sem nenhum código extra.
+   *
+   * Devolve `false` quando não há follow ativo — E quando o follow está INTERROMPIDO —, para
+   * `#playerStep` cair na postura contra monstro e na rota, exatamente como sem follow nenhum.
+   *
+   * **Andar diferente atravessa ESCADA DE VERDADE, não vira `unreachable` na hora** (#527). Até
+   * aqui, o líder mudando de andar deixava o seguidor "sem alvo alcançável" para sempre — ele
+   * caía na PRÓPRIA rota, que pode levar a um andar DIFERENTE do que o líder está agora (foi
+   * assim que o Druid da QA do M28 foi sozinho para o meio dos Dragon Lords, atrás da própria
+   * rota, sem saber que o resto da party tinha ficado para trás). `floorChangeToward`
+   * (`@draconya/content`) acha a escada, NO ANDAR do seguidor, que começa a travessia até o
+   * andar do alvo — sem pathfinding real (ADR 0009 continua valendo): é o MESMO passo guloso de
+   * sempre, só que mirando o tile da escada em vez do alvo. Pisar nela já muda de andar sozinho
+   * (`move`, `movement.ts`); no vencimento seguinte o seguidor está no andar novo, e ou já está
+   * perto o bastante do alvo (cai no caminho de baixo, por distância) ou a MESMA busca acha a
+   * escada seguinte — "tomar a mesma escada que o líder tomou", sem guardar rota nem estado
+   * extra. Só vira `unreachable` quando NENHUMA sequência de escadas liga os dois andares — um
+   * mapa sem elas, ou hunt de andar único (onde `floorChangeToward` nunca é chamada, porque
+   * `sameFloor` já é `true`).
+   */
+  #holdFollow(session: Session, runner: Runner, character: CharacterRuntime): MoveResult | null | false {
+    const follow = runner.botConfig?.follow;
+    if (follow === undefined || follow.kind === 'none') return false;
+
+    // Acabou de ser empurrado para abrir passagem (#527, `#nudgeCompanion`): por
+    // `NUDGE_YIELD_MS`, o follow fica em suspenso — o mesmo `false` de "inalcançável" — para
+    // não voltar direto para cima de quem acabou de pedir passagem. Sem ISTO precisar emitir
+    // `follow-state`: a suspensão é curta demais para o jogador notar, e um evento por empurrão
+    // seria ruído no fio.
+    if (runner.nudgedUntilMs !== null) {
+      if (session.nowMs < runner.nudgedUntilMs) return false;
+      runner.nudgedUntilMs = null;
+    }
+
+    const targetId = follow.kind === 'leader' ? (this.#leader(session)?.id ?? null) : follow.characterId;
+    const target = targetId === null ? null : findById(session.participants, targetId);
+
+    // Alvo ausente: nunca deveria chegar aqui por morte ou saída — `#interruptFollowersOf` já
+    // reportou no MESMO evento em que o alvo saiu (`onLeave`) —, mas cair no mesmo `false` por
+    // segurança nunca escolhe outro, que é a garantia que importa.
+    if (target === null || target.id === character.id) return false;
+
+    const from = character.position;
+
+    if (!sameFloor(from.z, target.position.z)) {
+      const stair = floorChangeToward(this.#world.map, from.z, target.position.z);
+      if (stair === null) {
+        this.#reportFollow(session, runner, character.id, target.id, false, 'unreachable');
+        return false;
+      }
+      // O DESTINO da escada — não o tile dela — decide se ela está livre (#527, achado numa QA
+      // ao vivo com o plano de bot real: `greedyStep` só confere ocupação do tile da escada em
+      // si, que quase nunca tem ninguém em cima; quem rejeita pelo tile de CHEGADA ocupado é
+      // `move`/`canOccupy`, chamado só DEPOIS — e o ramo abaixo devolvia esse resultado sem
+      // tratar, tentando o MESMO passo rejeitado a cada vencimento, para sempre, sem nunca
+      // cair nem no `#clearCompanionsAround` nem na válvula de último recurso, porque os dois
+      // só rodavam quando `greedyStep` devolvia `null` — nunca quando devolvia um tile que
+      // `#step` recusaria por outro motivo). Checar aqui, ANTES do passo guloso, faz a escada
+      // ocupada virar exatamente o mesmo "empacado" de parede — o mesmo caminho de espera +
+      // pedir passagem + válvula de último recurso já cobre os dois, e ninguém trava para
+      // sempre tentando repisar um degrau cuja chegada está ocupada.
+      const landing = floorChangeAt(this.#world.map, stair.x, stair.y, from.z);
+      const landingBlocked = landing !== null && this.#world.occupied(landing.x, landing.y, landing.z);
+      const to = landingBlocked
+        ? null
+        : this.#followStep(session, runner, from, stair, this.#blockedFor(character), true, null, false);
+      if (to === null) {
+        // Empacado a caminho da escada (parede, companheiro, monstro): espera, e PERMANECE
+        // seguindo — nunca desiste para ir caçar sozinho em outro andar por um bloqueio
+        // PASSAGEIRO (#527, revisto depois de uma QA ao vivo: dar as costas ao líder por causa
+        // de um bloqueio de segundos tirava o seguidor do andar do líder sem ele nunca mais
+        // voltar — uma party de Tibia não se separa assim). Se o bloqueio for um companheiro,
+        // pede que abra espaço — a MESMA saída que desempata a party inteira cercando o líder
+        // na rota; sem isto, três seguidores satisfeitos podem ocupar os únicos tiles livres ao
+        // redor de um QUARTO que também está tentando atravessar a mesma escada.
+        this.#clearCompanionsAround(session, character, stair);
+        // `crossFloorStuckSinceMs` só existe como VÁLVULA DE ÚLTIMO RECURSO — não a saída
+        // corriqueira que era antes (30 s, quase toda travessia real esbarrava nela e o
+        // seguidor desistia rotineiramente, exatamente o abandono que a QA ao vivo flagrou).
+        // Um bloqueio que sobrevive a `#clearCompanionsAround` por MINUTOS é parede/monstro,
+        // não companheiro — cede à própria rota só quando esperar deixou de ser plausível.
+        const stuckSince = runner.crossFloorStuckSinceMs ?? session.nowMs;
+        runner.crossFloorStuckSinceMs = stuckSince;
+        if (session.nowMs - stuckSince >= MAX_CROSS_FLOOR_STUCK_MS) {
+          runner.crossFloorStuckSinceMs = null;
+          this.#reportFollow(session, runner, character.id, target.id, false, 'unreachable');
+          return false;
+        }
+        this.#reportFollow(session, runner, character.id, target.id, true);
+        return null;
+      }
+      runner.crossFloorStuckSinceMs = null;
+      // Ainda seguindo — só navegando até a escada, não interrompido. `d === 1`/parado não se
+      // aplica aqui: a distância contra um alvo em OUTRO andar não diz nada sobre proximidade.
+      this.#reportFollow(session, runner, character.id, target.id, true);
+      runner.walker.stop();
+      const crossingResult = this.#step(session, character, { ...to, z: from.z }, character.id);
+      if (crossingResult.ok) this.#advanceFollowPath(runner, to);
+      else runner.followPath = null;
+      return crossingResult;
+    }
+
+    const d = distance(from, target.position);
+    const radius = this.#options.targetSearchRadius ?? 8;
+
+    // A distância RAW (Chebyshev) não é monotônica ao longo de um caminho do BFS — rodear uma
+    // parede pode AUMENTAR a distância em linha reta antes de diminuir (#527, achado com o bot
+    // config real: o Druid tomava o primeiro passo de um desvio de dez passos, a distância raw
+    // subia de 8 para 9 — um a mais que `radius`/`targetSearchRadius` —, e `d > radius`
+    // desistia do follow exatamente no meio da travessia, jogando fora o caminho já calculado e
+    // caindo para a PRÓPRIA rota, sem nada a ver com onde o líder está). `FOLLOW_UNREACHABLE_SLACK`
+    // é a folga — pequena e FIXA, não "sempre que houver cache" (essa versão inicial soltava o
+    // teto de desistência por completo sempre que um caminho velho continuasse por perto,
+    // deixando seguidores genuinamente perdidos NUNCA desistirem, e a coesão da varredura
+    // desabou) — o bastante para um desvio típico não estourar o alcance, sem apagar o teto.
+    if (d > radius + FOLLOW_UNREACHABLE_SLACK) {
+      this.#reportFollow(session, runner, character.id, target.id, false, 'unreachable');
+      return false;
+    }
+    // Em alcance: reporta a RETOMADA se estava interrompido (não-op se já estava ativo). Fica
+    // ANTES do "já adjacente" porque retomar e já estar adjacente são independentes: o alvo pode
+    // ter voltado ao alcance parado.
+    this.#reportFollow(session, runner, character.id, target.id, true);
+
+    // O tile em que o ALVO vai pisar no PRÓXIMO passo da rota DELE nunca é destino válido para
+    // quem o segue (#527, achado numa QA ao vivo com o plano de bot real: quatro seguidores
+    // convergindo por `greedyStep` podem ficar satisfeitos — `d === 1` — sentados exatamente
+    // nos tiles à volta do líder, e num corredor de 1 tile o ÚNICO tile adjacente na direção em
+    // que o líder anda É o próximo tile da rota dele. `d === 1` já significa "parado" — sem
+    // isto, o seguidor nunca mais sai dali, e o líder fica cercado pelo próprio bloco a hunt
+    // inteira, porque nudge/`#clearCompanionsAround` só reage DEPOIS que o líder já tentou e
+    // falhou, e num corredor sem outra saída eles também falham). Reservar aqui é PROATIVO: o
+    // seguidor nunca escolhe esse tile como destino, então nunca precisa ser desalojado dele.
+    const reserved = this.#reservedRouteTile(target);
+    const onReserved = reserved !== null
+      && from.x === reserved.x && from.y === reserved.y && from.z === reserved.z;
+
+    if (d === 1 && !onReserved) return null;
+
+    const base = this.#blockedForGroundedStep(character);
+    const blocked: Blocked = reserved === null
+      ? base
+      : (x, y, z, monsterId) => base(x, y, z, monsterId)
+        || (x === reserved.x && y === reserved.y && (z ?? from.z) === reserved.z);
+
+    // Guloso primeiro; só quando ele emperra o BFS limitado entra (`#followStep`, #527, emenda
+    // ao ADR 0009) — o corredor em U que uma QA ao vivo achou, onde os três candidatos do
+    // guloso eram todos parede mas havia caminho livre pelo lado OPOSTO.
+    const to = this.#followStep(session, runner, from, target.position, blocked, false, reserved, true);
+    // Empacado — mesmo comportamento de `#holdPosture`: esperar este vencimento, não é
+    // interrupção. "Sem caminho" vira `unreachable` só pela DISTÂNCIA (acima), não por um passo
+    // bloqueado — senão contornar uma parede piscaria o follow a cada vencimento. Já em cima do
+    // tile reservado e sem candidato livre: espera ali mesmo (ainda adjacente ao líder) até o
+    // próximo vencimento, nunca fica MAIS longe só para desocupar.
+    if (to === null) return null;
+
+    runner.walker.stop();
+    const result = this.#step(session, character, { ...to, z: from.z }, character.id);
+    if (result.ok) this.#advanceFollowPath(runner, to);
+    else runner.followPath = null;
+    return result;
+  }
+
+  /**
+   * O passo em direção a `goal` para o FOLLOW (#527, emenda ao ADR 0009 —
+   * `docs/adr/0009-fixed-hunt-route-without-pathfinding.md`): guloso primeiro — resolve a
+   * esmagadora maioria dos casos, O(1), sem estado —, e só quando ele emperra (devolve `null`,
+   * empacado contra parede) entra o BFS limitado em cache (`FOLLOW_PATHFIND_RADIUS`,
+   * `route/pathfind.ts`). Achado numa QA ao vivo: um corredor em U onde os três candidatos do
+   * guloso eram todos parede, mas havia caminho livre pelo lado OPOSTO — sem isto, o seguidor
+   * fica visivelmente perto (8 tiles) e nunca anda, até a válvula de regroup soltar o líder.
+   *
+   * `exact` pede pisar EXATAMENTE em `goal` (a escada que o follow vai atravessar); sem
+   * `exact`, o alvo é ficar ADJACENTE a ele (o alvo seguido, cujo tile ninguém pode ocupar).
+   *
+   * O cache é validado contra a posição ATUAL antes de ser usado — não só contra o alvo: um
+   * `from` que se moveu por fora (o guloso resolvendo sozinho por vários vencimentos, um
+   * empurrão) deixa `path[0]` do cache velho sem ser mais adjacente a onde o personagem está
+   * agora, e usá-lo assim tentaria um passo `not-adjacent`. Mais barato invalidar e recalcular
+   * do que arriscar isso.
+   */
+  #followStep(
+    session: Session, runner: Runner, from: FloorPoint, goal: FloorPoint, blocked: Blocked,
+    exact: boolean, reserved: FloorPoint | null, grounded: boolean,
+  ): GridPoint | null {
+    // `blocked` (abaixo) é o predicado de `canOccupy` (#blockedFor/#blockedForGroundedStep) —
+    // ele SEMPRE compara contra a posição ATUAL do personagem (`not-adjacent` quando o tile
+    // pedido não é vizinho imediato dela), o que faz sentido para o passo guloso — que só
+    // avalia os três vizinhos IMEDIATOS de `from` — mas quebra um BFS: ele avalia vizinhos dos
+    // nós da FRENTE de busca, não de `from`, e todo tile a mais de um passo do personagem
+    // voltaria "bloqueado" mesmo livre (achado depurando o teste desta issue: `blocked(10,2)`
+    // devolvia `true` com `isBlocked`/ocupação/`floorChangeAt` todos `false` — só a distância
+    // até a posição REAL do personagem, não a do tile explorado, é que reprovava). O BFS usa a
+    // MESMA regra de passabilidade (parede, fora do mapa, ocupado, e as mesmas exceções de
+    // `blocked` — reservado, aterrado), só que sem o gate de adjacência.
+    // `from` é sempre `character.position` (#519: personagem carrega `z` de verdade, nunca
+    // ausente) — o `?? this.#world.map.z` é só para o tipo, nunca alcançado na prática.
+    const z = from.z ?? this.#world.map.z;
+    const pathBlocked: Blocked = (x, y) => {
+      if (isBlocked(this.#world.map, x, y, z) || this.#world.occupied(x, y, z)) return true;
+      if (grounded && floorChangeAt(this.#world.map, x, y, z) !== null) return true;
+      if (reserved !== null && x === reserved.x && y === reserved.y && z === reserved.z) return true;
+      return false;
+    };
+
+    // O CACHE de um caminho já em andamento vence o guloso (#527) — não o contrário. Tentar o
+    // guloso de novo a cada vencimento, mesmo com um caminho do BFS já resolvido, podia puxar
+    // quem segue para um tile LOCALMENTE mais perto do alvo em linha reta mas que não leva a
+    // lugar nenhum (o "bolso" à esquerda de uma QA ao vivo tinha vários desses) — abandonando o
+    // caminho real, reiniciando o atraso e o BFS do zero, repetidas vezes, sem nunca terminar
+    // de atravessar: o Druid ficou dois minutos "quase" chegando, sem nunca progredir de fato.
+    // Com o caminho comprometido, o guloso só volta a decidir quando ELE (o cache) falhar.
+    const cache = runner.followPath;
+    const sameGoal = cache !== null
+      && cache.goal.x === goal.x && cache.goal.y === goal.y && cache.goal.z === goal.z;
+    if (sameGoal) {
+      const next = cache.path[0];
+      if (next !== undefined && distance(from, next) === 1 && !pathBlocked(next.x, next.y)) {
+        runner.followStuckSinceMs = null;
+        return next;
+      }
+      runner.followPath = null;
+    }
+
+    // O relógio de "empacado" conta a partir de PROGRESSO, não de "o guloso devolveu um tile"
+    // (#527, achado com o bot config real: um bolso da Darashia Dragon Lair deixava o guloso
+    // "ter sucesso" repetidas vezes, andando para dentro do bolso sem nunca se aproximar de
+    // verdade do alvo — cada sucesso zerava o relógio antes dele acumular os
+    // `FOLLOW_PATHFIND_DELAY_MS` seguidos que fariam o BFS entrar, e o Druid ficava minutos
+    // "andando" sem nunca progredir). Só reduzir a distância RAW até o alvo conta como
+    // progresso de verdade; um passo que anda para o lado ou para trás (o próprio caminho do
+    // BFS pode fazer isso, contornando uma parede) não reseta o relógio — só não é o guloso
+    // quem decide isso, e por isso o cache acima já zera o relógio só quando de fato avança.
+    const beforeDistance = distance(from, goal);
+    const direct = greedyStep(from, goal, blocked);
+    if (direct !== null) {
+      if (distance(direct, goal) < beforeDistance) runner.followStuckSinceMs = null;
+      else runner.followStuckSinceMs ??= session.nowMs;
+      return direct;
+    }
+
+    // Só entra no BFS depois de `FOLLOW_PATHFIND_DELAY_MS` de bloqueio/estagnação SEGUIDOS —
+    // não na primeira falha (#527, `FOLLOW_PATHFIND_DELAY_MS`): um monstro ou companheiro
+    // momentaneamente no caminho resolve sozinho, e path-find nele produzia um desvio inútil
+    // pela masmorra em vez de uma espera curta.
+    const stuckSince = runner.followStuckSinceMs ?? session.nowMs;
+    runner.followStuckSinceMs = stuckSince;
+    if (session.nowMs - stuckSince < FOLLOW_PATHFIND_DELAY_MS) return null;
+
+    const isGoal = exact ? isExactly(goal) : isAdjacentTo(goal);
+    const path = boundedPath(from, isGoal, pathBlocked, FOLLOW_PATHFIND_RADIUS);
+    if (path === null || path.length === 0) return null;
+    runner.followPath = { goal: { ...goal }, path };
+    return path[0] ?? null;
+  }
+
+  /**
+   * Consome o tile de `to` do cache do caminho do follow, se ele bater com o topo — mantém o
+   * resto do BFS já calculado para o vencimento seguinte, em vez de refazer a busca a cada
+   * passo. Qualquer outra coisa (o guloso resolveu direto, o tile não bate) invalida o cache:
+   * mais barato recalcular do zero do que arriscar seguir um caminho que não é mais o de agora.
+   */
+  #advanceFollowPath(runner: Runner, to: GridPoint): void {
+    const cache = runner.followPath;
+    if (cache === null) return;
+    const head = cache.path[0];
+    if (head !== undefined && head.x === to.x && head.y === to.y) {
+      runner.followPath = { goal: cache.goal, path: cache.path.slice(1) };
+    } else {
+      runner.followPath = null;
+    }
+  }
+
+  /**
+   * O tile `to` — a rota PRÓPRIA do personagem, não um passo de follow — é uma escada que leva
+   * para um andar DIFERENTE do alvo seguido agora? (#527) `false` sem follow configurado: quem
+   * não segue ninguém (o líder de verdade) sempre pode atravessar pela própria rota. Ver o
+   * chamador, no ramo "ninguém ao alcance: anda" de `#playerStep`.
+   */
+  #crossesAwayFromLeader(
+    session: Session, runner: Runner, character: CharacterRuntime, to: FloorPoint,
+  ): boolean {
+    const follow = runner.botConfig?.follow;
+    if (follow === undefined || follow.kind === 'none') return false;
+    const change = floorChangeAt(this.#world.map, to.x, to.y, character.position.z);
+    if (change === null) return false;
+    const targetId = follow.kind === 'leader' ? (this.#leader(session)?.id ?? null) : follow.characterId;
+    const target = targetId === null ? null : findById(session.participants, targetId);
+    if (target === null || target.id === character.id) return false;
+    return change.z !== target.position.z;
+  }
+
+  /**
+   * Há follow ativo para alguém em OUTRO andar agora? (#527) Usado só para decidir se o
+   * combate pode segurar o personagem no topo de `#playerStep` — repete a mesma busca de alvo
+   * do início de `#holdFollow` de propósito: são poucas linhas, e as duas listas de motivo
+   * para "não" (sem follow, alvo ausente) precisam concordar — divergir aqui deixaria o
+   * combate segurar um seguidor que `#holdFollow` trataria como "sem follow nenhum".
+   */
+  #mustCrossFloorToFollow(session: Session, runner: Runner, character: CharacterRuntime): boolean {
+    const follow = runner.botConfig?.follow;
+    if (follow === undefined || follow.kind === 'none') return false;
+    const targetId = follow.kind === 'leader' ? (this.#leader(session)?.id ?? null) : follow.characterId;
+    const target = targetId === null ? null : findById(session.participants, targetId);
+    if (target === null || target.id === character.id) return false;
+    return !sameFloor(character.position.z, target.position.z);
+  }
+
+  /**
+   * O próximo tile da ROTA do alvo seguido — `null` quando o alvo não anda rota nenhuma (ele
+   * próprio está em follow de outra pessoa, ou não tem `walker` relevante aqui). Ver o
+   * chamador (`#holdFollow`, ramo do mesmo andar) para o porquê de reservar.
+   */
+  #reservedRouteTile(target: CharacterRuntime): FloorPoint | null {
+    const targetRunner = this.#runnerOf(target.id);
+    const targetFollow = targetRunner.botConfig?.follow;
+    if (targetFollow !== undefined && targetFollow.kind !== 'none') return null;
+    const ahead = targetRunner.walker.ahead(1);
+    return { ...ahead, z: target.position.z };
+  }
+
+  /**
+   * O tile reservado do LÍDER da party especificamente (#527) — não "de quem eu sigo agora"
+   * (`#reservedRouteTile`, usado só dentro de `#holdFollow`), mas do líder mesmo quando ESTE
+   * personagem não está em follow ativo no momento. A rota é UMA SÓ, compartilhada pelos
+   * quatro, e um corredor estreito pode aparecer nela em índices BEM diferentes — achado numa
+   * QA ao vivo com o plano de bot real: (56,30)/(56,31) na Darashia Dragon Lair aparece em três
+   * pontos da rota (índices ~44–46, ~165–168, ~1451–1454), cada um numa direção diferente. Um
+   * seguidor pode chegar no tile que travaria o líder por um caminho que NUNCA passa por
+   * `#holdFollow` — a PRÓPRIA rota dele (quando `d > radius` desiste de seguir) tem essa MESMA
+   * coordenada em ALGUM índice próprio, sem nenhuma relação com o índice atual do líder; ou um
+   * nudge que abria espaço para outra coisa pode, por coincidência, largar alguém bem ali.
+   * `null` para o próprio líder (sempre livre para a própria rota) e para quem está em outro
+   * andar (a reserva só faz sentido no mesmo andar do líder).
+   */
+  #leaderReservedTile(session: Session, character: CharacterRuntime): FloorPoint | null {
+    // Só entra em jogo para quem TEM follow configurado — nunca para uma hunt de vários
+    // personagens andando a MESMA rota sem nenhuma relação de líder (`follow.kind: 'none'` em
+    // todo mundo, como em `hunt.test.ts`). `#leader(session)` sempre devolve alguém (cai para
+    // `participants[0]` sem `#party`), e sem este guarda qualquer hunt de andar único viraria
+    // "ninguém pode pisar onde o primeiro personagem vai pisar" — a MESMA regressão que
+    // `#hasActiveFollow` existe para evitar em `#clearCompanionsAround`.
+    const follow = this.#runnerOf(character.id).botConfig?.follow;
+    if (follow === undefined || follow.kind === 'none') return null;
+    const leader = this.#leader(session);
+    if (leader === undefined || leader.id === character.id) return null;
+    if (!sameFloor(character.position.z, leader.position.z)) return null;
+    return this.#reservedRouteTile(leader);
+  }
+
+  /** `to`/`tile` é o tile reservado do líder (#527)? Comparação de coordenadas, sem alocar. */
+  #isLeaderReservedTile(reserved: FloorPoint | null, tile: FloorPoint): boolean {
+    return reserved !== null && tile.x === reserved.x && tile.y === reserved.y && tile.z === reserved.z;
+  }
+
+  /**
+   * O LÍDER deve segurar o próprio passo de rota para a party se reagrupar? (#527) `false` para
+   * quem não lidera ninguém (`#leader(session)` sempre devolve alguém — cai para
+   * `participants[0]` sem `#party` — mas um seguidor não tem "a party" para esperar, ele É quem
+   * se junta) e para quem lidera mas não tem NENHUM seguidor configurado (uma hunt de andar
+   * único sem follow, a mesma exceção de `#leaderReservedTile`/`#hasActiveFollow`).
+   *
+   * O raio exigido é mais apertado (`PARTY_REGROUP_FLOOR_CHANGE_RADIUS`) quando `to` é o tile
+   * de ORIGEM de uma escada — atravessar andar é exatamente como a party se perde de vista: um
+   * seguidor a 6 tiles ainda no MESMO andar se recupera sozinho em poucos passos, mas um que
+   * fica para trás quando o líder já trocou de andar precisa da travessia INTEIRA de
+   * `#holdFollow` para alcançar de novo, minutos depois.
+   *
+   * `MAX_REGROUP_WAIT_MS` é a válvula de último recurso (mesmo espírito de
+   * `MAX_CROSS_FLOOR_STUCK_MS`): um seguidor genuinamente perdido não pode travar o líder — e a
+   * hunt inteira atrás dele — para sempre.
+   */
+  #partyRegroupBlocked(
+    session: Session, runner: Runner, character: CharacterRuntime, to: FloorPoint,
+  ): boolean {
+    const leader = this.#leader(session);
+    if (leader === undefined || leader.id !== character.id) return false;
+    const followers = session.participants.filter((p) => {
+      if (p.id === character.id || !p.alive) return false;
+      const follow = this.#runnerOf(p.id).botConfig?.follow;
+      return follow !== undefined && follow.kind !== 'none';
+    });
+    if (followers.length === 0) return false;
+
+    const crossingFloor = floorChangeAt(this.#world.map, to.x, to.y, character.position.z) !== null;
+    // FOLGADO em relação ao raio de follow de cada seguidor (#527, `PARTY_REGROUP_MARGIN`),
+    // nunca mais apertado — um raio menor que `targetSearchRadius` é o que produzia o impasse
+    // mútuo que motivou a emenda.
+    const followRadius = (this.#options.targetSearchRadius ?? 8) + PARTY_REGROUP_MARGIN;
+    const radius = crossingFloor ? PARTY_REGROUP_FLOOR_CHANGE_RADIUS : followRadius;
+    const cohesive = followers.every((follower) => sameFloor(follower.position.z, character.position.z)
+      && distance(character.position, follower.position) <= radius);
+    if (cohesive) {
+      runner.regroupSinceMs = null;
+      return false;
+    }
+
+    const since = runner.regroupSinceMs ?? session.nowMs;
+    runner.regroupSinceMs = since;
+    if (session.nowMs - since >= MAX_REGROUP_WAIT_MS) {
+      runner.regroupSinceMs = null;
+      return false;
+    }
     return true;
+  }
+
+  /**
+   * Emite `follow-state` só na TRANSIÇÃO (§D10: "uma vez"). `runner.followInterrupted` é o que
+   * faz cada chamada custar uma comparação em vez de um evento — `#holdFollow` chama isto a CADA
+   * vencimento enquanto o alvo está em alcance, e só a primeira depois de uma mudança produz
+   * `session.emit`.
+   */
+  #reportFollow(
+    session: Session, runner: Runner, characterId: string, targetId: string, active: boolean,
+    reason?: 'dead' | 'left' | 'unreachable',
+  ): void {
+    // A verdade ATUAL é gravada ANTES do curto-circuito de transição: o evento só sai uma vez,
+    // mas o `followStateOf` precisa responder "onde o Follow está agora" mesmo quando nada mudou
+    // desde o último vencimento (#401).
+    runner.followTargetId = targetId;
+    runner.followReason = active ? undefined : reason;
+    if (runner.followInterrupted === !active) return;
+    runner.followInterrupted = !active;
+    session.emit({
+      kind: 'follow-state', characterId, targetId, active,
+      ...(reason === undefined ? {} : { reason }),
+    });
+  }
+
+  /**
+   * O estado ATUAL do Follow de um personagem (#401), para o hospedeiro reenviar a quem
+   * reconecta. O evento `follow-state` só é emitido na TRANSIÇÃO (#398), e sem visualizador ele
+   * é descartado pelo hospedeiro — esta leitura síncrona é o que faz a verdade sobreviver ao
+   * descarte (invariante 3), em vez de o host guardar uma segunda cópia do estado.
+   *
+   * `undefined` sem Follow configurado (`kind: 'none'`) ou sem alvo resolvido ainda — os dois
+   * casos em que o cliente não tem nada a corrigir.
+   */
+  followStateOf(characterId: string): {
+    readonly active: boolean;
+    readonly targetId: string;
+    readonly reason?: 'dead' | 'left' | 'unreachable';
+  } | undefined {
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined) return undefined;
+    const follow = runner.botConfig?.follow;
+    if (follow === undefined || follow.kind === 'none') return undefined;
+    const targetId = runner.followTargetId
+      ?? (follow.kind === 'member' ? follow.characterId : this.#party?.leaderId);
+    if (targetId === undefined) return undefined;
+    const active = !runner.followInterrupted;
+    return {
+      active,
+      targetId,
+      ...(active || runner.followReason === undefined ? {} : { reason: runner.followReason }),
+    };
+  }
+
+  /**
+   * O alvo de um follow saiu da sessão (§D10, #398): quem o seguia é interrompido AGORA, no mesmo
+   * evento da saída — é o único lugar em que dá para diferenciar `'dead'` de `'left'`, porque
+   * `character.alive` já está `false` antes de `onLeave` rodar. `kind: 'leader'` usa
+   * `this.#party?.leaderId` — o valor de ANTES desta saída, porque #394 só o reescreve depois, em
+   * `#flushLoss` — para saber se o `departed` ERA o líder.
+   */
+  #interruptFollowersOf(session: Session, departed: CharacterRuntime): void {
+    const reason = departed.alive ? 'left' : 'dead';
+    const wasLeader = departed.id === this.#party?.leaderId;
+    for (const [followerId, runner] of this.#runners) {
+      const follow = runner.botConfig?.follow;
+      if (follow === undefined || follow.kind === 'none') continue;
+      const followedId = follow.kind === 'leader'
+        ? (wasLeader ? departed.id : null)
+        : follow.characterId;
+      if (followedId !== departed.id) continue;
+      this.#reportFollow(session, runner, followerId, departed.id, false, reason);
+    }
   }
 
   /**
@@ -933,15 +3434,34 @@ export class HuntRuleset implements Ruleset {
    * recompiladas junto: elas vêm da mesma configuração, e deixar as antigas valendo faria a
    * hunt encerrar por uma regra que o jogador acabou de apagar.
    */
-  configureBot(session: Session, config: BotConfig): void {
-    this.#botConfig = config;
-    this.#bot = compileBot(config);
-    this.#exitRules = this.#composeExitRules(config);
-    // Categoria que ganhou regra agora precisa acordar. `#armBot` só toca as ENGATILHADAS, e
-    // as que já tinham evento pendente seguem com ele — a invariante "engatilhada ou agendada"
-    // continua valendo do outro lado de uma troca de configuração.
-    for (const character of session.participants) {
-      if (character.alive) this.#armBot(session, character.id);
+  configureBot(session: Session, config: BotConfigInput, characterId?: string): void {
+    // De QUEM (#203): por id, ou o primeiro participante — o caminho solo de sempre.
+    const character = characterId === undefined
+      ? session.participants[0]
+      : findById(session.participants, characterId) ?? undefined;
+    if (character === undefined) return;
+    const runner = this.#runnerOf(character.id);
+    // v1 no boundary vira v2 (DT-02); a config guardada é a v2, para o snapshot já sair no
+    // vocabulário novo.
+    const normalized = migrateBotConfigV1(config);
+    runner.botConfig = normalized;
+    runner.bot = compileBot(normalized, this.#cooldownOf);
+    runner.automations = compileAutomations(normalized.automations);
+    runner.actuator = this.#automationActuatorFor(runner, character);
+    // Grupo NOVO (a config antiga não o tinha) nasce ENGATILHADO: `#armBot` só toca os
+    // engatilhados, e sem esta linha a regra recém-configurada nunca acordaria.
+    for (const group of runner.bot.groups.keys()) {
+      if (runner.botReady[group] === undefined) runner.botReady[group] = true;
+    }
+    runner.exitRules = this.#composeExitRules(normalized);
+    // Grupo que ganhou regra agora precisa acordar. `#armBot` só toca os ENGATILHADOS, e os
+    // que já tinham evento pendente seguem com ele — a invariante "engatilhado ou agendado"
+    // continua valendo do outro lado de uma troca de configuração. Um grupo que SAIU da config
+    // tem `botReady` órfão, e o evento pendente dele vence sem achar slots: não faz nada.
+    if (character.alive) {
+      this.#autoSelectTarget(session, character);
+      this.#armBot(session, character.id);
+      this.#armAutomations(session, character.id);
     }
   }
 
@@ -949,13 +3469,28 @@ export class HuntRuleset implements Ruleset {
    * Um jogador pediu para andar (FUN-69). Mesmo caminho do bot, mesma razão de recusa.
    *
    * Não mexe no walker: se o passo tirou o personagem da rota, o vencimento seguinte de
-   * `PLAYER_STEP` descobre e reentra pelo tile mais próximo.
+   * `PLAYER_STEP` descobre e reentra pelo tile mais próximo. Mas o passo manual É um passo
+   * (FUN-122): o próximo vencimento do bot conta a partir dele. Sem isto, o `PLAYER_STEP` já
+   * agendado — com a cadência do passo anterior — vencia logo depois, e o personagem dava
+   * dois passos dentro da duração de um.
    */
   requestMove(session: Session, characterId: string, to: GridPoint): MoveResult {
     const character = findById(session.participants, characterId);
     if (character === null) return { ok: false, reason: 'tile-blocked' };
     if (this.#occupancyStale) this.#rebuildOccupancy(session);
-    return this.#step(session, character, { ...to, z: character.position.z }, characterId);
+    const result = this.#step(session, character, { ...to, z: character.position.z }, characterId);
+    if (result.ok) {
+      const runner = this.#runners.get(characterId);
+      if (runner !== undefined) runner.sameTileStreak = 0;
+      session.cancelEvent(PLAYER_STEP, characterId);
+      session.scheduleIn(PLAYER_STEP, result.durationMs, {
+        priority: EventPriority.Movement, subject: characterId,
+      });
+      this.#autoSelectTarget(session, character);
+      this.#armPlayerAttack(session, character);
+      this.#armBot(session, character.id);
+    }
+    return result;
   }
 
   /**
@@ -974,12 +3509,24 @@ export class HuntRuleset implements Ruleset {
 
     const target = this.#attackTarget(character);
     if (target === null) {
-      this.#playerAttackReady = true;
+      this.#runnerOf(characterId).playerAttackReady = true;
       return;
     }
 
+    if (!this.#isPinned(character)) {
+      const runner = this.#runners.get(characterId);
+      if (runner !== undefined && runner.attackTarget !== target.subject) {
+        this.setAttackTarget(character, target, false);
+      }
+    }
+
     this.#schedulePlayerAttack(session, characterId, this.#options.player.attackIntervalMs);
-    this.#strike(session, character, target);
+    const weapon = character.inventory.weapon(this.#options.items, character);
+    const how = weapon?.weapon;
+    // Wand sem mana NÃO bate (#152): o golpe fica agendado para o intervalo seguinte, e sai
+    // quando a mana tiver voltado. Não consome mana, não rende skill — como a magia recusada.
+    if (how?.kind === 'wand' && character.mana < (how.manaPerHit ?? 0)) return;
+    this.#strike(session, character, target, weapon, how);
     // Quem aplica dano não decide morte: o pipeline resolve quem matou e devolve a
     // consequência a `onCreatureDied`, o mesmo caminho da morte do personagem.
     if (!target.alive) resolveDeath(session, { kind: 'monster', monster: target });
@@ -993,7 +3540,7 @@ export class HuntRuleset implements Ruleset {
    * memória de quem escreve a próxima chamada.
    */
   #schedulePlayerAttack(session: Session, characterId: string, delayMs: number): void {
-    this.#playerAttackReady = false;
+    this.#runnerOf(characterId).playerAttackReady = false;
     session.scheduleIn(PLAYER_ATTACK, delayMs, {
       priority: EventPriority.Attack, subject: characterId,
     });
@@ -1015,58 +3562,94 @@ export class HuntRuleset implements Ruleset {
    * monstro por passo, e o custo por instância é o número que a FUN-46 cobra.
    */
   /**
-   * Uma categoria venceu: avalia os slots de cima para baixo e executa a primeira válida
-   * (§13.4). As demais daquela categoria não rodam neste ciclo.
+   * Um grupo do bot venceu: percorre os slots na ORDEM da barra (RP-002) e executa o primeiro
+   * ELEGÍVEL (RP-001). O inelegível é PULADO no MESMO ciclo (RP-003/RP-004).
    *
    * O reagendamento depende do que aconteceu, e a distinção importa:
    *
-   * - **executou** → volta no cooldown da categoria. É o rate limit do §13.5, e ele conta a
-   *   partir da AÇÃO, não do relógio de parede;
-   * - **nenhuma regra valeu, ou o atuador recusou** → ENGATILHA. Não custa evento nenhum até
-   *   o mundo mudar. Uma categoria que reagenda no vazio é cinco eventos por segundo por
-   *   personagem gastos para descobrir que não há nada a fazer.
+   * - **executou** → volta no cooldown do GRUPO (do conteúdo), não num 1 s fixo. É o rate limit
+   *   do ADR 0032 d.2, e ele conta a partir da AÇÃO, não do relógio de parede;
+   * - **nenhum slot elegível** → ENGATILHA, exceto a recusa por COOLDOWN, que volta no
+   *   vencimento do livro que trancou. Um grupo que reagenda no vazio é um evento por segundo
+   *   por personagem gasto para descobrir que não há nada a fazer.
    *
-   * Atuador que recusa (sem mana, sem supply) NÃO consome o cooldown: seria o bot parando um
-   * segundo por ter tentado curar sem ter com quê.
+   * Atuador que recusa (sem mana, sem item, sem alvo) NÃO consome o cooldown: o próximo slot do
+   * MESMO grupo tenta agora (RP-004). Sem mana não melhora com o tempo passar, então a recusa
+   * por falta ENGATILHA ao fim do laço.
    */
-  #onBot(session: Session, category: BotCategory, characterId: string): void {
-    this.#botReady[category] = true;
-    const bot = this.#bot;
+  #onBot(session: Session, group: string, characterId: string): void {
     const character = findById(session.participants, characterId);
-    if (bot === undefined || character === null || !character.alive) return;
+    if (character === null) return;
+    const runner = this.#runnerOf(characterId);
+    runner.botReady[group] = true;
+    const bot = runner.bot;
+    if (bot === undefined || !character.alive) return;
 
-    const action = bot.select(category, this.#botViewOf(character));
-    if (action === null) return;
-
+const slots = bot.groups.get(group);
+    if (slots === undefined) return;
+    // A view é montada UMA vez por vencimento: todos os slots do grupo decidem sobre o MESMO
+    // instante. Reavaliar por slot depois de uma recusa é o atuador que decide, não o mundo.
+    // O alcance é o do GRUPO (#444): um grupo com runa enxerga a 8, não no alcance da arma.
+    const reach = this.#groupRange(slots, character);
+    const view = this.#botViewOf(character, reach);
     const external = this.#options.actuator;
-    if (external !== undefined) {
-      if (!external.perform(action, this.#botView)) return;
-      this.#scheduleBot(session, category, characterId, this.#botCooldownMs());
-      return;
-    }
 
-    const result = this.#perform(session, character, action);
-    if (result.ok) {
-      this.#scheduleBot(session, category, characterId, this.#botCooldownMs());
-      // A ação mudou HP, mana ou gold: o que está engatilhado reavalia AGORA, sobre o mundo
-      // já resolvido. Uma poção de mana que não acorda a cura é o bot esperando dano novo
-      // para usar a mana que acabou de repor.
-      this.#armBot(session, characterId);
-      // E o anel sai quando a cura devolve o HP, ou quando a magia derruba a mana abaixo do
-      // piso — os dois lados da máquina do §13.8 dependem do que a ação acabou de mudar.
-      this.#applyRingSwap(session, character);
-      return;
+    let retryInMs = 0;
+    for (let i = 0; i < slots.length; i += 1) {
+      const slot = slots[i] as CompiledSlot;
+      // O `targets` é da AÇÃO avaliada, não do grupo (#480): uma runa de área conta quem cai
+      // no FOOTPRINT dela sobre o alvo primário, e uma ação sem área no alcance. Recalcular
+      // por slot evita que o slot seguinte herde a contagem do anterior — a view é a mesma, o
+      // instante é o mesmo, só a mira muda.
+      view.targetCount = this.#targetCountFor(
+        character, reach, this.#actionArea(slot.act), this.#actionRange(slot.act),
+      );
+      // Alvo != self resolve o RECIPIENTE ANTES de avaliar: a condição `hp` lê o CANDIDATO, e o
+      // slot pode valer para ele mesmo com o lançador de vida cheia (§26-30, ADR 0035 d.10).
+      // Tenta os candidatos NA ORDEM em que chegaram (já rankeada por `#resolveRuleTarget`) e
+      // para no primeiro cujo `when` vale — o "usa o primeiro válido" do §29.
+      let recipient = character;
+      if (slot.target.kind !== 'self') {
+        const candidates = this.#resolveRuleTarget(session, character, slot);
+        let matched = false;
+        for (let j = 0; j < candidates.length; j += 1) {
+          const candidate = candidates[j] as CharacterRuntime;
+          view.partyTarget = candidate;
+          if (slot.when(view)) { recipient = candidate; matched = true; break; }
+        }
+        view.partyTarget = null;
+        if (!matched) continue;
+      } else {
+        view.partyTarget = null;
+        if (!slot.when(view)) continue;                  // condição falsa → PULA (RP-003)
+      }
+      if (external !== undefined) {
+        if (!external.perform(slot.act, view)) continue; // recusou → próximo no mesmo ciclo
+        this.#scheduleBot(session, group, characterId, this.#botCooldownMs());
+        return;
+      }
+      const result = this.#perform(session, character, slot.act, recipient);
+      if (result.ok) {
+        // O grupo trancou: o próximo vencimento é o cooldown DELE (do conteúdo), não um 1 s
+        // fixo. A magia já iniciou `group:<g>` no `castSpell`; o item sem livro cai no fallback.
+        const wait = character.cooldowns.remainingMs(slot.cooldownKey, session.nowMs);
+        this.#scheduleBot(session, group, characterId, wait > 0 ? wait : this.#botCooldownMs());
+        // A ação mudou HP, mana ou gold: o que está engatilhado reavalia AGORA, sobre o mundo
+        // já resolvido. Uma poção de mana que não acorda a cura é o bot esperando dano novo
+        // para usar a mana que acabou de repor.
+        this.#armBot(session, characterId);
+        // As automações (AB-08) reagem ao mesmo mundo: o anel sai quando a cura devolve o HP,
+        // ou quando a magia derruba a mana abaixo do piso — os dois lados da máquina do §13.8
+        // dependem do que a ação acabou de mudar.
+        this.#armAutomations(session, character.id);
+        return;
+      }
+      // Recusa: o próximo slot do MESMO grupo tenta agora. Só a recusa por COOLDOWN carrega
+      // prazo; ela é lembrada para o reagendamento caso nenhum outro slot execute.
+      if (result.retryInMs > retryInMs) retryInMs = result.retryInMs;
     }
-    // Recusa por COOLDOWN volta no vencimento dele; as outras engatilham.
-    //
-    // A distinção não é detalhe. Uma categoria engatilhada só acorda quando o mundo muda, e
-    // "o mundo mudar" pode simplesmente não acontecer: o personagem com a cura em cooldown,
-    // parado, sem levar dano, ficaria sem curar até alguém bater nele de novo. As outras
-    // recusas são o oposto — sem mana e sem gold não melhoram com o tempo passar, e reagendar
-    // por elas seria um evento por segundo para redescobrir a mesma falta.
-    if (result.retryInMs > 0) {
-      this.#scheduleBot(session, category, characterId, result.retryInMs);
-    }
+    // Nenhum elegível: recusa por cooldown volta no vencimento; as outras ENGATILHAM.
+    if (retryInMs > 0) this.#scheduleBot(session, group, characterId, retryInMs);
   }
 
   /**
@@ -1077,13 +3660,89 @@ export class HuntRuleset implements Ruleset {
    * pipeline de morte. Uma classe separada receberia os quatro por parâmetro e não ganharia
    * nada em troca.
    */
-  #perform(session: Session, character: CharacterRuntime, action: BotAction): CastResult {
+  #perform(
+    session: Session, character: CharacterRuntime, action: BotAction,
+    recipient: CharacterRuntime = character,
+  ): CastResult {
     switch (action.kind) {
-      case 'spell': return this.#castSpell(session, character, action.spellId);
-      case 'supply': return this.#useSupply(session, character, action.supplyId);
-      // Catálogo de ITEM é M8. `validateBotConfig` já recusa a regra na entrada; aqui a
-      // resposta é não fazer nada, que é o que "sem catálogo" significa.
+      case 'spell': return this.#castSpell(session, character, action.spellId, recipient);
+      case 'supply': return this.#useSupply(session, character, action.supplyId, recipient);
+      // O item de slot saiu no vocabulário v2 (AB-03): o consumível abstrato é `supply`, com
+      // gold no uso, e o item de equipamento é das automações.
       case 'item': return NOT_IN_CATALOG;
+    }
+  }
+
+  /**
+   * Alcance do EFEITO de cura da ação — nunca o de ataque. `null` quando a ação não é magia/
+   * supply de cura, OU o efeito é `self`-only: é a checagem em profundidade do RF-05
+   * (`validateBotConfig` já recusa a combinação na configuração; aqui a resposta é "sem
+   * candidato", nunca uma exceção — a mesma filosofia de toda outra recusa deste arquivo).
+   */
+  #healRangeOf(action: BotAction): number | null {
+    if (action.kind === 'spell') {
+      const effect = this.#options.spells.get(action.spellId)?.effect;
+      if (effect === undefined || effect.kind !== 'heal' || effect.target !== 'friend') return null;
+      return effect.range ?? null;
+    }
+    if (action.kind === 'supply') {
+      const effect = this.#options.supplies.get(action.supplyId)?.effect;
+      if (effect === undefined || (effect.kind !== 'heal' && effect.kind !== 'mana')
+        || effect.target !== 'friend') {
+        return null;
+      }
+      return effect.range ?? null;
+    }
+    return null;
+  }
+
+  /**
+   * Os candidatos de uma regra com alvo != self (D11, ADR 0035 decisão 10).
+   *
+   * `member` usa SÓ o id pedido: morto, fora da sessão ou fora do alcance devolve lista vazia e
+   * a regra não age (§30 — nunca substitui por outro vivo). `lowest-hp-member` devolve todo
+   * participante vivo ao alcance ordenado por percentual ASCENDENTE (§28); o próprio lançador
+   * entra como candidato de si mesmo, então numa hunt solo "menor vida da party" é ele.
+   *
+   * Confere o andar (#519) antes do alcance: a hunt hospeda um personagem só hoje (§14 — party
+   * é Fase 3), então isto é código morto POR ENQUANTO — mas os três andares da Darashia Dragon
+   * Lair compartilham a mesma caixa (x, y), e sem a checagem um curandeiro curaria (ou um
+   * `heal-friend` miraria) um companheiro dois andares acima só por coincidência de coordenada,
+   * a primeira vez que uma party entrar numa hunt multiandar.
+   */
+  #resolveRuleTarget(
+    session: Session, character: CharacterRuntime, rule: CompiledSlot,
+  ): readonly CharacterRuntime[] {
+    const range = this.#healRangeOf(rule.act);
+    if (range === null) return NO_CANDIDATES;
+
+    if (rule.target.kind === 'member') {
+      const member = findById(session.participants, rule.target.characterId);
+      if (member === null || !member.alive) return NO_CANDIDATES;
+      if (!sameFloor(character.position.z, member.position.z)) return NO_CANDIDATES;
+      if (distance(character.position, member.position) > range) return NO_CANDIDATES;
+      return [member];
+    }
+
+    // `session.participants` já está na ordem de entrada, e `Array#sort` é ESTÁVEL: o desempate
+    // cai de graça.
+    return session.participants
+      .filter((p) => p.alive && sameFloor(character.position.z, p.position.z)
+        && distance(character.position, p.position) <= range)
+      .sort((a, b) => percentOf(a.health, a.maxHealth) - percentOf(b.health, b.maxHealth));
+  }
+
+  /**
+   * Acorda o bot de todo participante com ao menos uma regra heal/potion/support de alvo !=
+   * self — não só de quem apanhou (RF-06). Custo N por golpe, só com party (ADR 0035,
+   * consequências: "aceito").
+   */
+  #armHealersOf(session: Session): void {
+    if (session.participants.length <= 1) return;
+    for (const participant of session.participants) {
+      const runner = this.#runners.get(participant.id);
+      if (runner === undefined || runner.bot === undefined || runner.botConfig === undefined) continue;
+      if (hasNonSelfHealRule(runner.botConfig)) this.#armBot(session, participant.id);
     }
   }
 
@@ -1091,74 +3750,203 @@ export class HuntRuleset implements Ruleset {
    * Lança a magia. O alvo é o mesmo do golpe — o monstro mais próximo —, e o alcance é o da
    * MAGIA, não o da arma: uma magia de alcance 3 alcança de onde o corpo a corpo não alcança.
    */
-  #castSpell(session: Session, character: CharacterRuntime, spellId: string): CastResult {
+  #castSpell(
+    session: Session, character: CharacterRuntime, spellId: string,
+    recipient: CharacterRuntime = character,
+  ): CastResult {
     const spell = this.#options.spells.get(spellId);
     if (spell === undefined) return NOT_IN_CATALOG;
 
     const aim = spell.effect.kind === 'damage'
-      ? this.#aimAt(character, spell.effect.range, spell.effect.area?.radius ?? 0)
+      ? this.#aimFor(character, spell.effect.range, spell.effect.area)
+      : spell.effect.kind === 'damage-over-time'
+        ? this.#aimFor(character, spell.effect.range, undefined)
+        : null;
+    // Cura em ÁREA (Mass Healing, #475): a forma sai do lançador e os aliados são colhidos
+    // ANTES de emitir, como a mira de dano — a ordem dos alvos é contrato de RNG.
+    const healArea = spell.effect.kind === 'heal'
+      && spell.effect.area !== undefined && isSelfOrigin(spell.effect.area)
+      ? this.#collectHealAllies(session, character, spell.effect.area)
       : null;
 
     const result = castSpell(
       character, spell, aim, session.nowMs, this.#options.combat, session.rng,
-      // A skill de magia escala o poder, como a de arma escala o golpe (FUN-75).
-      this.#scaledPower(character, 'spell-cast', 1),
+      this.#spellScaling(character), recipient,
     );
+    if (!result.ok) return result;
     // A magia SAIU: a mana gasta é o que ela rende de skill (§9.4). Recusa não rende nada —
     // não gastou mana, não praticou.
-    if (result.ok) this.#gainSkills(session, character, 'spell-cast', spell.manaCost);
-    if (!result.ok || aim === null) return result;
+    this.#gainSkills(session, character, 'spell-cast', spell.manaCost);
 
-    // Aplicar depois de colher TODOS os alvos, e não durante (FUN-92).
+    // UMA vez, ANTES dos golpes (FUN-109): o cliente desenha o efeito no lançador e nos alvos
+    // e só depois faz cada número cair. A ordem é contrato.
     //
-    // `#onMonsterDied` faz `this.#monsters = this.#monsters.filter(...)`: resolver morte no
-    // meio de uma varredura sobre `#monsters` é varrer um array que está sendo trocado, e os
-    // alvos depois do que morreu ficariam de fora. Colher primeiro fecha essa porta.
-    // Nenhum monstro entra duas vezes na mesma mira — o principal é excluído do laço do raio —,
-    // então não há como um deles já estar morto quando chega a vez dele. Uma conferência de
-    // `alive` aqui seria código que nenhum teste alcança.
-    for (let i = 0; i < this.#spellHits.length; i += 1) {
-      const monster = this.#spellHits[i] as MonsterRuntime;
-      const damage = result.hits[i] ?? 0;
-      // Por ALVO, não a soma da área: "maior hit" é o maior golpe que alguém levou, e somar
-      // uma área faria uma magia fraca em cinco alvos superar a mais forte do jogo em um.
-      session.aggregates.bestSpellHit = Math.max(session.aggregates.bestSpellHit, damage);
-      // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe.
-      recordDamage(monster.contribution, character.id, monster.receiveDamage(damage));
-      if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
+    // `targets` é um vetor NOVO, e não `#spellHits`: aquele é reaproveitado e limpo a cada
+    // lançamento, e o evento é drenado pelo hospedeiro DEPOIS — quando `#spellHits` já seria a
+    // mira da magia seguinte. É a única alocação por lançamento que este arquivo faz de
+    // propósito, e ela é do tamanho da mira.
+    session.emit({
+      kind: 'spell-cast', casterId: character.id, spellId: spell.id,
+      casterPosition: this.#at(character),
+      targets: aim === null
+        ? (healArea === null
+          ? NO_SPELL_TARGETS
+          : this.#healAllies.map((ally) => ({ creatureId: ally.id, position: this.#at(ally) })))
+        : this.#spellHits.map((m) => ({ creatureId: m.subject, position: this.#at(m) })),
+      // Os tiles da forma (#155): vetor NOVO pela razão de `targets`.
+      tiles: aim === null ? (healArea ?? NO_TILES) : [...this.#aimTiles],
+    });
+    // Condição (#155, CMB-07): o `castSpell` devolve, e quem agenda é quem tem a fila. O DOT
+    // mira o ALVO principal da mira; haste, postura, magic shield e Recovery valem no LANÇADOR.
+    if (result.condition !== undefined) {
+      const target: ConditionTarget | undefined = result.condition.tick?.kind === 'damage'
+        ? this.#spellHits[0]
+        : character;
+      if (target !== undefined) {
+        this.#applyConditionTo(session, target, {
+          ...result.condition,
+          targetId: this.#subjectOf(target),
+          sourceId: character.id,
+        });
+      }
+      return result;
     }
+    if (aim === null) {
+      // o efeito prometia — e de vida cheia é zero, sem número nenhum a flutuar. O anúncio é do
+      // RECIPIENT: curar um amigo acende a barra dele, não a de quem lançou. O HPS, ao
+      // contrário, é de QUEM lançou (#431) — por isso o `character.id` como curador.
+      this.#emitHealed(session, recipient, result.healed, 'spell', character.id);
+      // Mass Healing: os ALIADOS na forma, um a um, na ordem dos participantes. Cada um consome
+      // uma rolagem (o contrato do dano em área), e o conjurador é pulado porque o `castSpell`
+      // já o curou. Overheal rende zero e nenhum evento sai.
+      if (healArea !== null && spell.effect.kind === 'heal') {
+        const scaling = this.#spellScaling(character);
+        for (const ally of this.#healAllies) {
+          if (ally === character || !ally.alive) continue;
+          const healed = executeHealing(
+            character, ally, spell.effect, scaling, this.#options.combat, session.rng,
+          );
+          this.#emitHealed(session, ally, healed, 'spell', character.id);
+        }
+      }
+      return result;
+    }
+
+    this.#applyHits(
+      session, character, result.hits,
+      spell.effect.kind === 'damage' ? spell.effect.damageType : undefined,
+    );
     return result;
   }
 
   /**
-   * Colhe quem a magia atinge: o alvo principal primeiro, depois quem cai no raio (FUN-92).
+   * Colhe os aliados de uma cura em área (#475): os participantes VIVOS cujo tile cai na forma
+   * centrada no lançador, na ordem de `session.participants`. Devolve os tiles para o evento e
+   * guarda os alvos em `#healAllies` — a mesma divisão de `#aimFor`.
    *
-   * `radius` zero é alvo único — um caso do mesmo caminho, e não um ramo à parte. Área é
-   * distância de Chebyshev a partir do ALVO, a mesma métrica da grade.
+   * Só personagens entram: Mass Healing cura jogadores (e invocações, que o motor ainda não
+   * tem), nunca monstros. A ordem é contrato, como a da área de dano.
+   */
+  #collectHealAllies(
+    session: Session, character: CharacterRuntime, area: SpellArea,
+  ): readonly WorldPoint[] {
+    const tiles = areaTiles(area, character.position, character.direction);
+    this.#healAllies.length = 0;
+    const keys = new Set(tiles.map(tileKey));
+    for (const participant of session.participants) {
+      if (!participant.alive) continue;
+      if (!keys.has(tileKey(this.#at(participant)))) continue;
+      this.#healAllies.push(participant);
+    }
+    return tiles;
+  }
+
+  /**
+   * Aplica os golpes de uma mira — magia (FUN-92) ou runa (#165) — depois de colher TODOS os
+   * alvos, e não durante.
+   *
+   * `#onMonsterDied` faz `this.#monsters = this.#monsters.filter(...)`: resolver morte no
+   * meio de uma varredura sobre `#monsters` é varrer um array que está sendo trocado, e os
+   * alvos depois do que morreu ficariam de fora. Colher primeiro fecha essa porta.
+   * Nenhum monstro entra duas vezes na mesma mira — o principal é excluído do laço da forma —,
+   * então não há como um deles já estar morto quando chega a vez dele. Uma conferência de
+   * `alive` aqui seria código que nenhum teste alcança.
+   */
+  #applyHits(
+    session: Session, character: CharacterRuntime, hits: readonly number[],
+    damageType: DamageType | undefined,
+  ): void {
+    for (let i = 0; i < this.#spellHits.length; i += 1) {
+      const monster = this.#spellHits[i] as MonsterRuntime;
+      const damage = hits[i] ?? 0;
+      // Por ALVO, não a soma da área: "maior hit" é o maior golpe que alguém levou, e somar
+      // uma área faria uma magia fraca em cinco alvos superar a mais forte do jogo em um.
+      session.credit(character.id, 'bestSpellHit', damage);
+      // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe.
+      const applied = monster.receiveDamage(damage);
+      // O DPS soma o APLICADO (#431), pela mesma razão do `#land`: a manopla do overkill não
+      // entra na conta do dano causado.
+      session.creditDamage(character.id, applied);
+      recordDamage(monster.contribution, character.id, applied);
+      this.#markCombatActive(session, character.id);
+      // O golpe antes da barra, com o APLICADO — a mesma regra do `#strike`. O elemento
+      // (#479) vai junto quando a magia o declara: é ele que escolhe a cor do número.
+      session.emit({
+        kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
+        amount: applied, source: 'spell', position: this.#at(monster),
+        ...(damageType === undefined ? {} : { damageType }),
+      });
+      this.#emitHealth(session, monster);
+      if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
+    }
+  }
+
+  /**
+   * Colhe quem a magia atinge (FUN-92, #155): o alvo principal primeiro, depois quem cai na
+   * forma. Sem área é alvo único — um caso do mesmo caminho, e não um ramo à parte.
+   *
+   * Duas famílias de forma (referência §19): a centrada no ALVO (alvo único, círculo no alvo)
+   * passa por `selectTarget` com o alcance da MAGIA — não o da arma, que era o defeito da
+   * FUN-74 —, e a que sai do LANÇADOR (onda, cleave, feixe, círculo em volta) não tem alvo
+   * nem alcance: os tiles saem da posição e da DIREÇÃO do personagem, e `distance` vem zero.
    *
    * A ordem é CONTRATO: cada alvo consome uma rolagem do `Rng` da sessão, e ela é a ordem da
    * lista de monstros, que é a de nascimento. Trocar a ordem troca qual sorteio cai em quem, e
    * a mesma semente passa a render uma hunt diferente.
    *
-   * Os dois vetores são REAPROVEITADOS, como `#botView` e `#spellTarget`: uma magia por
-   * segundo por personagem, vezes 5.000 instâncias, é alocação que dá para não fazer.
+   * Os vetores são REAPROVEITADOS, como `#botView` e `#spellTarget`. A única alocação por
+   * lançamento é o `Set` de chaves da forma, do tamanho dela.
    */
-  #aimAt(character: CharacterRuntime, range: number, radius: number): SpellAim | null {
-    // Alcance da MAGIA, não o da arma — e isto era um defeito desde a FUN-74, que só apareceu
-    // quando o teste de área foi escrito. `#attackTarget` para no alcance do golpe, então uma
-    // magia de alcance 3 nunca alcançava além de 1: a conferência de alcance dentro de
-    // `castSpell` jamais era a restrição que mordia, porque a seleção já tinha mordido antes.
-    const primary = selectTarget(this.#targeting, this.#monsters, character.position, range);
-    if (primary === null) return null;
-
+  #aimFor(
+    character: CharacterRuntime, range: number | undefined, area: SpellArea | undefined,
+  ): SpellAim | null {
     this.#spellHits.length = 0;
     this.#spellTargets.length = 0;
+    this.#aimTiles = [];
+
+    if (area !== undefined && isSelfOrigin(area)) {
+      this.#aimTiles = areaTiles(area, character.position, character.direction);
+      const keys = new Set(this.#aimTiles.map(tileKey));
+      for (const monster of this.#monsters) {
+        if (!monster.alive || !keys.has(tileKey(this.#at(monster)))) continue;
+        this.#collect(monster);
+      }
+      if (this.#spellHits.length === 0) return null;
+      this.#aim.distance = 0;
+      this.#aim.targets = this.#spellTargets;
+      return this.#aim;
+    }
+
+    const primary = this.#targetInRange(character, range);
+    if (primary === null) return null;
     this.#collect(primary);
 
-    if (radius > 0) {
+    if (area !== undefined) {
+      this.#aimTiles = areaTiles(area, character.position, character.direction, this.#at(primary));
+      const keys = new Set(this.#aimTiles.map(tileKey));
       for (const monster of this.#monsters) {
         if (monster === primary || !monster.alive) continue;
-        if (distance(primary.position, monster.position) > radius) continue;
+        if (!keys.has(tileKey(this.#at(monster)))) continue;
         this.#collect(monster);
       }
     }
@@ -1168,69 +3956,433 @@ export class HuntRuleset implements Ruleset {
     return this.#aim;
   }
 
-  /** Põe o monstro na mira, com a armadura que o conteúdo dá a ele. */
+  /**
+   * O que escala a runa (#165): a skill `magic` de toda vocação, sem o multiplicador por uso (o
+   * BP já a conta), MAIS o bônus de equipamento (#524: Hat of the Mad, Focus Cape, Spellbook of
+   * Mind Control) — o item soma no magic level como soma no dano da runa e na cura da poção.
+   */
+  #runeScaling(character: CharacterRuntime): SpellScaling {
+    const magic = this.#options.skills.get('magic');
+    const magicLevel = (magic === undefined ? 0 : character.skills.levelOf(magic))
+      + character.inventory.skillBonus(this.#options.items, 'magic');
+    return { skillLevel: magicLevel, powerScale: 1, magicLevel };
+  }
+
+  /**
+   * O que escala a magia deste personagem (#155): a skill da vocação (`spellSkill`), e as por
+   * uso — MAIS o bônus de equipamento da MESMA skill (#524): a Paladin Armor soma em `distance`
+   * (a skill da magia do Paladin), o Hat of the Mad/Focus Cape em `magic` (Sorcerer/Druid).
+   */
+  #spellScaling(character: CharacterRuntime): SpellScaling {
+    const skillId = this.#vocationOf(character)?.spellSkill ?? 'magic';
+    const skill = this.#options.skills.get(skillId);
+    const magic = this.#options.skills.get('magic');
+    return {
+      skillLevel: (skill === undefined ? 0 : character.skills.levelOf(skill))
+        + character.inventory.skillBonus(this.#options.items, skillId),
+      // A skill de magia escala o poder FIXO, como a de arma escala o golpe (FUN-75).
+      powerScale: this.#scaledPower(character, 'spell-cast', 1),
+      // A fórmula canônica de CURA (#475) escala pelo magic level, em toda vocação.
+      magicLevel: (magic === undefined ? 0 : character.skills.levelOf(magic))
+        + character.inventory.skillBonus(this.#options.items, 'magic'),
+      // O termo de arma da fórmula baseada em `attack` (#523: Groundshaker, Berserk, Fierce
+      // Berserk, Front Sweep, Whirlwind Throw). `0` desarmado — a mesma resposta honesta de
+      // `weaponAttack`, nunca um número inventado.
+      weaponAttack: character.inventory.weaponAttack(this.#options.items, character) ?? 0,
+    };
+  }
+
+  /**
+   * Aplica uma condição a um ALVO — personagem ou monstro (CMB-07) — e agenda o vencimento e o
+   * tique. Relançar segue a política `merge` declarada: o evento antigo é cancelado ANTES do
+   * novo agendamento, sem deixar órfão.
+   *
+   * Quando `strongest` mantém a condição que já estava, o mapa não muda e NADA é reagendado —
+   * comparar a identidade do estado guardado com o que foi passado distingue os dois casos sem
+   * um segundo retorno.
+   */
+  #applyConditionTo(session: Session, target: ConditionTarget, condition: ConditionState): void {
+    const subject = conditionSubject(this.#subjectOf(target), condition.key);
+    const previous = target.conditions.get(condition.key);
+    const tick = tickOf(condition);
+    // Só reaproveita o tique quando HÁ de fato um evento pendente na mesma cadência: um
+    // `nextTickAtMs` ausente (nenhum tique agendado — o último já rodou) ou vencido não é
+    // reaproveitável. Sem este segundo requisito, o relançamento herdaria o fantasma do #334 —
+    // um `nextTickAtMs` sem evento correspondente na fila — e a condição relançada nunca mais
+    // tiquetaria enquanto fosse renovada.
+    const keepTick = previous !== null
+      && sameTick(previous, condition)
+      && previous.nextTickAtMs !== undefined
+      && previous.nextTickAtMs <= previous.expiresAtMs;
+    // O `nextTickAtMs` é atualizado aqui para o snapshot; quando o tique é REAPROVEITADO, a
+    // cadência antiga continua valendo — é o que impede a inanição do relançamento no mesmo ritmo.
+    const nextTickAtMs = tick === null
+      ? undefined
+      : keepTick
+        ? previous!.nextTickAtMs
+        : session.nowMs + tick.intervalMs;
+    const effective: ConditionState = nextTickAtMs === undefined
+      ? condition
+      : { ...condition, nextTickAtMs };
+    target.conditions.apply(effective);
+    // `strongest` manteve o anterior: o evento dele continua valendo, e reagendar duplicaria.
+    if (target.conditions.get(condition.key) !== effective) return;
+    if (previous !== null) {
+      session.cancelEvent(CONDITION_EXPIRE, subject);
+      // Relançar no MESMO ritmo NÃO cancela o tique: ele mantém a cadência. Cancelar e
+      // reagendar a cada relançamento empurraria o tique para sempre quando as duas cadências
+      // coincidem — o DOT que nunca acontece.
+      if (!keepTick) session.cancelEvent(CONDITION_TICK, subject);
+    }
+    session.scheduleIn(CONDITION_EXPIRE, condition.expiresAtMs - session.nowMs, {
+      priority: EXPIRE_PRIORITY, subject,
+    });
+    if (!keepTick && nextTickAtMs !== undefined) {
+      session.scheduleIn(CONDITION_TICK, nextTickAtMs - session.nowMs, {
+        priority: TICK_PRIORITY, subject,
+      });
+    }
+  }
+
+  #onConditionTick(session: Session, subject: string): void {
+    const separator = subject.lastIndexOf('/');
+    if (separator < 0) return;
+    const target = this.#conditionTargetOf(session, subject.slice(0, separator));
+    if (target === null || !target.alive) return;
+    const condition = target.conditions.get(subject.slice(separator + 1));
+    const tick = condition === null ? null : tickOf(condition);
+    if (condition === null || tick === null) return;
+    this.#applyConditionTick(session, target, condition, tick);
+    // O tique pode ter MATADO o alvo: `#cancelConditions` já removeu a condição e os eventos,
+    // e reagendar aqui a ressuscitaria no mapa. Morto não tiqueta.
+    if (!target.alive || target.conditions.get(condition.key) === null) return;
+    // Reagenda até o prazo: o tique que só caberia DEPOIS de `expiresAtMs` não acontece. O
+    // `nextTickAtMs` guardado é o que permite o relançamento reaproveitar a cadência — mas só
+    // quando HÁ de fato um evento pendente (#334): sem tique agendado, a chave fica AUSENTE do
+    // estado, nunca com um valor fantasma que não corresponde a nenhum evento na fila.
+    const nextTickAtMs = session.nowMs + tick.intervalMs;
+    if (nextTickAtMs <= condition.expiresAtMs) {
+      target.conditions.replace({ ...condition, nextTickAtMs });
+      session.scheduleIn(CONDITION_TICK, tick.intervalMs, {
+        priority: TICK_PRIORITY, subject,
+      });
+    } else {
+      const { nextTickAtMs: _nextTickAtMs, ...withoutTick } = condition;
+      target.conditions.replace(withoutTick);
+    }
+  }
+
+  #onConditionExpire(session: Session, subject: string): void {
+    const separator = subject.lastIndexOf('/');
+    if (separator < 0) return;
+    this.#conditionTargetOf(session, subject.slice(0, separator))
+      ?.conditions.remove(subject.slice(separator + 1));
+  }
+
+  /**
+   * O tique de uma condição: cura repõe; DANO passa pelo resolver canônico e pelo pipeline de
+   * morte (CMB-07) — nunca escrita direta de vida. A atribuição vai para `sourceId` (quem
+   * aplicou), e um monstro que cai no tique é resolvido por `resolveDeath`.
+   */
+  #applyConditionTick(
+    session: Session, target: ConditionTarget, condition: ConditionState, tick: NormalizedTick,
+  ): void {
+    if (!target.alive) return;
+    if (tick.kind === 'heal') {
+      if (target instanceof CharacterRuntime) {
+        // A cura feita é de quem aplicou a condição (`sourceId`), não de quem a carrega (#431).
+        this.#emitHealed(session, target, target.heal(tick.amount), 'spell', condition.sourceId);
+      }
+      return;
+    }
+    const intent = {
+      rawDamage: tick.amount,
+      source: tick.source ?? 'monster-attack',
+      damageType: tick.damageType ?? 'physical',
+    } as const;
+    const attacker = condition.sourceId ?? 'field';
+    if (target instanceof CharacterRuntime) {
+      const outcome = resolveDamage(
+        intent, this.#playerDefender(target), 'pve', this.#options.combat, session.rng,
+      );
+      // CMB-08: o mana shield entra como estágio explícito, e o hit/atribuição usam o HP
+      // aplicado. Sem atacante para leech — o DOT não repõe vida de quem o aplicou.
+      const applied = applyDamageOutcome(
+        target, outcome, null, target.conditions.damageTakenScale(),
+        this.#hasEnergyShield(target),
+      );
+      recordDamage(target.contribution, attacker, applied.healthDamage);
+      session.emit({
+        kind: 'creature-hit', creatureId: target.id, attackerId: attacker,
+        amount: applied.healthDamage, source: 'spell', position: this.#at(target),
+        damageType: intent.damageType,
+      });
+      this.#emitCharacterHealth(session, target);
+      if (target.health <= 0) session.kill(target);
+      return;
+    }
+    const definition = this.#options.monsters.get(target.monsterId);
+    const outcome = resolveDamage(
+      intent,
+      { armor: definition?.armor ?? 0, dodgeChance: 0, mitigation: definition?.mitigation },
+      'pve', this.#options.combat, session.rng,
+    );
+    const applied = applyDamageOutcome(target, outcome, null);
+    recordDamage(target.contribution, attacker, applied.healthDamage);
+    session.emit({
+      kind: 'creature-hit', creatureId: target.subject, attackerId: attacker,
+      amount: applied.healthDamage, source: 'spell', position: this.#at(target),
+      damageType: intent.damageType,
+    });
+    this.#emitHealth(session, target);
+    if (!target.alive) resolveDeath(session, { kind: 'monster', monster: target });
+  }
+
+  /** O alvo de uma condição pelo id: monstro primeiro (`m:<id>`), depois personagem. */
+  #conditionTargetOf(session: Session, id: string): ConditionTarget | null {
+    const monster = this.#monsterBySubject.get(id);
+    if (monster !== undefined) return monster;
+    return findById(session.participants, id);
+  }
+
+  #subjectOf(target: ConditionTarget): string {
+    return target instanceof CharacterRuntime ? target.id : target.subject;
+  }
+
+  /**
+   * Cancela os eventos das condições de um alvo (CMB-07). Chamado quando ele morre ou sai: sem
+   * isto, o vencimento de uma condição de quem não existe mais ficaria na fila até vencer, e o
+   * despacho encontraria o vazio — o órfão que o critério da issue proíbe.
+   */
+  #cancelConditions(session: Session, target: ConditionTarget): void {
+    const id = this.#subjectOf(target);
+    for (const condition of target.conditions.getState()) {
+      const subject = conditionSubject(id, condition.key);
+      session.cancelEvent(CONDITION_EXPIRE, subject);
+      session.cancelEvent(CONDITION_TICK, subject);
+      target.conditions.remove(condition.key);
+    }
+  }
+
+  // --- campos de tile (CMB-07) ---------------------------------------------------------------
+
+  /**
+   * Aplica um campo de tile. O `sim` resolve os tiles da forma AGORA, indexa por chave numérica
+   * e agenda tique e vencimento. Relançar o MESMO id reinicia: os eventos antigos são cancelados
+   * antes, sem órfão. É a porta ÚNICA — a ability de monstro e o teste passam por aqui.
+   *
+   * O campo pertence ao ruleset, nunca ao `Tilemap` (DT-01): conteúdo é imutável e fixado.
+   */
+  applyField(session: Session, spec: FieldSpec, at: WorldPoint, source: AreaSource = 'spell'): TileFieldState {
+    const subject = fieldSubject(spec.id);
+    const previous = this.#fields.get(spec.id);
+    const interval = specTickIntervalMs(spec.condition);
+    // Relançar no MESMO ritmo reaproveita o tique pendente: cancelar e reagendar a cada
+    // relançamento empurraria o tique para sempre quando a cadência do campo coincide com a da
+    // ability — o mesmo defeito de inanição que o DOT tem. Só o vencimento é sempre reagendado.
+    // Mas só reaproveita quando HÁ de fato um evento pendente (#334): um `nextTickAtMs` ausente
+    // ou vencido é o fantasma que não corresponde a nenhum evento na fila.
+    const keepTick = previous !== null
+      && previous.nextTickAtMs !== undefined
+      && previous.nextTickAtMs <= previous.expiresAtMs
+      && specTickIntervalMs(previous.condition) === interval;
+    const nextTickAtMs = interval === null
+      ? undefined
+      : keepTick
+        ? previous!.nextTickAtMs
+        : session.nowMs + interval;
+    const field: TileFieldState = {
+      id: spec.id,
+      // `source` (#523, achado da revisão do #536): o campo de uma ability de monstro usa a
+      // MESMA tabela de anéis que a área de dano dela — senão o campo de fogo do Dragon Lord
+      // cobriria 69 tiles em vez dos 21 que o raio 4 do Canary de fato cobre, enquanto a bola
+      // de fogo do mesmo ataque já usa os 21 certos.
+      tiles: areaTiles(spec.shape, at, 'south', at, source),
+      expiresAtMs: session.nowMs + spec.durationMs,
+      condition: spec.condition,
+      ...(nextTickAtMs === undefined ? {} : { nextTickAtMs }),
+    };
+    if (previous !== null) {
+      session.cancelEvent(FIELD_EXPIRE, subject);
+      if (!keepTick) session.cancelEvent(FIELD_TICK, subject);
+    }
+    this.#fields.apply(field);
+    // O vencimento roda ANTES do tique no mesmo instante (prioridade explícita): o tique do
+    // instante de expiração encontra o campo removido. Ordem documentada e testada.
+    session.scheduleIn(FIELD_EXPIRE, spec.durationMs, {
+      priority: EXPIRE_PRIORITY, subject,
+    });
+    if (!keepTick && nextTickAtMs !== undefined) {
+      session.scheduleIn(FIELD_TICK, nextTickAtMs - session.nowMs, {
+        priority: TICK_PRIORITY, subject,
+      });
+    }
+    return field;
+  }
+
+  #onFieldTick(session: Session, subject: string): void {
+    const field = this.#fields.get(subject.slice(2));
+    if (field === null) return;
+    const interval = specTickIntervalMs(field.condition);
+    if (interval === null) return;
+    // Quem PISA no campo agora. Um evento por campo, e `at` é O(1) por criatura — nenhum passo
+    // varre a lista de campos.
+    for (const target of this.#occupants(session, field)) {
+      const condition = conditionFromSpec(
+        field.condition, this.#subjectOf(target), field.id, session.nowMs, 'monster-attack',
+      );
+      const tick = tickOf(condition);
+      if (tick !== null) this.#applyConditionTick(session, target, condition, tick);
+    }
+    // Reagenda até o prazo, e guarda o `nextTickAtMs` (#334) pelo mesmo motivo do tique de
+    // condição: sem tique agendado, a chave fica AUSENTE, nunca com um valor fantasma.
+    const nextTickAtMs = session.nowMs + interval;
+    if (nextTickAtMs <= field.expiresAtMs) {
+      this.#fields.replace({ ...field, nextTickAtMs });
+      session.scheduleIn(FIELD_TICK, interval, {
+        priority: TICK_PRIORITY, subject,
+      });
+    } else {
+      const { nextTickAtMs: _nextTickAtMs, ...withoutTick } = field;
+      this.#fields.replace(withoutTick);
+    }
+  }
+
+  #onFieldExpire(session: Session, subject: string): void {
+    this.#fields.remove(subject.slice(2));
+  }
+
+  /** Quem está sobre os tiles do campo: participantes e monstros vivos. */
+  #occupants(session: Session, field: TileFieldState): ConditionTarget[] {
+    const occupants: ConditionTarget[] = [];
+    for (const character of session.participants) {
+      if (!character.alive) continue;
+      if (this.#fields.at(this.#at(character))?.id === field.id) occupants.push(character);
+    }
+    for (const monster of this.#monsters) {
+      if (!monster.alive) continue;
+      if (this.#fields.at(this.#at(monster))?.id === field.id) occupants.push(monster);
+    }
+    return occupants;
+  }
+
+  /**
+   * A entrada num campo, observada SÓ depois de um passo aceito (`#step`). Refusão de tile não
+   * chega aqui — `movement` devolve resultado e não infringe dano (CMB-07). Aplica UM tique.
+   */
+  #enterField(session: Session, target: ConditionTarget): void {
+    const field = this.#fields.at(this.#at(target));
+    if (field === null) return;
+    const condition = conditionFromSpec(
+      field.condition, this.#subjectOf(target), field.id, session.nowMs, 'monster-attack',
+    );
+    const tick = tickOf(condition);
+    if (tick !== null) this.#applyConditionTick(session, target, condition, tick);
+  }
+
+  /** Põe o monstro na mira, com a armadura e a mitigação que o conteúdo dá a ele. */
   #collect(monster: MonsterRuntime): void {
     this.#spellHits.push(monster);
     // Monstro não esquiva do jogador — é a mesma regra do `#strike`, e ela vale igual para
     // magia. Quando esquiva de monstro existir, vem do conteúdo e os dois leem do mesmo campo.
+    const definition = this.#options.monsters.get(monster.monsterId);
     this.#spellTargets.push({
-      armor: this.#options.monsters.get(monster.monsterId)?.armor ?? 0,
+      armor: definition?.armor ?? 0,
       dodgeChance: 0,
+      mitigation: definition?.mitigation,
     });
   }
 
   /** Usa o supply e leva o gasto ao extrato. O débito em si é do `useSupply`. */
-  #useSupply(session: Session, character: CharacterRuntime, supplyId: string): CastResult {
+  #useSupply(
+    session: Session, character: CharacterRuntime, supplyId: string,
+    recipient: CharacterRuntime = character,
+  ): CastResult {
     const supply = this.#options.supplies.get(supplyId);
     if (supply === undefined) return NOT_IN_CATALOG;
 
-    const result = useSupply(character, supply);
+    // A runa (#165) mira como a magia em área — o mesmo `#aimFor`, o mesmo contrato de ordem —
+    // e escala SEMPRE pela skill `magic`: runa é do magic level, em toda vocação.
+    const aim = supply.effect.kind === 'damage'
+      ? this.#aimFor(character, supply.effect.range, supply.effect.area)
+      : null;
+    // Quem paga (#192): em solo o usuário; no modo compartilhado, o rateio entre os presentes
+    // — e é a bolsa quem credita `goldSpent` a cada um pelo que pagou.
+    const shared = this.#party !== undefined && this.#party.shareCosts && session.participants.length > 1;
+    const purse = shared ? this.#sharedPurse(session, character) : ownPurse(character);
+    const result = useSupply(
+      character, supply, aim, this.#options.combat, session.rng, this.#runeScaling(character), purse,
+      recipient, session.nowMs,
+    );
     if (result.ok) {
       // Gold gasto é agregado da SESSÃO, como `goldGained` é no abate: o extrato leva os dois
-      // ao ledger, e o personagem só carrega o delta.
-      session.aggregates.goldSpent += result.goldSpent;
+      // ao ledger, e o personagem só carrega o delta. No rateio, a bolsa já creditou a cada um.
+      if (!shared) session.credit(character.id, 'goldSpent', result.goldSpent);
       // E a CONTAGEM, que é outra pergunta: "gastei 4.000 de gold" e "bebi 80 poções" contam
       // coisas diferentes sobre a mesma hunt, e o §16.1 pede as duas.
-      session.aggregates.suppliesUsed += 1;
+      session.credit(character.id, 'suppliesUsed', 1);
+      // O uso ANTES do que ele repôs (FUN-109), como a magia sai antes dos golpes dela. Uma
+      // poção de mana para aqui: `healed` é zero e a barra de mana não é assunto desta issue.
+      session.emit({
+        kind: 'supply-used', characterId: character.id, supplyId: supply.id,
+        position: this.#at(character),
+        targets: aim === null
+          ? NO_SPELL_TARGETS
+          : this.#spellHits.map((m) => ({ creatureId: m.subject, position: this.#at(m) })),
+        tiles: aim === null ? NO_TILES : [...this.#aimTiles],
+      });
+      if (aim === null) this.#emitHealed(session, recipient, result.healed, 'supply', character.id);
+      else this.#applyHits(
+        session, character, result.hits,
+        supply.effect.kind === 'damage' ? supply.effect.damageType : undefined,
+      );
       return result;
     }
 
     // §20.3 sem a regra de saída: a hunt CONTINUA, sem poção, e o personagem pode morrer. Vale
     // a linha no extrato pela mesma razão que a stamina zerada vale: descobrir isso só pelo
-    // personagem morto é como o modo idle perde a confiança de quem o deixou rendendo.
-    if (!this.#warnedNoGold) {
-      this.#warnedNoGold = true;
-      session.record('supply-unaffordable', supply.id);
+    // personagem morto é como o modo idle perde a confiança de quem o deixou rendendo. Mas só
+    // `not-enough-gold` é ESTA notícia (#217): as outras recusas da runa (#165) não são "sem
+    // gold". `level-too-low`/`magic-level-too-low` o `BotPanel` já tranca na configuração — a
+    // única forma de aparecer aqui é um level-down depois de configurada, e mesmo assim não é
+    // pergunta de gold; `no-target`/`out-of-range` são a mira falhando a cada segundo, o mesmo
+    // silêncio que `castSpell` já dá às magias.
+    if (result.reason === 'not-enough-gold') {
+      const runner = this.#runnerOf(character.id);
+      if (!runner.warnedNoGold) {
+        runner.warnedNoGold = true;
+        session.record('supply-unaffordable', supply.id);
+      }
     }
     return result;
   }
 
   /**
-   * Reavalia agora o que está engatilhado (FUN-84).
+   * Reavalia agora o que está engatilhado (FUN-84, AB-07).
    *
    * O mundo mudou de um jeito que pode tornar uma regra válida — o personagem levou dano, um
    * alvo entrou no alcance. Esperar o próximo múltiplo de um relógio para curar quem está
    * caindo é a mesma perda que o golpe engatilhado da FUN-68 corrigiu do outro lado.
    *
-   * Só toca categoria ENGATILHADA: quem tem evento pendente já vai vencer, e agendar de novo
+   * Só toca grupo ENGATILHADO: quem tem evento pendente já vai vencer, e agendar de novo
    * seria a ação dobrada.
    */
   #armBot(session: Session, characterId: string): void {
-    const bot = this.#bot;
+    const runner = this.#runnerOf(characterId);
+    const bot = runner.bot;
     if (bot === undefined) return;
-    for (const category of BOT_CATEGORIES) {
-      if (!this.#botReady[category]) continue;
-      if ((bot.categories.get(category)?.length ?? 0) === 0) continue;
-      this.#scheduleBot(session, category, characterId, 0);
+    for (const group of bot.groups.keys()) {
+      if (!runner.botReady[group]) continue;
+      this.#scheduleBot(session, group, characterId, 0);
     }
   }
 
-  /** O ÚNICO lugar que agenda categoria. É o que torna "engatilhada ou agendada" verdade. */
+  /** O ÚNICO lugar que agenda grupo. É o que torna "engatilhado ou agendado" verdade. */
   #scheduleBot(
-    session: Session, category: BotCategory, characterId: string, delayMs: number,
+    session: Session, group: string, characterId: string, delayMs: number,
   ): void {
-    this.#botReady[category] = false;
-    session.scheduleIn(BOT_EVENT[category], delayMs, {
+    this.#runnerOf(characterId).botReady[group] = false;
+    session.scheduleIn(botEvent(group), delayMs, {
       // Depois do movimento e do ataque: o bot decide sobre o mundo já resolvido do instante.
       priority: EventPriority.Housekeeping, subject: characterId,
     });
@@ -1243,9 +4395,9 @@ export class HuntRuleset implements Ruleset {
    * jogador é a que ele consegue explicar — `exitRules` é costura de teste e do dia em que a
    * hunt tiver regra própria.
    */
-  #composeExitRules(config: BotConfig | undefined): readonly HuntExitRule[] {
+  #composeExitRules(config: BotConfigV2 | undefined): readonly HuntExitRule[] {
     if (config === undefined) return this.#injectedExitRules;
-    return [...compileExitRules(config.exit), ...this.#injectedExitRules];
+    return [...compileExitRules(config.exit, this.#options.items), ...this.#injectedExitRules];
   }
 
   #botCooldownMs(): number {
@@ -1253,35 +4405,213 @@ export class HuntRuleset implements Ruleset {
   }
 
   /** A política do jogador, ou a de sempre: mais próximo, sem preferência, sem sair da rota. */
-  get #targeting(): Targeting {
-    return this.#bot?.targeting ?? DEFAULT_TARGETING;
+  #targetingOf(character: CharacterRuntime): Targeting {
+    return targetingOf(this.#runners.get(character.id));
   }
 
-  /** A view REAPROVEITADA: campos reescritos, objeto nunca recriado (FUN-80). */
-  #botViewOf(character: CharacterRuntime): BotView {
-    const target = this.#attackTarget(character);
+  /**
+   * Quanto falta para o livro individual E o de grupo liberarem — o MAIOR dos dois (AB-07/AB-09).
+   *
+   * A magia tranca TRÊS livros no `castSpell`: o próprio `spell:<id>`, o do grupo e o
+   * secundário. O par de `#cooldownOf` só expõe o individual quando não há grupo, então o
+   * `spell:<id>` é consultado à parte — sem isso, uma magia de `cooldownMs: 4000` num grupo de
+   * `1000` aparecia `ready` no `slotStates` e o `#perform` recusava por 3 s (DT-08). O supply
+   * usa o mesmo caminho com o livro do grupo. Zero é "pode executar".
+   */
+  #cooldownWaitOf(character: CharacterRuntime, action: BotActionV2, nowMs: number): number {
+    const { cooldownKey, group } = this.#cooldownOf(action);
+    const individualKey = action.kind === 'spell'
+      ? spellCooldownKey(action.spellId)
+      : supplyCooldownKey(action.supplyId);
+    return Math.max(
+      character.cooldowns.remainingMs(cooldownKey, nowMs),
+      character.cooldowns.remainingMs(groupCooldownKey(group), nowMs),
+      character.cooldowns.remainingMs(individualKey, nowMs),
+    );
+  }
+
+  /**
+   * O estado NATURAL de um slot que já passou por `enabled` e cooldown: `ready`, ou `blocked`
+   * com o mesmo motivo que `#perform` daria (DT-08). Espelha as fontes — catálogo, mana, saldo
+   * e alvo — sem executar e sem consumir sorteio.
+   */
+  #naturalStateOf(
+    set: number, slot: number, character: CharacterRuntime, action: BotActionV2,
+  ): SlotState {
+    const blocked = (reason: SlotRefusal): SlotState =>
+      ({ set, slot, state: 'blocked', remainingMs: 0, reason });
+
+    if (action.kind === 'spell') {
+      const spell = this.#options.spells.get(action.spellId);
+      if (spell === undefined) return blocked('not-in-catalog');
+      if (character.level < spell.minLevel) return blocked('not-in-catalog');
+      if (spell.vocationId !== undefined && character.vocationId !== spell.vocationId) {
+        return blocked('not-in-catalog');
+      }
+      if (character.mana < spell.manaCost) return blocked('not-enough-mana');
+      if (this.#needsTarget(spell.effect)) {
+        const range = 'range' in spell.effect ? spell.effect.range : undefined;
+        if (this.#targetInRange(character, range) === null) return blocked('no-target');
+      }
+      return { set, slot, state: 'ready', remainingMs: 0 };
+    }
+
+    const supply = this.#options.supplies.get(action.supplyId);
+    if (supply === undefined) return blocked('not-in-catalog');
+    if (supply.effect.kind === 'damage') {
+      // A ordem é a de `useSupply`: requisitos, alvo, e SÓ ENTÃO o gold.
+      if (supply.requires.level !== undefined && character.level < supply.requires.level) {
+        return blocked('not-in-catalog');
+      }
+      const magic = this.#options.skills.get('magic');
+      const magicLevel = magic === undefined ? 0 : character.skills.levelOf(magic);
+      if (supply.requires.magicLevel !== undefined && magicLevel < supply.requires.magicLevel) {
+        // Motivo PRÓPRIO (RF-02): o `#perform` devolve `magic-level-too-low`, e o espelho do
+        // `slotStates` tem de coincidir com ele (DT-08) — genérico aqui é o cliente sem a
+        // explicação que o requisito da runa pede.
+        return blocked('magic-level-too-low');
+      }
+      if (this.#targetInRange(character, supply.effect.range) === null) return blocked('no-target');
+    }
+    // Poção e runa são ABSTRATAS: o "estoque" é o saldo, e sem ele a ação não acontece. O motivo
+    // é próprio (`not-enough-gold`) — dizer "não tem o item" de uma poção que não é item é o
+    // tooltip errado; `not-enough-item` fica com o consumível físico (carga de bênção, M22).
+    if (balanceOf(character) < supply.price) return blocked('not-enough-gold');
+    return { set, slot, state: 'ready', remainingMs: 0 };
+  }
+
+  /** O efeito exige alvo? Forma que sai do LANÇADOR não exige (onda, cleave, explosão em volta). */
+  #needsTarget(effect: { readonly kind: string; readonly area?: SpellArea | undefined }): boolean {
+    if (effect.kind !== 'damage' && effect.kind !== 'damage-over-time') return false;
+    return effect.area === undefined || !isSelfOrigin(effect.area);
+  }
+
+  /**
+   * O melhor alvo dentro de `range`, para a mira e o espelho de elegibilidade. Não muta nada.
+   *
+   * O alvo escolhido vem primeiro (AB-09, ADR 0032 d.5), e vale também para magia e runa. Alvo
+   * do JOGADOR fora do alcance devolve `null` — quem mandou mirar num alvo não quer acertar
+   * outro; alvo do AUTO-TARGET (#444) cai na política, como em `#attackTarget`.
+   */
+  #targetInRange(character: CharacterRuntime, range: number | undefined): MonsterRuntime | null {
+    const maxDistance = range ?? 1;
+    const attack = this.#attackTargetOfRunner(character);
+    if (attack !== null) {
+      if (distance(character.position, attack.position) <= maxDistance) return attack;
+      if (this.#isPinned(character)) return null;
+    }
+    const candidate = this.#botCandidateOf(character);
+    if (candidate !== null
+      && distance(character.position, candidate.position) <= maxDistance) {
+      return candidate;
+    }
+    return selectTarget(
+      this.#targetingOf(character), this.#monsters, character.position, maxDistance,
+    );
+  }
+
+  /**
+   * A view REAPROVEITADA: campos reescritos, objeto nunca recriado (FUN-80).
+   *
+   * `range` é o alcance da AVALIAÇÃO (#444): um grupo com runa de alcance 8 precisa contar e
+   * mirar a 8, e não no alcance da arma. Ausente é o alcance da arma — o caminho de quem não
+   * declarou ação de dano à distância.
+   */
+  #botViewOf(character: CharacterRuntime, range?: number): BotView {
+    const reach = range ?? this.#attackRangeOf(character);
+    const target = this.#targetInRange(character, reach);
     this.#botView.self = character;
-    this.#botView.targetCount = this.#targetsInReach(character);
+    this.#botView.targetCount = this.#targetCountFor(character, reach, undefined, null);
     this.#botView.target = target === null
       ? null
       : { health: target.health, maxHealth: this.#maxHealthOf(target) };
+    // Sem candidato até que `select` avalie uma regra de alvo != self — e `select` o reescreve a
+    // cada regra, então um valor da avaliação anterior nunca vaza para a próxima.
+    this.#botView.partyTarget = null;
     return this.#botView;
+  }
+
+  /**
+   * Quantos alvos VÁLIDOS a condição `targets` enxerga para uma AÇÃO do bot (#216, #444, #480).
+   *
+   * - **Sem área**: os monstros no `reach` — o alcance do grupo, o da ação de dano à distância
+   *   (uma runa de alcance 8 conta a 8), ou o da arma. É o comportamento da #216/#444.
+   * - **Com área que sai do lançador** (onda, cleave, feixe, círculo em volta): os monstros nos
+   *   tiles da forma projetada a partir do personagem — a área não tem alvo primário, e a
+   *   contagem tem de ser a mesma que `#aimFor` vai colher.
+   * - **Com área centrada no alvo** (Avalanche, Explosion, cruz): projeta a forma sobre o alvo
+   *   primário e conta quem cai nela. Sem alvo primário não há forma, e a contagem é 0 — a
+   *   condição não dispara.
+   *
+   * Ignorado não conta em nenhum dos caminhos (RF-03): a condição não pode ser satisfeita por
+   * quem o jogador mandou deixar em paz.
+   */
+  #targetCountFor(
+    character: CharacterRuntime, reach: number, area: SpellArea | undefined,
+    actionRange: number | null,
+  ): number {
+    const targeting = this.#targetingOf(character);
+    if (area === undefined) {
+      return countTargets(targeting, this.#monsters, character.position, reach);
+    }
+    if (isSelfOrigin(area)) {
+      return countAreaTargets(
+        targeting, this.#monsters, areaTiles(area, character.position, character.direction),
+      );
+    }
+    const primary = this.#targetInRange(character, actionRange ?? reach);
+    if (primary === null) return 0;
+    return countAreaTargets(
+      targeting, this.#monsters,
+      areaTiles(area, character.position, character.direction, this.#at(primary)),
+    );
+  }
+
+  /**
+   * O maior alcance entre as ações de DANO à distância de um grupo (#444). É o alcance que a
+   * condição `targets` e o `target` da view usam, porque é o alcance que a ação do grupo pode
+   * de fato atingir — sem ele, uma runa de alcance 8 não enxerga o alvo a 5 tiles.
+   *
+   * Sem ação de dano, cai no alcance da ARMA: um grupo de cura não herda alcance de runa que
+   * ele não tem.
+   */
+  #groupRange(slots: readonly CompiledSlot[], character: CharacterRuntime): number {
+    let maxRange = 0;
+    for (const slot of slots) {
+      const range = this.#actionRange(slot.act);
+      if (range !== null && range > maxRange) maxRange = range;
+    }
+    return maxRange > 0 ? maxRange : this.#attackRangeOf(character);
+  }
+
+  /** O alcance da ação, quando ela mira à distância; `null` para cura e ação sem alvo. */
+  #actionRange(action: BotActionV2): number | null {
+    if (action.kind === 'spell') {
+      const spell = this.#options.spells.get(action.spellId);
+      if (spell === undefined) return null;
+      if (spell.effect.kind !== 'damage' && spell.effect.kind !== 'damage-over-time') return null;
+      return 'range' in spell.effect ? spell.effect.range ?? null : null;
+    }
+    const supply = this.#options.supplies.get(action.supplyId);
+    if (supply === undefined || supply.effect.kind !== 'damage') return null;
+    return supply.effect.range ?? null;
+  }
+
+  /**
+   * A forma de área declarada por uma ação de DANO do bot, ou `undefined` (#480). Magia de cura
+   * e ação sem área devolvem `undefined`, e o `targets` cai na contagem por alcance.
+   */
+  #actionArea(action: BotActionV2): SpellArea | undefined {
+    if (action.kind === 'spell') {
+      const spell = this.#options.spells.get(action.spellId);
+      return spell?.effect.kind === 'damage' ? spell.effect.area : undefined;
+    }
+    const supply = this.#options.supplies.get(action.supplyId);
+    return supply?.effect.kind === 'damage' ? supply.effect.area : undefined;
   }
 
   #maxHealthOf(monster: MonsterRuntime): number {
     return this.#options.monsters.get(monster.monsterId)?.health ?? monster.health;
-  }
-
-  /**
-   * Quantos alvos ao alcance. O NÚMERO, sem materializar a lista (FUN-80).
-   *
-   * Monstro IGNORADO não conta (FUN-85): "3 ou mais alvos → onda" disparando por causa de
-   * quem o jogador mandou o bot deixar em paz é a regra reagindo ao que ela não vai atingir.
-   */
-  #targetsInReach(character: CharacterRuntime): number {
-    return countTargets(
-      this.#targeting, this.#monsters, character.position, this.#options.player.attackRange,
-    );
   }
 
   /**
@@ -1298,100 +4628,277 @@ export class HuntRuleset implements Ruleset {
    * (`#armPlayerAttack` é chamado no fim do passo). O que muda é ele não PARAR — e é assim que
    * "correr acumulando" funciona sem pathfinding novo, porque o passo guloso dos monstros já
    * os faz seguir.
+   *
+   * **O cerco tem um teto de tempo, `MAX_LURE_HOLD_MS`** (#527). Numa zona densa — aggro real
+   * (raio maior, sem leash) atrai gente de FORA do raio de busca continuamente —, `perto` pode
+   * nunca cair abaixo de `min`: quem morre é reposto por um recém-chegado de longe antes do
+   * respawn do próprio ponto, e a máquina de dois limiares fica presa em "lutando" para sempre —
+   * achado reproduzindo a QA do M28 com o conteúdo real (a party parada 29 minutos lógicos no
+   * mesmo tile). `lureStoppedSinceMs` marca QUANDO o cerco começou; estourado o teto, resume
+   * "correndo" mesmo com `perto >= min` — o líder retoma a rota e PUXA o que ainda está por
+   * perto, em vez de acampar. Isto não é fidelidade de Tibia (a automação é nossa, ADR 0037
+   * decisão 2): é o contrato do PRÓPRIO lure, que promete "junta, limpa, anda" e não "vira torre".
    */
-  #luring(character: CharacterRuntime): boolean {
-    const lure = this.#bot?.lure;
+  #luring(runner: Runner, character: CharacterRuntime, nowMs: number): boolean {
+    const lure = runner.bot?.lure;
     if (lure === undefined) return false;
 
+    // Puxando à força (#527, `LURE_FORCE_WALK_MS`): o teto de cerco acabou de liberar o líder, e
+    // esta janela ignora `lure.max` de propósito. Sem ela, a densidade de uma zona cheia não cai
+    // num passo só — o vencimento seguinte veria `perto >= lure.max` de novo e reengatilharia o
+    // cerco no MESMO tile em que ele tinha acabado de ser liberado, e "resume" duraria um único
+    // passo antes de travar outra vez pelos mesmos `MAX_LURE_HOLD_MS`.
+    if (runner.lureForceWalkUntilMs !== null) {
+      if (nowMs < runner.lureForceWalkUntilMs) return true;
+      runner.lureForceWalkUntilMs = null;
+    }
+
     const perto = countTargets(
-      this.#targeting, this.#monsters, character.position,
+      targetingOf(runner), this.#monsters, character.position,
       this.#options.targetSearchRadius ?? 8,
     );
-    if (this.#running) {
-      if (perto >= lure.max) this.#running = false;
+    if (runner.running) {
+      if (perto >= lure.max) {
+        runner.running = false;
+        runner.lureStoppedSinceMs = nowMs;
+      }
     } else if (perto < lure.min) {
-      this.#running = true;
+      runner.running = true;
+      runner.lureStoppedSinceMs = null;
+    } else if (
+      runner.lureStoppedSinceMs !== null && nowMs - runner.lureStoppedSinceMs >= MAX_LURE_HOLD_MS
+    ) {
+      // Estourou o teto com a densidade ainda alta: retoma e PROTEGE a retomada por
+      // `LURE_FORCE_WALK_MS` — ver o comentário no topo do método.
+      runner.running = true;
+      runner.lureStoppedSinceMs = null;
+      runner.lureForceWalkUntilMs = nowMs + LURE_FORCE_WALK_MS;
     }
-    return this.#running;
+    return runner.running;
   }
 
   /**
-   * A máquina de estados do anel (§13.8, FUN-87).
-   *
-   *   sem anel  --(HP < equipBelow  E  mana >= manaFloor)-->  com anel
-   *   com anel  --(HP > removeAbove  OU  mana < manaFloor)-->  sem anel
-   *
-   * **Os limiares são separados, e é o ponto inteiro da issue.** Com um só, o HP oscilando em
-   * torno dele troca o anel a cada golpe — e trocar anel é uma ação por vez que o personagem
-   * não está usando para lutar. Entre `equipBelow` e `removeAbove` nada acontece, por
-   * construção: nenhum dos dois lados dispara ali.
-   *
-   * `manaFloor` desativa a máquina: um anel que custa mana não vale a mana que falta para
-   * curar. Ele derruba o anel também quando já está equipado — desativar pela metade seria
-   * gastar a mana justamente quando ela é escassa.
-   *
-   * Não faz nada com o dedo quando o jogador nunca configurou anel nenhum: quem não pediu a
-   * máquina não pode ter o dedo mexido por ela.
+   * Reavalia as automações AGORA (AB-08): dano recebido, vencimento de item, troca de
+   * configuração ou entrada na hunt. Cancela o ciclo pendente e o traz para o instante zero —
+   * o mesmo desenho de `#armBot`, e a razão é a mesma: esperar o próximo múltiplo de um relógio
+   * faria a decisão depender de quando alguém olhou.
    */
-  #applyRingSwap(session: Session, character: CharacterRuntime): void {
-    const ring = this.#bot?.ringSwap;
-    if (ring === undefined || !character.alive) return;
+  #armAutomations(session: Session, characterId: string): void {
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined || runner.automations.list.length === 0) return;
+    session.cancelEvent(AUTOMATION, characterId);
+    session.scheduleIn(AUTOMATION, 0, {
+      priority: EventPriority.Housekeeping, subject: characterId,
+    });
+  }
 
-    const hp = percentOf(character.health, character.maxHealth);
-    const mana = percentOf(character.mana, character.maxMana);
-    const wearing = character.inventory.equippedAt('finger')?.itemId === ring.itemId;
-
-    if (wearing) {
-      if (hp <= ring.removeAbove && mana >= ring.manaFloor) return;
-      this.#takeOffRing(session, character, ring.restorePrevious);
-      return;
+  /**
+   * O ciclo periódico das automações venceu (AB-08, ADR 0032 d.9).
+   *
+   * Monta a view e o atuador UMA vez e itera o catálogo. As automações são INDEPENDENTES: uma
+   * bloqueada (item ausente) informa o motivo e NÃO interrompe as seguintes (RF-09). Quem tem
+   * automação habilitada se reagenda para o próximo ciclo; quem não tem não gera evento nenhum.
+   */
+  #onAutomation(session: Session, characterId: string): void {
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined) return;
+    const character = findById(session.participants, characterId);
+    if (character !== null && character.alive && runner.actuator !== undefined) {
+      const view = this.#botViewOf(character);
+      const actuator = runner.actuator;
+      for (const automation of runner.automations.list) {
+        const outcome = automation.run(view, actuator);
+        if (outcome.kind === 'applied') {
+          // A automação voltou a agir: o aviso saiu da transição, e a próxima vez que ela
+          // bloquear no mesmo motivo volta a valer como notícia.
+          runner.automationWarned.delete(automation.model);
+          session.record(outcome.event, outcome.detail);
+        } else if (outcome.kind === 'blocked') {
+          // Só a TRANSIÇÃO registra (#420): uma automação bloqueada por 8 h é UMA linha no
+          // extrato, não uma por ciclo. Sem isto, `notableEvents` crescia sem teto e era
+          // reserializado inteiro em cada snapshot.
+          const key = `${outcome.reason}:${outcome.itemId}`;
+          if (runner.automationWarned.get(automation.model) !== key) {
+            runner.automationWarned.set(automation.model, key);
+            session.record('automation-blocked', `${automation.model}:${key}`);
+          }
+        } else {
+          // `idle`: a automação saiu do bloqueio sem agir (o alvo vivo, o HP voltou). Limpa o
+          // aviso para que um novo bloqueio seja notícia de novo.
+          runner.automationWarned.delete(automation.model);
+        }
+      }
     }
-    if (hp >= ring.equipBelow || mana < ring.manaFloor) return;
-
-    // Guarda o que estava no dedo ANTES de trocar: `equip` devolve a peça anterior para a
-    // mochila, e sem o id guardado não há como saber qual delas era a do jogador.
-    const previous = character.inventory.equippedAt('finger');
-    const carried = character.inventory.backpack
-      .find((item) => item.itemId === ring.itemId);
-    // Não tem o anel na mochila: nada a fazer, e nada a avisar. Perder o anel é caso normal
-    // (§21.3 gasta anel por tempo), e a máquina não pode virar erro por causa disso.
-    if (carried === undefined) return;
-    if (!character.inventory.equip(carried.instanceId, character, this.#options.items).ok) return;
-
-    this.#ringReplaced = previous?.instanceId ?? null;
-    session.record('ring-equipped', ring.itemId);
-  }
-
-  /** Tira o anel e devolve o anterior, se o jogador pediu para restaurar (§13.8). */
-  #takeOffRing(session: Session, character: CharacterRuntime, restore: boolean): void {
-    if (!character.inventory.unequip('finger').ok) return;
-    const previous = this.#ringReplaced;
-    this.#ringReplaced = null;
-    session.record('ring-removed', '');
-    if (!restore || previous === null) return;
-    // Falhar aqui é o anel anterior ter sumido no meio da hunt. O dedo fica vazio, que é o
-    // estado honesto — e é o mesmo que `restorePrevious: false` pede de propósito.
-    character.inventory.equip(previous, character, this.#options.items);
-  }
-
-  #armPlayerAttack(session: Session): void {
-    if (!this.#playerAttackReady) return;
-    for (const character of session.participants) {
-      if (!character.alive) continue;
-      if (this.#attackTarget(character) === null) continue;
-      this.#schedulePlayerAttack(session, character.id, 0);
-      return;
+    if (runner.automations.list.length > 0) {
+      session.scheduleIn(AUTOMATION, AUTOMATION_INTERVAL_MS, {
+        priority: EventPriority.Housekeeping, subject: characterId,
+      });
     }
   }
 
   /**
-   * O passo ou o ataque de um monstro venceu.
+   * O que uma automação pode fazer com o inventário. Fecha sobre o personagem e o catálogo de
+   * itens; NENHUM opcode é emitido — a escrita é `character.inventory.equip/unequip` direto,
+   * dentro do evento da própria sessão (invariantes 4 e 9).
    *
-   * Os dois eventos passam pela mesma decisão e agem só quando ela bate com o tipo deles: é
-   * `decideMonsterAction` que sabe se, deste tile, cabe andar ou bater — e ter uma decisão só
-   * evita que a regra de alcance exista escrita duas vezes, divergindo na terceira mudança.
+   * Montado UMA vez por runner (#420), em `#newRunner` e recompilado em `configureBot`. As
+   * `containerRules` NÃO são capturadas: elas derivam do inventário (que cresce por level) e
+   * seriam um valor velho numa hunt longa, então são lidas na hora em que `unequip` é chamado.
    */
-  #onMonsterAction(session: Session, subject: string, which: 'step' | 'attack'): void {
+  #automationActuatorFor(runner: Runner, character: CharacterRuntime): AutomationActuator {
+    const items = this.#options.items;
+    const ammunition = this.#options.ammunition;
+    return {
+      equippedItemId: (slot) => character.inventory.equippedAt(slot)?.itemId ?? null,
+      equippedInstanceId: (slot) => character.inventory.equippedAt(slot)?.instanceId ?? null,
+      carriedItem: (itemId) => character.inventory.findStack(itemId),
+      slotOf: (itemId) => items.get(itemId)?.slot ?? null,
+      equip: (instanceId) => character.inventory.equip(instanceId, character, items).ok,
+      unequip: (slot) => character.inventory.unequip(slot, this.#containerRules(character)).ok,
+      // A família vem da ARMA na mão; sem arma de distância não há seleção a trocar.
+      selectedAmmoId: () => {
+        const family = character.inventory.weapon(items, character)?.weapon?.ammoFamily;
+        if (family === undefined) return null;
+        return character.ammo.get(family) ?? null;
+      },
+      selectAmmo: (ammoId) => {
+        const ammo = ammunition.get(ammoId);
+        return ammo === undefined ? false : character.selectAmmo(ammo).ok;
+      },
+      rememberRing: (instanceId) => { runner.ringReplaced = instanceId; },
+      previousRing: () => runner.ringReplaced,
+    };
+  }
+
+  /**
+   * Instala o observer de equipamento e agenda o vencimento do que já está vestido (ADR 0032
+   * d.8). A varredura é de no máximo 10 slots UMA vez na entrada — nunca por tick (invariante 2).
+   */
+  #armEquipment(session: Session, character: CharacterRuntime): void {
+    character.inventory.setEquipmentObserver(this.#equipmentObserver(session, character.id));
+    for (const slot of ITEM_SLOTS) {
+      const equipped = character.inventory.equippedAt(slot);
+      if (equipped === null) continue;
+      const definition = this.#options.items.get(equipped.itemId);
+      if (definition?.durationMs === undefined) continue;
+      session.scheduleIn(EQUIP_EXPIRE, definition.durationMs, {
+        priority: EventPriority.Housekeeping,
+        subject: equipExpirySubject(character.id, slot),
+      });
+    }
+  }
+
+  /** O que agenda e cancela o vencimento por duração, e reavalia a velocidade. Closure pura sobre a `Session`. */
+  #equipmentObserver(session: Session, characterId: string): EquipmentObserver {
+    return {
+      onEquip: (slot, item) => {
+        const subject = equipExpirySubject(characterId, slot);
+        // Cancela SEMPRE, inclusive quando o novo item não dura: um anel de duração que saiu
+        // para outro anel tem de perder o prazo antigo.
+        session.cancelEvent(EQUIP_EXPIRE, subject);
+        const definition = this.#options.items.get(item.itemId);
+        if (definition?.durationMs !== undefined) {
+          session.scheduleIn(EQUIP_EXPIRE, definition.durationMs, {
+            priority: EventPriority.Housekeeping, subject,
+          });
+        }
+        this.#recomputeSpeed(session, characterId);
+      },
+      onUnequip: (slot) => {
+        session.cancelEvent(EQUIP_EXPIRE, equipExpirySubject(characterId, slot));
+        this.#recomputeSpeed(session, characterId);
+      },
+    };
+  }
+
+  /**
+   * Reavalia `character.speed` pela tabela mais o bônus de equipamento (#524, boots of haste):
+   * vestir ou tirar a bota muda a velocidade NO MESMO evento — sem esperar o próximo passo, que
+   * já reagenda pela velocidade atual (`#onPlayerStep`). Recomputa do zero, e não soma/subtrai o
+   * item que entrou/saiu, porque `character.speed` não guarda a base separada do bônus — um
+   * recálculo é barato (poucos slots) e não arrisca divergir por conta dupla.
+   */
+  #recomputeSpeed(session: Session, characterId: string): void {
+    const character = findById(session.participants, characterId);
+    if (character === null || character.speed <= 0) return;
+    character.speed = statsForLevel(
+      character.level, this.#vocationOf(character), this.#options.progression,
+    ).speed + character.inventory.speedBonus(this.#options.items);
+  }
+
+  /**
+   * O prazo de um item equipado venceu. Confere que o slot ainda é o item que dura — o
+   * cancelamento no desequip cobre o caso comum, e a guarda cobre o resto —, destrói sem passar
+   * por container e avisa a apresentação.
+   */
+  #onEquipExpire(session: Session, subject: string): void {
+    const separator = subject.lastIndexOf(':');
+    if (separator < 0) return;
+    const characterId = subject.slice(0, separator);
+    const slot = subject.slice(separator + 1) as ItemSlot;
+    const character = findById(session.participants, characterId);
+    if (character === null) return;
+    const equipped = character.inventory.equippedAt(slot);
+    if (equipped === null) return;
+    const definition = this.#options.items.get(equipped.itemId);
+    if (definition?.durationMs === undefined) return;
+    character.inventory.destroy(slot);
+    session.record('item-expired', equipped.itemId);
+    session.emit({ kind: 'equipment-changed', characterId });
+    // O slot esvaziou: a renovação (AB-08) acontece no MESMO despacho, via `#armAutomations`.
+    this.#armAutomations(session, characterId);
+  }
+
+  /**
+   * Gasta uma carga do colar E do anel quando o golpe é de um tipo que eles protegem (ADR 0032
+   * d.8, alargado no #524 para o anel — o Might Ring do Tibia é exatamente isto no dedo). Olha a
+   * definição de CADA peça vestida, e não a mitigação somada: a soma não diz de quem é a
+   * proteção, e as duas gastam independente — um Dragon Necklace de fogo e um Might Ring que
+   * também resiste fogo gastam UMA carga cada no mesmo golpe de fogo.
+   *
+   * Gasta mesmo quando o golpe é esquivado (DT-03): a mitigação incide no cálculo antes do corte
+   * do Dodge, então ela "trabalhou" no golpe. Resistência negativa é vulnerabilidade e não gasta.
+   */
+  #consumeAmuletCharge(
+    session: Session, character: CharacterRuntime, damageType: DamageType,
+  ): void {
+    this.#consumeProtectionCharge(session, character, 'neck', 'amulet-spent', damageType);
+    this.#consumeProtectionCharge(session, character, 'finger', 'ring-spent', damageType);
+  }
+
+  /** O corpo de `#consumeAmuletCharge`, por slot — ver o comentário lá. */
+  #consumeProtectionCharge(
+    session: Session, character: CharacterRuntime, slot: ItemSlot, recordType: string,
+    damageType: DamageType,
+  ): void {
+    const equipped = character.inventory.equippedAt(slot);
+    if (equipped === null) return;
+    const definition = this.#options.items.get(equipped.itemId);
+    if (definition?.charges === undefined) return;
+    const protects = definition.mitigation.immunities.has(damageType)
+      || definition.mitigation.resistances[damageType] > 0;
+    if (!protects) return;
+    if (character.inventory.consumeCharge(slot, definition.charges) > 0) return;
+    session.record(recordType, equipped.itemId);
+    session.emit({ kind: 'equipment-changed', characterId: character.id });
+  }
+
+  #armPlayerAttack(session: Session, character: CharacterRuntime): void {
+    if (!this.#runnerOf(character.id).playerAttackReady) return;
+    if (!character.alive) return;
+    if (this.#attackTarget(character) === null) return;
+    this.#schedulePlayerAttack(session, character.id, 0);
+  }
+
+  /**
+   * O passo de um monstro venceu (CMB-06).
+   *
+   * A decisão de andar ou bater continua sendo UMA (`decideMonsterAction`), e o alcance de
+   * parada é o MAIOR entre as abilities. Depois do passo, as abilities prontas cujo alvo está
+   * no alcance DELAS são armadas para agora — é a mesma regra do golpe engatilhado do
+   * personagem, do outro lado.
+   */
+  #onMonsterStep(session: Session, subject: string): void {
     const monster = this.#monsterBySubject.get(subject);
     if (monster === undefined || !monster.alive) return;
     const definition = this.#options.monsters.get(monster.monsterId);
@@ -1405,52 +4912,337 @@ export class HuntRuleset implements Ruleset {
     const target = findById(prey, monster.targetId);
     const action = decideMonsterAction(monster, target, definition, this.#blockedFor(monster));
 
-    if (which === 'step') {
-      // O passo reagenda sempre: um monstro parado precisa continuar acordando para descobrir
-      // que o alvo se mexeu. É a única cadência que roda mesmo sem nada a fazer.
-      session.scheduleIn(MONSTER_STEP, definition.stepDurationMs, {
-        priority: EventPriority.Movement, subject,
-      });
-      if (action.kind === 'step') this.#step(session, monster, action.to, subject);
-      // Chegou ao alcance com o golpe engatilhado: ele sai agora, e não no próximo múltiplo
-      // de um relógio. É a mesma regra do personagem, do outro lado.
-      if (action.kind === 'attack' && monster.attackReady) {
-        this.#scheduleMonsterAttack(session, monster, 0);
-      }
-      return;
+    // O passo reagenda sempre: um monstro parado precisa continuar acordando para descobrir
+    // que o alvo se mexeu. É a única cadência que roda mesmo sem nada a fazer — e o ritmo é
+    // o do passo dado, ou o de um passo daqui quando ele ficou (FUN-119).
+    const result = action.kind === 'step' ? this.#step(session, monster, action.to, subject) : null;
+    const cadence = result !== null && result.ok
+      ? result.durationMs
+      : movementDuration(this.#world, monster, monster.position, this.#at(monster));
+    session.scheduleIn(MONSTER_STEP, cadence, {
+      priority: EventPriority.Movement, subject,
+    });
+    // Chegou ao alcance com o golpe engatilhado: ele sai agora, e não no próximo múltiplo de
+    // um relógio. É a mesma regra do personagem, do outro lado — e vale por ability.
+    this.#armMonsterAbilities(session, monster, definition, target);
+    // Um monstro que entrou no raio de busca vira alvo na hora (#444): sem isto, quem se
+    // aproxima de fora da tela só seria notado no próximo passo do personagem.
+    for (const character of session.participants) {
+      this.#autoSelectTarget(session, character);
+      this.#armBot(session, character.id);
+      this.#armPlayerAttack(session, character);
     }
+  }
 
-    if (action.kind !== 'attack') {
-      // Sem ninguém ao alcance: engatilha em vez de desperdiçar, e para de acordar. Quem o
-      // traz de volta é o passo, que já reavalia a distância a cada vencimento.
+  /**
+   * O ataque BÁSICO de um monstro venceu — o legado, e o caminho do rato (CMB-06).
+   *
+   * A sequência é a de sempre: reescolhe alvo, confere o alcance, reagenda a cadência e aplica
+   * pelo pipeline canônico. Sem alvo ao alcance, ENGATILHA em vez de desperdiçar — quem o traz
+   * de volta é o passo, que reavalia a distância a cada vencimento. Fugindo (#518), o corpo a
+   * corpo entra na mesma regra de "fora do alcance": engatilha e não bate, e é `#armMonsterAbilities`
+   * quem re-arma quando o HP subir de novo acima de `runOnHealth`.
+   */
+  #onMonsterAttack(session: Session, subject: string): void {
+    const monster = this.#monsterBySubject.get(subject);
+    if (monster === undefined || !monster.alive) return;
+    const definition = this.#options.monsters.get(monster.monsterId);
+    if (definition === undefined) return;
+    const ability = definition.abilities.find((candidate) => candidate.id === BASIC_ABILITY_ID);
+    if (ability === undefined) {
       monster.attackReady = true;
       return;
     }
 
-    this.#scheduleMonsterAttack(session, monster, definition.attackIntervalMs);
+    const prey: readonly Prey[] = session.participants;
+    monster.targetId = chooseTarget(monster, prey, definition);
+    const target = findById(session.participants, monster.targetId);
+    if (target === null || !target.alive
+      || distance(monster.position, target.position) > ability.target.range
+      || (isMonsterFleeing(monster, definition) && isMeleeAbility(ability))) {
+      monster.attackReady = true;
+      return;
+    }
 
-    const character = findById(session.participants, action.targetId);
-    if (character === null || !character.alive) return;
+    // Reagenda SEMPRE — a chance é rolada A CADA vencimento, independente do resultado. É o
+    // TFS `doAttacking`: o intervalo continua correndo mesmo quando a rolagem falha.
+    this.#scheduleMonsterAttack(session, monster, ability.cadenceMs);
+    // Ausente é sempre passa, sem consumir sorteio (preserva rato/rotworm bit a bit); declarada,
+    // UMA rolagem por vencimento (#518).
+    if (ability.chance !== undefined && !session.rng.chance(ability.chance)) return;
+    this.#executeMonsterAbility(session, monster, ability, target);
+  }
 
-    const result = resolveDamage(
-      { power: definition.attack, kind: 'melee' },
-      this.#playerDefender(character),
-      'pve',
-      this.#options.combat,
-      session.rng,
+  /**
+   * Uma ability DECLARADA de um monstro venceu (CMB-06). O subject carrega o id dela:
+   * `m:<id>:<abilityId>`, e é ele que a morte cancela sem varrer a fila.
+   */
+  #onMonsterAbility(session: Session, subject: string): void {
+    // `m:<id>:<abilityId>`: o id é numérico e vem primeiro, então o `:` seguinte separa a
+    // ability — o id dela pode conter `:` sem ambiguidade.
+    const rest = subject.startsWith('m:') ? subject.slice(2) : '';
+    const separator = rest.indexOf(':');
+    if (separator < 0) return;
+    const monster = this.#monsterBySubject.get(monsterSubject(Number(rest.slice(0, separator))));
+    if (monster === undefined || !monster.alive) return;
+    const definition = this.#options.monsters.get(monster.monsterId);
+    if (definition === undefined) return;
+    const abilityId = rest.slice(separator + 1);
+    const ability = definition.abilities.find((candidate) => candidate.id === abilityId);
+    if (ability === undefined) return;
+
+    monster.scheduledAbilities.delete(ability.id);
+    const prey: readonly Prey[] = session.participants;
+    monster.targetId = chooseTarget(monster, prey, definition);
+    const target = findById(session.participants, monster.targetId);
+    if (target === null || !target.alive
+      || distance(monster.position, target.position) > ability.target.range
+      || (isMonsterFleeing(monster, definition) && isMeleeAbility(ability))) {
+      // Alvo saiu do alcance (ou o monstro está fugindo e esta ability é corpo a corpo): NÃO
+      // bate, e a ability volta a ficar engatilhada — `#armMonsterAbilities` a re-arma.
+      return;
+    }
+
+    this.#scheduleMonsterAbility(session, monster, ability, ability.cadenceMs);
+    if (ability.chance !== undefined && !session.rng.chance(ability.chance)) return;
+    this.#executeMonsterAbility(session, monster, ability, target);
+  }
+
+  /**
+   * Arma para AGORA toda ability pronta cujo alvo está no alcance dela.
+   *
+   * A básica usa `attackReady`; as declaradas usam `scheduledAbilities` — cada uma tem a
+   * própria cadência, e um booleano só não distinguiria "vai bater" de "já tem evento na fila".
+   * Fugindo (#518), as abilities CORPO A CORPO nem são armadas — o monstro segue se afastando e
+   * só as de alcance continuam saindo.
+   */
+  #armMonsterAbilities(
+    session: Session, monster: MonsterRuntime, definition: Monster, target: Prey | null,
+  ): void {
+    if (target === null || !target.alive) return;
+    const fleeing = isMonsterFleeing(monster, definition);
+    for (const ability of definition.abilities) {
+      if (fleeing && isMeleeAbility(ability)) continue;
+      if (distance(monster.position, target.position) > ability.target.range) continue;
+      if (ability.id === BASIC_ABILITY_ID) {
+        if (monster.attackReady) this.#scheduleMonsterAttack(session, monster, 0);
+        continue;
+      }
+      if (monster.scheduledAbilities.has(ability.id)) continue;
+      this.#scheduleMonsterAbility(session, monster, ability, 0);
+    }
+  }
+
+  /**
+   * Aplica uma ability: colhe os alvos ANTES de qualquer dano, emite o lançamento e depois um
+   * golpe por alvo.
+   *
+   * A ORDEM é contrato (FUN-109): o `monster-ability-cast` sai antes dos `creature-hit` dele —
+   * o projétil e o impacto do lançamento acompanham os números, não o contrário. E a colheita
+   * antes do dano é a regra da FUN-92: resolver morte no meio da varredura mexeria na lista
+   * de participantes que está sendo lida.
+   */
+  #executeMonsterAbility(
+    session: Session, monster: MonsterRuntime, ability: MonsterAbility,
+    primary: CharacterRuntime,
+  ): void {
+    const subject = monster.subject;
+    const targets = abilityTargets(ability, this.#at(monster), primary, session.participants);
+    const melee = isMeleeAbility(ability);
+    const source: 'melee' | 'spell' = melee ? 'melee' : 'spell';
+    // A apresentação só sai quando há o que desenhar ou quando a ability NÃO é o corpo a corpo
+    // legado — é o que mantém o rato bit a bit (nenhum evento a mais por golpe).
+    if (!melee || ability.presentation !== undefined) {
+      session.emit({
+        kind: 'monster-ability-cast', casterId: subject, abilityId: ability.id,
+        casterPosition: this.#at(monster),
+        targets: targets.map((target) => ({
+          creatureId: target.id, position: this.#at(target),
+        })),
+        tiles: abilityTiles(ability, this.#at(monster), this.#at(primary)),
+        ...(ability.presentation?.missileKey === undefined
+          ? {} : { missileKey: ability.presentation.missileKey }),
+        ...(ability.presentation?.impactKey === undefined
+          ? {} : { impactKey: ability.presentation.impactKey }),
+      });
+    }
+
+    for (const character of targets) {
+      const defender = this.#playerDefender(character);
+      // A faixa sorteada com o `Rng` da sessão, uma rolagem por alvo — o contrato do loot vale
+      // para o dano, e a ordem dos alvos é a de entrada (documentada em `abilityTargets`).
+      const result = resolveDamage(
+        {
+          rawDamage: session.rng.integer(ability.power.min, ability.power.max),
+          source: 'monster-attack',
+          damageType: ability.damageType,
+        },
+        defender,
+        'pve',
+        this.#options.combat,
+        session.rng,
+      );
+      this.#applyMonsterHit(session, subject, character, ability, defender, result, source);
+      // A condição da ability (CMB-07), aplicada a CADA alvo vivo que ela acertou. O tique de
+      // dano entra no mesmo pipeline do golpe; quem aplicou (o monstro) leva a atribuição.
+      if (ability.condition !== undefined && character.alive) {
+        this.#applyConditionTo(session, character, conditionFromSpec(
+          ability.condition, character.id, subject, session.nowMs, 'monster-attack',
+        ));
+      }
+    }
+    // O campo da ability (CMB-07): UMA vez, centrado no alvo principal. A geometria usa a
+    // tabela de anéis de MONSTRO (#523), como a área de dano da própria ability — `source:
+    // 'monster'` é o que faz o campo de fogo do Dragon Lord cobrir os mesmos 21 tiles da bola.
+    if (ability.field !== undefined) {
+      this.applyField(session, ability.field, this.#at(primary), 'monster');
+    }
+  }
+
+  /**
+   * O fim de um golpe de ability em UM alvo: aplica, atribui, anuncia, treina shielding e
+   * decide a morte. É o mesmo corpo do ataque básico de sempre, agora por alvo.
+   */
+  #applyMonsterHit(
+    session: Session, subject: string, character: CharacterRuntime, ability: MonsterAbility,
+    defender: Defender, outcome: DamageOutcome, source: 'melee' | 'spell',
+  ): void {
+    // O CMB-08: o mana shield do personagem vira estágio explícito, e o hit/atribuição usam o
+    // HP APLICADO. A postura (#155) escala o dano TOMADO antes do escudo; o atacante é `null`
+    // porque monstro não faz leech — o outcome informa a mana absorvida sem matar ninguém. O
+    // Energy Ring (SV-16) é a segunda fonte de escudo, resolvida por quem tem o catálogo.
+    const applied = applyDamageOutcome(
+      character, outcome, null, character.conditions.damageTakenScale(),
+      this.#hasEnergyShield(character),
     );
-    recordDamage(character.contribution, subject, character.receiveDamage(result.damage));
+    recordDamage(character.contribution, subject, applied.healthDamage);
+    // O colar gasta UMA carga por golpe do tipo que ele protege (ADR 0032 d.8), mesmo esquivado
+    // (DT-03). A proteção vale NESTE golpe; a destruição, se zerou, é para o próximo.
+    this.#consumeAmuletCharge(session, character, ability.damageType);
+    // O golpe ANTES da barra (FUN-109): o número flutuante acompanha a barra caindo, não o
+    // contrário. `attackerId` é o subject do monstro, o mesmo id com que ele nasceu e anda.
+    session.emit({
+      kind: 'creature-hit', creatureId: character.id, attackerId: subject,
+      amount: applied.healthDamage, source, position: this.#at(character),
+      damageType: outcome.damageType,
+    });
+    this.#emitCharacterHealth(session, character);
+    // Shielding sobe pelo USO (CMB-04): uma vez por ataque físico ELEGÍVEL recebido — há fonte
+    // de defesa e o tipo está aprovado. Nunca por tick, nunca por dano aplicado: um bloqueio
+    // total (ou um golpe de 0) ainda é um bloqueio praticado. Ataque elemental não entra.
+    if (this.#options.combat.defense !== undefined
+      && defender.defense !== undefined && defender.defense.kind !== 'none'
+      && this.#options.combat.defense.blockTypes.includes(ability.damageType)) {
+      this.#gainSkills(session, character, 'shield-block', 1);
+    }
     // HP caiu: reavalia AGORA o que está engatilhado (FUN-84). Esperar o próximo múltiplo de
     // um relógio para curar quem está caindo é a mesma perda que o golpe engatilhado da
     // FUN-68 corrigiu do outro lado — só que aqui ela custa a vida do personagem.
     this.#armBot(session, character.id);
-    // E o anel defensivo (§13.8): este é o instante em que ele existe para servir.
-    this.#applyRingSwap(session, character);
+    // E os curandeiros da party: quem tem regra de alvo != self precisa acordar AGORA, sem
+    // esperar o próprio ciclo de golpe — o HP que caiu é de OUTRO membro (RF-06).
+    this.#armHealersOf(session);
+    // E as automações defensivas (§13.8, AB-08): este é o instante em que o anel existe para
+    // servir, e é a antecipação que faz o swap acontecer no golpe, não no próximo ciclo.
+    this.#armAutomations(session, character.id);
     if (character.health > 0) return;
 
     // `receiveDamage` já marcou `alive = false`; `kill` é o que conta a morte no extrato e
     // avisa o ruleset. Chamar os dois é deliberado: quem aplica dano não decide morte.
     session.kill(character);
+  }
+
+  /** O mesmo do lado do monstro, e pela mesma razão. */
+  #scheduleMonsterAbility(
+    session: Session, monster: MonsterRuntime, ability: MonsterAbility, delayMs: number,
+  ): void {
+    monster.scheduledAbilities.add(ability.id);
+    session.scheduleIn(MONSTER_ABILITY, delayMs, {
+      priority: EventPriority.Attack, subject: monsterAbilitySubject(monster.id, ability.id),
+    });
+  }
+
+  /** O mesmo, do lado da defesa (#518). */
+  #scheduleMonsterDefense(
+    session: Session, monster: MonsterRuntime, defense: MonsterDefense, delayMs: number,
+  ): void {
+    monster.scheduledDefenses.add(defense.id);
+    session.scheduleIn(MONSTER_DEFENSE, delayMs, {
+      priority: EventPriority.Attack, subject: monsterDefenseSubject(monster.id, defense.id),
+    });
+  }
+
+  /**
+   * Uma DEFESA declarada de um monstro venceu (#518, TFS `Monster::onThinkDefense`, referência
+   * §15-19): cura própria. Independente do alvo — não precisa de ninguém para curar —, então
+   * reagenda-se SEMPRE, ao contrário das abilities de ataque, que dependem de alcance.
+   */
+  #onMonsterDefense(session: Session, subject: string): void {
+    // `m:<id>:<defenseId>`, o mesmo desenho de `#onMonsterAbility`.
+    const rest = subject.startsWith('m:') ? subject.slice(2) : '';
+    const separator = rest.indexOf(':');
+    if (separator < 0) return;
+    const monster = this.#monsterBySubject.get(monsterSubject(Number(rest.slice(0, separator))));
+    if (monster === undefined || !monster.alive) return;
+    const definition = this.#options.monsters.get(monster.monsterId);
+    if (definition === undefined) return;
+    const defenseId = rest.slice(separator + 1);
+    const defense = definition.defenses.find((candidate) => candidate.id === defenseId);
+    if (defense === undefined) return;
+
+    monster.scheduledDefenses.delete(defense.id);
+    this.#scheduleMonsterDefense(session, monster, defense, defense.cadenceMs);
+
+    // `chance` é SEMPRE declarada aqui (o schema exige), então SEMPRE consome uma rolagem — ao
+    // contrário de `ability.chance`, que só existe em conteúdo novo.
+    if (!session.rng.chance(defense.chance)) return;
+
+    const healed = monster.heal(definition.health, session.rng.integer(defense.heal.min, defense.heal.max));
+    // De vida cheia, zero repôs — sem evento, como a regeneração passiva (`#onRegen`): um "+0"
+    // flutuando por cadência é ruído que uma hunt desanexada não precisa produzir.
+    if (healed <= 0) return;
+    session.emit({
+      kind: 'creature-healed', creatureId: monster.subject, amount: healed, source: 'monster',
+      position: this.#at(monster),
+      ...(defense.presentation?.impactKey === undefined
+        ? {} : { impactKey: defense.presentation.impactKey }),
+    });
+    this.#emitHealth(session, monster);
+  }
+
+  /**
+   * A troca de alvo por tempo de um monstro venceu (#518, TFS `Monster::onThinkTarget`,
+   * referência §15-19). Um timer da instância, como a defesa — não depende do alvo atual estar
+   * vivo ou no alcance, e reagenda-se sempre enquanto o monstro viver.
+   */
+  #onMonsterTargetChange(session: Session, subject: string): void {
+    const monster = this.#monsterBySubject.get(subject);
+    if (monster === undefined || !monster.alive) return;
+    const definition = this.#options.monsters.get(monster.monsterId);
+    const targetChange = definition?.targetChange;
+    if (definition === undefined || targetChange === undefined) return;
+
+    session.scheduleIn(MONSTER_TARGET_CHANGE, targetChange.intervalMs, {
+      priority: EventPriority.Attack, subject,
+    });
+
+    if (!session.rng.chance(targetChange.chance)) return;
+
+    // TFS `searchTarget(TARGETSEARCH_RANDOM)`: um alvo válido ao acaso, DIFERENTE do atual —
+    // trocar para o mesmo não é troca. A estratégia ponderada do Canary (70/10/10/10) fica fora
+    // (§ "Fora do escopo" do #518).
+    const prey: readonly Prey[] = session.participants;
+    // O mesmo andar primeiro (#519): um alvo em outro andar não é alvo válido — o `isTarget` do
+    // TFS confere o `z` antes da distância, como `chooseTarget` já faz.
+    const candidates = prey.filter((candidate) => candidate.alive
+      && candidate.id !== monster.targetId
+      && sameFloor(monster.position.z, candidate.position.z)
+      && distance(monster.position, candidate.position) <= definition.aggroRadius);
+    if (candidates.length === 0) return;
+    const chosen = candidates[session.rng.integer(0, candidates.length - 1)];
+    if (chosen === undefined) return;
+    monster.targetId = chosen.id;
+    this.#armMonsterAbilities(session, monster, definition, chosen);
   }
 
   /**
@@ -1465,12 +5257,102 @@ export class HuntRuleset implements Ruleset {
   ): MoveResult {
     const result = move(this.#world, mover, to);
     if (result.ok) {
+      // A direção do personagem (#155): é de onde saem onda, cleave e feixe. Só o passo a
+      // escreve, e só a do personagem — o monstro não lança magia.
+      if (mover instanceof CharacterRuntime) {
+        mover.direction = directionOf(result.from, result.to) ?? mover.direction;
+      }
       session.emit({
         kind: 'creature-moved', creatureId,
         from: result.from, to: result.to, durationMs: result.durationMs,
       });
+      // A entrada num campo (CMB-07) é observada SÓ depois de um passo ACEITO: `movement`
+      // devolve resultado e nunca infringe dano. Um tile recusado não aplica o campo.
+      if (mover instanceof CharacterRuntime || mover instanceof MonsterRuntime) {
+        this.#enterField(session, mover);
+      }
     }
     return result;
+  }
+
+  /**
+   * A vida do monstro mudou — uma vez por golpe (FUN-103).
+   *
+   * `creature-health` existia no protocolo sem emissor nenhum: o monstro aparecia, andava e
+   * morria com a barra cheia o tempo todo, e o sintoma parecia bug do cliente.
+   */
+  #emitHealth(session: Session, monster: MonsterRuntime): void {
+    const definition = this.#options.monsters.get(monster.monsterId);
+    session.emit({
+      kind: 'creature-health-changed', creatureId: monster.subject,
+      health: monster.health, maxHealth: definition?.health ?? monster.health,
+    });
+  }
+
+  /**
+   * A vida do PERSONAGEM mudou (FUN-109). O mesmo evento do monstro, com o id dele.
+   *
+   * Sai de todo lugar que escreve `character.health` OU `character.maxHealth` nesta hunt —
+   * golpe, cura, poção, regeneração, level up e penalidade de morte —, e a completude é o
+   * ponto: um caminho que muda a vida sem passar por aqui é a barra do jogador parando de
+   * andar até a próxima reanexação, que era o defeito inteiro. O máximo conta porque
+   * `retarget` (`progression.ts`) reescreve os dois de uma vez.
+   */
+  #emitCharacterHealth(session: Session, character: CharacterRuntime): void {
+    session.emit({
+      kind: 'creature-health-changed', creatureId: character.id,
+      health: character.health, maxHealth: character.maxHealth,
+    });
+  }
+
+  /**
+   * O personagem REPÔS vida: o número que sobe, e depois a barra que sobe (FUN-109).
+   *
+   * Só com `amount > 0`. `castSpell` e `useSupply` devolvem o que REPÔS, não o que o efeito
+   * prometia — e uma cura em quem estava cheio repôs zero. Um "+0" flutuando é ruído, e a
+   * barra que não mudou não tem o que anunciar.
+   */
+  #emitHealed(
+    session: Session, character: CharacterRuntime, amount: number,
+    source: CreatureHealed['source'], healerId?: string,
+  ): void {
+    if (amount <= 0) return;
+    // A cura FEITA conta para quem lançou (#431): o evento acende a barra do RECIPIENT, mas o
+    // HPS é do healer. O guarda de participante descarta um `sourceId` que não seja personagem
+    // (a condição de um monstro, por exemplo) — `creditHealing` somaria num id que não é dono.
+    if (healerId !== undefined && session.participants.some((p) => p.id === healerId)) {
+      session.creditHealing(healerId, amount);
+      // Atividade de XP compartilhada (§525) é OUTRA coisa que HPS: `Player::isPartner`
+      // (TFS/Canary) exclui `player == this` antes de registrar `updatePlayerTicks` por cura —
+      // curar A SI MESMO não prova que o personagem está engajado com a party, e as duas
+      // engines não contam. HPS continua contando o self-heal (linha acima); só a atividade
+      // que `canShareExperience` lê exige um RECIPIENTE diferente do healer.
+      if (character.id !== healerId) this.#markCombatActive(session, healerId);
+    }
+    session.emit({
+      kind: 'creature-healed', creatureId: character.id, amount, source,
+      position: this.#at(character),
+    });
+    this.#emitCharacterHealth(session, character);
+  }
+
+  /**
+   * Onde a criatura está, com o andar de FATO dela (#519, hunt multiandar).
+   *
+   * Até esta issue isto sempre devolvia `this.#world.map.z` — o andar PADRÃO do mapa —,
+   * ignorando `creature.position.z` mesmo para o personagem. Numa hunt de andar único isso nunca
+   * divergia (só existia um andar para se estar), e por isso o defeito nunca apareceu: a
+   * Darashia Dragon Lair é a primeira hunt em que ele apareceria, com todo golpe e toda mira de
+   * área calculados no andar ERRADO sempre que alguém não estivesse no padrão do mapa. `?? map.z`
+   * sobra só para quem nunca carrega `z` de verdade — o monstro de snapshot anterior a esta issue.
+   */
+  #at(creature: { readonly position: FloorPoint }): WorldPoint {
+    return { x: creature.position.x, y: creature.position.y, z: creature.position.z ?? this.#world.map.z };
+  }
+
+  /** O andar de FATO da criatura — o mesmo que `#at` usa, sem montar o `WorldPoint` inteiro. */
+  #floorOf(creature: { readonly position: FloorPoint }): number {
+    return creature.position.z ?? this.#world.map.z;
   }
 
   #onExitRules(session: Session): void {
@@ -1481,49 +5363,335 @@ export class HuntRuleset implements Ruleset {
   }
 
   #applyExitRules(session: Session): void {
-    const view: HuntView = {
-      elapsedMs: session.aggregates.durationMs,
-      aggregates: session.aggregates,
-      participants: session.participants,
-      monstersAlive: this.#monsters.filter((m) => m.alive).length,
-    };
-    for (const rule of this.#exitRules) {
-      if (!rule.when(view)) continue;
-      // O extrato precisa dizer QUAL regra — "sua hunt encerrou por uma regra de saída" sem
-      // dizer qual é a mensagem que faz o jogador desconfiar do bot que ele mesmo configurou.
-      session.record('exit-rule', rule.id);
-      session.end('exit-rule');
+    const monstersAlive = this.#monsters.filter((m) => m.alive).length;
+    // As regras são de CADA participante (#203): a view de cada um leva só ele e os agregados
+    // dele — `hp-below` e `out-of-gold` leem `participants[0]`. O que disparar faz é da
+    // sessão: em solo, encerrar; em party, sair (#193).
+    for (const character of session.participants) {
+      const runner = this.#runners.get(character.id);
+      if (runner === undefined || runner.pendingExit !== null) continue;
+      const view: HuntView = {
+        elapsedMs: session.aggregates.durationMs,
+        aggregates: session.aggregatesOf(character.id),
+        participants: [character],
+        monstersAlive,
+      };
+      for (const rule of runner.exitRules) {
+        if (!rule.when(view)) continue;
+        // O extrato precisa dizer QUAL regra — "sua hunt encerrou por uma regra de saída" sem
+        // dizer qual é a mensagem que faz o jogador desconfiar do bot que ele mesmo configurou.
+        session.record('exit-rule', rule.id);
+        this.#beginExit(session, character.id, 'exit-rule');
+        break;
+      }
+    }
+  }
+
+  #beginExit(session: Session, characterId: string, reason: ExitReason): void {
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined || runner.pendingExit !== null) return;
+    runner.pendingExit = reason;
+    const delayMs = this.#options.hunt.exitDelayMs;
+    if (delayMs === undefined) { this.#finishExit(session, characterId); return; }
+    session.scheduleIn(EXIT_COUNTDOWN, delayMs, {
+      priority: EventPriority.Housekeeping, subject: characterId,
+    });
+  }
+
+  #onExitCountdown(session: Session, characterId: string): void {
+    this.#finishExit(session, characterId);
+  }
+
+  #finishExit(session: Session, characterId: string): void {
+    const runner = this.#runners.get(characterId);
+    const reason = runner?.pendingExit ?? null;
+    if (runner === undefined || reason === null) return;
+    runner.pendingExit = null;
+    if (session.participants.length <= 1) {
+      if (session.ended === null) session.end(reason);
       return;
     }
+    this.#depart(session, characterId, reason);
   }
 
   // --- combate ------------------------------------------------------------------------------
 
-  #strike(session: Session, character: CharacterRuntime, monster: MonsterRuntime): void {
+  /**
+   * Um golpe do personagem, do jeito que a arma na mão bate (#152, ADR 0026 decisões 3 e 4;
+   * perfis de arma no CMB-05): corpo a corpo com o `attack` da arma (ou desarmado); tiro com o
+   * `attack` da munição escolhida, debitando o preço dela; ou wand, gastando mana e causando
+   * dano mágico por faixa. Os três compartilham o mesmo fim — aplicar, atribuir, anunciar,
+   * contar o recorde, praticar — e é `#land` quem aplica.
+   *
+   * O poder sai de `resolveWeaponPower` com o PERFIL da arma: o ruleset não conhece nome de
+   * item nem vocação (DT-01). A família do perfil aponta a skill e a prática, e é por isso que
+   * wand/rod não recebem multiplicador de weapon skill — o perfil deles não tem `power`.
+   */
+  #strike(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime,
+    weapon: Item | null, how: ResolvedWeapon | undefined,
+  ): void {
     const definition = this.#options.monsters.get(monster.monsterId);
     if (definition === undefined) return;
+    const defender: Defender = {
+      armor: definition.armor, dodgeChance: 0, mitigation: definition.mitigation,
+    };
+
+    if (weapon !== null && how?.kind === 'distance') {
+      const ammo = this.#ammoFor(character, how.ammoFamily ?? 'arrow');
+      // Sem munição paga pela família — catálogo vazio, ou saldo que não cobre o preço: o tiro
+      // NÃO sai. Nada de dano inventado nem de munição grátis (ADR 0026 d.3): sem gold, a regra
+      // de saída `out-of-gold` encerra a hunt, como para a poção.
+      if (ammo === null) return;
+      // O estoque de loot (#520, revisão do #536) é gasto ANTES do gold — a mesma regra do
+      // supply em `useSupply`. Estoque é PESSOAL, nunca rateado: quem tem Burst Arrow no
+      // estoque atira das PRÓPRIAS, e o resto da party continua pagando gold pelas delas.
+      const stock = character.ammunitionStock.get(ammo.id) ?? 0;
+      if (stock > 0) {
+        if (stock <= 1) character.ammunitionStock.delete(ammo.id);
+        else character.ammunitionStock.set(ammo.id, stock - 1);
+      } else if (ammo.price > 0) {
+        // O rateio do §4 inclui a MUNIÇÃO paga (#394): com `shareCosts` ligado quem paga é a
+        // purse compartilhada — a MESMA do supply, com o resto do atirador. O `#ammoFor` já
+        // conferiu `canAfford` pela purse; aqui só se debita. Sem rateio, o comportamento de
+        // sempre: gold do personagem E agregado da sessão (§20.1).
+        const shareCosts = this.#party !== undefined && this.#party.shareCosts && session.participants.length > 1;
+        if (shareCosts) {
+          this.#sharedPurse(session, character).pay(ammo.price);
+        } else {
+          character.goldDelta -= ammo.price;
+          session.credit(character.id, 'goldSpent', ammo.price);
+        }
+      }
+      session.emit({
+        kind: 'shot', attackerId: character.id, targetId: monster.subject,
+        weaponItemId: weapon.id, ammoId: ammo.id, from: this.#at(character), to: this.#at(monster),
+      });
+      // Chance de acerto (#522, `combat-v2`): o tiro sai e paga o preço mesmo errando — só o
+      // DANO depende da rolagem. `combat-v1` (sem `distanceHitChance`) sempre acerta.
+      const hit = this.#rollDistanceHit(session, character, monster, ammo, how);
+      // A prática é do TIRO, não do acerto (CMB-05): imunidade, bloqueio e agora o erro de
+      // pontaria não impedem a skill de subir — ela sai do gatilho da família, nunca do dano.
+      this.#practice(session, character, how.family, 1);
+      if (!hit) {
+        // A munição é ABSTRATA: nada de pilha a consumir. O tiro errou, mas já pagou o preço, e
+        // o próximo usa a mesma seleção (ou a básica da família) enquanto houver gold.
+        return;
+      }
+      // O `base` da fórmula e o TIPO são da MUNIÇÃO (o bow não tem attack próprio), e a família
+      // e a escala vêm do perfil da arma. Uma alocação por tiro, como o `defender` acima.
+      const power = how.power;
+      const profile: WeaponProfile = {
+        family: how.family,
+        damageType: ammo.damageType,
+        range: how.range,
+        ...(power === undefined ? {} : { power: { ...power, base: ammo.attack } }),
+      };
+      const result = resolveDamage(
+        {
+          rawDamage: this.#weaponPower(session, character, profile),
+          source: 'basic-attack',
+          damageType: profile.damageType,
+          modifiers: this.#options.combat.modifiers,
+        },
+        defender, 'pve', this.#options.combat, session.rng,
+      );
+      this.#land(session, character, monster, result, 'melee');
+      // A munição é ABSTRATA: nada de pilha a consumir. O tiro que saiu já pagou o preço, e o
+      // próximo usa a mesma seleção (ou a básica da família) enquanto houver gold.
+      return;
+    }
+
+    if (weapon !== null && how?.kind === 'wand') {
+      const manaPerHit = how.manaPerHit ?? 0;
+      // A mana sai ANTES da rolagem, e a conferência foi em `#onPlayerAttack`: chegar aqui é
+      // ter mana. Uma rolagem por golpe, com o `Rng` da sessão — a mesma semente, o mesmo
+      // dano, como o loot (contrato).
+      character.mana -= manaPerHit;
+      session.emit({
+        kind: 'shot', attackerId: character.id, targetId: monster.subject,
+        weaponItemId: weapon.id, from: this.#at(character), to: this.#at(monster),
+      });
+      // Dano por faixa fixa e do TIPO da arma (CMB-03): a wand de vortex é energia, o rod de
+      // snakebite é terra; sem declaração o boot resolve `arcane`, o `kind: magic` do v1. O
+      // perfil da wand/rod não tem `power`, então NÃO há multiplicador de weapon skill (DT-02).
+      const result = resolveDamage(
+        {
+          rawDamage: this.#weaponPower(session, character, how),
+          source: 'basic-attack',
+          damageType: how.damageType,
+          modifiers: this.#options.combat.modifiers,
+        },
+        defender, 'pve', this.#options.combat, session.rng,
+      );
+      this.#land(session, character, monster, result, 'spell');
+      // Rende magia pela MANA gasta, como a magia (§9.4): é assim que a wand treina magic level.
+      this.#practice(session, character, how.family, manaPerHit);
+      return;
+    }
+
+    // Corpo a corpo — ou desarmado: sem arma na mão vale o perfil `fist` (CMB-05), que carrega
+    // o `attack`, o alcance e o tipo de `combat.player`.
+    const profile: WeaponProfile = how ?? this.#options.unarmed;
     const result = resolveDamage(
-      // A skill escala o poder do golpe (FUN-75). O número base continua sendo do conteúdo;
-      // o que a skill faz é multiplicá-lo, e quanto por nível também é conteúdo.
-      { power: this.#scaledPower(character, 'melee-hit', this.#attackPowerOf(character)),
-        kind: 'melee' },
-      { armor: definition.armor, dodgeChance: 0 },
-      'pve',
-      this.#options.combat,
-      session.rng,
+      {
+        rawDamage: this.#weaponPower(session, character, profile),
+        source: 'basic-attack',
+        damageType: profile.damageType,
+        modifiers: this.#options.combat.modifiers,
+      },
+      defender, 'pve', this.#options.combat, session.rng,
     );
-    const applied = monster.receiveDamage(result.damage);
-    recordDamage(monster.contribution, character.id, applied);
+    this.#land(session, character, monster, result, 'melee');
+    // O golpe ACONTECEU: conta como uso, tenha ele acertado forte ou de raspão, e mesmo que o
+    // alvo seja imune ou já esteja morto — praticar não depende do dano final (CMB-05).
+    this.#practice(session, character, profile.family, 1);
+  }
+
+  /**
+   * O poder bruto de um golpe pelo PERFIL (CMB-05, `combat-v2` em #522), com a postura por
+   * último.
+   *
+   * A skill que escala é a da FAMÍLIA, não uma por nome: o ruleset lê `family.skillId` do
+   * conteúdo e o nível do personagem, MAIS o bônus de equipamento da mesma skill (#524: a
+   * Paladin Armor soma em `distance` — o crossbow bate mais forte com ela vestida). Corpo a
+   * corpo e distância recebem a postura (`buff`);
+   * wand/rod têm faixa fixa e não passam por ela — como sempre. O multiplicador de vocação
+   * (`meleeDamageMultiplier`/`distDamageMultiplier`, #522) só o `combat-v2` lê; passar o valor
+   * sempre é inofensivo — o v1 nunca teve multiplicador de vocação.
+   */
+  #weaponPower(session: Session, character: CharacterRuntime, profile: WeaponProfile): number {
+    const family = this.#options.weaponFamilies.get(profile.family);
+    const skillLevel = this.#skillLevelOf(character, family);
+    const vocation = this.#vocationOf(character);
+    const vocationMultiplier = family?.kind === 'distance'
+      ? vocation?.distDamageMultiplier ?? 1
+      : vocation?.meleeDamageMultiplier ?? 1;
+    const power = resolveWeaponPower(
+      profile, character.level, skillLevel, session.rng, this.#options.combat, vocationMultiplier,
+    );
+    if (family?.kind === 'distance') {
+      return Math.round(power * character.conditions.damageDealtScale('distance'));
+    }
+    if (family?.kind === 'melee') {
+      return Math.round(power * character.conditions.damageDealtScale('melee'));
+    }
+    return power;
+  }
+
+  /** O nível da skill que a família aponta; sem família ou skill no catálogo, zero. */
+  #skillLevelOf(character: CharacterRuntime, family: CompiledWeaponFamily | undefined): number {
+    const skill = family === undefined ? undefined : this.#options.skills.get(family.skillId);
+    // O bônus de equipamento da mesma skill (#524) entra aqui — no dano E na chance de acerto à
+    // distância (#522), como a skill do Tibia já inclui o `skillDist` do item.
+    return (skill === undefined ? 0 : character.skills.levelOf(skill))
+      + (family === undefined ? 0 : character.inventory.skillBonus(this.#options.items, family.skillId));
+  }
+
+  /**
+   * A chance de acerto à distância (#522, `combat-v2`): uma rolagem por tiro, SEMPRE consumida
+   * quando o conteúdo declara `combat.distanceHitChance` — a mesma regra do bloqueio e do
+   * crítico (ADR 0031). Conteúdo `combat-v1` (sem a tabela) não rola nada e sempre acerta, o
+   * que preserva o v1 bit a bit — nenhum sorteio novo entra na sequência de uma hunt legada.
+   *
+   * `ammo.hitChance` (#522) e `ammo.maxHitChance`/`how.hitChance` (#524, só dado até aqui)
+   * entram como o caminho direto, o balde da munição e o bônus/malus do arco — ver
+   * `combat/distance-hit.ts`.
+   */
+  #rollDistanceHit(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime, ammo: Ammunition,
+    how: ResolvedWeapon,
+  ): boolean {
+    const table = this.#options.combat.distanceHitChance;
+    if (table === undefined) return true;
+    const family = this.#options.weaponFamilies.get('distance');
+    const skillLevel = this.#skillLevelOf(character, family);
+    const tiles = distance(character.position, monster.position);
+    return rollDistanceHit(
+      tiles, skillLevel, table, session.rng, ammo.maxHitChance, ammo.hitChance, how.hitChance,
+    );
+  }
+
+  /**
+   * Registra que `characterId` atacou ou curou agora (§525, ADR 0027 emenda 2026-09-24): a
+   * atividade que `canShareExperience` lê como `Party::isPlayerActive` do TFS/Canary. Sem
+   * `Runner` (id que não é participante — `healerId` de uma condição, por exemplo) é no-op, a
+   * mesma guarda de `session.creditHealing` em `#emitHealed`.
+   */
+  #markCombatActive(session: Session, characterId: string): void {
+    const runner = this.#runners.get(characterId);
+    if (runner !== undefined) runner.lastCombatActionAtMs = session.nowMs;
+  }
+
+  /**
+   * Pratica UMA vez pelo golpe, pela skill que a família aponta (CMB-05). A prática é o
+   * `gain` da skill — `melee-hit`/`distance-hit` rendem por uso, `spell-cast` por mana gasta —
+   * e o gatilho vem do conteúdo, nunca de um `if` por nome.
+   *
+   * É chamada DEPOIS do `#land` e sem condição de dano: imunidade, resistência alta ou alvo
+   * morto no impacto não impedem a prática, porque o golpe de fato ocorreu.
+   */
+  #practice(
+    session: Session, character: CharacterRuntime, family: WeaponFamily, amount: number,
+  ): void {
+    const definition = this.#options.weaponFamilies.get(family);
+    if (definition === undefined) return;
+    const skill = this.#options.skills.get(definition.skillId);
+    if (skill === undefined) return;
+    this.#gainSkills(session, character, skill.gain.on, amount);
+  }
+
+  /** O fim de todo golpe do personagem: aplicar, atribuir, anunciar e contar o recorde. */
+  #land(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime,
+    outcome: DamageOutcome, source: 'melee' | 'spell',
+  ): void {
+    // O CMB-08: aplicar é o estágio explícito que passa pelo mana shield (no alvo), remove HP
+    // efetivo e credita o leech clampado no atacante. O `outcome` já traz o resolvido e o
+    // crítico; a atribuição e o hit usam o HP APLICADO, nunca a mana absorvida nem o overkill.
+    const applied = applyDamageOutcome(monster, outcome, character);
+    recordDamage(monster.contribution, character.id, applied.healthDamage);
+    this.#markCombatActive(session, character.id);
+    // O número que flutua é o APLICADO — o que saiu da barra —, e sai ANTES dela (FUN-109). O
+    // resolvido é o recorde do extrato, logo abaixo; mostrar 300 sobre um rato de 10 é o
+    // cliente contando uma história que a barra desmente.
+    session.emit({
+      kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
+      amount: applied.healthDamage, source, position: this.#at(monster),
+      damageType: outcome.damageType,
+    });
+    this.#emitHealth(session, monster);
+    // Life leech (CMB-08): o que de fato repôs no atacante, já clampado no teto. Atacante cheio,
+    // ou alvo integralmente absorvido pela mana, informa zero e não emite evento — o número
+    // verde não mente.
+    this.#emitHealed(session, character, applied.lifeLeechApplied, 'leech', character.id);
     // O maior hit é o RESOLVIDO, não o aplicado (§16.1): um golpe de 300 num monstro com 10 de
     // vida foi um golpe de 300. Guardar o aplicado faria o recorde depender de quão morto o
     // alvo já estava, e o jogador nunca veria o número que ele de fato bateu.
-    session.aggregates.bestBasicHit = Math.max(
-      session.aggregates.bestBasicHit, result.damage,
-    );
-    // O golpe ACONTECEU: conta como uso, tenha ele acertado forte ou de raspão. Contar só
-    // acerto cheio faria a skill subir mais devagar contra alvo blindado, que é o oposto do
-    // que "sobe pelo uso" quer dizer.
-    this.#gainSkills(session, character, 'melee-hit', 1);
+    session.credit(character.id, 'bestBasicHit', outcome.resolvedDamage);
+    // O DPS, ao contrário do recorde, soma o APLICADO (#431): overkill e absorção por mana
+    // shield não são dano que saiu da barra de ninguém.
+    session.creditDamage(character.id, applied.healthDamage);
+  }
+
+  /**
+   * A munição que o tiro usa (#152, ADR 0026 d.3): a escolhida da família, ou a BÁSICA dela.
+   *
+   * `null` é "não atira": a família não tem munição no catálogo, ou não há gold NEM estoque de
+   * loot (#520, revisão do #536) que cubra o tiro. **Não existe munição grátis** — sem gold e
+   * sem estoque o tiro não sai, e é a regra de saída `out-of-gold` que encerra a hunt. O preço
+   * é conferido ANTES do gold sair, e o débito (ou o consumo do estoque) fica em `#strike`.
+   */
+  #ammoFor(character: CharacterRuntime, family: AmmoFamily): Ammunition | null {
+    const chosenId = character.ammo.get(family);
+    const chosen = chosenId === undefined ? undefined : this.#options.ammunition.get(chosenId);
+    const ammo = chosen !== undefined && chosen.family === family
+      ? chosen
+      : this.#basicAmmo.get(family) ?? null;
+    if (ammo === null) return null;
+    const hasStock = (character.ammunitionStock.get(ammo.id) ?? 0) > 0;
+    if (!hasStock && balanceOf(character) < ammo.price) return null;
+    return ammo;
   }
 
   /**
@@ -1535,9 +5703,13 @@ export class HuntRuleset implements Ruleset {
    */
   #scaledPower(character: CharacterRuntime, on: Skill['gain']['on'], base: number): number {
     const definitions = this.#skillsByGain[on];
-    // Nenhuma skill alimentada por esta fonte: devolve o base sem tocar em nada. É o caminho
-    // de um conteúdo sem skills, e ele custa uma comparação.
-    if (definitions.length === 0) return base;
+    // Nenhuma skill alimentada por esta fonte: só a postura, se houver. É o caminho de um
+    // conteúdo sem skills, e ele custa uma comparação — e uma multiplicação com postura.
+    if (definitions.length === 0) {
+      if (on === 'melee-hit') return Math.round(base * character.conditions.damageDealtScale('melee'));
+      if (on === 'distance-hit') return Math.round(base * character.conditions.damageDealtScale('distance'));
+      return base;
+    }
 
     let power = base;
     for (let i = 0; i < definitions.length; i += 1) {
@@ -1545,6 +5717,10 @@ export class HuntRuleset implements Ruleset {
       if (definition.damagePerLevel === 0) continue;
       power *= powerMultiplier(definition, character.skills.levelOf(definition));
     }
+    // A postura (#155) escala o golpe e o tiro aqui; a magia é escalada dentro de `castSpell`,
+    // por alvo — aplicar nos dois lugares contaria a mesma postura duas vezes.
+    if (on === 'melee-hit') power *= character.conditions.damageDealtScale('melee');
+    else if (on === 'distance-hit') power *= character.conditions.damageDealtScale('distance');
     return Math.round(power);
   }
 
@@ -1563,11 +5739,16 @@ export class HuntRuleset implements Ruleset {
   ): void {
     if (amount <= 0) return;
     const definitions = this.#skillsByGain[on];
+    const vocation = this.#vocationOf(character);
     for (let i = 0; i < definitions.length; i += 1) {
       const definition = definitions[i] as Skill;
       const gain = definition.gain;
-      const points = gain.on === 'melee-hit' ? gain.points * amount : gain.pointsPerMana * amount;
-      if (character.skills.gain(definition, points) > 0) {
+      const points = gain.on === 'spell-cast' ? gain.pointsPerMana * amount : gain.points * amount;
+      // O fator de crescimento é DESTA vocação (#521, ADR 0037): um Knight sobe corpo a corpo
+      // rápido e magia devagar, um Sorcerer o oposto — a mesma curva de conteúdo, um `factor`
+      // diferente por quem está usando.
+      const factor = skillFactorFor(definition, vocation, this.#options.progression);
+      if (character.skills.gain(definition, points, factor) > 0) {
         session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`);
       }
     }
@@ -1581,51 +5762,124 @@ export class HuntRuleset implements Ruleset {
    * party — os dados já vão estar lá.
    */
   #onMonsterDied(session: Session, monster: MonsterRuntime, credit: KillCredit): void {
-    session.aggregates.kills++;
     const definition = this.#options.monsters.get(monster.monsterId);
     const killer = findById(session.participants, credit.lastHitBy);
+    // O abate conta SEMPRE, para todo presente: "matei N" é a pergunta do analisador de cada
+    // um (#190, DT-01), e a party matou junto. Em solo é o de sempre — conta mesmo com a fonte
+    // sumida ou o dono morto; o extrato mentiria se dissesse que não.
+    for (const participant of session.participants) session.credit(participant.id, 'kills', 1);
 
-    // Sem dono (dano de fonte que sumiu) ou dono morto antes da vítima: o abate conta, a
-    // recompensa não — morto não recebe. Stamina zero bloqueia a RECOMPENSA, não a hunt
-    // (§10.2), e vale para loot E para XP. O abate continua contando em todos os casos: o
-    // jogador matou, e o extrato mentiria se dissesse que não.
-    if (definition !== undefined && killer !== null && killer.alive && !isExhausted(killer)) {
+    const eligible = session.participants.length === 1
+      ? (killer !== null && killer.alive && !isExhausted(killer) ? [killer] : NO_MEMBERS)
+      : session.participants.filter((p) => p.alive && !isExhausted(p));
+    // Quem recebe o loot (#191): em solo, o matador — se pode receber; sem dono (fonte que
+    // sumiu) ou dono morto, ninguém. Em party `split`, UM elegível sorteado; em `shared`,
+    // ninguém — a bolsa (#192).
+    const recipient = this.#lootRecipient(session, killer, eligible);
+    if (definition !== undefined && this.#bag !== null && session.participants.length > 1) {
+      // Modo compartilhado (#192): tudo cai na BOLSA — sem destinatário, sem modificador
+      // individual, e a ordem do RNG é a de solo (gold, depois itens na ordem da tabela).
+      // Só com alguém elegível: um monstro que morreu com todo mundo morto não paga ninguém.
+      if (eligible.length > 0) {
+        const loot = rollLoot(definition.loot, session.rng);
+        // Elegibilidade da bolsa (D4/§16.1): TODOS os presentes no instante do abate — o mesmo
+        // conjunto que paga o rateio, não o `eligible` (vivo + stamina) que decide XP.
+        const presentAtDrop = session.participants.map((p) => p.id);
+        if (loot.gold > 0) this.#bag.gold.push({ amount: loot.gold, eligible: presentAtDrop });
+        // `#deliverToBag` rebalanceia e emite SEMPRE (mesmo sem itens: o gold muda o `value`),
+        // então o `#emitBag` que existia aqui para o drop de gold puro sumiu (DT-03).
+        this.#deliverToBag(session, loot.items);
+        // Supply e munição (#520): não passam pela bolsa — são abstratos, sem peso e sem
+        // settlement a liquidar depois. Divididos entre os MESMOS presentes que a bolsa usa
+        // (`presentAtDrop`, D4/§16.1), não o `eligible` de XP.
+        this.#creditSupplies(session, session.participants, loot.supplies);
+        this.#creditAmmunition(session, session.participants, loot.ammunition);
+      }
+    } else if (definition !== undefined && recipient !== null) {
       // Gold vira DELTA no personagem e agregado na sessão. O extrato leva os dois ao ledger
       // (invariante 10) — nada aqui escreve banco, e nada aqui inventa saldo final.
-      const loot = rollLoot(definition.loot, session.rng);
-      killer.goldDelta += loot.gold;
-      session.aggregates.goldGained += loot.gold;
+      const loot = rollLoot(this.#lootTableFor(definition, recipient), session.rng);
+      recipient.goldDelta += loot.gold;
+      session.credit(recipient.id, 'goldGained', loot.gold);
       // O item cai DEPOIS do gold, na ordem da tabela — a ordem dos sorteios é contrato
       // (FUN-63), e acrescentar destino não muda sorteio nenhum.
-      this.#deliverLoot(session, killer, loot.items);
-
-      const change = grantXp(
-        killer, definition.experience, this.#vocationOf(killer), this.#options.progression,
-      );
-      session.aggregates.xpGained += definition.experience;
-      // Level up É evento notável, ao contrário do abate: é a única coisa que aconteceu numa
-      // hunt de oito horas que o jogador quer ver ao voltar (§16.2).
-      if (change !== null) session.record('level-up', String(change.to));
+      this.#deliverLoot(session, recipient, loot.items);
+      // Supply e munição (#520): o recipiente do loot leva o estoque inteiro, como o gold.
+      this.#creditSupplies(session, [recipient], loot.supplies);
+      this.#creditAmmunition(session, [recipient], loot.ammunition);
     }
+    // A XP é da PARTY (#190, ADR 0027 decisão 3): pool por vocações únicas, dividido por igual
+    // entre os elegíveis — e em solo o elegível é o matador, pela mesma condição de sempre.
+    if (definition !== undefined) this.#grantPartyXp(session, monster, definition, eligible, credit);
     // Abate comum NÃO vira evento notável. `notableEvents` é a lista curta da tela de retorno
     // (§16.2), e uma hunt de oito horas com uma linha por rato não é lista, é log.
 
     // O lugar volta a contar o tempo — e é aqui que a próxima hora dele é marcada, agora que
-    // o spawner não guarda mais instante nenhum.
+    // o spawner não guarda mais instante nenhum. O `spawntime` do PONTO (#519, o `<monster
+    // spawntime="...">` do Canary é por posição, não por zona nem por dificuldade) prevalece
+    // quando a rota o declara; sem ele, o `respawnDelayMs` da dificuldade continua valendo,
+    // como sempre foi — é o caminho de rat-cellars/rotworm-caves, que não declaram nada por ponto.
     const slot = this.#spawner.release(monster.id);
     if (slot !== null) {
-      session.scheduleIn(SPAWN, this.#difficulty.respawnDelayMs, {
+      const pointIndex = this.#spawner.slots[slot]?.pointIndex;
+      const point = pointIndex === undefined ? undefined : this.#options.route.spawnPoints[pointIndex];
+      session.scheduleIn(SPAWN, point?.respawnDelayMs ?? this.#difficulty.respawnDelayMs, {
         priority: EventPriority.Spawn, subject: String(slot),
       });
     }
-    this.#world.vacate(monster.position.x, monster.position.y);
+    // O andar de FATO do monstro (#519) — nunca o do mapa: é o que libera o tile certo quando
+    // ele morre em z11 num mapa cujo andar padrão é z10.
+    this.#world.vacate(monster.position.x, monster.position.y, this.#floorOf(monster));
+    // O cadáver, só visual (FUN-123): fica no tile por `corpseTtlMs` e some sozinho, sem
+    // loot — o loot já foi para a caixa da sessão acima. O `sim` diz que monstro morreu e onde;
+    // a arte é da tabela, no hospedeiro (invariante 6). Hunt sem `corpseTtlMs` não deixa nada.
+    const corpseTtlMs = this.#options.hunt.corpseTtlMs;
+    if (corpseTtlMs !== undefined) {
+      const corpse: CorpseState = {
+        id: this.#nextGroundItemId++,
+        monsterId: monster.monsterId,
+        position: this.#at(monster),
+      };
+      this.#corpses.push(corpse);
+      session.emit({
+        kind: 'ground-item-appeared', itemId: corpse.id, monsterId: corpse.monsterId,
+        position: corpse.position,
+      });
+      session.scheduleIn(CORPSE, corpseTtlMs, {
+        priority: EventPriority.Housekeeping, subject: String(corpse.id),
+      });
+    }
     // Os eventos dele já saíram da fila: congelar é o primeiro estágio do pipeline. Aqui só
     // se tira o monstro dos índices desta instância — e da atribuição de quem ele bateu, senão
     // o mapa do personagem cresce uma chave por respawn até o fim da hunt.
     const subject = monster.subject;
+    // As CONDIÇÕES do monstro (CMB-07) saem com ele: sem isto, o DOT de um monstro morto
+    // continuaria na fila e venceria contra o vazio. O `resolveDeath` só cancela o `m:<id>`.
+    this.#cancelConditions(session, monster);
     for (const character of session.participants) forgetActor(character.contribution, subject);
+    // As abilities DECLARADAS têm subject DERIVADO (CMB-06), e o `resolveDeath` só cancelou o
+    // `m:<id>`. Cancelar pelos ids que o conteúdo conhece é O(abilities), sem varrer a fila —
+    // e é o que impede um monstro morto de acordar uma vez por cadência.
+    for (const ability of definition?.abilities ?? []) {
+      if (ability.id === BASIC_ABILITY_ID) continue;
+      session.cancelEvent(MONSTER_ABILITY, monsterAbilitySubject(monster.id, ability.id));
+    }
+    // As DEFESAS (#518) têm o mesmo problema e a mesma solução: subject derivado, cancelado
+    // pelos ids que o conteúdo conhece. `MONSTER_TARGET_CHANGE` usa o subject `m:<id>` exato, e
+    // esse o `resolveDeath` já cancelou junto do resto.
+    for (const defense of definition?.defenses ?? []) {
+      session.cancelEvent(MONSTER_DEFENSE, monsterDefenseSubject(monster.id, defense.id));
+    }
     this.#monsterBySubject.delete(subject);
     this.#monsters = this.#monsters.filter((m) => m.id !== monster.id);
+    // O alvo escolhido morreu: o auto-target reavalia AGORA para o próximo mais próximo na tela
+    // (#444, AB-09). O alvo antigo aponta para um subject que acabou de sair do índice, e são
+    // `#attackTargetOfRunner`/`#botCandidateOf` que o limpam — não há um segundo lugar para
+    // esquecer de limpar.
+    for (const character of session.participants) this.#autoSelectTarget(session, character);
+    // Um emit aqui, e não uma varredura de `#monsters` por ciclo no hospedeiro: com 5.000
+    // instâncias, quem conta o custo é a fila, não o laço de quem olha (FUN-103).
+    session.emit({ kind: 'creature-vanished', creatureId: subject });
   }
 
   /**
@@ -1640,9 +5894,392 @@ export class HuntRuleset implements Ruleset {
    * Nada aqui escreve banco. O `sim` não faz I/O (invariante 1): o que ele faz é registrar
    * onde cada coisa ficou, e o extrato leva.
    */
+  /**
+   * A cota de XP de cada elegível para este abate (§525, ADR 0027 emenda 2026-09-24/25).
+   *
+   * Com 0/1 elegível, ou fora de party, `xpShare` já devolve a cota igual (a XP inteira em
+   * solo) sem ler mais nada — o `canShareExperience` do TFS/Canary não tem o que decidir com
+   * menos de dois. Com 2+, a XP compartilhada é TUDO OU NADA (`Party::getSharedExperienceStatus`):
+   * `canShareExperience` confere nível (2/3 do MAIOR level de TODA a sessão), alcance/andar do
+   * líder e atividade recente — checados sobre `allMembers`, o ROSTER INTEIRO da sessão
+   * (`getPlayers()` nas duas engines: líder + membros, presente ou não elegível para receber),
+   * não só `eligible`; se todos passam, a cota é igual (`xpShare`, cujo divisor TAMBÉM é
+   * `allMembers.length` — o tamanho total da party, como as duas engines fazem, não a contagem
+   * de elegíveis); se qualquer um falha, ninguém compartilha — cada elegível recebe pelo DANO
+   * que causou neste monstro (`xpByDamage`), como o Tibia sem party.
+   *
+   * `this.#party` ausente com `eligible.length > 1` não deveria acontecer (só a party hospeda
+   * mais de um dono), mas cai para a cota igual em vez de lançar — o mesmo espírito defensivo
+   * de `autoSellLimit` diante de conteúdo incompleto.
+   */
+  #xpShares(
+    session: Session, eligible: readonly CharacterRuntime[], experience: number, credit: KillCredit,
+  ): ReadonlyMap<string, number> {
+    const party = this.#party;
+    const allMembers = session.participants.map((p) => ({ id: p.id, vocationId: this.#vocationOf(p)?.id ?? null }));
+    if (eligible.length <= 1 || party === undefined) {
+      const share = xpShare(experience, eligible, allMembers);
+      return new Map(eligible.map((member) => [member.id, share]));
+    }
+    const leader = session.participants.find((p) => p.id === party.leaderId);
+    const highestLevel = session.participants.reduce((max, p) => Math.max(max, p.level), 0);
+    const rules = this.#options.party.sharedExperience ?? DEFAULT_SHARED_EXPERIENCE_RULES;
+    const canShare = leader !== undefined && canShareExperience(
+      session.participants.map((member) => ({
+        id: member.id,
+        level: member.level,
+        position: member.position,
+        lastActionAtMs: this.#runners.get(member.id)?.lastCombatActionAtMs ?? null,
+      })),
+      highestLevel, leader.position, session.nowMs, rules,
+    );
+    if (canShare) {
+      const share = xpShare(experience, eligible, allMembers);
+      return new Map(eligible.map((member) => [member.id, share]));
+    }
+    return xpByDamage(experience, eligible, credit.damageByActor);
+  }
+
+  /**
+   * A XP de um abate, dividida pela party (#190, ADR 0027 decisões 3 e emenda 2026-09-24).
+   *
+   * A cota vem de `#xpShares` — pool por vocações únicas reais dividido por igual quando a
+   * party inteira atende a elegibilidade do TFS/Canary, por dano quando não atende. Elegível é
+   * quem está VIVO com stamina — a condição que sempre decidiu se o matador recebia, aplicada a
+   * cada membro. Em solo, a cota é a XP inteira sem ler a tabela, e o único elegível é o
+   * matador: nada muda, inclusive quando a fonte do golpe sumiu — aí o solo continua sem XP,
+   * porque o único candidato não é o matador (DT-04).
+   *
+   * A ordem é contrato: para cada elegível, na ordem de ENTRADA, o bônus de Bestiário de ANTES
+   * deste abate (DT-04 da FUN-113) SOMA-SE ao bônus de level e aos que vierem — a XP com bônus
+   * sai de UMA multiplicação em inteiro (`applyExperienceBonus`), nunca de uma cadeia de
+   * `floor` por bônus; depois `grantXp` → `record` no Bestiário. Nada aqui consome RNG.
+   */
+  #grantPartyXp(
+    session: Session, monster: MonsterRuntime, definition: Monster, eligible: readonly CharacterRuntime[],
+    credit: KillCredit,
+  ): void {
+    if (eligible.length === 0) return;
+    const shares = this.#xpShares(session, eligible, definition.experience, credit);
+    const solo = session.participants.length === 1;
+    for (const member of eligible) {
+      const share = shares.get(member.id) ?? 0;
+      // Aditivo por decisão (#563): Bestiário + faixa de level + os que vierem (VIP, evento —
+      // extensão aqui, valor zero hoje; a monetização está fora desta issue).
+      const bonusPercent = member.bestiary.xpBonusPercent(this.#options.bestiary)
+        + levelExperienceBonusPercent(member.level, this.#options.progression);
+      const experience = applyExperienceBonus(share, bonusPercent);
+      const change = grantXp(member, experience, this.#vocationOf(member), this.#options.progression);
+      session.credit(member.id, 'xpGained', experience);
+      // Level up É evento notável, ao contrário do abate: é a única coisa que aconteceu numa
+      // hunt de oito horas que o jogador quer ver ao voltar (§16.2). Em party o detalhe diz
+      // DE QUEM (DT-02); em solo fica como sempre foi, e `event-text.ts` lê o formato solo.
+      if (change !== null) {
+        session.record('level-up', solo ? String(change.to) : `${member.id}/${String(change.to)}`);
+        // E reescreve `health`/`maxHealth` pela tabela (`retarget`): a barra sai daqui como
+        // de todo lugar que a escreve (FUN-109). Sem isto, a barra sobre o herói ficava com o
+        // máximo velho até o próximo golpe ou regeneração — e de vida cheia a regeneração não
+        // anuncia nada, então "até a reanexação".
+        this.#emitCharacterHealth(session, member);
+        // Level up REESCREVE `capacity` pela tabela (`retarget`, progression.ts): é gatilho do
+        // §13 — a disponível do membro cresce, e as reservas mudam com ela.
+        this.#rebalanceBag(session);
+      }
+      // O abate conta no Bestiário de TODO elegível (ADR 0027 decisão 4), pela MESMA condição
+      // que paga a XP (§18.6): stamina zero não conta abate. E fechar um marco é evento
+      // notável, como o level up: acontece cinco vezes por monstro na vida do personagem.
+      const reached = member.bestiary.record(monster.monsterId, this.#options.bestiary);
+      if (reached.milestoneReached !== null) {
+        const detail = `${monster.monsterId}/${String(reached.milestoneReached)}`;
+        session.record('bestiary-milestone', solo ? detail : `${member.id}/${detail}`);
+      }
+    }
+  }
+
+  /**
+   * O rateio de um supply no modo compartilhado (#192, ADR 0027 decisão 5).
+   *
+   * `floor(c / n)` de cada presente e o resto do usuário; quem não tem saldo para a cota paga
+   * o que tem e o usuário cobre; se nem o usuário cobre, `canAfford` é `false` e nada é
+   * debitado de ninguém — a garantia continua sendo a ORDEM, como no solo. `pay` credita
+   * `goldSpent` a cada um pelo que pagou: o extrato de cada membro sai equalizado.
+   */
+  #sharedPurse(session: Session, user: CharacterRuntime): Purse {
+    const plan = (cost: number): Map<string, number> | null => {
+      const present = session.participants;
+      const share = Math.floor(cost / present.length);
+      const paid = new Map<string, number>();
+      let uncovered = cost - share * present.length;   // o resto é do usuário
+      for (const member of present) {
+        if (member === user) continue;
+        const can = Math.min(share, Math.max(0, balanceOf(member)));
+        paid.set(member.id, can);
+        uncovered += share - can;
+      }
+      const mine = share + uncovered;
+      if (balanceOf(user) < mine) return null;
+      paid.set(user.id, mine);
+      return paid;
+    };
+    return {
+      canAfford: (cost) => plan(cost) !== null,
+      pay: (cost) => {
+        const paid = plan(cost);
+        if (paid === null) return;
+        for (const member of session.participants) {
+          const gold = paid.get(member.id) ?? 0;
+          if (gold === 0) continue;
+          member.goldDelta -= gold;
+          session.credit(member.id, 'goldSpent', gold);
+        }
+      },
+    };
+  }
+
+  /** O líder presente, ou o mais antigo (#192): é dele a caixa do excedente e o invendável. */
+  #leader(session: Session): CharacterRuntime | undefined {
+    const wanted = this.#party?.leaderId;
+    return session.participants.find((p) => p.id === wanted) ?? session.participants[0];
+  }
+
+  /**
+   * O limite de tipos vendáveis do LÍDER (D2/§23.1): o Premium é do PERSONAGEM líder, nunca do
+   * usuário do item. O conteúdo manda os números; a sessão só lê.
+   */
+  #autoSellLimit(): number {
+    const party = this.#party;
+    if (party === undefined) return 0;
+    return autoSellLimit(
+      party.premiumByCharacter, party.leaderId, this.#options.party.autoSellItemTypes,
+    );
+  }
+
+  /** Os ids que de fato vendem: só os `autoSellLimit` PRIMEIROS da lista configurada (§23.1). */
+  #effectiveAutoSell(): ReadonlySet<string> {
+    const party = this.#party;
+    if (party === undefined) return EMPTY_AUTO_SELL;
+    return new Set(party.autoSell.slice(0, this.#autoSellLimit()));
+  }
+
+  /**
+   * O loot cai na bolsa (#192, #396): pelo PESO, contra a capacidade DISPONÍVEL somada
+   * (`capacity − inventory.weight`), não a total — bolsa e mochila contavam a mesma capacidade
+   * duas vezes. `itemsLooted` conta para todo presente — "quantos itens caíram" é a pergunta do
+   * §16.1, e caíram para a party (DT-03) —, mas SÓ o que de fato é coletado.
+   *
+   * A lista de COLETA filtra DEPOIS de `rollLoot` (§7, D2): zero RNG a mais (FUN-63), e o item
+   * fora da lista fica no cadáver — sem `itemsLooted`, sem caixa de ninguém. A VENDA AUTOMÁTICA
+   * é um subconjunto lógico da coleta: o item vendável nunca pesa nem entra na bolsa, vira gold
+   * na hora dividido pelos presentes no abate (§8, D2/§16.1).
+   *
+   * Em OVERWEIGHT (§14, DT-01) um item com `weight > 0` que não cabe NÃO é coletado: fica no
+   * cadáver — nem bolsa, nem caixa do líder (a caixa é coletar com outro destinatário). Item de
+   * peso `0` sempre entra, gold sempre entra, autovenda sempre vende.
+   */
+  #deliverToBag(session: Session, items: readonly LootItem[]): void {
+    const bag = this.#bag;
+    const party = this.#party;
+    if (bag === null || party === undefined) return;
+    // A capacidade DISPONÍVEL é lida uma vez por abate: itens de um mesmo drop só aumentam
+    // `#bagWeight`, então o teto não muda no meio do laço.
+    const totalAvailable = this.#availableCapacities(session)
+      .reduce((sum, m) => sum + m.available, 0);
+    // Elegibilidade da bolsa (D4/§16.1): TODOS os presentes no instante do abate — o mesmo
+    // conjunto que paga o rateio, não o `eligible` (vivo + stamina) que decide XP.
+    const presentAtDrop = session.participants.map((p) => p.id);
+    const effectiveAutoSell = this.#effectiveAutoSell();
+
+    for (const rolled of items) {
+      const definition = this.#options.items.get(rolled.itemId);
+      if (definition === undefined) continue;
+
+      // Filtro de coleta (§7, D2), DEPOIS de `rollLoot` — zero RNG a mais (FUN-63). Fora da
+      // lista, o item não existe para a party: sem `itemsLooted`, sem caixa de ninguém.
+      if (party.collect !== null && !party.collect.includes(rolled.itemId)) {
+        continue;
+      }
+
+      // Venda automática (§8, D2): subconjunto lógico da coleta — nunca pesa, nunca entra na
+      // bolsa. `value: 0` na lista é ignorado aqui como defesa (configureParty já recusa
+      // configurar assim; isto cobre conteúdo que mudou de valor sob uma sessão em voo).
+      if (effectiveAutoSell.has(rolled.itemId) && definition.value > 0) {
+        const amount = definition.value * rolled.quantity;
+        const split = splitEqually(amount, presentAtDrop.length);
+        const shares = presentAtDrop.map((characterId, i) => ({ characterId, gold: split[i] ?? 0 }));
+        for (const { characterId, gold } of shares) {
+          if (gold === 0) continue;
+          const member = findById(session.participants, characterId);
+          if (member === null) continue;
+          member.goldDelta += gold;
+          session.credit(member.id, 'goldGained', gold);
+        }
+        for (const p of session.participants) session.credit(p.id, 'itemsLooted', rolled.quantity);
+        // Venda automática NÃO é evento notável (D2): a lista curta da tela de retorno não leva
+        // uma linha por dragon ham — só `party-settlement` de saída/fim/toggle entra ali.
+        session.emit({
+          kind: 'party-settlement', total: amount, reason: 'auto-sell', itemId: rolled.itemId, shares,
+        });
+        continue;
+      }
+
+      const weight = definition.weight * rolled.quantity;
+      // OVERWEIGHT (§14): item com peso que não cabe não é coletado — fica no cadáver, sem
+      // virar instância, sem contar `itemsLooted`, sem caixa de ninguém. Peso `0` sempre passa.
+      if (weight > 0 && this.#bagWeight + weight > totalAvailable) continue;
+
+      const carried: CarriedItem = {
+        instanceId: `${session.id}:bag:${String(this.#bagSeq++)}`,
+        itemId: rolled.itemId, quantity: rolled.quantity,
+      };
+      bag.items.push({ item: carried, eligible: presentAtDrop });
+      this.#bagWeight += weight;
+      for (const p of session.participants) session.credit(p.id, 'itemsLooted', carried.quantity);
+    }
+    // `#rebalanceBag` é o ÚNICO emissor de `party-bag-changed` (DT-03) e roda mesmo com `items`
+    // vazio, porque um drop só de gold muda o `value` da bolsa.
+    this.#rebalanceBag(session);
+  }
+
+  /** A capacidade DISPONÍVEL de cada presente: `max(0, capacity − inventory.weight)` (§12, D4). */
+  #availableCapacities(session: Session): MemberCapacity[] {
+    return session.participants.map((p) => ({
+      id: p.id,
+      available: Math.max(0, p.capacity - p.inventory.weight(this.#options.items)),
+    }));
+  }
+
+  /**
+   * O ÚNICO ponto que recalcula disponível/reservas/OVERWEIGHT e emite `party-bag-changed`
+   * (§11-§15, #396). Chamado só nos gatilhos do §13: `onEnter`, `onLeave` (via `#settle`),
+   * `#deliverToBag`, `#deliverLoot`, level up que reescreve `capacity`, `#settle`, autovenda
+   * (dentro de `#deliverToBag`) e `configureParty`. NUNCA por tick — é o que faz 1 Hz e 10 Hz
+   * rebalancearem no mesmo evento lógico, não no mesmo instante de relógio (invariante 2).
+   */
+  #rebalanceBag(session: Session): void {
+    const bag = this.#bag;
+    if (bag === null) return;
+    const members = this.#availableCapacities(session);
+    const totalAvailable = members.reduce((sum, m) => sum + m.available, 0);
+    const reservedById = reserveProportionally(this.#bagWeight, members);
+    const reservations = members.map((m) => ({
+      characterId: m.id, reserved: reservedById.get(m.id) ?? 0, available: m.available,
+    }));
+    // OVERWEIGHT: a bolsa está CHEIA — não há mais espaço para item com peso. O ADR escreve
+    // `W > ΣB`, mas como só se adiciona o que cabe, `W` nunca ultrapassa `ΣB` por drop; a
+    // igualdade é o estado de "cheio" do plano §3 (bolsa 1 500 com disponível 1 500), e é o que
+    // o gatilho de recusa enxerga. Bolsa vazia (peso 0) NUNCA é OVERWEIGHT, mesmo com ΣB = 0.
+    const overweight = this.#bagWeight > 0 && this.#bagWeight >= totalAvailable;
+    // Uma linha por TRANSIÇÃO: comparar com o valor JÁ PERSISTIDO em `bag.overweight` é o que
+    // evita um `party-overweight` falso logo depois de um `onResume` (DT-02/§7).
+    if (overweight !== bag.overweight) {
+      session.record('party-overweight', overweight ? 'on' : 'off');
+    }
+    bag.overweight = overweight;
+    bag.capacity = totalAvailable;
+    this.#emitBag(session, reservations);
+  }
+
+  #emitBag(session: Session, reservations: PartyBagChanged['reservations'] = []): void {
+    const bag = this.#bag;
+    if (bag === null) return;
+    session.emit({
+      kind: 'party-bag-changed',
+      gold: bag.gold.reduce((sum, entry) => sum + entry.amount, 0),
+      items: bag.items.map((entry) => entry.item),
+      weight: this.#bagWeight, capacity: bag.capacity,
+      value: bagValue(bag, this.#options.items),
+      overweight: bag.overweight,
+      reservations,
+    });
+  }
+
+  /**
+   * Vende a bolsa ENTRADA por entrada (#192, ADR 0027 decisão 5; #395, D4/D6): ao sair alguém
+   * — com quem sai incluído —, no fim, e ao desligar `splitLoot`. Cada entrada é dividida só
+   * entre `eligible ∩ present`; cada um recebe a cota em `goldDelta` e `goldGained`; o resto vai
+   * um gold por membro na ordem de entrada. O que não se vende (`value: 0`) vai para a mochila
+   * do líder, e o que não couber para a caixa dele. Registrado no extrato — "vendeu nada" também
+   * é informação.
+   */
+  #settle(
+    session: Session, present: readonly CharacterRuntime[], reason: 'leave' | 'end' | 'toggle',
+  ): void {
+    const bag = this.#bag;
+    if (bag === null || present.length === 0) return;
+    if (bag.gold.length === 0 && bag.items.length === 0) {
+      // Nada a vender, mas a composição pode ter mudado (saída): rebalanceia mesmo assim.
+      this.#rebalanceBag(session);
+      return;
+    }
+    const { shares, unsold, total } = settleEntries(bag, present.map((p) => p.id), this.#options.items);
+    for (const member of present) {
+      const gold = shares.get(member.id) ?? 0;
+      if (gold === 0) continue;
+      member.goldDelta += gold;
+      session.credit(member.id, 'goldGained', gold);
+    }
+    // A bolsa foi VENDIDA: a reserva que ela impunha à mochila cai junto, ANTES de devolver o
+    // que não vendeu. Senão a própria reserva recusaria o item que a bolsa guardava — o líder
+    // recebe os `unsold` com a capacidade cheia (RF-05: "settlement libera a reserva").
+    bag.gold = [];
+    bag.items.length = 0;
+    this.#bagWeight = 0;
+    const leader = this.#leader(session) ?? present[0];
+    if (leader !== undefined) {
+      const wearer = withReservedCapacity(leader, 0);
+      for (const item of unsold) {
+        if (leader.inventory.add(item, this.#options.items, wearer, this.#containerRules(leader)).ok) continue;
+        leader.lootBox.push(item);
+      }
+    }
+    session.record('party-settlement', `${String(total)}/${String(present.length)}`);
+    session.emit({
+      kind: 'party-settlement', total, reason,
+      shares: present.map((p) => ({ characterId: p.id, gold: shares.get(p.id) ?? 0 })),
+    });
+    this.#rebalanceBag(session);
+  }
+
+  /**
+   * Quem recebe o loot de um abate (#191, ADR 0027 decisão 5).
+   *
+   * Solo — ou party que virou solo —: o matador, e NENHUM sorteio. Um `rng` a mais aqui
+   * mudaria a sequência de loot de toda hunt existente (FUN-63), e o teste que grava a
+   * sequência é o que prende. Party `split` com ≥ 2: um elegível sorteado, uniforme, ANTES de
+   * `rollLoot` — os modificadores (Prey, quando existir) são do destinatário e mudam a tabela
+   * rolada. Party `shared`: ninguém; o loot vai para a bolsa (#192).
+   */
+  #lootRecipient(
+    session: Session, killer: CharacterRuntime | null, eligible: readonly CharacterRuntime[],
+  ): CharacterRuntime | null {
+    if (this.#party === undefined || session.participants.length < 2) {
+      return killer !== null && killer.alive && !isExhausted(killer) ? killer : null;
+    }
+    if (this.#party.splitLoot) return null;
+    if (eligible.length === 0) return null;
+    return eligible[session.rng.integer(0, eligible.length - 1)] ?? null;
+  }
+
+  /**
+   * A tabela de loot COMO o destinatário a vê. Identidade hoje: não há modificador de loot
+   * por personagem — o Prey (§19) é quem vai mexer aqui, e o gancho existe para ele entrar
+   * DEPOIS do sorteio do destinatário, e não antes.
+   */
+  #lootTableFor(definition: Monster, _recipient: CharacterRuntime): Monster['loot'] {
+    return definition.loot;
+  }
+
   #deliverLoot(
     session: Session, character: CharacterRuntime, items: readonly LootItem[],
   ): void {
+    // O loot PESSOAL entra na mochila com a capacidade já descontada da reserva que a party fez
+    // dele (§11, DT-05). Hoje `#deliverLoot` só roda quando `#bag` é `null` (o modo compartilhado
+    // entrega pela bolsa), então `reserved` é 0; o `Wearer` derivado fica pela consistência e
+    // blinda o código se uma issue futura mudar quando este caminho roda com bolsa ativa.
+    const reserved = this.#bag === null
+      ? 0
+      : (reserveProportionally(this.#bagWeight, this.#availableCapacities(session)).get(character.id) ?? 0);
+    const wearer = withReservedCapacity(character, reserved);
     for (const rolled of items) {
       // O catálogo é conferido ANTES de gastar um id. `buildContent` recusa loot de item
       // inexistente no boot, então isto só acontece com o conteúdo mudando sob uma sessão em
@@ -1650,28 +6287,131 @@ export class HuntRuleset implements Ruleset {
       // vai existir.
       if (this.#options.items.get(rolled.itemId) === undefined) continue;
 
+      // O id é determinístico (`sessionId:n`, FUN-88) e vira chave primária de `item_instance`.
+      // `lootSeq` é do PERSONAGEM, então em party (#191) o id leva o dono no meio — dois
+      // membros com `lootSeq` 0 colidiriam. Em solo o formato é o de sempre. O critério é o
+      // TIPO de sessão, não a contagem de presentes (DT-03, #397): uma party pode ficar
+      // momentaneamente com 1 presente e depois crescer de novo por join em curso, e o formato
+      // de solo colidiria com o de quem entrar depois.
+      const instanceId = this.#party !== undefined
+        ? `${session.id}:${character.id}:${String(character.lootSeq++)}`
+        : `${session.id}:${String(character.lootSeq++)}`;
       const carried: CarriedItem = {
-        instanceId: `${session.id}:${character.lootSeq++}`,
+        instanceId,
         itemId: rolled.itemId,
         quantity: rolled.quantity,
       };
       // Conta no ANALISADOR aconteça o que acontecer com o destino: o item caiu, e é isso que
       // o §16.1 chama de loot. Contar só o que coube faria a mochila cheia parecer hunt ruim.
-      session.aggregates.itemsLooted += carried.quantity;
+      session.credit(character.id, 'itemsLooted', carried.quantity);
 
-      if (character.inventory.add(carried, this.#options.items, character).ok) continue;
+      if (character.inventory.add(carried, this.#options.items, wearer, this.#containerRules(character)).ok) continue;
 
       // Não coube: vai para a caixa. Ela é da SESSÃO — encerrar começa o relógio de 30
       // minutos —, e por isso o item ainda não é uma instância no banco: expirar precisa
       // significar que ele nunca existiu, não que existe e ninguém consegue ver.
       character.lootBox.push(carried);
-      if (this.#warnedFullBackpack) continue;
-      this.#warnedFullBackpack = true;
+      const runner = this.#runnerOf(character.id);
+      if (runner.warnedFullBackpack) continue;
+      runner.warnedFullBackpack = true;
       // UMA linha no extrato, como o aviso de stamina. Uma por item encheria a lista curta da
       // tela de retorno até ela deixar de ser lista — e o que o jogador precisa saber é que a
       // mochila encheu, não qual das trinta flechas ficou de fora.
       session.record('backpack-full', character.id);
     }
+    // Gatilho do §13: o loot pessoal mudou o peso da mochila, e com ele a capacidade disponível
+    // e as reservas da party. No-op quando não há bolsa, que é o caso de hoje.
+    this.#rebalanceBag(session);
+  }
+
+  /**
+   * Credita o ESTOQUE de supply do loot (#520) a quem recebeu o drop — ver `#creditStock`.
+   * Supply é ABSTRATO (AB-01, ADR 0032 d.6): sem peso, sem instância, sem OVERWEIGHT — o
+   * estoque É o destino final, e não passa pela bolsa nem pelo `#settle` como item.
+   */
+  #creditSupplies(
+    session: Session, recipients: readonly CharacterRuntime[], supplies: readonly LootSupply[],
+  ): void {
+    this.#creditStock(
+      session, recipients, supplies,
+      (line) => line.supplyId,
+      (id) => this.#options.supplies.get(id) !== undefined,
+      (member) => member.supplyStock,
+    );
+  }
+
+  /**
+   * Credita o ESTOQUE de munição FÍSICA do loot (#520, revisão do #536) — a mesma mecânica e a
+   * mesma razão do `#creditSupplies`: munição continua abstrata no TIRO (ADR 0026 d.7), mas o
+   * que caiu em loot (Burst Arrow, Power Bolt) precisa existir como estoque para ser gasto
+   * antes do gold (`#ammoFor`/`#strike`).
+   */
+  #creditAmmunition(
+    session: Session, recipients: readonly CharacterRuntime[], ammunition: readonly LootAmmunition[],
+  ): void {
+    this.#creditStock(
+      session, recipients, ammunition,
+      (line) => line.ammunitionId,
+      (id) => this.#options.ammunition.get(id) !== undefined,
+      (member) => member.ammunitionStock,
+    );
+  }
+
+  /**
+   * O mecanismo comum de `#creditSupplies`/`#creditAmmunition` (#520): em solo/split o
+   * recipiente sozinho leva tudo; em shared, dividido entre os presentes no abate.
+   *
+   * **O resto vai para recipientes SORTEADOS, não sempre para o primeiro da lista** (achado da
+   * revisão do #536): a quantidade comum é 1 (uma Strong Health Potion para 4 presentes), e
+   * `splitEqually` — certo para o rateio de GOLD em `#settle`, que soma MUITOS drops numa bolsa
+   * antes de dividir UMA vez — sempre manda o resto para o índice 0. Aplicado abate a abate,
+   * isso credita a MESMA pessoa toda vez. Aqui o resto é sorteado sem reposição (embaralhamento
+   * parcial de Fisher-Yates) com o `Rng` da sessão — o mesmo sorteio que `#lootRecipient` já usa
+   * para o destinatário em modo `split` —, e ao longo de muitos abates cada presente recebe a
+   * unidade extra proporcionalmente.
+   *
+   * O catálogo é conferido ANTES de gastar um id, como `#deliverLoot` faz com item:
+   * `buildContent` recusa loot de supply/munição inexistente no boot, e isto só dispara com
+   * conteúdo mudando sob uma sessão em voo.
+   */
+  #creditStock<T extends { readonly quantity: number }>(
+    session: Session, recipients: readonly CharacterRuntime[], rolled: readonly T[],
+    idOf: (line: T) => string, existsInCatalog: (id: string) => boolean,
+    stockOf: (member: CharacterRuntime) => Map<string, number>,
+  ): void {
+    if (recipients.length === 0 || rolled.length === 0) return;
+    for (const line of rolled) {
+      const id = idOf(line);
+      if (!existsInCatalog(id)) continue;
+      const base = Math.floor(line.quantity / recipients.length);
+      const remainder = line.quantity - base * recipients.length;
+      const shares = new Array<number>(recipients.length).fill(base);
+      // Fisher-Yates parcial: sorteia `remainder` índices DISTINTOS entre os `recipients.length`
+      // presentes, um a um, sem reposição — cada um consome exatamente uma rolagem do Rng.
+      const order = recipients.map((_, i) => i);
+      for (let i = 0; i < remainder; i += 1) {
+        const pick = session.rng.integer(i, order.length - 1);
+        const chosen = order[pick] as number;
+        order[pick] = order[i] as number;
+        order[i] = chosen;
+        shares[chosen] = (shares[chosen] ?? 0) + 1;
+      }
+      for (let i = 0; i < recipients.length; i += 1) {
+        const share = shares[i] ?? 0;
+        if (share === 0) continue;
+        const member = recipients[i] as CharacterRuntime;
+        const stock = stockOf(member);
+        stock.set(id, (stock.get(id) ?? 0) + share);
+        // Conta no ANALISADOR como o item (§16.1): caiu, e é isso que importa para "quantos
+        // itens caíram" — não há um agregado separado só para supply/munição.
+        session.credit(member.id, 'itemsLooted', share);
+      }
+    }
+  }
+
+  /** Os tamanhos de container deste personagem (#160): a mochila que ele veste, e a tabela. */
+  #containerRules(character: CharacterRuntime): ContainerRules {
+    return containerRulesFor(character.inventory, this.#options.items, this.#options.progression);
   }
 
   #vocationOf(character: CharacterRuntime): Vocation | null {
@@ -1682,15 +6422,13 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * O ataque da ARMA equipada, ou o do desarmado (FUN-82).
-   *
-   * `combat.player.attackPower` deixou de ser "o ataque do personagem" e passou a ser o do
-   * personagem SEM arma — o fallback, e ele é conteúdo. Um zero em código no lugar dele faria
-   * todo personagem novo não machucar nada, e sem arma é como todo personagem começa.
+   * A regeneração passiva DESTE personagem (#521, ADR 0037): a da vocação escolhida, ou a da
+   * tabela base (sem vocação — Canary `vocations.xml`, id 0 "None") para quem ainda não tem
+   * uma. Cada vocação regenera num ritmo diferente no Tibia; antes da #521 era um número só
+   * para todo mundo.
    */
-  #attackPowerOf(character: CharacterRuntime): number {
-    return character.inventory.weaponAttack(this.#options.items)
-      ?? this.#options.player.attackPower;
+  #regenOf(character: CharacterRuntime): { healthPerSecond: number; manaPerSecond: number } {
+    return this.#vocationOf(character)?.regen ?? this.#options.progression.regen;
   }
 
   /**
@@ -1706,33 +6444,188 @@ export class HuntRuleset implements Ruleset {
     return {
       armor: this.#options.player.armor + character.inventory.armor(this.#options.items),
       dodgeChance: this.#options.player.dodgeChance,
+      // A resistência e a imunidade do EQUIPAMENTO (CMB-03), compiladas na hora do golpe a
+      // partir dos poucos slots vestidos — não é varredura de tabela de resistência.
+      mitigation: character.inventory.mitigation(this.#options.items),
+      // A fonte de defesa (CMB-04): escolhida pelo `Inventory` (DT-01) e escalada aqui pela
+      // skill de shielding, que é do ruleset porque vive no personagem.
+      defense: this.#defenseSourceOf(character),
     };
   }
 
   /**
-   * Em quem bater AGORA: o melhor alvo dentro do alcance da arma (FUN-85).
+   * O Energy Ring no dedo (§13.9, SV-16): a segunda fonte de mana shield, resolvida pelo
+   * catálogo — `CharacterRuntime` não conhece conteúdo. Entra em `applyDamageOutcome` como a
+   * mesma leitura OU-lógica da condição `mana-shield`, e nunca soma com ela.
+   */
+  #hasEnergyShield(character: CharacterRuntime): boolean {
+    return character.inventory.ringEffect(this.#options.items)?.kind === 'energy-shield';
+  }
+
+  /**
+   * A fonte de defesa do personagem (CMB-04), já escalada pela skill de shielding.
+   *
+   * A ESCOLHA é do `Inventory` (DT-01): escudo, arma de uma mão, nenhuma — uma regra só, a
+   * mesma que já recusa bow com escudo. Aqui entra o que é do ruleset: a skill que o conteúdo
+   * apontou em `combat.defense.skillId` multiplica a defesa da peça, como a skill de arma
+   * multiplica o ataque. Sem skill (conteúdo de teste, ou referência ausente), a peça vale o
+   * que ela diz.
+   */
+  #defenseSourceOf(character: CharacterRuntime): DefenseSource {
+    const source = character.inventory.defenseSource(this.#options.items, character);
+    if (source.kind === 'none') return source;
+    const skillId = this.#options.combat.defense?.skillId;
+    if (skillId === undefined) return source;
+    const skill = this.#options.skills.get(skillId);
+    if (skill === undefined) return source;
+    return {
+      kind: source.kind,
+      defense: Math.round(source.defense * powerMultiplier(skill, character.skills.levelOf(skill))),
+    };
+  }
+
+  /**
+   * Em quem bater AGORA: o alvo escolhido, se vivo e ao alcance; senão o melhor da política
+   * dentro do alcance da arma (FUN-85).
    *
    * Era `#nearestMonster`, e a política era o motor. Agora ela vem da configuração — e
    * `nearest` continua sendo o padrão, então uma hunt sem bot se comporta exatamente como
    * antes. O desempate segue estável, e é `selectTarget` que o garante.
+   *
+   * Alvo do JOGADOR fora do alcance devolve `null` em vez de cair na política: quem mandou
+   * seguir um não quer bater em outro no caminho — quem o leva até lá é `#approachTarget`, na
+   * postura `follow` (ADR 0032 d.5). Alvo do AUTO-TARGET (#444) é só a mira corrente: fora do
+   * alcance da arma, o golpe cai no melhor da política, e é isso que mantém o corpo a corpo
+   * batendo no monstro colado enquanto a runa espera o alvo distante.
    */
   #attackTarget(character: CharacterRuntime): MonsterRuntime | null {
+    // O alvo explícito (jogador ou bot, #470/#480) vem primeiro. O pinned do JOGADOR é
+    // EXCLUSIVO: fora do alcance devolve `null` em vez de cair na política. O eleito pelo bot
+    // NÃO é — fora do alcance ele cede para o candidato/política, e é isso que mantém o corpo
+    // a corpo batendo no monstro colado enquanto o bot mira um alvo distante (#444).
+    const attack = this.#attackTargetOfRunner(character);
+    if (attack !== null) {
+      if (distance(character.position, attack.position) <= this.#attackRangeOf(character)) {
+        return attack;
+      }
+      if (this.#isPinned(character)) return null;
+    }
+    // O candidato do auto-target (#444) é só a mira corrente: fora do alcance da arma, o golpe
+    // cai no melhor da política, e é isso que mantém o corpo a corpo batendo no monstro colado
+    // enquanto a runa espera o alvo distante.
+    const candidate = this.#botCandidateOf(character);
+    if (candidate !== null
+      && distance(character.position, candidate.position) <= this.#attackRangeOf(character)) {
+      return candidate;
+    }
     return selectTarget(
-      this.#targeting, this.#monsters, character.position, this.#options.player.attackRange,
+      this.#targetingOf(character), this.#monsters, character.position, this.#attackRangeOf(character),
     );
   }
 
   /**
-   * Atrás de quem ANDAR: o melhor alvo dentro do raio de visão.
+   * O monstro vivo, dentro do raio de busca; senão `null`. **NÃO muta** — é a leitura que
+   * `selectedTargetOf` usa para a apresentação (invariante 3).
+   */
+  #liveTargetOf(subject: string | null, character: CharacterRuntime): MonsterRuntime | null {
+    if (subject === null) return null;
+    const monster = this.#monsterBySubject.get(subject);
+    if (monster === undefined || !monster.alive) return null;
+    // Andar diferente é tela diferente (#519): um alvo pinado antes de trocar de andar — o dele
+    // ou o do personagem — não continua "na tela" só porque o (x, y) ainda está perto.
+    if (!sameFloor(this.#floorOf(character), this.#floorOf(monster))) return null;
+    if (distance(character.position, monster.position) > (this.#options.targetSearchRadius ?? 8)) {
+      return null;
+    }
+    return monster;
+  }
+
+  /** O alvo de ATAQUE vivo; limpa o campo se morreu ou saiu da tela. `null` se não há. */
+  #attackTargetOfRunner(character: CharacterRuntime): MonsterRuntime | null {
+    const runner = this.#runners.get(character.id);
+    if (runner === undefined || runner.attackTarget === null) return null;
+    const monster = this.#liveTargetOf(runner.attackTarget, character);
+    if (monster === null) {
+      runner.attackTarget = null;
+      runner.attackTargetPinned = false;
+    }
+    return monster;
+  }
+
+  /** O candidato do AUTO-TARGET vivo; limpa o campo se morreu ou saiu da tela. */
+  #botCandidateOf(character: CharacterRuntime): MonsterRuntime | null {
+    const runner = this.#runners.get(character.id);
+    if (runner === undefined || runner.botCandidate === null) return null;
+    const monster = this.#liveTargetOf(runner.botCandidate, character);
+    if (monster === null) runner.botCandidate = null;
+    return monster;
+  }
+
+  /** O alvo corrente é do JOGADOR (AB-09), ou só uma eleição do bot (#480)? */
+  #isPinned(character: CharacterRuntime): boolean {
+    const runner = this.#runners.get(character.id);
+    return runner !== undefined && runner.attackTarget !== null && runner.attackTargetPinned;
+  }
+
+  /**
+   * O alcance é da ARMA (#152): o bow alcança 6, wand e rod 3, e o desarmado vale o alcance
+   * do perfil `fist` (CMB-05) — que o boot monta de `combat.player.attackRange`, o corpo a
+   * corpo. A arma sem `range` já saiu do boot com o da família.
+   */
+  #attackRangeOf(character: CharacterRuntime): number {
+    return character.inventory.weapon(this.#options.items, character)?.weapon?.range
+      ?? this.#options.unarmed.range;
+  }
+
+  /**
+   * Atrás de quem ANDAR: o alvo escolhido primeiro (para "seguir" fora do alcance), senão o
+   * melhor dentro do raio de visão.
    *
    * Só é consultado quando a postura não é `stand`. Separar dos dois é o que destravou esta
    * issue: enquanto a busca parava no alcance da arma, "seguir o alvo" não tinha como ser
    * expresso — quem já está ao alcance não precisa ser seguido.
    */
   #approachTarget(character: CharacterRuntime): MonsterRuntime | null {
+    if (this.#isPinned(character)) {
+      const attack = this.#attackTargetOfRunner(character);
+      if (attack !== null) return attack;
+    }
     return selectTarget(
-      this.#targeting, this.#monsters, character.position, this.#options.targetSearchRadius ?? 8,
+      this.#targetingOf(character), this.#monsters, character.position, this.#options.targetSearchRadius ?? 8,
     );
+  }
+
+  /**
+   * Auto-target (#444): sem alvo pinado pelo jogador, seleciona o melhor monstro na TELA — o raio
+   * de busca, o mesmo de `#approachTarget` — e o guarda. É o que faz um monstro que surge ao
+   * alcance virar alvo na hora.
+   *
+   * A eleição passa por `setAttackTarget(..., pinned: false)` (#480, §42): o bot entra pelo
+   * MESMO pipeline do jogador, mas sem pinar — fora do alcance a política reassume. O
+   * `botCandidate` continua sendo a mira de tela, e é ele que sobrevive ao cancelamento do
+   * jogador. NÃO sobrepõe o alvo pinado do jogador: com um `attackTarget` pinado vivo e na tela,
+   * sai sem tocar em nada. Quando ele morre ou sai da tela, `#attackTargetOfRunner` limpa o campo e
+   * a chamada seguinte já reavalia para o próximo mais próximo.
+   */
+  #autoSelectTarget(session: Session, character: CharacterRuntime): void {
+    const runner = this.#runners.get(character.id);
+    if (runner === undefined || !character.alive) return;
+    if (this.#isPinned(character)) {
+      if (this.#attackTargetOfRunner(character) !== null) return;
+    }
+
+    const best = this.#approachTarget(character);
+    const next = best === null ? null : best.subject;
+    if (next === runner.attackTarget) return;
+    runner.botCandidate = next;
+    // A troca de alvo do bot entra pela porta única (#480): jogador e bot não têm pipelines
+    // que divergem. `false` porque é eleição de política, não clique.
+    this.setAttackTarget(character, best, false);
+    if (next === null) return;
+    // O alvo novo pode destravar uma regra e um golpe engatilhados: reavalia agora, e não no
+    // próximo múltiplo de um relógio.
+    this.#armBot(session, character.id);
+    this.#armPlayerAttack(session, character);
   }
 
   // --- ocupação -----------------------------------------------------------------------------
@@ -1761,9 +6654,76 @@ export class HuntRuleset implements Ruleset {
     return this.#moverBlocked;
   }
 
+  /**
+   * `#blockedFor`, mas trata TAMBÉM qualquer tile de troca de andar como bloqueado (#527) — só
+   * para os passos gulosos INCIDENTAIS de um personagem: fechar distância até a rota, contornar
+   * um companheiro, ceder lugar a quem pediu passagem, perseguir por postura, aproximar do alvo
+   * de follow no MESMO andar. Nenhum deles PRETENDE atravessar andar — e como z10/z11/z12 da
+   * Darashia Dragon Lair compartilham a MESMA caixa x/y (nota de `RouteWalker.rejoinNearest`),
+   * um passo guloso comum pode, por coincidência geométrica, mirar exatamente o tile de ORIGEM
+   * de uma escada sem que NENHUM código ali soubesse que aquele tile era uma escada — `canOccupy`
+   * (por trás de `#blockedFor`) só confere se o DESTINO dela está livre, nunca se cruzar ali faz
+   * sentido para quem pediu o passo. Achado com o bot config REAL da party de dragões (sem lure
+   * em ninguém): Sorcerer/Druid cruzavam para z11 e voltavam dezenas de vezes numa hunt de 10
+   * min, sobrevivendo aos dois guardas que já tratam travessia INTENCIONAL (`#holdFollow`,
+   * ramo de andar diferente, e `#crossesAwayFromLeader` na rota própria) porque o passo que
+   * cruzava não vinha de nenhum dos dois — vinha de "fechar distância"/"contornar"/"ceder"/
+   * "perseguir"/"aproximar no mesmo andar". A travessia intencional continua usando
+   * `#blockedFor` puro — ali pisar na escada É o objetivo, e `landingBlocked` (`#holdFollow`)
+   * já cobre o caso de chegada ocupada.
+   */
+  #blockedForGroundedStep(mover: CharacterRuntime): Blocked {
+    const base = this.#blockedFor(mover);
+    const z = mover.position.z;
+    return (x, y, stepZ, monsterId) => base(x, y, stepZ, monsterId)
+      || floorChangeAt(this.#world.map, x, y, z) !== null;
+  }
+
   /** Para o spawn não há quem se mova: só parede e ocupação. */
-  readonly #spawnBlocked: Blocked = (x, y) =>
-    isBlocked(this.#options.map, x, y) || this.#world.occupied(x, y);
+  /**
+   * Onde um monstro NÃO nasce (#236): parede, tile ocupado — e, com `spawnClearRadius` > 0,
+   * qualquer tile a menos disso de um participante vivo. Sem o terceiro, o rato nascia no
+   * tile ao lado do herói e, com `respawnDelayMs` igual ao intervalo de ataque, morria no
+   * MESMO instante em que nascia (`Spawn` vence antes de `Attack`): o cliente recebia
+   * appear + hit + disappear num lote só e desenhava o dano num tile vazio.
+   *
+   * Recusar aqui é ADIAR, não cancelar: `#onSpawn` reagenda em `SPAWN_RETRY_MS`. A densidade
+   * continua sendo a da dificuldade — é a diferença para a supressão que a referência (§29)
+   * manda não copiar. Morto não conta: ele está saindo, e um cadáver que segura o spawn
+   * seria um raio que ninguém vê.
+   *
+   * **O `z` é do PONTO, nunca o do mapa (#519).** `Spawner.#freeTile` passa o andar de cada
+   * tile que sonda; sem isto, todo ponto seria checado no andar padrão do mapa, e um lugar
+   * de z11 nasceria "livre" mesmo bloqueado por parede em z11 só porque o tile equivalente em
+   * z10 está livre. Pela mesma razão, "à vista" (a distância do `spawnClearRadius`, o
+   * `Spawn::findPlayer` do TFS) só conta um participante do MESMO andar do ponto — os três
+   * andares da Darashia Dragon Lair compartilham a caixa x/y, e um jogador em z10 não pode
+   * segurar o respawn de um Dragon Lord em z12 só por estar no (x, y) parecido.
+   *
+   * **`blockable` é a EXCEÇÃO, não a regra (#519, `isBlockable` do TFS/Canary).** No Canary,
+   * 1.640 dos 1.656 monstros do bestiário — Dragon e Dragon Lord inclusive — têm
+   * `isBlockable: false`: eles respawnam OLHANDO PARA O JOGADOR, ignorando quem está perto.
+   * Só quem declara `blockable: true` espera a vista limpar. `spawnClearRadius` continua
+   * existindo para quem precisa dele (o rato/rotworm de antes, que não declara `blockable` —
+   * ausente é `false`, então a checagem abaixo já os isenta também: era o comportamento ANTIGO
+   * que estava invertido, ligado para todo mundo por um `spawnClearRadius` > 0 só do lado da
+   * hunt). Sem `monsterId` (chamador que ainda não resolveu o monstro do ponto) a checagem
+   * roda — é o caminho defensivo, nunca o normal.
+   */
+  #spawnBlockedFor(session: Session): Blocked {
+    const radius = this.#options.hunt.spawnClearRadius;
+    return (x, y, z = this.#world.map.z, monsterId) => {
+      if (isBlocked(this.#options.map, x, y, z) || this.#world.occupied(x, y, z)) return true;
+      if (radius <= 0) return false;
+      const definition = monsterId === undefined ? undefined : this.#options.monsters.get(monsterId);
+      if (definition !== undefined && !definition.blockable) return false;
+      for (const participant of session.participants) {
+        if (!participant.alive || this.#floorOf(participant) !== z) continue;
+        if (distance(participant.position, { x, y }) < radius) return true;
+      }
+      return false;
+    };
+  }
 
   /**
    * Remonta a ocupação do zero. Chamado UMA vez, no primeiro evento depois de a sessão nascer
@@ -1773,19 +6733,6 @@ export class HuntRuleset implements Ruleset {
     this.#occupancyStale = false;
     this.#world.reset([...this.#monsters, ...session.participants]);
   }
-}
-
-/**
- * Percentual inteiro, com o zero protegido — `maxMana` zero é o personagem que ainda não tem
- * mana, não uma divisão por zero.
- *
- * Mesma conta que `bot.ts` faz para as condições, e é de propósito: os dois lados do bot
- * comparam percentual, e um deles usando outra fórmula faria "abaixo de 30%" querer dizer duas
- * coisas diferentes na mesma configuração.
- */
-function percentOf(current: number, max: number): number {
-  if (max <= 0) return 0;
-  return (current / max) * 100;
 }
 
 /**
@@ -1814,7 +6761,11 @@ export interface HuntSessionOptions {
   readonly exitRules?: readonly HuntExitRule[];
   readonly premium?: boolean;
   /** A configuração do bot, crua. Ver `HuntRulesetOptions.botConfig`. */
-  readonly botConfig?: BotConfig;
+  readonly botConfig?: BotConfigInput;
+  /** A de cada participante, por id (#203). Ver `HuntRulesetOptions.botConfigs`. */
+  readonly botConfigs?: Readonly<Record<string, BotConfigInput>>;
+  /** A party desta instância (#191). Ver `HuntRulesetOptions.partyOptions`. */
+  readonly partyOptions?: PartyOptionsInput;
   /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
   readonly actuator?: BotActuator;
 }
@@ -1823,6 +6774,22 @@ export class HuntUnavailableError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'HuntUnavailableError';
+  }
+}
+
+/**
+ * `onEnter` recusa join além do limite do conteúdo (#397, §22): TIPADO, ao contrário do
+ * `throw new Error` de colocação (linha 1033) — aquele é falha de CONTEÚDO (o primeiro tile da
+ * rota não existe; nunca deveria acontecer em produção); este é um caminho ESPERADO em toda
+ * hunt de party madura, e o hospedeiro precisa distingui-lo para recusar o ticket em vez de
+ * derrubar a sessão.
+ */
+export class PartyFullError extends Error {
+  readonly maxMembers: number;
+  constructor(huntId: string, maxMembers: number) {
+    super(`party da hunt "${huntId}" já tem ${String(maxMembers)} membros (limite do conteúdo)`);
+    this.name = 'PartyFullError';
+    this.maxMembers = maxMembers;
   }
 }
 
@@ -1836,7 +6803,11 @@ export interface HuntRulesetExtras {
   readonly exitRules?: readonly HuntExitRule[];
   readonly premium?: boolean;
   /** A configuração do bot, crua. Ver `HuntRulesetOptions.botConfig`. */
-  readonly botConfig?: BotConfig;
+  readonly botConfig?: BotConfigInput;
+  /** A de cada participante, por id (#203). Ver `HuntRulesetOptions.botConfigs`. */
+  readonly botConfigs?: Readonly<Record<string, BotConfigInput>>;
+  /** A party desta instância (#191). Ver `HuntRulesetOptions.partyOptions`. */
+  readonly partyOptions?: PartyOptionsInput;
   /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
   readonly actuator?: BotActuator;
 }
@@ -1847,7 +6818,7 @@ export function createHuntRuleset(
   difficulty: HuntDifficultyName,
   extras: HuntRulesetExtras = {},
 ): HuntRuleset {
-  const { premium, botConfig, exitRules, actuator } = extras;
+  const { premium, botConfig, botConfigs, partyOptions, exitRules, actuator } = extras;
   // A configuração passa CRUA para o ruleset, e ele compila. Compilar aqui criaria uma segunda
   // forma de entrar — e as regras de saída, que saem da mesma configuração, ficariam de fora
   // de quem entrasse pela outra. Já aconteceu.
@@ -1873,15 +6844,25 @@ export function createHuntRuleset(
     vocations: content.vocations,
     skills: content.skills,
     items: content.items,
+    weaponFamilies: content.weaponFamilies,
+    unarmed: content.unarmed,
+    // Opcional no conteúdo, opcional aqui — e a chave só existe quando há valor, por causa do
+    // `exactOptionalPropertyTypes`.
+    party: content.party,
+    ...(content.bestiary === undefined ? {} : { bestiary: content.bestiary }),
     targetSearchRadius: content.bot.targetSearchRadius,
     spells: content.spells,
     supplies: content.supplies,
-    player: { ...content.combat.player, stepDurationMs: content.progression.stepDurationMs },
+    ammunition: content.ammunition,
+    player: { ...content.combat.player },
     ...(exitRules === undefined ? {} : { exitRules }),
     ...(premium === undefined ? {} : { premium }),
     ...(botConfig === undefined ? {} : { botConfig }),
+    ...(botConfigs === undefined ? {} : { botConfigs }),
+    ...(partyOptions === undefined ? {} : { partyOptions }),
     ...(actuator === undefined ? {} : { actuator }),
-    // O cooldown de categoria vem do CONTEÚDO (§13.5), como todo parâmetro de balanceamento.
+    // O cooldown de FALLBACK do grupo vem do CONTEÚDO (§13.5), como todo parâmetro de
+    // balanceamento; o livro do conteúdo (`group:<g>`) tem precedência.
     botCooldownMs: content.bot.categoryCooldownMs,
   });
 }
@@ -1901,6 +6882,8 @@ export function createHuntSession(options: HuntSessionOptions): Session {
       ...(options.exitRules === undefined ? {} : { exitRules: options.exitRules }),
       ...(options.premium === undefined ? {} : { premium: options.premium }),
       ...(options.botConfig === undefined ? {} : { botConfig: options.botConfig }),
+      ...(options.botConfigs === undefined ? {} : { botConfigs: options.botConfigs }),
+      ...(options.partyOptions === undefined ? {} : { partyOptions: options.partyOptions }),
       ...(options.actuator === undefined ? {} : { actuator: options.actuator }),
     }),
     // Semente derivada do id: a mesma sessão reproduz a mesma sequência de combate, que é o
@@ -1935,7 +6918,7 @@ export function huntRulesetFromSnapshot(
 
 /**
  * Trocar de dificuldade ENCERRA a instância e cria outra (§14.7). Não existe alteração
- * dinâmica, e não tente ser esperto aqui: mudar `perSpawnPoint` no meio deixaria monstros da
+ * dinâmica, e não tente ser esperto aqui: mudar `monsterCount` no meio deixaria monstros da
  * densidade antiga vivos ao lado dos novos, e o jogador veria uma dificuldade que não é
  * nenhuma das duas.
  *
@@ -1951,7 +6934,7 @@ export function changeDifficulty(
     readonly newSessionId: string;
     readonly nowMs: number;
   },
-): { readonly session: Session; readonly receipt: Receipt } {
+): { readonly session: Session; readonly receipts: readonly Receipt[] } {
   const ruleset = session.ruleset;
   if (!(ruleset instanceof HuntRuleset)) {
     throw new Error(`sessão ${session.id} não é uma hunt`);
@@ -1960,7 +6943,7 @@ export function changeDifficulty(
   const characters = [...session.participants];
 
   session.record('difficulty-changed', `${state.difficulty} → ${options.to}`);
-  const receipt = session.end('manual-exit');
+  const receipts = session.end('manual-exit');
 
   const next = createHuntSession({
     id: options.newSessionId,
@@ -1970,5 +6953,5 @@ export function changeDifficulty(
     createdAtMs: options.nowMs,
   });
   for (const character of characters) next.enter(character);
-  return { session: next, receipt };
+  return { session: next, receipts };
 }

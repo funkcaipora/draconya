@@ -20,6 +20,7 @@ export interface HuntListing {
   readonly recommendedLevel: number;
   /** As dificuldades que ESTA hunt define — não obrigatoriamente as quatro. */
   readonly difficulties: readonly HuntDifficultyName[];
+  readonly description?: string;
 }
 
 /**
@@ -38,6 +39,7 @@ export function huntListings(content: Content): HuntListing[] {
       name: hunt.name,
       recommendedLevel: hunt.recommendedLevel,
       difficulties: Object.keys(hunt.difficulties) as HuntDifficultyName[],
+      ...(hunt.description === undefined ? {} : { description: hunt.description }),
     }))
     .sort((a, b) => a.recommendedLevel - b.recommendedLevel || a.id.localeCompare(b.id));
 }

@@ -11,32 +11,47 @@
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:wipe-characters": "tsx --env-file-if-exists=.env scripts/wipe-characters.ts",
     "typecheck": "tsc -b --force && tsc -p tsconfig.tooling.json && tsc -p packages/client/tsconfig.json && tsc -p tsconfig.tests.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
     "docs-check": "tsx scripts/docs-check.ts",
     "source-policy": "tsx scripts/source-policy.ts",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs-check && pnpm source-policy",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs-check && pnpm source-policy && pnpm assets:inventory --check && pnpm map:import --check && pnpm map:world --check && pnpm map:minimap --check",
     "dev": "tsx watch --env-file=.env packages/server/src/main.ts",
     "content:check": "tsc -b && pnpm --filter @draconya/tools content:check",
+    "assets:library": "tsx scripts/build-asset-library.ts",
+    "assets:inventory": "tsx scripts/pack-inventory.ts",
+    "assets:fetch:1098": "tsx scripts/fetch-open-tibia-assets.ts",
+    "map:fetch": "tsx scripts/fetch-map.ts",
+    "map:import": "tsx scripts/import-map.ts",
+    "map:census": "tsx scripts/map-census.ts",
+    "map:world": "tsx scripts/world-map.ts",
+    "map:minimap": "tsx --env-file-if-exists=.env scripts/world-minimap.ts",
+    "route:trace": "tsx scripts/trace-route.ts",
     "bench:monster": "tsc -b && pnpm --filter @draconya/tools bench:monster",
     "bench:hunts": "tsc -b && pnpm --filter @draconya/tools bench:hunts",
+    "bench:combat": "tsc -b && pnpm --filter @draconya/tools bench:combat",
     "bench:city": "tsc -b && pnpm --filter @draconya/tools bench:city",
-    "load": "tsc -b && pnpm --filter @draconya/tools load"
+    "load": "tsc -b && pnpm --filter @draconya/tools load",
+    "dev:dragon-party": "tsc -b && pnpm --filter @draconya/tools dev:dragon-party",
+    "setup:caiporinha": "tsx --env-file-if-exists=.env scripts/setup-character-caiporinha.ts"
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
-    "@typescript-eslint/parser": "^8.70.0",
-    "drizzle-kit": "^0.31.10",
-    "eslint": "^10.10.0",
+    "@types/node": "^24.13.6",
+    "@typescript-eslint/parser": "^8.70.1",
+    "drizzle-kit": "^0.31.11",
+    "eslint": "^10.11.0",
+    "ioredis": "^6.0.0",
     "jiti": "^2.7.0",
-    "tsx": "^4.23.13",
+    "postgres": "^3.4.9",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.2"
   },
   "dependencies": {
     "fflate": "^0.8.3",
-    "zod": "^4.5.4"
+    "zod": "^4.6.5"
   }
 }

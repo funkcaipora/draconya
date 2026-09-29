@@ -1,0 +1,13 @@
+{
+  "id": "zaoan-legs",
+  "name": "Zaoan Legs",
+  "kind": "armor",
+  "slot": "legs",
+  "weight": 66,
+  "value": 6000,
+  "armor": 8,
+  "mitigation": {
+    "resistances": { "physical": 0.02 }
+  },
+  "_open": "Kit level 200 (#524), Sorcerer e Druid. Armor 8, weight 6600 (66 oz) e `absorbpercentphysical` 2% do Canary `items.xml` id 10387 — sem `level`/`vocation` no script de equip (qualquer um veste; a issue reserva para os dois casters). `value` 6000: Alesar compra por esse preço (TibiaWiki via tibiascape.com/library/items/zaoan-legs)."
+}

@@ -1,0 +1,21 @@
+{
+  "id": "springsprout-rod",
+  "name": "Springsprout Rod",
+  "kind": "weapon",
+  "slot": "hand",
+  "weight": 27,
+  "value": 18000,
+  "requires": {
+    "level": 37,
+    "vocationId": "druid"
+  },
+  "weapon": {
+    "kind": "wand",
+    "family": "rod",
+    "range": 3,
+    "damageType": "earth",
+    "manaPerHit": 13,
+    "damage": { "min": 65, "max": 81 }
+  },
+  "_open": "Springsprout Rod (id 8084 do Canary / Tibia). Level 37, dano de terra 65-81, mana 13/golpe."
+}

@@ -98,6 +98,9 @@ export function decodeSheet(file: Uint8Array): DecodedSheet {
  * **O offset dos pixels vem do byte 10 do arquivo**, e não de uma constante: o cabeçalho DIB
  * tem tamanho variável, e assumir 54 lê o lugar errado num BMP com máscaras de cor — que é
  * exatamente o que o Windows escreve às vezes.
+ *
+ * **Mudou o que sai daqui? Suba `DECODED_FORMAT` em `cache.ts`.** O cache persistente guarda
+ * este resultado, e o hash do arquivo não sabe que o decoder mudou.
  */
 export function fromBitmap(bmp: Uint8Array): DecodedSheet {
   if (bmp.length < 54 || bmp[0] !== 0x42 || bmp[1] !== 0x4d) {
@@ -106,9 +109,15 @@ export function fromBitmap(bmp: Uint8Array): DecodedSheet {
   const view = new DataView(bmp.buffer, bmp.byteOffset, bmp.byteLength);
   const offset = view.getUint32(10, true);
   const width = view.getInt32(18, true);
-  // Altura negativa é BMP de cima para baixo. Não vem assim do pacote, mas ler o valor absoluto
-  // é mais barato que descobrir isso depois, olhando uma folha espelhada.
-  const height = Math.abs(view.getInt32(22, true));
+  // **O SINAL da altura diz a ordem das linhas.** Altura positiva — que é o que vem do pacote —
+  // é BMP de BAIXO para cima: a primeira linha do arquivo é a ÚLTIMA da imagem. Altura negativa
+  // é de cima para baixo. Ler o valor absoluto e ignorar o sinal espelha a folha inteira na
+  // vertical, e o sintoma é traiçoeiro: chão e parede continuam parecendo chão e parede, mas
+  // cada criatura sai de cabeça para baixo, no canto errado do quadro, e os quadros de
+  // animação de um outfit passam a apontar para as linhas de OUTRO.
+  const signedHeight = view.getInt32(22, true);
+  const height = Math.abs(signedHeight);
+  const bottomUp = signedHeight > 0;
   const bits = view.getUint16(28, true);
   if (bits !== 32) throw new Error(`folha: esperava BMP de 32 bits, veio de ${bits}`);
 
@@ -117,20 +126,26 @@ export function fromBitmap(bmp: Uint8Array): DecodedSheet {
     throw new Error('folha: os pixels do BMP passam do fim do arquivo');
   }
 
+  const stride = width * 4;
   const pixels = new Uint8ClampedArray(expected);
-  for (let at = 0; at < expected; at += 4) {
-    // BGRA no arquivo, RGBA na tela: a troca é B↔R.
-    const b = bmp[offset + at] ?? 0;
-    const g = bmp[offset + at + 1] ?? 0;
-    const r = bmp[offset + at + 2] ?? 0;
-    // **Magenta é transparência, e o alfa do arquivo é ignorado.** As folhas vêm com alfa 255
-    // em todo pixel, inclusive nos que deveriam ser vazios — confiar nele desenharia um
-    // retângulo magenta atrás de cada sprite.
-    const clear = r === TRANSPARENT_R && g === TRANSPARENT_G && b === TRANSPARENT_B;
-    pixels[at] = clear ? 0 : r;
-    pixels[at + 1] = clear ? 0 : g;
-    pixels[at + 2] = clear ? 0 : b;
-    pixels[at + 3] = clear ? 0 : 0xff;
+  for (let y = 0; y < height; y++) {
+    const sourceRow = bottomUp ? height - 1 - y : y;
+    const from = offset + sourceRow * stride;
+    const to = y * stride;
+    for (let x = 0; x < stride; x += 4) {
+      // BGRA no arquivo, RGBA na tela: a troca é B↔R.
+      const b = bmp[from + x] ?? 0;
+      const g = bmp[from + x + 1] ?? 0;
+      const r = bmp[from + x + 2] ?? 0;
+      // **Magenta é transparência, e o alfa do arquivo é ignorado.** Há folha em que o alfa vem
+      // 255 em todo pixel, inclusive nos que deveriam ser vazios — confiar nele desenharia um
+      // retângulo magenta atrás de cada sprite.
+      const clear = r === TRANSPARENT_R && g === TRANSPARENT_G && b === TRANSPARENT_B;
+      pixels[to + x] = clear ? 0 : r;
+      pixels[to + x + 1] = clear ? 0 : g;
+      pixels[to + x + 2] = clear ? 0 : b;
+      pixels[to + x + 3] = clear ? 0 : 0xff;
+    }
   }
 
   return { width, height, pixels };

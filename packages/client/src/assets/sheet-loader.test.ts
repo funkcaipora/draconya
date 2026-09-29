@@ -107,7 +107,7 @@ describe('SheetLoader (FUN-17)', () => {
     // Worker reaproveitado, ou outra coisa no mesmo canal. Estourar aqui derrubaria o thread
     // principal por ruído que não é do jogo.
     const worker = new FakeWorker();
-    // eslint-disable-next-line no-new -- o efeito é o `addEventListener` do construtor
+     
     new SheetLoader(worker);
     expect(() => worker.reply({ id: 999, ok: true, width: 1, height: 1, pixels: pixels(1) }))
       .not.toThrow();

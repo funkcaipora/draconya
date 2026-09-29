@@ -31,6 +31,7 @@ const snapshotOf = (id: string): SessionSnapshot => ({
   aggregates: {
     durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0,
        itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+       damageDealt: 0, healingDone: 0,
   },
   notableEvents: [],
   ledgerSeq: 0,

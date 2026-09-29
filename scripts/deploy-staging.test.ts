@@ -69,6 +69,35 @@ describe('staging deployment', () => {
     expect(calls).toHaveLength(1);
   });
 
+  it('retenta a falha de REDE três vezes, e nunca uma resposta HTTP', async () => {
+    // Dois merges seguidos tiveram o primeiro `deploy` derrubado por "failed or timed out" e
+    // o rerun manual aceito um minuto depois: o proxy do host fecha a conexão enquanto troca
+    // um contêiner. Mutação que mata: `attempt >= 1` (uma tentativa só), ou retentar também
+    // quando o `fetch` RESOLVE (o PATCH de segredos seria mandado duas vezes).
+    const { calls, dependencies } = fixture();
+    const inner = dependencies.fetch;
+    let failures = 2;
+    const flakyFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).includes('api.github.com') && failures > 0) {
+        failures -= 1;
+        throw new TypeError('fetch failed');
+      }
+      return inner(input, init);
+    });
+    await deployStaging(env, { ...dependencies, fetch: flakyFetch as typeof fetch });
+    expect(flakyFetch.mock.calls.filter(([input]) => String(input).includes('api.github.com'))).toHaveLength(3);
+    expect(dependencies.sleep).toHaveBeenCalledWith(10_000);
+    // O deploy seguiu normalmente depois: o PATCH de segredos saiu UMA vez.
+    expect(calls.filter((call) => call.url.endsWith('/envs/bulk'))).toHaveLength(1);
+
+    // Três falhas seguidas é falha de verdade.
+    const dead = fixture();
+    const alwaysDown = vi.fn(async () => { throw new TypeError('fetch failed'); });
+    await expect(deployStaging(env, { ...dead.dependencies, fetch: alwaysDown as unknown as typeof fetch }))
+      .rejects.toThrow('Deployment request failed or timed out.');
+    expect(alwaysDown).toHaveBeenCalledTimes(3);
+  });
+
   it('rejects a non-main run before accessing secrets remotely', async () => {
     const { calls, dependencies } = fixture();
     await expect(deployStaging({ ...env, GITHUB_REF: 'refs/pull/69/merge' }, dependencies)).rejects.toThrow('requires a main commit');

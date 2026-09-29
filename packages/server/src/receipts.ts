@@ -17,7 +17,9 @@
 // índice troca isso por um `SMEMBERS` que quase sempre volta vazio.
 
 import type { ChainableCommander, Redis } from 'ioredis';
-import type { Aggregates, EndReason, NotableEvent, SkillsState } from '@draconya/sim';
+import type {
+  Aggregates, BestiaryState, EndReason, NotableEvent, SkillsState,
+} from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
 
 export interface SessionReceipt {
@@ -52,6 +54,41 @@ export interface SessionReceipt {
    */
   readonly skills?: SkillsState;
   /**
+   * Os abates por monstro no fim da sessão (§18, FUN-113): `monsterId → abates`.
+   *
+   * Valor ABSOLUTO, como as skills, e pela mesma razão: abate nunca desce, então o ledger
+   * funde ficando com o MAIOR de cada monstro, e um extrato antigo processado fora de ordem
+   * não tem como rebaixar nada — sem guarda de instante. Absoluto e não delta porque a sessão
+   * já entrou com o valor de verdade (ele vem no ticket): somar delta por cima do que está no
+   * banco daria o mesmo número, com uma chance a mais de contar duas vezes.
+   */
+  readonly bestiary?: BestiaryState;
+  /**
+   * A munição escolhida por família (#152): `{ arrow: 'sniper-arrow' }`. ABSOLUTA e
+   * última-escrita-vence: é preferência do jogador, não progresso — um extrato antigo fora de
+   * ordem escreveria a escolha antiga, e o jogador a refaria num clique.
+   */
+  readonly ammo?: Readonly<Record<string, string>>;
+  /**
+   * O estoque de SUPPLY do loot (#520): `{ supplyId: quantidade }`. ABSOLUTO e
+   * última-escrita-vence, como `ammo` — mas NÃO é monotônico como o Bestiário: o estoque sobe
+   * por loot e desce por uso na mesma sessão (`useSupply`, revisão do #536), então um valor
+   * absoluto é o único que os dois lados podem concordar sobre.
+   */
+  readonly supplyStock?: Readonly<Record<string, number>>;
+  /**
+   * O estoque de MUNIÇÃO FÍSICA do loot (#520): `{ ammunitionId: quantidade }`, pela mesma
+   * razão e a mesma forma do `supplyStock` — munição continua abstrata no tiro (ADR 0026 d.7),
+   * mas o que caiu em loot precisa sobreviver à sessão para ser gasto antes do gold.
+   */
+  readonly ammunitionStock?: Readonly<Record<string, number>>;
+  /**
+   * A vocação escolhida nesta sessão (#154, ADR 0026 decisão 1). Escrita UMA vez pelo `jobs`
+   * (`coalesce`): um extrato fora de ordem com outra vocação não sobrescreve — e não pode
+   * haver outra, porque `already-chosen` recusa a segunda na sessão e o ticket a traz de volta.
+   */
+  readonly vocation?: string;
+  /**
    * O layout de equipamento no fim da sessão (§21.4, FUN-82): `slot → instanceId`.
    *
    * ABSOLUTO, como as skills: a sessão sabe o estado final, e mandar delta exigiria que os dois
@@ -61,6 +98,12 @@ export interface SessionReceipt {
    * onde ele está, e é só isso que atravessa.
    */
   readonly equipment?: Readonly<Record<string, string>>;
+  /**
+   * Onde cada instância está DENTRO dos containers (#160): `instanceId → { container, index }`.
+   * ABSOLUTO como `equipment`; instância equipada não aparece; o que não estiver aqui perde a
+   * posição gravada e volta ao primeiro lugar livre na próxima entrada.
+   */
+  readonly layout?: Readonly<Record<string, ItemPlace>>;
   /**
    * Os itens que ESTA sessão criou e que couberam na mochila (§22.2, FUN-88).
    *
@@ -74,6 +117,12 @@ export interface SessionReceipt {
    * expirar precisa significar que o item nunca existiu.
    */
   readonly lootBox?: readonly BoxedItem[];
+}
+
+/** Um lugar de container, como o extrato e o banco o guardam (#160). */
+export interface ItemPlace {
+  readonly container: 'backpack' | 'satchel';
+  readonly index: number;
 }
 
 export interface ReceiptStoreOptions {
@@ -92,7 +141,13 @@ const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  */
 const SETTLE_LIMIT = 50;
 
-const key = (sessionId: string): string => `receipt:${sessionId}`;
+/**
+ * Um extrato por MEMBRO (#194, ADR 0027): a party é uma sessão com N donos, e quatro extratos
+ * da mesma sessão não podem se sobrescrever. A chave antiga (`receipt:{sessionId}`) continua
+ * LIDA por um deploy: extrato em voo gravado por um nó anterior não pode se perder.
+ */
+const key = (sessionId: string, characterId: string): string => `receipt:${sessionId}:${characterId}`;
+const legacyKey = (sessionId: string): string => `receipt:${sessionId}`;
 /** Prefixo distinto de `receipt:`, de propósito: o `SCAN` de `pending` não pode pegá-lo. */
 const characterKey = (characterId: string): string => `receipts:char:${characterId}`;
 const RECEIPT_PATTERN = 'receipt:*';
@@ -114,10 +169,12 @@ export class ReceiptStore {
     // O extrato e a entrada de índice entram JUNTOS. O índice sozinho é um ponteiro para
     // lugar nenhum, que `pendingFor` limpa; o extrato sozinho seria pior — invisível para
     // quem emite o ticket, e o jogador voltaria a ver o personagem zerar (FUN-56).
+    // O índice guarda a CHAVE inteira (#194): `pendingFor` tem o `characterId`, mas guardar
+    // só o `sessionId` obrigaria a adivinhar entre a chave nova e a antiga.
     await exec(this.#redis
       .multi()
-      .set(key(receipt.sessionId), JSON.stringify(stored), 'PX', this.#ttlMs)
-      .sadd(index, receipt.sessionId)
+      .set(key(receipt.sessionId, receipt.characterId), JSON.stringify(stored), 'PX', this.#ttlMs)
+      .sadd(index, key(receipt.sessionId, receipt.characterId))
       .pexpire(index, this.#ttlMs));
   }
 
@@ -138,15 +195,17 @@ export class ReceiptStore {
    * gravou continua sendo creditado pela varredura do `jobs`, com o atraso de sempre.
    */
   async pendingFor(characterId: string, limit = SETTLE_LIMIT): Promise<SessionReceipt[]> {
-    const sessionIds = (await this.#redis.smembers(characterKey(characterId))).slice(0, limit);
-    if (sessionIds.length === 0) return [];
+    const members = (await this.#redis.smembers(characterKey(characterId))).slice(0, limit);
+    if (members.length === 0) return [];
 
-    const values = await this.#redis.mget(...sessionIds.map(key));
+    // Entrada de índice de antes do #194 é um `sessionId` cru; a de agora é a chave inteira.
+    const keys = members.map((member) => (member.startsWith('receipt:') ? member : legacyKey(member)));
+    const values = await this.#redis.mget(...keys);
     const receipts: SessionReceipt[] = [];
     const stale: string[] = [];
     for (const [index, raw] of values.entries()) {
       const parsed = raw === null ? null : parseReceipt(raw);
-      if (parsed === null) stale.push(sessionIds[index] as string);
+      if (parsed === null) stale.push(members[index] as string);
       else receipts.push(parsed);
     }
     // Índice apontando para extrato que não existe mais: ou ele expirou, ou um `remove`
@@ -181,9 +240,13 @@ export class ReceiptStore {
    * chama: derivá-lo aqui custaria um `GET` a mais para saber algo que o chamador tem na mão.
    */
   async remove(sessionId: string, characterId: string): Promise<void> {
+    // As duas chaves e as duas formas de índice: o extrato pode ter sido gravado por um nó
+    // anterior ao #194, e apagar só a nova o deixaria para a varredura creditar de novo —
+    // a chave única do ledger recusaria, mas o Redis ficaria com lixo até o TTL.
     await exec(this.#redis.multi()
-      .del(key(sessionId))
-      .srem(characterKey(characterId), sessionId));
+      .del(key(sessionId, characterId))
+      .del(legacyKey(sessionId))
+      .srem(characterKey(characterId), key(sessionId, characterId), sessionId));
   }
 }
 
@@ -239,10 +302,34 @@ function parseReceipt(raw: string): SessionReceipt | null {
     ...(typeof value['skills'] === 'object' && value['skills'] !== null
       ? { skills: value['skills'] as SkillsState }
       : {}),
+    // Bestiário (FUN-113). Lista de PERMISSÃO, como as skills logo acima — e a razão de esta
+    // linha existir é a mesma que a do comentário delas.
+    ...(typeof value['bestiary'] === 'object' && value['bestiary'] !== null
+      ? { bestiary: value['bestiary'] as BestiaryState }
+      : {}),
+    // A munição (#152): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['ammo'] === 'object' && value['ammo'] !== null
+      ? { ammo: value['ammo'] as Record<string, string> }
+      : {}),
+    // O estoque de supply e de munição física (#520): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['supplyStock'] === 'object' && value['supplyStock'] !== null
+      ? { supplyStock: value['supplyStock'] as Record<string, number> }
+      : {}),
+    ...(typeof value['ammunitionStock'] === 'object' && value['ammunitionStock'] !== null
+      ? { ammunitionStock: value['ammunitionStock'] as Record<string, number> }
+      : {}),
+    // A vocação (#154): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['vocation'] === 'string' && value['vocation'].length > 0
+      ? { vocation: value['vocation'] }
+      : {}),
     // Lista de PERMISSÃO, como o resto desta função: campo que não entra aqui some no caminho
     // de volta sem erro nenhum. Já aconteceu com as skills.
     ...(typeof value['equipment'] === 'object' && value['equipment'] !== null
       ? { equipment: value['equipment'] as Record<string, string> }
+      : {}),
+    // A posição dos itens (#160): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['layout'] === 'object' && value['layout'] !== null
+      ? { layout: value['layout'] as Record<string, ItemPlace> }
       : {}),
     ...(Array.isArray(value['acquired']) ? { acquired: value['acquired'] as BoxedItem[] } : {}),
     ...(Array.isArray(value['lootBox']) ? { lootBox: value['lootBox'] as BoxedItem[] } : {}),

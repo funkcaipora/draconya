@@ -1,0 +1,16 @@
+{
+  "id": "focus-cape",
+  "name": "Focus Cape",
+  "kind": "armor",
+  "slot": "chest",
+  "weight": 21,
+  "value": 0,
+  "armor": 9,
+  "requires": {
+    "vocationId": ["sorcerer", "druid"]
+  },
+  "bonuses": {
+    "skill": { "skillId": "magic", "amount": 1 }
+  },
+  "_open": "Kit level 200 (#524), Sorcerer e Druid. Armor 9, weight 2100 (21 oz) e `magiclevelpoints` +1 do Canary `items.xml` id 8043 (`Sorcerer;true, Druid;true, Master Sorcerer, Elder Druid`). Mesmo mecanismo do Hat of the Mad: soma na skill `magic` (FUN-92) via `Inventory.skillBonus`. `value` 0: nenhum NPC compra a Focus Cape no Tibia real (TibiaWiki via tibiascape.com/library/items/focus-cape — \"no buy/sell offers\")."
+}

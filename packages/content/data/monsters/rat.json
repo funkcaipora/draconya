@@ -1,13 +1,38 @@
 {
   "id": "rat",
   "name": "Rat",
+  "class": "mammal",
   "recommendedLevel": 1,
   "health": 20,
   "experience": 5,
-  "attack": 6,
-  "armor": 0,
+  "attack": {
+    "min": 3,
+    "max": 4
+  },
+  "armor": 1,
+  "mitigation": {
+    "resistances": {
+      "earth": -0.2,
+      "holy": -0.2,
+      "ice": 0.1,
+      "death": 0.1
+    }
+  },
   "attackIntervalMs": 2000,
-  "stepDurationMs": 500,
+  "speed": 172,
   "aggroRadius": 4,
-  "loot": { "gold": { "chance": 0.9, "min": 1, "max": 4 }, "items": [] }
+  "blockable": true,
+  "loot": {
+    "gold": {
+      "chance": 1,
+      "min": 1,
+      "max": 4
+    },
+    "items": [
+      {
+        "itemId": "cheese",
+        "chance": 0.394
+      }
+    ]
+  }
 }

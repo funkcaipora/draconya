@@ -27,16 +27,37 @@ interface Entry {
   usedAtMs: number;
 }
 
+export interface BitmapBudgetOptions<K> {
+  readonly now?: () => number;
+  /**
+   * Chamado ANTES de `close()`, com o bitmap ainda vivo.
+   *
+   * Existe por causa do Pixi: uma `Texture` construída sobre um `ImageBitmap` sobrevive ao
+   * `close()` da fonte e vira textura inválida por baixo — desenha lixo, ou falha ao reenviar
+   * para a GPU depois de uma perda de contexto. Quem guarda a textura precisa saber que o
+   * bitmap vai morrer, e este é o único instante em que dá para avisar.
+   *
+   * **Não pode lançar.** O despejo varre as entradas no meio da conta de bytes; uma exceção
+   * aqui deixaria `bytes` divergindo do que está guardado — vazamento silencioso, o defeito
+   * que a classe inteira existe para não ter.
+   */
+  readonly onEvict?: (key: K, sprite: Sprite) => void;
+}
+
 export class BitmapBudget<K> {
   readonly #maxBytes: number;
   readonly #now: () => number;
+  readonly #onEvict: (key: K, sprite: Sprite) => void;
   readonly #entries = new Map<K, Entry>();
   #bytes = 0;
 
-  constructor(maxBytes: number, now: () => number = () => Date.now()) {
+  constructor(maxBytes: number, options: BitmapBudgetOptions<K> | (() => number) = {}) {
     if (maxBytes <= 0) throw new Error('bitmaps: maxBytes precisa ser positivo');
+    // A forma antiga — só o relógio — continua valendo, para quem chamava assim.
+    const resolved = typeof options === 'function' ? { now: options } : options;
     this.#maxBytes = maxBytes;
-    this.#now = now;
+    this.#now = resolved.now ?? (() => Date.now());
+    this.#onEvict = resolved.onEvict ?? (() => {});
   }
 
   /** Quanto está segurando. Existe para o teste poder afirmar o teto. */
@@ -66,7 +87,7 @@ export class BitmapBudget<K> {
 
   /** Fecha tudo. Trocar de mapa sem isto vaza a memória de GPU da tela anterior. */
   clear(): void {
-    for (const entry of this.#entries.values()) entry.sprite.close();
+    for (const [key, entry] of this.#entries) this.#release(key, entry);
     this.#entries.clear();
     this.#bytes = 0;
   }
@@ -76,9 +97,19 @@ export class BitmapBudget<K> {
     const oldest = [...this.#entries.entries()].sort((a, b) => a[1].usedAtMs - b[1].usedAtMs);
     for (const [key, entry] of oldest) {
       if (this.#bytes + incoming <= this.#maxBytes) return;
-      entry.sprite.close();
+      this.#release(key, entry);
       this.#entries.delete(key);
       this.#bytes -= entry.bytes;
     }
+  }
+
+  /** Avisa quem depende do bitmap e SÓ ENTÃO o fecha. A ordem é o contrato de `onEvict`. */
+  #release(key: K, entry: Entry): void {
+    try {
+      this.#onEvict(key, entry.sprite);
+    } catch {
+      // Ver `onEvict`: a conta de bytes não pode ficar pela metade por causa de quem ouve.
+    }
+    entry.sprite.close();
   }
 }

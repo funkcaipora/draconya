@@ -1,0 +1,290 @@
+// O estado da party ANTES da hunt (#197), fora do React (ADR 0007).
+//
+// É um formulário que mora no servidor (`PartyStore`, em Redis); aqui fica a última cópia
+// que ele devolveu, o que está em curso, e a recusa em palavras. Quando o `start` acontece —
+// pelo líder aqui, ou por outro membro, descoberto no polling de `mine` — chega um ticket, e
+// entrar na hunt é oferecer o ticket à conexão e reconectar: o mesmo `connect` de sempre.
+//
+// **A store não importa `net/`** (ADR 0007): quem manda é injetado por `setPartyClient` e
+// `setEnterHunt`, como a do bot recebe o remetente.
+//
+// M20 (#402/#403, ADR 0035 D7/D8): `join` numa party EM CURSO devolve um ticket — a entrada é o
+// MESMO caminho de `start`, e é por isso que `acceptInvite` converge nele. `invites[]` é do
+// `/mine`, que agora roda em qualquer tela (o `Shell` é o dono do polling, DT-01).
+//
+// Desde a #501: `configure` substitui `propose` (patch parcial, cada eixo sozinho), `approve`
+// não existe mais (fim da aprovação pré-start), `publish` não recebe faixa nenhuma — o que se
+// publica é o estado que o `configure` gravou — e a busca de salas leva o candidato
+// (`characterId`), porque quem filtra a elegibilidade é o servidor.
+//
+// Desde a #502: o convite SOCIAL (#502) não exige party — `socialInvite` manda a intenção e o
+// sucesso é `notice` (DT-03); "Ignorar" é dispensa LOCAL (`dismissedSocial`, DT-05 — sem
+// endpoint novo; o TTL do servidor é o termo real do convite) e o `refresh` filtra os
+// dispensados, para o `/mine` não os trazer de volta a cada 2 s.
+
+import { createStore } from '../state/hud.js';
+import type { JoinResult, MineInvite, PartyClient, PartyConfigPatch, PartyView, RoomView } from './api.js';
+
+export interface PartyState {
+  /** Quem sou — o personagem selecionado; sem ele nada aqui faz sentido. */
+  readonly characterId: string | null;
+  readonly party: PartyView | null;
+  readonly activePartyId: string | null;
+  readonly busy: boolean;
+  readonly error: string | null;
+  /** O `start` aconteceu e o ticket foi oferecido à conexão: a tela some enquanto reconecta. */
+  readonly entering: boolean;
+  /** Na fila do matchmaking (#199), esperando alguém compatível. */
+  readonly seeking: boolean;
+  /** Convites visíveis a QUALQUER personagem selecionado (D7/D8) — não só a quem está sem party. */
+  readonly invites: readonly MineInvite[];
+  /** "Convite enviado." (RF-04): o último sucesso de convite social; limpa na próxima ação (DT-03). */
+  readonly notice: string | null;
+  /** Convites sociais dispensados localmente ("Ignorar", DT-05) — o `/mine` ainda os traz até o TTL. */
+  readonly dismissedSocial: readonly string[];
+}
+
+export const INITIAL_PARTY: PartyState = {
+  characterId: null, party: null, activePartyId: null, busy: false, error: null, entering: false,
+  seeking: false, invites: [], notice: null, dismissedSocial: [],
+};
+
+/** RF-04: a frase do convite social enviado — constante aqui para não haver texto solto na tela. */
+export const INVITE_SENT_NOTICE = 'Convite enviado.';
+
+/** O ritmo do polling de `/mine` (DT-01: agora é do Shell, não de um painel). */
+export const PARTY_POLL_MS = 2_000;
+
+export const party = createStore<PartyState>(INITIAL_PARTY);
+
+let client: PartyClient | null = null;
+let enterHunt: ((wsUrl: string) => void) | null = null;
+
+export function setPartyClient(next: PartyClient | null): void {
+  client = next;
+}
+
+/** Quem leva o ticket à conexão e reconecta. Injetado pela casca, que tem o `net/`. */
+export function setEnterHunt(next: ((wsUrl: string) => void) | null): void {
+  enterHunt = next;
+}
+
+export function setPartyCharacter(characterId: string | null): void {
+  party.set((state) => (state.characterId === characterId ? state : { ...INITIAL_PARTY, characterId }));
+}
+
+function fail(error: unknown): void {
+  const message = error instanceof Error ? error.message : 'Não foi possível concluir.';
+  party.set((state) => ({ ...state, busy: false, error: message }));
+}
+
+async function run(action: (api: PartyClient, characterId: string) => Promise<PartyView | null | void>): Promise<void> {
+  const { characterId } = party.get();
+  if (client === null || characterId === null) return;
+  // O `notice` de "Convite enviado." (DT-03) vale até a PRÓXIMA ação — e a próxima ação é esta.
+  party.set((state) => ({ ...state, busy: true, error: null, notice: null }));
+  try {
+    const result = await action(client, characterId);
+    party.set((state) => ({
+      ...state,
+      busy: false,
+      ...(result === undefined ? {} : { party: result, activePartyId: result?.id ?? null }),
+    }));
+  } catch (error) {
+    fail(error);
+  }
+}
+
+/**
+ * D7: o `join` de uma party em curso devolve um ticket. Oferecê-lo à conexão é o MESMO `enter()`
+ * de `start` — nenhum caminho novo de socket — e o formulário some porque a party virou a hunt.
+ */
+function enterOrForm(result: JoinResult, partyId: string | null): PartyView | undefined {
+  if (result.kind === 'entered') {
+    enter(result.ticket.wsUrl, partyId);
+    return undefined;
+  }
+  return result.party;
+}
+
+export const partyActions = {
+  create: () => run((api, me) => api.create(me)),
+  invite: (inviteeId: string) => run(async (api, me) => {
+    const { activePartyId, party: current } = party.get();
+    const partyId = current?.id ?? activePartyId;
+    if (partyId === null) return undefined;
+    await api.invite(partyId, me, inviteeId);
+    return undefined;
+  }),
+  /**
+   * O convite SOCIAL (#502, RF-01): SEM party pré-existente — a party nasce, se precisar, no
+   * aceite. Sucesso é `notice` (DT-03); a recusa tipada (`inviter-in-hunt`, `invite-self`, …)
+   * cai em `error` pelo `fail()` do `run`, com a frase do `REFUSAL` do `api`.
+   */
+  socialInvite: (inviteeId: string) => run(async (api, me) => {
+    await api.socialInvite(me, inviteeId);
+    party.set((state) => ({ ...state, notice: INVITE_SENT_NOTICE }));
+    return undefined;
+  }),
+  /** "Entrar por id" (formação) E "aceitar convite" convergem aqui — D7: o MESMO endpoint
+   *  devolve o formulário ou um ticket, dependendo do estado da party do outro lado. */
+  join: (partyId: string) => run(async (api, me) => enterOrForm(await api.join(partyId, me), partyId)),
+  acceptInvite: (partyId: string) => run(async (api, me) => {
+    const result = enterOrForm(await api.join(partyId, me), partyId);
+    // Convite SOCIAL (#502) não tem `partyId` — o filtro só derruba o tradicional deste id.
+    party.set((state) => ({
+      ...state,
+      invites: state.invites.filter((invite) => !('partyId' in invite) || invite.partyId !== partyId),
+    }));
+    return result;
+  }),
+  declineInvite: (partyId: string) => run(async (api, me) => {
+    await api.decline(partyId, me);
+    party.set((state) => ({
+      ...state,
+      invites: state.invites.filter((invite) => !('partyId' in invite) || invite.partyId !== partyId),
+    }));
+    return undefined;
+  }),
+  /**
+   * O aceite do convite social (#502, RF-05): o MESMO `enterOrForm` do tradicional (DT-04) — o
+   * comum é o formulário da party nova (ou a do convidador); um ticket entraria pela reconexão
+   * de sempre. Remove SÓ o convite aceito; os outros ficam para o polling.
+   */
+  acceptSocialInvite: (inviteId: string) => run(async (api, me) => {
+    const result = enterOrForm(await api.acceptSocialInvite(inviteId, me), null);
+    party.set((state) => ({
+      ...state,
+      invites: state.invites.filter((invite) => !('inviteId' in invite) || invite.inviteId !== inviteId),
+    }));
+    return result;
+  }),
+  /**
+   * "Ignorar" (DT-05): dispensa LOCAL, sem rede — o `api` da #501 não tem decline de convite
+   * social; o TTL de 15 min é o termo real, e a tela não mente sobre isso. Gravar o id em
+   * `dismissedSocial` é o que faz o `refresh` não trazê-lo de volta a cada 2 s.
+   */
+  dismissSocialInvite: (inviteId: string): void => {
+    party.set((state) => ({
+      ...state,
+      dismissedSocial: [...state.dismissedSocial, inviteId],
+      invites: state.invites.filter((invite) => !('inviteId' in invite) || invite.inviteId !== inviteId),
+    }));
+  },
+  leave: () => run(async (api, me) => {
+    const current = party.get().party;
+    if (current !== null) await api.leave(current.id, me);
+    return null;
+  }),
+  kick: (targetId: string) => run((api, me) => {
+    const current = party.get().party;
+    return current === null ? Promise.resolve(null) : api.kick(current.id, me, targetId);
+  }),
+  /**
+   * O patch do líder (RF-02): cada eixo muda sozinho — o toggle de custos manda SÓ
+   * `shareCosts`, o de lucro SÓ `splitLoot`, e o configure-then-start do `HuntsModal` manda o
+   * que mudou. O `PartyView` que volta é a verdade desenhada (invariante 4).
+   */
+  configure: (patch: PartyConfigPatch) => run((api, me) => {
+    const current = party.get().party;
+    return current === null ? Promise.resolve(null) : api.configure(current.id, me, patch);
+  }),
+  /** Publicar a sala SEM corpo: o que se publica é o estado que o `configure` gravou (RF-03). */
+  publish: () => run((api, me) => {
+    const current = party.get().party;
+    return current === null ? Promise.resolve(null) : api.publish(current.id, me);
+  }),
+  /**
+   * O `api` responde `{ ok: true }`; a cópia local reflete só o que ele fez: fecha as vagas.
+   * O `minLevel` configurado permanece — despublicar não desfaz a configuração (RF-03).
+   */
+  unpublish: () => run(async (api, me) => {
+    const current = party.get().party;
+    if (current === null) return null;
+    await api.unpublish(current.id, me);
+    return { ...current, published: false };
+  }),
+  start: () => run(async (api, me) => {
+    const current = party.get().party;
+    if (current === null) return null;
+    const started = await api.start(current.id, me);
+    if (started.ticket !== null) enter(started.ticket.wsUrl, current.id);
+    return undefined;
+  }),
+  /** O matchmaking (#199): entra na fila; casou na hora ou espera (e o polling vê chegar). */
+  seek: () => run(async (api, me) => {
+    const { party: formed } = await api.seek(me);
+    party.set((state) => ({ ...state, seeking: formed === null }));
+    return formed;
+  }),
+  stopSeeking: () => run(async (api, me) => {
+    await api.stopSeeking(me);
+    party.set((state) => ({ ...state, seeking: false }));
+    return undefined;
+  }),
+  /**
+   * O polling (#197, DT-01): agora é do `Shell`, rodando SEMPRE que há personagem — o convite
+   * precisa aparecer em qualquer tela (D7). Pergunta ao servidor a cada 2 s: um ticket significa
+   * que outro membro iniciou (ou que o convite aceito virou hunt); `invites[]` alimenta o diálogo.
+   */
+  refresh: async (): Promise<void> => {
+    const { characterId } = party.get();
+    if (client === null || characterId === null) return;
+    try {
+      const mine = await client.mine(characterId);
+      if (mine.ticket !== null) {
+        const current = party.get();
+        enter(mine.ticket.wsUrl, mine.party?.id ?? current.activePartyId);
+        return;
+      }
+      party.set((state) => (state.entering
+        ? state
+        : {
+          ...state,
+          party: mine.party,
+          activePartyId: mine.party?.id ?? null,
+          seeking: state.seeking && mine.party === null,
+          // O dispensado ("Ignorar", DT-05) o servidor ainda manda até o TTL — o filtro é quem
+          // o esconde. O convite TRADICIONAL nunca é filtrado: recusa nele é `declineInvite`.
+          invites: mine.invites.filter((invite) =>
+            !('inviteId' in invite) || !state.dismissedSocial.includes(invite.inviteId)),
+        }));
+    } catch (error) {
+      fail(error);
+    }
+  },
+};
+
+/**
+ * Sala pública (#402): lida sob demanda pela view de busca, NUNCA por `run`/`busy` — são
+ * OUTRAS parties, não a desta sessão, e marcar `busy` a cada tick de 2 s travaria os botões da
+ * própria formação por causa de uma listagem que não muda o estado dela.
+ *
+ * Falha de rede vira lista vazia, nunca exceção: é leitura de fundo, e travar a tela com erro
+ * vermelho a cada 2 s de instabilidade seria pior que uma lista momentaneamente vazia.
+ *
+ * A query leva o CANDIDATO (#501, RF-04): `characterId` é obrigatório, e é dele que o servidor
+ * tira level e vocação para filtrar — sala inelegível não chega ao cliente, nem desabilitada.
+ */
+export async function fetchRooms(query: { readonly characterId: string; readonly huntId?: string }): Promise<readonly RoomView[]> {
+  if (client === null) return [];
+  try {
+    return await client.rooms(query);
+  } catch {
+    return [];
+  }
+}
+
+function enter(wsUrl: string, partyId: string | null): void {
+  party.set((state) => ({ ...state, party: null, activePartyId: partyId, busy: false, entering: true }));
+  enterHunt?.(wsUrl);
+}
+
+/** A hunt começou de verdade (chegou o `session-state` de uma hunt): a tela de party fecha. */
+export function partyEntered(): void {
+  party.set((state) => (state.entering ? { ...state, entering: false } : state));
+}
+
+export function partyExited(): void {
+  party.set((state) => ({ ...state, activePartyId: null }));
+}

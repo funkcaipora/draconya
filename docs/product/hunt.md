@@ -12,20 +12,70 @@ Hunts são instâncias isoladas: não existe disputa aberta por spawn nem necess
 
 Cada hunt tem uma rota única, fixa e predeterminada — o bot nunca escolhe caminhos alternativos. A rota forma um loop lógico, seja circular, seja por subidas e descidas que retornam ao ponto de origem. Os pontos de respawn de monstros são definidos por design, e a quantidade/composição de monstros em cada ponto é um dado da hunt e da dificuldade escolhida; não existe variação aleatória de densidade no MVP.
 
-Existem quatro dificuldades — Iniciante, Profissional, Herói e Lendário — cada uma aumentando a quantidade de monstros e podendo introduzir variantes mais fortes e tematicamente coerentes (por exemplo, uma hunt de vampiros pode reservar variantes cerimoniais/escuras para dificuldades mais altas). O jogador pode trocar de dificuldade durante sua jornada, mas isso encerra a instância atual e cria uma nova — não existe alteração dinâmica de dificuldade dentro da mesma instância. Em party, a troca de dificuldade exige votação/aprovação dos membros.
+Existem três tamanhos de pull — Cauteloso, Ousado e Agressivo (FUN-123, cópia do Huntera; o PRD previa quatro dificuldades) — cada um aumentando a quantidade de monstros e podendo introduzir variantes mais fortes e tematicamente coerentes (por exemplo, uma hunt de vampiros pode reservar variantes cerimoniais/escuras para dificuldades mais altas). O jogador pode trocar de dificuldade durante sua jornada, mas isso encerra a instância atual e cria uma nova — não existe alteração dinâmica de dificuldade dentro da mesma instância. Em party, a troca de dificuldade exige votação/aprovação dos membros.
 
 A hunt termina por ação manual do jogador, por uma regra automática de saída configurada no bot, por morte, ou por outras condições de sessão que venham a ser adicionadas depois. Stamina chegando a zero, isoladamente, não encerra a hunt (ver `stamina.md`).
 
-## Escolher a hunt (FUN-79)
+## Escolher a hunt (FUN-79, #259)
 
-O menu fica no painel da esquerda, e mostra por hunt: nome, **level recomendado** e as
-dificuldades que ELA define — não obrigatoriamente as quatro.
+A escolha é um modal ("Escolha uma caçada", #259), aberto pela pill "Escolher caçada" sobre o
+mundo (na Cidade) ou pelo ícone Hunts do topo (nos dois estados); durante a hunt a pill vira
+"Sair da caçada". Mostra por hunt: nome, **level recomendado** e as dificuldades que ELA define —
+não obrigatoriamente as quatro. A formação da party (ADR 0027) é a coluna direita do mesmo modal;
+os companheiros DURANTE a hunt são um painel fixo próprio na coluna esquerda (`PartyMembers`,
+DS-14).
+
+**Detalhes da caçada, durante a hunt (#325, #349, SV-13).** A pill "ⓘ Detalhes da caçada" abre
+um modal de duas colunas com o nome, o nível recomendado e as dificuldades da hunt ativa — a mesma
+regra de "level recomendado é conselho" vale aqui. A identidade da hunt ativa vem do servidor
+(SV-05, #341: `session-state` e `instance-enter` trazem `huntId`/`difficulty`), não de uma
+lembrança do `HuntsModal` nesta aba — reabrir o jogo no meio de uma caçada existente, ou reanexar
+num nó diferente, também traz o nome de volta. O modal ainda omite a identidade, numa frase curta,
+nos dois casos que sobram sem resposta: um nó `game` anterior à SV-05 que não manda o campo, ou o
+catálogo (trocado por uma reconexão) sem mais aquela hunt. Tamanhos de pull com contagem
+("Ousado · 4", SV-19, #355), criaturas com vida e experiência e o loot possível — cada item uma vez,
+com sprite e nome, sem gold e sem raridade (SV-02, #338) — aparecem quando o catálogo os traz; o
+catálogo de monstros nunca traz outfit, e o lugar do sprite de cada criatura fica tracejado, como na
+Cyclopedia. A descrição (SV-21, #357, `hunt.description` no conteúdo) aparece quando a hunt tem o
+parágrafo escrito — Rat Cellars tem — e a seção some, em vez de mostrar um traço, quando não tem.
+A pill "Despachar loot" do kit espera o épico E5. "Seu recorde" (XP/h, gp/h) nunca aparece — mesma
+regra de "não mostra estimativa oficial" já descrita abaixo.
+
+**A área da hunt aparece no mundo (#327, #348, SV-12).** O overlay do canto superior mostra
+"`<nome da hunt>` · `<dificuldade>`" antes da contagem de criaturas no alcance, pela mesma
+identidade da hunt (SV-05) do parágrafo acima — e some, deixando só a contagem, nos mesmos dois
+casos em que o modal de detalhes omite o nome.
+
+**A contagem e o painel Batalha são do MESMO andar, sempre (#527).** Numa hunt privada não há
+AOI (FUN-33): o hospedeiro manda TODOS os monstros vivos da instância pelo `session-state`, dos
+três andares da Darashia Dragon Lair inclusive, porque o mundo espacial precisa deles para
+desenhar o que se vê através de escada e vão (ADR 0034). `battleRows`
+(`packages/client/src/shell/BattlePanel.tsx`) e a contagem do `WorldOverlay` filtram por
+`creature.position.z === própria posição` antes de contar — sem isto, quem estava em z10 via
+"35 criaturas no alcance" com Dragon Lords de z11/z12 somados, embora o bot (`countTargets`,
+`packages/sim/src/targeting.ts`) já contasse certo, só por andar, desde o #519. O mundo
+continua desenhando andares vizinhos (ADR 0034); só a LISTA de batalha e o contador são
+por andar — no Tibia a battle list também só mostra quem está no mesmo andar.
 
 **Level recomendado aparece; estimativa de XP/h e gold/h não.** A regra é de produto e virou
 estrutura: a mensagem `hunt-catalogue` não tem campo onde guardar a estimativa. Um comentário
 pedindo para não mandar seria esquecido; um campo que não existe não pode ser preenchido por
 engano. Um número oficial de XP/h vira a métrica pela qual toda hunt é julgada, e a partir daí só
 existe uma hunt boa — o jogo passa a ter uma escolha, não quatro.
+
+**Monstros e loot possível chegam pelo catálogo, sem raridade** (SV-02, #338). Cada hunt leva
+`monsters: [{id, name}]` — os monstros que aparecem em QUALQUER dificuldade dela, deduplicados —
+e `loot: [{itemId, name}]` — o loot possível, também deduplicado. A raridade não vem: a mecânica
+não existe (E5). Gold nunca entra em `loot`: não é item, é campo do personagem — quem quer saber
+se a hunt solta gold já tem isso em `lootDrops`. `catalogue.monsters[]` (a lista para o
+Bestiário) ganha `health` e `experience` de cada monstro — nunca XP/h nem gold/h por hora, que
+continua fora por decisão de produto (parágrafo acima).
+
+**Contagem de monstros por dificuldade chega pelo catálogo** (SV-19, #355). Cada hunt leva
+`difficultyDetails: [{ id, monsterCount }]` — a quantidade total de monstros que cada
+dificuldade mantém vivos na instância, na mesma ordem de `difficulties`. É o que o cliente usa
+para exibir "Ousado · 4" nos botões de pull e no seletor de dificuldade da party, como no
+Huntera.
 
 **Recomendação não é trava.** Abaixo do level recomendado a linha fica em âmbar e o botão
 continua lá: quem decide se a entrada vale é o servidor, e no MVP ele não recusa por level.
@@ -37,12 +87,22 @@ cria outra (§14.7), então a tela oferece as duas ações que de fato acontecem
 O catálogo chega **uma vez**, logo depois do `welcome` e pela fila normal — a versão de conteúdo é
 fixada na sessão (invariante 7), então ele não muda enquanto ela vive.
 
+## Saída da hunt (#360)
+
+A saída da hunt pode ocorrer de duas maneiras principais quando não decorre de morte: por **regra automática de saída** (configurada nas opções de saída do bot, como `hp-below` ou `out-of-gold`) ou por **solicitação manual** (`ruleset.requestExit(session, characterId)`).
+
+- **Contagem regressiva (`exitDelayMs`)**: Quando configurado na hunt (`exitDelayMs` em `packages/content`), tanto o disparo de uma regra automática de saída quanto a solicitação manual iniciam uma contagem regressiva (por padrão 5 segundos — 5 000 ms). Durante esse intervalo, o personagem continua no mundo e sujeito ao combate. Se `exitDelayMs` estiver ausente, a saída é imediata.
+- **Registro do evento**: O evento notável (`exit-rule`) é registrado no instante exato do disparo do gatilho (`t`), enquanto o encerramento da sessão ou a partida do participante é diferida para `t + exitDelayMs`.
+- **Múltiplos disparos**: Novas solicitações de saída durante uma contagem já em andamento são ignoradas e não reiniciam o timer.
+- **Preservação em snapshot**: Se o estado for serializado no meio da contagem regressiva, o timer agendado e o motivo de saída pendente (`pendingExit`) são preservados na retomada.
+- **Exceção para `party-member-lost`**: A regra de saída em cascata quando um membro do grupo sai ou morre (`party-member-lost`) permanece **imediata**, sem passar pelo atraso de `exitDelayMs`.
+
 ## Regras
 
 - Rota fixa e única por hunt; sem pathfinding dinâmico do bot dentro da hunt.
 - Rota forma loop lógico (circular ou com retorno ao ponto de origem).
 - Pontos de spawn e composição por dificuldade são dados de conteúdo, não aleatórios no MVP.
-- Quatro dificuldades: Iniciante, Profissional, Herói, Lendário.
+- Três tamanhos de pull: Cauteloso, Ousado, Agressivo — `monsterCount` total de 2/5/8 na Rat Cellars.
 - Trocar de dificuldade encerra a instância atual e cria uma nova; sem mudança dinâmica na mesma instância.
 - Em party, troca de dificuldade exige aprovação dos membros.
 - Tela de seleção mostra level recomendado; não mostra XP/h nem gold/h estimados.
@@ -128,14 +188,41 @@ A colocação inicial passa pela mesma legalidade. O personagem nasce no `entryP
 Cidade — conteúdo, validado no boot contra `isBlocked` — e não mais no literal `(0,0)`, que é
 parede na borda de qualquer tilemap (FUN-60).
 
-A duração do passo é **uma função** (`movementDuration`), usada por humano, bot e monstro. Hoje a
-diagonal custa o mesmo que a reta; mudar isso é balanceamento, e muda num lugar só.
+A duração do passo é **uma função** (`movementDuration`), usada por humano, bot e monstro. Desde
+a FUN-119 (ADR 0025) ela é a fórmula do Tibia: `chão × 1000 / speed`, com a velocidade do chão
+do tile de **destino**, arredondada para cima em múltiplos de 50 ms, e a **diagonal custa 3×**
+antes do arredondamento — os números medidos no Huntera (speed 292 em chão 130/160/200 → 450/
+550/700 ms; diagonal 2.100) são a fixture de `movement.test.ts`. A cadência de quem parou é a de
+um passo dali. A Cidade não usa nada disso: anda a um passo fixo (`city.json`), porque é
+navegação e não simulação.
+
+**O mapa tem andares** (FUN-119): `floors` por `z`, e pisar numa escada (`floorChanges`) é um
+passo cujo destino está em outro andar — como no Tibia, o tile de chegada pode não ser o
+adjacente. O monstro não usa escada: para quem não carrega `z`, o degrau é parede.
+
+**A rota pode atravessar andares** (#519, a Darashia Dragon Lair): `validateRoute` aceita um
+passo que pisa exatamente no tile registrado em `floorChanges`, e a posição EFETIVA para julgar o
+passo seguinte é o destino da escada — nunca o tile autorado, porque `move()` nunca deixa ninguém
+parado nela. `scripts/trace-route.ts` traça isso sozinho: de um estado `(x, y, z)`, o vizinho que
+é uma escada não vira um tile a mais no caminho, a busca CONTINUA a partir do destino dela. O
+monstro, mesmo passando a carregar o PRÓPRIO andar (`position.z`, para saber onde nasceu — ver
+"Spawn" abaixo), continua sem a CAPACIDADE de usar escada: o `z` na posição dele é identidade,
+nunca permissão (`Movable.crossesFloors`, só o personagem tem). Todo lugar que compara alvo,
+área ou proximidade confere o andar antes da distância — os três andares da Darashia Dragon Lair
+compartilham a mesma caixa `(x, y)`, e um Dragon Lord de z11 pode ter coordenada idêntica à de um
+Dragon em z10, um andar acima; sem a checagem, o monstro perseguiria e a magia acertaria através
+do chão.
 
 ## Spawn: densidade é dado, composição é sorteio
 
-Os pontos de respawn são definidos por design, na rota. Quantos monstros nascem em cada ponto
-vem da **dificuldade escolhida** e **não varia** — o §14.5 é explícito que não há variação
-aleatória de densidade no MVP.
+Os pontos de respawn são definidos por design, na rota. Quantos monstros a instância mantém
+vivos — o `monsterCount` TOTAL do pull escolhido, como o Huntera conta (FUN-123) — **não varia**:
+o §14.5 é explícito que não há variação aleatória de densidade no MVP. O total é ESPALHADO
+pelos pontos de spawn da rota (`Spawner`): o lugar `i` fica no ponto `⌊i × pontos / total⌋`,
+determinístico — com menos monstros que pontos eles cobrem o laço inteiro em intervalos iguais,
+com mais cada ponto recebe a mesma quantidade. Na Rat Cellars, 2/5/8 ratos sobre 14 pontos: o
+Cauteloso nasce nos pontos 0 e 7, o Agressivo em oito dos catorze. O `radius` de cada ponto é
+até onde o monstro procura tile livre para nascer.
 
 O único sorteio do spawn é **qual** monstro, dentro dos pesos da composição. Peso zero é
 permitido e significa "não sai": é como se desliga uma variante sem apagar a linha, e apagar
@@ -148,10 +235,33 @@ planejar — e planejar é justamente o que se ganha ao tornar o monstro previs�
 O respawn tem **prazo configurável por hunt**. Instantâneo faria a rota deixar de importar: o
 personagem mataria tudo parado num ponto só. Longo demais faz ele dar voltas em mapa vazio.
 
-As quatro dificuldades — Iniciante, Profissional, Herói, Lendário — são **dados**, não código.
-Trocar `perSpawnPoint` e a composição no JSON muda densidade e variedade sem tocar em lógica;
-há teste afirmando exatamente isso, porque se uma dificuldade nova exigisse código o formato
-estaria errado.
+**O monstro não nasce colado num participante** (#236): `spawnClearRadius` da hunt é a menos de
+quantos tiles de um participante vivo o tile é recusado. O spawn **adia** — tenta de novo a cada
+segundo, no evento que já existia — e nunca cancela: a densidade continua sendo a da
+dificuldade, que é o que a referência (§29) exige ao mandar não copiar a supressão do TFS. Sem
+isso, com `respawnDelayMs` igual ao intervalo de ataque, o rato nascia e morria no mesmo
+instante, e o cliente desenhava o dano num tile vazio. `0` desliga.
+
+**`spawnClearRadius` só vale para quem é `blockable`** (#519, o `isBlockable` do TFS/Canary). No
+Canary, 1.640 dos 1.656 monstros do bestiário — Dragon e Dragon Lord inclusive — respawnam
+olhando para o jogador: `isBlockable` é `false` neles, e a EXCEÇÃO é quem declara `true`. O
+monstro do Draconya ganha o mesmo campo, com o mesmo default (`blockable: false`); Rat e Rotworm
+DECLARAM `blockable: true`, porque o comportamento deles vem do Huntera observado (não do
+Canary) e não pode mudar por esta issue. A checagem de distância — o alcance é o mesmo
+`Spawn::findPlayer` do TFS, `±11` tiles no MESMO andar — só roda para quem é `blockable`.
+
+**Cada ponto de spawn pode declarar o próprio monstro, a posição exata e o próprio `spawntime`**
+(#519, o formato do XML de spawn do Canary — um `<monster>` por posição, nunca um sorteio). Um
+ponto assim SEMPRE nasce aquele monstro: a composição sorteada da dificuldade vira fallback, só
+para quem não declara. A Darashia Dragon Lair é a primeira hunt a usar isto: 47 pontos, cada um
+com o `monsterId` (`dragon` ou `dragon-lord`), a coordenada exata do Canary e
+`respawnDelayMs: 90000` (o `spawntime="90"` do XML). Rat Cellars e Rotworm Caves continuam com o
+formato de sempre — `routeIndex` + `radius`, monstro sorteado, `respawnDelayMs` da dificuldade —,
+porque nenhuma delas declara os campos novos.
+
+Os três pulls — Cauteloso, Ousado, Agressivo — são **dados**, não código. Trocar `monsterCount`
+e a composição no JSON muda densidade e variedade sem tocar em lógica; há teste afirmando
+exatamente isso, porque se um pull novo exigisse código o formato estaria errado.
 
 ## O ruleset, e por que ele é o molde dos outros cinco
 
@@ -186,16 +296,23 @@ diz o motivo, e no caso de regra automática diz **qual** regra: "sua hunt encer
 de saída" sem dizer qual é a mensagem que faz o jogador desconfiar do bot que ele mesmo
 configurou.
 
-**As regras de saída vêm da configuração do jogador** (FUN-86). São `hp-below`, `out-of-gold` e
-`party-member-lost`, com teto de 4 slots, avaliadas a cada 250 ms — e o extrato registra **qual**
-delas encerrou, com o percentual no id quando é de HP. O encerramento é `exit-rule`, nunca
-`manual-exit`: o jogador não pediu para sair, a regra dele decidiu, e o extrato tem que dizer a
-verdade sobre isso. Ver [`bot.md`](./bot.md) para o vocabulário.
+**As regras de saída vêm da configuração do jogador** (FUN-86). São `hp-below`, `out-of-gold`,
+`party-member-lost` e `out-of-capacity`, com teto de 4 slots, avaliadas a cada 250 ms — e o extrato
+registra **qual** delas encerrou, com o percentual no id quando é de HP. O encerramento é
+`exit-rule`, nunca `manual-exit`: o jogador não pediu para sair, a regra dele decidiu, e o extrato
+tem que dizer a verdade sobre isso. Ver [`bot.md`](./bot.md) para o vocabulário.
 
 **Gold zerado NÃO encerra a hunt sozinho** (§20.3). Sem a regra `out-of-gold`, o personagem fica,
-não consegue pagar supply e pode morrer — e a primeira recusa por falta de gold vira uma linha no
-extrato, uma só. Com a regra, ele sai antes. A diferença entre os dois comportamentos é uma linha
-na configuração, e é assim de propósito.
+não consegue pagar o próximo supply nem o próximo tiro e pode morrer — e a primeira recusa por
+falta vira uma linha no extrato, uma só. Com a regra, ele sai antes. A diferença entre os dois
+comportamentos é uma linha na configuração, e é assim de propósito.
+
+**O consumo debita gold no ato** (AB-04, ADR 0032 d.6/d.7). Usar um supply chama `useSupply`, que
+debita o `price` do saldo e leva o gasto a `aggregates.goldSpent`; cada tiro de arma de distância
+debita o `price` da munição escolhida da família. Não há pilha a repor nem lote a comprar — o
+limitador é o saldo. O débito é um evento no caminho da ação (invariante 2), então a hunt
+desanexada a 1 Hz debita no mesmo instante lógico que a anexada a 10 Hz. Ver
+[`items.md`](./items.md) e [`economy.md`](./economy.md).
 
 **Trocar de dificuldade encerra e cria outra** (§14.7). Não existe alteração dinâmica: mudar a
 densidade no meio deixaria monstros da densidade antiga vivos ao lado dos novos, e o jogador
@@ -219,13 +336,15 @@ snapshot. Hoje a recompensa vai ao **último golpe**; o maior dano fica guardado
 bestiário lerem depois, sem migração. Dividir entre participantes é regra de produto, e entra com
 party.
 
-**O loot cai** — em gold. A tabela do monstro separa moeda de item (`loot.gold` e `loot.items`),
-porque gold é campo no personagem e não item; `items` fica vazio até o sistema de itens existir, e
-o carregador recusa qualquer coisa nele. O sorteio usa o `Rng` da sessão — a mesma semente rende o
+**O loot cai** — em gold e em item. A tabela do monstro separa moeda de item (`loot.gold` e
+`loot.items`), porque gold é campo no personagem e não item; desde a FUN-76/FUN-88 `items` é
+conferido contra o catálogo de itens e o item cai de verdade (ver [`economy.md`](./economy.md)).
+O sorteio usa o `Rng` da sessão — a mesma semente rende o
 mesmo loot, antes e depois de uma retomada — e uma linha com `chance: 0` não consome sorteio, para
 desabilitar uma linha não mudar o que as outras rendem. O gold vira `goldDelta` no personagem e
-`goldGained` no extrato, que o ledger leva à linha do personagem (invariante 10). Sem cadáver, sem
-item no chão, sem caixa de loot: o produto rejeita isso de propósito (§26 da referência).
+`goldGained` no extrato, que o ledger leva à linha do personagem (invariante 10). Sem item de
+loot no chão e sem caixa de loot: o produto rejeita isso de propósito (§26 da referência); o
+cadáver que fica é só visual (FUN-123, ver "Divergências").
 
 ### Abate comum não é evento notável
 
@@ -338,13 +457,34 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
 |---|---|---|
-| Quantidade de dificuldades | 4 (Iniciante, Profissional, Herói, Lendário) | `data/hunts/*.json`, campo `difficulties` |
-| Densidade de referência por ponto de spawn (Iniciante / Profissional / Herói / Lendário) | ~2 / 4 / 8 / 12 monstros (referência inicial discutida; a composição real é definida por hunt) | `data/hunts/*.json`, campo `perSpawnPoint` |
+| Tamanhos de pull | 3 (Cauteloso, Ousado, Agressivo — `cautious`/`bold`/`reckless`) | `data/hunts/*.json`, campo `difficulties` |
+| Monstros vivos por pull (Cauteloso / Ousado / Agressivo) | Rat Cellars: 2 / 5 / 8; Rotworm Caves: 13 / 26 / 52 (1 / 2 / 4 monstros por ponto de spawn nos 13 pontos da caverna) | `data/hunts/*.json`, campo `monsterCount` |
 | Rota | lista ordenada de tiles, fixa por hunt | `data/routes/*.json`, apontada pelo `routeId` da hunt |
-| Prazo de respawn | 30 s em Rat Cellars | `data/hunts/*.json`, campo `respawnDelayMs` |
+| Prazo de respawn | 30 s em Rat Cellars e em Rotworm Caves (após abate); 90 s na Darashia Dragon Lair | `data/hunts/*.json`, campo `respawnDelayMs` |
+| Raio livre do spawn | 3 tiles em Rat Cellars e em Rotworm Caves `[ABERTO — valor provisório; o bow alcança 6]`; `0` desliga | `data/hunts/*.json`, campo `spawnClearRadius` (#236) |
+| Monstro espera a vista limpar para respawnar (`blockable`, o `isBlockable` do TFS/Canary) | `false` (não espera) é o default e o comportamento de 1.640/1.656 do bestiário do Canary; Rat e Rotworm declaram `true` para preservar o `spawnClearRadius` observado no Huntera (#519) | `data/monsters/*.json`, campo `blockable` |
+| Monstro e `spawntime` por ponto de spawn (#519, o formato do Canary) | Ausente é o de sempre (sorteio da composição, `respawnDelayMs` da dificuldade) — Rat Cellars e Rotworm Caves não declaram; a Darashia Dragon Lair declara os 47 (`dragon`/`dragon-lord`, 90 000 ms cada) | `data/routes/*.json`, campos `monsterId`/`at`/`respawnDelayMs` de `spawnPoints` |
+| Prazo do cadáver no chão (só visual) | 30 s em Rat Cellars e em Rotworm Caves (RESOLVIDO, Huntera Parte VI §36) | `data/hunts/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
+| Atraso da saída solo (`exitDelayMs`) | 5 000 ms (#360); ausente é saída imediata | `data/hunts/*.json`, campo `exitDelayMs` |
+| Ambiente da cena (só apresentação) | `cavern` em Rat Cellars e em Rotworm Caves — o cliente escurece o mundo; ausente é superfície (FUN-121) | `data/hunts/*.json`, campo `ambience` |
+| Texto de apresentação (`description`, só apresentação) | Rat Cellars e Rotworm Caves têm; as demais hunts (quando existirem) ganham o texto na própria issue de conteúdo que as criar | `data/hunts/*.json`, campo `description` |
+| Passo manual (`walk` do jogador) | um por vez, por personagem: o hospedeiro recusa o que chega antes de o passo anterior acabar (FUN-122); o passo do bot conta a partir dele | `packages/server/src/game/host.ts` (`#walkingUntil`), `packages/sim/src/rulesets/hunt.ts` (`requestMove`) — mecanismo |
 | Personagem desarmado (ataque, intervalo, alcance, armadura, esquiva) | [ABERTO — valor provisório: 25 / 2000 ms / 1 tile / 4 / 5%] | `data/combat/baseline.json`, bloco `player` |
-| Velocidade de passo do personagem | [ABERTO — valor provisório: 500 ms por tile] | `data/progression/baseline.json`, `stepDurationMs` |
-| Loot por abate (gold: chance, mínimo, máximo) | Rat: 90%, 1–4 | `data/monsters/*.json`, bloco `loot.gold` |
+| Velocidade do personagem (escala do Tibia) | 220 no level 1, +2 por level — o TFS clássico, RESOLVIDO pelo #527 (ADR 0037 decisão 4): mesma escala do passo abaixo e da velocidade de monstro | `data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
+| Duração do passo | `ceil50(chão × 1000 / speed)` ms, diagonal × 3; chão sem velocidade declarada vale 150 | `packages/sim/src/movement.ts` (`movementDuration`) — mecanismo, não balanceamento |
+| O rato (números do Huntera Cyclopedia, Parte V §32) | 20 HP, 5 XP, ataque 3–4 sorteado por golpe, armadura 1, speed 172; +20 % de dano de terra e sagrado, −10 % de gelo e morte; o `defense 5` do Canary fica `[ABERTO]` — o motor só tem `armor` | `data/monsters/rat.json` |
+| Loot por abate (Rat Cellars) | Rat: gold 100 %, 1–4; queijo 39,4 % (`items/cheese.json`, aparência 3607) | `data/monsters/*.json`, bloco `loot` |
+| O rotworm (números do Canary v3.6.1, #511) | 65 HP, 40 XP, ataque 24–30 sorteado por golpe, armadura 8, speed 180; sem elementos (Cyclopedia não lista nenhum) | `data/monsters/rotworm.json` |
+| Loot por abate (Rotworm Caves, #511) | Rotworm: gold 71,76 %, 1–17; sword 3 %; mace 4,5 %; meat 20 %; ham 20,12 %; worm 3 % (1–3 un.); lump of dirt 10 %; legion helmet 1,89 % | `data/monsters/rotworm.json`, bloco `loot` |
+| O Dragon (TFS `dragon.xml`, conferido com o Canary, #520) | 1000 HP, 700 XP, melee 0–120, armadura 25, speed 172 (escala do TFS — o Canary guarda metade por outra fórmula de cliente, não usada aqui); terra +80 %, energia +20 %, gelo −10 % (vulnerável), fogo IMUNE; `targetDistance 1`, `staticAttack 80 %` (aceito, não ligado ao passo — ver `combat.md`), `runOnHealth 300`, troca de alvo 4 s/10 % | `data/monsters/dragon.json` |
+| Abilities do Dragon (#520, CMB-06/#518) | bola de fogo (alvo, alcance 7, círculo raio 4, centrada no alvo): 60–140, 15 %; onda de fogo (comprimento 8, sem alvo): 100–170, 10 %; cura própria: +40–70, 15 % | `data/monsters/dragon.json`, blocos `abilities`/`defenses` |
+| O Dragon Lord (TFS `dragon_lord.xml`, conferido com o Canary, #520) | 1900 HP, 2100 XP, melee 0–230, armadura 35, speed 200 (escala do TFS); mesmos elementos do Dragon; mesmas flags | `data/monsters/dragon-lord.json` |
+| Abilities do Dragon Lord (#520) | bola de fogo: 100–200, 20 %; campo de fogo (alvo, alcance 7, sem dano direto — só larga o campo, círculo raio 4 centrado no alvo): 10 %; onda de fogo: 150–230, 15 %; cura própria: +57–93, 15 % | `data/monsters/dragon-lord.json` |
+| Campo de fogo do Dragon Lord (#520) | queimadura: 20 de dano a cada 10 s, por até 70 s (a cadeia de decaimento 2118→2119→2120 do Canary `items.xml` simplificada num campo só, com os números do estágio mais forte — ver `combat.md`) | `data/monsters/dragon-lord.json`, `abilities[].field` |
+| Loot do Dragon (21 linhas, chances do TFS `dragon.xml`) | gold 90,082 %, 1–105; dragon ham 65,143 % (1–2); steel shield 14,893 %; crossbow 10,085 %; dragon's tail 9,883 %; burst arrow (`ammunitionId`) 7,976 % (1–10); longsword 4,027 %; steel helmet 3,005 %; broadsword 1,995 %; plate legs 1,909 %; strong health potion (`supplyId`) 1,055 %; wand of inferno 1,053 %; green dragon scale 1,038 %; green dragon leather 1,018 %; double axe 1,008 %; dragon hammer 0,517 %; serpent sword 0,504 %; small diamond 0,384 %; dragon shield 0,301 %; life crystal 0,113 %; dragonbone staff 0,102 % | `data/monsters/dragon.json`, bloco `loot` |
+| Loot do Dragon Lord (20 linhas, chances do TFS `dragon_lord.xml`) | gold 95,258 %, 1–246; dragon ham 79,757 % (1–2); green mushroom 12,12 %; royal spear 9,139 % (1–3); gemmed book 9,09 %; power bolt (`ammunitionId`) 6,565 % (1–7); energy ring 5,072 %; small sapphire 4,968 %; golden mug 3,072 %; red dragon scale 1,963 %; red dragon leather 1,022 %; strong health potion (`supplyId`) 0,971 %; life crystal 0,629 %; strange helmet 0,382 %; fire sword 0,286 %; tower shield 0,268 %; royal helmet 0,233 %; dragon scale mail 0,142 %; dragon slayer 0,109 %; dragon lord trophy 0,093 % | `data/monsters/dragon-lord.json`, bloco `loot` |
+| Bestiário do Dragon/Dragon Lord (#520) | toKill 1000, firstUnlock 50, secondUnlock 500, charmsPoints 25, stars 3, occurrence 0 — ainda sem tela (ver `bestiary.md`) | `data/bestiary/baseline.json`, `entries` |
+| A hunt Darashia Dragon Lair (#520 fase 2) | `recommendedLevel` 40 (Gate of Expertise, TibiaWiki); uma dificuldade só, `monsterCount: 47` = o total de `spawnPoints`, cada ponto nasce exatamente uma vez; `corpseTtlMs` 670 000 ms — soma da cadeia de decaimento do Canary `items.xml` (dead dragon/dead dragon lord: 10 s → 300 s → 300 s → 60 s, `decayTo` até sumir, não os 30 000 ms do Huntera); `spawnClearRadius` ausente (0, desligado — a referência pede não copiar a supressão do TFS) | `data/hunts/darashia-dragon-lair.json` |
 
 ## Em aberto
 
@@ -352,13 +492,86 @@ Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. Os dois da tabela acim
 projeto, não do PRD: o personagem precisa de números de ataque e de velocidade para a hunt render,
 e o PRD é silencioso sobre os dois porque assume equipamento — que ainda não existe. A densidade de referência (2/4/8/12) é explicitamente descrita como ponto de partida, não como número final — cada hunt define sua própria composição em conteúdo.
 
+**A margem de sobrevivência do pull Cauteloso na Rotworm Caves é estreita, e ficou mais estreita
+com o recorte de Darashia (#515).** O recorte anterior (#511) media 8–30 HP de folga (de 185) em
+dez minutos desarmado, sem morrer; o recorte de Darashia — menor, por construção do próprio
+Huntera (Parte VI §38) — morreu em simulação de trial entre 272 s e 357 s de dez, mesmo com o
+laço desenhado para maximizar o tempo de caminhada tranquila entre encontros. `monsterCount`,
+`respawnDelayMs` e os números do monstro são de outras decisões (ADR 0025) e não mudam aqui; contra
+o mapa REAL e com o bot padrão do personagem (cura automática, FUN-114) — o cenário que o Huntera
+de fato usa —, o teste de dez minutos sobrevive, com HP mínimo 74/165, próximo do 116/170 que o
+Druid observado mediu (Parte VI §36).
+
 ## Divergências do PRD
 
-**Loot é só gold, por enquanto.** O §14 fala em XP *e* loot por abate; os dois caem desde a
-FUN-63, mas o loot de **item** não existe — não há item, inventário nem capacidade — e a tabela do
-monstro recusa qualquer `items` até o catálogo existir. A moeda é creditada como campo, não como
-item: fingir que gold é um item resolvido criaria um caminho econômico que ninguém desenharia de
-propósito.
+~~**Loot é só gold, por enquanto.**~~ → **Resolvido (FUN-76, FUN-88):** o loot de item
+existe — a tabela do monstro confere `items` contra o catálogo, e o item cai de verdade, na
+mochila se couber ou na Caixa de Loot da Sessão se não. Detalhe em
+[`economy.md`](./economy.md#divergências-do-prd). A moeda continua creditada como campo, não
+como item: gold nunca vira uma linha de `loot.items`.
 
 **A hunt hospeda um personagem por instância.** Party é da Fase 3; até lá, entrar com o segundo
 personagem é erro, não silêncio.
+
+**Três tamanhos de pull, não quatro dificuldades** (ADR 0025, M11, em vigor desde a FUN-123).
+O §14.5 prevê Iniciante/Profissional/Herói/Lendário; a decisão é copiar o Huntera —
+Cauteloso/Ousado/Agressivo (`cautious`/`bold`/`reckless`), com um `monsterCount` total (2/5/8 na
+Rat Cellars) como o número que o jogador vê.
+
+**Cadáver no chão, só visual** (decisão do usuário, 2026-09-11; FUN-123). O abate deixa o
+cadáver do monstro no tile — `ground-item-appear`, com a arte de `appearances.corpses` — por
+`corpseTtlMs`, e ele some sozinho (`ground-item-disappear`); não carrega loot — o loot continua
+indo direto à caixa da sessão. Quem reanexa vê os cadáveres que ainda estão lá
+(`session-state.world.groundItems`). Monstro sem linha na tabela não deixa nada.
+
+**A Rat Cellars é o bueiro de ratos de Rookgaard** (FUN-123), como no Huntera: o recorte real
+importado (118×80, andar 8, 2 043 tiles andáveis, `ambience: cavern`), a rota traçada por
+`pnpm route:trace` sobre ele — um laço de 160 tiles com 14 pontos de spawn onde o mapa real põe
+rato —, e o rato do Tibia (20 HP, 5 XP, 3–4 de ataque, speed 172, gold e queijo). A entrada
+continua pelo menu, abrindo uma instância — sem portal na cidade (ADR 0025).
+
+**A Rotworm Caves é a caverna de rotworms de Darashia do Huntera** (#515), a segunda hunt do
+Draconya: o recorte real importado (88×101→88×73, andar 8, 902 tiles andáveis em duas
+componentes — 823 na principal e 79 num corredor isolado que a rota nunca visita — `ambience:
+cavern`, ADR 0025 emenda, Parte VI §38), a rota traçada por `pnpm route:trace` sobre ele — um
+laço de 444 tiles com 13 pontos de spawn escolhidos dentro da componente principal, evitando um
+funil estreito que prendia o combate corpo a corpo —, e o rotworm do Canary v3.6.1 (65 HP, 40
+XP, 24–30 de ataque, armadura 8, speed 180). É a primeira hunt do Draconya com loot de verdade
+além do gold: sete itens (`sword`, `mace`, `meat`, `ham`, `worm`, `lump-of-dirt`,
+`legion-helmet`), com `value` de TibiaWiki provisório para as três peças de equipamento e `0`
+para as quatro de comida/curiosidade (sem NPC de venda ainda). A entrada continua pelo menu,
+abrindo uma instância — sem portal na cidade (ADR 0025), como a Rat Cellars.
+
+**A Darashia Dragon Lair é a primeira hunt MULTIANDAR, e a primeira copiada do Canary em vez do
+Huntera** (#519, ADR 0025 emenda, ADR 0037): o recorte real importado (86×121, z10–z12 — 2.036
+andáveis em z10, 1.849 em z11, 173 em z12), a rota traçada por `pnpm route:trace` — estendido
+nesta issue para atravessar `floorChanges` — sobre ele: um laço de 1.494 tiles pelos três
+andares, com os 47 pontos de spawn do Canary (`data-otservbr-global/world/otservbr-monster.xml`)
+ancorados na coordenada EXATA, distância zero. Os 19 pontos de z10 são `dragon`, os 28 de
+z11+z12 são `dragon-lord` — cada um com `respawnDelayMs: 90000`, o `spawntime="90"` do XML, por
+PONTO, não por dificuldade. **Os dois conectores entre andares são degraus reais do Canary**:
+cruzados por item id contra `items.xml` (id 469, `stairs`, `floorchange="down"`; id 7544/7729–7736,
+`ramp`, `floorchange="west"`/`"down"`) e resolvidos pelo deslocamento de pouso que
+`Tile::queryDestination` aplica — não uma coincidência geométrica de overlap (ver o detalhe,
+inclusive a correção de uma revisão adversarial que pegou o pouso errado numa primeira tentativa,
+em ADR 0025). **Os monstros (Dragon e Dragon Lord) e o arquivo da hunt fecharam o laço na #520**:
+`data/hunts/darashia-dragon-lair.json` aponta o mesmo `mapId`/`routeId`, `ambience: cavern`,
+`recommendedLevel: 40` (o "Gate of Expertise" que trava a entrada da lair real, TibiaWiki) e uma
+dificuldade só (`monsterCount: 47` — o mesmo total de `spawnPoints`, para cada ponto nascer
+exatamente uma vez; o Tibia real não tem tamanho de pull aqui). `corpseTtlMs: 670000` (670 s) é a
+vida útil TOTAL do cadáver no Canary — corrigido numa revisão da #536, achado [major]: a primeira
+versão tinha lido só os 10 s do PRIMEIRO estágio de decaimento (`items.xml` id 5973/5984, "dead
+dragon"/"dead dragon lord", `duration="10"`) e confundido isso com o tempo total no chão, quando
+na verdade o item decai (`decayTo`) para o próximo estágio em vez de sumir. A cadeia completa —
+idêntica em forma para os dois monstros — é 10 s → 300 s → 300 s → 60 s até o último `decayTo="0"`
+(aí some de fato): 10+300+300+60 = 670 s = 670 000 ms (segundos × 1000). NÃO os 30 000 ms que Rat
+Cellars/Rotworm Caves copiam do Huntera: ADR 0037 d.6 pede a caçada idêntica ao Tibia real em toda
+hunt, e o fato real é a soma da cadeia, não o primeiro estágio dela. O motor não modela decaimento
+em múltiplos estágios (só um `corpseTtlMs` por hunt) nem TTL por monstro; como Dragon e Dragon
+Lord chegam à MESMA soma no Canary, o único número da hunt já serve para os dois — a simplificação
+é "um TTL só", não o valor do TTL. Testado contra o
+CONTEÚDO REAL (`packages/server/src/game/darashia-dragon-lair.test.ts`): uma party de quatro
+level 200 (Knight/Paladin/Sorcerer/Druid) que entra vê os 47 nascerem — 19 Dragon em z10, 24
+Dragon Lord em z11, 4 em z12 —, cada um na coordenada exata do próprio ponto, e o respawn de um
+ponto abatido acontece 90 s depois, nunca antes, com o mesmo `monsterId` na mesma vizinhança. A
+entrada continua pelo menu (ADR 0025).

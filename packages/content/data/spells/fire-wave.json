@@ -1,0 +1,28 @@
+{
+  "id": "fire-wave",
+  "name": "Fire Wave",
+  "description": "Lança uma onda de fogo à sua frente.",
+  "vocationId": "sorcerer",
+  "minLevel": 18,
+  "manaCost": 25,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 4000,
+  "effect": {
+    "kind": "damage",
+    "basePower": 40,
+    "area": {
+      "shape": "wave",
+      "length": 3
+    },
+    "damageType": "fire",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 1.25,
+      "skillMax": 2.0,
+      "baseMin": 4,
+      "baseMax": 12
+    }
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Fórmula do Canary (`data/scripts/spells/attack/fire_wave.lua`, main, 2026-09-24)."
+}

@@ -1,0 +1,19 @@
+{
+  "id": "ultimate-health-potion",
+  "name": "Ultimate Health Potion",
+  "description": "Cura entre 650 e 850 pontos de vida. Nível 130 ou mais, Cavaleiro.",
+  "price": 350,
+  "group": "potion",
+  "groupCooldownMs": 1000,
+  "effect": {
+    "kind": "heal",
+    "amountRange": { "min": 650, "max": 850 },
+    "target": "friend",
+    "range": 1
+  },
+  "requires": {
+    "level": 130,
+    "vocationId": "knight"
+  },
+  "_open": "Kit level 200 (#524). Canary `potions.lua`, item id 7643: `health = {650, 850}`, `vocations = {KNIGHT}`, `level = 130`. `price` 350: preço uniforme de NPCs (TibiaWiki via tibiascape.com/library/items/ultimate-health-potion)."
+}

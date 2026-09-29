@@ -119,6 +119,101 @@ describe.skipIf(pack === null)('o leitor contra o pacote real (FUN-16)', () => {
       .flatMap((group) => group.spriteIds);
     expect(Math.max(...ids)).toBeGreaterThan(100_000);
   });
+
+  it('as flags batem com o que o mapa precisa: chão tem bank, parede tem unpass (FUN-117)', () => {
+    // Os ids são os de `packages/content/data/appearances/baseline.json`: os dois chãos
+    // (`rat-cellars` 355, `city` 429) e as quatro peças de parede. Um número de campo errado
+    // em `readAppearanceFlags` não dá erro — dá `false` em tudo, e o importador do OTBM
+    // marcaria Thais inteira como andável.
+    for (const floorId of [355, 429]) {
+      expect(packed().object.get(floorId)?.flags?.bankWaypoints).toBeGreaterThan(0);
+      expect(packed().object.get(floorId)?.flags?.unpass).toBe(false);
+    }
+    for (const wallId of [1294, 1295, 1296, 1298]) {
+      const wall = packed().object.get(wallId)?.flags;
+      expect(wall?.unpass).toBe(true);
+      expect(wall?.bottom).toBe(true);
+      expect(wall?.unsight).toBe(true);
+      expect(wall?.unmove).toBe(true);
+      expect(wall?.bankWaypoints).toBeUndefined();
+      expect(wall?.take).toBe(false);
+      expect(wall?.top).toBe(false);
+    }
+    // O gancho fica na peça reta, não no poste nem no canto: a vertical (1294) pendura a leste
+    // (`south=2` no enum do otclient), a horizontal (1295) ao sul. É o campo 21 lido de verdade.
+    expect(packed().object.get(1294)?.flags?.hookSouth).toBe(2);
+    expect(packed().object.get(1295)?.flags?.hookSouth).toBe(1);
+    expect(packed().object.get(1296)?.flags?.hookSouth).toBeUndefined();
+    expect(packed().object.get(1298)?.flags?.hookSouth).toBeUndefined();
+    // Os chãos não se pegam nem se penduram, e são `fullbank`.
+    for (const floorId of [355, 429]) {
+      const floor = packed().object.get(floorId)?.flags;
+      expect(floor?.unmove).toBe(true);
+      expect(floor?.fullbank).toBe(true);
+      expect(floor?.take).toBe(false);
+      expect(floor?.hang).toBe(false);
+    }
+    // O rato: outfit, sem chão nem bloqueio.
+    expect(packed().outfit.get(21)?.flags?.bankWaypoints).toBeUndefined();
+    expect(packed().outfit.get(21)?.flags?.unpass ?? false).toBe(false);
+  });
+
+  it('as flags aparecem em contagens plausíveis no catálogo inteiro', () => {
+    // Milhares de chãos e de bloqueios; centenas de elevações e de deslocamentos. Zero em
+    // qualquer um deles é número de campo errado.
+    const counts = {
+      bank: 0, unpass: 0, unmove: 0, unsight: 0, avoid: 0, take: 0, hang: 0, hook: 0,
+      shift: 0, elevation: 0, top: 0, clip: 0, bottom: 0, lyingObject: 0, fullbank: 0,
+    };
+    for (const appearance of packed().object.values()) {
+      const flags = appearance.flags;
+      if (flags === undefined) continue;
+      if (flags.bankWaypoints !== undefined) counts.bank += 1;
+      if (flags.unpass) counts.unpass += 1;
+      if (flags.unmove) counts.unmove += 1;
+      if (flags.unsight) counts.unsight += 1;
+      if (flags.avoid) counts.avoid += 1;
+      if (flags.take) counts.take += 1;
+      if (flags.hang) counts.hang += 1;
+      if (flags.hookSouth !== undefined || flags.hookEast !== undefined) counts.hook += 1;
+      if (flags.shiftX !== undefined) counts.shift += 1;
+      if (flags.elevation !== undefined) counts.elevation += 1;
+      if (flags.top) counts.top += 1;
+      if (flags.clip) counts.clip += 1;
+      if (flags.bottom) counts.bottom += 1;
+      if (flags.lyingObject) counts.lyingObject += 1;
+      if (flags.fullbank) counts.fullbank += 1;
+    }
+    // Ordens de grandeza medidas no pacote 1332 (bank 2.706, unpass 14.090, unmove 26.597,
+    // unsight 4.865, fullbank 2.401, take 5.757, shift 505, avoid 1.709, height 1.901,
+    // bottom 9.237, lying 1.582, top 998, clip 5.245, hang 435, hook 798).
+    expect(counts.bank).toBeGreaterThan(1_000);
+    expect(counts.unpass).toBeGreaterThan(5_000);
+    expect(counts.unmove).toBeGreaterThan(10_000);
+    expect(counts.unsight).toBeGreaterThan(1_000);
+    expect(counts.avoid).toBeGreaterThan(500);
+    expect(counts.take).toBeGreaterThan(1_000);
+    expect(counts.hang).toBeGreaterThan(100);
+    expect(counts.hook).toBeGreaterThan(100);
+    expect(counts.shift).toBeGreaterThan(100);
+    expect(counts.elevation).toBeGreaterThan(500);
+    expect(counts.top).toBeGreaterThan(100);
+    expect(counts.clip).toBeGreaterThan(1_000);
+    expect(counts.bottom).toBeGreaterThan(1_000);
+    expect(counts.lyingObject).toBeGreaterThan(500);
+    expect(counts.fullbank).toBeGreaterThan(1_000);
+    // E as duas que quase nada usa, mas alguma coisa usa: uma mutação no número de campo
+    // deixaria zero.
+    let noMovementAnimation = 0, animateAlways = 0;
+    for (const appearance of packed().object.values()) {
+      if (appearance.flags?.noMovementAnimation) noMovementAnimation += 1;
+    }
+    for (const appearance of [...packed().outfit.values(), ...packed().effect.values()]) {
+      if (appearance.flags?.animateAlways) animateAlways += 1;
+    }
+    expect(noMovementAnimation).toBeGreaterThan(0);
+    expect(animateAlways).toBeGreaterThan(0);
+  });
 });
 
 // Quando o pacote não está aqui, isto é o que aparece no lugar do bloco acima: uma linha que

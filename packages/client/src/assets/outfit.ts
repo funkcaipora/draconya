@@ -130,24 +130,38 @@ export function colorize(
   return out;
 }
 
-/** Uma chave por combinação. A cor sozinha não basta: cada direção e fase é um bitmap. */
+/**
+ * Uma chave por combinação. A cor sozinha não basta: cada direção e fase é um bitmap.
+ *
+ * **O grupo de quadros entra na chave, e separado da fase.** Parado e andando são dois
+ * `frameGroups` com fase 0 cada um; sem o grupo, "parado fase 0" e "andando fase 0" caem na
+ * mesma chave e o segundo pedido recebe o bitmap do primeiro — o personagem para de mexer
+ * as pernas no primeiro quadro de cada passo, e nada acusa, porque o cache "acertou".
+ */
 export function outfitKey(
-  outfitId: number, colors: OutfitColors, direction: number, phase: number,
+  outfitId: number, colors: OutfitColors, group: number, direction: number, phase: number,
 ): string {
-  return `${outfitId}:${colors.head},${colors.body},${colors.legs},${colors.feet}:${direction}:${phase}`;
+  return `${outfitId}:${colors.head},${colors.body},${colors.legs},${colors.feet}`
+    + `:${group}:${direction}:${phase}`;
 }
 
 export interface OutfitComposerOptions {
   readonly maxBytes: number;
   /** A base e o template daquele quadro, já recortados da folha (FUN-18). */
   readonly layersOf: (
-    outfitId: number, direction: number, phase: number,
+    outfitId: number, group: number, direction: number, phase: number,
   ) => Promise<{ base: Uint8ClampedArray; template: Uint8ClampedArray;
     width: number; height: number } | null>;
   readonly createBitmap: (
     pixels: Uint8ClampedArray, width: number, height: number,
   ) => Promise<Sprite>;
   readonly now?: () => number;
+  /**
+   * Ver `BitmapBudgetOptions.onEvict`. O bitmap composto vira `Texture` no viewport
+   * exatamente como um quadro da folha, e morre pelo mesmo aviso — a chave aqui é a de
+   * `outfitKey`, não um id de sprite, porque uma composição não tem id no pacote.
+   */
+  readonly onEvict?: (key: string, sprite: Sprite) => void;
 }
 
 /**
@@ -165,22 +179,25 @@ export class OutfitComposer {
 
   constructor(options: OutfitComposerOptions) {
     this.#options = options;
-    this.#budget = new BitmapBudget(options.maxBytes, options.now ?? (() => Date.now()));
+    this.#budget = new BitmapBudget(options.maxBytes, {
+      now: options.now ?? (() => Date.now()),
+      ...(options.onEvict === undefined ? {} : { onEvict: options.onEvict }),
+    });
   }
 
   get bytes(): number { return this.#budget.bytes; }
 
   async get(
-    outfitId: number, colors: OutfitColors, direction: number, phase: number,
+    outfitId: number, colors: OutfitColors, group: number, direction: number, phase: number,
   ): Promise<Sprite | null> {
-    const key = outfitKey(outfitId, colors, direction, phase);
+    const key = outfitKey(outfitId, colors, group, direction, phase);
     const cached = this.#budget.get(key);
     if (cached !== undefined) return cached;
 
     const flying = this.#inFlight.get(key);
     if (flying !== undefined) return flying;
 
-    const promise = this.#compose(key, outfitId, colors, direction, phase)
+    const promise = this.#compose(key, outfitId, colors, group, direction, phase)
       .finally(() => { this.#inFlight.delete(key); });
     this.#inFlight.set(key, promise);
     return promise;
@@ -189,9 +206,10 @@ export class OutfitComposer {
   clear(): void { this.#budget.clear(); }
 
   async #compose(
-    key: string, outfitId: number, colors: OutfitColors, direction: number, phase: number,
+    key: string, outfitId: number, colors: OutfitColors,
+    group: number, direction: number, phase: number,
   ): Promise<Sprite | null> {
-    const layers = await this.#options.layersOf(outfitId, direction, phase);
+    const layers = await this.#options.layersOf(outfitId, group, direction, phase);
     if (layers === null) return null;
     const painted = colorize(layers.base, layers.template, colors);
     const sprite = await this.#options.createBitmap(painted, layers.width, layers.height);

@@ -12,11 +12,14 @@ import {
 import type {
   HuntDifficultyName, InventoryState, Ruleset, SessionSnapshot, SkillsState,
 } from '@draconya/sim';
-import { advancedFeaturesUsed, botConfigSchema, validateBotConfig } from '@draconya/content';
-import type { BotConfig, Content } from '@draconya/content';
+import {
+  BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, migrateBotConfigV1, validateBotConfigV2,
+} from '@draconya/content';
+import type { BotConfigV2, Content } from '@draconya/content';
 import type {
   SessionBuilder, SessionFactory, SessionRestorer, TransitionRequest,
 } from './host.js';
+import type { InitialCharacter, PartyTicket } from '../tickets.js';
 
 /**
  * Campos ainda não persistidos pela FUN-11. Nível e XP chegam no ticket autenticado; nenhum
@@ -37,11 +40,15 @@ const INITIAL_FLAGS = { goldDelta: 0, alive: true, cooldowns: {} } as const;
 const UNPLACED = { x: -1, y: -1, z: 0 } as const;
 
 /** O ruleset da Cidade, com o mapa e a duração de passo que o conteúdo diz. */
-function cityRulesetFor(content: Content, entryRadius?: number) {
+function cityRulesetFor(content: Content, entryTiles?: number) {
   return createCityRuleset({
     ...(content.city === undefined ? {} : { map: content.city }),
-    stepDurationMs: content.progression.stepDurationMs,
-    ...(entryRadius === undefined ? {} : { entryRadius }),
+    // O passo da Cidade é FIXO (FUN-119, ADR 0025): vem de `city.json`, não da progressão.
+    ...(content.citySettings === undefined ? {} : { stepDurationMs: content.citySettings.stepDurationMs }),
+    ...(entryTiles === undefined ? {} : { entryTiles }),
+    // Os containers ganham os tamanhos iniciais na entrada (#160), como na hunt.
+    containers: { items: content.items, progression: content.progression },
+    vocations: content.vocations,
   });
 }
 
@@ -79,20 +86,19 @@ export interface CityShardOptions {
   /** Teto de população por cópia. Padrão: `CITY_SHARD_CAPACITY`. */
   readonly capacity?: number;
   /**
-   * Até onde procurar tile livre ao chegar, em tiles.
+   * Quantos tiles a busca por tile livre visita ao chegar (`placeReachable`, FUN-120).
    *
-   * A Cidade de hoje tem um ponto de entrada e mais nada, então todo mundo fica no mesmo
-   * punhado de tiles. Quando ela tiver loja, depósito e ruas, as pessoas se espalham — e é esse
-   * cenário que `pnpm bench:city` reproduz alargando isto.
+   * Quem chega entra no ponto de entrada ou no livre mais próximo a pé; o teto é a praça
+   * cheia. `pnpm bench:city` o alarga para caber quinhentas pessoas de uma vez.
    */
-  readonly entryRadius?: number;
+  readonly entryTiles?: number;
 }
 
 export class CityShard {
   readonly #content: Content;
   readonly #now: () => number;
   readonly #capacity: number;
-  readonly #entryRadius: number | undefined;
+  readonly #entryTiles: number | undefined;
   #copies: Session[] = [];
 
   constructor(
@@ -107,7 +113,7 @@ export class CityShard {
     this.#content = content;
     this.#now = now;
     this.#capacity = capacity;
-    this.#entryRadius = options.entryRadius;
+    this.#entryTiles = options.entryTiles;
   }
 
   /**
@@ -146,7 +152,7 @@ export class CityShard {
       // Fixada na criação e imutável até o fim (invariante 7): a sessão termina na versão
       // de conteúdo em que começou, mesmo que um deploy aconteça no meio.
       contentVersion: this.#content.version,
-      ruleset: cityRulesetFor(this.#content, this.#entryRadius),
+      ruleset: cityRulesetFor(this.#content, this.#entryTiles),
       // Semente derivada do id da sessão: o mesmo id reproduz a mesma sequência, que é o
       // que torna "por que esse loot não caiu" uma pergunta investigável.
       rng: Rng.fromSeed(id),
@@ -160,17 +166,82 @@ export function createCitySessionFactory(
   now: () => number = () => Date.now(),
   shard: CityShard = new CityShard(content, now),
 ): SessionFactory {
-  return (characterId, initialCharacter = { level: 1, xp: 0 }): Session => {
-    // Vocação ainda não é persistida (§7.4 a coloca no level 8, e a escolha é FUN-30): até
-    // lá, todo personagem cresce pela tabela base.
-    const stats = statsForLevel(initialCharacter.level, null, content.progression);
+  return (characterId, initialCharacter = { level: 1, xp: 0 }, party): Session => {
+    // A party (#195, ADR 0027): o primeiro ticket a chegar cria a hunt com os N — e ela nasce
+    // hunt, não Cidade. Os seguintes não passam por aqui: o host encontra a sessão pelo id.
+    if (party !== undefined) return partyHuntFor(content, party, now);
+    const character = characterFromTicket(content, characterId, initialCharacter, now);
+    // Entra na cópia compartilhada, e não numa Cidade só dele (FUN-71).
+    return shard.admit(character);
+  };
+}
+
+/**
+ * O personagem de UM recém-chegado numa sessão que já existe (#402, ADR 0035 D7). Mesma costura
+ * de `createSession`: função, e não `Content`, para o host não precisar conhecer balanceamento.
+ */
+export function createLateJoiner(
+  content: Content,
+  now: () => number = () => Date.now(),
+): (characterId: string, initialCharacter: InitialCharacter) => CharacterRuntime {
+  return (characterId, initialCharacter) => characterFromTicket(content, characterId, initialCharacter, now);
+}
+
+/**
+ * A hunt de uma party, com os N membros dentro (#195): o mesmo `createHuntSession` da
+ * transição, com `partyOptions` fixadas e o bot de cada um — validado AQUI, com o conteúdo,
+ * porque chega cru do ticket como o solo chega, e o host só valida o do personagem que entrou.
+ */
+function partyHuntFor(content: Content, party: PartyTicket, now: () => number): Session {
+  const accept = createBotConfigValidator(content);
+const botConfigs: Record<string, BotConfigV2> = {};
+  const premiumByCharacter: Record<string, boolean> = {};
+  for (const member of party.members) {
+    // O Premium do personagem (ADR 0035 D3) entra no estado da party: o limite de venda é do
+    // LÍDER, mas a penalidade de morte é de quem morre. Ausente no ticket é Free.
+    premiumByCharacter[member.characterId] = member.initialCharacter.premium ?? false;
+    const raw = member.initialCharacter.botConfig;
+    if (raw === undefined) continue;
+    const decision = accept(raw, member.initialCharacter.level);
+    if (decision.ok) botConfigs[member.characterId] = decision.config;
+  }
+  const session = createHuntSession({
+    id: party.sessionId,
+    content,
+    huntId: party.huntId,
+    difficulty: party.difficulty as HuntDifficultyName,
+    createdAtMs: now(),
+    partyOptions: {
+      leaderId: party.leaderId,
+      // Coleta/venda nascem vazias — o líder configura depois de entrar, por `party-settings`.
+      settings: { shareCosts: party.shareCosts, splitLoot: party.splitLoot, collect: null, autoSell: [] },
+      premiumByCharacter,
+    },
+    botConfigs,
+  });
+  for (const member of party.members) {
+    session.enter(characterFromTicket(content, member.characterId, member.initialCharacter, now));
+  }
+  return session;
+}
+
+/** O `CharacterRuntime` que um ticket descreve (FUN-12 … #154): o que o `api` leu do banco. */
+export function characterFromTicket(
+  content: Content, characterId: string, initialCharacter: InitialCharacter, now: () => number,
+): CharacterRuntime {
+  {
+    // A vocação vem do ticket (#154): escolhida no level 8, escrita uma vez pelo `jobs`. A que
+    // saiu do conteúdo cai para a tabela base — o id fica, os stats não (mesma regra da hunt).
+    const vocationId = initialCharacter.vocation ?? null;
+    const vocation = vocationId === null ? null : content.vocations.get(vocationId) ?? null;
+    const stats = statsForLevel(initialCharacter.level, vocation, content.progression);
     const character = new CharacterRuntime({
       id: characterId,
       position: UNPLACED,
       ...INITIAL_FLAGS,
       level: initialCharacter.level,
       xp: initialCharacter.xp,
-      vocationId: null,
+      vocationId,
       health: stats.maxHealth, maxHealth: stats.maxHealth,
       mana: stats.maxMana, maxMana: stats.maxMana,
       capacity: stats.capacity,
@@ -180,6 +251,19 @@ export function createCitySessionFactory(
       // Skills vêm do ticket porque escalam o dano DURANTE a hunt (FUN-75). Ausentes, toda
       // skill vale o nível inicial do conteúdo — que é onde um personagem novo começa.
       ...(isSkillsState(initialCharacter.skills) ? { skills: initialCharacter.skills } : {}),
+      // O Bestiário vem do ticket porque o bônus dos marcos escala a XP durante a hunt
+      // (FUN-113). Já validado na emissão e no consumo (`isBestiaryState`), então entra sem
+      // guarda; ausente, o personagem parte de `{}` — nenhum abate contado, sem marco, sem
+      // bônus — e o próximo extrato traz de volta o que ele matar.
+      ...(initialCharacter.bestiary === undefined ? {} : { bestiary: initialCharacter.bestiary }),
+      // A munição escolhida (#152): validada na emissão e no consumo; ausente, atira a grátis.
+      ...(initialCharacter.ammo === undefined ? {} : { ammo: initialCharacter.ammo }),
+      // O estoque de supply/munição do loot (#520): validado como a munição; ausente, a
+      // sessão parte sem estoque nenhum — a poção de ontem só entra se o ticket a trouxer.
+      ...(initialCharacter.supplyStock === undefined
+        ? {} : { supplyStock: initialCharacter.supplyStock }),
+      ...(initialCharacter.ammunitionStock === undefined
+        ? {} : { ammunitionStock: initialCharacter.ammunitionStock }),
       // A mochila vem do ticket porque a arma equipada decide o dano (FUN-82). Entrada
       // quebrada vira "sem item", não sessão que não abre.
       ...(isInventoryState(initialCharacter.inventory)
@@ -194,9 +278,8 @@ export function createCitySessionFactory(
     // esse tempo é recuperação. Fazer a conta aqui, e não na leitura de cada consulta, é o
     // que mantém "quanto de stamina ele tem" uma pergunta barata durante a sessão.
     materializeStamina(character, now(), content.stamina);
-    // Entra na cópia compartilhada, e não numa Cidade só dele (FUN-71).
-    return shard.admit(character);
-  };
+    return character;
+  }
 }
 
 /**
@@ -335,51 +418,61 @@ function huntFor(
  * vocabulário para rotear uma mensagem, e dar a ele o conteúdo todo seria dar acesso a
  * balanceamento a quem cuida de socket. É a mesma forma do `settleProgress` que o `api` recebe.
  *
- * As três checagens, na ordem em que custam a descobrir:
+ * As duas checagens, na ordem em que custam a descobrir:
  *
  *   1. **forma** — `botConfigSchema` recusa condição fora do vocabulário, operador que não
  *      existe, percentual fora de 0–100;
  *   2. **conteúdo** — slots, versão de vocabulário e referência cruzada de magia, supply e
- *      monstro, tudo contra o `content` deste nó;
- *   3. **level** — §13.2: o bot avançado abre no 50, e o recorte é dado (`advancedOnly`).
+ *      monstro, tudo contra o `content` deste nó.
+ *
+ * O gate de level do §13.2 foi revogado no AB-03 (ADR 0032 d.4): o `level` continua na
+ * assinatura porque o host o carrega, mas não recusa mais nada.
  *
  * A recusa devolve TEXTO, não booleano, porque ele vai direto para o jogador num
  * `system-message`. "Sua configuração é inválida" sem dizer onde é o que faz alguém desistir
  * de configurar o bot.
  */
 export type BotConfigDecision =
-  | { readonly ok: true; readonly config: BotConfig }
+  | { readonly ok: true; readonly config: BotConfigV2 }
   | { readonly ok: false; readonly reason: string };
 
+/**
+ * O juiz único da configuração do bot (FUN-81, AB-09). Migra v1→v2 e valida contra o conteúdo
+ * fixado na sessão (invariante 7). A migração é pura e idempotente (AB-03): v2 volta só
+ * parseada, v1 vira v2. Versão desconhecida é recusa com motivo — o portão de versão.
+ */
 export function createBotConfigValidator(
   content: Content,
 ): (raw: unknown, level: number) => BotConfigDecision {
-  return (raw, level) => {
-    const parsed = botConfigSchema.safeParse(raw);
-    if (!parsed.success) {
-      const first = parsed.error.issues[0];
-      const where = first === undefined || first.path.length === 0
-        ? ''
-        : ` em "${first.path.join('.')}"`;
-      return { ok: false, reason: `configuração fora do vocabulário${where}` };
+  return (raw, _level) => {
+    // O portão de versão ANTES da migração: `migrateBotConfigV1` aceita qualquer v1 bem formado,
+    // e uma config com `version: 99` que trouxesse as cinco categorias migraria em silêncio.
+    const version = typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)['version']
+      : undefined;
+    if (version !== BOT_VOCABULARY_VERSION_V1 && version !== BOT_VOCABULARY_VERSION) {
+      return {
+        ok: false,
+        reason: `configuração na versão ${String(version)} de vocabulário; este servidor `
+          + `entende ${BOT_VOCABULARY_VERSION}`,
+      };
     }
 
-    const problems = validateBotConfig(parsed.data, content);
+    let config: BotConfigV2;
+    try {
+      config = migrateBotConfigV1(raw);
+    } catch {
+      return { ok: false, reason: 'configuração fora do vocabulário' };
+    }
+
+    const problems = validateBotConfigV2(config, content);
     if (problems.length > 0) {
       // Só o primeiro problema vai para o socket. A lista inteira é da UI (M10), que consegue
       // apontar slot por slot; numa linha de chat, cinco motivos viram ruído.
       return { ok: false, reason: problems[0] as string };
     }
 
-    const advanced = advancedFeaturesUsed(parsed.data, content.bot);
-    if (advanced.length > 0 && level < content.bot.advancedFromLevel) {
-      return {
-        ok: false,
-        reason: `bot avançado exige level ${content.bot.advancedFromLevel}: `
-          + advanced.join(', '),
-      };
-    }
-    return { ok: true, config: parsed.data };
+    return { ok: true, config };
   };
 }
 
@@ -409,10 +502,13 @@ function isSkillsState(value: unknown): value is SkillsState {
  */
 function isInventoryState(value: unknown): value is InventoryState {
   if (typeof value !== 'object' || value === null) return false;
-  const state = value as { backpack?: unknown; equipped?: unknown };
+  const state = value as { backpack?: unknown; satchel?: unknown; equipped?: unknown };
   if (!Array.isArray(state.backpack)) return false;
   if (typeof state.equipped !== 'object' || state.equipped === null) return false;
-  return state.backpack.every(isCarried)
+  // Posicional (#160): `null` é lugar vazio, e a bolsa é opcional (ticket anterior).
+  const place = (item: unknown): boolean => item === null || isCarried(item);
+  if (state.satchel !== undefined && !(Array.isArray(state.satchel) && state.satchel.every(place))) return false;
+  return state.backpack.every(place)
     && Object.values(state.equipped).every((item) => item === undefined || isCarried(item));
 }
 

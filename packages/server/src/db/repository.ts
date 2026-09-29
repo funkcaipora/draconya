@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
-import { accounts, characters, itemInstances } from './schema.js';
+import { accounts, characters, friends, itemInstances } from './schema.js';
 
 export interface AccountRecord {
   readonly id: string;
@@ -32,6 +32,26 @@ export interface CharacterRecord {
   readonly botConfig: unknown;
   /** Skills que sobem por uso (§9.4, FUN-75). A coluna já existia; o que faltava era quem a usasse. */
   readonly skills: unknown;
+  /**
+   * As cores do outfit, como vieram do banco (FUN-104). `unknown` pela mesma razão de
+   * `botConfig`: a forma é do protocolo (`OutfitColors`), e quem a valida é quem monta o
+   * ticket — o repositório não é lugar de conhecer paleta. `null` é personagem que nunca
+   * escolheu. Sem método de escrita: a escolha (§7.4) ainda não tem tela.
+   */
+  readonly outfitColors: unknown;
+  /**
+   * Abates por monstro, como vieram do banco (§18, FUN-113). `unknown` pela mesma razão de
+   * `skills`: a forma (`BestiaryState`) é do `sim`, e quem a confere é quem monta o ticket.
+   * `null` é personagem que nunca abateu nada, ou gravado antes do Bestiário — os dois entram
+   * na sessão com `{}`. Sem método de escrita: quem escreve é o ledger, na transação do extrato.
+   */
+  readonly bestiary: unknown;
+  /** A munição escolhida por família (#152), como veio do banco; `null` é a grátis. */
+  readonly ammo: unknown;
+  /** O estoque de supply do loot (#520), como veio do banco; `null` é quem nunca recebeu um drop. */
+  readonly supplyStock: unknown;
+  /** O estoque de munição do loot (#520), pela mesma razão do `supplyStock`. */
+  readonly ammunitionStock: unknown;
   readonly createdAt: Date;
 }
 
@@ -41,6 +61,12 @@ export interface CharacterRecord {
  * `itemId` é do CATÁLOGO, que é conteúdo — o repositório não sabe o que uma espada faz, só que
  * esta linha existe e é de alguém.
  */
+/** Uma peça do kit de nascimento: o item e o slot em que ele nasce vestido (#153). */
+export interface StartingKitPiece {
+  readonly itemId: string;
+  readonly slot: string;
+}
+
 export interface ItemInstanceRecord {
   readonly id: string;
   readonly itemId: string;
@@ -49,6 +75,9 @@ export interface ItemInstanceRecord {
   readonly origin: string;
   /** Em que slot está vestida, ou `null` para "na mochila" (FUN-82). */
   readonly equippedSlot: string | null;
+  /** Onde está dentro dos containers (#160); nulos é linha sem posição gravada. */
+  readonly container: string | null;
+  readonly slotIndex: number | null;
   readonly createdAt: Date;
 }
 
@@ -58,12 +87,64 @@ export type CharacterActiveCheck = (
   characterId: string,
 ) => Promise<boolean>;
 
+/** Uma linha da tabela `friend` (Amigos, §21): a amizade é um fato, não uma presença. */
+export interface FriendRecord {
+  readonly id: string;
+  readonly characterId: string;
+  readonly friendCharacterId: string;
+  readonly createdAt: Date;
+}
+
+/**
+ * A vista que `GET /api/friends` precisa, já com nome/vocação/level — uma JOIN só, não um
+ * lookup por amigo (a tabela `friend` não guarda accountId, e não deveria: accountId é do
+ * personagem, não da amizade).
+ */
+export interface FriendView {
+  readonly characterId: string;
+  readonly name: string;
+  readonly vocation: string | null;
+  readonly level: number;
+  readonly createdAt: Date;
+}
+
 export interface GameRepository {
   ensureAccount(identity: { externalAuthId: string; email: string }): Promise<AccountRecord>;
-  createCharacter(accountId: string, name: string): Promise<CharacterRecord>;
+  /**
+   * Cria o personagem. `initial.botConfig` é a configuração de bot com que ele NASCE (FUN-114)
+   * — a padrão do conteúdo, gravada aqui porque o personagem novo precisa entrar na primeira
+   * hunt curando e atacando sem ter aberto tela nenhuma. Opaca: quem valida o vocabulário é o host da sessão.
+   *
+   * `initial.kit` é com o que ele nasce VESTIDO (#153, ADR 0026 decisão 2): uma linha de
+   * `item_instance` por peça, origem `starting-kit`, na MESMA transação do personagem —
+   * personagem sem kit, ou kit sem personagem, são os dois estados que uma falha no meio
+   * deixaria para trás. Não passa pelo ledger: o kit não tem preço, é inicialização de linha
+   * como o bot padrão.
+   */
+  createCharacter(
+    accountId: string, name: string,
+    initial?: { readonly botConfig?: unknown; readonly kit?: readonly StartingKitPiece[] },
+  ): Promise<CharacterRecord>;
   listCharacters(accountId: string): Promise<readonly CharacterRecord[]>;
   getCharacter(accountId: string, characterId: string): Promise<CharacterRecord | null>;
+  /**
+   * Resolve um personagem pela CHAVE PRIMÁRIA, sem exigir a conta (DT-07): o convite social
+   * aponta para um personagem que a conta de quem convida não conhece — a posse de quem FALA
+   * já foi conferida pela rota, e o convidado só precisa existir.
+   */
+  getCharacterById(characterId: string): Promise<CharacterRecord | null>;
   ownsCharacter(accountId: string, characterId: string): Promise<boolean>;
+  /**
+   * Resolve um personagem pelo nome (Amigos, §21). Mesma normalização do índice único
+   * (`character_name_unique`) que já impede dois personagens ativos com nomes que só diferem
+   * em maiúscula/acentuação — quem busca "Jose" precisa achar "José".
+   */
+  getCharacterByName(name: string): Promise<CharacterRecord | null>;
+  /** Direção única (ADR 0031 decisão 6): não cria a amizade recíproca. */
+  addFriend(characterId: string, friendCharacterId: string): Promise<FriendRecord>;
+  listFriends(characterId: string): Promise<readonly FriendView[]>;
+  /** `false` se o par não existia — remover o que não é amigo é idempotente, não é erro. */
+  removeFriend(characterId: string, friendCharacterId: string): Promise<boolean>;
   withOwnedCharacter<T>(
     accountId: string,
     characterId: string,
@@ -74,17 +155,6 @@ export interface GameRepository {
     characterId: string,
     isCharacterActive?: CharacterActiveCheck,
   ): Promise<DeleteCharacterResult>;
-  /**
-   * Grava a configuração do bot (FUN-81).
-   *
-   * Escrita CEGA, sem ler antes: "o jogador salvou isto" é última-escrita-vence por natureza,
-   * e um read-modify-write aqui criaria uma corrida entre duas abas do mesmo jogador para
-   * resolver um conflito que não existe — a configuração é substituída inteira, nunca mesclada.
-   *
-   * Por isso também não participa da trava de linha da emissão de ticket (FUN-53): é um
-   * `UPDATE` de uma instrução, que não segura a linha nem depende de nada que esteja nela.
-   */
-  saveBotConfig(characterId: string, config: unknown): Promise<void>;
   /**
    * Cria uma instância de item para um personagem (FUN-76).
    *
@@ -142,14 +212,38 @@ export class DrizzleGameRepository implements GameRepository {
     }
   }
 
-  async createCharacter(accountId: string, name: string): Promise<CharacterRecord> {
+  async createCharacter(
+    accountId: string, name: string,
+    initial: { readonly botConfig?: unknown; readonly kit?: readonly StartingKitPiece[] } = {},
+  ): Promise<CharacterRecord> {
+    const id = randomUUID();
+    const kit = initial.kit ?? [];
     try {
-      const [created] = await this.#db
-        .insert(characters)
-        .values({ id: randomUUID(), accountId, name })
-        .returning();
-      if (created === undefined) throw new Error('failed to create character');
-      return toCharacter(created);
+      return await this.#db.transaction(async (tx) => {
+        const [created] = await tx
+          .insert(characters)
+          .values({
+            id, accountId, name,
+            ...(initial.botConfig === undefined ? {} : { botConfig: initial.botConfig }),
+          })
+          .returning();
+        if (created === undefined) throw new Error('failed to create character');
+        // Id determinístico por posição no kit: a proveniência diz "a primeira peça do kit
+        // deste personagem", e nunca há como o mesmo personagem ganhar o kit duas vezes. Sem
+        // `ON CONFLICT`: duas peças no mesmo slot devem DERRUBAR a criação (índice único
+        // `item_instance_one_per_slot`), não nascer pela metade em silêncio. Um retry do
+        // `POST` esbarra antes no nome único, e é a resposta certa para ele.
+        if (kit.length > 0) {
+          await tx.insert(itemInstances).values(kit.map((piece, index) => ({
+            id: `${id}:kit:${index + 1}`,
+            itemId: piece.itemId,
+            ownerCharacterId: id,
+            origin: 'starting-kit',
+            equippedSlot: piece.slot,
+          })));
+        }
+        return toCharacter(created);
+      });
     } catch (error) {
       if (isUniqueViolation(error, 'character_name_unique')) throw new CharacterNameTakenError();
       throw error;
@@ -178,8 +272,76 @@ export class DrizzleGameRepository implements GameRepository {
     return rows[0] === undefined ? null : toCharacter(rows[0]);
   }
 
+  async getCharacterById(characterId: string): Promise<CharacterRecord | null> {
+    const rows = await this.#db
+      .select()
+      .from(characters)
+      .where(and(eq(characters.id, characterId), isNull(characters.deletedAt)))
+      .limit(1);
+    return rows[0] === undefined ? null : toCharacter(rows[0]);
+  }
+
   async ownsCharacter(accountId: string, characterId: string): Promise<boolean> {
     return (await this.getCharacter(accountId, characterId)) !== null;
+  }
+
+  async getCharacterByName(name: string): Promise<CharacterRecord | null> {
+    // A MESMA normalização do índice único (`character_name_unique`), e não `ilike`: um nome
+    // já é único no jogo inteiro por essa regra, e duplicá-la aqui com outra comparação
+    // arriscaria "José" e "jose" responderem personagens diferentes num lugar e o mesmo no
+    // outro. `normalize(..., NFC)` casa com a forma canônica que a criação exige.
+    const rows = await this.#db
+      .select()
+      .from(characters)
+      .where(and(
+        sql`lower(normalize(${characters.name}, NFC)) = lower(normalize(${name}, NFC))`,
+        isNull(characters.deletedAt),
+      ))
+      .limit(1);
+    return rows[0] === undefined ? null : toCharacter(rows[0]);
+  }
+
+  async addFriend(characterId: string, friendCharacterId: string): Promise<FriendRecord> {
+    if (characterId === friendCharacterId) throw new CannotFriendSelfError();
+    try {
+      const [created] = await this.#db
+        .insert(friends)
+        .values({ id: randomUUID(), characterId, friendCharacterId })
+        .returning();
+      if (created === undefined) throw new Error('failed to create friend');
+      return toFriend(created);
+    } catch (error) {
+      if (isUniqueViolation(error, 'friend_pair_unique')) throw new FriendAlreadyExistsError();
+      throw error;
+    }
+  }
+
+  async listFriends(characterId: string): Promise<readonly FriendView[]> {
+    return this.#db
+      .select({
+        characterId: friends.friendCharacterId,
+        name: characters.name,
+        vocation: characters.vocation,
+        level: characters.level,
+        createdAt: friends.createdAt,
+      })
+      .from(friends)
+      .innerJoin(characters, eq(characters.id, friends.friendCharacterId))
+      // Amigo cujo personagem foi soft-deleted nunca aparece, mesmo com a linha `friend`
+      // intacta — a limpeza da tabela é passiva (não há job de poda nesta versão).
+      .where(and(eq(friends.characterId, characterId), isNull(characters.deletedAt)))
+      .orderBy(asc(friends.createdAt));
+  }
+
+  async removeFriend(characterId: string, friendCharacterId: string): Promise<boolean> {
+    const deleted = await this.#db
+      .delete(friends)
+      .where(and(
+        eq(friends.characterId, characterId),
+        eq(friends.friendCharacterId, friendCharacterId),
+      ))
+      .returning();
+    return deleted.length > 0;
   }
 
   async withOwnedCharacter<T>(
@@ -261,19 +423,6 @@ export class DrizzleGameRepository implements GameRepository {
     });
   }
 
-  /**
-   * Grava a configuração do bot. Ver o contrato em `GameRepository.saveBotConfig`.
-   *
-   * Só atualiza personagem NÃO apagado: gravar num soft-deleted seria escrever num personagem
-   * que já não existe para o resto do sistema.
-   */
-  async saveBotConfig(characterId: string, config: unknown): Promise<void> {
-    await this.#db
-      .update(characters)
-      .set({ botConfig: config })
-      .where(and(eq(characters.id, characterId), isNull(characters.deletedAt)));
-  }
-
   async softDeleteCharacter(
     accountId: string,
     characterId: string,
@@ -330,6 +479,31 @@ export class CharacterNameTakenError extends Error {
   }
 }
 
+/** O par `(character_id, friend_character_id)` já existia — duplo clique ou retry de rede. */
+export class FriendAlreadyExistsError extends Error {
+  constructor() {
+    super('friend already added');
+    this.name = 'FriendAlreadyExistsError';
+  }
+}
+
+/** Um personagem não pode ser amigo de si mesmo (o CHECK `friend_not_self` também recusa). */
+export class CannotFriendSelfError extends Error {
+  constructor() {
+    super('a character cannot friend itself');
+    this.name = 'CannotFriendSelfError';
+  }
+}
+
+function toFriend(row: typeof friends.$inferSelect): FriendRecord {
+  return {
+    id: row.id,
+    characterId: row.characterId,
+    friendCharacterId: row.friendCharacterId,
+    createdAt: row.createdAt,
+  };
+}
+
 function toAccount(row: typeof accounts.$inferSelect): AccountRecord {
   if (row.externalAuthId === null) throw new Error('authenticated account has no external auth id');
   return { id: row.id, email: row.email, externalAuthId: row.externalAuthId, coins: row.coins };
@@ -357,6 +531,11 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     sessionId: row.sessionId,
     botConfig: row.botConfig,
     skills: row.skills,
+    outfitColors: row.outfitColors,
+    bestiary: row.bestiary,
+    ammo: row.ammo,
+    supplyStock: row.supplyStock,
+    ammunitionStock: row.ammunitionStock,
     createdAt: row.createdAt,
   };
 }

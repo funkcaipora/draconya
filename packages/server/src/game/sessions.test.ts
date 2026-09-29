@@ -1,9 +1,10 @@
 import { buildContent } from '@draconya/content';
 import { CharacterRuntime, createHuntSession, totalXpForLevel } from '@draconya/sim';
 import {
-  TEST_ADVANCED_POLICY, TEST_COMBAT, TEST_HUNT, TEST_PROGRESSION, TEST_STAMINA, testContent,
+  TEST_COMBAT, TEST_HUNT, TEST_PARTY, TEST_PROGRESSION, TEST_STAMINA,
+  rawTestContent, testContent,
 } from '../testing/content.js';
-import { BOT_VOCABULARY_VERSION } from '@draconya/content';
+import { BOT_SET_COUNT, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigV2Schema } from '@draconya/content';
 import type { Progression } from '@draconya/content';
 import type { HuntRuleset, Session, SessionSnapshot } from '@draconya/sim';
 import { describe, expect, it } from 'vitest';
@@ -28,12 +29,59 @@ describe('city session factory', () => {
   });
 });
 
+describe('party session factory (#195, ADR 0027)', () => {
+  const party = {
+    sessionId: 's-party', leaderId: 'p1', shareCosts: true, splitLoot: true,
+    huntId: TEST_HUNT.id, difficulty: 'cautious',
+    members: [
+      { characterId: 'p1', accountId: 'a1', initialCharacter: { level: 10, xp: totalXpForLevel(10, TEST_PROGRESSION as Progression), gold: 30, premium: true } },
+      // Um bot válido e um que o vocabulário recusa: só o válido compila.
+      { characterId: 'p2', accountId: 'a2', initialCharacter: { level: 12, xp: totalXpForLevel(12, TEST_PROGRESSION as Progression), botConfig: { version: BOT_VOCABULARY_VERSION_V1, heal: [], potion: [], attack: [], rune: [], support: [] } } },
+      { characterId: 'p3', accountId: 'a3', initialCharacter: { level: 1, xp: 0, botConfig: { version: 999 } } },
+    ],
+  };
+
+  it('creates the HUNT with every member inside, the party options fixed, and each validated bot', () => {
+    // Mutação que mata: entrar só o personagem do ticket — os outros nunca chegariam à hunt.
+    const session = createCitySessionFactory(testContent())('p2', party.members[1]?.initialCharacter, party);
+    expect(session.id).toBe('s-party');
+    expect(session.ruleset.type).toBe('hunt');
+    expect(session.participants.map((p) => [p.id, p.level, p.gold])).toEqual([['p1', 10, 30], ['p2', 12, 0], ['p3', 1, 0]]);
+    const ruleset = session.ruleset as HuntRuleset;
+    expect(ruleset.party).toEqual({
+      leaderId: 'p1', mode: 'shared', shareCosts: true, splitLoot: true,
+      collect: null, autoSell: [],
+      // O Premium de cada membro entra no estado da party (ADR 0035 D3): ausente no ticket é Free.
+      premiumByCharacter: { p1: true, p2: false, p3: false },
+    });
+    expect(Object.keys(ruleset.getState().runners ?? {}).sort()).toEqual(['p1', 'p2', 'p3']);
+    expect(ruleset.getState().runners?.['p2']?.botConfig).toBeDefined();
+    expect(ruleset.getState().runners?.['p3']?.botConfig).toBeUndefined();
+    expect(ruleset.getState().partyBag).toBeDefined();
+  });
+
+  it('os dois eixos vêm do ticket, e o líder Premium decide o limite de venda (#400)', () => {
+    const session = createCitySessionFactory(testContent())('p2', party.members[1]?.initialCharacter, {
+      ...party, shareCosts: false, splitLoot: true,
+    });
+    const ruleset = session.ruleset as HuntRuleset;
+    expect(ruleset.party?.shareCosts).toBe(false);
+    expect(ruleset.party?.splitLoot).toBe(true);
+    expect(ruleset.party?.premiumByCharacter['p1']).toBe(true);
+    expect(ruleset.partySummary(session)?.autoSell.limit).toBeGreaterThan(0);
+  });
+
+  it('without a party block it is the city of always', () => {
+    expect(createCitySessionFactory(testContent())('p1').ruleset.type).toBe('city');
+  });
+});
+
 describe('session restorer', () => {
   const content = testContent();
 
   const hunt = (): Session => {
     const session = createHuntSession({
-      id: 'hunt-1', content, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      id: 'hunt-1', content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
     });
     session.enter(new CharacterRuntime({
       id: 'p1', position: { x: 0, y: 0, z: 7 }, health: 500, maxHealth: 500, mana: 0, maxMana: 0,
@@ -64,10 +112,9 @@ describe('session restorer', () => {
 
   it('refuses a hunt that left the content, instead of resuming the wrong one', () => {
     const empty = buildContent({ monsters: [], hunts: [], vocations: [],
-      progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA],
+      progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA], party: [TEST_PARTY],
       // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
-      bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000,
-        advancedFromLevel: 50,
+      bot: [{ id: 'baseline', vocabularyVersion: 2, categoryCooldownMs: 1000,
         slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }] });
     expect(createSessionRestorer(empty)(hunt().snapshot())).toBeNull();
   });
@@ -88,7 +135,7 @@ describe('retomada num nó de relógio diferente (FUN-70)', () => {
    */
   const huntComRespawnPendente = (): Session => {
     const session = createHuntSession({
-      id: 'hunt-1', content, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      id: 'hunt-1', content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
     });
     session.enter(new CharacterRuntime({
       id: 'p1', position: { x: 0, y: 0, z: 7 }, health: 5_000, maxHealth: 5_000, mana: 0,
@@ -133,7 +180,7 @@ describe('retomada num nó de relógio diferente (FUN-70)', () => {
     // em um golpe e o instante final cai no prazo de respawn na maior parte das vezes.
     let noBAgoraMs = 5_000;
     let monstrosVistos = 0;
-    const ateMs = 5_000 + 10 * TEST_HUNT.difficulties.beginner.respawnDelayMs;
+    const ateMs = 5_000 + 10 * TEST_HUNT.difficulties.cautious.respawnDelayMs;
     for (; noBAgoraMs < ateMs; noBAgoraMs += 1_000) {
       noB.advanceBy(1_000);
       monstrosVistos = Math.max(monstrosVistos, ruleset.monsters.length);
@@ -159,7 +206,7 @@ describe('city successor (FUN-38)', () => {
 
   const dyingHunt = (): { session: Session; hero: CharacterRuntime } => {
     const session = createHuntSession({
-      id: 'hunt-1', content, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      id: 'hunt-1', content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
     });
     const hero = new CharacterRuntime({
       id: 'p1', position: { x: 0, y: 0, z: 7 }, health: 40, maxHealth: 200, mana: 0, maxMana: 0,
@@ -236,6 +283,29 @@ describe('o gold de entrada vem do TICKET, nunca do cliente (FUN-77)', () => {
   });
 });
 
+describe('o Bestiário de entrada vem do TICKET, nunca do cliente (FUN-113)', () => {
+  const content = testContent();
+
+  it('os abates persistidos chegam ao personagem da sessão', () => {
+    // O bônus dos marcos escala a XP DURANTE a hunt (DT-01): um personagem que entrasse em
+    // `{}` perderia o marco que já cruzou. E vem do ticket pela mesma razão do gold
+    // (invariante 4) — um contador vindo do socket seria marco de graça.
+    const session = createCitySessionFactory(content)('p1', {
+      level: 1, xp: 0, bestiary: { rat: 10_000, bat: 3 },
+    });
+
+    expect(session.participants[0]?.bestiary.killsOf('rat')).toBe(10_000);
+    expect(session.participants[0]?.bestiary.getState()).toEqual({ rat: 10_000, bat: 3 });
+  });
+
+  it('ticket sem Bestiário entra com nada contado', () => {
+    // É o personagem anterior à issue, ou o ticket de um `api` antigo em deploy em rolagem:
+    // parte de `{}`, e o próximo extrato traz de volta o que ele matar.
+    const session = createCitySessionFactory(content)('p1', { level: 1, xp: 0 });
+    expect(session.participants[0]?.bestiary.getState()).toEqual({});
+  });
+});
+
 describe('stamina nas fronteiras da sessão (FUN-39)', () => {
   const content = testContent();
   const HOUR = 3_600_000;
@@ -271,7 +341,7 @@ describe('stamina nas fronteiras da sessão (FUN-39)', () => {
     // leitura devolveria como recuperação exatamente o tempo que o personagem passou
     // gastando stamina.
     const hunt = createHuntSession({
-      id: 'hunt-1', content, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      id: 'hunt-1', content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
     });
     const hero = new CharacterRuntime({
       id: 'p1', position: { x: 0, y: 0, z: 7 }, health: 200, maxHealth: 200, mana: 0, maxMana: 0,
@@ -298,7 +368,7 @@ describe('construtor de sessão de destino (FUN-30)', () => {
     const city = cityWith();
     const hero = city.participants[0];
 
-    const hunt = build({ to: 'hunt', huntId: 'arena', difficulty: 'beginner' }, city, 'p1');
+    const hunt = build({ to: 'hunt', huntId: 'arena', difficulty: 'cautious' }, city, 'p1');
 
     expect(hunt?.ruleset.type).toBe('hunt');
     expect(hunt?.participants[0]).toBe(hero);
@@ -307,7 +377,7 @@ describe('construtor de sessão de destino (FUN-30)', () => {
   });
 
   it('recusa hunt inexistente em vez de construir uma que mente sobre o que é', () => {
-    expect(build({ to: 'hunt', huntId: 'nowhere', difficulty: 'beginner' }, cityWith(), 'p1'))
+    expect(build({ to: 'hunt', huntId: 'nowhere', difficulty: 'cautious' }, cityWith(), 'p1'))
       .toBeNull();
   });
 
@@ -336,7 +406,7 @@ describe('construtor de sessão de destino (FUN-30)', () => {
     const hero = city.participants[0];
 
     createSessionBuilder(content, () => 3 * HOUR)(
-      { to: 'hunt', huntId: 'arena', difficulty: 'beginner' }, city, 'p1',
+      { to: 'hunt', huntId: 'arena', difficulty: 'cautious' }, city, 'p1',
     );
 
     expect(hero?.staminaMs).toBe(8 * HOUR);
@@ -349,7 +419,7 @@ describe('a versão de conteúdo é fixada na sessão (FUN-55)', () => {
 
   const huntSnapshot = () => {
     const session = createHuntSession({
-      id: 'hunt-1', content, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      id: 'hunt-1', content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
     });
     session.enter(new CharacterRuntime({
       id: 'p1', position: { x: 0, y: 0, z: 7 }, health: 500, maxHealth: 500, mana: 0,
@@ -378,34 +448,69 @@ describe('a versão de conteúdo é fixada na sessão (FUN-55)', () => {
   });
 });
 
-describe('aceitar ou recusar a configuração do bot (FUN-81)', () => {
+describe('aceitar ou recusar a configuração do bot (FUN-81, AB-09)', () => {
   const content = testContent();
   const accept = createBotConfigValidator(content);
   const base = (over: Record<string, unknown> = {}) => ({
-    version: BOT_VOCABULARY_VERSION,
+    version: BOT_VOCABULARY_VERSION_V1,
     heal: [], potion: [], attack: [], rune: [], support: [],
     ...over,
   });
 
-  it('aceita uma configuração válida e devolve a versão PARSEADA, com defaults', () => {
-    // Devolver o parseado, e não o cru, é o que garante que quem compila recebe `targeting` e
-    // `exit` preenchidos — o cliente não precisa mandar campo que ele não usa.
-    const decision = accept(base(), 1);
+  const emptySets = () => Array.from({ length: BOT_SET_COUNT }, () => ({
+    slots: Array.from({ length: BOT_SLOTS_PER_SET }, () => null),
+  }));
+
+  it('migra a v1 para a v2, com defaults materializados (RF-12)', () => {
+    // A config v1 do Postgres entra como v2: quem a converte é `migrateBotConfigV1` (AB-03),
+    // chamada pelo juiz único. Sem isto, a coluna v1 nunca vira v2 e toda entrada repete a
+    // migração — o portão de versão que esta task fecha.
+    const decision = accept(base({
+      heal: [{
+        when: { kind: 'hp', op: '<=', percent: 50 },
+        do: { kind: 'spell', spellId: 'heal' },
+      }],
+    }), 1);
+
     expect(decision.ok).toBe(true);
     if (decision.ok) {
-      expect(decision.config.targeting.policy).toBe('nearest');
-      expect(decision.config.exit).toEqual([]);
+      expect(decision.config.version).toBe(BOT_VOCABULARY_VERSION);
+      expect(decision.config.activeSet).toBe(0);
+      expect(decision.config.stance).toBe('balanced');
+      expect(decision.config.automations).toEqual([]);
+      // A regra da v1 virou o slot 1 do conjunto 0, com `when` em lista e `auto` ligado.
+      const slot = decision.config.sets[0]?.slots[0];
+      expect(slot).toMatchObject({ do: { kind: 'spell', spellId: 'heal' }, auto: true });
     }
   });
 
-  it('recusa forma fora do vocabulário, dizendo ONDE', () => {
-    // "Sua configuração é inválida" sem dizer onde é o que faz alguém desistir de configurar
-    // o bot. O caminho do campo vai no texto porque ele vai direto para o jogador.
-    const decision = accept(base({
-      heal: [{ when: { kind: 'gold', op: '<', amount: 100 }, do: { kind: 'spell', spellId: 'heal' } }],
-    }), 1);
+  it('deixa a v2 passar INTACTA — idempotência (RF-13)', () => {
+    // Migrar duas vezes não pode apagar `sets`: o curto-circuito de `version === 2` vem antes
+    // do parse v1, que descartaria o v2 em silêncio (o v1 não conhece `sets`).
+    const v2 = botConfigV2Schema.parse({
+      version: BOT_VOCABULARY_VERSION, activeSet: 1, sets: emptySets(), stance: 'offensive',
+    });
+    const decision = accept(v2, 1);
+    expect(decision.ok).toBe(true);
+    if (decision.ok) expect(decision.config).toEqual(v2);
+  });
+
+  it('recusa versão desconhecida com motivo (RF-13)', () => {
+    // O portão de versão. `migrateBotConfigV1` aceitaria um v1 bem formado com número errado;
+    // é aqui que o servidor recusa antes de migrar.
+    const decision = accept({ version: 99, heal: [], potion: [], attack: [], rune: [], support: [] }, 1);
     expect(decision.ok).toBe(false);
-    if (!decision.ok) expect(decision.reason).toContain('heal');
+    if (!decision.ok) expect(decision.reason).toContain('99');
+  });
+
+  it('materializa os defaults dos campos novos da v2 (RF-14)', () => {
+    // Config v2 parcial parseia: `activeSet`, `stance` e `automations` têm default, e um
+    // cliente/nó que não os manda não é recusado.
+    const parsed = botConfigV2Schema.parse({ version: BOT_VOCABULARY_VERSION, sets: emptySets() });
+    expect(parsed.activeSet).toBe(0);
+    expect(parsed.stance).toBe('balanced');
+    expect(parsed.automations).toEqual([]);
+    expect(parsed.targeting.policy).toBe('nearest');
   });
 
   it('recusa magia que não existe no catálogo DESTE nó', () => {
@@ -419,55 +524,38 @@ describe('aceitar ou recusar a configuração do bot (FUN-81)', () => {
     if (!decision.ok) expect(decision.reason).toContain('nao-existe');
   });
 
-  it('recusa mais regras que slots', () => {
-    const regra = {
-      when: { kind: 'hp', op: '<=', percent: 50 }, do: { kind: 'spell', spellId: 'heal' },
-    };
-    const decision = accept(base({ heal: [regra, regra, regra, regra] }), 1);
-    expect(decision.ok).toBe(false);
-    if (!decision.ok) expect(decision.reason).toContain('heal');
+  it('não existe mais gate de level: avançado vale desde o level 1 (AB-03, ADR 0032 d.4)', () => {
+    // O §13.2 exigia level 50 para o bot avançado; o ADR 0032 d.4 revogou o gate. A asserção
+    // abaixo é o que impede alguém de reintroduzi-lo por engano.
+    expect(accept(base({ targeting: { policy: 'follow' } }), 1).ok).toBe(true);
+    expect(accept(base({ lure: { min: 2, max: 5 } }), 1).ok).toBe(true);
+    expect(accept(base(), 1).ok).toBe(true);
   });
 
-  it('o GATE de level: recurso avançado abaixo do 50 é recusado, dizendo qual', () => {
-    // §13.2. "Seu bot exige level 50" sem dizer o quê deixa o jogador procurando qual das
-    // trinta regras dele é a culpada.
-    const avancada = base({ targeting: { policy: TEST_ADVANCED_POLICY } });
-    const recusado = accept(avancada, 49);
-    expect(recusado.ok).toBe(false);
-    if (!recusado.ok) {
-      expect(recusado.reason).toContain('50');
-      expect(recusado.reason).toContain(TEST_ADVANCED_POLICY);
-    }
-
-    expect(accept(avancada, 50).ok).toBe(true);
-  });
-
-  it('o gate não atrapalha quem não usa nada avançado', () => {
-    expect(accept(base({ targeting: { policy: 'nearest' } }), 1).ok).toBe(true);
-  });
-
-  it('o lure é avançado por NOME, e o gate o recusa abaixo do 50 (FUN-87)', () => {
-    // Diferente da política de alvo acima: `lure` não está em `advancedOnly` nenhum. O §13.2
-    // cita lure e ring swap como o que o bot avançado tem, então o gate os conhece por nome —
-    // e este teste é o que impede alguém de "simplificar" isso para dentro da lista de
-    // conteúdo, onde o recorte ainda é [ABERTO].
-    const recusado = accept(base({ lure: { min: 2, max: 5 } }), 49);
-    expect(recusado.ok).toBe(false);
-    if (!recusado.ok) {
-      expect(recusado.reason).toContain('50');
-      expect(recusado.reason).toContain('lure');
-    }
-
-    expect(accept(base({ lure: { min: 2, max: 5 } }), 50).ok).toBe(true);
-  });
-
-  it('o conteúdo REAL não gateia nada — o recorte do §13.2 ainda é [ABERTO]', () => {
-    // Este teste é o comentário virando obrigação. No dia em que alguém preencher
-    // `advancedOnly` em `bot/baseline.json`, ele falha — e a mudança tem de ser deliberada,
-    // com o PRD tendo decidido, em vez de um palpite que trava o recurso para todo mundo
-    // abaixo do level 50.
-    expect(content.bot.advancedOnly.conditions).toEqual([]);
-    expect(content.bot.advancedOnly.postures).toEqual([]);
+  it('aceita `follow` e `rule.target` sem mudar de assinatura (#400, RF-06)', () => {
+    // O validador não conhece a party (D10): aceita qualquer `characterId` e qualquer alvo de
+    // membro. O vocabulário novo (#392) passa por ele porque ele delega inteiramente ao
+    // `content` — este teste é o que impede alguém de recortar os campos aqui.
+    const comAmigo = buildContent({
+      ...rawTestContent(),
+      spells: [
+        ...(rawTestContent().spells ?? []),
+        { id: 'heal-friend', name: 'Cura em Amigo', manaCost: 25, cooldownMs: 1_000, effect: { kind: 'heal', amount: 50, target: 'friend', range: 4 } },
+      ],
+    });
+    const accept = createBotConfigValidator(comAmigo);
+    const decision = accept({
+      version: BOT_VOCABULARY_VERSION_V1,
+      follow: { kind: 'member', characterId: 'qualquer-um' },
+      heal: [{
+        when: { kind: 'hp', op: '<=', percent: 50 },
+        do: { kind: 'spell', spellId: 'heal-friend' },
+        target: { kind: 'lowest-hp-member' },
+      }],
+      potion: [], attack: [], rune: [], support: [],
+    }, 1);
+    expect(decision.ok).toBe(true);
+    if (decision.ok) expect(decision.config.follow).toEqual({ kind: 'member', characterId: 'qualquer-um' });
   });
 });
 
@@ -504,7 +592,7 @@ describe('a Cidade é um SHARD: uma cópia, muitos personagens (FUN-71, ADR 0023
     const [session] = entrar(new CityShard(content, () => 0), 'p1', 'p2');
     if (session === undefined) throw new Error('a praça não foi criada');
 
-    expect(session.leave('p1')?.id).toBe('p1');
+    expect(session.leave('p1')?.character.id).toBe('p1');
     expect(session.ended).toBeNull();
     expect(session.participants.map((p) => p.id)).toEqual(['p2']);
   });
@@ -548,7 +636,7 @@ describe('a Cidade é um SHARD: uma cópia, muitos personagens (FUN-71, ADR 0023
 
     // p1 sai para caçar; p2 fica na praça. É a ordem real do hospedeiro: constrói o destino,
     // e só então tira quem saiu da sessão anterior.
-    const hunt = builder({ to: 'hunt', huntId: 'arena', difficulty: 'beginner' }, praca, 'p1');
+    const hunt = builder({ to: 'hunt', huntId: 'arena', difficulty: 'cautious' }, praca, 'p1');
     if (hunt === null) throw new Error('a hunt não foi construída');
     praca.leave('p1');
     expect(praca.participants.map((p) => p.id)).toEqual(['p2']);
@@ -565,7 +653,7 @@ describe('a Cidade é um SHARD: uma cópia, muitos personagens (FUN-71, ADR 0023
     if (praca === undefined) throw new Error('a praça não foi criada');
     const builder = createSessionBuilder(content, () => 0, shard);
 
-    const hunt = builder({ to: 'hunt', huntId: 'arena', difficulty: 'beginner' }, praca, 'p1');
+    const hunt = builder({ to: 'hunt', huntId: 'arena', difficulty: 'cautious' }, praca, 'p1');
     if (hunt === null) throw new Error('a hunt não foi construída');
     praca.leave('p1');
 

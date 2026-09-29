@@ -1,5 +1,8 @@
+import { compileMitigation, skillSchema } from '@draconya/content';
+import type { Combat } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from './character.js';
+import { resolveDamage } from './combat/damage.js';
 import { Rng } from './rng.js';
 import { Session } from './session.js';
 import type { EndReason, Ruleset } from './session.js';
@@ -35,19 +38,19 @@ function testRuleset(): Ruleset {
       }
 
       const damage = session.rng.integer(10, 20);
-      session.aggregates.xpGained += damage;
-      session.aggregates.kills++;
+      session.credit(p.id, 'xpGained', damage);
+      session.credit(p.id, 'kills', 1);
       if (session.rng.chance(0.1)) {
-        session.aggregates.goldGained += session.rng.integer(1, 50);
+        session.credit(p.id, 'goldGained', session.rng.integer(1, 50));
       }
       session.scheduleIn('attack', 350, { priority: EventPriority.Attack, subject: p.id });
     },
   };
 }
 
-function character(): CharacterRuntime {
+function character(id = 'p1'): CharacterRuntime {
   return new CharacterRuntime({
-    id: 'p1',
+    id,
     position: { x: 0, y: 0, z: 7 },
     health: 500, maxHealth: 500,
     mana: 0, maxMana: 1000,
@@ -164,8 +167,9 @@ describe('lifecycle', () => {
     session.enter(character());
     const first = session.end('death');
     const second = session.end('drain' as EndReason);
-    expect(first.reason).toBe('death');
-    expect(second.reason).toBe('death');
+    expect(first[0]?.reason).toBe('death');
+    expect(second[0]?.reason).toBe('death');
+    expect(second).toBe(first);
     expect(session.ended).toBe('death');
   });
 
@@ -301,5 +305,421 @@ describe('relógio lógico (FUN-68)', () => {
       expect(event.dueAtMs).toBeGreaterThanOrEqual(0);
     }
     expect(snap.logicalNowMs).toBe(5000);
+  });
+});
+
+describe('agregados e extrato por participante (#187, ADR 0027)', () => {
+  const sessionWith = (...ids: string[]): Session => {
+    const session = new Session({
+      id: 's-party', contentVersion: 'v1', ruleset: testRuleset(),
+      rng: Rng.fromSeed('party'), createdAtMs: 0,
+    });
+    for (const id of ids) session.enter(character(id));
+    return session;
+  };
+
+  it('credit escreve no participante E na soma; best*Hit é máximo, não soma', () => {
+    // Mutação que mata: `own[key] += delta` para bestBasicHit — a soma passaria de 30 a 50.
+    const session = sessionWith('a', 'b');
+    session.credit('a', 'xpGained', 5);
+    session.credit('b', 'xpGained', 7);
+    session.credit('a', 'bestBasicHit', 30);
+    session.credit('b', 'bestBasicHit', 20);
+    session.credit('a', 'bestBasicHit', 10);
+    expect(session.aggregatesOf('a').xpGained).toBe(5);
+    expect(session.aggregatesOf('b').xpGained).toBe(7);
+    expect(session.aggregates.xpGained).toBe(12);
+    expect(session.aggregatesOf('a').bestBasicHit).toBe(30);
+    expect(session.aggregatesOf('b').bestBasicHit).toBe(20);
+    expect(session.aggregates.bestBasicHit).toBe(30);
+  });
+
+  it('durationMs é tempo de SESSÃO: igual em todo presente, e a soma não é N × dt', () => {
+    const session = sessionWith('a', 'b');
+    session.advanceBy(1_000);
+    expect(session.aggregatesOf('a').durationMs).toBe(1_000);
+    expect(session.aggregatesOf('b').durationMs).toBe(1_000);
+    expect(session.aggregates.durationMs).toBe(1_000);
+  });
+
+  it('leave devolve o extrato de quem saiu com seq próprio, e end devolve só os que ficaram', () => {
+    // Mutação que mata: `seq` fixo por sessão — os dois extratos colidiriam no ledger.
+    const session = sessionWith('a', 'b');
+    session.credit('a', 'xpGained', 5);
+    session.credit('b', 'xpGained', 7);
+    const departure = session.leave('a', 'manual-exit');
+    expect(departure?.receipt).toMatchObject({
+      sessionId: 's-party', characterId: 'a', reason: 'manual-exit', seq: 1,
+    });
+    expect(departure?.receipt.aggregates.xpGained).toBe(5);
+    expect(session.ended).toBeNull();
+    expect(session.participants.map((p) => p.id)).toEqual(['b']);
+
+    const receipts = session.end('death');
+    expect(receipts.map((r) => [r.characterId, r.seq, r.aggregates.xpGained])).toEqual([['b', 2, 7]]);
+    // Duas vezes: os mesmos, sem seq novo.
+    expect(session.end('drain')).toBe(receipts);
+    expect(session.ledgerSeq).toBe(2);
+    expect(session.leave('zz')).toBeNull();
+  });
+
+  it('o snapshot preserva os agregados por participante, e um snapshot antigo restaura o solo', () => {
+    const session = sessionWith('a', 'b');
+    session.credit('a', 'kills', 3);
+    session.credit('b', 'kills', 4);
+    const restored = Session.fromSnapshot(session.snapshot(), testRuleset(), Rng.fromSeed('x'));
+    expect(restored.aggregatesOf('a').kills).toBe(3);
+    expect(restored.aggregatesOf('b').kills).toBe(4);
+    expect(restored.aggregates.kills).toBe(7);
+
+    // Anterior ao #187: sem `aggregatesByCharacter`, um dono — a soma é dele.
+    const solo = sessionWith('a');
+    solo.credit('a', 'kills', 9);
+    const { aggregatesByCharacter: _dropped, ...legacy } = solo.snapshot();
+    const fromLegacy = Session.fromSnapshot(legacy, testRuleset(), Rng.fromSeed('x'));
+    expect(fromLegacy.aggregatesOf('a').kills).toBe(9);
+    expect(fromLegacy.aggregates.kills).toBe(9);
+  });
+
+  it('o snapshot preserva o ledgerSeq sem reemitir seq (#419)', () => {
+    const session = sessionWith('a');
+    // Consome um `seq` emitindo um extrato de participante que sai.
+    session.leave('a', 'manual-exit');
+
+    const snap = session.snapshot();
+    const restored = Session.fromSnapshot(snap, testRuleset(), Rng.fromSeed('x'));
+    // O contador volta junto: a próxima emissão pega o seq 2, e nunca reusa o 1.
+    expect(restored.ledgerSeq).toBe(1);
+  });
+});
+
+describe('resolver canônico: seed, snapshot e retomada (CMB-02)', () => {
+  const combat: Combat = {
+    id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
+    armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 }, minimumDamageFraction: 0.1,
+    player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0, damageType: 'physical' },
+    spellPower: { levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 },
+  };
+
+  /**
+   * Um ruleset que resolve dano DE VERDADE pelo ponto canônico. É o que prende que a ORDEM do
+   * RNG — a faixa do ataque e a rolagem de Dodge — sobrevive ao snapshot: dois processos com a
+   * mesma semente e o mesmo ponto de retomada consomem os mesmos sorteios. Se a resolução
+   * omitisse um estado (ou mudasse a ordem), os números divergiriam.
+   */
+  const damageRuleset = (): Ruleset => ({
+    type: 'hunt',
+    hz: () => 1,
+    onEnter(session, character) {
+      session.scheduleIn('attack', 350, { priority: EventPriority.Attack, subject: character.id });
+    },
+    onCreatureDied: () => {},
+    onEnd: () => {},
+    onEvent(session, event) {
+      const p = session.participants.find((c) => c.id === event.subject);
+      if (p === undefined) return;
+      const outcome = resolveDamage(
+        { rawDamage: session.rng.integer(10, 20), source: 'basic-attack', damageType: 'physical' },
+        { armor: 5, dodgeChance: 0.5 }, 'pve', combat, session.rng,
+      );
+      session.credit(p.id, 'xpGained', outcome.resolvedDamage);
+      session.scheduleIn('attack', 350, { priority: EventPriority.Attack, subject: p.id });
+    },
+  });
+
+  const damageSession = (seed: string): Session => {
+    const session = new Session({
+      id: 'damage', contentVersion: 'v1', ruleset: damageRuleset(),
+      rng: Rng.fromSeed(seed), createdAtMs: 0,
+    });
+    session.enter(character());
+    return session;
+  };
+
+  it('a mesma semente rende o mesmo dano antes e depois do snapshot', () => {
+    const straight = damageSession('damage-seed');
+    for (let i = 0; i < 60; i++) straight.advanceBy(1000);
+
+    const interrupted = damageSession('damage-seed');
+    for (let i = 0; i < 30; i++) interrupted.advanceBy(1000);
+    const snap = JSON.parse(JSON.stringify(interrupted.snapshot())) as ReturnType<Session['snapshot']>;
+
+    const resumed = Session.fromSnapshot(snap, damageRuleset(), new Rng(snap.rng));
+    for (let i = 0; i < 30; i++) resumed.advanceBy(1000);
+
+    expect(resumed.aggregates.xpGained).toBe(straight.aggregates.xpGained);
+    expect(resumed.getRngState()).toEqual(straight.getRngState());
+  });
+
+  it('cada ataque consome DOIS sorteios: a faixa e o Dodge, na mesma ordem', () => {
+    // A ordem é contrato (DT-03 do ADR 0031). Sem o estado do gerador no snapshot, o primeiro
+    // golpe retomado repetiria o sorteio anterior — o dano divergiria com a MESMA semente.
+    const straight = damageSession('dodge-seed');
+    for (let i = 0; i < 10; i++) straight.advanceBy(1000);
+
+    const interrupted = damageSession('dodge-seed');
+    for (let i = 0; i < 5; i++) interrupted.advanceBy(1000);
+    const snap = interrupted.snapshot();
+    const resumed = Session.fromSnapshot(snap, damageRuleset(), new Rng(snap.rng));
+    for (let i = 0; i < 5; i++) resumed.advanceBy(1000);
+
+    expect(resumed.aggregates.xpGained).toBe(straight.aggregates.xpGained);
+  });
+});
+
+describe('mitigação e conteúdo congelado (CMB-03)', () => {
+  const combat: Combat = {
+    id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
+    armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
+    minimumDamageFraction: 0.1,
+    player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0, damageType: 'physical' },
+    spellPower: { levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 },
+  };
+
+  /**
+   * Resolve um golpe de FOGO contra um defensor com a resistência dada. O defensor é montado a
+   * partir do CONTEÚDO — a resistência é o que distingue duas versões de conteúdo.
+   */
+  const resistanceRuleset = (resistance: number): Ruleset => ({
+    type: 'hunt',
+    hz: () => 1,
+    onEnter(session, character) {
+      session.scheduleIn('attack', 350, { priority: EventPriority.Attack, subject: character.id });
+    },
+    onCreatureDied: () => {},
+    onEnd: () => {},
+    onEvent(session, event) {
+      const p = session.participants.find((c) => c.id === event.subject);
+      if (p === undefined) return;
+      const outcome = resolveDamage(
+        { rawDamage: session.rng.integer(10, 20), source: 'basic-attack', damageType: 'fire' },
+        {
+          armor: 0, dodgeChance: 0.5,
+          mitigation: compileMitigation({ resistances: { fire: resistance }, immunities: [] }),
+        },
+        'pve', combat, session.rng,
+      );
+      session.credit(p.id, 'xpGained', outcome.resolvedDamage);
+      session.scheduleIn('attack', 350, { priority: EventPriority.Attack, subject: p.id });
+    },
+  });
+
+  const mitigationSession = (seed: string, resistance: number): Session => {
+    const session = new Session({
+      id: 'mitigation', contentVersion: 'v1', ruleset: resistanceRuleset(resistance),
+      rng: Rng.fromSeed(seed), createdAtMs: 0,
+    });
+    session.enter(character());
+    return session;
+  };
+
+  it('a mitigação do conteúdo entra no resultado e sobrevive ao snapshot com a mesma semente', () => {
+    const straight = mitigationSession('mit-seed', 0.5);
+    for (let i = 0; i < 60; i++) straight.advanceBy(1000);
+
+    const interrupted = mitigationSession('mit-seed', 0.5);
+    for (let i = 0; i < 30; i++) interrupted.advanceBy(1000);
+    const snap = JSON.parse(JSON.stringify(interrupted.snapshot())) as ReturnType<Session['snapshot']>;
+
+    const resumed = Session.fromSnapshot(snap, resistanceRuleset(0.5), new Rng(snap.rng));
+    for (let i = 0; i < 30; i++) resumed.advanceBy(1000);
+
+    expect(resumed.aggregates.xpGained).toBe(straight.aggregates.xpGained);
+    expect(resumed.getRngState()).toEqual(straight.getRngState());
+  });
+
+  it('trocar a resistência do conteúdo MUDA o resultado — o conteúdo é a identidade', () => {
+    // Um deploy que mudasse a mitigação no meio da hunt produziria um resultado que ninguém
+    // simulou (invariante 7). Aqui a prova é que a mesma semente com resistência diferente
+    // rende diferente.
+    const resistant = mitigationSession('mit-seed', 0.5);
+    const vulnerable = mitigationSession('mit-seed', -0.5);
+    for (let i = 0; i < 20; i++) {
+      resistant.advanceBy(1000);
+      vulnerable.advanceBy(1000);
+    }
+    expect(vulnerable.aggregates.xpGained).toBeGreaterThan(resistant.aggregates.xpGained);
+  });
+});
+
+describe('entrada em curso: reversão e joinedAtMs (#397, ADR 0035 decisão 6)', () => {
+  const joinedRuleset = (): Ruleset => ({
+    type: 'hunt',
+    hz: () => 1,
+    onEnter: (session, character) => {
+      if (character.id === 'refused') throw new Error('party cheia');
+      session.scheduleIn('tick', 1000, { subject: character.id });
+    },
+    onCreatureDied: () => {},
+    onEnd: () => {},
+    onEvent: () => {},
+  });
+
+  it('reverte o push quando onEnter lança, sem deixar joinedAtMs órfão', () => {
+    const session = new Session({
+      id: 'join', contentVersion: 'v1', ruleset: joinedRuleset(),
+      rng: Rng.fromSeed('join'), createdAtMs: 0,
+    });
+    session.enter(character('a'));
+    session.advanceBy(500);
+    expect(() => session.enter(character('refused'))).toThrow('party cheia');
+    expect(session.participants.map((p) => p.id)).toEqual(['a']);
+    expect(session.snapshot().joinedAtMs).toEqual({ a: 0 });
+    // E a sessão segue aceitando quem couber, com o instante certo.
+    session.advanceBy(500);
+    session.enter(character('b'));
+    expect(session.participants.map((p) => p.id)).toEqual(['a', 'b']);
+    expect(session.snapshot().joinedAtMs).toEqual({ a: 0, b: 1000 });
+  });
+
+  it('guarda o instante lógico da entrada e filtra o extrato por ele', () => {
+    const session = new Session({
+      id: 'receipt', contentVersion: 'v1', ruleset: joinedRuleset(),
+      rng: Rng.fromSeed('receipt'), createdAtMs: 0,
+    });
+    session.enter(character('a'));
+    session.advanceBy(1000);
+    session.record('antes');
+    session.advanceBy(1000);
+    session.enter(character('b')); // entra em nowMs = 2000
+    session.record('depois');
+    session.advanceBy(1000);
+    session.record('mais-tarde');
+    expect(session.snapshot().joinedAtMs).toEqual({ a: 0, b: 2000 });
+
+    // O instante sobrevive ao snapshot: retomado, o extrato do mesmo jeito filtra.
+    const restored = Session.fromSnapshot(session.snapshot(), joinedRuleset(), Rng.fromSeed('r'));
+    expect(restored.snapshot().joinedAtMs).toEqual({ a: 0, b: 2000 });
+    expect(restored.leave('b', 'manual-exit')?.receipt.notableEvents.map((e) => e.type))
+      .toEqual(['depois', 'mais-tarde']);
+
+    // O extrato de quem entrou tarde não leva o que aconteceu antes dele.
+    const departure = session.leave('b', 'manual-exit');
+    expect(departure?.receipt.notableEvents.map((e) => e.type)).toEqual(['depois', 'mais-tarde']);
+
+    // O de quem estava desde o zero leva tudo, como sempre.
+    const end = session.end('manual-exit');
+    expect(end[0]?.notableEvents.map((e) => e.type))
+      .toEqual(['antes', 'depois', 'mais-tarde', 'ended']);
+  });
+
+  it('um snapshot antigo, sem joinedAtMs, restaura como zero (extrato com tudo)', () => {
+    const session = new Session({
+      id: 'legacy-join', contentVersion: 'v1', ruleset: joinedRuleset(),
+      rng: Rng.fromSeed('legacy-join'), createdAtMs: 0,
+    });
+    session.enter(character('a'));
+    session.record('evento');
+    const { joinedAtMs: _dropped, ...legacy } = session.snapshot();
+    const restored = Session.fromSnapshot(legacy, joinedRuleset(), Rng.fromSeed('x'));
+    const receipt = restored.end('manual-exit')[0];
+    expect(receipt?.notableEvents.map((e) => e.type)).toEqual(['evento', 'ended']);
+  });
+});
+
+describe('skill é estado de personagem e sobrevive ao snapshot (CMB-05, #333)', () => {
+  const melee = skillSchema.parse({
+    id: 'melee', name: 'Melee', startingLevel: 10,
+    curve: { base: 2, factor: 1 }, gain: { on: 'melee-hit', points: 1 }, damagePerLevel: 0.5,
+  });
+
+  it('o nível ganho durante a sessão volta no restore, e o resultado segue idêntico', () => {
+    const session = new Session({
+      id: 'skills', contentVersion: 'v1', ruleset: testRuleset(),
+      rng: Rng.fromSeed('skills'), createdAtMs: 0,
+    });
+    const hero = character();
+    session.enter(hero);
+    for (let i = 0; i < 5; i++) session.advanceBy(1000);
+    // Uso é evento: dois golpes praticados fecham um nível (curva base 2, um ponto por golpe).
+    hero.skills.gain(melee, 2);
+    const levelBefore = hero.skills.levelOf(melee);
+    expect(levelBefore).toBeGreaterThan(10);
+
+    const snap = JSON.parse(JSON.stringify(session.snapshot())) as ReturnType<Session['snapshot']>;
+    const resumed = Session.fromSnapshot(snap, testRuleset(), new Rng(snap.rng));
+    const restored = resumed.participants[0] as CharacterRuntime;
+    // O nível e os pontos voltam, sem bump de formato: `skills` é opcional no estado.
+    expect(restored.skills.getState()).toEqual(hero.skills.getState());
+    expect(restored.skills.levelOf(melee)).toBe(levelBefore);
+
+    // E o resultado segue a mesma sequência: mesma semente, mesmos agregados e mesma skill.
+    for (let i = 0; i < 5; i++) {
+      session.advanceBy(1000);
+      resumed.advanceBy(1000);
+    }
+    expect(resumed.aggregates.xpGained).toBe(session.aggregates.xpGained);
+    expect(resumed.getRngState()).toEqual(session.getRngState());
+    expect(restored.skills.getState()).toEqual(hero.skills.getState());
+  });
+});
+
+describe('DPS/HPS por evento com janela de 60 s (#431, ADR 0032 d.14)', () => {
+  /**
+   * Dois golpes de 100 (t=0 e t=30 s) e uma cura de 60 (t=0), agendados como EVENTOS: é o que
+   * garante o carimbo lógico no instante exato, igual a 1 Hz e a 10 Hz (invariante 2).
+   */
+  function performanceRuleset(): Ruleset {
+    return {
+      type: 'hunt',
+      hz: () => 10,
+      onEnter(session, character) {
+        session.scheduleIn('hit', 0, { priority: EventPriority.Attack, subject: character.id });
+        session.scheduleIn('hit', 30_000, { priority: EventPriority.Attack, subject: character.id });
+        session.scheduleIn('heal', 0, { priority: EventPriority.Upkeep, subject: character.id });
+      },
+      onCreatureDied: () => {},
+      onEnd: () => {},
+      onEvent(session, event) {
+        if (event.kind === 'hit') session.creditDamage(event.subject, 100);
+        if (event.kind === 'heal') session.creditHealing(event.subject, 60);
+      },
+    };
+  }
+
+  function sessionWithPerformance(): Session {
+    const session = new Session({
+      id: 'perf', contentVersion: 'v1', ruleset: performanceRuleset(),
+      rng: Rng.fromSeed('perf'), createdAtMs: 0,
+    });
+    session.enter(character('a'));
+    return session;
+  }
+
+  it('a janela é aparada na LEITURA: 200/60 em t=45 s, só o segundo golpe em t=75 s, zero em t=95 s', () => {
+    const session = sessionWithPerformance();
+    for (let t = 100; t <= 45_000; t += 100) session.advanceBy(100);
+    // Os dois golpes estão dentro dos 60 s (0 e 30 s de idade). O total da sessão é a soma.
+    expect(session.dpsOf('a', session.nowMs)).toBeCloseTo(200 / 60, 10);
+    expect(session.hpsOf('a', session.nowMs)).toBeCloseTo(60 / 60, 10);
+    expect(session.aggregatesOf('a').damageDealt).toBe(200);
+    expect(session.aggregatesOf('a').healingDone).toBe(60);
+
+    // t=75 s: o golpe de t=0 saiu da janela (75 s) e o de t=30 fica (45 s) — só o segundo conta.
+    // O critério da #431 dizia "em t=95 s só o segundo conta"; com o segundo golpe em t=30 s
+    // ele já saiu em t=95 (65 s), e é por isso que os dois pontos são prensados aqui: t=75
+    // isola o segundo e t=95 zera. A janela é de 60 s, nunca recontada do total.
+    session.advanceBy(30_000);
+    expect(session.dpsOf('a', session.nowMs)).toBeCloseTo(100 / 60, 10);
+    expect(session.hpsOf('a', session.nowMs)).toBe(0);
+
+    // t=95 s: os dois golpes saíram da janela; o total da sessão NÃO muda (não é recontado).
+    session.advanceBy(20_000);
+    expect(session.dpsOf('a', session.nowMs)).toBe(0);
+    expect(session.hpsOf('a', session.nowMs)).toBe(0);
+    expect(session.aggregatesOf('a').damageDealt).toBe(200);
+  });
+
+  it('1 Hz e 10 Hz produzem a mesma janela e o mesmo total', () => {
+    const runAt = (stepMs: number): { dps: number; hps: number; damage: number } => {
+      const session = sessionWithPerformance();
+      for (let t = stepMs; t <= 45_000; t += stepMs) session.advanceBy(stepMs);
+      return {
+        dps: session.dpsOf('a', session.nowMs),
+        hps: session.hpsOf('a', session.nowMs),
+        damage: session.aggregatesOf('a').damageDealt,
+      };
+    };
+    expect(runAt(1_000)).toEqual(runAt(100));
   });
 });

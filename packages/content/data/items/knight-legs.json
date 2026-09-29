@@ -1,0 +1,13 @@
+{
+  "id": "knight-legs",
+  "name": "Knight Legs",
+  "kind": "armor",
+  "slot": "legs",
+  "weight": 70,
+  "value": 5000,
+  "armor": 8,
+  "requires": {
+    "vocationId": ["knight", "paladin"]
+  },
+  "_open": "Kit level 200 (#524), Knight e Paladin. Armor 8 e weight 7000 (70 oz) do Canary `items.xml` id 3371 (`Knight;true, Paladin;true, Elite Knight, Royal Paladin`). `value` 5000 é a maior oferta de NPC (Alesar; TibiaWiki via tibiascape.com/library/items/knight-legs) — Kroox/Shanar/H.L. pagam menos pelo mesmo item, e a Crown Legs (item diferente, mesma armadura) vale mais por ser mais rara."
+}

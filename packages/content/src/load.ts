@@ -27,20 +27,31 @@ export function loadContent(dir: string): Content {
     progression: readJsonDir(join(dir, 'progression')),
     combat: readJsonDir(join(dir, 'combat')),
     stamina: readJsonDir(join(dir, 'stamina')),
+    party: readJsonDir(join(dir, 'party')),
+    bestiary: readJsonDir(join(dir, 'bestiary')),
     bot: readJsonDir(join(dir, 'bot')),
     spells: readJsonDir(join(dir, 'spells')),
+    // Suprimentos e munição ABSTRATOS (ADR 0026 d.3): poção, runa e flecha não são itens — o
+    // uso/tiro debita gold, e o catálogo vive em pasta própria.
     supplies: readJsonDir(join(dir, 'supplies')),
+    ammunition: readJsonDir(join(dir, 'ammunition')),
     skills: readJsonDir(join(dir, 'skills')),
     items: readJsonDir(join(dir, 'items')),
+    // As famílias de arma (CMB-05): alcance, tipo, recurso, fórmula e a skill que as escala —
+    // o que o `sim` lê para saber como uma arma bate sem conhecer item nem vocação.
+    weaponFamilies: readJsonDir(join(dir, 'weapon-families')),
     // A tabela de aparências (FUN-94). Uma pasta como as outras, com um `baseline.json` dentro:
     // trocar de pacote de assets é editar ESTE arquivo, e não todo arquivo de conteúdo.
     appearances: readJsonDir(join(dir, 'appearances')),
+    // O inventário de cada pacote (FUN-21): `packs/<pack>.json`, gerado por
+    // `pnpm assets:inventory`. É contra ele que a tabela acima é conferida.
+    packs: readJsonDir(join(dir, 'packs')),
     maps: readJsonDir(join(dir, 'maps')),
     routes: readJsonDir(join(dir, 'routes')),
     // `city/city.json`, uma pasta como as outras — é a convenção que o loader e a varredura
     // do invariante 6 esperam. Obrigatório no conteúdo real: sem Cidade ninguém tem onde
     // nascer (FUN-60); o `buildContent` é quem reclama se faltar.
-    city: readJsonDir(join(dir, 'city'))[0],
+    city: requireCity(readJsonDir(join(dir, 'city'))[0]),
   });
 }
 
@@ -61,4 +72,16 @@ function readJsonDir(dir: string): unknown[] {
       throw new Error(`${caminho}: JSON inválido — ${(erro as Error).message}`);
     }
   });
+}
+
+/**
+ * `city/city.json` é obrigatório no conteúdo REAL (FUN-120): sem ele a Cidade sobe sem mapa e
+ * sem `mapId`, o cliente nunca recebe `instance-enter` para a praça, e nada acusa no boot. O
+ * `buildContent` continua aceitando conteúdo sem Cidade — é a fixture que só fala de hunt.
+ */
+function requireCity(city: unknown): unknown {
+  if (city === undefined) {
+    throw new Error('city/city.json ausente: a Cidade não teria mapa nem ponto de entrada');
+  }
+  return city;
 }

@@ -28,7 +28,8 @@ describe('rollLoot', () => {
   });
 
   it('tabela vazia é zero e nada, não erro', () => {
-    expect(rollLoot(table(), Rng.fromSeed('loot'))).toEqual({ gold: 0, items: [] });
+    expect(rollLoot(table(), Rng.fromSeed('loot')))
+      .toEqual({ gold: 0, items: [], supplies: [], ammunition: [] });
   });
 
   it('a mesma semente produz a mesma sequência', () => {
@@ -72,6 +73,51 @@ describe('rollLoot', () => {
     expect(result).toEqual({
       gold: 7,
       items: [{ itemId: 'first', quantity: 2 }, { itemId: 'second', quantity: 1 }],
+      supplies: [],
+      ammunition: [],
     });
+  });
+
+  it('supplyId cai em `supplies`, separado de `items`, na ordem de sorteio da tabela (#520)', () => {
+    // A linha de supply consome sorteio na mesma posição que ocuparia se fosse item — só o
+    // BALDE de destino muda, não a sequência. Intercalar item e supply na tabela prova que a
+    // separação acontece DEPOIS do sorteio, não antes.
+    const rng = Rng.fromSeed('supply');
+    const result = rollLoot(table({
+      items: [
+        { itemId: 'dragon-ham', chance: 1, min: 1, max: 1 },
+        { supplyId: 'strong-health-potion', chance: 1, min: 2, max: 2 },
+        { itemId: 'small-diamond', chance: 1, min: 1, max: 1 },
+      ],
+    }), rng);
+    expect(result).toEqual({
+      gold: 0,
+      items: [
+        { itemId: 'dragon-ham', quantity: 1 },
+        { itemId: 'small-diamond', quantity: 1 },
+      ],
+      supplies: [{ supplyId: 'strong-health-potion', quantity: 2 }],
+      ammunition: [],
+    });
+  });
+
+  it('ammunitionId cai em `ammunition`, separado de `items` e `supplies` (#520, revisão do #536)', () => {
+    // Munição física (Burst Arrow, Power Bolt) é a TERCEIRA alternativa da linha — mesma regra
+    // de posição/sorteio do supply, balde diferente.
+    const rng = Rng.fromSeed('ammo');
+    const result = rollLoot(table({
+      items: [
+        { itemId: 'dragon-ham', chance: 1, min: 1, max: 1 },
+        { ammunitionId: 'burst-arrow', chance: 1, min: 1, max: 10 },
+        { supplyId: 'strong-health-potion', chance: 1, min: 1, max: 1 },
+      ],
+    }), rng);
+    expect(result.gold).toBe(0);
+    expect(result.items).toEqual([{ itemId: 'dragon-ham', quantity: 1 }]);
+    expect(result.supplies).toEqual([{ supplyId: 'strong-health-potion', quantity: 1 }]);
+    expect(result.ammunition).toHaveLength(1);
+    expect(result.ammunition[0]?.ammunitionId).toBe('burst-arrow');
+    expect(result.ammunition[0]?.quantity).toBeGreaterThanOrEqual(1);
+    expect(result.ammunition[0]?.quantity).toBeLessThanOrEqual(10);
   });
 });

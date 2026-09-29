@@ -1,0 +1,10 @@
+{
+  "id": "wooden-shield",
+  "name": "Wooden Shield",
+  "kind": "shield",
+  "slot": "shield",
+  "weight": 40,
+  "value": 0,
+  "defense": 14,
+  "_open": "O primeiro escudo real (AB-02, ADR 0032 d.8): defense 14 (TibiaWiki) e peso 40 oz são provisórios. Aparência 3412 (objeto do pacote 1332) ainda sem PNG na biblioteca local parcial; conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md)."
+}

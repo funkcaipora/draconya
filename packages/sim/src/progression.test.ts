@@ -2,38 +2,43 @@ import { describe, expect, it } from 'vitest';
 import type { Progression, Vocation } from '@draconya/content';
 import { CharacterRuntime } from './character.js';
 import {
-  applyDeathPenalty, grantXp, levelForXp, statsForLevel, totalXpForLevel, xpToCompleteLevel,
+  applyDeathPenalty, applyExperienceBonus, grantXp, levelExperienceBonusPercent, levelForXp,
+  statsForLevel, totalXpForLevel, xpToCompleteLevel,
 } from './progression.js';
 
 const baseline: Progression = {
   id: 'baseline',
   startingHealth: 150, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
-  vocationLevel: 8,
-  stepDurationMs: 500,
+  vocationLevel: 8, startingKit: [], satchelInitialSlots: 10, containerRow: 5,
+  startingSpeed: 300, speedPerLevel: 2,
   regen: { healthPerSecond: 1, manaPerSecond: 1 },
-  xp: { base: 20, exponent: 2 },
-  deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
+  xp: { kind: 'power', base: 20, exponent: 2 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+  experienceBonusByLevel: [],
+  skillMultipliers: {},
 };
 const knight: Vocation = {
-  id: 'knight', name: 'Knight', healthPerLevel: 20, manaPerLevel: 5, capacityPerLevel: 25,
+  id: 'knight', name: 'Knight', healthPerLevel: 20, manaPerLevel: 5, capacityPerLevel: 25, spellSkill: 'magic',
+  startingKit: [], skillMultipliers: {}, meleeDamageMultiplier: 1, distDamageMultiplier: 1,
 };
 const sorcerer: Vocation = {
-  id: 'sorcerer', name: 'Sorcerer', healthPerLevel: 5, manaPerLevel: 25, capacityPerLevel: 10,
+  id: 'sorcerer', name: 'Sorcerer', healthPerLevel: 5, manaPerLevel: 25, capacityPerLevel: 10, spellSkill: 'magic',
+  startingKit: [], skillMultipliers: {}, meleeDamageMultiplier: 1, distDamageMultiplier: 1,
 };
 
 describe('statsForLevel', () => {
   it('gives the starting values at level 1', () => {
     // Quem começa não "subiu" para o level 1: o primeiro level não concede incremento.
     expect(statsForLevel(1, null, baseline)).toEqual({
-      maxHealth: 150, maxMana: 0, capacity: 400,
+      maxHealth: 150, maxMana: 0, capacity: 400, speed: 300,
     });
   });
 
   it('uses the baseline while the character has no vocation', () => {
     // Nasce sem vocação e escolhe no level 8 (§7.4): até lá, todo mundo cresce igual.
     expect(statsForLevel(8, null, baseline)).toEqual({
-      maxHealth: 150 + 7 * 5, maxMana: 7 * 5, capacity: 400 + 7 * 10,
+      maxHealth: 150 + 7 * 5, maxMana: 7 * 5, capacity: 400 + 7 * 10, speed: 300 + 7 * 2,
     });
   });
 
@@ -104,7 +109,7 @@ const atLevel = (level: number, vocationId: string | null = null): CharacterRunt
 describe('curva de XP', () => {
   it('é fórmula, não tabela: mudar dois números muda a curva inteira', () => {
     // Tabela de 500 linhas nunca é rebalanceada, e a curva vai ser rebalanceada muitas vezes.
-    const íngreme: Progression = { ...baseline, xp: { base: 20, exponent: 3 } };
+    const íngreme: Progression = { ...baseline, xp: { kind: 'power', base: 20, exponent: 3 } };
     expect(xpToCompleteLevel(3, baseline)).toBe(180);
     expect(xpToCompleteLevel(3, íngreme)).toBe(540);
   });
@@ -155,18 +160,43 @@ describe('level up', () => {
   });
 });
 
-describe('penalidade de morte', () => {
-  it('tira 60% da XP necessária para completar o level atual', () => {
+describe('penalidade de morte (#521, ADR 0037 — a fórmula do Tibia)', () => {
+  it('abaixo do limiar cúbico (24), tira a fração fixa da XP ACUMULADA — não mais de UM level', () => {
+    // A diferença estrutural para o modelo antigo: a fração agora é sobre `character.xp`
+    // (o total), não sobre `xpToCompleteLevel` (o custo de UM level).
     const character = atLevel(20);
-    const esperado = Math.round(0.6 * xpToCompleteLevel(20, baseline));
+    const antes = character.xp;
+    const esperado = Math.round(baseline.deathPenalty.flatFraction * antes);
     expect(applyDeathPenalty(character, { premium: false }, null, baseline).xpLost)
       .toBe(esperado);
   });
 
-  it('tira 54% com Premium', () => {
+  it('abençoado (premium) perde menos — TETADO em 50%, não os 56% crus, abaixo do limiar cúbico', () => {
+    // `Player::getLostPercent` do Canary (ramo `level < 24`):
+    // `percentReduction = (percentReduction >= 0.40 ? 0.50 : percentReduction)`. Sete bênçãos
+    // dão 56% — ≥ 40% —, e o Tibia teta isso em exatamente 50% NESTE ramo, não o valor bruto.
     const character = atLevel(20);
-    expect(applyDeathPenalty(character, { premium: true }, null, baseline).xpLost)
-      .toBe(Math.round(0.54 * xpToCompleteLevel(20, baseline)));
+    const antes = character.xp;
+    const esperado = Math.round(baseline.deathPenalty.flatFraction * antes * (1 - 0.50));
+    expect(applyDeathPenalty(character, { premium: true }, null, baseline).xpLost).toBe(esperado);
+  });
+
+  it('abaixo de 40% cru, o teto não mexe em nada — só entra quando a redução bateria 40% ou mais', () => {
+    const gentle: Progression = { ...baseline, deathPenalty: { ...baseline.deathPenalty, blessedReduction: 0.30 } };
+    const character = atLevel(20);
+    const antes = character.xp;
+    const esperado = Math.round(gentle.deathPenalty.flatFraction * antes * (1 - 0.30));
+    expect(applyDeathPenalty(character, { premium: true }, null, gentle).xpLost).toBe(esperado);
+  });
+
+  it('no limiar cúbico (level ≥ 24) a redução crua vale, sem teto: 56%, não 50%', () => {
+    // O teto do Canary só existe no ramo `else` (`level < 24`) de `getLostPercent` — a fórmula
+    // cúbica não passa por ele.
+    const character = atLevel(24);
+    const level = character.level; // atLevel deixa o personagem exatamente na fronteira do level.
+    const rawLoss = ((level + 50) / 100) * 50 * (level * level - 5 * level + 8);
+    const esperado = Math.round(rawLoss * (1 - baseline.deathPenalty.blessedReduction));
+    expect(applyDeathPenalty(character, { premium: true }, null, baseline).xpLost).toBe(esperado);
   });
 
   it('pode rebaixar o level', () => {
@@ -176,10 +206,11 @@ describe('penalidade de morte', () => {
   });
 
   it('desce um level e para lá, com a curva que está no conteúdo hoje', () => {
-    // Vale saber, e foi medido escrevendo estes testes: com `exponent: 2`, a penalidade
-    // NUNCA cascateia acima do piso. Cascatear exige `0,6 × f(L) > f(L-1)`, e para a curva
-    // quadrática isso só valeria abaixo do level 6 — onde o piso do 8 já protege. O código
-    // trata cascata mesmo assim, porque a curva é conteúdo e vai ser rebalanceada.
+    // Vale saber, e foi medido escrevendo estes testes: `flatFraction` é 10% do ACUMULADO, e
+    // para qualquer curva de potência com termos crescentes isso nunca cascateia mais de um
+    // level partindo exatamente da fronteira — precisaria de uma fração bem maior que 50% para
+    // ultrapassar o termo do level anterior. O código trata cascata mesmo assim (abaixo), com
+    // uma curva onde o modelo cúbico (level ≥ 24) domina.
     const character = atLevel(9);
     applyDeathPenalty(character, { premium: false }, null, baseline);
     expect(character.level).toBe(8);
@@ -187,25 +218,28 @@ describe('penalidade de morte', () => {
     expect(character.xp).toBeGreaterThan(totalXpForLevel(8, baseline));
   });
 
-  // Curva íngreme o bastante para a cascata acontecer de verdade. Não é a do conteúdo, e é
-  // esse o ponto: é o teste que vai continuar valendo quando alguém rebalancear a curva.
-  const íngreme: Progression = { ...baseline, xp: { base: 20, exponent: 8 } };
+  // A partir do level 24 a perda é a fórmula CÚBICA do Tibia — função só do level, não da curva
+  // de XP —, então uma curva de XP mais "barata" (`base` pequeno) faz a mesma perda ABSOLUTA
+  // valer muitos levels. Não é a curva do conteúdo, e é esse o ponto: o teste continua valendo
+  // quando alguém rebalancear `baseline.xp`.
+  const íngreme: Progression = { ...baseline, xp: { kind: 'power', base: 5, exponent: 2 } };
+  const profunda: Progression = { ...baseline, xp: { kind: 'power', base: 1, exponent: 2 } };
 
   it('CASCATEIA por mais de um level quando a perda passa do level inteiro', () => {
     // O caso que passa despercebido e só aparece com um jogador reclamando.
-    const character = hero({ level: 12, xp: totalXpForLevel(12, íngreme) });
+    const character = hero({ level: 24, xp: totalXpForLevel(24, íngreme) });
     const penalidade = applyDeathPenalty(character, { premium: false }, null, íngreme);
-    expect(penalidade.levelChange?.to).toBeLessThan(11);
+    expect(penalidade.levelChange?.to).toBeLessThan(23);
     expect(character.level).toBe(levelForXp(character.xp, íngreme));
   });
 
   it('nunca desce abaixo do level 8, e para nele com a XP EXATA do 8', () => {
     // O piso é de XP, não só de level: parar no 8 com XP negativa é um estado impossível que
     // dá erro estranho três sistemas adiante.
-    const character = hero({ level: 9, xp: totalXpForLevel(9, íngreme) });
-    applyDeathPenalty(character, { premium: false }, null, íngreme);
+    const character = hero({ level: 24, xp: totalXpForLevel(24, profunda) });
+    applyDeathPenalty(character, { premium: false }, null, profunda);
     expect(character.level).toBe(8);
-    expect(character.xp).toBe(totalXpForLevel(8, íngreme));
+    expect(character.xp).toBe(totalXpForLevel(8, profunda));
   });
 
   it('o piso protege, e nunca promove', () => {
@@ -227,5 +261,52 @@ describe('penalidade de morte', () => {
     character.goldDelta = 500;
     applyDeathPenalty(character, { premium: false }, null, baseline);
     expect(character.goldDelta).toBe(500);
+  });
+});
+
+describe('bônus de XP por level (#563)', () => {
+  const comFaixas: Progression = {
+    ...baseline,
+    experienceBonusByLevel: [
+      { maxLevel: 300, bonusPercent: 200 },
+      { bonusPercent: 100 },
+    ],
+  };
+
+  it('a faixa vale até o teto INCLUSIVO, e a sem maxLevel é o catch-all', () => {
+    expect(levelExperienceBonusPercent(1, comFaixas)).toBe(200);
+    expect(levelExperienceBonusPercent(300, comFaixas)).toBe(200);
+    expect(levelExperienceBonusPercent(301, comFaixas)).toBe(100);
+    expect(levelExperienceBonusPercent(1_000, comFaixas)).toBe(100);
+  });
+
+  it('sem faixas (conteúdo de teste) o bônus é zero', () => {
+    expect(levelExperienceBonusPercent(50, baseline)).toBe(0);
+  });
+
+  it('aplica o percentual ADITIVO numa multiplicação só, em inteiro', () => {
+    expect(applyExperienceBonus(100, 0)).toBe(100);
+    // 100 + 200% = 300; 100 + 100% = 200.
+    expect(applyExperienceBonus(100, 200)).toBe(300);
+    expect(applyExperienceBonus(100, 100)).toBe(200);
+    // Soma de bônus (level 200% + Bestiário 13%) numa multiplicação: 100 × 3,13 = 313.
+    expect(applyExperienceBonus(100, 200 + 13)).toBe(313);
+    // 5 × 3,01 = 15,05 → 15: o piso é o inteiro.
+    expect(applyExperienceBonus(5, 200 + 1)).toBe(15);
+  });
+
+  it('a conta é em INTEIRO — 13% sobre 100 dá 113, não 112', () => {
+    // `1 + 0,01 × 13` é `1.13`, e `100 × 1.13` é `112.99999999999999`: o `floor` da conta em
+    // ponto flutuante devolveria 112. É a armadilha do acumulador fracionário, evitada pela
+    // mesma porta — não deixar o resíduo chegar ao arredondamento.
+    expect(Math.floor(100 * (1 + 0.01 * 13))).toBe(112);
+    expect(applyExperienceBonus(100, 13)).toBe(113);
+  });
+
+  it('somar aplica UM floor, e não encadear um por bônus', () => {
+    // Dois bônus de 50% sobre 7: somando dá +100% → floor(7 × 2) = 14. Encadeando um `floor`
+    // por bônus daria floor(floor(7 × 1,5) × 1,5) = floor(10 × 1,5) = 15 — um ponto a mais, e
+    // o floor duplo é justamente o que somar evita.
+    expect(applyExperienceBonus(7, 50 + 50)).toBe(14);
   });
 });

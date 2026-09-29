@@ -27,8 +27,8 @@ export const TEST_ROUTE = {
 export const TEST_HUNT = {
   id: 'arena', name: 'Arena', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
   difficulties: {
-    beginner: {
-      perSpawnPoint: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000,
+    cautious: {
+      monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000,
     },
   },
 };
@@ -48,43 +48,65 @@ export const TEST_PROGRESSION = {
   // O número é do teste; o balanceamento de verdade é `packages/content/data`.
   id: 'baseline', startingHealth: 1_200, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
-  stepDurationMs: 500, regen: { healthPerSecond: 1, manaPerSecond: 1 },
-  xp: { base: 20, exponent: 2 },
-  deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
+  startingSpeed: 300, speedPerLevel: 0, regen: { healthPerSecond: 1, manaPerSecond: 1 },
+  xp: { kind: 'power', base: 20, exponent: 2 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+  skillMultipliers: {},
 };
 
 export const TEST_COMBAT = {
-  id: 'baseline', dodgeMultiplier: 0.5, armorEffectiveness: { melee: 1, magic: 0 },
+  id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
   minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 0, dodgeChance: 0 },
 };
 
 export const TEST_STAMINA = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
+/**
+ * A party de hunt (ADR 0027; multiplicador de XP saiu do conteúdo no #525 — é
+ * `sharedExperiencePercent` em `packages/sim/src/party.ts`, a fórmula do Canary em código).
+ */
+export const TEST_PARTY = {
+  id: 'baseline', maxMembers: 4,
+  autoSellItemTypes: { free: 5, premium: 20 },
+};
+
+/**
+ * As famílias de arma (CMB-05) do conteúdo de teste. O conteúdo não tem skill nenhuma, então
+ * `buildContent` não confere o `skillId` — a arma bate o `attack` puro, que é o que estas
+ * fixtures sempre mediram. Quem testa escala de skill usa conteúdo com skill.
+ */
+export const TEST_WEAPON_FAMILIES = [
+  { id: 'fist', name: 'Fist', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'sword', name: 'Sword', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'axe', name: 'Axe', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'club', name: 'Club', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'distance', name: 'Distance', kind: 'distance', skillId: 'distance', range: 6, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'wand', name: 'Wand', kind: 'wand', skillId: 'magic', range: 3, damageType: 'arcane', resource: 'mana' },
+  { id: 'rod', name: 'Rod', kind: 'wand', skillId: 'magic', range: 3, damageType: 'arcane', resource: 'mana' },
+];
 
 const TEST_RAT = {
   id: 'rat', name: 'Rat', recommendedLevel: 1, health: 20, experience: 5,
-  attack: 6, armor: 0, attackIntervalMs: 2000, stepDurationMs: 500, aggroRadius: 4,
+  attack: 6, armor: 0, attackIntervalMs: 2000, speed: 300, aggroRadius: 4,
   loot: { gold: { chance: 1, min: 2, max: 2 }, items: [] },
 };
 
-/** Uma magia e um supply, para as regras de bot destes testes apontarem para algo que existe. */
+/** Uma magia e os suprimentos abstratos, para as regras de bot apontarem para algo que existe. */
 export const TEST_SPELL = {
   id: 'heal', name: 'Cura', manaCost: 20, cooldownMs: 1_000,
   effect: { kind: 'heal', amount: 60 },
 };
-export const TEST_SUPPLY = {
-  id: 'health-potion', name: 'Poção de Vida', price: 45,
-  effect: { kind: 'heal', amount: 80 },
-};
-
-/**
- * O recorte do bot avançado neste conteúdo de teste é `lowest-hp` (FUN-81).
- *
- * O conteúdo REAL tem a lista vazia — o §13.2 não decidiu o recorte, e inventá-lo em
- * `bot/baseline.json` seria decidir balanceamento disfarçado de implementação. Aqui ela é
- * preenchida de propósito: o gate é mecanismo, e mecanismo se testa com dado de teste.
- */
-export const TEST_ADVANCED_POLICY = 'lowest-hp';
+export const TEST_SUPPLIES = [
+  {
+    id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion',
+    effect: { kind: 'heal', amount: 80 },
+  },
+];
+/** A munição abstrata (ADR 0026 d.3): família, dano do tiro e preço por disparo. */
+export const TEST_AMMUNITION = [
+  { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 20, price: 1 },
+];
 
 /**
  * O conteúdo de teste ANTES de virar `Content`, para quem precisa trocar uma peça.
@@ -98,14 +120,18 @@ export function rawTestContent(): RawContent {
   // `packages/content/data/appearances/baseline.json`, escrita à mão.
   const raw: RawContent = {
     monsters: [TEST_RAT], hunts: [TEST_HUNT], vocations: [],
-    progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA],
-    spells: [TEST_SPELL], supplies: [TEST_SUPPLY],
- // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
- bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
-    slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-    advancedOnly: { targetPolicies: [TEST_ADVANCED_POLICY] } }],
+    progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA], party: [TEST_PARTY],
+    spells: [TEST_SPELL], supplies: TEST_SUPPLIES, ammunition: TEST_AMMUNITION,
+    weaponFamilies: TEST_WEAPON_FAMILIES,
+    // Sem itens por padrão: os testes que precisam de peça (colar, anel, espada) acrescentam a
+    // própria na cópia do raw. A lista vazia existe para `[...raw.items]` continuar funcionando.
+    items: [],
+  // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta. O gate de
+  // level saiu no AB-03; aqui o vocabulário é o v2.
+  bot: [{ id: 'baseline', vocabularyVersion: 2, categoryCooldownMs: 1000,
+    slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
     maps: [TEST_MAP, TEST_CITY_MAP], routes: [TEST_ROUTE],
-    city: { mapId: 'city' },
+    city: { mapId: 'city', stepDurationMs: 500 },
   };
   return { ...raw, appearances: [placeholderAppearances(raw)] };
 }

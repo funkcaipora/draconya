@@ -113,6 +113,94 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **Skill nunca desce, e `Skills.merge` depende disso.** Ficar com o maior de cada uma é o que
   torna a fusão de extratos comutativa: um extrato antigo processado fora de ordem não rebaixa
   nada, e não é preciso guardar instante como a stamina guarda.
+- **Bestiário é acumulador de ABATE, pelo mesmo argumento** (`bestiary.ts`, FUN-113, §18).
+  Abate é a morte que `resolveDeath` resolve no instante em que vence — evento na fila, não
+  grandeza por tick —, e o módulo é aritmética pura sobre um `Map`. `CharacterState.bestiary`
+  é OPCIONAL, como `skills`: ausente é `{}`, sem bump de `SNAPSHOT_FORMAT_VERSION`. O
+  contador sobe DENTRO do `if` de recompensa de `#onMonsterDied`, e não fora: stamina zero
+  não conta abate (§18.6) pela MESMA condição que não paga XP nem loot — duas condições
+  divergem na primeira mudança em uma delas. `Bestiary.merge` fica com o maior por monstro,
+  pela razão de `Skills.merge`.
+- **A party é aritmética pura em `party.ts` (#189, ADR 0027; fórmula e elegibilidade emendadas
+  pelo #525 em 2026-09-24/25, fidelidade CANARY do ADR 0037 d.4 — não TFS: as duas engines
+  divergem no multiplicador, e é o Canary que manda em fórmula), e o ruleset só chama.**
+  `uniqueVocations` conta `null` (sem vocação) como uma vocação DISTINTA, capada em 4
+  (`Party::getUniqueVocationsCount` do Canary não exclui `VOCATION_NONE` — o TFS exclui, mas
+  perde a decisão 4). `sharedExperiencePercent` é a fórmula do Canary em INTEIRO —
+  `10n² − 20n + 130`, menos 10 se o TAMANHO do roster (não `n`) for ≥ 4 — reproduzida do CÓDIGO
+  do Canary, não do comentário dele (que fala em "vocações", mas testa tamanho). `xpShare`
+  (cota ARREDONDADA PARA CIMA — `ceil`, não `floor` —, dividida pelo TAMANHO TOTAL do roster,
+  não por elegíveis; é a ÚNICA conta deste arquivo que NÃO descarta resto, porque não é escolha
+  de quem leva o resto, é "todos levam um pouco mais"), `canShareExperience` (o TUDO OU NADA do
+  `Party::canUseSharedExperience`, avaliado sobre o ROSTER inteiro — não só elegíveis: nível ≥
+  2/3 do maior de TODO o roster, alcance/andar do LÍDER, atividade em `activityWindowMs` — falhar
+  qualquer um desliga a cota igual do abate INTEIRO), `xpByDamage` (o rateio por dano quando a
+  regra acima desliga — `floor(dano/total × xp)`, igual ao `Creature::getGainedExperience`, SEM
+  o teto da cota compartilhada — quem causa 100 % do dano leva o XP inteiro do monstro; quem não
+  bateu não recebe) e `settleEntries` (vende a bolsa ENTRADA por entrada, cada uma dividida só
+  entre `eligible ∩ presentes` com `splitEqually` — resto UM a UM nos primeiros, porque gold
+  descartado é valor que o ledger não vê; `value: 0` vai em `unsold`, para o líder, não para o
+  gold), além de `autoSellLimit` (o limite de tipos do líder lê o Premium do PERSONAGEM). Nada
+  aqui sabe o que é sessão — a atividade chega como `lastActionAtMs` já resolvido, não como
+  `Runner`/relógio —; é o que permite testar por tabela. Duas populações, nomes DIFERENTES de
+  propósito: `allMembers` (o roster inteiro — decide `n`, tamanho e quem `canShareExperience`
+  confere) e `eligible` (vivo + stamina — decide só quem RECEBE a cota calculada).
+- **A atividade de `canShareExperience` é `Runner.lastCombatActionAtMs`, escrita só por
+  `#markCombatActive`** (`hunt.ts`, #525), nos MESMOS pontos que já creditam dano/cura para o
+  DPS/HPS (#431): `#land` (golpe corpo a corpo/distância/wand) e `#applyHits` (magia em área)
+  sempre; `#emitHealed` só quando o RECIPIENTE da cura é DIFERENTE do healer — curar A SI MESMO
+  não conta (`Player::isPartner`, TFS e Canary, exclui `player == this` antes de registrar
+  atividade por cura; o HPS continua contando o self-heal, só esta atividade não). Um ponto de
+  escrita a mais divergiria do que já é creditado em algum lugar. `null` é "nunca agiu" — o mesmo
+  efeito conservador de um `ticksMap` vazio no TFS/Canary logo após a entrada ou uma retomada de
+  snapshot (o campo é opcional no `RunnerState`, ausente quando `null`). Consequência OBSERVADA
+  (ou, no self-heal do Canary, INTENCIONADA e confirmada pelo TFS funcional — o código do Canary
+  para esse caminho específico tem uma variável não resolvida antes do uso, o que o torna inerte
+  na versão observada), não defeito: o abate que acontece no instante 0 de uma hunt cai sempre no
+  rateio por dano — ninguém teve tempo de agir ainda —, e um membro que nunca ataca nem cura
+  OUTRO (sem bot configurado, por exemplo) desliga a cota igual para a party inteira pelo resto
+  da hunt, não só para ele.
+- **Agregados são POR PARTICIPANTE desde o #187, e `session.aggregates` é a SOMA.** Escreva
+  com `session.credit(id, key, delta)` — nunca `session.aggregates.x += n`: `credit` escreve
+  no participante e na soma no mesmo passo, e trata `best*Hit` como máximo. `end()` devolve
+  um `Receipt` por participante, cada um com `seq` próprio (o ledger é `UNIQUE (session_id,
+  seq)`); `leave(id, reason)` vale em qualquer sessão e devolve quem saiu com o extrato dele,
+  emitido DEPOIS do `onLeave` — é o que faz o settlement da bolsa entrar no extrato de quem sai.
+- **No modo compartilhado a bolsa é da SESSÃO, e a capacidade dela é derivada** (#192, ADR
+  0027). `#bag` guarda gold e itens; a capacidade é `Σ capacity` dos presentes calculada na
+  hora — guardar e somar/subtrair divergia no primeiro level up, que reescreve `capacity`
+  pela tabela. O excedente vai para a caixa do líder; `itemsLooted` conta para todo presente.
+Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no cadáver) e
+  `autoSell` vira gold no drop, cortado pelo `autoSellLimit` do líder; cada `BagEntry`/
+  `GoldEntry` guarda `eligible` = presentes no abate (§16.1), e `#settle` vende por entrada —
+  na saída (com quem sai), no fim e ao desligar `splitLoot`, com `reason` no evento.
+  O settlement (`#settle`) roda no `onLeave` COM quem sai, no `onEnd` e no `toggle`, antes de a
+  `Session` emitir os extratos — é o que põe o gold neles. O supply do vocabulário v2 é
+  **abstrato**: usar debita o `price` do gold no ato (`useSupply`, `casting.ts`), sem pilha e
+  sem reposição. O rateio do supply é uma `Purse` (`casting.ts`): `useSupply` confere
+  `canAfford` antes de qualquer efeito e chama `pay` depois, e a bolsa de um (`ownPurse`) é o
+  solo de sempre; a compartilhada (`#sharedPurse`) debita `floor(c/n)` de cada um, o resto do
+  usuário, cobre quem não tem e credita `goldSpent` a cada um pelo que pagou — o extrato de cada
+  membro sai equalizado.
+- **Em party, morrer e disparar regra de saída são `leave`, e a cascata roda DEPOIS do extrato
+  de quem saiu** (#193). `#depart` chama `session.leave` — que roda `onLeave` (settlement) e SÓ
+  ENTÃO emite o extrato — e emite `member-left` com o extrato e o personagem, porque o
+  hospedeiro não chamou. A cascata de `party-member-lost` (`#onMemberLost`) fica PENDENTE no
+  `onLeave` e roda em `#flushLoss`: logo depois em `#depart`, ou no primeiro evento seguinte
+  quando a saída veio do socket. Rodá-la dentro do `onLeave` emitia os extratos dos outros
+  antes do de quem saiu — `seq` fora de ordem e `member-left` invertido; foi assim que o
+  primeiro teste reprovou. O último a sair encerra, com o motivo dele; solo continua `end`.
+- **O bônus do Bestiário é GLOBAL, e o abate que fecha o marco é pago pela regra de ANTES.**
+  Global (DT-01) porque o PRD diz "XP PvE permanente", não "XP daquele monstro" — por monstro
+  seria uma segunda regra que ninguém escreveu. E `xpBonusPercent` é lido antes de `record` (DT-04)
+  porque a ordem inversa faria o abate 10 000 ser o único da vida do personagem a render
+  diferente dos vizinhos. **Os bônus SOMAM entre si** (#563): Bestiário + faixa de level + os que
+  vierem (VIP, evento), e a multiplicação acontece UMA vez (`applyExperienceBonus`, em INTEIRO —
+  `floor(xp × (100 + soma) / 100)`), nunca `floor(xp × 1,13)`: `100 × 1.13` é `112.99999999999999`,
+  e um abate em cada setenta perderia um ponto sem ninguém saber por quê. Encadear um `floor` por
+  bônus perde ponto na borda de cada um. Por isso o conteúdo exige percentuais inteiros, e
+  `Bestiary.xpBonusPercent` devolve o percentual, nunca um multiplicador em ponto flutuante: quem
+  mostra o bônus soma os marcos e multiplica por `p` (é o que o cliente faz).
 - **Regra de saída é compilada em `hunt.ts`, não em `bot.ts`** (FUN-86). O predicado lê a
   `HuntView`, e `bot.ts` não conhece ruleset nenhum — o mesmo bot vai valer para quest e boss.
   `CompiledBot.exit` sai cru de propósito; quem tem a view é quem fecha a closure.
@@ -125,9 +213,16 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **Magia e supply RECUSAM, nunca lançam** (`casting.ts`). Sem mana, sem gold, em cooldown, fora
   de alcance: a ação não acontece e a sessão segue. Uma exceção aqui derrubaria a hunt por uma
   regra que o jogador escreveu certa. A recusa é tipada, e só a de cooldown carrega prazo — é o
-  que faz a categoria do bot voltar no vencimento em vez de engatilhar e dormir para sempre.
+  que faz o grupo do bot voltar no vencimento em vez de engatilhar e dormir para sempre.
 - **A mana sai por ÚLTIMO.** Level, cooldown, alvo e alcance são conferidos antes de descontar.
   Descontar primeiro é como se perde mana sem lançar nada.
+- **Inventário é POSICIONAL, e `Inventory` não conhece conteúdo** (`inventory.ts`, #160). Mochila
+  (o item em `back`, `initialSlots`) e bolsa (`progression.satchelInitialSlots`) são vetores com
+  `null`; os tamanhos e a linha chegam por `ContainerRules` — `containerRulesFor` é a única
+  ponte com o conteúdo, chamada em `onEnter`, em `onResume` (snapshot anterior ao formato, lido
+  como lista plana sem bump) e pelo host no `move`. O lugar NUNCA recusa loot: só o peso recusa,
+  e a Caixa segura. `move` é transação — valida tudo, depois escreve; a recusa não muta. A
+  mochila só sai vazia.
 - **Capacidade é PESO, e o equipado conta** (`inventory.ts`, FUN-82). Sem contar o equipado, a
   estratégia ótima é vestir tudo para carregar o dobro. E `weaponAttack` devolve `null` sem
   arma, nunca zero: zero faria o personagem desarmado não machucar nada, e desarmado é como
@@ -174,17 +269,200 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **`luring` e `ringReplaced` viajam no snapshot.** Sem o primeiro, a hunt retomada volta
   correndo e junta por cima do bando que já estava junto; sem o segundo, ela esquece qual anel
   era do jogador e termina com o dedo vazio.
-- **`Session.leave` existe para o SHARD, e só para ele** (FUN-71, ADR 0023). Numa sessão privada
-  sair é encerrar; num shard, sair é sair, e quem fica não perde nada. `Ruleset.shared` é quem
-  diz de qual dos dois se trata, e ausente é `false` — a sessão de sempre.
+- **`Session.leave` vale em qualquer sessão com mais de um dono** (FUN-71, ADR 0023; #187, ADR
+  0027): o shard da Cidade e a party de hunt. Numa sessão de um dono só sair é encerrar.
+  `Ruleset.shared` continua dizendo se é shard — o que muda é ter extrato e snapshot.
+- **A hunt hospeda N participantes, e o que é de um vive num `Runner`** (#203). Caminhante da
+  rota, bot compilado, grupos engatilhados, lure, anel, golpe engatilhado e os três avisos
+  são POR PARTICIPANTE, num `Map` por id; todo evento de personagem já carrega `subject`, e
+  `#runnerOf` encontra o seu. Spawn e regras de saída são da INSTÂNCIA e entram na fila com o
+  primeiro a entrar — o segundo não os dobra. O segundo entra por `placeNear` (tile é
+  exclusivo) e `rejoinNearest` o traz à rota; um companheiro PARADO na rota é contornado com
+  o passo guloso rumo ao tile seguinte (`walker.ahead()`), não esperado — esperar era ficar
+  atrás dele a hunt inteira, e foi o primeiro defeito da party. O snapshot leva `runners` por
+  id E os campos soltos do primeiro (um nó anterior continua lendo o solo); `restore` guarda o
+  que leu e `onResume` casa com os participantes, que só existem depois.
 - **`onLeave` da Cidade REMONTA a ocupação, não libera o tile de quem saiu.** Quando a saída
   acontece numa transição, quem sai já foi colocado no mapa da hunt para onde vai, e
   `TileOccupancy` guarda coordenada, não dono: liberar por `character.position` liberaria um tile
   da praça usando coordenada de outro mapa, em cima de quem estivesse parado ali. É o defeito da
   FUN-72 entrando pela mesma porta.
-- **Chegar na praça é `placeNear`, não `place`.** O ponto de entrada é um tile só e tile é
-  exclusivo; um `place` seco deixaria o segundo a chegar fora do mapa — invisível, sem andar,
-  com o log dizendo que ele entrou. O raio de 16 vem do TETO DE POPULAÇÃO por cópia (200, na
-  FUN-33): com 289 tiles ao redor da entrada, duzentas pessoas ficariam ombro a ombro.
+- **Chegar na Cidade é `placeReachable`, não `place` nem `placeNear`** (FUN-120). O ponto de
+  entrada é um tile só e tile é exclusivo; um `place` seco deixaria o segundo a chegar fora do
+  mapa — invisível, sem andar, com o log dizendo que ele entrou. E o anel geométrico de
+  `placeNear` atravessa parede: no templo de Thais lotado, ele punha quem chega do lado de fora
+  do prédio. A busca é em largura pelos tiles andáveis, quatro vizinhos, no andar da entrada,
+  sem entrar em escada; o teto de 1.089 tiles visitados (o quadrado do anel de 16 de antes) vem
+  do TETO DE POPULAÇÃO por cópia (200, na FUN-33): com 289, duzentas pessoas ficariam ombro a
+  ombro. A hunt não passa por nenhum dos dois: o spawn é um `place` seco num ponto aberto, e
+  `placeNear` fica como a busca em anel para quem tiver um lugar sem paredes.
+- **`Ruleset.mapId` é o mapa que o cliente desenha** (FUN-120): a hunt devolve o do
+  `TileOccupancy`, a Cidade o de `options.map`. Ausente é sessão sem mapa — só fixture. O
+  hospedeiro o manda em `instance-enter` antes do `session-state`, e em `world.mapId`.
+- **A duração do passo é do tile de DESTINO, e a diagonal custa 3× ANTES do arredondamento**
+  (FUN-119, ADR 0025). `movementDuration(world, mover, from, to)` é `ceil50(chão × 1000 /
+  speed)`; arredondar e depois triplicar dá 3.600 onde o Tibia dá 3.500. Quem parou volta a
+  olhar em volta no ritmo de um passo dali (`from === to`). A Cidade passa `fixedStepMs` no
+  `TileOccupancy` e nada disso vale lá.
+- **Escada é um passo com `z` diferente, e só para quem carrega `z`.** `canOccupy` julga o
+  DESTINO da escada (`floorChangeAt`), não o degrau; o monstro — posição sem `z` — vê o degrau
+  como parede, como no Tibia. A ocupação é por andar (`tileKey(x, y, z)`), e `occupied(x, y)`
+  sem `z` é o andar padrão do mapa.
+- **`monsterCount` é o TOTAL da instância, e o `Spawner` o ESPALHA pelo laço** (FUN-123, cópia
+  do Huntera: 2/5/8 no bueiro). O lugar `i` fica no ponto `⌊i × pontos / total⌋` — com menos
+  monstros que pontos eles cobrem o laço em intervalos iguais (o rodízio `i % pontos` deixava
+  seis dos catorze pontos do bueiro sem monstro em qualquer pull), com mais cada ponto recebe
+  o mesmo tanto; determinístico, igual em dois servidores com o mesmo conteúdo. O tile livre é
+  procurado até o `radius` DO PONTO, que a rota autora. Rota sem ponto de spawn é hunt sem
+  monstro. Com `spawnClearRadius` da hunt (#236), tile a menos disso de um participante vivo
+  conta como bloqueado: o spawn ADIA (`SPAWN_RETRY_MS`), nunca cancela — a densidade é a da
+  dificuldade, e é o que a referência §29 pede ao mandar não copiar a supressão do TFS.
+- **O cadáver é um evento de presença, e é só visual** (`ground-item-appeared` /
+  `ground-item-vanished`, FUN-123). O `sim` diz QUAL monstro morreu e ONDE; a arte é da tabela,
+  resolvida no hospedeiro (invariante 6). O prazo é o evento `CORPSE` na fila, com
+  `corpseTtlMs` da hunt — hunt sem o campo não deixa cadáver. Os cadáveres entram no snapshot
+  (`corpses`, `nextGroundItemId`), e o evento de apodrecer volta com a fila. O loot NUNCA passa
+  pelo cadáver: já foi para a caixa antes de ele cair.
+- **O ataque do monstro é uma faixa sorteada com o `Rng` da sessão** (`attackRange`, FUN-123):
+  o rato bate de 0 a 8, e a mesma semente dá o mesmo golpe — o contrato do loot vale para o
+  dano. Um número no JSON é a faixa de um valor só.
+- **A ability do monstro é conteúdo declarativo, normalizado no BOOT** (CMB-06, DT-01/DT-02).
+  `monster.abilities` ausente vira UMA básica montada de `attack`/`attackIntervalMs`/
+  `attackRange`/`damageType`, e é isso que preserva o rato bit a bit — mesmo sorteio, mesma
+  ordem de evento. A básica usa o subject `m:<id>` e o kind `monster-attack` de sempre; as
+  declaradas usam subject derivado `m:<id>:<abilityId>` e kind `monster-ability`, e a morte as
+  cancela pelos ids que o conteúdo conhece (sem varrer a fila). A distância emite
+  `monster-ability-cast` ANTES dos `creature-hit`; o golpe de ability não-corpo-a-corpo é
+  `spell`. A ordem dos alvos de uma área é a de ENTRADA e é contrato; morto é pulado. O estado
+  "engatilhada OU agendada" é POR ABILITY: a básica em `attackReady`, as declaradas em
+  `scheduledAbilities` (opcional no snapshot, sem bump).
+- **A IA do TFS é entrada independente, evento na fila — nunca um "pensamento" por tick**
+  (#518, referência §15-19). `ability.chance` AUSENTE é sempre passa e NÃO consome sorteio (o
+  mesmo argumento do `blockChance`/CMB-04 e do `modifiers.critical`/CMB-08 — preserva rato e
+  rotworm bit a bit); declarada, consome UMA rolagem por vencimento mesmo em 1.
+  `#onMonsterAttack`/`#onMonsterAbility` REAGENDAM antes de rolar a chance, para o intervalo
+  correr mesmo quando a rolagem falha. `wave`/`beam` de ability saem na direção do ALVO,
+  recalculada a cada golpe por `facingDirection` (`area.ts`, eixo de maior deslocamento, empate
+  decide horizontal) — DIFERENTE de `directionOf`, que é do PASSO e sempre prioriza horizontal.
+  `monster.defenses` (cura própria) é evento POR DEFESA, subject derivado `m:<id>:<defenseId>`,
+  `scheduledDefenses` (opcional no snapshot); não depende de alvo, e de vida cheia não emite
+  `creature-healed` — a mesma regra de `#emitHealed`. `monster.targetChange` troca para um alvo
+  ao acaso DIFERENTE do atual dentro do `aggroRadius` (TFS `TARGETSEARCH_RANDOM`); a estratégia
+  ponderada do Canary e o `TARGETSEARCH_NEAREST` ficam de fora — nenhum monstro do recorte
+  precisa deles. `isMonsterFleeing` (`monster.ts`) é PURA — `health <= runOnHealth`, recalculada
+  a cada decisão, nunca um booleano guardado; fugindo, o passo é SEMPRE `fleeStep` (nunca
+  aproxima) e as abilities CORPO A CORPO (`isMeleeAbility`) nem armam nem executam — as de
+  alcance continuam, porque passo e ataque são decisões independentes. `staticAttack` está no
+  schema mas NÃO é wired: sem "pensamento" periódico separado do passo, simular o shuffle do
+  TFS exigiria um evento novo só para isso — divergência registrada em `docs/product/combat.md`.
+- **O alcance é da ARMA, e cada tipo bate do seu jeito** (#152, ADR 0026; perfis no CMB-05;
+  munição abstrata desde #420). `Inventory.weapon()` é a definição da arma na mão; `#attackRangeOf`
+  lê `weapon.range` dela, e só sem arma vale o alcance do perfil `fist` (`content.unarmed`).
+  `#strike` despacha pelo `weapon.kind`: `melee` como sempre; `distance` atira a munição
+  ESCOLHIDA da família (ADR 0032 decisão 7): `#ammoFor` devolve a `Ammunition` do `character.ammo`
+  (ou a básica da família, a primeira em ordem de id), e o `attack`/`damageType` do tiro são os
+  dela pela skill `distance`. **Não existe munição grátis:** sem saldo que cubra o `price`, o tiro
+  NÃO sai — nem `shot`, nem dano. Resolvido o golpe, `#strike` debita o `price` no personagem e em
+  `aggregates.goldSpent`, e emite `shot` com o `ammoId`. A escolha é por família, via
+  `CharacterRuntime.selectAmmo`, que valida `requires.level`; o `select-ammo` do host a leva a
+  `player-stats.ammo`. `wand` gasta
+  `manaPerHit`, causa dano MÁGICO por faixa (`rng.integer(min, max)`, uma
+  rolagem por golpe — contrato como o loot) e rende `spell-cast` pela mana. **O poder sai de
+  `resolveWeaponPower` com o PERFIL da arma** (`WeaponProfile`: família, tipo, alcance, `power` ou
+  `fixedDamage`): a família aponta a skill e a prática no conteúdo, e o ruleset não conhece nome de
+  item nem vocação (DT-01). Corpo a corpo e distância recebem a postura; wand/rod não, porque o
+  perfil delas não tem `power` — e por isso não ganham multiplicador de weapon skill (DT-02).
+  **Wand sem mana não bate**: o golpe fica agendado para o intervalo seguinte, sem gastar mana nem
+  praticar. A prática é UMA por golpe e não depende do dano final: imune, resistente ou morto no
+  impacto ainda pratica. O tiro emite `shot` ANTES do `creature-hit`; o projétil é da tabela,
+  resolvido no hospedeiro (invariante 6). `hands-full`: bow com escudo, ou escudo com bow, é
+  recusado — nunca trocado.
+- **A defesa é da PEÇA, e a fonte é do `Inventory`** (CMB-04, emenda do ADR 0031).
+  `Inventory.defenseSource` escolhe escudo → arma corpo a corpo de uma mão → nenhuma (DT-01/02),
+  reusando a mesma verdade de slot que já recusa bow com escudo; o ruleset não repete a regra.
+  `resolveDefense` (`combat/defense.ts`) é o estágio entre o Dodge e a armadura: sem fonte, ou
+  com tipo fora de `blockTypes`, é IDENTIDADE e **não consome sorteio** — é o que mantém o v1 bit
+  a bit. Com fonte e físico, é o SEGUNDO sorteio (o Dodge continua o primeiro), e ele é
+  consumido mesmo com `defense` 0, para a sequência não depender do valor da peça. O piso é
+  calculado sobre o poder BRUTO: o bloqueio nunca zera o golpe. Shielding sobe uma vez por
+  ataque físico elegível RECEBIDO (`#onMonsterAttack`), nunca por tick, nunca por HP perdido e
+  nunca em elemental. Não há fight mode, opcode nem UI (DT-03).
+- **Condição é evento, não acumulador; a direção é do `#step`; cooldown tem três livros** (#155).
+  Haste, postura, magic shield e cura ao longo do tempo são `ConditionState` no personagem
+  (`conditions.ts`, uma por tipo, relançar substitui) com `expiresAtMs` LÓGICO, e o vencimento
+  é `CONDITION_EXPIRE` na fila — um `remainingMs -= dtMs` em qualquer lugar quebra a
+  equivalência de taxas. `castSpell` DEVOLVE a condição; quem agenda é o ruleset, que tem a
+  fila. O haste é `Movable.speedScale`, lido por `movementDuration` à parte de `speed`, porque
+  `retarget` e a entrada reescrevem `speed` pela tabela. A direção do personagem é gravada só
+  em `#step` (diagonal: a horizontal decide) e é de onde saem onda, cleave e feixe
+  (`area.ts`, puro: forma → tiles; a mira colhe quem está nos tiles por `Set` de chaves, uma
+  alocação do tamanho da forma). `Cooldowns` guarda `spell:`, `group:` e `secondary:` no mesmo
+  mapa; `group-cooldown` carrega o prazo do livro que trancou. Uma magia de `basePower` não
+  passa pelo `powerMultiplier` das skills por uso — a skill já entrou na conversão.
 - **`tilesAround` mora em `movement.ts`, não no spawner.** Tem dois donos desde a FUN-71 — o
   respawn da hunt e a chegada na praça —, e geometria de tile não é assunto de hunt.
+- **Evento de combate carrega o APLICADO, e a ordem é contrato** (`combat-events.ts`,
+  FUN-109). `creature-hit`/`creature-healed` saem ANTES do `creature-health-changed` que
+  explicam, e `spell-cast` antes dos golpes dele — o número flutuante acompanha a barra, não o
+  contrário. A vida do personagem é anunciada de TODO lugar que a escreve (golpe, cura, poção,
+  regeneração, level up e penalidade de morte); um caminho novo que mude `character.health`
+  ou `character.maxHealth` sem `#emitCharacterHealth` é a barra do jogador parando até a
+  reanexação. O máximo entra na lista porque `retarget` (`progression.ts`) reescreve os dois
+  de uma vez, e de vida cheia a regeneração não anuncia nada — o level up que não anuncia
+  fica com o máximo velho na barra até a reanexação. `targets` do `spell-cast` é vetor NOVO de
+  propósito: `#spellHits` é reaproveitado, e o evento é drenado depois.
+- **Outcome avançado é etapa explícita, e a ausência de modificador preserva o v1** (CMB-08,
+  emenda do ADR 0031). `resolveDamage` continua PURO e decide o resolvido e o crítico;
+  `applyDamageOutcome` (`combat/outcome.ts`) é a ÚNICA etapa que escreve recurso — mana shield,
+  HP efetivamente removido e leech —, e opera só os runtimes da sessão dona. O mana shield saiu
+  de `CharacterRuntime.receiveDamage`, que voltou a ser só vida; o escudo absorve até onde a
+  mana alcança e segue ativo até vencer mesmo com mana zero. A ordem do RNG é contrato: Dodge
+  (1º, sempre), defesa (2º, se elegível), crítico (3º, **só quando `intent.modifiers.critical`
+  é declarado** — declarado com chance 0 ainda consome). `combat.modifiers` ausente NÃO consome
+  sorteio nenhum, e é o que mantém bit a bit o CMB-02/03/04; por isso o conteúdo real não o
+  declara ainda. O leech usa o HP APLICADO (`healthDamage`), nunca o resolvido — overkill e
+  absorção total não rendem leech — e o que de fato repõe é clampado no teto do atacante. O
+  `creature-hit` e a contribuição usam `healthDamage`; `bestBasicHit`/`bestSpellHit` continuam
+  com o RESOLVIDO. O `AppliedDamageOutcome` é efêmero: não entra no snapshot nem no S2C, e não
+  há campo de protocolo nem UI de breakdown (DT-03).
+- **A conformance de combate é ORÁCULO explícito, nunca snapshot da implementação** (CMB-10,
+  #336). `combat/conformance.test.ts` prende fórmula, ordem de RNG e arredondamento com dados
+  escritos à mão, cada caso a 100 ms, a 1000 ms e com snapshot/retomada; o `RngState` é
+  comparado entre as três, nunca copiado para o oráculo — ele não é número que se lê, é
+  propriedade de equivalência. `combat/conformance.ts` é a comparação PURA; o cenário misto do
+  benchmark vive em `tools` e a interpretação da linha de base em
+  `docs/product/combat-conformance.md`.
+- **`circle` tem DOIS mecanismos de raio, e o parâmetro `source` de `areaTiles` (#523) escolhe
+  qual** — a magia usa as `AREA_CIRCLEnXn` nomeadas do Canary (raio 1-3 com bônus de
+  achatamento, raio ≥ 4 diamante puro, SEM o bônus — uma descontinuidade real da autoria, não um
+  erro de leitura), a ability de monstro usa a tabela de anéis de `AreaCombat::setupArea(radius)`
+  (mecanismo diferente, escala de raio diferente: raio de monstro 5 e raio de magia 3 dão a
+  MESMA forma por coincidência, não porque sejam o mesmo raio). O default é `'spell'` — quem
+  escreve uma ability de monstro em área precisa passar `'monster'` explicitamente (só
+  `monster/ability.ts` faz isso hoje); esquecer faz a ability usar a tabela errada em silêncio,
+  sem erro de tipo nenhum para pegar.
+- **Hunt multiandar (#519): o monstro carrega `z` para achar o PRÓPRIO andar, nunca para trocar
+  de andar sozinho.** `MonsterRuntime.position`/`.home` passaram a ser `FloorPoint` (`z`
+  opcional — ausente é snapshot anterior a esta issue, ou hunt de andar único). Isso faz `zOf`
+  (`movement.ts`) resolver o andar CERTO para ele em `canOccupy`/`move`/ocupação — sem isso, todo
+  monstro de um mapa multiandar seria tratado como se estivesse no andar padrão do mapa. O
+  `crossesFloors: false` de `MonsterRuntime` é o que impede esse `z` novo de virar permissão de
+  usar escada: antes desta issue, "não carrega `z`" e "não sobe escada" eram a MESMA checagem
+  (`'z' in from`); agora são duas, porque o monstro passou a satisfazer a primeira sem poder
+  satisfazer a segunda. Mexer nessa dupla checagem sem entender as duas metades quebra uma das
+  duas invisivelmente.
+- **Todo lugar que compara alvo por distância confere o ANDAR primeiro** (#519,
+  `sameFloor`/`FloorPoint` em `monster/step.ts`): `chooseTarget`, `selectTarget`/`countTargets`/
+  `countAreaTargets` (`targeting.ts`), `abilityTargets` (`monster/ability.ts`) e
+  `#spawnBlockedFor`/`#liveTargetOf`/`#holdFollow` (`hunt.ts`). `sameFloor(a, b)` é NO-OP quando
+  QUALQUER lado é `undefined` — é o que mantém bit a bit toda hunt de andar único e todo
+  snapshot anterior a esta issue, onde `z` nunca era escrito. Antes desta issue,
+  `abilityTargets` FORÇAVA `z: caster.z` em todo candidato antes de montar a chave — parecia
+  reforçar "mesmo andar", mas na verdade fazia o oposto: aceitava QUALQUER andar do candidato,
+  porque a chave comparada era sempre a do lançador. Ver #519 no ADR 0025 (emenda).
+- **`Blocked` (`monster/step.ts`) ganhou dois parâmetros opcionais, `z` e `monsterId` — nesta
+  ordem, e os dois só importam para o spawner.** O passo guloso de personagem e monstro continua
+  chamando com dois argumentos; `Spawner.#freeTile` é quem passa os quatro, porque só ele
+  precisa saber EM QUE andar e PARA QUAL monstro a checagem vale (`spawnClearRadius` só corre
+  para quem é `blockable` — #519, o `isBlockable` do TFS/Canary, onde NÃO esperar é o padrão de
+  1.640/1.656 do bestiário, não a exceção).

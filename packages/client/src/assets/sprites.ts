@@ -27,6 +27,19 @@ export interface SheetPixels {
   readonly pixels: Uint8ClampedArray;
 }
 
+/**
+ * Um quadro recortado, ainda em pixels — o que existe ANTES de virar `ImageBitmap`.
+ *
+ * O compositor de outfit (FUN-20) precisa disto: ele multiplica a base pelo template pixel a
+ * pixel, e um `ImageBitmap` é opaco — não dá para ler os bytes de volta sem passar por um
+ * canvas. É a mesma geometria, o mesmo recorte e a mesma folha de `get`; só não vira bitmap.
+ */
+export interface SpritePixels {
+  readonly pixels: Uint8ClampedArray;
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface SpriteCacheOptions {
   /**
    * Orçamento em BYTES, nunca em contagem de quadros. Ver `bitmap-budget.ts` para o porquê.
@@ -39,6 +52,8 @@ export interface SpriteCacheOptions {
     pixels: Uint8ClampedArray, width: number, height: number,
   ) => Promise<Sprite>;
   readonly now?: () => number;
+  /** Ver `BitmapBudgetOptions.onEvict`: quem construiu textura sobre o bitmap precisa saber. */
+  readonly onEvict?: (spriteId: number, sprite: Sprite) => void;
 }
 
 export class SpriteCache {
@@ -53,7 +68,10 @@ export class SpriteCache {
   constructor(catalog: Catalog, options: SpriteCacheOptions) {
     this.#catalog = catalog;
     this.#options = options;
-    this.#budget = new BitmapBudget(options.maxBytes, options.now ?? (() => Date.now()));
+    this.#budget = new BitmapBudget(options.maxBytes, {
+      now: options.now ?? (() => Date.now()),
+      ...(options.onEvict === undefined ? {} : { onEvict: options.onEvict }),
+    });
   }
 
   /** Quanto o cache está segurando, em bytes. Existe para o teste poder afirmar o teto. */
@@ -77,10 +95,35 @@ export class SpriteCache {
     return promise;
   }
 
+  /**
+   * Os pixels crus de um id, sem bitmap e sem orçamento — `null` pelas mesmas razões de `get`.
+   *
+   * **Não é guardado.** Quem pede pixels vai compor algo a partir deles, e é a COMPOSIÇÃO que
+   * merece cache (`OutfitComposer`); guardar também a matéria-prima seria pagar duas vezes
+   * pelo mesmo quadro. A folha, que é o insumo caro, continua deduplicada em voo: a base e o
+   * template de um outfit são ids vizinhos, e pedidos juntos a decodificam uma vez.
+   */
+  async pixels(spriteId: number): Promise<SpritePixels | null> {
+    return this.#cut(spriteId);
+  }
+
   /** Fecha tudo. Sem isto, trocar de mapa vaza a memória de GPU da tela anterior. */
   clear(): void { this.#budget.clear(); }
 
   async #slice(spriteId: number): Promise<Sprite | null> {
+    const cut = await this.#cut(spriteId);
+    if (cut === null) return null;
+    const sprite = await this.#options.createBitmap(cut.pixels, cut.width, cut.height);
+    this.#budget.put(spriteId, sprite);
+    return sprite;
+  }
+
+  /**
+   * Do id ao recorte. É o ÚNICO lugar que sabe o caminho folha → posição → quadro; `get` e
+   * `pixels` diferem só no que fazem com o resultado. Duplicar isto é como os dois passam a
+   * discordar sobre onde um sprite está.
+   */
+  async #cut(spriteId: number): Promise<SpritePixels | null> {
     const sheet = sheetFor(this.#catalog, spriteId);
     if (sheet === null) return null;
     const at = positionInSheet(sheet, spriteId);
@@ -89,10 +132,7 @@ export class SpriteCache {
     const pixels = await this.#sheetPixels(sheet.file);
     const frame = cutOut(pixels, at.x, at.y, sheet.width, sheet.height);
     if (frame === null) return null;
-
-    const sprite = await this.#options.createBitmap(frame, sheet.width, sheet.height);
-    this.#budget.put(spriteId, sprite);
-    return sprite;
+    return { pixels: frame, width: sheet.width, height: sheet.height };
   }
 
   /** A folha, com deduplicação: dez quadros dela pedidos juntos a decodificam uma vez. */

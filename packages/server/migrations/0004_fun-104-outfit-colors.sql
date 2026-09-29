@@ -1,0 +1,14 @@
+-- FUN-104: as cores do outfit são dado do PERSONAGEM, e sobrevivem à sessão.
+--
+-- Aditiva por construção (ADR 0014): coluna nova, nulável, sem default de conteúdo. Personagem
+-- gravado antes disto lê `null`, o ticket sai sem cores, e o cliente o pinta com as cores de
+-- personagem novo — que é exatamente o que ele já fazia com todo mundo.
+--
+-- `jsonb` e não quatro colunas inteiras: cabeça, corpo, pernas e pés só existem JUNTOS — meia
+-- escolha não é uma escolha —, e a forma é a do protocolo (`OutfitColors`), lida a cada emissão
+-- de ticket. `jsonb` guarda a forma já parseada, então a leitura não paga o parse de novo.
+--
+-- Quem valida a forma é quem monta o ticket, não o banco: um valor fora da paleta vira AUSENTE
+-- no ticket, nunca uma linha que não se consegue ler. Um CHECK aqui amarraria o tamanho da
+-- paleta — que é do pacote de assets, não do schema — a uma migração.
+ALTER TABLE character ADD COLUMN outfit_colors jsonb;

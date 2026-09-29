@@ -7,7 +7,9 @@ import type { CharacterRecord } from '../db/repository.js';
 const CHARACTER: CharacterRecord = {
   id: 'p1', accountId: 'a1', name: 'Hero', vocation: null, level: 1, xp: 0, gold: 0,
   capacity: 400, premiumUntil: null, staminaMs: 86400000, staminaUpdatedAt: new Date(),
-  state: 'city', sessionId: null, botConfig: null, skills: {}, createdAt: new Date(),
+  state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
+  ammo: null, supplyStock: null, ammunitionStock: null,
+  createdAt: new Date(),
 };
 
 const NODE = { nodeId: 'n1', sessions: 0, url: 'ws://n1:7171' };
@@ -142,6 +144,153 @@ describe('POST /api/tickets', () => {
     expect(issue).toHaveBeenCalledWith(
       'a1', 'p1', expect.objectContaining({ level: 1, xp: 0 }), NODE,
     );
+  });
+
+  it('as cores do outfit da linha entram no ticket; corrompidas ou nulas, ficam de fora (FUN-104)', async () => {
+    // Mesmo caminho do nome e do `botConfig`: a linha é lida sob a trava e o que ela diz vai
+    // no ticket. O `null` de quem nunca escolheu NÃO vira chave — o `game` espalha o que
+    // recebe, e uma chave `undefined` no claim seria mentira no tipo. E a linha é `jsonb` sem
+    // CHECK: um valor fora da paleta cai fora aqui, sem trancar o login por causa de cor.
+    const issuedWith = async (outfitColors: unknown) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, outfitColors })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    const colors = { head: 78, body: 69, legs: 58, feet: 76 };
+    expect(await issuedWith(colors)).toMatchObject({ outfitColors: colors });
+    expect(await issuedWith(null)).not.toHaveProperty('outfitColors');
+    expect(await issuedWith({ head: 133, body: 69, legs: 58, feet: 76 }))
+      .not.toHaveProperty('outfitColors');
+  });
+
+  it('os abates da linha entram no ticket; nulos ou corrompidos, ficam de fora (FUN-113)', async () => {
+    // Mesmo caminho das skills: a linha é lida sob a trava e o que ela diz vai no ticket —
+    // é assim que o bônus dos marcos vale DURANTE a hunt, e não só depois dela. O `null` de
+    // quem nunca abateu nada NÃO vira chave (o `game` espalha o que recebe), e a linha é
+    // `jsonb` sem CHECK: uma contagem torta cai fora aqui, sem trancar o login por causa dela.
+    const issuedWith = async (bestiary: unknown) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, bestiary })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    const counts = { rat: 10_000, bat: 3 };
+    expect(await issuedWith(counts)).toMatchObject({ bestiary: counts });
+    expect(await issuedWith(null)).not.toHaveProperty('bestiary');
+    expect(await issuedWith({ rat: -1 })).not.toHaveProperty('bestiary');
+    expect(await issuedWith([10_000])).not.toHaveProperty('bestiary');
+  });
+
+  it('leva a munição escolhida quando a linha tem uma válida, e descarta a torta (#152)', async () => {
+    // A mesma régua do Bestiário: uma escolha torta vira ausente — a sessão atira a grátis —,
+    // nunca login recusado por causa de uma preferência.
+    const issuedWith = async (ammo: unknown) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, ammo })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    expect(await issuedWith({ arrow: 'sniper-arrow' })).toMatchObject({ ammo: { arrow: 'sniper-arrow' } });
+    expect(await issuedWith(null)).not.toHaveProperty('ammo');
+    expect(await issuedWith({ arrow: 7 })).not.toHaveProperty('ammo');
+    expect(await issuedWith(['arrow'])).not.toHaveProperty('ammo');
+  });
+
+  it('leva a vocação da linha, e a ausência quando ainda não há uma (#154)', async () => {
+    // A vocação é escrita uma vez pelo `jobs` e volta pelo ticket a cada entrada — sem isto o
+    // diálogo do level 8 reapareceria a cada login. Mutação que mata: tirar o espalhamento.
+    const issuedWith = async (vocation: string | null) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, vocation })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    expect(await issuedWith('knight')).toMatchObject({ vocation: 'knight' });
+    expect(await issuedWith(null)).not.toHaveProperty('vocation');
+  });
+
+  it('deriva o Premium do personagem de `premiumUntil`, contra o relógio (#400, D3)', async () => {
+    // O `api` resolve a data e o `game` lê só o boolean (a sessão nunca compara datas). Ativo
+    // vira `premium: true`; `null` ou vencido vira AUSENTE — que a sessão trata como Free.
+    const issuedWith = async (premiumUntil: Date | null) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, premiumUntil })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    expect(await issuedWith(new Date(Date.now() + 60_000))).toMatchObject({ premium: true });
+    expect(await issuedWith(null)).not.toHaveProperty('premium');
+    expect(await issuedWith(new Date(Date.now() - 60_000))).not.toHaveProperty('premium');
+  });
+
+  it('reconstrói os containers pela posição gravada; a linha sem posição entra no primeiro lugar livre (#160)', async () => {
+    // Mutação que mata: ignorar `container`/`slotIndex` (tudo cairia na lista plana), ou
+    // perder a linha antiga em vez de encaixá-la.
+    const row = (id: string, slot: string | null, container: string | null, slotIndex: number | null) => ({
+      id, itemId: 'rock', ownerCharacterId: 'p1', quantity: 1, origin: 'loot', equippedSlot: slot,
+      container, slotIndex, createdAt: new Date(0),
+    });
+    const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+    const response = await post(build({
+      tickets: { issue } as never,
+      listItemInstances: async () => [
+        row('a', null, 'backpack', 3),
+        row('b', null, 'satchel', 0),
+        row('old', null, null, null),
+        row('dup', null, 'backpack', 3),
+        row('worn', 'hand', null, null),
+      ],
+    }), { characterId: 'p1' });
+    expect(response.statusCode).toBe(200);
+    const inventory = (issue.mock.calls[0]?.[2] as { inventory: { backpack: unknown[]; satchel: unknown[]; equipped: Record<string, unknown> } }).inventory;
+    expect(inventory.backpack[3]).toMatchObject({ instanceId: 'a' });
+    expect(inventory.satchel[0]).toMatchObject({ instanceId: 'b' });
+    expect(inventory.equipped['hand']).toMatchObject({ instanceId: 'worn' });
+    // As duas sem lugar — a antiga e a que colidiu — entram nos primeiros vazios da mochila.
+    expect(inventory.backpack[0]).toMatchObject({ instanceId: 'old' });
+    expect(inventory.backpack[1]).toMatchObject({ instanceId: 'dup' });
+    expect(inventory.backpack[2]).toBeNull();
   });
 
   it('resolve o nó ANTES de abrir a trava de linha (FUN-53)', async () => {

@@ -9,6 +9,20 @@
 // despejo, teto de bytes e degradação testáveis sem um banco — e é a mesma razão de
 // `sheet-loader.ts` não conhecer `Worker`.
 
+/**
+ * A versão do que `fromBitmap` (`sheet.ts`) DEVOLVE, e não do que ele lê.
+ *
+ * O que está guardado é o resultado do decoder, não o arquivo: quando uma correção lá muda os
+ * pixels do MESMO hash — a ordem das linhas, a cor de transparência, o alfa — o que está no
+ * disco do jogador virou mentira, e o hash não sabe disso. Suba este número a cada mudança que
+ * altere pixels; sem isso, quem já jogou uma vez fica com a folha velha para sempre, e o
+ * defeito "só acontece na máquina dele".
+ *
+ *   1 — linhas lidas na ordem do arquivo (espelhava a folha na vertical)
+ *   2 — ordem das linhas pelo sinal da altura do BMP
+ */
+export const DECODED_FORMAT = 2;
+
 /** Uma folha guardada: os pixels já em RGBA, prontos para virar `ImageBitmap`. */
 export interface CachedSheet {
   readonly width: number;
@@ -53,9 +67,13 @@ export interface SheetCacheOptions {
  *
  * A versão do pacote entra junto porque duas versões podem trazer folhas de mesmo nome com
  * conteúdo diferente, e aí o hash sozinho mentiria.
+ *
+ * E a versão do DECODER entra na frente porque o que está guardado é o resultado dele, não o
+ * arquivo: uma correção em `fromBitmap` muda os pixels do mesmo hash, e sem este prefixo o
+ * jogador que já visitou uma vez ficaria com a folha decodificada errado para sempre.
  */
 export function sheetKey(packVersion: string, file: string): string {
-  return `${packVersion}/${file}`;
+  return `v${DECODED_FORMAT}/${packVersion}/${file}`;
 }
 
 /** Quantos bytes uma folha ocupa. Os pixels são o que importa; o resto é ruído. */

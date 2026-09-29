@@ -1,0 +1,16 @@
+{
+  "id": "mace",
+  "name": "Mace",
+  "kind": "weapon",
+  "slot": "hand",
+  "weight": 38,
+  "value": 30,
+  "attack": 16,
+  "defense": 11,
+  "weapon": {
+    "kind": "melee",
+    "family": "club",
+    "range": 1
+  },
+  "_open": "Loot do Rotworm (TibiaWiki: atk 16, def 11, 38 oz). value 30 é o preço de NPC do Tibia, provisório — nenhum NPC de venda existe ainda."
+}

@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { advancedFeaturesUsed, validateBotConfig } from './bot.js';
+import { validateBotConfig, validateBotConfigV2 } from './bot.js';
 import { buildContent } from './content.js';
 import {
-  BOT_CATEGORIES, BOT_VOCABULARY_VERSION, botConfigSchema, botConditionSchema,
-  botLureSchema, botRingSwapSchema, botTargetingSchema,
+  BOT_CATEGORIES, BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigSchema,
+  botConditionSchema, botConfigV2Schema, botExitRuleSchema, botLureSchema, botRingSwapSchema,
+  botRuleSchema, botTargetingSchema,
 } from './schemas.js';
-import type { BotConfig } from './schemas.js';
+import type { BotConfig, BotConfigV2, BotExitRule, BotSlot } from './schemas.js';
 
 /**
  * O conteúdo mínimo que a validação cruzada precisa: os limites, e os catálogos contra os
@@ -17,13 +18,13 @@ const content = buildContent({
     {
       id: 'rat', name: 'Rat', recommendedLevel: 1,
       health: 20, experience: 5, attack: 6, armor: 0,
-      attackIntervalMs: 2_000, stepDurationMs: 500, aggroRadius: 4,
+      attackIntervalMs: 2_000, speed: 300, aggroRadius: 4,
       loot: { items: [] },
     },
     {
       id: 'wolf', name: 'Wolf', recommendedLevel: 3,
       health: 40, experience: 12, attack: 12, armor: 2,
-      attackIntervalMs: 2_000, stepDurationMs: 400, aggroRadius: 5,
+      attackIntervalMs: 2_000, speed: 300, aggroRadius: 5,
       loot: { items: [] },
     },
   ],
@@ -36,40 +37,52 @@ const content = buildContent({
   progression: [{
     id: 'baseline', startingHealth: 150, startingMana: 60, startingCapacity: 400,
     healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
-    vocationLevel: 8, stepDurationMs: 500,
+    vocationLevel: 8, startingSpeed: 300, speedPerLevel: 0,
     regen: { healthPerSecond: 1, manaPerSecond: 1 },
-    xp: { base: 20, exponent: 2 },
-    deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
+    xp: { kind: 'power', base: 20, exponent: 2 },
+    deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
   }],
   combat: [{
     id: 'baseline', dodgeMultiplier: 0.5,
-    armorEffectiveness: { melee: 1, magic: 0 }, minimumDamageFraction: 0.1,
+    armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 }, minimumDamageFraction: 0.1,
     player: {
       attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 4, dodgeChance: 0.05,
     },
   }],
   stamina: [{ id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 }],
+  party: [{ id: 'baseline', maxMembers: 4 }],
   bot: [{
     id: 'baseline', vocabularyVersion: BOT_VOCABULARY_VERSION, categoryCooldownMs: 1_000,
-    advancedFromLevel: 50,
     slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
   }],
-  spells: [{
-    id: 'strong-heal', name: 'Cura Forte', manaCost: 20, cooldownMs: 1_000,
-    effect: { kind: 'heal', amount: 60 },
-  }],
-  supplies: [{
-    id: 'health-potion', name: 'Poção de Vida', price: 45,
-    effect: { kind: 'heal', amount: 80 },
-  }],
+  spells: [
+    {
+      id: 'strong-heal', name: 'Cura Forte', manaCost: 20, cooldownMs: 1_000,
+      effect: { kind: 'heal', amount: 60 },
+    },
+    {
+      id: 'heal-friend-test', name: 'Cura em Amigo', manaCost: 25, cooldownMs: 1_000,
+      effect: { kind: 'heal', amount: 50, target: 'friend', range: 4 },
+    },
+  ],
+  supplies: [
+    {
+      id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion',
+      effect: { kind: 'heal', amount: 80 },
+    },
+    {
+      id: 'mana-potion-friend', name: 'Poção de Mana em Amigo', price: 50, group: 'potion',
+      effect: { kind: 'mana', amount: 100, target: 'friend', range: 1 },
+    },
+  ],
   items: [
     {
       id: 'spike-sword', name: 'Spike Sword', kind: 'weapon',
-      slot: 'hand', weight: 50, attack: 24,
+      slot: 'hand', weight: 50, value: 0, attack: 24,
     },
     {
       id: 'life-ring', name: 'Life Ring', kind: 'ring',
-      slot: 'finger', weight: 1, armor: 2,
+      slot: 'finger', weight: 1, value: 0, armor: 2,
     },
   ],
 });
@@ -82,9 +95,9 @@ const rule = (percent: number) => ({
 const config = (over: Partial<BotConfig> = {}): BotConfig =>
   // Pelo SCHEMA, e não por literal: é o schema que sabe preencher `targeting` e o que vier
   // depois dele. Um literal aqui obriga toda fixture a acompanhar cada campo novo com default,
-  // que é trabalho que o parse já faz — e do jeito que a produção faz.
+  // que é o trabalho que o parse já faz — e do jeito que a produção faz.
   botConfigSchema.parse({
-    version: BOT_VOCABULARY_VERSION,
+    version: BOT_VOCABULARY_VERSION_V1,
     heal: [], potion: [], attack: [], rune: [], support: [],
     ...over,
   });
@@ -214,11 +227,11 @@ describe('a referência cruzada, que a FUN-73 deixou como gancho (FUN-74, FUN-77
     )).toHaveLength(1);
   });
 
-  it('recusa item SEMPRE — o catálogo existe, mas usar item exige inventário', () => {
-    // Desde a FUN-76 o catálogo existe, então a recusa mudou de motivo: não é mais "não há
-    // catálogo", é "não há inventário" (FUN-82). Aceitar a regra faria o bot escolhê-la e o
-    // atuador recusá-la em silêncio a cada avaliação — um slot morto que o jogador não
-    // consegue explicar.
+  it('recusa item SEMPRE — o catálogo e o inventário existem, mas falta o atuador', () => {
+    // Desde a FUN-76 o catálogo existe e desde a FUN-82 (#160) o inventário também — a recusa
+    // mudou de motivo de novo: não é mais "não há catálogo" nem "não há inventário", é "não há
+    // atuador". Aceitar a regra faria o bot escolhê-la e o atuador recusá-la em silêncio a cada
+    // avaliação — um slot morto que o jogador não consegue explicar.
     const problems = validateBotConfig(
       config({
         support: [{
@@ -229,11 +242,11 @@ describe('a referência cruzada, que a FUN-73 deixou como gancho (FUN-74, FUN-77
       content,
     );
     expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain('inventário');
+    expect(problems[0]).toContain('atuador');
   });
 
   it('e o item que nem existe no catálogo é recusado por OUTRO motivo', () => {
-    // A distinção importa para quem lê: "não existe" manda corrigir o id; "exige inventário"
+    // A distinção importa para quem lê: "não existe" manda corrigir o id; "exige um atuador"
     // manda esperar. Uma mensagem só para os dois casos faria o jogador procurar um erro de
     // digitação que não está lá.
     const problems = validateBotConfig(
@@ -246,7 +259,7 @@ describe('a referência cruzada, que a FUN-73 deixou como gancho (FUN-74, FUN-77
       content,
     );
     expect(problems[0]).toContain('não existe');
-    expect(problems[0]).not.toContain('inventário');
+    expect(problems[0]).not.toContain('atuador');
   });
 });
 
@@ -292,6 +305,26 @@ describe('regras de saída têm teto (FUN-86)', () => {
   it('aceita o que cabe, e lista vazia é o padrão', () => {
     expect(validateBotConfig(config(), content)).toEqual([]);
     expect(config().exit).toEqual([]);
+  });
+
+  it('aceita out-of-capacity e combinações de tipos dentro do limite de 4 slots', () => {
+    expect(botExitRuleSchema.safeParse({ kind: 'out-of-capacity' }).success).toBe(true);
+    const todas: BotExitRule[] = [
+      { kind: 'hp-below', percent: 30 },
+      { kind: 'out-of-gold' },
+      { kind: 'party-member-lost' },
+      { kind: 'out-of-capacity' },
+    ];
+    expect(validateBotConfig(config({ exit: todas }), content)).toEqual([]);
+
+    const excesso: BotExitRule[] = [
+      ...todas,
+      { kind: 'hp-below', percent: 50 },
+    ];
+    const problems = validateBotConfig(config({ exit: excesso }), content);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('5');
+    expect(problems[0]).toContain('4');
   });
 });
 
@@ -340,19 +373,172 @@ describe('lure e ring swap: a seção AVANÇADA do vocabulário (FUN-87, §13.7 
     expect(problema).toContain('hand');
   });
 
-  it('os dois são AVANÇADOS por nome, sem passar pela lista de conteúdo', () => {
-    // O §13.2 cita lure e ring swap como o que o bot avançado tem. Aqui seguir a especificação
-    // é fixar em código; pôr os dois em `advancedOnly` seria fingir que o conteúdo decidiu.
-    expect(content.bot.advancedOnly.conditions).toEqual([]);
-    expect(content.bot.advancedOnly.postures).toEqual([]);
-
-    expect(advancedFeaturesUsed(config(), content.bot)).toEqual([]);
-    expect(advancedFeaturesUsed(config({ lure: { min: 2, max: 5 } }), content.bot))
-      .toEqual(['lure dinâmico']);
-
+  it('os dois deixaram de ter gate de level (AB-03)', () => {
+    // O §13.2 exigia level 50 para lure e ring swap; o ADR 0032 d.4 revogou o gate. Aqui a
+    // asserção é que a configuração v1 continua válida SEM o gate — o juiz v1 não olha mais
+    // level nenhum.
     const parsed = ring();
     if (!parsed.success) throw new Error('a fixture do anel deveria parsear');
-    expect(advancedFeaturesUsed(config({ ringSwap: parsed.data }), content.bot))
-      .toEqual(['troca de anel']);
+    expect(validateBotConfig(config({ lure: { min: 2, max: 5 }, ringSwap: parsed.data }), content))
+      .toEqual([]);
+  });
+});
+
+describe('o juiz do vocabulário v2 (AB-03)', () => {
+  const emptySlots = (): (BotSlot | null)[] => Array.from({ length: 24 }, () => null);
+  const set = (slots = emptySlots()) => ({ slots });
+  const v2 = (over: Partial<BotConfigV2> = {}): BotConfigV2 => botConfigV2Schema.parse({
+    version: 2,
+    sets: [set(), set(), set(), set()],
+    ...over,
+  });
+
+  it('recusa magia e supply inexistentes nomeando conjunto e slot', () => {
+    const badSpell = v2({
+      sets: [
+        set([{ do: { kind: 'spell', spellId: 'nao-existe' }, when: [], auto: true }, ...emptySlots().slice(1)]),
+        set(), set(), set(),
+      ],
+    });
+    expect(validateBotConfigV2(badSpell, content)[0]).toContain('conjunto 1, slot 1');
+    expect(validateBotConfigV2(badSpell, content)[0]).toContain('nao-existe');
+
+    const badSupply = v2({
+      sets: [
+        set([null, { do: { kind: 'supply', supplyId: 'nao-existe' }, when: [], auto: true }, ...emptySlots().slice(2)]),
+        set(), set(), set(),
+      ],
+    });
+    expect(validateBotConfigV2(badSupply, content)[0]).toContain('conjunto 1, slot 2');
+  });
+
+  it('aceita o que existe, e confere as automações contra o catálogo', () => {
+    const good = v2({
+      sets: [
+        set([{ do: { kind: 'spell', spellId: 'strong-heal' }, when: [], auto: true }, ...emptySlots().slice(1)]),
+        set(), set(), set(),
+      ],
+    });
+    expect(validateBotConfigV2(good, content)).toEqual([]);
+
+    const badAutomation = v2({
+      automations: [{ model: 'renew-ring', params: { itemId: 'nao-existe' }, enter: [], exit: [] }],
+    });
+    const problems = validateBotConfigV2(badAutomation, content);
+    expect(problems[0]).toContain('renew-ring');
+    expect(problems[0]).toContain('nao-existe');
+  });
+});
+
+describe('o interruptor por regra (#162)', () => {
+  it('a configuração gravada antes do campo continua válida, e a regra desligada continua contando slot', () => {
+    // Mutação que mata: `enabled` obrigatório (a config antiga reprova), ou `validateBotConfig`
+    // contar só as ligadas (desligar viraria truque para ganhar slot).
+    expect(botConfigSchema.safeParse(config({ heal: [rule(30)] })).success).toBe(true);
+    const parsed = botConfigSchema.parse(config({ heal: [{ ...rule(30), enabled: false }] }));
+    expect(parsed.heal[0]?.enabled).toBe(false);
+    const problems = validateBotConfig(
+      config({ heal: [rule(30), rule(55), { ...rule(80), enabled: false }, rule(90)] }), content,
+    );
+    expect(problems.length).toBeGreaterThan(0);
+  });
+});
+
+describe('follow de membro e alvo de regra (§24-30, ADR 0035 d.9 e d.10)', () => {
+  it('follow ausente é none, e os três kind parseiam', () => {
+    // Mutação que mata: tirar o `.default({ kind: 'none' })` — toda configuração salva antes
+    // deste campo viraria inválida.
+    expect(config().follow).toEqual({ kind: 'none' });
+    for (const follow of [
+      { kind: 'none' }, { kind: 'leader' }, { kind: 'member', characterId: 'abc' },
+    ]) {
+      expect(botConfigSchema.parse({ ...config(), follow }).follow).toEqual(follow);
+    }
+    expect(botConfigSchema.safeParse({ ...config(), follow: { kind: 'guild' } }).success).toBe(false);
+  });
+
+  it('target ausente é self, e os três kind parseiam', () => {
+    // Mutação que mata: tirar o `.default({ kind: 'self' })` — toda regra salva sem `target`
+    // reprovaria.
+    expect(botRuleSchema.parse(rule(30)).target).toEqual({ kind: 'self' });
+    for (const target of [
+      { kind: 'self' }, { kind: 'lowest-hp-member' }, { kind: 'member', characterId: 'abc' },
+    ]) {
+      expect(botRuleSchema.parse({ ...rule(30), target }).target).toEqual(target);
+    }
+  });
+
+  it('recusa alvo diferente de self em attack e rune, nomeando a categoria', () => {
+    // Mutação que mata: trocar `category === 'attack' || category === 'rune'` por só uma delas.
+    const attack = validateBotConfig(
+      config({
+        attack: [{
+          ...rule(50), do: { kind: 'spell', spellId: 'strong-heal' },
+          target: { kind: 'lowest-hp-member' },
+        }],
+      }),
+      content,
+    );
+    expect(attack).toHaveLength(1);
+    expect(attack[0]).toContain('attack');
+
+    const rune = validateBotConfig(
+      config({
+        rune: [{
+          ...rule(50), do: { kind: 'spell', spellId: 'strong-heal' },
+          target: { kind: 'lowest-hp-member' },
+        }],
+      }),
+      content,
+    );
+    expect(rune).toHaveLength(1);
+    expect(rune[0]).toContain('rune');
+  });
+
+  it('recusa alvo em outro personagem quando a magia é self-only, e aceita quando ela é friend', () => {
+    // Mutação que mata: remover a checagem `effect.target === 'friend'`, deixando qualquer
+    // heal/mana valer como alvo de terceiro.
+    const selfOnly = validateBotConfig(
+      config({ heal: [{ ...rule(50), target: { kind: 'lowest-hp-member' } }] }), // do: strong-heal
+      content,
+    );
+    expect(selfOnly).toHaveLength(1);
+    expect(selfOnly[0]).toContain('heal');
+
+    const friendTargetable = validateBotConfig(
+      config({
+        heal: [{
+          ...rule(50), do: { kind: 'spell', spellId: 'heal-friend-test' },
+          target: { kind: 'lowest-hp-member' },
+        }],
+      }),
+      content,
+    );
+    expect(friendTargetable).toEqual([]);
+  });
+
+  it('a mesma regra vale para supply: self-only recusa, friend aceita', () => {
+    const selfOnly = validateBotConfig(
+      config({
+        potion: [{
+          ...rule(50), do: { kind: 'supply', supplyId: 'health-potion' },
+          target: { kind: 'member', characterId: 'abc' },
+        }],
+      }),
+      content,
+    );
+    expect(selfOnly).toHaveLength(1);
+    expect(selfOnly[0]).toContain('potion');
+
+    const friendTargetable = validateBotConfig(
+      config({
+        potion: [{
+          ...rule(50), do: { kind: 'supply', supplyId: 'mana-potion-friend' },
+          target: { kind: 'member', characterId: 'abc' },
+        }],
+      }),
+      content,
+    );
+    expect(friendTargetable).toEqual([]);
   });
 });

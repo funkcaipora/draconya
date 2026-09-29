@@ -1,8 +1,9 @@
 # Analisador de hunt
 
-**Status:** parcial — os agregados existem, atravessam snapshot e extrato, e saem em
-`session-state` (FUN-32, FUN-78); a **janela no cliente** existe, minimizável, com "por hora"
-derivado local (FUN-83); falta o maior hit por skill (M7 já existe, mas o agregado é por tipo) e
+**Status:** parcial — os agregados existem, atravessam snapshot e extrato, saem em
+`session-state` (FUN-32, FUN-78) e ao vivo em `analyzer` quando mudam (FUN-110); a **janela no
+cliente** existe como janela flutuante e arrastável, com "por hora" derivado local (FUN-83) e um
+modal expandido com a lista completa de métricas da sessão (#315); falta o maior hit por skill (M7 já existe, mas o agregado é por tipo) e
 qualquer notificação fora do jogo
 **PRD:** §16, §43.10
 **Épico:** E6
@@ -69,19 +70,33 @@ Este sistema não define parâmetros numéricos de balanceamento — é uma espe
 
 ## A janela (FUN-83)
 
-Mora no painel da direita (`packages/client/src/shell/Analyzer.tsx`), e é **DOM** — HUD em DOM,
+Mora numa janela à direita (`packages/client/src/shell/Analyzer.tsx`), e é **DOM** — HUD em DOM,
 mundo em canvas. Nada nela toca `world`.
 
-**Nasce minimizada** (§16.1). Uma hunt idle não precisa dela aberta ocupando a tela, e a linha do
-cabeçalho já diz há quanto tempo a sessão roda. Ao encerrar ela abre sozinha: aí o extrato é a
-notícia, e escondê-lo seria a sessão sumir em silêncio.
+**É um `Panel dock` FIXO desde #258 (D6).** Antes, a barra do topo montava e desmontava a janela
+inteira (`{open.analyzer && <Analyzer />}`); agora ela está sempre montada na coluna da direita,
+como `AutomationsPanel`/`EquipmentPanel` (#161/#162) — o botão da barra só MINIMIZA (`collapsed`), nunca
+remove. **Nasce aberta** (FUN-115; o §16.1 dizia minimizada): quem decide se o corpo aparece é a
+barra do topo, e uma janela que abre minimizada é uma janela que abre vazia. Minimizada, o tempo
+de sessão fica na barra de título (`meta` do `Panel`). Ao encerrar ela reabre sozinha — um
+override local por cima do `collapsed` da barra —: aí o extrato é a notícia, e escondê-lo seria a
+sessão sumir em silêncio. Sem sessão, ou na Cidade, ela continua sem desenhar nada — essa
+continua sendo a única situação em que a janela não aparece, e não é o jogador que a removeu.
+
+**Os números viraram duas caixas** ("Sessão" e "Por hora", `Box`/`Line` sobre os primitivos
+`Panel`/`Kicker` do design system), no lugar da lista solta de linhas de antes — a taxa que
+aparecia como uma terceira coluna na mesma linha do valor absoluto agora é a caixa "Por hora"
+inteira. **A matemática não mudou**: `perHour` continua a única derivada, o "—" do campo opcional
+ausente continua a mesma regra (ver abaixo), e o relógio local continua o mesmo. Só a moldura ao
+redor trocou de pele.
 
 **Uma janela, duas telas.** Durante a hunt mostra o que está rendendo; ao voltar de um período
 offline mostra o mesmo, mais a lista curta de eventos notáveis (§16.2). São a mesma pergunta em
 dois momentos, e duas janelas divergiriam na terceira mudança.
 
 **Só o TEMPO anda entre duas atualizações.** O "por hora" é uma divisão, e o denominador é um
-relógio local que corre desde o instante em que o último `session-state` chegou. XP, gold e abates
+relógio local que corre desde a última entrega — o `session-state` ou o `analyzer` mais recente
+(FUN-110), que rebaseia o relógio junto com os números. XP, gold e abates
 são sempre o último número que o servidor mandou — extrapolar qualquer um mostraria progresso que
 talvez não tenha acontecido, e o jogador veria o valor ANDAR PARA TRÁS na atualização seguinte.
 
@@ -96,11 +111,47 @@ derreter na frente de quem está lendo.
 opcionais no protocolo: um nó `game` antigo, em deploy em rolagem, manda sem eles. Zero é uma
 afirmação, e ele não afirmou nada.
 
-A janela **não pede `session-state`** para se atualizar. Os deltas chegam pelo lote do ciclo e ela
-lê a store; pedir em laço seria tráfego de volta gerado por tráfego de entrada.
+A janela **não pede `session-state`** para se atualizar. O servidor manda `analyzer` — os mesmos
+agregados e eventos do `session-state` — **sempre que um deles muda** (abate, loot, gasto,
+level, morte; FUN-110), no mesmo ciclo que já leva `player-stats`; a janela lê a store. O tempo
+não é gatilho: `durationMs` muda a cada ciclo, e compará-lo mandaria a mensagem dez vezes por
+segundo para dizer que nada aconteceu. Pedir em laço, do outro lado, seria tráfego de volta
+gerado por tráfego de entrada. Até a FUN-110 nada saía entre dois `session-state`, e a janela
+ficava em zero a hunt inteira — foi o achado do passe de QA do MVP.
 
 Ela não aparece na Cidade: a praça não credita nada (§37), e uma janela de "0 XP, 0 gold" ali é
 ruído com aparência de informação.
+
+## Em party (M13, ADR 0027)
+
+Os agregados são **por participante** desde o #187: `Session.aggregatesOf(characterId)`, e
+`session.aggregates` é a soma. Cada membro vê no analisador **a própria linha** — a XP que a cota
+dele rendeu, o gold que ele ganhou e gastou (no modo `shared`, já rateado), os abates (que contam
+para todos os presentes) e os itens que caíram (para todos, no modo `shared`; para o sorteado, no
+`split`). O `session-state` e o `analyzer` que cada socket recebe levam os agregados do personagem
+daquele socket, e o servidor guarda o último enviado **por personagem** — dois membros na mesma
+sessão não compartilham o "já mandei isto".
+
+Os eventos notáveis são os da sessão, para todos, e em party dizem de quem: `level-up` com
+`id/level`, `bestiary-milestone` com `id/monstro/marco`, `exit-rule` com a regra (inclusive
+`party-member-lost`), e **`party-settlement`** com `total/presentes` — a bolsa foi vendida e
+dividida (ao sair alguém e no fim). O extrato final (`session-ended`) é o de quem saiu: um
+`Receipt` por membro, com `seq` próprio, e a tela de retorno mostra o dele. Ver `party.md`.
+
+O M20 (#400, ADR 0035 d.11) acrescentou o bloco **`analyzer.party`** à seção PARTY dos Detalhes da
+Caçada — o mesmo objeto em `session-state.partySummary` (o `party` do `session-state` continua
+sendo o roster, #196): `players`, `uniqueVocations`, `xpPercent`, `totalXp`, `totalSupplies`,
+`shareCosts`, `splitLoot`, `bagValue`, `bagWeight` e `autoSell: { used, limit }`. `autoSell.limit`
+é o limite do **personagem líder** (`autoSellItemTypes`, D2) e `used` é quantos ids ele guardou; a
+"parte estimada" de cada um continua vindo de `party-spending` (`estimatedShare`).
+
+A **PT-01** (#431, ADR 0032 d.14) acrescentou **DPS e HPS por membro**: `party-state.members[].{
+dps, hps, damageDealt, healingDone}` e `analyzer.aggregates.{damageDealt, healingDone}` (todos
+opcionais). O `sim` acumula dano causado e cura feita por EVENTO, com carimbo lógico, e mantém uma
+janela de 60 s aparada na LEITURA — nunca por tick (invariante 2). `dps`/`hps` são a taxa da
+janela; `damageDealt`/`healingDone` são os totais da sessão. O dano contado é o **aplicado**
+(overkill e mana shield ficam de fora), e a janela não viaja no snapshot: uma sessão retomada
+recomeça a janela, os totais continuam. O painel da party mostra a linha "DPS · HPS" por membro.
 
 ## Em aberto
 

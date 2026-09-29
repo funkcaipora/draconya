@@ -1,0 +1,9 @@
+{
+  "id": "lump-of-dirt",
+  "name": "Lump of Dirt",
+  "kind": "other",
+  "weight": 0.68,
+  "value": 0,
+  "stackable": true,
+  "_open": "Loot do Rotworm (TibiaWiki: 0,68 oz), comida/curiosidade sem NPC comprador, como o cheese: regeneração por comida ainda não existe (§20 do PRD não decide). value 0: comida não tem preço de venda no NPC; a bolsa da party a devolve ao líder em vez de vender (ADR 0027)."
+}

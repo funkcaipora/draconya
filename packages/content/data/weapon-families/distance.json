@@ -1,0 +1,11 @@
+{
+  "id": "distance",
+  "name": "Distance",
+  "kind": "distance",
+  "skillId": "distance",
+  "range": 6,
+  "damageType": "physical",
+  "resource": "none",
+  "formula": { "levelFactor": 0, "spread": 0 },
+  "_open": "Família de distância (CMB-05). O `base` da fórmula é o `attack` da MUNIÇÃO, resolvido no golpe — o bow não tem attack próprio. A fórmula preserva o v1: `levelFactor` e `spread` são 0, e a escala por nível é o `damagePerLevel` da skill `distance`."
+}

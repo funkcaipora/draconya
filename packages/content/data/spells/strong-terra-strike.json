@@ -1,0 +1,29 @@
+{
+  "id": "strong-terra-strike",
+  "name": "Strong Terra Strike",
+  "description": "Lança um raio de terra no seu alvo atual.",
+  "vocationId": "druid",
+  "minLevel": 70,
+  "manaCost": 60,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 8000,
+  "secondaryGroup": {
+    "name": "special",
+    "cooldownMs": 8000
+  },
+  "effect": {
+    "kind": "damage",
+    "basePower": 115,
+    "range": 3,
+    "damageType": "earth",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 2.8,
+      "skillMax": 4.4,
+      "baseMin": 16,
+      "baseMax": 28
+    }
+  },
+  "_open": "Efeito corrigido para 17 (CONST_ME_HITBYPOISON) em 2026-09-15, conferido visualmente no pacote de arte (issue #219): sprite de um respingo verde. O effect 16 anterior era CONST_ME_HITBYFIRE (chama), herdado do palpite anterior. Fórmula e alcance do Canary (`data/scripts/spells/attack/strong_terra_strike.lua`, main, 2026-09-24): range 7→3."
+}

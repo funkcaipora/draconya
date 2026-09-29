@@ -75,26 +75,57 @@ describe('decodeSheet — LZMA de verdade, ponta a ponta (FUN-17)', () => {
   });
 });
 
-describe('fromBitmap — BGRA, magenta e o offset (FUN-17)', () => {
+describe('fromBitmap — BGRA, magenta, o offset e a ordem das linhas (FUN-17)', () => {
   const decoded = fromBitmap(bitmap);
+  const WIDTH = 32;
+  const HEIGHT = 32;
+  /** O pixel (x, y) da IMAGEM decodificada, em RGBA. */
+  const at = (x: number, y: number): number[] => {
+    const start = (y * WIDTH + x) * 4;
+    return [...decoded.pixels.subarray(start, start + 4)];
+  };
+
+  it('altura POSITIVA é de baixo para cima: a primeira linha do arquivo é a última da imagem', () => {
+    // O BMP do pacote vem com altura positiva, e a espec do formato diz que isso é bottom-up.
+    // Ler as linhas na ordem do arquivo espelha a folha na vertical — e o sintoma não é óbvio:
+    // o chão continua parecendo chão, mas cada outfit sai de cabeça para baixo e no canto
+    // errado, e os ids de animação passam a cair nos quadros de OUTRA criatura.
+    //
+    // A fixture grava `G = linha do arquivo`: na imagem, a linha 0 tem que ter G = 31.
+    expect(at(5, 0)[1]).toBe(HEIGHT - 1);
+    expect(at(5, HEIGHT - 1)[1]).toBe(0);
+  });
+
+  it('altura NEGATIVA é de cima para baixo, e as linhas ficam como estão', () => {
+    // O mesmo arquivo com o sinal da altura trocado: o vermelho do canto (0,0) DO ARQUIVO passa
+    // a ser o canto (0,0) da imagem. É o que prova que a inversão vem do sinal, e não de uma
+    // constante — um "sempre inverter" passaria no teste de cima e cairia aqui.
+    const topDown = Uint8Array.from(bitmap);
+    new DataView(topDown.buffer).setInt32(22, -HEIGHT, true);
+    const result = fromBitmap(topDown);
+    expect(result.height).toBe(HEIGHT);
+    expect([...result.pixels.subarray(0, 4)]).toEqual([0xff, 0x00, 0x00, 0xff]);
+    expect(result.pixels[(5 * WIDTH + 5) * 4 + 1]).toBe(5);
+  });
 
   it('troca B com R: o vermelho do arquivo sai vermelho, não azul', () => {
-    // No BMP o pixel (0,0) é `00 00 FF FF` — BGRA, ou seja vermelho. Sem a troca ele sairia
-    // azul, e o sintoma seria um jogo inteiro com as cores invertidas.
-    expect([...decoded.pixels.subarray(0, 4)]).toEqual([0xff, 0x00, 0x00, 0xff]);
+    // No arquivo o pixel da primeira linha é `00 00 FF FF` — BGRA, ou seja vermelho. Sem a troca
+    // ele sairia azul, e o sintoma seria um jogo inteiro com as cores invertidas. Na imagem ele
+    // cai na ÚLTIMA linha, porque o arquivo é de baixo para cima.
+    expect(at(0, HEIGHT - 1)).toEqual([0xff, 0x00, 0x00, 0xff]);
   });
 
   it('magenta vira TRANSPARENTE, e não um pixel magenta', () => {
-    // O alfa do arquivo é 255 em todo pixel, inclusive nos vazios. Confiar nele desenharia um
-    // retângulo magenta atrás de cada sprite.
-    expect([...decoded.pixels.subarray(4, 8)]).toEqual([0, 0, 0, 0]);
+    // Há folha em que o alfa do arquivo é 255 em todo pixel, inclusive nos vazios. Confiar nele
+    // desenharia um retângulo magenta atrás de cada sprite.
+    expect(at(1, HEIGHT - 1)).toEqual([0, 0, 0, 0]);
   });
 
   it('os outros pixels ficam opacos', () => {
     // Guarda contra o oposto do teste acima: uma comparação frouxa que zerasse tudo passaria
-    // no de cima e apagaria a folha inteira.
-    const at = (10 * 32 + 10) * 4;
-    expect([...decoded.pixels.subarray(at, at + 4)]).toEqual([0x40, 10, 10, 0xff]);
+    // no de cima e apagaria a folha inteira. A fixture grava `B = x` e `G = linha do arquivo`;
+    // depois da troca B↔R e da inversão, a imagem (10, 10) tem R = 0x40, G = 21, B = 10.
+    expect(at(10, 10)).toEqual([0x40, HEIGHT - 1 - 10, 10, 0xff]);
   });
 
   it('lê o offset dos pixels do byte 10, e não de uma constante', () => {
@@ -104,7 +135,9 @@ describe('fromBitmap — BGRA, magenta e o offset (FUN-17)', () => {
     deslocado.set(bitmap.subarray(0, 54), 0);
     deslocado.set(bitmap.subarray(54), 74);
     new DataView(deslocado.buffer).setUint32(10, 74, true);
-    expect([...fromBitmap(deslocado).pixels.subarray(0, 4)]).toEqual([0xff, 0x00, 0x00, 0xff]);
+    const start = ((HEIGHT - 1) * WIDTH) * 4;
+    expect([...fromBitmap(deslocado).pixels.subarray(start, start + 4)])
+      .toEqual([0xff, 0x00, 0x00, 0xff]);
   });
 
   it('recusa o que não é BMP', () => {

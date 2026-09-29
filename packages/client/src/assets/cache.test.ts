@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { bytesOf, SheetCache, sheetKey } from './cache.js';
+import { bytesOf, DECODED_FORMAT, SheetCache, sheetKey } from './cache.js';
 import type { CachedSheet, SheetStore } from './cache.js';
 
 /** Um armazenamento em memória, com um interruptor para simular navegador que recusa. */
@@ -39,7 +39,15 @@ describe('sheetKey (FUN-19)', () => {
     // duas versões do pacote podem trazer folhas de mesmo nome com conteúdo diferente — e aí
     // o hash sozinho mentiria, servindo a arte da versão antiga.
     expect(sheetKey('1332', 'sprites-abc.bmp.lzma')).not.toBe(sheetKey('1333', 'sprites-abc.bmp.lzma'));
-    expect(sheetKey('1332', 'sprites-abc.bmp.lzma')).toBe('1332/sprites-abc.bmp.lzma');
+    expect(sheetKey('1332', 'sprites-abc.bmp.lzma')).toBe(`v${DECODED_FORMAT}/1332/sprites-abc.bmp.lzma`);
+  });
+
+  it('inclui a versão do DECODER, porque o que está guardado é o resultado dele', () => {
+    // A correção da ordem das linhas (FUN-17) mudou os pixels de todo hash sem mudar arquivo
+    // nenhum. Sem o prefixo, quem já tinha visitado uma vez ficaria com a folha espelhada
+    // para sempre — e a chave precisa mudar junto com o número, não só existir.
+    expect(DECODED_FORMAT).toBeGreaterThanOrEqual(2);
+    expect(sheetKey('1332', 'sprites-abc.bmp.lzma').startsWith(`v${DECODED_FORMAT}/`)).toBe(true);
   });
 });
 

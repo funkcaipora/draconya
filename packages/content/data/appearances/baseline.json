@@ -2,15 +2,501 @@
   "id": "baseline",
   "pack": "tibia-1332",
   "monsters": {
-    "rat": 21
+    "rat": 21,
+    "rotworm": 26,
+    "dragon": 34,
+    "dragon-lord": 39
+  },
+  "characters": {
+    "default": 128
   },
   "items": {
-    "arrow": 3447,
+    "machete": 3308,
+    "leather-helmet": 3355,
     "leather-armor": 3361,
-    "spike-sword": 3271
+    "leather-legs": 3559,
+    "leather-boots": 3552,
+    "backpack": 2854,
+    "steel-axe": 7773,
+    "bow": 3350,
+    "wand-of-vortex": 3074,
+    "snakebite-rod": 3066,
+    "spike-sword": 3271,
+    "cheese": 3607,
+    "energy-ring": 3051,
+    "life-ring": 3052,
+    "blessing-charge": 3155,
+    "glacier-amulet": 815,
+    "wooden-shield": 3412,
+    "sword": 3264,
+    "mace": 3286,
+    "meat": 3577,
+    "ham": 3582,
+    "worm": 3492,
+    "lump-of-dirt": 9692,
+    "legion-helmet": 3374,
+    "crusader-helmet": 3391,
+    "royal-helmet": 3392,
+    "hat-of-the-mad": 3210,
+    "magic-plate-armor": 3366,
+    "paladin-armor": 8063,
+    "focus-cape": 8043,
+    "knight-legs": 3371,
+    "crown-legs": 3382,
+    "zaoan-legs": 10387,
+    "boots-of-haste": 3079,
+    "mystic-blade": 7384,
+    "royal-crossbow": 8023,
+    "mastermind-shield": 3414,
+    "spellbook-of-mind-control": 8074,
+    "dragon-necklace": 3085,
+    "might-ring": 3048,
+    "wand-of-starstorm": 8092,
+    "hailstorm-rod": 3067,
+    "springsprout-rod": 8084,
+    "underworld-rod": 8082,
+    "ring-of-healing": 3098,
+    "dragon-ham": 3583,
+    "steel-shield": 3409,
+    "crossbow": 3349,
+    "dragons-tail": 11457,
+    "longsword": 3285,
+    "steel-helmet": 3351,
+    "broadsword": 3301,
+    "plate-legs": 3557,
+    "wand-of-inferno": 3071,
+    "green-dragon-scale": 5920,
+    "green-dragon-leather": 5877,
+    "double-axe": 3275,
+    "dragon-hammer": 3322,
+    "serpent-sword": 3297,
+    "small-diamond": 3028,
+    "dragon-shield": 3416,
+    "life-crystal": 3061,
+    "dragonbone-staff": 7430,
+    "green-mushroom": 3732,
+    "royal-spear": 7378,
+    "gemmed-book": 2842,
+    "small-sapphire": 3029,
+    "golden-mug": 2903,
+    "red-dragon-scale": 5882,
+    "red-dragon-leather": 5948,
+    "strange-helmet": 3373,
+    "fire-sword": 3280,
+    "tower-shield": 3428,
+    "dragon-scale-mail": 3386,
+    "dragon-slayer": 7402,
+    "dragon-lord-trophy": 7399
   },
-  "maps": {
-    "rat-cellars": { "floor": 357, "wall": 441 },
-    "city": { "floor": 357, "wall": 439 }
+  "ammunition": {
+    "arrow": {
+      "icon": 3447,
+      "missile": 3
+    },
+    "burst-arrow": {
+      "icon": 3446,
+      "missile": 4
+    },
+    "sniper-arrow": {
+      "icon": 7364,
+      "missile": 22
+    },
+    "onyx-arrow": {
+      "icon": 7365,
+      "missile": 23
+    },
+    "power-bolt": {
+      "icon": 3450,
+      "missile": 14
+    }
+  },
+  "weapons": {
+    "wand-of-vortex": {
+      "missile": 5
+    },
+    "snakebite-rod": {
+      "missile": 39
+    },
+    "wand-of-starstorm": {
+      "missile": 5
+    },
+    "hailstorm-rod": {
+      "missile": 29
+    },
+    "springsprout-rod": {
+      "missile": 39
+    },
+    "underworld-rod": {
+      "missile": 32
+    },
+    "wand-of-inferno": {
+      "missile": 4
+    }
+  },
+  "corpses": {
+    "rat": 5964,
+    "rotworm": 5967,
+    "dragon": 5973,
+    "dragon-lord": 5984
+  },
+  "maps": {},
+  "spells": {
+    "heal": {
+      "effect": 13
+    },
+    "strike": {
+      "effect": 12,
+      "missile": 5
+    },
+    "blast": {
+      "effect": 38
+    },
+    "bruise-bane": {
+      "effect": 13
+    },
+    "lesser-front-sweep": {
+      "effect": 10
+    },
+    "wound-cleansing": {
+      "effect": 13
+    },
+    "haste-knight": {
+      "effect": 14
+    },
+    "brutal-strike": {
+      "effect": 10
+    },
+    "blood-rage": {
+      "effect": 14
+    },
+    "protector": {
+      "effect": 13
+    },
+    "charge": {
+      "effect": 14
+    },
+    "whirlwind-throw": {
+      "effect": 10,
+      "missile": 25
+    },
+    "groundshaker": {
+      "effect": 34
+    },
+    "berserk": {
+      "effect": 10
+    },
+    "recovery-knight": {
+      "effect": 9
+    },
+    "front-sweep": {
+      "effect": 10
+    },
+    "intense-wound-cleansing": {
+      "effect": 13
+    },
+    "lesser-ethereal-spear": {
+      "effect": 2,
+      "missile": 28
+    },
+    "light-healing-paladin": {
+      "effect": 13
+    },
+    "haste-paladin": {
+      "effect": 14
+    },
+    "intense-healing-paladin": {
+      "effect": 13
+    },
+    "divine-defiance": {
+      "effect": 39
+    },
+    "sharpshooter": {
+      "effect": 14
+    },
+    "ethereal-spear": {
+      "effect": 2,
+      "missile": 28
+    },
+    "divine-healing": {
+      "effect": 13
+    },
+    "divine-missile": {
+      "effect": 39,
+      "missile": 31
+    },
+    "divine-caldera": {
+      "effect": 49
+    },
+    "recovery-paladin": {
+      "effect": 9
+    },
+    "swift-foot": {
+      "effect": 14
+    },
+    "salvation": {
+      "effect": 13
+    },
+    "ethereal-barrage": {
+      "effect": 2,
+      "missile": 28
+    },
+    "divine-barrage": {
+      "effect": 39,
+      "missile": 31
+    },
+    "buzz": {
+      "effect": 12,
+      "missile": 5
+    },
+    "scorch": {
+      "effect": 7
+    },
+    "magic-patch-sorcerer": {
+      "effect": 13
+    },
+    "apprentices-strike-sorcerer": {
+      "effect": 16,
+      "missile": 4
+    },
+    "flame-strike-sorcerer": {
+      "effect": 16,
+      "missile": 4
+    },
+    "ice-strike-sorcerer": {
+      "effect": 43,
+      "missile": 29
+    },
+    "energy-strike-sorcerer": {
+      "effect": 12,
+      "missile": 5
+    },
+    "terra-strike-sorcerer": {
+      "effect": 17,
+      "missile": 30
+    },
+    "haste-sorcerer": {
+      "effect": 14
+    },
+    "magic-shield-sorcerer": {
+      "effect": 13
+    },
+    "death-strike": {
+      "effect": 17,
+      "missile": 11
+    },
+    "fire-wave": {
+      "effect": 7
+    },
+    "energy-beam": {
+      "effect": 37
+    },
+    "great-energy-beam": {
+      "effect": 37
+    },
+    "ultimate-healing-sorcerer": {
+      "effect": 13
+    },
+    "energy-wave": {
+      "effect": 37
+    },
+    "great-fire-wave": {
+      "effect": 7
+    },
+    "lightning": {
+      "effect": 12,
+      "missile": 5
+    },
+    "rage-of-the-skies": {
+      "effect": 37
+    },
+    "hells-core": {
+      "effect": 7
+    },
+    "great-death-beam": {
+      "effect": 17
+    },
+    "strong-flame-strike": {
+      "effect": 16,
+      "missile": 4
+    },
+    "strong-energy-strike": {
+      "effect": 12,
+      "missile": 5
+    },
+    "mud-attack": {
+      "effect": 17,
+      "missile": 30
+    },
+    "chill-out": {
+      "effect": 41
+    },
+    "magic-patch-druid": {
+      "effect": 13
+    },
+    "apprentices-strike-druid": {
+      "effect": 16,
+      "missile": 4
+    },
+    "flame-strike-druid": {
+      "effect": 16,
+      "missile": 4
+    },
+    "ice-strike-druid": {
+      "effect": 43,
+      "missile": 29
+    },
+    "light-healing-druid": {
+      "effect": 13
+    },
+    "energy-strike-druid": {
+      "effect": 12,
+      "missile": 5
+    },
+    "terra-strike-druid": {
+      "effect": 17,
+      "missile": 30
+    },
+    "haste-druid": {
+      "effect": 14
+    },
+    "magic-shield-druid": {
+      "effect": 13
+    },
+    "physical-strike": {
+      "effect": 10,
+      "missile": 10
+    },
+    "ice-wave": {
+      "effect": 41
+    },
+    "intense-healing-druid": {
+      "effect": 13
+    },
+    "ultimate-healing-druid": {
+      "effect": 13
+    },
+    "mass-healing": {
+      "effect": 13
+    },
+    "heal-friend-druid": {
+      "effect": 13
+    },
+    "terra-wave": {
+      "effect": 45
+    },
+    "strong-ice-wave": {
+      "effect": 41
+    },
+    "wrath-of-nature": {
+      "effect": 54
+    },
+    "eternal-winter": {
+      "effect": 42
+    },
+    "strong-terra-strike": {
+      "effect": 17,
+      "missile": 30
+    },
+    "forked-thorns": {
+      "effect": 45,
+      "missile": 39
+    },
+    "strong-ice-strike": {
+      "effect": 43,
+      "missile": 29
+    },
+    "fierce-berserk": {
+      "effect": 10
+    },
+    "strong-ethereal-spear": {
+      "effect": 2,
+      "missile": 28
+    },
+    "ultimate-energy-strike": {
+      "effect": 12,
+      "missile": 5
+    }
+  },
+  "supplies": {
+    "health-potion": {
+      "effect": 14
+    },
+    "mana-potion": {
+      "effect": 13
+    },
+    "strong-health-potion": {
+      "effect": 14
+    },
+    "great-health-potion": {
+      "effect": 14
+    },
+    "ultimate-health-potion": {
+      "effect": 14
+    },
+    "supreme-health-potion": {
+      "effect": 14
+    },
+    "strong-mana-potion": {
+      "effect": 13
+    },
+    "great-mana-potion": {
+      "effect": 13
+    },
+    "ultimate-mana-potion": {
+      "effect": 13
+    },
+    "great-spirit-potion": {
+      "effect": 14
+    },
+    "ultimate-spirit-potion": {
+      "effect": 14
+    },
+    "avalanche-rune": {
+      "effect": 41,
+      "missile": 29
+    },
+    "great-fireball-rune": {
+      "effect": 7,
+      "missile": 4
+    },
+    "thunderstorm-rune": {
+      "effect": 12,
+      "missile": 5
+    },
+    "stone-shower-rune": {
+      "effect": 17,
+      "missile": 30
+    },
+    "sudden-death-rune": {
+      "effect": 17,
+      "missile": 11
+    },
+    "heavy-magic-missile-rune": {
+      "effect": 12,
+      "missile": 5
+    },
+    "explosion-rune": {
+      "effect": 10
+    },
+    "ultimate-healing-rune": {
+      "effect": 13
+    },
+    "intense-healing-rune": {
+      "effect": 13
+    }
+  },
+  "hits": {
+    "melee": 1
+  },
+  "abilities": {
+    "fire": {
+      "missile": 4
+    },
+    "firearea": {
+      "effect": 7
+    },
+    "blueshimmer": {
+      "effect": 13
+    }
   }
 }

@@ -18,8 +18,38 @@ export interface GridPoint {
   readonly y: number;
 }
 
-/** `true` quando o tile não pode ser ocupado — parede, borda, ou outra criatura. */
-export type Blocked = (x: number, y: number) => boolean;
+/**
+ * Um `GridPoint` que também sabe o andar (#519, hunt multiandar). Ausente é "andar padrão do
+ * mapa": snapshot de monstro anterior a esta issue, ou hunt de andar único — onde comparar
+ * andar nunca muda nada, porque todo mundo está no mesmo. Quem SEMPRE carrega `z` de verdade é
+ * o personagem (`WorldPoint`); o monstro passou a carregar também, só que opcional, para o
+ * snapshot antigo continuar restaurando sem bump de formato.
+ */
+export interface FloorPoint extends GridPoint {
+  readonly z?: number;
+}
+
+/**
+ * Dois andares são "iguais" para fins de mira e perseguição. Ausente em qualquer lado é
+ * "qualquer um" — compatibilidade com quem nunca carrega `z` (monstro de snapshot antigo, Cidade
+ * de andar único) —, e é isso que faz este comparador ser um NO-OP em toda hunt de andar único.
+ */
+export function sameFloor(a: number | undefined, b: number | undefined): boolean {
+  return a === undefined || b === undefined || a === b;
+}
+
+/**
+ * `true` quando o tile não pode ser ocupado — parede, borda, ou outra criatura. O `z` é opcional
+ * porque a maioria dos chamadores (o passo guloso de personagem e monstro) já sabe o andar pelo
+ * mover capturado na closure; só o spawner multiandar (#519) o usa, para conferir o andar CERTO
+ * de cada ponto — sem ele, todo ponto de spawn seria conferido no andar padrão do mapa.
+ *
+ * `monsterId` é o mesmo tipo de exceção, só para o spawner (#519): é como `#spawnBlockedFor`
+ * sabe SE o monstro deste ponto espera o jogador sair da vista (`blockable`) antes de aplicar
+ * `spawnClearRadius` — sem ele, a checagem valeria para todo monstro, e o Tibia faz o oposto
+ * (`isBlockable` é `false`, "não espera", para 1.640 dos 1.656 do bestiário).
+ */
+export type Blocked = (x: number, y: number, z?: number, monsterId?: string) => boolean;
 
 /**
  * As oito direções, em ordem angular. A ordem importa: "os dois vizinhos da direção geral"

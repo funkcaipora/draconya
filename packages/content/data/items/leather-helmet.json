@@ -1,0 +1,9 @@
+{
+  "id": "leather-helmet",
+  "name": "Leather Helmet",
+  "kind": "armor",
+  "slot": "head",
+  "weight": 22,
+  "value": 4,
+  "armor": 1
+}

@@ -30,7 +30,7 @@ Persistência, diretório de sessão e roteamento.
   a reconstrói **não é `SUM(delta)`**: o crédito tem piso de zero (`Math.max(0, …)` em
   `applyProgress`), então uma sessão que gasta mais do que o personagem tinha grava o delta
   negativo cheio e trunca a coluna. A projeção é a soma DOBRADA NO PISO, linha a linha, na
-  ordem em que entraram — e `ledger.test.ts`, "a coluna `gold` bate com o ledger", é quem
+  ordem em que entraram — e `ledger.postgres.test.ts`, "a coluna `gold` bate com o ledger", é quem
   confere. Quem escrever um caminho novo que credita gold sem linha de ledger reprova ali.
 - **Nenhuma leitura ou escrita de banco no caminho crítico de uma ação.** A simulação vive em
   memória; persistência é write-behind. Postgres no meio do tick mata o tempo de resposta.
@@ -79,7 +79,13 @@ sem um caminho de limpeza para cada caso.
 
 ## Personagens (FUN-11)
 
-Personagem nasce sem vocação, com Coins fora dele (na conta) e Premium por personagem. Nomes são
+Personagem nasce sem vocação, com Coins fora dele (na conta) e Premium por personagem. Nasce
+**vestido** com `progression.startingKit` (#153): `createCharacter` grava o personagem e uma
+linha de `item_instance` por peça (`origin: 'starting-kit'`, `equipped_slot` preenchido, id
+`<characterId>:kit:<n>`) na **mesma transação** — sem ledger, porque o kit não tem preço; é
+inicialização de linha, como o bot padrão (FUN-114). Duas peças no mesmo slot derrubam a
+criação inteira pelo índice único, e é o que se quer: kit pela metade em silêncio seria pior.
+Personagem anterior ao #153 continua sem kit. Nomes são
 únicos sem diferenciar maiúsculas/minúsculas. Exclusão é **soft delete** (`deleted_at`) para não
 quebrar proveniência futura de item/ledger; personagem com `session_id`, lease ou reserva ativa não pode ser apagado. Exclusão e emissão
 de ticket usam a mesma trava de linha do Postgres; o teste de concorrência é obrigatório.
@@ -268,8 +274,26 @@ sobre estado QUENTE, o `CharacterRuntime` em memória, que continua tendo dono �
 Postgres é durável, e o extrato só existe depois que a sessão dona acabou: não há dono para
 disputar.
 
+Desde o #194 (ADR 0027) a chave é `receipt:{sessionId}:{characterId}` — **um extrato por
+membro**: a party é uma sessão com N donos, e quatro extratos da mesma sessão não podem se
+sobrescrever. A chave antiga `receipt:{sessionId}` e a entrada de índice com o `sessionId` cru
+continuam LIDAS e apagadas por um deploy (extrato em voo de um nó anterior), e a tolerância sai
+numa issue de limpeza depois. No hospedeiro, `hosted.credited` é um `Set` por personagem,
+preenchido **só após confirmar a gravação no Redis** (#267), não ao iniciar a tentativa.
+`hosted.receiptSaves` compartilha a promessa em voo: drenagem e `release` concorrentes aguardam
+a mesma gravação, inclusive sua falha. Falha libera a tentativa para retry, mantendo sessão e
+snapshot; resposta perdida repete o mesmo `(session_id, seq)`, sem novo crédito no ledger.
+`#succeed` percorre `session.receipts()` e `#settleOne` grava, avisa os visualizadores DAQUELE
+personagem e o devolve à Cidade; quem sai por dentro do `sim` (`member-left`: morte, regra de
+saída) entra em `hosted.departures` no ciclo — que é síncrono — e `#settleDepartures` grava
+depois, haja ou não visualizador; `leave-hunt` com mais de um dono é `leave`, não `end`; e
+`#replace` só apaga a sessão quando não sobra ninguém dela. Uma sessão retomada com N traz os
+outros membros: a conta de cada um vem do snapshot DELE, e o lease é registrado antes de
+qualquer coisa local existir — senão o lease expira, o login seguinte resolve para outro nó, e
+a cópia do snapshot revive a mesma sessão duas vezes.
+
 Para achar o extrato daquele personagem sem varrer o keyspace inteiro a cada login, o
-`ReceiptStore` mantém `receipts:char:{characterId}` ao lado de `receipt:{sessionId}`. **Os dois
+`ReceiptStore` mantém `receipts:char:{characterId}` ao lado (guardando a chave inteira). **Os dois
 prefixos são distintos de propósito:** nomear o índice `receipt:char:{id}` o poria dentro do
 `MATCH` do `SCAN` da varredura, e um SET no lugar de um extrato sai do `MGET` como nada — a
 varredura pararia de ver um extrato por ciclo, sem erro em lugar nenhum.
@@ -329,7 +353,7 @@ gauge que ninguém escreve. Foi a pendência da FUN-47.
 
 ## Os dois critérios de saída, como teste (FUN-44, FUN-99)
 
-`api/phase-one-exit.test.ts` prova que a sessão **sobrevive**; `api/phase-two-exit.test.ts`
+`api/phase-one-exit.postgres.test.ts` prova que a sessão **sobrevive**; `api/phase-two-exit.postgres.test.ts`
 prova que ela **rende** — e que o número que o jogador lê é o que chega ao banco.
 
 Os dois seguem as mesmas duas regras, e elas valem para qualquer teste que entre aqui:
@@ -343,9 +367,23 @@ CONTA — `gold anterior + ganho − gasto` —, e não por "é maior que zero".
 analisador têm teste cada um; o que faltava era alguém afirmar que os quatro contam a MESMA
 história sobre a mesma hunt.
 
+## O critério de saída do M13, como teste (#198)
+
+`api/party-exit.postgres.test.ts` prova que quatro personagens de quatro vocações rendem
+JUNTOS numa party compartilhada — e que cada um leva a sua parte ao banco, da mesma sessão:
+a party pelo `api`, o líder abre o socket com o ticket da party (é ESSE socket que cria a hunt
+com os quatro) e fecha, os outros três nunca conectam, cada rato de 5 XP rende 2 a cada um
+(pool 200 % ÷ 4), um membro entra e sai levando a cota do settlement, a drenagem grava os
+outros três, e o ledger tem quatro linhas do mesmo `session_id` cuja soma é o que caiu. Duas
+armadilhas que ele pegou: a arena de teste comum tem 2×2 de chão e quatro heróis a ENCHEM
+(nenhum rato nasce, a hunt fica parada sem erro — o teste tem arena própria), e `release` de
+um membro apagava a sessão que os outros ainda iam creditar na drenagem (agora só some quando
+não sobra ninguém dela, como `#replace`). O cliente de carga ganhou `--party N` e
+`--party-mode`: uma party não atravessa workers (`slicePartied`), e a sobra entra solo.
+
 ## O critério de saída da Fase 1 (FUN-44)
 
-`src/api/phase-one-exit.test.ts` roda o roteiro inteiro com socket, Postgres e Redis de verdade:
+`src/api/phase-one-exit.postgres.test.ts` roda o roteiro inteiro com socket, Postgres e Redis de verdade:
 entrar numa hunt, fechar o navegador, render enquanto ninguém olha, voltar e reencontrar a
 sessão, matar o nó sem drenar e retomar em outro, drenar e ver o extrato virar linha de
 personagem.
@@ -367,32 +405,196 @@ Duas regras ao mexer nele:
 o que um `kill -9` parece de fora. Não confundir com `drain()`, que credita — trocar as duas
 seria perder exatamente o progresso que o ADR 0010 existe para preservar.
 
-## A configuração do bot é a ÚNICA escrita de banco do `game` (FUN-81, ADR 0021)
+## Configuração por papel e preferências do bot (ADR 0028, #263)
 
-Até aqui a divisão era limpa: `api` e `jobs` falam com o Postgres, o `game` não. A configuração
-do bot quebra isso — ela é dado durável do personagem **e** é editada com o jogador conectado,
-e quem tem a conexão é o `game`.
+`config.ts` resolve `PROCESSES` antes dos requisitos e o `main.ts` usa essa mesma seleção.
+Redis é obrigatório para todos; Postgres para `api/jobs`; WorkOS para `api` de produção;
+`GAME_PUBLIC_URL` exige `ws/wss` sem credenciais, query ou fragmento, e WSS em produção
+com `game`. Papel duplicado, desconhecido, vazio ou `PROCESSOS` legado recusa o boot.
+`THINGS_DIR` pertence às ferramentas, não ao runtime. Matriz e exemplos em
+[`runtime-configuration.md`](../../docs/runtime-configuration.md).
 
-O que a mantém segura, e o que não pode mudar sem pensar duas vezes:
+**O `game` não escreve Postgres, nem no modo solo.** A exceção do ADR 0021 foi substituída.
+A sessão aceita e aplica o bot imediatamente; `saveBotConfig` grava a pendência no Redis.
+Só depois confirma `ok: true`. Falha mantém a regra ativa, mas responde `ok: false` para
+permitir retry. Não emitir sucesso antes de o callback terminar.
 
-- **Uma instrução, sem `SELECT` antes.** "O jogador salvou isto" é última-escrita-vence por
-  natureza: a configuração é substituída inteira, nunca mesclada. Sem read-modify-write não há
-  corrida entre duas abas do mesmo jogador.
-- **Não participa da trava de linha** da emissão de ticket nem da exclusão (FUN-53): não abre
-  transação, não segura a linha, não depende de nada que esteja nela.
-- **O `game` não recebe o repositório nem o `Content`** — recebe `saveBotConfig` e
-  `acceptBotConfig`, funções estreitas, do mesmo jeito que o `api` recebe `settleProgress`.
-- **A ordem é aceitar → aplicar → persistir.** Aplicar antes de gravar faz a hunt em curso usar a
-  regra nova na hora; falhar ao gravar não desfaz o que já vale. Há teste afirmando isso.
-- **Sem banco configurado o `game` roda igual**, e a configuração vale na sessão e some no
-  logout. Degradação, não falha.
+`BotConfigStore` mantém um envelope com UUID por edição em `bot-config:pending`, sem TTL.
+`jobs/bot-config.ts` é o consumidor compartilhado por `jobs` e pela admissão no `api`:
 
-O caminho de LEITURA é outro e não se cruza com este: a configuração chega pelo **ticket**, que
-o `api` monta lendo a linha — mesmo caminho de level, XP e gold, e pela mesma razão (invariante 4).
+- Sem pendência (`HEXISTS`) não abre transação: a admissão chama isto em toda listagem e em
+  todo ticket, e o caso comum precisa continuar custando só Redis, como `pendingFor` no ledger.
+- Com pendência, trava a linha do personagem ANTES de ler a pendência do Redis; depois
+  substitui `bot_config`. Ler antes da trava permitiria a um consumidor atrasado sobrescrever
+  a edição mais nova — o `HEXISTS` de fora só decide se vale abrir a transação.
+- Confirma a pendência só depois do commit, com comparação/remoção atômicas do envelope.
+  Nova edição nunca é removida pelo ACK da anterior, mesmo com configuração idêntica.
+- Retry após commit repete a substituição, sem efeito econômico. Não há entrada no ledger.
+- **Entrada corrompida vira AUSENTE, nunca admissão recusada** (#265) — a regra das cores do
+  outfit e do Bestiário. `load` a devolve marcada (`corrupt: true`, JSON inválido incluído), e
+  o consumidor a move para `bot-config:corrupt` com a mesma comparação do ACK, para uma edição
+  válida que chegou por cima ficar onde está. Só Redis fora do ar recusa a admissão.
+- `settleCharacterState` processa o bot antes do progresso, antes de tickets solo/party e
+  da atualização da lista de personagens. Falhar recusa dado velho; não voltar ao callback
+  antigo que só liquidava extratos no boot.
+- Configuração chega ao `game` no ticket e é validada contra o conteúdo fixado da sessão.
+  Só o dono altera a regra em memória; `api/jobs` escrevem apenas a preferência durável.
 
-Se um dia aparecer uma segunda escrita no `game`, o ADR 0021 deixa de valer como precedente:
-duas escritas já são um repositório, e aí a pergunta é se a divisão de processos ainda descreve
-o sistema.
+A janela até o ciclo de `jobs` ou próxima admissão depende da disponibilidade dos serviços.
+Redis perdido antes de gravar Postgres pode perder a pendência. AOF/backup continuam
+necessários; confirmação no socket significa aceitação no Redis, não commit de Postgres.
+Testes reais de concorrência e reconexão: o bloco "persistência do bot entre processos"
+de `api/phase-two-exit.postgres.test.ts` — no fixture da F2, porque os bancos de Redis de teste
+acabaram e o 0 é o do desenvolvimento local.
+
+## As cores do outfit viajam no ticket, não no snapshot (FUN-104)
+
+`characters.outfit_colors` é `jsonb` nulável (`{ head, body, legs, feet }`, índices da paleta),
+lida pelo `api` na emissão do ticket e adotada pelo `SessionHost` no `prepare` — o mesmo caminho
+do `name`, e pela mesma razão: é dado do personagem que só a APRESENTAÇÃO lê. O `sim` não
+conhece cor, e o snapshot não a carrega; quem a repete é `creature-appear` e a lista de
+criaturas do `session-state`, só para personagem — monstro é uma camada só e nunca traz o campo.
+
+Três coisas que seguem disso:
+
+- **Uma escolha nova aparece na PRÓXIMA entrada**, com o ticket que a trouxer. Quem já está
+  hospedado continua com as cores com que entrou; não há mensagem de "trocou de cor" e não
+  precisa haver enquanto a tela de escolha (§7.4) não existir. Ninguém escreve a coluna ainda.
+- **Valor corrompido vira AUSENTE, nunca login recusado.** A coluna não tem CHECK — a paleta é
+  do pacote de assets, não do schema —, então quem valida é quem monta o ticket
+  (`OutfitColors.safeParse`, no `api` e de novo no `consume`). Sem cores, o cliente pinta o
+  padrão de personagem novo. Chave ausente, e não `colors: undefined`: o codec apagaria a chave
+  e o tipo passaria a mentir sobre o que foi mandado.
+- **Nome e cores são adotados ANTES de `#createLocal`.** O anúncio de chegada ao shard (FUN-71)
+  sai de dentro dele, e lê as duas tabelas. Adotar depois — como o nome era — mandava o
+  recém-chegado com o id no lugar do nome, e o teste da FUN-71 não via porque usa os dois
+  iguais. O da FUN-104 usa nomes diferentes dos ids de propósito.
+
+## O Bestiário viaja como as skills: ticket → runtime → extrato → ledger (FUN-113)
+
+`characters.bestiary` é `jsonb` nulável (`{ monsterId: kills }`), e percorre o MESMO caminho
+das skills (FUN-75), pela mesma razão — é progressão que escala a hunt DURANTE a hunt (o bônus
+dos marcos multiplica a XP, DT-01), então precisa entrar na sessão e não só sair dela:
+
+- **`api` lê a linha e põe no ticket**, VALIDADO (`isBestiaryState`, em `tickets.ts`, a mesma
+  régua que o `consume` usa). Ao contrário das skills, chega tipado: a forma é um mapa de
+  inteiros, e conferir isso não é conhecer domínio nenhum. Valor corrompido vira AUSENTE, nunca
+  login recusado — a linha não tem CHECK. `null` na linha NÃO vira chave no ticket.
+- **`createCitySessionFactory` põe no `CharacterState`**; ausente é `{}`, que é onde um
+  personagem novo começa. A hunt é o mesmo objeto (transição), e o `sim` conta o abate.
+- **O extrato leva o mapa ABSOLUTO** (`#saveReceipt`), e `parseReceipt` é lista de
+  PERMISSÃO — campo que não entra nela some no caminho de volta sem erro nenhum, e o teste de
+  ida e volta em `receipts.test.ts` é quem pega a omissão.
+- **O ledger funde pelo MAIOR de cada monstro** (`Bestiary.merge`), na mesma transação de XP e
+  gold. Abate nunca desce: um extrato antigo fora de ordem não rebaixa nada, sem guarda de
+  instante. Extrato SEM o campo (Cidade, nó antigo em deploy) não toca na coluna — gravar
+  `{}` por cima apagaria abates que ninguém pediu para apagar.
+
+A mensagem `bestiary` é APRESENTAÇÃO, pelo mecanismo de `sentStats`: sai no `#sendState` e no
+ciclo com visualizador quando a SOMA dos contadores mudou (`sentBestiary`, por personagem). A
+soma basta porque abate só sobe — muda se, e só se, algum contador mudou. Sem ninguém olhando
+não se compara nada; o `sim` conta de qualquer jeito (invariante 3). O catálogo leva
+`monsters: [{ id, name }]` em ordem de id e `bestiary: { milestones, xpBonusPercentPerMilestone }`
+só quando o conteúdo tem — o de teste não tem, e a chave fica AUSENTE, não `undefined`.
+
+## A munição é abstrata e escolhida por família (#152, #420)
+
+A munição é **abstrata** (ADR 0032 decisão 7): a escolha é por família, pelo opcode 14
+`select-ammo`, com `requires.level` conferido em `#requestSelectAmmo` e o sucesso publicado em
+`player-stats.ammo { arrow, bolt }`; a recusa vira `system-message`, como a de equipar. O
+catálogo (`catalogue.ammunition`) e `server.ammunition` levam família, `attack`, `price`,
+`appearanceId` e `requires.level`. **A escolha PERSISTE** (regressão corrigida no code review
+do M18): o extrato leva `SessionReceipt.ammo` (lista de PERMISSÃO em `parseReceipt`), o ledger
+lê e escreve `characters.ammo` (`jsonb`) em `applyProgression`, e o ticket devolve por
+`InitialCharacter.ammo` (validado por `isAmmoSelection`, valor corrompido vira AUSENTE) —
+o mesmo caminho da vocação. `#requestSelectAmmo` marca `hosted.dirty` para o extrato de estado
+durável da Cidade levar a escolha também. O
+projétil do tiro (`shot`) é resolvido em `#presentCombat` pela tabela:
+`appearances.ammunition[ammoId].missile` para a flecha, `appearances.weapons[itemId].missile`
+para wand e rod; sem linha, o tiro é mudo.
+
+## A vocação é escrita UMA vez, pelo `jobs`; e o shard grava um extrato de ESTADO (#154)
+
+`characters.vocation` é `text` nulável, nunca escrita pelo `game` (ADR 0026 decisão 1, ADR
+0021): chega ao banco pelo extrato (`SessionReceipt.vocation`, lista de PERMISSÃO em
+`parseReceipt`) e o ledger a grava com `coalesce(vocation, $1)` — um extrato fora de ordem com
+outra vocação não sobrescreve. Volta pelo ticket (`InitialCharacter.vocation`, string não vazia
+ou ausente), entra em `CharacterRuntime.vocationId` e nos stats de entrada (`statsForLevel` com
+a vocação), e vai ao cliente em `player-stats.vocationId` e `session-state.self.vocationId`. A
+escolha é `choose-vocation` (opcode 15), processada na chegada como `equip`; o host resolve a
+vocação e o grant no conteúdo fixado (`vocations`, `vocationLevel`, `itemCatalog`) e o `sim`
+decide (`chooseVocation`). **Desde #496 o grant é o kit completo** (`startingKit`: arma +
+`wooden-shield`): o host resolve cada peça do catálogo, na ORDEM do conteúdo (a arma veste antes
+do escudo — é isso que deixa o escudo do Paladin na mochila com o bow de duas mãos), e o `sim`
+reporta o destino de cada peça; peça sem capacidade vai para a Caixa de Loot, com mensagem
+nomeando o item. `startingWeaponItemId` é o fallback legado, e cada instância nasce com
+`instanceId` `${sessionId}:${characterId}:vocation:<item>` (a arma legada,
+`${sessionId}:${characterId}:vocation`) — **com o id do personagem no meio**, porque numa cópia
+da Cidade dois personagens compartilham
+`session.id` e `${sessionId}:${lootSeq}` colidiria na chave primária de `item_instance` — e
+`origin: 'vocation-choice'`, que o ledger grava (`item.origin ?? 'loot'`). O `catalogue` deriva a
+arma que o diálogo do level 8 mostra da peça de mão do kit — as vocações reais são kit-only, e
+um filtro pelo campo legado as apagaria do diálogo.
+
+**O shard não credita progresso, mas grava estado.** Antes de #154 a Cidade nunca gravava
+extrato: `equip` e agora a vocação feitos na praça sumiam no logout. Agora cada
+`HostedSession` de shard tem `dirty: Set<characterId>` — marcado por `equip`, `unequip`,
+`move-item` e `choose-vocation` — e `release` (antes do `leave`) e `drainAll` gravam, para
+quem está em `dirty`, um **extrato de estado durável**: agregados zerados, `vocation`,
+`equipment`, `acquired`, `lootBox`, `seq` do `ledgerSeq` compartilhado da cópia. A linha de
+ledger que o `jobs` insere tem `delta: 0` e é só a chave de idempotência. Quem não mexeu em
+nada sai sem extrato. **Limite:** a Cidade não tem snapshot (ADR 0023) — nó que cai sem drenar
+perde o que a praça mudou, como já perdia. `#creditUnrestorable` passou a levar `vocation`,
+`equipment`, `acquired` e `lootBox` (o buraco de antes: item equipado numa sessão
+irrestaurável se perdia).
+
+## A party é formada no `api`, em Redis, e vira uma sessão de hunt com N donos (#195)
+
+`PartyStore` (`party:{id}` com `vocationTargets` em JSON, `:members` ZSET por instante de
+entrada, `:accounts`, `:invites`, `:vocations`, `:tickets`, `party:by-char:{characterId}`) é
+FORMULÁRIO, não estado quente — o personagem está na Cidade, que é inerte. Desde a #501 o
+líder CONFIGURA a sala (`POST /:id/configure`: hunt, difficulty, `minLevel`,
+`vocationTargets` — vocação → TOTAL desejado, soma contra `content.party.maxMembers` — e os
+dois eixos, cada um sozinho) e PUBLICA sem corpo: o `publish` valida o estado gravado (hunt,
+level mínimo e pelo menos uma vaga pública). Não existe mais aprovação de membros nem rota
+de aprovar — o `/propose` sobrevive só como shim da MESMA escrita do `/configure`, enquanto
+o cliente antigo o usa. O `start` faz para N o que `POST /api/tickets` faz para um, nesta
+ORDEM: tudo o que recusa antes de reservar (todos na Cidade pelo diretório, liquidação de
+cada um); um nó só, resolvido pelo líder — o `consume` recusa ticket de nó errado; um ticket
+por membro com o MESMO `sessionId` e o mesmo bloco `party` (`TicketClaim.party`, com o
+`initialCharacter` de todos — montado por `initialCharacterOf`, o mesmo do ticket solo), e a
+falha do k-ésimo `revoke`a os k−1 (não há script Lua entre N contas: as chaves são de contas
+diferentes); só depois a party vira `hunting` e cada um pega o SEU ticket pelo `mine`, uma
+vez. No `game`, `prepare` recebe o bloco: se `party.sessionId` já está hospedada, o membro só
+entra nela; senão a `SessionFactory` cria a HUNT com os N (`partyHuntFor` em `sessions.ts`,
+bot de cada um validado ali com o conteúdo) e o host registra o lease dos outros com a conta
+do ticket — o membro que nunca conecta está na hunt do mesmo jeito (invariante 3).
+
+A composição por vocação é válida DENTRO de Lua (DT-01): as vocações dos membros moram no
+HASH `party:{id}:vocations` (`none` para quem não tem vocação) e o script conta `HVALS` no
+mesmo passo em que insere — dois joins na última vaga da mesma vocação não passam os dois,
+nem em formação (`joinParty`) nem em curso (`reserveSlot` no `/join` de party em curso,
+ANTES de emitir o ticket; falha depois da reserva = `releaseSlot` + `revoke`, nunca membro
+fantasma). Convidado (convite explícito) passa LIVRE da composição — convite é decisão do
+líder —, e todo convite só sai de quem está FORA de hunt (`inviter-in-hunt`, pelo diretório,
+DT-02): em hunt ninguém convida, nem tradicional nem social. A busca (`GET /api/party/rooms`)
+exige o personagem na query e FILTRA no servidor: publicada, level ≥ `minLevel`, lotação
+viva, e vaga para a vocação do candidato — sala inelegível some da lista. O convite social
+(`POST /api/party/invites/social`, TTL 15 min) NÃO exige party: o aceite é UM script que usa
+a party do convidador se ele ainda a lidera formando com vaga, CRIA uma com ele de líder se
+não tem (o `SET NX` em `party:by-char:{convidador}` é a trava: dois aceites não criam duas
+parties), ou recusa com erro tipado (`inviter-unavailable`, `in-another-party`,
+`invite-not-found`) — e só consome o convite no sucesso. Os dois convites aparecem na union
+do `invites[]` do `/mine`.
+
+O matchmaking (#199, §15.2) FORMA a party, não a inicia: `POST /api/matchmaking/join` põe o
+personagem em `matchmaking:queue` (ZSET por instante) e casa NA HORA, num script Lua, com quem
+já esperava — na faixa de level de `content.party.matchmakingLevelRange` (`0` é qualquer um),
+livre de outra party, preferindo VOCAÇÕES DISTINTAS (é o que o bônus de XP premia) até
+`maxMembers`, tirando os escolhidos da fila no mesmo passo. A party formada tem o mais antigo
+como líder e segue o fluxo de sempre (configurar e iniciar). Uma party de dois se forma no
+instante em que o segundo chega: esperar "encher" faria dois jogadores esperarem para sempre,
+e o §15.2 admite começar com menos de quatro.
 
 ## A Caixa de Loot vive no Redis porque ela EXPIRA (FUN-88)
 
@@ -421,14 +623,44 @@ que a FUN-56 registrou: o `SCAN` de uma varredura não pode pegar a chave da out
 pnpm vitest run packages/server
 ```
 
+**Da RAIZ do repositório, sempre.** De dentro do pacote, o vitest resolve `@draconya/*` pelo
+`dist/` de cada pacote — o que foi compilado da última vez, não o que está no editor. Um teste
+daqui que atravessa para o `sim` (toda hunt de verdade em `host.test.ts`) passa com o `sim`
+velho e, pior, uma mutação aplicada no `sim` fica invisível para ele: o teste "mata" a
+mutação sem nunca tê-la visto. Foi um achado de revisão, e é por isso que a disciplina de
+mutação manda a linha de comando inteira, com o caminho a partir da raiz.
+
 Testes de integração que importam: reanexar a uma sessão em andamento; matar o processo e recuperar
 do snapshot; drenar em deploy e conferir o extrato; duas requisições simultâneas competindo pelo
 terceiro slot de personagem.
 
+**Arquivo que abre o Postgres se chama `*.postgres.test.ts`** (FUN-102). O nome é o que o põe no
+projeto `postgres` do `vitest.config.ts` da raiz, onde esses arquivos rodam no máximo dois por
+vez: cada um cria um schema e roda as migrações, e cinco deles ao mesmo tempo contra um Postgres
+de uma CPU (o Docker da máquina de desenvolvimento) reprovava doze testes sortidos por timeout
+com um jogo aberto ao lado. O resto da suíte continua em paralelo. `testing/database.test.ts`
+reprova o arquivo que chama `connectTestDatabase` sem o sufixo — e o que tem o sufixo sem
+chamar. O custo é a suíte inteira ir de 6,5 s para ~14 s: os dois critérios de saída levam
+quatro e cinco segundos cada, e o grupo do Postgres termina antes de o outro começar.
+
 ## Armadilhas conhecidas
+
+- **Um passo por vez, por personagem, no relógio do PROCESSO** (`#walkingUntil` em
+  `host.ts`, FUN-122). A Cidade não tem relógio (`hz` 0) e o `move` do `sim` não sabe que horas
+  são: sem esta trava no hospedeiro, um cliente mandando mil `walk` por segundo atravessaria a
+  praça em meio segundo. O `walk` que chega antes de o passo anterior acabar é recusado em
+  silêncio — o teclado do cliente repete no ritmo do passo, e o ritmo é daqui. Vale para
+  TODA sessão, hunt inclusive: `#requestWalk` é a porta única do `walk`, e antes da trava a
+  hunt também aceitava a rajada — o jogador andava mais rápido que a fórmula do Tibia. Teste
+  que dá muitos passos em sequência precisa de um `now` que ande (a praça da FUN-33 avança o
+  relógio a cada consulta).
 
 - Ações do jogador são processadas **na chegada**, não enfileiradas para o tick. Enfileirar
   adiciona até 100 ms de jitter em cima do ping — irrelevante na hunt, fatal no PvP manual.
+- `uWebSockets.js` vem do GitHub, e é declarado pela **URL de tarball com SHA**
+  (`https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/<sha>`), não por `github:` —
+  o Dependabot reescreve `github:` como `git+ssh` no lockfile e o CI, sem chave SSH, morre no
+  `pnpm install` (#222, emenda no ADR 0013). Atualizar é trocar o SHA pelo da tag nova.
 - `uWebSockets.js` não é a API do `ws`. Não presuma compatibilidade. O `HttpRequest` do
   `upgrade` só vale DURANTE o handler: qualquer header ou query que o caminho assíncrono vá
   usar precisa ser lido antes, e mexer na resposta depois de `onAborted` derruba o processo.
@@ -476,11 +708,54 @@ terceiro slot de personagem.
   a partir de um tile em que a criatura nunca esteve, para ele.
 - **A AOI só existe no shard.** Numa hunt de um personagem ela seria índice para nada, no caminho
   quente das 5.000 instâncias que a FUN-46 mediu.
+- **`sentStats` guarda o que foi ENTREGUE, nunca o que foi calculado** (FUN-109). O
+  `player-stats` ao vivo sai da comparação campo a campo entre os vitais de agora e os últimos
+  que algum visualizador recebeu — no `session-attach` e no ciclo com visualizador. Sem
+  ninguém olhando não se compara nada: a comparação é apresentação, e o `sim` muda o que tem
+  de mudar de qualquer jeito (invariante 3). Escrever `sentStats` num ciclo sem visualizador
+  faria quem reanexa perder a primeira mudança depois do estado. E a comparação é campo a campo, hoje doze — a lista muda com qualquer SV-nn que acrescente algo a player-stats: comparar só a vida deixa a mana gasta numa magia fora do HUD, e o teste de mana em
+  `host.test.ts` é quem pega. **A stamina é comparada no MINUTO**, não no milissegundo: o
+  `sim` a queima a cada evento que vence (as regras de saída, a cada 250 ms), então
+  `staminaMs` muda em TODO ciclo anexado, e a comparação exata mandava um `player-stats` por
+  ciclo — 482 em 120 s medidos, mais que `creature-move`. O HUD mostra horas e minutos, e o
+  valor entregue continua em milissegundos; só o gatilho arredonda. O herói do helper da
+  FUN-109 tem stamina justamente para o teste de "ciclo sem mudança" queimar como a produção.
+- **`sentAnalyzer` é o mesmo mecanismo para o analisador** (FUN-110), por PERSONAGEM desde o
+  #196 — os agregados são de cada participante (#187), e quem olha um membro da party vê os
+  dele, não a soma; em solo é um só. `session-state.aggregates` também é dele. A party vai no
+  fio por três mensagens S2C (`party-state` no attach e na mudança de composição, `party-bag`
+  a cada item, `party-settlement` ao sair e no fim) e pelo bloco `party`/`partyBag` do
+  `session-state`, montado por `#partyBlock` do estado do ruleset — a capacidade da bolsa é a
+  soma dos PRESENTES agora, não a do snapshot. Compara nove agregados e a contagem de eventos notáveis,
+  e `durationMs` fica de fora pela mesma razão da stamina: muda em todo ciclo. Até a FUN-110
+  os agregados só saíam no `session-state` e no `session-ended`, e a janela ficava em zero a
+  hunt inteira — três abates, level 2, gold no HUD, e "Mortos 0" — porque `docs/product` e o
+  `Analyzer.tsx` diziam que "os deltas chegam pelo lote do ciclo" e nenhuma mensagem os levava.
+- **Combate e vida do personagem vão para TODOS os visualizadores da sessão** (FUN-109), pela
+  mesma decisão de `#presentPresence`: combate só existe em hunt, e hunt é privada. Magia ou
+  supply sem linha na tabela de aparências é MUDO, não erro — `buildContent` só exige que toda
+  linha aponte para algo que existe, não o contrário; uma magia nova sem arte ainda bate, e o
+  número e a barra provam. Golpe em criatura sem id numérico (nasceu sem ninguém olhando, e o
+  cliente ainda não pediu o `session-state`) é descartado, não mandado com id inventado.
+- **A ability de monstro resolve a arte por CHAVE SEMÂNTICA** (CMB-06). O `sim` emite
+  `monster-ability-cast` com `missileKey`/`impactKey` — nunca um id de arte (invariante 6) —, e
+  `#presentCombat` os resolve em `appearances.abilities`: o projétil sai do monstro ao primeiro
+  alvo, e o efeito de impacto em cada alvo/tile. Chave sem linha é MUDA, não erro: a mecânica
+  (dano, morte, atribuição) já aconteceu no `sim`. O golpe da ability chega como `creature-hit`
+  com `kind: 'spell'`; a básica legada continua `melee` com o sangue de `hits.melee`.
+- **O herói "level 8 com XP zero" do helper da FUN-103 é inconsistente, e a mana some no
+  primeiro abate.** `grantXp` recalcula o level a partir da XP acumulada (zero → 1) e devolve os
+  máximos à tabela de progressão — cuja mana inicial de teste é zero. Para golpe não faz
+  diferença; para uma hunt que precisa lançar magia, o bot nunca tem com quê. O helper da
+  FUN-109 nasce no level 1, com os máximos de `statsForLevel(1)` e uma progressão de teste com
+  `startingMana` alto — e é ele que se copia para o próximo teste com magia.
 
 ## Testes de autenticação e admissão
 
 `TEST_REDIS_URL` deve apontar para um Redis descartável; os bancos listados em `testing/redis.ts`
-são apagados pelos testes — hoje 1 a 10, e a lista é verificada, não confiada.
+são apagados pelos testes — hoje 1 a 16, e a lista é verificada, não confiada. O Redis de teste
+precisa de **32 bancos** (`--databases 32`): o `party-v2-exit.postgres.test.ts` usa o 16, e o
+padrão de 16 (0–15) faria `SELECT 16` cair no banco 0 em silêncio.
 `DATABASE_TEST_URL` aponta para Postgres de teste, com um schema exclusivo por suíte. O CI
 fornece os dois. Ver ADR 0017 para a ordem Postgres → Redis e separação entre sessão HTTP,
 `state` e ticket. Nenhum vínculo de conta é decidido somente por e-mail.

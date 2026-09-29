@@ -1,0 +1,8 @@
+{
+  "id": "burst-arrow",
+  "name": "Burst Arrow",
+  "family": "arrow",
+  "attack": 27,
+  "price": 3,
+  "_open": "Munição abstrata (gold no tiro, sem pilha): attack 27 e preço 3 são provisórios (TibiaWiki como ponto de partida; docs/reference/huntera-observed.md não observa munição). Aparência: ícone 3446 e projétil (missile 4) ainda sem PNG na biblioteca local parcial; conferência visual pendente e ids mantidos (ver docs/combat-presentation-audit.md)."
+}

@@ -1,0 +1,13 @@
+{
+  "id": "dragon-necklace",
+  "name": "Dragon Necklace",
+  "kind": "amulet",
+  "slot": "neck",
+  "weight": 6.3,
+  "value": 100,
+  "charges": 200,
+  "mitigation": {
+    "resistances": { "fire": 0.08 }
+  },
+  "_open": "Kit level 200 (#524), as quatro vocações. `absorbpercentfire` 8%, `charges` 200 e weight 630 (6,3 oz) do Canary `items.xml` id 3085 — sem `level`/`vocation`. Gasta 1 carga por golpe de fogo sofrido (`#consumeAmuletCharge`, ADR 0032 d.8), como o Glacier Amulet já fazia com gelo. `value` 100: Yaman compra por esse preço (TibiaWiki via tibiascape.com/library/items/dragon-necklace)."
+}

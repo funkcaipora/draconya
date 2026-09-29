@@ -1,0 +1,10 @@
+{
+  "id": "mastermind-shield",
+  "name": "Mastermind Shield",
+  "kind": "shield",
+  "slot": "shield",
+  "weight": 57,
+  "value": 550,
+  "defense": 37,
+  "_open": "Kit level 200 (#524), Knight. Defense 37 e weight 5700 (57 oz) do Canary `items.xml` id 3414. Sem `level`/`vocation` no script de equip — qualquer vocação veste (o peso é o que limita). `value` 550: preço do NPC H.L. (TibiaWiki via tibiascape.com/library/items/mastermind-shield)."
+}

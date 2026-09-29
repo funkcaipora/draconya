@@ -10,16 +10,32 @@ import type { Logger } from '../log.js';
 import type { Role } from '../role.js';
 import { registerAuthRoutes } from './auth.js';
 import { registerCharacterRoutes } from './characters.js';
+import type { CharacterRouteOptions } from './characters.js';
 import { createTicketHandler, type TicketRouteDependencies } from './tickets.js';
+import { registerPartyRoutes } from './party.js';
+import type { PartyRouteDependencies } from './party.js';
+import { registerFriendRoutes } from './friends.js';
 
 export interface ApiDependencies extends Partial<TicketRouteDependencies> {
   readonly auth?: AuthService;
   readonly repository?: GameRepository;
+  /** O bot com que o personagem nasce (FUN-114). Ver `CharacterRouteOptions`. */
+  readonly defaultBotConfig?: unknown;
+  /** O kit com que o personagem nasce vestido (#153). Ver `CharacterRouteOptions`. */
+  readonly startingKit?: CharacterRouteOptions['startingKit'];
   readonly isCharacterActive?: (accountId: string, characterId: string) => Promise<boolean>;
   /** Onde o personagem está agora, segundo o diretório de sessões (FUN-30). */
   readonly locateSession?: (
     characterId: string,
   ) => Promise<{ sessionId: string; type: string } | null>;
+  /** O diretório de sessões: a LOTACÃO VIVA do `/join` em curso (#402) e o nó do líder. */
+  readonly directory?: PartyRouteDependencies['directory'];
+  /** O snapshot de sessão de cada personagem (#527) — `/start` recusa quem tem um pendente. */
+  readonly snapshots?: PartyRouteDependencies['snapshots'];
+  /** A party antes da hunt (#195): o formulário em Redis e os limites do conteúdo. */
+  readonly party?: PartyRouteDependencies['party'];
+  readonly partyLimits?: PartyRouteDependencies['limits'];
+  readonly matchmakingLevelRange?: number;
 }
 
 export function createApi(
@@ -115,6 +131,10 @@ export function buildApi(
       isCharacterActive: dependencies.isCharacterActive,
       locateSession: dependencies.locateSession,
       settleProgress: dependencies.settleProgress,
+      ...(dependencies.defaultBotConfig === undefined
+        ? {}
+        : { defaultBotConfig: dependencies.defaultBotConfig }),
+      ...(dependencies.startingKit === undefined ? {} : { startingKit: dependencies.startingKit }),
     });
   }
 
@@ -129,6 +149,50 @@ export function buildApi(
         ownsCharacter: repository.ownsCharacter.bind(repository),
       }),
     }));
+  }
+
+  // As rotas da party (#195) precisam de tudo o que o ticket precisa, mais o formulário e o
+  // diretório; sem qualquer um deles não existem — falhar aberto aqui seria party sem dono.
+  const party = dependencies.party;
+  const partyLimits = dependencies.partyLimits;
+  const locateSession = dependencies.locateSession;
+  const settleProgress = dependencies.settleProgress;
+  const directory = dependencies.directory;
+  const partySnapshots = dependencies.snapshots;
+  if (
+    tickets !== undefined && party !== undefined && partyLimits !== undefined
+    && auth !== undefined && repository !== undefined && locateSession !== undefined
+    && settleProgress !== undefined && directory !== undefined && partySnapshots !== undefined
+  ) {
+    registerPartyRoutes(app, {
+      party,
+      tickets,
+      authenticate: auth.authenticate.bind(auth),
+      ownsCharacter: repository.ownsCharacter.bind(repository),
+      getCharacter: repository.getCharacter.bind(repository),
+      getCharacterById: repository.getCharacterById.bind(repository),
+      listItemInstances: repository.listItemInstances.bind(repository),
+      settleProgress,
+      locateSession,
+      directory,
+      snapshots: partySnapshots,
+      limits: partyLimits,
+      ...(dependencies.matchmakingLevelRange === undefined ? {} : { matchmakingLevelRange: dependencies.matchmakingLevelRange }),
+    });
+  }
+
+  // Amigos (§21, ADR 0031 decisão 6) precisa de auth, repositório e do diretório para o
+  // online/onde; sem qualquer um deles não existe — mesma guarda do bloco de party acima.
+  if (auth !== undefined && repository !== undefined && locateSession !== undefined) {
+    registerFriendRoutes(app, {
+      authenticate: auth.authenticate.bind(auth),
+      ownsCharacter: repository.ownsCharacter.bind(repository),
+      getCharacterByName: repository.getCharacterByName.bind(repository),
+      addFriend: repository.addFriend.bind(repository),
+      listFriends: repository.listFriends.bind(repository),
+      removeFriend: repository.removeFriend.bind(repository),
+      locateSession,
+    });
   }
 
   app.get('/metrics', async (_request, reply) => {

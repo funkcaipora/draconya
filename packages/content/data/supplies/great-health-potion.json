@@ -1,0 +1,19 @@
+{
+  "id": "great-health-potion",
+  "name": "Great Health Potion",
+  "description": "Cura entre 425 e 575 pontos de vida. Nível 80 ou mais, Cavaleiro.",
+  "price": 225,
+  "group": "potion",
+  "groupCooldownMs": 1000,
+  "effect": {
+    "kind": "heal",
+    "amountRange": { "min": 425, "max": 575 },
+    "target": "friend",
+    "range": 1
+  },
+  "requires": {
+    "level": 80,
+    "vocationId": "knight"
+  },
+  "_open": "Kit level 200 (#524). Canary `potions.lua`, item id 239: `health = {425, 575}`, `vocations = {KNIGHT}`, `level = 80`. `price` 225: preço uniforme de NPCs (TibiaWiki via tibiascape.com/library/items/great-health-potion)."
+}

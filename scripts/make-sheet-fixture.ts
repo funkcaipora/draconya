@@ -26,6 +26,10 @@ const HEADER_BYTES = 54;
  *
  * Os pixels são BGRA no arquivo, que é a ordem do BMP — e trocar B com R é metade do que o
  * decodificador precisa acertar. A magenta (0xFF00FF) é a cor de transparência do pacote.
+ *
+ * **A altura é POSITIVA, como no pacote, e isso é BMP de baixo para cima:** a linha 0 daqui é a
+ * ÚLTIMA linha da imagem. O padrão grava `G = linha do arquivo` justamente para que o teste
+ * consiga dizer em que linha da IMAGEM cada linha do arquivo caiu.
  */
 function bitmap(width = 32, height = 32): Uint8Array {
   const pixels = new Uint8Array(width * height * 4);
@@ -33,7 +37,8 @@ function bitmap(width = 32, height = 32): Uint8Array {
     for (let x = 0; x < width; x++) {
       const at = (y * width + x) * 4;
       if (x === 0 && y === 0) {
-        // Vermelho puro no canto: se sair azul, a troca B↔R não aconteceu.
+        // Vermelho puro no canto da primeira linha do ARQUIVO — que na imagem é a última.
+        // Se sair azul, a troca B↔R não aconteceu.
         pixels[at] = 0x00; pixels[at + 1] = 0x00; pixels[at + 2] = 0xff; pixels[at + 3] = 0xff;
       } else if (x === 1 && y === 0) {
         // Magenta: precisa virar transparente.

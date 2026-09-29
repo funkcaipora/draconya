@@ -1,0 +1,27 @@
+{
+  "id": "explosion-rune",
+  "name": "Explosion Rune",
+  "description": "Provoca uma explosão em cruz ao redor do alvo selecionado.",
+  "price": 25,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "requires": {
+    "level": 31,
+    "magicLevel": 6
+  },
+  "effect": {
+    "kind": "damage",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 0,
+      "skillMax": 4.8
+    },
+    "range": 8,
+    "damageType": "physical",
+    "area": {
+      "shape": "cross",
+      "radius": 1
+    }
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Canary `explosion.lua` usa AREA_CIRCLE1X1 (a cruz de 5 tiles no alvo, como o schema `cross`), COMBAT_PHYSICALDAMAGE e ignora armadura; aqui só o tipo é declarado, e a armadura física continua valendo. Fórmula do Canary: min = 0, max = level/5 + ml*4.8 — o schema canônico soma o termo de level nas DUAS pontas, então o piso sai level/5 em vez de 0 (aproximação registrada). Level 31 e magic level 6, 6 cargas. Preço por uso PROVISÓRIO (runa no NPC ÷ 6 cargas). Aparência: efeito (effect 10, o de physical-strike) provisório, auditado em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md)."
+}

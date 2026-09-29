@@ -7,8 +7,16 @@ services:
       target: client
       args:
         VITE_API_URL: ''
+        # Derivado de THINGS_VERSION, e não uma variável à parte: é o MESMO número que o
+        # `app` compara com o inventário do conteúdo no boot (FUN-21). Duas variáveis
+        # seriam duas identidades para um pacote só, e a conferência veria uma delas.
+        VITE_THINGS_URL: /things/${THINGS_VERSION:-1332}
     restart: unless-stopped
     expose: ['80']
+    # O pacote de arte fica num volume, fora da imagem: `things/<versão>/` do repositório
+    # local vai para cá por `scp`/`rsync` uma vez (docs/deploy.md, "O pacote de arte").
+    # Sem ele o jogo abre e desenha retângulos — nunca falha por causa de arte.
+    volumes: ['things:/usr/share/nginx/html/things:ro']
     depends_on:
       app: { condition: service_healthy }
 
@@ -32,6 +40,9 @@ services:
       WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID:?configure WORKOS_CLIENT_ID}
       WORKOS_REDIRECT_URI: ${APP_ORIGIN}/api/auth/callback
       AUTH_DEV_MODE: 'false'
+      # O pacote de arte servido pelo `web` (`/things/<versão>`). O boot recusa subir se o
+      # conteúdo foi conferido contra outro (packages/server/src/served-pack.ts).
+      THINGS_VERSION: ${THINGS_VERSION:-1332}
       LOG_LEVEL: info
     depends_on:
       postgres: { condition: service_healthy }
@@ -45,7 +56,13 @@ services:
       POSTGRES_USER: draconya
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
       POSTGRES_DB: draconya
-    volumes: ['pgdata:/var/lib/postgresql/data']
+    volumes:
+      - 'pgdata:/var/lib/postgresql/data'
+      # Bind (não volume nomeado) na mesma pasta que o próprio Coolify usa para os
+      # backups dele (/data/coolify/backups): é ali que as tarefas agendadas do
+      # Coolify escrevem, e um bind deixa o dono do servidor copiar com scp/rsync
+      # sem passar pelo Docker (docs/deploy.md, "Backup").
+      - '/data/coolify/backups/draconya-staging:/backups'
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U draconya -d draconya']
       interval: 10s
@@ -56,7 +73,10 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     command: ['redis-server', '--appendonly', 'yes']
-    volumes: ['redisdata:/data']
+    volumes:
+      - 'redisdata:/data'
+      # Mesmo bind do postgres acima, mesma razão.
+      - '/data/coolify/backups/draconya-staging:/backups'
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
@@ -66,3 +86,4 @@ services:
 volumes:
   pgdata:
   redisdata:
+  things:
