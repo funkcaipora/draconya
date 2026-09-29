@@ -236,9 +236,9 @@ o perfil é da versão de conteúdo (invariante 7). São três mudanças declara
 | 2 | `Game::combatChangeHealth`, após defesa/armadura/reflexo | golpe de monstro no personagem — e cada TIQUE de condição que um monstro VIVO aplicou (`ConditionDamage::doDamage`) —, antes do mana shield | minor (Adrenaline Burst, Numb) e depois major (Parry, Dodge), cada um `chance ≥ normal(1, 10000)/100`; Dodge encerra |
 | 3 | `Game::combatChangeMana` | dreno de mana (`manadrain`) | Void Inversion (`chance > normal(0, 100)`) → major, minor (`normal(1, 10000)`); o Parry não rola nesse ramo |
 | 4 | `Combat::CombatConditionFunc` (`#cleanseBeforeCondition`) | depois de todo golpe de monstro que acertou, antes da condição da ability | Cleanse `chance ≥ normal(0, 10000)/100` e `uniform(0, n−1)` da condição sorteada; imunidade de 11 s por tipo |
-| 5 | `Game::applyCharmRune` (`#applyCharmsAfterHit`) | depois de todo golpe do jogador que TIROU VIDA de um monstro (extensão/cleave fora) | major e minor ofensivos, cada um `chance ≥ uniform(1, 100)` |
+| 5 | `Game::applyCharmRune` (`#applyCharmsAfterHit`) | depois de todo golpe do jogador que TIROU VIDA de um monstro (extensão/cleave fora) | major e minor ofensivos, cada um `chance ≥ uniform(1, 100)`; a paralisia do Cripple ignora a imunidade a `paralyze` do monstro (ver abaixo) |
 | 6 | `Combat::CombatHealthFunc` (`#rollFatalHold`) | depois de todo dano do jogador a um monstro (o próprio dano dos charms inclusive) | Fatal Hold `chance > normal(0, 100)` |
-| 7 | `Monster::death` (`#carnage`) | morte de um monstro para o jogador que o matou (ou que ele atacava) | Carnage `chance ≥ normal(1, 10000)/100` |
+| 7 | `Monster::death` (`#carnage`) | morte de um monstro — invocado por outro monstro inclusive — para o jogador que o matou (ou que ele atacava) | Carnage `chance ≥ normal(1, 10000)/100` |
 | 8 | `Player::death` (`#charmBlessReductionOf`) | morte do personagem | sem sorteio: `chance/100` de redução multiplicativa quando o último golpe foi do monstro do Bless |
 | 9 | `generateLootRoll` (`#gutOf`) | loot do cadáver do monstro do Gut do MAIOR causador de dano | sem sorteio: `+ ceil(chance × charm / 100)` nos creature products |
 
@@ -264,14 +264,27 @@ do dono; cada um está no comentário da função que o evita):
 - **Gut inerte**: o `generateLootRoll` confere `iType:getType() == ITEM_TYPE_CREATUREPRODUCT`, mas
   nenhum item do `items.xml` declara esse `type` (só o `primarytype`, outro campo) — no `47dfd51`
   o charm nunca dispara. Aqui vale para os itens de `primarytype="creature products"`
-  (`Item.creatureProduct`, escrito pelo importador), o que o Lua descreve.
+  (`Item.creatureProduct`, escrito pelo importador — e, nos cinco que já eram autorais, `worm` e as
+  peles e escamas dos dragões, por override), o que o Lua descreve.
 
 **Onde o Canary é reproduzido mesmo sendo estranho:** o teto de 2× o level dos elementais (não está
 na descrição do charm, está no código), a base do Low Blow somada duas vezes, Low Blow/Savage Blow/
 Vampiric/Void's Call valendo sem exigir item de crítico/leech, o Fatal Hold que nunca expira em
 monstro que foge e não troca de alvo (achad, drasilla, muglex-clan-assassin), o Bless como redução
 MULTIPLICATIVA sobre bênção e promoção, e o dano do charm passando pelo resolver como extensão
-(resistência, imunidade e cura por elemento do monstro valem; só o neutro os pula).
+(resistência, imunidade e cura por elemento do monstro valem; só o neutro os pula). Mais dois, ambos
+do ponto em que o Canary NÃO confere o que o resto do combate confere:
+
+- **O Cripple e o Numb paralisam o monstro imune a `paralyze`.** `iobestiary.cpp` aplica a
+  condição com `target->addCondition`, direto; a imunidade por condição (`Monster::isImmune`)
+  só é conferida em `Combat::CombatConditionFunc` (`combat.cpp:1079`), que o charm não atravessa, e
+  `Creature::addCondition` só recusa a supressão (`isSuppress`, que só o `Player` sobrescreve). O
+  `#applyConditionTo` ganha `ignoreImmunity` para esses dois — as demais paralisias (magia, runa,
+  ability) seguem barradas. 685 dos 1.028 monstros importados declaram `paralyze`: sem isto os dois
+  charms seriam inertes em dois terços do catálogo.
+- **O Carnage rola também para o monstro invocado por outro monstro.** O `Monster::death` não
+  confere `isSummon()`; só o loot, a XP e o Bestiário (`Player::onKilledMonster`) excluem a
+  invocação. A invocação do PERSONAGEM nunca é "morta pelo jogador", então não chega a rolar.
 
 **Conformance de RNG com e sem charms** (`packages/sim/src/rulesets/charms.test.ts`, "a
 conformance de RNG com e sem charms"): (a) sem charm nenhum e com charm atribuído a OUTRO monstro
@@ -283,11 +296,13 @@ prova o mesmo contra a Rat Cellars real e confere cada id despachado contra o ca
 
 **Um vetor por charm** (`rulesets/charms.test.ts`; as rolagens e os números em
 `combat/charms.test.ts`): Wound, Enflame, Poison, Freeze, Zap, Curse e Divine Wrath (`it.each`
-dos sete, tipo e teto), Overpower, Overflux (neutros, tetos), Cripple, Carnage (vizinhos
-ortogonais, teto de level, neutro, cadeia), Dodge, Parry (só o segundo ponto), Adrenaline Burst,
-Numb, a ORDEM minor→major, Void Inversion, Cleanse (sequência remove/imuniza/expira), Fatal Hold
+dos sete, tipo e teto), Overpower, Overflux (neutros, tetos), Cripple (e contra o monstro imune a
+`paralyze`), Carnage (vizinhos ortogonais, teto de level, neutro, cadeia, monstro invocado),
+Dodge, Parry (só o segundo ponto), Adrenaline Burst, Numb (idem imune), a ORDEM minor→major, Void Inversion, Cleanse (sequência remove/imuniza/expira), Fatal Hold
 (30 s e para sempre), Low Blow, Savage Blow, Vampiric Embrace, Void's Call, Bless
-(`progression.test.ts` e o vetor de morte) e Gut (`loot.test.ts` e o vetor de abates).
+(`progression.test.ts` e o vetor de morte) e Gut (`loot.test.ts`, o vetor de abates e, em
+`charms-combat.test.ts`, as tabelas REAIS de Dragon, Dragon Lord, Rotworm e Cave Rat com o flag
+`creatureProduct` de cada creature product do Canary conferido contra o conteúdo carregado).
 
 ## Benchmark: o cenário misto
 

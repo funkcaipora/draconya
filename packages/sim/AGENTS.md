@@ -702,5 +702,9 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   existe no `combat-v4` — `resolveBlockHitProfile` nem sorteia. `cleanseImmunity` é estado do
   personagem e viaja no snapshot; o Fatal Hold é a condição `'fatal-hold'` do monstro (permanente,
   `Number.MAX_SAFE_INTEGER`, quando ele foge e não tem `targetChange` — o Canary só drena o prazo
-  em quem troca de alvo). Os defeitos do `47dfd51` que ficaram de fora estão listados em
+  em quem troca de alvo). O Cripple e o Numb chamam `#applyConditionTo(..., true)` (`ignoreImmunity`):
+  o Canary os aplica com `target->addCondition`, sem o `Monster::isImmune` que só o
+  `CombatConditionFunc` confere — uma paralisia nova que passe pelo caminho de combate normal NÃO
+  usa esse parâmetro. O Carnage roda também para o monstro invocado (`Monster::death` não confere
+  `isSummon()`). Os defeitos do `47dfd51` que ficaram de fora estão listados em
   `docs/product/combat-conformance.md`.

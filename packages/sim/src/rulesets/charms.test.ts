@@ -379,6 +379,27 @@ describe('os charms ofensivos: cada um bate DEPOIS do golpe, com o tipo e o teto
     expect((speed?.expiresAtMs ?? 0) - session.nowMs).toBeLessThanOrEqual(10_000);
   });
 
+  it('Cripple paraliza até o monstro IMUNE a `paralyze`: o Canary chama `addCondition` direto, sem o portão (#603)', () => {
+    // `iobestiary.cpp` aplica a condição com `target->addCondition`; a imunidade por condição só é
+    // conferida em `Combat::CombatConditionFunc`, que o charm não atravessa. 685 dos 1.028 monstros
+    // importados declaram `paralyze`: sem isto o charm seria inerte em dois terços do catálogo.
+    // Velocidade 200: com a base abaixo de 40 a "paralisia" (piso de 40) SOBE a velocidade e o portão
+    // de imunidade nem a reconheceria como paralisia — o vetor só prende com uma base rápida.
+    const immuneRat = { ...rat, speed: 200, conditionImmunities: ['paralyze'] };
+    const { session, ruleset } = start({
+      content: buildContent(raw({ monsters: [immuneRat, biter, bat] })), assign: { cripple: 'rat' },
+    });
+    session.advanceBy(50);
+    isolate(ruleset);
+    const target = ruleset.monsters[0];
+    if (target === undefined) throw new Error('sem rato');
+    run(session, 1_200);
+    const speed = target.conditions.get('speed');
+    expect(speed).not.toBeNull();
+    expect(target.speed * (1 + (speed?.speedPercent ?? 0) / 100)).toBeCloseTo(40, 5);
+    expect((speed?.expiresAtMs ?? 0) - session.nowMs).toBeLessThanOrEqual(10_000);
+  });
+
   it('major E minor: os dois rolam, na ordem major → minor', () => {
     const { session, ruleset } = start({ assign: { wound: 'rat', cripple: 'rat' } });
     session.advanceBy(50);
@@ -470,6 +491,20 @@ describe('Carnage: na morte do monstro, dano neutro nos quatro vizinhos ORTOGONA
     expect(hero.xp).toBeGreaterThan(0);
   });
 
+  it('o monstro INVOCADO por outro monstro também rola o Carnage: o `Monster::death` do Canary não confere `isSummon()`', () => {
+    const { session, a, b, c } = scene(10);
+    // A é uma invocação de um mestre qualquer (id numérico, o de um monstro): loot, XP e Bestiário
+    // a excluem, o Carnage não.
+    Object.assign(a, { masterId: 999_999 });
+    expect(a.masterId).not.toBeNull();
+    const bBefore = b.health;
+    const cBefore = c.health;
+    run(session, 1_500);
+    expect(a.alive).toBe(false);
+    expect(b.health).toBe(bBefore - 60);
+    expect(c.health).toBe(cBefore);
+  });
+
   it('sem o charm atribuído ao monstro que morreu, nada acontece com os vizinhos', () => {
     const { session, b } = scene(10, { carnage: 'bat' });
     const bBefore = b.health;
@@ -546,6 +581,24 @@ describe('os charms defensivos: DEPOIS do blockHit, ANTES do mana shield, minor 
 
   it('Numb (minor) paraliza o monstro que bateu por 10 s', () => {
     const { session, ruleset } = biterScene({ content: biterContent(), assign: { numb: 'biter' } });
+    const target = ruleset.monsters[0];
+    if (target === undefined) throw new Error('sem biter');
+    run(session, 2_500);
+    const paralysis = target.conditions.get('speed');
+    expect(paralysis).not.toBeNull();
+    expect(target.speed * (1 + (paralysis?.speedPercent ?? 0) / 100)).toBeCloseTo(40, 5);
+  });
+
+  it('Numb paraliza até o monstro IMUNE a `paralyze` (o mesmo `addCondition` direto do Cripple, #603)', () => {
+    const immune = buildContent(raw({
+      monsters: [{ ...biter, speed: 200, conditionImmunities: ['paralyze'] }, { ...rat, id: 'idle' }, bat],
+      routes: [{ ...route, spawnPoints: [
+        { routeIndex: 0, radius: 3, monsterId: 'biter', respawnDelayMs: 600_000 },
+        { routeIndex: 0, radius: 3, monsterId: 'idle', respawnDelayMs: 600_000 },
+        { routeIndex: 0, radius: 3, monsterId: 'idle', respawnDelayMs: 600_000 },
+      ] }],
+    }));
+    const { session, ruleset } = biterScene({ content: immune, assign: { numb: 'biter' } });
     const target = ruleset.monsters[0];
     if (target === undefined) throw new Error('sem biter');
     run(session, 2_500);

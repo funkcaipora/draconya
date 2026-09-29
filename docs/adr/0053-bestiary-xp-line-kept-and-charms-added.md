@@ -118,9 +118,12 @@ dele. A decisão 5 continua válida como ordem e como escopo.
   `maxLevelsLimit` estático que o Carnage reatribui a 6 para o processo inteiro; (3) o Gut confere
   `ITEM_TYPE_CREATUREPRODUCT`, tipo que nenhum item declara — no Canary o charm é inerte. Aqui o
   Gut vale para os itens de `primarytype="creature products"`, que o importador marca com
-  `creatureProduct: true`. Onde o Canary é estranho mas coerente, o motor o segue: Low Blow soma a
-  base duas vezes, os passivos valem sem exigir item de crítico/leech, o Fatal Hold nunca expira em
-  monstro que foge e não troca de alvo, o Bless multiplica por cima de bênção e promoção.
+  `creatureProduct: true` (e, nos cinco que já eram autorais, um override). Onde o Canary é estranho
+  mas coerente, o motor o segue: Low Blow soma a base duas vezes, os passivos valem sem exigir item
+  de crítico/leech, o Fatal Hold nunca expira em monstro que foge e não troca de alvo, o Bless
+  multiplica por cima de bênção e promoção, o Cripple e o Numb paralisam até o monstro imune a
+  `paralyze` (`addCondition` direto, sem o portão de imunidade), e o Carnage rola para o monstro
+  invocado (o `Monster::death` não confere `isSummon()`).
 - **O Dodge do PRD sai do `combat-v4`.** A #522 o mantivera por julgá-lo o charm de esquiva; o
   `combatChangeHealth` mostra que o charm NEGA o golpe, e o Dodge de metade não existe no Canary.
   `player.dodgeChance` vira `0`, o resolver do `combat-v4` nem o sorteia, e a exceção

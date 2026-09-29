@@ -6075,8 +6075,15 @@ const slots = bot.groups.get(group);
    * Quando `strongest` mantém a condição que já estava, o mapa não muda e NADA é reagendado —
    * comparar a identidade do estado guardado com o que foi passado distingue os dois casos sem
    * um segundo retorno.
+   *
+   * `ignoreImmunity` pula SÓ a imunidade de monstro por condição (#603): o Cripple e o Numb
+   * chamam `Creature::addCondition` direto (`iobestiary.cpp:108`/`:152`), sem passar por
+   * `Combat::CombatConditionFunc` — o único lugar do Canary que confere `Monster::isImmune`
+   * (`combat.cpp:1079`) —, então a paralisia deles entra até no monstro imune a `paralyze`.
    */
-  #applyConditionTo(session: Session, target: ConditionTarget, condition: ConditionState): void {
+  #applyConditionTo(
+    session: Session, target: ConditionTarget, condition: ConditionState, ignoreImmunity = false,
+  ): void {
     // Item que suprime a condição (#688, Dwarven Ring): ela não entra, como a recusa de
     // `Creature::addCondition` do Canary. Só personagem veste item; monstro fica como estava.
     if (condition.key === DRUNK_CONDITION_KEY && target instanceof CharacterRuntime
@@ -6090,7 +6097,7 @@ const slots = bot.groups.get(group);
     // repropositada para "enxerga invisível" (`Monster::canSeeInvisibility`, ADR 0041 d.2) — ela
     // filtra quem o monstro consegue MIRAR (`chooseTarget`, `monster/monster.ts`), nunca bloqueia
     // o monstro de ficar invisível por conta própria (`monster.defenses`).
-    if (!(target instanceof CharacterRuntime)) {
+    if (!ignoreImmunity && !(target instanceof CharacterRuntime)) {
       const immunities = this.#options.monsters.get(target.monsterId)?.conditionImmunities;
       const paralyzed = condition.key === SPEED_CONDITION_KEY && (condition.speedPercent ?? 0) < 0;
       const blockable = paralyzed ? 'paralyze' : condition.key === DRUNK_CONDITION_KEY ? 'drunk' : null;
@@ -8822,10 +8829,11 @@ const slots = bot.groups.get(group);
           entry.charm, character, this.#maxHealthOf(monster),
         );
         if (effect.kind === 'paralyze') {
+          // Cripple: `target->addCondition` direto, sem o portão de imunidade (ver `#applyConditionTo`).
           this.#applyConditionTo(session, monster, conditionFromSpec(
             CHARM_PARALYZE_CONDITION, monster.subject, character.id, session.nowMs, 'charm',
             { baseSpeed: monster.speed, rng: session.rng },
-          ));
+          ), true);
         } else if (effect.kind === 'damage') {
           this.#applyCharmDamage(
             session, character, monster, effect.amount, effect.damageType, effect.neutral,
@@ -8995,10 +9003,11 @@ const slots = bot.groups.get(group);
         ));
         return false;
       case 'numb':
+        // Numb: `target->addCondition` direto, sem o portão de imunidade (ver `#applyConditionTo`).
         this.#applyConditionTo(session, monster, conditionFromSpec(
           CHARM_PARALYZE_CONDITION, monster.subject, character.id, session.nowMs, 'charm',
           { baseSpeed: monster.speed, rng: session.rng },
-        ));
+        ), true);
         return false;
       case 'parry':
         this.#applyCharmDamage(session, character, monster, healthChange, 'physical', true);
@@ -9052,8 +9061,9 @@ const slots = bot.groups.get(group);
    * O Carnage (`Monster::death`, `monster.cpp:3283-3291`): ao morrer, o monstro ao qual o jogador
    * atribuiu o charm rola `chance >= normal_random(1, 10000) / 100`, e cada monstro nos quatro
    * tiles ORTOGONAIS leva `min(15 % da vida do morto, 6× o level)` de dano neutro. O jogador é
-   * quem deu o último golpe — ou, sem ele, quem o monstro estava atacando. Invocação de jogador
-   * fica de fora (não é alvo hostil, `Combat::canDoCombat`).
+   * quem deu o último golpe — ou, sem ele, quem o monstro estava atacando. Roda também para o
+   * monstro invocado por outro monstro (o `Monster::death` não confere `isSummon()`); invocação de
+   * jogador fica de fora como VÍTIMA (não é alvo hostil, `Combat::canDoCombat`).
    *
    * Roda no FIM de `#onMonsterDied`, com o morto já fora dos índices: as mortes que o Carnage causa
    * são resolvidas depois de todos os golpes (a regra de colher antes de aplicar, FUN-92) e podem
@@ -9689,8 +9699,11 @@ const slots = bot.groups.get(group);
     const summons = this.#monsters.filter((m) => m.masterId === monster.id);
     for (const summon of summons) this.#removeSummon(session, summon);
     // O Carnage (#603) no FIM, com o morto já fora dos índices: as mortes que ele causa são
-    // resolvidas aqui dentro, depois de todos os golpes, e podem encadear outro Carnage.
-    if (!isSummon && definition !== undefined && this.#charmStage()) {
+    // resolvidas aqui dentro, depois de todos os golpes, e podem encadear outro Carnage. Vale para a
+    // invocação também: o `Monster::death` do Canary não confere `isSummon()` — só o loot, a XP e o
+    // Bestiário (`Player::onKilledMonster`) a excluem, e é por isso que o `isSummon` acima os guarda
+    // e este não. A invocação de PERSONAGEM nunca chega a um `killer`: quem a mata é monstro.
+    if (definition !== undefined && this.#charmStage()) {
       this.#carnage(session, monster, definition, credit);
     }
   }
