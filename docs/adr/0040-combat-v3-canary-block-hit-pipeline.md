@@ -408,6 +408,14 @@ decisão 1 listava ("a postura de luta") e que a M30-02 (#549) deixou como parâ
   último golpe de arma, escrito por `#onPlayerAttack` quando `#strike` devolve `true` — o `result`
   de `Player::doAttacking`, que não é `true` para wand sem mana, arma abaixo do level, tiro sem
   visão ou sem munição. A janela é `attackIntervalMs` (o `attackspeed` de 2000 ms das vocações).
+  Dois pontos que a revisão do PR #808 fechou: (1) o carimbo é do relógio da sessão que o
+  gravou, e o personagem atravessa a transição como o MESMO objeto — `Session.enter` o zera, e o
+  restore de snapshot (que não passa por `enter`) o preserva; um carimbo no futuro nunca é
+  "recente"; (2) o empate exato (`agora − lastAttack == attackspeed`) é janela ABERTA quando o
+  golpe do herói está agendado para o mesmo ms, porque no Canary quem bate sem parar nunca fecha
+  a janela (o golpe seguinte corre `attackspeed` mais a latência do despachante) e, no motor
+  discreto, monstro e herói que chegaram juntos batem no mesmo ms para sempre — sem essa
+  exceção a ordem da fila decidiria a defesa.
 - **Só o `combat-v3` lê a postura.** `combat-v1`/`v2` seguem no 1,0 fixo — `attackFactorOf`
   (`weapon-power.ts`) é a única porta —, e o snapshot deles não ganha `lastAttackAtMs`. O
   resultado de um perfil publicado continua bit a bit (ADR 0031).

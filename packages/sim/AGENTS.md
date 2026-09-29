@@ -605,7 +605,17 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   `#onPlayerAttack`, DEPOIS de `#strike` devolver `true` (a arma foi usada, como o `result` de
   `Player::doAttacking`) e só no `combat-v3`; `#strike` devolve `false` para o tiro que não saiu
   (sem visão, sem munição) — não copie o carimbo para um caminho que não é golpe de arma
-  (magia/runa não escrevem `lastAttack` no Canary). O fator de ATAQUE entra por
+  (magia/runa não escrevem `lastAttack` no Canary). **O carimbo é do relógio da sessão que o
+  gravou**: `Session.enter` o zera (o `CharacterRuntime` atravessa a transição como o MESMO
+  objeto e o relógio da sessão nova nasce em zero — sem isso um carimbo de 57 700 ms ficaria no
+  futuro da hunt seguinte), e `attackedRecently` trata carimbo futuro como "nunca bateu"; o
+  restore de snapshot não passa por `enter`, então a janela quente atravessa. **O empate exato**
+  (`agora − lastAttack == attackIntervalMs`) só conta como janela aberta quando o golpe do herói
+  está agendado para ESTE ms (`session.dueAtOf(PLAYER_ATTACK, id) === session.nowMs`, lido só no
+  empate): monstro e herói que chegaram juntos batem no mesmo ms para sempre, e sem isso a ordem
+  da fila decidiria a defesa — o Canary nunca fecha a janela de quem bate sem parar. O reflexo do
+  próprio golpe roda com o evento do golpe já fora da fila e o `+ attackIntervalMs` reagendado,
+  então enxerga a janela fechada, como o Canary (o carimbo só é reescrito depois dele). O fator de ATAQUE entra por
   `resolveWeaponPower`/`resolveWeaponHit` e é gated por perfil dentro delas (`attackFactorOf`):
   `combat-v1`/`v2` ignoram a postura — é o que mantém o resultado do perfil publicado bit a bit.
   **`#playerDefender` bifurca por

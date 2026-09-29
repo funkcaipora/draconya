@@ -1250,6 +1250,22 @@ e o Canary é a fonte de precedência para a fórmula (ADR 0037 d.4). Os número
   snapshot de uma sessão `combat-v1`/`v2` continua sem a chave. Não vai para o Postgres: o
   relógio é da sessão; viaja só no snapshot quente, para a hunt retomada não perder a janela.
   `null` é "nunca bateu": fator 1,0 — o `lastAttack == 0` do Canary sem o relógio de processo.
+  **O carimbo não atravessa a troca de sessão**: o relógio da sessão nova nasce em zero e o
+  `CharacterRuntime` é o MESMO objeto na transição, então `Session.enter` zera `lastAttackAtMs`
+  (o restore de snapshot não passa por `enter` e mantém a janela quente), e `attackedRecently`
+  ainda trata um carimbo no futuro como "nunca bateu". Sem isso um herói vindo de uma hunt de
+  57 s teria a defesa pela metade por quase um minuto na hunt seguinte sem bater — o resultado
+  dependeria do caminho do objeto, não do estado e da semente.
+- **O empate exato da janela** (`agora − lastAttack == 2000 ms`): quem bate sem parar nunca fecha
+  a janela no Canary (o golpe seguinte corre `attackSpeed` mais a latência do despachante, e um
+  golpe de monstro só cai nessa fresta de poucos ms por ciclo). No motor de tempo discreto o
+  monstro que ANDOU até o herói e o próprio herói armam as duas cadências no mesmo instante e
+  batem no mesmo ms para sempre — e a ordem de dois eventos no mesmo ms é só a ordem da fila. O
+  empate conta como janela ABERTA quando o golpe do herói está agendado para este mesmo ms
+  (`session.dueAtOf('player-attack', id)`, lido só no empate exato); se o herói parou, é a
+  comparação estrita do Canary (fechada). O reflexo do próprio golpe (`#reflectOntoCharacter`,
+  dentro de `#onPlayerAttack`) vê o evento do golpe já fora da fila e a janela fechada, como o
+  Canary — o carimbo só é reescrito depois dele.
 - **Perfis**: só o `combat-v3` (e o v4 que o herda) lê a postura. `combat-v1`/`v2` — sessões
   fixadas neles — seguem no 1,0 fixo que a constante `weaponDamage.attackFactor` dava, bit a bit
   (ADR 0031/0040 d.3): a postura entrou no `combat-v3` porque ele ainda não chegou à `main` — um
