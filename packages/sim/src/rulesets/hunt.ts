@@ -2719,7 +2719,8 @@ export class HuntRuleset implements Ruleset {
           result = this.#step(session, character, { ...around, z: character.position.z }, character.id);
         }
       } else if (
-        result.reason === 'same-tile' && runner.sameTileStreak < 1 && this.#hasActiveFollow(session)
+        result.reason === 'same-tile' && runner.sameTileStreak < 1
+        && (this.#hasActiveFollow(session) || session.participants.length === 1)
       ) {
         // O ÍNDICE do walker está UM ATRÁS da posição real do personagem — ele chegou neste
         // tile por outro caminho (o fecha-distância do ramo `not-adjacent` acima, um empurrão,
@@ -2910,10 +2911,18 @@ export class HuntRuleset implements Ruleset {
     const from = character.position;
     const d = distance(from, target.position);
     const blocked = this.#blockedForGroundedStep(character);
-    // `follow` persegue até poder bater; `keep-distance` mira a distância configurada. Os dois
-    // são o mesmo cálculo com alvos diferentes, e escrever dois laços seria a mesma geometria
-    // divergindo na terceira mudança.
-    const want = posture.kind === 'follow' ? this.#attackRangeOf(character) : posture.tiles;
+    // `follow` persegue até poder bater (`d <= reach`), e quando já pode fica parado;
+    // `keep-distance` mira a distância configurada (aproxima se d > want, recua se d < want).
+    if (posture.kind === 'follow') {
+      const reach = this.#attackRangeOf(character);
+      if (d <= reach) return null;
+      const to = greedyStep(from, target.position, blocked);
+      if (to === null) return null;
+      runner.walker.stop();
+      return this.#step(session, character, { ...to, z: from.z }, character.id);
+    }
+
+    const want = posture.tiles;
     // `null` é "a postura decidiu ficar parado": a cadência seguinte é a de um passo daqui.
     if (d === want) return null;
 
@@ -3471,6 +3480,8 @@ export class HuntRuleset implements Ruleset {
     if (this.#occupancyStale) this.#rebuildOccupancy(session);
     const result = this.#step(session, character, { ...to, z: character.position.z }, characterId);
     if (result.ok) {
+      const runner = this.#runners.get(characterId);
+      if (runner !== undefined) runner.sameTileStreak = 0;
       session.cancelEvent(PLAYER_STEP, characterId);
       session.scheduleIn(PLAYER_STEP, result.durationMs, {
         priority: EventPriority.Movement, subject: characterId,
@@ -4919,6 +4930,7 @@ const slots = bot.groups.get(group);
     for (const character of session.participants) {
       this.#autoSelectTarget(session, character);
       this.#armBot(session, character.id);
+      this.#armPlayerAttack(session, character);
     }
   }
 
