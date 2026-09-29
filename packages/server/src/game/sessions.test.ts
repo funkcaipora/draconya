@@ -279,6 +279,29 @@ describe('city successor (FUN-38)', () => {
     city.end('manual-exit');
     expect(createSessionBuilder(content)({ to: 'city' }, city, 'p1')).toBeNull();
   });
+
+  it('leva para a Cidade quem JÁ saiu da origem — o membro da party que o sim tirou (#802)', () => {
+    // Quem sai por dentro do `sim` (morte, regra de saída, o `leave-hunt` que o ruleset
+    // conclui) não está mais em `from.participants`; o host entrega o objeto que `Session.leave`
+    // devolveu. Mutação que mata: ignorar o quarto argumento — o construtor devolvia `null`, e
+    // o host caía no `release`, que encerra a party inteira.
+    const { session, hero } = dyingHunt();
+    const other = new CharacterRuntime({
+      id: 'p2', position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+      level: 20, xp: 0, vocationId: null, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    session.enter(other);
+    const departure = session.leave('p1', 'manual-exit');
+    expect(departure?.character).toBe(hero);
+    expect(session.participants.map((p) => p.id)).toEqual(['p2']);
+
+    const build = createSessionBuilder(content);
+    // Sem o personagem, não há o que mover — o comportamento de sempre para quem não está lá.
+    expect(build({ to: 'city' }, session, 'p1')).toBeNull();
+    const city = build({ to: 'city' }, session, 'p1', departure?.character);
+    expect(city?.ruleset.type).toBe('city');
+    expect(city?.participants[0]).toBe(hero);
+  });
 });
 
 describe('o gold de entrada vem do TICKET, nunca do cliente (FUN-77)', () => {

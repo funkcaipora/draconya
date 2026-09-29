@@ -1710,3 +1710,39 @@ describe('enter-hunt without difficulty (#584, ADR 0039 — end of pull-by-diffi
     expect(decodeC2S(encodeC2S(legacy))).toEqual([legacy]);
   });
 });
+
+describe('saída pendente: cancel-exit, exit-pending (#802)', () => {
+  it('cancel-exit is C2S only, opcode 34, and takes no payload', () => {
+    // Mutação que mata: reutilizar o 33 (`charm-remove`), ou aceitar um campo — quem decide se
+    // há o que cancelar é o servidor, e o cliente não tem nada a dizer além do pedido.
+    expect(CLIENT_TO_SERVER['cancel-exit']).toBe(34);
+    expect('cancel-exit' in S2C_SCHEMAS).toBe(false);
+    const message: C2SMessage = { type: 'cancel-exit' };
+    expect(decodeC2S(encodeC2S(message))).toEqual([message]);
+    expect(C2S_SCHEMAS['cancel-exit'].safeParse({ force: true }).success).toBe(false);
+  });
+
+  it('exit-pending is S2C only, opcode 45, and round trips the countdown, in-combat and closed forms', () => {
+    // Mutação que mata: apagar `exit-pending: 45` de SERVER_TO_CLIENT (`decodeS2C` devolve
+    // `null`), ou tornar `remainingMs` obrigatório no estado fechado.
+    expect(SERVER_TO_CLIENT['exit-pending']).toBe(45);
+    expect('exit-pending' in C2S_SCHEMAS).toBe(false);
+    const countdown: S2CMessage = {
+      type: 'exit-pending', active: true, reason: 'manual-exit', phase: 'countdown', remainingMs: 5_000,
+    };
+    const inCombat: S2CMessage = {
+      type: 'exit-pending', active: true, reason: 'exit-rule', phase: 'in-combat', remainingMs: 41_250,
+    };
+    const closed: S2CMessage = { type: 'exit-pending', active: false };
+    for (const message of [countdown, inCombat, closed]) {
+      expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+    }
+  });
+
+  it('rejects an unknown reason, an unknown phase and a negative or fractional wait', () => {
+    const base = { type: 'exit-pending', active: true, reason: 'manual-exit', phase: 'countdown', remainingMs: 1_000 };
+    for (const patch of [{ reason: 'logout' }, { phase: 'later' }, { remainingMs: -1 }, { remainingMs: 1.5 }]) {
+      expect(decodeS2C(encodeS2C({ ...base, ...patch } as unknown as S2CMessage))).toBeNull();
+    }
+  });
+});

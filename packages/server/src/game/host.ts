@@ -31,7 +31,8 @@ import {
 } from '@draconya/sim';
 import type {
   AmmoRefusal, CarriedItem, CharacterRuntime, CharmAssignRefusal, CharmBestiaryEntry,
-  CharmRemoveRefusal, CharmUnlockRefusal, ConfigurePartyResult, ContainerRules, HuntRuleset,
+  CharmRemoveRefusal, CharmUnlockRefusal, ConfigurePartyResult, ContainerRules, ExitStatus,
+  HuntRuleset,
   InventoryRefusal, InventoryResult, InventoryState, ItemRef, PartyBagChanged, PartyEndVoteResult,
   PartySettingsPatch, Place, PromoteRefusal, SlotRefusal, SlotState, TakeLootRefusal,
   TileAppearanceChange, UseItemRefusal, UseOnMapRejection, UseSlotTarget, VocationRefusal,
@@ -89,6 +90,13 @@ export type SessionBuilder = (
   request: TransitionRequest,
   from: Session,
   characterId: string,
+  /**
+   * O personagem que JÁ saiu de `from` (#802): quem sai da party por dentro do `sim` — morte,
+   * regra de saída, o `leave-hunt` que o ruleset conclui — não está mais em `from.participants`,
+   * e o extrato dele (`Receipt`) só carrega números. O MESMO objeto que `Session.leave` devolveu
+   * atravessa para a sessão de destino, como o que atravessa pela lista sempre fez.
+   */
+  departed?: CharacterRuntime,
 ) => Session | null;
 
 export interface SessionHostOptions {
@@ -810,6 +818,27 @@ function activeConditionsOf(snapshot: ConditionsSnapshot, nowMs: number): S2CPro
   return { conditions };
 }
 
+/**
+ * A assinatura de uma saída pendente (#802) — o gatilho de envio do `exit-pending`. Leva o
+ * `untilMs` (instante lógico), e NÃO o `remainingMs`: este encolhe a cada ciclo, e compará-lo
+ * mandaria a banda inteira a 10 Hz para dizer que o tempo passou.
+ */
+function exitSignature(status: ExitStatus): string {
+  return `${status.reason}|${status.phase}|${String(status.untilMs)}`;
+}
+
+/** O `exit-pending` no fio; `null` é o fim da espera (`active: false`, sem os outros campos). */
+function exitPendingMessage(status: ExitStatus | null, nowMs: number): S2CMessage {
+  if (status === null) return { type: 'exit-pending', active: false };
+  return {
+    type: 'exit-pending',
+    active: true,
+    reason: status.reason,
+    phase: status.phase,
+    remainingMs: Math.max(0, Math.round(status.untilMs - nowMs)),
+  };
+}
+
 /** Ver `createBotConfigValidator` em `sessions.ts`. */
 export type BotConfigDecision =
   | { readonly ok: true; readonly config: BotConfigV2 }
@@ -941,6 +970,12 @@ interface HostedSession {
   sentSpending: readonly PartySpendingShare[] | null;
   /** As últimas condições ENTREGUES a quem olha cada personagem (#341, SV-05). */
   readonly sentConditions: Map<string, ConditionsSnapshot>;
+  /**
+   * A assinatura da saída pendente ENTREGUE a quem olha cada personagem (#802). Entrada ausente
+   * é "nada pendente entregue" — o caso de quase toda hunt, que assim não paga nada por ciclo
+   * além de uma consulta ao ruleset.
+   */
+  readonly sentExit: Map<string, string>;
   /**
    * A assinatura `(state, reason)` dos slots ENTREGUE a quem olha cada personagem (AB-09),
    * por `characterId`. É o gatilho do `slot-state`: o `remainingMs` decresce sempre, e compará-lo
@@ -1075,6 +1110,14 @@ export class SessionHost {
   readonly #preparations = new Map<string, Promise<void>>();
   /** Transições em voo, por personagem. Ver `transition`. */
   readonly #transitions = new Map<string, Promise<void>>();
+  /**
+   * Personagens cuja sucessão — extrato e Cidade, `#settleOne` — está EM VOO (#802). É o que o
+   * `leave-hunt` consulta quando a sessão já acabou: em voo, o segundo clique não tem o que fazer
+   * (e seguir a transição o poria em corrida com a sucessão que já corre); parada, é porque
+   * FALHOU — e o segundo clique é o retry manual que sempre existiu. Só o processo dono da
+   * sessão escreve aqui, e o marcador sai no `finally`, com sucesso ou falha.
+   */
+  readonly #settling = new Set<string>();
   #lastLagWarningMs = Number.NEGATIVE_INFINITY;
   /** Quanto tempo a retomada pulou, esperando o primeiro visualizador para ser contado. */
   readonly #resumedGapMs = new Map<string, number>();
@@ -1547,9 +1590,16 @@ export class SessionHost {
         });
         return;
       case 'leave-hunt':
-        // Sair é voltar para a cidade, não ficar sem sessão: todo personagem está em
-        // exatamente uma (invariante 8).
-        void this.#requestTransition(viewer, { to: 'city' });
+        // INTENÇÃO (invariante 4): o jogador PEDE a saída, e quem decide quando ela conclui é o
+        // ruleset (#802) — depois do `exitDelayMs` e fora da janela de combate. Sair é voltar
+        // para a cidade, não ficar sem sessão: todo personagem está em exatamente uma
+        // (invariante 8), e é a sucessão de sempre que o leva para lá quando a hora chega.
+        this.#requestLeaveHunt(viewer);
+        return;
+      case 'cancel-exit':
+        // INTENÇÃO (invariante 4): desistir do pedido acima. Só a saída MANUAL se desfaz, e quem
+        // sabe se há o que desfazer é o ruleset.
+        this.#requestCancelExit(viewer);
         return;
       case 'logout':
         // Sair do jogo ENCERRA a sessão e devolve o slot; fechar o socket não.
@@ -2738,6 +2788,73 @@ export class SessionHost {
     ruleset.configureBot?.(hosted.session, config, characterId);
   }
 
+  /**
+   * O `leave-hunt` do jogador (#802): PEDE a saída ao ruleset (`requestExit`), que a conclui
+   * quando o `exitDelayMs` vence e o personagem está fora de combate (#625: a janela de 60 s do
+   * `CONDITION_INFIGHT` do Canary, medida por dano aplicado — ver `combat/in-fight.ts`). Nada
+   * aqui encerra a sessão por conta própria.
+   *
+   * **Idle-first (invariante 3).** A espera é um evento da fila do `sim`, então ela vence com ou
+   * sem visualizador — o jogador que pede a saída e fecha a aba sai do mesmo jeito, no mesmo
+   * instante. O que o host faz é só a metade de I/O: quando o `sim` conclui, a sucessão de
+   * sempre grava o extrato e leva o personagem à Cidade (`#succeed` para a sessão que acabou,
+   * `#settleDepartures` para o membro da party que saiu — o `leave` com mais de um dono).
+   *
+   * Sem `requestExit` no ruleset — a Cidade, ou um ruleset que não sabe pedir —, ou com uma
+   * transição em andamento, é o caminho de antes: `transition({ to: 'city' })`, que também é
+   * quem devolve a recusa certa ("você já está aqui"). Morte, `party-member-lost` e a drenagem
+   * NÃO passam por aqui e continuam encerrando direto: nenhuma delas carrega a intenção do
+   * jogador de sair.
+   */
+  #requestLeaveHunt(viewer: Viewer): void {
+    const { characterId } = viewer;
+    const hosted = this.#hostedSession(characterId);
+    const ruleset = hosted?.session.ruleset as Partial<HuntRuleset> | undefined;
+    if (hosted === undefined || ruleset?.requestExit === undefined || this.#transitions.has(characterId)) {
+      void this.#requestTransition(viewer, { to: 'city' });
+      return;
+    }
+    // A sessão JÁ acabou. Ou a sucessão dela (extrato, Cidade) está em andamento — o segundo
+    // clique de uma saída que concluiu na hora —, e não há o que pedir: seguir para a transição
+    // aqui a poria em corrida com o `#succeed` que já corre (o `#transitions` não o conhece), a
+    // CAS do diretório recusaria a segunda, e o caminho de recusa SOLTA o personagem. Ou a
+    // sucessão FALHOU e o personagem ficou numa sessão encerrada que o ciclo ignora ("Failed to
+    // move the character to the next session"): aí o clique é o retry manual que existia antes
+    // do #802, pela transição de sempre — o extrato é idempotente (`credited`) e o `#replace`
+    // conclui o que faltou.
+    if (hosted.session.ended !== null) {
+      if (!this.#settling.has(characterId)) void this.#requestTransition(viewer, { to: 'city' });
+      return;
+    }
+    ruleset.requestExit(hosted.session, characterId);
+    // Sem `exitDelayMs` e fora de combate a saída conclui NA HORA, aqui, fora do ciclo — e o
+    // ciclo pula a sessão já encerrada. A ORDEM é a do `cycle`: os `member-left` PRIMEIRO, a
+    // sucessão da sessão depois. Quem sai na hora deixa o próprio `member-left` na fila do `sim`
+    // (`#depart`), e a mesma chamada pode ENCERRAR a sessão — o voto de encerrar que a saída dele
+    // completa, a cascata `party-member-lost` que esvazia a party. `Session.end` só monta o
+    // extrato de quem ainda está presente e `#succeed` só o liquida: sem drenar antes, o extrato
+    // de quem saiu (XP, gold, ledger) ficaria para sempre na fila de uma sessão que o ciclo não
+    // visita mais, e o personagem preso nela.
+    this.#presentMoves(hosted);
+    if (hosted.departures.length > 0) void this.#settleDepartures(hosted);
+    // Quem encerra fora do ciclo dispara a sucessão (mesma regra do `#partyEndVote`).
+    if (hosted.session.ended !== null) {
+      void this.#succeed(hosted);
+      return;
+    }
+    // A espera pendente chega ao cliente já, e não só no ciclo seguinte.
+    this.#presentExit(hosted);
+  }
+
+  /** O `cancel-exit` (#802): o ruleset desfaz a saída manual pendente, se houver. */
+  #requestCancelExit(viewer: Viewer): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const ruleset = hosted?.session.ruleset as Partial<HuntRuleset> | undefined;
+    if (hosted === undefined || ruleset?.cancelExit === undefined || hosted.session.ended !== null) return;
+    if (!ruleset.cancelExit(hosted.session, viewer.characterId)) return;
+    this.#presentExit(hosted);
+  }
+
   async #requestTransition(viewer: Viewer, request: TransitionRequest): Promise<void> {
     try {
       await this.transition(viewer.characterId, request);
@@ -2817,6 +2934,7 @@ export class SessionHost {
       // levá-lo. DEPOIS dos eventos pelo mesmo motivo dos vitais.
       this.#presentTarget(hosted);
       this.#presentConditions(hosted);
+      this.#presentExit(hosted);
       // E o analisador, se um abate, um loot, um gasto ou um evento entrou (FUN-110): sem
       // isto a janela ficava em zero a hunt inteira, até o jogador reconectar.
       this.#presentAnalyzer(hosted);
@@ -3300,6 +3418,30 @@ export class SessionHost {
     }
   }
 
+  /**
+   * A saída pendente de cada personagem, para quem olha (#802): manda `exit-pending` quando a
+   * assinatura (motivo, fase, prazo) muda, e `active: false` quando ela some — cancelada, ou
+   * concluída sem que a sessão inteira acabe. Quando a sessão acaba o `session-ended` é o aviso,
+   * e o cliente zera a espera com ele.
+   *
+   * SEM visualizador não se compara nada (invariante 3): a espera corre no `sim` de qualquer
+   * jeito, e quem anexar depois recebe o estado no `session-attach`.
+   */
+  #presentExit(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    if (ruleset.exitStatus === undefined) return;
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      const status = ruleset.exitStatus(hosted.session, character.id);
+      const signature = status === null ? undefined : exitSignature(status);
+      if (hosted.sentExit.get(character.id) === signature) continue;
+      if (signature === undefined) hosted.sentExit.delete(character.id);
+      else hosted.sentExit.set(character.id, signature);
+      this.#sendToViewersOf(hosted, character.id, exitPendingMessage(status, hosted.session.nowMs));
+    }
+  }
+
   #presentConditions(hosted: HostedSession): void {
     if (hosted.viewers.size === 0) return;
     for (const character of hosted.session.participants) {
@@ -3504,6 +3646,15 @@ export class SessionHost {
         targetId: follow.targetId,
         ...(follow.reason === undefined ? {} : { reason: follow.reason }),
       });
+    }
+    // A saída pendente (#802) sobrevive à desconexão, como o Follow: quem reconecta no meio da
+    // espera precisa vê-la e poder desistir. Só quando há uma — o attach comum não paga nada.
+    const exit = (hosted.session.ruleset as Partial<HuntRuleset>).exitStatus?.(hosted.session, characterId);
+    if (exit === undefined || exit === null) {
+      hosted.sentExit.delete(characterId);
+    } else {
+      hosted.sentExit.set(characterId, exitSignature(exit));
+      viewer.send(exitPendingMessage(exit, hosted.session.nowMs));
     }
     // A votação de encerrar em curso (#432) sobrevive à desconexão, como o Follow: quem
     // reconecta no meio da janela de 60 s precisa ver a proposta e poder aprovar. Só quando há
@@ -3848,16 +3999,29 @@ export class SessionHost {
   async #succeed(hosted: HostedSession): Promise<void> {
     // Um extrato por participante (#187, #194): cada um credita, avisa os SEUS visualizadores
     // e volta à Cidade, na ordem de entrada. Quem já saiu antes (`member-left`) não está aqui.
-    for (const receipt of hosted.session.receipts()) {
-      if (!this.#charactersOf(hosted.session.id).includes(receipt.characterId)) continue;
+    const receipts = hosted.session.receipts();
+    // Todos marcados ANTES do primeiro `await`: o segundo participante só entra em `#settleOne`
+    // depois de o primeiro terminar, e o clique dele nesse intervalo não pode passar por
+    // "parada" (#802, `#settling`).
+    for (const receipt of receipts) this.#settling.add(receipt.characterId);
+    for (const receipt of receipts) {
+      if (!this.#charactersOf(hosted.session.id).includes(receipt.characterId)) {
+        this.#settling.delete(receipt.characterId);
+        continue;
+      }
       await this.#settleOne(hosted, receipt.characterId, receipt);
     }
   }
 
   /** As saídas enfileiradas por `member-left` (#194), fora do ciclo. */
   async #settleDepartures(hosted: HostedSession): Promise<void> {
+    // A fila inteira é marcada de uma vez, pelo mesmo motivo do `#succeed`.
+    for (const left of hosted.departures) this.#settling.add(left.characterId);
     while (hosted.departures.length > 0) {
       const left = hosted.departures.shift() as MemberLeft;
+      // Quem saiu não faz mais parte da sessão: o id numérico dele é liberado aqui, como o
+      // `leave-hunt` fazia antes de passar pelo ruleset (#802) — nenhum evento posterior o cita.
+      this.#announceDeparture(hosted, left.characterId);
       await this.#settleOne(hosted, left.characterId, left.departure.receipt, left.departure.character);
     }
   }
@@ -3865,6 +4029,7 @@ export class SessionHost {
   async #settleOne(
     hosted: HostedSession, characterId: string, receipt: Receipt, departed?: CharacterRuntime,
   ): Promise<void> {
+    this.#settling.add(characterId);
     try {
       await this.#saveReceipt(characterId, hosted, receipt, departed);
       for (const viewer of hosted.viewers) {
@@ -3879,7 +4044,7 @@ export class SessionHost {
 
       // Toda sessão que acaba sozinha devolve o personagem à Cidade (§6): "a hunt acabou"
       // nunca pode significar "ficou sem sessão" (invariante 8).
-      const next = this.#options.buildSession?.({ to: 'city' }, hosted.session, characterId)
+      const next = this.#options.buildSession?.({ to: 'city' }, hosted.session, characterId, departed)
         ?? null;
       if (next === null) {
         await this.release(characterId, 1000, receipt.reason);
@@ -3894,6 +4059,8 @@ export class SessionHost {
         { error, characterId, sessionId: hosted.session.id },
         'Failed to move the character to the next session',
       );
+    } finally {
+      this.#settling.delete(characterId);
     }
   }
 
@@ -4049,6 +4216,7 @@ export class SessionHost {
       sentParty: null,
       lastPartyBag: null,
       sentConditions: new Map(),
+      sentExit: new Map(),
       sentSlotState: new Map(),
       slotStateAtMs: 0,
       sentSpending: null,
@@ -4852,6 +5020,7 @@ export class SessionHost {
       sentParty: null,
       lastPartyBag: null,
       sentConditions: new Map(),
+      sentExit: new Map(),
       sentSlotState: new Map(),
       slotStateAtMs: 0,
       sentSpending: null,

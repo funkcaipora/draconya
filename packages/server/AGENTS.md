@@ -292,6 +292,40 @@ outros membros: a conta de cada um vem do snapshot DELE, e o lease é registrado
 qualquer coisa local existir — senão o lease expira, o login seguinte resolve para outro nó, e
 a cópia do snapshot revive a mesma sessão duas vezes.
 
+**`leave-hunt` PEDE a saída, não a executa (#802).** `#requestLeaveHunt` chama `requestExit` do
+ruleset, e a sessão só termina quando o `sim` concluir — depois do `exitDelayMs` e fora da janela
+de combate de 60 s (#625). O host faz a metade de I/O: quando o `sim` encerra a sessão a
+sucessão de sempre (`#succeed`) grava o extrato e leva o personagem à Cidade; quando ele tira um
+membro da party (`member-left`), `#settleDepartures` faz o mesmo por ele. Quatro armadilhas:
+
+- **Quem encerra FORA do ciclo dispara a sucessão — e DRENA os `member-left` ANTES.** O ciclo pula
+  a sessão que já acabou, então o `requestExit` que conclui na hora (sem delay, fora de combate)
+  tem de chamar `#succeed` ele mesmo — como o `#partyEndVote`. Mas a ordem é a do `cycle`:
+  `#presentMoves` + `#settleDepartures` primeiro, `ended` depois. Quem sai na hora deixa o
+  `member-left` (o extrato dele) na fila, e a mesma chamada pode ENCERRAR a sessão — o voto de
+  encerrar que a saída dele completa, a cascata `party-member-lost` que esvazia a party.
+  `Session.end` monta o extrato só de quem ainda está presente e `#succeed` só o liquida: checar
+  `ended` antes de drenar perde o extrato de quem saiu e o deixa preso numa hunt que o ciclo não
+  visita mais. Também por isso o `member-left` é drenado na hora, e não no próximo ciclo (que só
+  apresenta depois de vencer o período do tick; a resposta do `leave-hunt` sempre foi imediata).
+- **Sessão encerrada: em voo ou falhou?** `#settling` marca, por personagem, a sucessão em curso
+  (`#succeed` marca todos antes do primeiro `await`, `#settleDepartures` a fila inteira,
+  `#settleOne` solta no `finally`). Com a sessão já encerrada, o `leave-hunt` de quem está em voo
+  é ignorado (a transição o poria em corrida com o `#succeed` — a CAS recusaria a segunda e a
+  recusa SOLTA o personagem); o de quem NÃO está é o retry manual da sucessão que falhou
+  ("Failed to move the character to the next session"), pela transição de sempre — idempotente
+  por `credited`. Trocar isto por um `if (ended) return` cego tira o único retry que o jogador
+  tem.
+- **O `SessionBuilder` recebe o personagem que JÁ saiu (`departed`).** Quem sai por dentro do
+  `sim` não está mais em `from.participants`; sem o quarto argumento o construtor devolvia `null`,
+  o host caía no `release`, e o `release` de uma sessão privada a ENCERRA — a saída de UM membro
+  (morte, regra, ou este `leave-hunt`) acabava a party inteira com `manual-exit`. `leave-hunt.test.ts`
+  usa o construtor de produção justamente porque o stub dos outros testes esconde isto.
+- **`exit-pending` é apresentação, com gatilho por assinatura** (`sentExit`, motivo|fase|prazo —
+  nunca o `remainingMs`, que encolhe a cada ciclo) e sem nada quando ninguém olha (invariante 3).
+  Sai no `session-attach` só se há saída pendente. Morte, `party-member-lost` e a drenagem NÃO
+  passam por aqui e seguem encerrando direto — nenhuma carrega a intenção de sair.
+
 Para achar o extrato daquele personagem sem varrer o keyspace inteiro a cada login, o
 `ReceiptStore` mantém `receipts:char:{characterId}` ao lado (guardando a chave inteira). **Os dois
 prefixos são distintos de propósito:** nomear o índice `receipt:char:{id}` o poria dentro do

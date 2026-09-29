@@ -285,7 +285,10 @@ produto. "Registro" é sempre no sentido do ADR 0052 d.1; "intenção de Cidade"
   há ≤ 60 000 ms (`pzLocked`), guardada como carimbo lógico no runtime; a saída manual e a por
   regra do bot só concluem fora dela (o `exitDelayMs` continua como contagem visual). A mesma
   definição alimenta o decaimento de imbuement (#606). Testes: saída em combate espera; fora usa o
-  delay.
+  delay. **Emenda (#802, achado desta issue):** o `leave-hunt` do socket encerrava a sessão direto,
+  sem passar por `requestExit`, então a trava só valia para a saída do bot; passou a PEDIR a saída
+  ao ruleset, com `exit-pending` (S2C) para a tela e `cancel-exit` (C2S) para desistir da saída
+  manual — ver `docs/product/hunt.md`, "Saída da hunt".
 - **#626 — Skinning e Scavenge.** Importador gera os 87 mapeamentos cadáver → material; o bot,
   com a ferramenta (5908/5942) na mochila, esfola **no mesmo evento em que coleta** (ordem de RNG
   determinística: um estágio declarado no `combat-v4`, consumido só quando há ferramenta), chance
