@@ -2434,6 +2434,10 @@ const huntSalao = {
 const withPosture = (
   over: Record<string, unknown>,
   difficulty: 'cautious' | 'bold' | 'reckless' = 'cautious',
+  heroOver: Partial<{
+    health: number; staminaMs: number; skills: SkillsState; inventory: InventoryState;
+    bestiary: BestiaryState; gold: number;
+  }> = {},
 ) => {
   const loaded = buildContent(raw({
     monsters: [rat, poste, posteEterno], hunts: [hunt, huntSalao],
@@ -2443,7 +2447,7 @@ const withPosture = (
     id: 'postura', content: loaded, huntId: 'salao', difficulty, createdAtMs: 0,
     botConfig: botConfig({ targeting: botTargetingSchema.parse(over) }),
   });
-  const hero = character();
+  const hero = character(heroOver);
   session.enter(hero);
   return { session, hero, ruleset: session.ruleset as HuntRuleset };
 };
@@ -2483,6 +2487,32 @@ describe('postura: o primeiro caso em que o personagem sai da rota por decisão 
     expect(ruleset.monsters[0]?.alive).toBe(true);
     expect(hero.position).toEqual({ x: 4, y: 4, z: 7 });
     // E ficou batendo o tempo todo: parar de andar não é parar de lutar.
+    expect(ruleset.monsters[0]?.health).toBeLessThan(1_000_000);
+  });
+
+  it('follow com arma de alcance NÃO foge quando o alvo fica adjacente — fica parado e bate', () => {
+    // Wand com range 3: o monstro está a distância 1 (adjacente).
+    // Antes do fix, posture.kind === 'follow' executava fleeStep porque d (1) < want (3),
+    // fugindo do monstro e empacando contra paredes.
+    const { session, hero, ruleset } = withPosture(
+      { posture: { kind: 'follow' } },
+      'bold',
+      {
+        inventory: {
+          backpack: [],
+          equipped: { hand: { instanceId: 'w1', itemId: 'wand', quantity: 1 } },
+        },
+      },
+    );
+    hero.mana = 10000;
+    hero.maxMana = 10000;
+    // Poste eterno nasce em (4, 5). Coloca o herói em (4, 4) adjacente (d = 1 <= 3).
+    hero.position = { x: 4, y: 4, z: 7 };
+
+    run(session, 10_000, 100);
+
+    // Herói não fugiu para distância 3: continuou em (4, 4) batendo!
+    expect(hero.position).toEqual({ x: 4, y: 4, z: 7 });
     expect(ruleset.monsters[0]?.health).toBeLessThan(1_000_000);
   });
 
@@ -2536,6 +2566,24 @@ describe('postura: o primeiro caso em que o personagem sai da rota por decisão 
     expect(session.aggregates.kills).toBe(0);
     expect(ruleset.monsters[0]?.health).toBe(40);
     expect(ruleset.monsters[0]?.position).toEqual({ x: 4, y: 5, z: 7 });
+  });
+
+  it('hunt solo: passo manual ao longo da rota não trava o walker em loop de same-tile', () => {
+    // Um passo manual (requestMove) move o personagem para o tile seguinte da rota.
+    // Antes do fix, na hunt solo, walker.step() pedia o tile onde o personagem já estava,
+    // move() devolvia same-tile, e walker.hold() desfazia o avanço, travando o bot para sempre.
+    const { session, hero, ruleset } = withPosture({ posture: { kind: 'stand' } }, 'bold');
+
+    // Rota 'anel': tiles[0] é (4, 3, 7), tiles[1] é (5, 3, 7).
+    // O herói nasce em (4, 3, 7). Dá um passo manual para o tile seguinte da rota:
+    const stepRes = ruleset.requestMove(session, hero.id, { x: 5, y: 3 });
+    expect(stepRes.ok).toBe(true);
+    expect(hero.position).toEqual({ x: 5, y: 3, z: 7 });
+
+    // Roda a simulação por 10 segundos. O walker NÃO deve ficar travado em (5, 3, 7).
+    run(session, 10_000, 100);
+
+    expect(hero.position).not.toEqual({ x: 5, y: 3, z: 7 });
   });
 });
 
@@ -8721,6 +8769,84 @@ describe('auto-target na tela e runa à distância (#444)', () => {
       .filter((event) => event.kind === 'creature-hit')
       .map((event) => (event as { creatureId: string }).creatureId);
     expect(hits).toContain(far.subject);
+  });
+
+  it('seleciona monstro no alcance da arma como alvo de ataque sem clique manual', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
+    session.advanceBy(1);
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    a.position = { x: hero.position.x + 1, y: hero.position.y };
+    b.position = { x: hero.position.x + 15, y: hero.position.y };
+    c.position = { x: hero.position.x + 16, y: hero.position.y };
+    ruleset.configureBot(session, botConfigV2([]), 'hero');
+
+    expect(ruleset.attackTargetOf(hero)?.subject).toBe(a.subject);
+    expect(ruleset.selectedTargetOf(hero)?.subject).toBe(a.subject);
+    expect(ruleset.getState().runners?.[hero.id]?.chosenTargetPinned).toBeUndefined();
+  });
+
+  it('monstro mais próximo toma precedência sobre alvo distante quando não está pinado', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
+    session.advanceBy(1);
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    a.position = { x: hero.position.x + 5, y: hero.position.y };
+    b.position = { x: hero.position.x + 8, y: hero.position.y };
+    c.position = { x: hero.position.x + 9, y: hero.position.y };
+    ruleset.configureBot(session, botConfigV2([]), 'hero');
+
+    expect(chosenOf(ruleset, hero.id)).toBe(a.subject);
+    expect(ruleset.selectedTargetOf(hero)?.subject).toBe(a.subject);
+
+    b.position = { x: hero.position.x + 1, y: hero.position.y };
+    ruleset.configureBot(session, botConfigV2([]), 'hero');
+    expect(ruleset.attackTargetOf(hero)?.subject).toBe(b.subject);
+    expect(chosenOf(ruleset, hero.id)).toBe(b.subject);
+    expect(ruleset.selectedTargetOf(hero)?.subject).toBe(b.subject);
+  });
+
+  it('alvo pinado manualmente é preservado mesmo se outro monstro surgir mais perto', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
+    session.advanceBy(1);
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    a.position = { x: hero.position.x + 3, y: hero.position.y };
+    b.position = { x: hero.position.x + 6, y: hero.position.y };
+    c.position = { x: hero.position.x + 7, y: hero.position.y };
+
+    ruleset.setAttackTarget(hero, a);
+    expect(ruleset.getState().runners?.[hero.id]?.chosenTargetPinned).toBe(true);
+    expect(chosenOf(ruleset, hero.id)).toBe(a.subject);
+
+    b.position = { x: hero.position.x + 1, y: hero.position.y };
+    ruleset.configureBot(session, botConfigV2([]), 'hero');
+
+    expect(chosenOf(ruleset, hero.id)).toBe(a.subject);
+    expect(ruleset.getState().runners?.[hero.id]?.chosenTargetPinned).toBe(true);
+  });
+
+  it('requestMove adquire o monstro próximo como alvo e arma o ataque ao dar um passo', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
+    session.advanceBy(1);
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    expect(hero.position).toEqual({ x: 2, y: 1, z: 7 });
+
+    // Afasta outros monstros
+    b.position = { x: 30, y: 30, z: 7 };
+    c.position = { x: 31, y: 31, z: 7 };
+
+    // Coloca 'a' a 2 tiles de distância (em 2, 3)
+    a.position = { x: 2, y: 3, z: 7 };
+    // Hero anda um passo para o sul (2, 2), ficando adjacente a 'a' (2, 3)
+    const res = ruleset.requestMove(session, hero.id, { x: 2, y: 2 });
+    expect(res.ok).toBe(true);
+    expect(hero.position).toEqual({ x: 2, y: 2, z: 7 });
+
+    // Agora 'a' está no alcance da arma (Chebyshev 1)
+    expect(ruleset.attackTargetOf(hero)?.subject).toBe(a.subject);
+    expect(ruleset.selectedTargetOf(hero)?.subject).toBe(a.subject);
   });
 });
 

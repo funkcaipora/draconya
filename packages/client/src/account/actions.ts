@@ -80,3 +80,23 @@ export async function signOut(): Promise<void> {
     ...state, phase: 'anonymous', identity: null, characters: [], playing: null,
   }));
 }
+
+/**
+ * Tenta iniciar o login: se o servidor estiver em dev mode, retorna `'dev'` para que a UI
+ * mostre o campo de e-mail. Senão, navega para o WorkOS.
+ */
+export async function tryLogin(register = false): Promise<'dev' | 'navigating' | null> {
+  return attempt(() => api.beginLogin(register));
+}
+
+/**
+ * Login em dev mode: manda o e-mail, recebe o cookie, e recarrega a lista de personagens.
+ */
+export async function devLogin(email: string): Promise<void> {
+  const identity = await attempt(() => api.devLogin(email));
+  if (identity === null) return;
+  const characters = await attempt(api.listCharacters);
+  account.set((state) => ({
+    ...state, phase: 'ready', identity, characters: characters ?? [],
+  }));
+}
