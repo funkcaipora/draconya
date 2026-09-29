@@ -85,13 +85,20 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   `HuntRuleset#onCharacterDied` chama `loseItemsOnDeath` ANTES de `applyDeathPenalty` e do consumo
   das bênçãos (o Canary roda `dropCorpse` antes de `death()`: a chance lê a contagem de bênçãos de
   ANTES, e o Amulet of Loss protege antes de ser gasto) e `consumeLossAmulet` DEPOIS (lê o level já
-  rebaixado). Cada slot vestido consome UM sorteio na ordem de `CANARY_SLOT_ORDER` — inclusive o que
-  não cai, e nenhum se o colar ou as bênçãos protegem: trocar a ordem, ou parar na primeira perda,
-  muda quem perde o quê com a mesma semente. O item é DESTRUÍDO (`removedInstances`, o mesmo caminho
-  de `sell-items`): não há cadáver de jogador, então nada aqui devolve o item a lugar nenhum. A
-  mochila perdida leva o vetor inteiro (`Inventory.loseEquipped`), a bolsa nunca. Container para a
-  regra é `kind: 'container'` OU `quiver` — a flag `container` do cliente. Sem estado novo: nada
-  disto entra no snapshot.
+  rebaixado). Cada slot vestido consome UM sorteio na ordem de `CANARY_SLOT_ORDER` (`head, neck,
+  back, chest, shield, hand, legs, feet, finger, ammo` — o `RIGHT` do Canary, o escudo, antes do
+  `LEFT`, a arma) — inclusive o que não cai, e nenhum se o colar ou as bênçãos protegem: trocar a
+  ordem, ou parar na primeira perda, muda quem perde o quê com a mesma semente (e a absorção por
+  item de `equipmentAbsorb`, que usa a mesma constante). **Sem vocação (`vocationId === null`) não
+  há perda nem bag**, e **abaixo do level do Adventurer's Blessing com vocação
+  (`hasAdventurersBlessing`) vale cinco bênçãos** — o Canary/TFS devolvem antes da perda para o
+  Dawnport/`VOCATION_NONE` e concedem as bênçãos 2 a 6 no login; quem mexer nas proteções lê
+  `docs/product/death.md`. O item é DESTRUÍDO (`removedInstances`, o mesmo caminho de
+  `sell-items`): não há cadáver de jogador, então nada aqui devolve o item a lugar nenhum. A
+  mochila perdida leva o vetor inteiro (`Inventory.loseEquipped`), **a bolsa nunca — um abrigo que o
+  Tibia não tem, e decisão do dono em aberto** (`docs/product/death.md`, "Em aberto"). Container
+  para a regra é `kind: 'container'` OU `quiver` — a flag `container` do cliente. Sem estado novo:
+  nada disto entra no snapshot.
 - **Loot sorteia com o `Rng` da sessão, gold antes de item, e `chance: 0` não consome
   sorteio.** Ordem e semente são contrato: mudar qualquer um dos dois muda o que toda hunt
   retomada rende. `Math.random` continua proibido, e `grep -rn "Math.random" src` é vazio.

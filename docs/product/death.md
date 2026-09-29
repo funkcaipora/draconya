@@ -111,18 +111,34 @@ respondeu: nenhuma morte de personagem foi capturada. Por isso o conteúdo real 
 `packages/content/data/progression/baseline.json` — sem código, e por versão de conteúdo (invariante
 7: só as sessões novas veem a mudança).
 
-**O mecanismo é o de `Blessings.PlayerDeath`/`DropLoot`** (`data/libs/systems/blessing.lua:82-126` do
+**O mecanismo é o de `Blessings.PlayerDeath`/`DropLoot`** (`data/libs/systems/blessing.lua:82-118` do
 Canary), na ordem em que ele roda — ANTES da penalidade de XP e do consumo das bênçãos, porque
 `Creature::onDeath` chama `dropCorpse` antes de `death()`:
 
+0. **Sem vocação não há perda nenhuma — nem a bag do passo 5.** O Canary devolve antes de
+   `Blessings.PlayerDeath` para o personagem do Dawnport abaixo do level 8 (`droploot.lua:6-9`,
+   `data-otservbr-global/scripts/creaturescripts/others/`) e o TFS para `VOCATION_NONE`
+   (`data/creaturescripts/scripts/drop_loot.lua:2-4`); a bag de reposição mora dentro de
+   `PlayerDeath`. No Draconya os dois são `vocationId === null` — a vocação só se escolhe no
+   `progression.vocationLevel` (8) —, então quem morre nos levels 1 a 7 (e quem chegou ao 8 e
+   ainda não escolheu) não perde item. É a fase do Draconya que o Tibia chama de Dawnport, e ela
+   existe.
 1. **O Amulet of Loss VESTIDO protege tudo.** É o item com `protectsOnDeath: true` no slot do
    pescoço (`amulet-of-loss`, id 3057, flag posta por override — o importador só transcreve o
    `items.xml`, e a regra do Canary é por id fixo no Lua). Nenhum sorteio roda. O colar na mochila,
    fora do pescoço, não protege — o Canary confere só o slot do colar.
 2. **Cinco ou mais bênçãos também protegem**: a tabela `Blessings.LossPercent[n].item` dá 0% a partir
-   da quinta. A contagem é a de ANTES de a morte consumir as bênçãos (`blessingCount`, #570).
-3. **Senão, cada slot vestido consome UM sorteio**, na ordem `head, neck, back, chest, hand, shield,
-   legs, feet, finger, ammo` (`CONST_SLOT_HEAD..AMMO`), com o `Rng` da sessão: inteiro em
+   da quinta. A contagem é a de ANTES de a morte consumir as bênçãos (`blessingCount`, #570). **O
+   Adventurer's Blessing conta como as cinco**: o Canary concede as bênçãos 2 a 6 no login a quem
+   tem vocação e está abaixo do level 21 (`player.cpp:12301-12308`, `adventurersBlessingLevel`,
+   `config.lua.dist:496`), e `#getBlessings()` dá 5 — `DropLoot` nem roda. O Draconya não guarda
+   essas cinco no bitmask (a #570 as modelou como bênção de preço zero), então `hasAdventurersBlessing`
+   as DERIVA de `level < blessingPricing.freeBelowLevel` e `vocationId !== null`, com o level de
+   ANTES da penalidade — a mesma conferência que o consumo do colar faz (passo 6), com o level de
+   depois. O evento é `item-loss-protected/blessings`.
+3. **Senão, cada slot vestido consome UM sorteio**, na ordem `head, neck, back, chest, shield, hand,
+   legs, feet, finger, ammo` (`CONST_SLOT_HEAD..AMMO`, `blessing.lua:106` — o `RIGHT` do Canary, o
+   escudo ou a aljava, vem antes do `LEFT`, a arma), com o `Rng` da sessão: inteiro em
    [1, 10 000] (`math.random(100 × 100)`, resolução de 0,01%), e o item se perde se o número cair
    até `chance × 100`. Slot vazio não sorteia. A `chance` é a tabela por contagem de bênçãos —
    100/70/45/25/10/0/0/0 — **cheia para container e dividida por 10 para o resto**
@@ -131,11 +147,15 @@ Canary), na ordem em que ele roda — ANTES da penalidade de XP e do consumo das
    (`items.cpp:174-178`): a mochila, e também a aljava (`quiver: true`) — conferido nos
    `appearances.dat` do pacote 13.32 para os ids 35562, 35848 e 36666.
 4. **Perder a mochila leva junto tudo o que ela carrega.** A bolsa (`satchel`) é do PERSONAGEM, não
-   do item, e nunca vai junto.
+   do item, e nunca vai junto: **é um abrigo que o Tibia não tem** — lá tudo o que o personagem
+   carrega está na mochila, e ela vai inteira para o cadáver. Com a chave ligada o jogador pode
+   mover (`move-item`, de graça) o que mais vale para a bolsa e nunca perdê-lo. Isto é decisão do
+   dono, ao lado da de destruir-ou-nunca-perder (ver "Em aberto"); o mecanismo hoje deixa a bolsa
+   de fora.
 5. **Quem fica sem mochila nas costas ganha uma `bag`** — perdeu agora, ou já não tinha, e mesmo
    protegido (o `addItem(ITEM_BAG)` do Canary está fora dos ramos da perda). É o `ITEM_BAG` (id 2853,
    8 lugares), com origem própria (`death-replacement`), vestida e vazia.
-6. **O Amulet of Loss é consumido DEPOIS da penalidade** (`Player::death`, `player.cpp:4213-4219`):
+6. **O Amulet of Loss é consumido DEPOIS da penalidade** (`Player::death`, `player.cpp:4215-4219`):
    UM colar vestido, protegendo ou não — inclusive com cinco bênçãos, que já protegiam sozinhas. A
    conferência lê o level JÁ rebaixado: quem tem vocação e ficou abaixo do level 21
    (`blessingPricing.freeBelowLevel`, o `adventurersBlessingLevel` do `config.lua.dist`) não perde o
@@ -230,7 +250,7 @@ sessão (invariante 8): "a hunt acabou" nunca pode significar "ficou sem sessão
 | Redução de quem está promovido (`promoted`) | 30%, aditiva e nunca tetada — parâmetro sem estado ainda (#566) | `packages/content/data/progression/baseline.json`, `deathPenalty.promotionReduction` |
 | Perda de item — chave (#571) | **`false`: decisão do dono em aberto** (ver "Perda de item na morte") | `packages/content/data/progression/baseline.json`, `deathPenalty.itemLoss.enabled` |
 | Perda de item — chance por bênçãos | 100/70/45/25/10/0/0/0 % (`Blessings.LossPercent[n].item`) | `deathPenalty.itemLoss.lossPercentByBlessings` |
-| Perda de item — divisor de quem não é container | 10 (`chance / 10`, `blessing.lua:112`) | `deathPenalty.itemLoss.nonContainerDivisor` |
+| Perda de item — divisor de quem não é container | 10 (`chance / 10`, `blessing.lua:109`) | `deathPenalty.itemLoss.nonContainerDivisor` |
 | Perda de item — mochila de reposição | `bag` (`ITEM_BAG`, 8 lugares) | `deathPenalty.itemLoss.replacementContainerId`, `packages/content/data/items/bag.json` |
 | Proteção do Amulet of Loss | `protectsOnDeath: true` no colar (slot `neck`) | `packages/content/data/items/overrides/amulet-of-loss.json` |
 | Piso de proteção de level | **removido pelo #569** | — |
@@ -247,10 +267,22 @@ Nenhum `[ABERTO]` do PRD atinge diretamente este sistema.
   não tem evidência do Huntera para se apoiar: segue aguardando decisão direta do dono, não uma
   captura. Enquanto isso o conteúdo real entrega `itemLoss.enabled: false` (ver "Perda de item na
   morte"). **Ligar** é trocar esse booleano — e o dono precisa saber que, no Draconya, perder é
-  DESTRUIR, sem cadáver para recuperar; **decidir por "nunca perde"** é apagar o bloco `itemLoss` e
+  DESTRUIR, sem cadáver para recuperar, e que a bolsa é abrigo (próximo item); **decidir por "nunca perde"** é apagar o bloco `itemLoss` e
   a issue fecha como divergência de produto registrada, ao lado de "always-hit" e Dodge no
   `combat-v1` (ADR 0031). `docs/tibia-parity-plan.md` §6 lista o que uma captura de morte
   precisaria mostrar, se uma acontecer.
+- **A bolsa é abrigo contra a perda** `[ABERTO]` — a `satchel` (ADR 0026 decisão 6, herdada do
+  Huntera) não tem equivalente no Tibia, e `Inventory.loseEquipped('back')` só esvazia a mochila:
+  com `itemLoss.enabled: true`, o que o jogador guarda na bolsa sobrevive a toda morte a 0% de
+  risco, enquanto no Canary tudo o que se carrega vai para o cadáver. O dono decide junto com a
+  chave: manter a bolsa fora da perda (o que o código faz), ou incluí-la — por exemplo com um
+  sorteio próprio, como o de um container, que leva o conteúdo junto quando cai.
+- **Adventurer's Blessing derivado do level, não concedido no login** — a regra é a do Canary
+  (level < 21 com vocação protege a perda de item), mas o Canary concede as bênçãos no LOGIN e o
+  Draconya as deriva do level da hora da morte. Só diverge para quem cruza o level 21 DENTRO de
+  uma mesma hunt e morre nela: o Canary ainda o protegeria (as bênçãos foram concedidas abaixo
+  do 21), o Draconya não. Reproduzir isso exigiria estado novo no snapshot (a concessão por login)
+  e não foi feito; fica registrado para quem ligar a chave.
 - **Bênção de verdade (#570) já está implementada**: `applyDeathPenalty` recebe
   `options.blessings` — a CONTAGEM de bênçãos do morto (`blessingCount(character.blessings)`,
   `packages/sim/src/blessings.ts`), nunca mais o binário `premium` que a #569 deixou como ponto

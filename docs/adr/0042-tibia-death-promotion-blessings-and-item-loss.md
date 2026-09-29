@@ -200,9 +200,28 @@ rebaixado ficou abaixo do Adventurer's Blessing (`Player::death`, `willNotLoseBl
 container para a regra (a flag `container` do cliente, não o `items.xml`) e perde com a chance
 cheia; a bag de reposição vem mesmo com o personagem protegido.
 
-**Adventurer's Blessing.** O Canary concede as cinco bênçãos regulares AUTOMATICAMENTE abaixo do
-level 21 com vocação; a #570 modelou isso como preço zero (`blessingPricing.freeBelowLevel`) — a
-bênção é comprada de graça, não concedida. A perda de item lê o mesmo bitmask que a penalidade de
-XP, então enquanto aquele desenho valer um personagem de level < 21 que não comprou as bênçãos
-grátis teria 100% de chance na mochila, com a chave ligada. Não é decisão desta issue, e fica
-registrado aqui para quem ligar a chave.
+**Adventurer's Blessing e personagem sem vocação — fechados na revisão da #571.** O Canary
+concede as cinco bênçãos regulares AUTOMATICAMENTE no login abaixo do level 21 com vocação
+(`player.cpp:12301-12308`), e o TFS e o Canary devolvem ANTES de qualquer perda para quem não
+tem vocação — o Canary para o Dawnport abaixo do level 8 (`droploot.lua:6-9`), o TFS para
+`VOCATION_NONE` (`drop_loot.lua:2-4`). A #570 modelou o Adventurer como preço zero, sem estado,
+e a perda de item lê o mesmo bitmask que a penalidade de XP; deixar assim tiraria a mochila de
+todo personagem novo assim que a chave fosse ligada. Por isso `loseItemsOnDeath` DERIVA as duas
+proteções: `vocationId === null` não perde nada (nem recebe a bag, que mora dentro de
+`Blessings.PlayerDeath`), e `hasAdventurersBlessing` (level < `blessingPricing.freeBelowLevel` com
+vocação — a conferência que `consumeLossAmulet` já fazia) equivale a cinco bênçãos, com o level de
+ANTES da penalidade. O que fica sem reproduzir: o Canary concede no LOGIN, e o Draconya deriva
+do level da hora da morte — quem cruza o level 21 dentro de uma mesma hunt e morre nela seria
+protegido no Canary e não aqui. Reproduzir exigiria estado novo no snapshot; fica registrado
+para quem ligar a chave.
+
+**A bolsa é o abrigo que o Tibia não tem — decisão do dono, junto com a chave.** A `satchel` (ADR
+0026 decisão 6) é do personagem, e a perda de item só esvazia a mochila: com a chave ligada, o que
+o jogador guarda na bolsa (`move-item` é de graça) sobrevive a toda morte, enquanto no Canary tudo
+o que se carrega vai para o cadáver. O mecanismo entrega a bolsa de fora; incluí-la (um sorteio
+próprio, como o de um container, levando o conteúdo) é a alternativa, e a escolha é do dono.
+
+**Ordem dos slots.** O sorteio percorre `CONST_SLOT_HEAD..AMMO` (`blessing.lua:106`), e no Canary
+o `RIGHT` (5, escudo ou aljava) vem antes do `LEFT` (6, a arma): `CANARY_SLOT_ORDER` é `head, neck,
+back, chest, shield, hand, legs, feet, finger, ammo` — a mesma constante da absorção por item
+(#552).
