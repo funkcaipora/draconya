@@ -468,6 +468,11 @@ export function checkMaps(mapsDir: string, thingsDir: string, version: string, o
     if (sha256 !== committed.source.sha256) {
       return { file, status: 'stale', detail: `o OTBM mudou: sha256 ${committed.source.sha256.slice(0, 12)}… no arquivo, ${sha256.slice(0, 12)}… no disco` };
     }
+    // Com o OTBM mas sem o pacote de arte, a geometria não é regenerável: é aviso, como faltar
+    // o próprio OTBM — nunca uma exceção que derruba o `pnpm check`.
+    if (pack === null && !existsSync(join(thingsDir, version, 'catalog-content.json'))) {
+      return { file, status: 'absent', detail: `pacote ${version} não está em ${thingsDir}` };
+    }
     pack ??= loadPack(thingsDir, version);
     const region = committed.source.region;
     const entry = committed.entryPoint === undefined
@@ -515,7 +520,7 @@ if (import.meta.main) {
     for (const outcome of outcomes) {
       if (outcome.status === 'fresh') console.log(`maps/${outcome.file}: confere com o OTBM`);
       else if (outcome.status === 'hand-made') console.log(`maps/${outcome.file}: autorado à mão, nada a conferir`);
-      else if (outcome.status === 'absent') console.log(`maps/${outcome.file}: OTBM não está nesta máquina — pulado (rode pnpm map:fetch)`);
+      else if (outcome.status === 'absent') console.log(`maps/${outcome.file}: ${outcome.detail ?? 'OTBM não está nesta máquina'} — pulado (rode pnpm map:fetch e traga o pacote de arte)`);
       else { stale = true; console.error(`maps/${outcome.file}: DESATUALIZADO — ${outcome.detail ?? ''}`); }
     }
     process.exit(stale ? 1 : 0);
