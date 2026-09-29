@@ -589,25 +589,45 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
 - **Imunidade de condição e invisibilidade (#559, ADR 0041 d.2) têm UM portão cada, e a
   invisibilidade tem um TIMING que é evento, não checagem.** (a) `#applyConditionTo` recusa a
   condição de um combate para o monstro imune (`conditionImmunityOf`, `conditions.ts`: `paralyze`
-  = o sinal NEGATIVO de `speed`, `drunk`, e a DOT pelo `damageType` do tique); `condition.sourceId
-  === target.subject` (auto-aplicação) pula o portão, e campo de tile NÃO passa por ele —
-  `FIELD_TICK` tiqueta direto, como o Canary só consulta a imunidade de DANO ali. `invisible` NUNCA
-  entra: a imunidade é `seesInvisible` (`monster.ts`), "enxerga o invisível". (b) `#revealOnDrain`
-  é o `Monster::drainHealth`: dano REAL de vida (`applied.healthDamage > 0`) num monstro invisível
-  o revela — chamado nos cinco pontos que fazem `applyDamageOutcome` num monstro; um sexto ponto
-  que aplique dano num `MonsterRuntime` sem chamá-lo esconde o defeito. Só o monstro perde a
-  invisibilidade por dano; a do JOGADOR não. (c) **Largar o alvo que ficou invisível é o `Creature::
-  onThink`, uma vez por 1000 ms numa fase por criatura — no sim é o evento `visibility-think`**
-  (`#scheduleVisibilityThinks`, agendado em `#applyConditionTo` quando a invisibilidade COMEÇA, não
-  quando é renovada): cada monstro que perseguia o invisível e não o enxerga pensa uma vez em
-  `[0, 1000)` ms (sorteio da sessão) e larga o alvo se ele ainda estiver invisível. `chooseTarget`
-  NÃO larga sozinho — largaria antes do Canary, porque roda a cada passo — e só filtra a AQUISIÇÃO
-  (aquisição, ramo estreito de fuga, `targetChange`, `#applyChallenge`). Do lado do jogador, o alvo
-  ELEITO pelo bot cai na hora (`selectTarget` nunca escolhe invisível, targeting do bot é do
-  Draconya, ADR 0037 d.2) e o FIXADO pelo jogador segue até o think — e o golpe dele nesse
-  intervalo revela o monstro. Toda invisibilidade que entra sem passar por `#applyConditionTo`
-  (um teste que faz `conditions.apply` direto) não agenda think, e o monstro que a persegue nunca
-  a larga: use a magia ou a defesa de verdade.
+  = o sinal NEGATIVO de `speed`, `drunk`, e a DOT pelo `damageType` do tique) — **mas só quando o
+  chamador passa `fromCombat = true`** (o DOT de `#castSpell`, a Paralyze Rune de `#useSupply`, a
+  ability de monstro): no Canary só `Combat::CombatConditionFunc` bloqueia uma condição por
+  imunidade, e o que entra por `addCondition` direto (campo de tile, defesa própria, os charms
+  Cripple/Numb) não a consulta. Um chamador novo e não combativo (um charm) nasce SEM o portão;
+  ligá-lo por padrão a tudo que tem origem estrangeira paralisa Dragon Lord com Cripple. A
+  auto-aplicação (`condition.sourceId === target.subject`) pula o portão até dentro do combate, e
+  campo de tile NÃO passa por ele — `FIELD_TICK` tiqueta direto. `invisible` NUNCA entra: a
+  imunidade é `seesInvisible` (`monster.ts`), "enxerga o invisível". (b) **`#drainMonster` é o
+  `Monster::drainHealth`, o cano ÚNICO do dano de vida num `MonsterRuntime`** — golpe, magia/runa,
+  tique de DOT e de campo, reflexo, golpe de invocação: aplica o `applyDamageOutcome`, e com dano
+  REAL (`applied.healthDamage > 0`) arma o bypass de campo e revela o monstro invisível. Todo ponto
+  novo que tire vida de um monstro (os charms de dano, por exemplo) chama ELE, nunca o
+  `applyDamageOutcome` direto: um ponto que pule o cano esconde os dois efeitos sem teste nenhum
+  que o aponte. Só o monstro perde a invisibilidade por dano; a do JOGADOR não. (c) **Largar o
+  alvo que ficou invisível é o `Creature::onThink`, uma vez por 1000 ms numa fase por criatura — no
+  sim é o evento `visibility-think`** (`#scheduleVisibilityThinks`, agendado em `#applyConditionTo`
+  quando a invisibilidade COMEÇA, não quando é renovada): cada monstro que perseguia o invisível e
+  não o enxerga pensa uma vez em `[0, 1000)` ms (sorteio da sessão) e larga o alvo se ele ainda
+  estiver invisível. `chooseTarget` NÃO larga sozinho — largaria antes do Canary, porque roda a
+  cada passo — e só filtra a AQUISIÇÃO (aquisição, ramo estreito de fuga, `targetChange`,
+  `#applyChallenge`). Do lado do jogador, o alvo ELEITO pelo bot cai na hora (`selectTarget` nunca
+  escolhe invisível, targeting do bot é do Draconya, ADR 0037 d.2) e o FIXADO pelo jogador segue
+  até o think — e o golpe dele nesse intervalo revela o monstro. **O campo do alvo eleito é
+  limpo NO EVENTO em que a invisibilidade começa (`#scheduleVisibilityThinks`), nunca por um
+  leitor**: `#attackTargetOfRunner`/`#botCandidateOf` são alcançáveis da apresentação
+  (`slotStates` → `#targetInRange`, só com visualizador anexado), então para o invisível não
+  fixado eles devolvem `null` SEM escrever — escrever ali faz o snapshot depender de haver alguém
+  assistindo (invariante 3). Toda invisibilidade que entra sem passar por `#applyConditionTo` (um
+  teste que faz `conditions.apply` direto) não agenda think nem limpa o campo, e o monstro que a
+  persegue nunca a larga: use a magia ou a defesa de verdade. (d) **A recusa de monstro invisível
+  como alvo MANUAL (`setAttackTarget`, o `target-cancel` do host, `use-slot`/`use-item-on` de
+  efeito de alvo único) é um substituto de apresentação, não uma regra do Canary**: lá o cliente
+  nem recebe a criatura (`ProtocolGame::canSee`), e o servidor só decide o tile
+  (`Spell::playerRuneSpellCheck`, `needTarget`). O efeito de ÁREA/campo mirado no monstro invisível
+  sai no tile dele (`#resolveManualTarget`) — recusá-lo divergiria do Canary. (e) **Cancel
+  Invisibility dispensa só os MONSTROS da forma (círculo de raio 3, `AREA_CIRCLE3X3`)**: o `combat`
+  do script é agressivo por default e `CombatFunc` exclui o lançador; a invisibilidade do
+  próprio Paladin sobrevive a ele.
 - **A haste do JOGADOR (as quatro magias de vocação, Swift Foot) continua em `casting.ts`, à
   parte de `conditionFromSpec`.** `spellEffectSchema`'s `kind: 'haste'` (percentual FLAT, sem
   fórmula) não mudou nesta issue — as duas mecânicas escrevem o MESMO campo de runtime

@@ -54,6 +54,7 @@ import { reflectedDamageIntent } from '../combat/reflect.js';
 import { cleavePower, cleaveTiles } from '../combat/cleave.js';
 import type { ReflectAttacker, ReflectedDamage } from '../combat/reflect.js';
 import { applyDamageOutcome } from '../combat/outcome.js';
+import type { AppliedDamageOutcome } from '../combat/outcome.js';
 import {
   combineCombatModifiers, monsterCriticalModifiers, rollSharedCriticalOutcome,
 } from '../combat/modifiers.js';
@@ -2169,9 +2170,13 @@ export class HuntRuleset implements Ruleset {
   ): void {
     const runner = this.#runners.get(character.id);
     if (runner === undefined) return;
-    // Monstro invisível não é alvo: o jogador não o enxerga (`Player::canSeeCreature`), e o
-    // cliente do Tibia nem recebe a criatura para clicar nela (#559). O alvo que JÁ estava
-    // fixado e ficou invisível é outro caso — cai no think agendado, não aqui.
+    // Monstro invisível não é alvo (#559): o jogador não o enxerga (`Player::canSeeCreature`,
+    // `player.cpp:1418`) e o cliente do Canary nem recebe a criatura para clicar nela
+    // (`ProtocolGame::canSee`) — o `Game::playerSetAttackedCreature` do servidor não confere
+    // visibilidade nenhuma, a proteção é do lado do cliente. O cliente do Draconya ainda DESENHA
+    // o monstro invisível, então esta recusa é o substituto server-side dessa apresentação (não
+    // uma regra de caça: o alvo que um jogador do Canary poderia escolher é o mesmo). O alvo que
+    // JÁ estava fixado e ficou invisível é outro caso — cai no think agendado, não aqui.
     const visible = target !== null && !target.invisible ? target : null;
     runner.attackTarget = visible === null ? null : visible.subject;
     runner.attackTargetPinned = visible !== null && pinned;
@@ -5415,16 +5420,28 @@ const slots = bot.groups.get(group);
     if (target.kind === 'monster') {
       const monster = this.#monsterBySubject.get(target.subject);
       if (monster === undefined || !monster.alive) return { ok: false, reason: 'no-target' };
-      // Monstro invisível não é alvo: o jogador não o enxerga (`Game::playerUseWithCreature`,
-      // Canary `game.cpp:6404`, descarta o pedido quando `!player->canSeeCreature`) — o mesmo
-      // `no-target` de "sem alvo" (#559).
-      if (monster.invisible) return { ok: false, reason: 'no-target' };
       // A invocação (#598, ADR 0057) nunca é alvo válido de fogo amigo — nem por
       // auto-target (`#hostileMonsters`), nem por clique explícito: o cliente manda intenção
       // (invariante 4), e a mira num aliado é sempre inválida, o mesmo `no-target` de "sem
       // alvo" — não "recusado", porque a invocação de outro dono é invisível para este gate
       // por design (só a masterId string do PRÓPRIO personagem importa aqui).
       if (monster.masterId === character.id) return { ok: false, reason: 'no-target' };
+      // Monstro invisível (#559). No Canary o cliente NUNCA recebe a criatura que o jogador não
+      // enxerga (`ProtocolGame::canSee` → `Player::canSeeCreature`, `player.cpp:1418`), então não
+      // há clique nela; o tile continua clicável, e o que o servidor decide é só o que a mira no
+      // TILE faz (`Spell::playerRuneSpellCheck`, `spells.cpp:704`): a runa que precisa de alvo
+      // (`needTarget`: Sudden Death, Fireball, Paralyze…) recusa o tile sem criatura VISÍVEL
+      // (`CANONLYUSETHISRUNEONCREATURES`), e a que não precisa (Great Fireball, Avalanche, os
+      // campos…) sai do mesmo jeito e atinge quem estiver lá — invisível inclusive, revelando-o.
+      // O cliente do Draconya ainda DESENHA o monstro invisível (a apresentação não some com ele),
+      // então este clique existe aqui; o `no-target` do efeito de alvo único é o substituto do
+      // filtro de apresentação do Canary, e o efeito de área/campo mira o tile do monstro, como o
+      // jogador faria ali. Não é regra de caça: a matemática é a do Canary nos dois casos.
+      if (monster.invisible) {
+        return this.#isSingleTargetEffect(damageEffect)
+          ? { ok: false, reason: 'no-target' }
+          : { ok: true, explicit: this.#at(monster) };
+      }
       return { ok: true, explicit: monster };
     }
     return { ok: true, explicit: target.position };
@@ -5509,7 +5526,8 @@ const slots = bot.groups.get(group);
 
     // Dispel em ÁREA (#592, Cancel Invisibility): a forma sai do LANÇADOR, como a cura em grupo
     // — `#aimFor` entra pelo ramo self-origin e colhe os MONSTROS na forma em `#spellHits`, sem
-    // mirar ninguém (sem alvo válido, `aim` vem `null`, e o dispel do lançador de sempre segue).
+    // mirar ninguém. Sem monstro na forma, `aim` vem `null` e nada é dispensado: a magia sai
+    // igual (gasta a mana, rende a skill), e o lançador nunca é o alvo do dispel (ver abaixo).
     const aim = spell.effect.kind === 'damage'
       ? this.#aimFor(character, spell.effect.range, spell.effect.area, explicit)
       : spell.effect.kind === 'damage-over-time'
@@ -5579,19 +5597,18 @@ const slots = bot.groups.get(group);
     // Dispel (#590): o `castSpell` devolve as CHAVES a remover, e quem tem a fila (para
     // cancelar `condition-expire`/`condition-tick`) é o ruleset — a mesma divisão da condição
     // abaixo. Vale para o RECIPIENTE: o mesmo alvo que a cura composta cura, quando há cura.
-    // Dispel em ÁREA (#592, Cancel Invisibility) vale para TODA criatura na forma, em vez do
-    // recipiente único de sempre: `Combat::CombatFunc` (`combat.cpp:1580`) só exclui o lançador
-    // quando o combate é AGRESSIVO (`!params.aggressive || caster != creature`), e o dispel não
-    // é — então os MONSTROS colhidos, o próprio lançador (o centro da forma) e os aliados dentro
-    // dela perdem a invisibilidade (#559).
+    // Dispel em ÁREA (#592, Cancel Invisibility) vale para os MONSTROS colhidos na forma, em vez
+    // do recipiente único de sempre — e SÓ para eles (#559). `Combat::CombatFunc` (`combat.cpp:
+    // 1562`/`1610`) só inclui o lançador quando `!params.aggressive`, e o `combat` do Cancel
+    // Invisibility nunca chama `COMBAT_PARAM_AGGRESSIVE` — o `spell:isAggressive(false)` do
+    // script é o `Spell::aggressive` do portão de proteção, outro campo —, então vale o default
+    // do Canary (`CombatParams::aggressive = true`): `caster != creature`, o lançador NUNCA é
+    // atingido, e outro jogador só o seria com as regras de PvP (`canDoCombatWithExpertPvp`),
+    // que a hunt não tem (invariante 8: instanciada, PvE). Quem ficou invisível pelo Invisibility
+    // (`utana vid`) continua invisível depois do próprio Cancel Invisibility.
     if (result.dispel !== undefined) {
       if (spell.effect.kind === 'dispel' && spell.effect.area !== undefined) {
         for (const monster of this.#spellHits) this.#dispelConditions(session, monster, result.dispel);
-        const keys = new Set(this.#aimTiles.map(tileKey));
-        for (const participant of session.participants) {
-          if (!participant.alive || !keys.has(tileKey(this.#at(participant)))) continue;
-          this.#dispelConditions(session, participant, result.dispel);
-        }
       } else {
         this.#dispelConditions(session, recipient, result.dispel);
       }
@@ -5620,7 +5637,7 @@ const slots = bot.groups.get(group);
           ...result.condition,
           targetId: this.#subjectOf(target),
           sourceId: character.id,
-        });
+        }, true);
       }
       return result;
     }
@@ -5804,16 +5821,11 @@ const slots = bot.groups.get(group);
       session.credit(character.id, 'bestSpellHit', damage);
       // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe. Um
       // `manadrain` sai daqui com `healthDamage: 0` sempre — a vida do monstro nunca se move.
-      const applied = applyDamageOutcome(monster, outcome, character, 1, false, targetsAffected);
+      const applied = this.#drainMonster(session, monster, outcome, character, targetsAffected);
       // Magia e runa também passam pelo `blockHit` do alvo no Canary: um acerto limpo recarrega
       // os contadores de sangue e de escudo (#686). Não rendem try de ARMA — a prática delas é
       // de magia, por mana.
       this.#noteAttackBlock(character, outcome);
-      // O bypass de campo (M29-05, TFS/Canary `Monster::drainHealth`): levar dano ESTANDO preso
-      // (`lastStepBlocked`) concede UMA passagem pelo campo que o prendia — nunca de graça, e
-      // nunca ao andar livre. Zero de dano (`chance: 0`/overkill de mira que já matou) não arma.
-      if (monster.lastStepBlocked && applied.healthDamage > 0) monster.ignoresFieldDamage = true;
-      this.#revealOnDrain(session, monster, applied.healthDamage);
       // O DPS soma o APLICADO (#431), pela mesma razão do `#land`: a manopla do overkill não
       // entra na conta do dano causado.
       session.creditDamage(character.id, applied.healthDamage);
@@ -6065,8 +6077,20 @@ const slots = bot.groups.get(group);
    * Quando `strongest` mantém a condição que já estava, o mapa não muda e NADA é reagendado —
    * comparar a identidade do estado guardado com o que foi passado distingue os dois casos sem
    * um segundo retorno.
+   *
+   * `fromCombat` liga o portão de IMUNIDADE do monstro, e só o chamador que é um COMBATE o liga
+   * (magia, runa, ability): a imunidade de condição do Canary é consultada por
+   * `Combat::CombatConditionFunc` (`combat.cpp:1079`) e por mais ninguém que BLOQUEIE uma
+   * condição (`Monster::canSeeInvisibility` a lê, mas para outro fim) — o que entra por
+   * `Creature::addCondition` direto, que só confere `isSuppress`, não a consulta: o campo de
+   * tile, a defesa própria e os charms Cripple/Numb do Bestiário (`iobestiary.cpp:105-109` e
+   * `:144-152`, uma `ConditionSpeed(CONDITION_PARALYZE)` adicionada ao monstro sem checar
+   * imunidade). Por isso o portão é opt-in do chamador, e não um filtro de tudo que tem origem
+   * estrangeira: um chamador novo e não combativo nasce SEM ele, como no Canary.
    */
-  #applyConditionTo(session: Session, target: ConditionTarget, condition: ConditionState): void {
+  #applyConditionTo(
+    session: Session, target: ConditionTarget, condition: ConditionState, fromCombat = false,
+  ): void {
     // Item que suprime a condição (#688, Dwarven Ring): ela não entra, como a recusa de
     // `Creature::addCondition` do Canary. Só personagem veste item; monstro fica como estava.
     if (condition.key === DRUNK_CONDITION_KEY && target instanceof CharacterRuntime
@@ -6084,7 +6108,7 @@ const slots = bot.groups.get(group);
     // bloqueia o monstro de ficar invisível por conta própria (`monster.defenses`). Campo de tile
     // não passa por aqui (`FIELD_TICK` tiqueta direto), e o Canary tampouco consulta a imunidade
     // de condição no campo — só a de DANO, que já zera o tique.
-    if (!(target instanceof CharacterRuntime) && condition.sourceId !== target.subject) {
+    if (fromCombat && !(target instanceof CharacterRuntime) && condition.sourceId !== target.subject) {
       const immunities = this.#options.monsters.get(target.monsterId)?.conditionImmunities;
       if (immunities !== undefined && immunities.length > 0) {
         const blockable = conditionImmunityOf(condition);
@@ -6145,11 +6169,15 @@ const slots = bot.groups.get(group);
    * - **Monstros** que o perseguem (`targetId`), exceto os que "veem invisível"
    *   (`Monster::canSeeInvisibility`) — para eles `canSeeCreature` é sempre verdadeiro e o think
    *   nunca larga nada. Ordem de `#monsters` (nascimento): a ordem dos sorteios é contrato.
-   * - **Personagens** cujo alvo de ataque é o `target` e foi FIXADO pelo jogador — a eleição do
-   *   bot (`selectTarget`) nunca escolhe um invisível e o bot reelege a cada vencimento de
-   *   monstro (`#autoSelectTarget`), então o alvo dele cai na hora: o targeting do bot é do
-   *   Draconya (ADR 0037 d.2), não do Canary. O jogador nunca "vê invisível" (`Player::
-   *   canSeeCreature`, `player.cpp:1418`); só um alvo que é MONSTRO importa aqui.
+   * - **Personagens** cujo alvo de ataque é o `target` e foi FIXADO pelo jogador. O alvo ELEITO
+   *   pelo bot (`attackTarget` não fixado) e o `botCandidate` caem AQUI, na hora: a eleição
+   *   (`selectTarget`) nunca escolhe um invisível e o bot reelege a cada vencimento de monstro
+   *   (`#autoSelectTarget`) — o targeting do bot é do Draconya (ADR 0037 d.2), não do Canary. Sai
+   *   daqui, num EVENTO, e não da primeira leitura que notar a invisibilidade: os leitores
+   *   (`#attackTargetOfRunner`/`#botCandidateOf`) são alcançáveis da apresentação (`slotStates`),
+   *   e o campo que o snapshot guarda não pode depender de alguém estar olhando (invariante 3).
+   *   O jogador nunca "vê invisível" (`Player::canSeeCreature`, `player.cpp:1418`); só um alvo que
+   *   é MONSTRO importa aqui.
    */
   #scheduleVisibilityThinks(session: Session, target: ConditionTarget): void {
     const id = this.#subjectOf(target);
@@ -6162,10 +6190,11 @@ const slots = bot.groups.get(group);
     if (!(target instanceof MonsterRuntime)) return;
     for (const character of session.participants) {
       const runner = this.#runners.get(character.id);
-      if (runner === undefined || !character.alive) continue;
-      if (runner.attackTarget === id && runner.attackTargetPinned) {
-        this.#scheduleVisibilityThink(session, character.id);
-      }
+      if (runner === undefined) continue;
+      if (runner.botCandidate === id) runner.botCandidate = null;
+      if (runner.attackTarget !== id) continue;
+      if (!runner.attackTargetPinned) runner.attackTarget = null;
+      else if (character.alive) this.#scheduleVisibilityThink(session, character.id);
     }
   }
 
@@ -6183,8 +6212,8 @@ const slots = bot.groups.get(group);
    * think, não no da invisibilidade.
    *
    * O monstro larga (`targetId = null`) e o PRÓXIMO `chooseTarget` dele reelege entre quem ele
-   * enxerga; o personagem larga o alvo fixado (o campo do bot, `botCandidate`, já é limpo por
-   * `#botCandidateOf` na primeira leitura — ver `#liveTargetOf`).
+   * enxerga; o personagem larga o alvo fixado (os campos do bot — `botCandidate` e o alvo não
+   * fixado — já saíram quando a invisibilidade começou, ver `#scheduleVisibilityThinks`).
    */
   #onVisibilityThink(session: Session, subject: string): void {
     const monster = this.#monsterBySubject.get(subject);
@@ -6326,14 +6355,12 @@ const slots = bot.groups.get(group);
       intent, this.#monsterDefender(target), 'pve', this.#options.combat, session.rng,
       session.nowMs,
     );
-    const applied = applyDamageOutcome(target, outcome, null);
+    // O tique de condição/campo também passa pelo cano único do dano no monstro — um monstro
+    // preso que leva dano de um campo em que PODE pisar (ex.: fogo, enquanto preso atrás de um
+    // de veneno) ganha a passagem temporária pelo campo que o prende, e o invisível que leva
+    // dano do campo volta a ser visível (`#drainMonster`).
+    const applied = this.#drainMonster(session, target, outcome, null);
     recordDamage(target.contribution, attacker, applied.healthDamage);
-    // O bypass de campo (M29-05) — o mesmo mecanismo de `#applyHits`/`#land`, agora para o tique
-    // de condição/campo: no Canary TODO dano passa por um único cano (`Creature::drainHealth`),
-    // então um monstro preso que leva dano de um campo em que PODE pisar (ex.: fogo, enquanto
-    // preso atrás de um de veneno) também ganha a passagem temporária pelo campo que o prende.
-    if (target.lastStepBlocked && applied.healthDamage > 0) target.ignoresFieldDamage = true;
-    this.#revealOnDrain(session, target, applied.healthDamage);
     session.emit({
       kind: 'creature-hit', creatureId: target.subject, attackerId: attacker,
       // `manaDamage` (#547): sempre zero aqui — monstro não tem mana —, mas a soma mantém o
@@ -6396,21 +6423,39 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * O monstro invisível que leva dano REAL volta a ficar visível (#559, `Monster::drainHealth`,
-   * Canary `monster.cpp:3454`: `if (isInvisible()) removeCondition(CONDITION_INVISIBLE)`). O
-   * `drainHealth` é o cano de TODO dano de vida que um monstro sofre (golpe, magia, runa, tique
-   * de DOT, campo, reflexo) e só é alcançado com `realDamage > 0` (`Game::combatChangeHealth`,
-   * `game.cpp:8735`) — o mesmo `healthDamage` que o `applyDamageOutcome` devolve: dano
-   * integralmente absorvido/bloqueado, ou de `manadrain`, não revela ninguém. O jogador NÃO tem
-   * este comportamento (só `Monster::drainHealth` o tem): a invisibilidade dele só cai por prazo,
-   * por Cancel Invisibility ou pelo equipamento.
+   * O cano ÚNICO do dano de vida que um MONSTRO sofre: `Monster::drainHealth` do Canary (`monster.
+   * cpp:3442-3458`), que `Game::combatChangeHealth` alcança com `realDamage > 0`
+   * (`game.cpp:8735`) para golpe, magia, runa, tique de DOT, campo, reflexo e golpe de invocação.
+   * Todo ponto do ruleset que tira vida de um `MonsterRuntime` passa por aqui, e é ISSO que
+   * impede que um ponto novo (os charms de dano, por exemplo) esqueça um dos dois efeitos do
+   * `drainHealth`: um sexto ponto que chame `applyDamageOutcome` direto num monstro esconderia o
+   * defeito, sem teste nenhum que o apontasse:
    *
-   * A remoção passa por `#dispelConditions` — é a fila do ruleset que cancela o
-   * `condition-expire` pendente, e um vencimento órfão é o defeito que CMB-07 proíbe.
+   * - **O bypass de campo** (M29-05): levar dano ESTANDO preso (`lastStepBlocked`) concede UMA
+   *   passagem pelo campo que o prendia (`ignoresFieldDamage`) — nunca de graça, e nunca ao
+   *   andar livre. Zero de dano (`chance: 0`, overkill de mira que já matou) não arma.
+   * - **A revelação** (#559): `if (isInvisible()) removeCondition(CONDITION_INVISIBLE)`. O mesmo
+   *   `healthDamage` que o `applyDamageOutcome` devolve é a fronteira: dano integralmente
+   *   absorvido/bloqueado, ou de `manadrain`, não revela ninguém. O jogador NÃO tem este
+   *   comportamento (só `Monster::drainHealth` o tem): a invisibilidade dele só cai por prazo,
+   *   por Cancel Invisibility ou pelo equipamento.
+   *
+   * `attacker` é quem recebe o leech (`null` quando não há — DOT, reflexo, campo, golpe de
+   * monstro), e `targetsAffected` o divisor dele numa ação em área (`#applyHits`). A atribuição do
+   * dano (`recordDamage`/`creditDamage`) fica com o chamador: quem leva o crédito muda por caminho.
    */
-  #revealOnDrain(session: Session, monster: MonsterRuntime, healthDamage: number): void {
-    if (healthDamage <= 0 || !monster.invisible) return;
-    this.#dispelConditions(session, monster, [INVISIBLE_CONDITION_KEY]);
+  #drainMonster(
+    session: Session, monster: MonsterRuntime, outcome: DamageOutcome, attacker: CharacterRuntime | null,
+    targetsAffected = 1,
+  ): AppliedDamageOutcome {
+    const applied = applyDamageOutcome(monster, outcome, attacker, 1, false, targetsAffected);
+    if (applied.healthDamage > 0) {
+      if (monster.lastStepBlocked) monster.ignoresFieldDamage = true;
+      // A remoção passa por `#dispelConditions` — é a fila do ruleset que cancela o
+      // `condition-expire` pendente, e um vencimento órfão é o defeito que CMB-07 proíbe.
+      if (monster.invisible) this.#dispelConditions(session, monster, [INVISIBLE_CONDITION_KEY]);
+    }
+    return applied;
   }
 
   // --- campos de tile (CMB-07) ---------------------------------------------------------------
@@ -6751,7 +6796,9 @@ const slots = bot.groups.get(group);
         const conditionTarget = (supply.effect.kind === 'condition' && supply.effect.target === 'enemy')
           ? this.#spellHits[0]
           : character;
-        if (conditionTarget !== undefined) this.#applyConditionTo(session, conditionTarget, result.condition);
+        if (conditionTarget !== undefined) {
+          this.#applyConditionTo(session, conditionTarget, result.condition, true);
+        }
       }
       return result;
     }
@@ -6927,6 +6974,16 @@ const slots = bot.groups.get(group);
     // tooltip errado; `not-enough-item` fica com o consumível físico (carga de bênção, M22).
     if (balanceOf(character) < supply.price) return blocked('not-enough-gold');
     return { set, slot, state: 'ready', remainingMs: 0 };
+  }
+
+  /**
+   * O efeito é de ALVO ÚNICO — dano ou dano ao longo do tempo sem forma —, o análogo do
+   * `needTarget(true)` das runas do Canary (Sudden Death, Fireball, Icicle…)? A que tem forma no
+   * tile mirado (Great Fireball, Avalanche) e o campo não são: saem sobre o tile, com ou sem
+   * criatura visível nele (`Spell::playerRuneSpellCheck`, `spells.cpp:704`).
+   */
+  #isSingleTargetEffect(effect: { readonly kind: string; readonly area?: SpellArea | undefined }): boolean {
+    return (effect.kind === 'damage' || effect.kind === 'damage-over-time') && effect.area === undefined;
   }
 
   /**
@@ -7830,7 +7887,7 @@ const slots = bot.groups.get(group);
         this.#applyConditionTo(session, character, conditionFromSpec(
           ability.condition, character.id, subject, session.nowMs, 'monster-attack',
           { baseSpeed: character.speed, rng: session.rng },
-        ));
+        ), true);
       }
     }
     // O campo da ability (CMB-07): UMA vez, centrado no alvo principal. A geometria usa a
@@ -7862,9 +7919,8 @@ const slots = bot.groups.get(group);
       reflectedDamageIntent(reflected), this.#monsterDefender(monster), 'pve', this.#options.combat,
       session.rng, session.nowMs,
     );
-    const applied = applyDamageOutcome(monster, outcome, null);
+    const applied = this.#drainMonster(session, monster, outcome, null);
     recordDamage(monster.contribution, character.id, applied.healthDamage);
-    this.#revealOnDrain(session, monster, applied.healthDamage);
     session.emit({
       kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
       amount: applied.healthDamage + applied.manaDamage, source: 'melee', position: this.#at(monster),
@@ -7971,9 +8027,8 @@ const slots = bot.groups.get(group);
     source: 'melee' | 'spell',
   ): void {
     const creditId = typeof attacker.masterId === 'string' ? attacker.masterId : attacker.subject;
-    const applied = applyDamageOutcome(target, outcome, null);
+    const applied = this.#drainMonster(session, target, outcome, null);
     recordDamage(target.contribution, creditId, applied.healthDamage);
-    this.#revealOnDrain(session, target, applied.healthDamage);
     session.emit({
       kind: 'creature-hit', creatureId: target.subject, attackerId: attacker.subject,
       amount: applied.healthDamage + applied.manaDamage, source, position: this.#at(target),
@@ -9015,13 +9070,9 @@ const slots = bot.groups.get(group);
     // O CMB-08: aplicar é o estágio explícito que passa pelo mana shield (no alvo), remove HP
     // efetivo e credita o leech clampado no atacante. O `outcome` já traz o resolvido e o
     // crítico; a atribuição e o hit usam o HP APLICADO, nunca a mana absorvida nem o overkill.
-    const applied = applyDamageOutcome(monster, outcome, character);
+    const applied = this.#drainMonster(session, monster, outcome, character);
     this.#noteAttackBlock(character, outcome);
     recordDamage(monster.contribution, character.id, applied.healthDamage);
-    // O bypass de campo (M29-05) — ver o comentário gêmeo em `#applyHits`, o mesmo mecanismo
-    // pelo caminho de golpe corpo a corpo/wand.
-    if (monster.lastStepBlocked && applied.healthDamage > 0) monster.ignoresFieldDamage = true;
-    this.#revealOnDrain(session, monster, applied.healthDamage);
     this.#markCombatActive(session, character.id);
     // A definição única de "em combate" (#625): ataque DADO — o espelho de `#applyMonsterHit`,
     // que marca o RECEBIDO. Ver a nota de distinção com `Runner.lastCombatActionAtMs` acima.
@@ -10438,22 +10489,16 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * O monstro vivo, dentro do raio de busca; senão `null`. **NÃO muta** — é a leitura que
-   * `selectedTargetOf` usa para a apresentação (invariante 3).
+   * O monstro vivo, no MESMO andar e dentro do raio de busca; senão `null`. A VISIBILIDADE fica
+   * de fora de propósito (#559): "saiu de cena" — morreu, mudou de andar, passou do raio — é o
+   * que os leitores que LIMPAM o campo (`#attackTargetOfRunner`/`#botCandidateOf`) perguntam, e
+   * um monstro apenas invisível NÃO saiu de cena: ele volta a ser visível por prazo ou por dano.
+   * **NÃO muta.**
    */
-  #liveTargetOf(
-    subject: string | null, character: CharacterRuntime, keepInvisible = false,
-  ): MonsterRuntime | null {
+  #inSightOf(subject: string | null, character: CharacterRuntime): MonsterRuntime | null {
     if (subject === null) return null;
     const monster = this.#monsterBySubject.get(subject);
     if (monster === undefined || !monster.alive) return null;
-    // O jogador não enxerga monstro invisível (`Player::canSeeCreature`, Canary `player.cpp:1418`:
-    // só `CanSenseInvisibility`/GM vê) e `Creature::onThink` larga o alvo de ataque que ficou
-    // invisível (#559). O alvo FIXADO pelo jogador segue até o think agendado
-    // (`#onVisibilityThink`, `keepInvisible`) — até lá ele ainda ataca, e o golpe REVELA o
-    // monstro (`#revealOnDrain`). O alvo ELEITO pelo bot cai na hora: o targeting do bot é do
-    // Draconya (ADR 0037 d.2) e `selectTarget` nunca escolhe um invisível.
-    if (monster.invisible && !keepInvisible) return null;
     // Andar diferente é tela diferente (#519): um alvo pinado antes de trocar de andar — o dele
     // ou o do personagem — não continua "na tela" só porque o (x, y) ainda está perto.
     if (!sameFloor(this.#floorOf(character), this.#floorOf(monster))) return null;
@@ -10463,25 +10508,57 @@ const slots = bot.groups.get(group);
     return monster;
   }
 
-  /** O alvo de ATAQUE vivo; limpa o campo se morreu ou saiu da tela. `null` se não há. */
+  /**
+   * `#inSightOf` + a regra de visibilidade do JOGADOR. **NÃO muta** — é a leitura que
+   * `selectedTargetOf` usa para a apresentação (invariante 3).
+   *
+   * O jogador não enxerga monstro invisível (`Player::canSeeCreature`, Canary `player.cpp:1418`:
+   * só `CanSenseInvisibility`/GM vê) e `Creature::onThink` larga o alvo de ataque que ficou
+   * invisível (#559). O alvo FIXADO pelo jogador segue até o think agendado
+   * (`#onVisibilityThink`, `keepInvisible`) — até lá ele ainda ataca, e o golpe REVELA o
+   * monstro (`#drainMonster`). O alvo ELEITO pelo bot não é devolvido: o targeting do bot é do
+   * Draconya (ADR 0037 d.2) e `selectTarget` nunca escolhe um invisível.
+   */
+  #liveTargetOf(
+    subject: string | null, character: CharacterRuntime, keepInvisible = false,
+  ): MonsterRuntime | null {
+    const monster = this.#inSightOf(subject, character);
+    return monster !== null && monster.invisible && !keepInvisible ? null : monster;
+  }
+
+  /**
+   * O alvo de ATAQUE vivo; limpa o campo se morreu ou saiu da tela. `null` se não há.
+   *
+   * Invisível e não fixado devolve `null` SEM limpar (#559): este leitor é alcançável da
+   * apresentação (`slotStates` → `#targetInRange`), e o que chega ao snapshot não pode depender
+   * de haver alguém assistindo (invariante 3). O campo do alvo eleito que fica invisível é
+   * limpo NO EVENTO em que a invisibilidade começa (`#scheduleVisibilityThinks`), nunca aqui.
+   */
   #attackTargetOfRunner(character: CharacterRuntime): MonsterRuntime | null {
     const runner = this.#runners.get(character.id);
     if (runner === undefined || runner.attackTarget === null) return null;
-    const monster = this.#liveTargetOf(runner.attackTarget, character, runner.attackTargetPinned);
+    const monster = this.#inSightOf(runner.attackTarget, character);
     if (monster === null) {
       runner.attackTarget = null;
       runner.attackTargetPinned = false;
+      return null;
     }
-    return monster;
+    return monster.invisible && !runner.attackTargetPinned ? null : monster;
   }
 
-  /** O candidato do AUTO-TARGET vivo; limpa o campo se morreu ou saiu da tela. */
+  /**
+   * O candidato do AUTO-TARGET vivo; limpa o campo se morreu ou saiu da tela. O mesmo contrato de
+   * `#attackTargetOfRunner` para o invisível: `null` sem escrever nada.
+   */
   #botCandidateOf(character: CharacterRuntime): MonsterRuntime | null {
     const runner = this.#runners.get(character.id);
     if (runner === undefined || runner.botCandidate === null) return null;
-    const monster = this.#liveTargetOf(runner.botCandidate, character);
-    if (monster === null) runner.botCandidate = null;
-    return monster;
+    const monster = this.#inSightOf(runner.botCandidate, character);
+    if (monster === null) {
+      runner.botCandidate = null;
+      return null;
+    }
+    return monster.invisible ? null : monster;
   }
 
   /** O alvo corrente é do JOGADOR (AB-09), ou só uma eleição do bot (#480)? */
