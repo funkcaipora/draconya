@@ -239,9 +239,11 @@ export function randomStep(
 }
 
 /**
- * O passo da volta ao spawn (#655, `Monster::doWalkBack`, `monster.cpp:2501-2526`): o passo
- * guloso rumo ao `home` — o mesmo movimento que o monstro já usa para perseguir (ADR 0009; o
- * Canary usa A* aqui, e o `home` desta hunt não muda essa escolha) —, com uma exceção que o
+ * O passo RÁPIDO da volta ao spawn (#655, `Monster::doWalkBack`, `monster.cpp:2501-2526`): o
+ * passo guloso rumo ao `home` — o mesmo movimento que o monstro já usa para perseguir (ADR 0009;
+ * o Canary usa A* aqui). Devolve `null` quando empaca, e quem chama (`nextWalkBackStep`, em
+ * `monster.ts`) cai para a busca de caminho (`walkBackPathStep`): empacar numa concavidade é o
+ * comportamento certo de quem PERSEGUE, mas não de quem volta para casa. Com uma exceção que o
  * guloso puro erraria: A UM tile do `home` só vale pisar NELE. O guloso tentaria também os dois
  * vizinhos da direção, que a essa distância NÃO aproximam — só rodeiam —, e um `home` ocupado
  * por outro monstro faria quem volta girar em volta dele para sempre. O Canary nem chega a

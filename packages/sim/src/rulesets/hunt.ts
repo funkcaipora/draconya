@@ -92,8 +92,8 @@ import type { BotActuator, BotView, CompiledBot, CompiledSlot, CooldownOfAction 
 import { compileAutomations } from '../automation.js';
 import type { AutomationActuator, CompiledAutomations } from '../automation.js';
 import {
-  MonsterRuntime, canMonsterEnterField, chooseTarget, decideMonsterAction, decideUnengagedMove,
-  isInSpawnRange, isMonsterFleeing, monsterSubject, nearestPrey,
+  CHALLENGE_CONDITION_KEY, MonsterRuntime, canMonsterEnterField, chooseTarget, decideMonsterAction,
+  decideUnengagedMove, isInSpawnRange, isMonsterFleeing, monsterSubject, nearestPrey,
 } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
 import { abilityBlockFlags, abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
@@ -3762,6 +3762,10 @@ export class HuntRuleset implements Ruleset {
     monster.scheduledSummons.delete(entry.monsterId);
     this.#scheduleMonsterSummon(session, monster, entry, entry.intervalMs);
 
+    // Ocioso não invoca (#655): o mesmo corte de `#onMonsterDefense` — o `onThinkDefense` do
+    // Canary, onde mora o laço de invocação, não roda para quem saiu da lista de `onThink`.
+    if (monster.idle) return;
+
     // O gate de engajamento (`hasFollowPath` do TFS/Canary) vem ANTES de qualquer teto ou
     // rolagem — igual à fonte, onde ele embrulha o laço `summons` inteiro. Sem alvo, nem sequer
     // consome `session.rng`: um monstro parado, nunca visto, não deve mover a sequência de RNG
@@ -5652,7 +5656,7 @@ const slots = bot.groups.get(group);
     for (const monster of this.#spellHits) {
       monster.targetId = character.id;
       this.#applyConditionTo(session, monster, {
-        key: 'challenge',
+        key: CHALLENGE_CONDITION_KEY,
         targetId: this.#subjectOf(monster),
         sourceId: character.id,
         expiresAtMs: session.nowMs + durationMs,
@@ -7383,18 +7387,25 @@ const slots = bot.groups.get(group);
     if (action.kind === 'step' || action.kind === 'retreat') {
       // `Monster::doFollowCreature` (`monster.cpp:2530`): quem persegue deixa de andar ao acaso.
       monster.randomStepping = false;
+      monster.idle = false;
       result = this.#step(session, monster, action.to, subject);
     } else if (action.kind === 'attack') {
       // Colado (ou ao alcance): o `getFollowCreature() && hasFollowPath` do Canary também vale
       // sem passo a dar, e é ele que roda `doFollowCreature` — e desliga o passo aleatório.
       monster.randomStepping = false;
+      monster.idle = false;
     } else {
       // Sem perseguição (#655): `updateIdleStatus` + os ramos `doWalkBack`/`doRandomStep` de
       // `Monster::getNextStep`. Ver `decideUnengagedMove`.
       const move = decideUnengagedMove(
         monster, definition, liveTarget, session.participants, summons, blocked,
-        this.#blockedForRandomStep(monster, definition), session.nowMs, session.rng,
+        this.#blockedForRandomStep(monster, definition), this.#blockedForWalkBackPath(monster, definition),
+        session.nowMs, session.rng,
       );
+      // `Monster::setIdle`: o flag acompanha a decisão — liga aqui e desliga em qualquer outra,
+      // incluindo os ramos de perseguição acima. É ele que cala a defesa, a troca de alvo e a
+      // invocação do monstro ocioso (`#onMonsterDefense` e os outros dois timers).
+      monster.idle = move.kind === 'idle';
       if (move.kind === 'idle') {
         // `Monster::setIdle(true)` → `Creature::onIdleStatus`: quem ficou ocioso no spawn esquece
         // quem bateu nele (`damageMap.clear()`, `lastHitCreatureId = 0`).
@@ -7906,7 +7917,8 @@ const slots = bot.groups.get(group);
   /**
    * Uma DEFESA declarada de um monstro venceu (#518, TFS `Monster::onThinkDefense`, referência
    * §15-19): cura própria. Independente do alvo — não precisa de ninguém para curar —, então
-   * reagenda-se SEMPRE, ao contrário das abilities de ataque, que dependem de alcance.
+   * reagenda-se SEMPRE, ao contrário das abilities de ataque, que dependem de alcance. Vence sem
+   * rolar nada com o monstro OCIOSO (`MonsterRuntime.idle`, #655), como o Canary.
    */
   #onMonsterDefense(session: Session, subject: string): void {
     // `m:<id>:<defenseId>`, o mesmo desenho de `#onMonsterAbility`.
@@ -7923,6 +7935,13 @@ const slots = bot.groups.get(group);
 
     monster.scheduledDefenses.delete(defense.id);
     this.#scheduleMonsterDefense(session, monster, defense, defense.cadenceMs);
+
+    // Ocioso não usa defesa (#655): o Canary tira o monstro ocioso da lista de `onThink`
+    // (`setIdle(true)` → `removeCreatureCheck`), então `onThinkDefense` nunca roda enquanto ele
+    // dura — e sem rolagem, como lá. O timer continua reagendando acima (a fila segue dirigida
+    // por evento; 1 Hz e 20 Hz idênticos), só vence sem efeito. Sem este corte, um Doom Deer
+    // ocioso se daria haste sozinho, a condição impediria o ocioso e ele passearia pelo spawn.
+    if (monster.idle) return;
 
     // `chance` é SEMPRE declarada aqui (o schema exige), então SEMPRE consome uma rolagem — ao
     // contrário de `ability.chance`, que só existe em conteúdo novo. UMA rolagem só: a defesa é
@@ -7982,6 +8001,10 @@ const slots = bot.groups.get(group);
     session.scheduleIn(MONSTER_TARGET_CHANGE, targetChange.intervalMs, {
       priority: EventPriority.Attack, subject,
     });
+
+    // Ocioso não troca de alvo (#655): `onThinkTarget` também é do `onThink`, que o monstro
+    // ocioso não roda — o mesmo corte de `#onMonsterDefense`, sem rolagem.
+    if (monster.idle) return;
 
     // Invocação de PERSONAGEM (#598) nunca reavalia sozinha — o alvo é sempre o do mestre
     // (`#chooseMonsterTarget`, chamado pelo passo/ataque/ability dela). O evento continua
@@ -10552,6 +10575,33 @@ const slots = bot.groups.get(group);
     this.#fieldMonster = monster;
     this.#fieldDefinition = definition;
     return this.#randomStepBlocked;
+  }
+
+  /**
+   * O predicado da BUSCA de caminho da volta ao spawn (#655, `walkBackPathStep`): para um tile
+   * QUALQUER — o `#monsterBlocked` do passo guloso passa por `canOccupy`, que só admite vizinhos
+   * do mover e recusa todo o resto como `not-adjacent`, o que faria a busca nunca achar caminho
+   * além do primeiro passo. O que ele diz de um tile é o que `canOccupy` diria de um passo até
+   * lá: parede, borda, porta fechada e campo bloqueante (`blockedAt`), escada e teleporte (o
+   * monstro não troca de andar, nem por teleporte), criatura no tile — salvo a empurrável que o
+   * guloso também atravessa (`#pushablePathThrough`) — e o campo de dano que ele não pisa.
+   *
+   * Lê o monstro e a definição dos MESMOS campos que `#monsterBlocked`; uma closure só, sem
+   * alocação por chamada — a busca varre centenas de tiles.
+   */
+  readonly #walkBackPathBlocked: Blocked = (x, y) => {
+    const monster = this.#fieldMonster as MonsterRuntime;
+    const z = this.#floorOf(monster);
+    if (this.#world.blockedAt(x, y, z)) return true;
+    if (this.#world.floorChangeAt(x, y, z) !== null || this.#world.teleportAt(x, y, z) !== null) return true;
+    if (this.#world.occupied(x, y, z) && !this.#pushablePathThrough(x, y)) return true;
+    return this.#fieldBlocksMonster(monster, this.#fieldDefinition as Monster, x, y);
+  };
+
+  #blockedForWalkBackPath(monster: MonsterRuntime, definition: Monster): Blocked {
+    this.#fieldMonster = monster;
+    this.#fieldDefinition = definition;
+    return this.#walkBackPathBlocked;
   }
 
   /**

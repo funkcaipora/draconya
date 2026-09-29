@@ -17,6 +17,7 @@ import type { ContributionState } from '../death.js';
 import type { CooldownState } from '../cooldown.js';
 import type { Rng } from '../rng.js';
 import { rankTarget, type TargetRankCandidate } from './target-strategy.js';
+import { boundedPath, isExactly } from '../route/pathfind.js';
 import {
   canSeePoint, distance, fleeStep, greedyStep, randomStep, sameFloor, walkBackStep,
   type Blocked, type FloorPoint, type GridPoint,
@@ -100,12 +101,12 @@ export interface MonsterState {
   /**
    * A última decisão de movimento (`decideMonsterAction`) tinha alvo vivo e não achou passo —
    * nem aproximando, nem fugindo (M29-05). É o dado que `HuntRuleset#land`/`#applyHits` consulta
-   * ao aplicar dano: apanhar preso arma `ignoresFieldDamage` — a mesma condição do TFS/Canary
-   * `Monster::drainHealth` (`!hasFollowPath && getFollowCreature()`), sem o ramo de passo
-   * aleatório porque este motor não tem um monstro "andando à toa" sem alvo (ver o comentário de
-   * `ignoresFieldDamage`). Ausente é `false` — o monstro que nunca ficou preso, ou snapshot
-   * anterior a esta issue. Precisa sobreviver ao snapshot: perder o valor na reconexão faria uma
-   * hunt retomada esquecer que estava presa no exato instante em que um golpe chegaria.
+   * ao aplicar dano: apanhar preso arma `ignoresFieldDamage` — a primeira metade da condição do
+   * TFS/Canary `Monster::drainHealth` (`!hasFollowPath && getFollowCreature()`); a segunda, o
+   * monstro andando ao acaso, é `randomStepping` (#655), e `noteDamageTaken` lê as duas. Ausente
+   * é `false` — o monstro que nunca ficou preso, ou snapshot anterior a esta issue. Precisa
+   * sobreviver ao snapshot: perder o valor na reconexão faria uma hunt retomada esquecer que
+   * estava presa no exato instante em que um golpe chegaria.
    */
   readonly lastStepBlocked?: boolean;
   /**
@@ -113,11 +114,15 @@ export interface MonsterState {
    * `monster.cpp` perto de 2536): true faz o predicado de bloqueio (`HuntRuleset
    * #blockedForMonster`) ignorar `canWalkOnFire/Poison/Energy` por UMA decisão de movimento — a
    * mesma que o consome e o zera de volta (`#onMonsterStep`), como o Canary o gasta no primeiro
-   * recálculo de caminho depois de concedido. Armado só quando o monstro leva dano ESTANDO preso
-   * (`lastStepBlocked`) — nunca ao andar livre, e nunca por si só sem dano, o que preservaria um
-   * monstro preso para sempre atrás de um campo que ele não pode atravessar (o comportamento
-   * CERTO, e o que os dois testes sem dano do `hunt.test.ts`/`monster.test.ts` prendem). Ausente
-   * é `false` — precisa sobreviver ao snapshot pela mesma razão de `lastStepBlocked`.
+   * recálculo de caminho depois de concedido. Só a PERSEGUIÇÃO e a volta ao spawn o consomem:
+   * o passo aleatório e o ocioso o deixam armado (`keepsFieldBypass` em `#onMonsterStep`), como
+   * o Canary, que só o zera em `doFollowCreature`/`doWalkBack`. Armado só quando o monstro leva
+   * dano (`noteDamageTaken`) ESTANDO preso (`lastStepBlocked`) OU andando ao acaso
+   * (`randomStepping`, #655) — nunca ao andar livre, e nunca por si só sem dano, o que
+   * preservaria um monstro preso para sempre atrás de um campo que ele não pode atravessar (o
+   * comportamento CERTO, e o que os dois testes sem dano do `hunt.test.ts`/`monster.test.ts`
+   * prendem). Ausente é `false` — precisa sobreviver ao snapshot pela mesma razão de
+   * `lastStepBlocked`.
    */
   readonly ignoresFieldDamage?: boolean;
   /**
@@ -156,6 +161,30 @@ export interface MonsterState {
    * passo aleatório vale de imediato.
    */
   readonly lastMoveAtMs?: number;
+  /**
+   * A volta ao spawn já empacou no passo guloso e passou a usar a BUSCA de caminho (#655): o
+   * `walkBackStep` guloso devolveu `null` fora do `home` — uma concavidade —, e dali até chegar
+   * a volta pede o próximo passo a `boundedPath`. Precisa ser estado, e não um "tenta o guloso
+   * primeiro de novo a cada passo": o guloso do tile de fora da concavidade a ENTRA outra vez, a
+   * busca a tira, e o monstro oscilaria na boca dela para sempre. O Canary resolve a volta
+   * inteira com A* (`getPathTo(masterPos, …)`), sem guloso nenhum; o guloso fica aqui só como o
+   * caminho rápido de quem nunca empaca. Desliga junto com `walkingBack`. Ausente é `false`;
+   * precisa sobreviver ao snapshot, ou uma hunt retomada voltaria a entrar na concavidade.
+   */
+  readonly walkBackByPath?: boolean;
+  /**
+   * O monstro está OCIOSO (#655, Canary `Monster::isIdle`, `setIdle(true)`): a última decisão de
+   * movimento (`decideUnengagedMove`) devolveu `idle` — lista de alvos vazia, no spawn, sem
+   * condição. O Canary tira o monstro ocioso da lista de `onThink` (`removeCreatureCheck`), e é
+   * por isso que ele NÃO usa defesa, NÃO troca de alvo e NÃO invoca enquanto dura: aqui os três
+   * temporizadores (`MONSTER_DEFENSE`, `MONSTER_TARGET_CHANGE`, `MONSTER_SUMMON`) continuam
+   * reagendando — a fila segue dirigida por evento —, mas vencem sem rolar nada enquanto este
+   * flag vale. Sem ele um Doom Deer ocioso se dá haste sozinho, a condição impede o ocioso e o
+   * monstro passeia pelo spawn. Escrito só por `HuntRuleset#onMonsterStep`; desliga em qualquer
+   * decisão que não seja `idle`. Ausente é `false`; precisa sobreviver ao snapshot, ou uma hunt
+   * retomada rolaria a defesa de um monstro que o Canary manteria quieto.
+   */
+  readonly idle?: boolean;
 }
 
 /**
@@ -258,6 +287,10 @@ export class MonsterRuntime {
   randomStepping: boolean;
   /** Ver `MonsterState.lastMoveAtMs` (#655). `null` é "nunca andou". */
   lastMoveAtMs: number | null;
+  /** Ver `MonsterState.walkBackByPath` (#655). */
+  walkBackByPath: boolean;
+  /** Ver `MonsterState.idle` (#655). Escrito só por `HuntRuleset#onMonsterStep`. */
+  idle: boolean;
 
   constructor(state: MonsterState) {
     this.id = state.id;
@@ -282,6 +315,8 @@ export class MonsterRuntime {
     this.walkingBack = state.walkingBack ?? false;
     this.randomStepping = state.randomStepping ?? false;
     this.lastMoveAtMs = state.lastMoveAtMs ?? null;
+    this.walkBackByPath = state.walkBackByPath ?? false;
+    this.idle = state.idle ?? false;
   }
 
   get alive(): boolean {
@@ -340,6 +375,8 @@ export class MonsterRuntime {
       ...(this.walkingBack ? { walkingBack: true } : {}),
       ...(this.randomStepping ? { randomStepping: true } : {}),
       ...(this.lastMoveAtMs === null ? {} : { lastMoveAtMs: this.lastMoveAtMs }),
+      ...(this.walkBackByPath ? { walkBackByPath: true } : {}),
+      ...(this.idle ? { idle: true } : {}),
     };
   }
 
@@ -553,7 +590,28 @@ export function isMonsterFleeing(monster: MonsterRuntime, definition: Monster): 
   return definition.runOnHealth !== undefined
     && monster.alive
     && monster.health <= definition.runOnHealth
-    && monster.conditions.get('challenge') === null;
+    && monster.conditions.get(CHALLENGE_CONDITION_KEY) === null;
+}
+
+/**
+ * A chave da provocação (Challenge/Chivalrous Challenge, #589) em `MonsterRuntime.conditions`.
+ * Ela mora ali só por conveniência de armazenamento (prazo, snapshot, cancelamento pelo mesmo
+ * cano das outras): no Canary a provocação NÃO é uma `Condition` — é o `challengeFocusDuration`,
+ * um contador do monstro que `onThinkTarget` decrementa (`monster.cpp:2146-2152`) e que
+ * `challengeCreature` (`monster.cpp:3470-3483`) arma sem adicionar condição alguma.
+ */
+export const CHALLENGE_CONDITION_KEY = 'challenge';
+
+/**
+ * O monstro tem alguma CONDIÇÃO ativa no sentido do Canary (`!conditions.empty()`, o que
+ * `Monster::updateIdleStatus` confere, `monster.cpp:1541`)? A provocação não conta — ver
+ * `CHALLENGE_CONDITION_KEY` —, senão um monstro provocado que perdeu o alvo não voltaria ao spawn
+ * nem ficaria ocioso até o prazo dela vencer, coisa que o Canary nunca faz. Sem alocação: só o
+ * tamanho do mapa e um lookup.
+ */
+export function hasActiveCondition(monster: MonsterRuntime): boolean {
+  const { conditions } = monster;
+  return conditions.size - (conditions.get(CHALLENGE_CONDITION_KEY) === null ? 0 : 1) > 0;
 }
 
 /**
@@ -625,8 +683,10 @@ export function decideMonsterAction(
   // `doAttacking`).
   if (isMonsterFleeing(monster, definition)) {
     const away = fleeStep(monster.position, target.position, blocked);
-    // Encurralado: fica — recuar até a parede e parar lá é o comportamento certo (ADR 0009),
-    // não um caso a consertar.
+    // Encurralado: sem passo de fuga — recuar até a parede e parar lá é o comportamento certo
+    // (ADR 0009), não um caso a consertar. A decisão devolve `idle` (sem perseguição), e é
+    // `#onMonsterStep` quem, com o alvo à vista, dá o passo ao acaso (`decideUnengagedMove`,
+    // #655): o Canary `doRandomStep` roda para quem não tem `hasFollowPath`.
     return away === null ? { kind: 'idle' } : { kind: 'step', to: away };
   }
 
@@ -685,6 +745,7 @@ export const RANDOM_STEP_INTERVAL_MS = 1_000;
  * `deSpawnRadius` do Canary (`config.lua.dist:612`, default 50): o quadrado, em torno do spawn,
  * dentro do qual `Monster::canWalkTo` aceita um tile (`Monster::isInSpawnRange`). Só o passo
  * ALEATÓRIO passa por ele — a perseguição e a volta usam o A* do Canary, que não consulta o raio.
+ * A busca de caminho da volta (`walkBackPathStep`) usa este valor só como TETO do próprio raio.
  * O teto de andares (`deSpawnRange`, 2) não entra: nenhum passo aleatório troca de andar. O
  * teleporte de volta que `Monster::onThink` faz com quem passa do raio NÃO existe neste motor
  * (nenhum monstro deste catálogo chega lá andando).
@@ -699,6 +760,32 @@ export function isInSpawnLocation(monster: MonsterRuntime): boolean {
   if (monster.masterId !== null) return true;
   const { position, home } = monster;
   return position.x === home.x && position.y === home.y && sameFloor(position.z, home.z);
+}
+
+/**
+ * O passo da volta ao spawn pela BUSCA de caminho (#655): o primeiro tile do caminho mais curto
+ * até o `home` (`boundedPath`, BFS limitado de `route/pathfind.ts`, vizinhos em ordem fixa — o
+ * mesmo determinismo do passo guloso), ou `null` sem caminho. É o A* do Canary (`doWalkBack` →
+ * `getPathTo(masterPos, …)`) no que interessa a este motor: um monstro que o passo guloso deixou
+ * numa concavidade sempre acha a saída, por maior que seja o desvio.
+ *
+ * O raio é o `deSpawnRadius` inteiro (`DESPAWN_RADIUS`, 50): o Canary só enxerga `distância` tiles
+ * por vez e re-planeja em trechos de 5 — mais os passos aleatórios entre uma tentativa e outra
+ * (`getNextStep`, `isWalkingBack` desligada a cada falha) —, e um raio menor aqui deixava monstros
+ * encalhados para sempre: medido na Darashia Dragon Lair (tiles a até 16 do spawn, dos 47 pontos
+ * reais), o raio `distância + 5` deixava 4 % dos pares sem saída apesar de haver caminho — o
+ * desvio de alguns chega a quase 100 passos —, e o raio inteiro não deixa nenhum. O raio só custa
+ * quando NÃO há caminho: a busca para no primeiro passo que chega ao `home`, e o `home` ocupado
+ * é recusado antes de varrer.
+ *
+ * Só é chamada depois que o guloso empacou (`MonsterRuntime.walkBackByPath`), porque custa uma
+ * varredura — nada a ver com os 0,069 µs do guloso — e a volta comum nunca a precisa. Um `home`
+ * ocupado por outra criatura não é alcançável, como no Canary: devolve `null` sem varrer.
+ */
+export function walkBackPathStep(from: GridPoint, home: GridPoint, blocked: Blocked): GridPoint | null {
+  if (blocked(home.x, home.y)) return null;
+  const path = boundedPath(from, isExactly(home), blocked, DESPAWN_RADIUS);
+  return path?.[0] ?? null;
 }
 
 /**
@@ -718,8 +805,9 @@ export function isInSpawnRange(monster: MonsterRuntime, x: number, y: number): b
  * - `idle`: `isIdle` — lista de alvos vazia, no spawn e sem condição nenhuma. O monstro nada faz.
  * - `still`: invocação sem alvo. O Canary a manda seguir o mestre (`updateSummonTarget`), o que
  *   este motor não modela; ela continua parada onde está, como antes desta issue.
- * - `walk-back`: `doWalkBack`; `to` é o passo rumo ao `home`, ou `null` quando já chegou ou não
- *   há passo (nos dois casos `walkingBack` desliga).
+ * - `walk-back`: `doWalkBack`; `to` é o passo rumo ao `home` — o guloso, ou a busca de caminho
+ *   depois que o guloso empacou fora do `home` —, ou `null` quando já chegou ou não há passo
+ *   (nos dois casos `walkingBack` desliga).
  * - `random-step`: `doRandomStep`; `to` é o passo sorteado, ou `null` quando o último passo foi
  *   há menos de `RANDOM_STEP_INTERVAL_MS` ou nenhuma direção está livre.
  */
@@ -738,20 +826,44 @@ function anyInView(monster: MonsterRuntime, candidates: readonly Prey[], radius:
 }
 
 /**
+ * O próximo passo da volta ao spawn: o guloso (`walkBackStep`, o caminho rápido) enquanto ele
+ * andar; no instante em que ele empaca FORA do `home` — uma concavidade, onde os três tiles que
+ * aproximam são parede —, `walkBackByPath` liga e a volta passa a pedir cada passo à busca de
+ * caminho (`walkBackPathStep`) até chegar. Ligar é obrigatório, e não um "tenta o guloso de novo
+ * no passo seguinte": do tile de fora da concavidade o guloso a ENTRA outra vez, a busca a tira,
+ * e o monstro oscilaria na boca dela para sempre.
+ */
+function nextWalkBackStep(monster: MonsterRuntime, blocked: Blocked, pathBlocked: Blocked): GridPoint | null {
+  const { position, home } = monster;
+  if (!monster.walkBackByPath) {
+    const greedy = walkBackStep(position, home, blocked);
+    if (greedy !== null) return greedy;
+    // No `home` o guloso também devolve `null`: é a chegada, não um empaque.
+    if (position.x === home.x && position.y === home.y) return null;
+    monster.walkBackByPath = true;
+  }
+  return walkBackPathStep(position, home, pathBlocked);
+}
+
+/**
  * Decide o passo de um monstro SEM perseguição — o que `decideMonsterAction` chama de `idle`
  * (sem alvo, ou com alvo e sem passo até ele). Escreve só nas flags de DECISÃO do próprio monstro
- * (`walkingBack`, `randomStepping`), como `Monster::updateIdleStatus`/`doWalkBack`/`doRandomStep`
- * escrevem nas dele; quem move é a sessão (invariante 9).
+ * (`walkingBack`, `walkBackByPath`, `randomStepping`), como `Monster::updateIdleStatus`/
+ * `doWalkBack`/`doRandomStep` escrevem nas dele; quem move é a sessão (invariante 9).
  *
  * A ordem é a do Canary: primeiro `updateIdleStatus` (`monster.cpp:1521-1560`) — com a lista de
- * alvos VAZIA (ninguém à vista: `participants` e `summons`), sem condição e fora do spawn, LIGA a
- * volta; no spawn, deixa o monstro ocioso —, depois `getNextStep`: a volta, se ligada, senão o
- * passo aleatório. `target !== null` significa lista de alvos não vazia (o alvo está à vista por
- * construção de `chooseTarget`), e é por isso que `walkingBack` só é ligada sem alvo.
+ * alvos VAZIA (ninguém à vista: `participants` e `summons`), sem condição (a provocação não
+ * conta, `hasActiveCondition`) e fora do spawn, LIGA a volta; no spawn, deixa o monstro ocioso —,
+ * depois `getNextStep`: a volta, se ligada (guloso, e a busca de caminho quando ele empaca:
+ * `nextWalkBackStep`), senão o passo aleatório. `target !== null` significa lista de alvos não
+ * vazia (o alvo está à vista por construção de `chooseTarget`), e é por isso que `walkingBack` só
+ * é ligada sem alvo.
  *
- * `blocked` é o predicado do passo guloso (com o empurrão de criatura e o desvio de campo);
- * `randomBlocked` é o de `Monster::canWalkTo` — mais estrito: tile com criatura recusa mesmo que
- * ela seja empurrável, e o raio de spawn vale.
+ * `blocked` é o predicado do passo guloso (com o empurrão de criatura e o desvio de campo) — só
+ * vale para os vizinhos do monstro; `randomBlocked` é o de `Monster::canWalkTo` — mais estrito:
+ * tile com criatura recusa mesmo que ela seja empurrável, e o raio de spawn vale; `pathBlocked`
+ * é o da BUSCA de caminho da volta, que olha tiles a qualquer distância (o `blocked` do guloso
+ * recusaria tudo que não é adjacente, e a busca nunca acharia nada).
  */
 export function decideUnengagedMove(
   monster: MonsterRuntime,
@@ -761,25 +873,34 @@ export function decideUnengagedMove(
   summons: readonly Prey[],
   blocked: Blocked,
   randomBlocked: Blocked,
+  pathBlocked: Blocked,
   nowMs: number,
   rng: { integer(min: number, max: number): number },
 ): UnengagedAction {
   const isSummon = monster.masterId !== null;
-  if (!isSummon && target === null && monster.conditions.size === 0
+  if (!isSummon && target === null && !hasActiveCondition(monster)
     && !anyInView(monster, participants, definition.aggroRadius)
     && !anyInView(monster, summons, definition.aggroRadius)) {
-    if (isInSpawnLocation(monster)) return { kind: 'idle' };
+    if (isInSpawnLocation(monster)) {
+      // Chegou: a volta por busca de caminho acabou (`walkingBack` fica ligada, como no Canary,
+      // mas a busca é só um jeito de andar — não deixa o flag velho para a próxima volta).
+      monster.walkBackByPath = false;
+      return { kind: 'idle' };
+    }
     monster.walkingBack = true;
   }
   if (isSummon && target === null) return { kind: 'still' };
 
   if (monster.walkingBack) {
     const to = sameFloor(monster.position.z, monster.home.z)
-      ? walkBackStep(monster.position, monster.home, blocked)
+      ? nextWalkBackStep(monster, blocked, pathBlocked)
       : null;
     // Chegou ou não há passo até lá: o Canary desliga (`isWalkingBack = false`) e o
     // `updateIdleStatus` seguinte religa, se ainda for o caso.
-    if (to === null) monster.walkingBack = false;
+    if (to === null) {
+      monster.walkingBack = false;
+      monster.walkBackByPath = false;
+    }
     return { kind: 'walk-back', to };
   }
 

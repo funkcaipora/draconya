@@ -13,7 +13,8 @@ import type { InventoryState } from '../inventory.js';
 import { resolveDeath } from '../death.js';
 import { DEFAULT_DIFFICULTY_NAME, huntListings } from '../hunt/catalogue.js';
 import { FORWARD } from '../area.js';
-import { MonsterRuntime, monsterSubject } from '../monster/monster.js';
+import { CHALLENGE_CONDITION_KEY, MonsterRuntime, monsterSubject } from '../monster/monster.js';
+import type { MonsterState } from '../monster/monster.js';
 import { distance } from '../monster/step.js';
 import type { GridPoint } from '../monster/step.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
@@ -9672,7 +9673,10 @@ describe('condição de velocidade com sinal — paralyze de ataque e haste de d
     // acima de 1 mesmo no PIOR sorteio da faixa —, o que torna o sinal positivo
     // DETERMINÍSTICO sem prender o teste a uma semente específica da sessão inteira.
     const selfHasteDeer = {
-      ...rat, aggroRadius: 0, // nunca mira ninguém — o teste é só sobre a própria defesa.
+      // O herói tem de estar À VISTA (#655): o monstro ocioso não usa defesa, como no Canary, onde
+      // ele sai da lista de `onThink`. O raio cobre a sala inteira, e o herói tem HP de sobra —
+      // o teste é só sobre a própria defesa.
+      ...rat, aggroRadius: 11,
       // A defesa NÃO rola no nascimento — a primeira chance é só em `cadenceMs` (#518, "um
       // monstro recém-nascido não se cura antes do primeiro vencimento"), então a cadência
       // precisa caber dentro da janela do teste.
@@ -15492,5 +15496,252 @@ describe('volta ao spawn, ocioso e passo aleatório (#655, Canary `Monster::getN
     // E quando a perseguição volta (o guloso o recoloca sob o herói), a flag desliga.
     session.advanceBy(600);
     expect(monster.randomStepping).toBe(false);
+  });
+
+  // --- a concavidade: o guloso empaca dentro da bolsa e a busca de caminho tira o monstro ------
+  // A geometria que a revisão achou na Darashia Dragon Lair (o `(75,116)` do Dragon Lord m:31):
+  // `M` (9,3) é uma bolsa sem saída — oeste, noroeste e sudoeste são parede — e o home é `H`
+  // (3,3). O guloso de `(11,1)` desce em diagonal até a bolsa e empaca; a saída é pelo norte.
+  //
+  //   x: 0123456789012
+  //   0  #############
+  //   1  #...........#
+  //   2  #...#...#...#
+  //   3  #..H...##M###
+  //   4  #......######
+  //   5  #############
+  const pocketGrid = [
+    '#############',
+    '#...........#',
+    '#...#...#...#',
+    '#......##.###',
+    '#......######',
+    '#############',
+  ];
+  const pocketContent = () => content({
+    maps: [{ id: 'arena', z: 7, grid: pocketGrid }],
+    routes: [{
+      id: 'arena-loop', mapId: 'arena',
+      tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+      spawnPoints: [{
+        routeIndex: 0, radius: 1, at: { x: 3, y: 3, z: 7 }, monsterId: 'wanderer', respawnDelayMs: 30_000,
+      }],
+    }],
+    monsters: [wanderer],
+  });
+  const FAR = { x: 100, y: 100, z: 7 };
+
+  /**
+   * O monstro que nasceu no home, levado para `to` por um snapshot editado e retomado — e não por
+   * `monster.position = …`, que deixaria a ocupação do tile de origem fantasma (o home) e
+   * impediria o último passo. O herói fica congelado e longe, fora da visão de todo o mapa.
+   */
+  const relocated = (to: GridPoint) => {
+    const loaded = pocketContent();
+    const started = start({ loaded });
+    started.session.advanceBy(50);
+    const snapshot = JSON.parse(JSON.stringify(started.session.snapshot())) as SessionSnapshot;
+    const state = snapshot.ruleset as { monsters: MonsterState[] };
+    const original = state.monsters[0];
+    if (original === undefined) throw new Error('sem monstro no snapshot');
+    state.monsters[0] = { ...original, position: { ...original.position, ...to } };
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, new Rng(snapshot.rng),
+    );
+    const hero = resumed.participants[0];
+    if (hero === undefined) throw new Error('sem herói na retomada');
+    resumed.cancelEvents(hero.id);
+    hero.position = FAR;
+    const monster = (resumed.ruleset as HuntRuleset).monsters[0];
+    if (monster === undefined) throw new Error('sem monstro na retomada');
+    return { session: resumed, monster, loaded };
+  };
+
+  it('a concavidade não prende quem volta: o guloso a pisa, a busca a tira — chega EXATAMENTE ao home e fica ocioso', () => {
+    const { session, monster } = relocated({ x: 11, y: 1 });
+    expect(monster.position).toEqual({ x: 11, y: 1, z: 7 });
+    session.drainEvents();
+    const tiles = movesOf(session, monster.subject, 90_000, 100).map((m) => `${String(m.to.x)},${String(m.to.y)}`);
+    expect(monster.position).toEqual({ x: 3, y: 3, z: 7 });
+    // Pisou na bolsa e saiu dela, sem nunca repetir um tile: nada de vaivém na boca.
+    expect(tiles).toContain('9,3');
+    expect(new Set(tiles).size).toBe(tiles.length);
+    expect(tiles.at(-1)).toBe('3,3');
+    // A busca acabou junto com a chegada, e o monstro fica ocioso: nenhum passo mais.
+    session.drainEvents();
+    expect(movesOf(session, monster.subject, 20_000, 1_000)).toHaveLength(0);
+    expect(monster.walkBackByPath).toBe(false);
+    expect(monster.idle).toBe(true);
+  });
+
+  it('a volta por busca de caminho vale IGUAL a 1 Hz e a 20 Hz (invariante 2) — o snapshot inteiro coincide', () => {
+    const scenario = (stepMs: number) => {
+      const { session, monster } = relocated({ x: 11, y: 1 });
+      run(session, 90_000, stepMs);
+      return { snapshot: session.snapshot(), monster: monster.getState() };
+    };
+    const twentyHz = scenario(50);
+    const oneHz = scenario(1_000);
+    expect(oneHz.monster.position).toEqual({ x: 3, y: 3, z: 7 });
+    expect(oneHz.monster).toEqual(twentyHz.monster);
+    expect(oneHz.snapshot).toEqual(twentyHz.snapshot);
+  });
+
+  it('um snapshot com a busca de caminho LIGADA retoma no mesmo passo e chega ao mesmo lugar (restauração)', () => {
+    const build = () => {
+      const started = relocated({ x: 11, y: 1 });
+      // Até o instante em que o guloso empacou na bolsa e o flag ligou.
+      for (let t = 0; t < 60_000 && !started.monster.walkBackByPath; t += 100) started.session.advanceBy(100);
+      return started;
+    };
+    const straight = build();
+    const interrupted = build();
+    expect(interrupted.monster.walkBackByPath).toBe(true);
+    expect(interrupted.monster.walkingBack).toBe(true);
+
+    const snapshot = JSON.parse(JSON.stringify(interrupted.session.snapshot())) as SessionSnapshot;
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, interrupted.loaded) as HuntRuleset, new Rng(snapshot.rng),
+    );
+    const resumedMonster = (resumed.ruleset as HuntRuleset).monsters[0];
+    if (resumedMonster === undefined) throw new Error('sem monstro na retomada');
+    expect(resumedMonster.walkBackByPath).toBe(true);
+    const resumedHero = resumed.participants[0];
+    if (resumedHero === undefined) throw new Error('sem herói na retomada');
+    resumedHero.position = FAR;
+    resumed.cancelEvents(resumedHero.id);
+
+    run(straight.session, 60_000, 100);
+    run(resumed, 60_000, 100);
+    expect(resumedMonster.position).toEqual({ x: 3, y: 3, z: 7 });
+    expect(resumedMonster.getState()).toEqual(straight.monster.getState());
+    expect(resumed.rng.getState()).toEqual(straight.session.rng.getState());
+  });
+
+  // --- ocioso não usa defesa, não troca de alvo e não invoca (`onThink` não roda) ---------------
+  // O Doom Deer (`doom_deer.lua`): defesa de haste em si mesmo. Aqui a cadência e o prazo são
+  // curtos de propósito, para o teste caber em minutos lógicos; o que importa é a ORDEM — sem
+  // ninguém à vista o monstro nasce ocioso e nunca chega a rolar a defesa.
+  const sentinel = {
+    ...wanderer, id: 'sentinel', name: 'Sentinel',
+    defenses: [{
+      id: 'haste', cadenceMs: 500, chance: 1,
+      condition: { key: 'speed', durationMs: 4_000, effect: { kind: 'speed', type: 'haste', delta: 2_000 } },
+    }],
+    targetChange: { intervalMs: 500, chance: 1 },
+  };
+  const sentinelCorridor = () => {
+    const started = start({
+      loaded: content({
+        maps: [corridorMap],
+        routes: [{
+          ...corridorRoute,
+          spawnPoints: [{ ...corridorRoute.spawnPoints[0], monsterId: 'sentinel' }],
+        }],
+        monsters: [sentinel],
+      }),
+    });
+    started.session.advanceBy(50); // o monstro nasce e decide (ninguém à vista: ocioso) no mesmo instante
+    started.session.cancelEvents(started.hero.id);
+    const monster = started.ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+    return { ...started, monster };
+  };
+
+  it('ocioso NÃO rola defesa nem troca de alvo: sem haste, sem passo, sem tocar a semente — por minutos', () => {
+    const { session, monster } = sentinelCorridor();
+    run(session, 5_000, 100);
+    expect(monster.idle).toBe(true);
+    expect(monster.getState().idle).toBe(true);
+    const rngBefore = session.rng.getState();
+    session.drainEvents();
+    expect(movesOf(session, monster.subject, 180_000, 1_000)).toHaveLength(0);
+    // A haste do Doom Deer ocioso era o defeito: a condição impedia o ocioso e ele passeava.
+    expect(monster.conditions.size).toBe(0);
+    expect(monster.position).toEqual({ x: 20, y: 2, z: 7 });
+    expect(monster.lastMoveAtMs).toBeNull();
+    // Nada sorteado: `chance: 1` de defesa e de troca de alvo vencem a cada 500 ms, e nenhuma rolou.
+    expect(session.rng.getState()).toEqual(rngBefore);
+    // O flag sobrevive ao snapshot, ou uma hunt retomada rolaria a defesa de quem o Canary cala.
+    expect(new MonsterRuntime(monster.getState()).idle).toBe(true);
+  });
+
+  it('alguém entra na visão: o monstro acorda, o flag desliga e a defesa volta a rolar', () => {
+    const { session, hero, monster } = sentinelCorridor();
+    run(session, 5_000, 100);
+    expect(monster.idle).toBe(true);
+    const rngBefore = session.rng.getState();
+    hero.position = { x: 14, y: 2, z: 7 };
+    run(session, 3_000, 100);
+    expect(monster.idle).toBe(false);
+    expect(monster.targetId).toBe(hero.id);
+    expect(monster.conditions.get('speed')).not.toBeNull();
+    expect(session.rng.getState()).not.toEqual(rngBefore);
+  });
+
+  it('o silêncio do ocioso vale IGUAL a 1 Hz e a 20 Hz (invariante 2): acorda, é hasteado, volta e sossega', () => {
+    // Os números REAIS do Doom Deer (`doom_deer.lua`): a cada 3 s, 30 % de chance, haste de 8 s.
+    // Com a cadência curta do `sentinel` acima a haste se renovaria sem parar e o monstro, com
+    // condição, nunca sossegaria — o que é fiel ao Canary e inútil para este teste.
+    const doomDeer = {
+      ...sentinel, id: 'doom-deer',
+      defenses: [{
+        id: 'haste', cadenceMs: 3_000, chance: 0.3,
+        condition: { key: 'speed', durationMs: 8_000, effect: { kind: 'speed', type: 'haste', delta: 2_000 } },
+      }],
+    };
+    const scenario = (stepMs: number) => {
+      const started = start({
+        loaded: content({
+          maps: [corridorMap],
+          routes: [{
+            ...corridorRoute,
+            spawnPoints: [{ ...corridorRoute.spawnPoints[0], monsterId: 'doom-deer' }],
+          }],
+          monsters: [doomDeer],
+        }),
+      });
+      const { session, hero } = started;
+      session.advanceBy(50);
+      session.cancelEvents(hero.id);
+      const monster = started.ruleset.monsters[0];
+      if (monster === undefined) throw new Error('sem monstro nesta cena');
+      run(session, 30_000, stepMs);
+      hero.position = { x: 14, y: 2, z: 7 };
+      run(session, 10_000, stepMs);
+      hero.position = { x: 1, y: 2, z: 7 };
+      run(session, 600_000, stepMs);
+      return { snapshot: session.snapshot(), monster: monster.getState() };
+    };
+    const twentyHz = scenario(50);
+    const oneHz = scenario(1_000);
+    // Sem ninguém à vista, o monstro que acordou voltou ao spawn e ficou ocioso de novo.
+    expect(oneHz.monster.idle).toBe(true);
+    expect(oneHz.monster.position).toEqual({ x: 20, y: 2, z: 7 });
+    expect(oneHz.monster).toEqual(twentyHz.monster);
+    expect(oneHz.snapshot).toEqual(twentyHz.snapshot);
+  });
+
+  // --- a provocação (Challenge) não é condição do Canary --------------------------------------
+  it('provocado, o monstro que perde o alvo VOLTA ao spawn e sossega — a provocação não impede o ocioso', () => {
+    const { session, hero, monster } = corridor();
+    hero.position = { x: 14, y: 2, z: 7 };
+    run(session, 4_000, 100);
+    expect(monster.targetId).toBe(hero.id);
+    // A condição da provocação, como `#applyChallenge` a deixa (sem o evento de vencimento: dura
+    // mais que a janela do teste).
+    monster.conditions.apply({
+      key: CHALLENGE_CONDITION_KEY, targetId: monster.subject, sourceId: hero.id,
+      expiresAtMs: session.nowMs + 600_000,
+    });
+    hero.position = { x: 1, y: 2, z: 7 };
+    run(session, 1_000, 100);
+    expect(monster.walkingBack).toBe(true);
+    run(session, 30_000, 100);
+    expect(monster.position).toEqual({ x: 20, y: 2, z: 7 });
+    expect(monster.idle).toBe(true);
+    expect(monster.conditions.get(CHALLENGE_CONDITION_KEY)).not.toBeNull();
+    session.drainEvents();
+    expect(movesOf(session, monster.subject, 20_000, 1_000)).toHaveLength(0);
   });
 });

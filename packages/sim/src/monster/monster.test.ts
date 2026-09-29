@@ -5,8 +5,9 @@ import { Fields } from '../fields.js';
 import type { TileFieldState } from '../fields.js';
 import { Rng } from '../rng.js';
 import {
-  MonsterRuntime, RANDOM_STEP_INTERVAL_MS, canMonsterEnterField, chooseTarget, decideMonsterAction,
-  decideUnengagedMove, isInSpawnLocation, isInSpawnRange, isMonsterFleeing, type Prey,
+  CHALLENGE_CONDITION_KEY, MonsterRuntime, RANDOM_STEP_INTERVAL_MS, canMonsterEnterField,
+  chooseTarget, decideMonsterAction, decideUnengagedMove, hasActiveCondition, isInSpawnLocation,
+  isInSpawnRange, isMonsterFleeing, walkBackPathStep, type Prey,
 } from './monster.js';
 
 const rat: Monster = {
@@ -870,7 +871,7 @@ describe('decideUnengagedMove (#655, Canary `Monster::updateIdleStatus` + `getNe
     } = {},
   ) => decideUnengagedMove(
     monster, rat, opts.target ?? null, opts.participants ?? noPrey, opts.summons ?? noPrey,
-    opts.blocked ?? open, opts.blocked ?? open, opts.nowMs ?? 0, opts.rng ?? rng,
+    opts.blocked ?? open, opts.blocked ?? open, opts.blocked ?? open, opts.nowMs ?? 0, opts.rng ?? rng,
   );
   const countingRng = new Rng({ a: 1, b: 2, c: 3, d: 4 });
   /** Estoura se sorteado — prova que o ramo não consome nada. */
@@ -880,7 +881,7 @@ describe('decideUnengagedMove (#655, Canary `Monster::updateIdleStatus` + `getNe
     it('no spawn, sem ninguém à vista e sem condição: ocioso — não anda, não sorteia', () => {
       const monster = monsterAt(0, 0);
       const action = decideUnengagedMove(
-        monster, rat, null, [prey('far', 9, 0)], noPrey, open, open, 5_000, explodingRng,
+        monster, rat, null, [prey('far', 9, 0)], noPrey, open, open, open, 5_000, explodingRng,
       );
       expect(action).toEqual({ kind: 'idle' });
       expect(monster.walkingBack).toBe(false);
@@ -906,7 +907,7 @@ describe('decideUnengagedMove (#655, Canary `Monster::updateIdleStatus` + `getNe
       expect(action.kind).toBe('random-step');
     });
 
-    it('com QUALQUER condição ativa nunca fica ocioso — `conditions.empty()` no Canary', () => {
+    it('com QUALQUER condição do Canary ativa nunca fica ocioso — `conditions.empty()`', () => {
       const burning = monsterAt(0, 0, { conditions: [{ key: 'burning', expiresAtMs: 60_000 }] });
       const action = decide(burning);
       // No spawn e sem volta ligada: cai no passo aleatório.
@@ -953,7 +954,7 @@ describe('decideUnengagedMove (#655, Canary `Monster::updateIdleStatus` + `getNe
       expect(monster.walkingBack).toBe(false);
     });
 
-    it('sem passo até o home (parede): desliga a volta e não anda — o seguinte religa', () => {
+    it('sem passo até o home (nem pela busca de caminho): desliga a volta e não anda — o seguinte religa', () => {
       const monster = monsterAt(3, 0, { home: { x: 0, y: 0 } });
       const walled = (x: number): boolean => x <= 2;
       const action = decide(monster, { blocked: walled, rng: explodingRng });
@@ -984,6 +985,159 @@ describe('decideUnengagedMove (#655, Canary `Monster::updateIdleStatus` + `getNe
       const before = countingRng.getState();
       decide(monster, { rng: countingRng });
       expect(countingRng.getState()).toEqual(before);
+    });
+  });
+
+  describe('a volta que o guloso não resolve: a busca de caminho (`doWalkBack` usa A*, #655)', () => {
+    // A concavidade da Darashia Dragon Lair achada na revisão (o `(75,116)` do Dragon Lord m:31):
+    // `M` é uma bolsa sem saída — oeste, noroeste e sudoeste são parede —, e `H` o home. O guloso
+    // de `(11,1)` desce em diagonal até a bolsa, pisa nela e empaca; o caminho de verdade sai
+    // pelo norte, dá a volta pelo tile `(8,1)` e chega ao home em 7 passos.
+    //
+    //   x: 0123456789012
+    //   0  #############
+    //   1  #...........#
+    //   2  #...#...#...#
+    //   3  #..H...##M###      H = home (3,3), M = a bolsa (9,3)
+    //   4  #......######
+    //   5  #############
+    const POCKET = [
+      '#############',
+      '#...........#',
+      '#...#...#...#',
+      '#......##.###',
+      '#......######',
+      '#############',
+    ];
+    const pocketBlocked = (x: number, y: number): boolean => POCKET[y]?.[x] !== '.';
+    const HOME = { x: 3, y: 3 };
+    const key = (p: { x: number; y: number }): string => `${String(p.x)},${String(p.y)}`;
+
+    /** Anda o monstro pelas decisões de volta até o ocioso; devolve o rastro de tiles pisados. */
+    const walkHome = (monster: MonsterRuntime, limit = 40): string[] => {
+      const trail: string[] = [];
+      for (let i = 0; i < limit; i += 1) {
+        const action = decide(monster, { blocked: pocketBlocked, rng: explodingRng, nowMs: i * 1_000 });
+        if (action.kind === 'idle') break;
+        if (action.kind !== 'walk-back' || action.to === null) throw new Error(`ramo inesperado: ${action.kind}`);
+        monster.position = action.to;
+        trail.push(key(action.to));
+      }
+      return trail;
+    };
+
+    it('o guloso pisa a bolsa e empaca; a busca a tira dali — chega ao home sem repetir tile e fica ocioso', () => {
+      const monster = monsterAt(11, 1, { home: HOME });
+      const trail = walkHome(monster);
+      expect(monster.position).toEqual(HOME);
+      // Pisou na bolsa pelo guloso (era o único jeito de o rastro passar por ela)…
+      expect(trail).toContain('9,3');
+      // …e nenhum tile se repete: nada de oscilar entre a boca da bolsa e o fundo dela.
+      expect(new Set(trail).size).toBe(trail.length);
+      // 2 passos gulosos até a bolsa + 7 do caminho de volta.
+      expect(trail).toHaveLength(9);
+      // Chegou: o vencimento seguinte é o ocioso, e a busca desliga junto — o flag não fica velho.
+      expect(monster.walkBackByPath).toBe(false);
+      expect(decide(monster, { blocked: pocketBlocked, rng: explodingRng })).toEqual({ kind: 'idle' });
+    });
+
+    it('o guloso empacar FORA do home liga `walkBackByPath`, e ele sobrevive ao snapshot', () => {
+      const monster = monsterAt(9, 3, { home: HOME });
+      const action = decide(monster, { blocked: pocketBlocked, rng: explodingRng });
+      expect(action).toEqual({ kind: 'walk-back', to: { x: 9, y: 2 } });
+      expect(monster.walkingBack).toBe(true);
+      expect(monster.walkBackByPath).toBe(true);
+      const resumed = new MonsterRuntime(monster.getState());
+      expect(resumed.walkBackByPath).toBe(true);
+      // Sem o flag, o estado não escreve o campo (o snapshot antigo continua restaurando igual).
+      expect('walkBackByPath' in monsterAt(9, 3).getState()).toBe(false);
+    });
+
+    it('por isso o flag é estado: na boca da bolsa o guloso a ENTRARIA de novo, a busca não', () => {
+      // De `(9,2)` o guloso (sudoeste e oeste são parede) escolhe o sul — a bolsa. Sem estado a
+      // volta seria um vaivém eterno: a busca tira o monstro, o guloso o devolve.
+      const greedy = monsterAt(9, 2, { home: HOME });
+      greedy.walkingBack = true;
+      expect(decide(greedy, { blocked: pocketBlocked, rng: explodingRng }))
+        .toEqual({ kind: 'walk-back', to: { x: 9, y: 3 } });
+
+      const pathing = monsterAt(9, 2, { home: HOME });
+      pathing.walkingBack = true;
+      pathing.walkBackByPath = true;
+      expect(decide(pathing, { blocked: pocketBlocked, rng: explodingRng }))
+        .toEqual({ kind: 'walk-back', to: { x: 8, y: 1 } });
+    });
+
+    it('sem caminho até o home (fechado por parede): desliga a volta E a busca, sem andar', () => {
+      const sealedHome = (x: number, y: number): boolean => pocketBlocked(x, y) || (Math.abs(x - 3) <= 1 && Math.abs(y - 3) <= 1 && !(x === 3 && y === 3));
+      const monster = monsterAt(9, 3, { home: HOME });
+      const action = decide(monster, { blocked: sealedHome, rng: explodingRng });
+      expect(action).toEqual({ kind: 'walk-back', to: null });
+      expect(monster.walkingBack).toBe(false);
+      expect(monster.walkBackByPath).toBe(false);
+    });
+
+    describe('`walkBackPathStep`', () => {
+      it('devolve o primeiro tile do caminho mais curto até o home', () => {
+        expect(walkBackPathStep({ x: 9, y: 3 }, HOME, pocketBlocked)).toEqual({ x: 9, y: 2 });
+        expect(walkBackPathStep({ x: 5, y: 4 }, HOME, pocketBlocked)).toEqual({ x: 4, y: 4 });
+      });
+
+      it('um home ocupado por outra criatura não é alcançável (como no Canary): null, sem varrer nada', () => {
+        let calls = 0;
+        const occupied = (x: number, y: number): boolean => {
+          calls += 1;
+          return pocketBlocked(x, y) || (x === 3 && y === 3);
+        };
+        expect(walkBackPathStep({ x: 9, y: 3 }, HOME, occupied)).toBeNull();
+        // Só perguntou pelo próprio home: a varredura do raio inteiro é a parte cara, e ela é
+        // inútil quando o destino já está fechado.
+        expect(calls).toBe(1);
+      });
+
+      it('o raio da busca é o do spawn (50): um desvio longo é achado, um além dele não', () => {
+        // Muro em x=2 com uma única passagem em y=`gap`; monstro em (5,0), home (0,0).
+        const wallWithGap = (gap: number) => (x: number, y: number): boolean => x === 2 && y !== gap;
+        expect(walkBackPathStep({ x: 5, y: 0 }, { x: 0, y: 0 }, wallWithGap(12))).not.toBeNull();
+        expect(walkBackPathStep({ x: 5, y: 0 }, { x: 0, y: 0 }, wallWithGap(45))).not.toBeNull();
+        expect(walkBackPathStep({ x: 5, y: 0 }, { x: 0, y: 0 }, wallWithGap(60))).toBeNull();
+      });
+
+      it('é determinística: dois caminhos mais curtos empatados resolvem sempre para o mesmo', () => {
+        const first = walkBackPathStep({ x: 9, y: 3 }, HOME, pocketBlocked);
+        for (let i = 0; i < 5; i += 1) expect(walkBackPathStep({ x: 9, y: 3 }, HOME, pocketBlocked)).toEqual(first);
+      });
+    });
+  });
+
+  describe('a provocação não é condição do Canary (`challengeFocusDuration`, #589)', () => {
+    const challenged = (x: number, y: number, extra: Array<{ key: string; expiresAtMs: number }> = []) =>
+      monsterAt(x, y, {
+        home: { x: 0, y: 0 },
+        conditions: [{ key: CHALLENGE_CONDITION_KEY, expiresAtMs: 60_000 }, ...extra],
+      });
+
+    it('`hasActiveCondition` ignora a provocação e conta qualquer outra', () => {
+      expect(hasActiveCondition(monsterAt(0, 0))).toBe(false);
+      expect(hasActiveCondition(challenged(0, 0))).toBe(false);
+      expect(hasActiveCondition(monsterAt(0, 0, { conditions: [{ key: 'burning', expiresAtMs: 60_000 }] }))).toBe(true);
+      expect(hasActiveCondition(challenged(0, 0, [{ key: 'burning', expiresAtMs: 60_000 }]))).toBe(true);
+    });
+
+    it('provocado, sem ninguém à vista e fora do spawn: VOLTA ao spawn como qualquer monstro', () => {
+      const monster = challenged(3, 0);
+      const action = decide(monster, { rng: explodingRng });
+      expect(action).toEqual({ kind: 'walk-back', to: { x: 2, y: 0 } });
+      expect(monster.walkingBack).toBe(true);
+    });
+
+    it('provocado e no spawn, sem ninguém à vista: fica ocioso', () => {
+      expect(decide(challenged(0, 0), { rng: explodingRng })).toEqual({ kind: 'idle' });
+    });
+
+    it('a provocação MAIS outra condição: a outra ainda impede o ocioso', () => {
+      const monster = challenged(0, 0, [{ key: 'burning', expiresAtMs: 60_000 }]);
+      expect(decide(monster).kind).toBe('random-step');
     });
   });
 
@@ -1026,7 +1180,7 @@ describe('decideUnengagedMove (#655, Canary `Monster::updateIdleStatus` + `getNe
       const calls: Array<[number, number]> = [];
       const spy = { integer: (min: number, max: number): number => { calls.push([min, max]); return min; } };
       const action = decideUnengagedMove(
-        monster, rat, someone, [someone], noPrey, () => true, () => true, 0, spy,
+        monster, rat, someone, [someone], noPrey, () => true, () => true, () => true, 0, spy,
       );
       expect(action).toEqual({ kind: 'random-step', to: null });
       expect(monster.randomStepping).toBe(true);
@@ -1037,7 +1191,7 @@ describe('decideUnengagedMove (#655, Canary `Monster::updateIdleStatus` + `getNe
       // O guloso deixa passar tile com criatura empurrável; o `canWalkTo` do Canary não.
       const monster = monsterAt(3, 3);
       const action = decideUnengagedMove(
-        monster, rat, someone, [someone], noPrey, open, () => true, 0, rng,
+        monster, rat, someone, [someone], noPrey, open, () => true, open, 0, rng,
       );
       expect(action).toEqual({ kind: 'random-step', to: null });
     });
