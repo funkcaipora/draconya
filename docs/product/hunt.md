@@ -96,6 +96,7 @@ A saída da hunt pode ocorrer de duas maneiras principais quando não decorre de
 - **Múltiplos disparos**: Novas solicitações de saída durante uma contagem já em andamento são ignoradas e não reiniciam o timer.
 - **Preservação em snapshot**: Se o estado for serializado no meio da contagem regressiva, o timer agendado e o motivo de saída pendente (`pendingExit`) são preservados na retomada.
 - **Exceção para `party-member-lost`**: A regra de saída em cascata quando um membro do grupo sai ou morre (`party-member-lost`) permanece **imediata**, sem passar pelo atraso de `exitDelayMs`.
+- **Trava de combate (#625, `CONDITION_INFIGHT`/`pzLocked` do Canary, 60 s)**: depois de vencer o `exitDelayMs`, a saída — manual ou por regra do bot, as duas — só **conclui** se o personagem estiver fora de combate: nenhum ataque dado nem recebido nos últimos 60 000 ms. Em combate, o `pendingExit` fica marcado e a saída aguarda; um novo ataque durante a espera empurra o prazo para 60 s depois DELE, como no Tibia. "Em combate" tem uma definição só no motor (`isInFight`, `packages/sim/src/combat/in-fight.ts`), que também alimenta o decaimento de imbuement fora de combate (#606). A cascata `party-member-lost` continua isenta — ela nunca passa por essa trava.
 
 ## Regras
 

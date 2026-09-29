@@ -249,6 +249,18 @@ export interface CharacterState {
    */
   readonly attackLockedUntil?: number;
   /**
+   * O último instante (relógio lógico da sessão) em que o personagem deu OU recebeu um ataque
+   * — a definição ÚNICA de "em combate" do endgame (#625), lida por `isInFight`
+   * (`combat/in-fight.ts`): `pzLocked` do Canary, 60 000 ms desde este carimbo. Escrito pelo
+   * ruleset da hunt em `#land`/`#applyHits` (dado) e `#applyMonsterHit` (recebido) — a mesma
+   * régua de `Runner.lastCombatActionAtMs` (`rulesets/hunt.ts`), mas NÃO o mesmo campo: aquele
+   * é só DADO, sem self-heal, e alimenta só a elegibilidade de XP compartilhada (#525); este
+   * soma o recebido e não exclui nada, porque apanhar também deveria travar a saída no Tibia.
+   * Ausente é "nunca lutou nesta sessão" — sem bump de `SNAPSHOT_FORMAT_VERSION`, como
+   * `attackLockedUntil`.
+   */
+  readonly lastCombatActionAtMs?: number;
+  /**
    * Promovido (#566, ADR 0042 decisão 1): estado que SÓ SOBE — não existe des-promoção no
    * Tibia. Ausente/`false` é "não promovido", o normal de todo personagem novo. Sem bump de
    * `SNAPSHOT_FORMAT_VERSION`, como `vocationId`/`blessings`.
@@ -396,6 +408,11 @@ export class CharacterRuntime {
    */
   attackLockedUntil: number;
   /**
+   * Ver `CharacterState.lastCombatActionAtMs`. Só o ruleset da hunt escreve (invariante 9);
+   * `null` é "nunca lutou".
+   */
+  lastCombatActionAtMs: number | null;
+  /**
    * Promovido (#566, ADR 0042 decisão 1). Só `promote()` escreve — nunca desce. Consumido pelo
    * regen (`#regenOf`) e pela penalidade de morte (`applyDeathPenalty`), os dois em `hunt.ts`.
    */
@@ -443,6 +460,7 @@ export class CharacterRuntime {
     this.blessings = state.blessings ?? 0;
     this.pendingManualAction = state.pendingManualAction ?? null;
     this.attackLockedUntil = state.attackLockedUntil ?? 0;
+    this.lastCombatActionAtMs = state.lastCombatActionAtMs ?? null;
     this.promoted = state.promoted ?? false;
   }
 
@@ -668,6 +686,8 @@ export class CharacterRuntime {
       ...(this.blessings === 0 ? {} : { blessings: this.blessings }),
       ...(this.pendingManualAction === null ? {} : { pendingManualAction: this.pendingManualAction }),
       ...(this.attackLockedUntil === 0 ? {} : { attackLockedUntil: this.attackLockedUntil }),
+      ...(this.lastCombatActionAtMs === null
+        ? {} : { lastCombatActionAtMs: this.lastCombatActionAtMs }),
       ...(this.promoted ? { promoted: true } : {}),
     };
   }

@@ -33,6 +33,7 @@ export * from './targeting.js';
 export * from './combat/damage.js';
 export * from './combat/outcome.js';
 export * from './combat/conformance.js';
+export * from './combat/in-fight.js';
 export * from './monster/step.js';
 export * from './monster/monster.js';
 export * from './route/walker.js';
