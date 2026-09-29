@@ -1,0 +1,10 @@
+{
+  "id": "dwarf-mines",
+  "name": "Dwarf Mines",
+  "recommendedLevel": 8,
+  "mapId": "dwarf-mines",
+  "routeId": "dwarf-mines",
+  "ambience": "cavern",
+  "description": "As minas escavadas nas rochas perto de Kazordoon. Dwarf Soldier, Dwarf Guard e Dwarf Geomancer disputam os túneis com picaretas e machados — a primeira hunt de quem já deixou Rookgaard para trás.",
+  "_open": "#587 (M36-06). Recorte real do Canary: `pnpm map:import --id dwarf-mines --x 32440..32570 --y 31947..32030 --z 14 --keep-from 32502,31959,14 --entry 32503,31958,14` sobre `otservbr.otbm`, região final 32474..32523 x 31947..31993 z14 (50×47, 881 tiles andáveis). O recorte inicial (padding maior) incluía uma salinha fechada por porta trancada, desconectada da mina pela busca de tile andável — apertar a caixa para excluir essa sala foi o que fez `pnpm map:import --check` bater (o `--check` relê o OTBM bruto da região salva, sem reaplicar `--keep-from`: a caixa final precisa não conter nada fora do componente andável). `pnpm catalog:spawns --map dwarf-mines`: 83 pontos reais do `otservbr-monster.xml` (não monotemático — Dwarf Guard, Dwarf Soldier e Dwarf Geomancer misturados, a fauna inteira da zona, ADR 0039 decisão 3), 0 desconhecidos. Rota: laço de 464 tiles gerado por busca (vizinho mais próximo sobre os pontos de spawn reais + BFS de `trace-route.ts`), não autorada à mão tile a tile. `recommendedLevel: 8` é o nível real de entrada de Knight nas Dwarf Mines de Kazordoon (TibiaWiki, fila 'Recommended Levels by Vocation' — Knights 8/30, Paladins 13/30, Mages 14/29; usei o menor, seguindo a convenção do Gate da Darashia Dragon Lair de citar um número só) — cobre a faixa 8–30 do #587."
+}

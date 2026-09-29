@@ -362,6 +362,107 @@ Esta hunt (a Darashia Dragon Lair) já usava `spawnPoints[i].monsterId`/`at`/`re
 ponto desde o #519; o #583 só torna esse formato obrigatório para toda hunt, em vez de um caso
 especial só dela.
 
+## O roteiro para importar uma hunt nova do Tibia (#587, M36-06)
+
+O primeiro lote de hunts reais por faixa de level — seis áreas novas, além das três que já
+existiam (Rat Cellars, Rotworm Caves, Darashia Dragon Lair) — proveu o fluxo ponta a ponta e
+deixou o roteiro abaixo repetível. As seis: **Dwarf Mines** (nível 8, faixa 8–30), **Cyclopolis**
+(nível 34, faixa 30–60), **Minotaur Camp** (nível 60, faixa 60–100), **Bone Crypt** (nível 100,
+faixa 100–150), **Hydra Mountain** (nível 150, faixa 150–250) e **Hellhound Den** (nível 250,
+faixa 250+) — `data/hunts/{dwarf-mines,cyclopolis,minotaur-camp,bone-crypt,hydra-mountain,hellhound-den}.json`,
+cada uma com o `_open` citando o comando exato usado e a fonte do `recommendedLevel`.
+
+### Escolher a área
+
+1. Liste candidatos por faixa de level com `Bestiary.Locations` do monstro no Canary
+   (`$CANARY_DIR/data-otservbr-global/monster/**/*.lua`) — o campo cita os nomes reais de área do
+   Tibia (ex. `dragon.lua`: "Darashia Dragon Lair", "Edron Dragon Lair"…).
+2. Confira se o monstro está no catálogo LOCAL (`packages/content/data/monsters/generated/*.json`,
+   campo `"id"`) — só entra quem já foi promovido (#580); o relatório
+   `docs/reference/catalog/monsters-promotion-report.md` diz o que falta.
+3. Ache onde esse monstro nasce DE VERDADE no `otservbr-monster.xml`
+   (`$CANARY_DIR/data-otservbr-global/world/otservbr-monster.xml`, elemento raiz `<monster
+   centerx centery centerz radius>` por zona, filhos `<monster name x y z spawntime>`) — agrupe
+   por proximidade geográfica (mesmo `z`, distância Chebyshev pequena) para achar o AGRUPAMENTO
+   real, não um monstro solto. Um agrupamento denso (dezenas de pontos próximos) é uma masmorra
+   de verdade; um espalhado por um mapa inteiro é terreno de superfície, mais difícil de recortar
+   (ver nota do Cyclopolis abaixo).
+4. O `recommendedLevel`: TibiaWiki (WebSearch) quando existir um Gate ou "Recommended Levels by
+   Vocation" claro para aquela área — use o MENOR requisito por vocação, como a Darashia Dragon
+   Lair usa o "Gate of Expertise" (nível 40). Sem fonte clara, caia no monstro mais forte da
+   composição (regra que o próprio #587 já previa) — documente no `_open` que é estimativa, não
+   fato de fonte.
+
+### Recortar o mapa
+
+```
+pnpm map:import --id <id> --x <xmin>..<xmax> --y <ymin>..<ymax> --z <z>
+```
+
+Comece com uma caixa generosa em torno do agrupamento de spawns. **Duas armadilhas medidas nas
+seis hunts:**
+
+- **`--keep-from x,y,z` (poda ao componente andável conectado a partir da semente) é ótimo para
+  DESCOBRIR o formato natural da área, mas o `pnpm map:import --check` relê o OTBM BRUTO da
+  região salva, sem reaplicar `--keep-from`.** Se a caixa final ainda contiver, no OTBM real,
+  algum pedaço andável desconexo do componente (uma salinha vizinha, um corredor paralelo), o
+  `--check` volta "DESATUALIZADO" para sempre — a comparação nunca reconstrói o filtro que só
+  `--keep-from` sabe fazer. Duas saídas, as duas usadas no lote: (a) apertar a caixa até a
+  bounding box do componente não sobrar nada fora dele (Dwarf Mines: cortar as linhas do topo
+  que continham uma salinha trancada por porta, desconexa); ou (b) mais simples e o que as
+  outras cinco usaram — **descubra a região com `--keep-from` numa caixa larga, depois faça o
+  IMPORT FINAL sem `--keep-from` nenhum, com `--x`/`--y` batendo EXATAMENTE a região final
+  reportada.** Um recorte reto (sem poda) bate com `--check` por construção, porque os dois
+  lados leem o mesmo OTBM bruto na mesma caixa — o preço é que conteúdo desconexo dentro da
+  caixa (se houver) entra no mapa, inerte (a rota nunca o visita; ver abaixo).
+- **`--entry x,y,z` precisa ser um tile ANDÁVEL exato**, não a média de um agrupamento (que cai
+  numa parede com frequência). Depois do import sem `--entry`, procure o `.` mais próximo do
+  centro do agrupamento na grade (`packages/content/data/maps/<id>.json`, `floors[z].grid`) e
+  reimporte com esse ponto.
+
+### Traçar a rota e importar os spawns reais
+
+Sem waypoints manuais: uma rota gerada por vizinho-mais-próximo sobre os PONTOS DE SPAWN REAIS
+(filtrados da mesma forma que `pnpm catalog:spawns` filtra — dentro da `region` que
+`map:import` gravou), fechada com o BFS de `scripts/trace-route.ts` (`traceRoute`), cobre a área
+inteira sem exigir um humano desenhando tile a tile. Se a caixa final não usou `--keep-from` (e
+por isso pode ter pedaço desconexo), filtre os alvos ao componente alcançável A PÉ a partir da
+entrada antes de montar o tour — ponto de spawn fora do alcance ainda ganha `spawnPoint` (fica
+ancorado no tile de rota mais próximo por `anchorSpawnPoints`), só nunca é visitado pelo bot.
+
+```
+pnpm route:trace --id <id> --map <id> --z <z> --via <entrada> <resto do tour>
+pnpm catalog:spawns --map <id>       # regrava spawnPoints com o XML real do Canary
+pnpm catalog:spawns --map <id> --check
+```
+
+`catalog:spawns` relata (não falha) todo monstro do agrupamento que o catálogo local ainda não
+tem — Scarab apareceu assim na Bone Crypt (2 pontos descartados, 22 escritos de 24). A hunt NÃO
+é monotemática: cada recorte real do Canary traz a fauna inteira da zona (Dwarf Guard + Dwarf
+Soldier + Dwarf Geomancer nas Dwarf Mines; Minotaur + Pig + Smuggler no Minotaur Camp), a mesma
+regra que já valia para a Rat Cellars/Rotworm Caves (#586, ADR 0039 decisão 3).
+
+### A hunt e o resto do lote
+
+1. `data/hunts/<id>.json`: `id`, `name`, `recommendedLevel`, `mapId`, `routeId`, `ambience`
+   (`cavern` para masmorra/caverna), `description` (narrativa curta) e `_open` citando o comando
+   exato do recorte e a fonte do `recommendedLevel` — o schema não tem mais `difficulties` desde
+   o #583.
+2. Some `pnpm catalog:spawns --map <id> --check` à linha `check` do `package.json` raiz, ao lado
+   da que já existia para a Darashia Dragon Lair.
+3. `HuntsModal` (cliente) não precisa de registro manual: hunts são descobertas por diretório
+   (`packages/content/src/load.ts`, `readJsonDir('hunts')`) — o catálogo que o cliente lista é o
+   que `loadContent` devolve.
+4. Um teste curto no padrão de `rat-cellars.test.ts`: entra, percorre a rota real e mata, com XP
+   e (quando a sorte ajudar) loot — `packages/server/src/game/tibia-parity-hunts.test.ts` cobre
+   as seis com `describe.each`. Um herói no `recommendedLevel` exato, DESARMADO, morre antes de
+   acertar um golpe contra a maioria destas seis (medido: nível 8 contra os Dwarf Guard reais
+   mata em ~2,4 s) — os `spawnPoints` nascem TODOS ao mesmo tempo (ADR 0039 decisão 3), sem pull
+   que espalhe o encontro, e o personagem de teste não tem o kit/talento que um personagem real
+   do `recommendedLevel` levaria. O teste usa um nível de prova bem acima (`TEST_LEVEL`, medido
+   para garantir ao menos um abate antes de morrer) — o ponto é provar mapa/rota/spawn, não
+   balancear o combate de cada faixa.
+
 ## Boosted Creature do dia (#615, ADR 0054 decisão 7)
 
 Uma vez por dia, na hora de virada (`boosted.rolloverHourUtc`, conteúdo), o `jobs` sorteia um
@@ -647,6 +748,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Loot do Dragon Lord (16 linhas, #581) | gold 95,3 %, 1–237; dragon ham 79,79 % (1–2); green mushroom 12,03 %; royal spear 9,38 % (1–3); small sapphire 5,59 %; energy ring 4,55 %; golden mug 3,31 %; red dragon scale 1,94 %; red dragon leather 1,15 %; life crystal 0,65 %; strange helmet 0,52 %; tower shield 0,41 %; fire sword 0,35 %; royal helmet 0,26 %; dragon slayer 0,22 %; dragon lord trophy 0,13 %; dragon scale mail 0,09 % — `book`, `power bolt` e `strong health potion` saíram pelo mesmo motivo do Dragon (munição/suprimento abstrato, ou item sem entidade no catálogo real ainda) | `data/monsters/generated/dragons.json`, bloco `loot` |
 | Bestiário do Dragon/Dragon Lord (#520) | toKill 1000, firstUnlock 50, secondUnlock 500, charmsPoints 25, stars 3, occurrence 0 — ainda sem tela (ver `bestiary.md`) | `data/bestiary/baseline.json`, `entries` |
 | A hunt Darashia Dragon Lair (#520 fase 2) | `recommendedLevel` 40 (Gate of Expertise, TibiaWiki); sem dificuldade nenhuma desde o #583 — os 47 `spawnPoints` nascem todos, cada um exatamente uma vez; `corpseTtlMs` saiu do hunt e mora em `dragon`/`dragon-lord` desde o #585 (670000 ms cada, a mesma soma da cadeia de decaimento do Canary `items.xml`: dead dragon/dead dragon lord, 10 s → 300 s → 300 s → 60 s até `decayTo` sumir); Dragon e Dragon Lord são `blockable: false` (o default), então nascem com o telegraph de 4200 ms, nunca esperando a vista limpar; `spawnClearRadius` ausente (0, desligado — a referência pede não copiar a supressão do TFS) | `data/hunts/darashia-dragon-lair.json` |
+| As seis hunts do primeiro lote por faixa de level (#587, M36-06) | Dwarf Mines (nível 8, 83 `spawnPoints`), Cyclopolis (34, 7), Minotaur Camp (60, 39), Bone Crypt (100, 24), Hydra Mountain (150, 21), Hellhound Den (250, 18) — cada `recommendedLevel` sourced de TibiaWiki quando existia um Gate/tabela de vocação clara (Dwarf Mines, Cyclopolis, Hydra Mountain), ou o piso da faixa que o #587 pedia por fallback (Minotaur Camp, Bone Crypt, Hellhound Den — sem Gate/wiki específico achado); roteiro completo em "O roteiro para importar uma hunt nova do Tibia" acima | `data/hunts/{dwarf-mines,cyclopolis,minotaur-camp,bone-crypt,hydra-mountain,hellhound-den}.json` |
 | Rate de loot e escala de monstro/boss (#691) | neutros (1); o conteúdo real não declara | `data/progression/baseline.json`, `rates.loot` / `rates.monster` / `rates.boss`; `data/monsters/*.json`, `boss` |
 | Monstro evita campo de fogo/veneno/energia (M29-05, `canWalkOnFieldType` do TFS/Canary) | `true` (anda por cima) é o default, como no Canary; nenhum dos quatro monstros do catálogo hoje declara `false` — Dragon e Dragon Lord declaram `true` explicitamente (`dragon.lua`/`dragon_lord.lua`, conferidos em 2026-09-25), rato e rotworm não declaram nada | `data/monsters/*.json`, campos `canWalkOnFire`/`canWalkOnPoison`/`canWalkOnEnergy` |
 
