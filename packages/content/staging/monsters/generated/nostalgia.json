@@ -390,7 +390,7 @@
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
     "attackIntervalMs": 2000,
-    "speed": 240,
+    "speed": 152,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,

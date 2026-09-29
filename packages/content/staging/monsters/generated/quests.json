@@ -27,7 +27,7 @@
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
     "attackIntervalMs": 2000,
-    "speed": 176,
+    "speed": 185,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -1381,6 +1381,129 @@
     "outfitId": 120
   },
   {
+    "id": "animated-clomp",
+    "name": "Animated Clomp",
+    "health": 900,
+    "experience": 475,
+    "attack": {
+      "min": 0,
+      "max": 289
+    },
+    "armor": 20,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 430,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.92,
+        "min": 1,
+        "max": 130
+      },
+      "items": [
+        {
+          "itemId": "raw-meat",
+          "chance": 0.022
+        },
+        {
+          "itemId": "hardened-bone",
+          "chance": 0.012,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "thick-fur",
+          "chance": 0.009
+        },
+        {
+          "itemId": "tusk-shield",
+          "chance": 0.004
+        },
+        {
+          "itemId": "furry-club",
+          "chance": 0.002
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 289
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "burning",
+          "merge": "strongest",
+          "durationMs": 54000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 6,
+            "intervalMs": 9000,
+            "damageType": "fire"
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "heal": {
+          "min": 80,
+          "max": 95
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 300,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/cults_of_tibia/animated_clomp.lua"
+    },
+    "outfitId": 860
+  },
+  {
     "id": "animated-cyclops",
     "name": "Animated Cyclops",
     "health": 260,
@@ -1405,7 +1528,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 200,
+    "speed": 190,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -3010,7 +3133,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 132,
+    "speed": 380,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -3522,7 +3645,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
     "attackIntervalMs": 2000,
-    "speed": 208,
+    "speed": 195,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -3664,7 +3787,7 @@
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
     "attackIntervalMs": 2000,
-    "speed": 160,
+    "speed": 170,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -4804,7 +4927,7 @@
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
     "attackIntervalMs": 2000,
-    "speed": 220,
+    "speed": 190,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -6842,6 +6965,64 @@
     "outfitId": 538
   },
   {
+    "id": "cart-packed-with-gold",
+    "name": "Cart Packed with Gold",
+    "health": 10000,
+    "experience": 0,
+    "attack": 0,
+    "armor": 25,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "death"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "small-diamond",
+          "chance": 1
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "corpseTtlMs": 470000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/grave_danger/cart_packed_with_gold.lua"
+    },
+    "outfitId": 1175
+  },
+  {
     "id": "cave-spider",
     "name": "Cave Spider",
     "health": 1800,
@@ -7211,7 +7392,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 194,
+    "speed": 195,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -7513,7 +7694,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 320,
+    "speed": 160,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -8605,7 +8786,7 @@
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
     "attackIntervalMs": 2000,
-    "speed": 204,
+    "speed": 205,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -8781,7 +8962,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 250,
+    "speed": 240,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -8862,7 +9043,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 50,
+    "speed": 440,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -9115,7 +9296,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 162,
+    "speed": 160,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -10457,7 +10638,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 394,
+    "speed": 230,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -11467,7 +11648,7 @@
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
     "attackIntervalMs": 2000,
-    "speed": 480,
+    "speed": 320,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -11930,7 +12111,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 370,
+    "speed": 410,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -13872,7 +14053,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 154,
+    "speed": 155,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -14848,7 +15029,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 174,
+    "speed": 175,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -15147,7 +15328,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 244,
+    "speed": 245,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -17758,7 +17939,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 1000,
-    "speed": 100,
+    "speed": 500,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -18088,7 +18269,7 @@
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
     "attackIntervalMs": 2000,
-    "speed": 30,
+    "speed": 200,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -18897,7 +19078,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 390,
+    "speed": 350,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -22114,7 +22295,7 @@
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
     "attackIntervalMs": 2000,
-    "speed": 340,
+    "speed": 276,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -24066,7 +24247,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 440,
+    "speed": 560,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -25014,7 +25195,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 424,
+    "speed": 250,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -26145,7 +26326,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 154,
+    "speed": 160,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -26710,7 +26891,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 300,
+    "speed": 220,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -28928,7 +29109,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 430,
+    "speed": 390,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -29907,7 +30088,7 @@
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
     "attackIntervalMs": 2000,
-    "speed": 330,
+    "speed": 296,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -30558,7 +30739,7 @@
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
     "attackIntervalMs": 2000,
-    "speed": 590,
+    "speed": 320,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -31673,7 +31854,7 @@
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
     "attackIntervalMs": 2000,
-    "speed": 270,
+    "speed": 360,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -32073,7 +32254,7 @@
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
     "attackIntervalMs": 2000,
-    "speed": 194,
+    "speed": 195,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -35399,7 +35580,7 @@
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
     "attackIntervalMs": 2000,
-    "speed": 440,
+    "speed": 320,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -37585,7 +37766,7 @@
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
     "attackIntervalMs": 2000,
-    "speed": 200,
+    "speed": 220,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -38597,86 +38778,6 @@
       "path": "data-otservbr-global/monster/quests/svargrond_arena/greenhorn/rocky.lua"
     },
     "outfitId": 95
-  },
-  {
-    "id": "sand-brood",
-    "name": "Sand Brood",
-    "health": 2100,
-    "experience": 0,
-    "attack": {
-      "min": 0,
-      "max": 150
-    },
-    "armor": 10,
-    "defense": 10,
-    "damageType": "physical",
-    "mitigation": {
-      "resistances": {},
-      "immunities": []
-    },
-    "conditionImmunities": [
-      "invisible",
-      "paralyze"
-    ],
-    "defenseMitigation": 0,
-    "canWalkOnFire": true,
-    "canWalkOnPoison": true,
-    "canWalkOnEnergy": true,
-    "attackIntervalMs": 2000,
-    "speed": 174,
-    "aggroRadius": 11,
-    "attackRange": 1,
-    "targetDistance": 1,
-    "blockable": false,
-    "loot": {
-      "rollModel": "canary",
-      "items": []
-    },
-    "abilities": [
-      {
-        "id": "melee",
-        "cadenceMs": 2000,
-        "target": {
-          "range": 1
-        },
-        "power": {
-          "min": 0,
-          "max": 150
-        },
-        "damageType": "physical",
-        "kind": "melee",
-        "condition": {
-          "key": "poisoned",
-          "merge": "strongest",
-          "durationMs": 60000,
-          "effect": {
-            "kind": "damage-over-time",
-            "form": "generated",
-            "totalDamage": 15,
-            "intervalMs": 4000,
-            "damageType": "earth"
-          }
-        }
-      }
-    ],
-    "targetChange": {
-      "intervalMs": 5000,
-      "chance": 0.2
-    },
-    "targetStrategy": {
-      "nearest": 70,
-      "health": 10,
-      "damage": 10,
-      "random": 10
-    },
-    "staticAttack": 0.95,
-    "corpseTtlMs": 670000,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data-otservbr-global/monster/quests/cults_of_tibia/bosses/summons/sand_brood.lua"
-    },
-    "outfitId": 82
   },
   {
     "id": "schiach",
@@ -39765,7 +39866,7 @@
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
     "attackIntervalMs": 2000,
-    "speed": 194,
+    "speed": 195,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -40936,7 +41037,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 220,
+    "speed": 238,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -41291,7 +41392,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 130,
+    "speed": 280,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -42915,6 +43016,56 @@
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/stonecracker.lua"
     },
     "outfitId": 55
+  },
+  {
+    "id": "strange-slime",
+    "name": "Strange Slime",
+    "health": 15,
+    "experience": 0,
+    "attack": 0,
+    "armor": 0,
+    "defense": 0,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 120,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/bigfoots_burden/strange_slime.lua"
+    },
+    "outfitId": 19
   },
   {
     "id": "strong-soul",
@@ -46459,7 +46610,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 370,
+    "speed": 250,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -48291,7 +48442,7 @@
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
     "attackIntervalMs": 2000,
-    "speed": 204,
+    "speed": 205,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 5,
@@ -49915,7 +50066,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
     "attackIntervalMs": 2000,
-    "speed": 438,
+    "speed": 240,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -52638,7 +52789,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 370,
+    "speed": 238,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -52764,7 +52915,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 150,
+    "speed": 210,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -53611,7 +53762,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 680,
+    "speed": 280,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 4,
@@ -54425,7 +54576,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 240,
+    "speed": 330,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -56160,7 +56311,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 200,
+    "speed": 240,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,
@@ -57883,7 +58034,7 @@
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
     "attackIntervalMs": 2000,
-    "speed": 330,
+    "speed": 340,
     "aggroRadius": 11,
     "attackRange": 1,
     "targetDistance": 1,

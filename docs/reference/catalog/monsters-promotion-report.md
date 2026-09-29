@@ -2,7 +2,7 @@
 
 Separa `packages/content/staging/monsters/generated/*.json` (a transcrição pura do Canary, #578/#579) em `data/monsters/generated/` + `data/bestiary/baseline.json` + `data/appearances/baseline.json`, e valida `loot.items` contra o catálogo de itens REAL (`packages/content/data/items`, autoral + `generated/` — o que `loadContent` de fato carrega hoje; a promoção de itens é `promote-items.ts`, #748).
 
-1021 monstro(s) promovido(s) em 26 fatia(s):
+1023 monstro(s) promovido(s) em 26 fatia(s):
 
 - `amphibics.json`: 11
 - `aquatics.json`: 33
@@ -24,7 +24,7 @@ Separa `packages/content/staging/monsters/generated/*.json` (a transcrição pur
 - `mammals.json`: 68
 - `nostalgia.json`: 8
 - `plants.json`: 7
-- `quests.json`: 364
+- `quests.json`: 366
 - `raids.json`: 32
 - `reptiles.json`: 20
 - `slimes.json`: 7
@@ -43,7 +43,7 @@ Separa `packages/content/staging/monsters/generated/*.json` (a transcrição pur
 | rat | hand-authored — regenerado só pelo #581, nunca por esta promoção |
 | rotworm | hand-authored — regenerado só pelo #581, nunca por esta promoção |
 
-## Linhas de loot removidas (2785)
+## Linhas de loot removidas (2786)
 
 Item referenciado por `loot.items` que não existe no catálogo real, ou que excede a pilha de um item que não empilha. A linha inteira é removida — nunca creditada como item fantasma (§"Loot" de `packages/content/CLAUDE.md`).
 
@@ -296,7 +296,7 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | hair-of-a-banshee | 1 | item ausente do catálogo (packages/content/data/items) |
 | half-digested-piece-of-meat | 2 | item ausente do catálogo (packages/content/data/items) |
 | handmaidens-protector | 1 | item ausente do catálogo (packages/content/data/items) |
-| hardened-bone | 3 | max 2 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
+| hardened-bone | 4 | max 2 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | harpoon-of-a-giant-snail | 1 | item ausente do catálogo (packages/content/data/items) |
 | haunch-of-boar | 1 | item ausente do catálogo (packages/content/data/items) |
 | haunted-piece-of-wood | 1 | item ausente do catálogo (packages/content/data/items) |
