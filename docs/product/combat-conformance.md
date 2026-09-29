@@ -104,7 +104,7 @@ Cada peça tem a própria matriz de oráculos escritos à mão, no mesmo formato
 
 | Arquivo | O que prende |
 |---|---|
-| `packages/sim/src/combat/weapon-power.test.ts` | tabela (attack, skill, level, attackFactor, vocationMultiplier) → faixa `[min, max]` igual à conta do Canary; distribuição (média/desvio) da normal truncada numa amostra grande; retrocompatibilidade — sem `combat`, ou com `combat-v1`, a fórmula não muda |
+| `packages/sim/src/combat/weapon-power.test.ts` | tabela (attack, skill, level, vocationMultiplier) → faixa `[min, max]` igual à conta do Canary; distribuição (média/desvio) da normal truncada numa amostra grande; retrocompatibilidade — sem `combat`, ou com `combat-v1`, a fórmula não muda |
 | `packages/sim/src/combat/distance-hit.test.ts` | a tabela por skill/distância (1–7); o balde `ammunition.maxHitChance` (#524) — tabela ou chance fixa; o bônus/malus `weapon.hitChance` (#524); a rolagem sempre consumida |
 | `packages/sim/src/rulesets/weapons.test.ts` (`combat-v2: chance de acerto à distância`) | o `#strike` fim a fim: skill baixa erra mais que skill alta à mesma distância, `combat-v1` continua sempre acertando, 1 Hz == 10 Hz com a chance ligada |
 | `packages/server/src/game/rat-cellars.test.ts`, `rotworm-caves.test.ts` | conformance do CONTEÚDO REAL — inclusive frequência-invariância (`dez minutos a 1 Hz e a 10 Hz...`). Carregam `packages/content/data` direto (`loadContent(DATA)`), então rodam sob QUALQUER perfil que `combat/baseline.json` declarar no momento — `combat-v2` até esta issue, `combat-v3` desde que `baseline.json` passou a declará-lo (seção seguinte); a suite não fixa o perfil, só prova que o conteúdo real continua verde sob o que estiver em vigor |
@@ -181,6 +181,10 @@ O que muda, e o que NÃO muda:
 | `packages/content/src/content.test.ts` | `monsterSchema` aceita `defense`/`defenseMitigation`, default `0`; `combat-v3` exige `weaponDamage`/`distanceHitChance` como o v2 |
 | `packages/sim/src/rulesets/hunt.test.ts` (`defesa, escudo e prática de shielding`) | shielding treina por ORIGEM sob `combat-v3` — um ataque corpo a corpo elemental (que `combat.defense.blockTypes` recusaria) ainda treina, o oposto do `combat-v1`/`v2` |
 | `packages/sim/src/combat/damage.test.ts` (achado da revisão do PR #642) | o componente secundário (#473) herda a carga que o primário já gastou, e o `blockCharge` de nível superior — o único que `applyDamageOutcome` grava de volta — reflete o total consumido pelos dois |
+| `packages/sim/src/combat/fight-mode.test.ts` (#550, M30-03) | os três fatores da postura — ataque 1,0/0,75/0,5, defesa dinâmica 0,5·0,75·1,0 batendo e 1,0 parado, mitigação 0,8/1,0/1,2 — e `attackedRecently` (comparação estrita, `null` = nunca bateu) |
+| `packages/sim/src/combat/weapon-power.test.ts` (`a postura de luta escala o MÁXIMO`) | o teto do dano de arma por postura (espada 170/128/85, distância 38/29/20), o ofensivo bit a bit igual ao v2 de antes, o `combat-v2` IGNORANDO a postura, wand/rod fora |
+| `packages/sim/src/combat/player-defense.test.ts` (`o fator de postura é o DINÂMICO`) | `playerDefense` nos seis cenários modo × batendo/parado, e a mitigação por postura |
+| `packages/sim/src/rulesets/hunt.test.ts` (`postura de luta: o fightMode do personagem chega ao golpe e à defesa`) | fim a fim: o teto por postura no golpe da hunt, `lastAttackAtMs` só no v3 e só quando a arma sai, a defesa 11/17/22 batendo e 22 parado (wand sem mana), snapshot/retomada e 1 Hz == 10 Hz |
 
 ## O `combat-v4` (ADR 0052 decisão 7)
 

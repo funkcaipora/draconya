@@ -235,6 +235,27 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('blessings');
   });
 
+  it('carries the fight mode through Redis and back, and a receipt without one stays without (#550)', async () => {
+    // A mesma lista de PERMISSÃO. Os três modos voltam inteiros, o extrato sem o campo não ganha
+    // a chave (o ledger não toca a coluna), e um valor torto na volta some em vez de virar um
+    // modo que o `sim` não conhece.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, { fightMode: 'defense' }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2, fightMode: 'attack' }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 3 }));
+    await store.save(receiptOf(randomUUID(), characterId, {
+      seq: 4, fightMode: 'aggressive' as unknown as 'attack',
+    }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.fightMode).toBe('defense');
+    expect(found.find((receipt) => receipt.seq === 2)?.fightMode).toBe('attack');
+    expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('fightMode');
+    expect(found.find((receipt) => receipt.seq === 4)).not.toHaveProperty('fightMode');
+  });
+
   it('keeps the index out of the sweep, which scans by key prefix', async () => {
     // `receipts:char:` e `receipt:` são prefixos distintos DE PROPÓSITO. Nomear o índice
     // `receipt:char:{id}` o poria dentro do `MATCH` da varredura, e um SET no lugar de um

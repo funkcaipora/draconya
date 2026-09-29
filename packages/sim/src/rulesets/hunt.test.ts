@@ -2232,7 +2232,7 @@ describe('empurrar criatura e esmagamento (M29-08, #544)', () => {
   // para exercitar o caminho de código real — não porque `combat-v1`/`v2` sejam o alvo da issue.
   const combatV3 = {
     ...combat, compatibilityProfile: 'combat-v3',
-    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09 },
     distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
   };
 
@@ -5242,7 +5242,7 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
     const fireRat = { ...rat, damageType: 'fire' };
     const combatV3 = {
       ...combat, compatibilityProfile: 'combat-v3', defense,
-      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09 },
       distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
     };
     const { session, hero } = start({
@@ -5272,7 +5272,7 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
     };
     const combatV3 = {
       ...combat, compatibilityProfile: 'combat-v3', defense,
-      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09 },
       distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
     };
     const abilityHits = () => vi.mocked(resolveDamage).mock.calls
@@ -5335,7 +5335,7 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
     vi.mocked(resolveDamage).mockClear();
     const combatV3 = {
       ...combat, compatibilityProfile: 'combat-v3',
-      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09 },
       distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
     };
     const comWand: InventoryState = {
@@ -5368,7 +5368,7 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
     };
     const combatV3 = {
       ...combat, compatibilityProfile: 'combat-v3', defense,
-      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09 },
       distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
     };
     const loaded = defenseContent({ items: [...items, shieldWithBonus], combat: [combatV3] });
@@ -5463,7 +5463,7 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
   describe('combat-v3: de onde vem cada try (#686)', () => {
     const combatV3 = {
       ...combat, compatibilityProfile: 'combat-v3', defense,
-      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09 },
       distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
     };
     const combatV2 = { ...combatV3, compatibilityProfile: 'combat-v2' };
@@ -5526,6 +5526,340 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
         snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed(snapshot.id),
       );
       expect(retomado.participants[0]?.attackPractice).toEqual(hero.attackPractice);
+    });
+  });
+
+  describe('postura de luta: o fightMode do personagem chega ao golpe e à defesa (M30-03, #550)', () => {
+    const combatV3 = {
+      ...combat, compatibilityProfile: 'combat-v3', defense,
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09 },
+      distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    };
+    const combatV2 = { ...combatV3, compatibilityProfile: 'combat-v2' };
+    // Imune a físico: o golpe NUNCA treina a skill (v3, #686), então a skill de melee fica em 10
+    // a hunt inteira e o teto de cada postura é um número, não uma faixa que anda.
+    const immuneRat = { ...rat, mitigation: { resistances: {}, immunities: ['physical'] } };
+    const comEspada: InventoryState = {
+      backpack: [], equipped: { hand: { instanceId: 'w1', itemId: 'sword', quantity: 1 } },
+    };
+    const modes = ['attack', 'balanced', 'defense'] as const;
+    type Mode = (typeof modes)[number];
+
+    /** Roda 30 s com o herói na postura `mode`, gravando o que o resolver viu. */
+    const play = (
+      mode: Mode, loaded: Content, inventory: InventoryState | undefined, ms = 30_000,
+    ) => {
+      vi.mocked(resolveDamage).mockClear();
+      const { session, hero } = start({
+        loaded, difficulty: 'bold', health: 5_000,
+        ...(inventory === undefined ? {} : { inventory }),
+      });
+      hero.setFightMode(mode);
+      run(session, ms, 100);
+      const calls = vi.mocked(resolveDamage).mock.calls;
+      return {
+        session, hero,
+        swings: calls.filter(([intent]) => intent.source === 'basic-attack')
+          .map(([intent, , , , , nowMs]) => ({ rawDamage: intent.rawDamage, nowMs: nowMs ?? 0 })),
+        hits: calls.filter(([intent]) => intent.source === 'monster-attack')
+          .map(([, defender, , , , nowMs]) => ({
+            defense: defender.defense, mitigation: defender.defenseMitigation, nowMs: nowMs ?? 0,
+          })),
+        trace: traceOfCalls(),
+      };
+    };
+    /**
+     * Golpes do herói e golpes do monstro NA ORDEM em que o resolver os viu — a ordem de dois
+     * eventos no mesmo ms é o que os empates da janela de ataque medem.
+     */
+    interface TraceEntry { readonly kind: 'swing' | 'hit'; readonly nowMs: number; readonly defense?: unknown }
+    const traceOfCalls = (): TraceEntry[] => vi.mocked(resolveDamage).mock.calls
+      .flatMap(([intent, defender, , , , nowMs]): TraceEntry[] => {
+        if (intent.source === 'basic-attack') return [{ kind: 'swing', nowMs: nowMs ?? 0 }];
+        if (intent.source === 'monster-attack') {
+          return [{ kind: 'hit', nowMs: nowMs ?? 0, defense: defender.defense }];
+        }
+        return [];
+      });
+    const swingsOf = (mode: Mode, combatDef: object) => play(
+      mode, defenseContent({ monsters: [immuneRat], combat: [combatDef as typeof combat] }), comEspada,
+    ).swings.map((swing) => swing.rawDamage);
+
+    it('o golpe: a postura escala o MÁXIMO da arma — 170 / 127 / 85 para a espada 200, skill 10', () => {
+      // Espada 200, skill 10, level 1 (`⌊1/5⌋ = 0`): round(0,085 × fator × 200 × 10) =
+      //   ofensivo 170 · balanceado round(127,5) = 128 · defensivo 85.
+      const attack = swingsOf('attack', combatV3);
+      const balanced = swingsOf('balanced', combatV3);
+      const defensive = swingsOf('defense', combatV3);
+      expect(attack.length).toBeGreaterThan(8);
+      expect(Math.max(...attack)).toBeLessThanOrEqual(170);
+      expect(Math.max(...balanced)).toBeLessThanOrEqual(128);
+      expect(Math.max(...defensive)).toBeLessThanOrEqual(85);
+      // E as três amostras EXERCITAM o teto: a ofensiva passa do que a defensiva pode dar, e a
+      // balanceada passa do que a defensiva pode dar — um teto que ninguém alcança não prova
+      // que a postura escalou.
+      expect(Math.max(...attack)).toBeGreaterThan(85);
+      expect(Math.max(...balanced)).toBeGreaterThan(85);
+    });
+
+    it('o combat-v2 IGNORA a postura: perfil publicado segue no 1,0 de antes (ADR 0031)', () => {
+      const defensive = swingsOf('defense', combatV2);
+      expect(defensive.length).toBeGreaterThan(8);
+      // Só o v3 lê o `fightMode`: sob v2 o herói defensivo ainda bate até 170.
+      expect(Math.max(...defensive)).toBeGreaterThan(85);
+      expect(Math.max(...defensive)).toBeLessThanOrEqual(170);
+    });
+
+    it('lastAttackAtMs é gravado a cada golpe de arma no combat-v3, e o v2 nem o guarda', () => {
+      const v3 = play('attack', defenseContent({ monsters: [immuneRat], combat: [combatV3] }), comEspada);
+      expect(v3.swings.length).toBeGreaterThan(8);
+      expect(v3.hero.lastAttackAtMs).toBe(v3.swings.at(-1)?.nowMs);
+
+      const v2 = play('attack', defenseContent({ monsters: [immuneRat], combat: [combatV2] }), comEspada);
+      expect(v2.swings.length).toBeGreaterThan(8);
+      expect(v2.hero.lastAttackAtMs).toBeNull();
+      expect(v2.hero.getState()).not.toHaveProperty('lastAttackAtMs');
+    });
+
+    it('a defesa: batendo, ofensivo 0,5 e balanceado 0,75; o defensivo é 1,0 — e a mitigação é 0,8 / 1,0 / 1,2', () => {
+      // Escudo 30 e shielding 10: (10/4 + 2,23) × 30 × 0,16 = 22,704 antes do fator:
+      //   0,5 → 11,35 → 11 · 0,75 → 17,03 → 17 · 1,0 → 22,7 → 22 (o `trunc` do `int32_t` do Canary).
+      // Só o PRIMEIRO golpe do monstro conta — depois dele o bloqueio treina a skill.
+      const loaded = defenseContent({ combat: [combatV3] });
+      const first = {} as Record<Mode, { defense: unknown; mitigation: number | undefined }>;
+      for (const mode of modes) {
+        const run1 = play(mode, loaded, comEscudo);
+        const swings = run1.swings.map((swing) => swing.nowMs);
+        const hit = run1.hits[0];
+        expect(hit).toBeDefined();
+        // Precondição: o herói JÁ estava batendo quando o primeiro golpe chegou (janela aberta).
+        expect(swings.some((at) => hit!.nowMs - at >= 0 && hit!.nowMs - at < 2_000)).toBe(true);
+        first[mode] = { defense: hit!.defense, mitigation: hit!.mitigation };
+      }
+      expect(first.attack.defense).toEqual({ kind: 'shield', defense: 11 });
+      expect(first.balanced.defense).toEqual({ kind: 'shield', defense: 17 });
+      expect(first.defense.defense).toEqual({ kind: 'shield', defense: 22 });
+      // A mitigação percentual usa o `fightFactor` ESTÁTICO: ofensivo < balanceado < defensivo.
+      expect(first.attack.mitigation).toBeLessThan(first.balanced.mitigation ?? 0);
+      expect(first.balanced.mitigation).toBeLessThan(first.defense.mitigation ?? 0);
+    });
+
+    it('a defesa: PARADO (nunca bateu) a defesa é 1,0 em toda postura — o fator dinâmico do Canary', () => {
+      // A wand sem mana não sai (`useWeapon` devolve `false` no Canary, e `updateLastAttack` só
+      // roda no `true`): o herói apanha dos ratos sem NUNCA bater, `lastAttackAtMs` continua nulo,
+      // o `(agora − lastAttack) < attackSpeed` é falso e o fator é 1,0 — até no ofensivo.
+      const comVaraSemMana: InventoryState = {
+        backpack: [],
+        equipped: {
+          hand: { instanceId: 'w1', itemId: 'wand', quantity: 1 },
+          shield: { instanceId: 's1', itemId: 'shield', quantity: 1 },
+        },
+      };
+      const loaded = defenseContent({ combat: [combatV3] });
+      for (const mode of modes) {
+        const idle = play(mode, loaded, comVaraSemMana, 10_000);
+        expect(idle.swings).toHaveLength(0);
+        expect(idle.hero.lastAttackAtMs).toBeNull();
+        expect(idle.hits.length).toBeGreaterThan(0);
+        expect(idle.hits[0]!.defense).toEqual({ kind: 'shield', defense: 22 });
+      }
+    });
+
+    it('a postura e a janela de ataque atravessam o snapshot e a hunt retomada segue igual', () => {
+      const loaded = defenseContent({ monsters: [immuneRat], combat: [combatV3] });
+      const { session, hero } = start({
+        loaded, difficulty: 'bold', health: 5_000, inventory: comEspada,
+      });
+      hero.setFightMode('balanced');
+      run(session, 10_000, 100);
+      expect(hero.lastAttackAtMs).not.toBeNull();
+
+      const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+      const retomado = Session.fromSnapshot(
+        snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed(snapshot.id),
+      );
+      const restored = retomado.participants[0];
+      expect(restored?.fightMode).toBe('balanced');
+      expect(restored?.lastAttackAtMs).toBe(hero.lastAttackAtMs);
+
+      // Restore-invariance (invariante 3): continuar a original e a retomada dá o MESMO estado.
+      run(session, 20_000, 100);
+      run(retomado, 20_000, 100);
+      expect(retomado.participants[0]?.getState()).toEqual(hero.getState());
+    });
+
+    it('1 Hz e 10 Hz dão o MESMO resultado com a postura balanceada e o fator de defesa dinâmico', () => {
+      const at = (stepMs: number) => {
+        const { session, hero } = start({
+          loaded: defenseContent({ combat: [combatV3] }), difficulty: 'bold', health: 5_000,
+          inventory: comEscudo,
+        });
+        hero.setFightMode('balanced');
+        run(session, 60_000, stepMs);
+        return {
+          kills: session.aggregates.kills, health: hero.health, xp: hero.xp,
+          lastAttackAtMs: hero.lastAttackAtMs, shielding: hero.skills.getState()['shielding'],
+        };
+      };
+      const rapido = at(100);
+      expect(at(1_000)).toEqual(rapido);
+      // O cenário precisa ter EXERCITADO a defesa: o herói apanhou e treinou o escudo.
+      expect(rapido.kills).toBeGreaterThan(0);
+      expect(rapido.lastAttackAtMs).not.toBeNull();
+      expect(rapido.shielding).toBeDefined();
+    });
+
+    describe('a janela de ataque no empate com o golpe do monstro e entre sessões (#550, revisão do PR #808)', () => {
+      const espadaEEscudo: InventoryState = {
+        backpack: [],
+        equipped: {
+          hand: { instanceId: 'w1', itemId: 'sword', quantity: 1 },
+          shield: { instanceId: 's1', itemId: 'shield', quantity: 1 },
+        },
+      };
+      // A skill de escudo que NUNCA sobe (o custo do próximo nível é astronômico): a defesa de
+      // cada golpe é um número fixo — 22 cheia, 11 no ofensivo, 17 no balanceado —, e o teste lê a
+      // janela, não o treino do bloqueio.
+      const fixedShielding = { ...shielding, curve: { base: 1_000_000_000, factor: 1 } };
+      const fixedContent = (monsters: readonly object[] = [immuneRat]) => defenseContent({
+        monsters: monsters as RawContent['monsters'],
+        skills: [...skills, fixedShielding], combat: [combatV3],
+      });
+
+      // Um corredor de um tile de largura: o herói fica PARADO na ponta (x=1) e o rato nasce a
+      // oito tiles, com aggro para andar até ele — o único jeito de o monstro CHEGAR depois de o
+      // herói já estar esperando (o spawn adjacente põe o herói na frente da fila).
+      const corridorMap = { id: 'arena', z: 7, grid: ['#'.repeat(12), `#${'.'.repeat(10)}#`, '#'.repeat(12)] };
+      const corridorRoute = {
+        id: 'arena-loop', mapId: 'arena',
+        // Vai até x=9 e volta por x=2: o laço fecha (o último tile é adjacente ao primeiro).
+        tiles: [...Array.from({ length: 9 }, (_, i) => 1 + i), ...Array.from({ length: 7 }, (_, i) => 8 - i)]
+          .map((x) => ({ x, y: 1, z: 7 })),
+        spawnPoints: [{ routeIndex: 8, radius: 1, monsterId: 'rat', respawnDelayMs: 1_000_000 }],
+      };
+      /** O herói parado no corredor, o rato andando até ele: devolve o rastro dos golpes. */
+      const walkIn = (mode: Mode, walker: object, ms: number) => {
+        vi.mocked(resolveDamage).mockClear();
+        const loaded = defenseContent({
+          monsters: [walker as RawContent['monsters'][number]],
+          skills: [...skills, fixedShielding], combat: [combatV3],
+          maps: [corridorMap], routes: [corridorRoute],
+        });
+        const { session, hero } = start({ loaded, health: 50_000, inventory: espadaEEscudo });
+        hero.setFightMode(mode);
+        session.cancelEvent('player-step', hero.id);
+        run(session, ms, 100);
+        return traceOfCalls();
+      };
+      const walkingRat = { ...immuneRat, aggroRadius: 20 };
+      type Trace = readonly TraceEntry[];
+      /**
+       * Lê do rastro o que o Canary daria a cada golpe recebido: `lastAttack` é o último golpe do
+       * herói ANTES dele na ordem do resolver; a janela é aberta se ele foi há menos de 2 s, ou se
+       * foi há exatamente 2 s e o golpe seguinte do herói cai neste mesmo ms — quem bate sem parar
+       * nunca a fecha. `tie` marca o segundo caso, o que a comparação estrita fechava.
+       */
+      const readWindows = (trace: Trace) => {
+        const out: { nowMs: number; defense: unknown; open: boolean; tie: boolean }[] = [];
+        let last: number | null = null;
+        trace.forEach((entry, index) => {
+          if (entry.kind === 'swing') { last = entry.nowMs; return; }
+          const elapsed = last === null ? Infinity : entry.nowMs - last;
+          const swingDueNow = trace.slice(index + 1)
+            .find((next) => next.kind === 'swing')?.nowMs === entry.nowMs;
+          const tie = elapsed === 2_000 && swingDueNow;
+          out.push({ nowMs: entry.nowMs, defense: entry.defense, open: elapsed < 2_000 || tie, tie });
+        });
+        return out;
+      };
+      const halved = { attack: 11, balanced: 17 } as const;
+
+      it('quem bate sem parar segue com a janela ABERTA no empate: a ordem da fila não decide a defesa', () => {
+        // O rato imune sobrevive a todo golpe, e o herói bate a cada 2 s sem parar. O rato que
+        // ANDOU até ele arma o golpe dele antes de o herói armar o próprio (`#onMonsterStep` arma
+        // as abilities antes do `#armPlayerAttack`), e as duas cadências de 2 s nascem no mesmo
+        // instante: dali em diante o golpe do monstro sai da fila ANTES do golpe do herói, no
+        // MESMO ms, todo ciclo. O Canary nunca fecha a janela de quem bate sem parar (o golpe
+        // seguinte corre `attackSpeed` MAIS a latência do despachante).
+        for (const mode of ['attack', 'balanced'] as const) {
+          const windows = readWindows(walkIn(mode, walkingRat, 30_000));
+          // Precondição: o cenário EXERCITA o empate (sem ele o teste passaria vazio).
+          expect(windows.filter((hit) => hit.tie).length, `${mode}: golpes no empate`).toBeGreaterThan(3);
+          for (const hit of windows) {
+            expect(hit.defense, `${mode} @${hit.nowMs}`).toEqual({
+              kind: 'shield', defense: hit.open ? halved[mode] : 22,
+            });
+          }
+          // O PRIMEIRO golpe do monstro chega antes de o herói bater: defesa cheia, sem carimbo.
+          expect(windows[0]?.defense).toEqual({ kind: 'shield', defense: 22 });
+        }
+      });
+
+      it('o carimbo de uma hunt NÃO atravessa para a seguinte: o mesmo herói, sessão nova, defesa cheia', () => {
+        // O `CharacterRuntime` é o MESMO objeto na transição (`createSessionBuilder`), e o relógio
+        // da sessão nova nasce em zero. Um carimbo de ~30 000 ms da primeira ficaria no futuro da
+        // segunda e a defesa seria pela metade enquanto o herói não bate — que aqui nunca (sem
+        // mana a vara não sai).
+        const comVara: InventoryState = {
+          backpack: [],
+          equipped: {
+            hand: { instanceId: 'w1', itemId: 'wand', quantity: 1 },
+            shield: { instanceId: 's1', itemId: 'shield', quantity: 1 },
+          },
+        };
+        const loaded = fixedContent([rat]);
+        const first = start({ loaded, difficulty: 'bold', health: 50_000, inventory: comVara });
+        // Mana de sobra na primeira hunt: a vara BATE, e o carimbo é gravado.
+        first.hero.maxMana = 100_000;
+        first.hero.mana = 100_000;
+        run(first.session, 30_000, 100);
+        const stamp = first.hero.lastAttackAtMs;
+        expect(stamp).not.toBeNull();
+        expect(stamp).toBeGreaterThan(20_000);
+
+        // Transição: sai da primeira e entra numa sessão NOVA, com o mesmo objeto.
+        first.session.leave('hero');
+        const second = createHuntSession({
+          id: 'session-2', content: loaded, huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+        });
+        // Sem mana: a vara não bate na segunda hunt, então o carimbo só pode vir da primeira.
+        first.hero.maxMana = 0;
+        first.hero.mana = 0;
+        vi.mocked(resolveDamage).mockClear();
+        second.enter(first.hero);
+        expect(second.nowMs).toBe(0);
+        expect(first.hero.lastAttackAtMs).toBeNull();
+
+        run(second, 10_000, 100);
+        const hits = vi.mocked(resolveDamage).mock.calls
+          .filter(([intent]) => intent.source === 'monster-attack');
+        expect(hits.length).toBeGreaterThan(0);
+        expect(vi.mocked(resolveDamage).mock.calls.some(([intent]) => intent.source === 'basic-attack'))
+          .toBe(false);
+        for (const [, defender] of hits) {
+          expect(defender.defense).toEqual({ kind: 'shield', defense: 22 });
+        }
+        expect(first.hero.lastAttackAtMs).toBeNull();
+      });
+
+      it('a entrada recusada (party cheia) não apaga a janela de quem continua na sessão de origem', () => {
+        const loaded = fixedContent([immuneRat]);
+        const origin = start({ loaded, difficulty: 'bold', health: 50_000, inventory: espadaEEscudo });
+        run(origin.session, 10_000, 100);
+        const stamp = origin.hero.lastAttackAtMs;
+        expect(stamp).not.toBeNull();
+
+        // A party de teste é de 4: lota a sessão de destino e tenta entrar com o herói.
+        const full = createHuntSession({
+          id: 'session-full', content: loaded, huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+          partyOptions: { leaderId: 'member-0', mode: 'split' },
+        });
+        for (let i = 0; i < 4; i += 1) {
+          full.enter(new CharacterRuntime({ ...character().getState(), id: `member-${i}` }));
+        }
+        expect(() => full.enter(origin.hero)).toThrow(PartyFullError);
+        expect(origin.hero.lastAttackAtMs).toBe(stamp);
+      });
     });
   });
 });
@@ -10798,7 +11132,7 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
     const actual = await vi.importActual<typeof import('../combat/combat-value.js')>('../combat/combat-value.js');
     const v3 = {
       ...pacifist, compatibilityProfile: 'combat-v3',
-      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09 },
       distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
     };
     const loaded = buildContent(raw({ monsters: [dragon], hunts: [dragonHunt], routes: [dragonRoute], combat: [v3] }));
@@ -13000,7 +13334,7 @@ describe('outcomes avançados na hunt (CMB-08)', () => {
 describe('reflexo e cleave do equipamento (#552, M30-05)', () => {
   const combatV3 = {
     ...combat, compatibilityProfile: 'combat-v3',
-    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09 },
     distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
   };
   // O golpe desarmado do herói zerado: o único dano que chega ao rato é o que o teste mede.
@@ -13129,7 +13463,7 @@ describe('reflexo e cleave do equipamento (#552, M30-05)', () => {
 describe('cura por elemento e reflexo do monstro (#683, M30-G6)', () => {
   const combatV3 = {
     ...combat, compatibilityProfile: 'combat-v3',
-    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09 },
     distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
   };
   // O herói não bate de mão: o único golpe no rato é a magia de fogo, a cada 1,5 s.
@@ -14813,7 +15147,7 @@ describe('stairhop: trava de ataque ao trocar de andar (#554, M30-07, ADR 0040 d
   // perfil), com `stairhopDelayMs` — a issue declara 2000, o número real da baseline.
   const combatV3 = {
     ...combat, compatibilityProfile: 'combat-v3',
-    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09 },
     distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
     stairhopDelayMs: 2_000,
   };
@@ -14879,7 +15213,7 @@ describe('stairhop: trava de ataque ao trocar de andar (#554, M30-07, ADR 0040 d
 describe('stairhop: magia agressiva recusa, cura não (#554, M30-07)', () => {
   const combatV3 = {
     ...combat, compatibilityProfile: 'combat-v3',
-    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09 },
     distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
     stairhopDelayMs: 2_000,
   };
@@ -15211,7 +15545,7 @@ describe('arma vestida abaixo do level e elemento da arma no combat-v3 (#687)', 
   };
   const combatV3 = {
     ...combat, compatibilityProfile: 'combat-v3',
-    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09 },
     distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
   };
   const combatV2 = { ...combatV3, compatibilityProfile: 'combat-v2' };

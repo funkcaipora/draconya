@@ -3,7 +3,8 @@
 **Status:** parcial — vocabulário v2 (`sets[4] × slots[24]`, AB-03), motor por grupo de cooldown
 (AB-07), automações (AB-08), suprimento abstrato com gold no uso (AB-04), intenções `use-slot`/
 `select-target`/`select-ammo` e migração v1→v2 (AB-09), barra de ações e painel de Automações
-(AB-10…AB-13) implementados; postura (`stance`) e moedas são M21/M22
+(AB-10…AB-13) implementados; a postura de luta é do jogador (`character.fight_mode`, M30-03) e o
+`stance` da config v2 é vestigial; moedas são M21/M22
 **PRD:** §13, §43.3
 **Épico:** E4
 
@@ -238,9 +239,13 @@ por cooldown.
 
 - Vocabulário final de todas as condições possíveis do bot (§43.3).
 - `[ABERTO — valor provisório: 1]` Alcance da poção com `target: 'friend'` (§26, ADR 0035 d.10) — o PRD não fixa alcance de poção; 1 é o mínimo que ainda é "em terceiro", em `packages/content/data/supplies/{health-potion,mana-potion}.json`.
-- **Postura de combate** (`stance`: `offensive`/`balanced`/`defensive`) já existe no schema e no
+- ~~**Postura de combate** (`stance`: `offensive`/`balanced`/`defensive`) já existe no schema e no
   rascunho do cliente, mas o efeito sobre o combate é **M21** (ADR 0032 d.10) — não está em
-  vigor no `sim`.
+  vigor no `sim`.~~ → **Resolvido (M30-03, #550):** a postura de luta é escolha do JOGADOR e mora
+  em `character.fight_mode` (intenção `set-fight-mode`, três botões sob o set — ver
+  `docs/product/combat.md`, "A postura de luta"). **O bot não a troca** e o vocabulário da
+  automação não mudou. O `stance` da config v2 continua no schema, sem efeito e sem leitor, só
+  por compatibilidade com config já salva (ADR 0014).
 - **Baseline v2 por vocação**: `defaultConfigByVocation` é declarada e validada no boot, mas o
   `api` ainda semeia o personagem novo com o `defaultConfig` v1, migrado na entrada (ver
   "Divergências").

@@ -3,7 +3,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { OutfitColors } from '@draconya/protocol';
-import { readItemOverlay } from '@draconya/sim';
+import { isFightMode, readItemOverlay } from '@draconya/sim';
 import type { BestiaryState, CharmsState } from '@draconya/sim';
 import { isAmmoSelection, isBestiaryState, isCharmsState, isStockMap } from '../tickets.js';
 import type { InitialCharacter, IssueFailure, TicketService } from '../tickets.js';
@@ -251,6 +251,9 @@ export function initialCharacterOf(
     // E a promoção (#566, ADR 0042 decisão 1): lida aqui a cada entrada, como a vocação.
     // Ausente quando `false` — a coluna não é nulável, e "não promovido" é o normal.
     ...(character.promoted ? { promoted: true } : {}),
+    // E a postura de luta (#550, M30-03): validada AQUI, como o Bestiário — a coluna tem CHECK, mas
+    // um valor torto (banco editado à mão) some do ticket e a sessão parte da ofensiva do Canary.
+    ...(isFightMode(character.fightMode) ? { fightMode: character.fightMode } : {}),
     // E o Premium (ADR 0035 D3): derivado AQUI contra o relógio — a sessão nunca compara datas,
     // só lê um boolean já resolvido. `null` ou vencido é Free, e ausente é o que o ticket
     // carrega: a sessão trata ausência como `false` (a regra do Bestiário, degradação).

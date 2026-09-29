@@ -37,6 +37,7 @@ export * from './combat/outcome.js';
 export * from './combat/conformance.js';
 export * from './combat/in-fight.js';
 export * from './combat/charms.js';
+export * from './combat/fight-mode.js';
 export * from './monster/step.js';
 export * from './monster/monster.js';
 export * from './route/walker.js';

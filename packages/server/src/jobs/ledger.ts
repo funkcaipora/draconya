@@ -255,6 +255,10 @@ async function applyProgression(
   // maior de cada extrato" ressuscitaria uma bênção recém-consumida se um extrato antigo, fora
   // de ordem, chegasse depois de um mais novo já aplicado.
   const blessings = receipt.blessings === undefined ? {} : { blessings: receipt.blessings };
+  // A postura de luta (#550, M30-03): ABSOLUTA e última-escrita-vence, como as bênçãos — o jogador
+  // troca para qualquer lado, e não existe ordem entre os três modos que uma fusão por máximo
+  // pudesse respeitar. Extrato SEM o campo (nó anterior, ou Cidade que não mexeu) não toca a coluna.
+  const fightMode = receipt.fightMode === undefined ? {} : { fightMode: receipt.fightMode };
 
   // O que caiu e coube (FUN-88). ANTES do equipamento, porque uma peça que caiu nesta sessão
   // e foi equipada nela precisa existir como linha para o layout ter o que apontar.
@@ -333,6 +337,7 @@ async function applyProgression(
       ...fedMs,
       ...charms,
       ...blessings,
+      ...fightMode,
       // A vocação (#154, ADR 0026 decisão 1): escrita UMA vez. `coalesce` mantém o que já
       // está na linha — um extrato fora de ordem com outra vocação não sobrescreve.
       ...(receipt.vocation === undefined

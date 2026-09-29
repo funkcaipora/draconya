@@ -348,6 +348,26 @@ describe('o Bestiário de entrada vem do TICKET, nunca do cliente (FUN-113)', ()
   });
 });
 
+describe('a postura de luta de entrada vem do TICKET, nunca do cliente (#550)', () => {
+  const content = testContent();
+
+  it('a postura persistida chega ao personagem da sessão — a hunt desanexada a mantém', () => {
+    // Invariante 4: a postura vem do ticket (lida de `characters.fight_mode`), pela mesma razão do
+    // gold e do Bestiário — um valor vindo do socket na criação seria dano de graça.
+    for (const fightMode of ['attack', 'balanced', 'defense'] as const) {
+      const session = createCitySessionFactory(content)('p1', { level: 1, xp: 0, fightMode });
+      expect(session.participants[0]?.fightMode).toBe(fightMode);
+    }
+  });
+
+  it('ticket sem postura entra na ofensiva — o `FIGHTMODE_ATTACK` do Canary', () => {
+    // É o ticket de um `api` anterior à issue, em deploy em rolagem, ou o personagem que nunca
+    // escolheu: parte da ofensiva, e o próximo extrato leva a escolha de volta.
+    const session = createCitySessionFactory(content)('p1', { level: 1, xp: 0 });
+    expect(session.participants[0]?.fightMode).toBe('attack');
+  });
+});
+
 describe('stamina nas fronteiras da sessão (FUN-39)', () => {
   const content = testContent();
   const HOUR = 3_600_000;

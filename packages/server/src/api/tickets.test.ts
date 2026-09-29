@@ -8,7 +8,7 @@ const CHARACTER: CharacterRecord = {
   id: 'p1', accountId: 'a1', name: 'Hero', vocation: null, promoted: false, level: 1, xp: 0, soul: 0, gold: 0,
   capacity: 400, premiumUntil: null, staminaMs: 86400000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
-  ammo: null, supplyStock: null, ammunitionStock: null, charms: null, fedMs: 0, blessings: 0,
+  ammo: null, supplyStock: null, ammunitionStock: null, charms: null, fedMs: 0, blessings: 0, fightMode: 'attack',
   createdAt: new Date(),
 };
 
@@ -170,6 +170,31 @@ describe('POST /api/tickets', () => {
     expect(await issuedWith(null)).not.toHaveProperty('outfitColors');
     expect(await issuedWith({ head: 133, body: 69, legs: 58, feet: 76 }))
       .not.toHaveProperty('outfitColors');
+  });
+
+  it('a postura de luta da linha entra no ticket; um valor fora dos três modos fica de fora (#550)', async () => {
+    // Mesmo caminho do Bestiário: a linha é lida sob a trava e a postura vai no ticket — é assim
+    // que ela vale desde o PRIMEIRO golpe da hunt. A coluna tem CHECK, mas um banco editado à
+    // mão não tranca o login: o valor torto cai fora e a sessão parte da ofensiva do Canary.
+    const issuedWith = async (fightMode: unknown) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, fightMode: fightMode as string })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    for (const fightMode of ['attack', 'balanced', 'defense']) {
+      expect(await issuedWith(fightMode)).toMatchObject({ fightMode });
+    }
+    expect(await issuedWith('aggressive')).not.toHaveProperty('fightMode');
+    expect(await issuedWith(null)).not.toHaveProperty('fightMode');
   });
 
   it('os abates da linha entram no ticket; nulos ou corrompidos, ficam de fora (FUN-113)', async () => {

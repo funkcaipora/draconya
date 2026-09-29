@@ -69,6 +69,13 @@ export interface CharacterRecord {
   readonly fedMs: number;
   /** As sete bênçãos PvE (#570, ADR 0052): BITMASK de `CharacterRuntime.blessings`. `0` é nenhuma. */
   readonly blessings: number;
+  /**
+   * A postura de luta (#550, M30-03), como veio do banco: `attack`/`balanced`/`defense`. `string`
+   * de propósito, pela razão de `botConfig`: o vocabulário é do `sim` (`isFightMode`), e quem o
+   * confere é quem monta o ticket (`initialCharacterOf`) — o repositório não conhece regra de
+   * jogo. A coluna tem CHECK, então na prática é sempre um dos três.
+   */
+  readonly fightMode: string;
   readonly createdAt: Date;
 }
 
@@ -584,6 +591,7 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     charms: row.charms,
     fedMs: row.fedMs,
     blessings: row.blessings,
+    fightMode: row.fightMode,
     createdAt: row.createdAt,
   };
 }

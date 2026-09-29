@@ -108,9 +108,7 @@ describe('resolveWeaponPower — perfil sem dano', () => {
 // --- combat-v2 (#522, ADR 0037 d.5): a fórmula do Canary --------------------------------------
 
 /** Um `Combat` `combat-v2` mínimo, só com o que `resolveWeaponPower` lê. */
-const combatV2 = (
-  weaponDamage: Partial<NonNullable<Combat['weaponDamage']>> = {},
-): Combat => ({
+const combatV2 = (): Combat => ({
   id: 'baseline', compatibilityProfile: 'combat-v2', dodgeMultiplier: 0.5,
   armorEffectiveness: {
     physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
@@ -121,8 +119,11 @@ const combatV2 = (
     damageType: 'physical',
   },
   spellPower: { levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 },
-  weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1, ...weaponDamage },
+  weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09 },
 } as Combat);
+
+/** O mesmo conteúdo sob o `combat-v3` — o perfil que lê a postura de luta (M30-03, #550). */
+const combatV3 = (): Combat => ({ ...combatV2(), compatibilityProfile: 'combat-v3' });
 
 const melee = (attack: number): WeaponProfile => ({
   family: 'sword', damageType: 'physical', range: 1,
@@ -189,15 +190,6 @@ describe('resolveWeaponPower — combat-v2: tabela (attack, skill, level, attack
     }
   });
 
-  it('`attackFactor` do conteúdo escala o MÁXIMO (a postura, quando existir, troca só este valor)', () => {
-    // maxRounded = round(0,085 × 0,75 × 50 × 50 + 10) = 169; minDamage = 10.
-    const values = sample(melee(50), 50, 50, combatV2({ attackFactor: 0.75 }), 1, 300, 'v2-attackfactor');
-    for (const value of values) {
-      expect(value).toBeGreaterThanOrEqual(10);
-      expect(value).toBeLessThanOrEqual(169);
-    }
-  });
-
   it('a truncagem de `vocationMultiplier` é ASSIMÉTRICA por família — reproduz o Canary bit a bit', () => {
     // Corpo a corpo (`WeaponMelee::getWeaponDamage`, weapons.cpp:655): multiplica primeiro e
     // trunca o PRODUTO. maxRounded = round(0,085×1×20×20+2) = 36; maxDamage = trunc(36×1,5) = 54.
@@ -213,6 +205,106 @@ describe('resolveWeaponPower — combat-v2: tabela (attack, skill, level, attack
     // A prova da assimetria: o MESMO multiplicador 1,5 rende um teto mais alto em corpo a corpo
     // do que em distância, porque o Canary trunca em posições diferentes do código-fonte.
     expect(Math.max(...meleeValues)).toBeGreaterThan(Math.max(...distanceValues));
+  });
+});
+
+describe('resolveWeaponPower — a postura de luta escala o MÁXIMO (M30-03, #550)', () => {
+  // `Player::getAttackFactor`: 1.0 / 0.75 / 0.5. Arma 50, skill 10, level 10 (⌊10/5⌋ = 2):
+  //   ofensivo   round(0,085 × 1,00 × 50 × 10 + 2) = round(44,5)  = 45 → faixa [2, 45]
+  //   balanceado round(0,085 × 0,75 × 50 × 10 + 2) = round(33,875) = 34 → faixa [2, 34]
+  //   defensivo  round(0,085 × 0,50 × 50 × 10 + 2) = round(23,25) = 23 → faixa [2, 23]
+  const CAP = { attack: 45, balanced: 34, defense: 23 } as const;
+  const range = (
+    combat: Combat, mode: 'attack' | 'balanced' | 'defense', profile: WeaponProfile = melee(50),
+    skill = 10,
+  ): number[] => {
+    const values: number[] = [];
+    for (let i = 0; i < 4_000; i += 1) {
+      values.push(resolveWeaponPower(
+        profile, 10, skill, Rng.fromSeed(`posture-${mode}-${i}`), combat, 1, mode,
+      ));
+    }
+    return values;
+  };
+
+  it('corpo a corpo: o teto de cada postura é o do Canary, e o piso (⌊level/5⌋) não muda', () => {
+    for (const mode of ['attack', 'balanced', 'defense'] as const) {
+      const values = range(combatV3(), mode);
+      expect(Math.max(...values)).toBe(CAP[mode]);
+      expect(Math.min(...values)).toBe(2);
+    }
+  });
+
+  it('distância: o mesmo fator, com o coeficiente 0,09 — munição 40, skill 10, level 10', () => {
+    // ofensivo round(0,09 × 1 × 40 × 10 + 2) = 38 · balanceado round(0,09 × 0,75 × 400 + 2) = 29
+    // · defensivo round(0,09 × 0,5 × 400 + 2) = 20 — piso sempre ⌊10/5⌋ = 2 na distância.
+    const caps = { attack: 38, balanced: 29, defense: 20 } as const;
+    for (const mode of ['attack', 'balanced', 'defense'] as const) {
+      const values = range(combatV3(), mode, bow(40));
+      expect(Math.max(...values)).toBe(caps[mode]);
+      expect(Math.min(...values)).toBe(2);
+    }
+  });
+
+  it('a postura ofensiva é bit a bit o combat-v2 de antes — mesma semente, mesmo dano', () => {
+    // O `attackFactor` constante do conteúdo era 1.0 = ofensivo. Mutação que mata: o v3
+    // ofensivo usar outro fator, ou consumir um sorteio a mais.
+    for (let i = 0; i < 50; i += 1) {
+      const a = Rng.fromSeed(`bit-${i}`);
+      const b = Rng.fromSeed(`bit-${i}`);
+      expect(resolveWeaponPower(melee(50), 30, 40, a, combatV3(), 1, 'attack'))
+        .toBe(resolveWeaponPower(melee(50), 30, 40, b, combatV2(), 1));
+      expect(a.getState()).toEqual(b.getState());
+    }
+  });
+
+  it('o combat-v2 IGNORA a postura: perfil publicado continua no 1,0 de antes (ADR 0031)', () => {
+    for (const mode of ['attack', 'balanced', 'defense'] as const) {
+      const values = range(combatV2(), mode);
+      expect(Math.max(...values)).toBe(CAP.attack);
+    }
+  });
+
+  it('sem `fightMode` o default é o ofensivo, no v2 e no v3 — o chamador antigo não muda', () => {
+    for (const combat of [combatV2(), combatV3()]) {
+      const a = Rng.fromSeed('default-mode');
+      const b = Rng.fromSeed('default-mode');
+      expect(resolveWeaponPower(melee(50), 30, 40, a, combat, 1))
+        .toBe(resolveWeaponPower(melee(50), 30, 40, b, combat, 1, 'attack'));
+    }
+  });
+
+  it('wand/rod NÃO leem a postura: faixa fixa do item, o Canary não multiplica o `WeaponWand`', () => {
+    const wand: WeaponProfile = {
+      family: 'wand', damageType: 'energy', range: 4, fixedDamage: { min: 10, max: 30 },
+    };
+    for (const mode of ['attack', 'balanced', 'defense'] as const) {
+      const values = range(combatV3(), mode, wand);
+      expect(Math.max(...values)).toBe(30);
+      expect(Math.min(...values)).toBe(10);
+    }
+  });
+
+  it('resolveWeaponHit com elemento aplica a postura no TOTAL, antes da divisão físico/elemental', () => {
+    // Espada 50 + 20 de fogo, skill 10, level 10: combinado 70.
+    //   ofensivo   round(0,085 × 1,00 × 70 × 10 + 2) = round(61,5)   = 62 (teto do total)
+    //   defensivo  round(0,085 × 0,50 × 70 × 10 + 2) = round(31,75)  = 32
+    const sword: WeaponProfile = {
+      ...melee(50), element: { type: 'fire', attack: 20 },
+    };
+    for (const [mode, cap] of [['attack', 62], ['defense', 32]] as const) {
+      let biggest = 0;
+      for (let i = 0; i < 4_000; i += 1) {
+        const hit = resolveWeaponHit(
+          sword, 10, 10, Rng.fromSeed(`hit-${mode}-${i}`), combatV3(), 1, 100, mode,
+        );
+        expect(hit.physical + hit.elemental).toBeLessThanOrEqual(cap);
+        biggest = Math.max(biggest, hit.physical + hit.elemental);
+      }
+      // O teto de 62 perde até 2 pontos no `trunc` por parte — o do Canary —, então o maior
+      // total observável fica a poucos pontos do teto, nunca acima.
+      expect(biggest).toBeGreaterThanOrEqual(cap - 2);
+    }
   });
 });
 
@@ -342,7 +434,6 @@ describe('resolveWeaponPower — combat-v2: wand/rod sorteiam pela normal trunca
 // --- #687: o elemento da arma e o `damagePercent` do `unproperly` (combat-v3) ------------------
 
 describe('resolveWeaponHit — elemento dividido e unproperly (#687)', () => {
-  const combatV3 = (): Combat => ({ ...combatV2(), compatibilityProfile: 'combat-v3' });
   /** A Fire Sword do Canary: 24 físico + 11 de fogo. */
   const fireSword: WeaponProfile = { ...melee(24), element: { type: 'fire', attack: 11 } };
 

@@ -17,9 +17,10 @@
 // índice troca isso por um `SMEMBERS` que quase sempre volta vazio.
 
 import type { ChainableCommander, Redis } from 'ioredis';
+import { isFightMode } from '@draconya/sim';
 import type {
-  Aggregates, BestiaryState, CharacterStorageMap, CharmsState, EndReason, ItemInstanceOverlay,
-  NotableEvent, SkillsState,
+  Aggregates, BestiaryState, CharacterStorageMap, CharmsState, EndReason, FightMode,
+  ItemInstanceOverlay, NotableEvent, SkillsState,
 } from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
 
@@ -106,6 +107,14 @@ export interface SessionReceipt {
    * acabou de ser consumida.
    */
   readonly blessings?: number;
+  /**
+   * A postura de luta no fim da sessão (#550, M30-03, ADR 0040): o `fightMode` de
+   * `CharacterRuntime`. Valor ABSOLUTO e última-escrita-vence, como `blessings` — o jogador troca a
+   * postura para qualquer lado, então NÃO existe fusão por máximo (não há ordem entre os três
+   * modos). Sai em todo extrato do dono, hunt ou Cidade; extrato SEM o campo (nó anterior a esta
+   * issue) não toca na coluna.
+   */
+  readonly fightMode?: FightMode;
   /**
    * A vocação escolhida nesta sessão (#154, ADR 0026 decisão 1). Escrita UMA vez pelo `jobs`
    * (`coalesce`): um extrato fora de ordem com outra vocação não sobrescreve — e não pode
@@ -383,6 +392,9 @@ function parseReceipt(raw: string): SessionReceipt | null {
     ...(typeof value['fedMs'] === 'number' ? { fedMs: value['fedMs'] } : {}),
     // As bênçãos (#570): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['blessings'] === 'number' ? { blessings: value['blessings'] } : {}),
+    // A postura de luta (#550): lista de PERMISSÃO, pela razão das skills — só um dos três nomes
+    // sobrevive à volta; qualquer outra coisa vira ausente, e a coluna fica como estava.
+    ...(isFightMode(value['fightMode']) ? { fightMode: value['fightMode'] } : {}),
     // A vocação (#154): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['vocation'] === 'string' && value['vocation'].length > 0
       ? { vocation: value['vocation'] }

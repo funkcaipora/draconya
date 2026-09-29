@@ -9,27 +9,39 @@ import {
 } from './player-defense.js';
 
 describe('playerDefense', () => {
+  // `recentlyAttacked: true` é o jogador BATENDO (a janela `(now - lastAttack) < attackSpeed` do
+  // `Player::getDefenseFactor(false)`): ofensivo 0.5, balanceado 0.75. Os vetores antigos desta
+  // suíte — escritos quando o fator era o estático do painel — são exatamente esse caso.
+
   it('desarmado usa a defesa do punho (7) e a skill fist (Draconya: melee)', () => {
-    // (10/4 + 2.23) × 7 × 0.5 (fator ofensivo) × 0.15 (sem escudo, sem arma) = 2.48325 → trunc 2.
+    // (10/4 + 2.23) × 7 × 0.5 (ofensivo batendo) × 0.15 (sem escudo, sem arma) = 2.48325 → trunc 2.
     expect(playerDefense({
-      fistSkillLevel: 10, shieldSkillLevel: 0, fightMode: 'attack',
+      fistSkillLevel: 10, shieldSkillLevel: 0, fightMode: 'attack', recentlyAttacked: true,
     })).toBe(2);
   });
 
   it('skill de defesa zero devolve 1 no modo ofensivo/equilibrado, sem multiplicador nenhum', () => {
-    expect(playerDefense({ fistSkillLevel: 0, shieldSkillLevel: 0, fightMode: 'attack' })).toBe(1);
-    expect(playerDefense({ fistSkillLevel: 0, shieldSkillLevel: 0, fightMode: 'balanced' })).toBe(1);
+    for (const recentlyAttacked of [true, false]) {
+      expect(playerDefense({
+        fistSkillLevel: 0, shieldSkillLevel: 0, fightMode: 'attack', recentlyAttacked,
+      })).toBe(1);
+      expect(playerDefense({
+        fistSkillLevel: 0, shieldSkillLevel: 0, fightMode: 'balanced', recentlyAttacked,
+      })).toBe(1);
+    }
   });
 
   it('skill de defesa zero devolve 2 no modo defensivo', () => {
-    expect(playerDefense({ fistSkillLevel: 0, shieldSkillLevel: 0, fightMode: 'defense' })).toBe(2);
+    expect(playerDefense({
+      fistSkillLevel: 0, shieldSkillLevel: 0, fightMode: 'defense', recentlyAttacked: false,
+    })).toBe(2);
   });
 
   it('arma de uma mão sem escudo usa a defesa e a skill DELA, escala 0,146 (defense > 0)', () => {
     // (50/4 + 2.23) × 14 × 0.5 × 0.146 = 15.05406 → trunc 15.
     expect(playerDefense({
       weapon: { defense: 14, extraDefense: 0, skillLevel: 50 },
-      fistSkillLevel: 10, shieldSkillLevel: 0, fightMode: 'attack',
+      fistSkillLevel: 10, shieldSkillLevel: 0, fightMode: 'attack', recentlyAttacked: true,
     })).toBe(15);
   });
 
@@ -39,7 +51,7 @@ describe('playerDefense', () => {
     expect(playerDefense({
       weapon: { defense: 25, extraDefense: 2, skillLevel: 95 },
       shield: { defense: 37 },
-      fistSkillLevel: 10, shieldSkillLevel: 95, fightMode: 'attack',
+      fistSkillLevel: 10, shieldSkillLevel: 95, fightMode: 'attack', recentlyAttacked: true,
     })).toBe(81);
   });
 
@@ -47,20 +59,41 @@ describe('playerDefense', () => {
     // defenseValue = 0 + 0 = 0 → o produto inteiro é zero, mesmo com skill alta.
     expect(playerDefense({
       weapon: { defense: 0, extraDefense: 0, skillLevel: 110 },
-      fistSkillLevel: 10, shieldSkillLevel: 0, fightMode: 'attack',
+      fistSkillLevel: 10, shieldSkillLevel: 0, fightMode: 'attack', recentlyAttacked: true,
     })).toBe(0);
   });
 
-  it('a postura defensiva usa o fator 1,0 em vez de 0,5 — mais defesa, nunca menos', () => {
-    const attack = playerDefense({
-      weapon: { defense: 14, extraDefense: 0, skillLevel: 50 },
-      fistSkillLevel: 10, shieldSkillLevel: 0, fightMode: 'attack',
+  describe('o fator de postura é o DINÂMICO do Canary (`getDefenseFactor(false)`)', () => {
+    // A mesma arma e a mesma skill nos seis cenários (modo × batendo/parado):
+    //   base = (50/4 + 2.23) × 14 × 0.146 = 30.10812 (antes do fator)
+    //   ofensivo batendo 0.5 → 15.05 → 15 · ofensivo parado 1.0 → 30.10 → 30
+    //   balanceado batendo 0.75 → 22.58 → 22 · balanceado parado 1.0 → 30
+    //   defensivo (qualquer) 1.0 → 30
+    const at = (fightMode: 'attack' | 'balanced' | 'defense', recentlyAttacked: boolean): number =>
+      playerDefense({
+        weapon: { defense: 14, extraDefense: 0, skillLevel: 50 },
+        fistSkillLevel: 10, shieldSkillLevel: 0, fightMode, recentlyAttacked,
+      });
+
+    it('ofensivo: 0,5 enquanto bate, 1,0 depois de parar um intervalo', () => {
+      expect(at('attack', true)).toBe(15);
+      expect(at('attack', false)).toBe(30);
     });
-    const defense = playerDefense({
-      weapon: { defense: 14, extraDefense: 0, skillLevel: 50 },
-      fistSkillLevel: 10, shieldSkillLevel: 0, fightMode: 'defense',
+
+    it('balanceado: 0,75 enquanto bate, 1,0 depois de parar um intervalo', () => {
+      expect(at('balanced', true)).toBe(22);
+      expect(at('balanced', false)).toBe(30);
     });
-    expect(defense).toBeGreaterThan(attack);
+
+    it('defensivo: 1,0 sempre — bater ou não bater não muda a defesa', () => {
+      expect(at('defense', true)).toBe(30);
+      expect(at('defense', false)).toBe(30);
+    });
+
+    it('a postura defensiva nunca dá menos defesa que a ofensiva, batendo ou não', () => {
+      expect(at('defense', true)).toBeGreaterThan(at('attack', true));
+      expect(at('defense', false)).toBeGreaterThanOrEqual(at('attack', false));
+    });
   });
 });
 
@@ -126,5 +159,17 @@ describe('playerMitigation', () => {
     const attack = playerMitigation({ shieldSkillLevel: 50, vocation: knightVocation, fightMode: 'attack' });
     const defense = playerMitigation({ shieldSkillLevel: 50, vocation: knightVocation, fightMode: 'defense' });
     expect(defense).toBeGreaterThan(attack);
+  });
+
+  it('cada postura liga o SEU fightFactor (0,8 / 1,0 / 1,2), estático, sem olhar o relógio de ataque', () => {
+    // Sem escudo nem arma: base = (41 × 1.3) / 100 = 0.533 (longe de qualquer fronteira de ceil).
+    //   ofensivo    × 0.8 = 0.4264 → ceil(42.64) / 100 = 0.43
+    //   balanceado  × 1.0 = 0.533  → ceil(53.3)  / 100 = 0.54
+    //   defensivo   × 1.2 = 0.6396 → ceil(63.96) / 100 = 0.64
+    const at = (fightMode: 'attack' | 'balanced' | 'defense'): number =>
+      playerMitigation({ shieldSkillLevel: 41, vocation: knightVocation, fightMode });
+    expect(at('attack')).toBe(0.43);
+    expect(at('balanced')).toBe(0.54);
+    expect(at('defense')).toBe(0.64);
   });
 });

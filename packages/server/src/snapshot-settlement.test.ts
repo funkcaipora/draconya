@@ -48,6 +48,9 @@ describe('settleSnapshotAsReceipt (#527)', () => {
       fedMs: 0,
       // As bênçãos (#570): mesma regra — `0` é "nenhuma", nunca a chave omitida.
       blessings: 0,
+      // A postura de luta (#550): o snapshot omite o default, e `attack` é GRAVADO — nunca a chave
+      // omitida, ou a postura antiga do Postgres ressuscitaria no próximo login.
+      fightMode: 'attack',
     }]);
   });
 
@@ -105,6 +108,22 @@ describe('settleSnapshotAsReceipt (#527)', () => {
       { instanceId: 's-old:1', itemId: 'gold-coin', quantity: 50 },
       { instanceId: 's-old:2', itemId: 'sword', quantity: 1, overlay: imbued },
     ]);
+  });
+
+  it('carries the posture of the OWNER (#550), and a snapshot without one is the Canary offensive default', async () => {
+    const { receipts, saved } = fakeReceipts();
+    const snapshot: SessionSnapshot = {
+      ...baseSnapshot,
+      participants: [{ ...baseSnapshot.participants[0]!, fightMode: 'defense' }],
+    };
+    await settleSnapshotAsReceipt(snapshot, { characterId: 'a', accountId: 'acc-a', receipts });
+    expect(saved[0]?.fightMode).toBe('defense');
+
+    // `getState` omite o default: o snapshot de quem nunca trocou de postura NÃO tem a chave, e o
+    // extrato grava `attack` mesmo assim — omitir deixaria uma postura antiga do Postgres voltar.
+    const { receipts: other, saved: otherSaved } = fakeReceipts();
+    await settleSnapshotAsReceipt(baseSnapshot, { characterId: 'a', accountId: 'acc-a', receipts: other });
+    expect(otherSaved[0]?.fightMode).toBe('attack');
   });
 
   it('omits every optional field when the participant record has none of them', async () => {

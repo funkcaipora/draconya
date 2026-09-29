@@ -17,7 +17,9 @@ mitigação percentual (#548, M30-01, ADR 0040, perfil `combat-v3`), a condiçã
 com sinal — paralyze/slow de ataque de monstro e haste de defesa (CMB-11, #556) —, o desvio de
 passo da condição drunk (M31-03, #558, ADR 0041) —, a seleção
 ponderada de alvo do Canary (nearest/health/damage/random, #541) e a invocação de monstro por
-monstro (#546, TFS/Canary `monster.summon`/`maxSummons`) implementados
+monstro (#546, TFS/Canary `monster.summon`/`maxSummons`) e a postura de luta do jogador —
+ofensiva/balanceada/defensiva, com o fator de ataque, o de defesa dinâmico e o de mitigação do
+Canary (M30-03, #550) implementados
 **PRD:** §12
 **Épico:** E2
 
@@ -712,11 +714,11 @@ damage    = normalRandomInt(minDamage, maxDamage)
   mágica (§12.1).
 - `skill` é o nível ABSOLUTO da skill da família — ao contrário do `combat-v1`, que só contava a
   partir do `skillStartingLevel` (um personagem nasce com skill 10, não 0).
-- `attackFactor` é o `getAttackFactor()` do modo de luta do Canary (ofensivo 1,0 / equilibrado
-  0,75 / defensivo 0,5). **O Draconya não tem seletor de postura** — o primitivo "Postura
-  Defensiva/Balanceada/Atacante" do `docs/hud-contract-plan.md` nunca foi montado —, então o
-  valor é uma CONSTANTE de conteúdo (`combat.weaponDamage.attackFactor`, `1,0` hoje) até essa UI
-  existir; trocar por leitura de `CharacterState` não muda a fórmula.
+- `attackFactor` é o `getAttackFactor()` do modo de luta do Canary (ofensivo 1,0 / balanceado
+  0,75 / defensivo 0,5) — a POSTURA que o jogador escolheu, `CharacterRuntime.fightMode`
+  (M30-03, #550; ver "A postura de luta" abaixo). **Não é mais constante de conteúdo**: o campo
+  `combat.weaponDamage.attackFactor` saiu do schema. `combat-v1`/`v2` — sessões fixadas neles —
+  continuam no 1,0 de antes (a ofensiva) e ignoram a postura; só o `combat-v3` a lê.
 - `vocationMultiplier` é `vocation.meleeDamageMultiplier`/`distDamageMultiplier` — `1,0` em toda
   vocação, como em `vocations.xml` do Canary hoje; entra pela mesma razão do coeficiente.
   **A truncagem é ASSIMÉTRICA por família, e a assimetria é do Canary, não nossa**:
@@ -860,7 +862,7 @@ não gasta a munição de graça: o preço já saiu antes da rolagem (o tiro exi
 | Parâmetro | Valor | Onde mora |
 |---|---|---|
 | `meleeCoefficient` / `distanceCoefficient` | 0,085 / 0,09 | `packages/content/data/combat/baseline.json`, `weaponDamage` |
-| `attackFactor` | 1,0 (ofensivo — sem seletor de postura ainda) | `packages/content/data/combat/baseline.json`, `weaponDamage.attackFactor` |
+| `attackFactor` | 1,0 / 0,75 / 0,5 pela postura (ofensiva / balanceada / defensiva) — NÃO é conteúdo desde a #550 | `packages/sim/src/combat/fight-mode.ts`, `attackFactorFor` |
 | `meleeDamageMultiplier` / `distDamageMultiplier` | 1,0 em toda vocação | `packages/content/data/vocations/*.json` |
 | Tabela de acerto à distância (baldes 75/90/100) | ver a tabela acima | `packages/content/data/combat/baseline.json`, `distanceHitChance` |
 | `ammunition.hitChance` / `ammunition.maxHitChance` / `weapon.hitChance` | ausentes hoje (nenhuma munição/arma especial no catálogo) | #522/#524, `packages/content/src/schemas.ts` |
@@ -1036,14 +1038,12 @@ descrito pelo Canary 13.x (ADR 0019 — nunca código copiado):
   usam `secondaryShield` como `distanceFactor` em vez de `primaryShield`, como faz uma arma de
   duas mãos ou uma que atira munição (`Item.extraDefense`, `Weapon.ammoFamily`).
 
-`fightMode` é PARÂMETRO das duas primeiras (a postura do Canary — ofensiva/equilibrada/
-defensiva). **Sem seletor ainda** (M30-03): todo chamador em `hunt.ts` passa `'attack'` fixo, a
-mesma decisão que `combat.weaponDamage.attackFactor` já tomou para o dano de arma do
-`combat-v2`. As duas fórmulas usam a metade ESTÁTICA dos fatores do Canary
-(`getDefenseFactor(sendToClient = true)`: 0,5/0,75/1,0; `getCombatTacticsMitigation`: 0,8/1,0/
-1,2) — a metade DINÂMICA (se o jogador bateu "recentemente", via `lastAttack`/`attackSpeed`) fica
-para a M30-03, que é quem vai desenhar o relógio de "último ataque" que essa metade pede; nenhum
-estado foi inventado só para esta issue.
+`fightMode` é PARÂMETRO das duas primeiras (a postura do Canary — ofensiva/balanceada/defensiva)
+e, desde a M30-03 (#550), é a postura que o jogador ESCOLHEU (`CharacterRuntime.fightMode`) —
+`hunt.ts#playerDefenseV3`/`#playerMitigationV3` leem o estado do personagem, não mais um
+`'attack'` fixo. Os fatores estão em "A postura de luta" abaixo: a defesa usa a variante
+DINÂMICA do `getDefenseFactor(false)` (que depende de o jogador ter batido há pouco) e a
+mitigação o `fightFactor` estático (0,8/1,0/1,2).
 
 **Fora do escopo, de propósito** (ADR 0040 decisão 1, "o multiplicador da Roda é 0 até o M41"): o
 bônus `Combat Mastery` (soma em `defenseValue` quando um escudo tem `defense > 0`) e o
@@ -1193,6 +1193,105 @@ O número flutuante do manadrain usa o novo `AppliedDamageOutcome.manaDamage` no
 `healthDamage` (`hunt.ts`, `amount: applied.healthDamage + applied.manaDamage` — exatamente um
 dos dois é não-zero para qualquer golpe), e a cor sai da mesma tabela de elemento do cliente
 (azul saturado, distinto do azul claro de `drown` e do azul-gelo de `ice`).
+
+## A postura de luta (M30-03, #550, ADR 0040)
+
+O jogador escolhe a postura de luta — o `fightMode` do Canary — e ela multiplica o dano que ele
+causa, a defesa que ele tem e a mitigação percentual que ele recebe. Um estado por PERSONAGEM,
+não constante de conteúdo: `CharacterRuntime.fightMode` (`packages/sim/src/character.ts`).
+
+- **Três modos**, na ordem do `FightMode_t` do Canary (`creatures_definitions.hpp:813-815`):
+  `attack` (ofensiva), `balanced` (balanceada), `defense` (defensiva). O default é `attack` — o
+  `FIGHTMODE_ATTACK` de `player.hpp:1857` — para quem nunca escolheu, na coluna, no ticket, no
+  construtor do runtime e no `player-stats` que o cliente lê.
+- **Quem escolhe**: a intenção `set-fight-mode` (C2S 35, `{ mode }`), tratada pela sessão dona
+  (invariante 9) na Cidade e na hunt, na chegada — como `select-ammo` —, sem passar pelo
+  ruleset. A resposta é o `player-stats.fightMode` (a marca do botão só troca quando ele
+  chega). Uma troca no meio da hunt vale do evento seguinte em diante; a hunt DESANEXADA
+  continua com o modo que o jogador deixou (o estado vive no `CharacterRuntime` hospedado).
+- **Persistência**: `character.fight_mode` (migração `0022`, `NOT NULL DEFAULT 'attack'` com
+  CHECK dos três valores). ABSOLUTA e última-escrita-vence, como as bênçãos — não há ordem entre
+  os modos, então nada de fusão por máximo. O ticket a leva à sessão (`initialCharacter.fightMode`)
+  e o extrato a traz de volta (`Receipt.fightMode`, sempre incluída quando o personagem
+  participou, nunca gateada pelo default: voltar à ofensiva é uma escolha real).
+
+### Os três fatores (cada um numa escala própria)
+
+| Onde entra | Ofensiva | Balanceada | Defensiva | Canary |
+|---|---|---|---|---|
+| Fator de ataque — o MÁXIMO do dano de arma (`getMaxWeaponDamage`) | 1,0 | 0,75 | 0,5 | `Player::getAttackFactor`, `player.cpp:840-851` |
+| Fator de defesa — `playerDefense`, **DINÂMICO** | 0,5 batendo · 1,0 parado | 0,75 batendo · 1,0 parado | 1,0 sempre | `Player::getDefenseFactor(false)`, `player.cpp:853-872` |
+| Fator da mitigação percentual — `playerMitigation`, estático | 0,8 | 1,0 | 1,2 | `PlayerWheel::calculateMitigation`, `player_wheel.cpp:4078-4090` (= `getCombatTacticsMitigation`, `player.cpp:754-774`) |
+
+A tabela do TFS (`getAttackFactor` 1,0/1,2/2,0, usada como divisor) NÃO é a que vale aqui: a
+fórmula de arma do Draconya é a do Canary (`0,085 × attackFactor × attack × skill`, multiplicando),
+e o Canary é a fonte de precedência para a fórmula (ADR 0037 d.4). Os números vivem em código puro
+— `combat/fight-mode.ts` —, porque são MECANISMO do Canary, não balanceamento do Draconya.
+
+- **O fator de ataque** entra em `resolveWeaponPower`/`resolveWeaponHit` para corpo a corpo, punho
+  e distância — e no componente elemental da arma (que o Canary também multiplica dentro de
+  `getWeaponDamage`, antes da divisão físico/elemento). Wand/rod NÃO o leem (`WeaponWand` do Canary
+  não usa `attackFactor`), e as magias tampouco: os `onGetFormulaValues` de `data/scripts/spells`
+  recebem o `factor` mas nenhum o usa (conferido no `47dfd51`).
+- **O fator de defesa é o dinâmico**, o que `Creature::blockHit` chama (`getDefense()` com
+  `sendToClient = false`, `creature.cpp:967`): nos modos ofensivo e balanceado a defesa cai
+  enquanto o jogador bateu há menos de um intervalo de ataque — `(now − lastAttack) <
+  getAttackSpeed()` — e volta a 1,0 quando ele parou por um intervalo inteiro. `getAttackSpeed()`
+  é o `attackspeed` da vocação (2000 ms em todas, `vocations.xml`), que é o
+  `combat.player.attackIntervalMs` do conteúdo. A variante ESTÁTICA (0,5/0,75/1,0 sem olhar o
+  relógio) é o que o Canary manda ao CLIENTE para o painel de stats — apresentação, fora do
+  resultado da caça, e por isso não implementada.
+- **Quando `lastAttack` é escrito** (`CharacterRuntime.lastAttackAtMs`, relógio LÓGICO da sessão):
+  só quando a arma foi de fato usada — o `result` de `Player::doAttacking`, que só é `true` se
+  `useWeapon`/`useFist` devolveu `true` (`player.cpp:4030`) — e DEPOIS do golpe, então o reflexo
+  que ele provoca ainda enxerga a janela anterior. `HuntRuleset#strike` devolve `true` quando o
+  golpe saiu (acertando ou errando); `false` quando NÃO saiu: sem visão livre (#553), sem munição,
+  monstro fora do conteúdo — e a wand sem mana e a arma abaixo do level exigido (`damagePercent`
+  0) nem chegam ao `strike`. Só o `combat-v3` o escreve (o único perfil que o lê), então o
+  snapshot de uma sessão `combat-v1`/`v2` continua sem a chave. Não vai para o Postgres: o
+  relógio é da sessão; viaja só no snapshot quente, para a hunt retomada não perder a janela.
+  `null` é "nunca bateu": fator 1,0 — o `lastAttack == 0` do Canary sem o relógio de processo.
+  **O carimbo não atravessa a troca de sessão**: o relógio da sessão nova nasce em zero e o
+  `CharacterRuntime` é o MESMO objeto na transição, então `Session.enter` zera `lastAttackAtMs`
+  (o restore de snapshot não passa por `enter` e mantém a janela quente), e `attackedRecently`
+  ainda trata um carimbo no futuro como "nunca bateu". Sem isso um herói vindo de uma hunt de
+  57 s teria a defesa pela metade por quase um minuto na hunt seguinte sem bater — o resultado
+  dependeria do caminho do objeto, não do estado e da semente.
+- **O empate exato da janela** (`agora − lastAttack == 2000 ms`): quem bate sem parar nunca fecha
+  a janela no Canary (o golpe seguinte corre `attackSpeed` mais a latência do despachante, e um
+  golpe de monstro só cai nessa fresta de poucos ms por ciclo). No motor de tempo discreto o
+  monstro que ANDOU até o herói e o próprio herói armam as duas cadências no mesmo instante e
+  batem no mesmo ms para sempre — e a ordem de dois eventos no mesmo ms é só a ordem da fila. O
+  empate conta como janela ABERTA quando o golpe do herói está agendado para este mesmo ms
+  (`session.dueAtOf('player-attack', id)`, lido só no empate exato); se o herói parou, é a
+  comparação estrita do Canary (fechada). O reflexo do próprio golpe (`#reflectOntoCharacter`,
+  dentro de `#onPlayerAttack`) vê o evento do golpe já fora da fila e a janela fechada, como o
+  Canary — o carimbo só é reescrito depois dele.
+- **Perfis**: só o `combat-v3` (e o v4 que o herda) lê a postura. `combat-v1`/`v2` — sessões
+  fixadas neles — seguem no 1,0 fixo que a constante `weaponDamage.attackFactor` dava, bit a bit
+  (ADR 0031/0040 d.3): a postura entrou no `combat-v3` porque ele ainda não chegou à `main` — um
+  perfil já publicado nunca é reaberto.
+
+### Parâmetros
+
+| Parâmetro | Valor | Onde mora |
+|---|---|---|
+| Modo default | `attack` (`FIGHTMODE_ATTACK`) | `packages/sim/src/combat/fight-mode.ts` (`DEFAULT_FIGHT_MODE`); `character.fight_mode` `DEFAULT` |
+| Fatores de ataque / defesa / mitigação | ver a tabela acima | `packages/sim/src/combat/fight-mode.ts` |
+| Intervalo de ataque da janela de defesa | 2000 ms | `packages/content/data/combat/baseline.json`, `player.attackIntervalMs` |
+| Vocabulário e opcode | `attack`/`balanced`/`defense`; C2S 35 `set-fight-mode` | `packages/protocol/src/{types,messages}.ts` |
+
+### Divergências e o que fica de fora
+
+- **Chase mode e secure mode** ficam de fora (issue #550, ADR 0037 d.2): a perseguição é do bot
+  (rota, follow, `targeting.posture`) e o modo seguro é regra de PvP.
+- **`Player::attackTotal`** (o "dano" que o Canary mostra no painel de stats do cliente, com a
+  postura em `1,2/1,0/0,6`) é apresentação: o Draconya não tem esse painel de dano.
+- **A postura NÃO é do bot.** O bot não a troca, e o vocabulário da automação não mudou. O campo
+  `stance` (`offensive`/`balanced`/`defensive`) que a config v2 do bot já carregava (ADR 0032
+  d.10, que o previa como a postura de combate) NÃO é lido por nada e não tem efeito: ele fica no
+  schema só por compatibilidade com config já salva (ADR 0014); a postura de verdade é
+  `character.fight_mode`.
 
 ## Famílias de arma e proficiências (CMB-05, #333)
 
@@ -2865,10 +2964,9 @@ curva —, e `damage-over-time` não a modela; reportada, não aproximada (ver `
   `SKILL_DISTANCEPERCENT`), não de dano, e o schema (`damageDealtPercent`) só expressa dano. Só
   Protector foi corrigido (o Canary já expressa em `BUFF_DAMAGEDEALT`, percentual de dano puro).
   Converter skill % em dano % exigiria a fórmula de arma nova da #522 primeiro.
-- `[ABERTO]` `combat.weaponDamage.attackFactor` (#522) é uma CONSTANTE de conteúdo em `1,0`
-  (ofensivo) porque o Draconya não tem seletor de postura de luta ainda — o primitivo nunca foi
-  montado (`docs/hud-contract-plan.md`, M21 fechado sem issue). Quando a UI de postura existir,
-  o valor troca de constante para leitura de `CharacterState`, sem mudar a fórmula.
+- ~~`[ABERTO]` `combat.weaponDamage.attackFactor` (#522) é uma CONSTANTE de conteúdo em `1,0`~~
+  — **fechado na M30-03 (#550)**: o campo saiu do conteúdo e o fator é a postura do personagem
+  (ver "A postura de luta").
 - `[ABERTO]` `ammunition.maxHitChance` e `weapon.hitChance` (#524) não têm nenhum valor não-default
   no catálogo real hoje — nenhuma munição ou arma especial (power bolt, royal crossbow) existe
   ainda. Os campos e a leitura (#522) já existem; falta o item.
