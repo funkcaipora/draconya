@@ -1014,8 +1014,9 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
         });
         hero = new CharacterRuntime({
           id: characterId, position: { x: 0, y: 0, z: 7 },
-          health: 100, maxHealth: 100, mana: 0, maxMana: 0, level: 8, xp: 0, gold: 0, goldDelta: 0,
-          alive: true, cooldowns: {}, capacity: 1_000,
+          // Com vocação: sem ela o Canary e o TFS não perdem item nenhum na morte.
+          health: 100, maxHealth: 100, mana: 0, maxMana: 0, level: 8, xp: 0, vocationId: 'knight',
+          gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
           inventory: {
             backpack: [{ instanceId: 'i:gems', itemId: 'gem', quantity: 12 }],
             equipped: { back: { instanceId: 'i:backpack', itemId: 'backpack', quantity: 1 } },

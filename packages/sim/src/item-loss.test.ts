@@ -6,7 +6,7 @@ import type { CharacterState } from './character.js';
 import { CANARY_SLOT_ORDER } from './inventory.js';
 import type { CarriedItem, EquipmentObserver } from './inventory.js';
 import {
-  LOSS_ROLL_RESOLUTION, consumeLossAmulet, lossPercentFor, loseItemsOnDeath,
+  LOSS_ROLL_RESOLUTION, consumeLossAmulet, hasAdventurersBlessing, lossPercentFor, loseItemsOnDeath,
 } from './item-loss.js';
 import { Rng } from './rng.js';
 
@@ -193,7 +193,7 @@ describe('loseItemsOnDeath — sem bênção, a mochila se perde (100%) e leva o
     expect(lostIds).toEqual([
       'i:helmet', 'i:amulet',
       'i:backpack', 'i:potions', 'i:spare-sword',
-      'i:plate', 'i:sword', 'i:quiver', 'i:boots', 'i:ring',
+      'i:plate', 'i:quiver', 'i:sword', 'i:boots', 'i:ring',
     ]);
     expect(outcome.lost.find((entry) => entry.item.instanceId === 'i:potions')?.from)
       .toBe('backpack-contents');
@@ -289,10 +289,24 @@ describe('loseItemsOnDeath — a chance cai com as bênçãos, e cai na fronteir
     // Oito peças vestidas (`legs` vazio): oito sorteios de 1 a 10 000 (`math.random(100 × 100)`).
     expect(spy).toHaveBeenCalledTimes(8);
     for (const call of spy.mock.calls) expect(call).toEqual([1, LOSS_ROLL_RESOLUTION]);
-    // A ordem é a de `CANARY_SLOT_ORDER`: head, neck, back, chest, hand, shield, legs, feet, finger.
+    // A ordem é a de `CONST_SLOT_HEAD..AMMO` do Canary: head, neck, back, chest, RIGHT (o escudo
+    // ou a aljava — `shield` aqui), LEFT (a arma — `hand`), legs, feet, finger, ammo.
     expect(CANARY_SLOT_ORDER).toEqual([
-      'head', 'neck', 'back', 'chest', 'hand', 'shield', 'legs', 'feet', 'finger', 'ammo',
+      'head', 'neck', 'back', 'chest', 'shield', 'hand', 'legs', 'feet', 'finger', 'ammo',
     ]);
+  });
+
+  it('o escudo/aljava (RIGHT) sorteia ANTES da arma (LEFT): a mesma semente dá o mesmo dono a cada número', () => {
+    // Uma bênção: container 70% (até 7000), resto 7% (até 700). O primeiro número do `Rng` é do
+    // slot `shield`, o segundo do `hand`: 500 → a aljava cai (500 ≤ 7000) e a espada, com 5000,
+    // fica (5000 > 700). Na ordem invertida a espada levaria o 500 e cairia junto.
+    const character = hero({ hand: carried('sword', 'i:sword'), shield: carried('quiver', 'i:quiver') });
+    const { rng } = rigged([500, 5000]);
+
+    const outcome = loseItemsOnDeath(character, context(character, rng, 1));
+
+    expect(outcome.lost.map((entry) => entry.item.instanceId)).toEqual(['i:quiver']);
+    expect(character.inventory.equippedAt('hand')?.instanceId).toBe('i:sword');
   });
 
   it('a sequência do Rng depende de QUANTOS itens estão vestidos, não do que caiu antes', () => {
@@ -396,6 +410,87 @@ describe('loseItemsOnDeath — quem está protegido não sorteia nada', () => {
     const outcome = loseItemsOnDeath(character, context(character, rigged(1).rng, 5));
     expect(outcome.replacement).toBeNull();
     expect(character.inventory.equippedAt('back')?.instanceId).toBe('i:bp');
+  });
+});
+
+describe('loseItemsOnDeath — as proteções de nível baixo (Adventurer\'s Blessing e sem vocação)', () => {
+  const dressedAt = (level: number, vocationId: string | null): CharacterRuntime =>
+    hero({
+      back: carried('backpack', 'i:bp'), chest: carried('plate', 'i:plate'),
+      hand: carried('sword', 'i:sword'), finger: carried('ring', 'i:ring'),
+    }, { level, vocationId });
+
+  it('level 20 com vocação e ZERO bênçãos comprou nada e ainda assim não perde: são as cinco de graça', () => {
+    const character = dressedAt(20, 'knight');
+    const before = JSON.stringify(character.inventory.getState());
+    const { rng, spy } = rigged(1);
+
+    const outcome = loseItemsOnDeath(character, context(character, rng, 0));
+
+    // O Canary concede as bênçãos 2 a 6 no login abaixo do level 21: `#getBlessings()` é 5, e
+    // `DropLoot` nem roda — nenhum `math.random`.
+    expect(outcome.lost).toEqual([]);
+    expect(outcome.protectedBy).toBe('blessings');
+    expect(spy).not.toHaveBeenCalled();
+    expect(JSON.stringify(character.inventory.getState())).toBe(before);
+    expect(character.removedInstances).toEqual([]);
+  });
+
+  it('protegido pelo Adventurer, quem estava sem mochila AINDA ganha a bag (está fora dos ramos da perda)', () => {
+    const character = hero({ chest: carried('plate', 'i:plate') }, { level: 12, vocationId: 'knight' });
+
+    const outcome = loseItemsOnDeath(character, context(character, rigged(1).rng, 0));
+
+    expect(outcome.protectedBy).toBe('blessings');
+    expect(outcome.replacement?.itemId).toBe('bag');
+    expect(character.inventory.equippedAt('chest')?.instanceId).toBe('i:plate');
+  });
+
+  it('no level 21 o Adventurer acaba: sem bênção a mochila cai de novo, e o sorteio é consumido', () => {
+    const character = dressedAt(21, 'knight');
+    const { rng, spy } = rigged(1);
+
+    const outcome = loseItemsOnDeath(character, context(character, rng, 0));
+
+    expect(outcome.protectedBy).toBeNull();
+    expect(outcome.lost.map((entry) => entry.item.instanceId)).toContain('i:bp');
+    expect(spy).toHaveBeenCalledTimes(4);
+  });
+
+  it('sem `blessingPricing` no conteúdo não há level de Adventurer: level 12 com vocação perde', () => {
+    const character = dressedAt(12, 'knight');
+
+    const outcome = loseItemsOnDeath(
+      character, context(character, rigged(1).rng, 0, progressionOf(CANARY_RULES, false)),
+    );
+
+    expect(outcome.protectedBy).toBeNull();
+    expect(outcome.lost.map((entry) => entry.item.instanceId)).toContain('i:bp');
+  });
+
+  it.each([3, 7, 50])('sem vocação (level %i) nada acontece: nem perda, nem sorteio, nem bag', (level) => {
+    // Canary (`droploot.lua:6-9`, Dawnport abaixo do level 8) e TFS (`drop_loot.lua:2-4`,
+    // `VOCATION_NONE`) devolvem ANTES de `Blessings.PlayerDeath` — a bag de reposição mora nele.
+    const character = hero({ chest: carried('plate', 'i:plate') }, { level, vocationId: null });
+    const before = JSON.stringify(character.inventory.getState());
+    const { rng, spy } = rigged(1);
+
+    const outcome = loseItemsOnDeath(character, context(character, rng, 0));
+
+    expect(outcome).toEqual({ lost: [], protectedBy: null, replacement: null });
+    expect(spy).not.toHaveBeenCalled();
+    expect(character.inventory.equippedAt('back')).toBeNull();
+    expect(JSON.stringify(character.inventory.getState())).toBe(before);
+    expect(character.removedInstances).toEqual([]);
+  });
+
+  it('`hasAdventurersBlessing`: level abaixo do de Adventurer E vocação — as duas condições', () => {
+    const progression = progressionOf(CANARY_RULES);
+    expect(hasAdventurersBlessing({ level: 20, vocationId: 'knight' }, progression)).toBe(true);
+    expect(hasAdventurersBlessing({ level: 21, vocationId: 'knight' }, progression)).toBe(false);
+    expect(hasAdventurersBlessing({ level: 20, vocationId: null }, progression)).toBe(false);
+    expect(hasAdventurersBlessing({ level: 5, vocationId: 'knight' }, progressionOf(CANARY_RULES, false)))
+      .toBe(false);
   });
 });
 

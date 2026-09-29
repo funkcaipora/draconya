@@ -36,15 +36,21 @@ import type { ItemInstanceOverlay } from './item-overlay.js';
 import type { DefenderAbsorb } from './combat/damage.js';
 
 /**
- * A ordem em que o Canary varre os slots vestidos (`CONST_SLOT_FIRST..CONST_SLOT_LAST`: head,
- * necklace, backpack, armor, right, left, legs, feet, ring, ammo) — a de `Player::blockHit`
- * (#552). Importa porque a absorção percentual arredonda item a item: a ordem muda o número. É
- * também a de `Blessings.DropLoot` (#571, `for i = CONST_SLOT_HEAD, CONST_SLOT_AMMO`), onde cada
- * item vestido consome UM sorteio na ordem — trocar a ordem muda quem perde o quê com a mesma
- * semente.
+ * A ordem em que o Canary varre os slots vestidos (`CONST_SLOT_FIRST..CONST_SLOT_LAST`, ids 1 a
+ * 10 de `creatures_definitions.hpp:375-384`: head, necklace, backpack, armor, RIGHT, LEFT, legs,
+ * feet, ring, ammo) — a de `Player::blockHit` (`player.cpp:3915`, #552). Importa porque a
+ * absorção percentual arredonda item a item: a ordem muda o número. É também a de
+ * `Blessings.DropLoot` (#571, `for i = CONST_SLOT_HEAD, CONST_SLOT_AMMO`, `blessing.lua:106`),
+ * onde cada item vestido consome UM sorteio na ordem — trocar a ordem muda quem perde o quê com
+ * a mesma semente.
+ *
+ * **`RIGHT` (5) vem antes de `LEFT` (6), e é o ESCUDO**: `Player::queryAdd` só aceita no `RIGHT`
+ * `WEAPON_SHIELD` ou aljava (`player.cpp:4643-4646`), e a arma vai no `LEFT` (`:4686-4702`) — a
+ * aljava é lida de `CONST_SLOT_RIGHT` (`weapons.cpp:715`). No Draconya `shield` é o slot da mão
+ * secundária (escudo, aljava, livro) e `hand` o da arma, então a ordem é `shield`, `hand`.
  */
 export const CANARY_SLOT_ORDER: readonly ItemSlot[] = [
-  'head', 'neck', 'back', 'chest', 'hand', 'shield', 'legs', 'feet', 'finger', 'ammo',
+  'head', 'neck', 'back', 'chest', 'shield', 'hand', 'legs', 'feet', 'finger', 'ammo',
 ];
 
 /** Teto de empilhamento (§21.5). Item empilhável enche até aqui; espada não empilha. */

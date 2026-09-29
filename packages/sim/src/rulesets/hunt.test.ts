@@ -1190,13 +1190,23 @@ describe('perda de item na morte (#571, ADR 0042 decisão 4)', () => {
     enabled: true, lossPercentByBlessings: [100, 70, 45, 25, 10, 0, 0, 0],
     nonContainerDivisor: 10, replacementContainerId: 'bag',
   };
+  // O preço das bênçãos do Canary: só o `freeBelowLevel` (o Adventurer's Blessing) importa aqui.
+  const blessingPricing = {
+    freeBelowLevel: 21, flatUntilLevel: 30, flatPrice: 2000, highFromLevel: 120, midOffset: 20,
+    midMultiplier: 200, midEnhancedMultiplier: 260, highBase: 20_000, highEnhancedBase: 26_000,
+    highMultiplier: 75, highEnhancedMultiplier: 100,
+  };
   const lossContent = (
-    over: { enabled?: boolean; nonContainerDivisor?: number; routes?: NonNullable<RawContent['routes']> } = {},
+    over: {
+      enabled?: boolean; nonContainerDivisor?: number; routes?: NonNullable<RawContent['routes']>;
+      adventurer?: boolean;
+    } = {},
   ): Content => content({
     items: [...items, ...lossItems] as unknown as NonNullable<RawContent['items']>,
     ...(over.routes === undefined ? {} : { routes: over.routes }),
     progression: [{
       ...progression,
+      ...(over.adventurer === true ? { blessingPricing } : {}),
       deathPenalty: {
         ...progression.deathPenalty,
         itemLoss: { ...itemLoss, enabled: over.enabled ?? true, nonContainerDivisor: over.nonContainerDivisor ?? 10 },
@@ -1218,12 +1228,19 @@ describe('perda de item na morte (#571, ADR 0042 decisão 4)', () => {
     },
   });
 
-  /** O herói morre AGORA, direto no pipeline — a perda de item não depende de como ele morreu. */
+  /**
+   * O herói morre AGORA, direto no pipeline — a perda de item não depende de como ele morreu.
+   * Com vocação: sem ela o Canary e o TFS não perdem item nenhum (`droploot.lua`,
+   * `drop_loot.lua`), e o fixture nasce sem uma (§7.4).
+   */
   const dies = (
-    loaded: Content, inventory: InventoryState, blessings = 0,
+    loaded: Content, inventory: InventoryState, blessings = 0, vocationId: string | null = 'knight',
+    level = 1,
   ): { session: Session; hero: CharacterRuntime } => {
     const { session, hero } = start({ loaded, inventory });
     hero.blessings = blessings;
+    hero.vocationId = vocationId;
+    hero.level = level;
     session.kill(hero);
     expect(session.ended).toBe('death');
     return { session, hero };
@@ -1340,7 +1357,7 @@ describe('perda de item na morte (#571, ADR 0042 decisão 4)', () => {
       return new CharacterRuntime({
         id, position: { x: 0, y: 0, z: 7 },
         health: stats.maxHealth, maxHealth: stats.maxHealth,
-        mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
+        mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: 'knight',
         staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
         gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000, inventory,
       });
@@ -1371,6 +1388,37 @@ describe('perda de item na morte (#571, ADR 0042 decisão 4)', () => {
     expect(eventsOf(session, 'item-lost-on-death').every((detail) => detail.endsWith('/b'))).toBe(true);
   });
 
+  it('sem vocação a morte não perde item nem entrega bag (Canary/TFS devolvem antes da perda)', () => {
+    const inventory = dressed();
+    const { session, hero } = dies(lossContent({ nonContainerDivisor: 1 }), inventory, 0, null);
+
+    expect(session.receipts()[0]?.removedInstances).toEqual([]);
+    expect(hero.inventory.getState().equipped).toEqual(inventory.equipped);
+    expect(session.notableEvents.filter((e) => e.type.startsWith('item-loss') || e.type === 'item-lost-on-death'
+      || e.type === 'backpack-replaced')).toEqual([]);
+  });
+
+  it('abaixo do level 21 com vocação, sem bênção nenhuma, a morte não perde item (Adventurer\'s Blessing)', () => {
+    const inventory = dressed();
+    const { session, hero } = dies(
+      lossContent({ nonContainerDivisor: 1, adventurer: true }), inventory, 0, 'knight', 20,
+    );
+
+    expect(session.receipts()[0]?.removedInstances).toEqual([]);
+    expect(hero.inventory.getState().equipped).toEqual(inventory.equipped);
+    expect(eventsOf(session, 'item-loss-protected')).toEqual(['blessings']);
+    expect(eventsOf(session, 'item-lost-on-death')).toEqual([]);
+  });
+
+  it('no level 21 o Adventurer acaba: a mesma morte volta a tirar a mochila', () => {
+    const { session } = dies(
+      lossContent({ nonContainerDivisor: 1, adventurer: true }), dressed(), 0, 'knight', 21,
+    );
+
+    expect(session.receipts()[0]?.removedInstances).toContain('i:backpack');
+    expect(eventsOf(session, 'item-loss-protected')).toEqual([]);
+  });
+
   // Sem arma nem armadura: com a espada de 200 de ataque o herói mata os ratos de um golpe e
   // nunca morre, e o teste não chegaria à perda. Mochila e anel bastam para haver o que perder.
   const barehanded = (): InventoryState => ({
@@ -1388,6 +1436,7 @@ describe('perda de item na morte (#571, ADR 0042 decisão 4)', () => {
       const { session, hero } = start({
         loaded: lossContent({ routes: [threeRatsRoute] }), health: 40, inventory: barehanded(),
       });
+      hero.vocationId = 'knight';
       run(session, 120_000, 1000 / hz);
       expect(session.ended).toBe('death');
       return {
@@ -1409,7 +1458,8 @@ describe('perda de item na morte (#571, ADR 0042 decisão 4)', () => {
     const loaded = lossContent({ routes: [threeRatsRoute] });
     // 40 de vida: com o herói de mãos vazias a morte vem aos ~4 s, então o snapshot dos 2 s sai
     // com ele ainda vivo e a perda acontece DEPOIS da retomada.
-    const { session } = start({ loaded, health: 40, inventory: barehanded() });
+    const { session, hero } = start({ loaded, health: 40, inventory: barehanded() });
+    hero.vocationId = 'knight';
     run(session, 2_000, 100);
     expect(session.ended).toBeNull();
 

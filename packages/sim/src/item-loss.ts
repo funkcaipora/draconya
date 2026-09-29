@@ -1,6 +1,6 @@
 // Perda de item na morte (#571, ADR 0042 decisão 4) — `Blessings.PlayerDeath`/`DropLoot` do
-// Canary (`data/libs/systems/blessing.lua:82-126`), mais o consumo do Amulet of Loss de
-// `Player::death` (`src/creatures/players/player.cpp:4213-4219`).
+// Canary (`data/libs/systems/blessing.lua:82-118`), mais o consumo do Amulet of Loss de
+// `Player::death` (`src/creatures/players/player.cpp:4215-4219`).
 //
 // **O Tibia larga o item perdido no cadáver do jogador; o Draconya não tem item no chão.** O
 // ADR 0037 (Alternativas) já rejeitou o cadáver-container que isso exigiria, então "perder" aqui
@@ -13,14 +13,24 @@
 //
 // **O mecanismo, como o Canary o descreve:**
 //
+//   0. SEM VOCAÇÃO não há perda nenhuma, nem a bag do passo 4: o Canary devolve antes de
+//      `Blessings.PlayerDeath` para o personagem do Dawnport abaixo do level 8
+//      (`data-otservbr-global/scripts/creaturescripts/others/droploot.lua:6-9`) e o TFS para
+//      `VOCATION_NONE` (`data/creaturescripts/scripts/drop_loot.lua:2-4`) — no Draconya os
+//      dois são `vocationId === null` (a vocação só se escolhe no `vocationLevel`, 8);
 //   1. o Amulet of Loss VESTIDO (`protectsOnDeath` no slot do pescoço) protege tudo: nenhum
 //      sorteio; e um personagem com CINCO ou mais bênçãos também está protegido — a tabela
-//      `LossPercent` dá zero a partir dali;
+//      `LossPercent` dá zero a partir dali. Abaixo do level do Adventurer's Blessing, com
+//      vocação, o personagem TEM as cinco bênçãos regulares de graça (o Canary as concede no
+//      login, `player.cpp:12301-12308`), então também está protegido — ver
+//      `hasAdventurersBlessing`;
 //   2. senão, cada slot vestido, na ordem de `CANARY_SLOT_ORDER`, consome UM sorteio de 1 a
 //      10 000 (`math.random(100 * multiplier)`, resolução de 0,01%) e perde o item se o número
 //      cair até `chance × 100` — `chance` cheia para container (a mochila, e a aljava, que no
 //      cliente é container), `chance / 10` para o resto;
-//   3. perder a mochila leva junto tudo o que estava dentro dela;
+//   3. perder a mochila leva junto tudo o que estava dentro dela — a BOLSA do personagem
+//      (`satchel`) é o único abrigo: ela não tem equivalente no Tibia, o mecanismo nunca a toca e
+//      isso é decisão do dono em aberto (ver `docs/product/death.md`);
 //   4. quem ficou sem mochila nas costas — perdeu agora ou já não tinha — ganha uma bag nova.
 //
 // Tudo isto roda ANTES da penalidade de XP/skill e do consumo das bênçãos, como no Canary
@@ -40,7 +50,7 @@ import type { Rng } from './rng.js';
 
 /**
  * A resolução do sorteio: `math.random(100 * multiplier)` com `multiplier = 100`
- * (`blessing.lua:102-105`) — inteiro em [1, 10 000], então a chance mínima é 0,01%.
+ * (`blessing.lua:102,110`) — inteiro em [1, 10 000], então a chance mínima é 0,01%.
  */
 export const LOSS_ROLL_RESOLUTION = 10_000;
 
@@ -72,7 +82,8 @@ export interface ItemLossContext {
   readonly items: ReadonlyMap<string, Item>;
   /**
    * Quantas bênçãos o morto tinha ANTES de a morte as consumir (`blessingCount`,
-   * `blessings.ts`) — o índice da tabela `lossPercentByBlessings`.
+   * `blessings.ts`) — o índice da tabela `lossPercentByBlessings`. As do Adventurer's Blessing
+   * não entram na conta: `hasAdventurersBlessing` as trata à parte.
    */
   readonly blessings: number;
   readonly rng: Rng;
@@ -105,16 +116,43 @@ function isContainerForLoss(definition: Item | undefined): boolean {
 }
 
 /**
+ * O personagem tem o Adventurer's Blessing? É a bênção "de graça" de quem está abaixo do level
+ * `progression.blessingPricing.freeBelowLevel` (21 — `adventurersBlessingLevel` do
+ * `config.lua.dist:496`) e JÁ TEM vocação: o Canary concede as cinco bênçãos regulares (ids 2 a 6)
+ * a quem loga assim (`player.cpp:12301-12308`), e a morte não as consome
+ * (`willNotLoseBless`, `player.cpp:4194-4199`). Com cinco bênçãos a tabela `LossPercent` dá zero:
+ * nada se perde. O Draconya não guarda essas cinco no bitmask (a #570 modelou o Adventurer como
+ * bênção de preço zero, `blessingCost`), e por isso a regra é DERIVADA aqui do level e da
+ * vocação — a mesma conferência que `consumeLossAmulet` faz. Sem `blessingPricing` no conteúdo
+ * não há level de Adventurer, e ninguém tem a bênção.
+ *
+ * Lê o level de AGORA: `loseItemsOnDeath` roda antes da penalidade (o level ainda é o de quem
+ * morreu) e `consumeLossAmulet` depois (o level já é o rebaixado), como o Canary.
+ */
+export function hasAdventurersBlessing(
+  character: Pick<CharacterRuntime, 'level' | 'vocationId'>,
+  progression: Progression,
+): boolean {
+  const adventurerLevel = progression.blessingPricing?.freeBelowLevel;
+  return adventurerLevel !== undefined && character.level < adventurerLevel && character.vocationId !== null;
+}
+
+/**
  * A morte tira os itens do personagem (`Blessings.PlayerDeath`). Muta o inventário do personagem
  * e a lista de instâncias destruídas (`removedInstances`, que o extrato drena); devolve o que
  * mudou para quem chamou registrar no extrato da sessão.
  *
  * Com o bloco de conteúdo ausente ou `enabled: false` não toca em nada — nem a bag de reposição:
  * o "nunca perde item" provisório é a AUSÊNCIA de qualquer mudança de inventário na morte.
+ *
+ * Sem vocação (`vocationId === null`) também não toca em nada, nem na bag: o Canary devolve antes
+ * de `Blessings.PlayerDeath` para o Dawnport abaixo do level 8 e o TFS para `VOCATION_NONE`, e a
+ * bag de reposição mora dentro de `PlayerDeath`.
  */
 export function loseItemsOnDeath(character: CharacterRuntime, context: ItemLossContext): ItemLossOutcome {
   const rules = context.progression.deathPenalty.itemLoss;
   if (rules === undefined || !rules.enabled) return NOTHING_LOST;
+  if (character.vocationId === null) return NOTHING_LOST;
   const inventory = character.inventory;
 
   const neck = inventory.equippedAt('neck');
@@ -125,7 +163,8 @@ export function loseItemsOnDeath(character: CharacterRuntime, context: ItemLossC
   let protectedBy: ItemLossOutcome['protectedBy'] = null;
   if (hasAmulet) {
     protectedBy = 'amulet';
-  } else if (percent <= 0) {
+  } else if (percent <= 0 || hasAdventurersBlessing(character, context.progression)) {
+    // Cinco bênçãos, ou o Adventurer's Blessing (que as concede de graça): `#getBlessings() >= 5`.
     protectedBy = 'blessings';
   } else {
     for (const slot of CANARY_SLOT_ORDER) {
@@ -168,7 +207,7 @@ export function loseItemsOnDeath(character: CharacterRuntime, context: ItemLossC
 }
 
 /**
- * A morte consome UM Amulet of Loss vestido (`Player::death`, `player.cpp:4213-4219`): o colar é
+ * A morte consome UM Amulet of Loss vestido (`Player::death`, `player.cpp:4215-4219`): o colar é
  * de uso único, protegendo ou não — inclusive com cinco bênçãos, quando ele não tinha o que
  * proteger. Devolve a instância consumida, ou `null`.
  *
@@ -189,10 +228,7 @@ export function consumeLossAmulet(
   if (rules === undefined || !rules.enabled) return null;
   const neck = character.inventory.equippedAt('neck');
   if (neck === null || context.items.get(neck.itemId)?.protectsOnDeath !== true) return null;
-  const adventurerLevel = context.progression.blessingPricing?.freeBelowLevel;
-  if (adventurerLevel !== undefined && character.level < adventurerLevel && character.vocationId !== null) {
-    return null;
-  }
+  if (hasAdventurersBlessing(character, context.progression)) return null;
   const consumed = character.inventory.destroy('neck');
   if (consumed !== null) character.removedInstances.push(consumed.instanceId);
   return consumed;
