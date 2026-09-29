@@ -118,6 +118,15 @@ export type BestiaryConfig = NonNullable<Catalogue['bestiary']>;
  * contador que nunca desce —, então a tela não soma nada: cada mensagem substitui a anterior.
  */
 export type BestiaryCounts = Readonly<S2CProps<'bestiary'>['counts']>;
+/** Um Charm do catálogo (M39-02, #602, ADR 0053 d.3): custo, chance e categoria por tier. */
+export type CharmDefinition = Catalogue['charms'][number];
+/**
+ * A economia de Charms do personagem (M39-02, #602, ADR 0052 d.1): o registro CRU que o
+ * servidor manda — pontos/echoes gastos, tier de cada charm e as atribuições por monstro. A
+ * tela deriva ganho/disponível cruzando com `CharmDefinition`/`BestiaryCounts`, do mesmo jeito
+ * que já deriva o bônus de XP do Bestiário (`bestiary-progress.ts`).
+ */
+export type CharmsRegister = Readonly<S2CProps<'charms'>>;
 /** As sete bênçãos e o preço por level (#570). Ausente do catálogo: este servidor não as tem. */
 export type BlessingsConfig = NonNullable<Catalogue['blessings']>;
 export type BlessingDefinition = BlessingsConfig['list'][number];
@@ -298,6 +307,11 @@ export interface HudState {
    */
   readonly bestiary: BestiaryCounts | null;
   /**
+   * A economia de Charms (M39-02, #602). `null` até chegar — o primeiro segundo de toda
+   * conexão, ou um nó anterior a esta issue. SUBSTITUI: é o registro inteiro, não um delta.
+   */
+  readonly charms: CharmsRegister | null;
+  /**
    * As sete bênçãos PvE (#570, ADR 0052): o BITMASK — um bit por `order` do catálogo
    * (`catalogue.blessings.list`), nunca uma lista de nomes (invariante 6: a tela resolve o
    * nome pelo catálogo, o servidor só manda o número). `0` até o attach/enter responder — é
@@ -378,6 +392,7 @@ export const INITIAL_HUD: HudState = {
   slotStates: {},
   slotResults: {},
   bestiary: null,
+  charms: null,
   blessings: 0,
   party: null,
   partyBag: null,

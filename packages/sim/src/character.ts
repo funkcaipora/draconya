@@ -9,6 +9,8 @@ import { INITIAL_ATTACK_PRACTICE, isInitialAttackPractice } from './combat/attac
 import type { AttackPracticeState } from './combat/attack-practice.js';
 import { Bestiary } from './bestiary.js';
 import type { BestiaryState } from './bestiary.js';
+import { Charms } from './charms.js';
+import type { CharmsState } from './charms.js';
 import { Conditions } from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import { Cooldowns } from './cooldown.js';
@@ -113,6 +115,12 @@ export interface CharacterState {
    * o `SNAPSHOT_FORMAT_VERSION` não precisou subir (DT-06), exatamente como `skills`.
    */
   readonly bestiary?: BestiaryState;
+  /**
+   * A economia de Charms (M39-02, #602, ADR 0052 d.1): pontos/echoes gastos, tier de cada
+   * charm e as atribuições por monstro. Ausente é personagem anterior a esta issue, ou que
+   * nunca gastou um ponto de Charm — a mesma degradação de `bestiary`.
+   */
+  readonly charms?: CharmsState;
   /**
    * Quanto ele aguenta carregar (§21.5). Vem da tabela de progressão, como `maxHealth`.
    *
@@ -360,6 +368,8 @@ export class CharacterRuntime {
   readonly skills: Skills;
   /** Mutado no lugar a cada abate recompensado — ver `Bestiary.record`. */
   readonly bestiary: Bestiary;
+  /** Mutado no lugar a cada intenção de Charm aceita — ver `Charms.unlock`/`assign`/`remove`. */
+  readonly charms: Charms;
   capacity: number;
   /** Mutado ao equipar e ao receber item. Só a sessão dona escreve (invariante 9). */
   readonly inventory: Inventory;
@@ -440,6 +450,7 @@ export class CharacterRuntime {
     this.speed = state.speed ?? 0;
     this.skills = Skills.fromState(state.skills);
     this.bestiary = Bestiary.fromState(state.bestiary);
+    this.charms = Charms.fromState(state.charms);
     this.capacity = state.capacity ?? 0;
     this.inventory = Inventory.fromState(state.inventory);
     this.lootSeq = state.lootSeq ?? 0;
@@ -652,6 +663,7 @@ export class CharacterRuntime {
       alive: this.alive,
       skills: this.skills.getState(),
       bestiary: this.bestiary.getState(),
+      charms: this.charms.getState(),
       capacity: this.capacity,
       inventory: this.inventory.getState(),
       lootSeq: this.lootSeq,

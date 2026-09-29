@@ -157,6 +157,31 @@ export const CLIENT_TO_SERVER = {
    * 30: o 29 é do `promote-vocation` (#566).
    */
   'buy-blessing': 30,
+  /**
+   * Desbloquear o próximo tier de um Charm (M39-02, #602; ADR 0052 d.2, ADR 0053 d.3).
+   * INTENÇÃO: o cliente diz QUAL charm; quem decide se os pontos/echoes derivados do Bestiário
+   * bastam é o servidor (invariante 4). Tratada pela sessão de Cidade E pela hunt — sem
+   * rolagem, o mesmo caminho aceita as duas (ADR 0052 d.4). Sucesso é `charms` reenviado;
+   * recusa é `system-message`.
+   *
+   * 31: o 30 é do `buy-blessing` (#570).
+   */
+  'charm-unlock': 31,
+  /**
+   * Atribuir um Charm desbloqueado a um monstro (ADR 0053 d.4). INTENÇÃO: `monsterId` é o id de
+   * CONTEÚDO do bestiário, não uma criatura da hunt — Charms se gerem de qualquer lugar
+   * (ADR 0052 d.4), inclusive olhando o Cyclopedia fora de sessão nenhuma de combate.
+   *
+   * 32: o 31 é do `charm-unlock`.
+   */
+  'charm-assign': 32,
+  /**
+   * Remover a atribuição de um Charm (ADR 0053 d.4): custa `level × 100` gold pelo ledger
+   * (invariante 10) — o servidor debita, nunca o cliente informa quanto pagou.
+   *
+   * 33: o 32 é do `charm-assign`.
+   */
+  'charm-remove': 33,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -381,6 +406,17 @@ export const SERVER_TO_CLIENT = {
    * 43: o 42 é do `field-stage-change` (#560).
    */
   blessings: 43,
+  /**
+   * A economia de Charms do personagem (M39-02, #602, ADR 0052 d.1): pontos/echoes gastos,
+   * tier de cada charm e as atribuições por monstro — o registro cru, como `bestiary` manda os
+   * abates crus. O que cada charm CUSTA e RENDE é do `catalogue` (fixado na sessão, invariante
+   * 7); o cliente deriva ganho/disponível do mesmo jeito que já deriva o bônus de XP do
+   * Bestiário (`bestiary-progress.ts`). Sai no attach e sempre que uma intenção de Charm muda o
+   * registro.
+   *
+   * 44: o 43 é do `blessings` (#570).
+   */
+  charms: 44,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

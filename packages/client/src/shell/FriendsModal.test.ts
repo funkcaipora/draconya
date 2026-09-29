@@ -27,7 +27,7 @@ const catalogue: Catalogue = {
   vocations: [
     { id: 'paladin', name: 'Paladino', healthPerLevel: 10, manaPerLevel: 15, capacityPerLevel: 20, startingWeaponItemId: 'bow' },
   ],
-  vocationLevel: 8,
+  charms: [], vocationLevel: 8,
 };
 
 const friend = (over: Partial<FriendView> = {}): FriendView => ({

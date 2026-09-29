@@ -16,7 +16,7 @@ const catalogue = (): Catalogue => ({
   hunts: [],
   monsters: [],
   vocations: [],
-  vocationLevel: 0,
+  charms: [], vocationLevel: 0,
   items: [
     { id: 'life-ring', name: 'Life Ring', appearanceId: 1, weight: 1, slot: 'finger', twoHanded: false, kind: 'ring' },
     { id: 'energy-ring', name: 'Energy Ring', appearanceId: 2, weight: 1, slot: 'finger', twoHanded: false, kind: 'ring' },

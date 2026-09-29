@@ -3,12 +3,16 @@
 // apresentação local sobre `catalogue` e `bestiary`, sem mensagem ao servidor.
 
 import { useMemo, useState } from 'react';
-import type { BestiaryConfig, BestiaryCounts, ItemDefinition, MonsterListing } from '../state/hud.js';
+import { sendIntent } from '../net/current.js';
+import type {
+  BestiaryConfig, BestiaryCounts, CharmDefinition, CharmsRegister, ItemDefinition, MonsterListing,
+} from '../state/hud.js';
 import { useHudSlice } from '../state/useSlice.js';
 import {
   bestiaryStageOf, bonusPercent, charmPointsEarned, progressOf,
 } from './bestiary-progress.js';
 import type { BestiaryCharmThresholds, BestiaryProgress, BestiaryStage } from './bestiary-progress.js';
+import { charmPointsAvailable, echoesAvailable, nextTierCost } from './charms-progress.js';
 import { SLOT_TEXT } from './EquipmentPanel.js';
 import { ItemSprite } from './ItemSprite.js';
 import { Badge } from './ui/Badge.js';
@@ -28,7 +32,7 @@ const collator = new Intl.Collator('pt-BR');
 const count = (value: number): string => integer.format(value);
 const bonusText = (value: number): string => `+${percentFmt.format(value)} %`;
 
-export type CyclopediaTab = 'Itens' | 'Bestiary';
+export type CyclopediaTab = 'Itens' | 'Bestiary' | 'Charms';
 export type BestiarySort = 'progress' | 'name' | 'kills';
 
 const SORT_OPTIONS: ReadonlyArray<{ value: BestiarySort; label: string }> = [
@@ -322,14 +326,129 @@ export function itemsFooterNote(items: readonly ItemDefinition[], query: string)
   return `${count(visible)} de ${count(total)} itens`;
 }
 
+// A economia de Charms (M39-02, #602, ADR 0052/0053): terceira aba do Cyclopedia. INTENÇÃO
+// (invariante 4) — cada botão manda `charm-unlock`/`charm-assign`/`charm-remove`, e o servidor
+// decide (custo, slot, ficha completa); a recusa vira `system-message`, como o resto do kit. A
+// tela nunca calcula se algo é aceito, só o que já foi pago e o que falta.
+
+const CHARM_CATEGORY_TEXT: Record<CharmDefinition['category'], string> = { major: 'Major', minor: 'Minor' };
+const CHARM_TYPE_TEXT: Record<CharmDefinition['type'], string> = {
+  offensive: 'Ofensivo', defensive: 'Defensivo', passive: 'Passivo',
+};
+
+function CharmRow({ charm, register, monsters }: {
+  charm: CharmDefinition; register: CharmsRegister; monsters: readonly MonsterListing[];
+}) {
+  const tier = (register.tiers[charm.id] ?? 0) as 0 | 1 | 2 | 3;
+  const assignedTo = register.assignments[charm.id];
+  const cost = nextTierCost(charm, tier);
+  const [target, setTarget] = useState('');
+  const monsterOptions = monsters.map((monster) => ({ value: monster.id, label: monster.name }));
+
+  return (
+    <article className="cyclopedia-modal-charm-row">
+      <span className="cyclopedia-modal-charm-name">
+        <b>{charm.name}</b>
+        <Badge tone={charm.category === 'major' ? 'gold' : 'muted'} dot={false}>
+          {CHARM_CATEGORY_TEXT[charm.category]}
+        </Badge>
+        <Badge tone="muted" dot={false}>{CHARM_TYPE_TEXT[charm.type]}</Badge>
+      </span>
+      <span className="cyclopedia-modal-charm-tier">{`Tier ${String(tier)}/3`}</span>
+      <span className="cyclopedia-modal-charm-target">
+        {assignedTo === undefined ? 'Não atribuído' : `Em: ${monsters.find((m) => m.id === assignedTo)?.name ?? assignedTo}`}
+      </span>
+      <span className="cyclopedia-modal-charm-actions">
+        {cost !== null && (
+          <Button variant="secondary" size="sm"
+            onClick={() => { sendIntent({ type: 'charm-unlock', charmId: charm.id }); }}
+          >
+            {`Desbloquear (${String(cost)} ${charm.category === 'major' ? 'pts' : 'echoes'})`}
+          </Button>
+        )}
+        {tier > 0 && (
+          <>
+            <Select
+              options={[{ value: '', label: 'Escolher monstro…' }, ...monsterOptions]}
+              value={target}
+              size="sm"
+              onChange={(value) => { setTarget(value); }}
+            />
+            <Button
+              variant="secondary" size="sm" disabled={target === ''}
+              onClick={() => {
+                if (target === '') return;
+                sendIntent({ type: 'charm-assign', charmId: charm.id, monsterId: target });
+              }}
+            >
+              Atribuir
+            </Button>
+          </>
+        )}
+        {assignedTo !== undefined && (
+          <Button variant="secondary" size="sm"
+            onClick={() => { sendIntent({ type: 'charm-remove', charmId: charm.id }); }}
+          >
+            Remover
+          </Button>
+        )}
+      </span>
+    </article>
+  );
+}
+
+function CharmsTab({ charms, register, monsters, counts }: {
+  charms: readonly CharmDefinition[]; register: CharmsRegister; monsters: readonly MonsterListing[];
+  counts: BestiaryCounts;
+}) {
+  const entries: Record<string, BestiaryCharmThresholds> = {};
+  for (const monster of monsters) {
+    if (monster.bestiary !== undefined) entries[monster.id] = monster.bestiary;
+  }
+  const pointsAvailable = charmPointsAvailable(counts, entries, register.pointsSpent);
+  const echoesLeft = echoesAvailable(register.tiers, charms, register.echoesSpent);
+  const assignedCount = Object.keys(register.assignments).length;
+
+  if (charms.length === 0) {
+    return <p className="cyclopedia-modal-empty">Este servidor não tem Charms.</p>;
+  }
+  return (
+    <div className="cyclopedia-modal-body">
+      <div className="cyclopedia-modal-sidebar">
+        <section className="cyclopedia-modal-progress">
+          <Kicker tone="muted">Economia de Charms</Kicker>
+          <span className="cyclopedia-modal-progress-note">
+            {'Pontos disponíveis: '}<b>{count(pointsAvailable)}</b>
+          </span>
+          <span className="cyclopedia-modal-progress-note">
+            {'Minor Charm Echoes: '}<b>{count(echoesLeft)}</b>
+          </span>
+          <span className="cyclopedia-modal-progress-note">
+            {'Atribuídos: '}<b>{count(assignedCount)}</b>
+          </span>
+        </section>
+      </div>
+      <div className="cyclopedia-modal-main">
+        <div className="cyclopedia-modal-charm-list">
+          {charms.map((charm) => (
+            <CharmRow key={charm.id} charm={charm} register={register} monsters={monsters} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CyclopediaModal({ onClose, initialTab }: { onClose: () => void; initialTab?: CyclopediaTab }) {
   const catalogue = useHudSlice((state) => state.catalogue);
   const counts = useHudSlice((state) => state.bestiary);
+  const charmsRegister = useHudSlice((state) => state.charms);
   const [tab, setTab] = useState<CyclopediaTab>(initialTab ?? 'Bestiary');
   const [query, setQuery] = useState('');
 
   const monsters = catalogue?.monsters ?? [];
   const items = catalogue?.items ?? [];
+  const charms = catalogue?.charms ?? [];
   const config = catalogue?.bestiary ?? null;
   // Entre catálogo e `bestiary` do attach, ausência significa zero — a mesma convenção da tela
   // anterior, não uma terceira tela intermediária.
@@ -346,11 +465,16 @@ export function CyclopediaModal({ onClose, initialTab }: { onClose: () => void; 
     : bonus === null
       ? `${count(monsters.length)} monstros no Bestiário`
       : `Bônus do Bestiário: ${bonusText(bonus)} de experiência (${count(reached)} / ${count(total)} marcos)`;
+  const charmsFooterNote = charms.length === 0
+    ? 'Este servidor não tem Charms.'
+    : `${count(charms.length)} Charms no catálogo`;
   const footerNote = catalogue === null
     ? 'Carregando…'
     : tab === 'Itens'
       ? itemsFooterNote(items, query)
-      : bestiaryFooterNote;
+      : tab === 'Charms'
+        ? charmsFooterNote
+        : bestiaryFooterNote;
 
   return (
     <Modal
@@ -380,16 +504,23 @@ export function CyclopediaModal({ onClose, initialTab }: { onClose: () => void; 
               onChange={(event) => { setQuery(event.target.value); }}
             />
             <Tabs
-              items={['Itens', 'Bestiary']}
+              items={['Itens', 'Bestiary', 'Charms']}
               value={tab}
               className="cyclopedia-modal-tabs"
               onChange={(value) => { setTab(value as CyclopediaTab); }}
             />
-            {tab === 'Itens'
-              ? <ItemsTab items={items} query={query} />
-              : (monsters.length === 0
-                ? <p className="cyclopedia-modal-empty">Este servidor não tem Bestiário.</p>
-                : <BestiaryTab monsters={monsters} counts={known} config={config} query={query} />)}
+            {tab === 'Itens' && <ItemsTab items={items} query={query} />}
+            {tab === 'Bestiary' && (monsters.length === 0
+              ? <p className="cyclopedia-modal-empty">Este servidor não tem Bestiário.</p>
+              : <BestiaryTab monsters={monsters} counts={known} config={config} query={query} />)}
+            {tab === 'Charms' && (
+              <CharmsTab
+                charms={charms}
+                register={charmsRegister ?? { pointsSpent: 0, echoesSpent: 0, tiers: {}, assignments: {} }}
+                monsters={monsters}
+                counts={known}
+              />
+            )}
           </>
         )}
     </Modal>

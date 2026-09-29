@@ -66,6 +66,7 @@ class MemoryRepository implements GameRepository {
       capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: now,
       state: 'city', sessionId: null, botConfig: initial.botConfig ?? null, skills: {},
       outfitColors: null, bestiary: null, ammo: null, supplyStock: null, ammunitionStock: null,
+      charms: null,
       fedMs: 0,
       blessings: 0,
       createdAt: now,

@@ -19,11 +19,12 @@ import {
   packSchema,
   blessingSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
-  bestiarySchema, boostedSchema, itemSchema, partySchema, skillSchema, spellSchema, staminaSchema,
-  supplySchema, tilemapSchema, vocationSchema, weaponFamilySchema,
+  bestiarySchema, boostedSchema, charmSchema, itemSchema, partySchema, skillSchema, spellSchema,
+  staminaSchema, supplySchema, tilemapSchema, vocationSchema, weaponFamilySchema,
 } from './schemas.js';
 import type {
-  Ammunition, AmmunitionDefinition, Appearances, Bestiary, Blessing, Boosted, BotLimits, Combat, CompiledMitigation,
+  Ammunition, AmmunitionDefinition, Appearances, Bestiary, Blessing, Boosted, BotLimits, Charm,
+  Combat, CompiledMitigation,
   CompiledReflect, DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
   MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Spell, Stamina, Supply,
   Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
@@ -55,6 +56,13 @@ export interface Content {
    * não fala de progressão permanente. O conteúdo REAL o tem, e `load.test.ts` prende.
    */
   readonly bestiary?: Bestiary;
+  /**
+   * O catálogo dos 25 Charms do Canary (M39-02, #602; ADR 0053 d.3): `content/data/charms/
+   * generated/charms.json`, chave `charmId` (o slug). Vazio no conteúdo de teste que não fala
+   * de Charms — a economia (`@draconya/sim/charms.ts`) trata catálogo ausente como "nenhum
+   * charm existe", igual a `bestiary` ausente.
+   */
+  readonly charms: ReadonlyMap<string, Charm>;
   /**
    * A Boosted Creature diária (M42, #615, ADR 0054 decisão 7): a hora de virada. Opcional —
    * sem ela o `jobs` não sorteia nada, e nenhuma hunt aplica o bônus. É o conteúdo de teste que
@@ -134,6 +142,7 @@ export interface RawContent {
   readonly stamina?: readonly unknown[];
   readonly party?: readonly unknown[];
   readonly bestiary?: readonly unknown[];
+  readonly charms?: readonly unknown[];
   readonly boosted?: readonly unknown[];
   readonly bot?: readonly unknown[];
   readonly spells?: readonly unknown[];
@@ -590,6 +599,10 @@ export function buildContent(raw: RawContent): Content {
   const staminas = parseAll('stamina', raw.stamina ?? [], staminaSchema, problems);
   const stamina = staminas.get('baseline');
   const bestiary = parseAll('bestiary', raw.bestiary ?? [], bestiarySchema, problems).get('baseline');
+  // O catálogo de Charms (M39-02, #602): uma entidade por charm, como `spells`/`items` — não
+  // um documento `baseline` único como `bestiary` (aqui não há "marco global", só 25 fichas
+  // independentes, cada uma com o próprio id).
+  const charms = parseAll('charm', raw.charms ?? [], charmSchema, problems);
   const boosted = parseAll('boosted', raw.boosted ?? [], boostedSchema, problems).get('baseline');
   // Ausente é ERRO pela mesma razão dos outros dois: a stamina é o TETO DE SIMULAÇÃO do
   // projeto (ADR 0001), e um default em código faria o número que sustenta a projeção de
@@ -1506,6 +1519,7 @@ export function buildContent(raw: RawContent): Content {
     // `boosted` não tem `_open`: a hora de virada não é um número disputado do PRD, é
     // configuração de operação — não pede uma seção de `docs/product` para justificar.
     ...openOf('spell', spells),
+    ...openOf('charm', charms),
     ...openOf('supply', supplies),
     ...openOf('blessing', blessings),
     ...openOf('skill', skills),
@@ -1540,6 +1554,7 @@ export function buildContent(raw: RawContent): Content {
     stamina: stamina as Stamina,
     party: party as PartyConfig,
     ...(bestiary === undefined ? {} : { bestiary }),
+    charms,
     ...(boosted === undefined ? {} : { boosted }),
     maps,
     routes,

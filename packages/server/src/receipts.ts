@@ -18,8 +18,8 @@
 
 import type { ChainableCommander, Redis } from 'ioredis';
 import type {
-  Aggregates, BestiaryState, CharacterStorageMap, EndReason, ItemInstanceOverlay, NotableEvent,
-  SkillsState,
+  Aggregates, BestiaryState, CharacterStorageMap, CharmsState, EndReason, ItemInstanceOverlay,
+  NotableEvent, SkillsState,
 } from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
 
@@ -64,6 +64,13 @@ export interface SessionReceipt {
    * banco daria o mesmo número, com uma chance a mais de contar duas vezes.
    */
   readonly bestiary?: BestiaryState;
+  /**
+   * A economia de Charms (M39-02, #602, ADR 0052 d.1): pontos/echoes gastos, tier de cada
+   * charm e as atribuições. ABSOLUTA e ÚLTIMA-ESCRITA-VENCE, como `ammo`/`equipment` — NÃO
+   * fundida pelo maior como o Bestiário: não há aqui um contador externo monotônico, é o
+   * estado final da sessão dona.
+   */
+  readonly charms?: CharmsState;
   /**
    * A munição escolhida por família (#152): `{ arrow: 'sniper-arrow' }`. ABSOLUTA e
    * última-escrita-vence: é preferência do jogador, não progresso — um extrato antigo fora de
@@ -356,6 +363,10 @@ function parseReceipt(raw: string): SessionReceipt | null {
     // linha existir é a mesma que a do comentário delas.
     ...(typeof value['bestiary'] === 'object' && value['bestiary'] !== null
       ? { bestiary: value['bestiary'] as BestiaryState }
+      : {}),
+    // A economia de Charms (M39-02, #602): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['charms'] === 'object' && value['charms'] !== null
+      ? { charms: value['charms'] as CharmsState }
       : {}),
     // A munição (#152): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['ammo'] === 'object' && value['ammo'] !== null

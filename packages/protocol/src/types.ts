@@ -386,6 +386,20 @@ export const C2S_SCHEMAS = {
    * (`content.blessings`); preço, saldo e "já tem esta bênção" são do servidor (invariante 4).
    */
   'buy-blessing': z.object({ blessingId: z.string().min(1) }),
+  /**
+   * Desbloquear o próximo tier de um Charm (M39-02, #602; ADR 0052 d.2/ADR 0053 d.3).
+   * INTENÇÃO: só o id do charm; custo, elegibilidade e o próprio saldo derivado do Bestiário
+   * são do servidor (invariante 4). Sucesso é `charms` reenviado; recusa é `system-message`.
+   */
+  'charm-unlock': z.object({ charmId: z.string().min(1) }),
+  /**
+   * Atribuir um Charm já desbloqueado a um monstro do bestiário (ADR 0053 d.4). `monsterId` é
+   * o id de CONTEÚDO (o mesmo de `catalogue.monsters[].id`), nunca uma criatura viva — Charms
+   * atacam por RAÇA, não por instância.
+   */
+  'charm-assign': z.object({ charmId: z.string().min(1), monsterId: z.string().min(1) }),
+  /** Remover a atribuição de um Charm (ADR 0053 d.4): o custo em gold é do servidor. */
+  'charm-remove': z.object({ charmId: z.string().min(1) }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */
@@ -939,6 +953,21 @@ export const S2C_SCHEMAS = {
       xpBonusPercentPerMilestone: z.number().nonnegative(),
     }).optional(),
     /**
+     * Os 25 Charms do Canary (M39-02, #602, ADR 0053 d.3): nome, categoria, tipo, elemento e o
+     * custo/chance por tier — o que a tela do Cyclopedia precisa para mostrar preço e efeito
+     * ANTES de desbloquear. `default([])`: nó anterior a esta issue.
+     */
+    charms: z.array(z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+      category: z.enum(['major', 'minor']),
+      type: z.enum(['offensive', 'defensive', 'passive']),
+      damageType: z.string().optional(),
+      percent: z.number().optional(),
+      chance: z.tuple([z.number(), z.number(), z.number()]),
+      points: z.tuple([z.number().int().positive(), z.number().int().positive(), z.number().int().positive()]),
+    })).default([]),
+    /**
      * O que a UI do bot pode oferecer (AB-09, ADR 0032 d.1/d.9).
      *
      * **A tela NÃO tem lista de opções em código.** O que existe é o que este pacote diz que
@@ -1390,6 +1419,19 @@ export const S2C_SCHEMAS = {
    * catálogo (`catalogue.blessings`, invariante 6). Só para o dono, como `slot-state`.
    */
   blessings: z.object({ mask: z.number().int().nonnegative() }),
+  /**
+   * A economia de Charms do personagem (M39-02, #602, ADR 0052 d.1): o registro CRU, como
+   * `bestiary` manda os abates crus — o cliente deriva ganho/disponível cruzando com
+   * `catalogue.charms`/`catalogue.bestiary`, do mesmo jeito que já deriva o bônus de XP.
+   */
+  charms: z.object({
+    pointsSpent: z.number().int().nonnegative(),
+    echoesSpent: z.number().int().nonnegative(),
+    /** `charmId` → tier atual (0 = nunca desbloqueado, 3 = máximo). */
+    tiers: z.record(z.string().min(1), z.number().int().min(0).max(3)),
+    /** `charmId` → `monsterId` do alvo atribuído. */
+    assignments: z.record(z.string().min(1), z.string().min(1)),
+  }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;

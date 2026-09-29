@@ -34,7 +34,7 @@ const hunts: HuntListing[] = [
 const catalogue: Catalogue = {
   hunts, monsters: [],
   bot: { vocabularyVersion: 1, slots: {}, spells: [], supplies: [] },
-  items: [], ammunition: [], vocations: [], vocationLevel: 8,
+  items: [], ammunition: [], vocations: [], charms: [], vocationLevel: 8,
 };
 
 const forming = (over: Partial<PartyView> = {}): PartyView => ({

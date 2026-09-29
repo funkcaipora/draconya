@@ -50,7 +50,7 @@ const catalogue: Catalogue = {
   items: [cheeseItem, goldCoinItem],
   ammunition: [],
   vocations: [],
-  vocationLevel: 8,
+  charms: [], vocationLevel: 8,
 };
 
 async function render(props: { open: boolean; onClose?: () => void }): Promise<string> {

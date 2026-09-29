@@ -14,7 +14,7 @@ const catalogue = (over: Partial<Catalogue> = {}): Catalogue => ({
   items: [],
   ammunition: [],
   vocations: [],
-  vocationLevel: 0,
+  charms: [], vocationLevel: 0,
   bot: {
     vocabularyVersion: 2,
     setCount: 4,

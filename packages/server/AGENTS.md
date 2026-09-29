@@ -497,6 +497,71 @@ não se compara nada; o `sim` conta de qualquer jeito (invariante 3). O catálog
 `monsters: [{ id, name }]` em ordem de id e `bestiary: { milestones, xpBonusPercentPerMilestone }`
 só quando o conteúdo tem — o de teste não tem, e a chave fica AUSENTE, não `undefined`.
 
+## O padrão do endgame (ADR 0052): registro por sistema, intenção sem endpoint `api` (#602)
+
+Sete milestones (M38–M44) trazem progressão nova — Charms, Imbuements, Wheel of Destiny, Prey,
+Task Hunting, Concoctions, Forja, Loyalty, Bosstiary, magia comprada, treino — e o ADR 0052
+decidiu o caminho ÚNICO para todos, para as 36 issues não inventarem 36 formas de persistir e
+cobrar. **#602 (Charms) foi a primeira a materializar o padrão**, e é o modelo a copiar.
+
+**1. Estado é um registro `jsonb` por sistema, no mesmo padrão de `bestiary`.** Uma coluna nova
+em `characters` (`charms`, `imbuements`, `prey`, …), nulável, sem CHECK — os ids que ela referencia
+são conteúdo, versionado à parte, e um id fora do catálogo não resolve nada, nunca vira linha
+ilegível. O registro carrega `version` própria (como `botConfig.version`), para migrar sem coluna
+nova depois. Ele percorre EXATAMENTE o caminho de `bestiary`/`ammo`/`equipment` (ver a seção
+acima): lido INTEIRO na emissão do ticket (`api/tickets.ts`, validado por uma `isXState` em
+`tickets.ts` — a mesma régua no `consume`), posto no `CharacterState` inicial
+(`game/sessions.ts`), mutado só pela sessão dona em memória (`CharacterRuntime`, invariante 9),
+saído INTEIRO no extrato (`SessionReceipt`, `parseReceipt` é lista de PERMISSÃO — campo que não
+entra nela some no caminho de volta sem erro, `receipts.test.ts`/`*.postgres.test.ts` são quem
+pega a omissão) e escrito pela transação do ledger (`jobs/ledger.ts`) — **ÚLTIMA ESCRITA VENCE**,
+não fusão por máximo como o Bestiário: a diferença é que aqui não há um contador externo
+monotônico para fundir, é o estado final de UMA sessão dona (invariante 8 garante que só existe
+uma por vez). Drenagem irrestaurável (`snapshot-settlement.ts`) e o extrato de estado durável do
+shard (`#saveDurableReceipt`/`#creditUnrestorable`, `game/host.ts`) levam o registro também — sem
+isso, uma intenção aceita na Cidade sumiria no logout, porque a Cidade não gera `Receipt` de
+progresso (ADR 0023).
+
+**2. Serviço de Cidade é opcode C2S, NUNCA rota `api`.** O personagem numa sessão hospedada tem
+gold, inventário e o registro quentes no `CharacterRuntime`; uma rota HTTP escrevendo a linha do
+Postgres por baixo seria o segundo escritor que o invariante 9 proíbe. A intenção (`charm-unlock`,
+`imbue`, `wheel-allocate`, …) é tratada em `game/host.ts` como `equip`/`select-ammo` — **direto no
+`switch` do `#handle`, SEM passar pelo `Ruleset`** —, porque ela vale em QUALQUER sessão (Cidade
+e hunt, quando não tem rolagem): um `#requestX` que resolve o catálogo em `this.#options`, chama
+o método puro do `sim` (`character.charms.unlock(...)`), marca `hosted.dirty` (para o extrato do
+shard levar) e manda de volta o estado novo — nunca uma mensagem "sucesso" separada. Recusa vira
+`system-message` com um mapa `Record<Reason, string>` (`CHARM_UNLOCK_REFUSAL` e companhia), como
+toda recusa do kit (FUN-73).
+
+**3. Gold pelos canais que já existem, nunca um novo.** Debitar (remover um Charm, comprar
+Imbuement) é `character.goldDelta -= custo` MAIS `hosted.session.credit(id, 'goldSpent', custo)`
+quando a sessão não é compartilhada (`ruleset.shared !== true`) — a mesma regra de
+`#requestSellItems` para o gold entrar na sessão certa: hunt privada credita no agregado, Cidade
+(shard) só no `goldDelta`, drenado pelo extrato de estado durável. **Confira o saldo ANTES de
+mexer no `sim`**: `character.gold + character.goldDelta >= custo`, e só then chama o método que
+aplica o efeito — nunca aplicar e desfazer se não pagar.
+
+**4. Catálogo e ficha de referência entram como MAPAS, nunca o `Content` inteiro** — o mesmo
+`itemCatalog: content.items` de sempre. `main.ts` deriva o que o `sim` precisa
+(`charmBestiaryEntries`, só `toKill`/`charmsPoints` por monstro) e passa pelo
+`SessionHostOptions`/`GameDependencies` (`game/host.ts`/`game/server.ts`) — o host não precisa
+de balanceamento inteiro para decidir se um Charm cabe.
+
+**5. Premium por sessão, quando o serviço depende dele fora de hunt/party.** A hunt já tem
+`premiumByCharacter` no ruleset; a Cidade não tinha NENHUM lugar para isso antes do #602, e
+Charms se gerem de qualquer sessão (ADR 0052 d.4). `#premiumByCharacter` (`Map<string, boolean>`
+em `SessionHost`, ao lado de `#nameByCharacter`/`#colorsByCharacter`) é o precedente: populado do
+`initialCharacter.premium` do ticket em TODO ponto de entrada (solo, late joiner, party), apagado
+no `release`. Um sistema novo que precise de Premium fora de hunt lê daqui, não reinventa.
+
+**6. Migração é aditiva, número é o PRÓXIMO LIVRE — confira `tibia-parity` E as PRs/branches
+abertas** (várias issues do M38–M44 rodam em paralelo, cada uma achando "o próximo" na hora em
+que começou). O mesmo vale para opcode: `protocol/src/messages.ts` é a fonte única, e mais de uma
+branch vai reivindicar o mesmo número até alguém mesclar — o merge é quem resolve a colisão.
+
+Issues seguintes (Imbuements #605–#607, Wheel #608–#611, Prey #612–#615, Forja #616–#618, …):
+copie esta seção trocando `charms` pelo nome do sistema, e as seis regras continuam valendo.
+
 ## A munição é abstrata e escolhida por família (#152, #420)
 
 A munição é **abstrata** (ADR 0032 decisão 7): a escolha é por família, pelo opcode 14

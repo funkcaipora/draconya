@@ -245,6 +245,11 @@ async function applyProgression(
   // acima — drena dentro da sessão, então o valor final é o único que os dois lados concordam.
   const fedMs = receipt.fedMs === undefined ? {} : { fedMs: receipt.fedMs };
 
+  // A economia de Charms (M39-02, #602, ADR 0052 d.1): ABSOLUTA e última-escrita-vence, como
+  // `ammo`/`equipment` — NÃO fundida pelo maior como o Bestiário: não há aqui um contador
+  // externo monotônico a fundir, é o estado final da sessão dona. Extrato SEM o campo (Cidade
+  // ou nó antigo em deploy) não toca na coluna.
+  const charms = receipt.charms === undefined ? {} : { charms: receipt.charms };
   // As bênçãos (#570, ADR 0052): ABSOLUTAS e última-escrita-vence, NUNCA fundidas pelo maior
   // (ao contrário do Bestiário/skills-antes-do-#569) — bênção DESCE na morte, e "ficar com o
   // maior de cada extrato" ressuscitaria uma bênção recém-consumida se um extrato antigo, fora
@@ -326,6 +331,7 @@ async function applyProgression(
       ...supplyStock,
       ...ammunitionStock,
       ...fedMs,
+      ...charms,
       ...blessings,
       // A vocação (#154, ADR 0026 decisão 1): escrita UMA vez. `coalesce` mantém o que já
       // está na linha — um extrato fora de ordem com outra vocação não sobrescreve.

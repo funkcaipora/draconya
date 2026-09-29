@@ -17,7 +17,7 @@ import { randomBytes } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import { OutfitColors } from '@draconya/protocol';
 import { isCharacterStorageMap } from '@draconya/sim';
-import type { BestiaryState, CharacterStorageMap } from '@draconya/sim';
+import type { BestiaryState, CharacterStorageMap, CharmsState } from '@draconya/sim';
 import type { NodeStatus, SessionDirectory } from './directory.js';
 
 export interface TicketClaim {
@@ -167,6 +167,15 @@ export interface InitialCharacter {
    * é quem nunca setou nada, ou ticket de um `api` antigo: a sessão parte de `{}`.
    */
   readonly storages?: CharacterStorageMap;
+  /**
+   * A economia de Charms (M39-02, #602, ADR 0052 d.1): pontos/echoes gastos, tier de cada
+   * charm e as atribuições por monstro. Entra na sessão, e não só sai dela, porque intenções
+   * de Charm são aceitas em qualquer sessão (Cidade e hunt, ADR 0052 d.4) — sem o registro
+   * de entrada, um `charm-unlock` na primeira hunt do dia partiria sempre de zero. Validado
+   * como o Bestiário/estoque (`isCharmsState`). Ausente é personagem que nunca gastou um
+   * ponto de Charm, ou ticket de um `api` anterior: a sessão parte vazia.
+   */
+  readonly charms?: CharmsState;
   /**
    * Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, lido de `characters.fed_ms`.
    * Entra na sessão, e não só sai dela — sem isto, quem comeu antes de deslogar voltaria em
@@ -658,6 +667,9 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     // Storages (#731): mesma régua do Bestiário/estoque — inteiro seguro, e nunca o `-1` de
     // ausência (`isCharacterStorageMap`, `sim`). Torto vira AUSENTE, nunca ticket recusado.
     ...(isCharacterStorageMap(initial['storages']) ? { storages: initial['storages'] } : {}),
+    // A economia de Charms (M39-02, #602): mesma régua do Bestiário/estoque — forma validada
+    // por inteiro, torto vira AUSENTE, nunca ticket recusado.
+    ...(isCharmsState(initial['charms']) ? { charms: initial['charms'] } : {}),
     // Comida ativa (#726): inteiro seguro não negativo, ou AUSENTE — a mesma régua acima.
     ...(typeof initial['fedMs'] === 'number' && Number.isSafeInteger(initial['fedMs'])
       && initial['fedMs'] >= 0
@@ -717,6 +729,34 @@ export function isBestiaryState(value: unknown): value is BestiaryState {
     && typeof kills === 'number'
     && Number.isSafeInteger(kills)
     && kills >= 0);
+}
+
+/**
+ * A forma de `CharmsState` (M39-02, #602, ADR 0052 d.1): os quatro campos do registro, cada um
+ * conferido por forma — nunca por conteúdo de domínio (isso é `Charms.unlock`/`assign`/`remove`,
+ * no `sim`). Um valor que não bate vira AUSENTE, nunca ticket recusado, pela mesma razão do
+ * Bestiário: a linha é `jsonb` sem CHECK.
+ *
+ * Exportada para o `api` conferir a linha com a MESMA régua que o `consume` usa.
+ */
+export function isCharmsState(value: unknown): value is CharmsState {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record['pointsSpent'] !== 'number' || !Number.isSafeInteger(record['pointsSpent'])
+    || record['pointsSpent'] < 0
+    || typeof record['echoesSpent'] !== 'number' || !Number.isSafeInteger(record['echoesSpent'])
+    || record['echoesSpent'] < 0
+    || typeof record['version'] !== 'number'
+  ) return false;
+  const tiers = record['tiers'];
+  if (typeof tiers !== 'object' || tiers === null || Array.isArray(tiers)) return false;
+  if (!Object.entries(tiers).every(([charmId, tier]) =>
+    charmId.length > 0 && typeof tier === 'number' && [0, 1, 2, 3].includes(tier))) return false;
+  const assignments = record['assignments'];
+  if (typeof assignments !== 'object' || assignments === null || Array.isArray(assignments)) return false;
+  return Object.entries(assignments).every(([charmId, monsterId]) =>
+    charmId.length > 0 && typeof monsterId === 'string' && monsterId.length > 0);
 }
 
 /**

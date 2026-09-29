@@ -116,6 +116,9 @@ export async function settleSnapshotAsReceipt(
     ...(owner?.skills === undefined ? {} : { skills: owner.skills }),
     ...(owner?.bestiary === undefined ? {} : { bestiary: owner.bestiary }),
     ...(owner?.ammo === undefined ? {} : { ammo: owner.ammo }),
+    // A economia de Charms (M39-02, #602, ADR 0052 d.1): ABSOLUTA como `ammo` — sem ela aqui,
+    // um `charm-unlock` aceito antes da queda sumiria junto com o snapshot irrestaurável.
+    ...(owner?.charms === undefined ? {} : { charms: owner.charms }),
     // Estoque de supply/munição do loot (#520), pela mesma razão da munição escolhida.
     // O estoque de supply/munição do loot (#520): NÃO gatear por vazio — `{}` é "esgotado nesta
     // sessão", e omitir a chave deixaria o valor antigo ressuscitar no próximo login. O `?? {}`

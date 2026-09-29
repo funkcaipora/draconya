@@ -58,6 +58,13 @@ export interface CharacterRecord {
   readonly supplyStock: unknown;
   /** O estoque de munição do loot (#520), pela mesma razão do `supplyStock`. */
   readonly ammunitionStock: unknown;
+  /**
+   * A economia de Charms (M39-02, #602), como veio do banco. `unknown` pela mesma razão de
+   * `bestiary`: a forma (`CharmsState`) é do `sim`, e quem a confere é quem monta o ticket.
+   * `null` é personagem que nunca gastou um ponto de Charm. Sem método de escrita: quem
+   * escreve é o ledger, na transação do extrato (ADR 0052 d.1).
+   */
+  readonly charms: unknown;
   /** Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, em milissegundos. `0` é ninguém comeu. */
   readonly fedMs: number;
   /** As sete bênçãos PvE (#570, ADR 0052): BITMASK de `CharacterRuntime.blessings`. `0` é nenhuma. */
@@ -574,6 +581,7 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     ammo: row.ammo,
     supplyStock: row.supplyStock,
     ammunitionStock: row.ammunitionStock,
+    charms: row.charms,
     fedMs: row.fedMs,
     blessings: row.blessings,
     createdAt: row.createdAt,

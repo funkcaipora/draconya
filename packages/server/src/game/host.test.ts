@@ -1,13 +1,13 @@
 import {
   CharacterRuntime, HuntRuleset, PartyFullError, Rng, Session, createHuntSession, statsForLevel, totalXpForLevel,
-  type EndReason, type Ruleset, type SessionSnapshot,
+  type CharmBestiaryEntry, type EndReason, type Ruleset, type SessionSnapshot,
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigSchema, buildContent, compileItem,
   itemSchema, migrateBotConfigV1, placeholderAppearances,
 } from '@draconya/content';
-import type { Ammunition, Appearances, BotConfig, Progression, RawContent, Vocation } from '@draconya/content';
+import type { Ammunition, Appearances, BotConfig, Charm, Progression, RawContent, Vocation } from '@draconya/content';
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import { createLogger } from '../log.js';
 import type { SessionDirectory } from '../directory.js';
@@ -78,17 +78,20 @@ function buildHost(
     loadBotConfig?: NonNullable<SessionHostOptions['loadBotConfig']>;
     itemCatalog?: NonNullable<SessionHostOptions['itemCatalog']>;
     ammunitionCatalog?: NonNullable<SessionHostOptions['ammunitionCatalog']>;
+    charmCatalog?: NonNullable<SessionHostOptions['charmCatalog']>;
+    charmBestiaryEntries?: NonNullable<SessionHostOptions['charmBestiaryEntries']>;
     vocations?: NonNullable<SessionHostOptions['vocations']>;
     vocationLevel?: number;
     progression?: NonNullable<SessionHostOptions['progression']>;
     saveBotConfig?: NonNullable<SessionHostOptions['saveBotConfig']>;
     level?: number;
+    gold?: number;
   } = {},
 ) {
   const sessions: Session[] = [];
-  // `level` é do PERSONAGEM de teste, não do host: tirar do espalhamento é o que impede
-  // `exactOptionalPropertyTypes` de recusar uma chave que `SessionHostOptions` não tem.
-  const { level, ...hostOptions } = options;
+  // `level`/`gold` são do PERSONAGEM de teste, não do host: tirar do espalhamento é o que
+  // impede `exactOptionalPropertyTypes` de recusar uma chave que `SessionHostOptions` não tem.
+  const { level, gold, ...hostOptions } = options;
   // `loadBotConfig` é a CARGA (ADR 0014) — função separada de `acceptBotConfig`, a EDIÇÃO. Um
   // teste que só configura `acceptBotConfig` (a maioria, escrita antes do #596) ainda precisa
   // do ticket adotar o bot: adapta o mesmo julgador para a forma de carga, com `removed: []` —
@@ -118,7 +121,7 @@ function buildHost(
         id: characterId,
         position: { x: 0, y: 0, z: 7 },
         health: 100, maxHealth: 100, mana: 10, maxMana: 10,
-        level: level ?? 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+        level: level ?? 8, xp: 0, gold: gold ?? 0, goldDelta: 0, alive: true, cooldowns: {},
       }));
       sessions.push(session);
       return session;
@@ -662,11 +665,12 @@ describe('session host', () => {
 
     host.handle(viewer, { type: 'session-attach' });
     expect(socket.frames).toHaveLength(0);
-    // Seis: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
+    // Sete: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
     // e stamina só viajam na segunda —, o alvo (`target-changed`, #470), as condições ativas
-    // (`active-conditions`, #341), o Bestiário (`bestiary`, FUN-113) e as bênçãos (`blessings`,
-    // #570, ADR 0052). Os seis na FILA, nenhum no fio.
-    expect(viewer.queued).toBe(6);
+    // (`active-conditions`, #341), o Bestiário (`bestiary`, FUN-113), as bênçãos (`blessings`,
+    // #570, ADR 0052) e a economia de Charms (`charms`, M39-02, #602). Os sete na FILA, nenhum
+    // no fio.
+    expect(viewer.queued).toBe(7);
 
     host.flush();
     const state = socket.received().find((m) => m.type === 'session-state');
@@ -4574,6 +4578,118 @@ describe('a munição escolhida pelo socket (#152, ADR 0026 decisão 4)', () => 
 
     expect(hero.ammo.size).toBe(0);
     expect(warnings(socket)).toHaveLength(1);
+  });
+});
+
+describe('a economia de Charms pelo socket (M39-02, #602, ADR 0052/0053)', () => {
+  const WOUND: Charm = {
+    id: 'wound', name: 'Wound', canaryCharmId: 0, category: 'major', type: 'offensive',
+    damageType: 'physical', percent: 5, chance: [5, 10, 11], points: [10, 20, 30],
+  };
+  const charmCatalog = new Map([[WOUND.id, WOUND]]);
+  const RAT_ENTRY: CharmBestiaryEntry = { toKill: 1, charmsPoints: 20 };
+  const WOLF_ENTRY: CharmBestiaryEntry = { toKill: 1_000, charmsPoints: 50 };
+  const charmBestiaryEntries = new Map([['rat', RAT_ENTRY], ['wolf', WOLF_ENTRY]]);
+  const warnings = (socket: FakeSocket) =>
+    socket.received().filter((m) => m.type === 'system-message');
+  const charmsMessages = (socket: FakeSocket) =>
+    socket.received().filter((m): m is S2CMessage & { type: 'charms' } => m.type === 'charms');
+
+  function setUp(gold = 0) {
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, { charmCatalog, charmBestiaryEntries, gold });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    socket.frames.length = 0;
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    // Completa a ficha do rat (toKill: 1) para o unlock ter pontos e o assign aceitar o alvo.
+    hero.bestiary.record('rat');
+    return { host, viewer, socket, hero };
+  }
+
+  it('desbloqueia com pontos derivados do Bestiário, e manda o registro por charms', () => {
+    const { host, viewer, socket, hero } = setUp();
+
+    host.handle(viewer, { type: 'charm-unlock', charmId: 'wound' });
+    host.flush();
+
+    expect(hero.charms.tierOf('wound')).toBe(1);
+    expect(warnings(socket)).toHaveLength(0);
+    const last = charmsMessages(socket).at(-1);
+    expect(last).toMatchObject({ pointsSpent: 10, tiers: { wound: 1 } });
+  });
+
+  it('sem pontos suficientes, recusa com o motivo e não muda nada', () => {
+    // Ficha do rat NUNCA completa (`toKill: 1_000`) — `pointsEarned` é zero, recusa antes de
+    // gastar qualquer coisa.
+    const { ruleset } = countingRuleset();
+    const emptyEntries = new Map([['rat', { toKill: 1_000, charmsPoints: 20 }]]);
+    const { host, sessions } = buildHost(ruleset, { charmCatalog, charmBestiaryEntries: emptyEntries });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+
+    host.handle(viewer, { type: 'charm-unlock', charmId: 'wound' });
+    host.flush();
+
+    expect(hero.charms.tierOf('wound')).toBe(0);
+    const warning = warnings(socket)[0];
+    expect(warning?.type === 'system-message' && warning.text).toContain('pontos');
+  });
+
+  it('atribui a um monstro com a ficha completa, e remove cobrando level × 100 gold', () => {
+    const { host, viewer, socket, hero } = setUp(1_000);
+    host.handle(viewer, { type: 'charm-unlock', charmId: 'wound' });
+    host.flush();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'charm-assign', charmId: 'wound', monsterId: 'rat' });
+    host.flush();
+    expect(hero.charms.assignmentOf('wound')).toBe('rat');
+    expect(warnings(socket)).toHaveLength(0);
+
+    const goldBefore = hero.gold + hero.goldDelta;
+    host.handle(viewer, { type: 'charm-remove', charmId: 'wound' });
+    host.flush();
+
+    expect(hero.charms.assignmentOf('wound')).toBeUndefined();
+    // level 8 (o default de `buildHost`) × 100 = 800.
+    expect(goldBefore - (hero.gold + hero.goldDelta)).toBe(800);
+    expect(warnings(socket)).toHaveLength(0);
+  });
+
+  it('atribuir major a monstro incompleto é recusado com o motivo', () => {
+    // Desbloqueia com os pontos do rat (ficha completa), mas tenta atribuir ao WOLF — cuja
+    // ficha está longe de completa (`toKill: 1_000`, zero abates): a exigência é por ALVO, não
+    // por ter pontos suficientes para desbloquear.
+    const { host, viewer, socket, hero } = setUp();
+    host.handle(viewer, { type: 'charm-unlock', charmId: 'wound' });
+    host.flush();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'charm-assign', charmId: 'wound', monsterId: 'wolf' });
+    host.flush();
+
+    expect(hero.charms.assignmentOf('wound')).toBeUndefined();
+    const warning = warnings(socket)[0];
+    expect(warning?.type === 'system-message' && warning.text).toContain('Bestiário');
+  });
+
+  it('remover sem gold suficiente recusa, e a atribuição fica', () => {
+    const { host, viewer, socket, hero } = setUp(0);
+    host.handle(viewer, { type: 'charm-unlock', charmId: 'wound' });
+    host.handle(viewer, { type: 'charm-assign', charmId: 'wound', monsterId: 'rat' });
+    host.flush();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'charm-remove', charmId: 'wound' });
+    host.flush();
+
+    expect(hero.charms.assignmentOf('wound')).toBe('rat');
+    const warning = warnings(socket)[0];
+    expect(warning?.type === 'system-message' && warning.text).toContain('gold');
   });
 });
 

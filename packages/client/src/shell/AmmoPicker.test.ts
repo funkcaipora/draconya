@@ -16,7 +16,7 @@ const ammunition: Catalogue['ammunition'] = [
   { id: 'bolt', name: 'Bolt', family: 'bolt', attack: 30, price: 2, appearanceId: 3446, requires: {} },
 ];
 const catalogue: Catalogue = {
-  hunts: [], monsters: [], items: [], vocations: [], vocationLevel: 8, ammunition,
+  hunts: [], monsters: [], items: [], vocations: [], charms: [], vocationLevel: 8, ammunition,
   bot: { vocabularyVersion: 1, slots: {}, spells: [], supplies: [] },
 };
 

@@ -293,7 +293,7 @@ describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () 
     const decodedWithIds = decodeS2C(encodeS2C(withIds)) as Array<{ hunts: Array<Record<string, unknown>> }> | null;
     // E `vocations`/`vocationLevel` (#154): sem eles o diálogo da vocação não abre.
     expect(decodedWithIds).toEqual([{
-      ...withIds, monsters: [], vocations: [], vocationLevel: 0,
+      ...withIds, monsters: [], charms: [], vocations: [], vocationLevel: 0,
       hunts: (withIds as unknown as { hunts: Array<Record<string, unknown>> }).hunts.map((hunt) => ({
         ...hunt, difficultyDetails: [], lootDrops: 0, monsters: [], loot: [],
       })),
@@ -394,6 +394,7 @@ describe('the bestiary (FUN-113, §18)', () => {
     const full = {
       ...base,
       monsters: [{ id: 'rat', name: 'Rat' }],
+      charms: [],
       vocations: [],
       vocationLevel: 8,
       bestiary: { milestones: [10_000, 25_000], xpBonusPercentPerMilestone: 1 },
@@ -401,6 +402,7 @@ describe('the bestiary (FUN-113, §18)', () => {
     expect(decodeS2C(encodeS2C(full))).toEqual([full]);
     const decoded = decodeS2C(encodeS2C(base as unknown as S2CMessage)) as Array<Record<string, unknown>> | null;
     expect(decoded?.[0]?.['monsters']).toEqual([]);
+    expect(decoded?.[0]?.['charms']).toEqual([]);
     expect(decoded?.[0]).not.toHaveProperty('bestiary');
   });
 
@@ -530,6 +532,7 @@ describe('the bestiary (FUN-113, §18)', () => {
       },
       items: [], ammunition: [],
       monsters: [],
+      charms: [],
       vocations: [],
       vocationLevel: 8,
     };
@@ -1594,6 +1597,64 @@ describe('fields on the world: field-appear, field-disappear (#561, M31-06)', ()
     expect(withFields.world.fields).toEqual([
       { id: 'fire', tiles: [{ x: 1, y: 2, z: 3 }], appearanceId: 2118 },
     ]);
+  });
+});
+
+describe('Charms (M39-02, #602, ADR 0052/0053)', () => {
+  it('charm-unlock/charm-assign/charm-remove are client-to-server only', () => {
+    for (const name of ['charm-unlock', 'charm-assign', 'charm-remove'] as const) {
+      expect(name in C2S_SCHEMAS).toBe(true);
+      expect(name in S2C_SCHEMAS).toBe(false);
+    }
+    expect('charms' in S2C_SCHEMAS).toBe(true);
+    expect('charms' in C2S_SCHEMAS).toBe(false);
+  });
+
+  it('round trips charm-unlock, charm-assign and charm-remove', () => {
+    const unlock = { type: 'charm-unlock' as const, charmId: 'wound' };
+    expect(decodeC2S(encodeC2S(unlock))).toEqual([unlock]);
+    const assign = { type: 'charm-assign' as const, charmId: 'wound', monsterId: 'rat' };
+    expect(decodeC2S(encodeC2S(assign))).toEqual([assign]);
+    const remove = { type: 'charm-remove' as const, charmId: 'wound' };
+    expect(decodeC2S(encodeC2S(remove))).toEqual([remove]);
+  });
+
+  it('round trips the charms register (pointsSpent, echoesSpent, tiers, assignments)', () => {
+    const message = {
+      type: 'charms' as const,
+      pointsSpent: 240,
+      echoesSpent: 50,
+      tiers: { wound: 1, scavenge: 1 },
+      assignments: { wound: 'rat' },
+    };
+    expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+  });
+
+  it('the catalogue carries the 25 Charms as content fixed to the session, and an older node decodes to an EMPTY list', () => {
+    const withCharms = {
+      type: 'catalogue' as const,
+      hunts: [],
+      monsters: [],
+      vocations: [],
+      vocationLevel: 0,
+      bot: {
+        vocabularyVersion: 2, setCount: 4, slotsPerSet: 24,
+        setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'], hotkeys: ['1'], groups: [],
+        spells: [], automations: [], supplies: [],
+      },
+      items: [], ammunition: [],
+      charms: [{
+        id: 'wound', name: 'Wound', category: 'major' as const, type: 'offensive' as const,
+        damageType: 'physical', percent: 5, chance: [5, 10, 11] as [number, number, number],
+        points: [240, 360, 1200] as [number, number, number],
+      }],
+    } as unknown as S2CMessage;
+    expect(decodeS2C(encodeS2C(withCharms))).toEqual([withCharms]);
+
+    const { charms, ...withoutCharms } = withCharms as unknown as Record<string, unknown>;
+    void charms;
+    const decoded = decodeS2C(encodeS2C(withoutCharms as unknown as S2CMessage)) as Array<Record<string, unknown>> | null;
+    expect(decoded?.[0]?.['charms']).toEqual([]);
   });
 });
 

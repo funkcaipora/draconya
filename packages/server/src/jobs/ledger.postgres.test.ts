@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
 import { CharacterRuntime, createHuntSession, Inventory, levelForXp } from '@draconya/sim';
-import type { InventoryState } from '@draconya/sim';
+import type { CharmsState, InventoryState } from '@draconya/sim';
 import { NEUTRAL_RATES } from '@draconya/content';
 import type { Progression, Vocation } from '@draconya/content';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -109,7 +109,8 @@ const characterRow = async (
   database: NonNullable<typeof db>, characterId: string,
 ): Promise<{
   xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
-  ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown; blessings: number;
+  ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown;
+  charms: unknown; blessings: number;
 }> => {
   const [row] = await database.database.db
     .select({
@@ -122,13 +123,15 @@ const characterRow = async (
       staminaMs: characters.staminaMs,
       supplyStock: characters.supplyStock,
       ammunitionStock: characters.ammunitionStock,
+      charms: characters.charms,
       blessings: characters.blessings,
     })
     .from(characters)
     .where(eq(characters.id, characterId));
   return row as {
     xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
-    ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown; blessings: number;
+    ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown;
+    charms: unknown; blessings: number;
   };
 };
 
@@ -743,6 +746,33 @@ describe.runIf(ready)('a munição escolhida chega ao Postgres pelo extrato (#15
     await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3 });
     await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
     expect((await characterRow(database, characterId)).ammo).toEqual({ arrow: 'onyx-arrow' });
+  });
+});
+
+describe.runIf(ready)('a economia de Charms chega ao Postgres pelo extrato (M39-02, #602, ADR 0052 d.1)', () => {
+  it('grava o registro, a última escrita vence, e o extrato sem o campo não toca na coluna', async () => {
+    // ABSOLUTA como `ammo` — NÃO fundida pelo maior como o Bestiário: não há aqui um contador
+    // externo monotônico a fundir, é o estado final da sessão dona.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    expect((await characterRow(database, characterId)).charms).toBeNull();
+    const receipts = new ReceiptStore(redis);
+    const first: CharmsState = {
+      pointsSpent: 240, echoesSpent: 0, tiers: { wound: 1 }, assignments: { wound: 'rat' }, version: 1,
+    };
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), charms: first });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).charms).toEqual(first);
+
+    const second: CharmsState = {
+      pointsSpent: 240 + 360, echoesSpent: 50, tiers: { wound: 2 }, assignments: { wound: 'rat' }, version: 1,
+    };
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2, charms: second });
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    // O extrato SEM o campo (seq 3, uma sessão de Cidade que não mexeu em Charm) não apaga o
+    // que o extrato anterior gravou.
+    expect((await characterRow(database, characterId)).charms).toEqual(second);
   });
 });
 

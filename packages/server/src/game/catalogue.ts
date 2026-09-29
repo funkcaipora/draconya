@@ -294,6 +294,21 @@ export function buildCatalogue(content: Content): Catalogue {
           xpBonusPercentPerMilestone: content.bestiary.xpBonusPercentPerMilestone,
         },
       }),
+    // Os 25 Charms do Canary (M39-02, #602, ADR 0053 d.3), do conteúdo fixado na sessão
+    // (invariante 7) — nome, categoria, tipo, elemento e custo/chance por tier, para a tela
+    // do Cyclopedia mostrar ANTES de desbloquear. Em ordem de id, pela mesma razão de `monsters`.
+    charms: [...content.charms.values()]
+      .map((charm) => ({
+        id: charm.id,
+        name: charm.name,
+        category: charm.category,
+        type: charm.type,
+        ...(charm.damageType === undefined ? {} : { damageType: charm.damageType }),
+        ...(charm.percent === undefined ? {} : { percent: charm.percent }),
+        chance: charm.chance,
+        points: charm.points,
+      }))
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
   };
 }
 

@@ -30,7 +30,7 @@ const catalogue = (
   hunts: [],
   monsters: [],
   vocations: [],
-  vocationLevel: 0,
+  charms: [], vocationLevel: 0,
   items: catalogueItems,
   ammunition: catalogueAmmo,
   bot: {
