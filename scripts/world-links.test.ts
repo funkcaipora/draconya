@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import type { SectorTile } from '../packages/client/src/world/sector.js';
 import { deriveLinks, FLOOR, parseItemsXml, parseRopeSpots } from './world-links.js';
 import type { Point, TileLookup } from './world-links.js';
@@ -96,8 +96,14 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const LINKS = join(ROOT, 'things', '1533', 'world', 'links.json');
 
 describe.skipIf(!existsSync(LINKS))('ligações reais (things/)', () => {
-  const data = JSON.parse(readFileSync(LINKS, 'utf8')) as { links: Array<[Point, Point, string]> };
-  const byFrom = new Map(data.links.map((link) => [link[0].join(','), link[1].join(',')]));
+  // Lido no `beforeAll`, nunca no corpo do `describe`: o Vitest executa esse corpo na COLETA
+  // mesmo quando o bloco é pulado, e o `links.json` gerado não existe no CI — ler aqui derrubava
+  // o arquivo inteiro com ENOENT antes de o `skipIf` valer.
+  let byFrom: Map<string, string>;
+  beforeAll(() => {
+    const data = JSON.parse(readFileSync(LINKS, 'utf8')) as { links: Array<[Point, Point, string]> };
+    byFrom = new Map(data.links.map((link) => [link[0].join(','), link[1].join(',')]));
+  });
 
   it('os quatro conectores da Darashia Dragon Lair são os da emenda #519 do ADR 0025', () => {
     expect(byFrom.get('33264,32301,10')).toBe('33265,32301,11');
