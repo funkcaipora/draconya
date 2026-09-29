@@ -34,7 +34,7 @@ import {
 } from './camera.js';
 import { CREATURE_SLOT, sceneZIndex } from './depth.js';
 import {
-  FALLBACK_EFFECT_PHASES, effectPhaseAt, floatingTextColor, floatingTextOffset, missileProgress,
+  FALLBACK_EFFECT_PHASES, effectPhaseAt, floatingTextColor, floatingTextOffset, loopPhaseAt, missileProgress,
 } from './effects.js';
 import { facingOf, walkFrame } from './facing.js';
 import { createFpsMeter } from './fps.js';
@@ -64,9 +64,14 @@ export type { MapTiles } from './scene.js';
  * arte sintética e para o contrato do viewport ficar visível num lugar só. O pacote real a
  * satisfaz por estrutura — `shell/Viewport.tsx` não muda (issue #381).
  */
-export type WorldArt = Pick<AssetPack, 'object' | 'objectPattern' | 'objectFlags' | 'objectSize'
+export type WorldArt = Pick<AssetPack, 'object' | 'objectPattern' | 'objectFlags' | 'objectSize' | 'objectPhases'
   | 'outfit' | 'framesOf' | 'effect' | 'effectPhases' | 'missile' | 'warmObjects' | 'warmOutfit'
   | 'outfitDisplacement'>;
+
+/** A identidade da cena para as chaves de repintura e prefetch: o id e, se ela muda, a revisão. */
+function sceneKeyOf(scene: Scene): string {
+  return scene.revision === undefined ? scene.id : `${scene.id}@${scene.revision()}`;
+}
 
 const COLOR_FLOOR = 0x2b2b33;
 const COLOR_WALL = 0x14141a;
@@ -162,7 +167,27 @@ export interface ViewportOptions {
   readonly loadScene?: (mapId: string) => Promise<Scene | null>;
   /** O relógio do quadro. `performance.now` por padrão; o teste injeta o dele (issue #381). */
   readonly now?: () => number;
+  /**
+   * Onde a câmera está, quando não é o personagem — o explorador do mundo (#661) anda com a
+   * câmera livre, sem sessão e sem `selfId`. Ausente, a câmera segue o personagem, como sempre.
+   */
+  readonly camera?: () => { readonly x: number; readonly y: number; readonly z: number };
+  /**
+   * De onde vêm as criaturas a desenhar, quando não é o `world` — o explorador (#665) desenha os
+   * NPCs e spawns do mapa parados, sem sessão e sem escrever no store do jogo (ADR 0007).
+   * Ausente, são as do `world`, como sempre.
+   */
+  readonly creatures?: () => Iterable<Creature>;
+  /**
+   * Anima os objetos que têm fases — água, fogo, fontes (#666). O terreno passa a repintar no
+   * compasso de `OBJECT_ANIMATION_TICK_MS`, então só liga quem quer pagar por isso: o explorador
+   * do mundo. Ausente, todo objeto fica na fase 0, como sempre.
+   */
+  readonly animateObjects?: boolean;
 }
+
+/** De quanto em quanto tempo o terreno animado repinta. As fases do Tibia duram de 100 ms para cima. */
+export const OBJECT_ANIMATION_TICK_MS = 100;
 
 /**
  * A fotografia dos contadores de desenvolvimento do renderer (M23 §40, D8). Tudo é leitura:
@@ -414,7 +439,16 @@ export async function mountViewport(
   let drawnTarget: number | null = null;
   let drawnTargetRect = '';
 
+  /** As criaturas deste quadro: as do `world`, ou as da fonte injetada (`options.creatures`). */
+  function creatureList(): Iterable<Creature> {
+    return options.creatures === undefined ? world.creatures.values() : options.creatures();
+  }
+
   function target(): { x: number; y: number; z: number } {
+    if (options.camera !== undefined) {
+      const { x, y, z } = options.camera();
+      return { x, y, z };
+    }
     const self = world.selfId === null ? undefined : world.creatures.get(world.selfId);
     if (self !== undefined) return interpolate(self, now());
     // Sem `selfId` ainda (FUN-32), a câmera fica no centro do mapa: é melhor mostrar o mapa
@@ -470,12 +504,24 @@ export async function mountViewport(
    * parecer azulejo. Qual célula é de `tile-stack.ts`: posição, contagem ou gancho.
    */
   function objectTexture(
-    appearanceId: number, cell: { readonly x: number; readonly y: number },
+    appearanceId: number, cell: { readonly x: number; readonly y: number }, nowMs: number,
   ): Texture | null | undefined {
     // Cópia local porque `pack` é `let` (`setPack`) e o narrowing não entra na closure.
     const art = pack;
     if (art === null) return null;
-    return book.get(objectKey(appearanceId, cell), () => art.object(appearanceId, cell.x, cell.y));
+    const phase = options.animateObjects === true ? loopPhaseAt(phasesOf(art, appearanceId), nowMs) : 0;
+    return book.get(objectKey(appearanceId, cell, phase), () => art.object(appearanceId, cell.x, cell.y, phase));
+  }
+
+  /** As fases de cada objeto, pelo pacote de agora — lidas uma vez por id, não por tile pintado. */
+  const objectPhaseCache = new Map<number, readonly number[]>();
+  function phasesOf(art: WorldArt, appearanceId: number): readonly number[] {
+    let phases = objectPhaseCache.get(appearanceId);
+    if (phases === undefined) {
+      phases = art.objectPhases(appearanceId);
+      objectPhaseCache.set(appearanceId, phases);
+    }
+    return phases;
   }
 
   /**
@@ -531,11 +577,12 @@ export async function mountViewport(
     const floorsKey = floors.join(',');
     const next = prefetchTiles(center, view);
     const previous = warmed;
-    const sameContext = previous !== null && previous.sceneId === scene.id && previous.floors === floorsKey;
+    const sceneKey = sceneKeyOf(scene);
+    const sameContext = previous !== null && previous.sceneId === sceneKey && previous.floors === floorsKey;
     if (sameContext && sameWindow(previous.window, next)) return;
 
     const tiles = tilesEntering(sameContext ? previous.window : null, next);
-    warmed = { window: next, sceneId: scene.id, floors: floorsKey };
+    warmed = { window: next, sceneId: sceneKey, floors: floorsKey };
     const ids = idsIn(scene, tiles, floors);
     // Tile fora do mapa (borda) não vira pedido: `warmObjects([])` seria uma promessa por
     // quadro de borda, e o teste conta chamadas.
@@ -556,7 +603,7 @@ export async function mountViewport(
   function warmOutfitsNear(window: TileWindow): void {
     const art = pack;
     if (art === null) return;
-    for (const creature of world.creatures.values()) {
+    for (const creature of creatureList()) {
       const { appearanceId } = creature;
       if (appearanceId <= 0 || warmedOutfits.has(appearanceId)) continue;
       const at = creature.step?.to ?? creature.position;
@@ -599,7 +646,11 @@ export async function mountViewport(
     const floorsKey = floors.join(',');
     // E os itens do chão (FUN-123): um cadáver que cai repinta o tile dele. E o cenário usável
     // (#729): a porta que abriu repinta o tile dela, sem esperar a janela andar.
-    const key = `${scene?.id ?? '-'}:${floor}:${floorsKey}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}:${world.groundItemsVersion}:${world.tileOverridesVersion}:${world.fieldsVersion}`;
+    // O compasso da animação (#666) entra na chave só para quem anima: sem ele, o terreno parado
+    // continua repintando só quando a janela, o livro, os itens do chão ou o cenário mudam.
+    const paintedAt = now();
+    const animation = options.animateObjects === true ? `:a${Math.floor(paintedAt / OBJECT_ANIMATION_TICK_MS)}` : '';
+    const key = `${scene === null ? '-' : sceneKeyOf(scene)}${animation}:${floor}:${floorsKey}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}:${world.groundItemsVersion}:${world.tileOverridesVersion}:${world.fieldsVersion}`;
     if (key === painted) return;
     painted = key;
     terrainRepaints += 1;
@@ -720,7 +771,7 @@ export async function mountViewport(
         return drawn.creatureElevation;
       }
       for (const [index, object] of drawn.objects.entries()) {
-        const texture = objectTexture(object.appearanceId, object.cell);
+        const texture = objectTexture(object.appearanceId, object.cell, paintedAt);
         if (!(texture instanceof Texture)) {
           if (index === 0) placeholder(object.layer);
           if (object.layer === 'scene') sceneSlot++;
@@ -879,7 +930,7 @@ export async function mountViewport(
     /** O retângulo de tela do alvo neste quadro, se ele estiver desenhado (#428). */
     let targetRect: string | null = null;
 
-    for (const creature of world.creatures.values()) {
+    for (const creature of creatureList()) {
       seen.add(creature.id);
       const position = interpolate(creature, nowMs);
       const offset = position.z - floor;
@@ -1270,6 +1321,7 @@ export async function mountViewport(
       // inteira no próximo quadro. `null` também zera — não fica nada pendente para o próximo.
       warmed = null;       // era `if (next !== null && scene !== null) warm(scene);`
       warmedOutfits.clear();
+      objectPhaseCache.clear();
       fadeKey = '';        // as flags vêm do pacote: `dontHide`, `unsight`, `bottom`
       // Os efeitos em voo nasceram com a linha do tempo de reserva; renascem no próximo
       // quadro com a do pacote, que é de onde as fases deles saem (`timelineOf`).
@@ -1309,7 +1361,7 @@ export async function mountViewport(
         center, view,
       );
       return pickCreature(
-        world.creatures.values(),
+        creatureList(),
         { x: at.x, y: at.y, z: Math.round(center.z) },
         performance.now(),
       );

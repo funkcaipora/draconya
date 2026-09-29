@@ -1782,3 +1782,37 @@ body {
   color: var(--gold-5); font: 8px var(--font-mono); padding: 2px 6px; cursor: pointer;
 }
 .blessing-buy:disabled { opacity: 0.45; cursor: default; }
+
+/* ---- Explorador do mundo (#661) ---------------------------------------------------------- */
+/* O mapa inteiro com câmera livre, em /world. O mundo ocupa a tela; o painel flutua no canto. */
+.world-explorer { position: fixed; inset: 0; background: var(--bg-world, #000); }
+.world-explorer .viewport { cursor: grab; touch-action: none; }
+.world-explorer .viewport:active { cursor: grabbing; }
+.world-explorer__panel {
+  position: absolute; top: var(--space-4); left: var(--space-4); z-index: 1;
+  display: flex; flex-direction: column; gap: var(--space-2);
+  width: 240px; max-width: calc(100vw - 2 * var(--space-4)); padding: var(--space-3);
+  background: var(--surface-panel-solid); border: 1px solid var(--border-default); border-radius: var(--radius-md);
+  font-family: var(--font-body); font-size: var(--text-body-sm); color: var(--ash-8);
+}
+.world-explorer__title { margin: 0; font-family: var(--font-display); font-size: var(--text-body-lg); color: var(--action-gold); }
+.world-explorer__coords { margin: 0; font-family: var(--font-mono); font-size: var(--text-body-md); }
+.world-explorer__floors, .world-explorer__goto { display: flex; gap: var(--space-2); align-items: center; }
+.world-explorer__floors span { flex: 1; text-align: center; }
+.world-explorer__goto input { flex: 1; min-width: 0; font-family: var(--font-mono); }
+.world-explorer__stats, .world-explorer__help { margin: 0; color: var(--ash-6); }
+.world-minimap { width: 180px; height: 180px; align-self: center; image-rendering: pixelated; border: 1px solid var(--border-default); cursor: crosshair; }
+.world-atlas { position: absolute; inset: 0; z-index: 2; background: #000; }
+.world-atlas__canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; cursor: crosshair; touch-action: none; }
+.world-atlas__bar {
+  position: absolute; left: 50%; bottom: var(--space-4); transform: translateX(-50%);
+  display: flex; gap: var(--space-3); align-items: center; padding: var(--space-2) var(--space-3);
+  background: var(--surface-panel-solid); border: 1px solid var(--border-default); border-radius: var(--radius-md);
+  font-family: var(--font-mono); font-size: var(--text-body-sm); color: var(--ash-8);
+}
+.world-places-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.world-explorer__layers { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+.world-explorer__layers label { display: flex; gap: var(--space-1); align-items: center; }
+.world-explorer__hover { margin: 0; min-height: 2.6em; font-family: var(--font-mono); color: var(--ash-7); overflow-wrap: anywhere; }
+.world-explorer__daylight { display: flex; gap: var(--space-2); align-items: center; }
+.world-explorer__daylight input { flex: 1; }

@@ -346,6 +346,35 @@ pnpm tsx scripts/make-sheet-fixture.ts
   `setPack`). A folga de dois tiles entre a janela de render e a de prefetch é o tempo que uma
   folha tem para sair do Worker antes de ser desenhada — é o que tira o retângulo de reserva da
   borda da tela.
+- **O explorador do mundo (`/world`, #661) usa o MESMO viewport, com outra cena e outra câmera.**
+  A cena é `world/world-scene.ts`: os setores de `things/<versão>/world/` (ADR 0047, codec em
+  `world/sector.ts`, o mesmo que `scripts/world-map.ts` escreve), buscados quando `tileAt` cai num
+  setor que ainda não chegou — e `revision()` sobe quando ele chega. **`Scene.revision` entra na
+  chave de repintura e de prefetch** (`sceneKeyOf`): sem isso o setor chegava e o chão continuava
+  vazio até a câmera andar. A câmera vem de `ViewportOptions.camera` em vez do personagem; o
+  explorador não tem sessão, não tem `selfId` e não importa `net/` (invariante 4). O cache é LRU
+  por setor (`DEFAULT_SECTOR_BUDGET`, 512 ≈ 100 MB de heap medido). A rota só existe em
+  desenvolvimento ou com `VITE_WORLD_EXPLORER=true` (`worldExplorerEnabled`).
+  **Minimapa e mapa-múndi (#662)** são canvas 2D, sem Pixi (`shell/WorldMaps.tsx`): blocos PNG de
+  256 px em seis níveis (`world/minimap.ts` é o contrato e a conta de coordenadas; `pnpm
+  map:minimap` pinta a partir da cor de automapa, `AppearanceFlags.automapColor`, campo 30). O
+  índice diz quais blocos existem, e bloco que não existe nunca é pedido.
+  **Lugares (#664)**: `shell/WorldPlacesLayer.tsx` desenha casas, zonas e marcadores de escada num
+  canvas 2D POR CIMA do Pixi, no andar da câmera, com a projeção de `world/camera.ts`. Lê
+  `WorldScene.metaAt` (flags e casa do setor que o pintor já trouxe — nunca pede setor) e o índice
+  de `world/world-places.ts` (`links.json` e `places.json`). Clique sem arrasto numa ligação leva
+  ao destino. **Não confundir com `shell/WorldOverlay.tsx`**, que é o overlay de área do HUD do jogo.
+  **Criaturas (#665)**: `ViewportOptions.creatures` troca a fonte das criaturas desenhadas — o
+  explorador entrega os NPCs e spawns do Canary perto da câmera (`world/world-creatures.ts`,
+  blocos de 256 tiles buscados sob demanda), parados e com vida cheia, e **nunca escreve no
+  `world` do jogo** (ADR 0007). Sem a opção, o viewport lê `world.creatures`, como sempre.
+  **Luz e animação (#666)**: a luz é outra camada 2D (`shell/WorldLightLayer.tsx`) — escurece o
+  andar (`darknessFor`: subsolo sempre, superfície pela hora do dia) e abre um círculo com a cor de
+  cada fonte (`world/world-lights.ts`, blocos de `pnpm map:lights`). **A animação de objeto é do
+  viewport e é opcional**: `ViewportOptions.animateObjects` faz o pintor pedir a fase do relógio
+  global (`loopPhaseAt`, `AssetPack.objectPhases`) e põe o compasso (`OBJECT_ANIMATION_TICK_MS`)
+  na chave de repintura. O jogo não liga a opção — pagar a repintura a 10 Hz é decisão de quem
+  anima, e a fase 0 guarda a chave de textura de antes.
 - **A criatura pertence ao WALKING TILE, não ao tile arredondado** (`world/walking-tile.ts`,
   puro; #386). Durante o passo, a ordem dela na `spatialScene` é a do tile que contém o canto
   inferior direito do corpo de 32×32, deslocado pelo `shift` do outfit

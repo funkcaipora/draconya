@@ -111,8 +111,8 @@ describe('classifyByAttributes', () => {
     });
   });
 
-  it('teleportDestination classifica teleporte', () => {
-    expect(classifyByAttributes(item(1387, { teleportDestination: { x: 1, y: 2, z: 3 } }))).toEqual({
+  it('teleportTo classifica teleporte', () => {
+    expect(classifyByAttributes(item(1387, { teleportTo: { x: 1, y: 2, z: 3 } }))).toEqual({
       kind: 'teleport', initialState: 'default', appearanceKey: 'teleport-1387',
     });
   });

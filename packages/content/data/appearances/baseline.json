@@ -3005,6 +3005,12 @@
     },
     "wand-of-inferno": {
       "missile": 4
+    },
+    "springsprout-rod": {
+      "missile": 39
+    },
+    "underworld-rod": {
+      "missile": 32
     }
   },
   "corpses": {

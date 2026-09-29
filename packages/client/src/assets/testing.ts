@@ -114,6 +114,8 @@ export interface FlagsFixture {
   readonly lyingObject?: boolean;
   readonly animateAlways?: boolean;
   readonly fullbank?: boolean;
+  readonly light?: { readonly intensity: number; readonly color: number };
+  readonly automapColor?: number;
   /** Campos que o leitor NÃO conhece, para provar o pulo. */
   readonly extra?: readonly Field[];
 }
@@ -143,6 +145,10 @@ export function flags(fixture: FlagsFixture): Field {
     parts.push(messageField(26, concat(uint32Field(1, fixture.shift.x), uint32Field(2, fixture.shift.y))));
   }
   if (fixture.elevation !== undefined) parts.push(messageField(27, uint32Field(1, fixture.elevation)));
+  if (fixture.light !== undefined) {
+    parts.push(messageField(23, concat(uint32Field(1, fixture.light.intensity), uint32Field(2, fixture.light.color))));
+  }
+  if (fixture.automapColor !== undefined) parts.push(messageField(30, uint32Field(1, fixture.automapColor)));
   parts.push(...(fixture.extra ?? []));
   return messageField(3, concat(...parts));
 }

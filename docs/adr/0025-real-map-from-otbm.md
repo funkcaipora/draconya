@@ -352,6 +352,18 @@ NA PRÁTICA — mas "todo lugar que compara alvo confere o andar" só fica verda
 corrigidos, e o dia em que a party entrar numa hunt multiandar sem ninguém reabrir esta auditoria
 é exatamente o dia em que o gap deixaria de ser dormant.
 
+## Emenda — 2026-09-26 (#663): as escadas passam a ser derivadas, no mundo inteiro
+
+O "possível trabalho futuro" da emenda #519 existe agora para o mundo em setores (ADR 0047):
+`pnpm map:links` lê o `floorchange` e o `type` por id do `items.xml` do Canary (`CANARY_DIR`, só
+dado — ADR 0038) e aplica a regra de `Tile::queryDestination` ao mapa inteiro, mais escada de mão e
+ponto de corda (`Position:moveUpstairs`) e o destino gravado dos teleportes. A derivação foi
+conferida contra tudo que foi autorado à mão: os **quatro conectores da Darashia Dragon Lair**
+desta emenda e **as 92 escadas de `thais.json`** saem idênticos. O resultado mora em
+`things/<versão>/world/links.json` e serve o explorador; os recortes versionados em `content/`
+continuam com as `floorChanges` autoradas — trocá-las pela derivação é decisão da fase 6 do plano
+do mundo, não desta emenda.
+
 ## Emenda — 2026-09-27 (#727): o importador preserva `aid`/`uid`/`text`, e o bloqueio deriva das
 flags EXCETO no tile classificado como cenário usável
 

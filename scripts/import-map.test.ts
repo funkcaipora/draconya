@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -307,6 +308,24 @@ describe('checkMaps', () => {
     expect(checkMaps(maps, join(dir, 'things'), '1332', join(dir, 'things', 'maps'))).toEqual([
       { file: 'hand.json', status: 'hand-made' },
       { file: 'thais.json', status: 'absent' },
+    ]);
+  });
+
+  it('com o OTBM mas sem o pacote de arte na máquina é absent, não exceção', () => {
+    dir = mkdtempSync(join(tmpdir(), 'maps-'));
+    const maps = join(dir, 'maps');
+    const otbmDir = join(dir, 'things', 'maps');
+    mkdirSync(maps);
+    mkdirSync(otbmDir, { recursive: true });
+    const otbm = Uint8Array.from([0, 0, 0, 0]);
+    writeFileSync(join(otbmDir, 'world.otbm'), otbm);
+    const sha256 = createHash('sha256').update(otbm).digest('hex');
+    writeFileSync(join(maps, 'thais.json'), JSON.stringify({
+      id: 'thais', z: 7, floors: { '7': { grid: ['###', '#.#', '###'] } },
+      source: { file: 'world.otbm', sha256, region: { x: [0, 2], y: [0, 2], z: [7, 7] } },
+    }));
+    expect(checkMaps(maps, join(dir, 'things'), '1332', otbmDir)).toEqual([
+      { file: 'thais.json', status: 'absent', detail: `pacote 1332 não está em ${join(dir, 'things')}` },
     ]);
   });
 });

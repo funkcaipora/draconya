@@ -109,7 +109,38 @@ export async function logout(): Promise<void> {
   await fetch(`${API_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' });
 }
 
-/** Manda para o WorkOS. É navegação de verdade: o retorno vem pelo callback com o cookie. */
-export function beginLogin(register = false): void {
-  window.location.href = `${API_URL}/api/auth/${register ? 'register' : 'login'}`;
+/**
+ * Tenta iniciar o fluxo de login. Em produção, navega para o WorkOS (ADR 0012). Em dev mode
+ * (`AUTH_DEV_MODE=true`), o servidor recusa com `use-dev-login` e esta função retorna `'dev'`
+ * para que a UI mostre o campo de e-mail em vez de navegar para lugar nenhum.
+ */
+export async function beginLogin(register = false): Promise<'dev' | 'navigating'> {
+  const response = await fetch(
+    `${API_URL}/api/auth/${register ? 'register' : 'login'}`,
+    { credentials: 'include', redirect: 'manual' },
+  );
+  // Em dev mode o servidor responde 400 com `{"error":"use-dev-login"}`.
+  if (response.status === 400) {
+    try {
+      const body = (await response.json()) as { error?: string };
+      if (body.error === 'use-dev-login') return 'dev';
+    } catch { /* cai no redirect abaixo */ }
+  }
+  // Fluxo normal: o servidor mandou um redirect para o WorkOS. `redirect: 'manual'` impediu
+  // o fetch de seguir, então navegamos manualmente.
+  const location = response.headers.get('location');
+  if (location) {
+    window.location.href = location;
+  } else {
+    window.location.href = `${API_URL}/api/auth/${register ? 'register' : 'login'}`;
+  }
+  return 'navigating';
+}
+
+/** Login em dev mode: manda o e-mail, recebe o cookie de sessão. */
+export async function devLogin(email: string): Promise<Identity> {
+  return call<Identity>('/api/auth/dev-login', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
 }

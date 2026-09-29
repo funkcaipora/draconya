@@ -202,7 +202,7 @@ export function classifyByAttributes(item: OtbmItem): ClassifiedFeature | null {
   if (item.text !== undefined) {
     return { kind: 'sign', initialState: 'default', appearanceKey: `sign-${item.id}` };
   }
-  if (item.teleportDestination !== undefined) {
+  if (item.teleportTo !== undefined) {
     return { kind: 'teleport', initialState: 'default', appearanceKey: `teleport-${item.id}` };
   }
   return null;
