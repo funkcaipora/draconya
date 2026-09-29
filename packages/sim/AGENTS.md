@@ -418,6 +418,30 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   de combate** (`resolveDamage`/`resolveDefense`): os sorteios da dança são de uma fila
   totalmente separada da sequência de combate, o mesmo argumento que já vale para `chooseTarget`
   — por isso não exige perfil `combat-v1`/`v2`/`v3` novo (ADR 0031/0040).
+- **Sem passo de perseguição o monstro volta ao spawn, fica ocioso ou anda ao acaso — e tudo isso
+  mora em `decideUnengagedMove`, não em `decideMonsterAction`** (#655, Canary
+  `Monster::updateIdleStatus` + `getNextStep`). `decideMonsterAction` continua decidindo só a
+  PERSEGUIÇÃO e devolvendo `idle` quando não há passo; é `HuntRuleset#onMonsterStep` quem, nesse
+  caso, chama a outra. A "lista de alvos" do Canary é quem está na área de visão (`canSeePoint`,
+  `monster/step.ts`, com as regras de andar do `Creature::canSee`; o raio é o `aggroRadius`): vazia,
+  no `home` e sem condição nenhuma é OCIOSO (nenhum passo; `Contribution.clear()`); vazia e fora do
+  `home`, LIGA `walkingBack` e volta pelo guloso (`walkBackStep`); com passo aleatório é
+  `shuffledCardinals` (3 `rng.integer` por tentativa) e a primeira direção livre de `canWalkTo`
+  (`#randomStepBlocked`), no máximo uma por `RANDOM_STEP_INTERVAL_MS` desde
+  `MonsterRuntime.lastMoveAtMs`. Armadilhas: (1) **`walkingBack` e `randomStepping` PERSISTEM** — a
+  primeira só `doWalkBack` a desliga, a segunda só a perseguição —, e são o quirk do Canary, não
+  descuido: um alvo que aparece no meio da volta não a desliga, e `randomStepping` velho arma o
+  bypass de campo ao tomar dano (`MonsterRuntime.noteDamageTaken`, o ponto único dos cinco caminhos
+  de dano a monstro). (2) **`lastMoveAtMs` só é escrito por `#step`** — qualquer código novo que
+  mude `monster.position` por fora dele (como os testes) deixa o passo aleatório contando de um
+  instante velho. (3) **A retenção do alvo exige a área de visão** (`chooseTarget`): sem isso, com
+  `leashRadius` 0 o monstro persegue para sempre e a volta nunca liga. (4) **`aggroRadius: 0` já não
+  "congela" um monstro reposicionado à mão**: sem ninguém à vista e fora do `home` ele VOLTA; o
+  teste que planta um monstro precisa plantar o `home` junto (`plant` em `hunt.test.ts`) — e o que
+  conta `rng.integer` precisa isolar os três sorteios do passo aleatório. (5) Invocação nunca volta
+  nem fica ociosa (`masterId`), e sem alvo continua parada — seguir o mestre não é modelado. (6) O
+  ocioso NÃO pausa defesa, troca de alvo nem invocação (o Canary os para com o `onThink`).
+
 - **O alcance é da ARMA, e cada tipo bate do seu jeito** (#152, ADR 0026; perfis no CMB-05;
   munição abstrata desde #420). `Inventory.weapon()` é a definição da arma na mão; `#attackRangeOf`
   lê `weapon.range` dela, e só sem arma vale o alcance do perfil `fist` (`content.unarmed`).

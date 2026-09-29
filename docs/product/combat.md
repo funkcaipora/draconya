@@ -1374,7 +1374,10 @@ interface MonsterTargetStrategy {
   quadrado de `Creature::canSee`, `MAP_MAX_VIEW_PORT_X`/`_Y` = 11 (`src/map/map_const.hpp`,
   `src/creatures/creature.cpp`) — os dois conferidos contra o código em 2026-09-25. Pela
   precedência do ADR 0037 d.4 (Canary primeiro quando ele define algo; TFS só onde a escala é a
-  clássica — não é o caso aqui), o valor certo é o do Canary, 11.
+  clássica — não é o caso aqui), o valor certo é o do Canary, 11. **Desde o #655 é também a área
+  de visão que MANTÉM o alvo**: o alvo retido que sai dela é largado (o Canary o tira da
+  `targetList`), e é a mesma área que decide o ocioso, a volta ao spawn e o passo aleatório —
+  ver "Volta ao spawn, passo aleatório e monstro ocioso".
 - **Aquisição sem alvo (`chooseTarget`, #645)**: SEMPRE `TARGETSEARCH_NEAREST` fixo — o mesmo
   passo único de sempre, mais perto dentro do `aggroRadius`, desempate estrito por ordem de
   candidatos — e o `targetStrategy` do conteúdo NUNCA é consultado aqui, nem para o Dragon
@@ -1646,6 +1649,113 @@ produção, e passa `(from, to) => isSightClear(this.#world.map, from, to)` —
 `packages/sim/src/line-of-sight.ts`, a linha de visão pura que este mesmo issue introduz (ver
 "Linha de visão" mais abaixo). Sem visão, o monstro cai para a checagem de alcance seguinte
 (aproxima ou ataca parado), exatamente como o Canary.
+
+## Volta ao spawn, passo aleatório e monstro ocioso (#655, TFS/Canary `Monster::getNextStep`)
+
+Até o #655 o monstro do Draconya só tinha UMA decisão de movimento — perseguir o alvo — e um
+"espera" quando não havia passo. O Canary tem três, em `Monster::getNextStep`
+(`src/creatures/monsters/monster.cpp:2443-2492`), e a ordem entre elas é a regra:
+
+1. **perseguir** (`getFollowCreature() && hasFollowPath`) — o que o motor já fazia;
+2. **voltar ao spawn** (`isWalkingBack`, `doWalkBack`, `monster.cpp:2501-2526`);
+3. **passo aleatório** (`doRandomStep`, `monster.cpp:2494-2499`).
+
+Antes delas vem `updateIdleStatus` (`monster.cpp:1521-1560`), que decide se o monstro está OCIOSO
+(`isIdle`) — e um monstro ocioso não anda (`getNextStep` devolve `false` no topo).
+
+**Onde mora.** `decideMonsterAction` continua decidindo só a perseguição (e devolvendo `idle`
+quando não há alvo, ou há alvo e nenhum passo até ele — o "preso" do #545). Quando devolve `idle`,
+`HuntRuleset#onMonsterStep` chama `decideUnengagedMove` (`packages/sim/src/monster/monster.ts`),
+que faz o `updateIdleStatus` e escolhe entre os dois ramos que sobram. É evento na fila como todo o
+resto (o `MONSTER_STEP` que já reagendava): nada é por tick (invariante 2), e o resultado é o mesmo
+a 1 Hz e a 20 Hz — os testes de `hunt.test.ts` ("volta ao spawn, ocioso e passo aleatório")
+comparam o snapshot inteiro das duas taxas e o de uma retomada no meio.
+
+### A lista de alvos e o ocioso
+
+A `targetList` do Canary (`Monster::updateTargetList`/`onCreatureFound`) é quem o monstro
+ENXERGA: `Creature::canSee` (`creature.cpp:68-87`), o quadrado de `MAP_MAX_VIEW_PORT_X`/`_Y` = 11
+tiles. É exatamente o `aggroRadius` do monstro (11 em todo o catálogo, ver "Raio de agressão"
+acima), então a "lista vazia" daqui é: nenhum participante vivo (nem invocação de personagem
+viva) em `canSeePoint(monster.position, prey.position, aggroRadius)` (`monster/step.ts`).
+**No mesmo andar** é a distância de Chebyshev; **entre andares** valem as regras do Canary — de
+superfície (z ≤ 7) não se enxerga o subsolo, do subsolo só até dois andares, e a caixa desliza
+`from.z − to.z` tiles por andar. Quem está à vista SEM ser alvo (invisível, outro andar) mantém a
+lista cheia, e o monstro anda ao acaso.
+
+O monstro fica **ocioso** com a lista vazia, no `home` (`isInSpawnLocation`) e **sem nenhuma
+condição** (`conditions.empty()`): não anda, e — `Creature::onIdleStatus` — esquece quem bateu nele
+(`Contribution.clear()`). Uma condição ativa (fogo, veneno, haste, lentidão) impede o ocioso: o
+monstro queimando no spawn, sem ninguém à vista, anda ao acaso. Invocação (`masterId`) nunca fica
+ociosa nem volta ao spawn (`spawnMonster.expired()` no Canary devolve "no spawn"); sem alvo ela
+continua parada — o Canary a manda seguir o mestre (`updateSummonTarget`), o que este motor não
+modela.
+
+A retenção do alvo (`chooseTarget`) passou a exigir a mesma área de visão: o alvo que sai do
+`aggroRadius` é largado (`Creature::onCreatureMove` → `onCreatureDisappear`), mesmo com o
+`leashRadius` zero — sem isso, o monstro perseguiria para sempre e a lista nunca esvaziaria. O
+`leashRadius` continua valendo por cima (medido do `home`, e agora também filtra a aquisição, para
+"desistir" não ser desfeito no mesmo vencimento).
+
+### Volta ao spawn
+
+Lista vazia, sem condição e fora do `home`: liga `MonsterRuntime.walkingBack` e o monstro anda UM
+tile por vencimento rumo ao `home` (`walkBackStep`, `monster/step.ts`), sem sortear nada. O
+caminho é o **passo guloso** de sempre — o Canary usa A* aqui (`getPathTo(masterPos, …)`), e o
+ADR 0009 mantém o monstro sem busca de caminho (ver a emenda de 2026-09-29): um monstro empacado
+numa concavidade no caminho de volta espera, como na perseguição. Duas coisas do Canary valem:
+
+- **A flag persiste** (`isWalkingBack` só é desligada por `doWalkBack`, ao chegar ou sem
+  caminho): um alvo que aparece no meio da volta não a desliga, e o monstro que tem alvo mas não
+  alcança volta ao spawn — em vez de andar ao acaso — enquanto ela estiver ligada.
+- **A um tile do `home` só se pisa NELE** (`walkBackStep`): o guloso puro rodearia um `home` ocupado
+  para sempre; o Canary nem chega a andar sem caminho até o tile exato.
+
+### Passo aleatório
+
+Com a volta desligada e sem passo de perseguição (sem alvo mas não ocioso; ou com alvo e nenhum
+passo até ele; ou fugindo encurralado): se o último passo do monstro foi há pelo menos 1000 ms
+(`RANDOM_STEP_INTERVAL_MS`, contado de `MonsterRuntime.lastMoveAtMs`, escrito por `#step` em
+QUALQUER deslocamento do próprio monstro — passo, volta, dança, empurrão), liga
+`randomStepping` e sorteia as quatro direções cardinais embaralhadas (`shuffledCardinals`, três
+`rng.integer` por tentativa — o mesmo Fisher-Yates do empurrão de criatura, M29-08); vale a
+primeira com tile livre para `Monster::canWalkTo` (`randomBlocked`, `hunt.ts#randomStepBlocked`):
+sem criatura no tile MESMO que empurrável, sem escada nem teleporte, com o campo pelo mesmo
+`canMonsterEnterField` da perseguição (`FLAG_IGNOREFIELDDAMAGE` do Canary), dentro de 50 tiles do
+`home` (`deSpawnRadius`). `randomStepping` só desliga quando a perseguição roda de novo
+(`doFollowCreature`) — persiste pela volta e pelo ocioso, como no Canary.
+
+`randomStepping` é a segunda metade da condição que arma `ignoresFieldDamage` ao tomar dano
+(`Monster::drainHealth`, `monster.cpp:3450`: `randomStepping || (!hasFollowPath &&
+getFollowCreature())`): `MonsterRuntime.noteDamageTaken` é o ponto único dos cinco caminhos que
+aplicam dano a um monstro. O passo aleatório e o ocioso NÃO gastam o bypass; só a perseguição e a
+volta o zeram.
+
+### O que NÃO foi modelado
+
+- **A\* na volta** — o passo guloso (ADR 0009). A divergência é de CAMINHO, não de gatilho: quando a
+  volta liga e desliga é a do Canary.
+- **Os segmentos de 5 tiles de `doWalkBack`** (`getPathTo(…, distance - 5, …)`) e a pausa de um
+  vencimento entre segmentos — detalhe do A*.
+- **O teleporte de volta de `Monster::onThink`** para quem passa de `deSpawnRadius`.
+- **O ocioso não pausa os outros timers do monstro** (defesa/cura própria, troca de alvo,
+  invocação): o Canary os para junto com o `onThink`; aqui continuam agendados. É o que
+  `docs/product/combat.md` já descreve para a defesa ("cura mesmo sem ninguém para atacar").
+- **Seguir o mestre** (`Monster::updateSummonTarget`) — a invocação sem alvo continua parada.
+
+### Efeito nas hunts
+
+Rato e rotworm mudam de comportamento **de propósito**: o monstro que perdeu o alvo (o herói se
+afastou mais que `aggroRadius`) volta ao spawn e fica ocioso, em vez de ficar parado onde estava; o
+que ficou preso atrás de obstáculo ou campo anda ao acaso. Medido na Darashia Dragon Lair com a
+party de quatro do #526 (kit e bot reais, combate de verdade) e HP imortal para não saturar,
+16 sementes × 10 min: abates 1.536 → 1.560 (+1,6 %), dano recebido pela party 184.108 → 185.405
+(+0,7 %); os deslocamentos de monstro sobem de 2.104 para 12.623 (as voltas e os passos
+aleatórios). Com o HP real do nível 200 a party morre nos DOIS lados dentro dos 10 minutos (15/16
+sementes na versão anterior, 16/16 aqui; 46 × 48 mortes, 211 × 214 abates) — o cenário sintético
+é mais letal que a QA ao vivo, e o número serve só de comparação entre as duas versões: não há
+regressão de mortes, e o teste de 30 sementes da Darashia (`darashia-dragon-lair-party-movement`)
+segue verde.
 
 ## Invocação de monstro por monstro (#546, TFS/Canary `monster.summon`/`maxSummons`)
 

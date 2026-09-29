@@ -112,3 +112,35 @@ um jogador humano, seguindo manualmente, contornaria sem pensar.
 - A ordem de vizinho fixa do BFS (a mesma garantia de determinismo do passo guloso) é o que
   mantém a simulação reproduzível — dois nós que empatam em distância sempre resolvem para o
   mesmo caminho, nunca dependem de ordem de iteração de `Map`/`Set`.
+
+## Emenda — 2026-09-29 (#655): a volta ao spawn do monstro continua gulosa, e o monstro larga o
+alvo que sai da área de visão
+
+O #655 dá ao monstro o que o Canary chama de `Monster::getNextStep` completo: além de perseguir,
+ele **volta ao spawn** quando a lista de alvos esvazia (`doWalkBack`), **anda ao acaso**
+(`doRandomStep`) quando tem alvo mas nenhum passo até ele, e fica **ocioso** no `home` sem ninguém
+à vista (`updateIdleStatus`). O Canary resolve a volta com A* (`getPathTo(masterPos, …)`).
+
+**Decisão da emenda:**
+
+- **A volta ao spawn usa o passo guloso**, o mesmo da perseguição (`walkBackStep`,
+  `packages/sim/src/monster/step.ts`) — nenhuma busca de caminho nova para o monstro. A regra da
+  emenda do #527 sobre "O monstro perseguindo alvo" vale igual para "o monstro voltando ao
+  spawn": empacar numa concavidade é o comportamento certo, e um caminho guardado voltaria a ser
+  algo a invalidar. A divergência em relação ao Canary é só de CAMINHO — QUANDO a volta liga e
+  desliga (o gatilho, que é o que a regra de "caça idêntica" do ADR 0037 d.6 cobra) é o do Canary.
+  Uma única exceção ao guloso puro: a um tile do `home`, só se pisa nele (um `home` ocupado não
+  faz o monstro rodeá-lo para sempre).
+- **O monstro larga o alvo que sai da área de visão dele** (o `aggroRadius`, o quadrado de
+  `Creature::canSee`), mesmo com o `leashRadius` zero — antes ele perseguia para sempre. É o que
+  esvazia a lista de alvos e liga a volta; sem isso o mecanismo nunca dispararia numa hunt real.
+  O `leashRadius` continua sendo o limite EXTRA do Draconya, e passou a filtrar também a aquisição.
+
+### Consequências da emenda
+
+- O custo continua O(1) por monstro por decisão, sem estado de caminho: nada novo entra no
+  snapshot além de três campos opcionais do monstro (`walkingBack`, `randomStepping`,
+  `lastMoveAtMs`), sem bump de `SNAPSHOT_FORMAT_VERSION`.
+- Rato e rotworm mudam de comportamento de propósito (o monstro que perdeu o alvo volta ao spawn e
+  fica ocioso, em vez de ficar onde estava) — registrado em `docs/product/combat.md` e
+  `docs/product/hunt.md`.
