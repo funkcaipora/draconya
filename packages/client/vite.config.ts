@@ -21,7 +21,7 @@ const REPO_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '.
 function serveThings(): Plugin {
   const TYPES: Record<string, string> = {
     '.json': 'application/json', '.dat': 'application/octet-stream',
-    '.lzma': 'application/octet-stream', '.png': 'image/png',
+    '.lzma': 'application/octet-stream', '.png': 'image/png', '.bin': 'application/octet-stream',
   };
   return {
     name: 'draconya-serve-things',

@@ -6,6 +6,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Shell } from './shell/Shell.js';
 import { Entry } from './shell/Entry.js';
+import { WorldExplorer, worldExplorerEnabled } from './shell/WorldExplorer.js';
 import { useConnection } from './shell/useConnection.js';
 import { useStoreSlice } from './state/useSlice.js';
 import { account } from './account/store.js';
@@ -28,6 +29,11 @@ function characterFromUrl(): string | null {
  * O `characterId` vem da URL ou da tela de entrada (FUN-97). Antes dela, só da URL — e o
  * staging ficava no ar sem ninguém conseguir entrar.
  */
+/** `/world` é o explorador do mapa (#661): sem sessão, sem login, só o mundo. */
+function isWorldExplorer(): boolean {
+  return window.location.pathname.replace(/\/$/, '') === '/world' && worldExplorerEnabled();
+}
+
 function App() {
   const chosen = useStoreSlice(account, (state) => state.playing);
   const characterId = characterFromUrl() ?? chosen;
@@ -40,6 +46,6 @@ if (!root) throw new Error('missing #root element in index.html');
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    {isWorldExplorer() ? <WorldExplorer /> : <App />}
   </StrictMode>,
 );

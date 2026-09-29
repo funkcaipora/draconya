@@ -67,6 +67,11 @@ export type WorldArt = Pick<AssetPack, 'object' | 'objectPattern' | 'objectFlags
   | 'outfit' | 'framesOf' | 'effect' | 'effectPhases' | 'missile' | 'warmObjects' | 'warmOutfit'
   | 'outfitDisplacement'>;
 
+/** A identidade da cena para as chaves de repintura e prefetch: o id e, se ela muda, a revisão. */
+function sceneKeyOf(scene: Scene): string {
+  return scene.revision === undefined ? scene.id : `${scene.id}@${scene.revision()}`;
+}
+
 const COLOR_FLOOR = 0x2b2b33;
 const COLOR_WALL = 0x14141a;
 const COLOR_GRID = 0x3a3a45;
@@ -161,6 +166,11 @@ export interface ViewportOptions {
   readonly loadScene?: (mapId: string) => Promise<Scene | null>;
   /** O relógio do quadro. `performance.now` por padrão; o teste injeta o dele (issue #381). */
   readonly now?: () => number;
+  /**
+   * Onde a câmera está, quando não é o personagem — o explorador do mundo (#661) anda com a
+   * câmera livre, sem sessão e sem `selfId`. Ausente, a câmera segue o personagem, como sempre.
+   */
+  readonly camera?: () => { readonly x: number; readonly y: number; readonly z: number };
 }
 
 /**
@@ -401,6 +411,10 @@ export async function mountViewport(
   let drawnTargetRect = '';
 
   function target(): { x: number; y: number; z: number } {
+    if (options.camera !== undefined) {
+      const { x, y, z } = options.camera();
+      return { x, y, z };
+    }
     const self = world.selfId === null ? undefined : world.creatures.get(world.selfId);
     if (self !== undefined) return interpolate(self, now());
     // Sem `selfId` ainda (FUN-32), a câmera fica no centro do mapa: é melhor mostrar o mapa
@@ -517,11 +531,12 @@ export async function mountViewport(
     const floorsKey = floors.join(',');
     const next = prefetchTiles(center, view);
     const previous = warmed;
-    const sameContext = previous !== null && previous.sceneId === scene.id && previous.floors === floorsKey;
+    const sceneKey = sceneKeyOf(scene);
+    const sameContext = previous !== null && previous.sceneId === sceneKey && previous.floors === floorsKey;
     if (sameContext && sameWindow(previous.window, next)) return;
 
     const tiles = tilesEntering(sameContext ? previous.window : null, next);
-    warmed = { window: next, sceneId: scene.id, floors: floorsKey };
+    warmed = { window: next, sceneId: sceneKey, floors: floorsKey };
     const ids = idsIn(scene, tiles, floors);
     // Tile fora do mapa (borda) não vira pedido: `warmObjects([])` seria uma promessa por
     // quadro de borda, e o teste conta chamadas.
@@ -584,7 +599,7 @@ export async function mountViewport(
     const floors = visibility.floors;
     const floorsKey = floors.join(',');
     // E os itens do chão (FUN-123): um cadáver que cai repinta o tile dele.
-    const key = `${scene?.id ?? '-'}:${floor}:${floorsKey}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}:${world.groundItemsVersion}`;
+    const key = `${scene === null ? '-' : sceneKeyOf(scene)}:${floor}:${floorsKey}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}:${world.groundItemsVersion}`;
     if (key === painted) return;
     painted = key;
     terrainRepaints += 1;

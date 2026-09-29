@@ -61,6 +61,12 @@ export interface Scene {
   readonly defaultZ: number;
   /** A pilha do tile, ou `null` fora do mapa e onde não há tile nenhum. */
   tileAt(x: number, y: number, z: number): TileStack | null;
+  /**
+   * Sobe quando a pilha de algum tile muda depois de a cena existir — a cena do mundo inteiro
+   * (#661), que recebe setores sob demanda. O viewport a põe na chave de repintura. Ausente é
+   * cena imutável, como todo recorte.
+   */
+  revision?(): number;
 }
 
 const EMPTY: readonly StackedItem[] = [];
