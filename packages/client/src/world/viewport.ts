@@ -171,6 +171,12 @@ export interface ViewportOptions {
    * câmera livre, sem sessão e sem `selfId`. Ausente, a câmera segue o personagem, como sempre.
    */
   readonly camera?: () => { readonly x: number; readonly y: number; readonly z: number };
+  /**
+   * De onde vêm as criaturas a desenhar, quando não é o `world` — o explorador (#665) desenha os
+   * NPCs e spawns do mapa parados, sem sessão e sem escrever no store do jogo (ADR 0007).
+   * Ausente, são as do `world`, como sempre.
+   */
+  readonly creatures?: () => Iterable<Creature>;
 }
 
 /**
@@ -410,6 +416,11 @@ export async function mountViewport(
   let drawnTarget: number | null = null;
   let drawnTargetRect = '';
 
+  /** As criaturas deste quadro: as do `world`, ou as da fonte injetada (`options.creatures`). */
+  function creatureList(): Iterable<Creature> {
+    return options.creatures === undefined ? world.creatures.values() : options.creatures();
+  }
+
   function target(): { x: number; y: number; z: number } {
     if (options.camera !== undefined) {
       const { x, y, z } = options.camera();
@@ -557,7 +568,7 @@ export async function mountViewport(
   function warmOutfitsNear(window: TileWindow): void {
     const art = pack;
     if (art === null) return;
-    for (const creature of world.creatures.values()) {
+    for (const creature of creatureList()) {
       const { appearanceId } = creature;
       if (appearanceId <= 0 || warmedOutfits.has(appearanceId)) continue;
       const at = creature.step?.to ?? creature.position;
@@ -851,7 +862,7 @@ export async function mountViewport(
     /** O retângulo de tela do alvo neste quadro, se ele estiver desenhado (#428). */
     let targetRect: string | null = null;
 
-    for (const creature of world.creatures.values()) {
+    for (const creature of creatureList()) {
       seen.add(creature.id);
       const position = interpolate(creature, nowMs);
       const offset = position.z - floor;
@@ -1281,7 +1292,7 @@ export async function mountViewport(
         center, view,
       );
       return pickCreature(
-        world.creatures.values(),
+        creatureList(),
         { x: at.x, y: at.y, z: Math.round(center.z) },
         performance.now(),
       );
