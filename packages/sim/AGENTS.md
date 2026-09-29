@@ -44,7 +44,10 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 
 - Monstro usa **passo guloso, não A\***: tenta o tile que aproxima, bloqueado tenta o adjacente,
   senão espera. Consequência barata: campo bloqueante não invalida caminho nenhum, porque não
-  existe caminho guardado. Ver ADR 0009.
+  existe caminho guardado. Ver ADR 0009. **A exceção é a VOLTA AO SPAWN** (#655): empacar numa
+  concavidade é o comportamento certo de quem persegue, mas não de quem volta para casa — quando
+  o guloso empaca fora do `home`, a volta usa a busca de caminho limitada (`walkBackPathStep`)
+  até chegar. Ver a emenda de 2026-09-29 do ADR 0009.
 - **A escolha entre os dois desvios é fixa** (horário antes de anti-horário). Alternar exigiria
   guardar estado por monstro, e um viés estável é preferível a um que depende de quantas vezes o
   monstro já tentou — esse último produz movimento errático que ninguém reproduz.
@@ -432,15 +435,28 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   primeira só `doWalkBack` a desliga, a segunda só a perseguição —, e são o quirk do Canary, não
   descuido: um alvo que aparece no meio da volta não a desliga, e `randomStepping` velho arma o
   bypass de campo ao tomar dano (`MonsterRuntime.noteDamageTaken`, o ponto único dos cinco caminhos
-  de dano a monstro). (2) **`lastMoveAtMs` só é escrito por `#step`** — qualquer código novo que
+  de dano a monstro; só a perseguição e a volta o consomem — o passo aleatório e o ocioso o deixam
+  armado). (2) **`lastMoveAtMs` só é escrito por `#step`** — qualquer código novo que
   mude `monster.position` por fora dele (como os testes) deixa o passo aleatório contando de um
   instante velho. (3) **A retenção do alvo exige a área de visão** (`chooseTarget`): sem isso, com
   `leashRadius` 0 o monstro persegue para sempre e a volta nunca liga. (4) **`aggroRadius: 0` já não
   "congela" um monstro reposicionado à mão**: sem ninguém à vista e fora do `home` ele VOLTA; o
   teste que planta um monstro precisa plantar o `home` junto (`plant` em `hunt.test.ts`) — e o que
   conta `rng.integer` precisa isolar os três sorteios do passo aleatório. (5) Invocação nunca volta
-  nem fica ociosa (`masterId`), e sem alvo continua parada — seguir o mestre não é modelado. (6) O
-  ocioso NÃO pausa defesa, troca de alvo nem invocação (o Canary os para com o `onThink`).
+  nem fica ociosa (`masterId`), e sem alvo continua parada — seguir o mestre não é modelado. (6) **O
+  ocioso CALA defesa, troca de alvo e invocação** (o Canary tira o monstro do `onThink`):
+  `MonsterRuntime.idle` é escrito por `#onMonsterStep` a cada decisão (liga no `idle`, desliga em
+  qualquer outra) e `#onMonsterDefense`/`#onMonsterTargetChange`/`#onMonsterSummon` REAGENDAM e
+  voltam antes de rolar — a fila continua dirigida por evento, e a semente não é tocada. Sem o
+  corte, um Doom Deer ocioso se dá haste, a condição impede o ocioso e ele passeia pelo spawn.
+  (7) **A provocação (`CHALLENGE_CONDITION_KEY`) mora em `conditions` mas NÃO é `Condition` do
+  Canary** (é o `challengeFocusDuration`): qualquer teste de "tem condição?" para o ocioso e a
+  volta usa `hasActiveCondition`, nunca `conditions.size`. (8) **A busca de caminho da volta tem
+  predicado PRÓPRIO** (`HuntRuleset#walkBackPathBlocked`): o `blocked` do guloso passa por
+  `canOccupy`, que recusa como `not-adjacent` todo tile que não é vizinho do monstro — passado
+  à busca, ela nunca acharia caminho (só um teste em sessão de verdade pega isso, e um predicado
+  estático nos testes unitários o esconde). (9) `walkBackByPath` é estado, não otimização: sem ele
+  o guloso volta a entrar na bolsa que a busca acabou de tirar o monstro.
 
 - **O alcance é da ARMA, e cada tipo bate do seu jeito** (#152, ADR 0026; perfis no CMB-05;
   munição abstrata desde #420). `Inventory.weapon()` é a definição da arma na mão; `#attackRangeOf`

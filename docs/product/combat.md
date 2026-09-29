@@ -1357,7 +1357,9 @@ interface MonsterTargetStrategy {
 - **Defesa (`monster.defenses`)**: cura própria, o mecanismo que o Dragon usa (`interval 2000,
   chance 15%, +40..+70`). Cada defesa é um evento NA FILA com a própria cadência — o mesmo
   desenho das abilities, subject derivado `m:<id>:<defenseId>` — e não depende de alvo: cura
-  mesmo sem ninguém para atacar. `chance` é sempre declarada (o campo é conteúdo NOVO, sem
+  mesmo sem ninguém para atacar, mas SÓ com o monstro acordado — o ocioso (#655, sem ninguém à
+  vista no spawn) vence o timer sem rolar nada, como o `onThinkDefense` que o Canary não roda para
+  ele. `chance` é sempre declarada (o campo é conteúdo NOVO, sem
   concessão de compatibilidade). A cura nunca passa do HP máximo, e de vida cheia o `sim` não
   emite `creature-healed` — a mesma regra de `#emitHealed` do personagem (um "+0" flutuando é
   ruído). A apresentação é a mesma chave semântica de `MonsterAbilityCast.impactKey`
@@ -1445,7 +1447,9 @@ interface MonsterTargetStrategy {
   `packages/sim/src/monster/monster.ts`) — pura, recalculada a cada decisão a partir do HP atual,
   nunca um booleano guardado à parte. Fugindo, `decideMonsterAction` SEMPRE devolve um passo para
   LONGE do alvo (`fleeStep`, o passo guloso com a ameaça espelhada — FUN-85), nunca aproxima;
-  encurralado, fica parado (ADR 0009). As abilities CORPO A CORPO (`isMeleeAbility`: sem área,
+  encurralado, a decisão de perseguição devolve `idle` (ADR 0009) e é o passo aleatório do #655
+  que roda em seguida (`decideUnengagedMove` — ver "Volta ao spawn, passo aleatório e monstro
+  ocioso"), como o `doRandomStep` do Canary para quem não tem `hasFollowPath`. As abilities CORPO A CORPO (`isMeleeAbility`: sem área,
   alcance 1) nem são armadas nem executam enquanto foge; as de alcance continuam saindo — passo
   e ataque são decisões independentes, como no TFS (`getNextStep` × `doAttacking`).
 - **`staticAttack` (dança de alvo, #543, TFS `staticattack`/`randomStepping`,
@@ -1686,7 +1690,22 @@ lista cheia, e o monstro anda ao acaso.
 O monstro fica **ocioso** com a lista vazia, no `home` (`isInSpawnLocation`) e **sem nenhuma
 condição** (`conditions.empty()`): não anda, e — `Creature::onIdleStatus` — esquece quem bateu nele
 (`Contribution.clear()`). Uma condição ativa (fogo, veneno, haste, lentidão) impede o ocioso: o
-monstro queimando no spawn, sem ninguém à vista, anda ao acaso. Invocação (`masterId`) nunca fica
+monstro queimando no spawn, sem ninguém à vista, anda ao acaso. **A provocação (Challenge) NÃO conta
+como condição**: no Canary ela é o contador `challengeFocusDuration` (`monster.cpp:2146-2152`,
+`3470-3483`), que nunca entra em `conditions` — aqui ela mora em `MonsterRuntime.conditions` só por
+conveniência de armazenamento (prazo e snapshot), e `hasActiveCondition` a descarta. Um monstro
+provocado que perde o alvo volta ao spawn e sossega, sem esperar o prazo da provocação.
+
+**O ocioso não usa defesa, não troca de alvo e não invoca.** O Canary tira o monstro ocioso da lista
+de `onThink` (`setIdle(true)` → `removeCreatureCheck`), e é o `onThink` que roda `onThinkDefense`
+(defesa de cura, self-haste e o laço de invocação) e `onThinkTarget` (troca de alvo por tempo). Aqui
+`MonsterRuntime.idle` (escrito por `HuntRuleset#onMonsterStep` a cada decisão: liga no `idle`,
+desliga em qualquer outra) cala os três timers — `MONSTER_DEFENSE`, `MONSTER_TARGET_CHANGE` e
+`MONSTER_SUMMON` continuam REAGENDANDO (a fila segue dirigida por evento, invariante 2), mas vencem
+sem rolar nada, e a semente da sessão não é tocada. Sem esse corte, um Doom Deer ocioso no spawn se
+daria haste sozinho (`doom_deer.lua`: defesa de velocidade, 30 % a cada 3 s, 8 s), a condição
+impediria o ocioso e ele passearia pelo spawn para sempre. O reverso vale igual: um monstro ferido
+que voltou e ficou ocioso NÃO se cura pela defesa enquanto ninguém o acorda. Invocação (`masterId`) nunca fica
 ociosa nem volta ao spawn (`spawnMonster.expired()` no Canary devolve "no spawn"); sem alvo ela
 continua parada — o Canary a manda seguir o mestre (`updateSummonTarget`), o que este motor não
 modela.
@@ -1699,11 +1718,20 @@ A retenção do alvo (`chooseTarget`) passou a exigir a mesma área de visão: o
 
 ### Volta ao spawn
 
-Lista vazia, sem condição e fora do `home`: liga `MonsterRuntime.walkingBack` e o monstro anda UM
-tile por vencimento rumo ao `home` (`walkBackStep`, `monster/step.ts`), sem sortear nada. O
-caminho é o **passo guloso** de sempre — o Canary usa A* aqui (`getPathTo(masterPos, …)`), e o
-ADR 0009 mantém o monstro sem busca de caminho (ver a emenda de 2026-09-29): um monstro empacado
-numa concavidade no caminho de volta espera, como na perseguição. Duas coisas do Canary valem:
+Lista vazia, sem condição (a provocação não conta) e fora do `home`: liga
+`MonsterRuntime.walkingBack` e o monstro anda UM tile por vencimento rumo ao `home`, sem sortear
+nada. O caminho é o **passo guloso** de sempre (`walkBackStep`, `monster/step.ts`) enquanto ele
+andar; o Canary usa A* aqui (`getPathTo(masterPos, …)`), e é por isso que o guloso NÃO basta:
+empacar numa concavidade é o comportamento certo de quem PERSEGUE, mas quem volta para casa preso
+numa bolsa sem saída nunca chega, nunca fica ocioso e mantém o slot de spawn ocupado. Quando o guloso
+empaca fora do `home`, `MonsterRuntime.walkBackByPath` liga e cada passo até a chegada vem da busca
+de caminho limitada (`walkBackPathStep`, o BFS de `route/pathfind.ts`, ordem de vizinho fixa; ADR
+0009, emenda de 2026-09-29): o primeiro tile do caminho mais curto até o `home`, dentro de 50 tiles
+(`deSpawnRadius`), com o `home` ocupado recusado antes de varrer. O flag PERSISTE até a chegada — do
+tile de fora da bolsa o guloso a entraria de novo, e a volta seria um vaivém eterno. O predicado da
+busca (`HuntRuleset#walkBackPathBlocked`) é o de "tile qualquer": o do guloso só admite vizinhos.
+Sem caminho nenhum (`home` ocupado, região isolada) a volta desliga sem andar, como o Canary faz, e o
+vencimento seguinte a religa. Duas coisas do Canary valem:
 
 - **A flag persiste** (`isWalkingBack` só é desligada por `doWalkBack`, ao chegar ou sem
   caminho): um alvo que aparece no meio da volta não a desliga, e o monstro que tem alvo mas não
@@ -1733,14 +1761,16 @@ volta o zeram.
 
 ### O que NÃO foi modelado
 
-- **A\* na volta** — o passo guloso (ADR 0009). A divergência é de CAMINHO, não de gatilho: quando a
-  volta liga e desliga é a do Canary.
+- **A\* na volta** — o guloso e, quando ele empaca, o BFS limitado (ADR 0009). A divergência é de
+  CAMINHO, não de gatilho: quando a volta liga e desliga é a do Canary, e o monstro sempre chega
+  em casa quando há caminho.
 - **Os segmentos de 5 tiles de `doWalkBack`** (`getPathTo(…, distance - 5, …)`) e a pausa de um
   vencimento entre segmentos — detalhe do A*.
+- **O que o Canary faz DEPOIS de uma volta sem caminho**: `isWalkingBack` desliga e o monstro dá
+  passos aleatórios até o próximo `onThink` (1 s) religá-la; aqui a volta é religada no vencimento
+  seguinte e o monstro espera. Só vale para o `home` ocupado ou a região isolada — com caminho, a
+  busca o acha.
 - **O teleporte de volta de `Monster::onThink`** para quem passa de `deSpawnRadius`.
-- **O ocioso não pausa os outros timers do monstro** (defesa/cura própria, troca de alvo,
-  invocação): o Canary os para junto com o `onThink`; aqui continuam agendados. É o que
-  `docs/product/combat.md` já descreve para a defesa ("cura mesmo sem ninguém para atacar").
 - **Seguir o mestre** (`Monster::updateSummonTarget`) — a invocação sem alvo continua parada.
 
 ### Efeito nas hunts

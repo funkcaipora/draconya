@@ -143,12 +143,16 @@ updateIdleStatus`/`doWalkBack`, `monster.cpp:1521-1560`, `2501-2526`).** A "list
 Canary é quem está na área de visão do monstro — aqui, algum participante VIVO (ou invocação de
 personagem viva) dentro do `aggroRadius`, no mesmo andar ou não (`canSee` com as regras de andar do
 Canary). Com ela vazia e o monstro fora do `home`, ele LIGA a volta e caminha até lá pelo passo
-guloso de sempre (o Canary usa A* aqui; o ADR 0009 continua valendo — ver a emenda de 2026-09-29),
-um tile por vencimento, sem sortear nada. No `home`, com a lista vazia e sem nenhuma condição
-ativa (fogo, veneno, haste…), ele fica **ocioso** (`isIdle`): nenhum passo — e, ao ficar ocioso,
-esquece quem bateu nele (`Creature::onIdleStatus`: a atribuição de dano zera). Uma condição ativa
-impede o ocioso, como no Canary (`conditions.empty()`). A volta persiste ligada até o monstro
-chegar ou não achar passo — um alvo que aparece no meio dela não a desliga.
+guloso de sempre, um tile por vencimento, sem sortear nada; se o guloso empaca numa concavidade
+fora do `home`, a volta passa a pedir cada passo à busca de caminho limitada até chegar (o Canary
+usa A* aqui; ADR 0009, emenda de 2026-09-29) — o monstro sempre chega em casa quando há caminho. No
+`home`, com a lista vazia e sem nenhuma condição ativa (fogo, veneno, haste…), ele fica **ocioso**
+(`isIdle`): nenhum passo — e, ao ficar ocioso, esquece quem bateu nele (`Creature::onIdleStatus`: a
+atribuição de dano zera) e **não usa defesa, não troca de alvo e não invoca** (o Canary o tira do
+`onThink`; os timers seguem reagendando, mas vencem sem rolar). Uma condição ativa impede o ocioso,
+como no Canary (`conditions.empty()`) — exceto a provocação do Challenge, que no Canary é um
+contador e não uma `Condition`. A volta persiste ligada até o monstro chegar ou não achar passo —
+um alvo que aparece no meio dela não a desliga.
 
 **Com alvo à vista mas sem passo até ele, ele anda ao acaso (#655, `Monster::doRandomStep`/
 `getRandomStep`, `monster.cpp:2494-2499`, `2552`).** É o "preso" do parágrafo seguinte, e também o
@@ -782,7 +786,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Monstro evita campo de fogo/veneno/energia (M29-05, `canWalkOnFieldType` do TFS/Canary) | `true` (anda por cima) é o default, como no Canary; nenhum dos quatro monstros do catálogo hoje declara `false` — Dragon e Dragon Lord declaram `true` explicitamente (`dragon.lua`/`dragon_lord.lua`, conferidos em 2026-09-25), rato e rotworm não declaram nada | `data/monsters/*.json`, campos `canWalkOnFire`/`canWalkOnPoison`/`canWalkOnEnergy` |
 | Área de visão do monstro (#655, `Creature::canSee` do Canary — a lista de alvos que decide ocioso, volta e passo aleatório, e o corte da retenção de alvo) | O `aggroRadius` do monstro — 11 tiles em TODO o catálogo (o `MAP_MAX_VIEW_PORT_X`/`_Y` do Canary); no mesmo andar é Chebyshev ≤ raio, entre andares valem as regras do Canary (superfície não vê subsolo; subsolo até ±2 andares; a caixa desliza 1 tile por andar) | `data/monsters/*.json`, campo `aggroRadius`; a regra em `packages/sim/src/monster/step.ts` (`canSeePoint`) |
 | Intervalo mínimo do passo aleatório (#655, `Monster::doRandomStep`) | 1000 ms de tempo lógico desde o último passo do monstro | `packages/sim/src/monster/monster.ts`, `RANDOM_STEP_INTERVAL_MS` — mecanismo, não conteúdo |
-| Raio de spawn do passo aleatório (#655, `Monster::isInSpawnRange`) | ±50 tiles em torno do `home` (`deSpawnRadius` padrão do Canary, `config.lua.dist:612`); o teleporte de volta de `Monster::onThink` para quem passa dele NÃO existe aqui | `packages/sim/src/monster/monster.ts`, `DESPAWN_RADIUS` — mecanismo, não conteúdo |
+| Raio de spawn do passo aleatório (#655, `Monster::isInSpawnRange`) e da busca de caminho da volta | ±50 tiles em torno do `home` (`deSpawnRadius` padrão do Canary, `config.lua.dist:612`); a busca de caminho da volta ao spawn usa o mesmo número como raio a partir do monstro; o teleporte de volta de `Monster::onThink` para quem passa dele NÃO existe aqui | `packages/sim/src/monster/monster.ts`, `DESPAWN_RADIUS` — mecanismo, não conteúdo |
 
 ## Em aberto
 
