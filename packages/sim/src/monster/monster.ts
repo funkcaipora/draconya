@@ -480,13 +480,15 @@ export function nearestPrey(origin: GridPoint, candidates: readonly Prey[]): Pre
  *
  * Provocação (#589, Canary `Monster::isFleeing`: `challengeFocusDuration <= 0`) suspende a fuga
  * enquanto a condição `'challenge'` vale — o mesmo lookup O(1) em `Conditions` que qualquer
- * outra condição já usa, sem campo novo.
+ * outra condição já usa, sem campo novo. O Fatal Hold (#603, `fatalHoldDuration <= 0`, o
+ * charm do jogador) faz o mesmo com a condição `'fatal-hold'`.
  */
 export function isMonsterFleeing(monster: MonsterRuntime, definition: Monster): boolean {
   return definition.runOnHealth !== undefined
     && monster.alive
     && monster.health <= definition.runOnHealth
-    && monster.conditions.get('challenge') === null;
+    && monster.conditions.get('challenge') === null
+    && monster.conditions.get('fatal-hold') === null;
 }
 
 /**

@@ -619,6 +619,80 @@ describe('crítico do LANÇADOR (M30-04, #551): o Canary rola para magia como pa
   });
 });
 
+describe('charms passivos do lançador por ALVO (#603): Low Blow, Savage Blow e leech', () => {
+  const blast = {
+    id: 'blast', name: 'Explosão', manaCost: 60, cooldownMs: 4_000, minLevel: 1,
+    effect: { kind: 'damage' as const, power: 30, range: 4, damageType: 'fire' as const, area: { shape: 'circle' as const, radius: 1, centered: 'target' as const } },
+  };
+  const plain = { armor: 0, dodgeChance: 0 };
+  const ofMonster = (monsterId: string, bonus: { lowBlow?: number; savageBlow?: number; lifeLeech?: number }) =>
+    ({ armor: 0, dodgeChance: 0, charm: { monsterId, ...bonus } });
+  const base = { critical: { chance: 0, multiplier: 2 } };
+
+  it('Low Blow (chance 1): o crítico base falhou, o charm abre — só o alvo do charm critica', () => {
+    const result = castSpell(
+      hero(), blast,
+      { distance: 2, targets: [ofMonster('rat', { lowBlow: 1 }), plain, ofMonster('rat', { lowBlow: 1 })] },
+      0, combat, rng(), undefined, undefined, base,
+    );
+    if (!result.ok) throw new Error('esperava lançar');
+    expect(result.hits).toEqual([60, 30, 60]);
+  });
+
+  it('Low Blow: os alvos do MESMO monstro dividem UM sorteio (o `lowBlowCrits` do Canary)', () => {
+    // Com chance parcial e três ratos, um sorteio por alvo daria misturas; um por monstro-alvo,
+    // nunca — em nenhuma semente.
+    const outcomes = new Set<number>();
+    for (let seed = 0; seed < 60; seed += 1) {
+      const result = castSpell(
+        hero(), blast,
+        { distance: 2, targets: [ofMonster('rat', { lowBlow: 0.5 }), ofMonster('rat', { lowBlow: 0.5 }), ofMonster('rat', { lowBlow: 0.5 })] },
+        0, combat, Rng.fromSeed(`low-blow-${seed}`), undefined, undefined, base,
+      );
+      if (!result.ok) throw new Error('esperava lançar');
+      expect(new Set(result.hits).size).toBe(1);
+      outcomes.add(result.hits[0] as number);
+    }
+    expect(outcomes).toEqual(new Set([30, 60]));
+  });
+
+  it('Savage Blow soma ao multiplicador do crítico (2 + 0,5) só do alvo do charm', () => {
+    const result = castSpell(
+      hero(), blast,
+      { distance: 2, targets: [ofMonster('rat', { savageBlow: 0.5 }), plain] },
+      0, combat, rng(), undefined, undefined, { critical: { chance: 1, multiplier: 2 } },
+    );
+    if (!result.ok) throw new Error('esperava lançar');
+    expect(result.hits).toEqual([75, 60]);
+  });
+
+  it('o leech do charm chega ao intent do alvo, sem tocar o dos outros', () => {
+    const result = castSpell(
+      hero(), blast,
+      { distance: 2, targets: [ofMonster('rat', { lifeLeech: 0.05 }), plain] },
+      0, combat, rng(),
+    );
+    if (!result.ok) throw new Error('esperava lançar');
+    expect(result.hitOutcomes?.[0]?.intent.modifiers?.lifeLeech).toBe(0.05);
+    expect(result.hitOutcomes?.[1]?.intent.modifiers).toBeUndefined();
+  });
+
+  it('sem charm em alvo nenhum, o resultado é o de sempre — mesmo dano, mesmo estado do Rng', () => {
+    const a = rng();
+    const b = rng();
+    const withField = castSpell(
+      hero(), blast, { distance: 2, targets: [plain, plain] }, 0, combat, a, undefined, undefined, base,
+    );
+    const legacy = castSpell(
+      hero(), blast, { distance: 2, targets: [{ armor: 0, dodgeChance: 0 }, { armor: 0, dodgeChance: 0 }] },
+      0, combat, b, undefined, undefined, base,
+    );
+    if (!withField.ok || !legacy.ok) throw new Error('esperava lançar');
+    expect(withField.hits).toEqual(legacy.hits);
+    expect(a.getState()).toEqual(b.getState());
+  });
+});
+
 describe('requisito de VOCAÇÃO (FUN-92)', () => {
   const druidica = { ...heal, id: 'nature-heal', vocationId: 'druid' };
 

@@ -451,6 +451,17 @@ describe('isMonsterFleeing (#518)', () => {
     const noLongerChallenged = monsterAt(0, 0, { health: 300 });
     expect(isMonsterFleeing(noLongerChallenged, runsAt300)).toBe(true);
   });
+
+  it('#603: is suspended while the Fatal Hold charm condition ("fatal-hold") is active', () => {
+    // `Monster::isFleeing` do Canary confere `fatalHoldDuration <= 0`: o charm do jogador
+    // (30 s) segura a fuga por vida baixa, e a condição é a mesma máquina do `challenge`.
+    const held = monsterAt(0, 0, {
+      health: 300,
+      conditions: [{ key: 'fatal-hold', expiresAtMs: 30_000 }],
+    });
+    expect(isMonsterFleeing(held, runsAt300)).toBe(false);
+    expect(isMonsterFleeing(monsterAt(0, 0, { health: 300 }), runsAt300)).toBe(true);
+  });
 });
 
 describe('decideMonsterAction fleeing (#518)', () => {

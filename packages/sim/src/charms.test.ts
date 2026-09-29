@@ -225,6 +225,49 @@ describe('remove (ADR 0053 d.4 — o gold é de quem chama, invariante 10)', () 
   });
 });
 
+describe('assignedTo: os charms que agem contra UM monstro (#603, getCharmFromTarget)', () => {
+  const parry: Charm = {
+    id: 'parry', name: 'Parry', canaryCharmId: 7, category: 'major', type: 'defensive',
+    chance: [5, 10, 11], points: [400, 600, 2000],
+  };
+  const cripple: Charm = {
+    id: 'cripple', name: 'Cripple', canaryCharmId: 6, category: 'minor', type: 'offensive',
+    chance: [6, 9, 12], points: [100, 150, 225],
+  };
+  const full = new Map<string, Charm>([['wound', wound], ['parry', parry], ['cripple', cripple]]);
+
+  it('sem atribuição nenhuma é undefined — o caminho quente de toda hunt sem charm', () => {
+    expect(Charms.fromState().assignedTo('rat', full)).toBeUndefined();
+  });
+
+  it('devolve o major e o minor do monstro, cada um com o tier atual', () => {
+    const charms = Charms.fromState({
+      ...emptyCharmsState(), tiers: { wound: 2, cripple: 3 },
+      assignments: { wound: 'rat', cripple: 'rat' },
+    });
+    const assigned = charms.assignedTo('rat', full);
+    expect(assigned?.major).toEqual({ charm: wound, tier: 2 });
+    expect(assigned?.minor).toEqual({ charm: cripple, tier: 3 });
+  });
+
+  it('charm atribuído a OUTRO monstro não age contra este', () => {
+    const charms = Charms.fromState({
+      ...emptyCharmsState(), tiers: { wound: 1, parry: 1 }, assignments: { wound: 'rat', parry: 'bat' },
+    });
+    expect(charms.assignedTo('rat', full)).toEqual({ major: { charm: wound, tier: 1 } });
+    expect(charms.assignedTo('bat', full)).toEqual({ major: { charm: parry, tier: 1 } });
+    expect(charms.assignedTo('dragon', full)).toBeUndefined();
+  });
+
+  it('ignora o que não está no catálogo (charm removido) e o que nunca foi desbloqueado', () => {
+    const charms = Charms.fromState({
+      ...emptyCharmsState(), tiers: { wound: 1 }, assignments: { wound: 'rat', ghost: 'rat', parry: 'rat' },
+    });
+    // `ghost` não está no catálogo; `parry` está sem tier (registro inconsistente).
+    expect(charms.assignedTo('rat', full)).toEqual({ major: { charm: wound, tier: 1 } });
+  });
+});
+
 describe('ida e volta do estado', () => {
   it('fromState/getState preserva pontos, echoes, tiers e atribuições', () => {
     const state: CharmsState = {

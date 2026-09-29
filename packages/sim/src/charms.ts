@@ -21,6 +21,23 @@ import type { Bestiary } from './bestiary.js';
 
 export type CharmTier = 0 | 1 | 2 | 3;
 
+/**
+ * Um charm atribuído a um monstro, com o tier (1/2/3) em que está desbloqueado (#603). O
+ * `chance`/`points` do catálogo são indexados por `tier − 1`: o Canary guarda um `0` na frente
+ * do vetor (`charm_functions.cpp:164`) para indexar pelo tier já incrementado, e o catálogo
+ * importado não repete esse `0`.
+ */
+export interface AssignedCharm {
+  readonly charm: Charm;
+  readonly tier: 1 | 2 | 3;
+}
+
+/** O major e o minor que agem contra UM monstro (`PlayerCharmsByMonster` do Canary). */
+export interface AssignedCharms {
+  readonly major?: AssignedCharm;
+  readonly minor?: AssignedCharm;
+}
+
 /** O que `content.bestiary.entries[monsterId]` dá — só os dois campos que a economia usa. */
 export interface CharmBestiaryEntry {
   readonly toKill: number;
@@ -120,6 +137,36 @@ export class Charms {
   /** Quantos slots de atribuição já estão em uso. */
   slotsUsed(): number {
     return this.#assignments.size;
+  }
+
+  /**
+   * Os charms que agem CONTRA um monstro (#603, `IOBestiary::getCharmFromTarget` do Canary): o
+   * major e o minor atribuídos a ele, cada um com o tier atual. `undefined` quando nenhum charm
+   * aponta para `monsterId` — o caso comum, e é o que o caminho quente (a cada golpe, dado ou
+   * recebido) espera: sem atribuição nenhuma o custo é um `size === 0` e nenhuma alocação; com
+   * atribuições a OUTROS monstros, um laço de no máximo seis entradas, também sem alocar.
+   *
+   * O charm precisa estar no catálogo e desbloqueado (tier ≥ 1) — `assign` já garante o segundo,
+   * mas um registro que sobrou de um catálogo antigo (charm removido) não dispara nada.
+   */
+  assignedTo(monsterId: string, catalogue: ReadonlyMap<string, Charm>): AssignedCharms | undefined {
+    if (this.#assignments.size === 0) return undefined;
+    let major: AssignedCharm | undefined;
+    let minor: AssignedCharm | undefined;
+    for (const [charmId, target] of this.#assignments) {
+      if (target !== monsterId) continue;
+      const charm = catalogue.get(charmId);
+      const tier = this.tierOf(charmId);
+      if (charm === undefined || tier < 1) continue;
+      const assigned: AssignedCharm = { charm, tier: tier as 1 | 2 | 3 };
+      if (charm.category === 'major') major = assigned;
+      else minor = assigned;
+    }
+    if (major === undefined && minor === undefined) return undefined;
+    return {
+      ...(major === undefined ? {} : { major }),
+      ...(minor === undefined ? {} : { minor }),
+    };
   }
 
   /**

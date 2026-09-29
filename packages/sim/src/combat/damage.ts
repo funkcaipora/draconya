@@ -20,6 +20,7 @@ import { resolveDefense } from './defense.js';
 import type { DefenseSource } from './defense.js';
 import { FULL_BLOCK_CHARGE, type BlockChargeState } from './block-charge.js';
 import { MELEE_BLOCK_FLAGS, resolveBlockHit } from './blockhit.js';
+import { hasCharmStage } from './profile.js';
 import type { BlockFlags, BlockType } from './blockhit.js';
 import type { Rng } from '../rng.js';
 import { resolveReflect } from './reflect.js';
@@ -126,7 +127,10 @@ export interface Defender {
  * aquele é apresentação e diz que efeito desenhar; este diz qual fórmula resolveu. Reusar o
  * visual para a fórmula é exatamente a confusão que a DT-01 descarta.
  */
-export type DamageSource = 'basic-attack' | 'spell' | 'rune' | 'monster-attack' | 'reflect';
+export type DamageSource =
+  | 'basic-attack' | 'spell' | 'rune' | 'monster-attack' | 'reflect'
+  // O dano de um Charm (#603, `IOBestiary::parseCharmCombat`): extensão de outro golpe.
+  | 'charm';
 
 /**
  * O TIPO de dano. Desde o CMB-03 é o vocabulário CANÔNICO de `@draconya/content` — o `sim`
@@ -461,8 +465,13 @@ function resolveBlockHitProfile(
   rng: Rng,
   nowMs: number,
 ): DamageOutcome {
-  // Idêntico ao v1/v2: primeiro ato, sempre consumido.
-  const dodged = rng.chance(effectiveDodge(defender, context));
+  // Idêntico ao v1/v2: primeiro ato, sempre consumido — ATÉ o `combat-v4` (#603, ADR 0053 d.5):
+  // o Dodge do PRD (`dodgeChance` do defensor, corte pela metade) SAI do perfil, o único Dodge é o
+  // charm (que nega o golpe inteiro, e vive no ruleset, antes do mana shield). Sem o estágio,
+  // nem o sorteio é consumido: a sequência do `combat-v4` é a de um resolver sem Dodge.
+  const dodged = hasCharmStage(combat.compatibilityProfile)
+    ? false
+    : rng.chance(effectiveDodge(defender, context));
 
   // Crítico (M30-04): o SEGUNDO sorteio, na GERAÇÃO do dano — ANTES do `blockHit`, a mesma
   // posição do Canary (ver o comentário da função). Declarado com `chance: 0`, ainda consome —
@@ -692,9 +701,11 @@ export function resolveDamage(
       // de arma do Canary) e a chance de acerto à distância, resolvidos ANTES pelo chamador.
       return resolveMitigation(intent, defender, context, combat, rng, nowMs);
     case 'combat-v3':
+    case 'combat-v4':
       // O pipeline de RECEBIMENTO muda (ver `resolveBlockHitProfile`); o que o `combat-v2`
       // mudou no lado ofensivo continua valendo — o `rawDamage` que chega aqui já é a fórmula
-      // de arma do Canary, resolvida ANTES pelo chamador, como no v2.
+      // de arma do Canary, resolvida ANTES pelo chamador, como no v2. O `combat-v4` (#598/#603)
+      // soma em cima e é o MESMO resolver, sem o Dodge do PRD.
       return resolveBlockHitProfile(intent, defender, context, combat, rng, nowMs);
     default:
       // Inalcançável enquanto o registro do conteúdo e este despacho conhecerem o mesmo
