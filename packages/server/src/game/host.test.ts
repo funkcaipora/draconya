@@ -7007,6 +7007,27 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
     expect(socket.received()).not.toContainEqual({ type: 'target-changed', creatureId: ratId, seq: 2 });
   });
 
+  it('select-target num monstro INVISÍVEL é recusado com target-cancel — o jogador não o enxerga (#559)', async () => {
+    const { host, socket, viewer, runFor, send, sessions } = realHunt(true);
+    runFor(200);
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = socket.received().filter((m) => m.type === 'session-state').at(-1);
+    if (state?.type !== 'session-state') throw new Error('não veio session-state');
+    const rat = state.world.creatures.find((c) => c.name === 'Rat');
+    const ratId = rat?.id as number;
+    const monster = (sessions[0]?.ruleset as HuntRuleset).monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    monster.conditions.apply({ key: 'invisible', targetId: monster.subject, expiresAtMs: 999_999 });
+
+    // O auto-target (#444) pode já ter anunciado o rato ANTES de ele ficar invisível: o que se
+    // confere é que o pedido de seleção NÃO gera uma confirmação a mais.
+    const before = socket.received().filter((m) => m.type === 'target-changed').length;
+    await send({ type: 'select-target', creatureId: ratId, seq: 1 });
+    expect(socket.received()).toContainEqual({ type: 'target-cancel', seq: 1 });
+    expect(socket.received().filter((m) => m.type === 'target-changed')).toHaveLength(before);
+  });
+
   it('slot-state sai no primeiro ciclo e só muda quando o par (state, reason) muda (RF-09)', async () => {
     const { socket, runFor, send } = realHunt(false, false);
     await send({ type: 'bot-config', config: manualHealConfig() });

@@ -2000,7 +2000,9 @@ export class SessionHost {
 
     const subject = this.#subjectOfCreature(hosted, creatureId);
     const monster = subject === null ? null : ruleset.monsterBySubject(subject);
-    if (monster === null) {
+    // Monstro invisível não é alvo (#559): o jogador não o enxerga (`Player::canSeeCreature`), e o
+    // `sim` recusa em `setAttackTarget` — confirmar aqui com `target-changed` mentiria ao cliente.
+    if (monster === null || monster.invisible) {
       viewer.send({ type: 'target-cancel', ...(seq === undefined ? {} : { seq }) });
       return;
     }
