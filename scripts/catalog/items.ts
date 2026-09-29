@@ -527,6 +527,11 @@ export function convertItem(
     }
   }
 
+  // Creature product (#603, o charm Gut): o `primarytype="creature products"` do Canary é o que a
+  // fatia `creature-products` já classifica, e o Gut (`generateLootRoll`, `monstertype.lua`) soma
+  // ao drop justamente deles. O flag viaja no item porque `sim/loot.ts` não conhece a fatia — só o
+  // catálogo de itens.
+  if (classification.slice === 'creature-products') entity['creatureProduct'] = true;
   entity['source'] = source;
   // Aparência (#748, ADR 0038 decisão 2, o MESMO recurso que `outfitId` já usa em `monsters.ts`):
   // o `id` do `<item>` do Canary É o `appearanceId` (o clientid do OTB) — conferido em

@@ -472,6 +472,12 @@ sobrevive como fallback legado do conteúdo de teste — se ele e o kit coexiste
 a arma declarada seja uma das peças, porque o host prefere o kit e o campo ficaria só a mentira
 de exibição; é daí que o `catalogue` deriva a arma que o diálogo do level 8 mostra.
 
+**`creatureProduct: true` é do importador, nunca autoral** (#603, o charm Gut): o
+`scripts/catalog/items.ts` o escreve em todo item da fatia `creature-products`
+(`primarytype="creature products"`), e `sim/loot.ts` o lê para somar o Gut à chance de drop. Item
+autoral (`data/items/*.json`) vence o gerado no mesmo slug — se um creature product autoral
+existir, o flag entra por override, com o motivo citado, não por edição do gerado.
+
 ## Munição (#151, AB-02, ADR 0032 decisão 7)
 
 **Munição é abstrata** (ADR 0032 d.7; a decisão 3 do ADR 0026 volta a valer): flecha e virote

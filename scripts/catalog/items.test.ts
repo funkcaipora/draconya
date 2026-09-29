@@ -509,6 +509,14 @@ describe('convertItem', () => {
     expect(convert('90018')?.entity).toMatchObject({ kind: 'other' });
   });
 
+  it('só o creature product leva `creatureProduct: true` (o charm Gut, #603) — o valuable não', () => {
+    // O flag é do `primarytype="creature products"` do Canary; o Gut soma ao drop justamente deles.
+    expect(convert('90017')?.entity['creatureProduct']).toBe(true);
+    expect(convert('90017')?.slice).toBe('creature-products');
+    expect(convert('90018')?.entity['creatureProduct']).toBeUndefined();
+    expect(convert('90020')?.entity['creatureProduct']).toBeUndefined();
+  });
+
   it('decoração comum tem primarytype, então vira PULADO (aparece no relatório), não some em silêncio', () => {
     const decoration = convert('90019');
     expect(decoration?.blockers[0]).toMatch(/sem categoria/);
