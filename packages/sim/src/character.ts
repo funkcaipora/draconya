@@ -271,6 +271,15 @@ export interface CharacterState {
    */
   readonly lastCombatActionAtMs?: number;
   /**
+   * A imunidade temporária que o charm Cleanse dá ao tipo de condição que acabou de remover (#603,
+   * `Player::setImmuneCleanse` do Canary — 11 s): `tipo → instante ABSOLUTO (relógio lógico) em que
+   * vence`. Só o ruleset da hunt escreve (invariante 9), e só sob `combat-v4`. Ausente é "nenhuma
+   * imunidade" — sem bump de `SNAPSHOT_FORMAT_VERSION`, como `attackLockedUntil`. Precisa viajar no
+   * snapshot: uma hunt retomada no meio dos 11 s que voltasse sem ela deixaria uma condição que a
+   * sessão original recusaria entrar.
+   */
+  readonly cleanseImmunity?: Readonly<Record<string, number>>;
+  /**
    * Promovido (#566, ADR 0042 decisão 1): estado que SÓ SOBE — não existe des-promoção no
    * Tibia. Ausente/`false` é "não promovido", o normal de todo personagem novo. Sem bump de
    * `SNAPSHOT_FORMAT_VERSION`, como `vocationId`/`blessings`.
@@ -447,6 +456,11 @@ export class CharacterRuntime {
    */
   lastCombatActionAtMs: number | null;
   /**
+   * A imunidade de Cleanse por tipo de condição (#603) — ver `CharacterState.cleanseImmunity`.
+   * Só o ruleset da hunt escreve. Vazio é o caso de todo personagem sem o charm.
+   */
+  readonly cleanseImmunity = new Map<string, number>();
+  /**
    * Promovido (#566, ADR 0042 decisão 1). Só `promote()` escreve — nunca desce. Consumido pelo
    * regen (`#regenOf`) e pela penalidade de morte (`applyDeathPenalty`), os dois em `hunt.ts`.
    */
@@ -507,6 +521,9 @@ export class CharacterRuntime {
     this.pendingManualAction = state.pendingManualAction ?? null;
     this.attackLockedUntil = state.attackLockedUntil ?? 0;
     this.lastCombatActionAtMs = state.lastCombatActionAtMs ?? null;
+    for (const [type, untilMs] of Object.entries(state.cleanseImmunity ?? {})) {
+      this.cleanseImmunity.set(type, untilMs);
+    }
     this.promoted = state.promoted ?? false;
     // Defensivo, como `readCharacterStorage`: um valor que não é um dos três modos (snapshot
     // gravado à mão, ticket torto) vira o default do Canary em vez de travar a sessão.
@@ -751,6 +768,8 @@ export class CharacterRuntime {
       ...(this.attackLockedUntil === 0 ? {} : { attackLockedUntil: this.attackLockedUntil }),
       ...(this.lastCombatActionAtMs === null
         ? {} : { lastCombatActionAtMs: this.lastCombatActionAtMs }),
+      ...(this.cleanseImmunity.size === 0
+        ? {} : { cleanseImmunity: Object.fromEntries(this.cleanseImmunity) }),
       ...(this.promoted ? { promoted: true } : {}),
       // Omitidos no default (ofensiva, nunca bateu): o construtor os repõe sozinho.
       ...(this.fightMode === DEFAULT_FIGHT_MODE ? {} : { fightMode: this.fightMode }),

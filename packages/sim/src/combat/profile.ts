@@ -13,3 +13,18 @@
 export function isV3OrLater(compatibilityProfile: string | undefined): boolean {
   return compatibilityProfile === 'combat-v3' || compatibilityProfile === 'combat-v4';
 }
+
+/**
+ * O perfil executa o estágio de Charms e as demais mudanças de resultado do #603 (ADR 0053 d.5)
+ * — só o `combat-v4`. Diferente de `isV3OrLater`, este predicado NÃO cobre o `combat-v3`: um
+ * personagem com charm atribuído numa sessão ainda fixada em `combat-v3` (conteúdo anterior ao
+ * #603) não rola charm nenhum — o resultado dessa sessão não pode mudar no meio dela (invariante
+ * 7), e o registro de Charms é do PERSONAGEM, não da versão de conteúdo.
+ *
+ * Cobre também o fim do Dodge do PRD: o resolver não rola o Dodge de `combat.player.dodgeChance`
+ * neste perfil (o único Dodge é o charm, ADR 0053 d.5). O crítico base do jogador, ao contrário,
+ * é conteúdo (`baseline.json` declara `modifiers.critical`) e não precisa deste predicado.
+ */
+export function hasCharmStage(compatibilityProfile: string | undefined): boolean {
+  return compatibilityProfile === 'combat-v4';
+}

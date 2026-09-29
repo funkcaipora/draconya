@@ -5,6 +5,7 @@
     "kind": "other",
     "weight": 0.5,
     "value": 10,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -17,6 +18,7 @@
     "kind": "other",
     "weight": 1.7,
     "value": 900,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -29,6 +31,7 @@
     "kind": "other",
     "weight": 1.7,
     "value": 500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -41,6 +44,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 260,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -53,6 +57,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -65,6 +70,7 @@
     "kind": "other",
     "weight": 0.8,
     "value": 28000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -77,6 +83,7 @@
     "kind": "other",
     "weight": 1.6,
     "value": 200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -89,6 +96,7 @@
     "kind": "other",
     "weight": 6.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -101,6 +109,7 @@
     "kind": "other",
     "weight": 0.9,
     "value": 50,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -113,6 +122,7 @@
     "kind": "other",
     "weight": 1.2,
     "value": 120,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -125,6 +135,7 @@
     "kind": "other",
     "weight": 0.6,
     "value": 1300,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -137,6 +148,7 @@
     "kind": "other",
     "weight": 6.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -149,6 +161,7 @@
     "kind": "other",
     "weight": 6.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -161,6 +174,7 @@
     "kind": "other",
     "weight": 0.65,
     "value": 15,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -173,6 +187,7 @@
     "kind": "other",
     "weight": 1.12,
     "value": 30,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -185,6 +200,7 @@
     "kind": "other",
     "weight": 0.68,
     "value": 55,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -197,6 +213,7 @@
     "kind": "other",
     "weight": 2.1,
     "value": 210,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -209,6 +226,7 @@
     "kind": "other",
     "weight": 2.1,
     "value": 160,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -221,6 +239,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 600,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -233,6 +252,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 350,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -245,6 +265,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 400,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -257,6 +278,7 @@
     "kind": "other",
     "weight": 1,
     "value": 50,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -269,6 +291,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 290,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -281,6 +304,7 @@
     "kind": "other",
     "weight": 1.2,
     "value": 100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -293,6 +317,7 @@
     "kind": "other",
     "weight": 35,
     "value": 200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -305,6 +330,7 @@
     "kind": "other",
     "weight": 12.5,
     "value": 2000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -317,6 +343,7 @@
     "kind": "other",
     "weight": 1.75,
     "value": 190,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -329,6 +356,7 @@
     "kind": "other",
     "weight": 1.18,
     "value": 300,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -341,6 +369,7 @@
     "kind": "other",
     "weight": 2.2,
     "value": 610,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -353,6 +382,7 @@
     "kind": "other",
     "weight": 2.7,
     "value": 550,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -365,6 +395,7 @@
     "kind": "other",
     "weight": 1.6,
     "value": 800,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -377,6 +408,7 @@
     "kind": "other",
     "weight": 1.6,
     "value": 1000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -389,6 +421,7 @@
     "kind": "other",
     "weight": 0.8,
     "value": 320,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -401,6 +434,7 @@
     "kind": "other",
     "weight": 8.1,
     "value": 4200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -413,6 +447,7 @@
     "kind": "other",
     "weight": 0.7,
     "value": 110,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -425,6 +460,7 @@
     "kind": "other",
     "weight": 1.2,
     "value": 100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -437,6 +473,7 @@
     "kind": "other",
     "weight": 0.2,
     "value": 70000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -449,6 +486,7 @@
     "kind": "other",
     "weight": 0.9,
     "value": 230,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -461,6 +499,7 @@
     "kind": "other",
     "weight": 2.1,
     "value": 600,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -473,6 +512,7 @@
     "kind": "other",
     "weight": 1.69,
     "value": 200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -485,6 +525,7 @@
     "kind": "other",
     "weight": 5,
     "value": 35,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -497,6 +538,7 @@
     "kind": "other",
     "weight": 1.6,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -509,6 +551,7 @@
     "kind": "other",
     "weight": 2.2,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -521,6 +564,7 @@
     "kind": "other",
     "weight": 20,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -533,6 +577,7 @@
     "kind": "other",
     "weight": 1.2,
     "value": 190,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -545,6 +590,7 @@
     "kind": "other",
     "weight": 5,
     "value": 80,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -557,6 +603,7 @@
     "kind": "other",
     "weight": 0.92,
     "value": 210,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -569,6 +616,7 @@
     "kind": "other",
     "weight": 1,
     "value": 640,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -581,6 +629,7 @@
     "kind": "other",
     "weight": 2.2,
     "value": 220,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -593,6 +642,7 @@
     "kind": "other",
     "weight": 1.12,
     "value": 380,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -605,6 +655,7 @@
     "kind": "other",
     "weight": 1.12,
     "value": 210,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -617,6 +668,7 @@
     "kind": "other",
     "weight": 2.4,
     "value": 2600,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -629,6 +681,7 @@
     "kind": "other",
     "weight": 1.3,
     "value": 30,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -641,6 +694,7 @@
     "kind": "other",
     "weight": 2,
     "value": 340,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -653,6 +707,7 @@
     "kind": "other",
     "weight": 6.4,
     "value": 190,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -665,6 +720,7 @@
     "kind": "other",
     "weight": 2.1,
     "value": 100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -677,6 +733,7 @@
     "kind": "other",
     "weight": 1.56,
     "value": 20,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -689,6 +746,7 @@
     "kind": "other",
     "weight": 0.5,
     "value": 8000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -701,6 +759,7 @@
     "kind": "other",
     "weight": 5,
     "value": 130,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -715,6 +774,7 @@
     "value": 1000,
     "slot": "hand",
     "attack": 1,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -727,6 +787,7 @@
     "kind": "other",
     "weight": 1,
     "value": 210,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -739,6 +800,7 @@
     "kind": "other",
     "weight": 1.28,
     "value": 35,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -751,6 +813,7 @@
     "kind": "other",
     "weight": 1.4,
     "value": 120,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -763,6 +826,7 @@
     "kind": "other",
     "weight": 11,
     "value": 230,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -775,6 +839,7 @@
     "kind": "other",
     "weight": 3.9,
     "value": 2800,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -787,6 +852,7 @@
     "kind": "other",
     "weight": 0.75,
     "value": 2100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -799,6 +865,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 1200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -811,6 +878,7 @@
     "kind": "other",
     "weight": 0.35,
     "value": 50,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -823,6 +891,7 @@
     "kind": "other",
     "weight": 1,
     "value": 230,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -835,6 +904,7 @@
     "kind": "other",
     "weight": 1,
     "value": 250,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -847,6 +917,7 @@
     "kind": "other",
     "weight": 1.2,
     "value": 630,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -859,6 +930,7 @@
     "kind": "other",
     "weight": 0.88,
     "value": 35,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -871,6 +943,7 @@
     "kind": "other",
     "weight": 1.9,
     "value": 1200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -883,6 +956,7 @@
     "kind": "other",
     "weight": 1.1,
     "value": 650,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -895,6 +969,7 @@
     "kind": "other",
     "weight": 0.8,
     "value": 550,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -907,6 +982,7 @@
     "kind": "other",
     "weight": 2.4,
     "value": 350,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -919,6 +995,7 @@
     "kind": "other",
     "weight": 1.9,
     "value": 600,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -931,6 +1008,7 @@
     "kind": "other",
     "weight": 1.3,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -943,6 +1021,7 @@
     "kind": "other",
     "weight": 0.69,
     "value": 28,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -955,6 +1034,7 @@
     "kind": "other",
     "weight": 1,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -967,6 +1047,7 @@
     "kind": "other",
     "weight": 2.7,
     "value": 240,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -979,6 +1060,7 @@
     "kind": "other",
     "weight": 1.6,
     "value": 850,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -991,6 +1073,7 @@
     "kind": "other",
     "weight": 1.6,
     "value": 120,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1003,6 +1086,7 @@
     "kind": "other",
     "weight": 0.45,
     "value": 50,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1015,6 +1099,7 @@
     "kind": "other",
     "weight": 0.75,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1027,6 +1112,7 @@
     "kind": "other",
     "weight": 2.7,
     "value": 120000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1039,6 +1125,7 @@
     "kind": "other",
     "weight": 0.1,
     "value": 30,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1051,6 +1138,7 @@
     "kind": "other",
     "weight": 2.2,
     "value": 800,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1063,6 +1151,7 @@
     "kind": "other",
     "weight": 5,
     "value": 20,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1075,6 +1164,7 @@
     "kind": "other",
     "weight": 6.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1087,6 +1177,7 @@
     "kind": "other",
     "weight": 1.7,
     "value": 650,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1099,6 +1190,7 @@
     "kind": "other",
     "weight": 0.75,
     "value": 15,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1111,6 +1203,7 @@
     "kind": "other",
     "weight": 0.1,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1123,6 +1216,7 @@
     "kind": "other",
     "weight": 0.36,
     "value": 110,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1135,6 +1229,7 @@
     "kind": "other",
     "weight": 4.5,
     "value": 400,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1147,6 +1242,7 @@
     "kind": "other",
     "weight": 1.7,
     "value": 1000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1159,6 +1255,7 @@
     "kind": "other",
     "weight": 0.8,
     "value": 45,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1171,6 +1268,7 @@
     "kind": "other",
     "weight": 1.65,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1183,6 +1281,7 @@
     "kind": "other",
     "weight": 2,
     "value": 260,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1195,6 +1294,7 @@
     "kind": "other",
     "weight": 1.1,
     "value": 360,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1207,6 +1307,7 @@
     "kind": "other",
     "weight": 0.3,
     "value": 570,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1219,6 +1320,7 @@
     "kind": "other",
     "weight": 1.12,
     "value": 700,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1231,6 +1333,7 @@
     "kind": "other",
     "weight": 7.2,
     "value": 120,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1243,6 +1346,7 @@
     "kind": "other",
     "weight": 4,
     "value": 210,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1255,6 +1359,7 @@
     "kind": "other",
     "weight": 2.3,
     "value": 550,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1267,6 +1372,7 @@
     "kind": "other",
     "weight": 1.75,
     "value": 35,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1279,6 +1385,7 @@
     "kind": "other",
     "weight": 4.5,
     "value": 180,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1291,6 +1398,7 @@
     "kind": "other",
     "weight": 2.65,
     "value": 210,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1303,6 +1411,7 @@
     "kind": "other",
     "weight": 9.7,
     "value": 3200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1315,6 +1424,7 @@
     "kind": "other",
     "weight": 12,
     "value": 250,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1327,6 +1437,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 280,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1339,6 +1450,7 @@
     "kind": "other",
     "weight": 3.4,
     "value": 440,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1351,6 +1463,7 @@
     "kind": "other",
     "weight": 12,
     "value": 400,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1363,6 +1476,7 @@
     "kind": "other",
     "weight": 1.65,
     "value": 280,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1375,6 +1489,7 @@
     "kind": "other",
     "weight": 2,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1387,6 +1502,7 @@
     "kind": "other",
     "weight": 0.82,
     "value": 500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1399,6 +1515,7 @@
     "kind": "other",
     "weight": 4.5,
     "value": 430,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1411,6 +1528,7 @@
     "kind": "other",
     "weight": 6.5,
     "value": 6000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1423,6 +1541,7 @@
     "kind": "other",
     "weight": 0.97,
     "value": 320,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1435,6 +1554,7 @@
     "kind": "other",
     "weight": 1.11,
     "value": 55,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1447,6 +1567,7 @@
     "kind": "other",
     "weight": 1,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1459,6 +1580,7 @@
     "kind": "other",
     "weight": 2,
     "value": 280,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1471,6 +1593,7 @@
     "kind": "other",
     "weight": 1.6,
     "value": 8000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1483,6 +1606,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 25,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1495,6 +1619,7 @@
     "kind": "other",
     "weight": 1.2,
     "value": 20,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1507,6 +1632,7 @@
     "kind": "other",
     "weight": 1.3,
     "value": 200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1519,6 +1645,7 @@
     "kind": "other",
     "weight": 6,
     "value": 300,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1531,6 +1658,7 @@
     "kind": "other",
     "weight": 2.2,
     "value": 250,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1543,6 +1671,7 @@
     "kind": "other",
     "weight": 1,
     "value": 4400,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1555,6 +1684,7 @@
     "kind": "other",
     "weight": 0.9,
     "value": 48,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1567,6 +1697,7 @@
     "kind": "other",
     "weight": 1,
     "value": 3800,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1579,6 +1710,7 @@
     "kind": "other",
     "weight": 1,
     "value": 4100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1591,6 +1723,7 @@
     "kind": "other",
     "weight": 1,
     "value": 5500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1603,6 +1736,7 @@
     "kind": "other",
     "weight": 7.5,
     "value": 450,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1615,6 +1749,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1627,6 +1762,7 @@
     "kind": "other",
     "weight": 1,
     "value": 5100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1639,6 +1775,7 @@
     "kind": "other",
     "weight": 2.4,
     "value": 90,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1651,6 +1788,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 430,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1663,6 +1801,7 @@
     "kind": "other",
     "weight": 2.6,
     "value": 230,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1675,6 +1814,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 360,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1687,6 +1827,7 @@
     "kind": "other",
     "weight": 4.8,
     "value": 80,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1699,6 +1840,7 @@
     "kind": "other",
     "weight": 2.4,
     "value": 180,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1711,6 +1853,7 @@
     "kind": "other",
     "weight": 2.4,
     "value": 290,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1723,6 +1866,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1735,6 +1879,7 @@
     "kind": "other",
     "weight": 0.7,
     "value": 650,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1747,6 +1892,7 @@
     "kind": "other",
     "weight": 1,
     "value": 800,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1760,6 +1906,7 @@
     "weight": 1,
     "value": 300,
     "durationMs": 300000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1772,6 +1919,7 @@
     "kind": "other",
     "weight": 10,
     "value": 1000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1784,6 +1932,7 @@
     "kind": "other",
     "weight": 1,
     "value": 1000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1796,6 +1945,7 @@
     "kind": "other",
     "weight": 3,
     "value": 1000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1808,6 +1958,7 @@
     "kind": "other",
     "weight": 1.32,
     "value": 80,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1820,6 +1971,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 350,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1832,6 +1984,7 @@
     "kind": "other",
     "weight": 2.29,
     "value": 270,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1844,6 +1997,7 @@
     "kind": "other",
     "weight": 1.34,
     "value": 120,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1856,6 +2010,7 @@
     "kind": "other",
     "weight": 0.75,
     "value": 2100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1868,6 +2023,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 1200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1880,6 +2036,7 @@
     "kind": "other",
     "weight": 0.32,
     "value": 20,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1892,6 +2049,7 @@
     "kind": "other",
     "weight": 3.6,
     "value": 35,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1904,6 +2062,7 @@
     "kind": "other",
     "weight": 2,
     "value": 690,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1916,6 +2075,7 @@
     "kind": "other",
     "weight": 2,
     "value": 475,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1928,6 +2088,7 @@
     "kind": "other",
     "weight": 3.5,
     "value": 700,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1940,6 +2101,7 @@
     "kind": "other",
     "weight": 12.5,
     "value": 8000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1952,6 +2114,7 @@
     "kind": "other",
     "weight": 6.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1964,6 +2127,7 @@
     "kind": "other",
     "weight": 5.5,
     "value": 550,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1976,6 +2140,7 @@
     "kind": "other",
     "weight": 0.68,
     "value": 550,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1988,6 +2153,7 @@
     "kind": "other",
     "weight": 0.78,
     "value": 430,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2000,6 +2166,7 @@
     "kind": "other",
     "weight": 2,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2012,6 +2179,7 @@
     "kind": "other",
     "weight": 2.8,
     "value": 205,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2024,6 +2192,7 @@
     "kind": "other",
     "weight": 3.9,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2036,6 +2205,7 @@
     "kind": "other",
     "weight": 31,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2048,6 +2218,7 @@
     "kind": "other",
     "weight": 34,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2060,6 +2231,7 @@
     "kind": "other",
     "weight": 1.9,
     "value": 130,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2072,6 +2244,7 @@
     "kind": "other",
     "weight": 0.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2084,6 +2257,7 @@
     "kind": "other",
     "weight": 0.75,
     "value": 40,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2096,6 +2270,7 @@
     "kind": "other",
     "weight": 0.75,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2108,6 +2283,7 @@
     "kind": "other",
     "weight": 12,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2120,6 +2296,7 @@
     "kind": "other",
     "weight": 1.12,
     "value": 90,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2132,6 +2309,7 @@
     "kind": "other",
     "weight": 2.29,
     "value": 115,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2144,6 +2322,7 @@
     "kind": "other",
     "weight": 0.8,
     "value": 50,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2156,6 +2335,7 @@
     "kind": "other",
     "weight": 1.1,
     "value": 45,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2168,6 +2348,7 @@
     "kind": "other",
     "weight": 6,
     "value": 2150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2180,6 +2361,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 270,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2192,6 +2374,7 @@
     "kind": "other",
     "weight": 10,
     "value": 20000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2204,6 +2387,7 @@
     "kind": "other",
     "weight": 3.5,
     "value": 300,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2216,6 +2400,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 2000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2228,6 +2413,7 @@
     "kind": "other",
     "weight": 2,
     "value": 270,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2240,6 +2426,7 @@
     "kind": "other",
     "weight": 1.35,
     "value": 820,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2252,6 +2439,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 5000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2264,6 +2452,7 @@
     "kind": "other",
     "weight": 3.2,
     "value": 240,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2276,6 +2465,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2288,6 +2478,7 @@
     "kind": "other",
     "weight": 2.4,
     "value": 650,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2300,6 +2491,7 @@
     "kind": "other",
     "weight": 1.9,
     "value": 420,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2312,6 +2504,7 @@
     "kind": "other",
     "weight": 0.6,
     "value": 900,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2324,6 +2517,7 @@
     "kind": "other",
     "weight": 1.7,
     "value": 950,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2336,6 +2530,7 @@
     "kind": "other",
     "weight": 2,
     "value": 200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2348,6 +2543,7 @@
     "kind": "other",
     "weight": 0.5,
     "value": 650,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2360,6 +2556,7 @@
     "kind": "other",
     "weight": 1.14,
     "value": 375,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2372,6 +2569,7 @@
     "kind": "other",
     "weight": 0.6,
     "value": 200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2384,6 +2582,7 @@
     "kind": "other",
     "weight": 1.9,
     "value": 25,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2396,6 +2595,7 @@
     "kind": "other",
     "weight": 20,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2408,6 +2608,7 @@
     "kind": "other",
     "weight": 1,
     "value": 500000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2420,6 +2621,7 @@
     "kind": "other",
     "weight": 1.2,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2432,6 +2634,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 5000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2444,6 +2647,7 @@
     "kind": "other",
     "weight": 3.75,
     "value": 800,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2456,6 +2660,7 @@
     "kind": "other",
     "weight": 2.9,
     "value": 330,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2468,6 +2673,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2480,6 +2686,7 @@
     "kind": "other",
     "weight": 6.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2492,6 +2699,7 @@
     "kind": "other",
     "weight": 1.2,
     "value": 100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2504,6 +2712,7 @@
     "kind": "other",
     "weight": 1.9,
     "value": 400,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2516,6 +2725,7 @@
     "kind": "other",
     "weight": 6.8,
     "value": 700,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2528,6 +2738,7 @@
     "kind": "other",
     "weight": 2.48,
     "value": 160,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2540,6 +2751,7 @@
     "kind": "other",
     "weight": 1.86,
     "value": 280,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2552,6 +2764,7 @@
     "kind": "other",
     "weight": 2.25,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2565,6 +2778,7 @@
     "weight": 4.55,
     "value": 0,
     "slot": "finger",
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2577,6 +2791,7 @@
     "kind": "other",
     "weight": 7,
     "value": 270,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2589,6 +2804,7 @@
     "kind": "other",
     "weight": 6.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2601,6 +2817,7 @@
     "kind": "other",
     "weight": 2.4,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2613,6 +2830,7 @@
     "kind": "other",
     "weight": 5,
     "value": 200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2625,6 +2843,7 @@
     "kind": "other",
     "weight": 0.97,
     "value": 90,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2637,6 +2856,7 @@
     "kind": "other",
     "weight": 0.95,
     "value": 200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2649,6 +2869,7 @@
     "kind": "other",
     "weight": 0.05,
     "value": 500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2661,6 +2882,7 @@
     "kind": "other",
     "weight": 12,
     "value": 700,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2673,6 +2895,7 @@
     "kind": "other",
     "weight": 0.5,
     "value": 90,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2685,6 +2908,7 @@
     "kind": "other",
     "weight": 1.4,
     "value": 60,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2697,6 +2921,7 @@
     "kind": "other",
     "weight": 1.12,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2709,6 +2934,7 @@
     "kind": "other",
     "weight": 1.2,
     "value": 380,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2721,6 +2947,7 @@
     "kind": "other",
     "weight": 9,
     "value": 170,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2733,6 +2960,7 @@
     "kind": "other",
     "weight": 2.1,
     "value": 10000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2745,6 +2973,7 @@
     "kind": "other",
     "weight": 0.5,
     "value": 30,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2757,6 +2986,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 520,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2769,6 +2999,7 @@
     "kind": "other",
     "weight": 0.5,
     "value": 500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2781,6 +3012,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 2000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2793,6 +3025,7 @@
     "kind": "other",
     "weight": 12,
     "value": 250,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2805,6 +3038,7 @@
     "kind": "other",
     "weight": 1.2,
     "value": 70,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2817,6 +3051,7 @@
     "kind": "other",
     "weight": 14,
     "value": 350,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2829,6 +3064,7 @@
     "kind": "other",
     "weight": 6.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2841,6 +3077,7 @@
     "kind": "other",
     "weight": 0.1,
     "value": 350,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2853,6 +3090,7 @@
     "kind": "other",
     "weight": 0.9,
     "value": 950,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2865,6 +3103,7 @@
     "kind": "other",
     "weight": 0.9,
     "value": 190,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2877,6 +3116,7 @@
     "kind": "other",
     "weight": 0.75,
     "value": 20,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2889,6 +3129,7 @@
     "kind": "other",
     "weight": 2.1,
     "value": 175,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2901,6 +3142,7 @@
     "kind": "other",
     "weight": 1.55,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2913,6 +3155,7 @@
     "kind": "other",
     "weight": 2.2,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2925,6 +3168,7 @@
     "kind": "other",
     "weight": 1,
     "value": 270,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2937,6 +3181,7 @@
     "kind": "other",
     "weight": 2.8,
     "value": 11000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2949,6 +3194,7 @@
     "kind": "other",
     "weight": 6.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2961,6 +3207,7 @@
     "kind": "other",
     "weight": 2.8,
     "value": 11000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2973,6 +3220,7 @@
     "kind": "other",
     "weight": 2.8,
     "value": 650,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2985,6 +3233,7 @@
     "kind": "other",
     "weight": 2.4,
     "value": 2750,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2997,6 +3246,7 @@
     "kind": "other",
     "weight": 2.8,
     "value": 2650,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3009,6 +3259,7 @@
     "kind": "other",
     "weight": 6.3,
     "value": 2250,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3021,6 +3272,7 @@
     "kind": "other",
     "weight": 6.2,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3033,6 +3285,7 @@
     "kind": "other",
     "weight": 1.18,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3045,6 +3298,7 @@
     "kind": "other",
     "weight": 0.6,
     "value": 500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3057,6 +3311,7 @@
     "kind": "other",
     "weight": 0.6,
     "value": 120000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3069,6 +3324,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3081,6 +3337,7 @@
     "kind": "other",
     "weight": 2,
     "value": 40,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3093,6 +3350,7 @@
     "kind": "other",
     "weight": 0.64,
     "value": 85,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3105,6 +3363,7 @@
     "kind": "other",
     "weight": 0.9,
     "value": 1450,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3117,6 +3376,7 @@
     "kind": "other",
     "weight": 20,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3129,6 +3389,7 @@
     "kind": "other",
     "weight": 6,
     "value": 70,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3141,6 +3402,7 @@
     "kind": "other",
     "weight": 3.9,
     "value": 730,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3153,6 +3415,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 30,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3165,6 +3428,7 @@
     "kind": "other",
     "weight": 0.75,
     "value": 5000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3177,6 +3441,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 3000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3189,6 +3454,7 @@
     "kind": "other",
     "weight": 3.9,
     "value": 2800,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3201,6 +3467,7 @@
     "kind": "other",
     "weight": 0.7,
     "value": 1300,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3213,6 +3480,7 @@
     "kind": "other",
     "weight": 2.1,
     "value": 50,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3225,6 +3493,7 @@
     "kind": "other",
     "weight": 0.75,
     "value": 500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3237,6 +3506,7 @@
     "kind": "other",
     "weight": 1.9,
     "value": 2950,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3249,6 +3519,7 @@
     "kind": "other",
     "weight": 1.25,
     "value": 475,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3261,6 +3532,7 @@
     "kind": "other",
     "weight": 1.9,
     "value": 350,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3273,6 +3545,7 @@
     "kind": "other",
     "weight": 1.6,
     "value": 510,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3285,6 +3558,7 @@
     "kind": "other",
     "weight": 1.12,
     "value": 550,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3297,6 +3571,7 @@
     "kind": "other",
     "weight": 1.03,
     "value": 130,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3309,6 +3584,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3321,6 +3597,7 @@
     "kind": "other",
     "weight": 1.9,
     "value": 160,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3333,6 +3610,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 90,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3345,6 +3623,7 @@
     "kind": "other",
     "weight": 0.8,
     "value": 40,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3357,6 +3636,7 @@
     "kind": "other",
     "weight": 5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3369,6 +3649,7 @@
     "kind": "other",
     "weight": 2.8,
     "value": 40,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3381,6 +3662,7 @@
     "kind": "other",
     "weight": 10,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3393,6 +3675,7 @@
     "kind": "other",
     "weight": 3.2,
     "value": 15000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3405,6 +3688,7 @@
     "kind": "other",
     "weight": 3.8,
     "value": 8000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3417,6 +3701,7 @@
     "kind": "other",
     "weight": 1,
     "value": 2000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3429,6 +3714,7 @@
     "kind": "other",
     "weight": 1.9,
     "value": 540,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3441,6 +3727,7 @@
     "kind": "other",
     "weight": 20,
     "value": 500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3453,6 +3740,7 @@
     "kind": "other",
     "weight": 13,
     "value": 600,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3465,6 +3753,7 @@
     "kind": "other",
     "weight": 0.45,
     "value": 220,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3477,6 +3766,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 2000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3489,6 +3779,7 @@
     "kind": "other",
     "weight": 4.4,
     "value": 90,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3501,6 +3792,7 @@
     "kind": "other",
     "weight": 0.75,
     "value": 2100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3513,6 +3805,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 1200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3525,6 +3818,7 @@
     "kind": "other",
     "weight": 6,
     "value": 300,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3537,6 +3831,7 @@
     "kind": "other",
     "weight": 2,
     "value": 500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3549,6 +3844,7 @@
     "kind": "other",
     "weight": 1.4,
     "value": 300,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3561,6 +3857,7 @@
     "kind": "other",
     "weight": 0.8,
     "value": 150000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3573,6 +3870,7 @@
     "kind": "other",
     "weight": 1.7,
     "value": 3900,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3585,6 +3883,7 @@
     "kind": "other",
     "weight": 1.24,
     "value": 180,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3597,6 +3896,7 @@
     "kind": "other",
     "weight": 1.7,
     "value": 160,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3609,6 +3909,7 @@
     "kind": "other",
     "weight": 8.4,
     "value": 250,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3621,6 +3922,7 @@
     "kind": "other",
     "weight": 0.5,
     "value": 140,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3633,6 +3935,7 @@
     "kind": "other",
     "weight": 0.7,
     "value": 210,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3645,6 +3948,7 @@
     "kind": "other",
     "weight": 4.59,
     "value": 420,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3657,6 +3961,7 @@
     "kind": "other",
     "weight": 1.1,
     "value": 330,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3669,6 +3974,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 240,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3681,6 +3987,7 @@
     "kind": "other",
     "weight": 1.07,
     "value": 80,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3693,6 +4000,7 @@
     "kind": "other",
     "weight": 4.9,
     "value": 90,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3705,6 +4013,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 900,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3717,6 +4026,7 @@
     "kind": "other",
     "weight": 0.4,
     "value": 390,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3729,6 +4039,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 1100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3741,6 +4052,7 @@
     "kind": "other",
     "weight": 0.7,
     "value": 600,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3753,6 +4065,7 @@
     "kind": "other",
     "weight": 1,
     "value": 750,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3765,6 +4078,7 @@
     "kind": "other",
     "weight": 1.1,
     "value": 500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3777,6 +4091,7 @@
     "kind": "other",
     "weight": 1.7,
     "value": 480,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3789,6 +4104,7 @@
     "kind": "other",
     "weight": 5,
     "value": 190,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3801,6 +4117,7 @@
     "kind": "other",
     "weight": 2,
     "value": 270,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3813,6 +4130,7 @@
     "kind": "other",
     "weight": 5,
     "value": 210,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3825,6 +4143,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 300,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3837,6 +4156,7 @@
     "kind": "other",
     "weight": 3.5,
     "value": 530,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3849,6 +4169,7 @@
     "kind": "other",
     "weight": 0.5,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3861,6 +4182,7 @@
     "kind": "other",
     "weight": 0.8,
     "value": 120,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3873,6 +4195,7 @@
     "kind": "other",
     "weight": 1.2,
     "value": 8000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3885,6 +4208,7 @@
     "kind": "other",
     "weight": 2.9,
     "value": 140,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3897,6 +4221,7 @@
     "kind": "other",
     "weight": 7,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3909,6 +4234,7 @@
     "kind": "other",
     "weight": 0.94,
     "value": 1000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3921,6 +4247,7 @@
     "kind": "other",
     "weight": 1.6,
     "value": 80,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3933,6 +4260,7 @@
     "kind": "other",
     "weight": 1,
     "value": 8000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3945,6 +4273,7 @@
     "kind": "other",
     "weight": 3.1,
     "value": 570,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3957,6 +4286,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 350,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3969,6 +4299,7 @@
     "kind": "other",
     "weight": 1.2,
     "value": 320,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3981,6 +4312,7 @@
     "kind": "other",
     "weight": 6,
     "value": 100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3993,6 +4325,7 @@
     "kind": "other",
     "weight": 1.14,
     "value": 280,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4005,6 +4338,7 @@
     "kind": "other",
     "weight": 0.9,
     "value": 310,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4017,6 +4351,7 @@
     "kind": "other",
     "weight": 7.5,
     "value": 220,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4029,6 +4364,7 @@
     "kind": "other",
     "weight": 4.2,
     "value": 2800,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4041,6 +4377,7 @@
     "kind": "other",
     "weight": 1.1,
     "value": 65,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4053,6 +4390,7 @@
     "kind": "other",
     "weight": 0.3,
     "value": 50,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4065,6 +4403,7 @@
     "kind": "other",
     "weight": 2.1,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4077,6 +4416,7 @@
     "kind": "other",
     "weight": 2.1,
     "value": 500000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4089,6 +4429,7 @@
     "kind": "other",
     "weight": 3.7,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4101,6 +4442,7 @@
     "kind": "other",
     "weight": 2,
     "value": 1100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4113,6 +4455,7 @@
     "kind": "other",
     "weight": 0.1,
     "value": 2500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4125,6 +4468,7 @@
     "kind": "other",
     "weight": 1.4,
     "value": 260,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4137,6 +4481,7 @@
     "kind": "other",
     "weight": 0.5,
     "value": 320,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4149,6 +4494,7 @@
     "kind": "other",
     "weight": 5,
     "value": 430,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4161,6 +4507,7 @@
     "kind": "other",
     "weight": 20,
     "value": 100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4173,6 +4520,7 @@
     "kind": "other",
     "weight": 1.11,
     "value": 75,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4185,6 +4533,7 @@
     "kind": "other",
     "weight": 0.4,
     "value": 80,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4197,6 +4546,7 @@
     "kind": "other",
     "weight": 1.4,
     "value": 60,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4209,6 +4559,7 @@
     "kind": "other",
     "weight": 2,
     "value": 840,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4221,6 +4572,7 @@
     "kind": "other",
     "weight": 3.5,
     "value": 140,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4233,6 +4585,7 @@
     "kind": "other",
     "weight": 2.8,
     "value": 18000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4245,6 +4598,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 5000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4257,6 +4611,7 @@
     "kind": "other",
     "weight": 0.75,
     "value": 2100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4269,6 +4624,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 1200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4281,6 +4637,7 @@
     "kind": "other",
     "weight": 1.7,
     "value": 200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4293,6 +4650,7 @@
     "kind": "other",
     "weight": 1.75,
     "value": 420,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4305,6 +4663,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 50,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4317,6 +4676,7 @@
     "kind": "other",
     "weight": 1.43,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4329,6 +4689,7 @@
     "kind": "other",
     "weight": 120,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4341,6 +4702,7 @@
     "kind": "other",
     "weight": 0.96,
     "value": 700,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4353,6 +4715,7 @@
     "kind": "other",
     "weight": 0.3,
     "value": 340,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4365,6 +4728,7 @@
     "kind": "other",
     "weight": 3.5,
     "value": 390,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4377,6 +4741,7 @@
     "kind": "other",
     "weight": 2.8,
     "value": 380,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4389,6 +4754,7 @@
     "kind": "other",
     "weight": 0.3,
     "value": 340,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4401,6 +4767,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 2000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4413,6 +4780,7 @@
     "kind": "other",
     "weight": 2.2,
     "value": 250,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4425,6 +4793,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 390,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4437,6 +4806,7 @@
     "kind": "other",
     "weight": 0.88,
     "value": 75,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4449,6 +4819,7 @@
     "kind": "other",
     "weight": 0.9,
     "value": 25,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4461,6 +4832,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 5000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4473,6 +4845,7 @@
     "kind": "other",
     "weight": 1.4,
     "value": 2000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4485,6 +4858,7 @@
     "kind": "other",
     "weight": 2,
     "value": 520,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4497,6 +4871,7 @@
     "kind": "other",
     "weight": 0.65,
     "value": 430000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4509,6 +4884,7 @@
     "kind": "other",
     "weight": 1.3,
     "value": 425000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4521,6 +4897,7 @@
     "kind": "other",
     "weight": 1.44,
     "value": 430,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4533,6 +4910,7 @@
     "kind": "other",
     "weight": 5,
     "value": 2000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4545,6 +4923,7 @@
     "kind": "other",
     "weight": 2.8,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4557,6 +4936,7 @@
     "kind": "other",
     "weight": 4.5,
     "value": 410,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4569,6 +4949,7 @@
     "kind": "other",
     "weight": 16,
     "value": 180,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4581,6 +4962,7 @@
     "kind": "other",
     "weight": 21,
     "value": 210,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4593,6 +4975,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 570,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4605,6 +4988,7 @@
     "kind": "other",
     "weight": 1.3,
     "value": 220000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4617,6 +5001,7 @@
     "kind": "other",
     "weight": 0.5,
     "value": 30,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4629,6 +5014,7 @@
     "kind": "other",
     "weight": 1,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4641,6 +5027,7 @@
     "kind": "other",
     "weight": 10,
     "value": 700,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4653,6 +5040,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 85,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4665,6 +5053,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4677,6 +5066,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4689,6 +5079,7 @@
     "kind": "other",
     "weight": 2.9,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4701,6 +5092,7 @@
     "kind": "other",
     "weight": 0.7,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4713,6 +5105,7 @@
     "kind": "other",
     "weight": 2,
     "value": 350,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4725,6 +5118,7 @@
     "kind": "other",
     "weight": 5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4737,6 +5131,7 @@
     "kind": "other",
     "weight": 1.3,
     "value": 30,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4749,6 +5144,7 @@
     "kind": "other",
     "weight": 8.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4761,6 +5157,7 @@
     "kind": "other",
     "weight": 5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4773,6 +5170,7 @@
     "kind": "other",
     "weight": 5.8,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4785,6 +5183,7 @@
     "kind": "other",
     "weight": 8.69,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4797,6 +5196,7 @@
     "kind": "other",
     "weight": 5,
     "value": 250,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4809,6 +5209,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 250,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4821,6 +5222,7 @@
     "kind": "other",
     "weight": 0.5,
     "value": 500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4833,6 +5235,7 @@
     "kind": "other",
     "weight": 0.98,
     "value": 10,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4845,6 +5248,7 @@
     "kind": "other",
     "weight": 0.4,
     "value": 110,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4857,6 +5261,7 @@
     "kind": "other",
     "weight": 0.7,
     "value": 280000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4869,6 +5274,7 @@
     "kind": "other",
     "weight": 3.5,
     "value": 250,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4881,6 +5287,7 @@
     "kind": "other",
     "weight": 7,
     "value": 270,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4893,6 +5300,7 @@
     "kind": "other",
     "weight": 0.33,
     "value": 210,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4905,6 +5313,7 @@
     "kind": "other",
     "weight": 1.3,
     "value": 10,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4917,6 +5326,7 @@
     "kind": "other",
     "weight": 1.2,
     "value": 130,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4929,6 +5339,7 @@
     "kind": "other",
     "weight": 0.8,
     "value": 50,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4941,6 +5352,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 30,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4953,6 +5365,7 @@
     "kind": "other",
     "weight": 8.5,
     "value": 2300,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4965,6 +5378,7 @@
     "kind": "other",
     "weight": 11,
     "value": 3000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4977,6 +5391,7 @@
     "kind": "other",
     "weight": 0.3,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4989,6 +5404,7 @@
     "kind": "other",
     "weight": 0.3,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5001,6 +5417,7 @@
     "kind": "other",
     "weight": 0.3,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5013,6 +5430,7 @@
     "kind": "other",
     "weight": 0.3,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5025,6 +5443,7 @@
     "kind": "other",
     "weight": 0.3,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5037,6 +5456,7 @@
     "kind": "other",
     "weight": 0.3,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5049,6 +5469,7 @@
     "kind": "other",
     "weight": 0.3,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5061,6 +5482,7 @@
     "kind": "other",
     "weight": 1.9,
     "value": 15000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5073,6 +5495,7 @@
     "kind": "other",
     "weight": 1.2,
     "value": 60,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5085,6 +5508,7 @@
     "kind": "other",
     "weight": 1.7,
     "value": 400,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5097,6 +5521,7 @@
     "kind": "other",
     "weight": 2.29,
     "value": 110,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5109,6 +5534,7 @@
     "kind": "other",
     "weight": 1.44,
     "value": 500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5121,6 +5547,7 @@
     "kind": "other",
     "weight": 0.8,
     "value": 350,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5133,6 +5560,7 @@
     "kind": "other",
     "weight": 1.2,
     "value": 410,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5145,6 +5573,7 @@
     "kind": "other",
     "weight": 1.07,
     "value": 140,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5157,6 +5586,7 @@
     "kind": "other",
     "weight": 0.9,
     "value": 1100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5169,6 +5599,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 80,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5181,6 +5612,7 @@
     "kind": "other",
     "weight": 0.4,
     "value": 220000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5193,6 +5625,7 @@
     "kind": "other",
     "weight": 28,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5205,6 +5638,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5217,6 +5651,7 @@
     "kind": "other",
     "weight": 0.9,
     "value": 270,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5229,6 +5664,7 @@
     "kind": "other",
     "weight": 2.1,
     "value": 40,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5241,6 +5677,7 @@
     "kind": "other",
     "weight": 3,
     "value": 250,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5253,6 +5690,7 @@
     "kind": "other",
     "weight": 5.7,
     "value": 680,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5265,6 +5703,7 @@
     "kind": "other",
     "weight": 8,
     "value": 175,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5277,6 +5716,7 @@
     "kind": "other",
     "weight": 6.5,
     "value": 265,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5289,6 +5729,7 @@
     "kind": "other",
     "weight": 6,
     "value": 300,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5301,6 +5742,7 @@
     "kind": "other",
     "weight": 2.8,
     "value": 2600,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5313,6 +5755,7 @@
     "kind": "other",
     "weight": 0.3,
     "value": 1200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5325,6 +5768,7 @@
     "kind": "other",
     "weight": 0.55,
     "value": 135,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5337,6 +5781,7 @@
     "kind": "other",
     "weight": 0.3,
     "value": 570,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5349,6 +5794,7 @@
     "kind": "other",
     "weight": 0.9,
     "value": 1200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5361,6 +5807,7 @@
     "kind": "other",
     "weight": 0.97,
     "value": 66,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5373,6 +5820,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 120,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5385,6 +5833,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 70,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5397,6 +5846,7 @@
     "kind": "other",
     "weight": 0.2,
     "value": 120,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5409,6 +5859,7 @@
     "kind": "other",
     "weight": 1.1,
     "value": 74000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5421,6 +5872,7 @@
     "kind": "other",
     "weight": 1,
     "value": 3800,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5433,6 +5885,7 @@
     "kind": "other",
     "weight": 1,
     "value": 4500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5445,6 +5898,7 @@
     "kind": "other",
     "weight": 1.28,
     "value": 400,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5457,6 +5911,7 @@
     "kind": "other",
     "weight": 1.35,
     "value": 2500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5469,6 +5924,7 @@
     "kind": "other",
     "weight": 0.5,
     "value": 120,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5481,6 +5937,7 @@
     "kind": "other",
     "weight": 0.75,
     "value": 20,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5493,6 +5950,7 @@
     "kind": "other",
     "weight": 2.3,
     "value": 280,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5505,6 +5963,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 620,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5517,6 +5976,7 @@
     "kind": "other",
     "weight": 1.2,
     "value": 25,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5529,6 +5989,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 450,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5541,6 +6002,7 @@
     "kind": "other",
     "weight": 6.5,
     "value": 42000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5553,6 +6015,7 @@
     "kind": "other",
     "weight": 1.46,
     "value": 520,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5565,6 +6028,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 260,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5577,6 +6041,7 @@
     "kind": "other",
     "weight": 3.5,
     "value": 400,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5589,6 +6054,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5601,6 +6067,7 @@
     "kind": "other",
     "weight": 0.5,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5613,6 +6080,7 @@
     "kind": "other",
     "weight": 6.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5625,6 +6093,7 @@
     "kind": "other",
     "weight": 6.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5637,6 +6106,7 @@
     "kind": "other",
     "weight": 1.12,
     "value": 25,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5649,6 +6119,7 @@
     "kind": "other",
     "weight": 0.9,
     "value": 45,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5661,6 +6132,7 @@
     "kind": "other",
     "weight": 1.28,
     "value": 200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5673,6 +6145,7 @@
     "kind": "other",
     "weight": 19,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5685,6 +6158,7 @@
     "kind": "other",
     "weight": 6.2,
     "value": 250,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5697,6 +6171,7 @@
     "kind": "other",
     "weight": 1.7,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5709,6 +6184,7 @@
     "kind": "other",
     "weight": 1.56,
     "value": 500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5721,6 +6197,7 @@
     "kind": "other",
     "weight": 0.7,
     "value": 480000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5733,6 +6210,7 @@
     "kind": "other",
     "weight": 4.2,
     "value": 390,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5745,6 +6223,7 @@
     "kind": "other",
     "weight": 3.5,
     "value": 600,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5757,6 +6236,7 @@
     "kind": "other",
     "weight": 1,
     "value": 1300,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5769,6 +6249,7 @@
     "kind": "other",
     "weight": 1.14,
     "value": 35,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5781,6 +6262,7 @@
     "kind": "other",
     "weight": 2.8,
     "value": 11000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5793,6 +6275,7 @@
     "kind": "other",
     "weight": 2.8,
     "value": 11000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5805,6 +6288,7 @@
     "kind": "other",
     "weight": 4.7,
     "value": 2100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5817,6 +6301,7 @@
     "kind": "other",
     "weight": 0.6,
     "value": 1000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5829,6 +6314,7 @@
     "kind": "other",
     "weight": 1.15,
     "value": 80,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5841,6 +6327,7 @@
     "kind": "other",
     "weight": 4.4,
     "value": 250,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5853,6 +6340,7 @@
     "kind": "other",
     "weight": 3.8,
     "value": 170,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5865,6 +6353,7 @@
     "kind": "other",
     "weight": 1.05,
     "value": 50,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5877,6 +6366,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 160,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5889,6 +6379,7 @@
     "kind": "other",
     "weight": 3,
     "value": 175,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5901,6 +6392,7 @@
     "kind": "other",
     "weight": 3,
     "value": 320,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5913,6 +6405,7 @@
     "kind": "other",
     "weight": 1.6,
     "value": 4500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5925,6 +6418,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 250,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5937,6 +6431,7 @@
     "kind": "other",
     "weight": 7,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5949,6 +6444,7 @@
     "kind": "other",
     "weight": 0.8,
     "value": 480,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5961,6 +6457,7 @@
     "kind": "other",
     "weight": 9,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5973,6 +6470,7 @@
     "kind": "other",
     "weight": 1.1,
     "value": 70,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5985,6 +6483,7 @@
     "kind": "other",
     "weight": 8,
     "value": 500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5997,6 +6496,7 @@
     "kind": "other",
     "weight": 2.2,
     "value": 380,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6009,6 +6509,7 @@
     "kind": "other",
     "weight": 31.5,
     "value": 470000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6021,6 +6522,7 @@
     "kind": "other",
     "weight": 1,
     "value": 400,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6033,6 +6535,7 @@
     "kind": "other",
     "weight": 4,
     "value": 2000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6045,6 +6548,7 @@
     "kind": "other",
     "weight": 8.5,
     "value": 1200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6057,6 +6561,7 @@
     "kind": "other",
     "weight": 0.3,
     "value": 6000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6069,6 +6574,7 @@
     "kind": "other",
     "weight": 5,
     "value": 350,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6081,6 +6587,7 @@
     "kind": "other",
     "weight": 8,
     "value": 290,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6093,6 +6600,7 @@
     "kind": "other",
     "weight": 7.5,
     "value": 310,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6105,6 +6613,7 @@
     "kind": "other",
     "weight": 3.5,
     "value": 280,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6117,6 +6626,7 @@
     "kind": "other",
     "weight": 7.5,
     "value": 300,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6129,6 +6639,7 @@
     "kind": "other",
     "weight": 1.35,
     "value": 500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6141,6 +6652,7 @@
     "kind": "other",
     "weight": 1.35,
     "value": 250,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6153,6 +6665,7 @@
     "kind": "other",
     "weight": 6.5,
     "value": 3100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6165,6 +6678,7 @@
     "kind": "other",
     "weight": 0.1,
     "value": 470,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6178,6 +6692,7 @@
     "weight": 3.5,
     "value": 360,
     "slot": "head",
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6190,6 +6705,7 @@
     "kind": "other",
     "weight": 0.5,
     "value": 10,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6202,6 +6718,7 @@
     "kind": "other",
     "weight": 0.1,
     "value": 100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6214,6 +6731,7 @@
     "kind": "other",
     "weight": 0.1,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6226,6 +6744,7 @@
     "kind": "other",
     "weight": 2.38,
     "value": 450,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6238,6 +6757,7 @@
     "kind": "other",
     "weight": 1.25,
     "value": 100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6250,6 +6770,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6262,6 +6783,7 @@
     "kind": "other",
     "weight": 1.9,
     "value": 340,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6274,6 +6796,7 @@
     "kind": "other",
     "weight": 0.86,
     "value": 95,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6286,6 +6809,7 @@
     "kind": "other",
     "weight": 0.8,
     "value": 300,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6298,6 +6822,7 @@
     "kind": "other",
     "weight": 0.4,
     "value": 1800,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6310,6 +6835,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6322,6 +6848,7 @@
     "kind": "other",
     "weight": 1.7,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6334,6 +6861,7 @@
     "kind": "other",
     "weight": 0.3,
     "value": 15,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6346,6 +6874,7 @@
     "kind": "other",
     "weight": 0.2,
     "value": 20,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6358,6 +6887,7 @@
     "kind": "other",
     "weight": 2.6,
     "value": 590,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6370,6 +6900,7 @@
     "kind": "other",
     "weight": 1.53,
     "value": 120,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6382,6 +6913,7 @@
     "kind": "other",
     "weight": 6,
     "value": 300,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6394,6 +6926,7 @@
     "kind": "other",
     "weight": 2,
     "value": 200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6406,6 +6939,7 @@
     "kind": "other",
     "weight": 0.8,
     "value": 500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6418,6 +6952,7 @@
     "kind": "other",
     "weight": 2.4,
     "value": 600,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6430,6 +6965,7 @@
     "kind": "other",
     "weight": 1.9,
     "value": 400,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6442,6 +6978,7 @@
     "kind": "other",
     "weight": 1.2,
     "value": 50,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6454,6 +6991,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 2200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6466,6 +7004,7 @@
     "kind": "other",
     "weight": 1,
     "value": 1900,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6478,6 +7017,7 @@
     "kind": "other",
     "weight": 1.42,
     "value": 100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6490,6 +7030,7 @@
     "kind": "other",
     "weight": 2.8,
     "value": 18000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6502,6 +7043,7 @@
     "kind": "other",
     "weight": 0.94,
     "value": 20,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6514,6 +7056,7 @@
     "kind": "other",
     "weight": 2.7,
     "value": 20,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6526,6 +7069,7 @@
     "kind": "other",
     "weight": 1,
     "value": 130,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6538,6 +7082,7 @@
     "kind": "other",
     "weight": 2.2,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6550,6 +7095,7 @@
     "kind": "other",
     "weight": 0.4,
     "value": 80,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6562,6 +7108,7 @@
     "kind": "other",
     "weight": 7.5,
     "value": 320,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6574,6 +7121,7 @@
     "kind": "other",
     "weight": 0.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6586,6 +7134,7 @@
     "kind": "other",
     "weight": 0.3,
     "value": 1600,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6598,6 +7147,7 @@
     "kind": "other",
     "weight": 3,
     "value": 5000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6610,6 +7160,7 @@
     "kind": "other",
     "weight": 1.14,
     "value": 60,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6622,6 +7173,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 170,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6634,6 +7186,7 @@
     "kind": "other",
     "weight": 1.17,
     "value": 95,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6646,6 +7199,7 @@
     "kind": "other",
     "weight": 1.25,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6658,6 +7212,7 @@
     "kind": "other",
     "weight": 1.2,
     "value": 100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6670,6 +7225,7 @@
     "kind": "other",
     "weight": 6.5,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6682,6 +7238,7 @@
     "kind": "other",
     "weight": 5.09,
     "value": 60,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6694,6 +7251,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 250,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6706,6 +7264,7 @@
     "kind": "other",
     "weight": 12,
     "value": 900,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6718,6 +7277,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 930,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6730,6 +7290,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 740,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6742,6 +7303,7 @@
     "kind": "other",
     "weight": 1.4,
     "value": 50,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6754,6 +7316,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 500,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6766,6 +7329,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 700,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6778,6 +7342,7 @@
     "kind": "other",
     "weight": 5,
     "value": 90,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6790,6 +7355,7 @@
     "kind": "other",
     "weight": 10,
     "value": 100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6802,6 +7368,7 @@
     "kind": "other",
     "weight": 2.2,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6814,6 +7381,7 @@
     "kind": "other",
     "weight": 7.6,
     "value": 460,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6826,6 +7394,7 @@
     "kind": "other",
     "weight": 0.1,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6838,6 +7407,7 @@
     "kind": "other",
     "weight": 0.8,
     "value": 200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6850,6 +7420,7 @@
     "kind": "other",
     "weight": 0.75,
     "value": 2700,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6862,6 +7433,7 @@
     "kind": "other",
     "weight": 1.25,
     "value": 480,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6874,6 +7446,7 @@
     "kind": "other",
     "weight": 1,
     "value": 100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6886,6 +7459,7 @@
     "kind": "other",
     "weight": 0.5,
     "value": 275,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6898,6 +7472,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 750,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6910,6 +7485,7 @@
     "kind": "other",
     "weight": 2.29,
     "value": 670,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6922,6 +7498,7 @@
     "kind": "other",
     "weight": 3.8,
     "value": 55,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6934,6 +7511,7 @@
     "kind": "other",
     "weight": 1,
     "value": 0,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6946,6 +7524,7 @@
     "kind": "other",
     "weight": 9,
     "value": 1100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6958,6 +7537,7 @@
     "kind": "other",
     "weight": 0.75,
     "value": 2100,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6970,6 +7550,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 1200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6982,6 +7563,7 @@
     "kind": "other",
     "weight": 6,
     "value": 300,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6994,6 +7576,7 @@
     "kind": "other",
     "weight": 1.45,
     "value": 460,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7006,6 +7589,7 @@
     "kind": "other",
     "weight": 2,
     "value": 550,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7018,6 +7602,7 @@
     "kind": "other",
     "weight": 2,
     "value": 730,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7030,6 +7615,7 @@
     "kind": "other",
     "weight": 1.05,
     "value": 30,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7042,6 +7628,7 @@
     "kind": "other",
     "weight": 2.15,
     "value": 320,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7054,6 +7641,7 @@
     "kind": "other",
     "weight": 0.99,
     "value": 190,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7066,6 +7654,7 @@
     "kind": "other",
     "weight": 1.1,
     "value": 160,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7078,6 +7667,7 @@
     "kind": "other",
     "weight": 3,
     "value": 185,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7090,6 +7680,7 @@
     "kind": "other",
     "weight": 5,
     "value": 195,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7102,6 +7693,7 @@
     "kind": "other",
     "weight": 5,
     "value": 195,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7114,6 +7706,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 175,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7126,6 +7719,7 @@
     "kind": "other",
     "weight": 1.9,
     "value": 165,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7138,6 +7732,7 @@
     "kind": "other",
     "weight": 2.8,
     "value": 570,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7150,6 +7745,7 @@
     "kind": "other",
     "weight": 1.4,
     "value": 200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7162,6 +7758,7 @@
     "kind": "other",
     "weight": 1,
     "value": 220,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7174,6 +7771,7 @@
     "kind": "other",
     "weight": 0.8,
     "value": 350,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7186,6 +7784,7 @@
     "kind": "other",
     "weight": 2.8,
     "value": 280,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7198,6 +7797,7 @@
     "kind": "other",
     "weight": 2.8,
     "value": 490,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7210,6 +7810,7 @@
     "kind": "other",
     "weight": 1.6,
     "value": 180,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7222,6 +7823,7 @@
     "kind": "other",
     "weight": 1.12,
     "value": 380,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7234,6 +7836,7 @@
     "kind": "other",
     "weight": 3,
     "value": 400,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7246,6 +7849,7 @@
     "kind": "other",
     "weight": 3,
     "value": 245,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7258,6 +7862,7 @@
     "kind": "other",
     "weight": 1.5,
     "value": 120,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7270,6 +7875,7 @@
     "kind": "other",
     "weight": 2.4,
     "value": 120,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7282,6 +7888,7 @@
     "kind": "other",
     "weight": 4.5,
     "value": 800,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7294,6 +7901,7 @@
     "kind": "other",
     "weight": 1.1,
     "value": 20,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7306,6 +7914,7 @@
     "kind": "other",
     "weight": 3.33,
     "value": 60,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7318,6 +7927,7 @@
     "kind": "other",
     "weight": 1.4,
     "value": 850,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7330,6 +7940,7 @@
     "kind": "other",
     "weight": 1.7,
     "value": 900,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7342,6 +7953,7 @@
     "kind": "other",
     "weight": 0.8,
     "value": 70,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7354,6 +7966,7 @@
     "kind": "other",
     "weight": 5,
     "value": 5,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7366,6 +7979,7 @@
     "kind": "other",
     "weight": 1.18,
     "value": 15,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7378,6 +7992,7 @@
     "kind": "other",
     "weight": 1,
     "value": 4200,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7390,6 +8005,7 @@
     "kind": "other",
     "weight": 0.6,
     "value": 370000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7402,6 +8018,7 @@
     "kind": "other",
     "weight": 0.6,
     "value": 185000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7414,6 +8031,7 @@
     "kind": "other",
     "weight": 1.8,
     "value": 400,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7426,6 +8044,7 @@
     "kind": "other",
     "weight": 2.25,
     "value": 265,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7438,6 +8057,7 @@
     "kind": "other",
     "weight": 2,
     "value": 240,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7450,6 +8070,7 @@
     "kind": "other",
     "weight": 2.95,
     "value": 600,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7462,6 +8083,7 @@
     "kind": "other",
     "weight": 4.75,
     "value": 600,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7474,6 +8096,7 @@
     "kind": "other",
     "weight": 2.5,
     "value": 280,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7486,6 +8109,7 @@
     "kind": "other",
     "weight": 0.3,
     "value": 25000,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7498,6 +8122,7 @@
     "kind": "other",
     "weight": 0.98,
     "value": 600,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7510,6 +8135,7 @@
     "kind": "other",
     "weight": 1.03,
     "value": 150,
+    "creatureProduct": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

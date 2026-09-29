@@ -860,6 +860,13 @@ export const itemSchema = z.strictObject({
    * carga única não-empilhável, e um consumível futuro pode voltar a precisar disso.
    */
   stackable: z.boolean().default(false),
+  /**
+   * É um creature product (#603, o `primarytype="creature products"` do Canary `items.xml`)? É o
+   * que o charm Gut lê: no `generateLootRoll` (`monstertype.lua`) a chance de drop de um item
+   * desta classe sobe `ceil(chance × charm / 100)` quando o dono do cadáver tem o charm para o
+   * monstro. Só o importador o escreve (fatia `creature-products`); ausente é "não é".
+   */
+  creatureProduct: z.literal(true).optional(),
   attack: z.number().int().nonnegative().default(0),
   armor: z.number().int().nonnegative().default(0),
   /**
@@ -3297,14 +3304,28 @@ export const COMBAT_V3: CombatCompatibilityProfile = {
  * `chooseTarget` de monstro e credita dano ao MESTRE via `Contribution`/mapa de dano — não
  * existe hoje nenhum cenário sem invocação onde isso mude ordem de sorteio ou resultado
  * resolvido (o teste de conformance §11 prende que a hunt sem ninguém invocando consome
- * `session.rng` exatamente como antes). Por isso a política aqui é `additive`, como o
+ * `session.rng` exatamente como antes). Sozinho esse estágio seria `additive`, como o
  * `combat-v1`: o mecanismo é novo, mas nenhum abate ou golpe que já existia muda de número.
+ *
+ * **Estágio #603** (M39-03, Charms em combate — ADR 0053 d.5): os 24 Charms do Canary que agem
+ * em combate (todos menos o Scavenge, que é a esfola do #626) rolam na ordem do `Game::
+ * combatChangeHealth` — defensivos no golpe RECEBIDO de monstro (minor antes de major, antes do
+ * mana shield, o Dodge encerra o golpe), ofensivos no golpe DADO (`percent` da vida do monstro),
+ * passivos nos termos que já existem (crítico, leech, penalidade de morte, loot). Junto com ele
+ * entram três mudanças de resultado declaradas em `docs/product/combat-conformance.md`: **(a)** o
+ * Dodge do PRD (`dodgeChance` do jogador, `dodgeMultiplier`) SAI deste perfil — o único Dodge é o
+ * charm (ADR 0053 d.5), e por isso a exceção `dodge-halves-damage` também sai; **(b)** o crítico
+ * BASE de todo jogador (`playerBaseCriticalChance`/`Damage` do Canary, `combat.modifiers`), sem
+ * o qual Low Blow e Savage Blow — que somam a ele — não têm o que somar; **(c)** o estágio de
+ * Charms só roda neste perfil (`hasCharmStage`): a sessão ainda fixada em `combat-v3` não rola
+ * charm nenhum, mesmo com o registro do personagem cheio (invariante 7). Muda resultado e ordem
+ * de sorteio: a política passa a ser `breaking`.
  */
 export const COMBAT_V4: CombatCompatibilityProfile = {
   id: 'combat-v4',
   referenceRelease: 'tibia-13.32',
-  productExceptions: ['player-always-hit-melee', 'dodge-halves-damage', 'pve-only-bestiary-bonus'],
-  migrationPolicy: 'additive',
+  productExceptions: ['player-always-hit-melee', 'pve-only-bestiary-bonus'],
+  migrationPolicy: 'breaking',
 };
 
 /**
@@ -3572,7 +3593,10 @@ export const combatSchema = z.object({
   // O `combat-v3` (#548, ADR 0040) HERDA a exigência: ele não substitui o lado ofensivo do v2,
   // só o pipeline de RECEBIMENTO (defesa/armadura/mitigação) — um conteúdo v3 sem esses blocos
   // continua sem fórmula de dano de arma nenhuma.
-  if (combat.compatibilityProfile === 'combat-v2' || combat.compatibilityProfile === 'combat-v3') {
+  if (
+    combat.compatibilityProfile === 'combat-v2' || combat.compatibilityProfile === 'combat-v3'
+    || combat.compatibilityProfile === 'combat-v4'
+  ) {
     if (combat.weaponDamage === undefined) {
       context.addIssue({
         code: 'custom', message: `${combat.compatibilityProfile} exige o bloco "weaponDamage"`,

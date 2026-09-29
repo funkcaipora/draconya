@@ -509,6 +509,14 @@ describe('convertItem', () => {
     expect(convert('90018')?.entity).toMatchObject({ kind: 'other' });
   });
 
+  it('só o creature product leva `creatureProduct: true` (o charm Gut, #603) — o valuable não', () => {
+    // O flag é do `primarytype="creature products"` do Canary; o Gut soma ao drop justamente deles.
+    expect(convert('90017')?.entity['creatureProduct']).toBe(true);
+    expect(convert('90017')?.slice).toBe('creature-products');
+    expect(convert('90018')?.entity['creatureProduct']).toBeUndefined();
+    expect(convert('90020')?.entity['creatureProduct']).toBeUndefined();
+  });
+
   it('decoração comum tem primarytype, então vira PULADO (aparece no relatório), não some em silêncio', () => {
     const decoration = convert('90019');
     expect(decoration?.blockers[0]).toMatch(/sem categoria/);
@@ -662,6 +670,38 @@ describe('readItemCatalog e reconcileAuthored', () => {
       expect(override?.patch).toEqual({ defense: 12, extraDefense: 1 });
       expect(override?.reason).toMatch(/defense: 10 → 12/);
       expect(override?.reason).toMatch(/extraDefense: \(ausente\) → 1/);
+    });
+  });
+
+  it('reconcileAuthored: creature product autoral sem o flag ganha o override `creatureProduct: true` (#603)', () => {
+    withTempDir((dir) => {
+      // O slug autoral vence o gerado — sem o override, o Gut ficaria inerte no drop dele.
+      writeFileSync(join(dir, 'worm.json'), JSON.stringify({
+        id: 'worm', name: 'Worm', kind: 'other', weight: 0.05, value: 0, stackable: true,
+      }));
+      const generated = {
+        id: 'worm', name: 'Worm', kind: 'other', weight: 0.05, value: 0, creatureProduct: true,
+        source: { engine: 'canary' as const, commit: COMMIT, path: PATH },
+      };
+      const override = reconcileAuthored(generated, dir, COMMIT);
+      expect(override?.patch).toEqual({ creatureProduct: true });
+      expect(override?.reason).toMatch(/creatureProduct: \(ausente\) → true/);
+    });
+  });
+
+  it('reconcileAuthored: o autoral que já leva o flag, ou o gerado que não é creature product, não gera override', () => {
+    withTempDir((dir) => {
+      writeFileSync(join(dir, 'flagged.json'), JSON.stringify({
+        id: 'flagged', name: 'Flagged', kind: 'other', weight: 0.05, value: 0, creatureProduct: true,
+      }));
+      writeFileSync(join(dir, 'plain.json'), JSON.stringify({ id: 'plain', name: 'Plain', kind: 'other', weight: 0.05, value: 0 }));
+      const source = { engine: 'canary' as const, commit: COMMIT, path: PATH };
+      expect(reconcileAuthored({
+        id: 'flagged', name: 'Flagged', kind: 'other', weight: 0.05, value: 0, creatureProduct: true, source,
+      }, dir, COMMIT)).toBeUndefined();
+      expect(reconcileAuthored({
+        id: 'plain', name: 'Plain', kind: 'other', weight: 0.05, value: 0, source,
+      }, dir, COMMIT)).toBeUndefined();
     });
   });
 

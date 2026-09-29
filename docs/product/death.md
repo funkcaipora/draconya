@@ -53,6 +53,15 @@ mana gasta. O Draconya faz o mesmo (`applyDeathPenalty`, `packages/sim/src/progr
 a MESMA fração (`lossFraction`, já com bênção e promoção descontadas) multiplica o total
 acumulado de XP e o de CADA skill do catálogo.
 
+## O charm Bless multiplica a perda por cima de bênção e promoção (#603)
+
+Com o charm Bless atribuído ao monstro que deu o ÚLTIMO golpe (`Contribution.lastHitBy`), a fração
+efetiva cai `chance[tier]/100` — 6/9/12 % nos tiers 1/2/3 — DEPOIS de bênção e promoção já terem
+reduzido, como `Player::death` do Canary (`deathLossPercent -= deathLossPercent × chance/100`):
+sete bênçãos (56 %) mais Bless de 12 % deixam 44 % × 88 %, não 32 %. Vale para a XP e para as
+skills (a mesma fração, `applyDeathPenalty` opção `charmBlessReduction`), e só no perfil `combat-v4`
+(`HuntRuleset#charmBlessReductionOf`). Ver `docs/product/bestiary.md`, "Charms em combate".
+
 ## Skill e mana gasta usam o mesmo mecanismo
 
 O Tibia trata "perder mana gasta" como uma skill a mais — `manaSpent` é o "tries" do magic

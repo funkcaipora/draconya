@@ -987,6 +987,85 @@ describe('combat-v3 (#683, M30-G6): vulnerabilidade até -200 % e cura por eleme
   });
 });
 
+describe('combat-v4 (#603, M39-03): o mesmo resolver do combat-v3, sem o Dodge do PRD', () => {
+  const v3: Combat = { ...combat, compatibilityProfile: 'combat-v3' };
+  const v4: Combat = { ...combat, compatibilityProfile: 'combat-v4' };
+  const defender = { armor: 20, dodgeChance: 1 };
+
+  it('o `dodgeChance` do defensor é ignorado: nenhum golpe é esquivado, e a metade do dodge não existe', () => {
+    for (let seed = 0; seed < 20; seed += 1) {
+      const outcome = resolveDamage(swing, defender, 'pve', v4, Rng.fromSeed(`v4-${seed}`));
+      expect(outcome.dodged).toBe(false);
+    }
+    // O mesmo defensor no v3 esquiva sempre (chance 1): o corte pela metade é do perfil anterior.
+    expect(resolveDamage(swing, defender, 'pve', v3, Rng.fromSeed('v3')).dodged).toBe(true);
+  });
+
+  it('nem o SORTEIO do Dodge é consumido: a sequência do v4 é a do v3 sem essa rolagem', () => {
+    // v3 gasta o primeiro sorteio no Dodge, sempre; v4 não. Com o mesmo estado inicial, o v4 deixa o
+    // Rng UM `next` à frente do v3 nesse golpe simples (sem crítico, sem defesa com carga).
+    const a = Rng.fromSeed('sequence');
+    const b = Rng.fromSeed('sequence');
+    // Origem mágica: sem defesa nem armadura, o Dodge é o ÚNICO sorteio que o v3 consome.
+    const spell: DamageIntent = { ...swing, source: 'spell', blockable: MAGIC_BLOCK_FLAGS };
+    resolveDamage(spell, { armor: 20, dodgeChance: 0 }, 'pve', v4, a);
+    resolveDamage(spell, { armor: 20, dodgeChance: 0 }, 'pve', v3, b);
+    const ahead = Rng.fromSeed('sequence');
+    ahead.next(); // o sorteio do Dodge que o v3 gastou
+    expect(b.getState()).toEqual(ahead.getState());
+    expect(a.getState()).toEqual(Rng.fromSeed('sequence').getState());
+  });
+
+  it('o resto do pipeline é o do v3: armadura em faixa, piso e imunidade', () => {
+    const plain = { armor: 20, dodgeChance: 0 };
+    const four = resolveDamage(swing, plain, 'pve', v4, Rng.fromSeed('same'));
+    const three = resolveDamage(swing, plain, 'pve', v3, Rng.fromSeed('same'));
+    // As duas armaduras saem da faixa [10, 19]; o valor pode diferir porque o v4 não gasta o sorteio
+    // do Dodge — o que prende é que a resolução cai DENTRO da faixa do Canary.
+    for (const outcome of [four, three]) {
+      expect(outcome.resolvedDamage).toBeGreaterThanOrEqual(81);
+      expect(outcome.resolvedDamage).toBeLessThanOrEqual(90);
+    }
+    const immune = {
+      armor: 0, dodgeChance: 0, mitigation: compileMitigation({ resistances: {}, immunities: ['physical'] }),
+    };
+    expect(resolveDamage(swing, immune, 'pve', v4, Rng.fromSeed('same')).resolvedDamage).toBe(0);
+  });
+
+  it('a origem `charm` é uma extensão neutra: sem crítico, sem reflexo, pula resistência e imunidade', () => {
+    const resistant = {
+      armor: 0, dodgeChance: 0,
+      mitigation: compileMitigation({ resistances: { physical: 0.5 }, immunities: ['fire'] }),
+    };
+    const neutral = resolveDamage(
+      {
+        rawDamage: 60, source: 'charm', damageType: 'physical', blockable: MAGIC_BLOCK_FLAGS,
+        extension: true, neutral: true,
+      },
+      resistant, 'pve', v4, Rng.fromSeed('charm'),
+    );
+    expect(neutral.resolvedDamage).toBe(60);
+    expect(neutral.critical).toBe(false);
+    expect(neutral.reflected).toBeUndefined();
+    // O elemental respeita a resistência e a imunidade do alvo.
+    const elemental = resolveDamage(
+      {
+        rawDamage: 60, source: 'charm', damageType: 'physical', blockable: MAGIC_BLOCK_FLAGS,
+        extension: true,
+      },
+      resistant, 'pve', v4, Rng.fromSeed('charm'),
+    );
+    expect(elemental.resolvedDamage).toBe(30);
+    const fire = resolveDamage(
+      {
+        rawDamage: 60, source: 'charm', damageType: 'fire', blockable: MAGIC_BLOCK_FLAGS, extension: true,
+      },
+      resistant, 'pve', v4, Rng.fromSeed('charm'),
+    );
+    expect(fire.resolvedDamage).toBe(0);
+  });
+});
+
 describe('effectiveDodge', () => {
   it('gives the Bestiary bonus in PvE only', () => {
     // §18.5: bônus de Bestiário são PvE-only. O contexto é o que impede a Guild War de

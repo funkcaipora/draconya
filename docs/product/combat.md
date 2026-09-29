@@ -68,7 +68,7 @@ no `combat-v2`, ver `COMBAT_V2` em `packages/content/src/schemas.ts`). **A DIST�
 exceção**: desde o `combat-v2` ela rola a chance de acerto do Canary, por skill e por tile — ver
 "Como cada arma bate".
 
-Segunda: existe o atributo Dodge no defensor. Quando o Dodge ativa, o ataque recebido causa metade do dano que causaria normalmente. Isso vale contra qualquer tipo de ataque recebido — incluindo magia e ataques de boss —, não apenas contra combate corpo a corpo. A chance de Dodge é percentual e pode vir de fontes como bônus permanentes de Bestiário. A #522 confirmou que este mecanismo corresponde ao charm de esquiva do Tibia (que também reduz, não zera) — por isso continua listado como exceção de produto **e não** foi substituído pela fórmula do Tibia.
+Segunda: existe o atributo Dodge no defensor. Quando o Dodge ativa, o ataque recebido causa metade do dano que causaria normalmente. Isso vale contra qualquer tipo de ataque recebido — incluindo magia e ataques de boss —, não apenas contra combate corpo a corpo. A chance de Dodge é percentual e pode vir de fontes como bônus permanentes de Bestiário. A #522 tinha mantido este mecanismo por acreditar que correspondia ao charm de esquiva do Tibia (que também reduz, não zera) — **o #603 mostrou que não**: o Dodge do charm NEGA o golpe inteiro (`Game::combatChangeHealth`, `return true` no ramo do Dodge), e o Dodge de metade não existe no Canary. **No `combat-v4` esta exceção SAI** (ADR 0053 d.5): `player.dodgeChance` é `0`, o resolver nem sorteia o Dodge, e o único Dodge é o charm — ver "Charms em combate" abaixo. `combat-v1`/`v2`/`v3` seguem com ele, congelados.
 
 Bônus permanentes obtidos via Bestiário são válidos apenas em PvE. O PvP (Guild War) não herda automaticamente essas vantagens de farm.
 
@@ -389,14 +389,15 @@ protocolo continua em pontos por segundo, derivado no `server` (`amount × 1000 
 | Tipos que o blocking mitiga | `["physical"]` (v1) | `packages/content/data/combat/baseline.json`, `defense.blockTypes` |
 | Defesa da arma corpo a corpo de uma mão | machete 9, steel axe 10, spike sword 10 `[ABERTO — spike sword provisório: 10]` | `packages/content/data/items/*.json`, `defense` |
 | Shielding — início, curva (base), defesa por nível | 10 / 100 / +2 % `[ABERTO — defesa por nível provisória]` (base = `skillBase` do escudo no Canary; `factor` por vocação, #521, ADR 0037 — ver `docs/product/progression.md`) | `packages/content/data/skills/shielding.json` |
-| Modificadores avançados (`combat.modifiers`) | **ausente é neutro** (preserva o v1); quando declarado, crítico/leech são `[ABERTO — valores provisórios]` | `packages/content/data/combat/baseline.json`, `modifiers` |
+| Modificadores avançados (`combat.modifiers`) | **ausente é neutro** (preserva o v1); quando declarado, crítico/leech são `[ABERTO — valores provisórios]`. **Desde o #603 o baseline declara o crítico BASE do jogador: 5 % de chance, +10 % de dano** (`playerBaseCriticalChance`/`Damage` do Canary `config.lua.dist`, números REAIS, não provisórios) — o item soma em cima, e Low Blow/Savage Blow também | `packages/content/data/combat/baseline.json`, `modifiers` |
 | Crítico/leech de ITEM (M30-04, #551) | pontos-base (×10000), NÚMEROS REAIS do Canary — não provisórios: wand of darkness 1000/3500 (chance/dano); nenhum item do catálogo atual declara ainda | `packages/content/src/schemas.ts`, `item.combatModifiers` |
 | Crítico de MONSTRO (M30-04, #551) | percentual 0-100, a escala do Lua do Canary (`critChance`); ausente/`0` em rat, rotworm, dragon e dragon lord — os únicos 6 monstros do Canary que declaram são bosses fora do recorte | `packages/content/src/schemas.ts`, `monster.critChance` |
 
 As exceções de produto — always-hit, Dodge e o escopo PvE-only do Bestiário — são contrato do
 perfil `combat-v1` ([ADR 0031](../adr/0031-contrato-de-compatibilidade-de-combate-e-migracao.md)),
 não parâmetro de balanceamento. O único número entre elas é o multiplicador de Dodge, já listado
-acima em `combat/baseline.json`; as demais são estruturais.
+acima em `combat/baseline.json`; as demais são estruturais. No `combat-v4` (#603) o Dodge de
+metade deixou de ser exceção: saiu do perfil, e o multiplicador só vale para os perfis anteriores.
 
 O catálogo de magias e seus números de dano/custo/cooldown pertence a `progression.md` — este arquivo cobre só a matemática geral de acerto/Dodge.
 
@@ -1905,6 +1906,49 @@ por `spell.manaCost`.
   pela barra, mas o mecanismo de PRESET em si (aplicar automaticamente ao escolher vocação) é o
   #526, que ainda não existe neste repositório.
 
+## Charms em combate (#603, M39-03, ADR 0053 d.5 — `combat-v4`)
+
+Os 24 Charms do Canary que agem em combate (todos menos o Scavenge, #626) rolam DENTRO do
+pipeline de dano, na ordem do `Game::combatChangeHealth`/`applyCharmRune`. O que cada um faz, o
+que rola e onde mora cada número está na tabela de estágios de `docs/product/combat-conformance.md`
+(seção "Estágio #603"); o catálogo (id, categoria, tipo, `percent`, `chance[3]`) é
+`packages/content/data/charms/generated/charms.json`, e a economia (desbloquear, atribuir, remover)
+é `docs/product/bestiary.md`.
+
+- **Ofensivos** (Wound, Enflame, Poison, Freeze, Zap, Curse, Divine Wrath, Overpower, Overflux,
+  Cripple): depois de todo golpe do jogador que tirou vida do monstro do charm — melee, distância,
+  wand, magia e runa, cada alvo da área —, `chance ≥ uniform(1, 100)` (a chance nominal, exata). O
+  dano é uma EXTENSÃO passando pelo mesmo resolver: `min(2× o level, percent % da vida máxima do
+  monstro)` no tipo do charm (elementais); `min(8 % da vida do alvo, 5 % da vida máxima do jogador
+  | 2,5 % da mana)` NEUTRO no Overpower/Overflux. Resistência, imunidade e cura por elemento do
+  monstro valem; o aumento por tipo do atacante também; defesa, armadura, crítico, leech e reflexo
+  não. O neutro pula absorção, aumento, imunidade e resistência (a mitigação percentual e o piso
+  continuam). Cripple paralisa o monstro por 10 s (velocidade 40, como a Paralyze Rune) — inclusive
+  o monstro imune a `paralyze`, porque o Canary aplica a condição direto, sem o portão de imunidade
+  do `CombatConditionFunc`. O dano do charm conta para o DPS e para a atribuição de kill/XP do
+  jogador.
+- **Defensivos** (Dodge, Parry, Adrenaline Burst, Numb; Cleanse é à parte): no golpe de monstro
+  que já passou pelo `blockHit` e pelo reflexo do equipamento — e em cada tique de condição que um
+  monstro VIVO aplicou (o `owner` da condição é o atacante) —, antes do mana shield; minor antes de
+  major. O Dodge nega o golpe inteiro (o `blockHit` já gastou carga e treinou escudo, então o golpe
+  segue com dano zero); o Parry devolve o dano recebido como neutro; Adrenaline Burst dá haste de
+  10 s (`2,5 × (base − 40) + 40`); Numb paralisa o monstro (também o imune a `paralyze`, como o
+  Cripple). Golpe já zerado não rola. A
+  probabilidade REAL é a da normal truncada (~1,4 % a 4,3 %), não a nominal.
+- **Passivos**: Low Blow abre um segundo sorteio de crítico contra o monstro do charm (chance
+  `base + charm`) e Savage Blow soma ao multiplicador do crítico dele — sobre o crítico BASE de todo
+  jogador (5 %, +10 %), que entrou junto (`combat.modifiers`); Vampiric Embrace e Void's Call somam
+  ao leech; Fatal Hold impede a fuga por 30 s; Void Inversion converte dreno de mana em ganho;
+  Bless reduz a perda de morte (`chance/100`, multiplicativa); Gut sobe o drop dos creature
+  products do cadáver.
+- **Carnage** age na morte do monstro: dano neutro `min(15 % da vida do morto, 6× o level)` nos
+  quatro vizinhos ortogonais, com a morte deles resolvida e creditada ao jogador. Vale para o monstro
+  invocado por outro monstro também (o `Monster::death` não confere `isSummon()`).
+- **O Dodge do PRD saiu** (ver "As exceções de produto"): o único Dodge deste perfil é o charm.
+
+Sob `combat-v3` nada disso roda, mesmo com charm atribuído (o registro é do personagem, o perfil é
+da versão de conteúdo — invariante 7).
+
 ## Condições generalizadas, dano contínuo e campos (CMB-07, #334)
 
 O #155 criou as condições como estado temporário do PERSONAGEM com quatro chaves fixas (haste,
@@ -2568,6 +2612,10 @@ combat-v3" mais acima.
   a sequência não depende do VALOR;
 - `lifeLeech`/`manaLeech` são fração do HP aplicado e **não consomem RNG**.
 
+O default neutro é do CÓDIGO, não do conteúdo real: o `baseline.json` declara `critical` (5 %, ×1,1)
+desde o #603, então todo golpe, magia e runa do `combat-v4` consome a rolagem de crítico; o leech
+segue sem declaração.
+
 ### Leech: base, fórmula, clamp e evento
 
 - A base é o **HP efetivamente removido** (`healthDamage`), nunca o resolvido: overkill não rende
@@ -2886,9 +2934,12 @@ curva —, e `damage-over-time` não a modela; reportada, não aproximada (ver `
 - `[ABERTO]` A chance de bloqueio (`combat.defense.blockChance`, provisória em 0,6) e a defesa
   do spike sword (10) não vêm do PRD e ainda não foram medidas contra uma hunt com escudo.
 - `[ABERTO]` A conversão do Base Power (`combat.spellPower`) é nossa e provisória — ver acima.
-- `[ABERTO]` Os modificadores avançados (`combat.modifiers`: chance/multiplicador do crítico e as
-  frações de life/mana leech) não estão declarados no conteúdo real: **ausente é neutro**, e
-  ligá-los é conteúdo novo com `Content.version` novo. Os valores só entram quando medidos.
+- `[ABERTO]` Só o **life/mana leech** de `combat.modifiers` segue sem declaração no conteúdo real
+  (**ausente é neutro**, e ligá-lo é conteúdo novo com `Content.version` novo; o valor só entra
+  quando medido). O crítico BASE do jogador **já está declarado** desde o #603 — 5 % de chance,
+  +10 % de dano, números REAIS do Canary (`config.lua.dist`), não provisórios: como o `critical`
+  declarado consome uma rolagem mesmo com `chance: 0`, a sequência de RNG de todo golpe, magia e
+  runa do `combat-v4` inclui essa rolagem — ver "Charms em combate".
 - `[ABERTO]` As fórmulas das famílias de arma (`levelFactor` e `spread`) são provisórias e estão
   zeradas para preservar o dano entregue (CMB-05). Ligar `spread` a um valor diferente de zero
   muda o consumo de RNG e exige perfil novo (ADR 0031).
@@ -2991,5 +3042,6 @@ distinguir corpo a corpo de distância. O ADR 0037 (decisão 3) revogou esse lim
 de jogo, e a #522 aplicou a revogação só onde o Canary também rola acerto: a distância passa a
 errar por skill/distância, e o corpo a corpo continua sempre acertando — não porque o PRD
 mandou, mas porque é isso que o Canary faz no PvE.
-O Dodge do §12.2 **não** mudou: a #522 confirmou que ele já corresponde ao charm de esquiva do
-Tibia (reduz à metade, não zera), então não havia divergência a corrigir ali.
+O Dodge do §12.2 **não** mudou na #522 — que o julgou equivalente ao charm de esquiva do Tibia
+(reduz à metade, não zera). O #603 corrigiu o julgamento: o charm NEGA o golpe, e o Dodge de metade
+saiu no `combat-v4` (ADR 0053 d.5), com o charm entrando no lugar dele.

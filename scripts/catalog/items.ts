@@ -533,6 +533,11 @@ export function convertItem(
     }
   }
 
+  // Creature product (#603, o charm Gut): o `primarytype="creature products"` do Canary é o que a
+  // fatia `creature-products` já classifica, e o Gut (`generateLootRoll`, `monstertype.lua`) soma
+  // ao drop justamente deles. O flag viaja no item porque `sim/loot.ts` não conhece a fatia — só o
+  // catálogo de itens.
+  if (classification.slice === 'creature-products') entity['creatureProduct'] = true;
   entity['source'] = source;
   // Aparência (#748, ADR 0038 decisão 2, o MESMO recurso que `outfitId` já usa em `monsters.ts`):
   // o `id` do `<item>` do Canary É o `appearanceId` (o clientid do OTB) — conferido em
@@ -572,6 +577,7 @@ export interface ReconciliationOverride {
  * a gravar em `data/items/overrides/<id>.json` — nunca editando o autoral. Campos simples primeiro
  * (`RECONCILED_FIELDS`); `requires.level` e `weapon.manaPerHit`/`weapon.damage` também, porque as
  * duas wands iniciais (#573, comentário de reconciliação) trocaram `mana`/`level` no arquivo autoral.
+ * `creatureProduct: true` (#603) também: é um booleano, fora do `RECONCILED_FIELDS` numérico.
  */
 export function reconcileAuthored(
   generated: CatalogEntity, authoredDir: string, canaryCommit: string,
@@ -588,6 +594,13 @@ export function reconcileAuthored(
     if (oldValue === undefined && genValue === 0) continue;
     patch[field] = genValue;
     diffs.push(`${field}: ${String(oldValue ?? '(ausente)')} → ${genValue}`);
+  }
+  // Creature product (#603, o Gut): o slug autoral vence o gerado, então o flag que o importador
+  // escreve só na fatia `creature-products` nunca chegaria ao item autoral — o Gut ficaria inerte
+  // no `green-dragon-leather` e no `worm`, os drops do Dragon e do Rotworm. O override o leva.
+  if (generated['creatureProduct'] === true && authored['creatureProduct'] !== true) {
+    patch['creatureProduct'] = true;
+    diffs.push(`creatureProduct: ${String(authored['creatureProduct'] ?? '(ausente)')} → true`);
   }
   const genRequires = generated['requires'] as { level?: number } | undefined;
   const oldRequires = authored['requires'] as { level?: number } | undefined;

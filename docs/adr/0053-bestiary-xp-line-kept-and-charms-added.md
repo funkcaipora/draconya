@@ -93,3 +93,48 @@ não a forma de 13.32 (um custo fixo por charm, uma criatura por charm). A regra
 Nenhum. Estado quente (contador, pontos derivados) continua no `CharacterRuntime` da sessão dona
 (invariante 9); gold da remoção pelo ledger (invariante 10); o cliente só manda intenção
 (invariante 4).
+
+## Emenda — 2026-09-29: a implementação dos Charms em combate (#603)
+
+Esta emenda registra o que a implementação do #603 (`packages/sim/src/combat/charms.ts`,
+`rulesets/hunt.ts`) decidiu dentro do espaço da decisão 5, e as três coisas que ela mudou fora
+dele. A decisão 5 continua válida como ordem e como escopo.
+
+- **24 charms, não 19.** A issue contava "19 charms fora do Scavenge" pelo texto da descrição; o
+  `bestiary_charms.lua` tem 25 (o #602 já corrigira a contagem), e "identidade com o Canary" (ADR
+  0037 d.6) manda tratar todos os que agem em caça: Cripple, Fatal Hold, Void Inversion, Carnage,
+  Overpower e Overflux entram junto com os da lista original. Só o Scavenge fica para o #626.
+- **O dano ofensivo tem o teto de 2× o level.** A issue e a descrição dizem "5 % da vida inicial";
+  o `iobestiary.cpp` faz `min(ceil(level × 2), ceil(vida × percent / 100))`, e o código é a fonte.
+  Overpower/Overflux e Carnage têm as próprias contas (ver `combat/charms.ts`).
+- **As probabilidades reais são as das funções do Canary, não as nominais.** Defensivos rolam
+  `normal_random(1, 10000)/100` (~1,4 % a 4,3 %), Cleanse `normal_random(0, 10000)/100`, Void
+  Inversion e Fatal Hold `normal_random(0, 100)`, e só os ofensivos `uniform_random(1, 100)` — a
+  chance escrita. Reproduzir a função certa em cada ponto é o mecanismo; `combat/charms.test.ts`
+  mede cada probabilidade.
+- **Três defeitos do `47dfd51` não são reproduzidos**, e cada um é decisão para o dono rever (a
+  PR do #603 os lista): (1) o Parry rola em DOIS pontos, e o primeiro (`game.cpp:7944-7952`) tem o
+  sinal invertido — curaria o monstro; só o segundo (`:8566-8583`) reflete; (2) o
+  `maxLevelsLimit` estático que o Carnage reatribui a 6 para o processo inteiro; (3) o Gut confere
+  `ITEM_TYPE_CREATUREPRODUCT`, tipo que nenhum item declara — no Canary o charm é inerte. Aqui o
+  Gut vale para os itens de `primarytype="creature products"`, que o importador marca com
+  `creatureProduct: true` (e, nos cinco que já eram autorais, um override). Onde o Canary é estranho
+  mas coerente, o motor o segue: Low Blow soma a base duas vezes, os passivos valem sem exigir item
+  de crítico/leech, o Fatal Hold nunca expira em monstro que foge e não troca de alvo, o Bless
+  multiplica por cima de bênção e promoção, o Cripple e o Numb paralisam até o monstro imune a
+  `paralyze` (`addCondition` direto, sem o portão de imunidade), e o Carnage rola para o monstro
+  invocado (o `Monster::death` não confere `isSummon()`).
+- **O Dodge do PRD sai do `combat-v4`.** A #522 o mantivera por julgá-lo o charm de esquiva; o
+  `combatChangeHealth` mostra que o charm NEGA o golpe, e o Dodge de metade não existe no Canary.
+  `player.dodgeChance` vira `0`, o resolver do `combat-v4` nem o sorteia, e a exceção
+  `dodge-halves-damage` sai do perfil (`combat-v1`/`v2`/`v3` a mantêm, congelados) — é o "o único
+  Dodge é o charm" da decisão 5, agora com o charm de fato existindo.
+- **O crítico BASE de todo jogador entra junto** (`playerBaseCriticalChance` 0,05 e
+  `playerBaseCriticalDamage` 0,1 do Canary, em `combat.modifiers`): Low Blow e Savage Blow somam a
+  ele, e sem ele o Savage Blow não teria crítico a reforçar num personagem sem item. É mudança de
+  resultado de todo golpe do jogador no perfil novo, declarada como estágio.
+- **O perfil passa a `breaking`.** O estágio #598 era `additive`; este muda resultado e ordem de
+  sorteio (ADR 0031/0052 d.7). Sessão fixada em `combat-v3` nunca rola charm.
+- **Fora desta emenda:** o Scavenge (#626); o `getCharmChanceModifier()` das Concoctions (M42,
+  sempre zero até a fonte existir); `rooted`/`feared` no Cleanse (M44-04); a apresentação (efeitos,
+  mensagens de log dos charms — não é regra de caça, ADR 0037 d.6).

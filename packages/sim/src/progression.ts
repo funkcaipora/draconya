@@ -267,12 +267,23 @@ export interface DeathPenalty {
  * opcional e por padrão `false` — `hunt.ts#onCharacterDied` passa `character.promoted`
  * (`CharacterRuntime.promoted`, #566/ADR 0042).
  *
+ * **`options.charmBlessReduction` (#603, o charm Bless) é uma redução MULTIPLICATIVA por cima de
+ * tudo o que veio antes** (`Player::death`, `player.cpp:4092-4098`): o Canary calcula
+ * `deathLossPercent = getLostPercent() × unfairFight` — com bênção e promoção já dentro — e só
+ * então faz `deathLossPercent -= deathLossPercent × chance[tier] / 100` quando o último golpe foi
+ * do monstro do charm. Aqui é a fração `chance/100` (0,06 / 0,09 / 0,12), e vale para a XP e para
+ * as skills, o mesmo `deathLossPercent` das duas somas. Ausente é zero, e a conta fica idêntica.
+ *
  * **Sem piso de level** (#569 removeu o `levelFloor` do Draconya): o Tibia não tem piso para
  * a penalidade de morte, e o repo alinhou a isso — o personagem pode cair até o level 1.
  */
 export function applyDeathPenalty(
   character: CharacterRuntime,
-  options: { readonly blessings: number; readonly promoted?: boolean },
+  options: {
+    readonly blessings: number;
+    readonly promoted?: boolean;
+    readonly charmBlessReduction?: number;
+  },
   vocation: Vocation | null,
   progression: Progression,
   skills: ReadonlyMap<string, Skill>,
@@ -285,11 +296,16 @@ export function applyDeathPenalty(
   const blessingFraction = blessingReduction * options.blessings;
   const blessing = belowCubic && blessingFraction >= 0.40 ? 0.50 : blessingFraction;
   const reduction = blessing + (options.promoted ? promotionReduction : 0);
+  // O charm Bless age DEPOIS de bênção e promoção, multiplicando o que sobrou (ver a função). Sem
+  // o charm o fator é exatamente `1 - reduction`, como antes.
+  const keptFraction = options.charmBlessReduction === undefined
+    ? 1 - reduction
+    : (1 - reduction) * (1 - options.charmBlessReduction);
 
   const raw = belowCubic
     ? flatFraction * character.xp
     : cubicLoss(level + fractionIntoLevel(character, progression));
-  const loss = Math.round(raw * (1 - reduction));
+  const loss = Math.round(raw * keptFraction);
 
   // A FRAÇÃO efetiva (não o valor absoluto) é o que se reaplica às skills e à mana gasta: o
   // Canary calcula um `deathLossPercent` só e o usa três vezes, sobre somas diferentes. Sem XP
@@ -300,7 +316,7 @@ export function applyDeathPenalty(
   const before = character.xp;
   character.xp = Math.max(0, character.xp - loss);
 
-  const skillLosses = applySkillLosses(character, skills, vocation, progression, lossFraction * (1 - reduction));
+  const skillLosses = applySkillLosses(character, skills, vocation, progression, lossFraction * keptFraction);
 
   return {
     xpLost: before - character.xp,

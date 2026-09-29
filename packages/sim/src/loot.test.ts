@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { LootTable } from '@draconya/content';
 import { CANARY_LOOT_CHANCE_SCALE, rollLoot } from './loot.js';
+import type { LootGut } from './loot.js';
 import { Rng } from './rng.js';
 
 const table = (over: Partial<LootTable> = {}): LootTable => ({ items: [], ...over });
@@ -269,6 +270,69 @@ describe('rollLoot com rollModel canary (#685)', () => {
       return [result.gold, result.items[0]?.quantity ?? 0];
     });
     expect(sequence).toEqual(FUN63_REGRESSION);
+  });
+});
+
+describe('o charm Gut no modelo canary (#603, generateLootRoll de monstertype.lua)', () => {
+  const products = new Set(['fur']);
+  const gut = (percent: number): LootGut => ({ percent, isProduct: (id) => products.has(id) });
+  const fur = canary({ items: [{ itemId: 'fur', chance: 0.5, min: 1, max: 1 }] });
+
+  it('sobe a chance do creature product: adjusted + ceil(adjusted × charm / 100)', () => {
+    // chance 50000, fator 100 → 50000; Gut de 12 % → +6000 → 56000 (a comparação segue estrita).
+    expect(rollLoot(fur, new ScriptedRng([100, 55_999]), 1, gut(12)).items)
+      .toEqual([{ itemId: 'fur', quantity: 1 }]);
+    expect(rollLoot(fur, new ScriptedRng([100, 56_000]), 1, gut(12)).items).toEqual([]);
+    // Sem o Gut a mesma rolagem 55.999 não cai.
+    expect(rollLoot(fur, new ScriptedRng([100, 55_999])).items).toEqual([]);
+  });
+
+  it('o ceil: 12.345 × fator 1,01 = 12.468,45; Gut de 9 % soma ceil(1.122,16) = 1.123', () => {
+    const line = canary({ items: [{ itemId: 'fur', chance: 0.12345, min: 1, max: 1 }] });
+    // 12468.45 + 1123 = 13591.45: cai em 13.591, não em 13.592 (13591.45 > 13591, ≤ 13592).
+    expect(rollLoot(line, new ScriptedRng([101, 13_591]), 1, gut(9)).items)
+      .toEqual([{ itemId: 'fur', quantity: 1 }]);
+    expect(rollLoot(line, new ScriptedRng([101, 13_592]), 1, gut(9)).items).toEqual([]);
+  });
+
+  it('só creature product recebe o Gut: o resto da tabela rola como sempre', () => {
+    const line = canary({ items: [{ itemId: 'ham', chance: 0.5, min: 1, max: 1 }] });
+    expect(rollLoot(line, new ScriptedRng([100, 55_000]), 1, gut(12)).items).toEqual([]);
+    const gold = canary({ gold: { chance: 0.5, min: 1, max: 1 } });
+    expect(rollLoot(gold, new ScriptedRng([100, 55_000]), 1, gut(12)).gold).toBe(0);
+  });
+
+  it('não consome sorteio a mais — o Gut é aritmética sobre a chance', () => {
+    const a = new CountingRng(Rng.fromSeed('gut-count').getState());
+    const b = new CountingRng(Rng.fromSeed('gut-count').getState());
+    rollLoot(fur, a);
+    rollLoot(fur, b, 1, gut(12));
+    expect(b.draws).toBe(a.draws);
+    expect(b.getState()).toEqual(a.getState());
+  });
+
+  it('o modelo FUN-63 (sem rollModel) não tem o que o Gut altere: a sequência é a mesma', () => {
+    const legacy = table({ items: [{ itemId: 'fur', chance: 0.4, min: 1, max: 3 }] });
+    const plain = Rng.fromSeed('gut-legacy');
+    const gutted = Rng.fromSeed('gut-legacy');
+    for (let i = 0; i < 20; i += 1) {
+      expect(rollLoot(legacy, gutted, 1, gut(12))).toEqual(rollLoot(legacy, plain));
+    }
+  });
+
+  it('em conjunto o Gut rende mais: ~+12 % de drops num creature product de 40 %', () => {
+    const line = canary({ items: [{ itemId: 'fur', chance: 0.4, min: 1, max: 1 }] });
+    const count = (withGut: boolean): number => {
+      const rng = Rng.fromSeed('gut-rate');
+      let drops = 0;
+      for (let i = 0; i < 100_000; i += 1) {
+        if (rollLoot(line, rng, 1, withGut ? gut(12) : undefined).items.length > 0) drops += 1;
+      }
+      return drops;
+    };
+    const ratio = count(true) / count(false);
+    expect(ratio).toBeGreaterThan(1.10);
+    expect(ratio).toBeLessThan(1.14);
   });
 });
 

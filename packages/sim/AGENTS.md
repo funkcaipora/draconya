@@ -776,3 +776,28 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   subject certo, como cinto e suspensório contra o cliente pedindo por fora do auto-target. Ver
   "Invocação do PERSONAGEM" em `docs/product/combat.md` para o resto do contrato (teto de 2,
   mana do MONSTRO via `manaCostOverride`, `combat-v4`).
+- **Os Charms em combate (#603, M39-03, ADR 0053 d.5) vivem em `combat/charms.ts` (puro) e nos
+  métodos `#charm*`/`#roll*` do `HuntRuleset`, e SÓ rolam no `combat-v4` (`hasCharmStage`).** Três
+  armadilhas custam caro. (1) **O índice do tier é `tier − 1`**: o Canary guarda um `0` na frente do
+  vetor de chance, então o tier 1 lê o PRIMEIRO valor do Lua (`charmChance`); `points` continua
+  indexado pelo tier ANTES de desbloquear. (2) **A rolagem certa em cada ponto é o mecanismo**:
+  defensivos usam `normal_random(1, 10000)/100` (~1,4 % a 4,3 % reais, não os 5–12 % nominais),
+  Cleanse a normal em `0..10000`, Void Inversion/Fatal Hold a normal em `0..100`, ofensivos a
+  uniforme `1..100` — trocar uma por outra "que dá o mesmo número" muda a probabilidade. (3) **O
+  crítico é decidido por AÇÃO, antes do `blockHit`** (`ActionCritical`): o crítico base rola uma vez
+  para todos os alvos da magia, e o Low Blow só rola se o base falhou, com `base + charm` e UM
+  sorteio por monstro-alvo do charm. `castSpell`/`useSupply` ganharam `SpellTarget.charm` por isso;
+  um caminho novo em que o jogador acerta um monstro precisa passar por `#hitModifiers` (golpe único)
+  ou por `SpellTarget.charm` (mira) E chamar `#applyCharmsAfterHit` depois de aplicar o dano — o
+  mesmo ponto único que `#afterMonsterHit` já é para reflexo e cura por elemento. O dano do charm é
+  EXTENSÃO (`source: 'charm'`, `extension: true`, neutro em Overpower/Overflux/Carnage/Parry): não
+  crítica, não faz leech, não reflete, e nunca dispara outro charm ofensivo. O Dodge do PRD NÃO
+  existe no `combat-v4` — `resolveBlockHitProfile` nem sorteia. `cleanseImmunity` é estado do
+  personagem e viaja no snapshot; o Fatal Hold é a condição `'fatal-hold'` do monstro (permanente,
+  `Number.MAX_SAFE_INTEGER`, quando ele foge e não tem `targetChange` — o Canary só drena o prazo
+  em quem troca de alvo). O Cripple e o Numb chamam `#applyConditionTo(..., true)` (`ignoreImmunity`):
+  o Canary os aplica com `target->addCondition`, sem o `Monster::isImmune` que só o
+  `CombatConditionFunc` confere — uma paralisia nova que passe pelo caminho de combate normal NÃO
+  usa esse parâmetro. O Carnage roda também para o monstro invocado (`Monster::death` não confere
+  `isSummon()`). Os defeitos do `47dfd51` que ficaram de fora estão listados em
+  `docs/product/combat-conformance.md`.
