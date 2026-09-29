@@ -81,14 +81,16 @@ export function charmChance(assigned: AssignedCharm): number {
 //
 // Cada família de charm rola por uma função DIFERENTE no Canary, e o resultado não é o mesmo
 // número com nomes diferentes: a normal truncada põe a probabilidade real abaixo da nominal
-// (`normal_random(1, 10000) / 100` num charm de 5 % acerta ~3,6 % das vezes), e a uniforme acerta
+// (`normal_random(1, 10000) / 100` num charm de 5 % acerta ~1,4 % das vezes), e a uniforme acerta
 // exatamente a chance. Reproduzir a função certa em cada ponto É o mecanismo.
 
 /**
  * `chance >= normal_random(1, 10000) / 100.0` — os charms DEFENSIVOS no golpe recebido
  * (`game.cpp:8572`/`:8580`, e `:7951` do Parry) e o Carnage na morte (`monster.cpp:3287`). A
- * normal centra em 0,5: o charm de 5 % dispara com probabilidade ~3,6 %, o de 10 % ~5,5 %, o de
- * 11 % ~5,9 % (e os de 6/9/12 % dos minor, ~3,9/5,0/6,5 %).
+ * normal centra em 0,5 e é TRUNCADA em [0, 1] (o `normal_random` do Canary re-sorteia o que sai
+ * do intervalo): o charm de 5 % dispara com probabilidade ~1,4 %, o de 10 % ~3,4 %, o de 11 %
+ * ~3,8 % (e os de 6/9/12 % dos minor, ~1,7/2,9/4,3 %). Os números medidos estão em
+ * `charms.test.ts` e em `docs/product/combat-conformance.md`.
  */
 export function rollDefensiveCharm(rng: Rng, chance: number): boolean {
   return chance >= normalRandomInt(rng, 1, 10_000) / 100;
