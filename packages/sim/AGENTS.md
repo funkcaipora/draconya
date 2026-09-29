@@ -596,9 +596,19 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   já escreveu (`defenseValue`/`shieldFactor`/`distanceFactor`), na ordem exata do Canary
   (`Player::getDefense`/`PlayerWheel::calculateMitigation`): trocar a ordem das duas checagens
   muda o resultado do Knight com Mystic Blade + Mastermind Shield (as duas contribuem juntas).
-  **`fightMode` é sempre `'attack'` em produção** (`hunt.ts#playerDefenseV3`/`#playerMitigationV3`)
-  até a M30-03 ligar um seletor de postura de verdade — a mesma decisão que
-  `combat.weaponDamage.attackFactor` já tomou para o `combat-v2`. **`#playerDefender` bifurca por
+  **`fightMode` é o estado do PERSONAGEM** (`CharacterRuntime.fightMode`, M30-03, #550), lido por
+  `hunt.ts#playerDefenseV3`/`#playerMitigationV3` — nunca um `'attack'` fixo, e a constante
+  `combat.weaponDamage.attackFactor` saiu do conteúdo. O fator de DEFESA é o dinâmico
+  (`Player::getDefenseFactor(false)`): `playerDefense` recebe `recentlyAttacked`, que o CHAMADOR
+  calcula com `attackedRecently(character.lastAttackAtMs, session.nowMs, attackIntervalMs)` —
+  relógio LÓGICO da sessão, nunca de parede (invariante 2). `lastAttackAtMs` só é escrito por
+  `#onPlayerAttack`, DEPOIS de `#strike` devolver `true` (a arma foi usada, como o `result` de
+  `Player::doAttacking`) e só no `combat-v3`; `#strike` devolve `false` para o tiro que não saiu
+  (sem visão, sem munição) — não copie o carimbo para um caminho que não é golpe de arma
+  (magia/runa não escrevem `lastAttack` no Canary). O fator de ATAQUE entra por
+  `resolveWeaponPower`/`resolveWeaponHit` e é gated por perfil dentro delas (`attackFactorOf`):
+  `combat-v1`/`v2` ignoram a postura — é o que mantém o resultado do perfil publicado bit a bit.
+  **`#playerDefender` bifurca por
   `compatibilityProfile`**: `combat-v1`/`v2` continuam com os números antigos
   (`combat.player.armor` + equipado; `#defenseSourceOf`), só `combat-v3` usa as três funções
   novas — mexer nas duas sem entender a bifurcação quebra uma sessão v1/v2 congelada (ADR 0031).
