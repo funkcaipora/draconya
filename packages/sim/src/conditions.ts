@@ -30,12 +30,15 @@
 // esgotada, ela para de tiquetar ANTES do vencimento, como `ConditionDamage::executeCondition` do
 // Canary faz quando `damageList` esvazia.
 
-import type { ConditionEffect, ConditionSpec } from '@draconya/content';
+import type { ConditionEffect, ConditionImmunity, ConditionSpec } from '@draconya/content';
 import type { DamageType } from '@draconya/content';
 // `generateDamageList`/`damageOverTimeTicks` moram em `content` (achado da revisão do #557):
 // `conditionSpecSchema` também precisa delas para conferir `durationMs` contra o total da fila, e
 // duas implementações do mesmo cálculo é o defeito que a DT-03 já nomeia noutro lugar do content.
-import { damageOverTimeTicks, generateDamageList } from '@draconya/content';
+import {
+  DAMAGE_OVER_TIME_CONDITION_IMMUNITY, DRUNK_CONDITION_KEY, SPEED_CONDITION_KEY, damageOverTimeTicks,
+  generateDamageList,
+} from '@draconya/content';
 import type { Direction } from './area.js';
 import type { DamageSource } from './combat/damage.js';
 import type { Rng } from './rng.js';
@@ -203,6 +206,29 @@ export function sameTick(a: ConditionState, b: ConditionState): boolean {
 }
 
 /**
+ * A imunidade de condição que barraria esta condição num monstro (`Monster::isImmune(
+ * ConditionType_t)` do Canary, ADR 0041 d.2), ou `null` se nenhuma imunidade declarável a cobre.
+ *
+ * - **`paralyze`**: a condição vive na chave RESERVADA `speed` (haste e paralyze dividem o slot,
+ *   CMB-11), então só o sinal NEGATIVO conta — a imunidade nunca impede o monstro de se acelerar;
+ * - **`drunk`**: casa direto pela chave reservada;
+ * - **DOT** (tique de dano): o tipo de dano do tique dá a condição do Tibia
+ *   (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY` — `physical` sangra, `fire` queima…), como
+ *   `Combat::DamageToConditionType`. Um tique sem `damageType` é físico, o mesmo default de
+ *   `#applyConditionTick`.
+ *
+ * `invisible` NUNCA sai daqui: no Canary a MESMA imunidade é repropositada para "enxerga quem
+ * está invisível" (`Monster::canSeeInvisibility`), e não bloqueia a aplicação da condição.
+ */
+export function conditionImmunityOf(condition: ConditionState): ConditionImmunity | null {
+  if (condition.key === SPEED_CONDITION_KEY) return (condition.speedPercent ?? 0) < 0 ? 'paralyze' : null;
+  if (condition.key === DRUNK_CONDITION_KEY) return 'drunk';
+  if (condition.tick?.kind === 'damage') {
+    return DAMAGE_OVER_TIME_CONDITION_IMMUNITY[condition.tick.damageType ?? 'physical'] ?? null;
+  }
+  return null;
+}
+
 /**
  * A magnitude de uma condição, para a política `strongest`. Um DOT vale o dano TOTAL que falta
  * — o tique corrente mais a fila (M31-02, a mesma comparação de `ConditionDamage::

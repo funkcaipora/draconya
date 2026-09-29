@@ -964,6 +964,107 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
     await vi.waitFor(() => expect(acts).toEqual(['remove:p1']));
   });
 
+  it('a morte com perda de item (#571): o extrato leva o que caiu e a bag, e a tela de morte lista o que se perdeu', async () => {
+    // O caminho inteiro pelo host, com a hunt de verdade: `HuntRuleset#onCharacterDied` destrói as
+    // instâncias, o extrato as entrega ao `jobs` (`removedInstances`), a bag nova nasce como
+    // `acquired` já vestida em `equipment`, e o `session-ended` leva um evento por instância —
+    // sem ninguém olhar para nada disso acontecer (invariante 3).
+    const raw = rawTestContent();
+    const withLoss = buildContent({
+      ...raw,
+      items: [
+        { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', initialSlots: 20, weight: 18, value: 5 },
+        { id: 'bag', name: 'Bag', kind: 'container', slot: 'back', initialSlots: 8, weight: 8, value: 1 },
+        { id: 'gem', name: 'Gem', kind: 'other', weight: 1, value: 10, stackable: true },
+      ],
+      progression: [{
+        ...TEST_PROGRESSION,
+        deathPenalty: {
+          ...TEST_PROGRESSION.deathPenalty,
+          itemLoss: {
+            enabled: true, lossPercentByBlessings: [100, 70, 45, 25, 10, 0, 0, 0],
+            nonContainerDivisor: 10, replacementContainerId: 'bag',
+          },
+        },
+      }],
+      appearances: [placeholderAppearances({
+        ...raw,
+        items: [
+          { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', initialSlots: 20, weight: 18, value: 5 },
+          { id: 'bag', name: 'Bag', kind: 'container', slot: 'back', initialSlots: 8, weight: 8, value: 1 },
+          { id: 'gem', name: 'Gem', kind: 'other', weight: 1, value: 10, stackable: true },
+        ],
+      })],
+    } as unknown as RawContent);
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = {
+      save: async (r: Record<string, unknown>) => { saved.push(r); },
+    } as unknown as ReceiptStore;
+    const directory = {
+      register: async () => true, succeed: async () => true,
+    } as unknown as SessionDirectory;
+    let hero: CharacterRuntime | undefined;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: withLoss.version, logger, directory, receipts,
+      itemCatalog: withLoss.items, progression: withLoss.progression as Progression,
+      buildSession: citySuccessor(), now: () => 1000,
+      createSession: (characterId) => {
+        const session = createHuntSession({
+          id: `s-${characterId}`, content: withLoss, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+        });
+        hero = new CharacterRuntime({
+          id: characterId, position: { x: 0, y: 0, z: 7 },
+          // Com vocação: sem ela o Canary e o TFS não perdem item nenhum na morte.
+          health: 100, maxHealth: 100, mana: 0, maxMana: 0, level: 8, xp: 0, vocationId: 'knight',
+          gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+          inventory: {
+            backpack: [{ instanceId: 'i:gems', itemId: 'gem', quantity: 12 }],
+            equipped: { back: { instanceId: 'i:backpack', itemId: 'backpack', quantity: 1 } },
+          },
+        });
+        session.enter(hero);
+        // A morte acontece DENTRO do avanço do ciclo — o `cycle` pula sessão que já chegou
+        // encerrada —, como acontece numa hunt de verdade: o herói morre no meio de um `advanceBy`.
+        const advance = session.advanceBy.bind(session);
+        let killed = false;
+        (session as unknown as { advanceBy: (dtMs: number) => void }).advanceBy = (dtMs) => {
+          advance(dtMs);
+          if (killed) return;
+          killed = true;
+          session.kill(hero as CharacterRuntime);
+        };
+        return session;
+      },
+    });
+    await host.prepare('p1', undefined, 'a1');
+    const socket = new FakeSocket();
+    host.attach(socket, 'p1');
+
+    const session = host.sessionFor('p1') as Session;
+    host.cycle(1100);
+    await vi.waitFor(() => expect(host.sessionFor('p1')?.ruleset.type).toBe('city'));
+    host.flush();
+
+    // O extrato durável: o que o `jobs` apaga, a bag que ele insere, e onde ela está vestida.
+    expect(saved).toHaveLength(1);
+    expect(saved[0]?.['reason']).toBe('death');
+    expect(saved[0]?.['removedInstances']).toEqual(['i:backpack', 'i:gems']);
+    const bagId = `${session.id}:0`;
+    expect(saved[0]?.['acquired']).toEqual([
+      { instanceId: bagId, itemId: 'bag', quantity: 1, origin: 'death-replacement' },
+    ]);
+    expect(saved[0]?.['equipment']).toEqual({ back: bagId });
+    // A tela de morte: um evento por instância perdida, no formato que o cliente lê.
+    const ended = socket.received().find((m) => m.type === 'session-ended');
+    expect(ended?.type === 'session-ended' && ended.notableEvents
+      .filter((e) => e.type === 'item-lost-on-death').map((e) => e.detail))
+      .toEqual(['backpack/1/i:backpack/p1', 'gem/12/i:gems/p1']);
+    // E a Cidade que sucede já é a do inventário NOVO: a bag vestida, vazia.
+    const city = host.sessionFor('p1')?.participants[0];
+    expect(city?.inventory.equippedAt('back')?.itemId).toBe('bag');
+    expect(city?.inventory.backpack.every((slot) => slot === null)).toBe(true);
+  });
+
   it('solta o personagem quando o registro no diretório trocou de dono', async () => {
     // Insistir seria escrever por cima de um dono que já não somos nós — e duas cópias da
     // mesma sessão dobram XP e loot, que é pior que uma sessão perdida.
@@ -7005,6 +7106,27 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
     // `seq` anterior a um já processado é mensagem atrasada: ignorada em silêncio.
     await send({ type: 'select-target', creatureId: ratId, seq: 2 });
     expect(socket.received()).not.toContainEqual({ type: 'target-changed', creatureId: ratId, seq: 2 });
+  });
+
+  it('select-target num monstro INVISÍVEL é recusado com target-cancel — o jogador não o enxerga (#559)', async () => {
+    const { host, socket, viewer, runFor, send, sessions } = realHunt(true);
+    runFor(200);
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = socket.received().filter((m) => m.type === 'session-state').at(-1);
+    if (state?.type !== 'session-state') throw new Error('não veio session-state');
+    const rat = state.world.creatures.find((c) => c.name === 'Rat');
+    const ratId = rat?.id as number;
+    const monster = (sessions[0]?.ruleset as HuntRuleset).monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    monster.conditions.apply({ key: 'invisible', targetId: monster.subject, expiresAtMs: 999_999 });
+
+    // O auto-target (#444) pode já ter anunciado o rato ANTES de ele ficar invisível: o que se
+    // confere é que o pedido de seleção NÃO gera uma confirmação a mais.
+    const before = socket.received().filter((m) => m.type === 'target-changed').length;
+    await send({ type: 'select-target', creatureId: ratId, seq: 1 });
+    expect(socket.received()).toContainEqual({ type: 'target-cancel', seq: 1 });
+    expect(socket.received().filter((m) => m.type === 'target-changed')).toHaveLength(before);
   });
 
   it('slot-state sai no primeiro ciclo e só muda quando o par (state, reason) muda (RF-09)', async () => {

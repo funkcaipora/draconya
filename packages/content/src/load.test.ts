@@ -888,6 +888,18 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     expect(byVocation.get(undefined)).toBe(1);
   });
 
+  it('Cancel Invisibility usa o `AREA_CIRCLE3X3` do Canary — o círculo de RAIO 3, o mesmo do Mass Healing (#559)', () => {
+    // O "3X3" do nome da constante é o raio, não o lado: `register_spells.lua:372-380` tem 37 tiles
+    // em linhas 3/5/7/7/7/5/3. A #592 a copiou como raio 1 (9 tiles) e um Paladin com o coelho a 3
+    // tiles não o revelava.
+    const cancel = content.spells.get('cancel-invisibility')?.effect;
+    const mass = content.spells.get('mass-healing')?.effect;
+    expect(cancel).toMatchObject({
+      kind: 'dispel', types: ['invisible'], area: { shape: 'circle', radius: 3, centered: 'caster' },
+    });
+    expect(mass).toMatchObject({ area: { shape: 'circle', radius: 3 } });
+  });
+
   it('nenhuma das 13 magias novas do #596 cai no default `arcane` de `damageType`', () => {
     // `arcane` continua no enum `DAMAGE_TYPES` — é o default de `weaponSchema` (wand/rod) e de
     // dez magias físicas ANTERIORES a esta issue (`berserk`, `physical-strike`, etc., um
@@ -1400,6 +1412,41 @@ describe('wave and beam areas transcribed from the Canary AREA_* (#679)', () => 
     for (const entry of catalogue) {
       expect(JSON.stringify(entry), entry.id).not.toMatch(/"shape":"wave"/);
     }
+  });
+});
+
+describe('a perda de item na morte do conteúdo real (#571, ADR 0042 decisão 4)', () => {
+  it('carrega a tabela do Canary DESLIGADA — a decisão do dono (destruir vs. nunca perder) segue em aberto', () => {
+    // `Blessings.LossPercent[n].item` (`blessing.lua:36-46`): 100/70/45/25/10/0… por contagem de
+    // bênçãos. `enabled: false` é a regra provisória "nunca perde item" (`docs/product/death.md`
+    // §3.8) — ligar é trocar UM booleano, e este teste é o que avisa quem o trocar de que a morte
+    // passou a DESTRUIR itens de verdade.
+    const { progression } = loadContent(DATA);
+    const loss = progression?.deathPenalty.itemLoss;
+    expect(loss).toEqual({
+      enabled: false,
+      lossPercentByBlessings: [100, 70, 45, 25, 10, 0, 0, 0],
+      nonContainerDivisor: 10,
+      replacementContainerId: 'bag',
+    });
+  });
+
+  it('a bag de reposição é o `ITEM_BAG` do Canary (8 lugares, nas costas) e tem aparência', () => {
+    const { items } = loadContent(DATA);
+    const bag = items.get('bag');
+    expect(bag).toMatchObject({ kind: 'container', slot: 'back', initialSlots: 8, weight: 8 });
+    // 2853 é o clientid da bag no pacote (`items.xml` id 2853) — a tabela de aparências resolve.
+    expect(bag?.appearanceId).toBe(2853);
+  });
+
+  it('o Amulet of Loss importado ganha `protectsOnDeath` por override — o importador só transcreve o XML', () => {
+    const { items } = loadContent(DATA);
+    expect(items.get('amulet-of-loss')).toMatchObject({
+      slot: 'neck', charges: 1, protectsOnDeath: true, appearanceId: 3057,
+    });
+    // E é o ÚNICO colar que protege: qualquer outro com a flag seria uma proteção não declarada.
+    const protectors = [...items.values()].filter((item) => item.protectsOnDeath).map((item) => item.id);
+    expect(protectors).toEqual(['amulet-of-loss']);
   });
 });
 

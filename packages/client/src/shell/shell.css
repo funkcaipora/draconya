@@ -804,6 +804,11 @@ body {
   background: linear-gradient(180deg, #3d1315, #24090b);
   color: var(--blood-7);
 }
+/* A saída PENDENTE (#802) ocupa o lugar da pill de saída — mesmo botão partido, mesmo canto —,
+   então reusa `.hunt-pill-danger`. Na saída manual é um botão (o clique cancela); na de uma regra
+   do bot é só um aviso, sem cursor de clique. */
+.hunt-pill-pending { white-space: nowrap; }
+div.hunt-pill-pending { cursor: default; }
 /* A pill "ⓘ Detalhes da caçada" reusa `.hunt-pill`; só o selo circular "i" é novo
    (Hud.jsx:140, o span antes do texto). */
 .hunt-pill-icon {

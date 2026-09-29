@@ -596,5 +596,13 @@ entre arquivos resolvem.
   item sem pedido. `monster.elementHealing` (teto 500) e `monster.reflect` (teto 200) são
   PERCENTUAL INTEIRO, como o reflexo de item, e compilam no boot (`compileElementHealing`,
   `compileReflect` com `flat` zero); ausentes no monstro compilado quando nada cura/reflete.
+- **`monster.conditionImmunities` é o `monster.immunities[].condition` do Canary** (#559, ADR 0041
+  d.2) — distinto de `mitigation.immunities` (`combat = true`, DANO). Onze nomes:
+  `paralyze`, `drunk`, `invisible` e as oito DOTs (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY`, a
+  `Combat::DamageToConditionType`: `physical` sangra, `earth` envenena, `fire` queima…) — o
+  vocabulário do ADR, NÃO os nomes do Lua (`bleed`, `fire`, `earth`…), que o importador traduz.
+  **`invisible` significa "enxerga o invisível"** (`Monster::canSeeInvisibility`), nunca "não pode
+  ficar invisível": é a exceção que não bloqueia a condição. `outfit` (119 monstros) fica fora até
+  o M44-03. Ausente é `[]`, sem imunidade nenhuma.
 
 Issue: FUN-8.

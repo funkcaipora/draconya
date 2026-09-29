@@ -20,6 +20,7 @@ export * from './progression.js';
 export * from './stamina.js';
 export * from './food.js';
 export * from './blessings.js';
+export * from './item-loss.js';
 export * from './skills.js';
 export * from './bestiary.js';
 export * from './charms.js';

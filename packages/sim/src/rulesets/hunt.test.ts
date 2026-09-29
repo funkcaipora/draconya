@@ -1173,6 +1173,313 @@ describe('level up e penalidade de morte dentro da hunt', () => {
   });
 });
 
+describe('perda de item na morte (#571, ADR 0042 decisão 4)', () => {
+  // O Canary larga o item perdido no cadáver do jogador; o Draconya não tem item no chão, então
+  // "perder" é DESTRUIR — a instância vai para `removedInstances` (o `jobs` a apaga na MESMA
+  // transação do ledger) e cada perda vira um evento notável do extrato.
+  const lossItems = [
+    { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', initialSlots: 20, weight: 18, value: 5 },
+    { id: 'bag', name: 'Bag', kind: 'container', slot: 'back', initialSlots: 8, weight: 8, value: 1 },
+    {
+      id: 'amulet-of-loss', name: 'Amulet of Loss', kind: 'amulet', slot: 'neck',
+      weight: 4.2, value: 0, charges: 1, protectsOnDeath: true,
+    },
+    { id: 'gem', name: 'Gem', kind: 'other', weight: 1, value: 10, stackable: true },
+  ];
+  const itemLoss = {
+    enabled: true, lossPercentByBlessings: [100, 70, 45, 25, 10, 0, 0, 0],
+    nonContainerDivisor: 10, replacementContainerId: 'bag',
+  };
+  // O preço das bênçãos do Canary: só o `freeBelowLevel` (o Adventurer's Blessing) importa aqui.
+  const blessingPricing = {
+    freeBelowLevel: 21, flatUntilLevel: 30, flatPrice: 2000, highFromLevel: 120, midOffset: 20,
+    midMultiplier: 200, midEnhancedMultiplier: 260, highBase: 20_000, highEnhancedBase: 26_000,
+    highMultiplier: 75, highEnhancedMultiplier: 100,
+  };
+  const lossContent = (
+    over: {
+      enabled?: boolean; nonContainerDivisor?: number; routes?: NonNullable<RawContent['routes']>;
+      adventurer?: boolean;
+    } = {},
+  ): Content => content({
+    items: [...items, ...lossItems] as unknown as NonNullable<RawContent['items']>,
+    ...(over.routes === undefined ? {} : { routes: over.routes }),
+    progression: [{
+      ...progression,
+      ...(over.adventurer === true ? { blessingPricing } : {}),
+      deathPenalty: {
+        ...progression.deathPenalty,
+        itemLoss: { ...itemLoss, enabled: over.enabled ?? true, nonContainerDivisor: over.nonContainerDivisor ?? 10 },
+      },
+    }] as unknown as NonNullable<RawContent['progression']>,
+  });
+
+  const dressed = (extra: InventoryState['equipped'] = {}): InventoryState => ({
+    backpack: [
+      { instanceId: 'i:gems', itemId: 'gem', quantity: 12 }, null,
+      { instanceId: 'i:spare', itemId: 'sword', quantity: 1 },
+    ],
+    equipped: {
+      back: { instanceId: 'i:backpack', itemId: 'backpack', quantity: 1 },
+      chest: { instanceId: 'i:plate', itemId: 'plate', quantity: 1 },
+      hand: { instanceId: 'i:sword', itemId: 'sword', quantity: 1 },
+      head: { instanceId: 'i:hat', itemId: 'sharp-hat', quantity: 1 },
+      ...extra,
+    },
+  });
+
+  /**
+   * O herói morre AGORA, direto no pipeline — a perda de item não depende de como ele morreu.
+   * Com vocação: sem ela o Canary e o TFS não perdem item nenhum (`droploot.lua`,
+   * `drop_loot.lua`), e o fixture nasce sem uma (§7.4).
+   */
+  const dies = (
+    loaded: Content, inventory: InventoryState, blessings = 0, vocationId: string | null = 'knight',
+    level = 1,
+  ): { session: Session; hero: CharacterRuntime } => {
+    const { session, hero } = start({ loaded, inventory });
+    hero.blessings = blessings;
+    hero.vocationId = vocationId;
+    hero.level = level;
+    session.kill(hero);
+    expect(session.ended).toBe('death');
+    return { session, hero };
+  };
+
+  const eventsOf = (session: Session, type: string): string[] =>
+    session.notableEvents.filter((e) => e.type === type).map((e) => e.detail ?? '');
+
+  it('DESLIGADO (`enabled: false`, o conteúdo real hoje): a morte não toca em item nenhum', () => {
+    // O "nunca perde item" provisório do dono (`docs/product/death.md` §3.8). Vale também sem o
+    // bloco no conteúdo — é o que o resto da suíte usa.
+    for (const loaded of [lossContent({ enabled: false }), content({
+      items: [...items, ...lossItems] as unknown as NonNullable<RawContent['items']>,
+    })]) {
+      const inventory = dressed();
+      const { session, hero } = dies(loaded, inventory);
+      expect(session.receipts()[0]?.removedInstances).toEqual([]);
+      expect(hero.inventory.getState().equipped).toEqual(inventory.equipped);
+      expect(session.notableEvents.filter((e) => e.type.startsWith('item-loss') || e.type === 'item-lost-on-death'))
+        .toEqual([]);
+    }
+  });
+
+  it('sem bênção a mochila se perde (100%) COM o que carrega, e uma bag nova a substitui', () => {
+    const { session, hero } = dies(lossContent(), dressed());
+
+    const removed = session.receipts()[0]?.removedInstances ?? [];
+    // A mochila cai sempre (sorteio ≤ 10 000 contra chance cheia) e leva os dois de dentro.
+    expect(removed).toContain('i:backpack');
+    expect(removed).toContain('i:gems');
+    expect(removed).toContain('i:spare');
+    // O extrato registra UMA linha por instância, na mesma ordem em que saíram do inventário —
+    // `itemId/quantidade/instanceId/dono`.
+    const names: Record<string, string> = {
+      'i:backpack': 'backpack/1', 'i:gems': 'gem/12', 'i:spare': 'sword/1', 'i:plate': 'plate/1',
+      'i:sword': 'sword/1', 'i:hat': 'sharp-hat/1',
+    };
+    expect(eventsOf(session, 'item-lost-on-death'))
+      .toEqual(removed.map((instanceId) => `${names[instanceId] as string}/${instanceId}/hero`));
+    // Quem ficou sem mochila recebe uma bag: vestida, com os lugares dela, e id `sessão:n`.
+    const back = hero.inventory.equippedAt('back');
+    expect(back).toMatchObject({ itemId: 'bag', quantity: 1, origin: 'death-replacement' });
+    expect(back?.instanceId).toBe('session-1:0');
+    expect(hero.inventory.backpack).toEqual(new Array(8).fill(null));
+    expect(eventsOf(session, 'backpack-replaced')).toEqual(['bag']);
+  });
+
+  it('a perda é CONSERVADORA: o que sai + o que fica = o que estava (nada some sem registro)', () => {
+    const before = dressed();
+    const ids = [
+      ...before.backpack.filter((c) => c !== null).map((c) => c.instanceId),
+      ...Object.values(before.equipped).map((c) => c.instanceId),
+    ].sort();
+    const { session, hero } = dies(lossContent(), before);
+
+    const removed = session.receipts()[0]?.removedInstances ?? [];
+    const state = hero.inventory.getState();
+    const kept = [
+      ...state.backpack.filter((c) => c !== null).map((c) => c.instanceId),
+      ...Object.values(state.equipped).map((c) => c.instanceId).filter((id) => id !== 'session-1:0'),
+    ];
+    expect([...removed, ...kept].sort()).toEqual(ids);
+    // E o extrato do Postgres é idempotente por `(session_id, seq)`: o `seq` do extrato é o
+    // mesmo com ou sem perda de item — é a chave que o `jobs` deduplica, não uma nova.
+    expect(session.receipts()[0]?.seq).toBe(1);
+  });
+
+  it('com `nonContainerDivisor: 1` TUDO cai com o sorteio mínimo — o mecanismo por slot, sem sorte', () => {
+    const { session, hero } = dies(lossContent({ nonContainerDivisor: 1 }), dressed());
+    expect(hero.inventory.getState().equipped).toEqual({
+      back: { instanceId: 'session-1:0', itemId: 'bag', quantity: 1, origin: 'death-replacement' },
+    });
+    expect(session.receipts()[0]?.removedInstances).toEqual([
+      'i:hat', 'i:backpack', 'i:gems', 'i:spare', 'i:plate', 'i:sword',
+    ]);
+  });
+
+  it('com cinco bênçãos nada se perde, mas a morte consome as bênçãos do mesmo jeito', () => {
+    // 0b11111: cinco bênçãos — a tabela dá 0% e nenhum sorteio roda.
+    const inventory = dressed();
+    const { session, hero } = dies(lossContent({ nonContainerDivisor: 1 }), inventory, 0b11111);
+
+    expect(session.receipts()[0]?.removedInstances).toEqual([]);
+    expect(hero.inventory.getState().equipped).toEqual(inventory.equipped);
+    expect(eventsOf(session, 'item-loss-protected')).toEqual(['blessings']);
+    // A contagem que decidiu a chance é a de ANTES da morte consumir: `hero.blessings` já é 0.
+    expect(hero.blessings).toBe(0);
+    expect(eventsOf(session, 'blessings-consumed')).toEqual(['5']);
+  });
+
+  it('o Amulet of Loss protege tudo e é CONSUMIDO — o único item que sai do inventário', () => {
+    const inventory = dressed({ neck: { instanceId: 'i:aol', itemId: 'amulet-of-loss', quantity: 1 } });
+    const { session, hero } = dies(lossContent({ nonContainerDivisor: 1 }), inventory);
+
+    expect(session.receipts()[0]?.removedInstances).toEqual(['i:aol']);
+    expect(hero.inventory.equippedAt('neck')).toBeNull();
+    expect(hero.inventory.equippedAt('back')?.instanceId).toBe('i:backpack');
+    expect(hero.inventory.equippedAt('chest')?.instanceId).toBe('i:plate');
+    expect(eventsOf(session, 'item-loss-protected')).toEqual(['amulet-of-loss']);
+    expect(eventsOf(session, 'loss-amulet-consumed')).toEqual(['amulet-of-loss']);
+    expect(eventsOf(session, 'item-lost-on-death')).toEqual([]);
+  });
+
+  it('o colar é consumido mesmo com cinco bênçãos, que já protegiam sozinhas (Player::death)', () => {
+    const inventory = dressed({ neck: { instanceId: 'i:aol', itemId: 'amulet-of-loss', quantity: 1 } });
+    const { session, hero } = dies(lossContent(), inventory, 0b11111);
+    expect(session.receipts()[0]?.removedInstances).toEqual(['i:aol']);
+    expect(hero.inventory.equippedAt('neck')).toBeNull();
+  });
+
+  it('em party só quem morre perde: o sobrevivente fica intacto e o id da bag leva o dono no meio', () => {
+    const member = (id: string, inventory: InventoryState): CharacterRuntime => {
+      const stats = statsForLevel(1, null, progression as Progression);
+      return new CharacterRuntime({
+        id, position: { x: 0, y: 0, z: 7 },
+        health: stats.maxHealth, maxHealth: stats.maxHealth,
+        mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: 'knight',
+        staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+        gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000, inventory,
+      });
+    };
+    const session = createHuntSession({
+      id: 'party-session', content: lossContent({ nonContainerDivisor: 1, routes: [threeRatsRoute] }),
+      huntId: 'arena', difficulty: 'bold', createdAtMs: 0, partyOptions: { leaderId: 'a', mode: 'split' },
+    });
+    const a = member('a', dressed());
+    const b = member('b', dressed());
+    session.enter(a);
+    session.enter(b);
+    session.drainEvents();
+
+    session.kill(b);
+
+    // `a` continua caçando, com tudo o que tinha.
+    expect(session.ended).toBeNull();
+    expect(a.inventory.getState().equipped).toEqual(dressed().equipped);
+    expect(a.removedInstances).toEqual([]);
+    // `b` saiu com o próprio extrato: as instâncias dele, e a bag com o id do dono no meio.
+    const departure = session.drainEvents().find((e) => e.kind === 'member-left');
+    expect(departure).toBeDefined();
+    if (departure?.kind !== 'member-left') throw new Error('sem member-left');
+    expect(departure.departure.receipt.removedInstances).toContain('i:backpack');
+    expect(b.inventory.equippedAt('back')?.instanceId).toBe('party-session:b:0');
+    // O detalhe leva o dono: as linhas dos membros compartilham a lista de eventos da sessão.
+    expect(eventsOf(session, 'item-lost-on-death').every((detail) => detail.endsWith('/b'))).toBe(true);
+  });
+
+  it('sem vocação a morte não perde item nem entrega bag (Canary/TFS devolvem antes da perda)', () => {
+    const inventory = dressed();
+    const { session, hero } = dies(lossContent({ nonContainerDivisor: 1 }), inventory, 0, null);
+
+    expect(session.receipts()[0]?.removedInstances).toEqual([]);
+    expect(hero.inventory.getState().equipped).toEqual(inventory.equipped);
+    expect(session.notableEvents.filter((e) => e.type.startsWith('item-loss') || e.type === 'item-lost-on-death'
+      || e.type === 'backpack-replaced')).toEqual([]);
+  });
+
+  it('abaixo do level 21 com vocação, sem bênção nenhuma, a morte não perde item (Adventurer\'s Blessing)', () => {
+    const inventory = dressed();
+    const { session, hero } = dies(
+      lossContent({ nonContainerDivisor: 1, adventurer: true }), inventory, 0, 'knight', 20,
+    );
+
+    expect(session.receipts()[0]?.removedInstances).toEqual([]);
+    expect(hero.inventory.getState().equipped).toEqual(inventory.equipped);
+    expect(eventsOf(session, 'item-loss-protected')).toEqual(['blessings']);
+    expect(eventsOf(session, 'item-lost-on-death')).toEqual([]);
+  });
+
+  it('no level 21 o Adventurer acaba: a mesma morte volta a tirar a mochila', () => {
+    const { session } = dies(
+      lossContent({ nonContainerDivisor: 1, adventurer: true }), dressed(), 0, 'knight', 21,
+    );
+
+    expect(session.receipts()[0]?.removedInstances).toContain('i:backpack');
+    expect(eventsOf(session, 'item-loss-protected')).toEqual([]);
+  });
+
+  // Sem arma nem armadura: com a espada de 200 de ataque o herói mata os ratos de um golpe e
+  // nunca morre, e o teste não chegaria à perda. Mochila e anel bastam para haver o que perder.
+  const barehanded = (): InventoryState => ({
+    backpack: [{ instanceId: 'i:gems', itemId: 'gem', quantity: 12 }],
+    equipped: {
+      back: { instanceId: 'i:backpack', itemId: 'backpack', quantity: 1 },
+      finger: { instanceId: 'i:ring', itemId: 'other-ring', quantity: 1 },
+    },
+  });
+
+  it('1 Hz == 10 Hz: morrendo em combate, a perda é a MESMA (invariante 3, sem ninguém assistindo)', () => {
+    // O herói morre de verdade, pelos golpes dos ratos, e o sorteio sai do `Rng` da sessão. Se a
+    // perda dependesse da cadência (ou de haver quem assistisse), as duas taxas divergiriam.
+    const scenario = (hz: number) => {
+      const { session, hero } = start({
+        loaded: lossContent({ routes: [threeRatsRoute] }), health: 40, inventory: barehanded(),
+      });
+      hero.vocationId = 'knight';
+      run(session, 120_000, 1000 / hz);
+      expect(session.ended).toBe('death');
+      return {
+        removed: session.receipts()[0]?.removedInstances,
+        events: session.notableEvents
+          .filter((e) => e.type.startsWith('item-loss') || e.type === 'item-lost-on-death'
+            || e.type === 'backpack-replaced')
+          .map((e) => `${e.type}:${e.detail ?? ''}`),
+        kept: hero.inventory.getState().equipped,
+        diedAtMs: session.notableEvents.find((e) => e.type === 'death')?.atMs,
+      };
+    };
+    const rapido = scenario(10);
+    expect(rapido.removed?.length).toBeGreaterThan(0);
+    expect(scenario(1)).toEqual(rapido);
+  });
+
+  it('retomar de um snapshot antes da morte dá a MESMA perda (o `Rng` atravessa o snapshot)', () => {
+    const loaded = lossContent({ routes: [threeRatsRoute] });
+    // 40 de vida: com o herói de mãos vazias a morte vem aos ~4 s, então o snapshot dos 2 s sai
+    // com ele ainda vivo e a perda acontece DEPOIS da retomada.
+    const { session, hero } = start({ loaded, health: 40, inventory: barehanded() });
+    hero.vocationId = 'knight';
+    run(session, 2_000, 100);
+    expect(session.ended).toBeNull();
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset,
+      new Rng(snapshot.rng),
+    );
+    run(session, 120_000, 100);
+    run(retomado, 120_000, 100);
+
+    expect(session.ended).toBe('death');
+    expect(retomado.ended).toBe('death');
+    expect(retomado.receipts()[0]?.removedInstances).toEqual(session.receipts()[0]?.removedInstances);
+    expect(retomado.notableEvents.filter((e) => e.type === 'item-lost-on-death'))
+      .toEqual(session.notableEvents.filter((e) => e.type === 'item-lost-on-death'));
+  });
+});
+
 describe('encerramento', () => {
   it('por ação manual, com extrato', () => {
     const { session } = start();
@@ -4318,6 +4625,152 @@ describe('trava de combate na saída (#625)', () => {
     expect(session.ended).toBeNull();
     session.advanceBy(1);
     expect(session.ended).toBe('exit-rule');
+  });
+});
+
+// --- a saída que o jogador pede e desfaz (#802) ----------------------------------------------
+
+describe('saída pedida pelo jogador: estado pendente e cancelamento (#802)', () => {
+  it('exitStatus é null sem saída pendente, para quem existe e para quem não existe', () => {
+    const { session, hero, ruleset } = withExit([], { exitDelayMs: 5_000 });
+    expect(ruleset.exitStatus(session, hero.id)).toBeNull();
+    expect(ruleset.exitStatus(session, 'desconhecido')).toBeNull();
+  });
+
+  it('durante a contagem do exitDelayMs: fase `countdown`, com o instante em que ela vence', () => {
+    const { session, hero, ruleset } = withExit([], { exitDelayMs: 5_000 });
+    session.advanceBy(1_000);
+    ruleset.requestExit(session, hero.id);
+    expect(ruleset.exitStatus(session, hero.id))
+      .toEqual({ reason: 'manual-exit', phase: 'countdown', untilMs: 6_000 });
+    // O tempo corre e o instante NÃO se mexe — quem calcula "faltam N s" é quem apresenta.
+    session.advanceBy(2_000);
+    expect(ruleset.exitStatus(session, hero.id))
+      .toEqual({ reason: 'manual-exit', phase: 'countdown', untilMs: 6_000 });
+    // Concluída, a saída deixa de estar pendente.
+    session.advanceBy(3_000);
+    expect(session.ended).toBe('manual-exit');
+    expect(ruleset.exitStatus(session, hero.id)).toBeNull();
+  });
+
+  it('em combate: fase `in-combat`, com o fim da janela de 60 s — e um golpe novo empurra o prazo', () => {
+    const { session, hero, ruleset } = withExit([]);
+    session.advanceBy(1_000);
+    hero.lastCombatActionAtMs = session.nowMs;
+    ruleset.requestExit(session, hero.id);
+    expect(ruleset.exitStatus(session, hero.id))
+      .toEqual({ reason: 'manual-exit', phase: 'in-combat', untilMs: 61_000 });
+
+    // O golpe novo entra no carimbo, mas o evento agendado só o relê quando vence: o que o
+    // jogador vê (o mais tardio dos dois) já reflete a janela nova.
+    session.advanceBy(30_000);
+    hero.lastCombatActionAtMs = session.nowMs;
+    expect(ruleset.exitStatus(session, hero.id))
+      .toEqual({ reason: 'manual-exit', phase: 'in-combat', untilMs: 91_000 });
+    // E o número diz a verdade: a saída conclui exatamente nele.
+    session.advanceBy(59_999);
+    expect(session.ended).toBeNull();
+    session.advanceBy(1);
+    expect(session.ended).toBe('manual-exit');
+  });
+
+  it('em combate, vale o mais tardio entre o prazo agendado e o fim da janela', () => {
+    const { session, hero, ruleset } = withExit([], { exitDelayMs: 5_000 });
+    session.advanceBy(1_000);
+    hero.lastCombatActionAtMs = session.nowMs;
+    ruleset.requestExit(session, hero.id);
+    // O evento agendado (6 000) é ANTES do fim da janela (61 000): vale a janela.
+    expect(ruleset.exitStatus(session, hero.id))
+      .toEqual({ reason: 'manual-exit', phase: 'in-combat', untilMs: 61_000 });
+
+    // Uma contagem MAIS LONGA que a janela: vale a contagem.
+    const longa = withExit([], { exitDelayMs: 90_000 });
+    longa.session.advanceBy(1_000);
+    longa.hero.lastCombatActionAtMs = longa.session.nowMs;
+    longa.ruleset.requestExit(longa.session, longa.hero.id);
+    expect(longa.ruleset.exitStatus(longa.session, longa.hero.id))
+      .toEqual({ reason: 'manual-exit', phase: 'in-combat', untilMs: 91_000 });
+  });
+
+  it('cancelExit desfaz a saída manual: a hunt segue depois do prazo que ela teria', () => {
+    const { session, hero, ruleset } = withExit([], { exitDelayMs: 5_000 });
+    session.advanceBy(1_000);
+    ruleset.requestExit(session, hero.id);
+    session.advanceBy(2_000);
+
+    expect(ruleset.cancelExit(session, hero.id)).toBe(true);
+    expect(ruleset.exitStatus(session, hero.id)).toBeNull();
+    // O evento agendado saiu da fila: nada vence em 6 000 ms.
+    expect(session.dueAtOf('exit-countdown', hero.id)).toBeNull();
+    session.advanceBy(60_000);
+    expect(session.ended).toBeNull();
+    // Cancelar de novo é um no-op honesto.
+    expect(ruleset.cancelExit(session, hero.id)).toBe(false);
+  });
+
+  it('cancelar e pedir de novo recomeça a contagem inteira — o evento velho não conclui antes da hora', () => {
+    // Mutação que mata: `cancelExit` só zerar `pendingExit`, sem cancelar o evento — o velho
+    // (t = 6 000) venceria com o pedido novo já marcado e encerraria 2 000 ms cedo demais.
+    const { session, hero, ruleset } = withExit([], { exitDelayMs: 5_000 });
+    session.advanceBy(1_000);
+    ruleset.requestExit(session, hero.id);
+    session.advanceBy(1_000);
+    expect(ruleset.cancelExit(session, hero.id)).toBe(true);
+    session.advanceBy(1_000);
+    ruleset.requestExit(session, hero.id); // t = 3 000 → conclui em 8 000
+
+    session.advanceBy(3_000); // t = 6 000: o prazo do pedido cancelado
+    expect(session.ended).toBeNull();
+    session.advanceBy(1_999);
+    expect(session.ended).toBeNull();
+    session.advanceBy(1);
+    expect(session.ended).toBe('manual-exit');
+  });
+
+  it('cancelar a saída que espera o combate tira a espera dos 60 s', () => {
+    const { session, hero, ruleset } = withExit([]);
+    session.advanceBy(1_000);
+    hero.lastCombatActionAtMs = session.nowMs;
+    ruleset.requestExit(session, hero.id);
+    session.advanceBy(10_000);
+    expect(ruleset.cancelExit(session, hero.id)).toBe(true);
+    // Passou o fim da janela e a hunt segue: ninguém concluiu uma saída que foi desfeita.
+    session.advanceBy(120_000);
+    expect(session.ended).toBeNull();
+  });
+
+  it('não cancela a saída de uma REGRA do bot — é decisão da configuração, e ela dispararia de novo', () => {
+    const { session, hero, ruleset } = withExit(
+      [{ kind: 'hp-below', percent: 50 }],
+      { health: 100, exitDelayMs: 5_000 },
+    );
+    session.advanceBy(250);
+    expect(ruleset.exitStatus(session, hero.id))
+      .toEqual({ reason: 'exit-rule', phase: 'countdown', untilMs: 5_250 });
+    expect(ruleset.cancelExit(session, hero.id)).toBe(false);
+    session.advanceBy(5_000);
+    expect(session.ended).toBe('exit-rule');
+  });
+
+  it('a saída pendente e o cancelamento atravessam o snapshot', () => {
+    const { session, hero, ruleset, loaded } = withExit([], { exitDelayMs: 5_000 });
+    session.advanceBy(1_000);
+    ruleset.requestExit(session, hero.id);
+    session.advanceBy(1_000);
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+    const retomadoRuleset = retomado.ruleset as HuntRuleset;
+    expect(retomadoRuleset.exitStatus(retomado, hero.id))
+      .toEqual({ reason: 'manual-exit', phase: 'countdown', untilMs: 6_000 });
+
+    expect(retomadoRuleset.cancelExit(retomado, hero.id)).toBe(true);
+    retomado.advanceBy(60_000);
+    expect(retomado.ended).toBeNull();
   });
 });
 
@@ -11410,7 +11863,7 @@ describe('Invisibility e Cancel Invisibility (#592, ADR 0041 d.2)', () => {
     id: 'cancel-invisibility-test', name: 'Cancel Invisibility', manaCost: 10, cooldownMs: 1_000,
     effect: {
       kind: 'dispel' as const, types: ['invisible'],
-      area: { shape: 'circle' as const, radius: 1, centered: 'caster' as const },
+      area: { shape: 'circle' as const, radius: 3, centered: 'caster' as const },
     },
   };
 
@@ -11437,8 +11890,8 @@ describe('Invisibility e Cancel Invisibility (#592, ADR 0041 d.2)', () => {
     session.advanceBy(1);
     const monster = ruleset.monsters[0];
     if (monster === undefined) throw new Error('faltou rato');
-    // O spawn da rota nasce longe do herói (routeIndex 4, radius 2) — o raio 1 desta magia sai
-    // do LANÇADOR, então o teste o reposiciona adjacente, como quem mira a mesma forma que a
+    // O spawn da rota nasce longe do herói (routeIndex 4, radius 2) — a forma desta magia sai do
+    // LANÇADOR, então o teste o reposiciona adjacente, como quem mira a mesma forma que a
     // ability em área já usa em outros describes deste arquivo.
     monster.position = { ...hero.position, x: hero.position.x + 1 };
     monster.conditions.apply({ key: 'invisible', targetId: monster.subject, expiresAtMs: session.nowMs + 200_000 });
@@ -11446,6 +11899,661 @@ describe('Invisibility e Cancel Invisibility (#592, ADR 0041 d.2)', () => {
     session.advanceBy(1_500); // 1 lançamento (cooldown 1 s), sem depender de "poison" nenhum.
     expect(monster.invisible).toBe(false);
     void hero;
+  });
+});
+
+describe('invisibilidade além do alvo: revelação por dano, alvo do jogador e DOT imune (#559)', () => {
+  const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 }, minimumDamageFraction: 0 };
+  const seer = { ...rat, conditionImmunities: ['invisible'] };
+  const invisibilityTest = {
+    id: 'invisibility-test', name: 'Invisibility', manaCost: 10, cooldownMs: 1_000,
+    effect: { kind: 'invisible' as const, durationMs: 200_000 },
+  };
+  // O rato que aguenta a hunt inteira: o herói (pacifista) nunca o mata no meio do cenário.
+  const tank = { ...rat, health: 1_000_000 };
+  const tankContent = (monster: Record<string, unknown> = {}) =>
+    content({ monsters: [{ ...tank, ...monster }], combat: [pacifist] });
+  // Um campo grande o bastante para cobrir a sala inteira (4×3) sem depender de onde o monstro
+  // esteja no instante do tique.
+  const roomFire: FieldSpec = {
+    id: 'room-fire', durationMs: 20_000,
+    shape: { shape: 'circle', radius: 5, centered: 'caster' },
+    condition: {
+      key: 'fire', merge: 'refresh', durationMs: 20_000,
+      effect: {
+        kind: 'damage-over-time', form: 'rounds',
+        rounds: [{ count: 40, intervalMs: 500, damage: 10 }], damageType: 'fire',
+      },
+    },
+  };
+  /** Deixa o alvo invisível como a própria defesa faria: a condição E o vencimento na fila. */
+  const makeInvisible = (
+    session: Session, target: CharacterRuntime | MonsterRuntime, durationMs: number,
+  ): void => {
+    const subject = target instanceof CharacterRuntime ? target.id : target.subject;
+    target.conditions.apply({ key: 'invisible', targetId: subject, expiresAtMs: session.nowMs + durationMs });
+    session.scheduleIn('condition-expire', durationMs, { subject: `${subject}/invisible` });
+  };
+  const expireEventsOf = (session: Session, subject: string) =>
+    session.snapshot().schedule.events.filter((e) => e.subject === `${subject}/invisible`);
+  const at = (m: MonsterRuntime) => ({ x: m.position.x, y: m.position.y, z: 7 });
+
+  describe('`Monster::drainHealth`: o monstro invisível que leva dano REAL volta a ficar visível', () => {
+    it('o tique de um campo de fogo revela o monstro — e o vencimento pendente sai da fila', () => {
+      const { session, ruleset } = withSpells(botConfig(), {
+        monstersRaw: [{ ...rat, health: 100_000, attack: 0 }], combat: [pacifist], health: 1_000_000,
+      });
+      session.advanceBy(1);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou rato');
+      makeInvisible(session, monster, 200_000);
+      expect(monster.invisible).toBe(true);
+      expect(expireEventsOf(session, monster.subject)).toHaveLength(1);
+
+      ruleset.applyField(session, roomFire, at(monster));
+      run(session, 700, 100); // o primeiro tique cai em +500
+
+      expect(monster.health).toBeLessThan(100_000);
+      expect(monster.invisible).toBe(false);
+      expect(monster.conditions.get('invisible')).toBeNull();
+      // O evento de vencimento da invisibilidade NÃO fica órfão na fila.
+      expect(expireEventsOf(session, monster.subject)).toHaveLength(0);
+    });
+
+    it('a runa de área numa posição (manual) revela quem estava dentro dela', () => {
+      const attackRune = {
+        id: 'reveal-rune', name: 'Rune', price: 10, group: 'attack', groupCooldownMs: 2_000,
+        requires: {},
+        effect: {
+          kind: 'damage' as const, basePower: 100, range: 4,
+          area: { shape: 'circle' as const, radius: 1, centered: 'target' as const },
+        },
+      };
+      const { session, ruleset } = withSpells(botConfig({}), {
+        gold: 1_000, supplies: [attackRune], mana: 200, monstersRaw: [{ ...rat, health: 100_000 }],
+        combat: [pacifist],
+      });
+      session.advanceBy(1);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou rato');
+      makeInvisible(session, monster, 200_000);
+
+      const outcome = ruleset.useItemOn(
+        session, 'hero', { supplyId: 'reveal-rune' }, 1, { kind: 'position', position: at(monster) },
+      );
+      expect(outcome).toEqual({ ok: true });
+      expect(monster.health).toBeLessThan(100_000);
+      expect(monster.invisible).toBe(false);
+      expect(expireEventsOf(session, monster.subject)).toHaveLength(0);
+    });
+
+    it('o golpe corpo a corpo do herói no alvo FIXADO que ficou invisível o revela (`#land`)', () => {
+      const { session, hero, ruleset } = start({
+        loaded: content({ monsters: [{ ...tank, attack: 0 }] }),
+      });
+      session.advanceBy(100);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou rato');
+      monster.position = { ...hero.position, x: hero.position.x + 1 };
+      ruleset.setAttackTarget(hero, monster, true);
+      makeInvisible(session, monster, 200_000);
+      expect(monster.invisible).toBe(true);
+
+      run(session, 6_000, 100);
+      expect(monster.health).toBeLessThan(1_000_000);
+      expect(monster.invisible).toBe(false);
+      expect(expireEventsOf(session, monster.subject)).toHaveLength(0);
+    });
+
+    it('o reflexo do equipamento que o monstro invisível leva ao bater no herói o revela (`#reflectOntoMonster`)', () => {
+      const combatV3 = {
+        ...combat, compatibilityProfile: 'combat-v3',
+        weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+        distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+        player: { ...combat.player, attackPower: 0 },
+      };
+      const thornHelmet = {
+        id: 'thorn-helmet', name: 'Thorn Helmet', kind: 'armor', slot: 'head',
+        weight: 1, value: 0, reflect: { physical: { flat: 42 } },
+      };
+      const { session, ruleset } = withSpells(botConfig(), {
+        health: 10_000, items: [...items, thornHelmet],
+        inventory: { backpack: [], equipped: { head: { instanceId: 'h1', itemId: 'thorn-helmet', quantity: 1 } } },
+        combat: [combatV3], monstersRaw: [{ ...rat, health: 500 }],
+      });
+      session.advanceBy(100);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou rato');
+      makeInvisible(session, monster, 200_000);
+
+      run(session, 10_000, 100);
+      // O rato invisível bate no herói (visível) e o reflexo do capacete o revela.
+      expect(monster.health).toBeLessThan(500);
+      expect(monster.invisible).toBe(false);
+    });
+
+    it('a invisibilidade do JOGADOR não cai por dano — só por prazo, Cancel Invisibility ou equipamento', () => {
+      // Um rato que VÊ invisível o ataca; o herói apanha e continua invisível.
+      const { session, hero } = start({ loaded: tankContent({ conditionImmunities: ['invisible'] }) });
+      makeInvisible(session, hero, 200_000);
+      const before = hero.health;
+      run(session, 8_000, 100);
+      expect(hero.health).toBeLessThan(before);
+      expect(hero.invisible).toBe(true);
+    });
+  });
+
+  describe('o monstro que não "vê invisível" (`Monster::isTarget` exige `canSeeCreature`)', () => {
+    it('nunca seleciona o herói invisível — ele não apanha', () => {
+      const { session, hero, ruleset } = start({ loaded: tankContent() });
+      makeInvisible(session, hero, 200_000);
+      const before = hero.health;
+      run(session, 10_000, 100);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou rato');
+      expect(monster.targetId).toBeNull();
+      expect(hero.health).toBe(before);
+    });
+
+    it('já um monstro que VÊ invisível o alvo e bate igual', () => {
+      const { session, hero, ruleset } = start({ loaded: tankContent({ conditionImmunities: ['invisible'] }) });
+      makeInvisible(session, hero, 200_000);
+      const before = hero.health;
+      run(session, 10_000, 100);
+      expect(ruleset.monsters[0]?.targetId).toBe(hero.id);
+      expect(hero.health).toBeLessThan(before);
+    });
+
+    it('o herói que lança Invisibility no meio da luta é largado no think agendado ([0, 1000) ms depois) — e não apanha mais', () => {
+      const { session, hero, ruleset } = withSpells(
+        botConfigV2([{ do: { kind: 'spell', spellId: 'invisibility-test' }, auto: false }]),
+        {
+          mana: 1_000, health: 1_000_000, spells: [invisibilityTest], combat: [pacifist],
+          monstersRaw: [{ ...tank, attack: 10 }],
+        },
+      );
+      run(session, 4_000, 100); // o rato alcança, engaja e bate
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou rato');
+      expect(monster.targetId).toBe(hero.id);
+
+      const castAtMs = session.nowMs;
+      expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+      expect(hero.invisible).toBe(true);
+      // O think do monstro foi AGENDADO no instante da invisibilidade — o `Creature::onThink` do
+      // Canary, numa fase sorteada dentro de um `EVENT_CREATURE_THINK_INTERVAL`.
+      const thinks = session.snapshot().schedule.events
+        .filter((e) => e.kind === 'visibility-think' && e.subject === monster.subject);
+      expect(thinks).toHaveLength(1);
+      const dueAtMs = thinks[0]?.dueAtMs ?? -1;
+      expect(dueAtMs).toBeGreaterThanOrEqual(castAtMs);
+      expect(dueAtMs).toBeLessThan(castAtMs + 1_000);
+
+      // Até o think ele segue com o alvo (e pode bater); no instante dele, larga.
+      if (dueAtMs > session.nowMs) session.advanceBy(dueAtMs - session.nowMs - 1);
+      expect(monster.targetId).toBe(hero.id);
+      session.advanceBy(1);
+      expect(monster.targetId).toBeNull();
+
+      const before = hero.health;
+      run(session, 8_000, 100);
+      expect(hero.health).toBe(before);
+      expect(monster.targetId).toBeNull();
+    });
+
+    it('o think agendado atravessa o snapshot — o monstro restaurado larga o alvo no MESMO instante (restore-invariance)', () => {
+      const { session, hero, ruleset, content: loaded } = withSpells(
+        botConfigV2([{ do: { kind: 'spell', spellId: 'invisibility-test' }, auto: false }]),
+        {
+          mana: 1_000, health: 1_000_000, spells: [invisibilityTest], combat: [pacifist],
+          monstersRaw: [{ ...tank, attack: 10 }],
+        },
+      );
+      run(session, 4_000, 100);
+      expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+      const dueAtMs = session.snapshot().schedule.events
+        .find((e) => e.kind === 'visibility-think')?.dueAtMs ?? -1;
+      expect(dueAtMs).toBeGreaterThan(0);
+
+      const snapshot = session.snapshot();
+      const resumed = Session.fromSnapshot(
+        snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed('resume'),
+      );
+      const monster = (resumed.ruleset as HuntRuleset).monsters[0];
+      if (monster === undefined) throw new Error('faltou rato restaurado');
+      expect(resumed.snapshot().schedule.events.find((e) => e.kind === 'visibility-think')?.dueAtMs)
+        .toBe(dueAtMs);
+
+      if (dueAtMs > resumed.nowMs + 1) resumed.advanceBy(dueAtMs - resumed.nowMs - 1);
+      expect(monster.targetId).toBe(hero.id);
+      resumed.advanceBy(1);
+      expect(monster.targetId).toBeNull();
+    });
+
+    it('o desfecho não depende da cadência do avanço — 10 Hz e 1 Hz largam o alvo e cobram o mesmo dano (invariante 2)', () => {
+      const outcomeAt = (stepMs: number) => {
+        const { session, hero, ruleset } = withSpells(
+          botConfigV2([{ do: { kind: 'spell', spellId: 'invisibility-test' }, auto: false }]),
+          {
+            mana: 1_000, health: 1_000_000, spells: [invisibilityTest], combat: [pacifist],
+            monstersRaw: [{ ...tank, attack: 10 }],
+          },
+        );
+        run(session, 4_000, 100);
+        expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+        run(session, 10_000, stepMs);
+        const monster = ruleset.monsters[0];
+        return { health: hero.health, target: monster === undefined ? 'sem monstro' : monster.targetId };
+      };
+      expect(outcomeAt(1_000)).toEqual(outcomeAt(100));
+      expect(outcomeAt(100).target).toBeNull();
+    });
+
+    it('quem "vê invisível" não agenda think nenhum — e o herói segue apanhando', () => {
+      const { session, hero, ruleset } = withSpells(
+        botConfigV2([{ do: { kind: 'spell', spellId: 'invisibility-test' }, auto: false }]),
+        {
+          mana: 1_000, health: 1_000_000, spells: [invisibilityTest], combat: [pacifist],
+          monstersRaw: [{ ...tank, attack: 10, conditionImmunities: ['invisible'] }],
+        },
+      );
+      run(session, 4_000, 100);
+      expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+      expect(session.snapshot().schedule.events.some((e) => e.kind === 'visibility-think')).toBe(false);
+      const before = hero.health;
+      run(session, 6_000, 100);
+      expect(hero.health).toBeLessThan(before);
+      expect(ruleset.monsters[0]?.targetId).toBe(hero.id);
+    });
+
+    it('relançar Invisibility com ela ainda ativa NÃO reagenda o think — a invisibilidade não recomeçou', () => {
+      const { session, ruleset } = withSpells(
+        botConfigV2([{ do: { kind: 'spell', spellId: 'invisibility-test' }, auto: false }]),
+        {
+          mana: 1_000, health: 1_000_000, spells: [invisibilityTest], combat: [pacifist],
+          monstersRaw: [{ ...tank, attack: 10 }],
+        },
+      );
+      run(session, 4_000, 100);
+      expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+      const first = session.snapshot().schedule.events.filter((e) => e.kind === 'visibility-think').length;
+      run(session, 1_100, 100); // o think venceu e o cooldown de 1 s também
+      expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+      const second = session.snapshot().schedule.events.filter((e) => e.kind === 'visibility-think').length;
+      expect(first).toBe(1);
+      expect(second).toBe(0);
+    });
+
+    it('a troca de alvo por tempo (`targetChange`) nunca sorteia o herói invisível — `searchTarget` só aceita quem `isTarget` aceita', () => {
+      const changer = { ...rat, aggroRadius: 1_000, targetChange: { intervalMs: 1_000, chance: 1 } };
+      const pickedBy = (invisibleAlly: boolean): ReadonlySet<string | null> => {
+        const loaded = content({ monsters: [changer], combat: [pacifist] });
+        const session = createHuntSession({
+          id: 'target-change-invisible', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+        });
+        const first = character();
+        session.enter(first);
+        const other = new CharacterRuntime({ ...character().getState(), id: 'other' });
+        session.enter(other);
+        if (invisibleAlly) makeInvisible(session, other, 500_000);
+        session.advanceBy(100);
+        const monster = (session.ruleset as HuntRuleset).monsters[0];
+        if (monster === undefined) throw new Error('faltou rato');
+        const seen = new Set<string | null>();
+        for (let i = 0; i < 40; i += 1) {
+          monster.targetId = first.id; // fixa o alvo: o que se mede é a TROCA
+          run(session, 1_100, 100);
+          seen.add(monster.targetId);
+        }
+        return seen;
+      };
+      // Controle: com os dois visíveis o sorteio alcança o segundo — o teste MEDE alguma coisa.
+      expect(pickedBy(false).has('other')).toBe(true);
+      expect(pickedBy(true).has('other')).toBe(false);
+    });
+  });
+
+  describe('o herói não enxerga monstro invisível (`Player::canSeeCreature`)', () => {
+    it('o alvo ELEITO pelo bot cai na hora — `selectTarget` nunca escolhe um invisível — e ao reaparecer volta a ser alvo', () => {
+      const { session, hero, ruleset } = start({
+        loaded: content({ monsters: [{ ...rat, health: 1_000_000, attack: 0 }] }),
+      });
+      session.advanceBy(100);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou rato');
+      ruleset.setAttackTarget(hero, monster, false);
+      expect(ruleset.selectedTargetOf(hero)).toBe(monster);
+
+      makeInvisible(session, monster, 5_000);
+      const untouched = monster.health;
+      expect(ruleset.selectedTargetOf(hero)).toBeNull();
+      run(session, 4_000, 100);
+      // O herói não bate no que não vê.
+      expect(monster.health).toBe(untouched);
+      expect(ruleset.attackTargetOf(hero)).toBeNull();
+      // Nenhum think foi agendado para o herói: a eleição do bot é do Draconya (ADR 0037 d.2).
+      expect(session.snapshot().schedule.events.some((e) => e.kind === 'visibility-think')).toBe(false);
+
+      run(session, 2_000, 100); // a invisibilidade venceu em +5 000: o bot volta a mirar
+      expect(monster.invisible).toBe(false);
+      expect(monster.health).toBeLessThan(untouched);
+    });
+
+    describe('o alvo FIXADO pelo jogador segue até o think agendado (`Creature::onThink`, [0, 1000) ms)', () => {
+      // A defesa de invisibilidade DE VERDADE (o Killer Rabbit, `monster.defenses`): é a única porta
+      // pela qual um monstro fica invisível na hunt, e é ela que agenda o think.
+      const rabbit = {
+        ...rat, health: 1_000_000, attack: 0,
+        defenses: [{
+          id: 'invisible', cadenceMs: 1_000, chance: 1,
+          condition: { key: 'invisible', merge: 'refresh' as const, durationMs: 4_000, effect: { kind: 'invisible' as const } },
+        }],
+      };
+      const untilInvisible = (session: Session, monster: MonsterRuntime): number => {
+        for (let i = 0; i < 300 && !monster.invisible; i += 1) session.advanceBy(10);
+        expect(monster.invisible).toBe(true);
+        return session.nowMs;
+      };
+
+      it('mantém o alvo fixado até o think, e o larga nele', () => {
+        const { session, hero, ruleset } = start({ loaded: content({ monsters: [rabbit], combat: [pacifist] }) });
+        session.advanceBy(100);
+        const monster = ruleset.monsters[0];
+        if (monster === undefined) throw new Error('faltou coelho');
+        ruleset.setAttackTarget(hero, monster, true);
+
+        const seenAtMs = untilInvisible(session, monster);
+        const think = session.snapshot().schedule.events
+          .find((e) => e.kind === 'visibility-think' && e.subject === hero.id);
+        expect(think).toBeDefined();
+        const dueAtMs = think?.dueAtMs ?? -1;
+        expect(dueAtMs).toBeGreaterThanOrEqual(seenAtMs - 10);
+        expect(dueAtMs).toBeLessThan(seenAtMs + 1_000);
+
+        // Até o think o jogador ainda o tem como alvo — é o alvo que o próximo golpe dele usa
+        // (`#attackTarget`), e o golpe REVELA o monstro (`#revealOnDrain`, testado acima)…
+        if (dueAtMs > session.nowMs + 1) session.advanceBy(dueAtMs - session.nowMs - 1);
+        expect(ruleset.selectedTargetOf(hero)).toBe(monster);
+        expect(ruleset.attackTargetOf(hero)).toBe(monster);
+        // …e no think ele larga.
+        session.advanceBy(1);
+        expect(ruleset.selectedTargetOf(hero)).toBeNull();
+        expect(ruleset.attackTargetOf(hero)).toBeNull();
+      });
+    });
+
+    describe('a apresentação nunca muda o snapshot (invariante 3) — um monstro que PISCA invisível', () => {
+      // O Killer Rabbit de mentira: fica invisível por 300 ms, a 70 % de chance, a cada segundo.
+      // O herói o ataca por magia (bot), e é o `slotStates` — a apresentação, que o hospedeiro
+      // chama a cada 500 ms SÓ com alguém assistindo — que lê o alvo pelos mesmos leitores que
+      // limpam o campo (`#attackTargetOfRunner`/`#botCandidateOf`).
+      const blinker = {
+        ...rat, health: 1_000_000, attack: 0,
+        defenses: [{
+          id: 'invisible', cadenceMs: 1_000, chance: 0.7,
+          condition: { key: 'invisible', merge: 'refresh' as const, durationMs: 300, effect: { kind: 'invisible' as const } },
+        }],
+      };
+      const strikeTest = {
+        id: 'strike-test', name: 'Strike', manaCost: 1, cooldownMs: 1_000,
+        effect: { kind: 'damage' as const, power: 5, range: 4, damageType: 'fire' },
+      };
+      const scene = () => withSpells(
+        botConfigV2([{ do: { kind: 'spell', spellId: 'strike-test' }, auto: false }]),
+        {
+          mana: 100_000, health: 1_000_000, spells: [strikeTest], combat: [pacifist],
+          monstersRaw: [blinker],
+        },
+        'bold',
+      );
+
+      it('o snapshot é o mesmo com e sem `slotStates` no meio — a cada 500 ms, por 30 s', () => {
+        const unwatched = scene();
+        const watched = scene();
+        for (let t = 500; t <= 30_000; t += 500) {
+          for (const { session } of [unwatched, watched]) run(session, 500, 100);
+          // O que o hospedeiro faz a cada 500 ms com um visualizador anexado.
+          watched.ruleset.slotStates(watched.session, watched.hero);
+          expect(watched.session.snapshot(), `divergiu em ${t} ms`).toEqual(unwatched.session.snapshot());
+        }
+      });
+
+      it('o alvo ELEITO pelo bot que fica invisível sai NO EVENTO, e a leitura da apresentação não escreve nada', () => {
+        const { session, hero, ruleset } = scene();
+        session.advanceBy(100);
+        const monster = ruleset.monsters[0];
+        if (monster === undefined) throw new Error('faltou coelho');
+        ruleset.setAttackTarget(hero, monster, false);
+        const chosen = () => (session.snapshot().ruleset as {
+          runners: Record<string, { chosenTarget?: string }>;
+        }).runners.hero?.chosenTarget;
+        expect(chosen()).toBe(monster.subject);
+
+        // Invisibilidade que COMEÇA por `#applyConditionTo` (a defesa de verdade): o campo do alvo
+        // eleito é limpo ali, no evento.
+        for (let i = 0; i < 600 && !monster.invisible; i += 1) session.advanceBy(10);
+        expect(monster.invisible).toBe(true);
+        expect(chosen()).toBeUndefined();
+        // Ler pela apresentação (invisível, não fixado) devolve nada e não escreve nada.
+        expect(ruleset.selectedTargetOf(hero)).toBeNull();
+        const before = JSON.stringify(session.snapshot());
+        ruleset.slotStates(session, hero);
+        expect(JSON.stringify(session.snapshot())).toBe(before);
+      });
+    });
+
+    describe('a mira MANUAL num monstro invisível (o clique que o cliente do Canary nunca teria)', () => {
+      // O cliente do Draconya ainda desenha o monstro invisível, então o clique chega como `kind:
+      // 'monster'`. No Canary o cliente não o recebe; o que o servidor decide é o TILE
+      // (`Spell::playerRuneSpellCheck`, `spells.cpp:704`): a runa `needTarget` recusa o tile sem
+      // criatura visível, a que não precisa (área/campo) sai do mesmo jeito e atinge quem estiver lá.
+      const singleTargetRune = {
+        id: 'blind-single', name: 'Sudden', price: 10, group: 'attack', groupCooldownMs: 2_000,
+        requires: {},
+        effect: { kind: 'damage' as const, basePower: 100, range: 4 },
+      };
+      const areaRune = {
+        id: 'blind-area', name: 'Great Fireball', price: 10, group: 'attack', groupCooldownMs: 2_000,
+        requires: {},
+        effect: {
+          kind: 'damage' as const, basePower: 100, range: 4,
+          area: { shape: 'circle' as const, radius: 1, centered: 'target' as const },
+        },
+      };
+      const invisibleRat = (supply: Record<string, unknown>) => {
+        const { session, ruleset } = withSpells(botConfig({}), {
+          gold: 1_000, supplies: [supply], mana: 200, monstersRaw: [{ ...rat, health: 100_000 }],
+          combat: [pacifist],
+        });
+        session.advanceBy(1);
+        const monster = ruleset.monsters[0];
+        if (monster === undefined) throw new Error('faltou rato');
+        makeInvisible(session, monster, 200_000);
+        const target = { kind: 'monster' as const, subject: monsterSubject(monster.id) };
+        return { session, ruleset, monster, target };
+      };
+
+      it('a runa de ALVO ÚNICO (`needTarget`) é recusada `no-target` — o tile não tem criatura visível', () => {
+        const { session, ruleset, monster, target } = invisibleRat(singleTargetRune);
+        const before = monster.health;
+        expect(ruleset.useItemOn(session, 'hero', { supplyId: 'blind-single' }, 1, target))
+          .toMatchObject({ ok: false, reason: 'no-target' });
+        expect(monster.health).toBe(before);
+        expect(monster.invisible).toBe(true);
+      });
+
+      it('a runa de ÁREA sai no tile do monstro e o atinge — e o revela, como se o clique fosse no chão', () => {
+        const { session, ruleset, monster, target } = invisibleRat(areaRune);
+        expect(ruleset.useItemOn(session, 'hero', { supplyId: 'blind-area' }, 1, target))
+          .toEqual({ ok: true });
+        expect(monster.health).toBeLessThan(100_000);
+        expect(monster.invisible).toBe(false);
+        expect(expireEventsOf(session, monster.subject)).toHaveLength(0);
+      });
+    });
+  });
+
+  describe('imunidade às DOTs (`Combat::CombatConditionFunc`, `Monster::isImmune(ConditionType_t)`)', () => {
+    const dotSpell = (damageType: string) => ({
+      id: 'dot-test', name: 'DOT', manaCost: 5, cooldownMs: 999_999,
+      effect: {
+        kind: 'damage-over-time' as const, amount: 20, intervalMs: 500, durationMs: 10_000,
+        range: 3, damageType,
+      },
+    });
+    const castOn = (monster: Record<string, unknown>, damageType: string) => {
+      const { session, ruleset } = withSpells(
+        botConfig({ attack: [{
+          when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId: 'dot-test' },
+        }] }),
+        {
+          mana: 1_000, health: 1_000_000, spells: [dotSpell(damageType)], combat: [pacifist],
+          monstersRaw: [{ ...rat, health: 100_000, attack: 0, ...monster }],
+        },
+      );
+      run(session, 3_000, 100);
+      const victim = ruleset.monsters[0];
+      if (victim === undefined) throw new Error('faltou rato');
+      return victim;
+    };
+
+    it('a DOT física (sangramento — Inflict Wound) não pega em quem é imune a `bleeding`, e pega em quem não é', () => {
+      const immune = castOn({ conditionImmunities: ['bleeding'] }, 'physical');
+      expect(immune.conditions.get('dot-test')).toBeNull();
+      expect(immune.health).toBe(100_000);
+      const normal = castOn({}, 'physical');
+      expect(normal.health).toBeLessThan(100_000);
+    });
+
+    it('a imunidade é POR condição: `burning` não protege de veneno, e `poison` protege da DOT de terra', () => {
+      expect(castOn({ conditionImmunities: ['burning'] }, 'earth').health).toBeLessThan(100_000);
+      expect(castOn({ conditionImmunities: ['poison'] }, 'earth').health).toBe(100_000);
+      expect(castOn({ conditionImmunities: ['burning'] }, 'fire').health).toBe(100_000);
+    });
+
+    it('o CAMPO não consulta a imunidade de condição — o Canary só tem a imunidade de DANO ali', () => {
+      const { session, ruleset } = withSpells(botConfig(), {
+        monstersRaw: [{ ...rat, health: 100_000, attack: 0, conditionImmunities: ['burning'] }],
+        combat: [pacifist], health: 1_000_000,
+      });
+      session.advanceBy(1);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou rato');
+      ruleset.applyField(session, roomFire, at(monster));
+      run(session, 1_200, 100);
+      expect(monster.health).toBeLessThan(100_000);
+    });
+  });
+
+  describe('Cancel Invisibility: o `combat` do script é AGRESSIVO por default, e `CombatFunc` exclui o lançador', () => {
+    // O círculo de RAIO 3 (`AREA_CIRCLE3X3`, 37 tiles em linhas 3/5/7/7/7/5/3), como o
+    // `cancel-invisibility.json` de verdade — o "3X3" do nome é o raio, não o lado.
+    const cancelInvisibility = {
+      id: 'cancel-invisibility-test', name: 'Cancel Invisibility', manaCost: 10, cooldownMs: 1_000,
+      effect: {
+        kind: 'dispel' as const, types: ['invisible'],
+        area: { shape: 'circle' as const, radius: 3, centered: 'caster' as const },
+      },
+    };
+    const cast = () => withSpells(
+      botConfigV2([{ do: { kind: 'spell', spellId: 'cancel-invisibility-test' }, auto: false }]),
+      {
+        mana: 1_000, health: 1_000_000, spells: [cancelInvisibility], combat: [pacifist],
+        monstersRaw: [{ ...tank, attack: 0 }],
+      },
+      'bold',
+    );
+
+    it('NÃO tira a invisibilidade do próprio lançador nem a dos aliados na forma — só a dos monstros', () => {
+      const { session, hero, ruleset } = cast();
+      session.advanceBy(1);
+      const near = new CharacterRuntime({ ...hero.getState(), id: 'near' });
+      session.enter(near);
+      near.position = { ...hero.position, x: hero.position.x + 1 };
+      for (const who of [hero, near]) makeInvisible(session, who, 200_000);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou rato');
+      monster.position = { ...hero.position, x: hero.position.x + 1 };
+      makeInvisible(session, monster, 200_000);
+
+      expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+
+      expect(monster.invisible).toBe(false);
+      expect(expireEventsOf(session, monster.subject)).toHaveLength(0);
+      // O Paladin que ficou invisível continua invisível depois do próprio Cancel Invisibility.
+      expect(hero.invisible).toBe(true);
+      expect(near.invisible).toBe(true);
+      expect(expireEventsOf(session, hero.id)).toHaveLength(1);
+      expect(expireEventsOf(session, near.id)).toHaveLength(1);
+    });
+
+    it('sem monstro nenhum na forma a magia sai e o lançador invisível segue invisível', () => {
+      const { session, hero, ruleset } = withSpells(
+        botConfigV2([{ do: { kind: 'spell', spellId: 'cancel-invisibility-test' }, auto: false }]),
+        { mana: 1_000, health: 1_000_000, spells: [cancelInvisibility], monsters: false },
+      );
+      makeInvisible(session, hero, 200_000);
+      expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+      expect(hero.invisible).toBe(true);
+    });
+
+    it('alcança a 3 tiles (o círculo de raio 3) e o canto |dx|+|dy| = 4; não alcança a 4, nem o canto 3,3', () => {
+      const { session, hero, ruleset } = cast();
+      session.advanceBy(1);
+      const [edge, past, corner] = ruleset.monsters;
+      if (edge === undefined || past === undefined || corner === undefined) throw new Error('faltaram ratos');
+      const place = (m: MonsterRuntime, dx: number, dy: number): void => {
+        m.position = { ...hero.position, x: hero.position.x + dx, y: hero.position.y + dy };
+        makeInvisible(session, m, 200_000);
+      };
+
+      place(edge, 3, 0); // dentro: a ponta da linha do meio
+      place(past, 4, 0); // fora: além do raio
+      place(corner, 3, 3); // fora: o canto do quadrado 7x7 é recortado
+      expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+      expect(edge.invisible).toBe(false);
+      expect(past.invisible).toBe(true);
+      expect(corner.invisible).toBe(true);
+
+      session.advanceBy(1_100); // o cooldown de 1 s
+      place(corner, 2, 2); // dentro: |dx| + |dy| = 4 é o último canto que a forma cobre
+      place(edge, -3, 0); // dentro, do outro lado
+      expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+      expect(corner.invisible).toBe(false);
+      expect(edge.invisible).toBe(false);
+      expect(past.invisible).toBe(true);
+    });
+  });
+
+  describe('Challenge de um lançador invisível (`Monster::challengeCreature` → `selectTarget` → `isTarget`)', () => {
+    const challenge = {
+      id: 'challenge-test', name: 'Challenge', manaCost: 10, cooldownMs: 999_999,
+      effect: { kind: 'challenge', durationMs: 6_000, range: 5 },
+    };
+    const challengedBy = (monster: Record<string, unknown>) => {
+      const { session, hero, ruleset } = withSpells(
+        botConfigV2([{ do: { kind: 'spell', spellId: 'challenge-test' }, auto: false }]),
+        {
+          mana: 1_000, health: 1_000_000, spells: [challenge], combat: [pacifist],
+          monstersRaw: [{ ...rat, attack: 0, runOnHealth: 50, ...monster }],
+        },
+      );
+      session.advanceBy(100);
+      makeInvisible(session, hero, 200_000);
+      ruleset.useSlot(session, 'hero', 0, 0);
+      const victim = ruleset.monsters[0];
+      if (victim === undefined) throw new Error('faltou rato');
+      return victim;
+    };
+
+    it('quem não vê invisível NÃO é provocado (sem `challenge`, a fuga continua valendo)', () => {
+      expect(challengedBy({}).conditions.get('challenge')).toBeNull();
+    });
+
+    it('quem vê invisível é provocado como sempre', () => {
+      const victim = challengedBy({ conditionImmunities: ['invisible'] });
+      expect(victim.conditions.get('challenge')).not.toBeNull();
+    });
   });
 });
 

@@ -166,3 +166,62 @@ continua em aberto — `options.promoted` em `applyDeathPenalty` segue como pont
 estado por trás.
 
 A questão de perda de item (decisão 4) não muda: segue aberta, sem captura aplicável.
+
+## Emenda — 2026-09-29: perda de item implementada (#571), DESLIGADA até a decisão do dono
+
+A #571 implementa a decisão 4 inteira — o mecanismo de `Blessings.PlayerDeath`/`DropLoot`, o
+consumo do Amulet of Loss, a bag de reposição e o registro no extrato — em
+`packages/sim/src/item-loss.ts`, mas o conteúdo real a entrega **desligada**:
+`deathPenalty.itemLoss.enabled: false` em `packages/content/data/progression/baseline.json`.
+
+**Por que desligada, e não com o valor "provisório" da decisão 4.** O texto original deste ADR
+tratava "destruir e registrar" como o valor provisório do perfil até o dono responder; a emenda de
+2026-09-25 (e o comentário "Atualização de decisão" da própria #571) revogou isso: sem captura
+do Huntera não há o que copiar, a issue fica BLOQUEADA aguardando a decisão DIRETA do dono, e a
+implementação mantém "nunca perde item" (`docs/product/death.md` §3.8) até ela chegar. Destruir é
+irreversível para o jogador — não há cadáver para recuperar o item —, então entregar o mecanismo
+LIGADO por padrão seria decidir pelo dono na direção que não tem volta; entregá-lo desligado
+deixa a decisão como ela estava e a reduz a um booleano. É a mesma disciplina do `combat-v1`
+(ADR 0031): o comportamento de produto fica marcado até o dono decidir, e o contrato de dado
+(`itemLoss`, `protectsOnDeath`, o evento `item-lost-on-death`) é fixado por este ADR.
+
+**O que ligar significa.** Trocar `enabled` para `true`: a morte passa a sortear cada item vestido
+(100/70/45/25/10/0 % por contagem de bênçãos, um décimo disso para quem não é container), destruir
+o que cair — com o conteúdo da mochila —, entregar uma bag a quem ficou sem mochila e gastar o
+Amulet of Loss vestido. Nada mais muda: sem migração (o conteúdo é fixado por sessão, invariante
+7) e sem estado novo no snapshot. **Decidir por "nunca perde item"** é apagar o bloco `itemLoss` do
+conteúdo e fechar a #571 como divergência de produto registrada.
+
+**Fidelidade verificada contra o Canary (`47dfd51`)**, incluindo o que o texto do ADR não dizia:
+a perda roda ANTES da penalidade de XP e do consumo das bênçãos (`Creature::onDeath` chama
+`dropCorpse` antes de `death()`); o Amulet of Loss só protege no slot do pescoço e é consumido
+DEPOIS da penalidade — mesmo com cinco bênçãos, e não quando o personagem tem vocação e o level
+rebaixado ficou abaixo do Adventurer's Blessing (`Player::death`, `willNotLoseBless`); a aljava é
+container para a regra (a flag `container` do cliente, não o `items.xml`) e perde com a chance
+cheia; a bag de reposição vem mesmo com o personagem protegido.
+
+**Adventurer's Blessing e personagem sem vocação — fechados na revisão da #571.** O Canary
+concede as cinco bênçãos regulares AUTOMATICAMENTE no login abaixo do level 21 com vocação
+(`player.cpp:12301-12308`), e o TFS e o Canary devolvem ANTES de qualquer perda para quem não
+tem vocação — o Canary para o Dawnport abaixo do level 8 (`droploot.lua:6-9`), o TFS para
+`VOCATION_NONE` (`drop_loot.lua:2-4`). A #570 modelou o Adventurer como preço zero, sem estado,
+e a perda de item lê o mesmo bitmask que a penalidade de XP; deixar assim tiraria a mochila de
+todo personagem novo assim que a chave fosse ligada. Por isso `loseItemsOnDeath` DERIVA as duas
+proteções: `vocationId === null` não perde nada (nem recebe a bag, que mora dentro de
+`Blessings.PlayerDeath`), e `hasAdventurersBlessing` (level < `blessingPricing.freeBelowLevel` com
+vocação — a conferência que `consumeLossAmulet` já fazia) equivale a cinco bênçãos, com o level de
+ANTES da penalidade. O que fica sem reproduzir: o Canary concede no LOGIN, e o Draconya deriva
+do level da hora da morte — quem cruza o level 21 dentro de uma mesma hunt e morre nela seria
+protegido no Canary e não aqui. Reproduzir exigiria estado novo no snapshot; fica registrado
+para quem ligar a chave.
+
+**A bolsa é o abrigo que o Tibia não tem — decisão do dono, junto com a chave.** A `satchel` (ADR
+0026 decisão 6) é do personagem, e a perda de item só esvazia a mochila: com a chave ligada, o que
+o jogador guarda na bolsa (`move-item` é de graça) sobrevive a toda morte, enquanto no Canary tudo
+o que se carrega vai para o cadáver. O mecanismo entrega a bolsa de fora; incluí-la (um sorteio
+próprio, como o de um container, levando o conteúdo) é a alternativa, e a escolha é do dono.
+
+**Ordem dos slots.** O sorteio percorre `CONST_SLOT_HEAD..AMMO` (`blessing.lua:106`), e no Canary
+o `RIGHT` (5, escudo ou aljava) vem antes do `LEFT` (6, a arma): `CANARY_SLOT_ORDER` é `head, neck,
+back, chest, shield, hand, legs, feet, finger, ammo` — a mesma constante da absorção por item
+(#552).

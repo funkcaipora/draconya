@@ -22,7 +22,7 @@ import type {
   Aggregates, BotVocabulary, NotableEvent, PartySpendingView, PartySummary,
 } from '../state/hud.js';
 import { useHudSlice } from '../state/useSlice.js';
-import { describeEvent } from './event-text.js';
+import { describeEvents } from './event-text.js';
 import type { EventNames } from './event-text.js';
 import { FloatingWindow } from './FloatingWindow.js';
 import { IconButton } from './ui/IconButton.js';
@@ -172,12 +172,15 @@ export function Events({ events }: { events: readonly NotableEvent[] }) {
   // Os nomes de hunt e supply vêm do catálogo: o evento carrega o id, e o id é o que o
   // conteúdo fixou na sessão — a tradução para o nome é apresentação (FUN-110).
   const catalogue = useHudSlice((state) => state.catalogue);
+  const me = useHudSlice((state) => state.characterId);
   if (events.length === 0) return null;
   const vocabulary = catalogue?.bot as BotVocabulary | undefined;
   const names: EventNames = {
     hunts: new Map(catalogue?.hunts.map((hunt) => [hunt.id, hunt.name]) ?? []),
     supplies: new Map((vocabulary?.supplies ?? []).map((supply) => [supply.id, supply.name])),
     monsters: new Map(catalogue?.monsters.map((monster) => [monster.id, monster.name]) ?? []),
+    // A perda de item na morte (#571) diz qual item: o nome vem do catálogo de definições.
+    items: new Map(catalogue?.items.map((item) => [item.id, item.name]) ?? []),
     // O bônus por marco (FUN-113) só entra quando o catálogo o trouxe: a chave ausente é
     // "não sei", e `exactOptionalPropertyTypes` não deixa escrever `undefined` no lugar.
     ...(catalogue?.bestiary === undefined
@@ -188,10 +191,10 @@ export function Events({ events }: { events: readonly NotableEvent[] }) {
     <ul className="analyzer-events">
       {/* Do mais recente para o mais antigo: a tela de retorno responde "o que aconteceu",
           e a resposta começa pelo fim. */}
-      {[...events].reverse().slice(0, 12).map((event, index) => (
-        <li key={`${event.atMs}-${event.type}-${String(index)}`}>
-          <span className="analyzer-event-time">{duration(event.atMs)}</span>
-          {describeEvent(event, names)}
+      {describeEvents(events, names, me ?? undefined).reverse().slice(0, 12).map((line, index) => (
+        <li key={`${String(line.atMs)}-${line.type}-${String(index)}`}>
+          <span className="analyzer-event-time">{duration(line.atMs)}</span>
+          {line.text}
         </li>
       ))}
     </ul>

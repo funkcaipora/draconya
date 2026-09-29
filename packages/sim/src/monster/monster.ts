@@ -147,11 +147,12 @@ export interface Prey {
    */
   readonly health: number;
   /**
-   * Invisível (#592, `CONDITION_INVISIBLE`). Ausente/`false` é o de sempre — só `CharacterRuntime`
-   * expõe `true` (via `Conditions.hasInvisible`); monstro nunca é alvo invisível de outro
-   * monstro. `chooseTarget` (abaixo) recusa como candidato — e DROPA o alvo já retido — quem
-   * carrega isto, a menos que `seesInvisible(definition)` seja `true` (`canSeeInvisibility` do
-   * Canary/TFS, ADR 0041 d.2 — a imunidade à condição `invisible`).
+   * Invisível (#592, `CONDITION_INVISIBLE`). Ausente/`false` é o de sempre — `CharacterRuntime` e
+   * `MonsterRuntime` expõem `true` (via `Conditions.hasInvisible`). `chooseTarget` (abaixo)
+   * recusa como CANDIDATO quem carrega isto, a menos que `seesInvisible(definition)` seja `true`
+   * (`canSeeInvisibility` do Canary/TFS, ADR 0041 d.2 — a imunidade à condição `invisible`). O
+   * alvo já RETIDO que fica invisível não é largado aqui: é o think agendado do ruleset
+   * (`visibility-think`) que o larga, como o `Creature::onThink` do Canary.
    */
   readonly invisible?: boolean;
 }
@@ -329,6 +330,17 @@ const TARGET_THINK_INTERVAL_MS = 1_000;
 const TARGET_THINK_COOLDOWN_KEY = 'target-think';
 
 /**
+ * `Monster::canSeeInvisibility()` do Canary/TFS (#559, ADR 0041 d.2): a MESMA imunidade a
+ * `invisible` que, para qualquer outra condição, bloquearia a aplicação — aqui vira "enxerga
+ * quem está invisível". Nunca lida como `conditionImmunities` genérico em `chooseTarget`: um
+ * monstro imune a `invisible` continuaria mirando alvo invisível igual, se a leitura fosse a
+ * mesma checagem de bloqueio que `#applyConditionTo` usa para `paralyze`/`drunk`.
+ */
+export function seesInvisible(definition: Pick<Monster, 'conditionImmunities'>): boolean {
+  return definition.conditionImmunities.includes('invisible');
+}
+
+/**
  * Escolhe alvo, e só quando precisa.
  *
  * Manter o alvo até ele morrer ou sair do raio de desistência é o que impede a varredura de
@@ -359,17 +371,6 @@ const TARGET_THINK_COOLDOWN_KEY = 'target-think';
  * os demais devolvem o `current` retido, como o Canary faria entre um `onThink_async` e o
  * próximo.
  */
-/**
- * `Monster::canSeeInvisibility()` do Canary/TFS (#559, ADR 0041 d.2): a MESMA imunidade a
- * `invisible` que, para qualquer outra condição, bloquearia a aplicação — aqui vira "enxerga
- * quem está invisível". Nunca lida como `conditionImmunities` genérico em `chooseTarget`: um
- * monstro imune a `invisible` continuaria mirando alvo invisível igual, se a leitura fosse a
- * mesma checagem de bloqueio que `#applyConditionTo` usa para `paralyze`/`drunk`.
- */
-export function seesInvisible(definition: Pick<Monster, 'conditionImmunities'>): boolean {
-  return definition.conditionImmunities.includes('invisible');
-}
-
 export function chooseTarget(
   monster: MonsterRuntime,
   prey: readonly Prey[],
@@ -381,17 +382,14 @@ export function chooseTarget(
     ? undefined
     : prey.find((p) => p.id === monster.targetId);
 
-  // Invisibilidade (#559/#592): quem não "vê invisível" não retém o alvo que virou invisível —
-  // o `Creature::onAddCondition`/`canSee` do Canary/TFS já testado do lado de ATAQUE (o
-  // passo/ataque em si segue sem alvo, como qualquer outro `chooseTarget` devolvendo `null`).
-  // Cai direto para a reaquisição abaixo, que já filtra o mesmo candidato pela mesma razão —
-  // "largar" é não conseguir reter, nunca um terceiro ramo.
-  const currentVisible = current === undefined
-    || !current.invisible
-    || seesInvisible(definition);
-
-  if (currentVisible
-    && current !== undefined && current.alive && sameFloor(monster.position.z, current.position.z)) {
+  // Invisibilidade (#559/#592): esta função NÃO larga o alvo retido que ficou invisível — o
+  // `Creature::onThink` do Canary/TFS só o faz no próximo think da criatura (até 1000 ms depois,
+  // numa fase sorteada), e quem reproduz isso é o evento `visibility-think` que o ruleset agenda
+  // no instante em que a invisibilidade começa (`HuntRuleset#onVisibilityThink`). Até lá o
+  // monstro segue com o alvo e ataca normalmente. O que esta função garante é o outro lado: a
+  // AQUISIÇÃO (abaixo, e o ramo estreito) nunca escolhe um candidato invisível — o `isTarget` do
+  // Canary exige `canSeeCreature`.
+  if (current !== undefined && current.alive && sameFloor(monster.position.z, current.position.z)) {
     const leash = definition.leashRadius;
     // Zero significa "nunca desiste": um monstro que larga o alvo no meio de uma hunt AFK
     // faria o jogador voltar e encontrar tudo parado sem explicação.

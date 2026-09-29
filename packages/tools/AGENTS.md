@@ -25,8 +25,12 @@ passam pelos mapeadores por NOME de `scripts/catalog/monster-abilities.ts` (#579
 `combat` (dano com forma, e cura própria em `defenses`), `speed`, `condition` (total fixo),
 `drunk`, `firefield`/`poisonfield`/`energyfield` e `monster.summon`; `outfit`, `effect` e
 `strength` são descartados porque o Canary não faz nada mecânico com eles. Um nome sem mapeador
-(`invisible` até o #559, as magias com nome próprio em script Lua, a `condition` de total
-sorteado) tira o monstro do catálogo, e quem invoca um monstro que não foi gerado sai junto. Dois
+(as magias com nome próprio em script Lua, `invisible` em `attacks` — o Canary só o usa em
+`defenses`, exceto num chefe de quest —, a `condition` de total sorteado) tira o monstro do
+catálogo, e quem invoca um monstro que não foi gerado sai junto. O `immunities[].condition = true`
+do Lua vira `monster.conditionImmunities` pela tabela de `luaMonsterTypeConditionImmunities` do
+Canary (`bleed`/`fire`/`ice`… → a imunidade à DOT correspondente, #559); `outfit` é reportado por
+nome em `ignoredFields` até o M44-03. Dois
 campos saem CONDICIONADOS ao schema da base: `kind` (#682) e a onda de monstro em `rows` (#679,
 sem ele a onda sai na `wave` antiga — TODO). O que ficou fora vai para
 `docs/reference/catalog/monsters-report.md` com o motivo; o que foi lido e não coube (moeda
