@@ -650,6 +650,9 @@ export type SuppressibleCondition = (typeof SUPPRESSIBLE_CONDITIONS)[number];
  */
 export const ITEM_ORIGINS = [
   'loot', 'boss', 'quest', 'market', 'admin', 'starting-kit', 'vocation-choice',
+  // A mochila que a morte devolve a quem ficou sem nenhuma (#571, ADR 0042 decisão 4): dada pelo
+  // sistema, não dropada nem comprada — `Blessings.PlayerDeath` do Canary faz `addItem(ITEM_BAG)`.
+  'death-replacement',
 ] as const;
 export type ItemOrigin = (typeof ITEM_ORIGINS)[number];
 
@@ -1013,6 +1016,15 @@ export const itemSchema = z.strictObject({
    * própria de dano (`WeaponMelee::useWeapon`, `weapons.cpp:531-589`). Soma entre os equipados.
    */
   cleavePercent: z.number().int().positive().max(100).optional(),
+  /**
+   * O item PROTEGE quem o veste da perda de item na morte (#571, ADR 0042 decisão 4) — o
+   * Amulet of Loss (`ITEM_AMULETOFLOSS`, id 3057, `src/utils/utils_definitions.hpp:638` do
+   * Canary): `Blessings.PlayerDeath` (`data/libs/systems/blessing.lua:82-99`) confere só o slot do
+   * colar, então a flag só vale em item de `slot: 'neck'`. Protegido, NENHUM item é sorteado; e a
+   * morte consome UM colar assim (`Player::death`, `player.cpp:4215-4219`). Ausente é o item comum
+   * de sempre. É a MESMA leitura da regra do Canary, mas por dado em vez de por id fixo em código.
+   */
+  protectsOnDeath: z.boolean().default(false),
   /** Efeito passivo de anel, ativo enquanto vestido (§13.9, SV-16). Só em `kind: 'ring'`. */
   ringEffect: ringEffectSchema.optional(),
   /** O efeito do consumível. Só em `kind: 'consumable'` — hoje só a comida (#726). */
@@ -1296,6 +1308,47 @@ export const blessingPricingSchema = z.object({
 
 export type Blessing = z.infer<typeof blessingSchema>;
 export type BlessingPricing = z.infer<typeof blessingPricingSchema>;
+
+/**
+ * A perda de item na morte (#571, ADR 0042 decisão 4): `Blessings.PlayerDeath`/`DropLoot` do
+ * Canary (`data/libs/systems/blessing.lua:36-46,82-118`). O mecanismo mora em
+ * `packages/sim/src/item-loss.ts` — os números abaixo são os do Tibia, e são dado, não código.
+ *
+ * **`enabled` é a chave da decisão em aberto do dono** (ADR 0042, "Questões em aberto" e emenda de
+ * 2026-09-25): o Tibia larga o item perdido no cadáver do jogador, e o Draconya não tem item no
+ * chão — então "perder" aqui é DESTRUIR, e isso é irreversível para o jogador. Enquanto o dono
+ * não decidir entre destruir-e-registrar e manter "nunca perde item" (`docs/product/death.md`
+ * §3.8), o mecanismo inteiro existe e é testado mas o conteúdo real o entrega DESLIGADO
+ * (`enabled: false` → morte não toca em item nenhum). Ligar é trocar este `true` — sem código.
+ *
+ * Quem liga também decide a BOLSA (`satchel`): ela não tem equivalente no Tibia, o mecanismo a
+ * deixa de fora da perda, e o que o jogador guarda nela sobrevive a toda morte (`death.md`, "Em
+ * aberto"). Sem vocação, ou abaixo do level do Adventurer's Blessing com vocação, a morte também
+ * não perde item — as proteções do Canary/TFS, derivadas no `sim` (`item-loss.ts`).
+ */
+export const itemLossSchema = z.strictObject({
+  /** Liga a perda de item na morte. `false` é o "nunca perde item" provisório (ver acima). */
+  enabled: z.boolean(),
+  /**
+   * A chance, em PERCENTUAL, de perder cada item equipado por CONTAGEM de bênçãos — o índice é o
+   * número de bênçãos (`Blessings.LossPercent[n].item`). Contagem além do fim da lista usa a
+   * última entrada. Tibia: 100/70/45/25/10/0… (`blessing.lua:36-46`).
+   */
+  lossPercentByBlessings: z.array(z.number().min(0).max(100)).min(1),
+  /**
+   * Item que NÃO é container perde a chance dividida por isto (`chance / 10` em `DropLoot`,
+   * `blessing.lua:109`): a mochila (e a aljava, que no cliente é container) leva o percentual
+   * cheio, o resto um décimo dele. Tibia: 10.
+   */
+  nonContainerDivisor: z.number().positive(),
+  /**
+   * A mochila que a morte devolve a quem ficou sem nenhuma nas costas
+   * (`player:addItem(ITEM_BAG, 1, false, CONST_SLOT_BACKPACK)`, `blessing.lua:94-96`, `ITEM_BAG` =
+   * 2853). Precisa ser um `kind: 'container'` de `slot: 'back'` — `buildContent` confere.
+   */
+  replacementContainerId: z.string().min(1),
+});
+export type ItemLoss = z.infer<typeof itemLossSchema>;
 
 /**
  * Um SUPRIMENTO (FUN-77, §20.1). Poção e runa **não são itens físicos**: usar debita gold
@@ -3091,6 +3144,13 @@ export const progressionSchema = z.object({
      * este campo é o ponto de extensão que ela vai acionar.
      */
     promotionReduction: z.number().min(0).max(1),
+    /**
+     * A perda de ITEM na morte (#571, ADR 0042 decisão 4) — ver `itemLossSchema`. Opcional:
+     * conteúdo de teste sem o bloco não perde item nenhum, e o conteúdo real o declara com
+     * `enabled: false` até o dono decidir (a mesma disciplina de `blessingPricing`: número é
+     * dado, nunca um default de código).
+     */
+    itemLoss: itemLossSchema.optional(),
   }),
   /**
    * O preço por level de bênção (#570). Opcional: conteúdo de teste sem Cidade/bênção não

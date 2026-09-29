@@ -1173,6 +1173,313 @@ describe('level up e penalidade de morte dentro da hunt', () => {
   });
 });
 
+describe('perda de item na morte (#571, ADR 0042 decisão 4)', () => {
+  // O Canary larga o item perdido no cadáver do jogador; o Draconya não tem item no chão, então
+  // "perder" é DESTRUIR — a instância vai para `removedInstances` (o `jobs` a apaga na MESMA
+  // transação do ledger) e cada perda vira um evento notável do extrato.
+  const lossItems = [
+    { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', initialSlots: 20, weight: 18, value: 5 },
+    { id: 'bag', name: 'Bag', kind: 'container', slot: 'back', initialSlots: 8, weight: 8, value: 1 },
+    {
+      id: 'amulet-of-loss', name: 'Amulet of Loss', kind: 'amulet', slot: 'neck',
+      weight: 4.2, value: 0, charges: 1, protectsOnDeath: true,
+    },
+    { id: 'gem', name: 'Gem', kind: 'other', weight: 1, value: 10, stackable: true },
+  ];
+  const itemLoss = {
+    enabled: true, lossPercentByBlessings: [100, 70, 45, 25, 10, 0, 0, 0],
+    nonContainerDivisor: 10, replacementContainerId: 'bag',
+  };
+  // O preço das bênçãos do Canary: só o `freeBelowLevel` (o Adventurer's Blessing) importa aqui.
+  const blessingPricing = {
+    freeBelowLevel: 21, flatUntilLevel: 30, flatPrice: 2000, highFromLevel: 120, midOffset: 20,
+    midMultiplier: 200, midEnhancedMultiplier: 260, highBase: 20_000, highEnhancedBase: 26_000,
+    highMultiplier: 75, highEnhancedMultiplier: 100,
+  };
+  const lossContent = (
+    over: {
+      enabled?: boolean; nonContainerDivisor?: number; routes?: NonNullable<RawContent['routes']>;
+      adventurer?: boolean;
+    } = {},
+  ): Content => content({
+    items: [...items, ...lossItems] as unknown as NonNullable<RawContent['items']>,
+    ...(over.routes === undefined ? {} : { routes: over.routes }),
+    progression: [{
+      ...progression,
+      ...(over.adventurer === true ? { blessingPricing } : {}),
+      deathPenalty: {
+        ...progression.deathPenalty,
+        itemLoss: { ...itemLoss, enabled: over.enabled ?? true, nonContainerDivisor: over.nonContainerDivisor ?? 10 },
+      },
+    }] as unknown as NonNullable<RawContent['progression']>,
+  });
+
+  const dressed = (extra: InventoryState['equipped'] = {}): InventoryState => ({
+    backpack: [
+      { instanceId: 'i:gems', itemId: 'gem', quantity: 12 }, null,
+      { instanceId: 'i:spare', itemId: 'sword', quantity: 1 },
+    ],
+    equipped: {
+      back: { instanceId: 'i:backpack', itemId: 'backpack', quantity: 1 },
+      chest: { instanceId: 'i:plate', itemId: 'plate', quantity: 1 },
+      hand: { instanceId: 'i:sword', itemId: 'sword', quantity: 1 },
+      head: { instanceId: 'i:hat', itemId: 'sharp-hat', quantity: 1 },
+      ...extra,
+    },
+  });
+
+  /**
+   * O herói morre AGORA, direto no pipeline — a perda de item não depende de como ele morreu.
+   * Com vocação: sem ela o Canary e o TFS não perdem item nenhum (`droploot.lua`,
+   * `drop_loot.lua`), e o fixture nasce sem uma (§7.4).
+   */
+  const dies = (
+    loaded: Content, inventory: InventoryState, blessings = 0, vocationId: string | null = 'knight',
+    level = 1,
+  ): { session: Session; hero: CharacterRuntime } => {
+    const { session, hero } = start({ loaded, inventory });
+    hero.blessings = blessings;
+    hero.vocationId = vocationId;
+    hero.level = level;
+    session.kill(hero);
+    expect(session.ended).toBe('death');
+    return { session, hero };
+  };
+
+  const eventsOf = (session: Session, type: string): string[] =>
+    session.notableEvents.filter((e) => e.type === type).map((e) => e.detail ?? '');
+
+  it('DESLIGADO (`enabled: false`, o conteúdo real hoje): a morte não toca em item nenhum', () => {
+    // O "nunca perde item" provisório do dono (`docs/product/death.md` §3.8). Vale também sem o
+    // bloco no conteúdo — é o que o resto da suíte usa.
+    for (const loaded of [lossContent({ enabled: false }), content({
+      items: [...items, ...lossItems] as unknown as NonNullable<RawContent['items']>,
+    })]) {
+      const inventory = dressed();
+      const { session, hero } = dies(loaded, inventory);
+      expect(session.receipts()[0]?.removedInstances).toEqual([]);
+      expect(hero.inventory.getState().equipped).toEqual(inventory.equipped);
+      expect(session.notableEvents.filter((e) => e.type.startsWith('item-loss') || e.type === 'item-lost-on-death'))
+        .toEqual([]);
+    }
+  });
+
+  it('sem bênção a mochila se perde (100%) COM o que carrega, e uma bag nova a substitui', () => {
+    const { session, hero } = dies(lossContent(), dressed());
+
+    const removed = session.receipts()[0]?.removedInstances ?? [];
+    // A mochila cai sempre (sorteio ≤ 10 000 contra chance cheia) e leva os dois de dentro.
+    expect(removed).toContain('i:backpack');
+    expect(removed).toContain('i:gems');
+    expect(removed).toContain('i:spare');
+    // O extrato registra UMA linha por instância, na mesma ordem em que saíram do inventário —
+    // `itemId/quantidade/instanceId/dono`.
+    const names: Record<string, string> = {
+      'i:backpack': 'backpack/1', 'i:gems': 'gem/12', 'i:spare': 'sword/1', 'i:plate': 'plate/1',
+      'i:sword': 'sword/1', 'i:hat': 'sharp-hat/1',
+    };
+    expect(eventsOf(session, 'item-lost-on-death'))
+      .toEqual(removed.map((instanceId) => `${names[instanceId] as string}/${instanceId}/hero`));
+    // Quem ficou sem mochila recebe uma bag: vestida, com os lugares dela, e id `sessão:n`.
+    const back = hero.inventory.equippedAt('back');
+    expect(back).toMatchObject({ itemId: 'bag', quantity: 1, origin: 'death-replacement' });
+    expect(back?.instanceId).toBe('session-1:0');
+    expect(hero.inventory.backpack).toEqual(new Array(8).fill(null));
+    expect(eventsOf(session, 'backpack-replaced')).toEqual(['bag']);
+  });
+
+  it('a perda é CONSERVADORA: o que sai + o que fica = o que estava (nada some sem registro)', () => {
+    const before = dressed();
+    const ids = [
+      ...before.backpack.filter((c) => c !== null).map((c) => c.instanceId),
+      ...Object.values(before.equipped).map((c) => c.instanceId),
+    ].sort();
+    const { session, hero } = dies(lossContent(), before);
+
+    const removed = session.receipts()[0]?.removedInstances ?? [];
+    const state = hero.inventory.getState();
+    const kept = [
+      ...state.backpack.filter((c) => c !== null).map((c) => c.instanceId),
+      ...Object.values(state.equipped).map((c) => c.instanceId).filter((id) => id !== 'session-1:0'),
+    ];
+    expect([...removed, ...kept].sort()).toEqual(ids);
+    // E o extrato do Postgres é idempotente por `(session_id, seq)`: o `seq` do extrato é o
+    // mesmo com ou sem perda de item — é a chave que o `jobs` deduplica, não uma nova.
+    expect(session.receipts()[0]?.seq).toBe(1);
+  });
+
+  it('com `nonContainerDivisor: 1` TUDO cai com o sorteio mínimo — o mecanismo por slot, sem sorte', () => {
+    const { session, hero } = dies(lossContent({ nonContainerDivisor: 1 }), dressed());
+    expect(hero.inventory.getState().equipped).toEqual({
+      back: { instanceId: 'session-1:0', itemId: 'bag', quantity: 1, origin: 'death-replacement' },
+    });
+    expect(session.receipts()[0]?.removedInstances).toEqual([
+      'i:hat', 'i:backpack', 'i:gems', 'i:spare', 'i:plate', 'i:sword',
+    ]);
+  });
+
+  it('com cinco bênçãos nada se perde, mas a morte consome as bênçãos do mesmo jeito', () => {
+    // 0b11111: cinco bênçãos — a tabela dá 0% e nenhum sorteio roda.
+    const inventory = dressed();
+    const { session, hero } = dies(lossContent({ nonContainerDivisor: 1 }), inventory, 0b11111);
+
+    expect(session.receipts()[0]?.removedInstances).toEqual([]);
+    expect(hero.inventory.getState().equipped).toEqual(inventory.equipped);
+    expect(eventsOf(session, 'item-loss-protected')).toEqual(['blessings']);
+    // A contagem que decidiu a chance é a de ANTES da morte consumir: `hero.blessings` já é 0.
+    expect(hero.blessings).toBe(0);
+    expect(eventsOf(session, 'blessings-consumed')).toEqual(['5']);
+  });
+
+  it('o Amulet of Loss protege tudo e é CONSUMIDO — o único item que sai do inventário', () => {
+    const inventory = dressed({ neck: { instanceId: 'i:aol', itemId: 'amulet-of-loss', quantity: 1 } });
+    const { session, hero } = dies(lossContent({ nonContainerDivisor: 1 }), inventory);
+
+    expect(session.receipts()[0]?.removedInstances).toEqual(['i:aol']);
+    expect(hero.inventory.equippedAt('neck')).toBeNull();
+    expect(hero.inventory.equippedAt('back')?.instanceId).toBe('i:backpack');
+    expect(hero.inventory.equippedAt('chest')?.instanceId).toBe('i:plate');
+    expect(eventsOf(session, 'item-loss-protected')).toEqual(['amulet-of-loss']);
+    expect(eventsOf(session, 'loss-amulet-consumed')).toEqual(['amulet-of-loss']);
+    expect(eventsOf(session, 'item-lost-on-death')).toEqual([]);
+  });
+
+  it('o colar é consumido mesmo com cinco bênçãos, que já protegiam sozinhas (Player::death)', () => {
+    const inventory = dressed({ neck: { instanceId: 'i:aol', itemId: 'amulet-of-loss', quantity: 1 } });
+    const { session, hero } = dies(lossContent(), inventory, 0b11111);
+    expect(session.receipts()[0]?.removedInstances).toEqual(['i:aol']);
+    expect(hero.inventory.equippedAt('neck')).toBeNull();
+  });
+
+  it('em party só quem morre perde: o sobrevivente fica intacto e o id da bag leva o dono no meio', () => {
+    const member = (id: string, inventory: InventoryState): CharacterRuntime => {
+      const stats = statsForLevel(1, null, progression as Progression);
+      return new CharacterRuntime({
+        id, position: { x: 0, y: 0, z: 7 },
+        health: stats.maxHealth, maxHealth: stats.maxHealth,
+        mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: 'knight',
+        staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+        gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000, inventory,
+      });
+    };
+    const session = createHuntSession({
+      id: 'party-session', content: lossContent({ nonContainerDivisor: 1, routes: [threeRatsRoute] }),
+      huntId: 'arena', difficulty: 'bold', createdAtMs: 0, partyOptions: { leaderId: 'a', mode: 'split' },
+    });
+    const a = member('a', dressed());
+    const b = member('b', dressed());
+    session.enter(a);
+    session.enter(b);
+    session.drainEvents();
+
+    session.kill(b);
+
+    // `a` continua caçando, com tudo o que tinha.
+    expect(session.ended).toBeNull();
+    expect(a.inventory.getState().equipped).toEqual(dressed().equipped);
+    expect(a.removedInstances).toEqual([]);
+    // `b` saiu com o próprio extrato: as instâncias dele, e a bag com o id do dono no meio.
+    const departure = session.drainEvents().find((e) => e.kind === 'member-left');
+    expect(departure).toBeDefined();
+    if (departure?.kind !== 'member-left') throw new Error('sem member-left');
+    expect(departure.departure.receipt.removedInstances).toContain('i:backpack');
+    expect(b.inventory.equippedAt('back')?.instanceId).toBe('party-session:b:0');
+    // O detalhe leva o dono: as linhas dos membros compartilham a lista de eventos da sessão.
+    expect(eventsOf(session, 'item-lost-on-death').every((detail) => detail.endsWith('/b'))).toBe(true);
+  });
+
+  it('sem vocação a morte não perde item nem entrega bag (Canary/TFS devolvem antes da perda)', () => {
+    const inventory = dressed();
+    const { session, hero } = dies(lossContent({ nonContainerDivisor: 1 }), inventory, 0, null);
+
+    expect(session.receipts()[0]?.removedInstances).toEqual([]);
+    expect(hero.inventory.getState().equipped).toEqual(inventory.equipped);
+    expect(session.notableEvents.filter((e) => e.type.startsWith('item-loss') || e.type === 'item-lost-on-death'
+      || e.type === 'backpack-replaced')).toEqual([]);
+  });
+
+  it('abaixo do level 21 com vocação, sem bênção nenhuma, a morte não perde item (Adventurer\'s Blessing)', () => {
+    const inventory = dressed();
+    const { session, hero } = dies(
+      lossContent({ nonContainerDivisor: 1, adventurer: true }), inventory, 0, 'knight', 20,
+    );
+
+    expect(session.receipts()[0]?.removedInstances).toEqual([]);
+    expect(hero.inventory.getState().equipped).toEqual(inventory.equipped);
+    expect(eventsOf(session, 'item-loss-protected')).toEqual(['blessings']);
+    expect(eventsOf(session, 'item-lost-on-death')).toEqual([]);
+  });
+
+  it('no level 21 o Adventurer acaba: a mesma morte volta a tirar a mochila', () => {
+    const { session } = dies(
+      lossContent({ nonContainerDivisor: 1, adventurer: true }), dressed(), 0, 'knight', 21,
+    );
+
+    expect(session.receipts()[0]?.removedInstances).toContain('i:backpack');
+    expect(eventsOf(session, 'item-loss-protected')).toEqual([]);
+  });
+
+  // Sem arma nem armadura: com a espada de 200 de ataque o herói mata os ratos de um golpe e
+  // nunca morre, e o teste não chegaria à perda. Mochila e anel bastam para haver o que perder.
+  const barehanded = (): InventoryState => ({
+    backpack: [{ instanceId: 'i:gems', itemId: 'gem', quantity: 12 }],
+    equipped: {
+      back: { instanceId: 'i:backpack', itemId: 'backpack', quantity: 1 },
+      finger: { instanceId: 'i:ring', itemId: 'other-ring', quantity: 1 },
+    },
+  });
+
+  it('1 Hz == 10 Hz: morrendo em combate, a perda é a MESMA (invariante 3, sem ninguém assistindo)', () => {
+    // O herói morre de verdade, pelos golpes dos ratos, e o sorteio sai do `Rng` da sessão. Se a
+    // perda dependesse da cadência (ou de haver quem assistisse), as duas taxas divergiriam.
+    const scenario = (hz: number) => {
+      const { session, hero } = start({
+        loaded: lossContent({ routes: [threeRatsRoute] }), health: 40, inventory: barehanded(),
+      });
+      hero.vocationId = 'knight';
+      run(session, 120_000, 1000 / hz);
+      expect(session.ended).toBe('death');
+      return {
+        removed: session.receipts()[0]?.removedInstances,
+        events: session.notableEvents
+          .filter((e) => e.type.startsWith('item-loss') || e.type === 'item-lost-on-death'
+            || e.type === 'backpack-replaced')
+          .map((e) => `${e.type}:${e.detail ?? ''}`),
+        kept: hero.inventory.getState().equipped,
+        diedAtMs: session.notableEvents.find((e) => e.type === 'death')?.atMs,
+      };
+    };
+    const rapido = scenario(10);
+    expect(rapido.removed?.length).toBeGreaterThan(0);
+    expect(scenario(1)).toEqual(rapido);
+  });
+
+  it('retomar de um snapshot antes da morte dá a MESMA perda (o `Rng` atravessa o snapshot)', () => {
+    const loaded = lossContent({ routes: [threeRatsRoute] });
+    // 40 de vida: com o herói de mãos vazias a morte vem aos ~4 s, então o snapshot dos 2 s sai
+    // com ele ainda vivo e a perda acontece DEPOIS da retomada.
+    const { session, hero } = start({ loaded, health: 40, inventory: barehanded() });
+    hero.vocationId = 'knight';
+    run(session, 2_000, 100);
+    expect(session.ended).toBeNull();
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset,
+      new Rng(snapshot.rng),
+    );
+    run(session, 120_000, 100);
+    run(retomado, 120_000, 100);
+
+    expect(session.ended).toBe('death');
+    expect(retomado.ended).toBe('death');
+    expect(retomado.receipts()[0]?.removedInstances).toEqual(session.receipts()[0]?.removedInstances);
+    expect(retomado.notableEvents.filter((e) => e.type === 'item-lost-on-death'))
+      .toEqual(session.notableEvents.filter((e) => e.type === 'item-lost-on-death'));
+  });
+});
+
 describe('encerramento', () => {
   it('por ação manual, com extrato', () => {
     const { session } = start();

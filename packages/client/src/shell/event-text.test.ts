@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeEvent } from './event-text.js';
+import { describeEvent, describeEvents } from './event-text.js';
 
 const names = {
   hunts: new Map([['rat-cellars', 'Rat Cellars']]),
@@ -60,6 +60,61 @@ describe('describeEvent (FUN-110)', () => {
   it('tipo que este cliente não conhece sai como veio: pior que frase feia é sumir com o evento', () => {
     expect(describeEvent({ atMs: 0, type: 'boss-spawned', detail: 'dragon' })).toBe('boss-spawned · dragon');
     expect(describeEvent({ atMs: 0, type: 'boss-spawned' })).toBe('boss-spawned');
+  });
+});
+
+describe('a perda de item na morte no extrato (#571)', () => {
+  const itemNames = { items: new Map([['backpack', 'Backpack'], ['gem', 'Gem'], ['amulet-of-loss', 'Amulet of Loss'], ['bag', 'Bag']]) };
+  const lost = (itemId: string, quantity: number, owner = 'hero') =>
+    ({ atMs: 5, type: 'item-lost-on-death', detail: `${itemId}/${String(quantity)}/i:${itemId}/${owner}` });
+
+  it('cada tipo que o sim grava na perda sai em palavras, com o nome do catálogo', () => {
+    expect(describeEvent(lost('backpack', 1), itemNames)).toBe('Perdeu na morte · Backpack');
+    expect(describeEvent(lost('gem', 12), itemNames)).toBe('Perdeu na morte · Gem ×12');
+    expect(describeEvent({ atMs: 0, type: 'item-loss-protected', detail: 'blessings' }, itemNames))
+      .toBe('Nenhum item perdido · protegido pelas bênçãos');
+    expect(describeEvent({ atMs: 0, type: 'item-loss-protected', detail: 'amulet-of-loss' }, itemNames))
+      .toBe('Nenhum item perdido · Amulet of Loss protegeu');
+    expect(describeEvent({ atMs: 0, type: 'loss-amulet-consumed', detail: 'amulet-of-loss' }, itemNames))
+      .toBe('Amulet of Loss consumido');
+    expect(describeEvent({ atMs: 0, type: 'backpack-replaced', detail: 'bag' }, itemNames))
+      .toBe('Ganhou Bag nova, sem mochila');
+    // Sem catálogo o id fica no lugar do nome — estável, e não vazio.
+    expect(describeEvent(lost('gem', 1))).toBe('Perdeu na morte · gem');
+  });
+
+  it('uma mochila perdida com vinte itens vira UMA linha, e não some o resto do extrato atrás dela', () => {
+    const events = [
+      { atMs: 1, type: 'entered-hunt', detail: 'rat-cellars/cautious' },
+      { atMs: 4, type: 'death', detail: 'hero' },
+      lost('backpack', 1), lost('gem', 12), lost('bag', 1), lost('gem', 1), lost('backpack', 1),
+      lost('gem', 3), lost('gem', 2),
+      { atMs: 9, type: 'ended', detail: 'death' },
+    ];
+
+    const lines = describeEvents(events, itemNames, 'hero');
+
+    // A linha agrupada fica na posição da PRIMEIRA perda, com os cinco primeiros nomeados e o
+    // resto resumido — mutação que mata: uma linha por instância.
+    expect(lines.map((line) => line.type)).toEqual(['entered-hunt', 'death', 'item-lost-on-death', 'ended']);
+    expect(lines[2]?.text).toBe('Perdeu na morte · Backpack, Gem ×12, Bag, Gem, Backpack (+2)');
+    expect(lines[2]?.atMs).toBe(5);
+  });
+
+  it('o item que OUTRO membro da party perdeu não aparece na tela de quem ficou', () => {
+    const events = [lost('backpack', 1, 'ana'), lost('gem', 2, 'hero')];
+    expect(describeEvents(events, itemNames, 'hero').map((line) => line.text))
+      .toEqual(['Perdeu na morte · Gem ×2']);
+    // Só a perda alheia: não sobra linha nenhuma, nem uma vazia.
+    expect(describeEvents([lost('backpack', 1, 'ana')], itemNames, 'hero')).toEqual([]);
+    // Sem dono no `detail` (nó anterior) a linha é de quem olha, como sempre foi.
+    expect(describeEvents([{ atMs: 0, type: 'item-lost-on-death', detail: 'gem/2' }], itemNames, 'hero')
+      .map((line) => line.text)).toEqual(['Perdeu na morte · Gem ×2']);
+  });
+
+  it('sem perda nenhuma a lista é a de sempre, uma linha por evento e na mesma ordem', () => {
+    const events = [{ atMs: 0, type: 'entered-city' }, { atMs: 1, type: 'death', detail: 'hero' }];
+    expect(describeEvents(events, {}, 'hero').map((line) => line.text)).toEqual(['Voltou para a cidade', 'Morreu']);
   });
 });
 
