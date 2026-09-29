@@ -2241,16 +2241,33 @@ mecanismo morto.
 
 - **`Monster.conditionImmunities`** (`packages/content/src/schemas.ts`) é o `monster.immunities`
   do Canary com `condition = true` (`Monster::isImmune`, `src/creatures/monsters/monsters.hpp`) —
-  distinto da imunidade de DANO (`mitigation.immunities`, `combat = true`), que já existia. Só
-  três chaves entram: `paralyze`, `drunk` e `invisible` — o resto que o Canary declara (`outfit`,
-  `bleed`…) não tem modelo de condição correspondente ainda, e o importador (`scripts/catalog/
-  monsters.ts`) os reporta em `ignoredFields` por NOME em vez de descartar com a mensagem genérica
-  de antes. Ausente é `[]`: todo monstro já importado continua sem imunidade nenhuma, bit a bit.
+  distinto da imunidade de DANO (`mitigation.immunities`, `combat = true`), que já existia. **Onze
+  nomes, o vocabulário do ADR 0041 d.1** (`CONDITION_IMMUNITIES`): `paralyze`, `drunk`, `invisible`
+  e as oito DOTs — `bleeding`, `poison`, `burning`, `electrified`, `cursed`, `drowning`,
+  `freezing`, `dazzled`. O importador (`scripts/catalog/monsters.ts`, `CONDITION_IMMUNITY_MAP`)
+  traduz os nomes do Lua pela tabela de `luaMonsterTypeConditionImmunities` do Canary
+  (`monster_type_functions.cpp:915-968`): `bleed`/`physical` → `bleeding`, `fire` → `burning`,
+  `ice` → `freezing`, `poison`/`earth` → `poison`, `energy` → `electrified`, `holy` → `dazzled`,
+  `death` → `cursed`, `drown` → `drowning`, `invisibility` → `invisible`. Só `outfit` (119 monstros
+  imunes) fica de fora até o M44-03 trazer a condição, e o importador o reporta em
+  `ignoredFields` por NOME. Dos monstros do Canary, só 14 declaram uma DOT imune (`bleed` ×12,
+  `fire` ×1, `ice` ×1) e 6 `drunk`; as 1 244 imunidades a `paralyze` e 1 385 a `invisible` são a
+  maioria. Ausente é `[]`: todo monstro sem a entrada continua sem imunidade nenhuma, bit a bit.
 - **O ponto de bloqueio é ÚNICO** — `HuntRuleset#applyConditionTo` (`sim/rulesets/hunt.ts`), o
-  mesmo lugar que já recusa `drunk` por anel (#688). `paralyze` é um caso à parte: a condição vive
+  mesmo lugar que já recusa `drunk` por anel (#688), com a tradução condição → imunidade em
+  `conditionImmunityOf` (`sim/conditions.ts`). `paralyze` é um caso à parte: a condição vive
   na chave RESERVADA `speed` (haste e paralyze dividem o slot, CMB-11), então só o sinal NEGATIVO
   é bloqueável — a imunidade nunca impede o PRÓPRIO monstro de se acelerar. `drunk` casa direto
-  pela chave. **`invisible` NUNCA entra neste portão**: no Canary, a MESMA imunidade que
+  pela chave; a **DOT** casa pelo `damageType` do tique (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY`,
+  a `Combat::DamageToConditionType` do Canary), então Inflict Wound (`physical`) não sangra um
+  monstro imune a `bleeding`, Ignite (`fire`) não queima um imune a `burning`, e a imunidade é
+  POR condição — `burning` não protege de veneno. Duas fronteiras do Canary (`Combat::
+  CombatConditionFunc`, `combat.cpp:1079`, o ÚNICO chamador de `Monster::isImmune(ConditionType_t)`
+  em jogo): **`caster == target` pula a checagem** (a auto-aplicação nunca é barrada —
+  `condition.sourceId === target.subject`), e **o campo de tile não consulta a imunidade de
+  condição** (`MagicField::onStepInField` chama `addCondition` direto; o que zera o dano do campo
+  é a imunidade de DANO, que já existia) — `FIELD_TICK` tiqueta sem passar pelo portão.
+  **`invisible` NUNCA entra neste portão**: no Canary, a MESMA imunidade que
   bloquearia a condição em qualquer outro caso é repropositada —
   `Monster::canSeeInvisibility() { return isImmune(CONDITION_INVISIBLE); }` — para "este monstro
   ENXERGA quem está invisível", nunca "este monstro não pode ficar invisível". Bloquear a
@@ -2258,18 +2275,52 @@ mecanismo morto.
   usar a própria defesa de invisibilidade.
 - **`seesInvisible(definition)`** (`sim/monster/monster.ts`) é só `conditionImmunities.includes
   ('invisible')` — uma função, não um campo de schema separado, para não haver dois lugares
-  guardando o mesmo bit. `chooseTarget` a lê em DOIS pontos: a RETENÇÃO do alvo atual (um alvo que
-  ficou invisível no meio da perseguição é LARGADO — `targetId` cai para a reaquisição, que também
-  filtra, e o efeito observável é "sem alvo" se não houver mais ninguém visível) e a AQUISIÇÃO
-  (tanto a busca padrão "mais perto" quanto o ramo estreito da estratégia ponderada, #645) — um
-  monstro sem a imunidade nunca SELECIONA quem está invisível como novo alvo. `Prey.invisible`
-  (opcional, ausente é `false`) é o campo que `CharacterRuntime.invisible` expõe via
-  `Conditions.hasInvisible()`.
+  guardando o mesmo bit. **Um monstro sem a imunidade nunca ESCOLHE quem está invisível** — o
+  `Monster::isTarget` do Canary exige `canSeeCreature` — e isso vale em TODOS os caminhos que
+  escolhem alvo: a aquisição "mais perto" e o ramo estreito da estratégia ponderada (#645) em
+  `chooseTarget`, o sorteio do `targetChange` (`#onMonsterTargetChange` → `searchTarget`) e a
+  Provocação (`Monster::challengeCreature` → `selectTarget` → `isTarget`: um lançador invisível
+  não provoca quem não o vê, e a fuga do monstro segue valendo). `Prey.invisible` (opcional,
+  ausente é `false`) é o campo que `CharacterRuntime` e `MonsterRuntime` expõem via
+  `Conditions.hasInvisible()` — o envelope da invocação de personagem também o carrega.
+- **Largar o alvo que ficou invisível tem TIMING, e o timing é o do Canary** — `Creature::onThink`
+  (`creature.cpp:130-140`) confere `canSeeCreature(attackedCreature)` UMA vez por
+  `EVENT_CREATURE_THINK_INTERVAL` (1000 ms, `creature.hpp:47`), numa fase por criatura sorteada em
+  `Game::addCreatureCheck` (`game.cpp:7672`). Até o próximo think o monstro segue com o alvo — e
+  ataca. O sim não tem relógio de think por criatura (seria um evento por criatura por segundo,
+  invariante 2), então o think é AGENDADO quando a invisibilidade COMEÇA (`#applyConditionTo`,
+  não na renovação): cada monstro que perseguia o invisível e não o enxerga ganha UM evento
+  `visibility-think` em `[0, 1000)` ms (sorteio da sessão — a mesma distribuição da fase do
+  Canary), e o alvo cai nesse instante se ainda estiver invisível (`#onVisibilityThink`; alvo que
+  já mudou, morreu ou reapareceu não é largado — a checagem é a do instante do think). O
+  `chooseTarget` NÃO larga por conta própria: ele roda a cada passo do monstro e largaria antes do
+  Canary (a versão da #592 largava na hora).
 - **O bot do jogador nunca mira monstro invisível**, na direção oposta: `targeting.ts`
   (`selectTarget`/`countTargets`/`countAreaTargets`) ganhou o mesmo filtro em `TargetLike.
-  invisible`, que `MonsterRuntime.invisible` expõe. Não existe "o jogador vê invisível" — só
-  monstro tem a imunidade —, então a checagem aqui é incondicional: um monstro que ficou
-  invisível sozinho (a própria defesa, abaixo) some do alcance do bot até a condição vencer.
+  invisible`, que `MonsterRuntime.invisible` expõe. Não existe "o jogador vê invisível" (`Player::
+  canSeeCreature`, `player.cpp:1418`: só GM/`CanSenseInvisibility` vê) — só monstro tem a
+  imunidade —, então a checagem aqui é incondicional: um monstro que ficou invisível sozinho (a
+  própria defesa, abaixo) some do alcance do bot até a condição vencer. **O alvo ELEITO pelo bot
+  (`botCandidate`, `attackTarget` não fixado) cai na hora** — o targeting do bot é do Draconya
+  (ADR 0037 d.2) e a eleição nunca escolhe um invisível —, **enquanto o alvo FIXADO pelo jogador
+  segue até o think agendado** (`#scheduleVisibilityThinks` agenda um para o personagem): até lá o
+  golpe dele ainda sai e REVELA o monstro (abaixo). `setAttackTarget` recusa um monstro invisível
+  (o cliente do Tibia nem recebe a criatura para clicar nela) e a mira manual de runa/magia num
+  monstro invisível (`use-slot`/`use-item-on`) recusa `no-target`, como `Game::playerUseWithCreature`
+  (`game.cpp:6404`), que descarta o pedido quando `!player->canSeeCreature`.
+- **O monstro invisível que leva dano REAL volta a ficar visível** — `Monster::drainHealth`
+  (`monster.cpp:3454`: `if (isInvisible()) removeCondition(CONDITION_INVISIBLE)`), o cano de TODO
+  dano de vida que um monstro sofre e que só é alcançado com `realDamage > 0`
+  (`Game::combatChangeHealth`, `game.cpp:8735`). No sim é `#revealOnDrain(session, monster,
+  applied.healthDamage)`, chamado depois de cada `applyDamageOutcome` num monstro (magia/runa,
+  golpe, tique de DOT e de campo, reflexo, golpe de invocação) — dano integralmente absorvido/
+  bloqueado ou `manadrain` não revela ninguém. A remoção passa por `#dispelConditions`, que
+  cancela o `condition-expire` pendente. **A invisibilidade do JOGADOR não cai por dano**: o
+  Canary só tem esse comportamento em `Monster::drainHealth` (no motor, `src/`, só duas chamadas
+  de `removeCondition(CONDITION_INVISIBLE)` existem: essa e o desequipar de item) — cai por prazo,
+  por Cancel Invisibility ou pelo equipamento. É o que faz o Killer Rabbit (e ~107 monstros com a
+  defesa `invisible`) voltar a ser golpeável: o jogador que o tinha fixado ainda o acerta no
+  intervalo do think, e uma magia de área o acerta a qualquer momento.
 - **`invisible` é um `ConditionEffect` novo** (chave reservada `INVISIBLE_CONDITION_KEY =
   'invisible'`, sem campo além do prazo — o mesmo desenho de `drunk`/`mana-shield`), com DOIS
   pontos de entrada:
@@ -2292,11 +2343,11 @@ mecanismo morto.
   `berserk.json` já usa, não a área "37 tiles" que o Mass Healing chama por engano de 3x3).
   `dispel.area` é sempre centrado no LANÇADOR (`buildContent` recusa o resto, como a cura em
   grupo); `#castSpell` entra pelo ramo self-origin de `#aimFor` — o mesmo que já colhia MONSTROS
-  para dano em área — e dispensa cada um deles em vez do recipiente único de sempre. Remove a
-  invisibilidade dos MONSTROS na área, nunca dos aliados: nenhum conteúdo do recorte atual usa
-  isso (nenhum monstro fica invisível E precisa ser "revelado" por um paladino ainda), então o
-  mecanismo é mudo em produção hoje e coberto por teste (`hunt.test.ts`) com uma condição aplicada
-  à mão, como o campo de fogo do Dragon Lord foi antes de existir conteúdo real.
+  para dano em área — e dispensa cada criatura da forma em vez do recipiente único de sempre:
+  os MONSTROS colhidos, **o próprio lançador e os aliados** dentro dela. `Combat::CombatFunc`
+  (`combat.cpp:1580`) só exclui o lançador quando o combate é AGRESSIVO (`!params.aggressive ||
+  caster != creature`), e o dispel não é — a versão da #592 só limpava os monstros (e o lançador
+  só quando não havia monstro nenhum na forma), o que divergia do Canary.
 - **A Paralyze Rune** (Druid, level 54, magic level 18, Canary `data/scripts/runes/
   paralyze_rune.lua`: `runeId(3165)`, `setFormula(-1, 0, -1, 0)`) é o primeiro supply a mirar um
   MONSTRO com uma condição — até aqui, `kind: 'condition'` (as quatro poções de postura) era
@@ -2317,12 +2368,17 @@ mecanismo morto.
   iniciada por nada — só CONSULTADA pelo caminho manual de `#groupOrIndividualWaitOf`, #726) passa
   a ser iniciada por `startSupplyCooldown` quando o supply o declara. Um supply sem `cooldownMs`
   continua exatamente como antes: só o livro do grupo.
-- **Fora do escopo** (§12, como toda spec): a generalização de `conditionImmunities` para o resto
-  do vocabulário do Canary (`outfit`, `bleed`…) e a extração automática de imunidade de DOT por
-  elemento; Cancel Invisibility revelando ALIADOS (só monstro); a Paralyze Rune com `area` (o
-  Canary não a tem); `docs/reference/catalog/monsters-report.md` listando os `unmatchedCondition
-  Immunities` por nome (o importador já os separa de `ignoredFields` genérico, mas o relatório
-  agregado fica para quando alguém precisar da contagem).
+- **Fora do escopo** (§12, como toda spec): `outfit` em `conditionImmunities` (o M44-03 traz a
+  condição) e a extração AUTOMÁTICA de imunidade de DOT a partir de `mitigation.immunities` (o
+  Canary não a deriva — `immunities` de dano e de condição são listas independentes no Lua); a
+  Paralyze Rune com `area` (o Canary não a tem); o `invisible` de `monster.attacks` (só o Tirecz,
+  chefe de quest, o declara — o resto está em `defenses`); a invisibilidade por EQUIPAMENTO
+  (`movement.cpp:564`, o item que a dá) e a magia do jogador em si (M37-05); a **apresentação**:
+  o Canary não envia o monstro invisível ao cliente (`Game::internalCreatureChangeVisible`), e o
+  cliente do Draconya ainda o desenha — a matemática (alvo, dano, revelação) já é a do Canary, só
+  a tela não some com ele; a invocação de personagem herda o alvo do mestre
+  (`#chooseMonsterTarget`) sem passar pelo think de visibilidade — nenhum monstro do catálogo é
+  `summonable` ainda (#598).
 
 ## O Dragon e o Dragon Lord (#520): a primeira ability wave/circle/defesa/fuga de verdade
 
@@ -2339,7 +2395,7 @@ generalizadas..." acima), `firewave` (onda `rows [1,1,3,3,3,5,5,5]` — o `setup
 monstro na direção de quem ele mira) e `heal` (defesa). `mitigation.immunities` só cobre `fire`
 — desde o CMB-11 (#556) existe MECANISMO de `paralyze` (a condição `speed`, ver abaixo), mas
 nenhum monstro do recorte o declara em `mitigation.immunities`: a IMUNIDADE por condição é a
-M31-04, fora desta issue, e `invisible` do TFS continua sem mecanismo equivalente no Draconya.
+M31-04 (#559, já fechada — ver "Imunidade de condição, invisibilidade e a Paralyze Rune" abaixo).
 Pela mesma razão, os flags `canPushItems`/`canPushCreatures`/`isBlockable` do Canary
 (`monster.flags`) não existem no schema — ficam registrados aqui como o que falta ao motor, não
 implementado por esta issue. A `strategiesTarget` ponderada (nearest 70 % / health 10 % / damage

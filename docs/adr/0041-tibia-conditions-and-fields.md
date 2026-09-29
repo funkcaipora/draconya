@@ -95,3 +95,31 @@ antes de virar trabalho, mesmo sem uma pergunta de produto pendente por trás de
 
 Nenhum muda de texto. O invariante 4 é quem justifica a decisão 3 (bot manda intenção, `sim`
 resolve o desvio). O invariante 11 é quem justifica não haver exceção de automação para drunk.
+
+## Emenda — 2026-09-29 (#559): o vocabulário de imunidade e o timing do "não enxergo mais o alvo"
+
+A decisão 2 disse **o quê** (imunidade por condição é dado de monstro; imunidade a `invisible` é
+"vê o invisível"). A implementação da M31-04 (#559, com o conteúdo jogável da #592) fixou o
+**como**, e duas escolhas merecem registro porque não são óbvias:
+
+1. **O vocabulário de `monster.conditionImmunities` são os onze nomes do ADR**, não os do Lua:
+   `paralyze`, `drunk`, `invisible` e as oito DOTs da decisão 1 (`bleeding`, `poison`, `burning`,
+   `electrified`, `cursed`, `drowning`, `freezing`, `dazzled`). O importador traduz o nome do
+   Canary (`bleed`/`physical`, `fire`, `earth`/`poison`…) pela tabela de
+   `luaMonsterTypeConditionImmunities`, e o `sim` casa uma DOT com a imunidade pelo tipo de dano do
+   tique (`Combat::DamageToConditionType`). O portão é o do Canary: só o combate consulta a
+   imunidade (`Combat::CombatConditionFunc`), a auto-aplicação (`caster == target`) e o campo de
+   tile não. `outfit` (119 monstros) fica para o M44-03, que traz a condição.
+2. **Largar o alvo que ficou invisível é um evento agendado, não uma checagem por passo.** O
+   `Creature::onThink` do Canary confere `canSeeCreature(alvo)` uma vez por 1000 ms numa fase
+   sorteada por criatura, então quem perseguia o invisível ainda o ataca por até um segundo — e o
+   golpe do jogador nesse intervalo revela o monstro (`Monster::drainHealth`). O `sim` não tem
+   relógio de think por criatura (seria um evento por criatura por segundo, contra o invariante 2),
+   nem pode largar o alvo no primeiro passo depois da invisibilidade (largaria antes do Canary), e
+   por isso agenda **um** `visibility-think` por criatura interessada, no instante em que a
+   invisibilidade começa, em `[0, 1000)` ms sorteados com o `Rng` da sessão — a mesma distribuição
+   da fase do Canary, determinística por semente e restaurável pelo snapshot da fila. A eleição de
+   alvo do BOT continua sendo do Draconya (ADR 0037 d.2): ela nunca escolhe um invisível e cai na
+   hora; só o alvo fixado pelo jogador segue até o think.
+
+Nenhum invariante muda de texto.
