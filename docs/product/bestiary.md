@@ -187,7 +187,9 @@ Canary — 10 s das condições, 30 s do Fatal Hold, 11 s da imunidade do Cleans
 level e 8 % da vida do alvo, as fórmulas de haste/paralisia — moram em
 `packages/sim/src/combat/charms.ts`, cada uma com o arquivo do Canary de onde saiu. O flag
 `creatureProduct` do item (o `primarytype="creature products"`) é escrito pelo importador
-(`scripts/catalog/items.ts`).
+(`scripts/catalog/items.ts`) — nos itens gerados direto, nos cinco autorais (`worm` e as peles e
+escamas dos dragões) por override em `content/data/items/overrides/`, que o `reconcileAuthored`
+grava.
 
 **A probabilidade real não é a nominal.** As rolagens defensivas usam `normal_random` (truncada,
 centrada em 0,5): um Dodge "de 5 %" dispara em ~1,4 % dos golpes. Só os ofensivos acertam a chance

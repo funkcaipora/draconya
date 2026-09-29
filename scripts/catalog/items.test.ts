@@ -673,6 +673,38 @@ describe('readItemCatalog e reconcileAuthored', () => {
     });
   });
 
+  it('reconcileAuthored: creature product autoral sem o flag ganha o override `creatureProduct: true` (#603)', () => {
+    withTempDir((dir) => {
+      // O slug autoral vence o gerado — sem o override, o Gut ficaria inerte no drop dele.
+      writeFileSync(join(dir, 'worm.json'), JSON.stringify({
+        id: 'worm', name: 'Worm', kind: 'other', weight: 0.05, value: 0, stackable: true,
+      }));
+      const generated = {
+        id: 'worm', name: 'Worm', kind: 'other', weight: 0.05, value: 0, creatureProduct: true,
+        source: { engine: 'canary' as const, commit: COMMIT, path: PATH },
+      };
+      const override = reconcileAuthored(generated, dir, COMMIT);
+      expect(override?.patch).toEqual({ creatureProduct: true });
+      expect(override?.reason).toMatch(/creatureProduct: \(ausente\) → true/);
+    });
+  });
+
+  it('reconcileAuthored: o autoral que já leva o flag, ou o gerado que não é creature product, não gera override', () => {
+    withTempDir((dir) => {
+      writeFileSync(join(dir, 'flagged.json'), JSON.stringify({
+        id: 'flagged', name: 'Flagged', kind: 'other', weight: 0.05, value: 0, creatureProduct: true,
+      }));
+      writeFileSync(join(dir, 'plain.json'), JSON.stringify({ id: 'plain', name: 'Plain', kind: 'other', weight: 0.05, value: 0 }));
+      const source = { engine: 'canary' as const, commit: COMMIT, path: PATH };
+      expect(reconcileAuthored({
+        id: 'flagged', name: 'Flagged', kind: 'other', weight: 0.05, value: 0, creatureProduct: true, source,
+      }, dir, COMMIT)).toBeUndefined();
+      expect(reconcileAuthored({
+        id: 'plain', name: 'Plain', kind: 'other', weight: 0.05, value: 0, source,
+      }, dir, COMMIT)).toBeUndefined();
+    });
+  });
+
   it('reconcileAuthored: idêntico não gera override', () => {
     withTempDir((dir) => {
       const data = { id: 'twin', name: 'Twin', kind: 'weapon', weight: 10, value: 0, attack: 5 };

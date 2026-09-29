@@ -472,11 +472,16 @@ sobrevive como fallback legado do conteúdo de teste — se ele e o kit coexiste
 a arma declarada seja uma das peças, porque o host prefere o kit e o campo ficaria só a mentira
 de exibição; é daí que o `catalogue` deriva a arma que o diálogo do level 8 mostra.
 
-**`creatureProduct: true` é do importador, nunca autoral** (#603, o charm Gut): o
-`scripts/catalog/items.ts` o escreve em todo item da fatia `creature-products`
+**`creatureProduct: true` é do importador — e o override o leva ao item autoral** (#603, o charm
+Gut): o `scripts/catalog/items.ts` o escreve em todo item da fatia `creature-products`
 (`primarytype="creature products"`), e `sim/loot.ts` o lê para somar o Gut à chance de drop. Item
-autoral (`data/items/*.json`) vence o gerado no mesmo slug — se um creature product autoral
-existir, o flag entra por override, com o motivo citado, não por edição do gerado.
+autoral (`data/items/*.json`) vence o gerado no mesmo slug, então o flag nunca chegaria a ele: o
+`reconcileAuthored` emite o override `data/items/overrides/<id>.json` (`patch.creatureProduct:
+true`, com o motivo) sozinho, a cada `pnpm catalog:import items`. São cinco hoje — `worm`,
+`green-dragon-leather`, `green-dragon-scale`, `red-dragon-leather`, `red-dragon-scale`, justo os
+drops do Dragon, do Dragon Lord, do Rotworm e da Cave Rat. Item autoral novo que o Canary declare
+creature product não precisa de edição à mão: reimporte. O teste de `charms-combat.test.ts` cruza o
+staging inteiro com o conteúdo carregado, então o esquecimento quebra o `pnpm check`.
 
 ## Munição (#151, AB-02, ADR 0032 decisão 7)
 

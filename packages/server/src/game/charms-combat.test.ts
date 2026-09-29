@@ -1,10 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from '../../../content/src/load.js';
 import type { Content } from '@draconya/content';
 import {
-  COMBAT_CHARM_IDS, CharacterRuntime, createHuntSession, statsForLevel,
+  COMBAT_CHARM_IDS, CharacterRuntime, Rng, createHuntSession, rollLoot, statsForLevel,
 } from '@draconya/sim';
 import type { CharmsState, DomainEvent, HuntRuleset, Session } from '@draconya/sim';
 
@@ -93,6 +94,74 @@ describe('o item creature product leva o flag que o Gut lê (#603)', () => {
     const { items } = real();
     expect(items.get('acorn')?.creatureProduct).toBe(true);
     expect(items.get('sword')?.creatureProduct).toBeUndefined();
+  });
+
+  // O slug AUTORAL vence o gerado: os cinco creature products que o Canary declara e que já eram
+  // autorais (`worm`, as peles e escamas dos dragões) ficam fora de `data/items/generated/`, e o
+  // flag só chega a eles pelo override de reconciliação. Sem isso o Gut era inerte no Dragon, no
+  // Dragon Lord e no Rotworm. O staging (`primarytype="creature products"` do Canary, 631 itens) é
+  // a lista de referência que o teste cruza com o conteúdo carregado.
+  it('todo `primarytype="creature products"` do Canary leva o flag no conteúdo carregado, autoral ou gerado', () => {
+    const { items } = real();
+    const staged = JSON.parse(readFileSync(
+      join(DATA, '..', 'staging', 'items', 'generated', 'creature-products.json'), 'utf8',
+    )) as { id: string }[];
+    expect(staged.length).toBeGreaterThan(600);
+    const unflagged = staged.filter((entry) => items.get(entry.id)?.creatureProduct !== true)
+      .map((entry) => entry.id);
+    expect(unflagged).toEqual([]);
+  });
+
+  it('os cinco creature products autorais são os que os drops de Dragon, Dragon Lord, Rotworm e Cave Rat usam', () => {
+    const { items, monsters } = real();
+    const lootOf = (monsterId: string): string[] => (monsters.get(monsterId)?.loot.items ?? [])
+      .flatMap((line) => (line.itemId === undefined ? [] : [line.itemId]));
+    const products = (monsterId: string): string[] => lootOf(monsterId)
+      .filter((itemId) => items.get(itemId)?.creatureProduct === true);
+    expect(products('dragon')).toEqual(['green-dragon-leather', 'green-dragon-scale']);
+    expect(products('dragon-lord')).toEqual(['red-dragon-scale', 'red-dragon-leather']);
+    expect(products('rotworm')).toEqual(['worm']);
+    expect(products('cave-rat')).toEqual(['worm']);
+    // O presunto e o cheese não são creature product no Canary: o Gut não os toca.
+    expect(items.get('dragon-ham')?.creatureProduct).toBeUndefined();
+    expect(items.get('cheese')?.creatureProduct).toBeUndefined();
+  });
+});
+
+describe('o Gut rende mais drops nas tabelas REAIS dos monstros das hunts (#603)', () => {
+  // A mesma semente com e sem o charm: o Gut é aritmética sobre a chance (não consome sorteio), então
+  // cada drop sem o charm continua drop com ele, e o creature product ganha os extras.
+  function drops(monsterId: string, itemId: string, withGut: boolean): number {
+    const { items, monsters } = real();
+    const table = monsters.get(monsterId)?.loot;
+    if (table === undefined) throw new Error(`monstro sem loot: ${monsterId}`);
+    const gut = withGut
+      ? { percent: 12, isProduct: (id: string) => items.get(id)?.creatureProduct === true }
+      : undefined;
+    const rng = Rng.fromSeed(`gut-${monsterId}`);
+    let count = 0;
+    for (let i = 0; i < 40_000; i += 1) {
+      if (rollLoot(table, rng, 1, gut).items.some((item) => item.itemId === itemId)) count += 1;
+    }
+    return count;
+  }
+
+  it.each([
+    { monsterId: 'dragon', itemId: 'green-dragon-leather' },
+    { monsterId: 'dragon', itemId: 'green-dragon-scale' },
+    { monsterId: 'dragon-lord', itemId: 'red-dragon-scale' },
+    { monsterId: 'dragon-lord', itemId: 'red-dragon-leather' },
+    { monsterId: 'rotworm', itemId: 'worm' },
+    { monsterId: 'cave-rat', itemId: 'worm' },
+  ])('$monsterId: o Gut de 12 por cento sobe o drop de $itemId', ({ monsterId, itemId }) => {
+    const plain = drops(monsterId, itemId, false);
+    const gutted = drops(monsterId, itemId, true);
+    expect(plain).toBeGreaterThan(0);
+    expect(gutted).toBeGreaterThan(plain);
+  });
+
+  it('o presunto do Dragon (não é creature product) cai igual com e sem o Gut', () => {
+    expect(drops('dragon', 'dragon-ham', true)).toBe(drops('dragon', 'dragon-ham', false));
   });
 });
 
