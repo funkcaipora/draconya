@@ -1824,14 +1824,17 @@ que rola e onde mora cada número está na tabela de estágios de `docs/product/
   | 2,5 % da mana)` NEUTRO no Overpower/Overflux. Resistência, imunidade e cura por elemento do
   monstro valem; o aumento por tipo do atacante também; defesa, armadura, crítico, leech e reflexo
   não. O neutro pula absorção, aumento, imunidade e resistência (a mitigação percentual e o piso
-  continuam). Cripple paralisa o monstro por 10 s (velocidade 40, como a Paralyze Rune). O dano do
-  charm conta para o DPS e para a atribuição de kill/XP do jogador.
+  continuam). Cripple paralisa o monstro por 10 s (velocidade 40, como a Paralyze Rune) — inclusive
+  o monstro imune a `paralyze`, porque o Canary aplica a condição direto, sem o portão de imunidade
+  do `CombatConditionFunc`. O dano do charm conta para o DPS e para a atribuição de kill/XP do
+  jogador.
 - **Defensivos** (Dodge, Parry, Adrenaline Burst, Numb; Cleanse é à parte): no golpe de monstro
   que já passou pelo `blockHit` e pelo reflexo do equipamento — e em cada tique de condição que um
   monstro VIVO aplicou (o `owner` da condição é o atacante) —, antes do mana shield; minor antes de
   major. O Dodge nega o golpe inteiro (o `blockHit` já gastou carga e treinou escudo, então o golpe
   segue com dano zero); o Parry devolve o dano recebido como neutro; Adrenaline Burst dá haste de
-  10 s (`2,5 × (base − 40) + 40`); Numb paralisa o monstro. Golpe já zerado não rola. A
+  10 s (`2,5 × (base − 40) + 40`); Numb paralisa o monstro (também o imune a `paralyze`, como o
+  Cripple). Golpe já zerado não rola. A
   probabilidade REAL é a da normal truncada (~1,4 % a 4,3 %), não a nominal.
 - **Passivos**: Low Blow abre um segundo sorteio de crítico contra o monstro do charm (chance
   `base + charm`) e Savage Blow soma ao multiplicador do crítico dele — sobre o crítico BASE de todo
@@ -1840,7 +1843,8 @@ que rola e onde mora cada número está na tabela de estágios de `docs/product/
   Bless reduz a perda de morte (`chance/100`, multiplicativa); Gut sobe o drop dos creature
   products do cadáver.
 - **Carnage** age na morte do monstro: dano neutro `min(15 % da vida do morto, 6× o level)` nos
-  quatro vizinhos ortogonais, com a morte deles resolvida e creditada ao jogador.
+  quatro vizinhos ortogonais, com a morte deles resolvida e creditada ao jogador. Vale para o monstro
+  invocado por outro monstro também (o `Monster::death` não confere `isSummon()`).
 - **O Dodge do PRD saiu** (ver "As exceções de produto"): o único Dodge deste perfil é o charm.
 
 Sob `combat-v3` nada disso roda, mesmo com charm atribuído (o registro é do personagem, o perfil é
@@ -2739,9 +2743,12 @@ curva —, e `damage-over-time` não a modela; reportada, não aproximada (ver `
 - `[ABERTO]` A chance de bloqueio (`combat.defense.blockChance`, provisória em 0,6) e a defesa
   do spike sword (10) não vêm do PRD e ainda não foram medidas contra uma hunt com escudo.
 - `[ABERTO]` A conversão do Base Power (`combat.spellPower`) é nossa e provisória — ver acima.
-- `[ABERTO]` Os modificadores avançados (`combat.modifiers`: chance/multiplicador do crítico e as
-  frações de life/mana leech) não estão declarados no conteúdo real: **ausente é neutro**, e
-  ligá-los é conteúdo novo com `Content.version` novo. Os valores só entram quando medidos.
+- `[ABERTO]` Só o **life/mana leech** de `combat.modifiers` segue sem declaração no conteúdo real
+  (**ausente é neutro**, e ligá-lo é conteúdo novo com `Content.version` novo; o valor só entra
+  quando medido). O crítico BASE do jogador **já está declarado** desde o #603 — 5 % de chance,
+  +10 % de dano, números REAIS do Canary (`config.lua.dist`), não provisórios: como o `critical`
+  declarado consome uma rolagem mesmo com `chance: 0`, a sequência de RNG de todo golpe, magia e
+  runa do `combat-v4` inclui essa rolagem — ver "Charms em combate".
 - `[ABERTO]` As fórmulas das famílias de arma (`levelFactor` e `spread`) são provisórias e estão
   zeradas para preservar o dano entregue (CMB-05). Ligar `spread` a um valor diferente de zero
   muda o consumo de RNG e exige perfil novo (ADR 0031).
