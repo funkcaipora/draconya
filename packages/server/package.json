@@ -21,7 +21,7 @@
     "@draconya/content": "workspace:*",
     "@draconya/protocol": "workspace:*",
     "@draconya/sim": "workspace:*",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^0.45.3",
     "fastify": "^5.12.5",
     "ioredis": "^6.0.0",
     "pino": "^10.3.1",
