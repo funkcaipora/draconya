@@ -247,5 +247,8 @@ describe('a party de dragões atravessa os três andares JUNTA, em VÁRIAS semen
       floorsWithKills.length,
       `semente ${String(seedIndex)}: nenhum abate em ${JSON.stringify([...killsByFloor.entries()])}`,
     ).toBeGreaterThanOrEqual(1);
-  });
+    // 20 s de teto por semente (#527, o mesmo do `dragon-party-stuck-527`): sozinha cada semente
+    // leva ~1,2 s, mas a suíte inteira competindo por CPU estoura o teto padrão de 5 s sem
+    // regressão nenhuma — medido na sincronização da main com a tibia-parity.
+  }, 20_000);
 });
