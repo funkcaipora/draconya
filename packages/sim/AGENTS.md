@@ -586,6 +586,28 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   para uma condição que pode ser `speed` precisa do mesmo. `min`/`max` da fórmula são TRUNCADOS
   (`Math.trunc`, como o C++ trunca `float` → `int32_t`), nunca arredondados, e `min === max` NÃO
   consome sorteio — a mesma regra do `uniform_random` do Canary quando os limites coincidem.
+- **Imunidade de condição e invisibilidade (#559, ADR 0041 d.2) têm UM portão cada, e a
+  invisibilidade tem um TIMING que é evento, não checagem.** (a) `#applyConditionTo` recusa a
+  condição de um combate para o monstro imune (`conditionImmunityOf`, `conditions.ts`: `paralyze`
+  = o sinal NEGATIVO de `speed`, `drunk`, e a DOT pelo `damageType` do tique); `condition.sourceId
+  === target.subject` (auto-aplicação) pula o portão, e campo de tile NÃO passa por ele —
+  `FIELD_TICK` tiqueta direto, como o Canary só consulta a imunidade de DANO ali. `invisible` NUNCA
+  entra: a imunidade é `seesInvisible` (`monster.ts`), "enxerga o invisível". (b) `#revealOnDrain`
+  é o `Monster::drainHealth`: dano REAL de vida (`applied.healthDamage > 0`) num monstro invisível
+  o revela — chamado nos cinco pontos que fazem `applyDamageOutcome` num monstro; um sexto ponto
+  que aplique dano num `MonsterRuntime` sem chamá-lo esconde o defeito. Só o monstro perde a
+  invisibilidade por dano; a do JOGADOR não. (c) **Largar o alvo que ficou invisível é o `Creature::
+  onThink`, uma vez por 1000 ms numa fase por criatura — no sim é o evento `visibility-think`**
+  (`#scheduleVisibilityThinks`, agendado em `#applyConditionTo` quando a invisibilidade COMEÇA, não
+  quando é renovada): cada monstro que perseguia o invisível e não o enxerga pensa uma vez em
+  `[0, 1000)` ms (sorteio da sessão) e larga o alvo se ele ainda estiver invisível. `chooseTarget`
+  NÃO larga sozinho — largaria antes do Canary, porque roda a cada passo — e só filtra a AQUISIÇÃO
+  (aquisição, ramo estreito de fuga, `targetChange`, `#applyChallenge`). Do lado do jogador, o alvo
+  ELEITO pelo bot cai na hora (`selectTarget` nunca escolhe invisível, targeting do bot é do
+  Draconya, ADR 0037 d.2) e o FIXADO pelo jogador segue até o think — e o golpe dele nesse
+  intervalo revela o monstro. Toda invisibilidade que entra sem passar por `#applyConditionTo`
+  (um teste que faz `conditions.apply` direto) não agenda think, e o monstro que a persegue nunca
+  a larga: use a magia ou a defesa de verdade.
 - **A haste do JOGADOR (as quatro magias de vocação, Swift Foot) continua em `casting.ts`, à
   parte de `conditionFromSpec`.** `spellEffectSchema`'s `kind: 'haste'` (percentual FLAT, sem
   fórmula) não mudou nesta issue — as duas mecânicas escrevem o MESMO campo de runtime
