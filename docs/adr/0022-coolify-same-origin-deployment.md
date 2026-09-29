@@ -57,6 +57,10 @@ este deploy não implementa as telas futuras de login e seleção de personagem.
 Migrações futuras precisam ser compatíveis com o processo anterior durante a atualização.
 O journal protege repetição; não substitui revisão de SQL nem backup e teste de restauração.
 
+**Emenda (2026-09-15):** backup de `postgres` e `redis` passou a existir, no bind
+`/data/coolify/backups/draconya-staging`, escrito por tarefas agendadas do próprio Coolify
+(docs/deploy.md, "Backup").
+
 ## Invariantes afetados
 
 Nenhum dos onze invariantes muda. A sessão continua autoritativa no servidor, independente

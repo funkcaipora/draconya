@@ -1,0 +1,16 @@
+{
+  "id": "hat-of-the-mad",
+  "name": "Hat of the Mad",
+  "kind": "armor",
+  "slot": "head",
+  "weight": 7,
+  "value": 0,
+  "armor": 3,
+  "requires": {
+    "vocationId": ["sorcerer", "druid"]
+  },
+  "bonuses": {
+    "skill": { "skillId": "magic", "amount": 1 }
+  },
+  "_open": "Kit level 200 (#524), Sorcerer e Druid. Armor 3, weight 700 (7 oz) e `magiclevelpoints` +1 do Canary `items.xml` id 3210 (`Sorcerer;true, Druid;true, Master Sorcerer, Elder Druid`). O magic level do Tibia É a skill `magic` no Draconya (FUN-92) — o bônus soma nela via `Inventory.skillBonus`, lido em `#runeScaling`/`#spellScaling` (runa e magia de cura/dano escalam mais forte com o chapéu). `value` 0: nenhum NPC compra o Hat of the Mad no Tibia real (TibiaWiki via tibiascape.com/library/items/hat-of-the-mad — quest-only)."
+}

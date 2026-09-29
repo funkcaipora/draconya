@@ -1,0 +1,13 @@
+{
+  "id": "boots-of-haste",
+  "name": "Boots of Haste",
+  "kind": "armor",
+  "slot": "feet",
+  "weight": 7.5,
+  "value": 0,
+  "armor": 0,
+  "bonuses": {
+    "speed": 40
+  },
+  "_open": "Kit level 200 (#524), as quatro vocações. `speed` 40 (desde o #527) e `weight` 750 (7,5 oz) do `forgottenserver` `data/items/items.xml` id 2195 (`<attribute key=\"speed\" value=\"40\" />`), somado direto a `character.speed` enquanto vestido — não é a `haste` condition da magia — verificado contra `otland/forgottenserver` `main` em 2026-09-25. É a escala TFS CLÁSSICA, a mesma de `progression.startingSpeed` (ADR 0037 decisão 4): o Canary guarda `speed` 20 (`items.xml` id 3079, metade) porque a base dele também é metade (110, não 220) — os dois valores só fazem sentido JUNTOS. Antes do #527 este arquivo trazia o `speed` do Canary (20) sobre uma base do Huntera (278), uma mistura de escalas sem fonte única. Sem `level`/`vocation` no script de equip. `value` 0: nenhum NPC compra a Boots of Haste no Tibia real (TibiaWiki via tibiascape.com/library/items/boots-of-haste — \"no buy/sell offers\", item de quest/drop raro); o `sell 30000` do Nah'Bob é economia do `data-otservbr-global`, descartado pela mesma razão do Royal Helmet (ADR 0037 d.4)."
+}

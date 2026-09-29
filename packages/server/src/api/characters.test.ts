@@ -8,6 +8,7 @@ import {
   type CharacterRecord,
   type GameRepository,
   type ItemInstanceRecord,
+  type StartingKitPiece,
 } from '../db/repository.js';
 import { registerCharacterRoutes } from './characters.js';
 
@@ -20,6 +21,8 @@ class MemorySessions implements AuthSessionStore {
 
 class MemoryRepository implements GameRepository {
   readonly characters = new Map<string, CharacterRecord>();
+  /** Com o que cada personagem nasceu vestido (#153): o que a rota mandou gravar. */
+  readonly kits = new Map<string, readonly StartingKitPiece[]>();
   next = 0;
   async applyEquipment(): Promise<void> {
     // Equipamento não passa por este arquivo.
@@ -32,6 +35,7 @@ class MemoryRepository implements GameRepository {
     return {
       id: 'i1', itemId: instance.itemId, ownerCharacterId: instance.ownerCharacterId,
       quantity: instance.quantity ?? 1, origin: instance.origin, equippedSlot: null,
+      container: null, slotIndex: null,
       createdAt: new Date(0),
     };
   }
@@ -45,7 +49,10 @@ class MemoryRepository implements GameRepository {
   async ensureAccount(identity: { externalAuthId: string; email: string }): Promise<AccountRecord> {
     return { id: 'a1', email: identity.email, externalAuthId: identity.externalAuthId, coins: 0 };
   }
-  async createCharacter(accountId: string, name: string): Promise<CharacterRecord> {
+  async createCharacter(
+    accountId: string, name: string,
+    initial: { readonly botConfig?: unknown; readonly kit?: readonly StartingKitPiece[] } = {},
+  ): Promise<CharacterRecord> {
     if ([...this.characters.values()].some((character) => character.name.toLowerCase() === name.toLowerCase())) {
       throw new CharacterNameTakenError();
     }
@@ -53,9 +60,12 @@ class MemoryRepository implements GameRepository {
     const character: CharacterRecord = {
       id: `c${++this.next}`, accountId, name, vocation: null, level: 1, xp: 0, gold: 0,
       capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: now,
-      state: 'city', sessionId: null, botConfig: null, skills: {}, createdAt: now,
+      state: 'city', sessionId: null, botConfig: initial.botConfig ?? null, skills: {},
+      outfitColors: null, bestiary: null, ammo: null, supplyStock: null, ammunitionStock: null,
+      createdAt: now,
     };
     this.characters.set(character.id, character);
+    this.kits.set(character.id, initial.kit ?? []);
     return character;
   }
   async listCharacters(accountId: string) {
@@ -65,8 +75,24 @@ class MemoryRepository implements GameRepository {
     const character = this.characters.get(characterId);
     return character?.accountId === accountId ? character : null;
   }
+  async getCharacterById(characterId: string) {
+    return this.characters.get(characterId) ?? null;
+  }
   async ownsCharacter(accountId: string, characterId: string) {
     return (await this.getCharacter(accountId, characterId)) !== null;
+  }
+  async getCharacterByName(name: string) {
+    return [...this.characters.values()]
+      .find((character) => character.name.toLowerCase() === name.toLowerCase()) ?? null;
+  }
+  async addFriend(): Promise<never> {
+    throw new Error('friends do not pass through this file');
+  }
+  async listFriends() {
+    return [];
+  }
+  async removeFriend() {
+    return false;
   }
   async withOwnedCharacter<T>(
     accountId: string,
@@ -125,6 +151,58 @@ describe('character routes', () => {
     expect((await app.inject({
       method: 'POST', url: `/api/characters/${id}/select`, headers: { cookie },
     })).statusCode).toBe(404);
+  });
+
+  it('nasce com o bot padrão do conteúdo, e sem padrão nasce sem bot (FUN-114)', async () => {
+    // O MVP é "magia + poção funcionando" na primeira hunt, sem abrir a tela do bot. O `api`
+    // não conhece o vocabulário: o que recebe do conteúdo, grava. Mutação que mata: não passar
+    // `botConfig` ao repositório.
+    const repository = new MemoryRepository();
+    const sessions = new MemorySessions();
+    const auth = new AuthService({ repository, sessions, devMode: true });
+    await auth.devLogin('hero@example.com');
+    const app = Fastify();
+    const defaultBotConfig = { version: 1, heal: [{ when: { kind: 'hp', op: '<=', percent: 70 }, do: { kind: 'spell', spellId: 'heal' } }] };
+    registerCharacterRoutes(app, auth, repository, { defaultBotConfig });
+    const cookie = `${SESSION_COOKIE}=token`;
+
+    const created = await app.inject({
+      method: 'POST', url: '/api/characters', headers: { cookie }, payload: { name: 'Novato' },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(repository.characters.get(created.json().id as string)?.botConfig).toEqual(defaultBotConfig);
+
+    const { app: bare, cookie: bareCookie, repository: bareRepository } = await build();
+    const bareCreated = await bare.inject({
+      method: 'POST', url: '/api/characters', headers: { cookie: bareCookie }, payload: { name: 'Sem Bot' },
+    });
+    expect(bareRepository.characters.get(bareCreated.json().id as string)?.botConfig).toBeNull();
+  });
+
+  it('nasce vestido com o kit do conteúdo, gravado junto com o personagem; sem kit, de mãos vazias (#153)', async () => {
+    // O kit é conteúdo (`progression.startingKit`) e chega à rota como o bot padrão chega:
+    // injetado no boot. A rota não sabe o que é uma machete — só repassa ao repositório, que
+    // grava tudo numa transação. Mutação que mata: esquecer o `kit` na chamada.
+    const repository = new MemoryRepository();
+    const sessions = new MemorySessions();
+    const auth = new AuthService({ repository, sessions, devMode: true });
+    await auth.devLogin('hero@example.com');
+    const app = Fastify();
+    const startingKit = [{ itemId: 'machete', slot: 'hand' }, { itemId: 'backpack', slot: 'back' }];
+    registerCharacterRoutes(app, auth, repository, { startingKit });
+    const cookie = `${SESSION_COOKIE}=token`;
+
+    const created = await app.inject({
+      method: 'POST', url: '/api/characters', headers: { cookie }, payload: { name: 'Vestido' },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(repository.kits.get(created.json().id as string)).toEqual(startingKit);
+
+    const { app: bare, cookie: bareCookie, repository: bareRepository } = await build();
+    const bareCreated = await bare.inject({
+      method: 'POST', url: '/api/characters', headers: { cookie: bareCookie }, payload: { name: 'Pelado' },
+    });
+    expect(bareRepository.kits.get(bareCreated.json().id as string)).toEqual([]);
   });
 
   it('normalizes names and rejects a case-insensitive duplicate', async () => {

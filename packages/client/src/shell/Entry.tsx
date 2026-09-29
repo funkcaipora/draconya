@@ -1,15 +1,19 @@
-// A tela de entrada: quem é você, e com quem vai jogar (FUN-97).
+// A tela de entrada: quem é você, e com quem vai jogar (FUN-97; redesenho #248, ADR 0029 D7/D8).
 //
 // É o portão do M10. Antes dela, jogar exigia bater na API por fora, copiar um UUID e montar
 // `?character=<id>` à mão — o staging estava no ar e ninguém conseguia entrar.
 //
 // HUD em DOM (§13), e nada aqui toca `world`: neste momento ainda não existe sessão de jogo.
+// Sem senha (ADR 0029 D7): as duas ações de login navegam para o AuthKit do WorkOS (ADR 0012).
+// Sem i18n (ADR 0029 D7): os textos ficam fixos em pt-BR, sem toggle de idioma.
 
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useStoreSlice } from '../state/useSlice.js';
 import { account } from '../account/store.js';
-import { beginLogin } from '../account/api.js';
-import { create, play, refresh, signOut } from '../account/actions.js';
+import type { AccountState } from '../account/store.js';
+import { create, devLogin, NO_SERVER_MESSAGE, play, refresh, signOut, tryLogin } from '../account/actions.js';
+import { Button } from './ui/Button.js';
 import type { CharacterSummary } from '../account/api.js';
 
 /** Onde o personagem está agora, em palavras. O diretório manda (FUN-30). */
@@ -22,23 +26,227 @@ const STATE_TEXT: Record<string, string> = {
   'guild-war': 'na guild war',
 };
 
-function Character({ character, busy }: { character: CharacterSummary; busy: boolean }) {
+/**
+ * O nome de cada vocação, em português — a mesma tradução por id que `STATE_TEXT` já faz acima.
+ * `character.vocation` chega como o id cru de `content/data/vocations/*.json`; a tela real de
+ * escolha (#249, DS-06) lê o nome do catálogo, mas aqui, ANTES de existir sessão, não há
+ * catálogo — só os quatro ids fixos. Um id sem entrada aqui mostra o próprio id, sem cor (D8: a
+ * tela nunca trava por um id que ela não conhece ainda).
+ */
+const VOCATION_NAME: Record<string, string> = {
+  knight: 'Cavaleiro',
+  paladin: 'Paladino',
+  druid: 'Druida',
+  sorcerer: 'Feiticeiro',
+};
+
+/** Os três estados visuais do indicador do cabeçalho, e a cor de cada um em tokens.css. */
+export interface EntryReadiness {
+  readonly tone: 'ok' | 'warn' | 'danger';
+  readonly label: string;
+}
+
+/**
+ * Lê a prontidão REAL de conta/conexão do estado que `account/actions.ts` já mantém — não um
+ * texto decorativo fixo como o `t.ready` do kit (Entry.jsx:11). PURA e exportada, pelo mesmo
+ * motivo que `resolveChosenVocationId` é: testável sem montar o componente.
+ *
+ * `busy` NÃO entra aqui de propósito: toda chamada (criar personagem, trocar de conta, entrar)
+ * liga `busy` por uma fração de segundo, e piscar o indicador do cabeçalho a cada clique seria
+ * ruído, não sinal de prontidão (DT-04).
+ *
+ * Só a mensagem genérica (`NO_SERVER_MESSAGE`, o ramo `else` de `attempt`) significa falta de
+ * conexão. Qualquer outro `state.error` é uma recusa da API — nome inválido, limite de
+ * personagens, login recusado — e nesses casos o SERVIDOR respondeu; o texto dela já aparece em
+ * `.entry-error`, e o indicador continua "Pronto para entrar".
+ */
+export function entryReadiness(state: Pick<AccountState, 'phase' | 'error'>): EntryReadiness {
+  if (state.phase === 'checking') return { tone: 'warn', label: 'Conectando…' };
+  if (state.error === NO_SERVER_MESSAGE) return { tone: 'danger', label: 'Sem conexão com o servidor.' };
+  return { tone: 'ok', label: 'Pronto para entrar' };
+}
+
+function EntryShell({
+  children,
+  screen,
+  readiness,
+}: {
+  children: ReactNode;
+  screen: 'login' | 'select';
+  readiness: EntryReadiness;
+}) {
   return (
-    <li className="entry-character">
-      <div>
-        <strong>{character.name}</strong>
-        <span className="entry-meta">
-          {` level ${String(character.level)} · ${STATE_TEXT[character.state] ?? character.state}`}
+    <div className="entry-shell" data-entry-screen={screen}>
+      <i className="entry-hachure" aria-hidden="true" />
+      <i className="entry-rings" aria-hidden="true" />
+      <header className="entry-header">
+        <span className="entry-wordmark">
+          <span className="entry-wordmark-mark">D</span>DRACONYA
         </span>
-      </div>
-      <button type="button" disabled={busy} onClick={() => { void play(character.id); }}>
-        Jogar
-      </button>
-    </li>
+        <span className="entry-tagline">UM MUNDO SOB O FOGO</span>
+        <span className={`entry-ready entry-ready-${readiness.tone}`} role="status">
+          <i className={`entry-ready-dot entry-ready-dot-${readiness.tone}`} aria-hidden="true" />
+          {readiness.label}
+        </span>
+      </header>
+      <main className="entry-main">{children}</main>
+      <footer className="entry-footer">DRACONYA</footer>
+    </div>
   );
 }
 
-function CreateForm({ busy }: { busy: boolean }) {
+function Brand({ emblem = true, compact = false }: { emblem?: boolean; compact?: boolean }) {
+  return (
+    <div className="entry-brand">
+      {emblem && (
+        <div className="entry-emblem" aria-hidden="true"><span>✦</span></div>
+      )}
+      <p className="entry-eyebrow">MMORPG</p>
+      <h1 className={compact ? 'entry-title entry-title-compact' : 'entry-title'}>DRACONYA</h1>
+      <div className="entry-rule" aria-hidden="true"><i /><span>✦</span><i /></div>
+    </div>
+  );
+}
+
+function EntryCard({ children }: { children: ReactNode }) {
+  return <div className="entry-card">{children}</div>;
+}
+
+function Heading({ kicker, title, sub }: { kicker: string; title: string; sub?: string }) {
+  return (
+    <div className="entry-heading">
+      <span className="entry-kicker">{kicker}</span>
+      <h2>{title}</h2>
+      {sub !== undefined && <p className="entry-heading-sub">{sub}</p>}
+    </div>
+  );
+}
+
+function LoginScreen({ error }: { error: string | null }) {
+  const [devMode, setDevMode] = useState(false);
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const handleLogin = async (register = false) => {
+    setBusy(true);
+    const result = await tryLogin(register);
+    if (result === 'dev') {
+      setDevMode(true);
+    }
+    setBusy(false);
+  };
+
+  const handleDevLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!email.trim()) return;
+    setBusy(true);
+    await devLogin(email.trim());
+    setBusy(false);
+  };
+
+  if (devMode) {
+    return (
+      <>
+        <Brand />
+        <EntryCard>
+          <Heading
+            kicker="Modo local"
+            title="Entre com seu e-mail"
+            sub="Qualquer e-mail funciona em desenvolvimento."
+          />
+          <form className="entry-card-actions" onSubmit={(event) => { void handleDevLogin(event); }}>
+            <input
+              type="email"
+              className="entry-dev-email"
+              placeholder="seu@email.dev"
+              value={email}
+              onChange={(event_) => { setEmail(event_.target.value); }}
+              autoFocus
+              required
+              disabled={busy}
+            />
+            <Button variant="gold" size="lg" block disabled={busy || !email.trim()} type="submit">
+              ENTRAR <span aria-hidden="true">→</span>
+            </Button>
+            <Button variant="text" size="md" block onClick={() => { setDevMode(false); }} disabled={busy}>
+              Voltar
+            </Button>
+          </form>
+        </EntryCard>
+        {error !== null && <p className="entry-error">{error}</p>}
+        <p className="entry-caption">Cada jornada deixa uma história.</p>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Brand />
+      <EntryCard>
+        <Heading
+          kicker="Bem-vindo"
+          title="Continue a jornada"
+          sub="O próximo capítulo começa com você."
+        />
+        <div className="entry-card-actions">
+          <Button variant="gold" size="lg" block onClick={() => { void handleLogin(); }} disabled={busy}>
+            ENTRAR <span aria-hidden="true">→</span>
+          </Button>
+          <Button variant="text" size="md" block onClick={() => { void handleLogin(true); }} disabled={busy}>
+            Criar conta
+          </Button>
+        </div>
+      </EntryCard>
+      {error !== null && <p className="entry-error">{error}</p>}
+      <p className="entry-caption">Cada jornada deixa uma história.</p>
+    </>
+  );
+}
+
+function CharacterCard({
+  character,
+  busy,
+  selected,
+  onSelect,
+}: {
+  character: CharacterSummary;
+  busy: boolean;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  // `== null` e não `!== null`: um nó anterior a esta task pode mandar o campo ausente
+  // (`undefined`) em vez de `null` explícito — os dois viram "—", nunca "undefined" na tela.
+  const known = character.vocation != null && character.vocation in VOCATION_NAME;
+  const vocationText = character.vocation == null
+    ? '—'
+    : (VOCATION_NAME[character.vocation] ?? character.vocation);
+
+  return (
+    <button
+      type="button"
+      className={selected ? 'entry-character-card entry-character-card--selected' : 'entry-character-card'}
+      disabled={busy}
+      aria-pressed={selected}
+      // Seleção LOCAL (invariante 4): este clique não manda nada à rede — só marca o cartão.
+      // `play()` só é chamado pelo botão "ENTRAR NO JOGO" no rodapé de `CharacterGrid`.
+      onClick={onSelect}
+    >
+      <span className="entry-avatar" aria-hidden="true">{character.name.charAt(0)}</span>
+      <span className="entry-character-info">
+        <strong className="entry-character-name">{character.name}</strong>
+        <span className={known ? `entry-vocation entry-vocation-${character.vocation}` : 'entry-vocation'}>
+          {vocationText}
+        </span>
+        <span className="entry-character-meta">
+          {`Lv ${String(character.level)} · ${STATE_TEXT[character.state] ?? character.state}`}
+        </span>
+      </span>
+      <span className="entry-character-indicator" aria-hidden="true">{selected ? '◆' : '◇'}</span>
+    </button>
+  );
+}
+
+function CreateForm({ busy, onDone }: { busy: boolean; onDone: () => void }) {
   const [name, setName] = useState('');
   const trimmed = name.trim();
 
@@ -48,23 +256,101 @@ function CreateForm({ busy }: { busy: boolean }) {
       onSubmit={(event) => {
         event.preventDefault();
         if (trimmed === '') return;
-        void create(trimmed).then(() => { setName(''); });
+        void create(trimmed).then(() => { setName(''); onDone(); });
       }}
     >
       <label htmlFor="entry-name">Nome do personagem</label>
       <div className="entry-create-row">
         <input
           id="entry-name"
+          className="entry-input"
           value={name}
           maxLength={30}
           autoComplete="off"
           onChange={(event) => { setName(event.target.value); }}
         />
-        {/* Desabilitado com o campo vazio: o servidor recusaria, e mandar para receber "não"
-            é um passo que a tela consegue evitar. As regras de nome continuam sendo dele. */}
-        <button type="submit" disabled={busy || trimmed === ''}>Criar</button>
+        {/* Botão nativo, não o primitivo `Button`: é o único controle da tela que precisa de
+            `type="submit"` para o `Enter` funcionar dentro do formulário. */}
+        <button type="submit" className="entry-create-submit" disabled={busy || trimmed === ''}>
+          Criar
+        </button>
       </div>
+      <Button variant="ghost" size="sm" onClick={onDone}>Cancelar</Button>
     </form>
+  );
+}
+
+function CharacterGrid({ state }: { state: AccountState }) {
+  const [creating, setCreating] = useState(false);
+  // Seleção LOCAL, sem efeito colateral (R1-16) — nada aqui manda intenção nenhuma; `null` até o
+  // jogador clicar um cartão, de propósito (DT-03): o hint abaixo só faz sentido como instrução
+  // se nada estiver marcado ainda.
+  const [selected, setSelected] = useState<string | null>(null);
+  const hasCharacters = state.characters.length > 0;
+
+  return (
+    <>
+      <Brand emblem={false} compact />
+      <div className="entry-select">
+        <div className="entry-select-head">
+          <Heading
+            kicker="Sua próxima aventura"
+            title="Escolha seu personagem"
+            sub={`${state.identity?.email ?? '—'} · ${String(state.characters.length)} personagens disponíveis`}
+          />
+          <Button variant="ghost" size="md" onClick={() => { void signOut(); }}>
+            Trocar de conta
+          </Button>
+        </div>
+
+        {!hasCharacters && (
+          <p className="entry-hint">Você ainda não tem personagem. Crie o primeiro.</p>
+        )}
+
+        <div className="entry-grid">
+          {state.characters.map((character) => (
+            <CharacterCard
+              key={character.id}
+              character={character}
+              busy={state.busy}
+              selected={selected === character.id}
+              onSelect={() => { setSelected(character.id); }}
+            />
+          ))}
+          {/* Duas contas ativas é o teto (§7.1), e quem recusa é o servidor — o cartão nunca
+              some, porque escondê-lo transformaria uma recusa explicável em botão sumido. */}
+          <button
+            type="button"
+            className="entry-new-card"
+            disabled={state.busy}
+            onClick={() => { setCreating(true); }}
+          >
+            + NOVO PERSONAGEM
+          </button>
+        </div>
+
+        {hasCharacters && (
+          <div className="entry-select-footer">
+            <p className="entry-select-hint">Selecione um personagem para continuar.</p>
+            <Button
+              variant="gold"
+              size="lg"
+              className="entry-enter-button"
+              disabled={selected === null || state.busy}
+              // A intenção só sai daqui — nunca do clique no cartão (invariante 4, sem mudança
+              // de forma: `play()` já mandava só o id, igual antes desta task).
+              onClick={() => { if (selected !== null) void play(selected); }}
+            >
+              ENTRAR NO JOGO <span aria-hidden="true">→</span>
+            </Button>
+          </div>
+        )}
+
+        {creating && <CreateForm busy={state.busy} onDone={() => { setCreating(false); }} />}
+      </div>
+      {state.error !== null && <p className="entry-error">{state.error}</p>}
+      <p className="entry-caption">Cada jornada deixa uma história.</p>
+    </>
   );
 }
 
@@ -74,48 +360,27 @@ export function Entry() {
   // Uma pergunta só, na montagem: "quem sou eu, e quais personagens tenho". Repetir em laço
   // seria tráfego de volta gerado por nada — a lista não muda sozinha.
   useEffect(() => { void refresh(); }, []);
+  const readiness = entryReadiness(state);
 
   if (state.phase === 'checking') {
-    return <main className="entry"><p className="quiet">Verificando sua sessão…</p></main>;
+    return (
+      <EntryShell screen="login" readiness={readiness}>
+        <p className="entry-checking">Verificando sua sessão…</p>
+      </EntryShell>
+    );
   }
 
   if (state.phase === 'anonymous') {
     return (
-      <main className="entry">
-        <h1>Draconya</h1>
-        <p className="quiet">Entre para escolher um personagem.</p>
-        <div className="entry-create-row">
-          <button type="button" onClick={() => { beginLogin(); }}>Entrar</button>
-          <button type="button" onClick={() => { beginLogin(true); }}>Criar conta</button>
-        </div>
-        {state.error !== null && <p className="system-error">{state.error}</p>}
-      </main>
+      <EntryShell screen="login" readiness={readiness}>
+        <LoginScreen error={state.error} />
+      </EntryShell>
     );
   }
 
   return (
-    <main className="entry">
-      <header className="entry-head">
-        <h1>Draconya</h1>
-        <button type="button" className="entry-quiet" onClick={() => { void signOut(); }}>
-          {state.identity?.email ?? 'sair'} · sair
-        </button>
-      </header>
-
-      {state.characters.length === 0
-        ? <p className="quiet">Você ainda não tem personagem. Crie o primeiro.</p>
-        : (
-          <ul className="entry-characters">
-            {state.characters.map((character) => (
-              <Character key={character.id} character={character} busy={state.busy} />
-            ))}
-          </ul>
-        )}
-
-      {/* Duas contas ativas é o teto (§7.1), e quem recusa é o servidor — a tela não esconde
-          o formulário, porque esconder transformaria uma recusa explicável em botão sumido. */}
-      <CreateForm busy={state.busy} />
-      {state.error !== null && <p className="system-error">{state.error}</p>}
-    </main>
+    <EntryShell screen="select" readiness={readiness}>
+      <CharacterGrid state={state} />
+    </EntryShell>
   );
 }

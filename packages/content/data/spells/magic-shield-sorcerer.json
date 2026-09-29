@@ -1,0 +1,16 @@
+{
+  "id": "magic-shield-sorcerer",
+  "name": "Magic Shield",
+  "description": "O dano recebido consome mana em vez de vida, por 180 segundos.",
+  "vocationId": "sorcerer",
+  "minLevel": 14,
+  "manaCost": 50,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 14000,
+  "effect": {
+    "kind": "mana-shield",
+    "durationMs": 180000
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. a mesma Magic Shield do Druid (DT-02)."
+}

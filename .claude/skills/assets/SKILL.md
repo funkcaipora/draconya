@@ -77,6 +77,8 @@ pacote de arte, nunca pelo conteúdo de jogo.
 
 ## Passo 5 — registrar a escolha
 
-Ao adicionar uma entidade, atualize a tabela de aparências da versão e rode `pnpm content:check`.
-Na entrega, rode `pnpm check`. Se uma troca de pacote exigir novo mapeamento, crie outro arquivo
-de versão em vez de alterar a arte de uma sessão em andamento.
+Ao adicionar uma entidade, atualize a tabela de aparências da versão e rode `pnpm content:check`
+— ele recusa um id que não existe no pacote, conferindo contra `data/packs/<pack>.json`
+(FUN-21). Na entrega, rode `pnpm check`. Se uma troca de pacote exigir novo mapeamento, crie
+outro arquivo de versão em vez de alterar a arte de uma sessão em andamento, e regenere o
+inventário do pacote novo com `pnpm assets:inventory` (ver `docs/asset-library.md`).

@@ -7,6 +7,13 @@ import { account } from './store.js';
 import * as api from './api.js';
 import { ApiError } from './api.js';
 
+/**
+ * A frase de "sem conexão": o `else` de `attempt` a usa quando a chamada nem chegou a
+ * responder. `Entry.tsx` (`entryReadiness`) compara contra ela para distinguir essa falha de
+ * uma recusa da API (o servidor respondeu, só que com "não").
+ */
+export const NO_SERVER_MESSAGE = 'Não foi possível falar com o servidor.';
+
 /** Roda a chamada mostrando "ocupado" e traduzindo a recusa. `null` quando ela falhou. */
 async function attempt<T>(run: () => Promise<T>): Promise<T | null> {
   account.set((state) => ({ ...state, busy: true, error: null }));
@@ -17,7 +24,7 @@ async function attempt<T>(run: () => Promise<T>): Promise<T | null> {
     // precisa saber que falhou mesmo quando ninguém previu o caso.
     const message = error instanceof ApiError
       ? error.message
-      : 'Não foi possível falar com o servidor.';
+      : NO_SERVER_MESSAGE;
     account.set((state) => ({ ...state, error: message }));
     return null;
   } finally {
@@ -71,5 +78,25 @@ export async function signOut(): Promise<void> {
   await attempt(api.logout);
   account.set((state) => ({
     ...state, phase: 'anonymous', identity: null, characters: [], playing: null,
+  }));
+}
+
+/**
+ * Tenta iniciar o login: se o servidor estiver em dev mode, retorna `'dev'` para que a UI
+ * mostre o campo de e-mail. Senão, navega para o WorkOS.
+ */
+export async function tryLogin(register = false): Promise<'dev' | 'navigating' | null> {
+  return attempt(() => api.beginLogin(register));
+}
+
+/**
+ * Login em dev mode: manda o e-mail, recebe o cookie, e recarrega a lista de personagens.
+ */
+export async function devLogin(email: string): Promise<void> {
+  const identity = await attempt(() => api.devLogin(email));
+  if (identity === null) return;
+  const characters = await attempt(api.listCharacters);
+  account.set((state) => ({
+    ...state, phase: 'ready', identity, characters: characters ?? [],
   }));
 }

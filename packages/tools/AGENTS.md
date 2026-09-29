@@ -2,8 +2,11 @@
 
 ## Propósito
 
-Ferramentas de desenvolvimento e operação: importadores (tilemap, rota, pacote de assets do
-cliente Tibia), o cliente sintético de carga e scripts de manutenção.
+Ferramentas de desenvolvimento e operação: o cliente sintético de carga, benchmarks e o
+`content:check`. Os importadores que falam com o pacote de arte e com o mapa real moram em
+`scripts/` na raiz (`pack-inventory.ts`, `import-map.ts`, `otbm.ts`, `fetch-map.ts`, `trace-route.ts`,
+`build-asset-library.ts`), porque importam `packages/client/src/assets` por caminho relativo
+sob o `tsconfig.tooling.json` — ver `docs/asset-library.md`.
 
 ## Fronteiras
 
@@ -54,6 +57,11 @@ pnpm vitest run packages/tools
   que aconteceu na FUN-68: o `pnpm check` ficou verde e o benchmark parou de rodar. Os scripts da
   raiz (`bench:hunts`, `bench:monster`, `load`, `content:check`) agora começam com `tsc -b`, que
   é incremental e custa nada quando já está em dia.
+- **`pnpm bench:hunts` não roda no CI, e por isso quebra em silêncio** (#179): ele parou quando
+  FUN-94 tornou a tabela de aparências obrigatória e ninguém viu por meses. O cenário vive em
+  `src/bench/cold-scenario.ts` e `cold-scenario.test.ts` monta e avança uma hunt — é o teste
+  que reprova no PR quando o contrato de `buildContent` mudar de novo. O relatório imprime a
+  CPU ao lado da parede: num laptop paginando a parede mediu 380 µs/tick onde a CPU gastou 16.
 - **`pnpm bench:hunts` só vale com a máquina junto.** O tick é single-thread, então quem decide é
   desempenho por core (ADR 0013); o relatório imprime plataforma, CPU e versão do Node por isso.
   Medir no laptop e extrapolar para o servidor erra.
@@ -63,5 +71,11 @@ pnpm vitest run packages/tools
 - **Observador de GC é `{ type: 'gc' }`, nunca `{ entryTypes: ['gc'] }`.** A segunda forma é
   aceita sem reclamar e não entrega entrada nenhuma no Node 24 — o relatório dizia "0 ms de GC" e
   não media coisa alguma.
+- **O cenário do CMB-10 é MISTO e roda pelo mesmo relatório** (`SCENARIO=combat pnpm bench:hunts`,
+  ou `pnpm bench:combat`): ability em área, resistência, defesa de escudo, condição/campo e
+  modificadores, sobre 40 monstros. `combat-scenario.test.ts` o monta no CI, como o frio. O
+  personagem entra VESTIDO (arma de uma mão + escudo) e com vida enorme — sem a vida enorme ele
+  morre, a sessão encerra, e o laço medido passa a rodar sessões mortas: o µs/tick despenca para
+  zero e o número vira mentira. Ver `docs/product/combat-conformance.md`.
 
 Issues: FUN-45 (cliente de carga), FUN-46 (cenário frio).

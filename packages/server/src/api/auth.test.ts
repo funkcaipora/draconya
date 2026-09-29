@@ -48,6 +48,7 @@ class MemoryRepository implements GameRepository {
     return {
       id: 'i1', itemId: instance.itemId, ownerCharacterId: instance.ownerCharacterId,
       quantity: instance.quantity ?? 1, origin: instance.origin, equippedSlot: null,
+      container: null, slotIndex: null,
       createdAt: new Date(0),
     };
   }
@@ -74,7 +75,12 @@ class MemoryRepository implements GameRepository {
   async createCharacter(): Promise<CharacterRecord> { throw new Error('not used'); }
   async listCharacters(): Promise<readonly CharacterRecord[]> { return []; }
   async getCharacter(): Promise<CharacterRecord | null> { return null; }
+  async getCharacterById(): Promise<CharacterRecord | null> { return null; }
   async ownsCharacter(): Promise<boolean> { return false; }
+  async getCharacterByName(): Promise<CharacterRecord | null> { return null; }
+  async addFriend(): Promise<never> { throw new Error('not used'); }
+  async listFriends() { return []; }
+  async removeFriend() { return false; }
   async withOwnedCharacter<T>(): Promise<T | null> { return null; }
   async softDeleteCharacter() { return 'not-found' as const; }
 }
@@ -210,6 +216,7 @@ describe('auth routes', () => {
   it('sets production cookies securely and uses only the configured callback destination', async () => {
     const sessions = new MemorySessions();
     const production = loadConfiguration({
+      PROCESSES: 'api',
       DATABASE_URL: 'postgres://localhost/test', REDIS_URL: 'redis://localhost',
       NODE_ENV: 'production', API_ORIGIN: 'https://play.example',
       WORKOS_API_KEY: 'test-key', WORKOS_CLIENT_ID: 'test-client',

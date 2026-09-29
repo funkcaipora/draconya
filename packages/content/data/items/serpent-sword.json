@@ -1,0 +1,16 @@
+{
+  "id": "serpent-sword",
+  "name": "Serpent Sword",
+  "kind": "weapon",
+  "slot": "hand",
+  "weight": 41,
+  "value": 900,
+  "attack": 18,
+  "defense": 15,
+  "_open": "Loot do Dragon (#520). Canary `items.xml` id 3297 (`serpent sword`): attack 18, defense 15, weight 4100 (41 oz) — sem level/vocação. Tem um componente elemental de terra (`elementearth 8`) que este catálogo não modela (`weapon.damageType` é um tipo só por arma, CMB-03); `attack` fica só o físico, divergência registrada em `docs/product/items.md`. `value` 900: NPC Alesar compra por esse preço, confirmado via WebSearch (TibiaWiki) — fato do Tibia (ADR 0037 d.4).",
+  "weapon": {
+    "kind": "melee",
+    "family": "sword",
+    "range": 1
+  }
+}

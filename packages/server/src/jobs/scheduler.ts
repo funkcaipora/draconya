@@ -22,6 +22,8 @@ import type { ReceiptStore } from '../receipts.js';
 import type { Database } from '../db/client.js';
 import { sweepOrphanedSessions } from './orphans.js';
 import type { Progression } from '@draconya/content';
+import type { BotConfigStore } from '../bot-config-store.js';
+import { writePendingBotConfigs } from './bot-config.js';
 import { writePendingReceipts } from './ledger.js';
 import type { JobsMetrics } from './metrics.js';
 import type { SingletonLock } from './lock.js';
@@ -33,6 +35,7 @@ export interface JobsDependencies {
   readonly snapshots?: SnapshotStore;
   readonly receipts?: ReceiptStore;
   readonly database?: Database;
+  readonly botConfigs?: BotConfigStore;
   /** Curva de XP, para o `jobs` derivar o level ao creditar a progressão (FUN-54). */
   readonly progression?: Progression;
   /** Onde o ciclo conta o que fez (FUN-59). Ausente: o `jobs` roda igual, só não expõe nada. */
@@ -90,7 +93,7 @@ export function createJobsCycle(
       } catch (error) {
         // Redis fora do ar: NÃO rodar. Assumir a liderança quando não dá para saber quem a
         // tem é a única forma de ter dois líderes de verdade.
-        logger.error({ error }, 'Could not reach the singleton lock; skipping this cycle');
+        logger.error({ err: error }, 'Could not reach the singleton lock; skipping this cycle');
         metrics?.observeLock(false);
         return;
       }
@@ -129,6 +132,14 @@ export function createJobsCycle(
         if (written > 0 || failed > 0) logger.info({ written, failed }, 'Wrote session receipts');
       }
 
+      if (dependencies.botConfigs !== undefined && dependencies.database !== undefined) {
+        const result = await writePendingBotConfigs({
+          database: dependencies.database, botConfigs: dependencies.botConfigs, logger,
+        });
+        if (result.written > 0 || result.failed > 0) logger.info(result, 'Wrote bot configurations');
+        if (result.failed > 0) metrics?.observeCycleFailure();
+      }
+
       // FUN-28: sessão órfã é snapshot sem lease. Este ciclo NÃO retoma — retomar é
       // hospedar, e quem hospeda é o `game`, no `prepare` de quem reconectar. Aqui só se
       // devolve o slot de quem não voltou, para o jogador poder usar os outros personagens.
@@ -162,7 +173,7 @@ export function createJobsCycle(
       // O `catch` continua engolindo — um ciclo que explode não pode derrubar o processo —,
       // mas agora conta. Antes, só logava, e log ninguém alerta.
       metrics?.observeCycleFailure();
-      logger.error({ error }, 'Scheduler cycle failed');
+      logger.error({ err: error }, 'Scheduler cycle failed');
     } finally {
       running = false;
     }
@@ -205,7 +216,6 @@ export function createJobs(
         await http.listen({ port: configuration.JOBS_PORT, host: '0.0.0.0' });
         logger.info({ port: configuration.JOBS_PORT }, 'Jobs metrics listening');
       }
-      // TODO(FUN-28): tomar o lock de singleton no Redis antes de começar a agendar.
       timer = setInterval(() => void cycle.run(), SCHEDULE_INTERVAL_MS);
       logger.info({ intervalMs: SCHEDULE_INTERVAL_MS }, 'Jobs started');
     },

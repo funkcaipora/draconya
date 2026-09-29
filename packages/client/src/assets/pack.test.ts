@@ -3,6 +3,7 @@ import { outfitColor } from './outfit.js';
 import { AssetPack, DIRECTIONS } from './pack.js';
 import { spriteBytes } from './sprites.js';
 import type { Sprite } from './sprites.js';
+import { NO_DISPLACEMENT } from '../world/walking-tile.js';
 
 /**
  * O pacote inteiro, servido de um objeto em memória.
@@ -21,12 +22,13 @@ class FakeBitmap implements Sprite {
 
 /** Um `.dat` de mentira precisa ser protobuf de verdade — o leitor é o real. */
 import {
-  appearance, appearances as encodeAppearances, frameGroup,
+  appearance, appearances as encodeAppearances, flags, frameGroup,
 } from './testing.js';
 
 const CATALOG = [
   { type: 'appearances', file: 'app.dat' },
   { type: 'sprite', file: 'folha.bmp.lzma', spritetype: 0, firstspriteid: 1, lastspriteid: 288 },
+  { type: 'sprite', file: 'grande.bmp.lzma', spritetype: 3, firstspriteid: 300, lastspriteid: 335 },
 ];
 
 /** Uma faixa de ids consecutivos, para escrever `frameGroup` de 96 quadros sem digitá-los. */
@@ -41,6 +43,9 @@ const ids = (from: number, count: number) => Array.from({ length: count }, (_, i
 const DAT = encodeAppearances({
   object: [
     appearance({ id: 357, frameGroups: [frameGroup({ spriteIds: [10] })] }),
+    // Um objeto grande: o primeiro sprite mora na folha de `spritetype` 3 (64×64), e a
+    // `objectSize` tem que sair em TILES — `{2, 2}`, não `{64, 64}`.
+    appearance({ id: 358, frameGroups: [frameGroup({ spriteIds: [300] })] }),
     // 4×2 e não 4×4 como a grama real: largura e altura DIFERENTES, para um teste poder
     // distinguir "trocou os dois" de "acertou".
     appearance({
@@ -58,6 +63,9 @@ const DAT = encodeAppearances({
           phases: [[100, 100], [100, 100], [100, 100]],
         }),
       ],
+      // O shift do outfit (#386): o walking tile e o desenho do sprite o usam. O 128 fica
+      // SEM, de propósito — é o caso comum e o teste de `{0, 0}`.
+      flags: flags({ shift: { x: 8, y: 8 } }),
     }),
     appearance({
       id: 128,
@@ -241,6 +249,39 @@ describe('AssetPack (FUN-23)', () => {
     expect(pack.objectPattern(355)).toEqual({ width: 4, height: 2 });
     expect(pack.objectPattern(357)).toEqual({ width: 1, height: 1 });
     expect(pack.objectPattern(99_999)).toEqual({ width: 1, height: 1 });
+  });
+
+  it('`objectSize` sai em TILES, pela folha em que mora o PRIMEIRO sprite (M23, D3)', async () => {
+    // A dimensão é a RESERVA da classificação de camada: um objeto passável sem flag que mede
+    // mais de um tile transborda para o vizinho e precisa de ordem espacial. Ela vem da
+    // geometria que o catálogo já declara por `spritetype` — 0 é 32×32, 3 é 64×64 —, então é
+    // síncrona e não baixa folha nenhuma.
+    // Mutação que mata: devolver pixels (`{64, 64}`), ou procurar a folha errada por `<` no
+    // lugar de `<=` na faixa; ou id desconhecido lançando em vez de `{1, 1}`.
+    const { pack, baixadas } = await build();
+    expect(pack.objectSize(358)).toEqual({ width: 2, height: 2 });
+    expect(pack.objectSize(357)).toEqual({ width: 1, height: 1 });
+    expect(pack.objectSize(99_999)).toEqual({ width: 1, height: 1 });
+    expect(baixadas).toEqual(['catalog-content.json', 'app.dat']);
+  });
+
+  it('`outfitDisplacement` devolve o `shift` do OUTFIT, e `{0, 0}` no caso comum (#386)', async () => {
+    // O shift já era lido do `.dat` para toda aparência, mas só o objeto o usava; o walking tile
+    // (#386) o precisa no outfit. Ler `object` em vez de `outfit` daria `{0, 0}` para o 21 (o
+    // objeto 355 não tem shift), e o teste do 128 prende o caso comum.
+    // Mutação que mata: `this.#appearances.object.get(...)` no lugar de `outfit`.
+    const { pack } = await build();
+    expect(pack.outfitDisplacement(21)).toEqual({ x: 8, y: 8 });
+    // O caso comum é o MESMO objeto congelado — nada alocado por criatura por quadro.
+    expect(pack.outfitDisplacement(128)).toBe(NO_DISPLACEMENT);
+    expect(pack.outfitDisplacement(99_999)).toBe(NO_DISPLACEMENT);
+  });
+
+  it('`outfitDisplacement` de id que não existe não lança (#386)', async () => {
+    // Um `?.flags` mal encadeado explodiria no viewport a cada quadro de uma criatura cujo
+    // outfit saiu do pacote — a degradação certa é a âncora, nunca um `TypeError`.
+    const { pack } = await build();
+    expect(pack.outfitDisplacement(355)).toBe(NO_DISPLACEMENT);
   });
 
   it('`outfit` com cores sai PINTADO: o vermelho do template multiplica a cor do corpo', async () => {
@@ -469,5 +510,72 @@ describe('AssetPack (FUN-23)', () => {
       loader: { decode: async () => ({ width: 1, height: 1, pixels: new Uint8ClampedArray(4) }) },
       createBitmap: async (p) => new FakeBitmap(1, 1, p),
     })).rejects.toThrow(/catalog-content\.json respondeu 500/);
+  });
+});
+
+describe('warmOutfit (FUN-112)', () => {
+  it('pede todos os quadros do outfit: a folha é baixada UMA vez, e depois todo quadro vem do cache', async () => {
+    // O rato era um quadrado por seis a dez segundos na primeira entrada: cada folha só
+    // decodificava quando o primeiro quadro dela era desenhado. Mutação que mata: aquecer
+    // só o grupo parado (o quadro andando abaixo voltaria a pedir folha), ou só a base de um
+    // outfit de duas camadas.
+    const decode = vi.fn(async () => sheetWith());
+    const { pack, baixadas } = await build({ decode });
+    const downloads = () => baixadas.filter((name) => name === 'folha.bmp.lzma').length;
+    // Dezesseis quadros do rato numa folha só: a folha desce UMA vez (a cache deduplica o voo).
+    await pack.warmOutfit(21);
+    expect(downloads()).toBe(1);
+    expect(decode).toHaveBeenCalledTimes(1);
+
+    // Parado e andando, todas as direções: nada disto volta à rede nem ao decoder.
+    for (const direction of DIRECTIONS) {
+      expect(await pack.outfit(21, direction, 0, false)).not.toBeNull();
+      expect(await pack.outfit(21, direction, 2, true)).not.toBeNull();
+    }
+    expect(downloads()).toBe(1);
+    expect(decode).toHaveBeenCalledTimes(1);
+
+    // O outfit de DUAS camadas aquece base E template. O quadro pintado passa por `pixels()`,
+    // que volta à folha — no navegador, à cópia decodificada no IndexedDB (FUN-19), que é o
+    // que o aquecimento enche; aqui, sem IndexedDB, à rede. O que se prende é que o
+    // aquecimento pediu a folha do 128 (que é a mesma do fixture) e não lançou.
+    await pack.warmOutfit(128);
+    expect(downloads()).toBeGreaterThanOrEqual(2);
+    expect(await pack.outfit(128, 'south', 0, false, COLORS)).not.toBeNull();
+  });
+
+  it('aquece a BASE e o TEMPLATE de um outfit de duas camadas — um bitmap por quadro por camada', async () => {
+    // O template é o que o compositor multiplica pela cor; aquecer só a base deixaria metade
+    // das folhas do jogador para a primeira pintura. Contado em bitmaps criados, porque é o
+    // único lado observável sem IndexedDB. Mutação que mata: `const layers = [LAYER_BASE]`.
+    let created = 0;
+    const fetched = vi.fn(async (url: string | URL | Request) => {
+      const name = String(url).split('/').pop() ?? '';
+      if (name === 'catalog-content.json') return new Response(JSON.stringify(CATALOG));
+      if (name === 'app.dat') return new Response(DAT.buffer as ArrayBuffer);
+      return new Response(new ArrayBuffer(8));
+    }) as unknown as typeof globalThis.fetch;
+    const pack = await AssetPack.load({
+      baseUrl: 'https://exemplo/things/1332', fetch: fetched,
+      loader: { decode: async () => sheetWith() },
+      createBitmap: async (p, w, h) => { created += 1; return new FakeBitmap(w, h, p); },
+    });
+    // O 21 tem uma camada: 4 parado + 4 × 3 andando = 16 quadros, 16 bitmaps.
+    await pack.warmOutfit(21);
+    expect(created).toBe(16);
+    // O 128 tem duas: (4 parado + 4 × 2 andando) × 2 camadas = 24 bitmaps a mais.
+    await pack.warmOutfit(128);
+    expect(created).toBe(16 + 24);
+  });
+
+  it('outfit que o pacote não tem não pede nada', async () => {
+    const { pack, baixadas } = await build();
+    await pack.warmOutfit(9_999);
+    expect(baixadas).toEqual(['catalog-content.json', 'app.dat']);
+  });
+
+  it('folha que não abre não derruba o aquecimento', async () => {
+    const { pack } = await build({ decode: async () => { throw new Error('LZMA corrompido'); } });
+    await expect(pack.warmOutfit(21)).resolves.toBeUndefined();
   });
 });

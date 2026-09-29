@@ -46,6 +46,11 @@ export interface LoadReport {
   readonly scenario: {
     sessions: number; mode: string; durationMs: number; workers: number;
     apiUrl: string; huntId: string; difficulty: string;
+    /** Parties de N (#198). Ausente ou 1 é solo. */
+    party?: number;
+    /** Os dois eixos do ADR 0035 D1 (#407): substituem o `partyMode` derivado. */
+    shareCosts?: boolean;
+    splitLoot?: boolean;
   };
   readonly sessions: {
     opened: number; failed: number; failures: Record<string, number>;
@@ -160,6 +165,14 @@ export function formatReport(report: LoadReport): string {
   row('workers', String(report.scenario.workers));
   row('duração', `${Math.round(report.scenario.durationMs / 1000)} s`);
   row('hunt', `${report.scenario.huntId} / ${report.scenario.difficulty}`);
+  if ((report.scenario.party ?? 1) > 1) {
+    const size = report.scenario.party ?? 1;
+    // A sobra entra solo, e o relatório diz: "3 parties de 4 + 1 solo" é o que se rodou.
+    const parties = Math.floor(report.scenario.sessions / size);
+    const solo = report.scenario.sessions - parties * size;
+    const axes = `rateio ${report.scenario.shareCosts ?? true ? 'on' : 'off'}, lucro ${report.scenario.splitLoot ?? true ? 'on' : 'off'}`;
+    row('parties', `${String(parties)} de ${String(size)} (${axes})${solo > 0 ? ` + ${String(solo)} solo` : ''}`);
+  }
 
   lines.push('--- sessões ---------------------------------------------------------');
   row('abertas', String(report.sessions.opened));

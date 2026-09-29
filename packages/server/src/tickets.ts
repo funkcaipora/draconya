@@ -15,6 +15,8 @@
 
 import { randomBytes } from 'node:crypto';
 import type { Redis } from 'ioredis';
+import { OutfitColors } from '@draconya/protocol';
+import type { BestiaryState } from '@draconya/sim';
 import type { NodeStatus, SessionDirectory } from './directory.js';
 
 export interface TicketClaim {
@@ -22,6 +24,37 @@ export interface TicketClaim {
   readonly characterId: string;
   readonly nodeId: string;
   readonly initialCharacter?: InitialCharacter;
+  /**
+   * A party (#195, ADR 0027): o MESMO bloco em cada ticket dos N membros, com o estado inicial
+   * de todos — o primeiro a chegar ao `game` cria a sessão com os N, os seguintes se anexam
+   * a ela. Vem do `api`, assinado como o resto (invariante 4): nada disto passa pelo cliente.
+   */
+  readonly party?: PartyTicket;
+}
+
+export interface PartyTicket {
+  readonly sessionId: string;
+  readonly leaderId: string;
+  /**
+   * Os dois eixos do líder (ADR 0035 D1), no lugar de `mode`. O `mode` continua aceito na
+   * LEITURA por um deploy em rolagem (`parsePartyTicket`) — um `api` antigo ainda o emite, e a
+   * migração é a mesma do snapshot: `'shared'` liga os dois, `'split'` desliga os dois.
+   */
+  readonly shareCosts: boolean;
+  readonly splitLoot: boolean;
+  readonly huntId: string;
+  readonly difficulty: string;
+  /**
+   * `true`: ticket de ENTRADA numa hunt já em curso (#402, ADR 0035 D7) — `members` tem
+   * exatamente UM, e o `game` chama `session.enter` na sessão hospedada em vez de criá-la.
+   */
+  readonly join?: true;
+  /** Na ordem de entrada: é a ordem em que a sessão os recebe. */
+  readonly members: ReadonlyArray<{
+    readonly characterId: string;
+    readonly accountId: string;
+    readonly initialCharacter: InitialCharacter;
+  }>;
 }
 
 /** Estado persistido necessário para criar a primeira sessão sem confiar no cliente. */
@@ -83,6 +116,58 @@ export interface InitialCharacter {
    * ticket emitido por um `api` antigo, durante deploy em rolagem — o host assina com o id.
    */
   readonly name?: string;
+  /**
+   * As cores do outfit (FUN-104), como quem está por perto precisa vê-lo pintado.
+   *
+   * Vêm pelo ticket, como o `name`, e pela mesma razão: é dado do personagem que só a
+   * apresentação lê — o `sim` não conhece cor, e o snapshot não a carrega. Ao contrário de
+   * `botConfig`, chegam JÁ VALIDADAS contra o schema do protocolo: a forma é do protocolo, não
+   * de domínio nenhum, e o `game` as repete no `creature-appear` sem olhar. Ausente é
+   * personagem que nunca escolheu (ou ticket de um `api` antigo): o cliente pinta com as
+   * cores de personagem novo.
+   */
+  readonly outfitColors?: OutfitColors;
+  /**
+   * Abates por monstro (§18, FUN-113), JÁ VALIDADOS: `monsterId → abates`.
+   *
+   * Entram na sessão, e não só saem dela, porque o bônus dos marcos escala a XP DURANTE a
+   * hunt (DT-01): um personagem que entrasse sempre em `{}` ganharia XP sem bônus a hunt
+   * inteira, e o marco que ele cruzou ontem não valeria nada hoje. Vêm do banco pelo mesmo
+   * caminho que level, XP e skills, e pela mesma razão (invariante 4).
+   *
+   * Tipados, ao contrário de `skills`: a forma é um mapa de inteiros, e conferir isso não é
+   * conhecer domínio nenhum — é o que faz o `game` espalhar sem cast. Ausente é personagem que
+   * nunca abateu nada (ou ticket de um `api` antigo): a sessão parte de `{}`.
+   */
+  readonly bestiary?: BestiaryState;
+  /** A munição escolhida por família (#152), validada como o Bestiário. */
+  readonly ammo?: Readonly<Record<string, string>>;
+  /**
+   * O estoque de supply do loot (#520): `supplyId → quantidade`. Entra na sessão, e não só sai
+   * dela — sem isto, uma hunt nova sempre começaria com estoque zero, e uma Strong Health
+   * Potion caída ontem sumiria no login de hoje. Tipado como o Bestiário: mapa de inteiros,
+   * conferido sem conhecer domínio. Ausente é quem nunca recebeu um drop, ou ticket de um `api`
+   * antigo: a sessão parte de `{}`.
+   */
+  readonly supplyStock?: Readonly<Record<string, number>>;
+  /** O estoque de munição do loot (#520), pela mesma razão e a mesma forma do `supplyStock`. */
+  readonly ammunitionStock?: Readonly<Record<string, number>>;
+  /**
+   * A vocação (#154), lida de `characters.vocation`. Ausente é quem ainda não escolheu — ou
+   * ticket de um `api` anterior: a sessão entra sem vocação e o diálogo aparece de novo, o que
+   * `already-chosen` no `sim` não impede, mas o `coalesce` do `jobs` impede de gravar duas.
+   */
+  readonly vocation?: string;
+  /**
+   * Premium do personagem (ADR 0035 D3), já resolvido contra o relógio pelo `api` — a sessão
+   * nunca compara datas, só lê um boolean. É o que decide o limite de venda automática do
+   * LÍDER e a penalidade de morte de cada membro.
+   *
+   * O PRD fala da "conta do líder"; o contrato persistido é por personagem
+   * (`characters.premium_until`, ADR 0014 — não se renomeia). Ausente é Free, ou ticket de um
+   * `api` antigo — nunca ticket recusado (regra do Bestiário).
+   */
+  readonly premium?: boolean;
 }
 
 export interface IssuedTicket {
@@ -242,6 +327,7 @@ export class TicketService {
     characterId: string,
     initialCharacter?: InitialCharacter,
     resolved?: NodeStatus,
+    party?: PartyTicket,
   ): Promise<IssueResult> {
     let node: NodeStatus | undefined = resolved;
     if (node === undefined) {
@@ -256,6 +342,7 @@ export class TicketService {
       characterId,
       nodeId: node.nodeId,
       ...(initialCharacter === undefined ? {} : { initialCharacter }),
+      ...(party === undefined ? {} : { party }),
     };
     const issuedAtMs = this.#now();
     const reservationTtlMs = this.#ttlMs + this.#graceMs;
@@ -297,6 +384,20 @@ export class TicketService {
         expiresAtMs: issuedAtMs + this.#ttlMs,
       },
     };
+  }
+
+  /**
+   * Desfaz uma emissão (#195): o `start` de uma party emite N tickets, e se o quarto falha os
+   * três primeiros não podem ficar reservando slot e apontando para uma sessão que não vai
+   * existir. Apaga o ticket, a reserva pendente e o slot ativo — como a varredura faria no
+   * prazo, só que agora.
+   */
+  async revoke(token: string, accountId: string, characterId: string): Promise<void> {
+    await this.#redis.multi()
+      .del(ticketKey(token))
+      .zrem(PENDING_KEY, pendingMember(accountId, characterId))
+      .srem(activeCharactersKey(accountId), characterId)
+      .exec();
   }
 
   /**
@@ -400,11 +501,54 @@ function parseClaim(raw: string): TicketClaim | null {
   const rawInitial = value['initialCharacter'];
   const initialCharacter = parseInitialCharacter(rawInitial);
   if (rawInitial !== undefined && initialCharacter === undefined) return null;
+  const rawParty = value['party'];
+  const party = parsePartyTicket(rawParty);
+  if (rawParty !== undefined && party === undefined) return null;
   return {
     accountId: value['accountId'],
     characterId: value['characterId'],
     nodeId: value['nodeId'],
     ...(initialCharacter === undefined ? {} : { initialCharacter }),
+    ...(party === undefined ? {} : { party }),
+  };
+}
+
+/** A party do ticket (#195), pela mesma régua do `initialCharacter`: torta é ticket recusado. */
+function parsePartyTicket(value: unknown): PartyTicket | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'object' || value === null) return undefined;
+  const raw = value as Record<string, unknown>;
+  // Compat de um deploy (D1): um `api` ainda não atualizado manda `mode`; a leitura migra com
+  // a MESMA tabela do snapshot antigo — 'shared' liga os dois eixos, 'split' desliga os dois.
+  const hasAxes = typeof raw['shareCosts'] === 'boolean' || typeof raw['splitLoot'] === 'boolean';
+  const hasMode = raw['mode'] === 'split' || raw['mode'] === 'shared';
+  // O ticket de ENTRADA (#402) é o único caso de um membro só: o recém-chegado entra numa hunt
+  // que já existe, e o bloco da party não carrega os N de novo.
+  const join = raw['join'] === true;
+  if (
+    typeof raw['sessionId'] !== 'string' || typeof raw['leaderId'] !== 'string'
+    || (!hasAxes && !hasMode)
+    || typeof raw['huntId'] !== 'string' || typeof raw['difficulty'] !== 'string'
+    || !Array.isArray(raw['members']) || raw['members'].length < (join ? 1 : 2)
+  ) {
+    return undefined;
+  }
+  const shareCosts = typeof raw['shareCosts'] === 'boolean' ? raw['shareCosts'] : raw['mode'] === 'shared';
+  const splitLoot = typeof raw['splitLoot'] === 'boolean' ? raw['splitLoot'] : raw['mode'] === 'shared';
+  const members: PartyTicket['members'][number][] = [];
+  for (const entry of raw['members'] as unknown[]) {
+    if (typeof entry !== 'object' || entry === null) return undefined;
+    const member = entry as Record<string, unknown>;
+    const initialCharacter = parseInitialCharacter(member['initialCharacter']);
+    if (typeof member['characterId'] !== 'string' || typeof member['accountId'] !== 'string' || initialCharacter === undefined) {
+      return undefined;
+    }
+    members.push({ characterId: member['characterId'], accountId: member['accountId'], initialCharacter });
+  }
+  return {
+    sessionId: raw['sessionId'], leaderId: raw['leaderId'], shareCosts, splitLoot,
+    huntId: raw['huntId'], difficulty: raw['difficulty'], members,
+    ...(join ? { join: true as const } : {}),
   };
 }
 
@@ -432,11 +576,16 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     : {};
   const name = initial['name'];
   const gold = initial['gold'];
+  // Cores fora da paleta ou com peça faltando viram AUSENTES, nunca ticket recusado: a linha
+  // do banco é `jsonb` sem CHECK, e um valor corrompido ali não pode trancar o personagem
+  // fora do jogo por causa de cor. Sem cores o cliente pinta o padrão — degradação, não perda.
+  const colors = OutfitColors.safeParse(initial['outfitColors']);
   return {
     level,
     xp,
     ...stamina,
     ...(typeof name === 'string' && name.length > 0 ? { name } : {}),
+    ...(colors.success ? { outfitColors: colors.data } : {}),
     // Gold inválido vira AUSENTE, não zero implícito com cara de valor: o resultado é o mesmo
     // saldo zero, mas quem lê o ticket consegue distinguir "não veio" de "veio como 0".
     ...(typeof gold === 'number' && Number.isSafeInteger(gold) && gold >= 0 ? { gold } : {}),
@@ -452,7 +601,72 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     ...(typeof initial['inventory'] === 'object' && initial['inventory'] !== null
       ? { inventory: initial['inventory'] }
       : {}),
+    // O Bestiário passa VALIDADO, como as cores e ao contrário das skills: a forma é um mapa
+    // de inteiros, e um valor torto vira AUSENTE — a sessão parte de `{}` — em vez de virar
+    // `NaN` dentro do motor ou de recusar o ticket por causa de uma contagem.
+    ...(isBestiaryState(initial['bestiary']) ? { bestiary: initial['bestiary'] } : {}),
+    ...(isAmmoSelection(initial['ammo']) ? { ammo: initial['ammo'] } : {}),
+    // O estoque de supply/munição (#520): mesma régua de forma do Bestiário — objeto de
+    // inteiros seguros, não negativos, sob chaves não vazias — porque valem pelo mesmo motivo:
+    // um valor torto vira AUSENTE, nunca ticket recusado.
+    ...(isStockMap(initial['supplyStock']) ? { supplyStock: initial['supplyStock'] } : {}),
+    ...(isStockMap(initial['ammunitionStock']) ? { ammunitionStock: initial['ammunitionStock'] } : {}),
+    // A vocação (#154): string não vazia; qualquer outra coisa vira AUSENTE, nunca ticket
+    // recusado — como o Bestiário.
+    ...(typeof initial['vocation'] === 'string' && initial['vocation'].length > 0
+      ? { vocation: initial['vocation'] }
+      : {}),
+    // O Premium (ADR 0035 D3): booleano ou AUSENTE, nunca ticket recusado. Um valor torto vira
+    // Free — a mesma régua das cores e do Bestiário —, porque a linha do banco não tem CHECK.
+    ...(typeof initial['premium'] === 'boolean' ? { premium: initial['premium'] } : {}),
   };
+}
+
+/**
+ * A forma da munição escolhida (#152): objeto `família → id`, strings não vazias. Um valor que
+ * não bate vira AUSENTE — a sessão atira a grátis —, nunca ticket recusado, pela razão do
+ * Bestiário. Exportada para o `api` conferir a linha com a MESMA régua do `consume`.
+ */
+export function isAmmoSelection(value: unknown): value is Readonly<Record<string, string>> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return Object.entries(value).every(([family, ammoId]) =>
+    family.length > 0 && typeof ammoId === 'string' && ammoId.length > 0);
+}
+
+/**
+ * A forma de `BestiaryState` (§18, FUN-113): objeto cujos valores são inteiros seguros, não
+ * negativos, sob chaves não vazias.
+ *
+ * Um valor que não bate vira AUSENTE, nunca ticket recusado: a linha do banco é `jsonb` sem
+ * CHECK, e uma contagem corrompida não pode trancar o personagem fora do jogo. Array fica de
+ * fora de propósito — `Object.values` de um array daria contagens sem monstro. A chave vazia
+ * também: o schema do protocolo a recusa, e a mensagem `bestiary` inteira sumiria em silêncio.
+ *
+ * Exportada para o `api` conferir a linha com a MESMA régua que o `consume` usa — duas réguas
+ * divergiriam na primeira mudança em uma delas.
+ */
+export function isBestiaryState(value: unknown): value is BestiaryState {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return Object.entries(value).every(([monsterId, kills]) =>
+    monsterId.length > 0
+    && typeof kills === 'number'
+    && Number.isSafeInteger(kills)
+    && kills >= 0);
+}
+
+/**
+ * A forma de um estoque de loot (#520: `supplyStock`/`ammunitionStock`) — a MESMA régua do
+ * Bestiário (objeto de inteiros seguros, não negativos, sob chaves não vazias), com nome
+ * próprio porque o domínio é outro: aqui a chave é `supplyId`/`ammunitionId`, não `monsterId`.
+ * Um valor torto vira AUSENTE, nunca ticket recusado, pela mesma razão do Bestiário.
+ */
+export function isStockMap(value: unknown): value is Readonly<Record<string, number>> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return Object.entries(value).every(([id, quantity]) =>
+    id.length > 0
+    && typeof quantity === 'number'
+    && Number.isSafeInteger(quantity)
+    && quantity >= 0);
 }
 
 function parseMember(member: string): { accountId: string; characterId: string } | null {

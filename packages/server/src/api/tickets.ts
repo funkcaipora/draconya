@@ -2,8 +2,11 @@
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import type { IssueFailure, TicketService } from '../tickets.js';
-import type { GameRepository } from '../db/repository.js';
+import { OutfitColors } from '@draconya/protocol';
+import type { BestiaryState } from '@draconya/sim';
+import { isAmmoSelection, isBestiaryState, isStockMap } from '../tickets.js';
+import type { InitialCharacter, IssueFailure, TicketService } from '../tickets.js';
+import type { CharacterRecord, GameRepository } from '../db/repository.js';
 
 export interface Principal {
   readonly accountId: string;
@@ -11,7 +14,7 @@ export interface Principal {
 
 export interface TicketRouteDependencies {
   /** Só a emissão: a rota não consome ticket, e o tipo estreito é o que diz isso. */
-  readonly tickets: Pick<TicketService, 'issue' | 'resolveNode'>;
+  readonly tickets: Pick<TicketService, 'issue' | 'resolveNode' | 'revoke'>;
   /**
    * Quem está pedindo. A sessão HTTP é resolvida aqui e MORRE aqui: o que segue para o
    * socket é o ticket, nunca a credencial (invariante 4 aplicado à borda de entrada).
@@ -123,7 +126,7 @@ export function createTicketHandler(
     try {
       settlement = await settleProgress(body.data.characterId);
     } catch (error) {
-      request.log.error({ error, characterId: body.data.characterId }, 'Settlement failed');
+      request.log.error({ err: error, characterId: body.data.characterId }, 'Settlement failed');
       return reply.code(503).send({ error: 'progress-not-settled' });
     }
     // Recusar em vez de deixar passar: entrar com um personagem que o servidor SABE estar
@@ -143,22 +146,12 @@ export function createTicketHandler(
     const issued = await withOwnedCharacter(
       principal.accountId,
       body.data.characterId,
-      async (character) => deps.tickets.issue(principal.accountId, character.id, {
-        level: character.level,
-        xp: character.xp,
-        name: character.name,
-        gold: character.gold,
-        // A configuração do bot viaja no ticket (FUN-81): é assim que ela chega ao `game`,
-        // que não fala com o Postgres. Mesmo caminho de level, XP e gold.
-        ...(character.botConfig === null ? {} : { botConfig: character.botConfig }),
-        // As skills entram na sessão porque escalam o dano DURANTE a hunt (FUN-75).
-        skills: character.skills,
-        // E o inventário, porque a arma equipada decide o dano (FUN-82). A consulta usa o
-        // índice por dono, e roda uma vez por emissão de ticket — não no caminho de tick.
-        inventory: inventoryOf(await deps.listItemInstances?.(character.id) ?? []),
-        staminaMs: character.staminaMs,
-        staminaUpdatedAtMs: character.staminaUpdatedAt.getTime(),
-      }, resolution.node),
+      async (character) => deps.tickets.issue(
+        principal.accountId,
+        character.id,
+        initialCharacterOf(character, await deps.listItemInstances?.(character.id) ?? []),
+        resolution.node,
+      ),
     );
     if (issued === null) {
       return reply.code(404).send({ error: 'character-not-found' });
@@ -180,6 +173,82 @@ export function createTicketHandler(
 }
 
 /**
+ * O que o ticket carrega de um personagem: a linha do banco, validada campo a campo. É a
+ * MESMA montagem para o ticket solo e para cada membro de uma party (#195) — o `game` não
+ * fala com o Postgres, e tudo o que a sessão precisa saber do personagem passa por aqui.
+ */
+export function initialCharacterOf(
+  character: CharacterRecord,
+  instances: Parameters<typeof inventoryOf>[0],
+): InitialCharacter {
+  return {
+    level: character.level,
+    xp: character.xp,
+    name: character.name,
+    gold: character.gold,
+    // A configuração do bot viaja no ticket (FUN-81): é assim que ela chega ao `game`,
+    // que não fala com o Postgres. Mesmo caminho de level, XP e gold.
+    ...(character.botConfig === null ? {} : { botConfig: character.botConfig }),
+    // As cores do outfit viajam no ticket como o nome (FUN-104): dado do personagem que só
+    // a apresentação lê, e o `game` não fala com o Postgres. Validadas AQUI, e não só no
+    // consumo: é o que faz o tipo do ticket dizer a verdade sem cast, e a linha é `jsonb`
+    // sem CHECK — um valor corrompido vira ausente, nunca personagem trancado fora.
+    ...outfitColorsOf(character.outfitColors),
+    // As skills entram na sessão porque escalam o dano DURANTE a hunt (FUN-75).
+    skills: character.skills,
+    // E o Bestiário, porque o bônus dos marcos escala a XP durante a hunt (FUN-113).
+    // Validado AQUI como as cores: a linha é `jsonb` sem CHECK, e uma contagem corrompida
+    // vira ausente — a sessão parte de `{}` — em vez de trancar o login.
+    ...bestiaryOf(character.bestiary),
+    // E a munição escolhida (#152), pela mesma régua do Bestiário: torta vira ausente.
+    ...(isAmmoSelection(character.ammo) ? { ammo: character.ammo } : {}),
+    // E o estoque de supply/munição do loot (#520), mesma régua: sem isto, uma hunt nova
+    // sempre começaria com estoque zero, mesmo com drop de ontem esperando na linha.
+    ...(isStockMap(character.supplyStock) ? { supplyStock: character.supplyStock } : {}),
+    ...(isStockMap(character.ammunitionStock) ? { ammunitionStock: character.ammunitionStock } : {}),
+    // E a vocação (#154): escrita uma vez pelo `jobs`, lida aqui a cada entrada.
+    ...(character.vocation === null ? {} : { vocation: character.vocation }),
+    // E o Premium (ADR 0035 D3): derivado AQUI contra o relógio — a sessão nunca compara datas,
+    // só lê um boolean já resolvido. `null` ou vencido é Free, e ausente é o que o ticket
+    // carrega: a sessão trata ausência como `false` (a regra do Bestiário, degradação).
+    ...(character.premiumUntil !== null && character.premiumUntil.getTime() > Date.now()
+      ? { premium: true }
+      : {}),
+    // E o inventário, porque a arma equipada decide o dano (FUN-82). A consulta usa o
+    // índice por dono, e roda uma vez por emissão de ticket — não no caminho de tick.
+    inventory: inventoryOf(instances),
+    staminaMs: character.staminaMs,
+    staminaUpdatedAtMs: character.staminaUpdatedAt.getTime(),
+  };
+}
+
+/**
+ * As cores do outfit como o ticket as carrega, ou nada (FUN-104).
+ *
+ * `null` é personagem que nunca escolheu, e é o caso comum enquanto a tela (§7.4) não existe.
+ * Qualquer outra coisa que não bata no schema do protocolo — peça faltando, índice fora da
+ * paleta — cai no mesmo "nada": o cliente pinta o padrão, e a emissão do ticket não é o lugar
+ * de recusar um login por causa de cor.
+ */
+function outfitColorsOf(stored: unknown): { outfitColors?: OutfitColors } {
+  if (stored === null || stored === undefined) return {};
+  const parsed = OutfitColors.safeParse(stored);
+  return parsed.success ? { outfitColors: parsed.data } : {};
+}
+
+/**
+ * Os abates por monstro como o ticket os carrega, ou nada (FUN-113).
+ *
+ * `null` é personagem que nunca abateu nada, ou gravado antes do Bestiário — e o `game`
+ * trata ausência como `{}`. Qualquer outra coisa que não seja um mapa de inteiros cai no mesmo
+ * "nada": a emissão do ticket não é o lugar de recusar um login por causa de uma contagem, e
+ * a chave só existe quando há valor, por causa do `exactOptionalPropertyTypes`.
+ */
+function bestiaryOf(stored: unknown): { bestiary?: BestiaryState } {
+  return isBestiaryState(stored) ? { bestiary: stored } : {};
+}
+
+/**
  * Monta a mochila e o equipamento a partir das instâncias do banco (FUN-82).
  *
  * `equipped_slot` diz onde cada uma está: com slot, no corpo; sem slot, na mochila. Duas peças
@@ -188,13 +257,31 @@ export function createTicketHandler(
  */
 function inventoryOf(instances: readonly {
   id: string; itemId: string; quantity: number; equippedSlot: string | null;
-}[]): { backpack: unknown[]; equipped: Record<string, unknown> } {
-  const backpack: unknown[] = [];
+  container?: string | null; slotIndex?: number | null;
+}[]): { backpack: unknown[]; satchel: unknown[]; equipped: Record<string, unknown> } {
+  // Posicional (#160): cada linha volta ao lugar gravado; a linha sem posição (anterior a
+  // #160, ou duas na mesma posição por banco tocado à mão) entra no primeiro lugar livre da
+  // mochila no fim — o `ensureContainers` da entrada acerta o tamanho inicial.
+  const backpack: (unknown | null)[] = [];
+  const satchel: (unknown | null)[] = [];
   const equipped: Record<string, unknown> = {};
+  const unplaced: unknown[] = [];
   for (const row of instances) {
     const carried = { instanceId: row.id, itemId: row.itemId, quantity: row.quantity };
-    if (row.equippedSlot === null) backpack.push(carried);
-    else equipped[row.equippedSlot] = carried;
+    if (row.equippedSlot !== null) { equipped[row.equippedSlot] = carried; continue; }
+    const target = row.container === 'backpack' ? backpack : row.container === 'satchel' ? satchel : null;
+    const index = row.slotIndex ?? null;
+    if (target === null || index === null || index < 0 || target[index] !== undefined && target[index] !== null) {
+      unplaced.push(carried);
+      continue;
+    }
+    while (target.length <= index) target.push(null);
+    target[index] = carried;
   }
-  return { backpack, equipped };
+  for (const carried of unplaced) {
+    const free = backpack.indexOf(null);
+    if (free >= 0) backpack[free] = carried;
+    else backpack.push(carried);
+  }
+  return { backpack, satchel, equipped };
 }

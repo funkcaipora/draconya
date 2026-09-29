@@ -71,7 +71,8 @@ Como preencher cada campo:
 - **Alternativas:** cada alternativa descartada em uma linha — o que era e por que perdeu.
 - **Consequências:** seja honesto sobre o trade-off. Toda decisão real piora algo — diga o quê.
 - **Invariantes afetados:** ver Passo 4. Se nenhum, escreva literalmente "nenhum".
-- Se houver issue relacionada, referencie `FUN-nn` no Contexto ou nas Consequências.
+- Se houver issue relacionada, referencie `#nn` no Contexto ou nas Consequências (`FUN-nn` só para
+  decisão ligada a uma issue do Linear, aberta antes de 2026-09-12).
 
 ## Passo 4 — checar contra os onze invariantes
 

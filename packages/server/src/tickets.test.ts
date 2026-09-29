@@ -80,6 +80,84 @@ describe.runIf(available)('session ticket', () => {
     });
   });
 
+  it('carries the outfit colours, and drops a set it cannot trust (FUN-104)', async () => {
+    // As cores vão pelo ticket como o nome: dado do personagem que só a apresentação lê. E um
+    // valor corrompido — índice fora da paleta, peça faltando — vira AUSENTE, nunca ticket
+    // recusado: a linha do banco é `jsonb` sem CHECK, e cor não pode trancar ninguém fora.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+
+    const colors = { head: 78, body: 69, legs: 58, feet: 76 };
+    const bom = await tickets.issue('a1', 'p1', { level: 1, xp: 0, outfitColors: colors });
+    if (!bom.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(bom.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+      initialCharacter: { level: 1, xp: 0, outfitColors: colors },
+    });
+
+    for (const ruim of [
+      { head: 133, body: 69, legs: 58, feet: 76 },
+      { head: 78, body: 69, legs: 58 },
+      { head: 'red', body: 69, legs: 58, feet: 76 },
+      'azul',
+    ]) {
+      const issued = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, outfitColors: ruim } as unknown as InitialCharacter,
+      );
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1')).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0 },
+      });
+    }
+  });
+
+  it('carries the bestiary, and drops a map it cannot trust (FUN-113)', async () => {
+    // Os abates entram na sessão pelo ticket porque o bônus dos marcos escala a XP DURANTE a
+    // hunt (DT-01) — um personagem que entrasse em `{}` perderia o marco que já cruzou. E um
+    // valor torto vira AUSENTE, nunca ticket recusado: a linha é `jsonb` sem CHECK, e uma
+    // contagem corrompida não pode trancar ninguém fora do jogo. Mutação que mata: aceitar
+    // qualquer objeto (o array e o `-1` passariam), ou recusar o mapa vazio.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+
+    const counts = { rat: 10_000, bat: 3 };
+    const bom = await tickets.issue('a1', 'p1', { level: 1, xp: 0, bestiary: counts });
+    if (!bom.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(bom.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+      initialCharacter: { level: 1, xp: 0, bestiary: counts },
+    });
+
+    // O mapa VAZIO é válido: é o personagem que nunca abateu nada, e ele tem que atravessar
+    // igual — distinguir "não veio" de "veio vazio" é do tipo, não do parse.
+    const vazio = await tickets.issue('a1', 'p1', { level: 1, xp: 0, bestiary: {} });
+    if (!vazio.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(vazio.value.ticket, 'n1')).toMatchObject({
+      initialCharacter: { level: 1, xp: 0, bestiary: {} },
+    });
+
+    for (const ruim of [
+      { rat: -1 },
+      { rat: 1.5 },
+      { rat: '10' },
+      { rat: Number.MAX_SAFE_INTEGER + 1 },
+      { '': 4 },
+      [10, 20],
+      'muitos',
+      null,
+    ]) {
+      const issued = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, bestiary: ruim } as unknown as InitialCharacter,
+      );
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1'), JSON.stringify(ruim)).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0 },
+      });
+    }
+  });
+
   it('expires in seconds', async () => {
     const { directory, tickets } = build({ ttlMs: SHORT_MS });
     await directory.heartbeat('n1', NODE);
@@ -172,6 +250,99 @@ describe.runIf(available)('session ticket', () => {
     expect((await tickets.issue('a1', 'p1')).ok).toBe(true);
     expect((await tickets.issue('a1', 'p2')).ok).toBe(true);
     expect(await tickets.issue('a1', 'p3')).toEqual({ ok: false, reason: 'active-limit' });
+  });
+
+  it('carries the party block through the claim, and refuses a torn one (#195, #400)', async () => {
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+    const members = [
+      { characterId: 'p1', accountId: 'a1', initialCharacter: { level: 10, xp: 0 } },
+      { characterId: 'p2', accountId: 'a2', initialCharacter: { level: 12, xp: 5 } },
+    ];
+    // Formato novo (#400): os dois eixos no lugar de `mode`.
+    const axes = {
+      sessionId: 's-party', leaderId: 'p1', shareCosts: true, splitLoot: true,
+      huntId: 'arena', difficulty: 'bold', members,
+    };
+    const issued = await tickets.issue('a2', 'p2', { level: 12, xp: 5 }, undefined, axes);
+    if (!issued.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(issued.value.ticket, 'n1')).toEqual({
+      accountId: 'a2', characterId: 'p2', nodeId: 'n1', initialCharacter: { level: 12, xp: 5 }, party: axes,
+    });
+    // Um bloco torto (um membro só) derruba o ticket inteiro no consumo, como o `initialCharacter`.
+    const torn = await tickets.issue('a1', 'p1', undefined, undefined, { ...axes, members: [members[0] as never] });
+    if (!torn.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(torn.value.ticket, 'n1')).toBeNull();
+  });
+
+  it('migra o `mode` legado para os dois eixos, pela mesma tabela do snapshot (#400, D1)', async () => {
+    // Compat de um deploy: um `api` anterior manda só `mode`. A leitura migra — 'shared' liga
+    // os dois eixos, 'split' desliga —, e o ticket NÃO é recusado por isso.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+    const members = [
+      { characterId: 'p1', accountId: 'a1', initialCharacter: { level: 10, xp: 0 } },
+      { characterId: 'p2', accountId: 'a2', initialCharacter: { level: 12, xp: 5 } },
+    ];
+    const legacy = (mode: 'split' | 'shared') => ({
+      sessionId: 's-party', leaderId: 'p1', mode, huntId: 'arena', difficulty: 'bold', members,
+    });
+    const shared = await tickets.issue(
+      'a2', 'p2', { level: 12, xp: 5 }, undefined, legacy('shared') as unknown as Parameters<typeof tickets.issue>[4],
+    );
+    if (!shared.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(shared.value.ticket, 'n1')).toMatchObject({
+      party: { shareCosts: true, splitLoot: true },
+    });
+    const split = await tickets.issue(
+      'a2', 'p2', { level: 12, xp: 5 }, undefined, legacy('split') as unknown as Parameters<typeof tickets.issue>[4],
+    );
+    if (!split.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(split.value.ticket, 'n1')).toMatchObject({
+      party: { shareCosts: false, splitLoot: false },
+    });
+  });
+
+  it('carries the character premium, and drops a value it cannot trust (#400, D3)', async () => {
+    // O Premium decide o limite de venda do líder e a penalidade de morte do membro. Vem do
+    // `api` já resolvido contra o relógio; um valor torto vira AUSENTE, nunca ticket recusado.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+    const premium = await tickets.issue('a1', 'p1', { level: 1, xp: 0, premium: true });
+    if (!premium.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(premium.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+      initialCharacter: { level: 1, xp: 0, premium: true },
+    });
+    const free = await tickets.issue('a1', 'p1', { level: 1, xp: 0, premium: false });
+    if (!free.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(free.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+      initialCharacter: { level: 1, xp: 0, premium: false },
+    });
+    const torto = await tickets.issue(
+      'a1', 'p1', { level: 1, xp: 0, premium: 'sim' } as unknown as InitialCharacter,
+    );
+    if (!torto.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(torto.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+      initialCharacter: { level: 1, xp: 0 },
+    });
+  });
+
+  it('revoke frees the slot, the ticket and the reservation (#195)', async () => {
+    // O `start` de uma party emite N e desfaz os k−1 quando o k-ésimo falha. Mutação que
+    // mata: `revoke` sem o `SREM` do slot ativo — o terceiro personagem da conta continuaria
+    // recusado por um ticket que nunca vai ser usado.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+    const first = await tickets.issue('a1', 'p1');
+    expect((await tickets.issue('a1', 'p2')).ok).toBe(true);
+    if (!first.ok) throw new Error('expected a ticket');
+    expect(await tickets.issue('a1', 'p3')).toEqual({ ok: false, reason: 'active-limit' });
+    await tickets.revoke(first.value.ticket, 'a1', 'p1');
+    expect(await tickets.consume(first.value.ticket, 'n1')).toBeNull();
+    expect((await tickets.issue('a1', 'p3')).ok).toBe(true);
   });
 
   it('picks the least loaded node', async () => {

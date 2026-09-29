@@ -92,13 +92,6 @@ jobs:
     name: lint, test and build
     runs-on: ubuntu-latest
     services:
-      # Sem Redis os testes de diretório e de lease apenas PULAM — e teste que pula em
-      # silêncio é pior que teste que não existe, porque dá falsa confiança.
-      redis:
-        image: redis:7-alpine
-        ports: ['6379:6379']
-        options: >-
-          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
       postgres:
         image: postgres:17-alpine
         env:
@@ -114,6 +107,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      # Sem Redis os testes de diretório e de lease apenas PULAM — e teste que pula em
+      # silêncio é pior que teste que não existe, porque dá falsa confiança.
+      #
+      # `docker run` e não um service container: service não aceita argumentos, e o Redis
+      # padrão tem 16 bancos (0–15) — `SELECT 16` de `party-v2-exit.postgres.test.ts` cai no
+      # banco 0 em silêncio. `--databases 32` é requisito da suíte desde a #407. A espera de
+      # prontidão substitui o health gate que o service dava.
+      - name: Start Redis (32 databases)
+        run: |
+          docker run -d --name redis -p 6379:6379 redis:7-alpine redis-server --databases 32
+          for i in $(seq 1 30); do
+            if docker exec redis redis-cli ping | grep -q PONG; then exit 0; fi
+            sleep 1
+          done
+          echo "redis did not become ready" >&2
+          exit 1
 
       # Sem esta checagem, o passo "pnpm install" seria o primeiro a falhar (não há
       # package.json nem lockfile para instalar) e todo o job ficaria vermelho por um motivo

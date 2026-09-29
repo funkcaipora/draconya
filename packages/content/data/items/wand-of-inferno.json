@@ -1,0 +1,21 @@
+{
+  "id": "wand-of-inferno",
+  "name": "Wand of Inferno",
+  "kind": "weapon",
+  "slot": "hand",
+  "weight": 27,
+  "value": 3000,
+  "requires": {
+    "level": 33,
+    "vocationId": "sorcerer"
+  },
+  "weapon": {
+    "kind": "wand",
+    "family": "wand",
+    "range": 3,
+    "damageType": "fire",
+    "manaPerHit": 8,
+    "damage": { "min": 56, "max": 74 }
+  },
+  "_open": "Loot do Dragon (#520), Sorcerer. Canary `items.xml` id 3071 (`wand of inferno`): level 33, mana 8/golpe, fromDamage/toDamage 56-74, wandType fire, range 3, weight 2700 (27 oz), vocação Sorcerer. `value` 3000: Haroun compra por esse preço (TibiaWiki via WebSearch, confirmado igual ao Canary — fato do Tibia, ADR 0037 d.4)."
+}

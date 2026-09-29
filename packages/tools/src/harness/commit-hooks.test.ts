@@ -176,34 +176,25 @@ describe('.githooks/commit-msg', { timeout: TIMEOUT_MS }, () => {
     const result = commit(dir, 'feat(sim): advance simulation using elapsed time');
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('missing (FUN-nn)');
+    expect(result.stderr).toContain('missing (#nn)');
   });
 
-  it('accepts a commit in the project format', () => {
+  it('accepts a commit in the project format, referencing the GitHub issue', () => {
+    const dir = repositoryFrom(cleanTemplate);
+    writeFileSync(join(dir, 'file.txt'), 'change\n');
+
+    expect(commit(dir, 'feat(sim): advance simulation using elapsed time (#150)').status)
+      .toBe(0);
+  });
+
+  it('still accepts the Linear reference, for a branch opened before the move to GitHub', () => {
+    // O rastreador mudou em 2026-09-12 (issue #163); uma branch aberta antes fecha com o
+    // identificador que a abriu. Trabalho novo usa `(#nn)` — é o que o AGENTS.md pede.
     const dir = repositoryFrom(cleanTemplate);
     writeFileSync(join(dir, 'file.txt'), 'change\n');
 
     expect(commit(dir, 'feat(sim): advance simulation using elapsed time (FUN-25)').status)
       .toBe(0);
-  });
-
-  it('accepts a GitHub issue reference in place of the Linear one', () => {
-    // Trabalho rastreado em milestone do GitHub (skill task-github, ADR 0025) referencia a
-    // issue como `(#nn)`. É referência de issue do mesmo jeito; só muda o rastreador.
-    const dir = repositoryFrom(cleanTemplate);
-    writeFileSync(join(dir, 'file.txt'), 'change\n');
-
-    expect(commit(dir, 'feat(client): load the engine in the shell (#12)').status).toBe(0);
-  });
-
-  it('still rejects a bare number that is not an issue reference', () => {
-    const dir = repositoryFrom(cleanTemplate);
-    writeFileSync(join(dir, 'file.txt'), 'change\n');
-
-    const result = commit(dir, 'feat(client): load the engine in the shell (12)');
-
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('missing (FUN-nn)');
   });
 
   it('accepts a merge that applies cleanly', () => {
@@ -274,13 +265,13 @@ describe('.claude/hooks/validate-commit.sh', { timeout: TIMEOUT_MS }, () => {
   });
 
   it('lets a commit in the project format through', () => {
-    const command = 'git commit -m "feat(sim): advance simulation using elapsed time (FUN-25)"';
+    const command = 'git commit -m "feat(sim): advance simulation using elapsed time (#150)"';
 
     expect(runHook(repositoryFrom(cleanTemplate), command).status).toBe(0);
   });
 
-  it('lets a commit that references a GitHub issue through', () => {
-    const command = 'git commit -m "feat(client): load the engine in the shell (#12)"';
+  it('still lets the Linear reference through, for a branch opened before the move to GitHub', () => {
+    const command = 'git commit -m "feat(sim): advance simulation using elapsed time (FUN-25)"';
 
     expect(runHook(repositoryFrom(cleanTemplate), command).status).toBe(0);
   });

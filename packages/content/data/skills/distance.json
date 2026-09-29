@@ -1,0 +1,15 @@
+{
+  "id": "distance",
+  "name": "Distância",
+  "startingLevel": 10,
+  "curve": {
+    "base": 30,
+    "factor": 2.0
+  },
+  "gain": {
+    "on": "distance-hit",
+    "points": 1
+  },
+  "damagePerLevel": 0.02,
+  "_open": "Base 30 é a `skillBase` da distância do Canary (`Vocation::skillBase`, #521, ADR 0037), verificada em `opentibiabr/canary` `main` 2026-09-24 — não é mais copiada do corpo a corpo (#152, ADR 0026 decisão 4 fica só para `damagePerLevel`, ainda provisório). `factor` 2.0 é o FALLBACK sem vocação (`None` do `vocations.xml`); cada vocação real sobe por `vocationSchema.skillMultipliers.distance`."
+}

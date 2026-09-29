@@ -48,15 +48,20 @@ a pergunta vai ser "onde fica esse número", não "qual era a regra".
 | Hunt | [`hunt.md`](./hunt.md) | parcial | E3 | §14 |
 | Cidade | [`city.md`](./city.md) | parcial | E1 | §6, §37 |
 | Chat | [`chat.md`](./chat.md) | parcial | E1 | — |
-| Party e matchmaking | [`party.md`](./party.md) | não implementado | E9 | §15, §43.2 |
+| Party e matchmaking | [`party.md`](./party.md) | implementado | E9 | §15, §43.2 |
 | Analisador de hunt | [`analyzer.md`](./analyzer.md) | parcial | E6 | §16, §43.10 |
-| Bestiário | [`bestiary.md`](./bestiary.md) | não implementado | E7 | §18 |
+| Bestiário | [`bestiary.md`](./bestiary.md) | parcial | E7 | §18 |
 | Prey | [`prey.md`](./prey.md) | não implementado | E7 | §19, §43.4 |
 | Economia, supply e Market | [`economy.md`](./economy.md) | parcial | E5, E13 | §20, §32, §33, §43.5 |
-| Itens, equipamento e inventário | [`items.md`](./items.md) | não implementado | E5, E7, E11 | §21-§23, §25, §43.6 |
+| Itens, equipamento e inventário | [`items.md`](./items.md) | parcial | E5, E7, E11 | §21-§23, §25, §43.6 |
 | Morte | [`death.md`](./death.md) | implementado | E2 | §26 |
 | Bosses | [`bosses.md`](./bosses.md) | não implementado | E11 | §27, §43.7 |
 | Quests | [`quests.md`](./quests.md) | não implementado | E11 | §28 |
 | Guildas | [`guilds.md`](./guilds.md) | não implementado | E12 | §29 |
 | Guild War | [`guild-war.md`](./guild-war.md) | não implementado | E12 | §30, §43.8 |
 | Monetização — Coins e Premium | [`monetization.md`](./monetization.md) | não implementado | E13 | §7.2, §7.3, §33.3, §34, §35 |
+| Configurações | [`settings.md`](./settings.md) | não implementado | — | — |
+| Amigos | [`future-systems.md#amigos`](./future-systems.md) | não implementado | — | — |
+| Arena | [`future-systems.md#arena`](./future-systems.md) | não implementado | — | §31 |
+| Bênçãos | [`future-systems.md#bênçãos`](./future-systems.md) | não implementado | — | — |
+| Soul | [`future-systems.md#soul`](./future-systems.md) | não implementado | — | — |

@@ -1,7 +1,12 @@
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { buildContent, placeholderAppearances } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
+import { loadContent } from '../../../content/src/load.js';
 import { buildCatalogue } from './catalogue.js';
-import { testContent } from '../testing/content.js';
+import { TEST_HUNT, rawTestContent, testContent } from '../testing/content.js';
 
+const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'content', 'data');
 const content = testContent();
 
 describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
@@ -20,31 +25,213 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     const { hunts } = buildCatalogue(content);
 
     for (const hunt of hunts) {
+      // `lootDrops` é uma CONTAGEM de drops distintos (FUN-123), não uma taxa: continua sem
+      // XP/h nem gold/h.
       expect(Object.keys(hunt).sort())
-        .toEqual(['difficulties', 'id', 'name', 'recommendedLevel']);
+        .toEqual(['difficulties', 'difficultyDetails', 'id', 'loot', 'lootDrops', 'monsters', 'name', 'outfitIds', 'recommendedLevel']);
     }
   });
 
-  it('leva o vocabulário do bot, e é ele que a tela oferece', () => {
+  it('leva os outfits dos monstros de cada hunt, únicos e em ordem, para o cliente aquecer (FUN-112)', () => {
+    // O rato era um quadrado por seis a dez segundos na primeira entrada: as folhas dele só
+    // decodificavam quando ele aparecia. Com os ids no catálogo o cliente as pede na Cidade.
+    // Mutação que mata: devolver `[]`, ou não deduplicar (o rato está em toda dificuldade).
+    const { hunts } = buildCatalogue(content);
+    const arena = hunts.find((hunt) => hunt.id === 'arena');
+    const rat = content.monsters.get('rat')?.outfitId;
+    expect(rat).toBeGreaterThan(0);
+    expect(arena?.outfitIds).toEqual([rat]);
+  });
+
+  it('o mesmo monstro em duas dificuldades sai UMA vez, e a lista vem em ordem de id', () => {
+    // Um id repetido seria uma folha pedida duas vezes; a ordem é o que faz a mensagem ser a
+    // mesma a cada boot. Mutação que mata: `push` num array em vez do `Set`, ou sem o `sort`.
+    // O morcego entra ANTES do rato no conteúdo cru (placeholder: outfit 1), mas a hunt o lista
+    // depois — a ordem do catálogo tem que ser a do id, não a da composição.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const rat = raw.monsters[0] as Record<string, unknown>;
+    const bat = { ...rat, id: 'bat', name: 'Bat' };
+    const twoTiers = {
+      ...raw,
+      monsters: [bat, rat],
+      hunts: [{
+        ...TEST_HUNT,
+        difficulties: {
+          cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
+          reckless: {
+            monsterCount: 2, respawnDelayMs: 1000,
+            composition: [{ monsterId: 'rat', weight: 1 }, { monsterId: 'bat', weight: 1 }],
+          },
+        },
+      }],
+    };
+    const content = buildContent({ ...twoTiers, appearances: [placeholderAppearances(twoTiers)] });
+    const ratId = content.monsters.get('rat')?.outfitId ?? -1;
+    const batId = content.monsters.get('bat')?.outfitId ?? -1;
+    // Os drops distintos da hunt (FUN-123): o rato de teste solta gold, e mais nada — um.
+    expect(buildCatalogue(content).hunts[0]?.lootDrops).toBe(1);
+    expect(batId).toBeLessThan(ratId);
+
+    const arena = buildCatalogue(content).hunts.find((hunt) => hunt.id === 'arena');
+    expect(arena?.outfitIds).toEqual([batId, ratId]);
+  });
+
+  it('leva como cada arma bate — tipo, alcance, família, duas mãos — e a munição abstrata (#152)', () => {
+    // O tooltip precisa do alcance e da família da munição; mana por golpe e faixa de dano são
+    // balanceamento (invariante 4) e ficam fora. A munição é ABSTRATA (ADR 0026 d.3): ela sai
+    // no topo do catálogo, com família, `attack` e preço — não como item de slot.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withWeapons = {
+      ...raw,
+      items: [
+        ...(raw.items ?? []),
+        { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } },
+        { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, value: 0, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } } },
+      ],
+      ammunition: [
+        { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1 },
+        { id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5, requires: { level: 20 } },
+      ],
+    };
+    const content = buildContent({ ...withWeapons, appearances: [placeholderAppearances(withWeapons)] });
+    const catalogue = buildCatalogue(content);
+
+    expect(catalogue.items.find((item) => item.id === 'bow')).toMatchObject({ twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } });
+    const wand = catalogue.items.find((item) => item.id === 'wand');
+    expect(wand?.weapon).toEqual({ kind: 'wand', range: 3 });
+    expect(catalogue.items.find((item) => item.id === 'arrow')).toBeUndefined();
+    expect(catalogue.ammunition.find((ammo) => ammo.id === 'arrow'))
+      .toMatchObject({ family: 'arrow', attack: 25, price: 1, requires: {} });
+    expect(catalogue.ammunition.find((ammo) => ammo.id === 'sniper-arrow'))
+      .toMatchObject({ family: 'arrow', price: 5, requires: { level: 20 } });
+  });
+
+  it('leva as vocações — ganhos por level e arma inicial — e o level da escolha (#154)', () => {
+    // O diálogo do level 8 lê daqui: a tela não pode ter o 8 em código. A vocação sem arma
+    // (conteúdo de teste) fica de fora — sem arma não há o que escolher.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withVocations = {
+      ...raw,
+      items: [
+        ...(raw.items ?? []),
+        { id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, value: 0, attack: 21, requires: { vocationId: 'knight' } },
+        { id: 'wooden-shield', name: 'Wooden Shield', kind: 'shield', slot: 'shield', weight: 40, value: 0, defense: 14 },
+      ],
+      vocations: [
+        { id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25, startingWeaponItemId: 'steel-axe' },
+        { id: 'monk', name: 'Monk', healthPerLevel: 10, manaPerLevel: 10, capacityPerLevel: 10 },
+      ],
+    };
+    const content = buildContent({ ...withVocations, appearances: [placeholderAppearances(withVocations)] });
+    const { vocations, vocationLevel } = buildCatalogue(content);
+
+    expect(vocations).toEqual([
+      { id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25, startingWeaponItemId: 'steel-axe' },
+    ]);
+    expect(vocationLevel).toBe(8);
+  });
+
+  it('derives the display weapon from the starting kit when the kit is the grant (#496)', () => {
+    // As vocações reais declaram o kit, não a arma: o diálogo precisa continuar mostrando a
+    // arma que a vocação entrega. Mutação que mata: filtrar por `startingWeaponItemId` — as
+    // quatro vocações reais, kit-only, sumiriam do diálogo e ninguém escolheria nada.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withKit = {
+      ...raw,
+      items: [
+        ...(raw.items ?? []),
+        { id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, value: 0, attack: 21, requires: { vocationId: 'knight' } },
+        { id: 'wooden-shield', name: 'Wooden Shield', kind: 'shield', slot: 'shield', weight: 40, value: 0, defense: 14 },
+      ],
+      vocations: [
+        {
+          id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
+          startingKit: [{ itemId: 'steel-axe', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' }],
+        },
+      ],
+    };
+    const content = buildContent({ ...withKit, appearances: [placeholderAppearances(withKit)] });
+    expect(buildCatalogue(content).vocations).toEqual([
+      { id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25, startingWeaponItemId: 'steel-axe' },
+    ]);
+  });
+
+  it('leva os monstros — id e nome, em ordem de id — para a tela do Bestiário (FUN-113)', () => {
+    // O contador chega por id; a tela de detalhes ganha vida e XP (SV-02, #338).
+    // Mutação que mata: devolver `[]`, vazar o monstro inteiro, ou não ordenar.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const rat = raw.monsters[0] as Record<string, unknown>;
+    const bat = { ...rat, id: 'bat', name: 'Bat' };
+    // O rato ANTES do morcego no conteúdo cru: a ordem do catálogo tem que ser a do id.
+    const twoMonsters = { ...raw, monsters: [rat, bat] };
+    const content = buildContent({ ...twoMonsters, appearances: [placeholderAppearances(twoMonsters)] });
+
+    const { monsters } = buildCatalogue(content);
+
+    expect(monsters).toEqual([
+      { id: 'bat', name: 'Bat', health: 20, experience: 5 },
+      { id: 'rat', name: 'Rat', health: 20, experience: 5 },
+    ]);
+    expect('class' in (monsters[0] ?? {})).toBe(false);
+    expect('class' in (monsters[1] ?? {})).toBe(false);
+  });
+
+  it('leva os marcos e o bônus do Bestiário quando o conteúdo os tem, e a chave some quando não (FUN-113)', () => {
+    // Os marcos são conteúdo fixado na sessão (invariante 7), e a tela mostra "próximo marco"
+    // a partir deles. O conteúdo de teste não tem Bestiário — a chave fica AUSENTE, não
+    // `undefined`: o codec apagaria a chave e o tipo passaria a mentir. E só os dois campos
+    // atravessam: `id` e `_open` são do carregador.
+    expect(buildCatalogue(content)).not.toHaveProperty('bestiary');
+
+    const withBestiary = buildContent({
+      ...rawTestContent(),
+      bestiary: [{ id: 'baseline', milestones: [3, 5], xpBonusPercentPerMilestone: 20 }],
+    });
+    expect(buildCatalogue(withBestiary).bestiary)
+      .toEqual({ milestones: [3, 5], xpBonusPercentPerMilestone: 20 });
+  });
+
+  it('leva o vocabulário do bot v2, e é ele que a tela oferece (AB-09, RF-10)', () => {
     // A UI do bot não pode ter lista de opções em código: se as duas divergirem, o jogador
-    // configura o que o bot recusa — e descobre pelo extrato que não fecha.
+    // configura o que o bot recusa — e descobre pelo extrato que não fecha. O v2 substitui o
+    // v1: saem `slots` por categoria; entram conjuntos, teclas, grupos, modelos e os suprimentos
+    // ABSTRATOS (`supplies`, com gold no uso).
     const { bot } = buildCatalogue(content);
 
     expect(bot.vocabularyVersion).toBe(content.bot.vocabularyVersion);
-    expect(bot.advancedFromLevel).toBe(content.bot.advancedFromLevel);
-    expect(bot.slots).toEqual(content.bot.slots);
-    expect(bot.advancedOnly.targetPolicies).toEqual(content.bot.advancedOnly.targetPolicies);
+    expect(bot.setCount).toBe(4);
+    expect(bot.slotsPerSet).toBe(24);
+    expect(bot.setNames.length).toBe(4);
+    expect(bot.hotkeys).toContain('1');
+    expect(bot.automations.map((automation) => automation.model)).toEqual([
+      'renew-ring', 'renew-amulet', 'swap-ammo-by-targets', 'swap-weapon-shield-by-hp', 'swap-ring',
+    ]);
+    expect(bot).not.toHaveProperty('slots');
+    expect(bot.supplies.map((supply) => supply.id)).toContain('health-potion');
+    expect(bot).not.toHaveProperty('advancedFromLevel');
+    expect(bot).not.toHaveProperty('advancedOnly');
   });
 
-  it('a magia leva o que a tela mostra e o que o GATE precisa — e nada mais', () => {
-    // Dano, cura, alcance e cooldown são balanceamento, e o cliente não simula (invariante 4).
-    // Mandá-los seria dar a ele material para calcular resultado.
+  it('leva os grupos de cooldown do conteúdo, unindo magia e consumível (AB-09)', () => {
+    // O editor do AB-11 oferece exatamente estes grupos; o motor de grupos usa os mesmos. A
+    // magia de teste não declara grupo, então só o consumível contribui aqui.
+    const { bot } = buildCatalogue(content);
+    expect(bot.groups).toEqual(['potion']);
+  });
+
+  it('a magia leva o que a tela mostra e o que o GATE precisa — e nada mais (ADR 0033)', () => {
+    // Desde o ADR 0033 o catálogo carrega os números de EXIBIÇÃO (cooldown e o detalhe do
+    // efeito) para o `ActionConfigModal` — mostrar a faixa que o servidor vai sortear não dá ao
+    // cliente material para FABRICAR resultado (invariante 4); o servidor continua rolando.
+    // `groupCooldownMs` e `description` ficam de fora porque a magia de teste não os declara.
     const { bot } = buildCatalogue(content);
     const spell = bot.spells[0];
 
     expect(spell).toBeDefined();
     expect(Object.keys(spell ?? {}).sort())
-      .toEqual(['effect', 'id', 'manaCost', 'minLevel', 'name', 'vocationId']);
+      .toEqual(['cooldownMs', 'detail', 'effect', 'group', 'id', 'manaCost', 'minLevel', 'name', 'vocationId']);
+    // `amount` do `heal` de teste, e nada de `basePower`/`range`/`area`/`damageType` que ela não tem.
+    expect(spell?.detail).toEqual({ amount: 60 });
   });
 
   it('vocação ausente vira `null`, e não some', () => {
@@ -57,14 +244,378 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect('vocationId' in (semVocacao ?? {})).toBe(true);
   });
 
-  it('o supply leva o PREÇO, e é o único número de balanceamento aqui', () => {
-    // O jogador configura "beber poção abaixo de 40% de HP" olhando quanto ela custa por hora
-    // de hunt. Sem o preço, a decisão que a tela existe para apoiar não pode ser tomada.
-    const { bot } = buildCatalogue(content);
-    const supply = bot.supplies[0];
+  it('o suprimento leva price, effect, group e requires — e nunca o Base Power (AB-09, RF-11)', () => {
+    // O editor de ação do AB-11 filtra por `effect` e mostra o preço de uso. A poção é SUPPLY
+    // abstrato (FUN-77, §20.1): ela não está em `items[]`, e sim em `bot.supplies[]`.
+    const { bot, items } = buildCatalogue(content);
+    const potion = bot.supplies.find((supply) => supply.id === 'health-potion');
 
-    expect(supply).toBeDefined();
-    expect(Object.keys(supply ?? {}).sort()).toEqual(['effect', 'id', 'name', 'price']);
-    expect(supply?.price).toBeGreaterThan(0);
+    expect(items.find((item) => item.id === 'health-potion')).toBeUndefined();
+    expect(potion).toMatchObject({
+      price: 45, group: 'potion', effect: 'heal', requires: {},
+    });
+  });
+
+  it('a vocação do suprimento vai para o catálogo — ausente vira `null`, e não some (#524)', () => {
+    // Sem isto a tela do bot oferece a Strong Health Potion (Knight/Paladin) para um Sorcerer
+    // configurar, o `Save` nunca bloqueia (não há como a tela saber), e `useSupply` recusa TODO
+    // uso em silêncio — o defeito que o cabeçalho deste arquivo descreve.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withVocationalSupplies = {
+      ...raw,
+      supplies: [
+        ...(raw.supplies ?? []),
+        {
+          id: 'strong-health-potion', name: 'Strong Health Potion', price: 115, group: 'potion',
+          requires: { level: 50, vocationId: ['knight', 'paladin'] },
+          effect: { kind: 'heal', amountRange: { min: 250, max: 350 } },
+        },
+      ],
+    };
+    const { bot } = buildCatalogue(
+      buildContent({ ...withVocationalSupplies, appearances: [placeholderAppearances(withVocationalSupplies)] }),
+    );
+    const strong = bot.supplies.find((supply) => supply.id === 'strong-health-potion');
+    expect(strong?.vocationId).toEqual(['knight', 'paladin']);
+    // A faixa fixa (#524) vai no detalhe junto — ver o teste dedicado abaixo para `alsoMana`.
+    expect(strong?.detail).toEqual({ amountRange: { min: 250, max: 350 } });
+
+    const potion = bot.supplies.find((supply) => supply.id === 'health-potion');
+    expect(potion?.vocationId).toBeNull();
+    expect('vocationId' in (potion ?? {})).toBe(true);
+  });
+
+  it('a poção de espírito leva `amountRange` E `alsoMana` no detalhe — cura E mana no mesmo uso (#524)', () => {
+    // Sem isto o painel de detalhe (`effectValue`) não tem como mostrar a faixa de cura nem a
+    // de mana da poção de espírito: `detail.amount` nunca existe para ela (só `amountRange`).
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withSpirit = {
+      ...raw,
+      supplies: [
+        ...(raw.supplies ?? []),
+        {
+          id: 'great-spirit-potion', name: 'Great Spirit Potion', price: 225, group: 'potion',
+          requires: { level: 80, vocationId: 'paladin' },
+          effect: {
+            kind: 'heal', amountRange: { min: 250, max: 350 },
+            alsoMana: { amountRange: { min: 100, max: 200 } },
+          },
+        },
+      ],
+    };
+    const { bot } = buildCatalogue(
+      buildContent({ ...withSpirit, appearances: [placeholderAppearances(withSpirit)] }),
+    );
+    const spirit = bot.supplies.find((supply) => supply.id === 'great-spirit-potion');
+    expect(spirit?.detail).toEqual({
+      amountRange: { min: 250, max: 350 },
+      alsoMana: { amountRange: { min: 100, max: 200 } },
+    });
+  });
+
+  it('a runa leva group, os requisitos e o detalhe do efeito — o Base Power inclusive (#165, AB-09, ADR 0033)', () => {
+    // A tela desabilita a runa abaixo do level, como faz com magia. Desde o ADR 0033 o Base
+    // Power VAI no `detail`: é o número que o painel converte com `spellPowerRange` para
+    // mostrar a faixa "min~max" — o servidor continua sendo quem rola de verdade (invariante 4).
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withRune = {
+      ...raw,
+      supplies: [
+        ...(raw.supplies ?? []),
+        {
+          id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, group: 'attack',
+          requires: { level: 30, magicLevel: 4 },
+          effect: { kind: 'damage', basePower: 45, range: 4, area: { shape: 'circle', radius: 3 } },
+        },
+      ],
+    };
+    const { bot } = buildCatalogue(buildContent({ ...withRune, appearances: [placeholderAppearances(withRune)] }));
+    const rune = bot.supplies.find((supply) => supply.id === 'avalanche-rune');
+    expect(rune).toMatchObject({
+      price: 14, group: 'attack', effect: 'damage', requires: { level: 30, magicLevel: 4 },
+    });
+    expect(rune?.detail).toEqual({
+      range: 4, area: { shape: 'circle', radius: 3, centered: 'target' }, damageType: 'arcane', basePower: 45,
+    });
+  });
+
+  it('uma magia de haste leva speedPercent e durationMs no detalhe, sem damageType (ADR 0033)', () => {
+    // Suporte não tem tipo de dano: o detalhe leva só o que o `kind: haste` declara.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withHaste = {
+      ...raw,
+      spells: [
+        ...(raw.spells ?? []),
+        {
+          id: 'haste', name: 'Haste', manaCost: 20, cooldownMs: 1_000, group: 'support',
+          groupCooldownMs: 1_000,
+          effect: { kind: 'haste', speedPercent: 30, durationMs: 33_000 },
+        },
+      ],
+    };
+    const { bot } = buildCatalogue(buildContent({ ...withHaste, appearances: [placeholderAppearances(withHaste)] }));
+    const haste = bot.spells.find((spell) => spell.id === 'haste');
+
+    expect(haste?.cooldownMs).toBe(1_000);
+    expect(haste?.groupCooldownMs).toBe(1_000);
+    expect(haste?.detail).toEqual({ speedPercent: 30, durationMs: 33_000 });
+    expect('damageType' in (haste?.detail ?? {})).toBe(false);
+  });
+
+  it('bot.spellPower é o conteúdo fixado na sessão, para a prévia do painel (ADR 0033)', () => {
+    // A prévia do `ActionConfigModal` (`min~max`) é calculada pelo CLIENTE com
+    // `spellPowerRange`; os coeficientes precisam vir do mesmo `combat.spellPower` que o
+    // servidor usa para rolar de verdade — fonte única.
+    const { bot } = buildCatalogue(content);
+    expect(bot.spellPower).toEqual(content.combat.spellPower);
+  });
+
+  it('leva valor de venda, ataque e armadura nas definições de item (#337)', () => {
+    // A tela precisa de valor (NPC de venda), ataque (armas) e armadura (equipamentos).
+    // São atributos base fixos definidos no conteúdo.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withEquipment = {
+      ...raw,
+      items: [
+        ...(raw.items ?? []),
+        { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 35, value: 25, attack: 14, armor: 0, weapon: { kind: 'melee', range: 1 } },
+        { id: 'shield', name: 'Wooden Shield', kind: 'shield', slot: 'shield', weight: 40, value: 15, attack: 0, armor: 15 },
+        { id: 'cheese', name: 'Cheese', kind: 'other', weight: 4, value: 2, attack: 0, armor: 0 },
+      ],
+    };
+    const content = buildContent({ ...withEquipment, appearances: [placeholderAppearances(withEquipment)] });
+    const { items } = buildCatalogue(content);
+
+    expect(items.find((item) => item.id === 'sword')).toMatchObject({
+      value: 25,
+      attack: 14,
+      armor: 0,
+    });
+    expect(items.find((item) => item.id === 'shield')).toMatchObject({
+      value: 15,
+      attack: 0,
+      armor: 15,
+    });
+    expect(items.find((item) => item.id === 'cheese')).toMatchObject({
+      value: 2,
+      attack: 0,
+      armor: 0,
+    });
+  });
+
+  it('o mesmo monstro em duas dificuldades aparece UMA vez na hunt, ordenado por id (SV-02, #338)', () => {
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const rat = raw.monsters[0] as Record<string, unknown>;
+    const bat = { ...rat, id: 'bat', name: 'Bat' };
+    const twoTiers = {
+      ...raw,
+      monsters: [bat, rat],
+      hunts: [{
+        ...TEST_HUNT,
+        difficulties: {
+          cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
+          reckless: {
+            monsterCount: 2, respawnDelayMs: 1000,
+            composition: [{ monsterId: 'rat', weight: 1 }, { monsterId: 'bat', weight: 1 }],
+          },
+        },
+      }],
+    };
+    const content = buildContent({ ...twoTiers, appearances: [placeholderAppearances(twoTiers)] });
+    const arena = buildCatalogue(content).hunts.find((hunt) => hunt.id === 'arena');
+    expect(arena?.monsters).toEqual([
+      { id: 'bat', name: 'Bat' },
+      { id: 'rat', name: 'Rat' },
+    ]);
+  });
+
+  it('loot com chance 0 é excluído, e o mesmo item em múltiplos monstros aparece UMA vez, ordenado por itemId (SV-02, #338)', () => {
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const rat = raw.monsters[0] as Record<string, unknown>;
+    const withItemsAndMonsters = {
+      ...raw,
+      items: [
+        ...(raw.items ?? []),
+        { id: 'bone', name: 'Bone', kind: 'other', weight: 5, value: 1, attack: 0, armor: 0 },
+        { id: 'cheese', name: 'Cheese', kind: 'other', weight: 4, value: 2, attack: 0, armor: 0 },
+        { id: 'rare-gem', name: 'Rare Gem', kind: 'other', weight: 1, value: 100, attack: 0, armor: 0 },
+      ],
+      monsters: [
+        {
+          ...rat,
+          id: 'rat',
+          name: 'Rat',
+          loot: {
+            gold: { chance: 1, min: 2, max: 2 },
+            items: [
+              { itemId: 'cheese', chance: 0.5 },
+              { itemId: 'rare-gem', chance: 0 },
+            ],
+          },
+        },
+        {
+          ...rat,
+          id: 'bat',
+          name: 'Bat',
+          loot: {
+            items: [
+              { itemId: 'cheese', chance: 0.8 },
+              { itemId: 'bone', chance: 0.3 },
+            ],
+          },
+        },
+      ],
+      hunts: [{
+        ...TEST_HUNT,
+        difficulties: {
+          cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
+          reckless: {
+            monsterCount: 2, respawnDelayMs: 1000,
+            composition: [{ monsterId: 'rat', weight: 1 }, { monsterId: 'bat', weight: 1 }],
+          },
+        },
+      }],
+    };
+    const content = buildContent({
+      ...withItemsAndMonsters,
+      appearances: [placeholderAppearances(withItemsAndMonsters)],
+    });
+    const arena = buildCatalogue(content).hunts.find((hunt) => hunt.id === 'arena');
+    expect(arena?.loot).toEqual([
+      { itemId: 'bone', name: 'Bone' },
+      { itemId: 'cheese', name: 'Cheese' },
+    ]);
+  });
+
+  it('gold nunca entra em loot[] (SV-02, #338)', () => {
+    // Gold não é item, é campo do personagem — quem quer saber se a hunt solta gold tem lootDrops.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const rat = raw.monsters[0] as Record<string, unknown>;
+    const withGoldOnly = {
+      ...raw,
+      monsters: [
+        {
+          ...rat,
+          id: 'rat',
+          name: 'Rat',
+          loot: {
+            gold: { chance: 1, min: 10, max: 50 },
+            items: [],
+          },
+        },
+      ],
+      hunts: [{
+        ...TEST_HUNT,
+        difficulties: {
+          cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
+        },
+      }],
+    };
+    const content = buildContent({
+      ...withGoldOnly,
+      appearances: [placeholderAppearances(withGoldOnly)],
+    });
+    const arena = buildCatalogue(content).hunts.find((hunt) => hunt.id === 'arena');
+    expect(arena?.lootDrops).toBe(1);
+    expect(arena?.loot).toEqual([]);
+  });
+
+  it('catalogue.monsters[] reflete todos os monstros de content.monsters com vida e XP (SV-02, #338)', () => {
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const rat = raw.monsters[0] as Record<string, unknown>;
+    const bat = { ...rat, id: 'bat', name: 'Bat', health: 15, experience: 8 };
+    const skeleton = { ...rat, id: 'skeleton', name: 'Skeleton', health: 50, experience: 35 };
+    const content = buildContent({
+      ...raw,
+      monsters: [skeleton, rat, bat],
+      appearances: [placeholderAppearances({ ...raw, monsters: [skeleton, rat, bat] })],
+    });
+    const { monsters } = buildCatalogue(content);
+    expect(monsters).toHaveLength(3);
+    expect(monsters).toEqual([
+      { id: 'bat', name: 'Bat', health: 15, experience: 8 },
+      { id: 'rat', name: 'Rat', health: 20, experience: 5 },
+      { id: 'skeleton', name: 'Skeleton', health: 50, experience: 35 },
+    ]);
+  });
+
+  it('leva a contagem de monstros por dificuldade na mesma ordem de difficulties (SV-19, #355)', () => {
+    const { hunts } = buildCatalogue(content);
+    const arena = hunts.find((hunt) => hunt.id === 'arena');
+    expect(arena?.difficultyDetails).toEqual([
+      { id: 'cautious', monsterCount: 1 },
+    ]);
+  });
+
+  it('leva class quando o conteúdo a define (como o rat do conteúdo real com mammal) e omite a chave quando ausente (SV-20, #356)', () => {
+    const realContent = loadContent(DATA);
+    const { monsters } = buildCatalogue(realContent);
+    const rat = monsters.find((m) => m.id === 'rat');
+    expect(rat).toEqual({
+      id: 'rat',
+      name: 'Rat',
+      class: 'mammal',
+      health: 20,
+      experience: 5,
+    });
+    expect('class' in (rat ?? {})).toBe(true);
+
+    // Monstro sem class na fixture não tem a chave 'class'
+    const withoutClass = buildCatalogue(content).monsters[0];
+    expect(withoutClass).toBeDefined();
+    expect('class' in (withoutClass ?? {})).toBe(false);
+  });
+
+  it('leva description quando a hunt a define (como a rat-cellars do conteúdo real) e omite a chave quando ausente (SV-21, #357)', () => {
+    const realContent = loadContent(DATA);
+    const { hunts } = buildCatalogue(realContent);
+    const cellars = hunts.find((h) => h.id === 'rat-cellars');
+    expect(cellars?.description).toBe(
+      'Os porões de pedra sob Rookgaard, a ilha que recebe todo aventureiro no primeiro dia. Ratos disputam caixotes e barris pelos corredores baixos — o primeiro perigo que toda espada aprende a enfrentar.',
+    );
+    expect('description' in (cellars ?? {})).toBe(true);
+
+    // Hunt sem description na fixture de teste omite a chave
+    const huntWithoutDescription = buildCatalogue(content).hunts[0];
+    expect(huntWithoutDescription).toBeDefined();
+    expect('description' in (huntWithoutDescription ?? {})).toBe(false);
+  });
+
+  it('o catálogo lista as três hunts em ordem de level, e a Rotworm Caves traz monstro e loot (#511, #520)', () => {
+    const realContent = loadContent(DATA);
+    const { hunts } = buildCatalogue(realContent);
+    expect(hunts.map((h) => h.id)).toEqual(['rat-cellars', 'rotworm-caves', 'darashia-dragon-lair']);
+    const rotworm = hunts.find((h) => h.id === 'rotworm-caves');
+    expect(rotworm?.monsters).toEqual([{ id: 'rotworm', name: 'Rotworm' }]);
+    expect(rotworm?.loot.map((l) => l.itemId).sort()).toEqual(
+      ['ham', 'legion-helmet', 'lump-of-dirt', 'mace', 'meat', 'sword', 'worm'].sort(),
+    );
+    expect(rotworm?.lootDrops).toBe(8); // 7 itens + gold (lootDropsOf, catalogue.ts:301-315)
+  });
+
+  it('buildCatalogue includes progression matching content.progression (SV-25, #361)', () => {
+    const { progression } = buildCatalogue(content);
+    expect(progression).toEqual({
+      startingSpeed: content.progression.startingSpeed,
+      speedPerLevel: content.progression.speedPerLevel,
+      regen: {
+        healthPerSecond: content.progression.regen.healthPerSecond,
+        manaPerSecond: content.progression.regen.manaPerSecond,
+      },
+    });
+
+    const realContent = loadContent(DATA);
+    const realCatalogue = buildCatalogue(realContent);
+    expect(realCatalogue.progression).toEqual({
+      startingSpeed: realContent.progression.startingSpeed,
+      speedPerLevel: realContent.progression.speedPerLevel,
+      regen: {
+        healthPerSecond: realContent.progression.regen.healthPerSecond,
+        manaPerSecond: realContent.progression.regen.manaPerSecond,
+      },
+    });
   });
 });
+
+
+

@@ -14,28 +14,38 @@
 
 import { performance } from 'node:perf_hooks';
 import type {
-  CombatEvent, EndReason, GridPoint, PresenceEvent, Receipt, Session, SessionSnapshot,
-  SessionType,
+  Aggregates, CombatEvent, EndReason, FollowState, GridPoint, MemberLeft, PartyEvent, PresenceEvent,
+  Receipt, Session, SessionSnapshot, SessionType, SkillProgress,
 } from '@draconya/sim';
-import type { C2SMessage, S2CMessage, S2CProps } from '@draconya/protocol';
-import { ITEM_SLOTS } from '@draconya/content';
-import type { Appearances, BotConfig, Item, ItemSlot, Monster } from '@draconya/content';
+import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
+import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
+import { ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
 import type {
-  CarriedItem, CharacterRuntime, HuntRuleset, InventoryRefusal, InventoryResult,
+  Ammunition, Appearances, BotConfigV2, Item, ItemSlot, Monster, Skill, Vocation,
+} from '@draconya/content';
+import { containerRulesFor, PartyFullError, shareCostsOf, skillFactorFor, splitLootOf } from '@draconya/sim';
+import type {
+  AmmoRefusal, CarriedItem, CharacterRuntime, ConfigurePartyResult, ContainerRules, HuntRuleset,
+  InventoryRefusal, InventoryResult, InventoryState, PartyBagChanged, PartyEndVoteResult,
+  PartySettingsPatch, Place, SlotRefusal, SlotState, VocationRefusal,
 } from '@draconya/sim';
-import type { SessionDirectory } from '../directory.js';
+import type { Progression } from '@draconya/content';
+import type { SessionDirectory, SessionLocation } from '../directory.js';
+import { settleSnapshotAsReceipt } from '../snapshot-settlement.js';
 import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptStore } from '../receipts.js';
 import type { BoxedItem, LootBoxStore } from '../loot-box.js';
 import type { Logger } from '../log.js';
-import type { InitialCharacter } from '../tickets.js';
+import type { InitialCharacter, PartyTicket } from '../tickets.js';
 import { AreaOfInterest } from './aoi.js';
 import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
 import { REFUSAL_TEXT, TransitionError, refuseTransition } from './transitions.js';
 import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
 
 /** Cria a sessão de um personagem que ainda não tem uma. */
-export type SessionFactory = (characterId: string, initialCharacter?: InitialCharacter) => Session;
+export type SessionFactory = (
+  characterId: string, initialCharacter?: InitialCharacter, party?: PartyTicket,
+) => Session;
 
 /** Reconstrói uma sessão a partir de um snapshot. `null` = não dá para retomar (FUN-28). */
 export type SessionRestorer = (snapshot: SessionSnapshot) => Session | null;
@@ -50,7 +60,7 @@ export interface TransitionRequest {
    * pelo cliente — o cliente manda a configuração numa mensagem própria, e o que chega aqui é
    * o que o servidor aceitou.
    */
-  readonly botConfig?: BotConfig;
+  readonly botConfig?: BotConfigV2;
 }
 
 /**
@@ -78,6 +88,12 @@ export interface SessionHostOptions {
   readonly nodeId: string;
   readonly contentVersion: string;
   readonly createSession: SessionFactory;
+  /**
+   * Constrói UM personagem para entrar numa sessão que JÁ existe (#402, ADR 0035 D7). É a
+   * costura equivalente a `createSession`, mas para o recém-chegado: o host chama `session.enter`
+   * com ele DENTRO do ciclo da sessão dona (invariante 9), sem conhecer balanceamento.
+   */
+  readonly createParticipant?: (characterId: string, initialCharacter: InitialCharacter) => CharacterRuntime;
   readonly logger: Logger;
   readonly directory?: SessionDirectory;
   /** Onde as sessões são guardadas para sobreviver à queda do processo (FUN-28). */
@@ -98,21 +114,32 @@ export interface SessionHostOptions {
    */
   readonly acceptBotConfig?: (raw: unknown, level: number) => BotConfigDecision;
   /**
-   * Persiste a configuração aceita. Ausente: ela vale nesta sessão e some no logout.
-   *
-   * É a ÚNICA escrita de banco do `game`, e é deliberada: a configuração é editada com o
-   * jogador conectado, e o processo que tem a conexão é este. Mandá-la pelo `api` obrigaria o
-   * cliente a manter sessão HTTP para uma ação de jogo, e ainda deixaria o `game` sem o valor.
-   *
-   * O caminho de LEITURA é outro e não se cruza com este: a configuração chega pelo ticket,
-   * que o `api` monta lendo a linha do personagem.
+   * Registra a preferência no Redis para jobs/api gravarem no Postgres (ADR 0028).
+   * Ausente ou falhando: aplica na sessão, mas devolve falha de salvamento ao jogador.
    */
-  readonly saveBotConfig?: (characterId: string, config: BotConfig) => Promise<void>;
+  readonly saveBotConfig?: (characterId: string, config: BotConfigV2) => Promise<void>;
   /**
    * O catálogo de itens (FUN-76), para as regras de equipar. Ausente: nada se veste, e a
    * recusa é honesta — um host sem conteúdo não sabe o que é uma espada.
    */
   readonly itemCatalog?: ReadonlyMap<string, Item>;
+  /**
+   * O catálogo de munição abstrata (ADR 0026 d.3), para o `select-ammo`. Ausente: a escolha é
+   * recusada, e a recusa é honesta — um host sem conteúdo não sabe o que é uma flecha.
+   */
+  readonly ammunitionCatalog?: ReadonlyMap<string, Ammunition>;
+  /**
+   * As vocações e o level da escolha (#154, ADR 0026 decisão 1), para `choose-vocation`.
+   * Ausentes: nada se escolhe, e a recusa é honesta — como os itens.
+   */
+  readonly vocations?: ReadonlyMap<string, Vocation>;
+  readonly vocationLevel?: number;
+  /**
+   * A tabela de progressão (#160), para os tamanhos de container — a bolsa e a linha. Ausente:
+   * `move-item` e a arma de vocação usam containers de zero lugares que crescem por um; é o
+   * host de teste sem conteúdo.
+   */
+  readonly progression?: Progression;
   /**
    * O catálogo de monstros (FUN-103), para nome e `outfitId` de quem nasce na hunt.
    *
@@ -122,6 +149,11 @@ export interface SessionHostOptions {
    * sessão (invariante 7): é um mapa carregado no boot, não uma consulta por criatura.
    */
   readonly monsterCatalog?: ReadonlyMap<string, Monster>;
+  /**
+   * O catálogo de skills (#340, SV-04), para progresso e magic level em player-stats.
+   * Ausente: skills vazias e magic level zerado.
+   */
+  readonly skillCatalog?: ReadonlyMap<string, Skill>;
   /**
    * O outfit de TODO personagem, enquanto ninguém escolhe o seu (FUN-103, §7.4 pendente).
    *
@@ -177,9 +209,80 @@ const INVENTORY_REFUSAL: Readonly<Record<InventoryRefusal, string>> = {
   'over-capacity': 'Você não aguenta carregar mais isso.',
   'not-carried': 'Você não está com esse item.',
   'not-equippable': 'Esse item não se veste.',
+  'hands-full': 'Isso precisa das duas mãos: tire o escudo, ou a arma.',
   'level-too-low': 'Seu level ainda não permite usar esse item.',
   'wrong-vocation': 'Esse item é de outra vocação.',
   'stack-too-large': 'Essa pilha é grande demais.',
+  'backpack-not-empty': 'Esvazie a mochila antes de tirá-la.',
+  'no-such-place': 'Esse lugar não existe.',
+  'empty-place': 'Não há nada nesse lugar.',
+};
+
+const VOCATION_REFUSAL: Readonly<Record<VocationRefusal, string>> = {
+  'level-too-low': 'Você ainda não chegou ao level da escolha de vocação.',
+  'already-chosen': 'Você já escolheu a sua vocação.',
+};
+
+/** A recusa da seleção de munição (#152, ADR 0026 d.3), em palavras. */
+const AMMO_REFUSAL: Readonly<Record<AmmoRefusal, string>> = {
+  'level-too-low': 'Você ainda não tem o level dessa munição.',
+};
+
+/**
+ * A recusa do slot em palavras (AB-09, FUN-73): o `sim` devolve o código tipado, e é AQUI que
+ * ele vira o motivo que o tooltip do slot mostra (AB-10). Traduzir no cliente espalharia a
+ * mesma explicação por dois lugares.
+ */
+const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
+  'empty-slot': 'Este slot está vazio.',
+  'wrong-set': 'Este conjunto não é o ativo — a barra mudou.',
+  'disabled': 'Este slot está desligado.',
+  'not-in-catalog': 'Essa ação não pode ser usada agora.',
+  // A recusa específica do requisito de magic level (RF-02): a runa não roda por ML, e o
+  // jogador precisa ler isso, não "ação indisponível".
+  'magic-level-too-low': 'Magic level insuficiente.',
+  'not-enough-mana': 'Mana insuficiente.',
+  'not-enough-gold': 'Gold insuficiente.',
+  // Reservado ao consumível FÍSICO (a carga de bênção da M22): supply e magia debitam gold no
+  // uso, e o que falta ali é gold, não item.
+  'not-enough-item': 'Você não tem o item.',
+  'no-target': 'Nenhum alvo ao alcance.',
+  'out-of-range': 'O alvo está fora de alcance.',
+  'on-cooldown': 'Ainda em cooldown.',
+  'group-cooldown': 'O grupo ainda está em cooldown.',
+};
+
+/** A assinatura de `(state, reason)` de um `slot-state` — o gatilho de envio (DT-06). */
+function slotStateSignature(states: readonly SlotState[]): string {
+  let signature = '';
+  for (const state of states) {
+    signature += `${state.set}:${state.slot}:${state.state}:${state.reason ?? ''}|`;
+  }
+  return signature;
+}
+
+/** O `slot-state` no fio, montado do estado puro do ruleset. */
+function slotStateMessage(states: readonly SlotState[]): S2CMessage {
+  return {
+    type: 'slot-state',
+    slots: states.map((state) => ({
+      set: state.set,
+      slot: state.slot,
+      state: state.state,
+      remainingMs: state.remainingMs,
+      // O motivo vai em PALAVRAS, como o do `slot-result` (FUN-73): o `sim` devolve o código
+      // tipado e é aqui que ele vira a explicação que o tooltip mostra. Mandar o slug cru
+      // contradizia o contrato do protocolo e deixava o cliente sem como explicar a recusa.
+      ...(state.reason === undefined ? {} : { reason: SLOT_REFUSAL[state.reason] }),
+    })),
+  };
+}
+
+/** Agregados zerados: o extrato de estado durável do shard não credita nada (#154). */
+const EMPTY_AGGREGATES: Aggregates = {
+  durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0,
+  itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+  damageDealt: 0, healingDone: 0,
 };
 
 /**
@@ -190,14 +293,44 @@ const INVENTORY_REFUSAL: Readonly<Record<InventoryRefusal, string>> = {
  * linha no banco e não precisa ser inserido de novo.
  */
 function acquiredBy(character: CharacterRuntime, sessionId: string): BoxedItem[] {
+  return acquiredByState(character.inventory.getState(), sessionId);
+}
+
+/**
+ * A mesma pergunta sobre o ESTADO (#154): é o que o snapshot irrestaurável tem em mãos. A arma
+ * de vocação nasce EQUIPADA com o prefixo da sessão, então o equipado também conta — sem isto
+ * ela nunca viraria linha de `item_instance`.
+ */
+function acquiredByState(inventory: InventoryState, sessionId: string): BoxedItem[] {
   const prefix = `${sessionId}:`;
-  return character.inventory.backpack.filter((item) => item.instanceId.startsWith(prefix));
+  const born = (item: CarriedItem | null | undefined): item is CarriedItem =>
+    item !== null && item !== undefined && item.instanceId.startsWith(prefix);
+  return [
+    ...inventory.backpack.filter(born),
+    ...(inventory.satchel ?? []).filter(born),
+    ...Object.values(inventory.equipped).filter(born),
+  ];
+}
+
+/**
+ * Onde cada instância está DENTRO dos containers (#160): `instanceId → lugar`. ABSOLUTO como
+ * `equipment`; o equipado não aparece — o slot dele já vai em `equipment`.
+ */
+function layoutOfState(inventory: InventoryState): Record<string, { container: 'backpack' | 'satchel'; index: number }> {
+  const layout: Record<string, { container: 'backpack' | 'satchel'; index: number }> = {};
+  inventory.backpack.forEach((item, index) => { if (item !== null) layout[item.instanceId] = { container: 'backpack', index }; });
+  (inventory.satchel ?? []).forEach((item, index) => { if (item !== null) layout[item.instanceId] = { container: 'satchel', index }; });
+  return layout;
 }
 
 /** O layout de equipamento como o extrato o leva: `slot → instanceId`. */
 function equipmentOf(character: CharacterRuntime): Record<string, string> {
+  return equipmentOfState(character.inventory.getState());
+}
+
+function equipmentOfState(inventory: InventoryState): Record<string, string> {
   const equipped: Record<string, string> = {};
-  for (const [slot, item] of Object.entries(character.inventory.getState().equipped)) {
+  for (const [slot, item] of Object.entries(inventory.equipped)) {
     if (item !== undefined) equipped[slot] = item.instanceId;
   }
   return equipped;
@@ -221,7 +354,27 @@ type PlayerStats = S2CProps<'player-stats'>;
  * porque o protocolo não tem "não sei", e zero é o único número que não promete tempo de
  * recompensa que não existe.
  */
-function playerStatsOf(character: CharacterRuntime | undefined): PlayerStats {
+function skillProgressOf(
+  character: CharacterRuntime | undefined, definition: Skill | undefined,
+  vocation: Vocation | null, progression: Progression | undefined,
+): SkillProgress {
+  if (character === undefined || definition === undefined) return { level: 0, percentToNext: 0 };
+  const factor = progression === undefined ? undefined : skillFactorFor(definition, vocation, progression);
+  return character.skills.progressOf(definition, factor);
+}
+
+function playerStatsOf(
+  character: CharacterRuntime | undefined,
+  skillCatalog?: ReadonlyMap<string, Skill>,
+  vocation: Vocation | null = null,
+  progression?: Progression,
+): PlayerStats {
+  const skills: Record<string, SkillProgress> = {};
+  if (character !== undefined && skillCatalog !== undefined) {
+    for (const definition of skillCatalog.values()) {
+      skills[definition.id] = skillProgressOf(character, definition, vocation, progression);
+    }
+  }
   return {
     health: character?.health ?? 0,
     maxHealth: character?.maxHealth ?? 0,
@@ -232,7 +385,30 @@ function playerStatsOf(character: CharacterRuntime | undefined): PlayerStats {
     capacity: character?.capacity ?? 0,
     gold: character === undefined ? 0 : character.gold + character.goldDelta,
     staminaMs: character?.staminaMs ?? 0,
+    vocationId: character?.vocationId ?? null,
+    // A munição escolhida por família (#152, ADR 0026 d.3). `null` é "a básica da família".
+    ammo: {
+      arrow: character?.ammo.get('arrow') ?? null,
+      bolt: character?.ammo.get('bolt') ?? null,
+    },
+    speed: character === undefined ? 0 : Math.round(character.speed * character.speedScale),
+    skills,
+    magicLevel: skillProgressOf(character, skillCatalog?.get('magic'), vocation, progression),
   };
+}
+
+function sameSkillProgress(a: SkillProgress, b: SkillProgress): boolean {
+  return a.level === b.level && a.percentToNext === b.percentToNext;
+}
+
+function sameSkills(a: Record<string, SkillProgress>, b: Record<string, SkillProgress>): boolean {
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  for (const key of keys) {
+    const other = b[key];
+    if (other === undefined || !sameSkillProgress(a[key] as SkillProgress, other)) return false;
+  }
+  return true;
 }
 
 /**
@@ -257,15 +433,259 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
     && a.xp === b.xp
     && a.capacity === b.capacity
     && a.gold === b.gold
-    && staminaMinute(a.staminaMs) === staminaMinute(b.staminaMs);
+    && a.ammo.arrow === b.ammo.arrow
+    && a.ammo.bolt === b.ammo.bolt
+    && staminaMinute(a.staminaMs) === staminaMinute(b.staminaMs)
+    && a.speed === b.speed
+    && sameSkills(a.skills, b.skills)
+    && sameSkillProgress(a.magicLevel, b.magicLevel);
+}
+
+/**
+ * O que o analisador entregou por último (FUN-110): os agregados e QUANTOS eventos notáveis.
+ *
+ * `durationMs` fica de fora da comparação de propósito, pela mesma razão da stamina em
+ * `sameStats`: ele muda em todo ciclo — dez por segundo numa hunt anexada —, e compará-lo
+ * faria a mensagem sair a 10 Hz para dizer que cem milissegundos passaram. O tempo anda no
+ * relógio local da janela; o que a janela não tem como saber sozinha é abate, loot, gasto,
+ * level e morte — e é isso que dispara.
+ */
+interface SentAnalyzer {
+  readonly aggregates: Aggregates;
+  readonly eventCount: number;
+  /** A seção PARTY do analisador entregue por último (ADR 0035 d.11). `undefined` em solo. */
+  readonly party: S2CProps<'analyzer'>['party'];
+}
+
+/** O extrato DESTE personagem entre os que a sessão emitiu (#187). `null` enquanto ela vive. */
+function receiptOf(hosted: HostedSession, characterId: string): Receipt | null {
+  return hosted.session.receipts().find((receipt) => receipt.characterId === characterId) ?? null;
+}
+
+function sameAnalyzer(sent: SentAnalyzer, aggregates: Aggregates, eventCount: number): boolean {
+  const a = sent.aggregates;
+  return sent.eventCount === eventCount
+    && a.xpGained === aggregates.xpGained
+    && a.goldGained === aggregates.goldGained
+    && a.goldSpent === aggregates.goldSpent
+    && a.kills === aggregates.kills
+    && a.deaths === aggregates.deaths
+    && a.itemsLooted === aggregates.itemsLooted
+    && a.suppliesUsed === aggregates.suppliesUsed
+    && a.bestBasicHit === aggregates.bestBasicHit
+    && a.bestSpellHit === aggregates.bestSpellHit
+    && a.damageDealt === aggregates.damageDealt
+    && a.healingDone === aggregates.healingDone;
+}
+
+/** Compara as duas seções PARTY entregues por último, campo a campo — como `sameAnalyzer`. */
+function samePartySummary(
+  a: S2CProps<'analyzer'>['party'],
+  b: S2CProps<'analyzer'>['party'],
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.players === b.players
+    && a.uniqueVocations === b.uniqueVocations
+    && a.xpPercent === b.xpPercent
+    && a.totalXp === b.totalXp
+    && a.totalSupplies === b.totalSupplies
+    && a.shareCosts === b.shareCosts
+    && a.splitLoot === b.splitLoot
+    && a.bagValue === b.bagValue
+    && a.bagWeight === b.bagWeight
+    && a.autoSell.used === b.autoSell.used
+    && a.autoSell.limit === b.autoSell.limit;
+}
+
+/** Um share de `party-spending` (#354, SV-18): o gasto do membro, e a prévia dele se pedir agora. */
+type PartySpendingShare = S2CProps<'party-spending'>['shares'][number];
+
+/**
+ * Os shares de `party-spending` (#354, SV-18) — o gasto de CADA participante, sempre (a MESMA
+ * leitura de `Aggregates.goldSpent` que `#presentAnalyzer` já usa por personagem), mais a
+ * prévia do settlement (`estimatedShare`), só em modo `shared`, reaproveitando
+ * `HuntRuleset.partySpendingPreview` — a MESMA conta do `party-settlement` real. `undefined`
+ * sem party: D8, nada a mandar.
+ */
+function partySpendingSharesOf(hosted: HostedSession): PartySpendingShare[] | undefined {
+  const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+  if (ruleset.party === undefined) return undefined;
+  const estimated = ruleset.partySpendingPreview?.(hosted.session);
+  return hosted.session.participants.map((member) => ({
+    characterId: member.id,
+    goldSpent: hosted.session.aggregatesOf(member.id).goldSpent,
+    ...(estimated?.has(member.id) ? { estimatedShare: estimated.get(member.id) } : {}),
+  }));
+}
+
+/** Compara os shares ENTREGUES por último com os de agora, campo a campo — como `sameAnalyzer`. */
+function sameSpending(a: readonly PartySpendingShare[], b: readonly PartySpendingShare[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const x = a[i];
+    const y = b[i];
+    if (x === undefined || y === undefined) return false;
+    if (x.characterId !== y.characterId || x.goldSpent !== y.goldSpent || x.estimatedShare !== y.estimatedShare) return false;
+  }
+  return true;
+}
+
+/**
+ * A seção PARTY do analisador (§32, ADR 0035 d.11), do `partySummary` do `sim` (DT-03: getter
+ * puro, sem `emit()`). O host só TRADUZ o que o `sim` calculou — jogadores, vocações únicas,
+ * pool de XP, valor/peso da bolsa e limite de venda — e soma XP/supplies por participante dos
+ * agregados que a própria sessão já mantém. `undefined` em solo (D8): nada a mandar.
+ */
+function partySummaryOf(hosted: HostedSession): S2CProps<'analyzer'>['party'] {
+  const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+  const summary = ruleset.partySummary?.(hosted.session);
+  if (summary === undefined) return undefined;
+  let totalXp = 0;
+  let totalSupplies = 0;
+  for (const member of summary.members) {
+    const aggregates = hosted.session.aggregatesOf(member);
+    totalXp += aggregates.xpGained;
+    totalSupplies += aggregates.suppliesUsed;
+  }
+  return {
+    players: summary.members.length,
+    uniqueVocations: summary.uniqueVocations,
+    xpPercent: summary.xpPoolPercent,
+    // A penalidade de morte pode deixar um `xpGained` negativo; o protocolo não aceita total
+    // negativo, e o piso em zero é a mesma régua do saldo de gold.
+    totalXp: Math.max(0, totalXp),
+    totalSupplies: Math.max(0, totalSupplies),
+    shareCosts: summary.shareCosts,
+    splitLoot: summary.splitLoot,
+    bagValue: summary.bagValue,
+    bagWeight: summary.bagWeight,
+    autoSell: { used: summary.autoSell.configured, limit: summary.autoSell.limit },
+  };
 }
 
 /** A stamina como o HUD a mostra: em minutos inteiros. */
 const staminaMinute = (staminaMs: number): number => Math.floor(staminaMs / 60_000);
 
+/**
+ * A soma dos abates do Bestiário: o gatilho da mensagem `bestiary` ao vivo (FUN-113).
+ *
+ * Um número só, e não a comparação monstro a monstro, porque abate nunca desce: a soma muda
+ * se, e só se, algum contador mudou. É o `sentItemsLooted` do Bestiário — comparar um inteiro
+ * por ciclo custa nada, e serializar o mapa a 10 Hz para dizer que nada mudou custaria a
+ * banda que a FUN-13 orça.
+ */
+function bestiaryTotal(counts: Readonly<Record<string, number>>): number {
+  let total = 0;
+  for (const kills of Object.values(counts)) total += kills;
+  return total;
+}
+
+/** Igualdade de lista de ids de item, com `null` = coletar tudo (§6, D2). */
+function sameIdList(a: readonly string[] | null, b: readonly string[] | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.length === b.length && a.every((id, i) => id === b[i]);
+}
+
+function samePartySettings(
+  a: S2CProps<'party-state'>['settings'],
+  b: S2CProps<'party-state'>['settings'],
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.shareCosts === b.shareCosts && a.splitLoot === b.splitLoot;
+}
+
+function samePartyLoot(
+  a: S2CProps<'party-state'>['loot'],
+  b: S2CProps<'party-state'>['loot'],
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.autoSellLimit === b.autoSellLimit
+    && a.leaderPremium === b.leaderPremium
+    && sameIdList(a.collect, b.collect)
+    && sameIdList(a.autoSell, b.autoSell);
+}
+
+function sameParty(a: S2CProps<'party-state'>, b: S2CProps<'party-state'>): boolean {
+  if (a.leaderId !== b.leaderId || a.mode !== b.mode
+    || a.shareCosts !== b.shareCosts || a.splitLoot !== b.splitLoot
+    || a.members.length !== b.members.length
+    || !samePartySettings(a.settings, b.settings)
+    || !samePartyLoot(a.loot, b.loot)) {
+    return false;
+  }
+  for (let i = 0; i < a.members.length; i++) {
+    const x = a.members[i];
+    const y = b.members[i];
+    if (
+      !x || !y
+      || x.characterId !== y.characterId || x.name !== y.name || x.alive !== y.alive
+      || x.healthPercent !== y.healthPercent || x.vocationId !== y.vocationId
+      || x.level !== y.level || x.manaPercent !== y.manaPercent
+      || x.joinedAtMs !== y.joinedAtMs || x.connected !== y.connected
+      // DPS/HPS (#431): a taxa da janela muda quando a amostra vence ou um golpe entra — é
+      // exatamente a variação que precisa reenviar o `party-state` ao vivo.
+      || x.dps !== y.dps || x.hps !== y.hps
+      || x.damageDealt !== y.damageDealt || x.healingDone !== y.healingDone
+    ) return false;
+  }
+  return true;
+}
+
+/** A recusa de `configureParty` em português, para o `system-message` (D12). */
+function partyRefusalText(decision: Extract<ConfigurePartyResult, { ok: false }>): string {
+  if (decision.reason === 'not-leader') return 'Só o líder pode mudar as configurações da party.';
+  if (decision.reason === 'unknown-item') return `Item desconhecido: ${decision.itemId}.`;
+  return `Item sem valor de venda: ${decision.itemId}.`;
+}
+
+/** A recusa da votação de encerrar em português, para o `system-message` (#432). */
+function partyEndVoteRefusalText(decision: Extract<PartyEndVoteResult, { ok: false }>): string {
+  if (decision.reason === 'not-leader') return 'Só o líder pode propor encerrar a caçada para todos.';
+  if (decision.reason === 'no-proposal') return 'Não há proposta de encerramento em aberto.';
+  return 'Você não está nesta party.';
+}
+
+type ConditionsSnapshot = ReadonlyMap<ActiveConditionKind, number>;
+
+const ACTIVE_CONDITION_KIND_SET: ReadonlySet<string> = new Set(ACTIVE_CONDITION_KINDS);
+
+/**
+ * Só as condições que o contrato conhece (`ACTIVE_CONDITION_KINDS`): desde o CMB-07 a chave da
+ * condição é livre no `sim` (DOT de ability, campo), e o que não tem badge no cliente fica de
+ * fora aqui — o `z.enum` do protocolo recusaria o frame inteiro, e a barra sumiria com ele.
+ */
+function conditionsSnapshotOf(character: CharacterRuntime): ConditionsSnapshot {
+  const snapshot = new Map<ActiveConditionKind, number>();
+  for (const condition of character.conditions.getState()) {
+    if (!ACTIVE_CONDITION_KIND_SET.has(condition.key)) continue;
+    snapshot.set(condition.key as ActiveConditionKind, condition.expiresAtMs);
+  }
+  return snapshot;
+}
+
+function sameConditions(a: ConditionsSnapshot, b: ConditionsSnapshot): boolean {
+  if (a.size !== b.size) return false;
+  for (const [key, expiresAtMs] of a) {
+    if (b.get(key) !== expiresAtMs) return false;
+  }
+  return true;
+}
+
+function activeConditionsOf(snapshot: ConditionsSnapshot, nowMs: number): S2CProps<'active-conditions'> {
+  const conditions: { kind: ActiveConditionKind; remainingMs: number }[] = [];
+  for (const [kind, expiresAtMs] of snapshot) {
+    conditions.push({
+      kind,
+      remainingMs: Math.max(0, Math.round(expiresAtMs - nowMs)),
+    });
+  }
+  conditions.sort((a, b) => a.kind.localeCompare(b.kind));
+  return { conditions };
+}
+
 /** Ver `createBotConfigValidator` em `sessions.ts`. */
 export type BotConfigDecision =
-  | { readonly ok: true; readonly config: BotConfig }
+  | { readonly ok: true; readonly config: BotConfigV2 }
   | { readonly ok: false; readonly reason: string };
 
 interface HostedSession {
@@ -282,11 +702,25 @@ interface HostedSession {
    */
   lastAdvancedAtMs: number;
   /**
-   * O extrato desta sessão já virou crédito? A drenagem grava e DEPOIS solta, e sem esta
-   * marca o `release` gravaria de novo com um `seq` novo — que a chave única do ledger não
-   * teria como recusar, e o jogador receberia o mesmo gold duas vezes.
+   * De quem o extrato já foi confirmado no Redis (#194: um por membro). A liquidação no
+   * Postgres é posterior. A drenagem grava e DEPOIS solta; esta marca evita regravar no release.
    */
-  credited: boolean;
+  readonly credited: Set<string>;
+  /** Tentativa em voo por membro: concorrentes aguardam inclusive a falha, sem soltar antes. */
+  readonly receiptSaves: Map<string, Promise<void>>;
+  /**
+   * Quem saiu por DENTRO do `sim` — morte ou regra de saída numa party (#193) — e ainda não
+   * foi gravado nem devolvido à Cidade. `#presentMoves` enfileira; `#settleDepartures` drena
+   * fora do ciclo, porque gravar é I/O.
+   */
+  readonly departures: MemberLeft[];
+  /**
+   * Personagens de um SHARD com estado durável pendente (#154): vocação, equipamento, munição
+   * e arma de vocação mudam na praça e, sem isto, sumiam no logout. Quem entra aqui recebe um
+   * extrato de estado durável ao sair (`#saveDurableReceipt`); quem não mexeu em nada, não —
+   * um extrato zerado por logout de praça seria uma linha de ledger por pessoa que fecha o jogo.
+   */
+  readonly dirty: Set<string>;
   /**
    * Quantos itens esta sessão já entregou, na última vez que o inventário foi mandado.
    *
@@ -307,6 +741,69 @@ interface HostedSession {
    * é apresentação; o `sim` muda o que tem de mudar de qualquer jeito (invariante 3).
    */
   readonly sentStats: Map<string, PlayerStats>;
+  /**
+   * O último alvo ENTREGUE a quem olha cada personagem (#470), por `characterId`, como id
+   * numérico de criatura ou `null`. É o gatilho do `target-changed` no ciclo: comparar um
+   * número por personagem custa nada, e mandar o alvo a 10 Hz custaria a banda que o
+   * `player-stats` deixou de gastar. Entrada AUSENTE é "ninguém recebeu ainda" — o
+   * `session-attach` e o primeiro ciclo com visualizador escrevem.
+   */
+  readonly sentTarget: Map<string, number | null>;
+  /**
+   * O último `seq` de `select-target` processado, por `characterId` (#470). Um `seq` anterior
+   * é mensagem atrasada e é ignorado em silêncio, como o `walk` fora do ritmo: processar
+   * fora de ordem faria o alvo oscilar entre duas seleções do mesmo cliente.
+   */
+  readonly lastTargetSeq: Map<string, number>;
+  /**
+   * O último analisador ENTREGUE (FUN-110), por sessão — os agregados são da sessão, não do
+   * personagem. `null` é "ninguém recebeu ainda", e o primeiro ciclo com visualizador manda;
+   * o `session-attach`, que já leva tudo no `session-state`, também o escreve.
+   */
+  /**
+   * Por PERSONAGEM desde o #196: os agregados são de cada participante (#187), e quem olha um
+   * membro da party vê os dele — não a soma. Em solo é um só, como antes.
+   */
+  readonly sentAnalyzer: Map<string, SentAnalyzer>;
+  /**
+   * A soma dos abates do Bestiário ENTREGUE a quem olha cada personagem (FUN-113), por
+   * `characterId` — o mesmo mecanismo de `sentStats`, para uma grandeza que só sobe. Entrada
+   * ausente é "ninguém recebeu ainda"; escrita só quando alguém recebeu, no `session-attach`
+   * e no ciclo com visualizador, pela razão registrada em `sentStats`.
+   */
+  readonly sentBestiary: Map<string, number>;
+  /** O último `party-state` ENTREGUE aos visualizadores (#339, SV-03). */
+  sentParty: S2CProps<'party-state'> | null;
+  /**
+   * O último `party-bag-changed` do `sim` (#400), guardado mesmo sem visualizador.
+   *
+   * `getState().partyBag` guarda gold, itens (com elegibilidade), capacidade e OVERWEIGHT, mas
+   * o PESO, o VALOR e as RESERVAS só existem no evento — `#rebalanceBag` os calcula e não os
+   * persiste. O host NUNCA os recalcula (PRD §34): ele guarda o que o `sim` mandou para o
+   * `session-state` de quem reanexa não perder as reservas.
+   */
+  lastPartyBag: PartyBagChanged | null;
+  /**
+   * Os shares de `party-spending` ENTREGUES por último (#354, SV-18) — por SESSÃO, como
+   * `party-bag`, não por personagem: a mensagem é UMA SÓ, para todos os visualizadores. `null`
+   * é "ninguém recebeu ainda" ou "sessão sem party" (D8); o primeiro ciclo com visualizador, ou
+   * o `session-attach`, escreve o real.
+   */
+  sentSpending: readonly PartySpendingShare[] | null;
+  /** As últimas condições ENTREGUES a quem olha cada personagem (#341, SV-05). */
+  readonly sentConditions: Map<string, ConditionsSnapshot>;
+  /**
+   * A assinatura `(state, reason)` dos slots ENTREGUE a quem olha cada personagem (AB-09),
+   * por `characterId`. É o gatilho do `slot-state`: o `remainingMs` decresce sempre, e compará-lo
+   * mandaria a banda inteira a 10 Hz. Entrada ausente é "ninguém recebeu ainda".
+   */
+  readonly sentSlotState: Map<string, string>;
+  /**
+   * O instante do último cálculo de `slotStates` desta sessão (AB-09). O gatilho por assinatura
+   * já evita o envio, mas o CÁLCULO — 24 slots e uma varredura de alvos por slot de dano — roda
+   * a cada ciclo; sem esta marca, uma party de dois faria 200 varreduras/s para descartar tudo.
+   */
+  slotStateAtMs: number;
   /**
    * `characterId` (UUID) → id numérico de criatura na instância.
    *
@@ -335,6 +832,12 @@ interface HostedSession {
 /** `created` diz se ESTA chamada trouxe a sessão à existência — ver `prepare`. */
 export interface PrepareResult {
   readonly created: boolean;
+  /**
+   * Presente só quando a admissão FOI recusada (#402) — `created` fica `false` junto, e o
+   * handshake do WebSocket fecha com o status do motivo. Aditivo de propósito (DT-03): os
+   * consumidores antigos continuam lendo `created` como booleano direto.
+   */
+  readonly refused?: 'party-full' | 'content-version' | 'session-not-here';
 }
 
 /**
@@ -345,6 +848,12 @@ const CYCLE_MS = 100;
 /** Um terço do lease do diretório, pela mesma razão do batimento. */
 const RENEW_INTERVAL_MS = 10_000;
 /**
+ * Cada quanto o total de jogadores online é agregado entre nós e mandado para quem está
+ * olhando (SV-07). Fixado em 30 s pelo desenho da issue: mais apertado não muda a sensação de
+ * "gente jogando" e custa banda à toa; mais frouxo atrasaria demais um pico real de entrada.
+ */
+const PLAYER_COUNT_INTERVAL_MS = 30_000;
+/**
  * Cada quanto a sessão é gravada.
  *
  * É exatamente o que se perde numa queda: dez segundos de XP. Aceitável para progresso,
@@ -352,6 +861,16 @@ const RENEW_INTERVAL_MS = 10_000;
  * e não depende deste intervalo.
  */
 const SNAPSHOT_INTERVAL_MS = 10_000;
+
+/**
+ * Cada quanto o estado dos slots é recalculado no ciclo (AB-09, #420).
+ *
+ * A assinatura já evita o ENVIO quando nada muda, mas o cálculo de 24 `SlotState` — com uma
+ * varredura de alvos por slot de dano — rodava a 10 Hz por personagem observado. A 2 Hz o
+ * cliente continua animando o prazo localmente e a transição de cooldown chega em até 500 ms,
+ * que é o mesmo atraso que ele já tolera entre a entrega e o vencimento.
+ */
+const SLOT_STATE_INTERVAL_MS = 500;
 
 /**
  * Quanto tempo uma sessão de REPOUSO fica de pé sem ninguém olhando (FUN-52).
@@ -381,6 +900,14 @@ export class SessionHost {
   /** Nome de exibição, do ticket. Só o chat lê; o `sim` não conhece nome (FUN-58). */
   readonly #nameByCharacter = new Map<string, string>();
   /**
+   * As cores do outfit, do ticket (FUN-104). Só `creature-appear` e `session-state` leem; o
+   * `sim` não conhece cor, e o snapshot não a carrega — é apresentação, não simulação. Como o
+   * nome, entram quando a sessão é preparada e vivem até `release`: uma escolha nova feita no
+   * meio da sessão só aparece na próxima entrada, com o ticket que a trouxer. Ausente é o
+   * padrão do cliente — personagem que nunca escolheu, ou ticket de um `api` antigo.
+   */
+  readonly #colorsByCharacter = new Map<string, OutfitColors>();
+  /**
    * A configuração do bot vigente, por personagem (FUN-81).
    *
    * Nasce do ticket e é substituída pela mensagem `bot-config`. Vive aqui, e não no
@@ -388,7 +915,7 @@ export class SessionHost {
    * Cidade e entra na hunt, e é o host que constrói a hunt. Guardá-la no runtime a poria no
    * snapshot duas vezes — o do personagem e o do ruleset.
    */
-  readonly #botByCharacter = new Map<string, BotConfig>();
+  readonly #botByCharacter = new Map<string, BotConfigV2>();
   readonly #preparations = new Map<string, Promise<void>>();
   /** Transições em voo, por personagem. Ver `transition`. */
   readonly #transitions = new Map<string, Promise<void>>();
@@ -408,10 +935,20 @@ export class SessionHost {
    * recolhida por isto, e é o ADR 0001 em uma linha.
    */
   readonly #restingSince = new Map<string, number | null>();
+  /**
+   * Até quando cada personagem está DANDO um passo, no relógio deste processo (FUN-122). O
+   * teclado do cliente repete o `walk` no ritmo do passo, mas o ritmo é do servidor: um `walk`
+   * que chega antes de o passo anterior acabar é recusado em silêncio — senão um cliente que
+   * mandasse mil por segundo atravessaria a Cidade em meio segundo, porque a Cidade não tem
+   * relógio (`hz` 0) e o `move` do `sim` não sabe que horas são.
+   */
+  readonly #walkingUntil = new Map<string, number>();
 
   #cycleTimer: NodeJS.Timeout | null = null;
   #renewTimer: NodeJS.Timeout | null = null;
   #snapshotTimer: NodeJS.Timeout | null = null;
+  #playerCountTimer: NodeJS.Timeout | null = null;
+  #lastPlayerCount: number | undefined = undefined;
 
   constructor(options: SessionHostOptions) {
     this.#options = options;
@@ -426,6 +963,21 @@ export class SessionHost {
     let total = 0;
     for (const hosted of this.#sessions.values()) total += hosted.viewers.size;
     return total;
+  }
+
+  /**
+   * Quantos PERSONAGENS distintos este nó tem conectados agora (SV-07) — não visualizadores:
+   * duas abas do mesmo personagem contam UMA vez (invariante 8, `CLAUDE.md` de `server`: "duas
+   * abas do mesmo personagem são dois visualizadores da MESMA sessão, nunca duas sessões"). O
+   * `Set` nunca precisa decidir entre SESSÕES, só entre ABAS dentro de uma: um personagem não
+   * pode estar hospedado em duas sessões deste nó ao mesmo tempo (o mesmo invariante).
+   */
+  get connectedCharacterCount(): number {
+    const characters = new Set<string>();
+    for (const hosted of this.#sessions.values()) {
+      for (const viewer of hosted.viewers) characters.add(viewer.characterId);
+    }
+    return characters.size;
   }
 
   sessionFor(characterId: string): Session | undefined {
@@ -459,10 +1011,11 @@ export class SessionHost {
     characterId: string,
     initialCharacter?: InitialCharacter,
     accountId?: string,
+    party?: PartyTicket,
   ): Promise<PrepareResult> {
     const startedAt = performance.now();
     try {
-      return await this.#prepare(characterId, initialCharacter, accountId);
+      return await this.#prepare(characterId, initialCharacter, accountId, party);
     } finally {
       // O que o jogador espera ao reconectar: resolver o diretório, carregar o snapshot e
       // hospedar. É o número que o teste de carga cobra, e ele NÃO inclui o tempo de rede —
@@ -475,11 +1028,34 @@ export class SessionHost {
     characterId: string,
     initialCharacter?: InitialCharacter,
     accountId?: string,
+    party?: PartyTicket,
   ): Promise<PrepareResult> {
     const existing = this.sessionFor(characterId);
     if (existing !== undefined) {
-      await this.#register(characterId, existing, accountId);
-      return { created: false };
+      // O ticket é de PARTY e pede uma sessão diferente da que o personagem já ocupa aqui
+      // (#527, invariante 8): o líder clica "Iniciar com o time" DA Cidade, e o socket antigo
+      // pode nem ter fechado ainda quando o novo ticket chega. Sem isto, `#prepare` reanexava
+      // à Cidade e o ticket da party era descartado em silêncio — a hunt nunca nascia, e quem
+      // mandasse `session-attach` continuava recebendo `sessionType: "city"` para sempre.
+      if (party !== undefined && existing.id !== party.sessionId) {
+        // O tipo do destino é o da sessão já hospedada (#402, quem chega depois do primeiro
+        // ticket) quando ela existe; senão é o que `createSession` vai produzir para um
+        // `PartyTicket` — sempre `'hunt'` (`sessions.ts`, `partyHuntFor`), nunca outra coisa.
+        const targetType = this.#sessions.get(party.sessionId)?.session.ruleset.type ?? 'hunt';
+        await this.#leaveForParty(characterId, existing, {
+          sessionId: party.sessionId, nodeId: this.#options.nodeId, type: targetType,
+        });
+      } else {
+        await this.#register(characterId, existing, accountId);
+        return { created: false };
+      }
+    }
+
+    // Ticket de ENTRADA (#402): o personagem NÃO tem sessão local e a party já está em curso —
+    // ou acabou de sair da Cidade pelo ramo acima. A sessão é achada pelo id dela neste nó;
+    // sessão ausente é recusa tipada, não sessão nova.
+    if (party?.join === true) {
+      return this.#admitLateJoiner(characterId, initialCharacter, accountId, party);
     }
 
     const pending = this.#preparations.get(characterId);
@@ -490,7 +1066,7 @@ export class SessionHost {
       return { created: false };
     }
 
-    const preparation = this.#createAndRegister(characterId, initialCharacter, accountId);
+    const preparation = this.#createAndRegister(characterId, initialCharacter, accountId, party);
     this.#preparations.set(characterId, preparation);
     try {
       await preparation;
@@ -499,6 +1075,123 @@ export class SessionHost {
         this.#preparations.delete(characterId);
       }
     }
+    return { created: true };
+  }
+
+  /**
+   * Tira o personagem da sessão que ele ocupa NESTE nó antes de a party assumir (#527,
+   * invariante 8: nunca duas sessões ao mesmo tempo) — E move o registro do diretório pela
+   * MESMA operação que a transição hunt↔Cidade da morte usa (`directory.succeed`, FUN-38, o
+   * `#replace` abaixo), nunca por `#register`/`#takeOver`: `#takeOver` existe para RETOMAR
+   * depois de nó morto — `TAKE_OVER_SESSION` recusa quando o batimento do nó ainda existe
+   * (`directory.ts`) — e o nó aqui está bem vivo, é ele mesmo quem está pedindo a troca. Sem
+   * isto, o `#register` que `#createAndRegister` chama logo depois via o `sessionKey` ainda
+   * apontando para a Cidade, caía no `#takeOver`, e ele recusava SEMPRE — "active reservation
+   * expired before session registration" em todo handshake, porque o nó nunca estava morto.
+   *
+   * Espelha o ramo de shard de `release` — a Cidade não credita e não encerra por personagem
+   * (ADR 0023), mas guarda o que mudou (`#saveDurableReceipt`, #154).
+   *
+   * A sessão de origem só deveria ser um shard: a API só emite ticket de party para quem o
+   * diretório via na Cidade (ou em repouso) no instante da emissão — `/start` e o `/join` em
+   * curso conferem isso antes de reservar qualquer coisa. O ramo `else` é rede de segurança
+   * para essa suposição falhar — credita como uma saída normal em vez de arriscar apagar
+   * progresso em silêncio.
+   */
+  async #leaveForParty(characterId: string, existing: Session, target: SessionLocation): Promise<void> {
+    const hosted = this.#sessions.get(existing.id);
+    if (hosted === undefined) {
+      this.#sessionIdByCharacter.delete(characterId);
+    } else {
+      this.#dropViewers(hosted, characterId);
+      if (existing.ruleset.shared === true) {
+        await this.#saveDurableReceipt(characterId, hosted, 'manual-exit');
+        hosted.session.leave(characterId);
+        this.#announceDeparture(hosted, characterId);
+      } else {
+        let receipt: Receipt | null;
+        if (hosted.session.ended === null && hosted.session.participants.length > 1) {
+          const departure = hosted.session.leave(characterId, 'manual-exit');
+          receipt = departure?.receipt ?? null;
+        } else {
+          if (hosted.session.ended === null) hosted.session.end('manual-exit');
+          receipt = receiptOf(hosted, characterId);
+        }
+        if (receipt !== null) await this.#saveReceipt(characterId, hosted, receipt);
+      }
+      const remaining = this.#charactersOf(existing.id).filter((id) => id !== characterId);
+      if (remaining.length === 0) this.#sessions.delete(existing.id);
+      this.#sessionIdByCharacter.delete(characterId);
+      this.#restingSince.delete(characterId);
+    }
+
+    // O registro do diretório troca AQUI, não em `#register` — ver o comentário acima. A
+    // conta é a que a Cidade já registrou (`#createLocal` a gravou quando o personagem
+    // entrou lá); sem diretório (host de teste sem essa dependência), não há o que mover.
+    const directory = this.#options.directory;
+    const accountId = this.#accountIdByCharacter.get(characterId);
+    if (directory === undefined || accountId === undefined) return;
+    const moved = await directory.succeed(
+      characterId, accountId,
+      { sessionId: existing.id, nodeId: this.#options.nodeId, type: existing.ruleset.type satisfies SessionType },
+      target,
+    );
+    if (!moved) {
+      // Outro nó assumiu o registro, ou o lease/reserva expirou, entre a leitura da sessão
+      // atual e agora — a mesma corrida rara que `#replace` cobre soltando o personagem. Aqui
+      // não há `hosted` para soltar (o estado local já saiu acima); falhar alto é o que faz o
+      // handshake responder 503 em vez de hospedar uma sessão sem registro válido nenhum
+      // (invariante 9).
+      throw new Error(
+        `directory entry for ${characterId} changed hands while leaving a session for a party ticket`,
+      );
+    }
+  }
+
+  /**
+   * Um personagem NOVO numa hunt que JÁ existe neste nó (#402, ADR 0035 D7, PRD §22).
+   *
+   * A sessão é achada pelo `sessionId` do ticket — o nó certo foi resolvido pelo `api` a partir
+   * do diretório. Aqui dentro, `session.enter` roda na sessão DONA (invariante 9): é o `onEnter`
+   * do #397 que aplica o teto de `maxMembers` e recusa acima dele, e é por isso que a lotação
+   * otimista do `api` não basta (DT-02).
+   */
+  async #admitLateJoiner(
+    characterId: string,
+    initialCharacter: InitialCharacter | undefined,
+    accountId: string | undefined,
+    party: PartyTicket,
+  ): Promise<PrepareResult> {
+    const hosted = this.#sessions.get(party.sessionId);
+    if (hosted === undefined) return { created: false, refused: 'session-not-here' };
+    if (hosted.session.contentVersion !== this.#options.contentVersion) {
+      return { created: false, refused: 'content-version' };
+    }
+    const member = party.members[0];
+    const newcomer = member === undefined || this.#options.createParticipant === undefined
+      ? undefined
+      : this.#options.createParticipant(member.characterId, member.initialCharacter);
+    if (newcomer === undefined) return { created: false, refused: 'session-not-here' };
+    try {
+      hosted.session.enter(newcomer);
+    } catch (error) {
+      // Teto de `maxMembers` do conteúdo (#397): recusa ESPERADA, não falha de sessão.
+      if (error instanceof PartyFullError) return { created: false, refused: 'party-full' };
+      throw error;
+    }
+    // O premium de quem entra DEPOIS do `start` é fato sobre o personagem, não configuração da
+    // party (#400): sem ele, a penalidade de morte do recém-chegado usaria o default do líder.
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    ruleset.setMemberPremium?.(hosted.session, characterId, member?.initialCharacter.premium ?? false);
+    // Registro sob lease ANTES do local: registro recusado não pode deixar rastro.
+    await this.#register(characterId, hosted.session, accountId);
+    // Nome e cores ANTES de `#createLocal`, como no caminho da party nova (FUN-104).
+    if (initialCharacter?.name !== undefined) this.#nameByCharacter.set(characterId, initialCharacter.name);
+    if (initialCharacter?.outfitColors !== undefined) {
+      this.#colorsByCharacter.set(characterId, initialCharacter.outfitColors);
+    }
+    this.#createLocal(characterId, hosted.session, accountId);
+    this.#adoptTicketBotConfig(characterId, hosted.session, initialCharacter);
     return { created: true };
   }
 
@@ -595,7 +1288,7 @@ export class SessionHost {
     try {
       await this.release(characterId, 1000, 'logout');
     } catch (error) {
-      this.#logger.error({ error, characterId }, 'Failed to log the character out');
+      this.#logger.error({ err: error, characterId }, 'Failed to log the character out');
     }
   }
 
@@ -618,7 +1311,9 @@ export class SessionHost {
     if (shared) {
       // Num shard, sair é SAIR — não encerrar (FUN-71, ADR 0023). O jogador que fecha o jogo
       // na praça não pode levar a praça junto, e nada há a creditar: a Cidade não gera
-      // progresso (§37).
+      // progresso (§37). O que ela gera é ESTADO (#154) — e ele sai antes de o participante
+      // sair, porque `leave` o tira da lista.
+      await this.#saveDurableReceipt(characterId, hosted, 'manual-exit');
       hosted.session.leave(characterId);
       this.#announceDeparture(hosted, characterId);
       // A cópia vazia deixa de ser hospedada. A próxima entrada cria outra, já na versão de
@@ -629,14 +1324,19 @@ export class SessionHost {
       // Creditar ANTES de soltar. Sem isto, sair do jogo dentro de uma hunt jogaria fora a XP
       // da sessão inteira: desde a FUN-54 o extrato é o único caminho até o banco, e logo
       // abaixo o snapshot — a outra cópia do progresso — é apagado.
-      const receipt = hosted.session.receipt();
+      const receipt = receiptOf(hosted, characterId);
       if (receipt !== null) await this.#saveReceipt(characterId, hosted, receipt);
-      this.#sessions.delete(hosted.session.id);
+      // Some daqui quando não sobra ninguém dela (#198): numa party, soltar um membro não pode
+      // apagar a sessão que os outros ainda vão creditar — a drenagem passa por eles em seguida.
+      const remaining = this.#charactersOf(hosted.session.id).filter((id) => id !== characterId);
+      if (remaining.length === 0) this.#sessions.delete(hosted.session.id);
     }
 
     this.#sessionIdByCharacter.delete(characterId);
+    this.#walkingUntil.delete(characterId);
     this.#accountIdByCharacter.delete(characterId);
     this.#nameByCharacter.delete(characterId);
+    this.#colorsByCharacter.delete(characterId);
     this.#botByCharacter.delete(characterId);
     this.#restingSince.delete(characterId);
 
@@ -652,7 +1352,7 @@ export class SessionHost {
     } catch (error) {
       // Falhar aqui deixa o slot preso até o lease expirar, que é ruim mas se resolve
       // sozinho. Silenciar seria pior: é a única pista de por que uma conta ficou sem slot.
-      this.#logger.error({ error, characterId }, 'Failed to release session from the directory');
+      this.#logger.error({ err: error, characterId }, 'Failed to release session from the directory');
     }
     this.#logger.info({ characterId, sessionId: hosted.session.id }, 'Session released');
   }
@@ -682,7 +1382,7 @@ export class SessionHost {
           // A hunt nasce compilada com a configuração que o servidor aceitou — do ticket ou
           // da última `bot-config` desta conexão.
           ...(this.#botByCharacter.has(viewer.characterId)
-            ? { botConfig: this.#botByCharacter.get(viewer.characterId) as BotConfig }
+            ? { botConfig: this.#botByCharacter.get(viewer.characterId) as BotConfigV2 }
             : {}),
         });
         return;
@@ -716,6 +1416,28 @@ export class SessionHost {
         // level basta e em que slot vai é o servidor.
         this.#requestEquip(viewer, message.instanceId);
         return;
+      case 'choose-vocation':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL vocação; level, arma e slot são daqui.
+        this.#requestVocation(viewer, message.vocationId);
+        return;
+      case 'select-ammo':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL munição; o level e o catálogo são daqui.
+        this.#requestSelectAmmo(viewer, message.ammoId);
+        return;
+      case 'move-item':
+        // INTENÇÃO (invariante 4): dois lugares; empilhar, vestir e recusar são do servidor.
+        this.#requestMove(viewer, message.from, message.to);
+        return;
+      case 'use-slot':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL slot; elegibilidade, estoque, mana e
+        // cooldown são do servidor (AB-09, ADR 0032 d.3).
+        this.#requestUseSlot(viewer, message.set, message.slot);
+        return;
+      case 'select-target':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL criatura (ou `0`, cancelar); quem valida
+        // o alvo e confirma/recusa é o servidor (#470).
+        this.#requestSelectTarget(viewer, message.creatureId, message.seq);
+        return;
       case 'unequip':
         this.#requestUnequip(viewer, message.slot);
         return;
@@ -723,6 +1445,16 @@ export class SessionHost {
         // INTENÇÃO (invariante 4): o jogador manda as REGRAS, e quem decide se elas valem —
         // vocabulário, slots, catálogo e gate de level — é o servidor.
         void this.#configureBot(viewer, message.config);
+        return;
+      case 'party-settings':
+        // INTENÇÃO (invariante 4): os campos já vêm tipados pelo protocolo (#393); quem
+        // confere liderança e catálogo é `configureParty`, dentro da sessão dona (invariante 9).
+        this.#configureParty(viewer, message);
+        return;
+      case 'party-end-vote':
+        // INTENÇÃO (invariante 4): o líder propõe e os membros respondem; quem confere quem
+        // pode propor e se todos já aprovaram é o `sim`, dentro da sessão dona (invariante 9).
+        this.#partyEndVote(viewer, message);
         return;
       case 'say':
         // Chat NÃO passa pelo `sim`: ele não muda resultado de simulação nenhuma, e pôr
@@ -795,6 +1527,10 @@ export class SessionHost {
     if (ruleset.requestMove === undefined) return;
     const character = session.participants.find((p) => p.id === viewer.characterId);
     if (character === undefined || !character.alive) return;
+    // Um passo por vez (FUN-122): o anterior ainda está em curso, e este chegou cedo demais —
+    // a rajada de uma tecla presa, ou um cliente que manda mais rápido do que anda.
+    const now = this.#now();
+    if (now < (this.#walkingUntil.get(viewer.characterId) ?? 0)) return;
 
     const from = character.position;
     const to = typeof target === 'string'
@@ -803,6 +1539,7 @@ export class SessionHost {
 
     const result = ruleset.requestMove(session, viewer.characterId, to);
     if (!result.ok) return;
+    this.#walkingUntil.set(viewer.characterId, now + result.durationMs);
     // A Cidade não tem ciclo (`hz` 0): o evento precisa virar pacote agora, senão ele fica
     // no buffer da sessão até alguém drenar — e ninguém drena o que não tica.
     this.#presentMoves(hosted);
@@ -823,10 +1560,14 @@ export class SessionHost {
   #requestEquip(viewer: Viewer, instanceId: string): void {
     const character = this.#ownerOf(viewer.characterId);
     if (character === undefined) return;
-    this.#answerInventory(
-      viewer,
-      character.inventory.equip(instanceId, character, this.#options.itemCatalog ?? EMPTY_ITEMS),
-    );
+    const result = character.inventory.equip(instanceId, character, this.#options.itemCatalog ?? EMPTY_ITEMS);
+    if (result.ok) this.#markDirty(viewer.characterId);
+    this.#answerInventory(viewer, result);
+  }
+
+  /** O personagem mudou estado durável num shard (#154): o logout precisa gravar. */
+  #markDirty(characterId: string): void {
+    this.#hostedSession(characterId)?.dirty.add(characterId);
   }
 
   #requestUnequip(viewer: Viewer, slot: string): void {
@@ -838,12 +1579,268 @@ export class SessionHost {
       viewer.send({ type: 'system-message', level: 'warning', text: 'Esse lugar não existe.' });
       return;
     }
-    this.#answerInventory(viewer, character.inventory.unequip(slot as ItemSlot));
+    const result = character.inventory.unequip(slot as ItemSlot, this.#containerRules(character));
+    if (result.ok) this.#markDirty(viewer.characterId);
+    this.#answerInventory(viewer, result);
+  }
+
+  /**
+   * Mover um item (#160, ADR 0026 decisão 6). Processado NA CHEGADA, como equipar. O `sim`
+   * decide — troca, pilha, veste, desveste, recusa — numa transação; o host confere só o que
+   * o protocolo deixou aberto (o slot é string) e traduz a recusa.
+   */
+  #requestMove(viewer: Viewer, from: Place | { readonly slot: string }, to: Place | { readonly slot: string }): void {
+    const character = this.#ownerOf(viewer.characterId);
+    if (character === undefined) return;
+    // O slot chega como string e é conferido pelo CONTEÚDO, como em `#requestUnequip`.
+    for (const end of [from, to]) {
+      if ('slot' in end && !(ITEM_SLOTS as readonly string[]).includes(end.slot)) {
+        viewer.send({ type: 'system-message', level: 'warning', text: 'Esse lugar não existe.' });
+        return;
+      }
+    }
+    const result = character.inventory.move(
+      from as Place, to as Place, this.#options.itemCatalog ?? EMPTY_ITEMS, character, this.#containerRules(character),
+    );
+    if (result.ok) this.#markDirty(viewer.characterId);
+    this.#answerInventory(viewer, result);
+  }
+
+  /**
+   * O disparo manual de um slot (AB-09, ADR 0032 d.3). Processado NA CHEGADA, como equipar.
+   *
+   * Fora de hunt é RECUSA com motivo, nunca silêncio: a barra é montada na Cidade e a tecla
+   * existe lá — "não estou numa caçada" é a resposta, não esconder o botão (ADR 0032 d.3).
+   */
+  #requestUseSlot(viewer: Viewer, set: number, slot: number): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const ruleset = hosted?.session.ruleset as Partial<HuntRuleset> | undefined;
+    const outcome = hosted === undefined || ruleset?.useSlot === undefined
+      ? undefined
+      : ruleset.useSlot(hosted.session, viewer.characterId, set, slot);
+    if (outcome === undefined) {
+      viewer.send({ type: 'slot-result', set, slot, ok: false, reason: 'Você não está numa caçada.' });
+      return;
+    }
+    viewer.send({
+      type: 'slot-result', set, slot, ok: outcome.ok,
+      ...(outcome.ok ? {} : { reason: SLOT_REFUSAL[outcome.reason] }),
+    });
+    if (!outcome.ok || hosted === undefined) return;
+    // A ação do jogador muda o estado do slot na hora: destrava o throttle para o próximo ciclo
+    // entregar o cooldown novo, sem esperar a janela de `SLOT_STATE_INTERVAL_MS`.
+    hosted.slotStateAtMs = 0;
+    // Supply e magia não tocam o inventário (o modelo abstrato debita gold no uso): o que muda
+    // é mana, vida e gold, e isso sai no `player-stats` abaixo. Mudança de corpo tem o
+    // `equipment-changed` como caminho próprio.
+    const character = this.#participantOf(hosted, viewer.characterId);
+    const stats = this.#statsOf(character);
+    hosted.sentStats.set(viewer.characterId, stats);
+    this.#sendToViewersOf(hosted, viewer.characterId, { type: 'player-stats', ...stats });
+  }
+
+  /**
+   * O jogador escolheu (ou cancelou) um alvo clicando (#470, AB-09, ADR 0032 d.5).
+   *
+   * `creatureId: 0` é CANCELAMENTO explícito (RF-01), como o `creatureId == 0` do Canary:
+   * limpa o alvo de ataque e confirma com `target-changed { creatureId: null }`. Criatura
+   * desconhecida ou morta é RECUSA, com `target-cancel` — nada muda, e o cliente sabe que a
+   * tentativa falhou em vez de achar que o alvo sumiu. Criatura válida vira `target-changed`
+   * com o id confirmado (RF-04).
+   *
+   * `seq` é monotônico por cliente e volta no ack. Um `seq` anterior a um já processado é
+   * mensagem atrasada e é ignorado em silêncio — processar fora de ordem faria o alvo oscilar
+   * entre duas seleções do mesmo cliente (edge case de ack obsoleto).
+   */
+  #requestSelectTarget(viewer: Viewer, creatureId: number, seq: number | undefined): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    if (hosted === undefined) return;
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    if (ruleset.setAttackTarget === undefined || ruleset.monsterBySubject === undefined) return;
+    const character = this.#participantOf(hosted, viewer.characterId);
+    if (character === undefined) return;
+
+    if (seq !== undefined) {
+      const last = hosted.lastTargetSeq.get(viewer.characterId);
+      if (last !== undefined && seq < last) return;
+      hosted.lastTargetSeq.set(viewer.characterId, seq);
+    }
+
+    if (creatureId === 0) {
+      ruleset.setAttackTarget(character, null);
+      this.#sendTargetChanged(hosted, viewer.characterId, null, seq);
+      return;
+    }
+
+    const subject = this.#subjectOfCreature(hosted, creatureId);
+    const monster = subject === null ? null : ruleset.monsterBySubject(subject);
+    if (monster === null) {
+      viewer.send({ type: 'target-cancel', ...(seq === undefined ? {} : { seq }) });
+      return;
+    }
+    ruleset.setAttackTarget(character, monster);
+    this.#sendTargetChanged(hosted, viewer.characterId, creatureId, seq);
+  }
+
+  /**
+   * O alvo autoritativo para quem olha o personagem (#470): a confirmação imediata de um
+   * `select-target`, ou a troca que o auto-target (#444) fez sozinho. Escreve `sentTarget` —
+   * o que acabou de sair É o último entregue.
+   */
+  #sendTargetChanged(
+    hosted: HostedSession, characterId: string, creatureId: number | null, seq: number | undefined,
+  ): void {
+    hosted.sentTarget.set(characterId, creatureId);
+    this.#sendToViewersOf(hosted, characterId, {
+      type: 'target-changed', creatureId, ...(seq === undefined ? {} : { seq }),
+    });
+  }
+
+  /** O subject do `sim` por trás do id numérico que o cliente clicou. `null` é desconhecido. */
+  #subjectOfCreature(hosted: HostedSession, creatureId: number): string | null {
+    for (const [subject, id] of hosted.creatureIds) {
+      if (id === creatureId) return subject;
+    }
+    return null;
+  }
+
+  /** Os tamanhos de container deste personagem (#160): a mochila que ele veste, e a tabela. */
+  #containerRules(character: CharacterRuntime): ContainerRules {
+    const progression = this.#options.progression;
+    if (progression === undefined) {
+      return { backpackSlots: 0, satchelSlots: 0, row: 1 };
+    }
+    return containerRulesFor(character.inventory, this.#options.itemCatalog ?? EMPTY_ITEMS, progression);
+  }
+
+  /**
+   * Escolher a vocação (#154, ADR 0026 decisão 1). Processada NA CHEGADA, como equipar. Quem
+   * decide é o `sim`; o host resolve vocação, kit e arma no conteúdo fixado na sessão
+   * (invariante 7), traduz a recusa, e no sucesso manda vitais e inventário — na Cidade não há
+   * ciclo que os compare.
+   *
+   * O kit completo (#496) é o caminho novo: cada peça de `startingKit` resolvida no catálogo,
+   * na ordem do conteúdo — a ordem é contrato, e é ela que veste a arma ANTES do escudo, para o
+   * bow de duas mãos deixar o escudo na mochila e não o contrário. `startingWeaponItemId` é o
+   * fallback legado para a vocação que não declara kit.
+   */
+  #requestVocation(viewer: Viewer, vocationId: string): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    const vocations = this.#options.vocations;
+    const vocationLevel = this.#options.vocationLevel;
+    if (vocations === undefined || vocationLevel === undefined) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Este servidor não tem vocações.' });
+      return;
+    }
+    const vocation = vocations.get(vocationId);
+    if (vocation === undefined) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Essa vocação não existe.' });
+      return;
+    }
+    const catalog = this.#options.itemCatalog ?? EMPTY_ITEMS;
+    const weapon = vocation.startingWeaponItemId === undefined
+      ? null
+      : this.#options.itemCatalog?.get(vocation.startingWeaponItemId) ?? null;
+    if (vocation.startingWeaponItemId !== undefined && weapon === null) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'A arma dessa vocação não existe.' });
+      return;
+    }
+    let kitItems: { item: Item }[] = [];
+    if (vocation.startingKit.length > 0) {
+      kitItems = [];
+      for (const piece of vocation.startingKit) {
+        const item = this.#options.itemCatalog?.get(piece.itemId) ?? null;
+        if (item === null) {
+          viewer.send({
+            type: 'system-message', level: 'warning',
+            text: `Uma peça do kit dessa vocação ("${piece.itemId}") não existe.`,
+          });
+          return;
+        }
+        kitItems.push({ item });
+      }
+    }
+    const result = character.chooseVocation(vocation, kitItems.length > 0 ? null : weapon, {
+      catalog,
+      vocationLevel,
+      // Uma por personagem, e com o id DELE no meio: numa cópia da Cidade dois personagens
+      // compartilham `session.id`, e `${session.id}:${lootSeq}` colidiria na chave primária
+      // de `item_instance`. O prefixo da sessão é o que `acquiredBy` filtra. Cada peça do kit
+      // recebe o id do item no fim, porque são N identidades, não uma.
+      instanceId: `${hosted.session.id}:${character.id}:vocation`,
+      rules: this.#containerRules(character),
+      ...(kitItems.length > 0 ? { kitItems } : {}),
+    });
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: VOCATION_REFUSAL[result.reason] });
+      return;
+    }
+    if (result.kit === undefined) {
+      if (result.weapon === 'in-loot-box') {
+        viewer.send({
+          type: 'system-message', level: 'info',
+          text: 'A arma da sua vocação não coube na mochila e foi para a Caixa de Loot.',
+        });
+      }
+    } else {
+      for (const piece of result.kit) {
+        if (piece.status !== 'in-loot-box') continue;
+        viewer.send({
+          type: 'system-message', level: 'info',
+          text: `A peça "${catalog.get(piece.itemId)?.name ?? piece.itemId}" do seu kit não coube na mochila e foi para a Caixa de Loot.`,
+        });
+      }
+    }
+    hosted.dirty.add(character.id);
+    const stats = this.#statsOf(character);
+    hosted.sentStats.set(character.id, stats);
+    this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
+    this.#sendInventory(character.id);
   }
 
   #ownerOf(characterId: string): CharacterRuntime | undefined {
     const hosted = this.#hostedSession(characterId);
     return hosted === undefined ? undefined : this.#participantOf(hosted, characterId);
+  }
+
+  /**
+   * `playerStatsOf` com a vocação DESTE personagem já resolvida (#521, ADR 0037): o `%` de
+   * skill/ML no HUD precisa do fator da vocação dele, não do genérico do conteúdo — e todo
+   * chamador tinha o mesmo par `character`/`this.#options.skillCatalog` repetido.
+   */
+  #statsOf(character: CharacterRuntime | undefined): PlayerStats {
+    const vocation = character?.vocationId == null
+      ? null
+      : this.#options.vocations?.get(character.vocationId) ?? null;
+    return playerStatsOf(character, this.#options.skillCatalog, vocation, this.#options.progression);
+  }
+
+  /**
+   * O jogador escolheu a munição da família (#152, ADR 0026 d.3). INTENÇÃO: o cliente diz o id;
+   * o catálogo e o gate de level são do servidor, e a escolha é aplicada na sessão dona. Recusa
+   * vira `system-message`, como a de equipar; o sucesso sai no `player-stats.ammo`.
+   */
+  #requestSelectAmmo(viewer: Viewer, ammoId: string): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    const ammunition = this.#options.ammunitionCatalog;
+    const ammo = ammunition?.get(ammoId);
+    if (ammo === undefined) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Essa munição não existe.' });
+      return;
+    }
+    const result = character.selectAmmo(ammo);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: AMMO_REFUSAL[result.reason] });
+      return;
+    }
+    hosted.dirty.add(character.id);
+    const stats = this.#statsOf(character);
+    hosted.sentStats.set(character.id, stats);
+    this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
   }
 
   /**
@@ -882,9 +1879,10 @@ export class SessionHost {
 
     const catalog = this.#options.itemCatalog ?? EMPTY_ITEMS;
     const state = character.inventory.getState();
-    const carried = (item: CarriedItem): S2CProps<'inventory'>['backpack'][number] => ({
+    const carried = (item: CarriedItem): NonNullable<S2CProps<'inventory'>['backpack'][number]> => ({
       instanceId: item.instanceId, itemId: item.itemId, quantity: item.quantity,
     });
+    const place = (item: CarriedItem | null) => (item === null ? null : carried(item));
     const equipped: S2CProps<'inventory'>['equipped'] = {};
     for (const [slot, item] of Object.entries(state.equipped)) {
       if (item !== undefined) equipped[slot] = carried(item);
@@ -892,7 +1890,9 @@ export class SessionHost {
 
     this.#sendToViewersOf(hosted, characterId, {
       type: 'inventory',
-      backpack: state.backpack.map(carried),
+      // Posicional (#160): `null` é lugar vazio, e o comprimento é o tamanho do container.
+      backpack: state.backpack.map(place),
+      satchel: (state.satchel ?? []).map(place),
       equipped,
       capacity: { used: character.inventory.weight(catalog), total: character.capacity },
     });
@@ -901,10 +1901,12 @@ export class SessionHost {
   /**
    * O jogador salvou uma configuração de bot (FUN-81, §13).
    *
-   * A ordem importa e é: aceitar → aplicar → persistir. Aplicar antes de gravar é deliberado —
-   * a hunt em curso passa a usar a regra nova na hora, e uma falha do Postgres não pode fazer
-   * o jogador ficar sem a cura que acabou de configurar. O preço é uma configuração que vale
-   * nesta sessão e não volta na próxima, e esse é o lado certo para errar.
+   * A ordem importa e é: aceitar → aplicar → registrar → confirmar (ADR 0028). Aplicar antes
+   * de registrar é deliberado — a hunt em curso passa a usar a regra nova na hora, e uma falha
+   * de persistência não pode fazer o jogador ficar sem a cura que acabou de configurar. Já a
+   * confirmação espera o registro: `ok: true` significa que a preferência está no Redis, de
+   * onde `jobs`/`api` a levam ao Postgres, e `ok: false` diz ao jogador que a regra vale
+   * agora mas precisa ser salva de novo.
    */
   async #configureBot(viewer: Viewer, raw: unknown): Promise<void> {
     const accept = this.#options.acceptBotConfig;
@@ -928,18 +1930,94 @@ export class SessionHost {
     }
 
     this.#botByCharacter.set(viewer.characterId, decision.config);
-    this.#applyBotConfig(hosted, decision.config);
-    viewer.send({ type: 'bot-config-result', ok: true });
-
-    // Persistir é o último passo, e falhar nele não desfaz o que já vale. O log é para quem
-    // investiga "salvei e voltou o antigo"; o jogador não pode fazer nada com esse erro.
+    this.#applyBotConfig(hosted, decision.config, viewer.characterId);
+    // Aplicar continua imediato; confirmar espera o Redis aceitar a pendência.
+    // Falha não desfaz a regra em uso, mas permite ao jogador tentar salvar novamente.
     try {
-      await this.#options.saveBotConfig?.(viewer.characterId, decision.config);
+      if (this.#options.saveBotConfig === undefined) throw new Error('Bot persistence is unavailable');
+      await this.#options.saveBotConfig(viewer.characterId, decision.config);
+      viewer.send({ type: 'bot-config-result', ok: true });
     } catch (error) {
       this.#logger.error(
         { error, characterId: viewer.characterId }, 'Failed to persist bot configuration',
       );
+      viewer.send({
+        type: 'bot-config-result', ok: false,
+        reason: 'A configuração vale nesta sessão, mas não pôde ser salva. Tente salvar de novo.',
+      });
     }
+  }
+
+  /**
+   * `party-settings` (ADR 0035 D1/D2). Ao contrário de `#configureBot`, não há vocabulário para
+   * validar aqui — os campos já vêm tipados pelo protocolo (#393) — e não há persistência
+   * própria: o estado é do ruleset, e viaja no MESMO snapshot da sessão (D1, sem bump).
+   *
+   * A recusa é `system-message` (D12); não existe `party-settings-result`. O sucesso não manda
+   * ack: o próximo `#presentPartyLive` vê a mudança e broadcasta o `party-state` novo, o mesmo
+   * caminho que a saída de um membro usa.
+   */
+  #configureParty(
+    viewer: Viewer,
+    message: Extract<C2SMessage, { type: 'party-settings' }>,
+  ): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const ruleset = hosted?.session.ruleset as Partial<HuntRuleset> | undefined;
+    if (hosted === undefined || ruleset?.configureParty === undefined) return;
+    // As chaves ausentes ficam AUSENTES, nunca `undefined` explícito: `PartySettingsPatch` sob
+    // `exactOptionalPropertyTypes` distingue as duas, e o `sim` usa `??` para não mexer no eixo.
+    const patch: PartySettingsPatch = {
+      ...(message.shareCosts === undefined ? {} : { shareCosts: message.shareCosts }),
+      ...(message.splitLoot === undefined ? {} : { splitLoot: message.splitLoot }),
+      ...(message.collect === undefined ? {} : { collect: message.collect }),
+      ...(message.autoSell === undefined ? {} : { autoSell: message.autoSell }),
+    };
+    const decision = ruleset.configureParty(hosted.session, patch, viewer.characterId);
+    if (!decision.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: partyRefusalText(decision) });
+      return;
+    }
+  }
+
+  /**
+   * `party-end-vote` (#432, ADR 0032 d.14): encerrar a hunt para todos é uma votação do líder,
+   * e não um `end`. A MESMA mensagem serve para propor e aprovar — `approve: true` é proposta
+   * quando quem manda é o líder e aprovação quando é membro —, e `approve: false` é recusa.
+   *
+   * O host não decide nada disso: liderança, presença e "todos aprovaram" são regra de jogo, e
+   * moram no `sim` (invariante 9). O broadcast do estado sai pelo evento `party-end-vote` do
+   * ruleset; a recusa vira `system-message`, como em `party-settings`.
+   */
+  #partyEndVote(
+    viewer: Viewer,
+    message: Extract<C2SMessage, { type: 'party-end-vote' }>,
+  ): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const ruleset = hosted?.session.ruleset as Partial<HuntRuleset> | undefined;
+    if (hosted === undefined || ruleset?.proposeEnd === undefined || ruleset.approveEnd === undefined) {
+      return;
+    }
+    let decision: PartyEndVoteResult;
+    if (!message.approve) {
+      decision = ruleset.cancelEnd?.(hosted.session, viewer.characterId)
+        ?? { ok: false, reason: 'no-proposal' };
+    } else if (ruleset.party === undefined || ruleset.party.leaderId === viewer.characterId) {
+      // O líder propõe (e a proposta já carrega o sim dele); solo não tem líder, e cai aqui
+      // para receber `not-leader` em vez de `no-proposal`. Re-propor reinicia a janela.
+      decision = ruleset.proposeEnd(hosted.session, viewer.characterId);
+    } else {
+      decision = ruleset.approveEnd(hosted.session, viewer.characterId);
+    }
+    if (!decision.ok) {
+      viewer.send({
+        type: 'system-message', level: 'warning', text: partyEndVoteRefusalText(decision),
+      });
+      return;
+    }
+    // O último sim encerra a sessão AQUI, fora do ciclo — e o ciclo pula sessão já encerrada
+    // (`cycle`), então a sucessão precisa ser disparada daqui: extrato, `session-ended` e
+    // Cidade, na mesma ordem de quando a morte encerra por dentro (FUN-38).
+    if (hosted.session.ended !== null) void this.#succeed(hosted);
   }
 
   /**
@@ -966,14 +2044,26 @@ export class SessionHost {
       return;
     }
     this.#botByCharacter.set(characterId, decision.config);
+    // A v1 migrada é DADO NOVO: persiste pelo caminho write-behind (ADR 0028, DT-07), senão
+    // toda entrada repetiria a migração e a coluna seguiria na v1. `saveBotConfig` só existe
+    // quando o papel aceita persistir; falha não é fatal — a config vale nesta sessão.
+    if (!isBotConfigV2(raw)) {
+      void this.#options.saveBotConfig?.(characterId, decision.config).catch(() => undefined);
+    }
   }
 
-  /** Troca a configuração da hunt em curso. Ruleset que não tem bot ignora, e é o normal. */
-  #applyBotConfig(hosted: HostedSession, config: BotConfig): void {
+/**
+   * Troca a configuração da hunt em curso. Ruleset que não tem bot ignora, e é o normal.
+   *
+   * **O `characterId` é obrigatório na party (#203/#407):** sem ele, `configureBot` cai no
+   * PRIMEIRO participante e a configuração de quem falou sobrescreve a do líder. O bot é por
+   * personagem — `#botByCharacter` já é — e o `sim` aceita o id de propósito.
+   */
+  #applyBotConfig(hosted: HostedSession, config: BotConfigV2, characterId: string): void {
     const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
     // A sessão dona é quem escreve (invariante 9), e é ela que está aqui: `configureBot`
     // recompila dentro do ruleset, não de fora.
-    ruleset.configureBot?.(hosted.session, config);
+    ruleset.configureBot?.(hosted.session, config, characterId);
   }
 
   async #requestTransition(viewer: Viewer, request: TransitionRequest): Promise<void> {
@@ -1026,7 +2116,7 @@ export class SessionHost {
         hosted.session.advanceBy(overdueMs);
       } catch (error) {
         // Uma sessão que explode não pode derrubar as outras do nó.
-        this.#logger.error({ error, sessionId: hosted.session.id }, 'Session tick failed');
+        this.#logger.error({ err: error, sessionId: hosted.session.id }, 'Session tick failed');
       }
       // O ATRASO é quanto o tick passou do período que ele mesmo pediu, não o intervalo. Um
       // tick de 1 Hz que roda a cada 1000 ms está no prazo; o mesmo intervalo num tick de
@@ -1051,6 +2141,19 @@ export class SessionHost {
       // `creature-health` explicam a mudança, e o HUD que recebe o número novo antes do golpe
       // que o causou mostra o dano duas vezes — uma no HUD, outra no número flutuante.
       this.#presentStats(hosted);
+      // E o alvo, se mudou (#470): o auto-target troca sozinho, e o `player-stats` deixou de
+      // levá-lo. DEPOIS dos eventos pelo mesmo motivo dos vitais.
+      this.#presentTarget(hosted);
+      this.#presentConditions(hosted);
+      // E o analisador, se um abate, um loot, um gasto ou um evento entrou (FUN-110): sem
+      // isto a janela ficava em zero a hunt inteira, até o jogador reconectar.
+      this.#presentAnalyzer(hosted);
+      this.#presentSpending(hosted);
+      // E o Bestiário, se um abate contou (FUN-113): é progressão permanente, e a tela precisa
+      // ver o marco chegar sem reconectar.
+      this.#presentBestiary(hosted);
+      this.#presentSlotState(hosted, nowMs);
+      this.#presentPartyLive(hosted);
       // Caiu loot desde o último ciclo: a mochila mudou, e quem está olhando precisa ver.
       // Comparar um inteiro é o que evita serializar o inventário dez vezes por segundo.
       if (hosted.session.aggregates.itemsLooted !== hosted.sentItemsLooted) {
@@ -1059,6 +2162,7 @@ export class SessionHost {
           this.#sendInventory(characterId);
         }
       }
+      if (hosted.departures.length > 0) void this.#settleDepartures(hosted);
       if (hosted.session.ended !== null) void this.#succeed(hosted);
     }
     this.flush();
@@ -1078,7 +2182,19 @@ export class SessionHost {
    */
   #presentMoves(hosted: HostedSession): void {
     const events = hosted.session.drainEvents();
-    if (events.length === 0 || hosted.viewers.size === 0) return;
+    if (events.length === 0) return;
+    // Sem ninguém olhando nada é apresentado — mas a saída de um membro (#194) não é
+    // apresentação: é extrato e Cidade, e acontece haja ou não visualizador (invariante 3).
+    if (hosted.viewers.size === 0) {
+      for (const event of events) {
+        if (event.kind === 'member-left') hosted.departures.push(event);
+        // A bolsa é ESTADO, não apresentação (#400): sem ninguém olhando, o último
+        // `party-bag-changed` ainda é guardado para o `session-state` de quem reanexar levar
+        // as reservas — `getState()` não as carrega.
+        else if (event.kind === 'party-bag-changed') hosted.lastPartyBag = event;
+      }
+      return;
+    }
 
     for (const event of events) {
       // Discriminar por `kind` ANTES de tocar em qualquer campo: a união cresceu na FUN-103 e
@@ -1089,13 +2205,41 @@ export class SessionHost {
         case 'creature-appeared':
         case 'creature-vanished':
         case 'creature-health-changed':
+        case 'ground-item-appeared':
+        case 'ground-item-vanished':
           this.#presentPresence(hosted, event);
           continue;
         case 'creature-hit':
         case 'creature-healed':
         case 'spell-cast':
         case 'supply-used':
+        case 'shot':
+        case 'monster-ability-cast':
           this.#presentCombat(hosted, event);
+          continue;
+        case 'party-bag-changed':
+        case 'party-settlement':
+        case 'party-state':
+        case 'party-end-vote':
+          this.#presentParty(hosted, event);
+          continue;
+        case 'follow-state':
+          // POR PERSONAGEM (#401) — ao contrário dos casos de party acima, que são da SESSÃO
+          // inteira (todo membro vê a bolsa e a composição), Follow é configuração de bot de
+          // UM personagem: vazar para quem olha outro membro exporia a estratégia de bot de
+          // alguém para os companheiros sem que ele tenha pedido isso — o mesmo motivo de
+          // `player-stats` (FUN-109) e `active-conditions` serem por personagem.
+          this.#presentFollow(hosted, event);
+          continue;
+        case 'member-left':
+          // Alguém saiu por dentro do `sim` (#193): extrato e volta à Cidade são I/O, e o
+          // ciclo é síncrono — fica na fila e sai logo depois dele (#194).
+          hosted.departures.push(event);
+          continue;
+        case 'equipment-changed':
+          // O `sim` mudou o corpo sozinho (o colar esgotou, o anel venceu): o cliente só sabe
+          // pelo `inventory`, e a mensagem é a MESMA de sempre (opcode 16, sem campo novo).
+          this.#sendInventory(event.characterId);
           continue;
         case 'creature-moved':
           break;
@@ -1155,6 +2299,20 @@ export class SessionHost {
    * não tem barra para atualizar; o `session-state` que vier traz a vida certa.
    */
   #presentPresence(hosted: HostedSession, event: PresenceEvent): void {
+    // O cadáver (FUN-123): o `sim` disse qual monstro e onde; a arte é da tabela. Monstro sem
+    // linha em `appearances.corpses` não deixa nada — e ninguém fica sabendo, de propósito.
+    if (event.kind === 'ground-item-appeared') {
+      const appearanceId = this.#options.monsterCatalog?.get(event.monsterId)?.corpseAppearanceId;
+      if (appearanceId === undefined) return;
+      const appeared: S2CMessage = { type: 'ground-item-appear', id: event.itemId, position: event.position, appearanceId };
+      for (const viewer of hosted.viewers) viewer.send(appeared);
+      return;
+    }
+    if (event.kind === 'ground-item-vanished') {
+      const vanished: S2CMessage = { type: 'ground-item-disappear', id: event.itemId };
+      for (const viewer of hosted.viewers) viewer.send(vanished);
+      return;
+    }
     const key = String(event.creatureId);
     let message: S2CMessage;
     if (event.kind === 'creature-appeared') {
@@ -1200,11 +2358,16 @@ export class SessionHost {
    *   creature-healed  → o número em verde. O efeito da cura NÃO sai daqui: ele é do
    *                      lançamento (`spell-cast`) ou do uso (`supply-used`), que vêm antes —
    *                      senão uma cura que repôs zero não teria efeito e uma que repôs teria,
-   *                      e a magia pareceria falhar quando o jogador estava cheio;
+   *                      e a magia pareceria falhar quando o jogador estava cheio. A EXCEÇÃO é
+   *                      `source: 'monster'` (#518, a defesa de cura própria): não há
+   *                      lançamento prévio, e o `sim` só emite o evento quando REPÔS — como
+   *                      `spell-cast`/`supply-used` sempre emitem, o efeito aqui é seguro do
+   *                      mesmo jeito;
    *   spell-cast       → o projétil do conjurador ao PRIMEIRO alvo (é um projétil, não uma
    *                      rajada), e o efeito em CADA alvo — ou no próprio conjurador quando
    *                      não há alvo, que é a cura;
-   *   supply-used      → o efeito no tile de quem usou.
+   *   supply-used      → o projétil do conjurador ao PRIMEIRO alvo (runa de ataque, #478), e o
+   *                      efeito no tile de cada alvo/tile da forma — ou no usuário, na poção.
    *
    * Magia ou supply SEM linha na tabela é mudo, e é silêncio, não erro: `buildContent` só
    * exige que toda linha aponte para algo que existe, não o contrário. Uma magia nova sem
@@ -1222,7 +2385,12 @@ export class SessionHost {
       case 'creature-hit': {
         const id = hosted.creatureIds.get(String(event.creatureId));
         if (id === undefined) return;
-        messages.push({ type: 'creature-hit', id, amount: event.amount, kind: event.source });
+        // O elemento (#479) vai junto quando o `sim` o resolveu: é ele que colore o número no
+        // cliente. Ausente, o cliente o lê do `kind` — a mesma degradação de sempre.
+        messages.push({
+          type: 'creature-hit', id, amount: event.amount, kind: event.source,
+          ...(event.damageType === undefined ? {} : { damageType: event.damageType }),
+        });
         const blood = appearances?.hits.melee;
         if (event.source === 'melee' && event.amount > 0 && blood !== undefined) {
           messages.push({ type: 'effect', position: event.position, effectId: blood });
@@ -1233,6 +2401,14 @@ export class SessionHost {
         const id = hosted.creatureIds.get(String(event.creatureId));
         if (id === undefined) return;
         messages.push({ type: 'creature-hit', id, amount: event.amount, kind: 'heal' });
+        // A defesa de cura própria (#518) não tem lançamento prévio — o efeito sai AQUI, só
+        // quando o evento existe (o `sim` já suprime a cura que repôs zero).
+        const impactId = event.impactKey === undefined
+          ? undefined
+          : appearances?.abilities[event.impactKey]?.effect;
+        if (impactId !== undefined) {
+          messages.push({ type: 'effect', position: event.position, effectId: impactId });
+        }
         break;
       }
       case 'spell-cast': {
@@ -1247,19 +2423,92 @@ export class SessionHost {
         }
         if (look.effect !== undefined) {
           const effectId = look.effect;
-          if (event.targets.length === 0) {
+          if (event.targets.length === 0 && event.tiles.length === 0) {
             messages.push({ type: 'effect', position: event.casterPosition, effectId });
           }
           for (const target of event.targets) {
             messages.push({ type: 'effect', position: target.position, effectId });
           }
+          // A forma inteira (#155): a onda aparece onde não há monstro, como no Tibia. O tile
+          // com alvo já teve o seu efeito acima.
+          const hit = new Set(event.targets.map((t) => `${String(t.position.x)},${String(t.position.y)},${String(t.position.z)}`));
+          for (const tile of event.tiles) {
+            if (hit.has(`${String(tile.x)},${String(tile.y)},${String(tile.z)}`)) continue;
+            messages.push({ type: 'effect', position: tile, effectId });
+          }
         }
         break;
       }
       case 'supply-used': {
-        const effectId = appearances?.supplies[event.supplyId]?.effect;
-        if (effectId === undefined) return;
-        messages.push({ type: 'effect', position: event.position, effectId });
+        const look = appearances?.supplies[event.supplyId];
+        if (look === undefined) return;
+        // Runa de ataque (#478): o projétil sai do conjurador ao PRIMEIRO alvo antes de a área
+        // estourar — o mesmo desenho do `spell-cast`, e a ordem é contrato. Uma runa sem alvo
+        // não chega aqui (o `sim` a recusa em `no-target`), e a poção não tem `missile`.
+        const first = event.targets[0];
+        if (look.missile !== undefined && first !== undefined) {
+          messages.push({
+            type: 'missile', from: event.position, to: first.position, missileId: look.missile,
+          });
+        }
+        const effectId = look.effect;
+        if (effectId === undefined) break;
+        // Poção: o efeito no usuário. Runa (#165): um por alvo e um por tile da forma — o
+        // mesmo desenho da magia em área.
+        if (event.targets.length === 0 && event.tiles.length === 0) {
+          messages.push({ type: 'effect', position: event.position, effectId });
+          break;
+        }
+        const hit = new Set(event.targets.map((t) => `${String(t.position.x)},${String(t.position.y)},${String(t.position.z)}`));
+        for (const target of event.targets) messages.push({ type: 'effect', position: target.position, effectId });
+        for (const tile of event.tiles) {
+          if (hit.has(`${String(tile.x)},${String(tile.y)},${String(tile.z)}`)) continue;
+          messages.push({ type: 'effect', position: tile, effectId });
+        }
+        break;
+      }
+      case 'shot': {
+        // O projétil é da MUNIÇÃO (flecha) ou da ARMA (wand e rod) — o `sim` só diz qual
+        // (invariante 6). Sem linha na tabela o tiro é mudo, como a magia sem arte.
+        const missileId = event.ammoId === undefined
+          ? appearances?.weapons[event.weaponItemId]?.missile
+          : appearances?.ammunition[event.ammoId]?.missile;
+        if (missileId === undefined) return;
+        messages.push({ type: 'missile', from: event.from, to: event.to, missileId });
+        break;
+      }
+      case 'monster-ability-cast': {
+        // A ability do monstro (CMB-06): as CHAVES SEMÂNTICAS do conteúdo viram ids de arte
+        // AQUI, pela tabela fixada na sessão (invariante 6). Chave sem linha é MUDA, nunca
+        // erro: a mecânica (dano, morte, atribuição) já aconteceu no `sim`, e derrubar a
+        // apresentação por falta de arte esconderia que ela funcionou.
+        const missileId = event.missileKey === undefined
+          ? undefined
+          : appearances?.abilities[event.missileKey]?.missile;
+        const effectId = event.impactKey === undefined
+          ? undefined
+          : appearances?.abilities[event.impactKey]?.effect;
+        // Projétil do lançador ao PRIMEIRO alvo — é um projétil, não uma rajada, como o
+        // `spell-cast`.
+        const first = event.targets[0];
+        if (missileId !== undefined && first !== undefined) {
+          messages.push({
+            type: 'missile', from: event.casterPosition, to: first.position, missileId,
+          });
+        }
+        if (effectId === undefined) break;
+        // O impacto em CADA alvo, e nos tiles da forma que não têm criatura — como a magia em
+        // área. Sem alvo e sem forma (não acontece numa ability que disparou), nada a desenhar.
+        for (const target of event.targets) {
+          messages.push({ type: 'effect', position: target.position, effectId });
+        }
+        const hit = new Set(event.targets.map(
+          (t) => `${String(t.position.x)},${String(t.position.y)},${String(t.position.z)}`,
+        ));
+        for (const tile of event.tiles) {
+          if (hit.has(`${String(tile.x)},${String(tile.y)},${String(tile.z)}`)) continue;
+          messages.push({ type: 'effect', position: tile, effectId });
+        }
         break;
       }
     }
@@ -1290,11 +2539,129 @@ export class SessionHost {
       // tem ciclo. Quem não tem visualizador próprio fica de fora pela mesma razão do `if`
       // acima: `sentStats` guarda o que foi ENTREGUE, e a ninguém não se entrega nada.
       if (this.#watchers(hosted, character.id) === 0) continue;
-      const stats = playerStatsOf(character);
+      const stats = this.#statsOf(character);
       const last = hosted.sentStats.get(character.id);
       if (last !== undefined && sameStats(last, stats)) continue;
       hosted.sentStats.set(character.id, stats);
       this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
+    }
+  }
+
+  /**
+   * O alvo selecionado, para quem olha CADA personagem, quando mudou (#470, RF-04).
+   *
+   * Substitui o `player-stats.targetId`: o alvo tem mensagem própria, e o gatilho é a
+   * comparação do id ENTREGUE — como `sentStats`. Sem visualizador não se compara nada
+   * (invariante 3); o `sim` muda o alvo de qualquer jeito, e quem anexa depois recebe o
+   * estado no `session-attach`.
+   *
+   * É por aqui que a tela vê o auto-target (#444) trocar sozinho: o `sim` escolhe o próximo
+   * monstro e o ciclo entrega a mudança, sem depender de um `select-target` do cliente.
+   */
+  #presentTarget(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      const targetId = this.#selectedTargetIdOf(hosted, character);
+      const last = hosted.sentTarget.get(character.id);
+      if (last !== undefined && last === targetId) continue;
+      hosted.sentTarget.set(character.id, targetId);
+      this.#sendToViewersOf(hosted, character.id, { type: 'target-changed', creatureId: targetId });
+    }
+  }
+
+  #presentConditions(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      const snapshot = conditionsSnapshotOf(character);
+      const last = hosted.sentConditions.get(character.id);
+      if (last !== undefined && sameConditions(last, snapshot)) continue;
+      hosted.sentConditions.set(character.id, snapshot);
+      this.#sendToViewersOf(hosted, character.id, {
+        type: 'active-conditions',
+        ...activeConditionsOf(snapshot, hosted.session.nowMs),
+      });
+    }
+  }
+
+  /**
+   * O analisador ao vivo (FUN-110): os agregados e os eventos notáveis para TODOS os
+   * visualizadores da sessão, quando mudaram desde a última entrega. Por sessão, e não por
+   * personagem, porque os agregados são da sessão — e numa hunt há um jogador só.
+   */
+  #presentAnalyzer(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    const { notableEvents } = hosted.session;
+    const party = partySummaryOf(hosted);
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      const aggregates = hosted.session.aggregatesOf(character.id);
+      const sent = hosted.sentAnalyzer.get(character.id);
+      if (sent !== undefined
+        && sameAnalyzer(sent, aggregates, notableEvents.length)
+        && samePartySummary(sent.party, party)) continue;
+      // Só os eventos NOVOS desde a última entrega: a lista é acumulativa e sem teto, e
+      // mandá-la inteira a cada abate custava 13 MB numa hunt de oito horas — quase tudo
+      // repetição. Sem entrega anterior (ninguém recebeu nada ainda) vai tudo.
+      const since = sent?.eventCount ?? 0;
+      hosted.sentAnalyzer.set(character.id, {
+        aggregates: { ...aggregates }, eventCount: notableEvents.length, party,
+      });
+      const message: S2CMessage = {
+        type: 'analyzer',
+        aggregates: { ...aggregates },
+        notableEvents: notableEvents.slice(since).map((event) => ({ ...event })),
+        ...(party === undefined ? {} : { party }),
+      };
+      for (const viewer of hosted.viewers) {
+        if (viewer.characterId === character.id) viewer.send(message);
+      }
+    }
+  }
+
+  /**
+   * O Bestiário ao vivo (FUN-113): os abates por monstro, para quem olha CADA personagem,
+   * quando a soma mudou desde a última entrega. Por personagem, como `#presentStats`, porque
+   * o Bestiário é do personagem — e pela mesma regra: sem visualizador não se compara nada,
+   * o `sim` conta o abate de qualquer jeito (invariante 3).
+   */
+  #presentBestiary(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      const counts = character.bestiary.getState();
+      const total = bestiaryTotal(counts);
+      if (hosted.sentBestiary.get(character.id) === total) continue;
+      hosted.sentBestiary.set(character.id, total);
+      this.#sendToViewersOf(hosted, character.id, { type: 'bestiary', counts });
+    }
+  }
+
+  /**
+   * O estado dos slots do conjunto ativo, para quem olha CADA personagem (AB-09, DT-06).
+   *
+   * O gatilho é o par `(state, reason)`, nunca o `remainingMs`: ele decresce sempre, e compará-lo
+   * mandaria um `slot-state` por ciclo a 10 Hz — a banda inteira para dizer que um cooldown
+   * andou. O cliente anima o prazo a partir do instante da entrega. Sem visualizador não se
+   * compara nada (invariante 3); o `sim` já resolveu o estado de qualquer jeito.
+   *
+   * O cálculo é throttled a `SLOT_STATE_INTERVAL_MS` (#420): a assinatura evita o envio, mas
+   * não a varredura de alvos que produz o estado.
+   */
+  #presentSlotState(hosted: HostedSession, nowMs: number): void {
+    if (hosted.viewers.size === 0) return;
+    if (nowMs - hosted.slotStateAtMs < SLOT_STATE_INTERVAL_MS) return;
+    hosted.slotStateAtMs = nowMs;
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    if (ruleset.slotStates === undefined) return;
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      const states = ruleset.slotStates(hosted.session, character);
+      const signature = slotStateSignature(states);
+      if (hosted.sentSlotState.get(character.id) === signature) continue;
+      hosted.sentSlotState.set(character.id, signature);
+      this.#sendToViewersOf(hosted, character.id, slotStateMessage(states));
     }
   }
 
@@ -1311,10 +2678,278 @@ export class SessionHost {
    */
   #sendState(hosted: HostedSession, viewer: Viewer): void {
     const { characterId } = viewer;
-    viewer.send(this.#sessionState(hosted, characterId));
-    const stats = playerStatsOf(this.#participantOf(hosted, characterId));
+    // Qual cena, ANTES do estado (FUN-120). `instance-enter` é a troca de cena — o cliente
+    // limpa o que tinha e busca o mapa —, e o `session-state` é o que povoa a cena nova. Na
+    // ordem inversa o estado chegaria e seria apagado pela troca. Sai no attach e em toda
+    // transição, porque os dois passam por aqui; a instância é a própria sessão.
+    const { mapId, ambience, huntId, difficulty } = hosted.session.ruleset;
+    if (mapId !== undefined) {
+      viewer.send({
+        type: 'instance-enter', instanceId: hosted.session.id, map: mapId,
+        ...(huntId === undefined ? {} : { huntId }),
+        ...(difficulty === undefined ? {} : { difficulty }),
+        ...(ambience === undefined ? {} : { ambience }),
+      });
+    }
+    const state = this.#sessionState(hosted, characterId);
+    // `state.type`, e não `'party' in state`: desde o #393 `analyzer.party` também existe, e o
+    // `in` deixaria de estreitar só para `session-state`. Aqui o `party` é o roster (#196).
+    if (state.type === 'session-state' && state.party !== undefined) hosted.sentParty = state.party;
+    viewer.send(state);
+    hosted.sentSpending = partySpendingSharesOf(hosted) ?? null;
+    const participant = this.#participantOf(hosted, characterId);
+    const stats = this.#statsOf(participant);
     hosted.sentStats.set(characterId, stats);
     viewer.send({ type: 'player-stats', ...stats });
+    // E o alvo selecionado (#470): tem mensagem própria, e sem ela quem reanexa com um alvo
+    // vivo o perderia até o próximo ciclo — na Cidade, que não tem ciclo, para sempre.
+    const targetId = this.#selectedTargetIdOf(hosted, participant);
+    hosted.sentTarget.set(characterId, targetId);
+    viewer.send({ type: 'target-changed', creatureId: targetId });
+    const snapshot = participant === undefined ? new Map() : conditionsSnapshotOf(participant);
+    hosted.sentConditions.set(characterId, snapshot);
+    viewer.send({
+      type: 'active-conditions',
+      ...activeConditionsOf(snapshot, hosted.session.nowMs),
+    });
+    // E o Bestiário (FUN-113), pela mesma razão dos vitais: é progressão que só viaja em
+    // mensagem própria, e sem ela quem reconecta veria a contagem em zero até o próximo abate
+    // — na Cidade, que não tem ciclo, para sempre. `sentBestiary` é escrito aqui porque o que
+    // acabou de sair É o último entregue.
+    const counts = participant?.bestiary.getState() ?? {};
+    hosted.sentBestiary.set(characterId, bestiaryTotal(counts));
+    viewer.send({ type: 'bestiary', counts });
+    // E o estado dos slots (AB-09): a barra do conjunto ativo precisa dele ao montar, e a
+    // Cidade não tem ciclo para o mandar depois. Ruleset sem slots (a Cidade) não manda nada.
+    const slotStates = participant === undefined
+      ? undefined
+      : (hosted.session.ruleset as Partial<HuntRuleset>).slotStates?.(hosted.session, participant);
+    if (slotStates !== undefined) {
+      hosted.sentSlotState.set(characterId, slotStateSignature(slotStates));
+      viewer.send(slotStateMessage(slotStates));
+    }
+    // O `session-state` acabou de levar os agregados DELE: o ciclo seguinte não precisa repetir.
+    hosted.sentAnalyzer.set(characterId, {
+      aggregates: { ...hosted.session.aggregatesOf(characterId) },
+      eventCount: hosted.session.notableEvents.length,
+      party: partySummaryOf(hosted),
+    });
+    // O Follow interrompido sobrevive à desconexão (#401): `#presentMoves` DESCARTA o evento
+    // `follow-state` quando ninguém olha — a apresentação é o que se perde, nunca o resultado da
+    // simulação (invariante 3). Sem isto, quem reconecta depois de o alvo morrer veria o Follow
+    // como se ainda estivesse ativo até o PRÓXIMO evento — que pode nunca vir, porque "voltou a
+    // ficar inválido" não é uma transição que se repete sozinha.
+    //
+    // Só quando INTERROMPIDO: quando o Follow está ativo, o cliente já sabe — foi ele que
+    // configurou — e reenviar toda vez seria tráfego sem informação nova no attach mais comum
+    // (o de sempre, hunt correndo, nada de errado).
+    const follow = (hosted.session.ruleset as Partial<HuntRuleset>).followStateOf?.(characterId);
+    if (follow !== undefined && !follow.active) {
+      viewer.send({
+        type: 'follow-state',
+        active: false,
+        targetId: follow.targetId,
+        ...(follow.reason === undefined ? {} : { reason: follow.reason }),
+      });
+    }
+    // A votação de encerrar em curso (#432) sobrevive à desconexão, como o Follow: quem
+    // reconecta no meio da janela de 60 s precisa ver a proposta e poder aprovar. Só quando há
+    // votação — `endVoteState()` devolve `active: false` fora de proposta, e reenviar isso em
+    // todo attach seria tráfego sem informação nova.
+    const endVote = (hosted.session.ruleset as Partial<HuntRuleset>).endVoteState?.();
+    if (endVote !== undefined && endVote.active) {
+      viewer.send({
+        type: 'party-end-vote',
+        active: endVote.active,
+        proposedAtMs: endVote.proposedAtMs,
+        approved: [...endVote.approved],
+      });
+    }
+  }
+
+  /**
+   * O Follow do bot no fio, por PERSONAGEM (#401): quem configurou o Follow é quem precisa saber
+   * que o alvo sumiu — nunca os outros visualizadores da sessão. `#presentParty`, ao lado, manda
+   * para `hosted.viewers` inteiro porque bolsa e composição SÃO da sessão; Follow não é.
+   *
+   * Sem comparação com "o último entregue" (ao contrário de `#presentStats`/`#presentAnalyzer`,
+   * que reamostram todo ciclo): o `sim` já emite este evento UMA VEZ por transição — interrompeu,
+   * ou retomou (#398, §D10) —, então não há nada aqui para deduplicar. Duplicar a dedução no
+   * host criaria uma segunda fonte de verdade sobre "o que já foi entregue" que o `sim` já
+   * resolveu sozinho.
+   */
+  #presentFollow(hosted: HostedSession, event: FollowState): void {
+    this.#sendToViewersOf(hosted, event.characterId, {
+      type: 'follow-state',
+      active: event.active,
+      targetId: event.targetId,
+      ...(event.reason === undefined ? {} : { reason: event.reason }),
+    });
+  }
+
+  /**
+   * A party no fio (#196): os eventos do `sim` viram as mensagens, para TODOS os visualizadores
+   * da sessão — a party é privada como a hunt, e todo membro vê a bolsa, o settlement e a
+   * votação de encerrar. O HP dos companheiros vai só no `party-state` (attach e mudança de
+   * composição); no meio o cliente já recebe `creature-health` de cada um.
+   */
+  #presentParty(hosted: HostedSession, event: PartyEvent): void {
+    let message: S2CMessage;
+    switch (event.kind) {
+      case 'party-state': {
+        const block = this.#partyBlock(hosted);
+        if (block.party === undefined) return;
+        hosted.sentParty = block.party;
+        message = { type: 'party-state', ...block.party };
+        break;
+      }
+      case 'party-bag-changed': {
+        hosted.lastPartyBag = event;
+        // A bolsa v2 vem do MESMO `#partyBlock` do `session-state`: elegibilidade por item e
+        // reservas só existem ali (`getState()` + último evento), e as duas mensagens não podem
+        // divergir sobre o que há na bolsa.
+        const bag = this.#partyBlock(hosted).partyBag;
+        if (bag === undefined) return;
+        message = { type: 'party-bag', ...bag };
+        break;
+      }
+      case 'party-settlement':
+        message = {
+          type: 'party-settlement', total: event.total, shares: event.shares.map((share) => ({ ...share })),
+          reason: event.reason,
+          ...(event.itemId === undefined ? {} : { itemId: event.itemId }),
+        };
+        break;
+      case 'party-end-vote':
+        // O estado da votação (#432) é da SESSÃO: todo membro precisa ver quem já aprovou. O
+        // evento já carrega tudo — não há segundo estado para recompor.
+        message = {
+          type: 'party-end-vote',
+          active: event.active,
+          proposedAtMs: event.proposedAtMs,
+          approved: [...event.approved],
+        };
+        break;
+      case 'member-left':
+        return;
+      case 'follow-state':
+        // POR PERSONAGEM (#401): `#presentMoves` o intercepta antes e chama `#presentFollow` —
+        // nunca este broadcast. O caso existe só para a união `PartyEvent` ficar fechada.
+        return;
+    }
+    for (const viewer of hosted.viewers) viewer.send(message);
+  }
+
+  #presentPartyLive(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    const party = this.#partyBlock(hosted).party;
+    if (party === undefined) return;
+    if (hosted.sentParty !== null && sameParty(hosted.sentParty, party)) return;
+    hosted.sentParty = party;
+    for (const viewer of hosted.viewers) viewer.send({ type: 'party-state', ...party });
+  }
+
+  /**
+   * O gasto de cada membro e a prévia de rateio, a TODOS os visualizadores da sessão (#354,
+   * SV-18) — broadcast, como `#presentParty`, e não por personagem: o AVISO 4 do Mapa de
+   * Capacidade (docs/reviews/kit-fidelity-audit-2026-09-16.md) registra que `analyzer`, que TEM
+   * `goldSpent` por participante, só vai a quem olha aquele personagem — "gasto de todos visível
+   * a todos" não é ligar um campo, é agregar e distribuir, o modelo que `party-bag` já segue.
+   *
+   * Gateado por comparação (`sameSpending`), como `sameStats`/`sameAnalyzer` — mas por SESSÃO
+   * (`hosted.sentSpending`), não por personagem: a mensagem é uma só para todo mundo.
+   */
+  #presentSpending(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    const shares = partySpendingSharesOf(hosted);
+    if (shares === undefined) return; // sem party (D8): nada a mandar
+    if (hosted.sentSpending !== null && sameSpending(hosted.sentSpending, shares)) return;
+    hosted.sentSpending = shares;
+    const message: S2CMessage = { type: 'party-spending', shares: shares.map((s) => ({ ...s })) };
+    for (const viewer of hosted.viewers) viewer.send(message);
+  }
+
+  /**
+   * O bloco `party`/`partyBag` do `session-state` (#196; v2 no #400), montado do estado do
+   * ruleset. Vazio em solo.
+   *
+   * Nada é somado aqui (PRD §34): peso, valor, OVERWEIGHT e reservas vêm do `sim` — peso/valor
+   * do `partySummary`, OVERWEIGHT/capacidade do `getState().partyBag` e as reservas do último
+   * `party-bag-changed`, que é onde `#rebalanceBag` as calcula. O `joinedAtMs` é opcional: um
+   * `sim` sem o acessor o omite (D12), e o campo é opcional no protocolo.
+   */
+  #partyBlock(hosted: HostedSession): { party?: S2CProps<'party-state'>; partyBag?: S2CProps<'party-bag'> } {
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    const party = ruleset.party;
+    if (party === undefined) return {};
+    const state = ruleset.getState?.();
+    const summary = ruleset.partySummary?.(hosted.session);
+    const leaderId = hosted.session.participants.some((p) => p.id === party.leaderId)
+      ? party.leaderId
+      : hosted.session.participants[0]?.id ?? party.leaderId;
+    const joinTimes = hosted.session as Session & {
+      joinedAtMsOf?: (characterId: string) => number | undefined;
+    };
+    const block: { party?: S2CProps<'party-state'>; partyBag?: S2CProps<'party-bag'> } = {
+      party: {
+        leaderId,
+        // Derivado (D1) — tolerância de um deploy para o cliente antigo.
+        mode: party.shareCosts && party.splitLoot ? 'shared' : 'split',
+        // Os campos achatados do #359 continuam no topo pelo mesmo deploy de rolagem.
+        shareCosts: party.shareCosts,
+        splitLoot: party.splitLoot,
+        settings: { shareCosts: party.shareCosts, splitLoot: party.splitLoot },
+        loot: {
+          collect: party.collect === null ? null : [...party.collect],
+          autoSell: [...party.autoSell],
+          autoSellLimit: summary?.autoSell.limit ?? 0,
+          leaderPremium: party.premiumByCharacter[leaderId] ?? false,
+        },
+        members: hosted.session.participants.map((member) => {
+          const joinedAtMs = joinTimes.joinedAtMsOf?.(member.id);
+          const totals = hosted.session.aggregatesOf(member.id);
+          return {
+            characterId: member.id,
+            name: this.#nameByCharacter.get(member.id) ?? member.id,
+            alive: member.alive,
+            healthPercent: member.maxHealth > 0
+              ? Math.max(0, Math.min(100, Math.round((member.health / member.maxHealth) * 100)))
+              : 0,
+            vocationId: member.vocationId,
+            level: member.level,
+            manaPercent: member.maxMana > 0
+              ? Math.max(0, Math.min(100, Math.round((member.mana / member.maxMana) * 100)))
+              : 0,
+            ...(joinedAtMs === undefined ? {} : { joinedAtMs }),
+            connected: this.#watchers(hosted, member.id) > 0,
+            // DPS/HPS (#431): a janela é lida AGORA, no instante do ciclo — o `sim` não mantém
+            // taxa nenhuma, só amostras carimbadas, e a taxa sai da divisão de 60 s.
+            dps: hosted.session.dpsOf(member.id, hosted.session.nowMs),
+            hps: hosted.session.hpsOf(member.id, hosted.session.nowMs),
+            damageDealt: totals.damageDealt,
+            healingDone: totals.healingDone,
+          };
+        }),
+      },
+    };
+    const bag = state?.partyBag;
+    if (bag !== undefined) {
+      block.partyBag = {
+        // O `gold` da entrada é a soma dos lançamentos; a bolsa v2 (`#395`) guarda entradas com
+        // elegibilidade, e é ela que vai no fio agora.
+        gold: bag.gold.reduce((sum, entry) => sum + entry.amount, 0),
+        weight: summary?.bagWeight ?? 0,
+        capacity: bag.capacity,
+        value: summary?.bagValue ?? 0,
+        overweight: bag.overweight,
+        reservations: (hosted.lastPartyBag?.reservations ?? []).map((reservation) => ({ ...reservation })),
+        items: bag.items.map((entry) => ({
+          instanceId: entry.item.instanceId, itemId: entry.item.itemId, quantity: entry.item.quantity,
+          eligible: [...entry.eligible],
+        })),
+      };
+    }
+    return block;
   }
 
   #participantOf(hosted: HostedSession, characterId: string): CharacterRuntime | undefined {
@@ -1374,7 +3009,20 @@ export class SessionHost {
       name: this.#nameByCharacter.get(characterId) ?? characterId,
       health: character?.health ?? 0,
       maxHealth: character?.maxHealth ?? 0,
+      ...this.#colorsOf(characterId),
     };
+  }
+
+  /**
+   * As cores de um PERSONAGEM para o fio, ou nada (FUN-104). Espalhado, e não `colors:
+   * undefined`: a chave ausente é o que o cliente lê como "pinte o padrão", e uma chave com
+   * `undefined` não sobrevive ao JSON de qualquer jeito — o codec a apagaria em silêncio, e o
+   * tipo passaria a mentir sobre o que foi mandado. Monstro nunca passa por aqui: é uma camada
+   * só, e a tabela é indexada por `characterId`.
+   */
+  #colorsOf(characterId: string): { colors?: OutfitColors } {
+    const colors = this.#colorsByCharacter.get(characterId);
+    return colors === undefined ? {} : { colors };
   }
 
   /**
@@ -1429,24 +3077,29 @@ export class SessionHost {
    *      estraga a tela de retorno e o analisador.
    */
   async #succeed(hosted: HostedSession): Promise<void> {
-    const characters = this.#charactersOf(hosted.session.id);
-    const characterId = characters[0];
-    if (characterId === undefined) return;
-    if (characters.length > 1) {
-      // Party divide uma sessão, e um extrato por personagem é decisão de produto que ainda
-      // não foi tomada. Creditar o mesmo agregado N vezes seria pior que não creditar.
-      this.#logger.error(
-        { sessionId: hosted.session.id, characters: characters.length },
-        'Cannot succeed a session shared by more than one character',
-      );
-      return;
+    // Um extrato por participante (#187, #194): cada um credita, avisa os SEUS visualizadores
+    // e volta à Cidade, na ordem de entrada. Quem já saiu antes (`member-left`) não está aqui.
+    for (const receipt of hosted.session.receipts()) {
+      if (!this.#charactersOf(hosted.session.id).includes(receipt.characterId)) continue;
+      await this.#settleOne(hosted, receipt.characterId, receipt);
     }
-    const receipt = hosted.session.receipt();
-    if (receipt === null) return;
+  }
 
+  /** As saídas enfileiradas por `member-left` (#194), fora do ciclo. */
+  async #settleDepartures(hosted: HostedSession): Promise<void> {
+    while (hosted.departures.length > 0) {
+      const left = hosted.departures.shift() as MemberLeft;
+      await this.#settleOne(hosted, left.characterId, left.departure.receipt, left.departure.character);
+    }
+  }
+
+  async #settleOne(
+    hosted: HostedSession, characterId: string, receipt: Receipt, departed?: CharacterRuntime,
+  ): Promise<void> {
     try {
-      await this.#saveReceipt(characterId, hosted, receipt);
+      await this.#saveReceipt(characterId, hosted, receipt, departed);
       for (const viewer of hosted.viewers) {
+        if (viewer.characterId !== characterId) continue;
         viewer.send({
           type: 'session-ended',
           reason: receipt.reason,
@@ -1532,11 +3185,21 @@ export class SessionHost {
     // de pé com quem ficou, e a Cidade não gera progresso (§37). Encerrar aqui mandaria um
     // extrato de Cidade — zerado — para todo mundo que estivesse lá dentro.
     if (hosted.session.ruleset.shared !== true) {
-      const receipt = hosted.session.ended === null
-        ? hosted.session.end('manual-exit')
-        : hosted.session.receipt();
+      // Party (#194, ADR 0027): com mais de um dono, sair é SAIR — o extrato é o dele, a hunt
+      // continua para os outros, e a cascata do §13.9 roda no próximo evento do `sim`.
+      let receipt: Receipt | null;
+      let departed: CharacterRuntime | undefined;
+      if (hosted.session.ended === null && hosted.session.participants.length > 1) {
+        const departure = hosted.session.leave(characterId, 'manual-exit');
+        receipt = departure?.receipt ?? null;
+        departed = departure?.character;
+        this.#announceDeparture(hosted, characterId);
+      } else {
+        if (hosted.session.ended === null) hosted.session.end('manual-exit');
+        receipt = receiptOf(hosted, characterId);
+      }
       if (receipt !== null) {
-        await this.#saveReceipt(characterId, hosted, receipt);
+        await this.#saveReceipt(characterId, hosted, receipt, departed);
         for (const viewer of hosted.viewers) {
           if (viewer.characterId !== characterId) continue;
           viewer.send({
@@ -1589,9 +3252,10 @@ export class SessionHost {
       hosted.session.leave(characterId);
       this.#announceDeparture(hosted, characterId);
     }
-    if (hosted.session.ruleset.shared !== true || hosted.session.participants.length === 0) {
-      this.#sessions.delete(hosted.session.id);
-    }
+    // Some daqui quando não sobra ninguém dela — nem no shard nem na party (#194): os outros
+    // membros continuam na hunt, e apagar a sessão levaria a deles junto.
+    const remaining = this.#charactersOf(hosted.session.id).filter((id) => id !== characterId);
+    if (remaining.length === 0) this.#sessions.delete(hosted.session.id);
 
     // A próxima pode JÁ estar hospedada — voltar da hunt é chegar na praça em que os outros
     // estão (FUN-71). Montar um `HostedSession` novo aqui jogaria fora os visualizadores e os
@@ -1601,12 +3265,30 @@ export class SessionHost {
       session: next, viewers: new Set(), creatureIds: new Map(), nextCreatureId: 1,
       aoi: this.#interestManaged(next) ? new AreaOfInterest() : null,
       lastAdvancedAtMs: this.#now(),
-      credited: false,
+      credited: new Set(),
+      receiptSaves: new Map(),
+      departures: [],
+      dirty: new Set(),
       sentItemsLooted: next.aggregates.itemsLooted,
       sentStats: new Map(),
+      sentTarget: new Map(),
+      lastTargetSeq: new Map(),
+      sentAnalyzer: new Map(),
+      sentBestiary: new Map(),
+      sentParty: null,
+      lastPartyBag: null,
+      sentConditions: new Map(),
+      sentSlotState: new Map(),
+      slotStateAtMs: 0,
+      sentSpending: null,
     };
     this.#sessions.set(next.id, successor);
     this.#sessionIdByCharacter.set(characterId, next.id);
+    // ANTES de os visualizadores dele entrarem em `successor.viewers`, de propósito: o que o
+    // anúncio manda é o `creature-appear` de quem chega para quem JÁ estava na praça. O que
+    // ele mandaria ao recém-chegado — os vizinhos que ele passa a ver — ninguém recebe, e
+    // não faz falta: o `#sendState` logo abaixo leva a cena inteira (`instance-enter` e
+    // `session-state`, que substitui tudo), e um `appear` antes dela seria apagado pela troca.
     this.#announceArrival(successor, characterId);
 
     for (const viewer of following) {
@@ -1686,7 +3368,7 @@ export class SessionHost {
         'Collecting a resting character nobody is watching',
       );
       void this.release(characterId).catch((error: unknown) => {
-        this.#logger.error({ error, characterId }, 'Failed to collect a resting character');
+        this.#logger.error({ err: error, characterId }, 'Failed to collect a resting character');
       });
     }
   }
@@ -1739,15 +3421,18 @@ export class SessionHost {
     this.#cycleTimer = setInterval(() => this.cycle(), CYCLE_MS);
     this.#renewTimer = setInterval(() => void this.#renewLeases(), RENEW_INTERVAL_MS);
     this.#snapshotTimer = setInterval(() => void this.saveAll(), SNAPSHOT_INTERVAL_MS);
+    this.#playerCountTimer = setInterval(() => void this.#publishPlayerCount(), PLAYER_COUNT_INTERVAL_MS);
   }
 
   stop(): void {
     if (this.#cycleTimer) clearInterval(this.#cycleTimer);
     if (this.#renewTimer) clearInterval(this.#renewTimer);
     if (this.#snapshotTimer) clearInterval(this.#snapshotTimer);
+    if (this.#playerCountTimer) clearInterval(this.#playerCountTimer);
     this.#cycleTimer = null;
     this.#renewTimer = null;
     this.#snapshotTimer = null;
+    this.#playerCountTimer = null;
   }
 
   /**
@@ -1771,8 +3456,12 @@ export class SessionHost {
         // Shard não credita e não encerra por personagem (FUN-71, ADR 0023): a praça não gera
         // progresso (§37), e chamar `end` uma vez por participante mandaria o mesmo extrato
         // zerado para duzentas pessoas. Sair basta, e `release` faz isso logo abaixo.
-        if (hosted.session.ruleset.shared !== true) {
-          const receipt = hosted.session.end(reason);
+        if (hosted.session.ruleset.shared === true) {
+          await this.#saveDurableReceipt(characterId, hosted, reason);
+        } else {
+          hosted.session.end(reason);
+          const receipt = receiptOf(hosted, characterId);
+          if (receipt === null) throw new Error(`no receipt for ${characterId} in ${sessionId}`);
           await this.#saveReceipt(characterId, hosted, receipt);
           for (const viewer of hosted.viewers) {
             if (viewer.characterId !== characterId) continue;
@@ -1799,7 +3488,7 @@ export class SessionHost {
         //
         // A que falhou FICA com snapshot e registro: é o caminho da FUN-28, e voltar
         // retomável é melhor que sumir sem crédito.
-        this.#logger.error({ error, characterId, sessionId }, 'Failed to drain a session');
+        this.#logger.error({ err: error, characterId, sessionId }, 'Failed to drain a session');
       }
     }
     return ended;
@@ -1809,27 +3498,49 @@ export class SessionHost {
     characterId: string,
     hosted: HostedSession,
     receipt: Receipt,
+    /** Quem saiu por `leave` já não está em `participants` (#194): quem chama o entrega. */
+    departed?: CharacterRuntime,
   ): Promise<void> {
     const receipts = this.#options.receipts;
     const accountId = this.#accountIdByCharacter.get(characterId);
     if (receipts === undefined || accountId === undefined) return;
-    // Uma sessão credita UMA vez. A drenagem grava e depois solta, e sem esta guarda o
-    // `release` gravaria de novo com um `seq` novo — que a chave única do ledger não teria
-    // como recusar, e o jogador receberia o mesmo gold duas vezes.
-    if (hosted.credited) return;
-    hosted.credited = true;
-    // `seq` avança na sessão: é metade da chave de idempotência do ledger (invariante 10), e
-    // é o que impede uma drenagem repetida por retry de creditar duas vezes.
-    hosted.session.ledgerSeq += 1;
+    if (hosted.credited.has(characterId)) return;
+    const pending = hosted.receiptSaves.get(characterId);
+    if (pending !== undefined) return pending;
+
+    const saving = this.#persistReceipt(characterId, hosted, receipt, receipts, accountId, departed);
+    hosted.receiptSaves.set(characterId, saving);
+    try {
+      await saving;
+      // Só a confirmação permite esquecer sessão/snapshot. Marcar antes do await faria um
+      // retry após falha pular a gravação e perder o progresso (#267).
+      hosted.credited.add(characterId);
+    } finally {
+      // Resposta perdida também é falha: repetir o mesmo seq é seguro pelo ledger.
+      hosted.receiptSaves.delete(characterId);
+    }
+  }
+
+  async #persistReceipt(
+    characterId: string,
+    hosted: HostedSession,
+    receipt: Receipt,
+    receipts: ReceiptStore,
+    accountId: string,
+    departed?: CharacterRuntime,
+  ): Promise<void> {
+    // O `seq` vem do `sim` (#187): é alocado quando o extrato é emitido, um por participante —
+    // metade da chave de idempotência do ledger (invariante 10), e o que impede uma drenagem
+    // repetida por retry de creditar duas vezes.
     // A stamina do dono da sessão vai junto (FUN-54): sem ela, o tempo de hunt gasto nunca
     // chegaria ao banco, e reconectar devolveria a stamina de antes da hunt.
-    const owner = hosted.session.participants.find((p) => p.id === characterId);
+    const owner = departed ?? hosted.session.participants.find((p) => p.id === characterId);
     await receipts.save({
       sessionId: receipt.sessionId,
       characterId,
       accountId,
       reason: receipt.reason,
-      seq: hosted.session.ledgerSeq,
+      seq: receipt.seq,
       aggregates: receipt.aggregates,
       notableEvents: receipt.notableEvents,
       ...(owner?.staminaMs === undefined || owner.staminaMs === null
@@ -1838,9 +3549,29 @@ export class SessionHost {
       // As skills do dono também (FUN-75). Sem elas, o que ele praticou na hunt nunca chegaria
       // ao banco — e a hunt seguinte começaria do zero de novo, sem nada explicando.
       ...(owner === undefined ? {} : { skills: owner.skills.getState() }),
+      // E o Bestiário (FUN-113), pela mesma razão: abate que não chega ao banco é abate que
+      // some no próximo logout, e o marco 10 000 nunca chegaria.
+      ...(owner === undefined ? {} : { bestiary: owner.bestiary.getState() }),
+      // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
+      // login se ficasse só na sessão.
+      ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
+      // E o estoque de supply/munição do loot (#520): sem isto, uma Strong Health Potion caída
+      // do Dragon sumiria a cada logout, mesmo sem ser gasta. Ao contrário de `ammo`/`skills`/
+      // `bestiary` (só crescem), este estoque É consumido dentro da sessão — drenar as 3 últimas
+      // poções até zero é um resultado real, não "nunca teve estoque". Por isso NÃO se olha
+      // `.size === 0` aqui: gatear por tamanho omitiria a chave do extrato quando a sessão zera o
+      // Map, o `ledger` interpretaria a ausência como "não mexe na coluna", e as 3 poções do
+      // Postgres ressuscitariam no próximo login (achado [blocker] da revisão da #536) — inclui
+      // sempre que o personagem participou, e um `{}` vazio É o valor correto para "drenado".
+      ...(owner === undefined ? {} : { supplyStock: Object.fromEntries(owner.supplyStock) }),
+      ...(owner === undefined ? {} : { ammunitionStock: Object.fromEntries(owner.ammunitionStock) }),
+      // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
+      ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
       // onde ele está, e é só isso que precisa atravessar.
       ...(owner === undefined ? {} : { equipment: equipmentOf(owner) }),
+      // E onde cada item está dentro dos containers (#160).
+      ...(owner === undefined ? {} : { layout: layoutOfState(owner.inventory.getState()) }),
       // O que caiu nesta sessão (FUN-88): o que coube vira linha de `item_instance`, o que não
       // coube vira Caixa de Loot da Sessão.
       ...(owner === undefined ? {} : { acquired: acquiredBy(owner, receipt.sessionId) }),
@@ -1849,18 +3580,63 @@ export class SessionHost {
         : { lootBox: owner.lootBox }),
     });
 
+    // O extrato agora é durável no Redis e será a fonte que o ledger aplica no Postgres.
+    // Enquanto ele está pendente, a Cidade continua com o MESMO `CharacterRuntime` da hunt;
+    // deixar o delta nele faz o ticket que acabou de liquidar o ledger reencontrar uma base
+    // antiga mais uma variação que já entrou no banco. Incorporar o delta à base aqui conserva o
+    // saldo disponível e deixa a próxima sessão começar do mesmo número que a linha durável.
+    if (owner !== undefined && owner.goldDelta !== 0) {
+      owner.settleGoldDelta();
+    }
+
     // A caixa é escrita AQUI, e não na liquidação: o relógio de 30 minutos começa no
     // encerramento (§21.6), e quem sabe que a sessão encerrou é quem a encerrou. Deixar para o
     // `jobs` faria o prazo começar até dez segundos depois, e por acaso.
-    if (owner !== undefined && owner.lootBox.length > 0) {
-      await this.#options.lootBoxes?.save(receipt.sessionId, owner.lootBox)
-        .catch((error: unknown) => {
-          this.#logger.error(
-            { error, characterId, sessionId: receipt.sessionId },
-            'Failed to save the session loot box',
-          );
-        });
-    }
+    await this.#saveLootBox(characterId, receipt.sessionId, owner);
+  }
+
+  async #saveLootBox(characterId: string, sessionId: string, owner: CharacterRuntime | undefined): Promise<void> {
+    if (owner === undefined || owner.lootBox.length === 0) return;
+    await this.#options.lootBoxes?.save(sessionId, owner.lootBox)
+      .catch((error: unknown) => {
+        this.#logger.error({ err: error, characterId, sessionId }, 'Failed to save the session loot box');
+      });
+  }
+
+  /**
+   * O extrato de ESTADO DURÁVEL de um shard (#154).
+   *
+   * O shard não credita progresso (ADR 0023) — mas guarda estado: vocação, equipamento, arma
+   * de vocação e munição equipada mudam na praça e, sem isto, sumiam no logout (o `equip` da
+   * FUN-82 e o `move-item` da AB-05 já caíam nesse buraco). Só para quem mexeu em algo (`dirty`).
+   * Agregados zerados: a linha de ledger que o `jobs` insere é a chave de idempotência
+   * (`UNIQUE (session_id, seq)`), não um crédito. `seq` avança na cópia compartilhada, e
+   * cada extrato tem o seu.
+   */
+  async #saveDurableReceipt(characterId: string, hosted: HostedSession, reason: EndReason): Promise<void> {
+    const receipts = this.#options.receipts;
+    const accountId = this.#accountIdByCharacter.get(characterId);
+    const owner = hosted.session.participants.find((p) => p.id === characterId);
+    if (receipts === undefined || accountId === undefined || owner === undefined) return;
+    if (!hosted.dirty.has(characterId)) return;
+    hosted.session.ledgerSeq += 1;
+    await receipts.save({
+      sessionId: hosted.session.id,
+      characterId,
+      accountId,
+      reason,
+      seq: hosted.session.ledgerSeq,
+      aggregates: EMPTY_AGGREGATES,
+      notableEvents: [],
+      ...(owner.vocationId === null ? {} : { vocation: owner.vocationId }),
+      ...(owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
+      equipment: equipmentOf(owner),
+      layout: layoutOfState(owner.inventory.getState()),
+      acquired: acquiredBy(owner, hosted.session.id),
+      ...(owner.lootBox.length === 0 ? {} : { lootBox: owner.lootBox }),
+    });
+    hosted.dirty.delete(characterId);
+    await this.#saveLootBox(characterId, hosted.session.id, owner);
   }
 
   /** Grava todas as sessões hospedadas. Chamado pelo timer e pela drenagem. */
@@ -1882,7 +3658,7 @@ export class SessionHost {
       } catch (error) {
         // Falhar aqui é perder o próximo intervalo, não a sessão. Silenciar seria perder a
         // única pista de por que uma retomada voltou mais atrasada do que devia.
-        this.#logger.error({ error, characterId }, 'Failed to save session snapshot');
+        this.#logger.error({ err: error, characterId }, 'Failed to save session snapshot');
       }
     }
   }
@@ -1904,6 +3680,22 @@ export class SessionHost {
   }
 
   /**
+   * O id numérico do alvo SELECIONADO para apresentação (#470, RF-05): `selectedTargetOf` do
+   * ruleset, que NÃO é recortado pelo alcance da arma. Antes daqui saía `attackTargetOf` — o
+   * alvo de combate —, e o alvo sumia da tela ao sair do corpo a corpo.
+   *
+   * `.get` e não `#creatureId`: quem não recebeu id numérico nunca apareceu para o cliente, e
+   * um alvo que a tela não desenha não pode ser destacado. Monstro visível já tem id pelo
+   * `session-state`.
+   */
+  #selectedTargetIdOf(hosted: HostedSession, character: CharacterRuntime | undefined): number | null {
+    if (character === undefined) return null;
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    const target = ruleset.selectedTargetOf?.(character) ?? null;
+    return target === null ? null : (hosted.creatureIds.get(target.subject) ?? null);
+  }
+
+  /**
    * O estado ATUAL, montado do zero a cada pedido.
    *
    * Não existe fila de eventos guardada para reproduzir depois, e isso é decisão, não
@@ -1915,7 +3707,7 @@ export class SessionHost {
     const { session } = hosted;
     // A MESMA montagem do `player-stats` ao vivo (FUN-109): o que a reanexação mostra e o que
     // o ciclo atualiza precisam concordar, e duas montagens divergem na primeira regra nova.
-    const self = playerStatsOf(this.#participantOf(hosted, characterId));
+    const self = this.#statsOf(this.#participantOf(hosted, characterId));
 
     // Quem está no CAMPO DE VISÃO, e não a sessão inteira (FUN-33). Numa praça de duzentos, o
     // `session-state` completo seria o pior pacote do jogo — e mandaria para a tela gente que
@@ -1934,6 +3726,9 @@ export class SessionHost {
       name: this.#nameByCharacter.get(participant.id) ?? participant.id,
       health: participant.health,
       maxHealth: participant.maxHealth,
+      // As cores do ticket (FUN-104), pelo MESMO espalhamento do `creature-appear`: o cliente
+      // aplica os dois pelo mesmo caminho, e o reanexado precisa ver o vizinho pintado igual.
+      ...this.#colorsOf(participant.id),
     }));
 
     // Os monstros VIVOS da hunt entram na mesma lista (FUN-103): quem reanexa no meio precisa
@@ -1945,7 +3740,11 @@ export class SessionHost {
       const definition = this.#options.monsterCatalog?.get(monster.monsterId);
       creatures.push({
         id: this.#creatureId(hosted, monster.subject),
-        position: { ...monster.position, z: ruleset.floor ?? 0 },
+        // O andar do MONSTRO (#519, hunt multiandar), nunca o padrão da instância: numa hunt de
+        // andar único os dois sempre bateram, e é só por isso que `ruleset.floor` nunca apareceu
+        // errado até aqui. `?? ruleset.floor ?? 0` sobra para o monstro de snapshot anterior a
+        // esta issue, sem `z` nenhum na posição.
+        position: { ...monster.position, z: monster.position.z ?? ruleset.floor ?? 0 },
         appearanceId: definition?.outfitId ?? 0,
         name: definition?.name ?? monster.monsterId,
         health: monster.health,
@@ -1953,10 +3752,16 @@ export class SessionHost {
       });
     }
 
+    const spendingShares = partySpendingSharesOf(hosted);
+    // A seção PARTY do analisador (§32, ADR 0035 d.11) — o MESMO bloco do `analyzer.party`,
+    // porque `session-state` já tem `party` como o roster (#196). Ausente em solo (D8).
+    const partySummary = partySummaryOf(hosted);
     return {
       type: 'session-state',
       sessionType: session.ruleset.type,
       elapsedMs: session.aggregates.durationMs,
+      ...(session.ruleset.huntId === undefined ? {} : { huntId: session.ruleset.huntId }),
+      ...(session.ruleset.difficulty === undefined ? {} : { difficulty: session.ruleset.difficulty }),
       self: {
         creatureId: this.#creatureId(hosted, characterId),
         characterId,
@@ -1966,13 +3771,35 @@ export class SessionHost {
         maxMana: self.maxMana,
         level: self.level,
         xp: self.xp,
+        vocationId: self.vocationId,
+        speed: self.speed,
+        skills: self.skills,
+        magicLevel: self.magicLevel,
       },
       world: {
-        mapId: null,
+        // O mapa da sessão (FUN-120): o cliente busca a geometria e a pilha por este id.
+        mapId: session.ruleset.mapId ?? null,
         creatures,
+        // Os cadáveres no chão (FUN-123), com a arte da tabela; sem linha, sem cadáver.
+        groundItems: (ruleset.groundItems ?? []).flatMap((corpse) => {
+          const appearanceId = this.#options.monsterCatalog?.get(corpse.monsterId)?.corpseAppearanceId;
+          return appearanceId === undefined ? [] : [{ id: corpse.id, position: corpse.position, appearanceId }];
+        }),
       },
-      aggregates: { ...session.aggregates },
+      // Os agregados DESTE personagem (#187, #196): numa party, o que ele rendeu — não a soma.
+      aggregates: { ...session.aggregatesOf(characterId) },
       notableEvents: session.notableEvents.map((event) => ({ ...event })),
+      // A party (#196): quem está nela e a bolsa, do estado do ruleset. Ausente em solo.
+      ...this.#partyBlock(hosted),
+      ...(partySummary === undefined ? {} : { partySummary }),
+      ...(spendingShares === undefined ? {} : { partySpending: { shares: spendingShares } }),
+      // A configuração de bot EM VIGOR (FUN-111): a do ticket ou a última `bot-config` aceita.
+      // É o que a tela mostra ao abrir; sem isto ela nascia vazia a cada carregamento, e um
+      // "Salvar" dali apagava as regras que a hunt estava executando.
+      ...(this.#botByCharacter.has(characterId)
+        ? { botConfig: this.#botByCharacter.get(characterId) }
+        : {}),
+      ...(this.#lastPlayerCount === undefined ? {} : { onlinePlayers: this.#lastPlayerCount }),
     };
   }
 
@@ -1985,12 +3812,78 @@ export class SessionHost {
     characterId: string,
     initialCharacter: InitialCharacter | undefined,
     accountId: string | undefined,
+    party?: PartyTicket,
   ): Promise<void> {
-    const resumed = await this.#resume(characterId, accountId);
-    const session = resumed?.session ?? this.#options.createSession(characterId, initialCharacter);
+    // A party (#195): a sessão pode JÁ estar hospedada — outro membro chegou primeiro — e aí
+    // este só entra nela. Senão, o primeiro ticket cria a hunt com todos.
+    const hostedParty = party === undefined ? undefined : this.#sessions.get(party.sessionId);
+    // A retomada de snapshot (que já traz os N, quando ele é de uma party) só se aplica a um
+    // ticket SOLO reconectando — nunca a um ticket de party (#527, invariante 8): o snapshot é
+    // indexado por `characterId`, não por `sessionId`, e `/start` sempre emite um `sessionId`
+    // novo (`randomUUID`). Um personagem com QUALQUER snapshot pendente de outra sessão — a
+    // hunt em que ele estava quando o nó reiniciou (ADR 0010), por exemplo — nunca deveria
+    // chegar aqui com um ticket de party: `/start` recusa formar a party antes disso (ver
+    // `api/party.ts`). Se chegar mesmo assim, o ticket é AUTORITATIVO sobre qual sessão isto
+    // é — retomar o snapshot errado seria colocar o personagem na hunt de outra pessoa.
+    const resumed = (party === undefined && hostedParty === undefined)
+      ? await this.#resume(characterId, accountId)
+      : null;
+    const session = hostedParty?.session
+      ?? resumed?.session
+      ?? this.#options.createSession(characterId, initialCharacter, party);
     await this.#register(characterId, session, accountId);
-    this.#createLocal(characterId, session, accountId);
+    // Uma sessão retomada com MAIS de um dono (#194, ADR 0027) traz os outros membros da party
+    // dentro: eles precisam do lease e do mapa deste nó antes de qualquer coisa local existir,
+    // senão o lease deles expira, o login seguinte resolve para outro nó, e a cópia do
+    // snapshot que ele guardou revive a MESMA sessão duas vezes. A conta de cada um vem do
+    // snapshot dele; recusa de lease derruba a retomada inteira — nada local foi criado ainda.
+    const others = resumed === null && (party === undefined || hostedParty !== undefined)
+      ? []
+      : session.participants.filter((p) => p.id !== characterId);
+    for (const other of others) {
+      // Da party recém-criada a conta vem do ticket; da retomada, do snapshot de cada um.
+      const fromTicket = party?.members.find((m) => m.characterId === other.id)?.accountId;
+      const otherAccount = fromTicket ?? (await this.#options.snapshots?.load(other.id))?.accountId;
+      if (otherAccount === undefined) {
+        this.#logger.warn({ characterId: other.id, sessionId: session.id }, 'Party member has no snapshot of their own; hosting without a lease');
+        continue;
+      }
+      // O outro membro pode estar hospedado AQUI, na Cidade, no mesmo nó (#527) — o cenário de
+      // duas caçadas locais logadas juntas. ANTES do `#register` de propósito: registrar com o
+      // `sessionKey` ainda apontando para a Cidade cairia no `#takeOver`, que recusa sempre
+      // (o nó está vivo — ver `#leaveForParty`).
+      const existingOther = this.sessionFor(other.id);
+      if (existingOther !== undefined && existingOther.id !== session.id) {
+        await this.#leaveForParty(other.id, existingOther, {
+          sessionId: session.id, nodeId: this.#options.nodeId, type: session.ruleset.type,
+        });
+      }
+      await this.#register(other.id, session, otherAccount);
+      this.#accountIdByCharacter.set(other.id, otherAccount);
+    }
+    // Nome e cores ANTES de hospedar: `#createLocal` anuncia a chegada a quem já está na praça
+    // (FUN-71), e o `creature-appear` desse anúncio lê as duas tabelas. Depois, quem já
+    // estava veria o recém-chegado com o id no lugar do nome e sem cores — e só o próximo
+    // `session-state` corrigiria. Passou despercebido enquanto o único leitor era o chat, que
+    // só fala depois. Depois do `#register`, porém: registro recusado não pode deixar rastro.
     if (initialCharacter?.name !== undefined) this.#nameByCharacter.set(characterId, initialCharacter.name);
+    if (initialCharacter?.outfitColors !== undefined) {
+      this.#colorsByCharacter.set(characterId, initialCharacter.outfitColors);
+    }
+    this.#createLocal(characterId, session, accountId);
+    for (const other of others) {
+      // A Cidade dele já foi deixada no loop acima, ANTES do `#register` — aqui só falta o
+      // mapa local, que aquele loop não mexeu de propósito (a ordem de `#createLocal` importa
+      // para quem já estava na hunt ver a chegada, como o comentário duas linhas acima explica).
+      this.#sessionIdByCharacter.set(other.id, session.id);
+      this.#restingSince.set(other.id, this.#now());
+      // Nome, cores e bot dos outros membros vêm do bloco da party (#195): quem os vê no
+      // mundo precisa do nome, e a tela deles do bot — mesmo que nunca conectem.
+      const member = party?.members.find((m) => m.characterId === other.id);
+      if (member?.initialCharacter.name !== undefined) this.#nameByCharacter.set(other.id, member.initialCharacter.name);
+      if (member?.initialCharacter.outfitColors !== undefined) this.#colorsByCharacter.set(other.id, member.initialCharacter.outfitColors);
+      if (member !== undefined) this.#adoptTicketBotConfig(other.id, session, member.initialCharacter);
+    }
     this.#adoptTicketBotConfig(characterId, session, initialCharacter);
     if (resumed !== null) {
       this.#resumedGapMs.set(characterId, resumed.gapMs);
@@ -2022,7 +3915,7 @@ export class SessionHost {
     try {
       stored = await snapshots.load(characterId);
     } catch (error) {
-      this.#logger.error({ error, characterId }, 'Failed to load session snapshot');
+      this.#logger.error({ err: error, characterId }, 'Failed to load session snapshot');
       return null;
     }
     if (stored === null) return null;
@@ -2050,10 +3943,12 @@ export class SessionHost {
   /**
    * Extrato de uma sessão que não volta mais, montado a partir do snapshot.
    *
-   * O `seq` sai de `ledgerSeq + 1`, que é a MESMA regra do caminho normal — e é ela que torna
-   * isto idempotente: se aquela sessão já tinha creditado esse `seq`, a chave única do ledger
-   * recusa o segundo, e o jogador não recebe duas vezes. Sem essa aritmética, um snapshot que
-   * sobreviveu a uma drenagem parcial creditaria o mesmo progresso de novo.
+   * A montagem em si — que campos do `CharacterState` viram extrato, `seq = ledgerSeq + 1`
+   * para a idempotência — é `settleSnapshotAsReceipt` (`../snapshot-settlement.js`, #527):
+   * compartilhada com `/api/party/:id/start` (recusa formar hunt para quem tem outro snapshot
+   * resumível pendente) e `pnpm dev:dragon-party --reset` (limpa o snapshot pelo MESMO
+   * caminho, nunca apagando a chave às cegas). Nenhum dos dois tem o resto do runtime de jogo
+   * para reconstruir a sessão — e não precisam: creditar não depende disso.
    */
   async #creditUnrestorable(
     characterId: string,
@@ -2062,30 +3957,13 @@ export class SessionHost {
   ): Promise<void> {
     const receipts = this.#options.receipts;
     if (receipts === undefined || accountId === undefined) return;
-    const owner = snapshot.participants.find((participant) => participant.id === characterId);
     try {
-      await receipts.save({
-        sessionId: snapshot.id,
-        characterId,
-        accountId,
-        // `drain` porque foi o servidor que encerrou, não o jogador: é a mesma família de
-        // "sua sessão foi encerrada por manutenção", que é o que de fato aconteceu.
-        reason: 'drain',
-        seq: snapshot.ledgerSeq + 1,
-        aggregates: snapshot.aggregates,
-        notableEvents: snapshot.notableEvents,
-        ...(owner?.staminaMs === undefined || owner.staminaMs === null
-          ? {}
-          : {
-            staminaMs: owner.staminaMs,
-            staminaUpdatedAtMs: owner.staminaUpdatedAtMs ?? 0,
-          }),
-      });
+      await settleSnapshotAsReceipt(snapshot, { characterId, accountId, receipts });
     } catch (error) {
       // Falhar aqui perde o crédito, e é por isso que o snapshot NÃO é apagado em seguida
       // quando isto lança: a próxima conexão tenta de novo.
       this.#logger.error(
-        { error, characterId, sessionId: snapshot.id },
+        { err: error, characterId, sessionId: snapshot.id },
         'Failed to credit an unrestorable snapshot',
       );
       throw error;
@@ -2108,9 +3986,22 @@ export class SessionHost {
       // Vale tanto para a sessão nova quanto para a retomada de snapshot: as duas começam a
       // ser cobradas a partir de agora, e não de um relógio que não é deste processo.
       lastAdvancedAtMs: this.#now(),
-      credited: false,
+      credited: new Set(),
+      receiptSaves: new Map(),
+      departures: [],
+      dirty: new Set(),
       sentItemsLooted: session.aggregates.itemsLooted,
       sentStats: new Map(),
+      sentTarget: new Map(),
+      lastTargetSeq: new Map(),
+      sentAnalyzer: new Map(),
+      sentBestiary: new Map(),
+      sentParty: null,
+      lastPartyBag: null,
+      sentConditions: new Map(),
+      sentSlotState: new Map(),
+      slotStateAtMs: 0,
+      sentSpending: null,
     };
     this.#sessions.set(session.id, hosted);
     this.#sessionIdByCharacter.set(characterId, session.id);
@@ -2186,7 +4077,43 @@ export class SessionHost {
     } catch (error) {
       // Lease não renovado vira sessão órfã para a FUN-28. Registrar alto: é o sintoma que
       // antecede uma sessão sendo retomada em outro nó sem necessidade.
-      this.#logger.error({ error }, 'Failed to renew session leases');
+      this.#logger.error({ err: error }, 'Failed to renew session leases');
+    }
+  }
+
+  /**
+   * Agrega o total de jogadores online entre todos os nós vivos do diretório e manda para
+   * todo visualizador conectado neste nó (SV-07, RF-03).
+   *
+   * Roda fora do caminho quente do tick (`setInterval` próprio de 30 s). Não filtra por estado
+   * aqui — a barra do topo aparece na Cidade e na hunt, e uma sessão sem visualizador
+   * simplesmente não tem para quem mandar (o `for` interno não itera nada).
+   *
+   * Sem `directory` (nó solo, ou teste), o total é só a contagem local — não há outro nó para
+   * somar.
+   *
+   * Falha do Redis NÃO publica um número errado. A alternativa óbvia — cair para
+   * `connectedCharacterCount` deste nó sozinho quando `aliveNodes()` falha — pareceria, para
+   * quem está vendo, uma queda repentina de milhares de jogadores para os poucos deste
+   * processo: "o Redis está lento" não pode virar "o servidor esvaziou" na tela de ninguém. O
+   * último total conhecido fica onde está, e o próximo ciclo de 30 s tenta de novo.
+   */
+  async #publishPlayerCount(): Promise<void> {
+    const directory = this.#options.directory;
+    let total = this.connectedCharacterCount;
+    if (directory !== undefined) {
+      try {
+        const nodes = await directory.aliveNodes();
+        total = nodes.reduce((sum, node) => sum + (node.players ?? 0), 0);
+      } catch (error) {
+        this.#logger.error({ err: error }, 'Failed to aggregate online player count');
+        return;
+      }
+    }
+    this.#lastPlayerCount = total;
+    const message: S2CMessage = { type: 'player-count', count: total };
+    for (const hosted of this.#sessions.values()) {
+      for (const viewer of hosted.viewers) viewer.send(message);
     }
   }
 

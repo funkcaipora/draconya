@@ -24,6 +24,7 @@ const receiptOf = (
   aggregates: {
     durationMs: 60_000, xpGained: 400, goldGained: 90, goldSpent: 10, kills: 4, deaths: 0,
        itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+       damageDealt: 0, healingDone: 0,
   },
   notableEvents: [],
   ...overrides,
@@ -73,7 +74,7 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     const characterId = randomUUID();
     const sessionId = randomUUID();
     await store.save(receiptOf(sessionId, characterId));
-    await redis.del(`receipt:${sessionId}`);
+    await redis.del(`receipt:${sessionId}:${characterId}`);
 
     expect(await store.pendingFor(characterId)).toEqual([]);
     expect(await redis.smembers(`receipts:char:${characterId}`)).toEqual([]);
@@ -109,6 +110,38 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(await store.pendingFor(characterId)).toHaveLength(4);
   });
 
+  it('carries the bestiary through Redis and back, and a receipt without one stays without (FUN-113)', async () => {
+    // `parseReceipt` é lista de PERMISSÃO: campo que não entra nela some no caminho de volta
+    // sem erro nenhum — foi o que aconteceu com as skills na primeira vez. Este teste é o que
+    // pega a mesma omissão para o Bestiário: gravado com o mapa, lido com o mapa, absoluto.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const counts = { rat: 10_000, bat: 3 };
+    await store.save(receiptOf(randomUUID(), characterId, { bestiary: counts }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.bestiary).toEqual(counts);
+    // Sem o campo, sem a chave: o ledger distingue "não veio" (não toca na coluna) de "veio
+    // vazio", e uma chave `undefined` colapsaria os dois.
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('bestiary');
+  });
+
+  it('carries the ammo selection through Redis and back, and a receipt without one stays without (#152)', async () => {
+    // A mesma lista de PERMISSÃO, o mesmo defeito a pegar: a escolha gravada tem de voltar
+    // inteira, e o extrato sem ela não pode ganhar a chave — o ledger não toca na coluna.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, { ammo: { arrow: 'sniper-arrow' } }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.ammo).toEqual({ arrow: 'sniper-arrow' });
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('ammo');
+  });
+
   it('keeps the index out of the sweep, which scans by key prefix', async () => {
     // `receipts:char:` e `receipt:` são prefixos distintos DE PROPÓSITO. Nomear o índice
     // `receipt:char:{id}` o poria dentro do `MATCH` da varredura, e um SET no lugar de um
@@ -121,5 +154,40 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
 
     expect(keys).toHaveLength(1);
     expect(await store.pending()).toHaveLength(1);
+  });
+});
+
+describe.runIf(available)('one receipt per party member (#194, ADR 0027)', () => {
+  it('keeps two receipts of the same session apart, and removes one without touching the other', async () => {
+    // Mutação que mata: a chave antiga `receipt:{sessionId}` — o segundo `save` sobrescreveria
+    // o primeiro, e um membro da party perderia a hunt inteira.
+    const store = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    await store.save(receiptOf(sessionId, 'a', { seq: 1 }));
+    await store.save(receiptOf(sessionId, 'b', { seq: 2 }));
+
+    expect((await store.pendingFor('a')).map((r) => [r.characterId, r.seq])).toEqual([['a', 1]]);
+    expect((await store.pendingFor('b')).map((r) => [r.characterId, r.seq])).toEqual([['b', 2]]);
+    expect(await store.pending()).toHaveLength(2);
+
+    await store.remove(sessionId, 'a');
+    expect(await store.pendingFor('a')).toEqual([]);
+    expect((await store.pendingFor('b')).map((r) => r.seq)).toEqual([2]);
+    expect(await store.pending()).toHaveLength(1);
+  });
+
+  it('still reads and removes a receipt written under the old key, with the old index entry', async () => {
+    // Deploy em rolagem: um nó anterior ao #194 gravou `receipt:{sessionId}` e o índice com o
+    // `sessionId` cru. Precisa ser lido por `pendingFor` E apagado por `remove`.
+    const store = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const characterId = randomUUID();
+    await redis.set(`receipt:${sessionId}`, JSON.stringify({ ...receiptOf(sessionId, characterId), endedAtMs: 1 }));
+    await redis.sadd(`receipts:char:${characterId}`, sessionId);
+
+    expect((await store.pendingFor(characterId)).map((r) => r.sessionId)).toEqual([sessionId]);
+    await store.remove(sessionId, characterId);
+    expect(await store.pendingFor(characterId)).toEqual([]);
+    expect(await redis.exists(`receipt:${sessionId}`)).toBe(0);
   });
 });

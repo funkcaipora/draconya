@@ -1,0 +1,27 @@
+{
+  "id": "energy-beam",
+  "name": "Energy Beam",
+  "description": "Lança um raio de energia numa linha reta à sua frente.",
+  "vocationId": "sorcerer",
+  "minLevel": 23,
+  "manaCost": 40,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 4000,
+  "effect": {
+    "kind": "damage",
+    "basePower": 60,
+    "area": {
+      "shape": "beam",
+      "length": 4
+    },
+    "damageType": "energy",
+    "formula": {
+      "skillMin": 1.8,
+      "skillMax": 3,
+      "baseMin": 11,
+      "baseMax": 19
+    }
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Área do Canary (`data/scripts/spells/attack/energy_beam.lua`, main, 2026-09-24): AREA_BEAM5 tem 4 tiles de alcance (o quinto é o próprio conjurador); fórmula já batia."
+}

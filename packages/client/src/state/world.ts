@@ -12,7 +12,11 @@
 //
 // Quem lê isto é o laço de render do canvas (FUN-23), a cada quadro, direto. Nunca por prop.
 
-import type { S2CProps } from '@draconya/protocol';
+import type { OutfitColors, S2CProps, DamageType } from '@draconya/protocol';
+import type { TileWindow } from '../world/camera.js';
+import {
+  FLOATING_TEXT_MERGE_WINDOW_MS, mergeFloatingText,
+} from '../world/effects.js';
 
 /** Posição em tiles. Igual à do protocolo. */
 export interface Point {
@@ -32,6 +36,17 @@ export interface Point {
 export interface Creature {
   readonly id: number;
   readonly appearanceId: number;
+  /**
+   * As cores com que o outfit dela é pintado (FUN-104). O tipo é o do PROTOCOLO, e não o de
+   * `assets/outfit.ts`, de propósito: o store guarda o que o servidor disse, e não pode
+   * depender da camada de arte para descrever isso — é o viewport quem liga um ao outro.
+   *
+   * Ausente quando a criatura chegou sem cores — monstro, que é uma camada só, ou um nó
+   * `game` anterior a esta issue —, e aí é o viewport quem escolhe as de reserva. O store não
+   * inventa: guardar as padrão aqui faria "o servidor não disse" e "o servidor disse estas"
+   * chegarem iguais ao desenho.
+   */
+  readonly colors?: OutfitColors;
   name: string;
   health: number;
   maxHealth: number;
@@ -85,14 +100,23 @@ export interface Missile {
 export interface FloatingText {
   readonly id: number;
   readonly creatureId: number;
-  readonly amount: number;
+  /**
+   * O valor desenhado. MUTÁVEL desde a #479: números no mesmo tile e mesma cor, dentro de uma
+   * janela curta, somam num só (RF-05) em vez de borrar um sobre o outro.
+   */
+  amount: number;
   readonly kind: HitKind;
+  /**
+   * O ELEMENTO do golpe, quando o servidor o mandou (RF-02, #479). Ausente é um nó `game`
+   * anterior, e a cor cai no mapa por `kind`. Entra na chave do merge: dois números de cores
+   * diferentes no mesmo tile NÃO se somam — o jogador não pode ler fogo como gelo.
+   */
+  readonly damageType?: DamageType;
   readonly startedAtMs: number;
   /**
-   * Onde o texto está sendo desenhado: a ÚLTIMA posição conhecida da criatura, que o viewport
-   * atualiza a cada quadro enquanto ela existe. Quando ela some no meio do voo — o golpe que
-   * mata é seguido do `creature-disappear` — o número termina de subir onde ela estava, em vez
-   * de sumir junto. `null` é criatura que este cliente nunca viu: nada a desenhar.
+   * Onde o texto está ancorado: o ponto do IMPACTO, fotografado quando o golpe chegou (RF-04).
+   * NÃO acompanha a criatura — o número fica no tile em que ela estava, mesmo que ela ande ou
+   * morra. `null` é criatura que este cliente nunca viu: nada a desenhar.
    */
   position: Point | null;
 }
@@ -101,6 +125,8 @@ export interface World {
   /** Instância em que o personagem está, ou `null` antes de entrar em alguma. */
   instanceId: string | null;
   mapId: string | null;
+  /** O ambiente da cena (FUN-121): `cavern` escurece o mundo. Superfície até alguém dizer. */
+  ambience: 'surface' | 'cavern';
   /**
    * Qual criatura é o próprio jogador. A câmera segue esta; sem ela, não há em quem centrar.
    *
@@ -110,15 +136,35 @@ export interface World {
    */
   selfId: number | null;
   readonly creatures: Map<number, Creature>;
+  /** Os itens no chão (FUN-123): cadáveres, pelo id do servidor. Desenhados na pilha do tile. */
+  readonly groundItems: Map<number, GroundItem>;
+  /**
+   * Sobe a cada mudança em `groundItems`: o terreno só repinta quando a chave muda, e a chave
+   * precisa saber que um cadáver caiu sem varrer o mapa a cada quadro.
+   */
+  groundItemsVersion: number;
+  /** A janela de tiles visíveis na tela agora (FUN-23, #254). Atualizada pelo viewport. */
+  visibleWindow: TileWindow | null;
   readonly effects: Effect[];
   readonly missiles: Missile[];
   readonly texts: FloatingText[];
 }
 
+/** Um item no chão: onde, e com que arte. */
+export interface GroundItem {
+  readonly id: number;
+  readonly position: Point;
+  readonly appearanceId: number;
+}
+
 export const world: World = {
   instanceId: null,
   mapId: null,
+  ambience: 'surface',
+  groundItems: new Map(),
+  groundItemsVersion: 0,
   selfId: null,
+  visibleWindow: null,
   creatures: new Map(),
   effects: [],
   missiles: [],
@@ -170,19 +216,54 @@ export function addMissile(
  */
 export function addFloatingText(
   creatureId: number, amount: number, kind: HitKind, startedAtMs: number,
+  damageType?: DamageType,
 ): FloatingText {
-  lastTransientId += 1;
+  // A posição é fotografada AQUI, e não só no primeiro quadro: o golpe que mata chega no mesmo
+  // lote que o `creature-disappear`, e quando o viewport olhasse a criatura já não existiria —
+  // justamente o número que o jogador mais quer ver ficaria sem lugar para cair. É também o
+  // ponto de IMPACTO ao qual o texto fica ancorado (RF-04): ele não segue a criatura depois.
   const creature = world.creatures.get(creatureId);
+  const position = creature === undefined ? null : interpolate(creature, startedAtMs);
+  const merged = mergeTargetAt(position, kind, damageType, startedAtMs);
+  if (merged !== null) {
+    mergeFloatingText(merged, amount);
+    return merged;
+  }
+  lastTransientId += 1;
   const text: FloatingText = {
     id: lastTransientId,
     creatureId,
     amount,
     kind,
+    ...(damageType === undefined ? {} : { damageType }),
     startedAtMs,
-    position: creature === undefined ? null : interpolate(creature, startedAtMs),
+    position,
   };
   pushCapped(world.texts, text);
   return text;
+}
+
+/**
+ * O texto recente de MESMO tile e MESMA cor em que este número se funde (RF-05), ou `null`.
+ *
+ * Sem posição não há merge: não existe "mesmo tile" de uma criatura que o cliente nunca viu. A
+ * varredura é de trás para a frente porque o candidato é o mais RECENTE — e o `kind` e o
+ * `damageType` entram na chave porque cores diferentes não podem virar uma soma só.
+ */
+function mergeTargetAt(
+  position: Point | null, kind: HitKind, damageType: DamageType | undefined, nowMs: number,
+): FloatingText | null {
+  if (position === null) return null;
+  for (let i = world.texts.length - 1; i >= 0; i -= 1) {
+    const text = world.texts[i] as FloatingText;
+    if (text.kind !== kind || text.damageType !== damageType) continue;
+    const anchor = text.position;
+    if (anchor === null) continue;
+    if (anchor.x !== position.x || anchor.y !== position.y || anchor.z !== position.z) continue;
+    if (nowMs - text.startedAtMs > FLOATING_TEXT_MERGE_WINDOW_MS) continue;
+    return text;
+  }
+  return null;
 }
 
 /** Esvazia os três transitórios. O que estava no ar pertence à cena anterior. */
@@ -196,9 +277,14 @@ export function clearTransients(): void {
  * Troca de instância limpa TUDO. Carregar por cima deixaria criatura do mapa anterior
  * desenhada no novo, e o sintoma é um monstro parado que nunca some.
  */
-export function enterInstance(instanceId: string, mapId: string): void {
+export function enterInstance(
+  instanceId: string, mapId: string, ambience: 'surface' | 'cavern' = 'surface',
+): void {
   world.instanceId = instanceId;
   world.mapId = mapId;
+  world.ambience = ambience;
+  world.groundItems.clear();
+  world.groundItemsVersion += 1;
   world.selfId = null;
   world.creatures.clear();
   clearTransients();

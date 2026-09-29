@@ -1,0 +1,9 @@
+{
+  "id": "leather-legs",
+  "name": "Leather Legs",
+  "kind": "armor",
+  "slot": "legs",
+  "weight": 18,
+  "value": 9,
+  "armor": 1
+}

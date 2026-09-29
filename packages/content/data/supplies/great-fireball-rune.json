@@ -1,0 +1,30 @@
+{
+  "id": "great-fireball-rune",
+  "name": "Great Fireball Rune",
+  "description": "Lança uma bola de fogo no alvo, causando dano numa área circular de 37 tiles ao redor dele.",
+  "price": 45,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "requires": {
+    "level": 30,
+    "magicLevel": 4
+  },
+  "effect": {
+    "kind": "damage",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 1.2,
+      "skillMax": 2.8,
+      "baseMin": 7,
+      "baseMax": 17
+    },
+    "range": 8,
+    "damageType": "fire",
+    "area": {
+      "shape": "circle",
+      "radius": 3,
+      "centered": "target"
+    }
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Fórmula canônica do Canary (#476) — a mesma da Avalanche: min = level/5 + ml*1.2 + 7, max = level/5 + ml*2.8 + 17; level 30 e magic level 4, 4 cargas. Preço por uso PROVISÓRIO (runa no NPC ÷ 4 cargas). Aparência: efeito (effect 7, o de fire-wave) e projétil (missile 4, o de flame-strike) — a bola de fogo voa do conjurador ao alvo antes de a área estourar (#478) —, auditados em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprites sem PNG, conferência visual pendente e ids mantidos (ver docs/combat-presentation-audit.md)."
+}

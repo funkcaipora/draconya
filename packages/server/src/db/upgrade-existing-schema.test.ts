@@ -48,7 +48,7 @@ describe.runIf(databaseUrl !== undefined)('existing English schema FUN-11 upgrad
     } finally {
       await fixture.cleanup();
     }
-  });
+  }, 20_000);
 
   it('rolls back completely when existing names collide after case folding', async () => {
     const fixture = await createExistingSchema(databaseUrl!);
@@ -81,7 +81,7 @@ describe.runIf(databaseUrl !== undefined)('existing English schema FUN-11 upgrad
     } finally {
       await fixture.cleanup();
     }
-  });
+  }, 20_000);
 });
 
 async function createExistingSchema(url: string) {

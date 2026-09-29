@@ -34,6 +34,12 @@ navegador, voltar e encontrar a sessão rodando — é testável inteiro em `loc
 `PROCESSES` decide quais sobem. A mesma imagem serve para o modo solo e para um papel por
 container — validar numa VPS pequena não exige desenho diferente do de escala.
 
+A configuração agora acompanha essa seleção: `api/jobs` exigem Postgres, somente `api`
+exige WorkOS em produção, e `game` exige um endereço público `wss`. O `game` separado salva
+preferências do bot pelo Redis; `jobs/api` as levam ao Postgres. Veja a
+[matriz de configuração, exemplos e roteiro de implantação/rollback](runtime-configuration.md).
+O healthcheck de um container isolado deve apontar para a porta do papel que ele executa.
+
 ## Drenagem
 
 Em `SIGTERM`, o processo drena na ordem `api` → `jobs` → `game`, com prazo de 25 s.
@@ -225,15 +231,16 @@ nohup docker run --rm -v hzd0uu0cuitkdi4ie0h1mu5g_things:/things -v /root/fetch-
 Três `FAIL` são esperados: `staticdata`, `staticmapdata` e `map` são o minimapa do cliente
 oficial, que a origem não serve e o Draconya não usa.
 
-**Esse caminho NÃO traz a arte de UI.** A casca (moldura, pedra, slot, barras — FUN-108) lê
-`things/<versão>/library/ui/images/*.png`, que é DERIVADO: `pnpm assets:library` extrai
-essas imagens do `graphics_resources.rcc.lzma` na sua máquina (`docs/asset-library.md`), e a
-origem não as serve (`…/library/ui/images/background.png` responde 404). Elas vêm da sua
-máquina, sempre — mesmo quando o resto veio da origem. Só a subpasta, e depois para dentro do
-volume (o `cp -r` funde com o que já está lá):
+**Esse caminho NÃO traz a pilha dos mapas.** Desde a FUN-121 o cliente desenha o mundo a partir de
+`things/<versão>/maps/<mapId>.json` — a pilha de aparências por tile de cada mapa do conteúdo
+(Thais, a Rat Cellars e a Rotworm Caves), que `pnpm map:import` deriva do OTBM na sua máquina
+(ADR 0025) e que nunca é versionada nem vai na imagem. A origem não a serve, e sem ela o jogo
+abre com a grade lisa de reserva: templo sem chão, bueiro sem parede, e nenhum erro além do 404
+na aba de rede. Ela sobe pela sua máquina — é a subpasta `maps/` inteira, três arquivos por
+versão hoje (1,2 MB na 13.32):
 
 ```bash
-rsync -av things/1332/library/ui/images/ root@<servidor>:/root/things/1332/library/ui/images/
+rsync -av things/1332/maps/ root@<servidor>:/root/things/1332/maps/
 ```
 
 ```bash
@@ -241,60 +248,184 @@ ssh root@<servidor> 'docker run --rm -v "$(docker volume ls -q | grep _things$)"
 ```
 
 Se a origem sumir, o pacote INTEIRO vem da sua máquina pelo mesmo caminho, com um filtro que
-deixa passar tudo da raiz e, de `library/`, SÓ `ui/images/` (o `cp -r` é o mesmo de cima):
+deixa passar tudo da raiz — `maps/` incluída — e exclui `library/` (o `cp -r` é o mesmo de
+cima):
 
 ```bash
-rsync -av --include='library/' --include='library/ui/' --include='library/ui/images/***' --exclude='library/*' --exclude='library/ui/*' things/1332/ root@<servidor>:/root/things/1332/
+rsync -av --exclude='library/' things/1332/ root@<servidor>:/root/things/1332/
 ```
 
-Os dois `--exclude` são necessários: só `--exclude='library/*'` deixaria `library/ui/` passar
-inteira (fontes, cursores, minimapa), porque `ui/` casou no `--include` antes. Foi conferido a
-seco contra a 13.32: da `library/`, entram os dois diretórios e os arquivos de `ui/images/`,
-nada mais. O que precisa estar no volume:
+Sem mais nenhum consumidor de `library/` desde #250, o filtro exclui a pasta inteira — ela
+continua existindo na sua máquina (é a biblioteca de consulta do Claude Code, ver
+`docs/asset-library.md`), só não precisa mais subir para o servidor. O que precisa estar no
+volume:
 
 - `catalog-content.json`, o `appearances-<hash>.dat` que ele aponta e as folhas
   `sprites-<hash>.bmp.lzma` (81 MB na 13.32) — o mundo;
-- `library/ui/images/` (9,4 MB, ~1 000 PNGs na 13.32, subpastas incluídas) — a casca. O
-  cliente lê 17 deles, e é a lista de `UI_SKIN` e `SLOT_IMAGES` em
-  `packages/client/src/assets/ui.ts`: `background.png`, `background-dark.png`,
-  `3pixel-frame-borderimage.png`, `2pixel-up-frame-borderimage.png`, `containerslot.png`,
-  `hitpoints-manapoints-bar-border.png`, `hitpoints-bar-filled.png`, `mana-bar-filled.png`,
-  `inventory-head.png`, `inventory-neck.png`, `inventory-torso.png`, `inventory-legs.png`,
-  `inventory-feet.png`, `inventory-left-hand.png`, `inventory-right-hand.png`,
-  `inventory-finger.png`, `inventory-hip.png`. A subpasta vai inteira porque é pequena e o
-  filtro fica em uma linha; se essa tabela crescer, nada muda aqui.
+- `maps/<mapId>.json`, um por mapa do conteúdo (`thais`, `rat-cellars`, `rotworm-caves`; 1,2 MB
+  na 13.32) — a pilha de cada tile, saída de `pnpm map:import`. Confira contra a sua máquina, e
+  não só o `200`: `curl -s <APP_ORIGIN>/things/1332/maps/thais.json | shasum -a 256` tem de dar
+  o mesmo hash de `shasum -a 256 things/1332/maps/thais.json`. Um mapa reimportado com outra
+  região ou outro OTBM muda de conteúdo no mesmo caminho, e o `Cache-Control` de um ano esconde
+  a troca de quem já o tinha — por isso a conferência é pelo hash.
 
-O resto de `library/` (índices, folhas PNG, quadros por id — 900 MB) é a biblioteca de
-consulta do Claude Code e continua fora: não é servido nem lido pelo cliente.
+`library/` (índices, folhas PNG, quadros por id — 900 MB) é a biblioteca de consulta do Claude
+Code e continua fora: não é servida nem lida pelo cliente — a casca (painéis, barras, slots)
+não depende de nenhum arquivo do volume desde #250, é CSS puro.
 
 Confira com `curl -sI <APP_ORIGIN>/things/1332/catalog-content.json` — `200` com
-`Cache-Control: immutable` — e com
-`curl -sI <APP_ORIGIN>/things/1332/library/ui/images/background.png`, que também tem de dar
-`200`. O hash está no nome de cada folha, então a URL nunca muda de conteúdo e o cache de um
-ano é seguro; trocar de versão do pacote é outro caminho, não outro conteúdo no mesmo caminho.
-(As imagens de UI não têm hash no nome; mudam só com a versão do pacote, que já está no
-caminho.)
+`Cache-Control: immutable`. O hash está no nome de cada folha, então a URL nunca muda de
+conteúdo e o cache de um ano é seguro; trocar de versão do pacote é outro caminho, não outro
+conteúdo no mesmo caminho.
+
+**Trocar a versão do pacote é também regenerar o inventário** em
+`packages/content/data/packs/` (`pnpm assets:inventory`, ver `docs/asset-library.md`): é contra
+ele que o boot recusa um id de aparência que o pacote não tem (FUN-21). A versão servida é
+`THINGS_VERSION` no Coolify (padrão `1332`): o compose deriva `VITE_THINGS_URL` dela, e o
+`app` recusa subir se ela não for a versão do inventário contra o qual o conteúdo foi
+conferido — um deploy apontando outro pacote não passa em silêncio.
 
 **Sem o pacote o jogo abre.** O cliente avisa no console (`pacote de arte indisponível`) e
-desenha retângulos: a arte é apresentação, e falta de arte nunca é falha de jogo. **Sem só a
-arte de UI** — volume com catálogo, `.dat` e folhas, mas sem `library/ui/images` — o mundo
-sai com sprite e a casca sai em cor lisa: o sintoma é só visual, com 404 de PNG na aba de
-rede, e o remédio é o `rsync` acima.
+desenha retângulos: a arte é apresentação, e falta de arte nunca é falha de jogo. **Sem os
+mapas** (`things/<versão>/maps/`) — volume com catálogo, `.dat` e folhas, mas sem `maps/` — o
+mundo sai em grade lisa de reserva: templo sem chão, bueiro sem parede, com 404 de
+`maps/<mapId>.json` na aba de rede — e o remédio é o `rsync` de mapas acima. A casca (barras,
+slots, painéis) não depende mais de nenhum arquivo do volume desde #250: ela é CSS puro.
 
 ## Backup
 
-```bash
-./scripts/backup-postgres.sh
+Staging roda por `compose.coolify.yml`, não por `compose.prod.yml` — por isso não é
+`scripts/backup-postgres.sh` que faz o backup lá (ver "O que não muda" no fim desta seção). O
+backup do staging é feito por **tarefas agendadas do próprio Coolify** (recurso `draconya` →
+Automation → Scheduled Tasks), gravando num diretório montado por bind nos containers
+`postgres` e `redis`.
+
+### Onde os backups ficam
+
+`compose.coolify.yml` monta, em cada um dos dois serviços, um segundo volume:
+
+```yaml
+- '/data/coolify/backups/draconya-staging:/backups'
 ```
 
-No cron, diariamente. Com `R2_BUCKET` definido, envia também para o Cloudflare R2 (egresso
-zero, e fora da máquina que pode morrer).
+É um **bind** (não volume nomeado) na mesma pasta onde o Coolify já grava os próprios backups
+(`/data/coolify/backups`) — a subpasta `draconya-staging` é deste recurso. Bind, e não volume
+nomeado, para que o dono do servidor copie os arquivos com `scp`/`rsync` direto do disco, sem
+precisar entrar em nenhum container. Dentro de `/backups`, cada serviço escreve na sua própria
+subpasta: `postgres/` e `redis/`.
 
-O script recusa dump menor que 1 KB, porque **dump truncado é pior que backup nenhum**: ele
-passa despercebido até o dia em que você precisa dele.
+### As três tarefas agendadas
 
-**Backup que nunca foi restaurado não é backup, é esperança.** Teste a restauração pelo menos
-uma vez, e de novo quando o schema mudar de forma.
+Criadas em Coolify → recurso `draconya` → **Automation → Scheduled Tasks**. As três rodam como
+root no container do serviço indicado — `sh -c '...'`, nunca bash: as imagens
+`postgres:17-alpine` e `redis:7-alpine` só têm BusyBox, e `stat -c`, `find -mtime` e `date -u`
+existem nas duas, mas nenhum comando aqui pode depender de bashismo.
+
+O campo Command do Coolify é `varchar(255)`: passar da margem não recusa o comando ao salvar,
+recusa com `SQLSTATE[22001]: String data, right truncated` — foi o que aconteceu com a primeira
+versão do `postgres-dump` (mais legível, com espaços e aspas em `"$d"`/`"$f"`), que tinha 302
+caracteres. Os três comandos abaixo são os que rodam em produção desde 2026-09-16: sem espaço
+supérfluo, sem aspas onde a variável não tem por que conter espaço.
+
+**`postgres-dump`** — cron `0 3 * * *` (UTC) — container `postgres` — timeout 600s:
+
+```sh
+sh -c 'set -e;d=/backups/postgres;mkdir -p $d;f=$d/draconya-$(date -u +%Y%m%dT%H%M).dump;pg_dump -U draconya -Fc draconya -f $f;[ $(stat -c %s $f) -gt 1024 ]||{ rm -f $f;exit 1;};find $d -name "*.dump" -mtime +14 -delete;ls -la $d'
+```
+
+**`redis-rdb`** — cron `10 3 * * *` (UTC) — container `redis` — timeout 300s:
+
+```sh
+sh -c 'set -e;d=/backups/redis;mkdir -p $d;redis-cli --rdb $d/dump-$(date -u +%Y%m%dT%H%M).rdb;find $d -name "*.rdb" -mtime +14 -delete;ls -la $d'
+```
+
+**`postgres-restore-test`** — cron `0 4 * * 0` (UTC, semanal, domingo) — container `postgres` —
+timeout 600s:
+
+```sh
+sh -c 'set -e;createdb -U draconya restore_test;pg_restore -U draconya -d restore_test "$(ls -t /backups/postgres/*.dump|head -1)";psql -U draconya -d restore_test -Atc "select count(*) as characters from character";dropdb -U draconya restore_test'
+```
+
+A saída esperada é a contagem de linhas da tabela `character` — singular, é o nome real
+(`pgTable('character', ...)` em `packages/server/src/db/schema.ts`, não `characters`). Na
+primeira execução, 2026-09-16 01:57 UTC, deu 7.
+
+Os dois primeiros horários são propositalmente próximos, não simultâneos: o Redis (extratos
+ainda não liquidados, ADR 0024) e o Postgres não precisam de um snapshot atômico conjunto, mas
+dois `pg_dump`/`redis-cli --rdb` competindo por I/O no mesmo minuto seria desperdício sem
+motivo. `postgres-restore-test` roda de madrugada num dia à parte (domingo) porque depende do
+dump da noite anterior já estar completo, e é a mais pesada das três — um `pg_restore` inteiro
+contra um banco descartável.
+
+**Primeira execução real** (2026-09-16): `draconya-20260916T0153.dump` (18.204 bytes) e
+`dump-20260916T0155.rdb` (923 bytes).
+
+### Retenção
+
+14 dias em disco, no próprio `find -mtime +14 -delete` de `postgres-dump` e `redis-rdb` — sem
+histórico maior até que exista um destino fora do servidor (ver "Cópia para fora do servidor"
+abaixo). `postgres-restore-test` não entra nessa conta: o banco `restore_test` que ela cria é
+derrubado (`dropdb`) no fim da própria execução, e não deixa arquivo em disco.
+
+O dump do Postgres é recusado (e apagado) se sair com menos de 1 KB: **dump truncado é pior
+que backup nenhum**, porque passa despercebido até o dia em que alguém precisa dele. O RDB do
+Redis não tem o mesmo teste — `redis-cli --rdb` já falha (código de saída ≠ 0, sob `set -e`)
+se a conexão cair no meio, então um arquivo pequeno demais também não sobra no disco de forma
+silenciosa.
+
+### Restauração (runbook)
+
+**Backup que nunca foi restaurado não é backup, é esperança.** Teste pelo menos uma vez, e de
+novo quando o schema mudar de forma.
+
+**(i) Teste sem sair do servidor.** Já não é manual: a tarefa agendada `postgres-restore-test`
+(seção anterior) roda toda semana contra o banco descartável `restore_test` — nunca `draconya`
+— e a saída é a contagem de linhas de `character`. Rodar Run Now nela a qualquer momento adianta
+a checagem sem esperar o cron; sem erro, e com uma contagem condizente com o que se espera no
+ambiente, é o sinal de que o dump mais recente restaura de verdade.
+
+**(ii) Restauração de verdade, num Postgres local** (não no staging — restaurar por cima do
+staging não é o caso de uso; é para investigar um incidente ou puxar dado para debug local):
+
+```sh
+scp root@<servidor>:/data/coolify/backups/draconya-staging/postgres/draconya-XXXXXXXXTXXXX.dump .
+pg_restore -U draconya --clean --if-exists -d draconya draconya-XXXXXXXXTXXXX.dump
+```
+
+`--clean --if-exists` derruba os objetos existentes antes de recriar — por isso é contra um
+Postgres local dedicado a isso, nunca contra um banco com dado que importa.
+
+**(iii) Redis.** O RDB só é lido na subida do processo, então: parar o `redis`, trocar
+`/data/dump.rdb` (dentro do volume `redisdata`) pelo arquivo restaurado, subir de novo. A
+pegadinha é o `appendonly yes` do `compose.coolify.yml`: com AOF ligado, um Redis que já tem
+`appendonlydir` ignora o `dump.rdb` na subida e recarrega do AOF, não do RDB que acabou de
+trocar. Duas saídas — **recomendada: apagar `appendonlydir` antes de subir** (o RDB substitui o
+estado inteiro mesmo, então o AOF antigo não tem nada que valha preservar); a alternativa,
+subir uma vez com `redis-server --appendonly no` para forçar a leitura do RDB e só depois voltar
+ao `command` normal do compose, funciona mas é mais passo para o mesmo resultado.
+
+### Cópia para fora do servidor
+
+**(i) Hoje:** da máquina do dono, `rsync` ou `scp` puxando a pasta inteira:
+
+```sh
+rsync -av root@<servidor>:/data/coolify/backups/draconya-staging/ ./draconya-staging-backups/
+```
+
+**(ii) O que falta, registrado como pendência — não implementado aqui:** o Coolify tem
+integração nativa de **S3 Storage** (Storages → S3), com chaves de acesso configuradas pelo
+dono do servidor — nunca neste repositório nem em chat. O backup da **própria base do Coolify**
+(Settings → Backup) já está ligado, diário às 00:00 UTC, hoje só local (sem S3 configurado);
+quando o dono validar um destino S3/R2 ali, o backup de instância passa a subir sozinho, mas os
+dumps do jogo (`draconya-staging/postgres` e `.../redis`) são um recurso à parte do Coolify e
+vão continuar só em disco até ganhar uma quarta tarefa agendada que envie para esse mesmo S3
+— o comando exato depende de qual credencial/bucket o dono escolher, por isso não é inventado
+aqui.
+
+### O que não muda
+
+`scripts/backup-postgres.sh` continua como está — é da topologia de `compose.prod.yml` (VPS,
+ADR 0013), não do Coolify (ADR 0022), e staging não o usa.
 
 ## O que ainda falta para produção de verdade
 

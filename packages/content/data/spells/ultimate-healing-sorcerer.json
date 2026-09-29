@@ -1,0 +1,23 @@
+{
+  "id": "ultimate-healing-sorcerer",
+  "name": "Ultimate Healing",
+  "description": "Cura você.",
+  "vocationId": "sorcerer",
+  "minLevel": 30,
+  "manaCost": 160,
+  "group": "healing",
+  "groupCooldownMs": 1000,
+  "cooldownMs": 1000,
+  "effect": {
+    "kind": "heal",
+    "basePower": 250,
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 6.8,
+      "skillMax": 12.9,
+      "baseMin": 42,
+      "baseMax": 90
+    }
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. a mesma Ultimate Healing do Druid (DT-02). Fórmula do Canary (`data/scripts/spells/healing/ultimate_healing.lua`, main, 2026-09-24)."
+}

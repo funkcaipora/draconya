@@ -404,6 +404,12 @@ com `dist` apagado, para garantir que mede o código de agora e não um build ve
 > `main` em 2026-09-10, no mesmo M2. O custo de tick foi de 18–21 µs para 21,0 µs, dentro da
 > variância entre execuções. Ninguém remediu ao mergear a FUN-63, e a tabela ficou dizendo o
 > número de antes: é o mesmo tipo de deriva que o índice de `docs/product/` tinha.
+>
+> **Remedido de novo na PR #180 (#179, `cold-scenario.ts`), 2026-09-13:** memória por sessão
+> **40,6 KiB** (+50 %), snapshot **14,4 KiB** (+20 %); custo de tick **15–17 µs**, sem regressão.
+> O crescimento é real, não bug: inventário posicional (#160) e cooldowns por grupo (#155) desde
+> a última medida. A PR deixou a atualização desta seção fora do próprio escopo — o número de
+> antes ficou parado de novo, o mesmo padrão do parágrafo acima.
 | pausa de GC | a medir | 2,9–3,7 s em ~50 s de laço, **pico de 100–195 ms** |
 
 Um número anterior desta seção dizia 34,7 KiB de memória por sessão e não reproduz: três
@@ -699,10 +705,13 @@ Estes não impedem começar, mas viram bloqueio quando o épico correspondente c
 | PRD | Aberto | Bloqueia |
 |---|---|---|
 | §43.3 | Subconjunto do bot básico pré-50 | E4, tarefa final |
-| §43.2 | Fórmula do bônus de vocação única | E9 |
 | §43.4 | Prey: 4 h de tempo real ou de hunt | E7 |
 | §43.6 | Catálogo de imbuement | E7 |
 | §43.8 | Horário, tolerância e roster da Guild War | E12 |
-| §43.1 | HP/mana do Druida | E2 |
 
 Todos são tabelas de configuração — a implementação pode nascer com valores provisórios marcados, desde que o `content` seja data-driven.
+
+Dois itens saíram desta lista por terem sido resolvidos: HP/mana do Druida (§43.1), por
+`healthPerLevel`/`manaPerLevel` em `content/data/vocations/druid.json` (ADR 0026, decisão 5); e a
+fórmula do bônus de XP por vocação única (§43.2), por `pool% = min(100 + 25 × únicas, 200)` em
+`content/data/party/baseline.json` (ADR 0027, decisão 3; ver `docs/product/party.md`).

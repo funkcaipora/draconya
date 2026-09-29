@@ -8,13 +8,13 @@
 
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
-import { Skills, levelForXp } from '@draconya/sim';
-import type { SkillsState } from '@draconya/sim';
+import { Bestiary, Skills, levelForXp } from '@draconya/sim';
+import type { BestiaryState, SkillsState } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { Database } from '../db/client.js';
 import { characters, itemInstances, ledger } from '../db/schema.js';
 import type { Logger } from '../log.js';
-import type { ReceiptStore, SessionReceipt } from '../receipts.js';
+import type { ItemPlace, ReceiptStore, SessionReceipt } from '../receipts.js';
 
 export interface LedgerSweepOptions {
   readonly database: Database;
@@ -33,7 +33,13 @@ export interface LedgerSweepResult {
   readonly failed: number;
 }
 
-/** Saldo da sessão. Ganho menos gasto: é o que de fato muda o gold do personagem. */
+/**
+ * O saldo da SESSÃO: `goldGained - goldSpent`.
+ *
+ * Sem compras por lote desde a reversão do modelo abstrato: potagem e munição debitam gold no
+ * USO, e o `goldSpent` já é o total gasto. É a mesma conta que `applyProgression` escreve na
+ * coluna, e as duas têm que bater.
+ */
 export function creditOf(receipt: SessionReceipt): number {
   return receipt.aggregates.goldGained - receipt.aggregates.goldSpent;
 }
@@ -150,6 +156,8 @@ async function applyProgression(
       xp: characters.xp,
       gold: characters.gold,
       skills: characters.skills,
+      bestiary: characters.bestiary,
+      ammo: characters.ammo,
       staminaUpdatedAt: characters.staminaUpdatedAt,
     })
     .from(characters)
@@ -160,7 +168,9 @@ async function applyProgression(
   // Piso de zero: a penalidade de morte chega como número negativo (FUN-37), e XP negativa é
   // um estado impossível que dá erro estranho em todo lugar que a lê depois.
   const xp = Math.max(0, current.xp + receipt.aggregates.xpGained);
-  const gold = Math.max(0, current.gold + creditOf(receipt));
+  // O gold do personagem é o LÍQUIDO da sessão (`goldGained - goldSpent`): `goldSpent` já é o
+  // total debitado no uso (poção, runa e tiro), e a linha de ledger leva o mesmo delta.
+  const gold = Math.max(0, current.gold + receipt.aggregates.goldGained - receipt.aggregates.goldSpent);
 
   // Stamina é valor absoluto, não soma — e por isso vem com guarda de instante: um extrato
   // atrasado, processado fora de ordem, não pode devolver stamina já gasta.
@@ -188,6 +198,29 @@ async function applyProgression(
     ? {}
     : { skills: Skills.merge(current.skills as SkillsState | undefined, receipt.skills) };
 
+  // O Bestiário funde pelo MAIOR de cada monstro (FUN-113, DT-02), pela mesma razão das
+  // skills: abate nunca desce. A coluna é nulável — `null` é quem nunca abateu nada — e o
+  // extrato SEM o campo (sessão de Cidade, nó antigo em deploy) não toca na coluna: gravar
+  // `{}` por cima apagaria abates que ninguém pediu para apagar.
+  const bestiary = receipt.bestiary === undefined
+    ? {}
+    : {
+      bestiary: Bestiary.merge(
+        (current.bestiary as BestiaryState | null) ?? undefined, receipt.bestiary,
+      ),
+    };
+
+  // A munição escolhida (#152): preferência, última escrita vence. Extrato SEM o campo não toca
+  // na coluna — é a Cidade, ou um nó antigo, e a escolha continua a de antes.
+  const ammo = receipt.ammo === undefined ? {} : { ammo: receipt.ammo };
+
+  // O estoque de supply/munição do loot (#520): ABSOLUTO e última-escrita-vence, como `ammo` —
+  // sobe por loot e desce por uso na MESMA sessão, então o valor final da sessão é o único que
+  // os dois lados podem concordar sobre (não monotônico como o Bestiário, que funde pelo maior).
+  const supplyStock = receipt.supplyStock === undefined ? {} : { supplyStock: receipt.supplyStock };
+  const ammunitionStock = receipt.ammunitionStock === undefined
+    ? {} : { ammunitionStock: receipt.ammunitionStock };
+
   // O que caiu e coube (FUN-88). ANTES do equipamento, porque uma peça que caiu nesta sessão
   // e foi equipada nela precisa existir como linha para o layout ter o que apontar.
   if (receipt.acquired !== undefined && receipt.acquired.length > 0) {
@@ -198,7 +231,9 @@ async function applyProgression(
         itemId: item.itemId,
         ownerCharacterId: receipt.characterId,
         quantity: item.quantity,
-        origin: 'loot',
+        // A proveniência vem do `sim` (#154): a arma de vocação é `'vocation-choice'`; o que
+        // não diz é loot — inclusive o extrato de um nó anterior.
+        origin: item.origin ?? 'loot',
       })))
       // O id vem do `sim` e é determinístico (`sessionId:n`), então inserir de novo é inserir
       // a mesma chave primária.
@@ -216,6 +251,11 @@ async function applyProgression(
   if (receipt.equipment !== undefined) {
     await applyEquipment(tx, receipt.characterId, receipt.equipment);
   }
+  // E onde cada item está dentro dos containers (#160): último-escrito-vence, como o
+  // equipamento — é posição, não valor.
+  if (receipt.layout !== undefined) {
+    await applyLayout(tx, receipt.characterId, receipt.layout);
+  }
 
   await tx
     .update(characters)
@@ -223,12 +263,45 @@ async function applyProgression(
       xp,
       gold,
       ...skills,
+      ...bestiary,
+      ...ammo,
+      ...supplyStock,
+      ...ammunitionStock,
+      // A vocação (#154, ADR 0026 decisão 1): escrita UMA vez. `coalesce` mantém o que já
+      // está na linha — um extrato fora de ordem com outra vocação não sobrescreve.
+      ...(receipt.vocation === undefined
+        ? {}
+        : { vocation: sql`coalesce(${characters.vocation}, ${receipt.vocation})` }),
       // O level é DERIVADO da XP nova, nunca copiado do extrato: copiar faria um extrato
       // antigo, processado fora de ordem, rebaixar um personagem que já subiu.
       ...(progression === undefined ? {} : { level: levelForXp(xp, progression) }),
       ...stamina,
     })
     .where(eq(characters.id, receipt.characterId));
+}
+
+/**
+ * A posição de cada instância nos containers (#160). Escopada por dono, como o equipamento:
+ * um extrato com o id de um item alheio não move nada. O que não está no layout — equipado,
+ * ou desconhecido — fica sem posição, e o ticket o põe no primeiro lugar livre.
+ */
+async function applyLayout(
+  tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+  characterId: string,
+  layout: Readonly<Record<string, ItemPlace>>,
+): Promise<void> {
+  const owned = await tx
+    .select({ id: itemInstances.id, container: itemInstances.container, slotIndex: itemInstances.slotIndex })
+    .from(itemInstances)
+    .where(eq(itemInstances.ownerCharacterId, characterId));
+  for (const row of owned) {
+    const place = layout[row.id];
+    const next = place === undefined
+      ? { container: null, slotIndex: null }
+      : { container: place.container, slotIndex: place.index };
+    if (row.container === next.container && row.slotIndex === next.slotIndex) continue;
+    await tx.update(itemInstances).set(next).where(eq(itemInstances.id, row.id));
+  }
 }
 
 /** Só para teste: conta linhas de uma sessão, para provar que o retry não duplica. */

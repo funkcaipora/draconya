@@ -1,0 +1,242 @@
+import { createElement, type ReactElement } from 'react';
+import { readFile } from 'node:fs/promises';
+import { prerender } from 'react-dom/static';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { BattlePanel, battleTone, sortBattleRows } from './BattlePanel.js';
+import type { BattleRow } from './BattlePanel.js';
+import { INITIAL_HUD, hud } from '../state/hud.js';
+import type { PartyView } from '../state/hud.js';
+import { world } from '../state/world.js';
+import type { Creature } from '../state/world.js';
+
+/**
+ * A árvore em HTML, sem DOM, como em `Bestiary.test.ts`: `prerender` roda a função do
+ * componente e pula os efeitos (o `setInterval` do painel nunca dispara aqui).
+ */
+async function render(element: ReactElement): Promise<string> {
+  const { prelude } = await prerender(element);
+  return new Response(prelude).text();
+}
+
+function creature(id: number, over: Partial<Creature> = {}): Creature {
+  return {
+    id,
+    appearanceId: 100,
+    name: `rat-${String(id)}`,
+    health: 20,
+    maxHealth: 20,
+    position: { x: 0, y: 0, z: 7 },
+    step: null,
+    ...over,
+  };
+}
+
+const party = (members: PartyView['members']): PartyView => ({
+  leaderId: members[0]?.characterId ?? 'nobody',
+  mode: 'split',
+  members,
+});
+
+beforeEach(() => {
+  hud.set(() => INITIAL_HUD);
+  world.creatures.clear();
+  world.selfId = null;
+});
+
+describe('o painel Batalha (#254)', () => {
+  it('lista as criaturas fora do próprio e fora da party, cada uma com nome e HP %', async () => {
+    world.selfId = 3;
+    world.creatures.set(1, creature(1, { name: 'Rat', health: 10, maxHealth: 20 }));
+    world.creatures.set(2, creature(2, { name: 'Bat', health: 20, maxHealth: 20 }));
+    world.creatures.set(3, creature(3, { name: 'você' }));
+
+    const html = await render(createElement(BattlePanel));
+
+    expect(html).toContain('Batalha · 2');
+    expect(html).toContain('Rat');
+    expect(html).toContain('50%');
+    expect(html).toContain('Bat');
+    expect(html).toContain('100%');
+    expect(html).not.toContain('você');
+  });
+
+  it('sem outra criatura visível (a Cidade, sozinho), mostra a mensagem vazia e o título zerado', async () => {
+    world.selfId = 1;
+    world.creatures.set(1, creature(1, { name: 'você' }));
+
+    const html = await render(createElement(BattlePanel));
+
+    expect(html).toContain('Batalha · 0');
+    expect(html).toContain('Nenhuma criatura à vista.');
+  });
+
+  it('renderiza a ação Ordenar no cabeçalho (R7-05)', async () => {
+    const html = await render(createElement(BattlePanel));
+
+    expect(html).toContain('title="Ordenar"');
+    expect(html).toContain('↕');
+  });
+
+  it('sortBattleRows: padrão preserva a ordem de chegada; hp-asc ordena por HP crescente', () => {
+    const rows: BattleRow[] = [
+      { id: 1, name: 'A', percent: 80 },
+      { id: 2, name: 'B', percent: 20 },
+      { id: 3, name: 'C', percent: 50 },
+    ];
+
+    expect(sortBattleRows(rows, 'default').map((r) => r.id)).toEqual([1, 2, 3]);
+    expect(sortBattleRows(rows, 'hp-asc').map((r) => r.id)).toEqual([2, 3, 1]);
+    // a função não muta o array de entrada
+    expect(rows.map((r) => r.id)).toEqual([1, 2, 3]);
+  });
+
+  it('a linha da Batalha tem a coluna de 16 px com o placeholder tracejado do kit (R7-06)', async () => {
+    world.selfId = 3;
+    world.creatures.set(1, creature(1, { name: 'Rat', health: 10, maxHealth: 20 }));
+    world.creatures.set(3, creature(3, { name: 'você' }));
+
+    const html = await render(createElement(BattlePanel));
+
+    expect(html).toContain('battle-icon');
+  });
+
+  it('só mostra criatura do MESMO andar do próprio personagem (#527)', async () => {
+    // Numa hunt privada não há AOI (FUN-33): o hospedeiro manda os monstros dos três andares da
+    // Darashia Dragon Lair para todo mundo, porque o mundo espacial precisa deles (ADR 0034).
+    // A lista de batalha não é o mundo: um dragão em z11 não é alvo de quem está em z10.
+    world.selfId = 99;
+    world.creatures.set(99, creature(99, { name: 'você', position: { x: 5, y: 5, z: 10 } }));
+    world.creatures.set(1, creature(1, { name: 'Dragon', position: { x: 6, y: 5, z: 10 } }));
+    world.creatures.set(2, creature(2, { name: 'Dragon Lord', position: { x: 6, y: 5, z: 11 } }));
+
+    const html = await render(createElement(BattlePanel));
+
+    expect(html).toContain('Batalha · 1');
+    expect(html).toContain('Dragon');
+    expect(html).not.toContain('Dragon Lord');
+  });
+
+  it('sem `selfId` ainda (antes do session-state), não filtra por andar', async () => {
+    world.selfId = null;
+    world.creatures.set(1, creature(1, { name: 'Dragon', position: { x: 6, y: 5, z: 10 } }));
+    world.creatures.set(2, creature(2, { name: 'Dragon Lord', position: { x: 6, y: 5, z: 11 } }));
+
+    const html = await render(createElement(BattlePanel));
+
+    expect(html).toContain('Batalha · 2');
+  });
+
+  it('quem está na party não aparece na lista de Batalha (RF-05)', async () => {
+    world.selfId = 99;
+    world.creatures.set(1, creature(1, { name: 'Companheiro' }));
+    world.creatures.set(2, creature(2, { name: 'Rat' }));
+    hud.set((state) => ({
+      ...state,
+      party: party([
+        { characterId: 'c1', name: 'Companheiro', alive: true, healthPercent: 100, vocationId: null },
+      ]),
+    }));
+
+    const html = await render(createElement(BattlePanel));
+
+    expect(html).toContain('Batalha · 1');
+    expect(html).toContain('Rat');
+    expect(html).not.toContain('Companheiro');
+  });
+
+  it('battleTone: o limite é ">", não ">="', () => {
+    expect(battleTone(61)).toBe('ok');
+    expect(battleTone(60)).toBe('warn');
+    expect(battleTone(31)).toBe('warn');
+    expect(battleTone(30)).toBe('danger');
+    expect(battleTone(0)).toBe('danger');
+  });
+
+  it('criatura com maxHealth 0 sai com percent 0, sem NaN na tela', async () => {
+    world.selfId = null;
+    world.creatures.set(1, creature(1, { name: 'Corpse', health: 0, maxHealth: 0 }));
+
+    const html = await render(createElement(BattlePanel));
+
+    expect(html).toContain('Corpse');
+    expect(html).toContain('0%');
+    expect(html).not.toContain('NaN');
+  });
+
+  it('destaca apenas a criatura alvo com battle-row-selected (#348, SV-12)', async () => {
+    world.selfId = 99;
+    world.creatures.set(1, creature(1, { name: 'Rat' }));
+    world.creatures.set(2, creature(2, { name: 'Bat' }));
+    hud.set((state) => ({ ...state, targetId: 2 }));
+
+    const html = await render(createElement(BattlePanel));
+    expect(html).toContain('battle-row battle-row-selected');
+    const selectedMatches = html.match(/battle-row-selected/g);
+    expect(selectedMatches).toHaveLength(1);
+    expect(html).toMatch(/class="battle-row"[^>]*>(<span class="battle-icon"[^>]*><\/span>)?<span class="battle-name">Rat<\/span>/);
+    expect(html).toMatch(/class="battle-row battle-row-selected"[^>]*>(<span class="battle-icon"[^>]*><\/span>)?<span class="battle-name">Bat<\/span>/);
+  });
+
+  it('targetId 999 não seleciona nenhuma linha', async () => {
+    world.selfId = 99;
+    world.creatures.set(1, creature(1, { name: 'Rat' }));
+    hud.set((state) => ({ ...state, targetId: 999 }));
+
+    const html = await render(createElement(BattlePanel));
+    expect(html).not.toContain('battle-row-selected');
+  });
+
+  it('targetId nulo não seleciona nenhuma linha', async () => {
+    world.selfId = 99;
+    world.creatures.set(1, creature(1, { name: 'Rat' }));
+    hud.set((state) => ({ ...state, targetId: null }));
+
+    const html = await render(createElement(BattlePanel));
+    expect(html).not.toContain('battle-row-selected');
+  });
+
+  it('a linha da Batalha é um botão que manda select-target pelo rastreador (RF-05, #471)', async () => {
+    // `prerender` não dispara evento: o botão e a intenção são presos pelo HTML e pela fonte,
+    // o mesmo precedente de `HuntActions.test.ts`. O clique passa pelo MESMO `targetTracker` do
+    // Viewport — é o que faz a Battle List e a moldura lerem o mesmo `hud.targetId` (RF-04) e o
+    // segundo clique no alvo atual cancelar (RF-02, coberto em `state/target.test.ts`).
+    world.selfId = 99;
+    world.creatures.set(1, creature(1, { name: 'Rat' }));
+    const html = await render(createElement(BattlePanel));
+    const listHtml = html.slice(html.indexOf('battle-list'));
+    expect(listHtml).toContain('<button type="button" class="battle-row"');
+    const source = await readFile(new URL('./BattlePanel.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('targetTracker.selectTarget(row.id, sendIntent)');
+  });
+
+  it('só mostra criaturas que estão NA TELA (dentro do viewport visible window)', async () => {
+    world.selfId = 99;
+    world.creatures.set(99, creature(99, { name: 'você', position: { x: 10, y: 10, z: 7 } }));
+    // Perto / na tela:
+    world.creatures.set(1, creature(1, { name: 'Near Rat', position: { x: 12, y: 11, z: 7 } }));
+    // Longe / fora da tela (no mesmo andar):
+    world.creatures.set(2, creature(2, { name: 'Far Rotworm', position: { x: 50, y: 50, z: 7 } }));
+
+    const html = await render(createElement(BattlePanel));
+
+    expect(html).toContain('Batalha · 1');
+    expect(html).toContain('Near Rat');
+    expect(html).not.toContain('Far Rotworm');
+  });
+
+  it('respeita world.visibleWindow quando definido pelo viewport', async () => {
+    world.selfId = 99;
+    world.creatures.set(99, creature(99, { name: 'você', position: { x: 10, y: 10, z: 7 } }));
+    world.creatures.set(1, creature(1, { name: 'Inside Window', position: { x: 11, y: 10, z: 7 } }));
+    world.creatures.set(2, creature(2, { name: 'Outside Window', position: { x: 15, y: 10, z: 7 } }));
+
+    // Janela customizada apertada: minX: 9, maxX: 12, minY: 9, maxY: 12
+    world.visibleWindow = { minX: 9, maxX: 12, minY: 9, maxY: 12 };
+
+    const html = await render(createElement(BattlePanel));
+
+    expect(html).toContain('Batalha · 1');
+    expect(html).toContain('Inside Window');
+    expect(html).not.toContain('Outside Window');
+  });
+});

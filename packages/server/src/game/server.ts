@@ -28,6 +28,8 @@ export interface GameDependencies {
   readonly tickets?: TicketService;
   readonly createSession?: SessionFactory;
   readonly contentVersion?: string;
+  /** Constrói UM personagem para entrar numa sessão em curso (#402). */
+  readonly createParticipant?: SessionHostOptions['createParticipant'];
   /** Onde a sessão é guardada para sobreviver à queda do processo (FUN-28). */
   readonly snapshots?: SnapshotStore;
   readonly receipts?: ReceiptStore;
@@ -41,10 +43,17 @@ export interface GameDependencies {
   readonly now?: () => number;
   /** Aceita ou recusa uma configuração de bot (FUN-81). Ver `SessionHostOptions`. */
   readonly acceptBotConfig?: SessionHostOptions['acceptBotConfig'];
-  /** Persiste a configuração aceita. A única escrita de banco do `game`. */
+  /** Registra a configuração aceita no Redis; jobs/api escrevem no Postgres (ADR 0028). */
   readonly saveBotConfig?: SessionHostOptions['saveBotConfig'];
   /** O catálogo de itens, para as regras de equipar (FUN-82). */
   readonly itemCatalog?: SessionHostOptions['itemCatalog'];
+  /** O catálogo de munição abstrata, para `select-ammo` (#152). */
+  readonly ammunitionCatalog?: SessionHostOptions['ammunitionCatalog'];
+  /** As vocações e o level da escolha (#154). */
+  readonly vocations?: SessionHostOptions['vocations'];
+  readonly vocationLevel?: SessionHostOptions['vocationLevel'];
+  /** A tabela de progressão, para os tamanhos de container (#160). */
+  readonly progression?: SessionHostOptions['progression'];
   /** O catálogo de monstros, para nome e outfit de quem nasce na hunt (FUN-103). */
   readonly monsterCatalog?: SessionHostOptions['monsterCatalog'];
   /** O outfit de todo jogador, até alguém escolher o seu (FUN-103). */
@@ -55,6 +64,8 @@ export interface GameDependencies {
   readonly lootBoxes?: SessionHostOptions['lootBoxes'];
   /** O catálogo do que existe: hunts e vocabulário do bot (FUN-79, FUN-89). */
   readonly catalogue?: SessionHostOptions['catalogue'];
+  /** O catálogo de skills (#340, SV-04). */
+  readonly skillCatalog?: SessionHostOptions['skillCatalog'];
 }
 
 /**
@@ -106,6 +117,9 @@ export function createGame(
       nodeId,
       contentVersion: dependencies.contentVersion ?? 'unknown',
       createSession: dependencies.createSession,
+      ...(dependencies.createParticipant === undefined
+        ? {}
+        : { createParticipant: dependencies.createParticipant }),
       logger,
       ...(dependencies.directory === undefined ? {} : { directory: dependencies.directory }),
       ...(dependencies.snapshots === undefined ? {} : { snapshots: dependencies.snapshots }),
@@ -126,6 +140,12 @@ export function createGame(
       ...(dependencies.itemCatalog === undefined
         ? {}
         : { itemCatalog: dependencies.itemCatalog }),
+      ...(dependencies.ammunitionCatalog === undefined
+        ? {}
+        : { ammunitionCatalog: dependencies.ammunitionCatalog }),
+      ...(dependencies.vocations === undefined ? {} : { vocations: dependencies.vocations }),
+      ...(dependencies.vocationLevel === undefined ? {} : { vocationLevel: dependencies.vocationLevel }),
+      ...(dependencies.progression === undefined ? {} : { progression: dependencies.progression }),
       ...(dependencies.monsterCatalog === undefined
         ? {}
         : { monsterCatalog: dependencies.monsterCatalog }),
@@ -141,6 +161,9 @@ export function createGame(
       ...(dependencies.lootBoxes === undefined
         ? {}
         : { lootBoxes: dependencies.lootBoxes }),
+      ...(dependencies.skillCatalog === undefined
+        ? {}
+        : { skillCatalog: dependencies.skillCatalog }),
       metrics,
     });
 
@@ -208,10 +231,13 @@ export function createGame(
         try {
           const claim = await tickets.consume(ticket, nodeId);
           let created = false;
+          let refused: 'party-full' | 'content-version' | 'session-not-here' | undefined;
           if (claim !== null) {
-            ({ created } = await host.prepare(
-              claim.characterId, claim.initialCharacter, claim.accountId,
-            ));
+            const prepared = await host.prepare(
+              claim.characterId, claim.initialCharacter, claim.accountId, claim.party,
+            );
+            created = prepared.created;
+            refused = prepared.refused;
           }
           // Cliente desistiu enquanto Redis/diretório respondiam. Tocar em `response`
           // depois do abort derruba o processo inteiro.
@@ -230,6 +256,17 @@ export function createGame(
               response.writeStatus('401 Unauthorized').end();
               return;
             }
+            // A recusa da admissão em curso (#402): fecha com o motivo, sem `upgrade`. É o
+            // mesmo desfecho do `onEnter` do #397, e o cliente tenta de novo pelo `/join`.
+            if (refused !== undefined) {
+              const status = {
+                'party-full': '409 Conflict',
+                'content-version': '409 Conflict',
+                'session-not-here': '503 Service Unavailable',
+              }[refused];
+              response.writeStatus(status).end(refused);
+              return;
+            }
             response.upgrade<SocketData>(
               { accountId: claim.accountId, characterId: claim.characterId, viewer: null },
               key,
@@ -239,7 +276,7 @@ export function createGame(
             );
           });
         } catch (error) {
-          logger.error({ error }, 'Game handshake failed');
+          logger.error({ err: error }, 'Game handshake failed');
           if (aborted) return;
           response.cork(() => {
             if (!aborted) {
@@ -326,8 +363,9 @@ export function createGame(
             .heartbeat(nodeId, {
               sessions: host?.sessionCount ?? 0,
               url: configuration.GAME_PUBLIC_URL,
+              players: host?.connectedCharacterCount ?? 0,
             })
-            .catch((error: unknown) => logger.error({ error }, 'Heartbeat failed'));
+            .catch((error: unknown) => logger.error({ err: error }, 'Heartbeat failed'));
         };
         beat();
         heartbeatTimer = setInterval(beat, HEARTBEAT_INTERVAL_MS);

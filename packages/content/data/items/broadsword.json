@@ -1,0 +1,19 @@
+{
+  "id": "broadsword",
+  "name": "Broadsword",
+  "kind": "weapon",
+  "slot": "hand",
+  "twoHanded": true,
+  "weight": 52.5,
+  "value": 500,
+  "attack": 26,
+  "requires": {
+    "vocationId": "knight"
+  },
+  "_open": "Loot do Dragon (#520). Canary `items.xml` id 3301 (`broadsword`): duas mãos, attack 26, weight 5250 (52,5 oz), vocação Knight no script de equip. O Tibia real também dá defense 23, mas `buildContent` recusa `defense > 0` fora de escudo/arma corpo a corpo de UMA mão (CMB-04, emenda do ADR 0031) — arma de duas mãos não tem defesa residual neste motor, e o número fica de fora. `value` 500: nenhum NPC padrão vende de volta — Nah'Bob compra por 500 (real Tibia, TibiaWiki via WebSearch, \"Nah'bob offers the better deal\"); H.L. oferece só 10 (bargain, descartado pela mesma razão do ADR 0037 d.4).",
+  "weapon": {
+    "kind": "melee",
+    "family": "sword",
+    "range": 1
+  }
+}

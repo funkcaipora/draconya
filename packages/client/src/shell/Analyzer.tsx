@@ -7,44 +7,35 @@
 // período offline, mostra o mesmo mais a lista curta de eventos notáveis. É de propósito: são a
 // mesma pergunta em dois momentos, e duas janelas divergiriam na terceira mudança.
 //
-// **Nada aqui pede `session-state`.** Os agregados chegam pelo lote do ciclo e a janela lê a
-// store; pedir em laço para atualizar um número seria tráfego de volta gerado por tráfego de
-// entrada — o mesmo erro que o `walk` recusado em silêncio evita do outro lado.
+// **Nada aqui pede `session-state`.** Os agregados chegam em `analyzer` quando mudam (FUN-110)
+// e a janela lê a store; pedir em laço para atualizar um número seria tráfego de volta gerado
+// por tráfego de entrada — o mesmo erro que o `walk` recusado em silêncio evita do outro lado.
+//
+// **A moldura é a janela flutuante (#315, RC-02).** O Analisador deixou de ser `Panel dock` da
+// coluna direita e virou uma `FloatingWindow` sobre o mundo (ADR 0030 decisão 3), aberta e
+// fechada pelo ícone "Analisador" do topo — o × FECHA de verdade (desmonta), porque janela
+// flutuante não minimiza. Os números continuam nas duas caixas — "Sessão" e "Por hora" — sobre
+// `Box`/`Line`, e o botão "⤢ Abrir completo" abre o `AnalyzerModal` com as dez linhas do kit.
 
-import { useEffect, useState } from 'react';
-import { perHour } from '../state/hud.js';
-import type { Aggregates, NotableEvent } from '../state/hud.js';
+import { useEffect, useState, type ReactNode } from 'react';
+import type {
+  Aggregates, BotVocabulary, NotableEvent, PartySpendingView, PartySummary,
+} from '../state/hud.js';
 import { useHudSlice } from '../state/useSlice.js';
-
-/** Como cada tipo de evento notável aparece para o jogador. */
-const EVENT_TEXT: Record<string, string> = {
-  'entered-city': 'Voltou para a cidade',
-  death: 'Morreu',
-  ended: 'Sessão encerrada',
-  'stamina-exhausted': 'Stamina esgotada',
-  'level-up': 'Subiu de level',
-  'backpack-full': 'Mochila cheia',
-  'out-of-gold': 'Gold acabou',
-  'ring-equipped': 'Equipou o anel',
-  'ring-removed': 'Tirou o anel',
-};
-
-const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
-
-/** `1.234` — número inteiro com separador, que é como um jogador lê gold e XP. */
-const count = (value: number): string => integer.format(Math.round(value));
-
-/** `2 h 13 min`. Segundos só aparecem no primeiro minuto, senão a linha pisca sem informar. */
-function duration(ms: number): string {
-  const totalMinutes = Math.floor(ms / 60_000);
-  if (totalMinutes < 1) return `${Math.floor(ms / 1_000)} s`;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`;
-}
+import { describeEvent } from './event-text.js';
+import type { EventNames } from './event-text.js';
+import { FloatingWindow } from './FloatingWindow.js';
+import { IconButton } from './ui/IconButton.js';
+import { Kicker } from './ui/Kicker.js';
+import { xpBonusLabel, xpMultiplierLabel } from './party-loot-format.js';
+import { AnalyzerModal } from './AnalyzerModal.js';
+import {
+  count, duration, formatClock, gold, goldRate, optionalCount, rate as ratePerHour,
+} from './analyzer-format.js';
 
 /**
- * O relógio local que faz o tempo de hunt andar entre dois `session-state`.
+ * O relógio local que faz o tempo de hunt andar entre duas entregas — `session-state` ou
+ * `analyzer` (FUN-110), que recarimba o instante junto com os números.
  *
  * **Só o TEMPO anda.** XP, gold e abates são sempre o último número que o servidor mandou —
  * extrapolar qualquer um deles mostraria progresso que talvez não tenha acontecido, e o jogador
@@ -54,7 +45,7 @@ function duration(ms: number): string {
  * está parado e o denominador anda. É o lado certo para errar — melhor uma taxa levemente
  * pessimista que se corrige do que uma otimista inventada aqui.
  */
-function useElapsedMs(base: number, since: number, running: boolean): number {
+export function useElapsedMs(base: number, since: number, running: boolean): number {
   // `performance.now()`, e não `Date.now()`: `since` é o `receivedAtMs` que `applyMessage`
   // carimba com o relógio monotônico. Subtrair dele o relógio de calendário mostrava
   // "496968 h" — a época Unix em horas — na primeira vez que a janela abriu.
@@ -64,52 +55,135 @@ function useElapsedMs(base: number, since: number, running: boolean): number {
     const timer = setInterval(() => { setNow(performance.now()); }, 1_000);
     return () => { clearInterval(timer); };
   }, [running]);
-  if (!running) return base;
+  if (!running || since <= 0) return base;
   return base + Math.max(0, now - since);
 }
 
-function Row({ label, value, rate }: {
-  label: string; value: string; rate?: string;
-}) {
+/** Uma caixa com título mono (`Sec` do handoff — `Hud.jsx`, linha 188). */
+function Box({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="analyzer-row">
-      <span className="analyzer-label">{label}</span>
-      <span className="analyzer-value">{value}</span>
-      {rate !== undefined && <span className="analyzer-rate">{rate}</span>}
-    </div>
+    <section className="analyzer-box">
+      <Kicker tone="muted">{title}</Kicker>
+      {children}
+    </section>
   );
 }
 
-function Numbers({ aggregates, elapsedMs }: {
-  aggregates: Aggregates; elapsedMs: number;
-}) {
+/**
+ * Uma linha rótulo/valor (`Line` do handoff — `Modals.jsx`, linha 3). Sem taxa embutida: a taxa
+ * é a OUTRA caixa, nunca uma terceira coluna na mesma linha (diferença em relação ao `Row` de
+ * antes desta task).
+ */
+function Line({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
+  return (
+    <p className={`analyzer-line${danger === true ? ' analyzer-line-danger' : ''}`}>
+      <span>{label}</span><b>{value}</b>
+    </p>
+  );
+}
+
+function SessionBox({ aggregates, elapsedMs }: { aggregates: Aggregates; elapsedMs: number }) {
   const balance = aggregates.goldGained - aggregates.goldSpent;
-  // `—` e não zero para o que o servidor NÃO mandou (FUN-78): zero é uma afirmação, e um nó
-  // antigo em deploy em rolagem simplesmente não afirmou nada sobre estes campos.
-  const optional = (value: number | undefined): string => (
-    value === undefined ? '—' : count(value)
-  );
-  const rate = (value: number): string => `${count(perHour(value, elapsedMs))}/h`;
-
   return (
-    <div className="analyzer-numbers">
-      <Row label="Tempo" value={duration(elapsedMs)} />
-      <Row label="XP" value={count(aggregates.xpGained)} rate={rate(aggregates.xpGained)} />
-      <Row label="Gold" value={count(aggregates.goldGained)} rate={rate(aggregates.goldGained)} />
-      <Row label="Gastos" value={count(aggregates.goldSpent)} rate={rate(aggregates.goldSpent)} />
-      <Row label="Saldo" value={count(balance)} rate={rate(balance)} />
-      <Row label="Mortos" value={count(aggregates.kills)} rate={rate(aggregates.kills)} />
-      <Row label="Loot" value={optional(aggregates.itemsLooted)} />
-      <Row label="Supplies" value={optional(aggregates.suppliesUsed)} />
-      <Row label="Maior golpe" value={optional(aggregates.bestBasicHit)} />
-      <Row label="Maior magia" value={optional(aggregates.bestSpellHit)} />
-      {aggregates.deaths > 0 && <Row label="Mortes" value={count(aggregates.deaths)} />}
-    </div>
+    <Box title="Sessão">
+      <Line label="Tempo" value={duration(elapsedMs)} />
+      <Line label="XP" value={count(aggregates.xpGained)} />
+      <Line label="Gold" value={gold(aggregates.goldGained)} />
+      <Line label="Gastos" value={gold(aggregates.goldSpent)} />
+      <Line label="Saldo" value={gold(balance)} />
+      <Line label="Mortos" value={count(aggregates.kills)} />
+      <Line label="Loot" value={optionalCount(aggregates.itemsLooted)} />
+      <Line label="Supplies" value={optionalCount(aggregates.suppliesUsed)} />
+      <Line label="Maior golpe" value={optionalCount(aggregates.bestBasicHit)} />
+      <Line label="Maior magia" value={optionalCount(aggregates.bestSpellHit)} />
+      {/* Dano causado e cura feita na sessão (PT-01, #431): só quando o servidor os mandou —
+          um nó anterior manda sem, e zero seria uma afirmação que ele não fez (D8). */}
+      {aggregates.damageDealt !== undefined && (
+        <Line label="Dano causado" value={count(aggregates.damageDealt)} />
+      )}
+      {aggregates.healingDone !== undefined && (
+        <Line label="Cura feita" value={count(aggregates.healingDone)} />
+      )}
+      {/* Só aparece com morte — "Mortes: 0" afirmaria o que ninguém disse. `danger`: inspirado
+          no `color(c)` do handoff (`Hud.jsx`, `c === "red"`). */}
+      {aggregates.deaths > 0 && <Line label="Mortes" value={count(aggregates.deaths)} danger />}
+    </Box>
   );
 }
 
-function Events({ events }: { events: readonly NotableEvent[] }) {
+function HourBox({ aggregates, elapsedMs }: { aggregates: Aggregates; elapsedMs: number }) {
+  const balance = aggregates.goldGained - aggregates.goldSpent;
+  // Só as cinco que já tinham taxa. Loot, Supplies, Maior golpe, Maior magia e Mortes nunca
+  // tiveram `rate()`, e continuam sem.
+  return (
+    <Box title="Por hora">
+      <Line label="XP" value={ratePerHour(aggregates.xpGained, elapsedMs)} />
+      <Line label="Gold" value={goldRate(aggregates.goldGained, elapsedMs)} />
+      <Line label="Gastos" value={goldRate(aggregates.goldSpent, elapsedMs)} />
+      <Line label="Saldo" value={goldRate(balance, elapsedMs)} />
+      <Line label="Mortos" value={ratePerHour(aggregates.kills, elapsedMs)} />
+    </Box>
+  );
+}
+
+/**
+ * A seção PARTY do analisador (§32, ADR 0035 d.11). Só monta com `analyzer.party` — ausência é
+ * solo, ou nó `game` anterior ao #400, nunca "0 jogadores" (D8).
+ *
+ * "Sua XP" é o agregado do VIEWER (`aggregates.xpGained`), que o host manda por personagem; "Sua
+ * parte" é `party-spending.estimatedShare` (DT-03), que já existia e era descartado — duplicá-lo
+ * em `analyzer.party` faria as duas mensagens divergirem na primeira que atualizasse só uma.
+ */
+function PartyBox({ summary, aggregates, spending, me }: {
+  summary: PartySummary; aggregates: Aggregates;
+  spending: PartySpendingView | null; me: string | null;
+}) {
+  const mine = spending?.shares.find((share) => share.characterId === me);
+  return (
+    <Box title="Party">
+      <Line label="Jogadores" value={count(summary.players)} />
+      <Line label="Vocações únicas" value={count(summary.uniqueVocations)} />
+      <Line label="Bônus de XP" value={xpBonusLabel(summary.xpPercent)} />
+      <Line label="Multiplicador" value={xpMultiplierLabel(summary.xpPercent)} />
+      <Line label="XP total" value={count(summary.totalXp)} />
+      <Line label="Sua XP" value={count(aggregates.xpGained)} />
+      <Line label="Rateio" value={summary.shareCosts ? 'Ativo' : 'Inativo'} />
+      <Line label="Supplies totais" value={gold(summary.totalSupplies)} />
+      {mine?.estimatedShare !== undefined && (
+        <Line label="Sua parte" value={gold(mine.estimatedShare)} />
+      )}
+      <Line label="Divisão de lucro" value={summary.splitLoot ? 'Ativa' : 'Inativa'} />
+      <Line label="Valor da bolsa" value={gold(summary.bagValue)} />
+      <Line label="Peso da bolsa" value={`${summary.bagWeight.toLocaleString('pt-BR')} oz`} />
+      <Line
+        label="Venda automática"
+        value={`${String(summary.autoSell.used)} / ${String(summary.autoSell.limit)}`}
+      />
+    </Box>
+  );
+}
+
+/**
+ * A lista de eventos notáveis, com os nomes do catálogo. Exportada para o teste: é aqui que o
+ * id do evento vira nome, e um teste de `describeEvent` com um mapa montado à mão não prova
+ * que ESTE mapa é montado (achado da revisão da FUN-113).
+ */
+export function Events({ events }: { events: readonly NotableEvent[] }) {
+  // Os nomes de hunt e supply vêm do catálogo: o evento carrega o id, e o id é o que o
+  // conteúdo fixou na sessão — a tradução para o nome é apresentação (FUN-110).
+  const catalogue = useHudSlice((state) => state.catalogue);
   if (events.length === 0) return null;
+  const vocabulary = catalogue?.bot as BotVocabulary | undefined;
+  const names: EventNames = {
+    hunts: new Map(catalogue?.hunts.map((hunt) => [hunt.id, hunt.name]) ?? []),
+    supplies: new Map((vocabulary?.supplies ?? []).map((supply) => [supply.id, supply.name])),
+    monsters: new Map(catalogue?.monsters.map((monster) => [monster.id, monster.name]) ?? []),
+    // O bônus por marco (FUN-113) só entra quando o catálogo o trouxe: a chave ausente é
+    // "não sei", e `exactOptionalPropertyTypes` não deixa escrever `undefined` no lugar.
+    ...(catalogue?.bestiary === undefined
+      ? {}
+      : { percentPerMilestone: catalogue.bestiary.xpBonusPercentPerMilestone }),
+  };
   return (
     <ul className="analyzer-events">
       {/* Do mais recente para o mais antigo: a tela de retorno responde "o que aconteceu",
@@ -117,56 +191,85 @@ function Events({ events }: { events: readonly NotableEvent[] }) {
       {[...events].reverse().slice(0, 12).map((event, index) => (
         <li key={`${event.atMs}-${event.type}-${String(index)}`}>
           <span className="analyzer-event-time">{duration(event.atMs)}</span>
-          {EVENT_TEXT[event.type] ?? event.type}
-          {event.detail !== undefined && event.detail !== '' && ` · ${event.detail}`}
+          {describeEvent(event, names)}
         </li>
       ))}
     </ul>
   );
 }
 
-export function Analyzer() {
+/**
+ * A janela flutuante do Analisador (#315, R4-14 — ADR 0030 decisão 3 reabre D6 do ADR 0029 só
+ * para esta janela e a Party loot). `open` deixou de ser "não colapsado": agora é "montado". O
+ * × FECHA de verdade (desmonta), porque uma janela flutuante que fecha não deixa cabeçalho para
+ * trás — ao contrário do `Panel dock` de antes, que minimizava e mantinha a barra.
+ *
+ * `forceOpen` sobrevive da versão anterior: ao terminar a hunt (`analyzer.ended`), a janela
+ * reabre sozinha mesmo se o jogador a tinha fechado.
+ *
+ * Sem sessão, ou na Cidade, a função retorna `null` — não é "removido pelo jogador", é "não há
+ * sessão para analisar" (`analyzer.md`, "Ela não aparece na Cidade: a praça não credita nada").
+ */
+export function Analyzer({ open = false, onToggle }: { open?: boolean; onToggle?: () => void }) {
   const analyzer = useHudSlice((state) => state.analyzer);
-  // **Minimizada por padrão** (§16.1): a janela existe durante a hunt inteira, e uma hunt idle
-  // não precisa dela aberta ocupando a tela. Ao encerrar, ela abre sozinha — aí o extrato é a
-  // notícia, e escondê-lo seria a sessão sumir em silêncio.
-  const [open, setOpen] = useState(false);
+  const partySpending = useHudSlice((state) => state.partySpending);
+  const me = useHudSlice((state) => state.characterId);
+
+  const [forceOpen, setForceOpen] = useState(false);
   useEffect(() => {
-    if (analyzer.ended) setOpen(true);
+    if (analyzer.ended) setForceOpen(true);
   }, [analyzer.ended]);
+  const isOpen = forceOpen || open;
+  const handleClose = (): void => {
+    setForceOpen(false);
+    onToggle?.();
+  };
+
+  const [expandedOpen, setExpandedOpen] = useState(false);
 
   const { aggregates } = analyzer;
   const elapsedMs = useElapsedMs(
     aggregates?.durationMs ?? 0, analyzer.receivedAtMs, !analyzer.ended && aggregates !== null,
   );
 
-  // Sem sessão não há o que analisar. A Cidade também não: ela não credita nada (§37), e uma
-  // janela de "0 XP, 0 gold" na praça é ruído com aparência de informação.
-  if (aggregates === null || analyzer.sessionType === 'city') return null;
+  // Sem sessão, na Cidade, ou fechada: nada para desenhar. A ordem importa — testar `isOpen`
+  // ANTES do `aggregates` trocaria "sem sessão" por "fechada" no teste de HTML vazio.
+  if (aggregates === null || analyzer.sessionType === 'city' || !isOpen) return null;
 
   return (
-    <section className={`analyzer${open ? '' : ' analyzer-minimized'}`} aria-label="analisador">
-      <header className="analyzer-head">
-        <button
-          type="button"
-          className="analyzer-toggle"
-          aria-expanded={open}
-          onClick={() => { setOpen((value) => !value); }}
-        >
-          {open ? '▾' : '▸'} Analisador
-        </button>
-        {/* Aberta, o tempo já está na primeira linha do corpo: repetir no cabeçalho é dizer
-            o mesmo número duas vezes na mesma janela. */}
-        <span className="analyzer-summary">
-          {analyzer.ended ? 'encerrada' : (open ? '' : duration(elapsedMs))}
-        </span>
-      </header>
-      {open && (
-        <div className="analyzer-body">
-          <Numbers aggregates={aggregates} elapsedMs={elapsedMs} />
-          <Events events={analyzer.notableEvents} />
-        </div>
+    <FloatingWindow
+      name="analyzer"
+      className="ui-floating-window--analyzer"
+      title="Analisador de caçada"
+      // "Sessão" + relógio hh:mm:ss no cabeçalho (kit: Hud.jsx:190) — a segunda coluna do kit
+      // ("Próximo level") fica de fora (RF-05): a curva de XP não trafega.
+      meta={`Sessão ${formatClock(elapsedMs)}`}
+      // (250, 12) é a coordenada do kit RELATIVA AO MUNDO, que no kit começa abaixo do topo de
+      // 65px. No nosso Shell, `.shell` é tela cheia (inclusive por trás do topo), então a MESMA
+      // posição visual exige somar a altura do topo: 12 + 65 = 77 (DT-02).
+      initial={{ x: 250, y: 77 }}
+      width={380}
+      onClose={handleClose}
+      actions={<IconButton title="Abrir completo" onClick={() => { setExpandedOpen(true); }}>⤢</IconButton>}
+    >
+      <SessionBox aggregates={aggregates} elapsedMs={elapsedMs} />
+      <HourBox aggregates={aggregates} elapsedMs={elapsedMs} />
+      {/* A caixa PARTY só existe com `analyzer.party` (solo, ou nó anterior, não a monta). */}
+      {analyzer.party !== undefined && (
+        <PartyBox
+          summary={analyzer.party}
+          aggregates={aggregates}
+          spending={partySpending}
+          me={me}
+        />
       )}
-    </section>
+      <Events events={analyzer.notableEvents} />
+      <AnalyzerModal
+        open={expandedOpen}
+        onClose={() => { setExpandedOpen(false); }}
+        aggregates={aggregates}
+        elapsedMs={elapsedMs}
+      />
+    </FloatingWindow>
   );
 }

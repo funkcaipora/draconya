@@ -1,0 +1,16 @@
+{
+  "id": "sword",
+  "name": "Sword",
+  "kind": "weapon",
+  "slot": "hand",
+  "weight": 35,
+  "value": 25,
+  "attack": 14,
+  "defense": 12,
+  "weapon": {
+    "kind": "melee",
+    "family": "sword",
+    "range": 1
+  },
+  "_open": "Loot do Rotworm (TibiaWiki: atk 14, def 12, 35 oz). value 25 é o preço de NPC do Tibia, provisório — nenhum NPC de venda existe ainda."
+}

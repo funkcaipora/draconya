@@ -1,8 +1,29 @@
 {
   "id": "druid",
   "name": "Druid",
-  "healthPerLevel": 10,
-  "manaPerLevel": 15,
-  "capacityPerLevel": 15,
-  "_open": "§43.1 — HP e mana por level do Druida ainda não decididos; valores provisórios"
+  "healthPerLevel": 5,
+  "manaPerLevel": 30,
+  "capacityPerLevel": 10,
+  "meleeDamageMultiplier": 1,
+  "distDamageMultiplier": 1,
+  "startingKit": [
+    {
+      "itemId": "snakebite-rod",
+      "slot": "hand"
+    },
+    {
+      "itemId": "wooden-shield",
+      "slot": "shield"
+    }
+  ],
+  "regen": {
+    "healthPerSecond": 0.08333333333333333,
+    "manaPerSecond": 0.6666666666666666
+  },
+  "skillMultipliers": {
+    "melee": 1.8,
+    "distance": 1.8,
+    "shielding": 1.5,
+    "magic": 1.1
+  }
 }

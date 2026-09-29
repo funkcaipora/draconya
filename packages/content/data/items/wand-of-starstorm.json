@@ -1,0 +1,21 @@
+{
+  "id": "wand-of-starstorm",
+  "name": "Wand of Starstorm",
+  "kind": "weapon",
+  "slot": "hand",
+  "weight": 25.5,
+  "value": 18000,
+  "requires": {
+    "level": 37,
+    "vocationId": "sorcerer"
+  },
+  "weapon": {
+    "kind": "wand",
+    "family": "wand",
+    "range": 3,
+    "damageType": "energy",
+    "manaPerHit": 13,
+    "damage": { "min": 56, "max": 74 }
+  },
+  "_open": "Kit level 200 (#524), Sorcerer. Level 37, `mana` 13/golpe, `fromDamage`/`toDamage` 56-74, `wandType=\"energy\"` (declarado em `weapon.damageType`, CMB-03) e weight 2550 (25,5 oz) do Canary `items.xml` id 8092 (`Sorcerer;true, Master Sorcerer`), 2026-09-24. `value` 18000: Haroun compra por esse preço (TibiaWiki via tibiascape.com/library/items/wand-of-starstorm). Não usado o range 4/sem custo de mana do update \"Vocation Adjustments\" 2026 — fora da era do cliente 13.32/pacote 1332 (ADR 0037 d.4)."
+}

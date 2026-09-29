@@ -1,0 +1,23 @@
+{
+  "id": "divine-healing",
+  "name": "Divine Healing",
+  "description": "Cura você.",
+  "vocationId": "paladin",
+  "minLevel": 35,
+  "manaCost": 160,
+  "group": "healing",
+  "groupCooldownMs": 1000,
+  "cooldownMs": 1000,
+  "effect": {
+    "kind": "heal",
+    "basePower": 250,
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 7.22,
+      "skillMax": 12.79,
+      "baseMin": 44,
+      "baseMax": 79
+    }
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Fórmula do Canary (`data/scripts/spells/healing/divine_healing.lua`, main, 2026-09-24)."
+}

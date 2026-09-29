@@ -6,6 +6,7 @@ import {
   CharacterNameTakenError,
   type CharacterRecord,
   type GameRepository,
+  type StartingKitPiece,
 } from '../db/repository.js';
 
 const CreateCharacterBody = z.object({
@@ -39,6 +40,16 @@ export interface CharacterRouteOptions {
    * derivação de level num segundo lugar; dois lugares divergem.
    */
   readonly settleProgress?: ((characterId: string) => Promise<SettlementResult>) | undefined;
+  /**
+   * A configuração de bot com que todo personagem nasce (FUN-114): `content.bot.defaultConfig`,
+   * já validada no boot. Opaca aqui, como no repositório — o `api` não conhece o vocabulário.
+   */
+  readonly defaultBotConfig?: unknown;
+  /**
+   * Com o que todo personagem nasce vestido (#153): `content.progression.startingKit`, já
+   * conferido no boot contra o catálogo. Ausente — ou vazio — é nascer de mãos vazias.
+   */
+  readonly startingKit?: readonly StartingKitPiece[];
 }
 
 export function registerCharacterRoutes(
@@ -47,7 +58,7 @@ export function registerCharacterRoutes(
   repository: GameRepository,
   options: CharacterRouteOptions = {},
 ): void {
-  const { isCharacterActive, locateSession, settleProgress } = options;
+  const { isCharacterActive, locateSession, settleProgress, defaultBotConfig, startingKit } = options;
 
   /**
    * Liquida e diz se ALGO foi escrito. Falhar aqui NÃO recusa a resposta, ao contrário do
@@ -61,7 +72,7 @@ export function registerCharacterRoutes(
     try {
       return (await settleProgress(characterId)).written > 0;
     } catch (error) {
-      log.error({ error, characterId }, 'Settlement failed while listing characters');
+      log.error({ err: error, characterId }, 'Settlement failed while listing characters');
       return false;
     }
   };
@@ -101,7 +112,15 @@ export function registerCharacterRoutes(
     }
 
     try {
-      const character = await repository.createCharacter(principal.accountId, name);
+      // Nasce com o bot padrão do conteúdo (FUN-114): é o que faz "magia + poção" existirem
+      // na primeira hunt sem o jogador ter aberto a tela do bot. Sem padrão no conteúdo, nasce
+      // sem — que é o que ele já fazia.
+      // E vestido com o kit do conteúdo (#153): machete, set de couro e mochila, gravados na
+      // mesma transação que o personagem.
+      const character = await repository.createCharacter(principal.accountId, name, {
+        ...(defaultBotConfig === undefined ? {} : { botConfig: defaultBotConfig }),
+        ...(startingKit === undefined ? {} : { kit: startingKit }),
+      });
       return reply.code(201).send(toDto(character));
     } catch (error) {
       if (error instanceof CharacterNameTakenError) {

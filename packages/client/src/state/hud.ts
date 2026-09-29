@@ -9,6 +9,8 @@
 
 import type { S2CProps } from '@draconya/protocol';
 
+export type ActiveCondition = S2CProps<'active-conditions'>['conditions'][number];
+
 export type ConnectionStatus =
   | 'idle'
   | 'connecting'
@@ -33,6 +35,17 @@ export interface SystemLine {
   readonly atMs: number;
 }
 
+export interface SkillProgress {
+  level: number;
+  percent: number;
+}
+
+export interface PlayerSkills {
+  melee: SkillProgress;
+  distance: SkillProgress;
+  magic: SkillProgress;
+}
+
 /**
  * O que a hunt rendeu, como o servidor mandou (§16.1), e a lista curta do §16.2.
  *
@@ -54,10 +67,81 @@ export type NotableEvent = S2CProps<'session-state'>['notableEvents'][number];
  * A hunt vem sem estimativa de XP/h nem de gold/h, e não por esquecimento: o campo não existe
  * no protocolo. Ver o comentário de `catalogue` lá.
  */
-export type Catalogue = S2CProps<'catalogue'>;
+export type Catalogue = Omit<S2CProps<'catalogue'>, 'bot'> & { bot: BotVocabulary };
 export type HuntListing = Catalogue['hunts'][number];
-export type BotVocabulary = Catalogue['bot'];
+/**
+ * O vocabulário do bot no cliente.
+ *
+ * Os campos v2 (`setCount`…`automations`) chegam no fio desde o AB-09 e são o que a barra de
+ * ações (AB-10) lê. Ficam OPCIONAIS porque as fixtures de teste montam catálogos parciais e um
+ * nó `game` antigo pode não mandá-los; a UI degrada para vazio. `supplies` é o suprimento
+ * abstrato (poção/runa), a forma exata do protocolo.
+ */
+export interface BotVocabulary {
+  readonly vocabularyVersion: number;
+  readonly spells: S2CProps<'catalogue'>['bot']['spells'];
+  /** Vocabulário v2 (AB-09): a barra e os painéis novos leem; opcionais até o AB-10. */
+  readonly setCount?: number;
+  readonly slotsPerSet?: number;
+  readonly setNames?: readonly string[];
+  readonly hotkeys?: readonly string[];
+  readonly groups?: readonly string[];
+  readonly automations?: S2CProps<'catalogue'>['bot']['automations'];
+  /** Vocabulário v1 aposentado no AB-11. */
+  readonly slots?: Readonly<Record<string, number>>;
+  /** Os suprimentos abstratos (§20.1, ADR 0026 d.3): a tela os oferece como ação de slot. */
+  readonly supplies?: S2CProps<'catalogue'>['bot']['supplies'];
+  /**
+   * Os coeficientes da conversão do Base Power (#436/#437, ADR 0033), para o `ActionConfigModal`
+   * mostrar a faixa "min~max" no painel de detalhe. Opcional: um nó `game` anterior manda sem, e
+   * `bot/action-detail.ts` omite a linha em vez de inventar um número (RF-09).
+   */
+  readonly spellPower?: S2CProps<'catalogue'>['bot']['spellPower'];
+}
 export type ItemDefinition = Catalogue['items'][number];
+/** A munição abstrata do catálogo (#152): a seleção por família, com preço por tiro. */
+export type AmmoDefinition = Catalogue['ammunition'][number];
+/** Um suprimento abstrato (poção/runa): o uso debita gold, não há item nem pilha. */
+export type SupplyDefinition = NonNullable<Catalogue['bot']['supplies']>[number];
+export type MonsterListing = Catalogue['monsters'][number];
+/** Os marcos e o bônus por marco (§18). Ausente do catálogo: o servidor não tem Bestiário. */
+export type BestiaryConfig = NonNullable<Catalogue['bestiary']>;
+
+/**
+ * O Bestiário do personagem (§18, FUN-113): `id do monstro → abates`, permanente.
+ *
+ * Derivado do protocolo, como os agregados. É o valor INTEIRO que o servidor manda — um
+ * contador que nunca desce —, então a tela não soma nada: cada mensagem substitui a anterior.
+ */
+export type BestiaryCounts = Readonly<S2CProps<'bestiary'>['counts']>;
+/** A party (#196): quem está nela, do `session-state` e do `party-state`. */
+export type PartyView = Readonly<S2CProps<'party-state'>>;
+export type PartyBagView = Readonly<S2CProps<'party-bag'>>;
+export type PartySettlementView = Readonly<S2CProps<'party-settlement'>>;
+/**
+ * O gasto de cada membro e a prévia de rateio (#354, SV-18). Chega em `party-spending` e é o
+ * que dá a "Sua parte" do analisador (DT-03): `analyzer.party` não duplica `estimatedShare`.
+ */
+export type PartySpendingView = Readonly<S2CProps<'party-spending'>>;
+/**
+ * A votação de encerrar a hunt para todos (#432, ADR 0032 d.14). `null` até o servidor mandar o
+ * primeiro `party-end-vote`; `active: false` é o fim da votação, e a tela só mostra o diálogo
+ * enquanto o servidor disser que ela corre.
+ */
+export type PartyEndVoteView = Readonly<S2CProps<'party-end-vote'>>;
+/**
+ * O estado do Follow do PRÓPRIO personagem (#406, ADR 0035 d.9/§25.1). `null` até o primeiro
+ * `follow-state` desta sessão, ou depois de reanexar sem a mensagem ter chegado de novo ainda —
+ * a tela não mostra "interrompido" nesse vazio, só quando o SERVIDOR disse que sim (D8: o
+ * cliente não fabrica o que o servidor não mandou).
+ */
+export type FollowStateView = Readonly<S2CProps<'follow-state'>>;
+/**
+ * A seção PARTY do analisador (§32, ADR 0035 d.11) — o mesmo bloco de `analyzer.party` e de
+ * `session-state.partySummary`. Ausente é solo, ou nó `game` anterior ao #400: nunca "0
+ * jogadores" (D8).
+ */
+export type PartySummary = NonNullable<S2CProps<'analyzer'>['party']>;
 
 /**
  * O que o personagem carrega e veste (§21.5, FUN-90).
@@ -68,10 +152,27 @@ export type ItemDefinition = Catalogue['items'][number];
 export type Inventory = S2CProps<'inventory'>;
 
 /**
+ * O estado de UM slot do conjunto ativo (AB-09): pronto, em cooldown, bloqueado por quê ou
+ * vazio. A CONTAGEM não vem daqui — é do `inventory` (invariante 4; DT-04).
+ */
+export type SlotState = S2CProps<'slot-state'>['slots'][number];
+/** A recusa do `use-slot` (AB-09): `reason` é o motivo que o tooltip do slot mostra. */
+export type SlotResult = S2CProps<'slot-result'>;
+
+/**
+ * A chave canônica de um slot no HUD: `${set}:${slot}`. Vive aqui porque é a chave das duas
+ * fatias de estado (`slotStates`/`slotResults`) e do `apply`; a barra a reexporta.
+ */
+export function slotKey(set: number, slot: number): string {
+  return `${String(set)}:${String(slot)}`;
+}
+
+/**
  * O analisador (§16.1, §16.2, FUN-83).
  *
  * **`receivedAtMs` é o instante local em que este pacote chegou**, e é ele que faz o relógio
- * andar entre dois `session-state`. Sem isso, o tempo de hunt ficaria congelado entre uma
+ * andar entre duas entregas — `session-state` ou `analyzer` (FUN-110), que o recarimba junto
+ * com os números. Sem isso, o tempo de hunt ficaria congelado entre uma
  * atualização e outra — e o "por hora", que é uma divisão por ele, ficaria congelado junto.
  *
  * **É `performance.now()`, o relógio de `applyMessage`, e não `Date.now()`.** Quem lê este
@@ -85,6 +186,11 @@ export interface AnalyzerState {
   readonly receivedAtMs: number;
   /** A sessão já acabou? Aí o relógio PARA: o extrato é definitivo. */
   readonly ended: boolean;
+  /**
+   * A seção PARTY (§32, ADR 0035 d.11), do `analyzer.party`/`session-state.partySummary`.
+   * `undefined` é solo, ou nó `game` anterior ao #400 — a caixa inteira não monta (D8).
+   */
+  readonly party: PartySummary | undefined;
 }
 
 export const INITIAL_ANALYZER: AnalyzerState = {
@@ -93,6 +199,7 @@ export const INITIAL_ANALYZER: AnalyzerState = {
   notableEvents: [],
   receivedAtMs: 0,
   ended: false,
+  party: undefined,
 };
 
 export interface HudState {
@@ -109,6 +216,10 @@ export interface HudState {
   readonly capacity: number;
   readonly gold: number;
   readonly staminaMs: number;
+  readonly speed: number;
+  readonly skills: PlayerSkills;
+  /** A vocação (#154): `null` até a escolha. Chega em `player-stats` e em `session-state`. */
+  readonly vocationId: string | null;
 
   /** Ida e volta medida pelo `ping`/`pong`, ou `null` enquanto não houve nenhum. */
   readonly latencyMs: number | null;
@@ -120,6 +231,13 @@ export interface HudState {
    * tem como saber se a hunt está rendendo ou se o socket caiu há dez minutos.
    */
   readonly connection: ConnectionStatus;
+
+  /**
+   * O total de jogadores online (SV-07/SV-15). `null` até o primeiro `player-count` ou
+   * `session-state.onlinePlayers` chegar — nunca `0`: zero seria uma afirmação que o servidor
+   * ainda não fez (invariante 4/D8). A TopBar mostra "—" enquanto for `null`.
+   */
+  readonly onlinePlayers: number | null;
 
   readonly chat: readonly ChatLine[];
   readonly systemMessages: readonly SystemLine[];
@@ -139,6 +257,61 @@ export interface HudState {
 
   /** A mochila, o equipado e o peso — tudo calculado pelo servidor (FUN-90). */
   readonly inventory: Inventory | null;
+
+  /**
+   * O estado por slot do conjunto ativo (AB-10, `slot-state`), indexado por `${set}:${slot}`.
+   * Substitui a cada mensagem: o servidor manda o estado inteiro do conjunto, não um delta.
+   */
+  readonly slotStates: Readonly<Record<string, SlotState>>;
+  /**
+   * A última recusa do `use-slot` por slot, indexada por `${set}:${slot}` — o motivo que o
+   * tooltip mostra. `slot-result { ok:true }` limpa a entrada; o próximo `slot-state` também.
+   */
+  readonly slotResults: Readonly<Record<string, string>>;
+
+  /**
+   * Abates por monstro (§18, FUN-113). Chega no attach e sempre que um contador muda.
+   *
+   * `null` até chegar, pela mesma razão do inventário: um Bestiário que abre em zero afirma
+   * "nunca matou nada", e o servidor ainda não disse isso — é o primeiro segundo de toda
+   * conexão, e um nó anterior à FUN-113 nunca manda. Monstro sem entrada é zero de verdade:
+   * o `sim` não grava zero para todo monstro do conteúdo.
+   */
+  readonly bestiary: BestiaryCounts | null;
+  /**
+   * A party desta sessão (#196). `null` é solo — e é o que todo `session-state` sem o bloco
+   * diz. A bolsa só existe no modo compartilhado; o último settlement fica até o próximo
+   * `session-state` limpar, para a tela dizer "vendeu N, você levou M" depois de alguém sair.
+   */
+  readonly party: PartyView | null;
+  readonly partyBag: PartyBagView | null;
+  readonly lastSettlement: PartySettlementView | null;
+  /**
+   * O último `party-spending` (#354, SV-18; #405 DT-03). `null` até chegar — a "Sua parte" do
+   * analisador só aparece quando este pacote existe, nunca com um valor inventado.
+   */
+  readonly partySpending: PartySpendingView | null;
+  /**
+   * A votação de encerrar a hunt para todos (#432). `null` até chegar; `active: false` é uma
+   * votação que terminou — a tela não fabrica um diálogo que o servidor não abriu.
+   */
+  readonly partyEndVote: PartyEndVoteView | null;
+  /**
+   * O Follow do PRÓPRIO personagem (#406, ADR 0035 d.9/§25.1). `null` até o servidor mandar
+   * `follow-state`; a tela só mostra "Follow interrompido" quando `active === false`.
+   */
+  readonly followState: FollowStateView | null;
+
+  readonly targetId: number | null;
+  readonly conditions: readonly ActiveCondition[];
+  readonly conditionsReceivedAtMs: number;
+  readonly huntId: string | null;
+  readonly difficulty: string | null;
+  /**
+   * A munição escolhida por família (#152, ADR 0026 d.3): `null` é "nenhuma escolhida". O
+   * servidor valida `requires.level` na seleção; a tela só mostra o que ele mandou de volta.
+   */
+  readonly ammo: { readonly arrow: string | null; readonly bolt: string | null };
 }
 
 export const INITIAL_HUD: HudState = {
@@ -148,13 +321,36 @@ export const INITIAL_HUD: HudState = {
   mana: 0, maxMana: 0,
   level: 0, xp: 0,
   capacity: 0, gold: 0, staminaMs: 0,
+  speed: 0,
+  skills: {
+    melee: { level: 0, percent: 0 },
+    distance: { level: 0, percent: 0 },
+    magic: { level: 0, percent: 0 },
+  },
+  vocationId: null,
   latencyMs: null,
   connection: 'idle',
+  onlinePlayers: null,
   chat: [],
   systemMessages: [],
   analyzer: INITIAL_ANALYZER,
   catalogue: null,
   inventory: null,
+  slotStates: {},
+  slotResults: {},
+  bestiary: null,
+  party: null,
+  partyBag: null,
+  lastSettlement: null,
+  partySpending: null,
+  partyEndVote: null,
+  followState: null,
+  targetId: null,
+  conditions: [],
+  conditionsReceivedAtMs: 0,
+  huntId: null,
+  difficulty: null,
+  ammo: { arrow: null, bolt: null },
 };
 
 /**

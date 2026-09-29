@@ -8,7 +8,51 @@ const Point = z.object({ x: z.number().int(), y: z.number().int(), z: z.number()
 const Direction = z.enum(['north', 'east', 'south', 'west']);
 
 /**
- * Uma criatura como ela chega no estado completo. Mesmos campos do `creature-appear`, de
+ * O TIPO de dano elemental (#479). Espelha `DAMAGE_TYPES` do conteúdo, mas vive aqui pela
+ * mesma razão que todo contrato de rede: o protocolo é a base da pilha e não importa `content`.
+ * A lista é fechada de propósito — um valor fora dela faria o cliente desenhar um número sem
+ * cor, e o `decodeS2C` deve recusar a mensagem inteira em vez de deixar passar.
+ *
+ * `arcane` é o tipo "mágico" do v1 (`kind: magic` do CMB-03). Cura NÃO é um tipo de dano: é o
+ * `kind` da mensagem, e por isso não aparece aqui.
+ */
+export const DamageType = z.enum([
+  'physical', 'energy', 'earth', 'fire', 'ice', 'holy', 'death', 'arcane',
+]);
+export type DamageType = z.infer<typeof DamageType>;
+
+/**
+ * Um lugar do inventário (#160): posição num container, ou um slot do corpo. O slot vem como
+ * string e é conferido pelo CONTEÚDO no servidor, como em `unequip`.
+ */
+const Place = z.union([
+  z.object({ container: z.enum(['backpack', 'satchel']), index: z.number().int().nonnegative() }),
+  z.object({ slot: z.string().min(1) }),
+]);
+
+/** Um índice na paleta de 133 cores do outfit (FUN-20). O cliente é quem sabe que cor é. */
+const PaletteIndex = z.number().int().min(0).max(132);
+
+/**
+ * Progresso até o próximo nível de uma skill (#340, SV-04): nível atual e percentual acumulado.
+ */
+export const SkillProgress = z.object({
+  level: z.number().int().nonnegative(),
+  percentToNext: z.number().int().min(0).max(99),
+});
+export type SkillProgress = z.infer<typeof SkillProgress>;
+
+/**
+ * As cores com que um outfit de duas camadas é pintado (FUN-104): cabeça, corpo, pernas e
+ * pés, cada um um índice da paleta. Do personagem, não do monstro — o rato é uma camada só.
+ */
+export const OutfitColors = z.object({
+  head: PaletteIndex, body: PaletteIndex, legs: PaletteIndex, feet: PaletteIndex,
+});
+export type OutfitColors = z.infer<typeof OutfitColors>;
+
+/**
+ * Uma criatura como ela chega no estado completo. O MESMO schema do `creature-appear`, de
  * propósito: o cliente aplica os dois pelo mesmo caminho, e um campo que só existisse num
  * deles viraria a diferença entre "reconectei" e "vi aparecer".
  */
@@ -19,6 +63,12 @@ const CreatureState = z.object({
   name: z.string(),
   health: z.number(),
   maxHealth: z.number(),
+  /**
+   * **Opcional**, pela mesma razão dos agregados do analisador: um nó `game` anterior manda a
+   * criatura sem cores, e um cliente que as exigisse recusaria a mensagem inteira — em
+   * silêncio. Ausente, o cliente pinta com as cores de personagem novo. Monstro nunca traz.
+   */
+  colors: OutfitColors.optional(),
 });
 
 /** Os agregados da sessão — o que o §16.2 chama de "quanto rendeu". */
@@ -39,6 +89,13 @@ const Aggregates = z.object({
   suppliesUsed: z.number().int().optional(),
   bestBasicHit: z.number().optional(),
   bestSpellHit: z.number().optional(),
+  /**
+   * O dano causado e a cura feita na SESSÃO (#431, ADR 0032 d.14). Totais acumulados por
+   * evento, como os demais — opcionais pela mesma razão de deploy em rolagem da FUN-78, e o
+   * cliente mostra "—" quando ausentes, nunca zero.
+   */
+  damageDealt: z.number().optional(),
+  healingDone: z.number().optional(),
 });
 
 /**
@@ -118,7 +175,292 @@ export const C2S_SCHEMAS = {
    * divergir.
    */
   unequip: z.object({ slot: z.string().min(1) }),
+  /**
+   * Escolher a munição (#152, ADR 0026 decisão 3). INTENÇÃO: o cliente diz QUAL munição, e
+   * quem decide se o level basta é o servidor (invariante 4). A escolha aparece de volta em
+   * `player-stats.ammo`; a recusa vira `system-message`, como a de equipar.
+   */
+  'select-ammo': z.object({ ammoId: z.string().min(1) }),
+  /**
+   * Escolher a vocação (#154, ADR 0026 decisão 1). INTENÇÃO: o cliente diz QUAL, e quem decide
+   * se o level basta e se ainda não há uma é o servidor (invariante 4). Sucesso é
+   * `player-stats.vocationId` mais `inventory`; recusa é `system-message`, como equipar.
+   */
+  'choose-vocation': z.object({ vocationId: z.string().min(1) }),
+  /**
+   * Mover um item (#160). INTENÇÃO: origem e destino; quem decide se cabe, se empilha, se
+   * veste e se o slot existe é o servidor (invariante 4). Sucesso é `inventory` reenviado;
+   * recusa é `system-message`, como equipar.
+   */
+  'move-item': z.object({ from: Place, to: Place }),
+  /**
+   * Disparo manual de um slot da barra (AB-09, ADR 0032 d.3). INTENÇÃO: o cliente diz QUAL
+   * slot; quem decide elegibilidade, consome estoque, gasta mana e inicia cooldown é o
+   * servidor (invariante 4). `set` é o conjunto que o cliente acredita ativo — defasado, o
+   * servidor recusa (`wrong-set`).
+   *
+   * Os literais `3`/`23` (máximo = contagem − 1) ficam AQUI porque `protocol` não importa
+   * `content` (fronteira do pacote): a mesma razão de `enter-hunt` validar dificuldade como
+   * string. O conteúdo (`BOT_SET_COUNT`/`BOT_SLOTS_PER_SET`) é a fonte; o teto do fio o repete.
+   */
+  'use-slot': z.object({
+    set: z.number().int().min(0).max(3),
+    slot: z.number().int().min(0).max(23),
+  }),
+  /**
+   * Escolher o alvo no mundo/Batalha (AB-09, ADR 0032 d.5). INTENÇÃO: o cliente diz QUAL
+   * criatura pelo id numérico do servidor; quem decide se ela é alvo válido é o servidor
+   * (invariante 4). `creatureId: 0` é o CANCELAMENTO explícito (#470, RF-01), como no Canary.
+   * `seq` é monotônico por cliente e volta no ack (`target-changed`/`target-cancel`) para o
+   * cliente descartar resposta obsoleta (RF-02). Opcional: um cliente anterior não o manda.
+   */
+  'select-target': z.object({
+    creatureId: z.number().int().nonnegative(),
+    seq: z.number().int().nonnegative().optional(),
+  }),
+  /**
+   * O líder muda rateio, divisão de lucro, coleta ou venda automática EM TEMPO DE HUNT
+   * (#393, ADR 0035 decisão 1). INTENÇÃO, sempre: um patch parcial — cada campo ausente
+   * mantém o valor atual — e quem decide se quem mandou é o líder e se os ids do catálogo
+   * existem é o servidor (invariante 4). Sucesso é `party-state` (v2) refletindo o estado
+   * novo; recusa é `system-message`.
+   */
+  'party-settings': z.object({
+    shareCosts: z.boolean().optional(),
+    splitLoot: z.boolean().optional(),
+    /** `null` = coletar tudo; `undefined` = não mexer no que já está configurado. */
+    collect: z.array(z.string().min(1)).nullable().optional(),
+    autoSell: z.array(z.string().min(1)).optional(),
+  }),
+  /**
+   * A votação de encerrar a hunt para todos (#432, ADR 0032 d.14). INTENÇÃO (invariante 4): o
+   * líder manda `approve: true` para propor e os membros para aprovar; `false` recusa. Quem
+   * decide se quem mandou pode propor, e se a sessão encerra, é o servidor.
+   */
+  'party-end-vote': z.object({ approve: z.boolean() }),
 } as const satisfies Record<C2SName, z.ZodType>;
+
+/** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */
+export const PartyState = z.object({
+  leaderId: z.string().min(1),
+  /**
+   * @deprecated Espelho de leitura para cliente anterior ao #393: `'shared'` sse os dois
+   * eixos estão ligados. Sai depois de um deploy completo (ADR 0035 d.1) — não remover sem
+   * antes confirmar que nenhum cliente em produção ainda o lê.
+   */
+  mode: z.enum(['split', 'shared']),
+  /**
+   * Os dois eixos como o #359 os gravou (PR #366), ainda no topo por um deploy de rolagem —
+   * o agrupamento novo é `settings`. Ausente: nó anterior ao #359.
+   */
+  shareCosts: z.boolean().optional(),
+  splitLoot: z.boolean().optional(),
+  /** Os dois eixos do líder (§4/§5 do PRD). Ausente: nó anterior ao #393 — leia `mode`. */
+  settings: z.object({
+    shareCosts: z.boolean(),
+    splitLoot: z.boolean(),
+  }).optional(),
+  /** A config de loot do líder e o limite dele (§6-§8, §23.1). Ausente: `splitLoot` desligado ou nó anterior. */
+  loot: z.object({
+    collect: z.array(z.string().min(1)).nullable(),
+    autoSell: z.array(z.string().min(1)),
+    autoSellLimit: z.number().int().nonnegative(),
+    leaderPremium: z.boolean(),
+  }).optional(),
+  members: z.array(z.object({
+    characterId: z.string().min(1),
+    name: z.string().min(1),
+    alive: z.boolean(),
+    /** HP em percentual inteiro (0–100), para o painel — o absoluto é balanceamento. */
+    healthPercent: z.number().int().min(0).max(100),
+    /**
+     * A vocação de cada membro (#339, SV-03).
+     * `null` é "ainda não escolheu" (level < 8, ADR 0026 decisão 1).
+     * `default(null)`: um nó game anterior manda sem.
+     */
+    vocationId: z.string().nullable().default(null),
+    /**
+     * O level de cada membro (#339, SV-03). Opcional.
+     */
+    level: z.number().int().positive().optional(),
+    /**
+     * Mana em percentual inteiro (0–100, #339, SV-03). Opcional.
+     */
+    manaPercent: z.number().int().min(0).max(100).optional(),
+    /** Quando entrou nesta hunt (§16.1, elegibilidade; #397 filtra o extrato por isto). */
+    joinedAtMs: z.number().nonnegative().optional(),
+    /** Tem viewer anexado agora — não confundir com "vivo": morto pode estar conectado. */
+    connected: z.boolean().optional(),
+    /**
+     * DPS/HPS do membro e os totais da sessão (#431, ADR 0032 d.14): dano causado e cura feita
+     * nos últimos 60 s, lidos da janela do `sim` com carimbo lógico. `dps`/`hps` são a taxa
+     * (soma / 60 s); `damageDealt`/`healingDone`, o acumulado. Opcionais: um nó `game` anterior
+     * manda sem, e o painel simplesmente não desenha a linha (D8, nunca zero fabricado).
+     */
+    dps: z.number().nonnegative().optional(),
+    hps: z.number().nonnegative().optional(),
+    damageDealt: z.number().nonnegative().optional(),
+    healingDone: z.number().nonnegative().optional(),
+  })),
+});
+
+/** A bolsa compartilhada (#196; v2 no #393): itens, gold, reserva e elegibilidade. */
+export const PartyBag = z.object({
+  gold: z.number().int().nonnegative(),
+  items: z.array(z.object({
+    instanceId: z.string().min(1),
+    itemId: z.string().min(1),
+    quantity: z.number().int().positive(),
+    /** Presentes no abate que deu este item (§16.1) — só quem entra na venda dele. */
+    eligible: z.array(z.string().min(1)).optional(),
+  })),
+  weight: z.number().nonnegative(),
+  capacity: z.number().nonnegative(),
+  /** Σ value × quantity dos itens da bolsa (§10). Ausente: nó anterior ao #393. */
+  value: z.number().int().nonnegative().optional(),
+  /** `peso > capacidade disponível total` (§14). Ausente: nó anterior, ou nunca calculado. */
+  overweight: z.boolean().optional(),
+  /** Reserva proporcional por membro (§11-§13, ADR 0035 d.3), na ordem de `party-state.members`. */
+  reservations: z.array(z.object({
+    characterId: z.string().min(1),
+    reserved: z.number().nonnegative(),
+    available: z.number().nonnegative(),
+  })).optional(),
+});
+
+/** O settlement da bolsa (#196; v2 no #393): quanto rendeu, quem levou quanto, e por quê. */
+export const PartySettlement = z.object({
+  total: z.number().int().nonnegative(),
+  shares: z.array(z.object({ characterId: z.string().min(1), gold: z.number().int().nonnegative() })),
+  /** Ausente: settlement anterior ao #393 (sempre foi saída/fim). */
+  reason: z.enum(['leave', 'end', 'toggle', 'auto-sell']).optional(),
+  /** Só com `reason: 'auto-sell'` — qual item da lista de venda gerou este settlement. */
+  itemId: z.string().min(1).optional(),
+});
+
+/**
+ * A votação de encerrar a hunt para todos (#432, ADR 0032 d.14). Só S2C: o cliente vê o estado
+ * e manda a intenção por `party-end-vote` C2S. `proposedAtMs` é o instante LÓGICO da proposta
+ * (0 quando não há votação), `approved` quem já aprovou e `active` se a janela de 60 s corre.
+ */
+export const PartyEndVote = z.object({
+  active: z.boolean(),
+  proposedAtMs: z.number().nonnegative(),
+  approved: z.array(z.string().min(1)),
+});
+
+/**
+ * O gasto de cada membro e a prévia de rateio da party (#354, SV-18). `estimatedShare` é a
+ * MESMA conta do `party-settlement` real, chamada como leitura — por isso é `.optional()`, e
+ * não `.nullable()`: ausente é "não se aplica" (modo `split`, ou nó `game` anterior a esta
+ * issue), nunca um zero fabricado (D8).
+ */
+export const PartySpending = z.object({
+  shares: z.array(z.object({
+    characterId: z.string().min(1),
+    /** O MESMO número de `Aggregates.goldSpent` — não int-constrained, como lá (types.ts:56). */
+    goldSpent: z.number(),
+    estimatedShare: z.number().int().nonnegative().optional(),
+  })),
+});
+
+/** A seção PARTY do analisador (§32, ADR 0035 d.11) — o mesmo bloco nos dois lugares que o usam. */
+export const PartySummary = z.object({
+  players: z.number().int().positive(),
+  // `nonnegative`, não `positive` (§525): "nenhuma" vocação (level < 8) não conta mais como
+  // vocação única — uma party inteira sem vocação real mostra 0, o número verdadeiro, não 1
+  // fabricado para caber num schema que só previa o caso antigo (`uniqueVocations` sempre >= 1
+  // porque "nenhuma" era ela mesma uma vocação). `xpPercent` continua lendo a linha "1" da
+  // tabela para 0 (ver `xpPoolPercent` em `packages/sim/src/party.ts`) — os dois campos
+  // divergem de propósito: um é a CONTAGEM real, o outro é o multiplicador que ela paga.
+  uniqueVocations: z.number().int().nonnegative(),
+  xpPercent: z.number().int().nonnegative(),
+  totalXp: z.number().nonnegative(),
+  totalSupplies: z.number().nonnegative(),
+  shareCosts: z.boolean(),
+  splitLoot: z.boolean(),
+  bagValue: z.number().int().nonnegative(),
+  bagWeight: z.number().nonnegative(),
+  autoSell: z.object({
+    used: z.number().int().nonnegative(),
+    limit: z.number().int().nonnegative(),
+  }),
+});
+
+/**
+ * As condições que a barra de buffs do cliente sabe desenhar (#341, SV-05). Vocabulário FECHADO
+ * do contrato: o host só envia estas, e uma badge nova entra aqui e no cliente na mesma PR.
+ */
+export const ACTIVE_CONDITION_KINDS = ['haste', 'buff', 'mana-shield', 'heal-over-time'] as const;
+export type ActiveConditionKind = (typeof ACTIVE_CONDITION_KINDS)[number];
+
+/**
+ * Os cinco modelos de automação do catálogo v2 (AB-09, ADR 0032 d.9). Vocabulário FECHADO do
+ * contrato: o servidor só envia estes, e um modelo novo entra aqui e no cliente na mesma PR.
+ *
+ * O protocolo repete a lista em vez de importar de `content` (fronteira do pacote): a mesma
+ * razão de `enter-hunt` validar dificuldade como string — o protocolo não depende do conteúdo.
+ */
+export const BOT_AUTOMATION_MODELS = [
+  'renew-ring', 'renew-amulet', 'swap-ammo-by-targets',
+  'swap-weapon-shield-by-hp', 'swap-ring',
+] as const;
+export type BotAutomationModel = (typeof BOT_AUTOMATION_MODELS)[number];
+
+/**
+ * A forma de área de uma ação, como o catálogo a publica (#436, ADR 0033). Espelha
+ * `spellAreaSchema` de `content` — este pacote não importa de lá — e é só exibição: quem
+ * resolve os tiles é o `sim`.
+ */
+export const catalogueAreaSchema = z.discriminatedUnion('shape', [
+  z.object({
+    shape: z.literal('circle'),
+    radius: z.number().int().positive(),
+    centered: z.enum(['target', 'caster']),
+  }),
+  z.object({ shape: z.literal('cross'), radius: z.number().int().positive() }),
+  z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
+  z.object({ shape: z.literal('cleave') }),
+  z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
+]);
+
+/** Uma faixa `[min, max]` de exibição (#524) — a poção do Tibia, que sorteia dentro dela sem escalar por level/ML. */
+const catalogueAmountRangeSchema = z.object({
+  min: z.number().int().positive(),
+  max: z.number().int().positive(),
+});
+
+/**
+ * O detalhe de exibição de um efeito (#436, ADR 0033): os números que o painel do
+ * `ActionConfigModal` mostra. Tudo opcional — cada `kind` preenche o que tem. NÃO é o efeito
+ * executável: o `sim` lê o conteúdo, nunca esta projeção.
+ */
+export const catalogueEffectDetailSchema = z.object({
+  range: z.number().int().positive().optional(),
+  area: catalogueAreaSchema.optional(),
+  damageType: z.string().min(1).optional(),
+  basePower: z.number().int().positive().optional(),
+  power: z.number().int().positive().optional(),
+  amount: z.number().int().positive().optional(),
+  /**
+   * A faixa fixa de `amount` (#524, kit level 200): a poção do Tibia cura/repõe um valor
+   * ALEATÓRIO entre min e max, sem escalar por level/ML — diferente de `basePower`, que o
+   * painel converte com `spellPowerRange`. Espelha `content.supplySchema.effect.amountRange`.
+   */
+  amountRange: catalogueAmountRangeSchema.optional(),
+  /**
+   * Mana reposta JUNTO da cura, no MESMO uso (#524: a poção de espírito do Tibia). Espelha
+   * `content.supplySchema.effect.heal.alsoMana` — `amount` fixo OU `amountRange` sorteado, a
+   * mesma dupla do campo principal.
+   */
+  alsoMana: z.object({
+    amount: z.number().int().positive().optional(),
+    amountRange: catalogueAmountRangeSchema.optional(),
+  }).optional(),
+  intervalMs: z.number().int().positive().optional(),
+  durationMs: z.number().int().positive().optional(),
+  speedPercent: z.number().int().positive().optional(),
+});
 
 export const S2C_SCHEMAS = {
   pong: z.object({ t: z.number() }),
@@ -143,6 +485,8 @@ export const S2C_SCHEMAS = {
      */
     sessionType: z.string(),
     elapsedMs: z.number(),
+    huntId: z.string().optional(),
+    difficulty: z.string().optional(),
     /** Quem é o jogador nesta instância — sem isto a câmera não tem em quem centrar. */
     self: z.object({
       creatureId: z.number().int(),
@@ -150,20 +494,62 @@ export const S2C_SCHEMAS = {
       health: z.number(), maxHealth: z.number(),
       mana: z.number(), maxMana: z.number(),
       level: z.number().int(), xp: z.number(),
+      /** A vocação (#154). `null` é "ainda não escolheu". `default(null)`: nó anterior manda sem. */
+      vocationId: z.string().nullable().default(null),
+      speed: z.number().int().nonnegative().default(0),
+      skills: z.record(z.string().min(1), SkillProgress).default({}),
+      magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
     }),
     world: z.object({
       mapId: z.string().nullable(),
       creatures: z.array(CreatureState),
+      /** Os itens no chão agora (FUN-123) — quem reanexa vê os cadáveres. `default([])`: nó anterior. */
+      groundItems: z.array(z.object({
+        id: z.number().int(),
+        position: Point,
+        appearanceId: z.number().int().positive(),
+      })).default([]),
     }),
     aggregates: Aggregates,
     notableEvents: z.array(NotableEvent),
+    /**
+     * A configuração de bot EM VIGOR para este personagem (FUN-111), opaca como a que sobe
+     * em `bot-config`: o schema de verdade é `botConfigSchema`, em `content`. É o que a tela
+     * do bot mostra ao abrir — sem isto ela nascia vazia a cada carregamento, e "Salvar" do
+     * vazio apagava as regras que a hunt estava executando. Ausente: nunca configurou, ou nó
+     * `game` anterior.
+     */
+    botConfig: z.unknown().optional(),
+    /** A party desta sessão (#196). Ausente em solo — e em todo nó anterior. */
+    party: PartyState.optional(),
+    partyBag: PartyBag.optional(),
+    partySpending: PartySpending.optional(),
+    /**
+     * A seção PARTY do analisador (§32, ADR 0035 d.11) — o MESMO bloco do `analyzer.party`.
+     * Ausente: solo, ou nó `game` anterior ao #393.
+     */
+    partySummary: PartySummary.optional(),
+    /**
+     * O total de jogadores online (SV-07) — o mesmo número do `player-count` mais recente,
+     * para quem reanexa não ficar sem ele até o próximo ciclo de 30 s. Ausente: nó `game`
+     * anterior a esta mudança, ou este processo ainda não completou o primeiro ciclo desde que
+     * subiu.
+     */
+    onlinePlayers: z.number().int().nonnegative().optional(),
   }),
-  'instance-enter': z.object({ instanceId: z.string(), map: z.string() }),
-  'creature-appear': z.object({
-    id: z.number().int(),
-    position: Point, appearanceId: z.number().int(), name: z.string(),
-    health: z.number(), maxHealth: z.number(),
+  /**
+   * A troca de cena (FUN-120): que mapa desenhar, e em que AMBIENTE (FUN-121) — `cavern`
+   * escurece o mundo, `surface` não. Opcional porque um nó `game` anterior manda sem, e o
+   * cliente trata ausência como superfície.
+   */
+  'instance-enter': z.object({
+    instanceId: z.string(),
+    map: z.string(),
+    huntId: z.string().optional(),
+    difficulty: z.string().optional(),
+    ambience: z.enum(['surface', 'cavern']).optional(),
   }),
+  'creature-appear': CreatureState,
   // Um passo é enviado UMA vez, com origem, destino e duração. O cliente interpola o
   // intervalo inteiro — não existe snapshot por tick (ADR 0001, seção de banda).
   'creature-move': z.object({
@@ -171,6 +557,47 @@ export const S2C_SCHEMAS = {
     from: Point, to: Point, durationMs: z.number().positive(), pushed: z.boolean().optional(),
   }),
   'creature-disappear': z.object({ id: z.number().int() }),
+  /**
+   * Um item apareceu no chão (FUN-123): o cadáver de um monstro, na posição em que ele caiu,
+   * com a aparência da tabela. Só visual — o loot nunca passa por aqui. Ids próprios, numa
+   * sequência separada da das criaturas.
+   */
+  'ground-item-appear': z.object({
+    id: z.number().int(),
+    position: Point,
+    appearanceId: z.number().int().positive(),
+  }),
+  /** O item do chão sumiu — o cadáver apodreceu. */
+  'ground-item-disappear': z.object({ id: z.number().int() }),
+  'party-state': PartyState,
+  'party-bag': PartyBag,
+  'party-settlement': PartySettlement,
+  'party-end-vote': PartyEndVote,
+  'party-spending': PartySpending,
+  /**
+   * O analisador ao vivo (FUN-110): os MESMOS agregados do `session-state`, mandados quando
+   * mudam — abate, loot, gasto, level, morte. `durationMs` vem junto mas não é o gatilho: o
+   * tempo anda no relógio local da janela, e mandá-lo a cada ciclo seria a banda inteira para
+   * dizer que cem milissegundos passaram.
+   *
+   * `notableEvents` são só os NOVOS desde a última entrega — o `session-state` ou o
+   * `analyzer` anterior —, e o cliente os acrescenta. A lista inteira a cada abate custava,
+   * medido, 13 MB numa hunt de oito horas, 99 % deles repetição do que a tela já tinha.
+   */
+  analyzer: z.object({
+    aggregates: Aggregates,
+    notableEvents: z.array(NotableEvent),
+    /** A seção PARTY (§32, ADR 0035 d.11). Ausente: solo, ou nó `game` anterior ao #393. */
+    party: PartySummary.optional(),
+  }),
+  /**
+   * O Bestiário do personagem (§18, FUN-113): `id do monstro → abates`, o valor inteiro e
+   * atual — é um contador permanente, e a tela mostra o total, não um delta. Os marcos e o
+   * bônus por marco vêm no `catalogue`, porque são conteúdo fixado na sessão (invariante 7).
+   */
+  bestiary: z.object({
+    counts: z.record(z.string().min(1), z.number().int().nonnegative()),
+  }),
   /**
    * O que o servidor decidiu sobre a configuração de bot que chegou (FUN-89).
    *
@@ -193,7 +620,13 @@ export const S2C_SCHEMAS = {
    * atributo base, fixo por id (§21.2), e vêm no catálogo.
    */
   inventory: z.object({
-    backpack: z.array(CarriedItem),
+    /**
+     * Um lugar por posição (#160); `null` é lugar vazio, e o comprimento é o tamanho ATUAL do
+     * container — 20 ao nascer, mais cinco a cada linha que abriu.
+     */
+    backpack: z.array(CarriedItem.nullable()),
+    /** A bolsa (#160): fixa do personagem, mesma forma. `default([])`: nó anterior manda sem. */
+    satchel: z.array(CarriedItem.nullable()).default([]),
     /**
      * `slot` → o que está vestido ali, com a MESMA forma de uma entrada da mochila.
      *
@@ -232,27 +665,92 @@ export const S2C_SCHEMAS = {
       name: z.string().min(1),
       recommendedLevel: z.number().int().positive(),
       difficulties: z.array(z.string().min(1)),
+      /**
+       * O texto de apresentação da hunt (R8-13, SV-21). Opcional: hunt sem o campo ainda não
+       * teve o parágrafo escrito. Sem .default('') — ausência e string vazia são coisas diferentes.
+       */
+      description: z.string().min(1).optional(),
+      /**
+       * A contagem de monstros por dificuldade (SV-19, #355) — "Ousado · 4" do Huntera.
+       * Mesma ordem de `difficulties`. `default([])`: nó game anterior manda sem.
+       */
+      difficultyDetails: z.array(z.object({
+        id: z.string().min(1),
+        monsterCount: z.number().int().positive(),
+      })).default([]),
+      /**
+       * Os outfits dos monstros desta hunt (FUN-112), para o cliente AQUECER as folhas deles
+       * na Cidade, antes de o primeiro aparecer — sem isto o rato era um quadrado por seis a
+       * dez segundos na primeira entrada. Só ids (invariante 6), resolvidos pelo servidor do
+       * conteúdo. `default([])`: um nó `game` anterior manda sem, e nada se aquece.
+       */
+      outfitIds: z.array(z.number().int().positive()).default([]),
+      /**
+       * Quantos drops distintos os monstros desta hunt têm — gold conta um, cada item conta um
+       * (FUN-123): a linha "3 tamanhos de pull · 2 drops de loot" do Huntera. `default(0)`: nó
+       * anterior manda sem.
+       */
+      lootDrops: z.number().int().nonnegative().default(0),
+      /**
+       * Os monstros que aparecem nesta hunt, em qualquer dificuldade dela — deduplicados e em
+       * ordem de `id` (SV-02, #338).
+       */
+      monsters: z.array(z.object({
+        id: z.string().min(1),
+        name: z.string().min(1),
+      })).default([]),
+      /**
+       * O loot possível desta hunt — cada item distinto uma vez, SEM raridade.
+       * Gold NUNCA entra aqui (não é item).
+       */
+      loot: z.array(z.object({
+        itemId: z.string().min(1),
+        name: z.string().min(1),
+      })).default([]),
     })),
     /**
-     * O que a UI do bot pode oferecer (§13.3, FUN-89).
+     * Os monstros que existem, para a tela do Bestiário (FUN-113) ter nome onde o contador
+     * tem id. Só id e nome: a arte de cada um chega pelo `creature-appear`, e o resto é
+     * balanceamento que o cliente não simula (invariante 4). `default([])`: nó anterior.
+     */
+    monsters: z.array(z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+      class: z.string().optional(),
+      health: z.number().int().positive().optional(),
+      experience: z.number().int().nonnegative().optional(),
+    })).default([]),
+    /**
+     * Os marcos do Bestiário e o bônus de XP por marco (§18, FUN-113), do conteúdo fixado na
+     * sessão. Ausente: o servidor não tem Bestiário configurado, e a tela mostra só a contagem.
+     */
+    bestiary: z.object({
+      milestones: z.array(z.number().int().positive()),
+      xpBonusPercentPerMilestone: z.number().nonnegative(),
+    }).optional(),
+    /**
+     * O que a UI do bot pode oferecer (AB-09, ADR 0032 d.1/d.9).
      *
      * **A tela NÃO tem lista de opções em código.** O que existe é o que este pacote diz que
      * existe: se a tela e o servidor divergirem, o jogador configura o que o bot recusa — e
      * descobre isso pelo extrato que não fecha, não por uma mensagem de erro.
      *
-     * As magias e supplies vêm com o que a tela mostra e com o que o gate do §13.2 precisa —
-     * level e vocação —, e nada mais: dano, cura e cooldown são balanceamento, e o cliente não
-     * simula (invariante 4).
+     * O v2 substitui o vocabulário v1: saem o gate de level, o record de slots por categoria e
+     * a lista de supply; entram a contagem e os nomes dos conjuntos, as teclas válidas, os
+     * grupos de cooldown do conteúdo e os modelos de automação. As magias vêm de `spells[]` e
+     * os suprimentos abstratos de `supplies[]` — a poção voltou a ser supply (gold no uso).
      */
     bot: z.object({
       vocabularyVersion: z.number().int().positive(),
-      advancedFromLevel: z.number().int().positive(),
-      slots: z.record(z.string(), z.number().int().nonnegative()),
-      advancedOnly: z.object({
-        conditions: z.array(z.string()),
-        targetPolicies: z.array(z.string()),
-        postures: z.array(z.string()),
-      }),
+      /** Quantos conjuntos e quantos slots por conjunto o conteúdo define (ADR 0032 d.1). */
+      setCount: z.number().int().positive(),
+      slotsPerSet: z.number().int().positive(),
+      /** Os nomes fixos dos conjuntos (ADR 0032 d.4) — rótulo do kit, não mecânica. */
+      setNames: z.array(z.string().min(1)),
+      /** As teclas válidas (1–9, 0, F1–F12) — a tela não tem a lista em código (UC-BAR). */
+      hotkeys: z.array(z.string().min(1)),
+      /** Os grupos de cooldown do conteúdo (união de `spell.group` e `supply.group`). */
+      groups: z.array(z.string().min(1)),
       spells: z.array(z.object({
         id: z.string().min(1),
         name: z.string().min(1),
@@ -261,13 +759,76 @@ export const S2C_SCHEMAS = {
         vocationId: z.string().nullable(),
         /** `heal`, `mana` ou `damage`: é o que separa a categoria em que ela cabe. */
         effect: z.string().min(1),
+        /** O grupo do Tibia (#155): `attack`, `healing`, `support`. `default`: nó anterior manda sem. */
+        group: z.string().min(1).default('attack'),
+        /**
+         * Pode mirar um amigo (#392, #393)? Opcional SEM `default`: um nó `game` anterior manda
+         * sem, e o cliente novo não pode recusar a mensagem — quem não veio é `self`.
+         */
+        targets: z.enum(['self', 'friend']).optional(),
+        /**
+         * Os números de EXIBIÇÃO (#436, ADR 0033), para o `ActionConfigModal`. Opcionais SEM
+         * `default`: um nó `game` anterior manda sem, e o cliente novo não pode recusar a
+         * mensagem — o painel só omite a linha que falta (RF-09).
+         */
+        cooldownMs: z.number().int().positive().optional(),
+        groupCooldownMs: z.number().int().positive().optional(),
+        description: z.string().min(1).optional(),
+        detail: catalogueEffectDetailSchema.optional(),
       })),
+      /**
+       * Os suprimentos abstratos (§20.1, ADR 0026 d.3): poção e runa não são itens — usar
+       * debita gold. O `price` e o `group` são o que a tela mostra para escolher.
+       */
       supplies: z.array(z.object({
         id: z.string().min(1),
         name: z.string().min(1),
         price: z.number().int().nonnegative(),
         effect: z.string().min(1),
+        group: z.string().min(1),
+        /** Level e magic level exigidos (#165) — para a tela não oferecer o que o servidor recusa. */
+        requires: z.object({
+          level: z.number().int().positive().optional(),
+          magicLevel: z.number().int().nonnegative().optional(),
+        }).default({}),
+        /**
+         * A vocação exigida (#524, kit level 200) — uma, várias, ou `null`/ausente, sem
+         * requisito. O mesmo contrato de `content.supplySchema.requires.vocationId`
+         * (`VocationRequirement`); o protocolo não importa de `content` (é a base da pilha), e
+         * por isso repete a forma, como já faz com `spells[].vocationId`. Poção como a Strong
+         * Health Potion é Knight/Paladin; a Great Mana Potion é uma LISTA de três. Opcional SEM
+         * `default`, como `targets`/`groupCooldownMs` abaixo: um nó `game` anterior manda sem, e
+         * a tela sem o campo trata como "sem requisito conhecido" — nunca bloqueia por dado que
+         * não chegou (RF-09).
+         */
+        vocationId: z.union([z.string().min(1), z.array(z.string().min(1)).min(2)]).nullable().optional(),
+/** Pode mirar um amigo (#392, #393)? Opcional SEM `default`, como em `spells[]`. */
+        targets: z.enum(['self', 'friend']).optional(),
+        /** Os números de EXIBIÇÃO (#436, ADR 0033), como em `spells[]`. Opcionais SEM `default`. */
+        groupCooldownMs: z.number().int().positive().optional(),
+        description: z.string().min(1).optional(),
+        detail: catalogueEffectDetailSchema.optional(),
+      })).default([]),
+      /** Os cinco modelos de automação e os parâmetros de cada um (AB-12). */
+      automations: z.array(z.object({
+        model: z.enum(BOT_AUTOMATION_MODELS),
+        label: z.string().min(1),
+        params: z.array(z.object({
+          name: z.string().min(1),
+          kind: z.enum(['item', 'number', 'boolean']),
+        })),
       })),
+      /**
+       * Os coeficientes da conversão do Base Power (#436, ADR 0033; ADR 0026 d.5), para o
+       * cliente MOSTRAR a faixa "min~max" no painel de detalhe — a rolagem de verdade continua
+       * só no servidor. Opcional sem `default`: um nó `game` anterior manda sem, e o painel
+       * omite a faixa de magia com `basePower` até o nó atualizar (RF-09).
+       */
+      spellPower: z.object({
+        levelFactor: z.number().nonnegative(),
+        skillFactor: z.number().nonnegative(),
+        spread: z.number().min(0).max(1),
+      }).optional(),
     }),
     /**
      * As DEFINIÇÕES de item (§21.2, FUN-90). Nome, peso, onde veste e a aparência.
@@ -283,7 +844,89 @@ export const S2C_SCHEMAS = {
       weight: z.number().nonnegative(),
       /** Onde ele veste, ou `null` quando não veste em lugar nenhum. */
       slot: z.string().nullable(),
+      /** Ocupa as duas mãos (#152). `default`: nó anterior manda sem. */
+      twoHanded: z.boolean().default(false),
+      /**
+       * Preço de venda ao NPC, ataque e armadura (#337). Opcionais sem default:
+       * um nó anterior manda sem, e o cliente novo não pode recusar a mensagem.
+       */
+      value: z.number().int().nonnegative().optional(),
+      attack: z.number().int().nonnegative().optional(),
+      armor: z.number().int().nonnegative().optional(),
+      /**
+       * O tipo de item (AB-09): `weapon`, `armor`, `shield`… O editor de ação do AB-11 filtra
+       * por ele. Opcional sem default, como `value`/`attack`/`armor`: um nó anterior manda sem,
+       * e o cliente trata ausência como "não filtrável".
+       */
+      kind: z.string().min(1).optional(),
+      /**
+       * O rótulo curto da barra/Mochila (AB-13). Opcional: só o item que o conteúdo declara
+       * tem; ausente, a tela cai no `name`.
+       */
+      shortLabel: z.string().min(1).optional(),
+      /**
+       * Como a arma bate (#152): o tipo e o alcance, para o tooltip. `ammoFamily` diz de que
+       * família é a munição que a arma dispara — o seletor de munição a usa. Mana por golpe e
+       * faixa de dano ficam de fora — são balanceamento que o cliente não simula (invariante 4).
+       */
+      weapon: z.object({
+        kind: z.string().min(1),
+        range: z.number().int().positive(),
+        ammoFamily: z.string().min(1).optional(),
+      }).optional(),
     })),
+    /**
+     * A munição abstrata que existe (#152, ADR 0026 d.3): o seletor no slot do escudo lista a
+     * família do bow, com o preço por tiro — o único número de balanceamento aqui, pela mesma
+     * razão do preço do supply: é o que o jogador olha para escolher. `default([])`: nó anterior.
+     */
+    ammunition: z.array(z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+      family: z.string().min(1),
+      attack: z.number().int().nonnegative(),
+      price: z.number().int().nonnegative(),
+      appearanceId: z.number().int().positive(),
+      requires: z.object({ level: z.number().int().positive().optional() }),
+    })).default([]),
+    /**
+     * As vocações (#154), para o diálogo do level da escolha. Os três ganhos por level
+     * aparecem porque são o que o jogador olha para escolher — como o preço do supply. A arma
+     * inicial vem como id de item, resolvido em `items`. `default([])`: nó anterior.
+     */
+    vocations: z.array(z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+      healthPerLevel: z.number().int().nonnegative(),
+      manaPerLevel: z.number().int().nonnegative(),
+      capacityPerLevel: z.number().int().nonnegative(),
+      startingWeaponItemId: z.string().min(1),
+    })).default([]),
+    /** O level da escolha (#154): a tela não pode ter o 8 em código. `default(0)`: nó anterior — sem diálogo. */
+    vocationLevel: z.number().int().nonnegative().default(0),
+    /**
+     * A tabela ESTÁTICA de velocidade e regeneração passiva (FUN-119/FUN-36/FUN-68, #361):
+     * quanto todo personagem tem ao nascer e quanto ganha por level, na fórmula
+     * `startingSpeed + (level - 1) * speedPerLevel` que `packages/sim/src/progression.ts`
+     * já usa — e o quanto ele regenera de HP/mana por segundo, que NÃO varia por level.
+     *
+     * Vocação-independente: hoje nenhuma vocação do conteúdo altera velocidade ou
+     * regeneração, então o campo vive UMA vez aqui, e não dentro de cada `vocations[]` — o
+     * mesmo motivo de `vocationLevel` já ser irmão de `vocations`, e não campo de cada uma.
+     *
+     * O valor AO VIVO (afetado por haste, level atual do personagem) é outro campo, em
+     * `player-stats` — SV-04 (#340), fora desta mensagem. `.optional()`, sem `.default()`,
+     * como `bestiary`: um nó `game` anterior a este deploy manda `catalogue` sem a chave, e o
+     * cliente trata ausência como "—", nunca como zero (a convenção de `Aggregates` opcionais).
+     */
+    progression: z.object({
+      startingSpeed: z.number().int().positive(),
+      speedPerLevel: z.number().int().nonnegative(),
+      regen: z.object({
+        healthPerSecond: z.number().nonnegative(),
+        manaPerSecond: z.number().nonnegative(),
+      }),
+    }).optional(),
   }),
   'creature-health': z.object({ id: z.number().int(), health: z.number(), maxHealth: z.number() }),
   /**
@@ -300,6 +943,13 @@ export const S2C_SCHEMAS = {
     id: z.number().int(),
     amount: z.number().int().nonnegative(),
     kind: z.enum(['melee', 'spell', 'heal']),
+    /**
+     * O ELEMENTO do golpe (#479), quando o servidor o resolveu. Opcional de propósito: um nó
+     * `game` anterior a esta issue manda sem, e o cliente que o exigisse recusaria a mensagem
+     * inteira em silêncio. Ausente, a cor sai do `kind` — melee vermelho, cura verde, magia
+     * roxa —, que é a leitura de antes.
+     */
+    damageType: DamageType.optional(),
   }),
   /**
    * Uma animação de efeito num tile (FUN-109): a explosão da magia, o sangue do golpe, o
@@ -318,6 +968,45 @@ export const S2C_SCHEMAS = {
   'player-stats': z.object({
     health: z.number(), maxHealth: z.number(), mana: z.number(), maxMana: z.number(),
     level: z.number().int(), xp: z.number(), capacity: z.number(), gold: z.number(), staminaMs: z.number(),
+    /**
+     * O alvo NÃO mora mais aqui (#470, DT-01). Ele era batimento geral e mascarava a
+     * confirmação e a recusa do `select-target`; agora viaja em `target-changed` /
+     * `target-cancel`, que dizem exatamente o que o jogador fez.
+     */
+    /**
+     * A munição escolhida por família (#152, ADR 0026 decisão 3), a forma do Huntera
+     * (`ammo-selection`): `null` é "nenhuma escolhida". `default`: um nó `game` anterior manda
+     * sem, e o cliente não mostra seleção.
+     */
+    ammo: z.object({ arrow: z.string().nullable(), bolt: z.string().nullable() })
+      .default({ arrow: null, bolt: null }),
+    /** A vocação (#154). `null` é "ainda não escolheu". `default(null)`: nó anterior manda sem. */
+    vocationId: z.string().nullable().default(null),
+    speed: z.number().int().nonnegative().default(0),
+    skills: z.record(z.string().min(1), SkillProgress).default({}),
+    magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
+  }),
+  /**
+   * O estado de cada slot do conjunto ATIVO (AB-09, UC-BAR-003, RG-003). `remainingMs` é o
+   * instante da entrega; o cliente anima o cooldown localmente. A CONTAGEM não vem aqui: é do
+   * `inventory` (invariante 4 — o servidor manda o número, não a regra).
+   */
+  'slot-state': z.object({
+    slots: z.array(z.object({
+      set: z.number().int().min(0).max(3),
+      slot: z.number().int().min(0).max(23),
+      state: z.enum(['ready', 'cooldown', 'blocked', 'empty']),
+      remainingMs: z.number().int().nonnegative().default(0),
+      /** Texto já em palavras (FUN-73), como `bot-config-result.reason`. Ausente em `ready`/`empty`. */
+      reason: z.string().optional(),
+    })),
+  }),
+  /** A resposta ao `use-slot` (AB-09, ADR 0032 d.3): `ok:false` carrega o motivo para o tooltip. */
+  'slot-result': z.object({
+    set: z.number().int().min(0).max(3),
+    slot: z.number().int().min(0).max(23),
+    ok: z.boolean(),
+    reason: z.string().optional(),
   }),
   'experience-gain': z.object({ amount: z.number(), sourceId: z.number().int().optional() }),
   'system-message': z.object({ level: z.enum(['info', 'warning', 'error']), text: z.string() }),
@@ -330,9 +1019,56 @@ export const S2C_SCHEMAS = {
    * personagem rendendo.
    */
   'session-ended': z.object({
-    reason: z.enum(['manual-exit', 'exit-rule', 'death', 'drain', 'completed']),
+    reason: z.enum(['manual-exit', 'exit-rule', 'death', 'drain', 'completed', 'party-vote']),
     aggregates: Aggregates,
     notableEvents: z.array(NotableEvent),
+  }),
+  /**
+   * Condições ativas do jogador (#341, SV-05): tempo restante de cada condição temporária.
+   * Só as de `ACTIVE_CONDITION_KINDS`: o `sim` admite chave livre desde o CMB-07 (DOT de
+   * ability, campo), e o host filtra pelo vocabulário fechado daqui — uma chave nova chega ao
+   * cliente quando ganhar badge, não antes.
+   */
+  'active-conditions': z.object({
+    conditions: z.array(z.object({
+      kind: z.enum(ACTIVE_CONDITION_KINDS),
+      remainingMs: z.number().int().nonnegative(),
+    })),
+  }),
+  /**
+   * O total de jogadores online (SV-07). Um inteiro simples — não há por que ser mais que
+   * isso, e um campo a mais aqui é um campo a mais para versionar depois.
+   */
+  'player-count': z.object({ count: z.number().int().nonnegative() }),
+  /**
+   * O Follow do bot mudou de estado (#393, ADR 0035 decisão 9): ligou, desligou, ou foi
+   * interrompido porque o alvo morreu, saiu ou ficou inalcançável. Por PERSONAGEM.
+   */
+  'follow-state': z.object({
+    active: z.boolean(),
+    /** O alvo tentado — presente mesmo com `active: false`, para a UI dizer QUEM parou. */
+    targetId: z.string().min(1),
+    reason: z.enum(['dead', 'left', 'unreachable']).optional(),
+  }),
+  /**
+   * O alvo autoritativo do jogador (#470, RF-03/RF-04). `creatureId` positivo é a criatura
+   * selecionada; `null` é o cancelamento CONFIRMADO (o cliente mandou `creatureId: 0`). Não é
+   * recusa — a recusa é `target-cancel`, e misturar as duas faria o cliente não saber se o
+   * alvo caiu porque ele cancelou ou porque o servidor recusou.
+   *
+   * `seq` é o número do `select-target` que originou a mudança; ausente quando a troca veio do
+   * auto-target do servidor (#444) ou de um nó `game` anterior.
+   */
+  'target-changed': z.object({
+    creatureId: z.number().int().positive().nullable(),
+    seq: z.number().int().nonnegative().optional(),
+  }),
+  /**
+   * A recusa do `select-target` (#470, RF-04): criatura desconhecida ou morta. Nada mudou, e o
+   * `seq` permite ao cliente saber QUAL tentativa foi recusada (edge case de ack obsoleto).
+   */
+  'target-cancel': z.object({
+    seq: z.number().int().nonnegative().optional(),
   }),
 } as const satisfies Record<S2CName, z.ZodType>;
 

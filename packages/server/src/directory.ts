@@ -22,6 +22,14 @@ export interface NodeLoad {
   readonly sessions: number;
   /** URL pública do WebSocket deste nó — é dela que sai a `wsUrl` do ticket. */
   readonly url: string;
+  /**
+   * Quantos PERSONAGENS distintos este nó tem conectados agora (SV-07) — não visualizadores:
+   * duas abas do mesmo personagem contam UMA vez. Opcional: um nó `game` anterior a esta
+   * mudança publica o batimento sem este campo, e `parseNodeStatus` trata a ausência como 0 na
+   * soma em vez de descartar o batimento inteiro — o mesmo precedente do `bestBasicHit` em
+   * `protocol`, só que do lado do diretório em vez do lado do socket.
+   */
+  readonly players?: number;
 }
 
 export interface NodeStatus extends NodeLoad {
@@ -416,7 +424,13 @@ function parseNodeStatus(nodeId: string, raw: string): NodeStatus | null {
   // Sem URL o nó existe mas é inalcançável para quem precisa roteá-lo. Descartar é mais
   // seguro que devolver endereço vazio: batimento antigo some sozinho em um lease.
   if (typeof url !== 'string' || url === '' || typeof sessions !== 'number') return null;
-  return { nodeId, sessions, url };
+  const players = value['players'];
+  return {
+    nodeId,
+    sessions,
+    url,
+    ...(typeof players === 'number' ? { players } : {}),
+  };
 }
 
 function parseSessionLocation(raw: string): SessionLocation {

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  FALLBACK_EFFECT_PHASES, FLOATING_TEXT_LIFETIME_MS, MISSILE_BASE_MS, MISSILE_PER_TILE_MS,
-  effectPhaseAt, floatingTextColor, floatingTextOffset, missileDuration, missileProgress,
+  ELEMENT_COLORS, FALLBACK_EFFECT_PHASES, FLOATING_TEXT_LIFETIME_MS, MISSILE_MIN_MS,
+  MISSILE_MS_PER_TILE, effectPhaseAt, elementColor, floatingTextColor, floatingTextOffset,
+  mergeFloatingText, missileDuration, missileProgress,
 } from './effects.js';
+import type { FloatingText } from '../state/world.js';
 
 const at = (x: number, y: number, z = 7) => ({ x, y, z });
 
@@ -46,23 +48,26 @@ describe('effectPhaseAt (FUN-106)', () => {
   });
 });
 
-describe('missileDuration (FUN-106)', () => {
-  it('é base mais um tanto por tile', () => {
-    expect(missileDuration(at(0, 0), at(0, 0))).toBe(MISSILE_BASE_MS);
-    expect(missileDuration(at(0, 0), at(1, 0))).toBe(MISSILE_BASE_MS + MISSILE_PER_TILE_MS);
-    expect(missileDuration(at(5, 5), at(2, 5))).toBe(MISSILE_BASE_MS + 3 * MISSILE_PER_TILE_MS);
+describe('missileDuration (#479)', () => {
+  it('é 150 ms por tile de distância EUCLIDIANA — a fórmula do OTClient v8', () => {
+    expect(missileDuration(at(0, 0), at(0, 0))).toBe(MISSILE_MIN_MS);
+    expect(missileDuration(at(0, 0), at(1, 0))).toBe(150);
+    expect(missileDuration(at(0, 0), at(4, 0))).toBe(600);
+    // 3-4-5: a hipotenusa manda, não o maior eixo. Mutação que mata: Chebyshev (450).
+    expect(missileDuration(at(0, 0), at(3, 4))).toBe(750);
   });
 
-  it('a distância é a de CHEBYSHEV: a diagonal é um passo, não dois', () => {
-    // Por Manhattan, (2, 2) seriam quatro tiles e o projétil em diagonal voaria mais devagar
-    // que o em linha reta para um alvo à mesma distância. Mutação que mata: somar os eixos.
-    expect(missileDuration(at(0, 0), at(2, 2))).toBe(MISSILE_BASE_MS + 2 * MISSILE_PER_TILE_MS);
-    expect(missileDuration(at(0, 0), at(3, -2))).toBe(MISSILE_BASE_MS + 3 * MISSILE_PER_TILE_MS);
+  it('a diagonal custa a hipotenusa, não o eixo maior', () => {
+    // Por Chebyshev (o maior eixo), (2, 2) custaria 300; a fórmula do OTClient dá
+    // `round(150 * sqrt(8)) = 424`. Mutação que mata: `Math.max(|dx|, |dy|)`.
+    expect(missileDuration(at(0, 0), at(2, 2))).toBe(424);
+    // `round(150 * sqrt(13)) = 541`.
+    expect(missileDuration(at(0, 0), at(3, -2))).toBe(541);
   });
 
-  it('os números de referência: 100 ms para sair, 60 ms por tile', () => {
-    expect(MISSILE_BASE_MS).toBe(100);
-    expect(MISSILE_PER_TILE_MS).toBe(60);
+  it('os números de referência: 150 ms por tile, piso de 50 ms', () => {
+    expect(MISSILE_MS_PER_TILE).toBe(150);
+    expect(MISSILE_MIN_MS).toBe(50);
   });
 });
 
@@ -89,24 +94,23 @@ describe('missileProgress (FUN-106)', () => {
   });
 });
 
-describe('floatingTextOffset (FUN-106)', () => {
-  it('sobe um pixel a cada 30 ms, INTEIRO', () => {
-    // Mutação que mata: tirar o `Math.floor` — 45 ms daria 1,5 px, e o texto borra.
+describe('floatingTextOffset (#479)', () => {
+  it('sobe 48 px ao longo da vida, INTEIRO', () => {
+    // Mutação que mata: tirar o `Math.round` — 45 ms daria 2,16 px, e o texto borra.
     expect(floatingTextOffset(0)?.dy).toBe(0);
-    expect(floatingTextOffset(29)?.dy).toBe(0);
-    expect(floatingTextOffset(30)?.dy).toBe(1);
-    expect(floatingTextOffset(45)?.dy).toBe(1);
-    expect(floatingTextOffset(300)?.dy).toBe(10);
-    expect(floatingTextOffset(999)?.dy).toBe(33);
+    expect(floatingTextOffset(500)?.dy).toBe(24);
+    expect(floatingTextOffset(45)?.dy).toBe(2);
+    // Aos 999 ms (o último instante antes de acabar) já chegou aos 48 px.
+    expect(floatingTextOffset(999)?.dy).toBe(48);
   });
 
-  it('o alfa fica cheio por dois terços e cai linear no último', () => {
+  it('o alfa fica cheio por cinco sextos e cai no último sexto', () => {
     // Sumir de repente parece o número ter sido apagado; desvanecer desde o início deixa o dano
-    // ilegível antes de o jogador ler. Mutação que mata: começar a cair em zero.
+    // ilegível antes de o jogador ler. Mutação que mata: começar a cair em zero, ou em 2/3.
     expect(floatingTextOffset(0)?.alpha).toBe(1);
     expect(floatingTextOffset(600)?.alpha).toBe(1);
-    expect(floatingTextOffset(666)?.alpha).toBe(1);
-    expect(floatingTextOffset(833)?.alpha).toBeCloseTo(0.5, 1);
+    expect(floatingTextOffset(833)?.alpha).toBe(1);
+    expect(floatingTextOffset(916)?.alpha).toBeCloseTo(0.5, 1);
     const last = floatingTextOffset(999)?.alpha ?? -1;
     expect(last).toBeGreaterThan(0);
     expect(last).toBeLessThan(0.01);
@@ -124,11 +128,41 @@ describe('floatingTextOffset (FUN-106)', () => {
   });
 });
 
-describe('floatingTextColor (FUN-106)', () => {
-  it('são as cores do Tibia: vermelho físico, roxo de energia, verde de cura', () => {
+describe('floatingTextColor (#479)', () => {
+  it('sem elemento, cai nas cores do Tibia: vermelho físico, roxo de magia, verde de cura', () => {
     // Mutação que mata: trocar duas cores entre si — o jogador leria cura como dano.
     expect(floatingTextColor('melee')).toBe(0xff0000);
     expect(floatingTextColor('spell')).toBe(0xcc33ff);
     expect(floatingTextColor('heal')).toBe(0x00ff00);
+  });
+
+  it('com elemento, a cor é a do ELEMENTO e vence o kind', () => {
+    // Dano de gelo aparece em azul claro, não no roxo da magia. Mutação que mata: ignorar o
+    // `damageType` e devolver sempre a cor do `kind`.
+    expect(floatingTextColor('spell', 'ice')).toBe(0x66ccff);
+    expect(floatingTextColor('spell', 'fire')).toBe(0xff6600);
+    expect(floatingTextColor('melee', 'energy')).toBe(0xcc33ff);
+    expect(floatingTextColor('melee', 'earth')).toBe(0x00cc00);
+    expect(floatingTextColor('spell', 'holy')).toBe(0xffff00);
+    expect(floatingTextColor('spell', 'death')).toBe(0xcccccc);
+    expect(floatingTextColor('spell', 'physical')).toBe(0xff0000);
+  });
+
+  it('são os oito elementos, e `arcane` é o roxo da magia', () => {
+    expect(Object.keys(ELEMENT_COLORS)).toHaveLength(9); // oito elementos + heal
+    expect(elementColor('arcane')).toBe(0xcc33ff);
+    // Tipo desconhecido nunca vira preto — some no fundo.
+    expect(elementColor('poison')).toBe(0xcc33ff);
+  });
+});
+
+describe('mergeFloatingText (#479)', () => {
+  it('soma os valores no MESMO texto, em vez de criar outro', () => {
+    const text: FloatingText = {
+      id: 1, creatureId: 1, amount: 30, kind: 'melee', startedAtMs: 0, position: at(0, 0),
+    };
+    mergeFloatingText(text, 12);
+    mergeFloatingText(text, 5);
+    expect(text.amount).toBe(47);
   });
 });

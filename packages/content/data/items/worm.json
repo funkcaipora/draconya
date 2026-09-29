@@ -1,0 +1,9 @@
+{
+  "id": "worm",
+  "name": "Worm",
+  "kind": "other",
+  "weight": 0.05,
+  "value": 0,
+  "stackable": true,
+  "_open": "Loot do Rotworm (TibiaWiki: 0,05 oz), comida/curiosidade sem NPC comprador, como o cheese: regeneração por comida ainda não existe (§20 do PRD não decide). value 0: comida não tem preço de venda no NPC; a bolsa da party a devolve ao líder em vez de vender (ADR 0027). Cai em 1–3 unidades (loot.items min/max)."
+}

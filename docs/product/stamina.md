@@ -1,7 +1,7 @@
 # Stamina
 
-**Status:** implementado — cálculo, consumo em hunt e bloqueio de XP **e de loot** (FUN-63).
-Bestiário não existe ainda; quando existir, o portão já está no lugar certo
+**Status:** implementado — cálculo, consumo em hunt e bloqueio de XP, de loot (FUN-63) **e do
+abate no Bestiário** (FUN-113), os três pelo mesmo portão.
 **PRD:** §10
 **Épico:** E2 (stamina como função do tempo decorrido, sem tick); E3 (bloqueio de XP, loot e Bestiário com stamina zero)
 
@@ -82,8 +82,9 @@ tempo simulado. Um multiplicador viraria a tentação de "queimar mais rápido n
 e aí a stamina deixaria de ser o teto de simulação que a projeção de custo usa — que é a razão de
 ela existir antes de ser regra de jogo.
 
-**Loot e Bestiário ainda não são bloqueados** porque nenhum dos dois existe. O bloqueio está
-escrito no lugar onde a recompensa é creditada, então os dois entram por ele quando chegarem.
+**Loot e Bestiário passam pelo MESMO portão da XP.** O bloqueio está escrito no lugar onde a
+recompensa é creditada (`#onMonsterDied`), e o loot (FUN-63) e o abate no Bestiário (FUN-113,
+§18.6) entraram por ele — uma condição só, para não divergirem na primeira mudança em uma delas.
 
 **Personagem sem stamina persistida roda sem teto.** É o que uma sessão gravada antes desta
 implementação é, e cobrar dela uma stamina que nunca foi medida seria inventar uma punição.
