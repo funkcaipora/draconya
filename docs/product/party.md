@@ -340,8 +340,12 @@ d.8).
 Sair e morrer são `leave`, não `end` (decisão 7): quem sai leva o **próprio extrato** — um
 `Receipt` por membro, cada um com `seq` próprio, uma linha de ledger cada (invariante 10) — e a
 cota do settlement; a sessão continua para os outros. Morte mantém a penalidade de hoje. Saída
-pelo cliente é `leave-hunt` (opcode 10), como no solo; o `session-ended` que volta é o extrato de
-quem saiu. Depois de uma saída, quem tem a regra `party-member-lost` no bot sai também, em cascata
+pelo cliente é `leave-hunt` (opcode 10), como no solo — e, desde o #802, ela PEDE a saída ao
+ruleset (`requestExit`): o membro sai depois do `exitDelayMs` e fora da janela de combate de 60 s,
+e o `session-ended` que volta é o extrato de quem saiu. O membro que sai por dentro do `sim`
+(`member-left`: morte, regra de saída, esta saída) volta para a Cidade pela mesma sucessão — o
+construtor de sessão recebe o personagem que já saiu (`departed`), porque ele não está mais em
+`from.participants`. Depois de uma saída, quem tem a regra `party-member-lost` no bot sai também, em cascata
 e na ordem de entrada (`bot.md`). O último a sair encerra a sessão com o motivo dele; se a cascata
 levou alguém, o motivo é `exit-rule`. Uma party que ficou com um membro vira, na prática, solo:
 morte encerra, loot é do matador sem sorteio.
@@ -365,8 +369,9 @@ líder, encerra a sessão da party para os outros** por um clique só:
   membro leva o seu `Receipt` com `reason: 'party-vote'` — a mesma máquina do encerramento por
   morte/saída, com um motivo novo. Quem sair no meio da votação deixa de contar; se os que
   ficaram já tinham aprovado todo, a sessão encerra depois do extrato de quem saiu.
-- **Sair sozinho continua livre.** `leave-hunt` (opcode 10) tira só quem pediu, com o extrato
-  dele, e não abre votação nenhuma.
+- **Sair sozinho continua livre de votação.** `leave-hunt` (opcode 10) tira só quem pediu, com o
+  extrato dele, e não abre votação nenhuma — mas, desde o #802, respeita o `exitDelayMs` e a
+  trava de combate como no solo (`hunt.md`, "Saída da hunt").
 - **A votação atravessa o snapshot** (`endVote` no estado do ruleset, sem bump de
   `SNAPSHOT_FORMAT_VERSION`): quem reconecta no meio da janela recebe o estado pelo `party-end-vote`
   do attach e não perde quem já aprovou.
