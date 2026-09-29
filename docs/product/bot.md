@@ -369,6 +369,15 @@ monstro:
 `ignore` vence `prioritize` quando o mesmo id está nas duas listas. É configuração contraditória
 do jogador, e "não ataque" é a leitura conservadora.
 
+**O bot nunca mira monstro invisível** (#559, ADR 0041 d.2): o jogador não enxerga o que o Canary
+esconde (`Player::canSeeCreature`), então a escolha de alvo, a contagem de `targets` e a contagem
+por footprint de área pulam quem está invisível — o Killer Rabbit e ~107 outros têm a defesa
+`invisible` — até a condição vencer, ou até um golpe o revelar (o monstro invisível que leva dano
+volta a ficar visível). O alvo que o BOT elegeu cai na hora quando o monstro some; o que o jogador
+FIXOU clicando segue até o próximo "think" do Canary (até 1000 ms, um sorteio da sessão) e o golpe
+dele nesse intervalo revela o monstro. Detalhe e fontes em `docs/product/combat.md`, "Imunidade de
+condição, invisibilidade e a Paralyze Rune".
+
 Os ids são validados contra o **catálogo inteiro** de monstros, não contra a composição da hunt:
 a configuração é do personagem e sobrevive à troca de hunt.
 

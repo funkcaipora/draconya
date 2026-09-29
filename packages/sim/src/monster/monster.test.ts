@@ -85,9 +85,29 @@ describe('chooseTarget', () => {
         .toBe('visible');
     });
 
-    it('larga o alvo retido que ficou invisível — a mesma semântica de "morreu"/"trocou de andar"', () => {
+    it('NÃO larga sozinho o alvo retido que ficou invisível — quem o larga é o think agendado pelo ruleset', () => {
+      // `Creature::onThink` (Canary `creature.cpp:130-140`) só larga o alvo invisível no próximo
+      // think da criatura, até 1000 ms depois: `HuntRuleset#onVisibilityThink` reproduz isso (com
+      // teste em `hunt.test.ts`). `chooseTarget` roda a cada passo do monstro e, largando o alvo
+      // na hora, encurtaria o atraso do Canary.
       const monster = monsterAt(0, 0, { targetId: 'hero' });
-      expect(chooseTarget(monster, [invisiblePrey('hero', 1, 0)], rat, rng, 0)).toBeNull();
+      const localRng = Rng.fromSeed('retain-invisible');
+      const before = Rng.fromSeed('retain-invisible').fraction();
+      expect(chooseTarget(monster, [invisiblePrey('hero', 1, 0)], rat, localRng, 0)).toBe('hero');
+      expect(chooseTarget(monster, [invisiblePrey('hero', 1, 0)], rat, localRng, 10_000)).toBe('hero');
+      expect(localRng.fraction()).toBe(before); // nenhum sorteio consumido
+    });
+
+    it('mas o alvo retido invisível não impede a AQUISIÇÃO de escolher só entre os visíveis (o ramo estreito de fuga)', () => {
+      const fleeing = {
+        ...rat, runOnHealth: 20, targetStrategy: { nearest: 0, health: 100, damage: 0, random: 0 },
+      };
+      const monster = monsterAt(0, 0, { targetId: 'ghost' });
+      // Longe do alcance de qualquer ability e fugindo: reavalia o ranking — e o invisível sai dele.
+      const chosen = chooseTarget(
+        monster, [invisiblePrey('ghost', 3, 0), prey('visible', 4, 0)], fleeing, Rng.fromSeed('narrow'), 0,
+      );
+      expect(chosen).toBe('visible');
     });
 
     it('um monstro que "vê invisível" (`conditionImmunities: [\'invisible\']`) seleciona e retém igual', () => {

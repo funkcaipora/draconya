@@ -4474,6 +4474,7 @@
       "immunities": []
     },
     "conditionImmunities": [
+      "burning",
       "invisible",
       "paralyze"
     ],
@@ -4867,6 +4868,7 @@
       "immunities": []
     },
     "conditionImmunities": [
+      "freezing",
       "invisible",
       "paralyze"
     ],

@@ -888,6 +888,18 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     expect(byVocation.get(undefined)).toBe(1);
   });
 
+  it('Cancel Invisibility usa o `AREA_CIRCLE3X3` do Canary — o círculo de RAIO 3, o mesmo do Mass Healing (#559)', () => {
+    // O "3X3" do nome da constante é o raio, não o lado: `register_spells.lua:372-380` tem 37 tiles
+    // em linhas 3/5/7/7/7/5/3. A #592 a copiou como raio 1 (9 tiles) e um Paladin com o coelho a 3
+    // tiles não o revelava.
+    const cancel = content.spells.get('cancel-invisibility')?.effect;
+    const mass = content.spells.get('mass-healing')?.effect;
+    expect(cancel).toMatchObject({
+      kind: 'dispel', types: ['invisible'], area: { shape: 'circle', radius: 3, centered: 'caster' },
+    });
+    expect(mass).toMatchObject({ area: { shape: 'circle', radius: 3 } });
+  });
+
   it('nenhuma das 13 magias novas do #596 cai no default `arcane` de `damageType`', () => {
     // `arcane` continua no enum `DAMAGE_TYPES` — é o default de `weaponSchema` (wand/rod) e de
     // dez magias físicas ANTERIORES a esta issue (`berserk`, `physical-strike`, etc., um

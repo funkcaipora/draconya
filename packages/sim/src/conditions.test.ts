@@ -4,8 +4,8 @@ import type { CharacterState } from './character.js';
 import { applyDamageOutcome } from './combat/outcome.js';
 import type { DamageOutcome } from './combat/damage.js';
 import {
-  Conditions, conditionFromSpec, damageOverTimeTicks, generateDamageList, resolveSpeedPercent,
-  retiredTick, rollDrunkDeviation, tickOf,
+  Conditions, conditionFromSpec, conditionImmunityOf, damageOverTimeTicks, generateDamageList,
+  resolveSpeedPercent, retiredTick, rollDrunkDeviation, tickOf,
 } from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import { MonsterRuntime } from './monster/monster.js';
@@ -596,5 +596,53 @@ describe('drunk: desvio de passo (M31-03, #558, ADR 0041)', () => {
     expect(deviated / total).toBeCloseTo(4 / 61, 2);
     expect(spoke / total).toBeCloseTo(5 / 61, 2);
     expect([...seenDirections].sort()).toEqual(['east', 'north', 'south', 'west']);
+  });
+});
+
+describe('conditionImmunityOf — que imunidade de monstro barra esta condição (#559, ADR 0041 d.2)', () => {
+  const dot = (damageType: string | undefined): ConditionState => ({
+    key: 'dot', expiresAtMs: 10_000,
+    tick: {
+      amount: 10, intervalMs: 2_000, kind: 'damage',
+      ...(damageType === undefined ? {} : { damageType: damageType as never }),
+    },
+  });
+
+  it('speed: só o sinal NEGATIVO é `paralyze` — haste nunca é barrada pela imunidade', () => {
+    expect(conditionImmunityOf({ key: 'speed', expiresAtMs: 1, speedPercent: -40 })).toBe('paralyze');
+    expect(conditionImmunityOf({ key: 'speed', expiresAtMs: 1, speedPercent: 30 })).toBeNull();
+    expect(conditionImmunityOf({ key: 'speed', expiresAtMs: 1 })).toBeNull();
+  });
+
+  it('drunk casa direto pela chave reservada', () => {
+    expect(conditionImmunityOf({ key: 'drunk', expiresAtMs: 1 })).toBe('drunk');
+  });
+
+  it('cada DOT casa com a condição que o tipo de dano gera (`Combat::DamageToConditionType`)', () => {
+    expect(conditionImmunityOf(dot('physical'))).toBe('bleeding');
+    expect(conditionImmunityOf(dot('earth'))).toBe('poison');
+    expect(conditionImmunityOf(dot('fire'))).toBe('burning');
+    expect(conditionImmunityOf(dot('energy'))).toBe('electrified');
+    expect(conditionImmunityOf(dot('death'))).toBe('cursed');
+    expect(conditionImmunityOf(dot('drown'))).toBe('drowning');
+    expect(conditionImmunityOf(dot('ice'))).toBe('freezing');
+    expect(conditionImmunityOf(dot('holy'))).toBe('dazzled');
+  });
+
+  it('um tique de dano sem `damageType` é físico — o mesmo default do tique (`#applyConditionTick`)', () => {
+    expect(conditionImmunityOf(dot(undefined))).toBe('bleeding');
+  });
+
+  it('lifedrain/manadrain/arcane não geram condição — nenhuma imunidade os cobre', () => {
+    for (const type of ['lifedrain', 'manadrain', 'arcane']) expect(conditionImmunityOf(dot(type))).toBeNull();
+  });
+
+  it('`invisible` NUNCA sai daqui (é "vê invisível", não um bloqueio), nem cura/postura/mana-shield', () => {
+    expect(conditionImmunityOf({ key: 'invisible', expiresAtMs: 1 })).toBeNull();
+    expect(conditionImmunityOf({
+      key: 'regen', expiresAtMs: 1, tick: { amount: 5, intervalMs: 1_000, kind: 'heal' },
+    })).toBeNull();
+    expect(conditionImmunityOf({ key: 'buff', expiresAtMs: 1, damageTakenPercent: -20 })).toBeNull();
+    expect(conditionImmunityOf({ key: 'mana-shield', expiresAtMs: 1 })).toBeNull();
   });
 });
