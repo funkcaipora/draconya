@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { describe, expect, it, vi } from 'vitest';
 import { HuntActions, leaveHunt } from './HuntActions.js';
+import { INITIAL_HUD, hud } from '../state/hud.js';
 
 // As pills sobre o mundo (#259, #325). `prerender` roda sem DOM — um clique real não dispara
 // (mesmo limite de VocationChoice.test.ts). A intenção de saída é uma função pura, testada
@@ -59,6 +60,27 @@ describe('HuntActions', () => {
     const exitIndex = source.indexOf('onClick={() => { leaveHunt(sendIntent); }}');
     expect(exitIndex).toBeGreaterThan(-1);
     expect(source.indexOf('<HuntDetailsModal', exitIndex)).toBeGreaterThan(exitIndex);
+  });
+});
+
+describe('HuntActions com a saída pendente (#802)', () => {
+  it('sem saída pendente a pill é a de sempre; com ela, o estado toma o lugar do "Sair da caçada"', async () => {
+    hud.set(() => INITIAL_HUD);
+    expect(await render(true)).toContain('Sair da caçada');
+
+    hud.set((state) => ({
+      ...state,
+      exitPending: { reason: 'manual-exit', phase: 'countdown', remainingMs: 5_000, receivedAtMs: performance.now() },
+    }));
+    const html = await render(true);
+    expect(html).not.toContain('Sair da caçada');
+    expect(html).toContain('Saindo em 5 s');
+    expect(html).toContain('Cancelar');
+    // O botão partido continua inteiro: o chevron das regras não some com a espera.
+    expect((html.match(/»/g) ?? []).length).toBe(1);
+    // E o resto da faixa não muda: os detalhes continuam ao lado.
+    expect(html).toContain('Detalhes da caçada');
+    hud.set(() => INITIAL_HUD);
   });
 });
 

@@ -614,7 +614,9 @@ a condição ativa ao mesmo tempo, o personagem continua absorvendo o dano uma v
 mana a cada 6 s**, os números do Canary `items.xml` id 3089 (`healthgain`/`healthticks`,
 `managain`/`manaticks`). Não é `ringEffect`: é `bonuses.regeneration`, o mesmo campo que
 qualquer item com regeneração usa (ring of healing, terran rainbow shield… entram pelo importador,
-#573). No Canary é uma `CONDITION_REGENERATION` presa ao slot; aqui cada ganho é um evento
+#573). `healthticks`/`manaticks` já são milissegundos no Canary e entram como estão: até o #804 o
+importador multiplicava por 1000, e todo item de regeneração do catálogo curava a cada 100 min
+(o Ring of Healing é +6 de vida e +24 de mana a cada 6 s). No Canary é uma `CONDITION_REGENERATION` presa ao slot; aqui cada ganho é um evento
 `item-regen` da fila, por slot e por recurso (`<characterId>:<slot>:<health|mana>`), no instante
 exato — a 1 Hz desanexada rende o mesmo que a 10 Hz (invariante 2). O primeiro ganho sai 6 s
 DEPOIS de vestir (a condição do Canary acumula o intervalo antes de curar), e trocar Life Ring

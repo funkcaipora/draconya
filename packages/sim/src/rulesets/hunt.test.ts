@@ -4321,6 +4321,152 @@ describe('trava de combate na saída (#625)', () => {
   });
 });
 
+// --- a saída que o jogador pede e desfaz (#802) ----------------------------------------------
+
+describe('saída pedida pelo jogador: estado pendente e cancelamento (#802)', () => {
+  it('exitStatus é null sem saída pendente, para quem existe e para quem não existe', () => {
+    const { session, hero, ruleset } = withExit([], { exitDelayMs: 5_000 });
+    expect(ruleset.exitStatus(session, hero.id)).toBeNull();
+    expect(ruleset.exitStatus(session, 'desconhecido')).toBeNull();
+  });
+
+  it('durante a contagem do exitDelayMs: fase `countdown`, com o instante em que ela vence', () => {
+    const { session, hero, ruleset } = withExit([], { exitDelayMs: 5_000 });
+    session.advanceBy(1_000);
+    ruleset.requestExit(session, hero.id);
+    expect(ruleset.exitStatus(session, hero.id))
+      .toEqual({ reason: 'manual-exit', phase: 'countdown', untilMs: 6_000 });
+    // O tempo corre e o instante NÃO se mexe — quem calcula "faltam N s" é quem apresenta.
+    session.advanceBy(2_000);
+    expect(ruleset.exitStatus(session, hero.id))
+      .toEqual({ reason: 'manual-exit', phase: 'countdown', untilMs: 6_000 });
+    // Concluída, a saída deixa de estar pendente.
+    session.advanceBy(3_000);
+    expect(session.ended).toBe('manual-exit');
+    expect(ruleset.exitStatus(session, hero.id)).toBeNull();
+  });
+
+  it('em combate: fase `in-combat`, com o fim da janela de 60 s — e um golpe novo empurra o prazo', () => {
+    const { session, hero, ruleset } = withExit([]);
+    session.advanceBy(1_000);
+    hero.lastCombatActionAtMs = session.nowMs;
+    ruleset.requestExit(session, hero.id);
+    expect(ruleset.exitStatus(session, hero.id))
+      .toEqual({ reason: 'manual-exit', phase: 'in-combat', untilMs: 61_000 });
+
+    // O golpe novo entra no carimbo, mas o evento agendado só o relê quando vence: o que o
+    // jogador vê (o mais tardio dos dois) já reflete a janela nova.
+    session.advanceBy(30_000);
+    hero.lastCombatActionAtMs = session.nowMs;
+    expect(ruleset.exitStatus(session, hero.id))
+      .toEqual({ reason: 'manual-exit', phase: 'in-combat', untilMs: 91_000 });
+    // E o número diz a verdade: a saída conclui exatamente nele.
+    session.advanceBy(59_999);
+    expect(session.ended).toBeNull();
+    session.advanceBy(1);
+    expect(session.ended).toBe('manual-exit');
+  });
+
+  it('em combate, vale o mais tardio entre o prazo agendado e o fim da janela', () => {
+    const { session, hero, ruleset } = withExit([], { exitDelayMs: 5_000 });
+    session.advanceBy(1_000);
+    hero.lastCombatActionAtMs = session.nowMs;
+    ruleset.requestExit(session, hero.id);
+    // O evento agendado (6 000) é ANTES do fim da janela (61 000): vale a janela.
+    expect(ruleset.exitStatus(session, hero.id))
+      .toEqual({ reason: 'manual-exit', phase: 'in-combat', untilMs: 61_000 });
+
+    // Uma contagem MAIS LONGA que a janela: vale a contagem.
+    const longa = withExit([], { exitDelayMs: 90_000 });
+    longa.session.advanceBy(1_000);
+    longa.hero.lastCombatActionAtMs = longa.session.nowMs;
+    longa.ruleset.requestExit(longa.session, longa.hero.id);
+    expect(longa.ruleset.exitStatus(longa.session, longa.hero.id))
+      .toEqual({ reason: 'manual-exit', phase: 'in-combat', untilMs: 91_000 });
+  });
+
+  it('cancelExit desfaz a saída manual: a hunt segue depois do prazo que ela teria', () => {
+    const { session, hero, ruleset } = withExit([], { exitDelayMs: 5_000 });
+    session.advanceBy(1_000);
+    ruleset.requestExit(session, hero.id);
+    session.advanceBy(2_000);
+
+    expect(ruleset.cancelExit(session, hero.id)).toBe(true);
+    expect(ruleset.exitStatus(session, hero.id)).toBeNull();
+    // O evento agendado saiu da fila: nada vence em 6 000 ms.
+    expect(session.dueAtOf('exit-countdown', hero.id)).toBeNull();
+    session.advanceBy(60_000);
+    expect(session.ended).toBeNull();
+    // Cancelar de novo é um no-op honesto.
+    expect(ruleset.cancelExit(session, hero.id)).toBe(false);
+  });
+
+  it('cancelar e pedir de novo recomeça a contagem inteira — o evento velho não conclui antes da hora', () => {
+    // Mutação que mata: `cancelExit` só zerar `pendingExit`, sem cancelar o evento — o velho
+    // (t = 6 000) venceria com o pedido novo já marcado e encerraria 2 000 ms cedo demais.
+    const { session, hero, ruleset } = withExit([], { exitDelayMs: 5_000 });
+    session.advanceBy(1_000);
+    ruleset.requestExit(session, hero.id);
+    session.advanceBy(1_000);
+    expect(ruleset.cancelExit(session, hero.id)).toBe(true);
+    session.advanceBy(1_000);
+    ruleset.requestExit(session, hero.id); // t = 3 000 → conclui em 8 000
+
+    session.advanceBy(3_000); // t = 6 000: o prazo do pedido cancelado
+    expect(session.ended).toBeNull();
+    session.advanceBy(1_999);
+    expect(session.ended).toBeNull();
+    session.advanceBy(1);
+    expect(session.ended).toBe('manual-exit');
+  });
+
+  it('cancelar a saída que espera o combate tira a espera dos 60 s', () => {
+    const { session, hero, ruleset } = withExit([]);
+    session.advanceBy(1_000);
+    hero.lastCombatActionAtMs = session.nowMs;
+    ruleset.requestExit(session, hero.id);
+    session.advanceBy(10_000);
+    expect(ruleset.cancelExit(session, hero.id)).toBe(true);
+    // Passou o fim da janela e a hunt segue: ninguém concluiu uma saída que foi desfeita.
+    session.advanceBy(120_000);
+    expect(session.ended).toBeNull();
+  });
+
+  it('não cancela a saída de uma REGRA do bot — é decisão da configuração, e ela dispararia de novo', () => {
+    const { session, hero, ruleset } = withExit(
+      [{ kind: 'hp-below', percent: 50 }],
+      { health: 100, exitDelayMs: 5_000 },
+    );
+    session.advanceBy(250);
+    expect(ruleset.exitStatus(session, hero.id))
+      .toEqual({ reason: 'exit-rule', phase: 'countdown', untilMs: 5_250 });
+    expect(ruleset.cancelExit(session, hero.id)).toBe(false);
+    session.advanceBy(5_000);
+    expect(session.ended).toBe('exit-rule');
+  });
+
+  it('a saída pendente e o cancelamento atravessam o snapshot', () => {
+    const { session, hero, ruleset, loaded } = withExit([], { exitDelayMs: 5_000 });
+    session.advanceBy(1_000);
+    ruleset.requestExit(session, hero.id);
+    session.advanceBy(1_000);
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+    const retomadoRuleset = retomado.ruleset as HuntRuleset;
+    expect(retomadoRuleset.exitStatus(retomado, hero.id))
+      .toEqual({ reason: 'manual-exit', phase: 'countdown', untilMs: 6_000 });
+
+    expect(retomadoRuleset.cancelExit(retomado, hero.id)).toBe(true);
+    retomado.advanceBy(60_000);
+    expect(retomado.ended).toBeNull();
+  });
+});
+
 // --- a configuração sobrevive ao snapshot e à troca ao vivo (FUN-81) -------------------------
 
 describe('a configuração do bot atravessa o snapshot (FUN-81)', () => {

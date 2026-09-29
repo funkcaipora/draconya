@@ -1060,6 +1060,73 @@ describe('o follow-state do bot (#406, ADR 0035 d.9)', () => {
   });
 });
 
+describe('a saída pendente da hunt (#802)', () => {
+  const stateMessage = (): S2CMessage => ({
+    type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+    self: {
+      creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+      level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+    },
+    world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
+    aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+    notableEvents: [],
+  } as S2CMessage);
+
+  it('grava o motivo, a fase e o que falta, com o instante LOCAL em que chegou', () => {
+    // Mutação que mata: descartar o `exit-pending` — a tela nunca saberia que a saída espera.
+    expect(hud.get().exitPending).toBeNull();
+    applyMessage({
+      type: 'exit-pending', active: true, reason: 'manual-exit', phase: 'countdown', remainingMs: 5_000,
+    }, 1_234);
+    expect(hud.get().exitPending).toEqual({
+      reason: 'manual-exit', phase: 'countdown', remainingMs: 5_000, receivedAtMs: 1_234,
+    });
+  });
+
+  it('uma mensagem nova substitui a anterior — o golpe que empurrou o prazo', () => {
+    applyMessage({
+      type: 'exit-pending', active: true, reason: 'manual-exit', phase: 'in-combat', remainingMs: 30_000,
+    }, 10);
+    applyMessage({
+      type: 'exit-pending', active: true, reason: 'manual-exit', phase: 'in-combat', remainingMs: 58_000,
+    }, 20);
+    expect(hud.get().exitPending).toMatchObject({ remainingMs: 58_000, receivedAtMs: 20 });
+  });
+
+  it('`active: false` zera — a saída foi cancelada', () => {
+    applyMessage({
+      type: 'exit-pending', active: true, reason: 'manual-exit', phase: 'countdown', remainingMs: 5_000,
+    }, 0);
+    applyMessage({ type: 'exit-pending', active: false }, 1);
+    expect(hud.get().exitPending).toBeNull();
+  });
+
+  it('`active: true` sem os campos não fabrica uma espera que o servidor não descreveu', () => {
+    applyMessage({ type: 'exit-pending', active: true }, 0);
+    expect(hud.get().exitPending).toBeNull();
+  });
+
+  it('session-ended zera: a saída acabou de se cumprir', () => {
+    applyMessage({
+      type: 'exit-pending', active: true, reason: 'manual-exit', phase: 'countdown', remainingMs: 5_000,
+    }, 0);
+    applyMessage({
+      type: 'session-ended', reason: 'manual-exit',
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 1);
+    expect(hud.get().exitPending).toBeNull();
+  });
+
+  it('session-state zera: o servidor reenvia no attach, com o que falta AGORA', () => {
+    applyMessage({
+      type: 'exit-pending', active: true, reason: 'manual-exit', phase: 'countdown', remainingMs: 5_000,
+    }, 0);
+    applyMessage(stateMessage(), 1);
+    expect(hud.get().exitPending).toBeNull();
+  });
+});
+
 describe('a configuração do bot no session-state (FUN-111)', () => {
   const state = (over: Record<string, unknown> = {}): S2CMessage => ({
     type: 'session-state', sessionType: 'hunt', elapsedMs: 0,

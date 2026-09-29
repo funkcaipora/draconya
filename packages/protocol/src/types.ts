@@ -411,6 +411,12 @@ export const C2S_SCHEMAS = {
   /** Remover a atribuição de um Charm (ADR 0053 d.4): o custo em gold é do servidor. */
   'charm-remove': z.object({ charmId: z.string().min(1) }),
   /**
+   * Desistir da saída da hunt pedida por `leave-hunt` (#802). INTENÇÃO sem payload: se há uma
+   * saída MANUAL pendente e ela é desfeita, quem decide é o servidor (invariante 4); a resposta é
+   * `exit-pending { active: false }`. `.strict()` porque não há campo para o cliente mandar.
+   */
+  'cancel-exit': z.object({}).strict(),
+  /**
    * Escolher a postura de luta (M30-03, #550). INTENÇÃO: só o modo; os fatores de ataque, de
    * defesa e de mitigação que ele liga são do servidor (invariante 4).
    */
@@ -1452,6 +1458,28 @@ export const S2C_SCHEMAS = {
     tiers: z.record(z.string().min(1), z.number().int().min(0).max(3)),
     /** `charmId` → `monsterId` do alvo atribuído. */
     assignments: z.record(z.string().min(1), z.string().min(1)),
+  }),
+  /**
+   * A saída da hunt do PRÓPRIO personagem está pendente (#802). `active: false` é o fim da espera
+   * (e os outros campos somem); com `active: true` os três vêm juntos:
+   *
+   * - `reason`: `manual-exit` (o jogador pediu, e pode desistir) ou `exit-rule` (uma regra do bot
+   *   disparou, e a tela só mostra);
+   * - `phase`: `countdown` (a contagem do `exitDelayMs`) ou `in-combat` (o personagem lutou há
+   *   menos de 60 s — a janela do `CONDITION_INFIGHT` do Canary — e a saída espera a janela
+   *   vencer);
+   * - `remainingMs`: quanto falta, medido no instante em que o servidor mandou. É uma DURAÇÃO, e
+   *   não um instante: o relógio da sessão é lógico e o do cliente não tem nada a ver com ele —
+   *   o cliente guarda quando a mensagem chegou e desconta o tempo local.
+   *
+   * O `remainingMs` de `in-combat` é uma PREVISÃO (a saída conclui nele se nenhum golpe novo
+   * acontecer), e cada golpe novo o empurra — por isso a mensagem é reenviada quando ele muda.
+   */
+  'exit-pending': z.object({
+    active: z.boolean(),
+    reason: z.enum(['manual-exit', 'exit-rule']).optional(),
+    phase: z.enum(['countdown', 'in-combat']).optional(),
+    remainingMs: z.number().int().nonnegative().optional(),
   }),
 } as const satisfies Record<S2CName, z.ZodType>;
 

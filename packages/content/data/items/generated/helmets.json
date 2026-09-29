@@ -2311,9 +2311,9 @@
       "speed": 20,
       "regeneration": {
         "healthGain": 2,
-        "healthTicksMs": 6000000,
+        "healthTicksMs": 6000,
         "manaGain": 8,
-        "manaTicksMs": 6000000
+        "manaTicksMs": 6000
       }
     },
     "source": {

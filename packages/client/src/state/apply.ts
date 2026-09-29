@@ -421,6 +421,8 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         // A votação de encerrar não sobrevive ao fim da sessão (#432): a tela de retorno não
         // mostra o diálogo de uma proposta que já cumpriu o efeito.
         partyEndVote: null,
+        // Nem a saída pendente (#802): ela acabou de se cumprir.
+        exitPending: null,
         systemMessages: appendCapped(state.systemMessages, {
           level: 'warning',
           text: `${REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
@@ -523,6 +525,10 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         // O Follow (#406) volta a `null` na reanexação: o servidor o reenvia no attach, e até
         // ele chegar a tela NÃO deve mostrar o "interrompido" da sessão anterior (§7).
         followState: null,
+        // A saída pendente (#802) também volta a `null` na reanexação: o servidor a reenvia no
+        // attach se ainda houver uma, com o que falta AGORA — e a contagem de antes, contada
+        // no relógio local, estaria errada.
+        exitPending: null,
         onlinePlayers: message.onlinePlayers ?? null,
         // Alvo e condições NÃO viajam no `session-state`: o host manda `player-stats`,
         // `target-changed` (#470) e `active-conditions` logo depois dele, no mesmo attach
@@ -586,6 +592,22 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // uma intenção: mora no `hud` (como `party`/`active-conditions`), e a tela só o espelha —
       // nunca decide sozinha que o follow parou (DT-01).
       hud.set((state) => ({ ...state, followState: message }));
+      return;
+
+    case 'exit-pending':
+      // A saída da hunt pendente (#802) é um PUSH do servidor, como o Follow: a tela só a
+      // espelha. `active: false` — ou uma mensagem incompleta, que o protocolo permite mas o
+      // servidor não manda — zera; o cliente nunca fabrica o que o servidor não disse (D8).
+      hud.set((state) => ({
+        ...state,
+        exitPending: message.active && message.reason !== undefined
+          && message.phase !== undefined && message.remainingMs !== undefined
+          ? {
+            reason: message.reason, phase: message.phase,
+            remainingMs: message.remainingMs, receivedAtMs: nowMs,
+          }
+          : null,
+      }));
       return;
 
     // `slot-state` (AB-10): o estado do conjunto ATIVO por slot. SUBSTITUI o mapa — o servidor
