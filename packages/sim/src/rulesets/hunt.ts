@@ -60,6 +60,7 @@ import type { DefenseSource } from '../combat/defense.js';
 import {
   DISTANCE_BLOCK_FLAGS, MAGIC_BLOCK_FLAGS, MELEE_BLOCK_FLAGS,
 } from '../combat/blockhit.js';
+import { attackedRecently } from '../combat/fight-mode.js';
 import { playerArmor, playerDefense, playerMitigation } from '../combat/player-defense.js';
 import type { PlayerMitigationVocation } from '../combat/player-defense.js';
 import { resolveWeaponPower } from '../combat/weapon-power.js';
@@ -5168,7 +5169,12 @@ export class HuntRuleset implements Ruleset {
     // Wand sem mana NÃO bate (#152): o golpe fica agendado para o intervalo seguinte, e sai
     // quando a mana tiver voltado. Não consome mana, não rende skill — como a magia recusada.
     if (how?.kind === 'wand' && character.mana < (how.manaPerHit ?? 0)) return;
-    this.#strike(session, character, target, weapon, how, damagePercent);
+    const used = this.#strike(session, character, target, weapon, how, damagePercent);
+    // O `Player::updateLastAttack` do Canary (M30-03, #550): só quando a arma foi usada, e DEPOIS
+    // do golpe — o reflexo que o golpe provocou ainda enxerga a janela anterior, como lá. Só o
+    // `combat-v3` lê este carimbo (o fator de defesa da postura); nos perfis anteriores o
+    // snapshot continua sem ele.
+    if (used && this.#isV3()) character.lastAttackAtMs = session.nowMs;
     // Quem aplica dano não decide morte: o pipeline resolve quem matou e devolve a
     // consequência a `onCreatureDied`, o mesmo caminho da morte do personagem.
     if (!target.alive) resolveDeath(session, { kind: 'monster', monster: target });
@@ -6179,7 +6185,7 @@ const slots = bot.groups.get(group);
     const attacker = condition.sourceId ?? 'field';
     if (target instanceof CharacterRuntime) {
       const outcome = resolveDamage(
-        intent, this.#playerDefender(target), 'pve', this.#options.combat, session.rng,
+        intent, this.#playerDefender(target, session.nowMs), 'pve', this.#options.combat, session.rng,
         session.nowMs,
       );
       // CMB-08: o mana shield entra como estágio explícito, e o hit/atribuição usam o HP
@@ -7645,7 +7651,7 @@ const slots = bot.groups.get(group);
         this.#applyMonsterHitOnSummon(session, monster, character, result, source);
         continue;
       }
-      const defender = this.#playerDefender(character);
+      const defender = this.#playerDefender(character, session.nowMs);
       const result = resolveDamage(
         {
           rawDamage, source: 'monster-attack', damageType: ability.damageType,
@@ -8358,13 +8364,19 @@ const slots = bot.groups.get(group);
    * O poder sai de `resolveWeaponPower` com o PERFIL da arma: o ruleset não conhece nome de
    * item nem vocação (DT-01). A família do perfil aponta a skill e a prática, e é por isso que
    * wand/rod não recebem multiplicador de weapon skill — o perfil deles não tem `power`.
+   *
+   * Devolve `true` quando a arma foi USADA — o `result` de `Player::doAttacking` do Canary
+   * (`useWeapon`/`useFist` devolvem `true`): o golpe saiu, tenha acertado ou errado. É o que
+   * `#onPlayerAttack` grava em `lastAttackAtMs` (M30-03, #550), de onde o fator de defesa da
+   * postura tira a janela "bateu há menos de um intervalo". `false` é o tiro que NÃO saiu — sem
+   * visão livre, sem munição, monstro fora do conteúdo —, que o Canary também não conta.
    */
   #strike(
     session: Session, character: CharacterRuntime, monster: MonsterRuntime,
     weapon: Item | null, how: ResolvedWeapon | undefined, damagePercent = 100,
-  ): void {
+  ): boolean {
     const definition = this.#options.monsters.get(monster.monsterId);
-    if (definition === undefined) return;
+    if (definition === undefined) return false;
     const defender = this.#monsterDefender(monster);
     // Contra quem o reflexo do monstro volta (#683) — ausente no monstro que não reflete.
     const reflectAttacker = this.#reflectAttackerFor(character, monster);
@@ -8374,19 +8386,19 @@ const slots = bot.groups.get(group);
       // nada. O alvo continua sendo o mesmo (a escolha ignora visão): o próximo vencimento
       // reavalia, e acerta assim que a linha abrir. Vale para o arremessável (#575) também —
       // ele só troca a fonte do projétil, nunca a exigência de linha de visão.
-      if (!isSightClear(this.#world.map, character.position, monster.position)) return;
+      if (!isSightClear(this.#world.map, character.position, monster.position)) return false;
       // O arremessável (#575): sem `ammoFamily`, o item na mão É o próprio projétil — não há
       // seleção por família nem lançador (ADR 0026 d.3 não se aplica a ele). `buildContent` já
       // garante que toda arma `distance` tem exatamente um dos dois campos.
       if (how.ammoFamily === undefined) {
         this.#throwWeapon(session, character, monster, weapon, how, damagePercent, defender, reflectAttacker);
-        return;
+        return true;
       }
       const ammo = this.#ammoFor(character, how.ammoFamily);
       // Sem munição paga pela família — catálogo vazio, ou saldo que não cobre o preço: o tiro
       // NÃO sai. Nada de dano inventado nem de munição grátis (ADR 0026 d.3): sem gold, a regra
       // de saída `out-of-gold` encerra a hunt, como para a poção.
-      if (ammo === null) return;
+      if (ammo === null) return false;
       // O estoque de loot (#520, revisão do #536) é gasto ANTES do gold — a mesma regra do
       // supply em `useSupply`. Estoque é PESSOAL, nunca rateado: quem tem Burst Arrow no
       // estoque atira das PRÓPRIAS, e o resto da party continua pagando gold pelas delas.
@@ -8430,8 +8442,10 @@ const slots = bot.groups.get(group);
           this.#practice(session, character, how.family, distanceTries(character.attackPractice));
         }
         // A munição é ABSTRATA: nada de pilha a consumir. O tiro errou, mas já pagou o preço, e
-        // o próximo usa a mesma seleção (ou a básica da família) enquanto houver gold.
-        return;
+        // o próximo usa a mesma seleção (ou a básica da família) enquanto houver gold. O tiro
+        // SAIU: é golpe de arma (`useWeapon` devolve `true` no Canary), e abre a janela do fator
+        // de defesa da postura.
+        return true;
       }
       // O `base` da fórmula e o TIPO são da MUNIÇÃO (o bow não tem attack próprio), e a família
       // e a escala vêm do perfil da arma. Uma alocação por tiro, como o `defender` acima.
@@ -8462,7 +8476,7 @@ const slots = bot.groups.get(group);
       }
       // A munição é ABSTRATA: nada de pilha a consumir. O tiro que saiu já pagou o preço, e o
       // próximo usa a mesma seleção (ou a básica da família) enquanto houver gold.
-      return;
+      return true;
     }
 
     if (weapon !== null && how?.kind === 'wand') {
@@ -8494,7 +8508,7 @@ const slots = bot.groups.get(group);
       this.#land(session, character, monster, result, 'spell');
       // Rende magia pela MANA gasta, como a magia (§9.4): é assim que a wand treina magic level.
       this.#practice(session, character, how.family, manaPerHit);
-      return;
+      return true;
     }
 
     // Corpo a corpo — ou desarmado: sem arma na mão vale o perfil `fist` (CMB-05), que carrega
@@ -8535,6 +8549,7 @@ const slots = bot.groups.get(group);
     // é o tipo de bloqueio que decide: 1 try, ou 0 contra imune e bloqueado sem sangue.
     this.#practice(session, character, profile.family,
       this.#isV3() ? meleeTries(character.attackPractice) : 1);
+    return true;
   }
 
   /**
@@ -8628,7 +8643,7 @@ const slots = bot.groups.get(group);
       : vocation?.meleeDamageMultiplier ?? 1;
     const hit = resolveWeaponHit(
       profile, character.level, skillLevel, session.rng, this.#options.combat, vocationMultiplier,
-      damagePercent,
+      damagePercent, character.fightMode,
     );
     // A postura vale para as duas partes do golpe (#687), cada uma arredondada.
     if (family?.kind === 'distance' || family?.kind === 'melee') {
@@ -8935,8 +8950,8 @@ const slots = bot.groups.get(group);
     session: Session, character: CharacterRuntime, monster: MonsterRuntime, reflected: ReflectedDamage,
   ): void {
     const outcome = resolveDamage(
-      reflectedDamageIntent(reflected), this.#playerDefender(character), 'pve', this.#options.combat,
-      session.rng, session.nowMs,
+      reflectedDamageIntent(reflected), this.#playerDefender(character, session.nowMs), 'pve',
+      this.#options.combat, session.rng, session.nowMs,
     );
     const applied = applyDamageOutcome(
       character, outcome, null, character.conditions.damageTakenScale(),
@@ -10020,9 +10035,11 @@ const slots = bot.groups.get(group);
    * acrescenta. Substituir faria vestir a primeira armadura deixar o personagem mais frágil se
    * ela valesse menos que o número base.
    *
-   * Recebe o personagem porque a armadura passou a depender de quem é — antes era constante.
+   * Recebe o personagem porque a armadura passou a depender de quem é — antes era constante. E
+   * `nowMs` (o relógio lógico da sessão) porque, no `combat-v3`, a defesa da postura ofensiva e
+   * balanceada depende de o personagem ter batido há pouco (M30-03, #550).
    */
-  #playerDefender(character: CharacterRuntime): Defender {
+  #playerDefender(character: CharacterRuntime, nowMs: number): Defender {
     // A resistência e a imunidade do EQUIPAMENTO (CMB-03), compiladas na hora do golpe a
     // partir dos poucos slots vestidos — não é varredura de tabela de resistência. `combat-v1`/
     // `v2` a usam inteira; o `combat-v3` (#552) tira dela a resistência, que vira `absorb`.
@@ -10056,7 +10073,7 @@ const slots = bot.groups.get(group);
         ...(reflect === undefined ? {} : { reflect: { reflector: 'player' as const, table: reflect } }),
         defense: {
           kind: shieldItem !== null ? 'shield' : weaponItem !== null ? 'weapon' : 'none',
-          defense: this.#playerDefenseV3(character, weaponItem, shieldItem),
+          defense: this.#playerDefenseV3(character, weaponItem, shieldItem, nowMs),
         },
         defenseMitigation: this.#playerMitigationV3(character, weaponItem, shieldItem),
         blockCharge,
@@ -10128,7 +10145,7 @@ const slots = bot.groups.get(group);
    * do Canary e devolve o piso correto para um Sorcerer/Druid sem escudo.
    */
   #playerDefenseV3(
-    character: CharacterRuntime, weaponItem: Item | null, shieldItem: Item | null,
+    character: CharacterRuntime, weaponItem: Item | null, shieldItem: Item | null, nowMs: number,
   ): number {
     const fistFamily = this.#options.weaponFamilies.get('fist');
     const weaponFamily = weaponItem?.weapon?.family === undefined
@@ -10147,7 +10164,13 @@ const slots = bot.groups.get(group);
       ...(shieldItem === null ? {} : { shield: { defense: shieldItem.defense } }),
       fistSkillLevel: this.#skillLevelOf(character, fistFamily),
       shieldSkillLevel: this.#shieldSkillLevelOf(character),
-      fightMode: 'attack',
+      // A postura que o jogador escolheu (M30-03, #550) e a janela "bateu há menos de um
+      // intervalo de ataque" — o `Player::getDefenseFactor(false)` do Canary, calculado contra o
+      // relógio LÓGICO da sessão, nunca contra o de parede (invariante 2).
+      fightMode: character.fightMode,
+      recentlyAttacked: attackedRecently(
+        character.lastAttackAtMs, nowMs, this.#options.player.attackIntervalMs,
+      ),
     });
   }
 
@@ -10176,7 +10199,9 @@ const slots = bot.groups.get(group);
           rangedFocus: shieldItem.spellbook || shieldItem.quiver,
         },
       }),
-      fightMode: 'attack',
+      // A postura escolhida (M30-03, #550): o `fightFactor` da mitigação é ESTÁTICO — não olha o
+      // relógio de ataque, diferente do da defesa acima.
+      fightMode: character.fightMode,
     });
   }
 

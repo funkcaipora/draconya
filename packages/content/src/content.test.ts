@@ -443,7 +443,7 @@ describe('combat-v3: defesa/armadura/mitigação do blockHit (#548, M30-01)', ()
   const v3Combat = {
     ...combat,
     compatibilityProfile: 'combat-v3',
-    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09 },
     distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
   };
 

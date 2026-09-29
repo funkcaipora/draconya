@@ -7,6 +7,8 @@ import { FULL_BLOCK_CHARGE, isFullBlockCharge } from './combat/block-charge.js';
 import type { BlockChargeState } from './combat/block-charge.js';
 import { INITIAL_ATTACK_PRACTICE, isInitialAttackPractice } from './combat/attack-practice.js';
 import type { AttackPracticeState } from './combat/attack-practice.js';
+import { DEFAULT_FIGHT_MODE, isFightMode } from './combat/fight-mode.js';
+import type { FightMode } from './combat/fight-mode.js';
 import { Bestiary } from './bestiary.js';
 import type { BestiaryState } from './bestiary.js';
 import { Charms } from './charms.js';
@@ -274,6 +276,26 @@ export interface CharacterState {
    * `SNAPSHOT_FORMAT_VERSION`, como `vocationId`/`blessings`.
    */
   readonly promoted?: boolean;
+  /**
+   * A postura de luta (M30-03, #550): o `fightMode` do Canary — ofensiva, balanceada ou
+   * defensiva —, escolhida pelo jogador com `set-fight-mode` e persistida em
+   * `character.fight_mode`. Escala o dano de arma (`attackFactor`), a defesa e a mitigação do
+   * `combat-v3` (`combat/fight-mode.ts`). Ausente é `'attack'`, o `FIGHTMODE_ATTACK` que o
+   * Canary usa quando ninguém escolheu (`player.hpp:1857`) — sem bump de
+   * `SNAPSHOT_FORMAT_VERSION`, como `promoted`.
+   */
+  readonly fightMode?: FightMode;
+  /**
+   * O instante (relógio lógico da sessão) do último golpe de ARMA do personagem — o `lastAttack`
+   * do Canary (`Player::updateLastAttack`, escrito só por `doAttacking` quando `useWeapon`/
+   * `useFist` devolve `true`), de onde sai o fator de defesa DINÂMICO da postura ofensiva e
+   * balanceada (`attackedRecently`, `combat/fight-mode.ts`). Só o ruleset da hunt escreve, no
+   * evento do golpe (invariante 9). Ausente é "nunca bateu nesta sessão" (fator 1,0) — o
+   * relógio é da sessão, então não sobrevive à troca de sessão nem vai para o Postgres, só no
+   * snapshot QUENTE, para a hunt retomada não perder a janela. Sem bump de
+   * `SNAPSHOT_FORMAT_VERSION`, como `lastCombatActionAtMs`.
+   */
+  readonly lastAttackAtMs?: number;
 }
 
 /** Ver `CharacterState.pendingManualAction`. */
@@ -427,6 +449,17 @@ export class CharacterRuntime {
    * regen (`#regenOf`) e pela penalidade de morte (`applyDeathPenalty`), os dois em `hunt.ts`.
    */
   promoted: boolean;
+  /**
+   * A postura de luta (M30-03, #550). Só `setFightMode` escreve, e só a sessão dona a chama
+   * (invariante 9) — pela intenção `set-fight-mode`, na Cidade e na hunt. Ver
+   * `CharacterState.fightMode`.
+   */
+  fightMode: FightMode;
+  /**
+   * Ver `CharacterState.lastAttackAtMs`. Só o ruleset da hunt escreve (invariante 9); `null` é
+   * "nunca bateu nesta sessão".
+   */
+  lastAttackAtMs: number | null;
 
   constructor(state: CharacterState) {
     this.id = state.id;
@@ -473,6 +506,10 @@ export class CharacterRuntime {
     this.attackLockedUntil = state.attackLockedUntil ?? 0;
     this.lastCombatActionAtMs = state.lastCombatActionAtMs ?? null;
     this.promoted = state.promoted ?? false;
+    // Defensivo, como `readCharacterStorage`: um valor que não é um dos três modos (snapshot
+    // gravado à mão, ticket torto) vira o default do Canary em vez de travar a sessão.
+    this.fightMode = isFightMode(state.fightMode) ? state.fightMode : DEFAULT_FIGHT_MODE;
+    this.lastAttackAtMs = state.lastAttackAtMs ?? null;
   }
 
   /** Haste (#155): o multiplicador que `movementDuration` lê. `speed` continua sendo a base da tabela. */
@@ -642,6 +679,18 @@ export class CharacterRuntime {
     return { ok: true };
   }
 
+  /**
+   * Escolhe a postura de luta (M30-03, #550) — o `Player::setFightMode` do Canary, sem o
+   * `sendStats`/`sendSkills` (apresentação, do host). Devolve se o modo MUDOU: quem chama só
+   * marca o personagem como sujo e reenvia os stats quando mudou, e escolher o modo em que já
+   * está é um pedido válido que não escreve nada.
+   */
+  setFightMode(mode: FightMode): boolean {
+    if (this.fightMode === mode) return false;
+    this.fightMode = mode;
+    return true;
+  }
+
   getState(): CharacterState {
     return {
       id: this.id,
@@ -701,6 +750,9 @@ export class CharacterRuntime {
       ...(this.lastCombatActionAtMs === null
         ? {} : { lastCombatActionAtMs: this.lastCombatActionAtMs }),
       ...(this.promoted ? { promoted: true } : {}),
+      // Omitidos no default (ofensiva, nunca bateu): o construtor os repõe sozinho.
+      ...(this.fightMode === DEFAULT_FIGHT_MODE ? {} : { fightMode: this.fightMode }),
+      ...(this.lastAttackAtMs === null ? {} : { lastAttackAtMs: this.lastAttackAtMs }),
     };
   }
 

@@ -3137,7 +3137,7 @@ export const COMBAT_V1: CombatCompatibilityProfile = {
  * O perfil `combat-v2` (ADR 0037, decisão 5): o próximo id livre depois do `combat-v1` — o
  * `combat-v2` que o ADR 0032 tinha reservado para a postura nunca chegou a existir em código, e
  * é por isso que esta é a primeira vez que o id é usado. **Rompimento**: o dano de arma passa a
- * ser o do Canary (fórmula, variância pela normal truncada e `attackFactor`), com chance de
+ * ser o do Canary (fórmula, variância pela normal truncada e o fator de ataque da postura), com chance de
  * acerto à distância por skill e por tile. Uma sessão fixada no `combat-v1` continua nele
  * (invariante 7); retomar sob um perfil `breaking` diferente do que a criou é recusado, nunca
  * reinterpretado (ADR 0031).
@@ -3359,12 +3359,11 @@ export const combatSchema = z.object({
    * ```
    *
    * `meleeCoefficient`/`distanceCoefficient` são os `0,085`/`0,09` do Canary
-   * (`Weapons::getMaxWeaponDamage`, `isMelee`). `attackFactor` é o `getAttackFactor()` do modo
-   * de luta (ofensivo 1,0 / equilibrado 0,75 / defensivo 0,5) — o Draconya **não tem seletor de
-   * postura ainda** (o primitivo de "Postura Defensiva/Balanceada/Atacante" nunca foi montado,
-   * `docs/hud-contract-plan.md`), então o valor é uma CONSTANTE de conteúdo fixada em `1,0`
-   * (ofensivo), e não o estado por personagem que uma UI de postura vai um dia escolher — trocar
-   * um escalar fixo por uma leitura de `CharacterState` não muda a fórmula nem exige perfil novo.
+   * (`Weapons::getMaxWeaponDamage`, `isMelee`). `attackFactor` NÃO é conteúdo: é o
+   * `getAttackFactor()` da POSTURA que o jogador escolheu (ofensivo 1,0 / equilibrado 0,75 /
+   * defensivo 0,5) e mora no estado do personagem (`CharacterRuntime.fightMode`, M30-03, #550) —
+   * uma constante aqui o fixaria numa postura só, que é o que o campo fazia até essa issue. A
+   * tabela dos três fatores é MECANISMO do Canary, código puro em `sim/src/combat/fight-mode.ts`.
    * `vocationMultiplier` vem de `vocation.meleeDamageMultiplier`/`distDamageMultiplier` — 1,0 em
    * toda vocação no Canary hoje (`vocations.xml`), e por isso em conteúdo e não constante mágica.
    * Obrigatório quando `compatibilityProfile` é `combat-v2`; `buildContent` recusa a ausência.
@@ -3372,7 +3371,6 @@ export const combatSchema = z.object({
   weaponDamage: z.object({
     meleeCoefficient: z.number().positive(),
     distanceCoefficient: z.number().positive(),
-    attackFactor: z.number().positive(),
   }).optional(),
   /**
    * A chance de acerto à distância do `combat-v2` (#522): só a DISTÂNCIA rola acerto ofensivo —
