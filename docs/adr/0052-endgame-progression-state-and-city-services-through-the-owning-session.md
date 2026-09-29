@@ -137,3 +137,13 @@ Nenhum muda de texto. O **9** é a razão da decisão 2 (sessão dona, não `api
 decisão 3 (tudo pelo ledger, `(session_id, seq)`); o **7** é estendido em espírito pela decisão 5
 (boosted, loyalty e hazard fixados como a versão de conteúdo); o **1** é a razão da decisão 6 (o
 `sim` recebe instantes, não lê relógio); o **8** é a razão de a Cidade tratar tudo como evento.
+
+## Emenda — 2026-09-29: o `combat-v4` passa a `breaking` (#603)
+
+A decisão 7 dizia que Charms, imbuements e os demais "exigem perfil `breaking`", mas o estágio
+#598 (invocação do jogador) nasceu `additive` e o perfil ficou assim até aqui. O #603 é o primeiro
+estágio que muda resultado e ordem de sorteio — o Dodge do PRD sai, o crítico base do jogador
+entra e os Charms rolam —, então `COMBAT_V4.migrationPolicy` é `breaking` a partir dele, e o
+conteúdo real (`baseline.json`) passa a declarar `combat-v4`. O detalhe dos estágios está em
+`docs/product/combat-conformance.md` ("Estágio #603") e a decisão sobre os charms na emenda de
+2026-09-29 do [ADR 0053](0053-bestiary-xp-line-kept-and-charms-added.md).
