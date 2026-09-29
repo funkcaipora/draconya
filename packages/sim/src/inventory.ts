@@ -38,9 +38,12 @@ import type { DefenderAbsorb } from './combat/damage.js';
 /**
  * A ordem em que o Canary varre os slots vestidos (`CONST_SLOT_FIRST..CONST_SLOT_LAST`: head,
  * necklace, backpack, armor, right, left, legs, feet, ring, ammo) — a de `Player::blockHit`
- * (#552). Importa porque a absorção percentual arredonda item a item: a ordem muda o número.
+ * (#552). Importa porque a absorção percentual arredonda item a item: a ordem muda o número. É
+ * também a de `Blessings.DropLoot` (#571, `for i = CONST_SLOT_HEAD, CONST_SLOT_AMMO`), onde cada
+ * item vestido consome UM sorteio na ordem — trocar a ordem muda quem perde o quê com a mesma
+ * semente.
  */
-const CANARY_SLOT_ORDER: readonly ItemSlot[] = [
+export const CANARY_SLOT_ORDER: readonly ItemSlot[] = [
   'head', 'neck', 'back', 'chest', 'hand', 'shield', 'legs', 'feet', 'finger', 'ammo',
 ];
 
@@ -101,6 +104,17 @@ export interface EquipmentChanged {
 }
 
 export type ContainerName = 'backpack' | 'satchel';
+
+/**
+ * O que `loseEquipped` tirou do corpo (#571): a peça e o que estava DENTRO dela. Só a mochila
+ * (`back`) tem conteúdo — a aljava é container no cliente, mas a munição do Draconya é abstrata
+ * (ADR 0026 d.3), então não há o que ir junto.
+ */
+export interface LostEquipped {
+  readonly slot: ItemSlot;
+  readonly item: CarriedItem;
+  readonly contents: readonly CarriedItem[];
+}
 
 /** Um lugar do inventário: posição num container, ou um slot do corpo. */
 export type Place =
@@ -308,6 +322,45 @@ export class Inventory {
     this.#equipped.delete(slot);
     this.#observer?.onUnequip(slot, equipped);
     return equipped;
+  }
+
+  /**
+   * Perde o item vestido no slot COM o que ele carrega (#571, `Blessings.DropLoot` do Canary:
+   * `item:moveTo(corpse)` leva a mochila e tudo dentro dela). Diferente de `destroy`, que só
+   * tira o item vestido e deixa a mochila cheia: aqui o vetor da mochila vai junto, e o tamanho
+   * inicial volta a zero — o container que sobra é o da PRÓXIMA mochila (`grantEquipped` +
+   * `ensureContainers`), não um vetor órfão de 20 lugares sem dono. A bolsa é do PERSONAGEM,
+   * não do item, e nunca vai junto.
+   *
+   * Devolve `null` se o slot está vazio. O observer é avisado como em `destroy` — é ele quem
+   * cancela o prazo do anel e reavalia a velocidade da bota.
+   */
+  loseEquipped(slot: ItemSlot): LostEquipped | null {
+    const equipped = this.#equipped.get(slot);
+    if (equipped === undefined) return null;
+    const contents: CarriedItem[] = [];
+    if (slot === 'back') {
+      for (const carried of this.#backpack) if (carried !== null) contents.push(carried);
+      this.#backpack = [];
+      this.#initial = { ...this.#initial, backpack: 0 };
+    }
+    this.#equipped.delete(slot);
+    this.#observer?.onUnequip(slot, equipped);
+    return { slot, item: equipped, contents };
+  }
+
+  /**
+   * Põe uma peça DIRETO num slot vazio, sem sair de lugar nenhum (#571): a mochila que a morte
+   * entrega (`player:addItem(ITEM_BAG, 1, false, CONST_SLOT_BACKPACK)`). Não confere level nem
+   * vocação — quem chama é o sistema, não o jogador — e recusa slot ocupado, porque trocar por
+   * cima destruiria em silêncio o que estava lá. O container só ganha os lugares da peça com um
+   * `ensureContainers` depois, com as `ContainerRules` de quem tem o catálogo.
+   */
+  grantEquipped(slot: ItemSlot, item: CarriedItem): boolean {
+    if (this.#equipped.has(slot)) return false;
+    this.#equipped.set(slot, item);
+    this.#observer?.onEquip(slot, item, null);
+    return true;
   }
 
   /**

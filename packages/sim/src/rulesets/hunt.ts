@@ -122,6 +122,8 @@ import { powerMultiplier, skillFactorFor } from '../skills.js';
 import { drainStamina, isExhausted } from '../stamina.js';
 import { drainFedMs, feed as feedCharacter, FOOD_CAP_MS } from '../food.js';
 import { blessingCount } from '../blessings.js';
+import { consumeLossAmulet, loseItemsOnDeath } from '../item-loss.js';
+import type { ItemLossOutcome } from '../item-loss.js';
 import { RouteWalker } from '../route/walker.js';
 import { boundedPath, isAdjacentTo, isExactly } from '../route/pathfind.js';
 import { Session } from '../session.js';
@@ -3178,6 +3180,18 @@ export class HuntRuleset implements Ruleset {
     // bênçãos (#570) é do PERSONAGEM morto — bênção é comprada por personagem, nunca por
     // sessão/party, ao contrário do antigo `premium` binário que este parâmetro substituiu.
     const blessings = blessingCount(character.blessings);
+    // A perda de ITEM (#571, ADR 0042 decisão 4) vem ANTES da penalidade e do consumo das bênçãos,
+    // como no Canary (`Creature::onDeath` chama `dropCorpse` antes de `death()`): a chance lê a
+    // contagem de bênçãos de ANTES de a morte as consumir, e o Amulet of Loss protege antes de ser
+    // gasto. O sorteio é do `Rng` da sessão, um por item vestido. Desligada (conteúdo real hoje —
+    // decisão do dono em aberto, ver `itemLossSchema`) não toca em item nenhum.
+    this.#recordItemLoss(session, character, loseItemsOnDeath(character, {
+      progression: this.#options.progression,
+      items: this.#options.items,
+      blessings,
+      rng: session.rng,
+      newInstanceId: () => this.#newInstanceId(session, character),
+    }));
     // Promovido (#566, ADR 0042 decisão 1) soma os 30% adicionais de redução, aditivos, nunca
     // tetados — ver o comentário de `promotionReduction` em `progression.ts`.
     const penalty = applyDeathPenalty(
@@ -3216,6 +3230,13 @@ export class HuntRuleset implements Ruleset {
         session.record('skill-down', `${loss.skillId}/${loss.levelChange.from} → ${loss.levelChange.to}`);
       }
     }
+    // O Amulet of Loss é gasto DEPOIS da penalidade (#571): no Canary a conferência do colar lê o
+    // level já rebaixado (`willNotLoseBless`), e o colar vestido se consome mesmo sem ter tido o
+    // que proteger.
+    const spentAmulet = consumeLossAmulet(character, {
+      progression: this.#options.progression, items: this.#options.items,
+    });
+    if (spentAmulet !== null) session.record('loss-amulet-consumed', spentAmulet.itemId);
 
     // Solo — ou party que virou solo —: a morte encerra a sessão (§26.1), como sempre. Em party
     // (#193, ADR 0027 decisão 7) o morto SAI com o próprio extrato — penalidade dentro, e a
@@ -3225,6 +3246,42 @@ export class HuntRuleset implements Ruleset {
       return;
     }
     this.#depart(session, character.id, 'death');
+  }
+
+  /**
+   * O que a perda de item da morte deixou no extrato (#571): um evento por instância destruída —
+   * é ele que vira `ledger.ref.notableEvents` e a lista da tela de morte —, mais a proteção que
+   * evitou o sorteio e a mochila de reposição. O `detail` de `item-lost-on-death` é
+   * `itemId/quantidade/instanceId/characterId`: o dono vai junto porque em party as linhas dos
+   * membros compartilham a mesma lista (`Session.notableEvents`), e o `instanceId` é o que liga a
+   * linha à instância apagada de `item_instance` (`removedInstances`).
+   */
+  #recordItemLoss(session: Session, character: CharacterRuntime, outcome: ItemLossOutcome): void {
+    for (const { item } of outcome.lost) {
+      session.record(
+        'item-lost-on-death',
+        `${item.itemId}/${String(item.quantity)}/${item.instanceId}/${character.id}`,
+      );
+    }
+    if (outcome.protectedBy === 'amulet') {
+      const amulet = character.inventory.equippedAt('neck');
+      session.record('item-loss-protected', amulet?.itemId ?? 'amulet');
+    } else if (outcome.protectedBy === 'blessings') {
+      session.record('item-loss-protected', 'blessings');
+    }
+    if (outcome.replacement !== null) session.record('backpack-replaced', outcome.replacement.itemId);
+  }
+
+  /**
+   * O id de uma instância NOVA criada por esta sessão para o personagem (`lootSeq`): o prefixo
+   * `${session.id}:` é o que `acquiredBy` filtra para virar linha de `item_instance`, e em party
+   * o id leva o dono no meio — dois membros com `lootSeq` 0 colidiriam. Mesmo formato de
+   * `#instantiateCorpseItems` e `#useChest`; o critério é o TIPO de sessão, não a contagem.
+   */
+  #newInstanceId(session: Session, character: CharacterRuntime): string {
+    return this.#party !== undefined
+      ? `${session.id}:${character.id}:${String(character.lootSeq++)}`
+      : `${session.id}:${String(character.lootSeq++)}`;
   }
 
   /**

@@ -80,6 +80,18 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   cada golpe — um `Record` com chave dinâmica e `delete` cai em modo dicionário — e mesmo assim
   a atribuição custa ~2 µs por tick por instância no `pnpm bench:hunts` (18 → 21). É o preço
   de saber quem matou; não o pague duas vezes registrando de novo em outro lugar.
+- **A perda de item na morte é `item-loss.ts` (#571, ADR 0042 d.4), DESLIGADA no conteúdo real
+  (`deathPenalty.itemLoss.enabled: false` — decisão do dono em aberto), e a ORDEM é contrato.**
+  `HuntRuleset#onCharacterDied` chama `loseItemsOnDeath` ANTES de `applyDeathPenalty` e do consumo
+  das bênçãos (o Canary roda `dropCorpse` antes de `death()`: a chance lê a contagem de bênçãos de
+  ANTES, e o Amulet of Loss protege antes de ser gasto) e `consumeLossAmulet` DEPOIS (lê o level já
+  rebaixado). Cada slot vestido consome UM sorteio na ordem de `CANARY_SLOT_ORDER` — inclusive o que
+  não cai, e nenhum se o colar ou as bênçãos protegem: trocar a ordem, ou parar na primeira perda,
+  muda quem perde o quê com a mesma semente. O item é DESTRUÍDO (`removedInstances`, o mesmo caminho
+  de `sell-items`): não há cadáver de jogador, então nada aqui devolve o item a lugar nenhum. A
+  mochila perdida leva o vetor inteiro (`Inventory.loseEquipped`), a bolsa nunca. Container para a
+  regra é `kind: 'container'` OU `quiver` — a flag `container` do cliente. Sem estado novo: nada
+  disto entra no snapshot.
 - **Loot sorteia com o `Rng` da sessão, gold antes de item, e `chance: 0` não consome
   sorteio.** Ordem e semente são contrato: mudar qualquer um dos dois muda o que toda hunt
   retomada rende. `Math.random` continua proibido, e `grep -rn "Math.random" src` é vazio.
