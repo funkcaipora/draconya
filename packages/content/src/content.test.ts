@@ -5,7 +5,9 @@ import {
   buildContent, compileElementHealing, compileMonster, compileReflect, computeVersion, ContentError, placeholderAppearances,
 } from './content.js';
 import type { RawContent } from './content.js';
-import { monsterSchema, NEUTRAL_RATES, ratesSchema, wallSetOf } from './schemas.js';
+import {
+  CONDITION_IMMUNITIES, DAMAGE_OVER_TIME_CONDITION_IMMUNITY, monsterSchema, NEUTRAL_RATES, ratesSchema, wallSetOf,
+} from './schemas.js';
 import { loadContent } from './load.js';
 
 const rat = {
@@ -2813,15 +2815,39 @@ describe('imunidade de condição, invisibilidade e a Paralyze Rune (#559/#592, 
     expect(() => buildContent(base({ monsters: [{ ...rat, defenses: [chaveErrada] }] }))).toThrow(ContentError);
   });
 
-  it('monsterSchema.conditionImmunities aceita paralyze/drunk/invisible, e só eles', () => {
+  it('monsterSchema.conditionImmunities aceita paralyze/drunk/invisible e as oito DOTs, e só elas', () => {
     const content = buildContent(base({
-      monsters: [{ ...rat, conditionImmunities: ['paralyze', 'invisible'] }],
+      monsters: [{ ...rat, conditionImmunities: ['paralyze', 'invisible', 'bleeding', 'burning'] }],
     }));
-    expect(content.monsters.get('rat')?.conditionImmunities).toEqual(['paralyze', 'invisible']);
+    expect(content.monsters.get('rat')?.conditionImmunities)
+      .toEqual(['paralyze', 'invisible', 'bleeding', 'burning']);
+    for (const dot of ['bleeding', 'poison', 'burning', 'electrified', 'cursed', 'drowning', 'freezing', 'dazzled']) {
+      expect(() => buildContent(base({ monsters: [{ ...rat, conditionImmunities: [dot] }] })), dot)
+        .not.toThrow();
+    }
     expect(() => buildContent(base({
-      // `outfit`/`bleed` não têm modelo ainda (#559) — o importador os reporta, o schema recusa.
+      // `outfit` não tem modelo ainda (M44-03) — o importador o reporta, o schema recusa.
       monsters: [{ ...rat, conditionImmunities: ['outfit'] }],
     }))).toThrow(ContentError);
+    // O nome do CANARY (`bleed`) é do importador; o schema fala o vocabulário do ADR 0041.
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, conditionImmunities: ['bleed'] }],
+    }))).toThrow(ContentError);
+  });
+
+  it('cada tipo de dano que gera DOT casa com UMA imunidade do vocabulário — `Combat::DamageToConditionType`', () => {
+    // A tabela é a do Canary (`combat.cpp:278-307`): oito tipos, oito condições, todas distintas.
+    expect(DAMAGE_OVER_TIME_CONDITION_IMMUNITY).toEqual({
+      physical: 'bleeding', earth: 'poison', fire: 'burning', energy: 'electrified',
+      death: 'cursed', drown: 'drowning', ice: 'freezing', holy: 'dazzled',
+    });
+    const values = Object.values(DAMAGE_OVER_TIME_CONDITION_IMMUNITY);
+    expect(new Set(values).size).toBe(8);
+    for (const value of values) expect(CONDITION_IMMUNITIES).toContain(value);
+    // Os tipos que não geram condição (`CONDITION_NONE`) não têm imunidade.
+    for (const type of ['lifedrain', 'manadrain', 'arcane'] as const) {
+      expect(DAMAGE_OVER_TIME_CONDITION_IMMUNITY[type]).toBeUndefined();
+    }
   });
 
   it('monsterSchema.conditionImmunities é [] por padrão — preserva bit a bit todo monstro sem o campo', () => {

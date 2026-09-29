@@ -1628,6 +1628,43 @@ export const DRUNK_CONDITION_KEY = 'drunk' as const;
 export const INVISIBLE_CONDITION_KEY = 'invisible' as const;
 
 /**
+ * As condições a que um monstro pode declarar imunidade (`monster.immunities[].condition` do
+ * Canary, ADR 0041 decisão 2): `paralyze` (o sinal NEGATIVO da condição de velocidade), `drunk`,
+ * `invisible` (que o Canary reaproveita como "enxerga invisível", ver `monsterSchema`) e as oito
+ * DOTs de `DAMAGE_OVER_TIME_CONDITION_IMMUNITY`. `outfit` — 119 monstros o declaram imune, mas o
+ * Draconya ainda não tem a condição — entra com o M44-03.
+ */
+export const CONDITION_IMMUNITIES = [
+  'paralyze', 'drunk', 'invisible',
+  'bleeding', 'poison', 'burning', 'electrified', 'cursed', 'drowning', 'freezing', 'dazzled',
+] as const;
+export type ConditionImmunity = (typeof CONDITION_IMMUNITIES)[number];
+
+/**
+ * O tipo de condição de DANO AO LONGO DO TEMPO que cada tipo de dano gera no Tibia
+ * (`Combat::DamageToConditionType`, Canary `src/creatures/combat/combat.cpp:278-307`; o TFS tem o
+ * mesmo par): fogo queima, energia eletrifica, terra envenena, gelo congela, sagrado ofusca, morte
+ * amaldiçoa, afogamento afoga, físico sangra. `lifedrain`/`manadrain`/`arcane` não geram condição
+ * nenhuma (`CONDITION_NONE`) e por isso não têm entrada.
+ *
+ * É o nome com que o ADR 0041 decisão 1 batiza as oito condições de DOT — e o nome que
+ * `monster.conditionImmunities` usa para a imunidade a cada uma (`Monster::isImmune(ConditionType_t)`,
+ * `monster.cpp:3535`). Uma DOT no `sim` (`ConditionState.tick.damageType`) casa com a imunidade
+ * por esta tabela: a condição não é ADICIONADA a quem é imune, e o dano que ela carregaria nunca
+ * nasce.
+ */
+export const DAMAGE_OVER_TIME_CONDITION_IMMUNITY: Readonly<Partial<Record<DamageType, ConditionImmunity>>> = {
+  physical: 'bleeding',
+  earth: 'poison',
+  fire: 'burning',
+  energy: 'electrified',
+  death: 'cursed',
+  drown: 'drowning',
+  ice: 'freezing',
+  holy: 'dazzled',
+};
+
+/**
  * Uma RODADA do dano ao longo do tempo do Tibia (M31-02): `count` tiques do MESMO `damage`, a
  * cada `intervalMs` — o `addDamage(rounds, interval, value)` que os scripts de magia do Canary
  * usam (Ignite: `addDamage(25, 3000, -45)`) e que o campo de fogo do Dragon Lord também usa
@@ -2352,18 +2389,21 @@ export const monsterSchema = z.strictObject({
   mitigation: monsterMitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
   /**
    * As condições a que o monstro é IMUNE (#559/#592, ADR 0041 decisão 2 — `Monster::isImmune`
-   * do Canary/TFS, `monster.immunities[].condition`). `paralyze`/`drunk`: a condição não é
+   * do Canary/TFS, `monster.immunities[].condition`). `paralyze`/`drunk` e as oito DOTs
+   * (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY`: `bleeding`, `poison`, `burning`…): a condição não é
    * ADICIONADA — `#applyConditionTo` (`sim/rulesets/hunt.ts`) recusa antes de entrar, a mesma
-   * forma que a supressão de `drunk` por anel já usa. `invisible` é o CASO especial que o Canary
-   * também trata à parte: `Monster::canSeeInvisibility() { return isImmune(CONDITION_INVISIBLE);
-   * }` — a MESMA imunidade vira "enxerga quem está invisível", nunca "não pode ficar invisível".
+   * forma que a supressão de `drunk` por anel já usa, e só quando ela vem de um COMBATE (magia,
+   * runa, ability) contra outro alvo — `Combat::CombatConditionFunc` do Canary; campo de tile e
+   * auto-aplicação não consultam a imunidade. `invisible` é o CASO especial que o Canary também
+   * trata à parte: `Monster::canSeeInvisibility() { return isImmune(CONDITION_INVISIBLE); }` — a
+   * MESMA imunidade vira "enxerga quem está invisível", nunca "não pode ficar invisível".
    * `chooseTarget` (`sim/monster/monster.ts`) lê esta chave para decidir se o monstro seleciona
    * ou retém um alvo invisível. Ausente é `[]`, o monstro de sempre, sem imunidade nenhuma —
-   * preserva bit a bit todo monstro já importado. Outras chaves do Canary sem modelo aqui
-   * (`outfit`, `bleed`…) ficam de fora, e o importador as reporta em vez de descartar em
-   * silêncio (`scripts/catalog/monsters.ts`).
+   * preserva bit a bit todo monstro já importado. `outfit` (119 monstros) fica de fora até o
+   * M44-03 trazer a condição; o importador o reporta em vez de descartar em silêncio
+   * (`scripts/catalog/monsters.ts`).
    */
-  conditionImmunities: z.array(z.enum(['paralyze', 'drunk', 'invisible'])).default([]),
+  conditionImmunities: z.array(z.enum(CONDITION_IMMUNITIES)).default([]),
   /**
    * A cura por elemento (#683, M30-G6; `monster.heals` do Canary): por tipo, o PERCENTUAL
    * INTEIRO do dano que o atinge — já crítico, ANTES de qualquer bloqueio, resistência ou
