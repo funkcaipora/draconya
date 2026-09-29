@@ -1792,6 +1792,56 @@ describe('catálogo de itens (FUN-76)', () => {
   });
 });
 
+describe('a perda de item na morte no catálogo (#571, ADR 0042 decisão 4)', () => {
+  const mochila = { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', weight: 18, value: 0, initialSlots: 20 };
+  const bag = { id: 'bag', name: 'Bag', kind: 'container', slot: 'back', weight: 8, value: 1, initialSlots: 8 };
+  const colar = {
+    id: 'amulet-of-loss', name: 'Amulet of Loss', kind: 'amulet', slot: 'neck', weight: 4.2, value: 0,
+    charges: 1, protectsOnDeath: true,
+  };
+  const itemLoss = {
+    enabled: true, lossPercentByBlessings: [100, 70, 45, 25, 10, 0, 0, 0],
+    nonContainerDivisor: 10, replacementContainerId: 'bag',
+  };
+  const withLoss = (loss: unknown): NonNullable<RawContent['progression']> =>
+    [{ ...baseline, deathPenalty: { ...baseline.deathPenalty, itemLoss: loss } }] as unknown as NonNullable<RawContent['progression']>;
+
+  it('o Amulet of Loss protege por dado — `protectsOnDeath` só vale em item do slot do pescoço', () => {
+    expect(buildContent(base({ items: [colar] })).items.get('amulet-of-loss')?.protectsOnDeath).toBe(true);
+    // Ausente é o item comum, e o default do schema é `false`: nenhum item existente muda.
+    expect(buildContent(base({ items: [{ ...colar, protectsOnDeath: undefined }] }))
+      .items.get('amulet-of-loss')?.protectsOnDeath).toBe(false);
+    // O Canary confere só `CONST_SLOT_NECKLACE`: a flag em outro slot nunca seria lida.
+    expect(() => buildContent(base({ items: [{ ...colar, kind: 'ring', slot: 'finger' }] })))
+      .toThrow(/protectsOnDeath só vale em item de slot "neck"/);
+  });
+
+  it('aceita o bloco `itemLoss` com uma bag de reposição de verdade, e sem ele o conteúdo monta igual', () => {
+    const content = buildContent(base({ items: [mochila, bag], progression: withLoss(itemLoss) }));
+    expect(content.progression?.deathPenalty.itemLoss).toEqual(itemLoss);
+    // Opcional: conteúdo de teste sem o bloco não perde item nenhum.
+    expect(buildContent(base({ items: [mochila, bag] })).progression?.deathPenalty.itemLoss).toBeUndefined();
+  });
+
+  it('recusa a reposição que não existe, ou que não é uma mochila de `back`', () => {
+    expect(() => buildContent(base({ items: [mochila], progression: withLoss(itemLoss) })))
+      .toThrow(/replacementContainerId "bag" não existe/);
+    const espada = { id: 'bag', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 10, value: 0, attack: 10 };
+    expect(() => buildContent(base({ items: [espada], progression: withLoss(itemLoss) })))
+      .toThrow(/precisa ser um container de slot "back"/);
+  });
+
+  it('a forma do bloco é fechada: chance fora de 0–100, divisor não positivo ou tabela vazia recusam', () => {
+    const attempt = (loss: unknown) => () =>
+      buildContent(base({ items: [mochila, bag], progression: withLoss(loss) }));
+    expect(attempt({ ...itemLoss, lossPercentByBlessings: [101] })).toThrow();
+    expect(attempt({ ...itemLoss, lossPercentByBlessings: [] })).toThrow();
+    expect(attempt({ ...itemLoss, nonContainerDivisor: 0 })).toThrow();
+    // Campo que o schema não declara é erro, e não um valor ignorado em silêncio.
+    expect(attempt({ ...itemLoss, floor: 8 })).toThrow();
+  });
+});
+
 describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)', () => {
   const espada = { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 10, value: 0, attack: 10 };
 

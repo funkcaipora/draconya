@@ -1,0 +1,10 @@
+{
+  "id": "bag",
+  "name": "Bag",
+  "kind": "container",
+  "slot": "back",
+  "initialSlots": 8,
+  "weight": 8,
+  "value": 1,
+  "_open": "A mochila que a MORTE devolve a quem ficou sem nenhuma (#571, ADR 0042 decisão 4): `Blessings.PlayerDeath` do Canary faz `player:addItem(ITEM_BAG, 1, false, CONST_SLOT_BACKPACK)` (`data/libs/systems/blessing.lua:94-96`, `ITEM_BAG` = 2853, `src/utils/utils_definitions.hpp:604`). `initialSlots: 8` e `weight: 8` (800 no `items.xml`, a mesma escala do backpack: 1800 → 18) são o `<item id=\"2853\" name=\"bag\">` do Canary (`data/items/items.xml:5929-5936`, `containersize` 8, 800 de peso, `slot backpack`). `value: 1` é provisório, pela mesma régua do backpack (¼ do preço de compra do NPC — `al_dee.lua`/`lee_delle.lua` vendem a bag por 4, `zora.lua` por 5); o NPC do Canary não a compra de volta. Aparência 2853 conferida no inventário do pacote."
+}

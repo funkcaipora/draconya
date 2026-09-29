@@ -1,0 +1,7 @@
+{
+  "id": "amulet-of-loss",
+  "reason": "#571 (ADR 0042 decisão 4): o Amulet of Loss (`ITEM_AMULETOFLOSS`, id 3057 — `src/utils/utils_definitions.hpp:638`) protege da perda de item na morte por um id FIXO em código Lua (`Blessings.PlayerDeath`, `data/libs/systems/blessing.lua:83`), não por atributo do `items.xml` — o importador só transcreve o XML e por isso não gera a flag. O Draconya lê a mesma regra por dado (`protectsOnDeath`, só em slot `neck`), e a morte consome UM colar assim (`Player::death`, `src/creatures/players/player.cpp:4213-4219`).",
+  "patch": {
+    "protectsOnDeath": true
+  }
+}

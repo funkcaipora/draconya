@@ -1403,6 +1403,41 @@ describe('wave and beam areas transcribed from the Canary AREA_* (#679)', () => 
   });
 });
 
+describe('a perda de item na morte do conteúdo real (#571, ADR 0042 decisão 4)', () => {
+  it('carrega a tabela do Canary DESLIGADA — a decisão do dono (destruir vs. nunca perder) segue em aberto', () => {
+    // `Blessings.LossPercent[n].item` (`blessing.lua:36-46`): 100/70/45/25/10/0… por contagem de
+    // bênçãos. `enabled: false` é a regra provisória "nunca perde item" (`docs/product/death.md`
+    // §3.8) — ligar é trocar UM booleano, e este teste é o que avisa quem o trocar de que a morte
+    // passou a DESTRUIR itens de verdade.
+    const { progression } = loadContent(DATA);
+    const loss = progression?.deathPenalty.itemLoss;
+    expect(loss).toEqual({
+      enabled: false,
+      lossPercentByBlessings: [100, 70, 45, 25, 10, 0, 0, 0],
+      nonContainerDivisor: 10,
+      replacementContainerId: 'bag',
+    });
+  });
+
+  it('a bag de reposição é o `ITEM_BAG` do Canary (8 lugares, nas costas) e tem aparência', () => {
+    const { items } = loadContent(DATA);
+    const bag = items.get('bag');
+    expect(bag).toMatchObject({ kind: 'container', slot: 'back', initialSlots: 8, weight: 8 });
+    // 2853 é o clientid da bag no pacote (`items.xml` id 2853) — a tabela de aparências resolve.
+    expect(bag?.appearanceId).toBe(2853);
+  });
+
+  it('o Amulet of Loss importado ganha `protectsOnDeath` por override — o importador só transcreve o XML', () => {
+    const { items } = loadContent(DATA);
+    expect(items.get('amulet-of-loss')).toMatchObject({
+      slot: 'neck', charges: 1, protectsOnDeath: true, appearanceId: 3057,
+    });
+    // E é o ÚNICO colar que protege: qualquer outro com a flag seria uma proteção não declarada.
+    const protectors = [...items.values()].filter((item) => item.protectsOnDeath).map((item) => item.id);
+    expect(protectors).toEqual(['amulet-of-loss']);
+  });
+});
+
 describe('alma da vocação promovida (#566 + #593)', () => {
   it('as quatro vocações promovidas carregam o teto e a cadência de alma do Canary (200 / 15 s)', () => {
     const content = loadContent(DATA);
