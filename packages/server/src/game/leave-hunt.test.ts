@@ -11,8 +11,8 @@
 
 import { CharacterRuntime, createHuntSession } from '@draconya/sim';
 import type { HuntRuleset, Session } from '@draconya/sim';
-import { buildContent } from '@draconya/content';
-import type { RawContent } from '@draconya/content';
+import { BOT_VOCABULARY_VERSION_V1, botConfigSchema, buildContent } from '@draconya/content';
+import type { BotConfig, RawContent } from '@draconya/content';
 import type { S2CMessage } from '@draconya/protocol';
 import { describe, expect, it, vi } from 'vitest';
 import { createLogger } from '../log.js';
@@ -37,7 +37,14 @@ interface Saved { characterId: string; sessionId: string; reason: string }
  * Com mais de um id é uma PARTY (`partyOptions`): os personagens são donos da MESMA sessão, como
  * o ticket de party os põe.
  */
-function fixture(options: { exitDelayMs?: number; members?: readonly string[] } = {}) {
+function fixture(options: {
+  exitDelayMs?: number;
+  members?: readonly string[];
+  /** Quem leva a regra de saída `party-member-lost` (§13.9): sai junto quando outro membro sai. */
+  exitOnLoss?: readonly string[];
+  /** As primeiras N gravações de extrato FALHAM (o Redis que pisca) — a sucessão que não fecha. */
+  failSaves?: number;
+} = {}) {
   const members = options.members ?? ['hero'];
   const raw = rawTestContent();
   const shaped: RawContent = {
@@ -53,9 +60,18 @@ function fixture(options: { exitDelayMs?: number; members?: readonly string[] } 
 
   let now = 0;
   const saved: Saved[] = [];
+  let failuresLeft = options.failSaves ?? 0;
   const receipts = {
-    save: async (r: Saved) => { saved.push({ characterId: r.characterId, sessionId: r.sessionId, reason: r.reason }); },
+    save: async (r: Saved) => {
+      if (failuresLeft > 0) { failuresLeft -= 1; throw new Error('receipt store unavailable'); }
+      saved.push({ characterId: r.characterId, sessionId: r.sessionId, reason: r.reason });
+    },
   } as unknown as ReceiptStore;
+  const exitOnLoss: BotConfig = botConfigSchema.parse({
+    version: BOT_VOCABULARY_VERSION_V1,
+    heal: [], potion: [], attack: [], rune: [], support: [],
+    exit: [{ kind: 'party-member-lost' }],
+  });
   const character = (id: string) => new CharacterRuntime({
     id, position: { x: 1, y: 1, z: 7 }, health: 1_000, maxHealth: 1_000, mana: 0, maxMana: 0,
     level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
@@ -67,6 +83,9 @@ function fixture(options: { exitDelayMs?: number; members?: readonly string[] } 
       shared = createHuntSession({
         id: 'hunt-1', content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
         ...(members.length > 1 ? { partyOptions: { leaderId: members[0] as string, mode: 'shared' as const } } : {}),
+        ...(options.exitOnLoss === undefined
+          ? {}
+          : { botConfigs: Object.fromEntries(options.exitOnLoss.map((id) => [id, exitOnLoss])) }),
       });
       for (const id of members) shared.enter(character(id));
     }
@@ -229,10 +248,23 @@ describe('leave-hunt pede a saída ao ruleset (#802)', () => {
     expect(pushed?.remainingMs).toBeGreaterThan(59_000);
     expect(pushed?.remainingMs).toBeLessThanOrEqual(60_000);
 
-    // Nos 60 s do PRIMEIRO golpe (quando a trava antiga venceria), ainda em combate.
-    f.runFor(29_000);
+    // Passa dos 60 s do PRIMEIRO golpe (t = 61 s, quando a trava antiga venceria): ainda em
+    // combate, porque o golpe novo empurrou o prazo para 91 s. Mutação que mata: tirar o segundo
+    // golpe — sem ele a saída conclui aos 61 s e este `expect` falha.
+    f.runFor(30_000);
+    await f.settle();
+    expect(f.now()).toBeGreaterThan(61_000);
+    expect(f.typeOf('hero')).toBe('hunt');
+    expect(f.saved).toEqual([]);
+
+    // E conclui no prazo empurrado, e não antes dele.
+    f.runFor(29_600);
     await f.settle();
     expect(f.typeOf('hero')).toBe('hunt');
+    f.runFor(500);
+    await f.settle();
+    expect(f.typeOf('hero')).toBe('city');
+    expect(f.saved.map((s) => s.reason)).toEqual(['manual-exit']);
   });
 
   it('cancel-exit desfaz a saída: `exit-pending { active: false }`, e a hunt segue depois do prazo', async () => {
@@ -389,5 +421,107 @@ describe('quem sai da party por dentro do sim vai para a Cidade, e a party não 
     expect(f.typeOf('b')).toBe('city');
     expect(f.hunt().ended).toBeNull();
     expect(f.typeOf('a')).toBe('hunt');
+  });
+});
+
+describe('a saída imediata que encerra a sessão não perde o extrato de quem saiu (#802)', () => {
+  // `requestExit` conclui NA HORA (sem `exitDelayMs`, fora de combate) e o `#depart` do membro
+  // pode encerrar a sessão na mesma chamada. O `member-left` dele fica na fila do `sim`, e o
+  // ciclo não visita mais sessão encerrada: o host tem que drená-lo ANTES de disparar a sucessão.
+  const bySaved = (saved: readonly Saved[]) =>
+    [...saved].sort((x, y) => x.characterId.localeCompare(y.characterId));
+
+  it('o voto de encerrar que a saída de quem faltava completa: os três extratos, os três na Cidade', async () => {
+    // Party de três; o líder propõe, `b` aprova, `c` NÃO aprovou — e sai. Sem `c` entre os
+    // presentes o voto passa a ser unânime e a sessão acaba com `party-vote`, dentro do
+    // `requestExit`. Mutação que mata: checar `ended` antes de drenar os `member-left` — o extrato
+    // de `c` (XP, gold, ledger) some, e ele fica preso numa hunt que já acabou.
+    const f = fixture({ members: ['a', 'b', 'c'] });
+    const a = await attach(f, 'a');
+    const b = await attach(f, 'b');
+    const c = await attach(f, 'c');
+    f.runFor(1_000);
+
+    f.host.handle(a.viewer, { type: 'party-end-vote', approve: true });
+    f.host.handle(b.viewer, { type: 'party-end-vote', approve: true });
+    expect(f.hunt().ended).toBeNull();
+
+    f.host.handle(c.viewer, { type: 'leave-hunt' });
+    await f.settle();
+
+    expect(f.hunt().ended).toBe('party-vote');
+    expect(bySaved(f.saved)).toEqual([
+      { characterId: 'a', sessionId: 'hunt-1', reason: 'party-vote' },
+      { characterId: 'b', sessionId: 'hunt-1', reason: 'party-vote' },
+      { characterId: 'c', sessionId: 'hunt-1', reason: 'manual-exit' },
+    ]);
+    expect(f.typeOf('a')).toBe('city');
+    expect(f.typeOf('b')).toBe('city');
+    expect(f.typeOf('c')).toBe('city');
+    expect(f.released).toEqual([]);
+    f.host.flush();
+    expect(ofType(c.socket.received(), 'session-ended').map((m) => m.reason)).toEqual(['manual-exit']);
+  });
+
+  it('party-member-lost que esvazia a party: quem saiu e quem foi na cascata salvam o extrato', async () => {
+    // Dois membros; `b` tem a regra "alguém do grupo saiu". A saída imediata de `a` derruba `b` em
+    // cascata, `participants` fica vazio e a sessão acaba com `exit-rule` — sem NENHUM presente
+    // para `session.receipts()`. Os dois extratos só existem nos `member-left`.
+    const f = fixture({ members: ['a', 'b'], exitOnLoss: ['b'] });
+    const a = await attach(f, 'a');
+    await attach(f, 'b');
+    f.runFor(1_000);
+
+    f.host.handle(a.viewer, { type: 'leave-hunt' });
+    await f.settle();
+
+    expect(f.hunt().ended).toBe('exit-rule');
+    expect(bySaved(f.saved)).toEqual([
+      { characterId: 'a', sessionId: 'hunt-1', reason: 'manual-exit' },
+      { characterId: 'b', sessionId: 'hunt-1', reason: 'exit-rule' },
+    ]);
+    expect(f.typeOf('a')).toBe('city');
+    expect(f.typeOf('b')).toBe('city');
+    expect(f.released).toEqual([]);
+  });
+
+  it('o mesmo caminho SEM visualizador (idle-first): a fila é drenada e os extratos salvos', async () => {
+    // Invariante 3: nada disso depende de alguém assistindo. `#presentMoves` sem visualizador
+    // enfileira os `member-left` em `departures`, e é essa fila que a saída imediata drena.
+    const f = fixture({ members: ['a', 'b'], exitOnLoss: ['b'] });
+    const a = await attach(f, 'a');
+    const b = await attach(f, 'b');
+    f.runFor(1_000);
+    f.host.handle(a.viewer, { type: 'leave-hunt' });
+    f.host.detach(a.viewer);
+    f.host.detach(b.viewer);
+    await f.settle();
+
+    expect(bySaved(f.saved).map((s) => s.characterId)).toEqual(['a', 'b']);
+    expect(f.typeOf('a')).toBe('city');
+    expect(f.typeOf('b')).toBe('city');
+  });
+});
+
+describe('leave-hunt depois de uma sucessão que falhou (#802)', () => {
+  it('o segundo clique é o retry manual: grava o extrato e leva o personagem à Cidade', async () => {
+    // A primeira gravação falha (Redis piscando): a sessão está encerrada, o personagem continua
+    // nela, e o ciclo a ignora. Antes do #802 o segundo clique passava pela transição e
+    // recuperava; o guarda `ended` do host o engolia em silêncio. Mutação que mata: voltar a
+    // `if (ended !== null) return` sem distinguir "em voo" de "falhou".
+    const f = fixture({ failSaves: 1 });
+    const { viewer } = await attach(f);
+
+    f.host.handle(viewer, { type: 'leave-hunt' });
+    await f.settle();
+    expect(f.hunt().ended).toBe('manual-exit');
+    expect(f.saved).toEqual([]);
+    expect(f.typeOf('hero')).toBe('hunt');
+
+    f.host.handle(viewer, { type: 'leave-hunt' });
+    await f.settle();
+    expect(f.saved).toEqual([{ characterId: 'hero', sessionId: 'hunt-1', reason: 'manual-exit' }]);
+    expect(f.typeOf('hero')).toBe('city');
+    expect(f.released).toEqual([]);
   });
 });

@@ -1110,6 +1110,14 @@ export class SessionHost {
   readonly #preparations = new Map<string, Promise<void>>();
   /** Transições em voo, por personagem. Ver `transition`. */
   readonly #transitions = new Map<string, Promise<void>>();
+  /**
+   * Personagens cuja sucessão — extrato e Cidade, `#settleOne` — está EM VOO (#802). É o que o
+   * `leave-hunt` consulta quando a sessão já acabou: em voo, o segundo clique não tem o que fazer
+   * (e seguir a transição o poria em corrida com a sucessão que já corre); parada, é porque
+   * FALHOU — e o segundo clique é o retry manual que sempre existiu. Só o processo dono da
+   * sessão escreve aqui, e o marcador sai no `finally`, com sucesso ou falha.
+   */
+  readonly #settling = new Set<string>();
   #lastLagWarningMs = Number.NEGATIVE_INFINITY;
   /** Quanto tempo a retomada pulou, esperando o primeiro visualizador para ser contado. */
   readonly #resumedGapMs = new Map<string, number>();
@@ -2782,8 +2790,9 @@ export class SessionHost {
 
   /**
    * O `leave-hunt` do jogador (#802): PEDE a saída ao ruleset (`requestExit`), que a conclui
-   * quando o `exitDelayMs` vence e o personagem está fora de combate (#625, o
-   * `CONDITION_INFIGHT` do Canary). Nada aqui encerra a sessão por conta própria.
+   * quando o `exitDelayMs` vence e o personagem está fora de combate (#625: a janela de 60 s do
+   * `CONDITION_INFIGHT` do Canary, medida por dano aplicado — ver `combat/in-fight.ts`). Nada
+   * aqui encerra a sessão por conta própria.
    *
    * **Idle-first (invariante 3).** A espera é um evento da fila do `sim`, então ela vence com ou
    * sem visualizador — o jogador que pede a saída e fecha a aba sai do mesmo jeito, no mesmo
@@ -2805,25 +2814,34 @@ export class SessionHost {
       void this.#requestTransition(viewer, { to: 'city' });
       return;
     }
-    // A sessão JÁ acabou e a sucessão dela (extrato, Cidade) está em andamento — o segundo clique
-    // de uma saída que concluiu na hora. Não há o que pedir, e seguir para a transição aqui a
-    // poria em corrida com o `#succeed` que já corre (o `#transitions` não o conhece): a CAS do
-    // diretório recusaria a segunda, e o caminho de recusa SOLTA o personagem.
-    if (hosted.session.ended !== null) return;
+    // A sessão JÁ acabou. Ou a sucessão dela (extrato, Cidade) está em andamento — o segundo
+    // clique de uma saída que concluiu na hora —, e não há o que pedir: seguir para a transição
+    // aqui a poria em corrida com o `#succeed` que já corre (o `#transitions` não o conhece), a
+    // CAS do diretório recusaria a segunda, e o caminho de recusa SOLTA o personagem. Ou a
+    // sucessão FALHOU e o personagem ficou numa sessão encerrada que o ciclo ignora ("Failed to
+    // move the character to the next session"): aí o clique é o retry manual que existia antes
+    // do #802, pela transição de sempre — o extrato é idempotente (`credited`) e o `#replace`
+    // conclui o que faltou.
+    if (hosted.session.ended !== null) {
+      if (!this.#settling.has(characterId)) void this.#requestTransition(viewer, { to: 'city' });
+      return;
+    }
     ruleset.requestExit(hosted.session, characterId);
     // Sem `exitDelayMs` e fora de combate a saída conclui NA HORA, aqui, fora do ciclo — e o
-    // ciclo pula a sessão já encerrada. Mesma regra do `#partyEndVote`: quem encerra fora do
-    // ciclo dispara a sucessão.
+    // ciclo pula a sessão já encerrada. A ORDEM é a do `cycle`: os `member-left` PRIMEIRO, a
+    // sucessão da sessão depois. Quem sai na hora deixa o próprio `member-left` na fila do `sim`
+    // (`#depart`), e a mesma chamada pode ENCERRAR a sessão — o voto de encerrar que a saída dele
+    // completa, a cascata `party-member-lost` que esvazia a party. `Session.end` só monta o
+    // extrato de quem ainda está presente e `#succeed` só o liquida: sem drenar antes, o extrato
+    // de quem saiu (XP, gold, ledger) ficaria para sempre na fila de uma sessão que o ciclo não
+    // visita mais, e o personagem preso nela.
+    this.#presentMoves(hosted);
+    if (hosted.departures.length > 0) void this.#settleDepartures(hosted);
+    // Quem encerra fora do ciclo dispara a sucessão (mesma regra do `#partyEndVote`).
     if (hosted.session.ended !== null) {
       void this.#succeed(hosted);
       return;
     }
-    // O membro de uma party que saiu NA HORA deixou um `member-left` na fila de eventos do `sim`.
-    // Drená-lo aqui, e não no próximo ciclo, mantém a resposta imediata que o `leave-hunt` sempre
-    // teve — e o ciclo pula a sessão que ainda não venceu o período, então esperar por ele
-    // atrasaria a saída em até um período de tick (um segundo, desanexada).
-    this.#presentMoves(hosted);
-    if (hosted.departures.length > 0) void this.#settleDepartures(hosted);
     // A espera pendente chega ao cliente já, e não só no ciclo seguinte.
     this.#presentExit(hosted);
   }
@@ -3981,14 +3999,24 @@ export class SessionHost {
   async #succeed(hosted: HostedSession): Promise<void> {
     // Um extrato por participante (#187, #194): cada um credita, avisa os SEUS visualizadores
     // e volta à Cidade, na ordem de entrada. Quem já saiu antes (`member-left`) não está aqui.
-    for (const receipt of hosted.session.receipts()) {
-      if (!this.#charactersOf(hosted.session.id).includes(receipt.characterId)) continue;
+    const receipts = hosted.session.receipts();
+    // Todos marcados ANTES do primeiro `await`: o segundo participante só entra em `#settleOne`
+    // depois de o primeiro terminar, e o clique dele nesse intervalo não pode passar por
+    // "parada" (#802, `#settling`).
+    for (const receipt of receipts) this.#settling.add(receipt.characterId);
+    for (const receipt of receipts) {
+      if (!this.#charactersOf(hosted.session.id).includes(receipt.characterId)) {
+        this.#settling.delete(receipt.characterId);
+        continue;
+      }
       await this.#settleOne(hosted, receipt.characterId, receipt);
     }
   }
 
   /** As saídas enfileiradas por `member-left` (#194), fora do ciclo. */
   async #settleDepartures(hosted: HostedSession): Promise<void> {
+    // A fila inteira é marcada de uma vez, pelo mesmo motivo do `#succeed`.
+    for (const left of hosted.departures) this.#settling.add(left.characterId);
     while (hosted.departures.length > 0) {
       const left = hosted.departures.shift() as MemberLeft;
       // Quem saiu não faz mais parte da sessão: o id numérico dele é liberado aqui, como o
@@ -4001,6 +4029,7 @@ export class SessionHost {
   async #settleOne(
     hosted: HostedSession, characterId: string, receipt: Receipt, departed?: CharacterRuntime,
   ): Promise<void> {
+    this.#settling.add(characterId);
     try {
       await this.#saveReceipt(characterId, hosted, receipt, departed);
       for (const viewer of hosted.viewers) {
@@ -4030,6 +4059,8 @@ export class SessionHost {
         { error, characterId, sessionId: hosted.session.id },
         'Failed to move the character to the next session',
       );
+    } finally {
+      this.#settling.delete(characterId);
     }
   }
 
