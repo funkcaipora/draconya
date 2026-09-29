@@ -7,7 +7,7 @@
 // devolveria o problema que o ADR 0007 evita: o painel de inventário re-renderizando porque a
 // mana mexeu.
 
-import type { S2CProps } from '@draconya/protocol';
+import type { FightModeName, S2CProps } from '@draconya/protocol';
 
 export type ActiveCondition = S2CProps<'active-conditions'>['conditions'][number];
 
@@ -248,6 +248,13 @@ export interface HudState {
    * vocação (`catalogue.vocations`) quando `true`. Chega em `player-stats`/`session-state`.
    */
   readonly promoted: boolean;
+  /**
+   * A postura de luta (M30-03, #550): a que o SERVIDOR confirmou em `player-stats`, nunca a que o
+   * clique pediu — o cliente não calcula nem antecipa o efeito (invariante 4), então o botão só
+   * marca o novo modo quando o `player-stats` volta. `attack` até chegar: é o `FIGHTMODE_ATTACK`
+   * do Canary, o que o servidor considera para quem nunca escolheu.
+   */
+  readonly fightMode: FightModeName;
 
   /** Ida e volta medida pelo `ping`/`pong`, ou `null` enquanto não houve nenhum. */
   readonly latencyMs: number | null;
@@ -381,6 +388,7 @@ export const INITIAL_HUD: HudState = {
   soulMax: 0,
   vocationId: null,
   promoted: false,
+  fightMode: 'attack',
   latencyMs: null,
   connection: 'idle',
   onlinePlayers: null,

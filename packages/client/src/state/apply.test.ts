@@ -503,6 +503,24 @@ describe('combat transients (FUN-106)', () => {
 });
 
 describe('HUD deltas', () => {
+  it('the posture the server confirmed replaces the HUD one, and only player-stats carries it (M30-03, #550)', () => {
+    expect(hud.get().fightMode).toBe('attack');
+    const stats = (fightMode: 'attack' | 'balanced' | 'defense') => ({
+      type: 'player-stats' as const,
+      health: 150, maxHealth: 185, mana: 30, maxMana: 35,
+      level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+      ammo: { arrow: null, bolt: null }, vocationId: null, promoted: false, fightMode,
+      speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+    });
+
+    applyMessage(stats('defense'), 0);
+    expect(hud.get().fightMode).toBe('defense');
+    applyMessage(stats('balanced'), 0);
+    expect(hud.get().fightMode).toBe('balanced');
+    applyMessage(stats('attack'), 0);
+    expect(hud.get().fightMode).toBe('attack');
+  });
+
   it('applies stats and notifies once', () => {
     const notified = vi.fn();
     subscribeSlice(hud, (state) => state.health, notified);
@@ -514,7 +532,7 @@ describe('HUD deltas', () => {
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
         ammo: { arrow: null, bolt: null },
         vocationId: null,
-        promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+        promoted: false, fightMode: 'attack', speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
       },
       0,
     );
@@ -531,7 +549,7 @@ describe('HUD deltas', () => {
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
         ammo: { arrow: null, bolt: null },
         vocationId: null,
-        promoted: false,
+        promoted: false, fightMode: 'attack',
         speed: 125,
         skills: {
           fist: { level: 11, percentToNext: 60 },
@@ -582,7 +600,7 @@ describe('HUD deltas', () => {
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
         ammo: { arrow: null, bolt: null },
         vocationId: null,
-        promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+        promoted: false, fightMode: 'attack', speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
       },
       0,
     );

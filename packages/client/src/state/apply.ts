@@ -242,6 +242,8 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         // Promovido (#566, ADR 0042 decisão 1): a tela troca o nome exibido pelo
         // `promotion.name` da vocação quando `true`.
         promoted: message.promoted,
+        // A postura de luta (#550): a que o servidor confirmou — o botão marca ESTA, não a do clique.
+        fightMode: message.fightMode,
         speed: message.speed,
         skills: skillsOf(message.skills, state.skills),
         soul: message.soul,

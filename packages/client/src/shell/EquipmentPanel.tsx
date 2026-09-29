@@ -12,6 +12,9 @@
 // munição escolhida — ou vazia quando ainda não há seleção — com o preço por tiro; o clique abre
 // o `AmmoPicker`. Sem bow/crossbow, o slot é um slot. O slot `ammo` do corpo continua genérico.
 //
+// **A postura de luta** (M30-03, #550) mora sob a capacidade: o primitivo `ui/Stance`, marcado com
+// a postura que o servidor confirmou, manda `set-fight-mode` ao clique.
+//
 // O clique num item vestido desveste; soltar um item de container em cima veste. O cliente não
 // soma peso (FUN-90) e não decide o que cabe: `capacity` vem pronto do servidor.
 
@@ -22,9 +25,11 @@ import { useHudSlice } from '../state/useSlice.js';
 import { AmmoPicker, ammoFamilyOf, ammoInUse } from './AmmoPicker.js';
 import { dropOn, startDrag } from './ContainerWindow.js';
 import { clickIntent } from './drag-intent.js';
+import { chooseFightMode } from './fight-mode-intent.js';
 import { ItemSprite } from './ItemSprite.js';
 import { Panel } from './ui/Panel.js';
 import { Slot } from './ui/Slot.js';
+import { Stance } from './ui/Stance.js';
 
 /**
  * Os dez lugares do §21.3 e do ADR 0026, em português e na ordem em que o corpo os usa.
@@ -48,6 +53,7 @@ export function EquipmentPanel({ collapsed = false, onToggle }: { collapsed?: bo
   const inventory = useHudSlice((state) => state.inventory);
   const catalogue = useHudSlice((state) => state.catalogue);
   const ammo = useHudSlice((state) => state.ammo);
+  const fightMode = useHudSlice((state) => state.fightMode);
   const [picker, setPicker] = useState<string | null>(null);
   const panelProps = onToggle === undefined ? {} : { onToggle };
 
@@ -150,6 +156,9 @@ export function EquipmentPanel({ collapsed = false, onToggle }: { collapsed?: bo
           <span>Cap</span>
           <span>{`${integer.format(inventory.capacity.used)} / ${integer.format(inventory.capacity.total)} oz`}</span>
         </div>
+        {/* A postura de luta (M30-03, #550): três botões sob a capacidade, como o kit. A marca é a
+            que o SERVIDOR confirmou (`player-stats.fightMode`) — o clique só manda a intenção. */}
+        <Stance value={fightMode} onChange={(mode) => { chooseFightMode(sendIntent, mode); }} />
       </Panel>
       {picker !== null && <AmmoPicker family={picker} onClose={() => { setPicker(null); }} />}
     </>
