@@ -2425,6 +2425,10 @@ combat-v3" mais acima.
   a sequência não depende do VALOR;
 - `lifeLeech`/`manaLeech` são fração do HP aplicado e **não consomem RNG**.
 
+O default neutro é do CÓDIGO, não do conteúdo real: o `baseline.json` declara `critical` (5 %, ×1,1)
+desde o #603, então todo golpe, magia e runa do `combat-v4` consome a rolagem de crítico; o leech
+segue sem declaração.
+
 ### Leech: base, fórmula, clamp e evento
 
 - A base é o **HP efetivamente removido** (`healthDamage`), nunca o resolvido: overkill não rende
