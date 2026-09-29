@@ -296,6 +296,8 @@ export function characterFromTicket(
       ...(initialCharacter.fedMs === undefined ? {} : { fedMs: initialCharacter.fedMs }),
       // As bênçãos (#570, ADR 0052): ausente, a sessão parte sem — ninguém comprou ainda.
       ...(initialCharacter.blessings === undefined ? {} : { blessings: initialCharacter.blessings }),
+      // A postura de luta (#550, M30-03): ausente, a sessão parte do `FIGHTMODE_ATTACK` do Canary.
+      ...(initialCharacter.fightMode === undefined ? {} : { fightMode: initialCharacter.fightMode }),
       // A mochila vem do ticket porque a arma equipada decide o dano (FUN-82). Entrada
       // quebrada vira "sem item", não sessão que não abre.
       ...(isInventoryState(initialCharacter.inventory)

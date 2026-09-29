@@ -182,6 +182,17 @@ export const CLIENT_TO_SERVER = {
    * 33: o 32 é do `charm-assign`.
    */
   'charm-remove': 33,
+  /**
+   * Escolher a postura de luta (M30-03, #550; ADR 0040): ofensiva (`attack`), balanceada
+   * (`balanced`) ou defensiva (`defense`) — o `fightMode` do Canary. INTENÇÃO: o cliente diz
+   * QUAL modo; o efeito (o fator de ataque, o de defesa e o da mitigação) é do servidor
+   * (invariante 4), na sessão dona (invariante 9). A escolha aparece de volta em
+   * `player-stats.fightMode`. Aceita na Cidade e na hunt, como `select-ammo`.
+   *
+   * 35: o 33 é do `charm-remove`, e o 34 está reservado ao `cancel-exit` da #802 (PR #806, ainda
+   * aberta na hora de escolher este número).
+   */
+  'set-fight-mode': 35,
 } as const;
 
 export const SERVER_TO_CLIENT = {

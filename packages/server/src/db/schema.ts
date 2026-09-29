@@ -249,6 +249,15 @@ export const characters = pgTable(
      */
     blessings: bigint('blessings', { mode: 'number' }).notNull().default(0),
 
+    /**
+     * A postura de luta (#550, M30-03, ADR 0040): o `fightMode` do Canary — `attack`, `balanced` ou
+     * `defense` —, o `FIGHTMODE_ATTACK` de quem nunca escolheu. Escolhida na HUD (`set-fight-mode`) e
+     * aplicada pela sessão dona ao dano de arma, à defesa e à mitigação do `combat-v3`. ABSOLUTO,
+     * última escrita vence, como `blessings`: não há ordem entre os três modos, então nada de fusão
+     * por máximo. CHECK no banco (`character_fight_mode`): vocabulário fechado do protocolo.
+     */
+    fightMode: text('fight_mode').notNull().default('attack'),
+
     state: text('state').notNull().default('city'),
     sessionId: text('session_id'),
 
@@ -262,6 +271,10 @@ export const characters = pgTable(
       .on(sql`lower(normalize(${t.name}, NFC))`)
       .where(sql`${t.deletedAt} is null`),
     normalizedName: check('character_name_nfc', sql`${t.name} = normalize(${t.name}, NFC)`),
+    fightModeVocabulary: check(
+      'character_fight_mode',
+      sql`${t.fightMode} in ('attack', 'balanced', 'defense')`,
+    ),
     byAccount: index('character_by_account').on(t.accountId),
   }),
 );

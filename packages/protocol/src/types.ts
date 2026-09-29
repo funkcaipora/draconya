@@ -193,6 +193,16 @@ const itemRefSchema = z.union([
   z.object({ supplyId: z.string().min(1) }),
 ]);
 
+/**
+ * As três posturas de luta do Canary (M30-03, #550; `FightMode_t` de `creatures_definitions.hpp`):
+ * ofensiva, balanceada e defensiva. Vocabulário FECHADO do contrato — o servidor só aceita e só
+ * envia estas. O protocolo repete a lista em vez de importar de `sim` (fronteira do pacote): o
+ * `FightMode` do `sim` é o mesmo conjunto, e o `server` (que enxerga os dois) confere a
+ * igualdade em tempo de compilação.
+ */
+export const FIGHT_MODES = ['attack', 'balanced', 'defense'] as const;
+export type FightModeName = (typeof FIGHT_MODES)[number];
+
 export const C2S_SCHEMAS = {
   authenticate: z.object({ ticket: z.string().min(1), clientVersion: z.string() }),
   ping: z.object({ t: z.number() }),
@@ -400,6 +410,11 @@ export const C2S_SCHEMAS = {
   'charm-assign': z.object({ charmId: z.string().min(1), monsterId: z.string().min(1) }),
   /** Remover a atribuição de um Charm (ADR 0053 d.4): o custo em gold é do servidor. */
   'charm-remove': z.object({ charmId: z.string().min(1) }),
+  /**
+   * Escolher a postura de luta (M30-03, #550). INTENÇÃO: só o modo; os fatores de ataque, de
+   * defesa e de mitigação que ele liga são do servidor (invariante 4).
+   */
+  'set-fight-mode': z.object({ mode: z.enum(FIGHT_MODES) }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */
@@ -1268,6 +1283,12 @@ export const S2C_SCHEMAS = {
      * o HUD mostra a vocação base — nunca uma promoção que não existiu.
      */
     promoted: z.boolean().default(false),
+    /**
+     * A postura de luta (M30-03, #550): o `fightMode` do Canary que o jogador escolheu com
+     * `set-fight-mode`. `default('attack')`: um nó `game` anterior manda sem, e o HUD mostra a
+     * ofensiva — o `FIGHTMODE_ATTACK` que o Canary usa quando ninguém escolheu.
+     */
+    fightMode: z.enum(FIGHT_MODES).default('attack'),
     speed: z.number().int().nonnegative().default(0),
     skills: z.record(z.string().min(1), SkillProgress).default({}),
     magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),

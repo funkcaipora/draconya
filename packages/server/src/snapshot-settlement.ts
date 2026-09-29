@@ -17,6 +17,7 @@
 // É só a metade "vira extrato" — quem chama decide se apaga o snapshot depois (`game/host.ts`
 // só apaga se isto NÃO lançar; o `--reset` faz o mesmo). Ver `docs/product/party.md`.
 
+import { DEFAULT_FIGHT_MODE } from '@draconya/sim';
 import type { CarriedItem, InventoryState, ItemInstanceOverlay, SessionSnapshot } from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
 import type { ReceiptStore } from './receipts.js';
@@ -134,6 +135,10 @@ export async function settleSnapshotAsReceipt(
     // As bênçãos (#570, ADR 0052): ABSOLUTO, nunca gateado por zero — a morte zera DENTRO da
     // sessão, e omitir a chave faria a bênção antiga do Postgres ressuscitar no próximo login.
     ...(owner === undefined ? {} : { blessings: owner.blessings ?? 0 }),
+    // A postura de luta (#550, M30-03): ABSOLUTA e última-escrita-vence. O snapshot OMITE o default
+    // (`getState`), então ausente é a ofensiva do Canary — e é gravada, não pulada: a postura que o
+    // jogador tinha ao cair a sessão é a que vale no próximo login.
+    ...(owner === undefined ? {} : { fightMode: owner.fightMode ?? DEFAULT_FIGHT_MODE }),
     // Vocação e o que a sessão criou (#154): sem isto, um item equipado numa sessão liquidada
     // por fora se perdia, e a arma de vocação com ele.
     ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),

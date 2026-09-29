@@ -8,6 +8,7 @@ import {
   itemSchema, migrateBotConfigV1, placeholderAppearances,
 } from '@draconya/content';
 import type { Ammunition, Appearances, BotConfig, Charm, Progression, RawContent, Vocation } from '@draconya/content';
+import { C2S_SCHEMAS } from '@draconya/protocol';
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import { createLogger } from '../log.js';
 import type { SessionDirectory } from '../directory.js';
@@ -4578,6 +4579,125 @@ describe('a munição escolhida pelo socket (#152, ADR 0026 decisão 4)', () => 
 
     expect(hero.ammo.size).toBe(0);
     expect(warnings(socket)).toHaveLength(1);
+  });
+});
+
+describe('a postura de luta pelo socket (M30-03, #550, ADR 0040)', () => {
+  const shard: Ruleset = {
+    type: 'city', shared: true, hz: () => 0,
+    onEnter: () => {}, onEvent: () => {}, onCreatureDied: () => {}, onEnd: () => {},
+  };
+  const statsOf = (socket: FakeSocket, from = 0) =>
+    socket.received().slice(from).filter((m): m is S2CMessage & { type: 'player-stats' } => m.type === 'player-stats');
+  const attach = () => {
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset);
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    return { host, viewer, socket, hero, before: socket.received().length };
+  };
+
+  it('quem entra sem ter escolhido vê a ofensiva — o `FIGHTMODE_ATTACK` do Canary — no player-stats do attach', () => {
+    const { host, viewer, socket } = attach();
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    expect(statsOf(socket).at(-1)?.fightMode).toBe('attack');
+  });
+
+  it('escolhe a postura no personagem da sessão dona, e a resposta é player-stats com o modo NOVO', () => {
+    const { host, viewer, socket, hero, before } = attach();
+
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'defense' });
+    host.flush();
+
+    expect(hero.fightMode).toBe('defense');
+    expect(statsOf(socket, before).at(-1)?.fightMode).toBe('defense');
+    // E a troca é imediata em cada direção — os três modos, sem ordem.
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'balanced' });
+    host.flush();
+    expect(hero.fightMode).toBe('balanced');
+    expect(statsOf(socket, before).at(-1)?.fightMode).toBe('balanced');
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'attack' });
+    host.flush();
+    expect(hero.fightMode).toBe('attack');
+    expect(statsOf(socket, before).at(-1)?.fightMode).toBe('attack');
+  });
+
+  it('escolher o modo em que já está confirma do mesmo jeito (o cliente não fica sem resposta) e nada muda', () => {
+    const { host, viewer, socket, hero, before } = attach();
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'attack' });
+    host.flush();
+    expect(hero.fightMode).toBe('attack');
+    expect(statsOf(socket, before)).toHaveLength(1);
+    expect(statsOf(socket, before)[0]?.fightMode).toBe('attack');
+  });
+
+  it('um modo que o protocolo não conhece nunca chega ao personagem — o schema o barra antes', () => {
+    // O host confia no tipo do protocolo; quem recusa o lixo é `C2S_SCHEMAS` (invariante 4).
+    expect(C2S_SCHEMAS['set-fight-mode'].safeParse({ mode: 'aggressive' }).success).toBe(false);
+  });
+
+  it('quem reanexa vê a postura que ficou — a hunt desanexada continua com o modo que o jogador deixou', () => {
+    const { host, viewer, hero } = attach();
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'balanced' });
+    host.flush();
+    host.detach(viewer);
+
+    const socket = new FakeSocket();
+    const again = host.attach(socket, 'p1');
+    host.handle(again, { type: 'session-attach' });
+    host.flush();
+    expect(hero.fightMode).toBe('balanced');
+    expect(statsOf(socket).at(-1)?.fightMode).toBe('balanced');
+  });
+
+  it('na Cidade: escolher marca sujo, e o extrato durável leva a postura (ABSOLUTA) ao ledger', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const { host, sessions } = buildHost(shard, { receipts });
+    await host.prepare('p1', undefined, 'a1');
+    const viewer = host.attach(new FakeSocket(), 'p1');
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'defense' });
+    host.flush();
+    await host.release('p1', 1000, 'logout');
+
+    expect(hero.fightMode).toBe('defense');
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ fightMode: 'defense' });
+  });
+
+  it('na Cidade: quem nunca mexeu na postura não gera extrato só por causa dela', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const { host } = buildHost(shard, { receipts });
+    await host.prepare('p1', undefined, 'a1');
+    host.attach(new FakeSocket(), 'p1');
+    await host.release('p1', 1000, 'logout');
+    expect(saved).toHaveLength(0);
+  });
+
+  it('o extrato de hunt leva a postura do dono mesmo quando ele voltou à ofensiva (nunca gateada pelo default)', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, { directory, receipts });
+    await host.prepare('p1', undefined, 'a1');
+    const viewer = host.attach(new FakeSocket(), 'p1');
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'defense' });
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'attack' });
+    host.flush();
+    expect(hero.fightMode).toBe('attack');
+
+    await host.drainAll('drain');
+
+    // `attack` no extrato — omitir a chave deixaria uma postura antiga do Postgres voltar.
+    expect(saved[0]).toHaveProperty('fightMode', 'attack');
   });
 });
 
