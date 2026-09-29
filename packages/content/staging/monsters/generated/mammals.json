@@ -2019,6 +2019,7 @@
       ]
     },
     "conditionImmunities": [
+      "bleeding",
       "invisible",
       "paralyze"
     ],

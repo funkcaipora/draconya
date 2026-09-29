@@ -315,6 +315,62 @@ describe('convertMonster (fixture sintética)', () => {
     expect(converted.notes.ignoredFields.some((field) => field.startsWith('immunities.condition'))).toBe(false);
   });
 
+  describe('imunidade de condição do Canary → `conditionImmunities` (#559, ADR 0041)', () => {
+    // A tabela é a de `luaMonsterTypeConditionImmunities` (`monster_type_functions.cpp:915-968`).
+    const withImmunities = (lua: string) => {
+      const ctx = fixture(false);
+      const text = RAT.replace('monster.immunities = {}', `monster.immunities = ${lua}`);
+      return convertMonster(text, 'x/mammals/test_rat.lua', 'mammals', COMMIT, deps(ctx));
+    };
+
+    it('os nomes de ELEMENTO e `bleed` viram a imunidade à DOT que o elemento gera; paralyze/drunk/invisible ficam', () => {
+      const converted = withImmunities(`{
+        { type = "paralyze", condition = true }, { type = "drunk", condition = true },
+        { type = "invisible", condition = true }, { type = "bleed", condition = true },
+        { type = "fire", condition = true }, { type = "ice", condition = true },
+        { type = "poison", condition = true }, { type = "energy", condition = true },
+        { type = "holy", condition = true }, { type = "death", condition = true },
+        { type = "drown", condition = true },
+      }`);
+      expect([...(converted.entity['conditionImmunities'] as string[])].sort()).toEqual([
+        'bleeding', 'burning', 'cursed', 'dazzled', 'drowning', 'drunk', 'electrified', 'freezing',
+        'invisible', 'paralyze', 'poison',
+      ]);
+      // Todo valor que o importador escreve é aceito pelo schema — o `promote` não estoura.
+      expect(() => monsterSchema.shape.conditionImmunities.parse(converted.entity['conditionImmunities']))
+        .not.toThrow();
+    });
+
+    it('sinônimos: `earth` = `poison`, `physical` = `bleed`, `invisibility` = `invisible` (o mesmo `if` do Canary)', () => {
+      const converted = withImmunities(`{
+        { type = "earth", condition = true }, { type = "physical", condition = true },
+        { type = "invisibility", condition = true },
+      }`);
+      expect(converted.entity['conditionImmunities']).toEqual(['bleeding', 'invisible', 'poison']);
+    });
+
+    it('`condition = false` não é imunidade — o Canary lista `{ type = "bleed", condition = false }` em 1632 monstros', () => {
+      const converted = withImmunities(`{
+        { type = "bleed", condition = false }, { type = "paralyze", condition = false },
+      }`);
+      expect(converted.entity['conditionImmunities']).toBeUndefined();
+    });
+
+    it('`outfit` (sem condição no Draconya até o M44-03) é REPORTADO por nome, não descartado em silêncio', () => {
+      const converted = withImmunities('{ { type = "outfit", condition = true }, { type = "fire", condition = true } }');
+      expect(converted.entity['conditionImmunities']).toEqual(['burning']);
+      expect(converted.notes.ignoredFields).toContain(
+        'immunities.condition.outfit (sem imunidade de condição no schema)',
+      );
+    });
+
+    it('imunidade de DANO e de CONDIÇÃO para o MESMO nome são leituras independentes', () => {
+      const converted = withImmunities('{ { type = "fire", combat = true }, { type = "fire", condition = true } }');
+      expect((converted.entity['mitigation'] as { immunities: string[] }).immunities).toEqual(['fire']);
+      expect(converted.entity['conditionImmunities']).toEqual(['burning']);
+    });
+  });
+
   it('loot: gold coin vira loot.gold, a moeda extra vai para o relatório, id resolve pelo items.xml', () => {
     const ctx = fixture(false);
     const text = readFileSync(join(ctx.canaryDir, 'data-otservbr-global/monster/dragons/test_drake.lua'), 'utf8');
