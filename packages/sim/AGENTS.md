@@ -213,7 +213,8 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   `<=`, "sair abaixo de 100%" encerraria a hunt de quem entrou de vida cheia.
 - **"Em combate" tem UMA definição, `isInFight` (`combat/in-fight.ts`, #625), e é ela que
   conclui a saída da hunt.** Último ataque DADO ou RECEBIDO há menos de `IN_FIGHT_WINDOW_MS`
-  (60 000 ms — o `pzLocked`/`CONDITION_INFIGHT` do Canary), lido de
+  (60 000 ms — a janela do `pzLocked`/`CONDITION_INFIGHT` do Canary; o carimbo é por dano
+  APLICADO e não cobre tudo o que o Canary conta, ver o cabeçalho de `in-fight.ts`), lido de
   `CharacterRuntime.lastCombatActionAtMs`. **Não confundir com `Runner.lastCombatActionAtMs`**
   (a atividade de `canShareExperience`, §16 acima): aquele é só DADO e exclui self-heal, porque
   o que ele mede é engajamento com a party; este soma o RECEBIDO e não exclui nada, porque

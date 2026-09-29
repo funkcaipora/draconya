@@ -302,7 +302,7 @@ type ExitReason = 'manual-exit' | 'exit-rule';
  *
  * - `countdown`: a contagem VISUAL do `exitDelayMs` corre e o personagem está fora de combate;
  * - `in-combat`: o personagem lutou há menos de `IN_FIGHT_WINDOW_MS` — a saída só conclui quando
- *   a janela vence (`CONDITION_INFIGHT` do Canary, #625).
+ *   a janela vence (a do `CONDITION_INFIGHT` do Canary, por dano aplicado — #625, `in-fight.ts`).
  */
 export interface ExitStatus {
   readonly reason: ExitReason;
@@ -8384,7 +8384,7 @@ const slots = bot.groups.get(group);
     const runner = this.#runners.get(characterId);
     const reason = runner?.pendingExit ?? null;
     if (runner === undefined || reason === null) return;
-    // A trava de combate (#625, CONDITION_INFIGHT do Canary): a saída — manual ou por regra do
+    // A trava de combate (#625, a janela do CONDITION_INFIGHT do Canary): a saída — manual ou por regra do
     // bot, as duas passam por `#beginExit`/`#finishExit` — só CONCLUI fora de combate. O
     // `exitDelayMs` continua a contagem VISUAL (o `#beginExit` acima); isto é uma segunda trava,
     // por cima, que reagenda para o instante em que o combate vence em vez de completar a

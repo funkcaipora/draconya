@@ -1,5 +1,5 @@
 // A pill de saída pendente (#802): no lugar de "Sair da caçada" enquanto o servidor espera para
-// concluir a saída — a contagem do `exitDelayMs`, e depois a janela de combate de 60 s (o
+// concluir a saída — a contagem do `exitDelayMs`, e depois a janela de combate de 60 s (a do
 // `CONDITION_INFIGHT` do Canary, #625). A tela só ESPELHA o `exit-pending` (invariante 4): quem
 // conclui a saída, e quando, é o servidor; o cliente manda `leave-hunt` para pedir e
 // `cancel-exit` para desistir.

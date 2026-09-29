@@ -1445,7 +1445,8 @@ export const S2C_SCHEMAS = {
    * - `reason`: `manual-exit` (o jogador pediu, e pode desistir) ou `exit-rule` (uma regra do bot
    *   disparou, e a tela só mostra);
    * - `phase`: `countdown` (a contagem do `exitDelayMs`) ou `in-combat` (o personagem lutou há
-   *   menos de 60 s — `CONDITION_INFIGHT` do Canary — e a saída espera a janela vencer);
+   *   menos de 60 s — a janela do `CONDITION_INFIGHT` do Canary — e a saída espera a janela
+   *   vencer);
    * - `remainingMs`: quanto falta, medido no instante em que o servidor mandou. É uma DURAÇÃO, e
    *   não um instante: o relógio da sessão é lógico e o do cliente não tem nada a ver com ele —
    *   o cliente guarda quando a mensagem chegou e desconta o tempo local.
