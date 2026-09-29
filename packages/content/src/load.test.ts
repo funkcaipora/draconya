@@ -1414,3 +1414,26 @@ describe('alma da vocação promovida (#566 + #593)', () => {
     }
   });
 });
+
+describe('regeneração de item do catálogo em milissegundos do Canary (#804)', () => {
+  // `healthticks`/`manaticks` do `items.xml` já são ms (`ItemParse::parseHealthAndMana`,
+  // `item_parse.cpp:445`, e a condição de regeneração que acumula o think em ms). O importador
+  // multiplicava por 1000, e o Ring of Healing regenerava a cada 100 min em vez de 6 s.
+  const content = loadContent(DATA);
+
+  it('Ring of Healing (id 3100 do Canary): +6 de vida e +24 de mana a cada 6 s', () => {
+    expect(content.items.get('ring-of-healing')?.bonuses?.regeneration).toEqual({
+      healthGain: 6, healthTicksMs: 6_000, manaGain: 24, manaTicksMs: 6_000,
+    });
+  });
+
+  it('nenhum item regenera em intervalo de um minuto ou mais — o sintoma do × 1000', () => {
+    const slow = [...content.items.values()].flatMap((item) => {
+      const regeneration = item.bonuses?.regeneration;
+      if (regeneration === undefined) return [];
+      const ticks = Math.max(regeneration.healthTicksMs, regeneration.manaTicksMs);
+      return ticks >= 60_000 ? [`${item.id}: ${String(ticks)} ms`] : [];
+    });
+    expect(slow).toEqual([]);
+  });
+});

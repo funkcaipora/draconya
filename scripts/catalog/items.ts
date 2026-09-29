@@ -431,11 +431,17 @@ export function convertItem(
   const hasManaRegen = manaGain !== undefined && manaGain > 0;
   if ((hasHealthRegen && healthTicks !== undefined && healthTicks > 0)
     || (hasManaRegen && manaTicks !== undefined && manaTicks > 0)) {
+    // `healthticks`/`manaticks` JÁ são milissegundos no Canary: `ItemParse::parseHealthAndMana`
+    // (`src/items/functions/item/item_parse.cpp:445`) grava o número cru em `Abilities`, e a
+    // condição de regeneração acumula o intervalo do think, em ms, contra ele
+    // (`src/creatures/combat/condition.cpp:1559-1580`). Multiplicar por 1000 (#804) fazia o Ring of
+    // Healing regenerar a cada 100 min em vez de 6 s. O `1000` do lado sem ticks é o default de
+    // quem só declara um dos dois pares — nunca é lido, porque o ganho do outro lado é zero.
     regeneration = {
       healthGain: hasHealthRegen ? (healthGain ?? 0) : 0,
-      healthTicksMs: hasHealthRegen && healthTicks !== undefined ? healthTicks * 1000 : 1000,
+      healthTicksMs: hasHealthRegen && healthTicks !== undefined ? healthTicks : 1000,
       manaGain: hasManaRegen ? (manaGain ?? 0) : 0,
-      manaTicksMs: hasManaRegen && manaTicks !== undefined ? manaTicks * 1000 : 1000,
+      manaTicksMs: hasManaRegen && manaTicks !== undefined ? manaTicks : 1000,
     };
   } else if (hasHealthRegen || hasManaRegen) {
     ignoredFields.push('healthgain/managain sem o par de ticks correspondente — regeneração incompleta, descartada');

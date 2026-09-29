@@ -562,7 +562,7 @@ describe('convertItem', () => {
     expect(item?.entity['bonuses']).toMatchObject({
       speed: 5, suppress: ['drunk'],
       specializedMagicLevel: { fire: 2 },
-      regeneration: { healthGain: 2, healthTicksMs: 6_000_000, manaGain: 8, manaTicksMs: 6_000_000 },
+      regeneration: { healthGain: 2, healthTicksMs: 6_000, manaGain: 8, manaTicksMs: 6_000 },
       skills: [{ skillId: 'magic', amount: 3 }],
     });
     expect(item?.entity['combatModifiers']).toEqual({
