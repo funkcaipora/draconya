@@ -18,6 +18,8 @@ import type { ViewportHandle } from '../world/viewport.js';
 import { createWorldScene, loadWorldIndex, sectorFetcher } from '../world/world-scene.js';
 import type { WorldScene } from '../world/world-scene.js';
 import { useBrowserPack } from './useBrowserPack.js';
+import { loadMinimapSource, WorldAtlas, WorldMinimap } from './WorldMaps.js';
+import type { MinimapSource } from './WorldMaps.js';
 
 /** O explorador existe em desenvolvimento, ou onde o deploy o liga. */
 export function worldExplorerEnabled(): boolean {
@@ -44,6 +46,11 @@ export function WorldExplorer() {
   const [status, setStatus] = useState<Status>('loading');
   const [stats, setStats] = useState({ loaded: 0, pending: 0, fps: 0 });
   const [goto, setGoto] = useState(formatCamera(initial));
+  const [minimap, setMinimap] = useState<MinimapSource | null>(null);
+  const [atlasOpen, setAtlasOpen] = useState(false);
+  /** O teclado do explorador para quando o mapa-múndi está aberto — ele tem o dele. */
+  const atlasOpenRef = useRef(false);
+  atlasOpenRef.current = atlasOpen;
   const loaded = useBrowserPack();
 
   const setCamera = (next: ExplorerCamera): void => {
@@ -89,6 +96,8 @@ export function WorldExplorer() {
       sceneRef.current = scene;
       mounted.setScene(scene);
       setStatus('ready');
+      const source = await loadMinimapSource(baseUrl);
+      if (!cancelled) setMinimap(source);
     })();
 
     const timer = setInterval(() => {
@@ -126,6 +135,8 @@ export function WorldExplorer() {
     const onKey = (event: KeyboardEvent): void => {
       const target = event.target as HTMLElement | null;
       if (target !== null && (target.tagName === 'INPUT' || target.isContentEditable)) return;
+      if (atlasOpenRef.current) return;
+      if (event.key === 'm') { setAtlasOpen(true); event.preventDefault(); return; }
       const step = PAN_KEYS[event.key.length === 1 ? event.key.toLowerCase() : event.key];
       if (step !== undefined) {
         const scale = event.shiftKey ? 8 : 1;
@@ -162,6 +173,12 @@ export function WorldExplorer() {
     setCamera(roundCamera(cameraRef.current));
   };
 
+  const pick = (x: number, y: number): void => {
+    const next = { x, y, z: cameraRef.current.z };
+    setCamera(next);
+    setGoto(formatCamera(next));
+  };
+
   const onGoto = (event: FormEvent): void => {
     event.preventDefault();
     const next = parseCamera(goto);
@@ -195,8 +212,22 @@ export function WorldExplorer() {
             ? 'Mundo não gerado: rode pnpm map:world'
             : `${stats.loaded} setores · ${stats.pending} a caminho · ${stats.fps} fps`}
         </p>
+        {minimap !== null && (
+          <>
+            <WorldMinimap source={minimap} cameraRef={cameraRef} onPick={pick} />
+            <button type="button" onClick={() => { setAtlasOpen(true); }}>Mapa-múndi (M)</button>
+          </>
+        )}
         <p className="world-explorer__help">Setas/WASD andam (Shift ×8) · arraste · Q/E ou PgUp/PgDn trocam de andar</p>
       </aside>
+      {atlasOpen && minimap !== null && (
+        <WorldAtlas
+          source={minimap}
+          camera={camera}
+          onPick={(x, y) => { pick(x, y); setAtlasOpen(false); }}
+          onClose={() => { setAtlasOpen(false); }}
+        />
+      )}
     </div>
   );
 }

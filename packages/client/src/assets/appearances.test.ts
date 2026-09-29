@@ -233,6 +233,19 @@ describe('as flags de aparência (FUN-117)', () => {
     expect(odd?.hookSouth).toBeUndefined();
   });
 
+  it('lê luz (23) e cor de automapa (30); ausentes e zerados não viram campo', () => {
+    const catalogue = readAppearances(appearances({
+      object: [
+        appearance({ id: 1, frameGroups: [frameGroup({ spriteIds: [1] })], flags: flags({ light: { intensity: 7, color: 206 }, automapColor: 129 }) }),
+        appearance({ id: 2, frameGroups: [frameGroup({ spriteIds: [1] })], flags: flags({ automapColor: 0, bottom: true }) }),
+      ],
+    }));
+    expect(catalogue.object.get(1)?.flags).toMatchObject({ lightIntensity: 7, lightColor: 206, automapColor: 129 });
+    const plain = catalogue.object.get(2)?.flags;
+    expect(plain?.automapColor).toBeUndefined();
+    expect(plain?.lightIntensity).toBeUndefined();
+  });
+
   it('lê dont_hide (24): ligado é true, ausente é false', () => {
     const catalogue = readAppearances(appearances({
       object: [
@@ -260,10 +273,11 @@ describe('as flags de aparência (FUN-117)', () => {
         appearance({ id: 1, frameGroups: [frameGroup({ spriteIds: [1] })] }),
         appearance({
           id: 2, frameGroups: [frameGroup({ spriteIds: [1] })],
-          // `light` (23) é submessage, `market` (36) também, e um bool que não lemos (9).
+          // `lenshelp` (31) é submessage, `market` (36) também, e um bool que não lemos (9).
+          // (`light`, 23, era o exemplo até #662 passar a lê-lo.)
           flags: flags({
             unpass: true,
-            extra: [messageField(23, concat(uint32Field(1, 7), uint32Field(2, 215))), uint32Field(9, 1),
+            extra: [messageField(31, concat(uint32Field(1, 7), uint32Field(2, 215))), uint32Field(9, 1),
               messageField(36, uint32Field(1, 3))],
           }),
         }),
