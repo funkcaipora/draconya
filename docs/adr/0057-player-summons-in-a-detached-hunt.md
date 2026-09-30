@@ -85,3 +85,34 @@ está olhando, como ela entra no snapshot, e se o bot pode ressumonar sozinho.
 
 Nenhum. O **3** é a decisão 1; o **11** é a decisão 4; o **2** é a razão de duração e cooldown
 serem eventos da fila.
+
+## Emenda — 2026-09-29: o familiar implementado (#599)
+
+A decisão 3 fixou o familiar de forma resumida; a implementação (M38-02) leu a fonte inteira
+(`Player:CreateFamiliarSpell`, `familiarOnLogin`/`FamiliarDeath`, `Creature::checkSummonMove`,
+`Tile::queryAdd`, `Combat::canDoCombat`) e fecha o que faltava. O texto completo, com números e
+divergências, está em `docs/product/combat.md` ("O familiar de vocação").
+
+1. **O familiar não é `summonable`.** O Canary declara `summonable = false` nos quatro — é o que
+   impede a Summon Creature de invocá-los. A decisão 5 e o texto do ADR ("importar como
+   `summonable`") valem só para Convince Creature; o familiar é marcado por `monsterSchema.familiar`
+   (o `flags.familiar` do Canary) e por uma magia com o efeito `familiar { monsterId, durationMs,
+   cooldownMs }`.
+2. **Os dois carimbos são de relógio de PAREDE, e a recriação ao entrar é regra.** O Canary guarda
+   `familiar-summon-time = os.time() + duração` (recriado no login com o tempo que sobra, zerado
+   pela morte do familiar) além da `CONDITION_SPELLCOOLDOWN` de `2 × duração` contada do
+   lançamento. O `CharacterRuntime` carrega os dois (`familiar: { version, summonUntilMs,
+   cooldownUntilMs }`), o registro `jsonb` `character.familiar` (ADR 0052 d.1) os persiste por
+   última escrita vence — nunca por máximo, porque o `summonUntilMs` desce na morte —, e a
+   recriação acontece ao ENTRAR NA HUNT, o login do personagem (a Cidade não tem invocação, d.3).
+   O `sim` não lê relógio: o "agora" é `Session.createdAtMs + Session.nowMs`, que o servidor já dá.
+3. **Divergência aceita, herdada do ADR 0052 d.6:** o cooldown corre também na Cidade e offline. No
+   Canary a condição só anda com o jogador online. Dentro da hunt são idênticos; fora, a decisão
+   deste ADR (d.3, "cooldown de parede") vale.
+4. **A recusa por cooldown de parede não carrega prazo para o bot.** Um `retryInMs` de 30 min faria
+   o grupo `support` dormir 30 min, e a haste vive no mesmo grupo. A regra engatilha — o bot a
+   reavalia a cada evento — e a barra mostra o prazo real.
+5. **A invocação de personagem passa a herdar o alvo SELECIONADO do mestre**, não o que a arma dele
+   alcança, e a ability em ÁREA de uma invocação de personagem atinge só monstros hostis (nunca a
+   party): as duas eram lacunas do primitivo do #598 que o familiar, cuja ability é quase toda em
+   área, expôs.

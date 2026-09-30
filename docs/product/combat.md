@@ -2039,12 +2039,124 @@ por `spell.manaCost`.
 - **`combat-v4` (ADR 0052 decisão 7):** o veículo único do endgame — ver "O `combat-v4`" em
   `docs/product/combat-conformance.md` para o estágio que este sistema declara nele (additive:
   nenhum abate ou golpe que já existia muda de número quando ninguém invoca).
-- **Fora do escopo** (M38 continua em #599/#600): os quatro familiares (level 200, duração/
-  cooldown de parede), Convince Creature (rouba um monstro hostil) e Animate Dead (cadáver vira
-  Skeleton). O PRESET "sem invocação viva → invocar" para Druid/Sorcerer também fica de fora — o
-  vocabulário (`kind: 'summons'`, a ação `spell` com `monsterId`) já suporta configurá-lo à mão
-  pela barra, mas o mecanismo de PRESET em si (aplicar automaticamente ao escolher vocação) é o
-  #526, que ainda não existe neste repositório.
+- **Fora do escopo** (M38 continua em #600): Convince Creature (rouba um monstro hostil) e Animate
+  Dead (cadáver vira Skeleton). Os quatro familiares chegaram no #599 (seção abaixo). O PRESET
+  "sem invocação viva → invocar" para Druid/Sorcerer também fica de fora — o vocabulário (`kind:
+  'summons'`, a ação `spell` com `monsterId`) já suporta configurá-lo à mão pela barra, mas o
+  mecanismo de PRESET em si (aplicar automaticamente ao escolher vocação) não existe; o preset da
+  party de dragões (#526) já leva a regra do FAMILIAR (seção abaixo).
+- **O alvo da invocação é o alvo SELECIONADO do mestre (#599).** `HuntRuleset#chooseMonsterTarget`
+  passou a herdar `#attackTargetOfRunner(owner) ?? #botCandidateOf(owner)` — a criatura que o
+  mestre escolheu atacar (`master->getAttackedCreature()` do Canary, `Monster::updateSummonTarget`)
+  — em vez do `attackTargetOf`, que só vale dentro do alcance da ARMA dele (o desarmado alcança 1).
+  Com o segundo, o Sorcerer e o Druid, que lutam a três ou sete tiles com magia e runa, deixavam a
+  invocação sem alvo enquanto a luta acontecia.
+
+## O familiar de vocação (#599, M38-02, ADR 0057 d.3–d.4; Canary `Player:CreateFamiliarSpell`)
+
+Fontes locais (Canary `47dfd51`): `data/scripts/spells/familiar/{knight,paladin,sorcerer,druid}_
+familiar.lua`, `data/libs/functions/player.lua` (`CreateFamiliarSpell`/`createFamiliar`),
+`data/libs/systems/familiar.lua` (`FAMILIAR_ID`, os outfits), `data/scripts/creaturescripts/
+familiar/{on_login,on_death}.lua`, `data-otservbr-global/monster/familiars/*.lua`,
+`data-otservbr-global/scripts/spells/monster/summonchallenge.lua` e `config.lua.dist` (`familiarTime`).
+
+**O que existe.** Quatro magias (`packages/content/data/spells/summon-<vocação>-familiar.json`),
+level 200, mana 1000 (Knight) / 2000 (Paladin) / 3000 (Sorcerer) / 3000 (Druid), grupo `support`, e
+quatro monstros importados de `familiars/` (`packages/content/data/monsters/generated/
+familiars.json`, pelo `pnpm catalog:import monsters` — o familiar do Monk fica de fora, ADR 0051).
+O familiar dura **15 minutos** (`60 × familiarTime / 2` s, `familiarTime = 30`) e a magia volta **30
+minutos depois do lançamento** (`2 ×` a duração) — os dois números moram no EFEITO da magia
+(`effect.durationMs`/`effect.cooldownMs`), e o `cooldownMs` da magia fica em 2 s (o `groupCooldown`
+do script; o `spell:cooldown(0)` do Canary diz que quem cobra é a `CreateFamiliarSpell`).
+
+- **Não é `summonable`.** O Canary declara `summonable = false` nos quatro: a Summon Creature não os
+  invoca. O que os liga é o `flags.familiar` (`monsterSchema.familiar`), que `buildContent` exige
+  do `monsterId` da magia.
+- **Lançar** (`HuntRuleset#castSpell`, ramo `familiar`): recusa com **zero invocações vivas**
+  (`has-summons` — o teto do familiar não é o 2 da Summon Creature; ele OCUPA um lugar do teto de 2,
+  então sobra uma Summon Creature) e recusa sem sala em volta (`not-enough-room`), **as duas antes
+  de gastar mana e de armar qualquer cooldown**: o `onCastSpell` do Canary devolve `false` e o
+  framework não cobra (`castSpell` ganhou o parâmetro `precondition`, chamado depois de level/
+  cooldown/mana e antes do custo). A mana sai pelo `spell.manaCost` e rende skill de magia como
+  qualquer magia (`addManaSpent`).
+- **Onde nasce:** `Game.createMonster(name, pos, extended = true, …)` — os doze tiles da
+  `extendedRelList` de `Map::placeCreature` (`familiar.ts`): os quatro do norte ({0,−2}, {−1,−1},
+  {0,−1}, {1,−1}) embaralhados entre si e só depois os outros oito, o primeiro que serve (parede,
+  ocupação, sem escada/teleporte, com linha de visão livre até o mestre). O embaralhamento usa o
+  `Rng` da sessão (o Canary usa `std::random_device`): 10 sorteios por tentativa, e zero quando
+  ninguém invoca.
+- **Velocidade:** a MAIOR entre a do mestre e a do monstro, **fixada no lançamento**
+  (`changeSpeed(math.max(self:getSpeed() - base, 0))`) — inclui a haste que o mestre tinha naquele
+  instante, e o Canary não a atualiza depois.
+- **Duração e cooldown são carimbos de relógio de PAREDE** no `CharacterRuntime.familiar`
+  (`{ version, summonUntilMs, cooldownUntilMs }`, epoch em ms — `packages/sim/src/familiar.ts`),
+  gravados no lançamento e persistidos na coluna `character.familiar` (`jsonb`, migração `0023`):
+  lidos inteiros no ticket, escritos inteiros pelo extrato, última escrita vence (NUNCA fundidos
+  pelo maior — o `summonUntilMs` desce quando o familiar morre). O `sim` não lê relógio nenhum
+  (invariante 1): o "agora" é `Session.createdAtMs + Session.nowMs`, dados pelo servidor. **O fim da
+  vida é um evento da fila** (`familiar-expire`, subject `m:<id>`; invariante 2) — mesmo estado a 1
+  Hz e a 10 Hz, e o evento volta no snapshot. Um `Cooldowns` de sessão não serviria: ele guarda
+  instante LÓGICO, que nasce em zero a cada sessão.
+- **A recusa por cooldown NÃO carrega prazo para o bot** (`retryInMs: 0`, engatilha). Um prazo de 30
+  min faria o grupo `support` do bot dormir 30 min — inclusive a haste, que vive nele. A barra
+  mostra o cooldown REAL (`#cooldownWaitOf` inclui o carimbo: `slotStates`/`useSlot` recusam com o
+  prazo em relógio de parede) e o bot lança sozinho no instante em que a magia volta.
+- **Ao entrar na hunt o familiar volta com o tempo que sobra** (`familiarOnLogin`,
+  `HuntRuleset#restoreFamiliar`): `summonUntilMs − agora`, para quem tem a magia da vocação, o level
+  dela e nenhuma invocação viva — sem mana, sem tocar no cooldown, e sem nova tentativa se não
+  houver sala. **A morte do familiar zera a recriação** (`FamiliarDeath`: `familiar-summon-time =
+  os.time()`) e deixa o cooldown de pé. O mestre que sai da hunt leva o familiar junto (#598) e os
+  carimbos ficam; a Cidade não simula nem tem invocação (`City#useSlot` recusa o efeito).
+- **Teleporte ao mestre** (`Creature::checkSummonMove`, a cada passo dele): outro andar OU mais de
+  15 tiles em x/y (`FAMILIAR_TELEPORT_DISTANCE`) — a invocação comum só some além de 30 tiles/2
+  andares, o familiar nunca.
+- **O jogador atravessa o familiar** (`Player::canWalkthrough`: `monster->isFamiliar()`, qualquer
+  familiar de qualquer dono): o tile ocupado só por ele não bloqueia o caminho do personagem
+  (`#moverBlocked` no passo guloso, `#occupiedForPlayer` nas buscas de caminho do follow e do `walk-to`), e o passo TROCA os dois de lugar (`#step`: o familiar ocupa o tile que o
+  jogador acabou de deixar, com um `creature-moved` para ele). Sem isto, um familiar parado num
+  corredor tranca a party — achado pela regressão de coesão do #527 com o preset novo. O monstro
+  hostil continua sem atravessá-lo.
+- **A ability do familiar bate nos monstros HOSTIS, nunca na party.** `#executeMonsterAbility`
+  troca as presas de uma invocação de PERSONAGEM por `#hostileMonsters()` (o Canary passa a área
+  pelo `canDoCombat`, que protege jogador e invocação de jogador). O #598 só tinha exercitado o golpe
+  de alvo único: uma onda de familiar acertaria o próprio mestre. O crédito de dano, XP e Bestiário
+  é do mestre, como antes — e **o mestre recebe a XP INTEIRA** (`Creature::onGainExperience` só
+  divide por 2 a invocação que NÃO é familiar).
+- **`summon challenge`** (Druid e Sorcerer, 40 % a cada 2 s): a ability `challenge: { durationMs:
+  8000 }` — `doChallengeCreature(..., 8000)` sobre a `AREA_CIRCLE2X2` centrada no lançador (o círculo
+  de raio 4 da tabela de anéis de monstro, os mesmos 21 tiles): cada monstro hostil atingido passa a
+  mirar o familiar (`Monster::challengeCreature` recusa quem é invocação) e ganha a condição
+  `challenge`. Sem dano, sem sorteio de dano.
+- **Ice Strike e Sudden Death Rune** (Knight): o monstro lança a magia REGISTRADA pelo nome
+  (`Monsters::deserializeSpell` → `getSpellByName`) com o dano da PRÓPRIA entrada
+  (`Monster::getCombatValues`). O `spell:range(3)` do Ice Strike vale por cima do `range 5` do
+  monstro (`canThrowSpell`) — a ability sai com alcance 3.
+- **Preset (#526)**: `botConfigFor` (`packages/tools/src/dev/dragon-party-plan.ts`) leva, para cada
+  vocação, `summon-<vocação>-familiar` com a condição `summons <= 0` ("familiar pronto → invocar",
+  ADR 0057 d.4) no grupo `support`, ao lado da haste.
+
+**Divergências, com o motivo** (nenhuma é regra de caça; as que são, estão marcadas):
+
+1. **O cooldown também corre na Cidade e offline (relógio de parede).** No Canary é uma
+   `CONDITION_SPELLCOOLDOWN` persistente cujos `ticks` só andam com o jogador ONLINE. Dentro da hunt
+   os dois coincidem. É a decisão do ADR 0057 d.3 e do ADR 0052 d.6 ("cooldown de parede"), anterior a
+   esta issue; ver a emenda do ADR 0057.
+2. **Premium não é conferido** (`CreateFamiliarSpell`: "You need a premium account."). O catálogo
+   inteiro de magias ignora `isPremium` (`scripts/catalog/spells.ts`), e o Premium do personagem só
+   chega ao ruleset da party — uma hunt solo não o conhece.
+3. **O teleporte cai no tile livre mais perto do mestre, não NO tile dele** (`internalTeleport` com
+   `FLAG_NOLIMIT`): o tile do `sim` é exclusivo (`TileOccupancy`).
+4. **Atravessar o familiar é uma TROCA de tiles, não dividir o tile** (mesma razão): o Canary deixa
+   o jogador e o familiar no mesmo tile. O familiar sem alvo fica onde nasceu — herança da
+   divergência do #598 (a invocação não segue o mestre quando ninguém tem alvo) —, e o teleporte
+   ao mestre (> 15 tiles/outro andar) e o fim dos 15 min o alcançam.
+5. **Sem as mensagens "Your summon will disappear in less than one minute / 10 seconds"** (texto
+   privado ao mestre, `MESSAGE_LOOT`): apresentação, sem canal no protocolo.
+6. **O familiar nasce fora de escada e de teleporte** — o Canary o aceita em tile de mudança de
+   andar, exceto com o mestre atacando (`Tile::queryAdd`).
+7. **A XP de uma invocação COMUM ainda é a inteira**, e o Canary a divide por 2 (`Creature::
+   onGainExperience`: `gainExp /= 2` para `!isFamiliar()`, exceto com XP compartilhada de party) —
+   achado ao ler a fonte do familiar, que é o caso certo; o #598 nunca modelou a metade.
 
 ## Charms em combate (#603, M39-03, ADR 0053 d.5 — `combat-v4`)
 
