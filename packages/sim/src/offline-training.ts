@@ -14,7 +14,7 @@
 // escolha do livro (`set-offline-training-skill`, um serviço de Cidade); a `api` a consome e a
 // zera, como o Canary faz no login (`setOfflineTrainingSkill(SKILL_NONE)`).
 
-import type { Progression, Skill, Training, Vocation } from '@draconya/content';
+import type { Content, Progression, Skill, Training, Vocation } from '@draconya/content';
 import { skillRateFor } from './rates.js';
 import { Skills, pointsForLevel, skillFactorFor } from './skills.js';
 import type { SkillsState } from './skills.js';
@@ -126,6 +126,27 @@ export interface OfflineTrainingRules {
   readonly attackIntervalMs: number;
   /** `combat.defense.skillId` — a skill do escudo, que treina junto (`SKILL_SHIELD`). */
   readonly shieldSkillId: string;
+}
+
+/** A skill do escudo, que o offline training de melee/distância treina junto (`SKILL_SHIELD`). */
+export const SHIELDING_SKILL_ID = 'shielding';
+
+/**
+ * As regras do gasto, montadas do conteúdo fixado (invariante 7) — ou `null` quando o conteúdo não
+ * tem o Treino (o conteúdo de teste sem `training/`): não há o que gastar, e quem chama trata como
+ * "nenhum banco é gasto", nunca como erro. É o que a `api` recebe no boot; o `sim` não conhece o
+ * `Content` inteiro por dentro de `settleOfflineTraining`, só isto.
+ */
+export function offlineTrainingRulesOf(content: Content): OfflineTrainingRules | null {
+  if (content.training === undefined) return null;
+  return {
+    training: content.training,
+    skills: content.skills,
+    vocations: content.vocations,
+    progression: content.progression,
+    attackIntervalMs: content.combat.player.attackIntervalMs,
+    shieldSkillId: SHIELDING_SKILL_ID,
+  };
 }
 
 export interface OfflineTrainingInput {

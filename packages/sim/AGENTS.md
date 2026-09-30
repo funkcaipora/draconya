@@ -841,3 +841,17 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   usa esse parâmetro. O Carnage roda também para o monstro invocado (`Monster::death` não confere
   `isSummon()`). Os defeitos do `47dfd51` que ficaram de fora estão listados em
   `docs/product/combat-conformance.md`.
+- **O Treino é um ruleset de eventos, e o offline training é PURO (#631, ADR 0059).** `TrainingRuleset`
+  (`rulesets/training.ts`): um evento `TRAIN_STRIKE` por golpe, o primeiro no instante da entrada e
+  os seguintes a cada `combat.player.attackIntervalMs`; cada golpe credita `7 × rate` tries (`600 ×
+  rate` de mana gasta para wand/rod) ANTES de descontar a carga (a última também rende), a arma
+  esgotada é destruída (`removedInstances`) e as cargas restantes vivem no overlay da instância
+  (`ItemInstanceOverlay.charges`, "ausente é cheia"). Nada aqui sorteia, e o resultado é idêntico a
+  10 Hz, a 1 Hz e depois de um snapshot. `settleOfflineTraining` (`offline-training.ts`) é a função
+  PURA do gasto do banco — `min(fora, banco, teto da conta)`, carência de 10 min, melee `/ 2`,
+  distância `/ 4`, magic level pela mana, escudo `/ 4` junto —: recebe o tempo fora COMO DADO
+  (`awayMs`), porque o `sim` não lê relógio; quem sabe a hora é a `api`, no ticket. O banco cresce
+  1:1 com `session.aggregatesOf(id).durationMs` no fim da participação (`onEnd`/`onLeave` de hunt e
+  de treino), nunca por tick. `buyItem` (`purchase.ts`) é a compra mínima do `buy-item`: confere
+  TUDO antes de mexer em `goldDelta` ou na mochila. `holdStamina` (`stamina.ts`) avança o marco sem
+  recuperar — o que o Treino faz ao sair (ADR 0060 d.14c).

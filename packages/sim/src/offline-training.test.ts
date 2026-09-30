@@ -4,10 +4,11 @@
 // escudo `s / 4` junto. Tudo PURO: o tempo fora chega como dado, o `sim` não lê relógio.
 
 import { buildContent, placeholderAppearances } from '@draconya/content';
-import type { RawContent } from '@draconya/content';
+import type { RawContent, Vocation } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import {
-  OfflineTraining, emptyOfflineTrainingState, readOfflineTrainingState, settleOfflineTraining,
+  OfflineTraining, SHIELDING_SKILL_ID, emptyOfflineTrainingState, offlineTrainingRulesOf,
+  readOfflineTrainingState, settleOfflineTraining,
 } from './offline-training.js';
 import type { OfflineTrainingRules, OfflineTrainingState } from './offline-training.js';
 import { readItemOverlay } from './item-overlay.js';
@@ -99,11 +100,9 @@ function rulesOf(over: { progression?: Record<string, unknown> } = {}): OfflineT
     city: { mapId: 'gym', stepDurationMs: 150 }, training: [training],
   };
   const content = buildContent({ appearances: [placeholderAppearances(base)], ...base });
-  return {
-    training: content.training as NonNullable<typeof content.training>,
-    skills: content.skills, vocations: content.vocations, progression: content.progression,
-    attackIntervalMs: content.combat.player.attackIntervalMs, shieldSkillId: 'shielding',
-  };
+  const built = offlineTrainingRulesOf(content);
+  if (built === null) throw new Error('the fixture has a training block');
+  return built;
 }
 
 const chosen = (offlineSkill: string | null, offlineBankMs: number): OfflineTrainingState => ({
@@ -111,6 +110,22 @@ const chosen = (offlineSkill: string | null, offlineBankMs: number): OfflineTrai
 });
 const away = (awayMs: number, over: Partial<Parameters<typeof settleOfflineTraining>[0]> = {}) => ({
   training: chosen('sword', 12 * HOUR), skills: undefined, awayMs, premium: true, vocationId: null, ...over,
+});
+
+describe('as regras do gasto, do conteúdo fixado (#631)', () => {
+  it('monta o que settleOfflineTraining lê do conteúdo — a skill do escudo é a shielding', () => {
+    const rules = rulesOf();
+    expect(SHIELDING_SKILL_ID).toBe('shielding');
+    expect(rules.shieldSkillId).toBe('shielding');
+    expect(rules.attackIntervalMs).toBe(2000);
+    expect(rules.training.offline.spendCapMs).toEqual({ free: 6 * HOUR, premium: 12 * HOUR });
+    expect(rules.skills.has('sword')).toBe(true);
+  });
+
+  it('devolve null para conteúdo sem `training/` — nenhum banco é gasto, e não é erro', () => {
+    const empty = { training: undefined } as unknown as Parameters<typeof offlineTrainingRulesOf>[0];
+    expect(offlineTrainingRulesOf(empty)).toBeNull();
+  });
 });
 
 describe('o registro do banco (ADR 0059 d.3)', () => {
@@ -269,7 +284,7 @@ describe('gastar o banco — as fórmulas de offline_training.lua', () => {
     const custom = rulesOf();
     const withVocationFactor: OfflineTrainingRules = {
       ...custom,
-      vocations: new Map([['sorcerer', { ...(custom.vocations.get('sorcerer') as never), skillMultipliers: { sword: 1 } }]]),
+      vocations: new Map([['sorcerer', { ...(custom.vocations.get('sorcerer') as Vocation), skillMultipliers: { sword: 1 } }]]),
     };
     // Fator 1: cada nível custa 50 — 150 tries são 3 níveis exatos.
     const result = settleOfflineTraining(away(600_000, { vocationId: 'sorcerer' }), withVocationFactor);

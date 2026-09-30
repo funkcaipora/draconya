@@ -18,9 +18,10 @@
 // `leave-hunt` (o jogador), ou sozinha quando a arma acaba — nos dois casos o servidor devolve o
 // personagem à Cidade pela sucessão de sempre.
 //
-// **A stamina recupera** (ADR 0059 d.1, ADR 0043): o Treino não a drena — só a hunt o faz (`#burnStamina`)
-// — e a materialização nas fronteiras da transição (`materializeStamina`) soma o tempo fora de
-// hunt, que aqui é o tempo de treino. Sem monstro, sem suprimento consumido, sem dano, sem RNG.
+// **A stamina não anda no Treino** (ADR 0060 d.14c, emenda ao ADR 0059 d.1): o exercise training do
+// Canary é online, e o Canary só regenera stamina deslogado. O Treino não a drena — só a hunt o faz
+// (`#burnStamina`) —, e quem a impede de RECUPERAR é a fronteira da transição de saída, que só avança o
+// marco (`holdStamina`, `game/sessions.ts`). Sem monstro, sem suprimento consumido, sem dano, sem RNG.
 
 import type {
   Item, Progression, Skill, Tilemap, Training, Vocation,

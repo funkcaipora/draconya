@@ -9,7 +9,8 @@ import { CharacterRuntime } from '../character.js';
 import type { CharacterState } from '../character.js';
 import { Rng } from '../rng.js';
 import { Session } from '../session.js';
-import { DEFAULT_DIFFICULTY_NAME, createHuntSession } from './hunt.js';
+import { DEFAULT_DIFFICULTY_NAME } from '../hunt/catalogue.js';
+import { createHuntSession } from './hunt.js';
 import {
   TRAIN_STRIKE, TrainingRuleset, TrainingUnavailableError, createTrainingSession,
   trainingRulesetFromSnapshot,
