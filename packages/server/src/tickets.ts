@@ -228,6 +228,14 @@ export interface InitialCharacter {
    * rodou), ou `api` antigo em deploy em rolagem — nenhuma hunt aplica o bônus.
    */
   readonly boostedMonsterId?: string;
+  /**
+   * O bônus de Loyalty (M44, #628, ADR 0052 decisão 5), em percentual inteiro: a `api` o calcula
+   * de `account.created_at` na hora da EMISSÃO (`loyalty.ts`) e o `game` o fixa no
+   * `CharacterRuntime` — nunca recalculado durante a sessão, como a versão de conteúdo. Ausente é
+   * conta abaixo do primeiro degrau, conteúdo sem `loyalty/` ou `api` antigo em deploy em
+   * rolagem: a sessão vale o nível BASE de toda skill.
+   */
+  readonly loyaltyBonusPercent?: number;
 }
 
 export interface IssuedTicket {
@@ -705,6 +713,13 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     // nunca ticket recusado — como a vocação.
     ...(typeof initial['boostedMonsterId'] === 'string' && initial['boostedMonsterId'].length > 0
       ? { boostedMonsterId: initial['boostedMonsterId'] }
+      : {}),
+    // O bônus de Loyalty (#628): inteiro de 1 a 65535 (o `uint16_t` do Canary) ou AUSENTE, nunca
+    // ticket recusado — a mesma régua da boosted. Um valor torto vale o nível base.
+    ...(typeof initial['loyaltyBonusPercent'] === 'number'
+      && Number.isInteger(initial['loyaltyBonusPercent'])
+      && initial['loyaltyBonusPercent'] > 0 && initial['loyaltyBonusPercent'] <= 65_535
+      ? { loyaltyBonusPercent: initial['loyaltyBonusPercent'] }
       : {}),
   };
 }

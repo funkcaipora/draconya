@@ -289,6 +289,28 @@ describe('POST /api/tickets', () => {
     expect(await issuedWith(new Date(Date.now() - 60_000))).not.toHaveProperty('premium');
   });
 
+  it('leva o bônus de Loyalty da CONTA do chamador, e nada quando a conta não tem degrau (#628)', async () => {
+    // A idade da conta é da CONTA, e a rota a pede com o `accountId` autenticado — nunca com o
+    // que vem no corpo. Sem degrau (ou sem o sistema ligado) o resolver devolve `undefined` e o
+    // ticket sai idêntico ao de antes desta issue.
+    const issuedWith = async (loyaltyBonusPercentOf?: (accountId: string) => Promise<number | undefined>) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        ...(loyaltyBonusPercentOf === undefined ? {} : { loyaltyBonusPercentOf }),
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    const seen: string[] = [];
+    expect(await issuedWith(async (accountId) => { seen.push(accountId); return 15; }))
+      .toMatchObject({ loyaltyBonusPercent: 15 });
+    expect(seen).toEqual(['a1']);
+    expect(await issuedWith(async () => undefined)).not.toHaveProperty('loyaltyBonusPercent');
+    expect(await issuedWith()).not.toHaveProperty('loyaltyBonusPercent');
+  });
+
   it('reconstrói os containers pela posição gravada; a linha sem posição entra no primeiro lugar livre (#160)', async () => {
     // Mutação que mata: ignorar `container`/`slotIndex` (tudo cairia na lista plana), ou
     // perder a linha antiga em vez de encaixá-la.

@@ -1,13 +1,14 @@
 import {
-  CharacterRuntime, HuntRuleset, PartyFullError, Rng, Session, createHuntSession, statsForLevel, totalXpForLevel,
-  type CharmBestiaryEntry, type EndReason, type Ruleset, type SessionSnapshot,
+  CharacterRuntime, HuntRuleset, PartyFullError, Rng, Session, createHuntSession, pointsForLevel, statsForLevel,
+  totalXpForLevel,
+  type CharmBestiaryEntry, type EndReason, type Ruleset, type SessionSnapshot, type SkillsState,
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigSchema, buildContent, compileItem,
-  itemSchema, migrateBotConfigV1, placeholderAppearances,
+  itemSchema, migrateBotConfigV1, placeholderAppearances, skillSchema,
 } from '@draconya/content';
-import type { Ammunition, Appearances, BotConfig, Charm, Progression, RawContent, Vocation } from '@draconya/content';
+import type { Ammunition, Appearances, BotConfig, Charm, Progression, RawContent, Skill, Vocation } from '@draconya/content';
 import { C2S_SCHEMAS } from '@draconya/protocol';
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import { createLogger } from '../log.js';
@@ -3637,6 +3638,9 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     weapon: 'bow' | 'wand';
     /** Skills do conteúdo de teste (#340, SV-04). */
     skills: readonly unknown[];
+    /** As skills com que o herói nasce e o bônus de Loyalty que o ticket lhe deu (#628). */
+    heroSkills: SkillsState;
+    loyaltyBonusPercent: number;
   }> = {}) {
     const raw = rawTestContent();
     // As armas precisam de linha na tabela de aparência (FUN-94); a munição abstrata, só do
@@ -3722,6 +3726,8 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
           level: 1, xp: 0, gold: over.gold ?? 0, goldDelta: 0, alive: true, cooldowns: {},
           staminaMs: over.stamina ?? FULL_STAMINA_MS, staminaUpdatedAtMs: 0,
           ...armed,
+          ...(over.heroSkills === undefined ? {} : { skills: over.heroSkills }),
+          ...(over.loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent: over.loyaltyBonusPercent }),
         }));
         return session;
       },
@@ -3966,6 +3972,92 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     // Próximo ciclo sem mudanças: nenhum player-stats adicional
     runFor(100);
     expect(ofType(received(), 'player-stats').length).toBe(2);
+  });
+
+  it('o HUD recebe o bônus de Loyalty e o nível efetivo de cada skill; sem bônus, a forma é a de sempre (#628)', () => {
+    // O Canary manda ao cliente o nível COM Loyalty ao lado do base. Aqui: `loyaltyLevel` só
+    // viaja quando o bônus muda o nível, e `loyaltyBonusPercent` só quando é > 0 — o
+    // `player-stats` da conta sem degrau não ganha campo nenhum. O percentual continua o do
+    // nível BASE, e o dado persistido (`level`) também.
+    //
+    // Mutações que matam: tirar `loyaltyLevel` de `skillProgressOf` (a skill vai sem o nível
+    // efetivo), ou `loyaltyBonusPercent` de `playerStatsOf`/do `session-state.self`.
+    const loyal = hunt({
+      regen: false, stamina: MID_MINUTE_STAMINA_MS, monsters: false, skills: [TEST_MELEE_SKILL],
+      heroSkills: { melee: { level: 100, points: 0 } }, loyaltyBonusPercent: 50,
+    });
+    const stats = ofType(loyal.received(), 'player-stats')[0];
+    expect(stats?.loyaltyBonusPercent).toBe(50);
+    // Tries até o 100 (fator 1,1): 2.655.971; 50 % fecham quatro níveis (ver `loyalty.test.ts`).
+    expect(stats?.skills.melee).toEqual({ level: 100, percentToNext: 0, loyaltyLevel: 104 });
+    const attach = ofType(loyal.socket.received(), 'session-state').at(-1);
+    expect(attach?.self.loyaltyBonusPercent).toBe(50);
+    expect(attach?.self.skills.melee).toEqual({ level: 100, percentToNext: 0, loyaltyLevel: 104 });
+    // O persistido não sabe do bônus.
+    expect(loyal.hero().skills.getState()['melee']).toEqual({ level: 100, points: 0 });
+
+    const plain = hunt({
+      regen: false, stamina: MID_MINUTE_STAMINA_MS, monsters: false, skills: [TEST_MELEE_SKILL],
+      heroSkills: { melee: { level: 100, points: 0 } },
+    });
+    const plainStats = ofType(plain.received(), 'player-stats')[0];
+    expect(plainStats).not.toHaveProperty('loyaltyBonusPercent');
+    expect(plainStats?.skills.melee).toEqual({ level: 100, percentToNext: 0 });
+    const plainAttach = ofType(plain.socket.received(), 'session-state').at(-1);
+    expect(plainAttach?.self).not.toHaveProperty('loyaltyBonusPercent');
+  });
+
+  it('uma mudança SÓ do nível efetivo (Loyalty) gera player-stats — a comparação olha loyaltyLevel (#628)', () => {
+    // O nível efetivo sobe em passos que não coincidem com o nível/percentual BASE: existe um
+    // try que fecha o nível efetivo sem mexer em nenhum dos dois. Este teste o ENCONTRA (bisseção
+    // sobre os tries de um nível de custo alto, onde um try é uma fração de percentual ínfima) e
+    // ganha exatamente esse try — o HUD tem de receber o novo `loyaltyLevel` mesmo assim.
+    //
+    // Mutação que mata: tirar `a.loyaltyLevel === b.loyaltyLevel` de `sameSkillProgress`.
+    const melee: Skill = skillSchema.parse(TEST_MELEE_SKILL);
+    const at = (level: number, points: number) => new CharacterRuntime({
+      id: 'probe', position: { x: 0, y: 0, z: 7 }, health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+      level: 1, xp: 0, goldDelta: 0, alive: true, cooldowns: {}, skills: { melee: { level, points } },
+      loyaltyBonusPercent: 50,
+    });
+    let boundary: { level: number; points: number } | null = null;
+    for (let level = 40; level < 120 && boundary === null; level += 1) {
+      const cost = pointsForLevel(melee, level, 1.1);
+      const effective = (points: number) => at(level, points).loyaltyLevelOf(melee, 1.1);
+      if (effective(cost - 1) === effective(0)) continue;
+      let low = 0;
+      let high = cost - 1; // efetivo(low) < efetivo(high)
+      while (high - low > 1) {
+        const mid = Math.floor((low + high) / 2);
+        if (effective(mid) === effective(0)) low = mid; else high = mid;
+      }
+      const percent = (points: number) => at(level, points).skills.progressOf(melee, 1.1).percentToNext;
+      // Só serve se o try do meio NÃO mexe no percentual base (senão o teste não isola nada).
+      if (percent(low) === percent(high)) boundary = { level, points: low };
+    }
+    if (boundary === null) throw new Error('nenhum nível de custo alto tem um try de fronteira isolado');
+
+    const { runFor, received, hero } = hunt({
+      regen: false, stamina: MID_MINUTE_STAMINA_MS, monsters: false, skills: [TEST_MELEE_SKILL],
+      heroSkills: { melee: boundary }, loyaltyBonusPercent: 50,
+    });
+    const before = ofType(received(), 'player-stats');
+    expect(before).toHaveLength(1);
+    const beforeMelee = before[0]?.skills.melee;
+
+    hero().skills.gain(melee, 1);
+    runFor(100);
+
+    const stats = ofType(received(), 'player-stats');
+    expect(stats).toHaveLength(2);
+    const afterMelee = stats[1]?.skills.melee;
+    // Nível e percentual BASE iguais; só o efetivo andou um nível.
+    expect(afterMelee?.level).toBe(beforeMelee?.level);
+    expect(afterMelee?.percentToNext).toBe(beforeMelee?.percentToNext);
+    expect(afterMelee?.loyaltyLevel).toBe((beforeMelee?.loyaltyLevel ?? 0) + 1);
+    // Ciclo seguinte sem mudança: nenhum pacote a mais.
+    runFor(100);
+    expect(ofType(received(), 'player-stats')).toHaveLength(2);
   });
 
   it('a magia com tabela vira missile do conjurador ao alvo e effect NO alvo, com os ids da tabela', () => {

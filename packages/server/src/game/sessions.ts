@@ -312,6 +312,12 @@ export function characterFromTicket(
       ...(initialCharacter.boostedMonsterId === undefined
         ? {}
         : { boostedMonsterId: initialCharacter.boostedMonsterId }),
+      // O bônus de Loyalty (#628, ADR 0052 decisão 5): calculado pela `api` na emissão e fixado
+      // AGORA, como a boosted — a sessão nunca relê conta nem relógio, e o valor atravessa toda
+      // transição Cidade↔hunt e toda retomada de snapshot (vive no `CharacterState`).
+      ...(initialCharacter.loyaltyBonusPercent === undefined
+        ? {}
+        : { loyaltyBonusPercent: initialCharacter.loyaltyBonusPercent }),
     });
     // Materializa na ENTRADA (§10): o personagem esteve fora de hunt desde a última vez, e
     // esse tempo é recuperação. Fazer a conta aqui, e não na leitura de cada consulta, é o

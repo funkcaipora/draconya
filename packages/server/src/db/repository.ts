@@ -146,6 +146,13 @@ export interface FriendView {
 export interface GameRepository {
   ensureAccount(identity: { externalAuthId: string; email: string }): Promise<AccountRecord>;
   /**
+   * Quando a conta nasceu (`account.created_at`) — a idade que o Loyalty (#628, ADR 0052 d.5)
+   * conta na emissão do ticket. `null` para uma conta que não existe. Leitura só do carimbo, e
+   * não o `AccountRecord` inteiro: quem chama é a `api`, uma vez por ticket, e a linha da conta
+   * não tem mais nada de que o ticket precise.
+   */
+  getAccountCreatedAt(accountId: string): Promise<Date | null>;
+  /**
    * Cria o personagem. `initial.botConfig` é a configuração de bot com que ele NASCE (FUN-114)
    * — a padrão do conteúdo, gravada aqui porque o personagem novo precisa entrar na primeira
    * hunt curando e atacando sem ter aberto tela nenhuma. Opaca: quem valida o vocabulário é o host da sessão.
@@ -251,6 +258,15 @@ export class DrizzleGameRepository implements GameRepository {
       }
       throw error;
     }
+  }
+
+  async getAccountCreatedAt(accountId: string): Promise<Date | null> {
+    const rows = await this.#db
+      .select({ createdAt: accounts.createdAt })
+      .from(accounts)
+      .where(eq(accounts.id, accountId))
+      .limit(1);
+    return rows[0]?.createdAt ?? null;
   }
 
   async createCharacter(

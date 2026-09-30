@@ -356,6 +356,35 @@ describe.runIf(available)('session ticket', () => {
     });
   });
 
+  it('carries the Loyalty bonus of the account, and drops a value it cannot trust (#628)', async () => {
+    // O bônus é da IDADE DA CONTA, calculado pela `api` na emissão e fixado na sessão (ADR 0052
+    // d.5): sem ele no ticket, o `game` — que não fala com o Postgres — valeria o nível base a
+    // hunt inteira. Um valor torto (fracionário, zero, negativo, texto, acima do `uint16_t` do
+    // Canary) vira AUSENTE, nunca ticket recusado, a mesma régua do Premium.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+    for (const loyaltyBonusPercent of [5, 50]) {
+      const issued = await tickets.issue('a1', 'p1', { level: 1, xp: 0, loyaltyBonusPercent });
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1')).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0, loyaltyBonusPercent },
+      });
+      await tickets.revoke(issued.value.ticket, 'a1', 'p1');
+    }
+    for (const torto of [0, -5, 7.5, 65_536, '5', null]) {
+      const issued = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, loyaltyBonusPercent: torto } as unknown as InitialCharacter,
+      );
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1')).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0 },
+      });
+      await tickets.revoke(issued.value.ticket, 'a1', 'p1');
+    }
+  });
+
   it('revoke frees the slot, the ticket and the reservation (#195)', async () => {
     // O `start` de uma party emite N e desfaz os k−1 quando o k-ésimo falha. Mutação que
     // mata: `revoke` sem o `SREM` do slot ativo — o terceiro personagem da conta continuaria

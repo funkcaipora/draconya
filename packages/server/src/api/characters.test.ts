@@ -53,6 +53,10 @@ class MemoryRepository implements GameRepository {
   async ensureAccount(identity: { externalAuthId: string; email: string }): Promise<AccountRecord> {
     return { id: 'a1', email: identity.email, externalAuthId: identity.externalAuthId, coins: 0 };
   }
+  async getAccountCreatedAt(): Promise<Date | null> {
+    // A idade da conta só importa para o ticket (Loyalty, #628), que não passa por este arquivo.
+    return null;
+  }
   async createCharacter(
     accountId: string, name: string,
     initial: { readonly botConfig?: unknown; readonly kit?: readonly StartingKitPiece[] } = {},

@@ -15,8 +15,7 @@
 import { performance } from 'node:perf_hooks';
 import type {
   Aggregates, CombatEvent, EndReason, FollowState, GridPoint, ManualActionResult, MemberLeft,
-  PartyEvent, PresenceEvent, Receipt, Session, SessionSnapshot, SessionType, SkillProgress,
-  WorldPoint,
+  PartyEvent, PresenceEvent, Receipt, Session, SessionSnapshot, SessionType, WorldPoint,
 } from '@draconya/sim';
 import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
@@ -464,6 +463,8 @@ function equipmentOfState(inventory: InventoryState): Record<string, string> {
 
 /** Os vitais do jogador como o HUD os lê. */
 type PlayerStats = S2CProps<'player-stats'>;
+/** O progresso de UMA skill como o HUD o lê: nível, percentual e, com Loyalty (#628), o nível efetivo. */
+type SkillProgress = PlayerStats['skills'][string];
 
 /**
  * Os vitais do jogador, montados UMA vez para os dois caminhos (FUN-109): o `session-state`
@@ -486,7 +487,12 @@ function skillProgressOf(
 ): SkillProgress {
   if (character === undefined || definition === undefined) return { level: 0, percentToNext: 0 };
   const factor = progression === undefined ? undefined : skillFactorFor(definition, vocation, progression);
-  return character.skills.progressOf(definition, factor);
+  const progress = character.skills.progressOf(definition, factor);
+  // O nível COM Loyalty (#628) só viaja quando o bônus muda o nível — o caso comum (conta sem
+  // degrau, ou tries de bônus que ainda não fecham um nível) manda a mesma forma de antes, e o
+  // HUD lê a ausência como "igual ao base". O percentual continua o do nível BASE, como no Canary.
+  const loyaltyLevel = character.loyaltyLevelOf(definition, factor);
+  return loyaltyLevel > progress.level ? { ...progress, loyaltyLevel } : progress;
 }
 
 function playerStatsOf(
@@ -526,6 +532,10 @@ function playerStatsOf(
     speed: character === undefined ? 0 : Math.round(character.speed * character.speedScale),
     skills,
     magicLevel: skillProgressOf(character, skillCatalog?.get('magic'), vocation, progression),
+    // O bônus de Loyalty da conta (#628): fixado no ticket, constante pela sessão. Ausente quando
+    // é zero — o `player-stats` do caso comum continua idêntico ao de antes.
+    ...(character === undefined || character.loyaltyBonusPercent === 0
+      ? {} : { loyaltyBonusPercent: character.loyaltyBonusPercent }),
     // Alma (#593): `soulMax` é da VOCAÇÃO — zero sem uma escolhida, o "sem teto" do HUD. A
     // vocação PROMOVIDA (#566) reescreve o teto quando o conteúdo declara `promotion.soulMax`.
     soul: character?.soul ?? 0,
@@ -534,7 +544,7 @@ function playerStatsOf(
 }
 
 function sameSkillProgress(a: SkillProgress, b: SkillProgress): boolean {
-  return a.level === b.level && a.percentToNext === b.percentToNext;
+  return a.level === b.level && a.percentToNext === b.percentToNext && a.loyaltyLevel === b.loyaltyLevel;
 }
 
 function sameSkills(a: Record<string, SkillProgress>, b: Record<string, SkillProgress>): boolean {
@@ -576,6 +586,7 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
     && a.speed === b.speed
     && sameSkills(a.skills, b.skills)
     && sameSkillProgress(a.magicLevel, b.magicLevel)
+    && a.loyaltyBonusPercent === b.loyaltyBonusPercent
     && a.soul === b.soul
     && a.soulMax === b.soulMax;
 }
@@ -4813,6 +4824,7 @@ export class SessionHost {
         speed: self.speed,
         skills: self.skills,
         magicLevel: self.magicLevel,
+        ...(self.loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent: self.loyaltyBonusPercent }),
         soul: self.soul,
         soulMax: self.soulMax,
       },
