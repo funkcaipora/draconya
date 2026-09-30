@@ -124,3 +124,28 @@ vence. O texto no `AGENTS.md` foi atualizado no mesmo commit.
 Os outros dez seguem intocados. O invariante 3 — o resultado não depende de haver alguém
 assistindo — sai **mais forte**: era verdade para a recompensa e falso para o dano sofrido, e
 agora é verdade para os dois.
+
+## Emenda — 2026-09-29 (#812): o relógio é da sessão, e o personagem chega sem instante nenhum da anterior
+
+Esta decisão faz cada sessão começar o próprio relógio em zero. O que ela não dizia é o que acontece
+com um instante gravado em `CharacterRuntime` — que atravessa Cidade → hunt, hunt → hunt e a saída da
+party como o MESMO objeto — e lido pela sessão seguinte. O #550 achou o primeiro caso
+(`lastAttackAtMs`, o carimbo do último golpe de arma) e o #812 fechou a classe inteira:
+
+- **`Session.enter` zera, depois do `onEnter`, tudo o que o personagem guarda como instante do relógio
+  da sessão anterior** (`CharacterRuntime.resetSessionClockState`): `lastAttackAtMs`,
+  `lastCombatActionAtMs`, `attackLockedUntil`, a imunidade do Cleanse, o banco de cargas de bloqueio
+  (volta cheio), os cooldowns, as condições e a ação manual adiada. Um carimbo de outra sessão lido no
+  relógio errado vira "agora mesmo" ou "no futuro": o resultado do combate passaria a depender do
+  caminho do objeto, e não do estado e da semente (invariante 3). Uma condição herdada é pior — o
+  vencimento dela morava na fila da sessão anterior, então na nova ela nunca acabaria.
+- **Entre uma sessão e a outra passa tempo real sem simulação** (a Cidade não simula, ADR 0023), então
+  "tudo vencido, nada em curso" é o único estado de entrada coerente — o mesmo de um personagem
+  recém-criado a partir do ticket. Reescrever o instante para o relógio novo (rebase) exigiria saber
+  onde o relógio antigo parou, e o objeto não guarda isso.
+- **A entrada recusada não zera** (party cheia: quem continua na origem mantém o estado), e **o restore
+  de snapshot não passa por `enter`**: o relógio é o mesmo, e a janela quente atravessa. A frequência
+  de avanço (invariante 2) e a restauração continuam invariantes.
+- **A regra é estrutural, não de memória**: `IS_SESSION_CLOCK` (`session.test.ts`) é um
+  `Record<keyof CharacterState, boolean>`, e um campo novo do estado do personagem não compila até ser
+  classificado como instante (e ganhar o teste de reset) ou dado que atravessa.

@@ -105,6 +105,20 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **Loot sorteia com o `Rng` da sessão, gold antes de item, e `chance: 0` não consome
   sorteio.** Ordem e semente são contrato: mudar qualquer um dos dois muda o que toda hunt
   retomada rende. `Math.random` continua proibido, e `grep -rn "Math.random" src` é vazio.
+- **Instante do relógio da sessão NÃO atravessa a troca de sessão** (#812, #550). O relógio de
+  cada sessão nasce em zero (ADR 0020), mas o `CharacterRuntime` é o MESMO objeto na transição
+  (Cidade → hunt, hunt → hunt, saída da party): um carimbo de 57 700 ms gravado pela hunt anterior
+  vira "no futuro" da nova e o combate passa a depender de por onde o objeto andou, não do estado e
+  da semente. `Session.enter` chama `CharacterRuntime.resetSessionClockState` DEPOIS de o `onEnter`
+  aceitar (a entrada recusada não apaga o estado de quem continua na origem), e o restore de
+  snapshot NÃO passa por `enter` — o relógio é o mesmo, e a janela quente atravessa. **Todo campo
+  novo do `CharacterRuntime` que guarde um instante (`…AtMs`, `…Until`, `until`, `expiresAtMs`,
+  `anchorMs`) entra em `resetSessionClockState`**, e o teste que força isso é a tabela
+  `IS_SESSION_CLOCK` de `session.test.ts` — um `Record<keyof CharacterState, boolean>`, então o campo
+  novo não compila até ser classificado. Duração restante (`fedMs`, `durationRemainingMs`) não é
+  instante e atravessa. "Carimbo no futuro é `false`" na leitura (o cinto de `attackedRecently`)
+  nunca substitui o reset: cobre só metade do defeito, e o carimbo que o relógio novo já alcançou
+  continua lido como recente.
 - **Um evento que se reagenda usa `session.nowMs + intervalo`**, e é exato porque `nowMs` durante
   o despacho É o instante do vencimento. Não há erro a herdar, e por isso não há acumulador.
 - **`pnpm source-policy` reprova nome de contador de tick** (`remainingTicks`, `cooldownTicks`, …)
