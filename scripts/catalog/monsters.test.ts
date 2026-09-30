@@ -144,6 +144,22 @@ monster.summon = { maxSummons = 1, summons = { { name = "Test Rat", chance = 20,
 mType:register(monster)
 `;
 
+// Um boss sintético (#629): o bloco `monster.bosstiary` do Canary, sem `Bestiary` (boss não tem
+// ficha de Bestiário).
+const BOSS = (bosstiary: string) => `
+local mType = Game.createMonsterType("Test Boss")
+local monster = {}
+monster.experience = 900
+monster.outfit = { lookType = 21 }
+${bosstiary}
+monster.health = 5000
+monster.maxHealth = 5000
+monster.speed = 100
+monster.attacks = { { name = "melee", interval = 2000, chance = 100, minDamage = 0, maxDamage = -50 } }
+monster.defenses = { defense = 5, armor = 5 }
+mType:register(monster)
+`;
+
 const OUT_OF_PACK = `
 local mType = Game.createMonsterType("Test Wraith")
 local monster = {}
@@ -425,6 +441,46 @@ describe('convertMonster (fixture sintética)', () => {
     const converted = convertMonster(text, 'x/dragons/test_drake.lua', 'dragons', COMMIT, deps(ctx));
     expect(converted.entity['speed']).toBe(170);
     expect(converted.notes.speedSource).toBe('tfs');
+  });
+});
+
+describe('o Bosstiary do Canary (#629)', () => {
+  const convertBoss = (bosstiary: string) => {
+    const ctx = fixture(false);
+    return convertMonster(BOSS(bosstiary), 'x/bosses/test_boss.lua', 'bosses', COMMIT, deps(ctx));
+  };
+
+  it.each([
+    ['RARITY_BANE', 'bane'], ['RARITY_ARCHFOE', 'archfoe'], ['RARITY_NEMESIS', 'nemesis'],
+  ])('%s vira a raridade %s, com o raceId e a flag boss (o isBoss do Canary)', (constant, rarity) => {
+    const converted = convertBoss(`monster.bosstiary = { bossRaceId = 5555, bossRace = ${constant} }`);
+    expect(converted.blockers).toEqual([]);
+    expect(converted.entity['boss']).toBe(true);
+    expect(converted.entity['bosstiary']).toEqual({ rarity, raceId: 5555 });
+    // O bloco vai para `data/` como está (é campo do `monsterSchema`), e o boss não tem `class`.
+    expect(converted.entity['bestiary']).toBeUndefined();
+    expect(() => monsterSchema.parse(asMonster(converted.entity))).not.toThrow();
+    // Lido, não mais "ignorado por falta de sistema".
+    expect(converted.notes.ignoredFields.some((field) => field.startsWith('bosstiary'))).toBe(false);
+  });
+
+  it('monstro sem bloco bosstiary não é boss, e o schema o aceita sem os dois campos', () => {
+    const converted = convertBoss('');
+    expect(converted.blockers).toEqual([]);
+    expect(converted.entity['boss']).toBeUndefined();
+    expect(converted.entity['bosstiary']).toBeUndefined();
+  });
+
+  it('bloqueia o boss sem raridade conhecida ou sem bossRaceId — o Canary o registra pela metade', () => {
+    // Sem `bossRace` o Canary nem o marca como boss; sem `bossRaceId` o `raceid` fica 0 e
+    // `IOBosstiary::addBosstiaryKill` devolve cedo: o boss nunca contaria abate.
+    expect(convertBoss('monster.bosstiary = { bossRaceId = 5555 }').blockers)
+      .toEqual(['raridade de Bosstiary desconhecida: nil']);
+    expect(convertBoss('monster.bosstiary = { bossRaceId = 5555, bossRace = RARITY_LEGENDARY }').blockers)
+      .toEqual(['raridade de Bosstiary desconhecida: RARITY_LEGENDARY']);
+    expect(convertBoss('monster.bosstiary = { bossRace = RARITY_BANE }').blockers)
+      .toEqual(['bosstiary sem bossRaceId']);
+    expect(convertBoss('monster.bosstiary = 3').blockers).toEqual(['bosstiary não é uma tabela']);
   });
 });
 
