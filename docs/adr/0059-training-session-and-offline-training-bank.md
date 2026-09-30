@@ -1,6 +1,6 @@
 # 0059 — Treino: exercise weapon numa sessão de Treino por eventos; offline training é um banco gasto na volta
 
-**Status:** proposto — implementa a decisão 4 do [ADR 0045](0045-tibia-bestiary-charms-prey-and-training.md)
+**Status:** aceito (#631) — implementa a decisão 4 do [ADR 0045](0045-tibia-bestiary-charms-prey-and-training.md)
 **Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30) — d.1 e d.3:** o treino é online; o banco cresce no mundo; o “fora” é o repouso.
 (exercise weapons e offline training no lugar dos Trainer Monks); persiste pelo
 [ADR 0052](0052-endgame-progression-state-and-city-services-through-the-owning-session.md)
@@ -84,3 +84,43 @@ training precisa saber quanto tempo o personagem passou fora — e o `sim` não 
 
 Nenhum. **8** (sessão de Treino como estado ATIVO), **2** (golpe é evento), **3** (idêntico
 desanexado), **1** (a `api` calcula o offline, não o `sim`).
+
+## Emenda — 2026-09-30: a implementação (#631)
+
+O que a implementação decidiu onde o ADR era genérico, e o que ela alinhou ao [ADR 0060](0060-tibia-open-world-without-pvp.md).
+
+1. **O "fora" do offline training é o repouso, medido por um carimbo no diretório** (d.3, emendada
+   pelo ADR 0060 d.14c). O `game` grava `char:{id}:rest` — o instante do `release` — no Redis, no
+   `SessionDirectory.release`; a `api` o lê no `resolveNode` (que diz se o personagem está em repouso:
+   nenhum registro de sessão) e o `register` o apaga. Não é coluna do Postgres: é dado de duração curta
+   (o "fora" nunca conta mais que 21 dias) e de leitura barata no ticket. **Sem carimbo — Redis
+   reiniciado, ou a sessão que caiu sem `release` — a `api` não gasta o banco naquele login**: o tempo
+   continua nele, a escolha do livro também, e nada se perde. A alternativa "agora − `stamina_updated_at`"
+   foi descartada: esse marco é o do último login/transição e contaria como "fora" o tempo online na
+   Cidade.
+2. **A `api` escreve na MESMA transação da trava de linha do ticket.** `withOwnedCharacter` passa à
+   operação um `CharacterWriter` (`applyOfflineTraining`) preso à `tx` que segura a linha — um método
+   do repositório abriria outra conexão e esperaria, sem fim, pela linha travada. O ticket leva o
+   resultado (skills e banco novos), e a escrita só acontece com o ticket emitido: `active-limit` não
+   gasta o banco. Quando nada rendeu (carência, banco vazio) só `characters.training` é escrito — as
+   skills e o instante delas (`skills_updated_at`, a guarda do ledger) ficam como estavam.
+3. **A stamina não anda no Treino** — a d.1 dizia "recupera como na Cidade"; o ADR 0060 d.14c
+   corrigiu para "não recupera", porque o exercise training do Canary é online e o Canary só regenera
+   stamina deslogado. Implementado como `holdStamina` (`packages/sim/src/stamina.ts`): sair do Treino
+   só avança o marco; a entrada materializa como sempre (o tempo antes do treino é recuperação).
+4. **Compra e persistência.** `buy-item` cria a instância de origem `purchase` (nova em
+   `ITEM_ORIGINS`), com id `${sessão da praça}:${personagem}:buy:${UUID}` — único por compra, porque a
+   mesma cópia da Cidade é reaberta em outro dia. O extrato de estado durável da Cidade agora **também
+   sai na transição para uma sessão privada** quando há estado sujo (`#runTransition`, como
+   `#leaveForParty` já fazia): sem isso, a arma comprada (prefixo da sessão da praça) nunca chegaria ao
+   banco — o extrato do Treino só leva o `acquired` nascido NELE — e o gold gasto sumiria junto, já que
+   o `goldDelta` da praça não entra nos agregados da sessão de destino.
+5. **O corte do catálogo**: 21 exercise weapons (sword, axe, club, bow, rod, wand e shield × 500 / 1 800
+   / 14 400 cargas). As exercise wraps de fist (Monk, pós-13.32) e as de 50 cargas de treino ficam
+   fora, com o boneco livre (`rate` 100); o boneco de casa (110) espera o sistema de casas.
+6. **O boneco mora no mapa da Cidade**, e não num recorte OTBM mínimo à parte (d.1 previa um): o
+   boneco livre da Thais é um item do próprio recorte da Cidade (`things/maps/otservbr.otbm`, item
+   28565 em (32347, 32240, 7) = (72, 87, 7)), então a sessão de Treino reaproveita `content.city` e o
+   tile do personagem é conferido no boot (`buildContent`).
+
+**Status:** implementado na #631.

@@ -375,6 +375,16 @@ origem nova desde `market`) entra pelo caminho de sempre — `acquired` + `equip
 DESLIGADA no conteúdo real** (`deathPenalty.itemLoss.enabled: false`) até o dono decidir entre
 destruir e manter "nunca perde item": ver `docs/product/death.md`, "Perda de item na morte".
 
+**A exercise weapon é o único item COMPRADO do NPC por gold (#631, ADR 0059 d.2).** O `buy-item { itemId }` mínimo só aceita `purchasable:
+true`, ao `buyPrice`, uma unidade por pedido; a instância nasce de origem **`purchase`** (nova em
+`ITEM_ORIGINS`: `market` é o comércio entre jogadores, e o NPC do Canary é outra proveniência) e
+entra pelo caminho de sempre — `goldDelta` para o gold e `acquired` para o item, gravados pelo
+extrato de estado durável da Cidade. O id da instância leva o do personagem e um UUID por compra:
+a mesma cópia da Cidade é reaberta em outro dia, e um id derivado do `lootSeq` (que recomeça em
+zero) colidiria na chave primária. As cargas restantes vivem no **overlay** da instância
+(`ItemInstanceOverlay.charges`, "ausente é cheia") e a arma esgotada é destruída por
+`removedInstances`, o mesmo caminho de vender, descartar e morrer — ver `docs/product/training.md`.
+
 ### A tela (#161, ADR 0026 decisão 7)
 
 A coluna da DIREITA do OTClient: o **painel do set** (`EquipmentPanel`) com os dez slots no

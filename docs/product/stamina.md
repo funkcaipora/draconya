@@ -9,7 +9,7 @@ abate no Bestiário** (FUN-113), os três pelo mesmo portão. Teto revisado para
 
 ## Comportamento
 
-Todo personagem tem uma reserva de stamina que funciona como o freio econômico do tempo de caça efetivo. Ela se esgota enquanto o personagem está em hunt e se recupera enquanto ele está fora de hunt — inclusive enquanto está em treino, que conta como "fora de hunt" para esse efeito.
+Todo personagem tem uma reserva de stamina que funciona como o freio econômico do tempo de caça efetivo. Ela se esgota enquanto o personagem está em hunt e se recupera enquanto ele está fora de hunt. **O Treino não conta como "fora de hunt"**: a stamina fica congelada nele (#631, emenda do [ADR 0060](../adr/0060-tibia-open-world-without-pvp.md) d.14c ao [ADR 0059](../adr/0059-training-session-and-offline-training-bank.md) d.1 — o exercise training do Canary é online, e o Canary só regenera stamina deslogado).
 
 Quando a stamina chega a zero, a hunt não é interrompida: o personagem continua dentro dela, continua andando, continua atacando, continua consumindo supplies e gastando gold, e pode morrer normalmente. O que muda é que a partir desse ponto ele para de progredir de verdade: não recebe XP, não recebe loot e os abates não contam para a Bestiário. Ou seja, stamina zero transforma a hunt em uma atividade que ainda tem custo mas não tem mais benefício de progressão — o jogador (ou o bot, via regra de saída configurada) é quem decide encerrar.
 
@@ -18,7 +18,9 @@ Quando a stamina chega a zero, a hunt não é interrompida: o personagem continu
 - Stamina máxima: 12 horas (43.200.000 ms) — o teto que o Huntera mostra cheio na Cidade
   (M32-01, #562). Eram 24 horas antes desta issue, um número nosso sem fonte no Tibia.
 - Recuperação fora de hunt: 1 minuto de tempo real recupera 1 minuto de stamina (proporção 1:1).
-- Treino conta como "fora de hunt" para fins de recuperação de stamina.
+- O Treino não recupera nem gasta stamina (#631): a saída dele só avança o marco
+  (`holdStamina`, `game/sessions.ts`), e o tempo de treino não vira recuperação na próxima
+  materialização. Antes desta emenda o PRD e o ADR 0059 d.1 diziam o contrário.
 - Em stamina zero, dentro da hunt: personagem continua se movendo, atacando, consumindo supplies/gold e pode morrer; não recebe XP; não recebe loot; abates não contam para a Bestiário.
 - Stamina zero, por si só, nunca encerra a hunt automaticamente.
 
