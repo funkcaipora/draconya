@@ -753,4 +753,9 @@ suba o `pnpm dev` e olhe cada cenário na tela do mundo:
   stamina, magic level, corpo a corpo, distância) seguem a preferência de `localStorage` acima;
   `magic`, `melee` e `distance` exibem a barra de progresso sob o valor, `magic` ganha o tom
   `vital-mp`, e `speed` não tem barra.
-
+- **A luz do jogador (#623) mora em `world.selfLight`, sem assinatura, e o pintor a lê a cada
+  quadro** (`world/light.ts`, `viewport.ts#paintTerrain`). O servidor manda raio, cor e prazo total
+  no `active-conditions`; o decaimento (`ceil(level × restante / total)`, o `ConditionLight` do
+  Canary) é conta LOCAL contra `receivedAtMs` — nada é mandado por tique. Só clareia o `cavern`; na
+  superfície não muda nada. É apresentação: o cliente não decide que há luz (invariante 4), e
+  `enterInstance` a zera porque o `active-conditions` a repõe logo depois em toda reanexação.
