@@ -314,6 +314,22 @@ const ITEMS_XML = `<?xml version="1.0" encoding="ISO-8859-1"?>
 		<attribute key="weight" value="3000"/>
 		<attribute key="imbuementslot" value="1"/>
 	</item>
+	<item id="90060" article="an" name="test exercise sword">
+		<attribute key="primarytype" value="exercise weapons"/>
+		<attribute key="showCharges" value="1"/>
+		<attribute key="charges" value="500"/>
+		<attribute key="weight" value="1000"/>
+	</item>
+	<item id="90061" article="an" name="test exercise wraps">
+		<attribute key="primarytype" value="exercise weapons"/>
+		<attribute key="charges" value="500"/>
+		<attribute key="weight" value="1000"/>
+	</item>
+	<item id="90062" article="a" name="test training sword">
+		<attribute key="primarytype" value="training weapons"/>
+		<attribute key="charges" value="50"/>
+		<attribute key="weight" value="1000"/>
+	</item>
 	<item id="90047" article="a" name="test power ring">
 		<attribute key="skillfist" value="6"/>
 		<attribute key="weight" value="10"/>
@@ -364,6 +380,52 @@ describe('classify', () => {
     expect(classify(undefined, undefined, undefined, 'necklace', false)).toEqual({ slice: 'amulets', kind: 'amulet', slot: 'neck' });
     expect(classify(undefined, undefined, undefined, 'ring', false)).toEqual({ slice: 'rings', kind: 'ring', slot: 'finger' });
     expect(classify(undefined, undefined, undefined, undefined, false)).toMatchObject({ skip: expect.stringMatching(/sem categoria/) });
+  });
+});
+
+describe('exercise weapons (#631, ADR 0059)', () => {
+  const exercise = {
+    skillNameByClientId: new Map([[90060, 'SKILL_SWORD'], [90061, 'SKILL_FIST']]),
+  };
+  const prices = {
+    sellMaxByClientId: new Map(),
+    buyMinByClientId: new Map([[90060, { amount: 347_222, itemName: 'test exercise sword', npcFile: 'test.lua' }]]),
+  };
+  const convertWith = (id: string, lookups: { prices?: typeof prices; exercise?: typeof exercise }) => {
+    const item = itemsOf(ITEMS_XML).find((el) => el.attributes['id'] === id);
+    if (item === undefined) throw new Error(`fixture sem item id ${id}`);
+    return convertItem(item, PATH, COMMIT, lookups.prices, lookups.exercise);
+  };
+
+  it('classifica `exercise weapons` na fatia própria e `training weapons` fica fora (Daily Reward)', () => {
+    expect(classify('exercise weapons', undefined, undefined, undefined, false))
+      .toEqual({ slice: 'exercise-weapons', kind: 'other' });
+    const skipped = classify('training weapons', undefined, undefined, undefined, false);
+    expect('skip' in skipped && skipped.skip).toMatch(/Daily Reward/);
+  });
+
+  it('converte cargas, skill e preço de compra — sem slot, sem arma, e o schema real aceita', () => {
+    const converted = convertWith('90060', { prices, exercise });
+    expect(converted?.blockers).toEqual([]);
+    expect(converted?.slice).toBe('exercise-weapons');
+    expect(converted?.entity).toMatchObject({
+      id: 'test-exercise-sword', kind: 'other', weight: 10, value: 0, charges: 500,
+      exercise: { skillId: 'sword' }, purchasable: true, buyPrice: 347_222,
+    });
+    expect(converted?.entity).not.toHaveProperty('slot');
+    expect(converted?.entity).not.toHaveProperty('weapon');
+    expect(itemSchema.parse(asItem(converted?.entity))).toBeTruthy();
+  });
+
+  it('sem NPC que a venda não há `purchasable` nem `buyPrice`', () => {
+    const converted = convertWith('90060', { prices: { sellMaxByClientId: new Map() }, exercise });
+    expect(converted?.entity).not.toHaveProperty('purchasable');
+    expect(converted?.entity).not.toHaveProperty('buyPrice');
+  });
+
+  it('wraps de fist (Monk) e item fora da tabela do Lua saem do corte com o motivo', () => {
+    expect(convertWith('90061', { prices, exercise })?.blockers[0]).toMatch(/fist é do Monk/);
+    expect(convertWith('90060', { prices })?.blockers[0]).toMatch(/exerciseWeaponsTable/);
   });
 });
 

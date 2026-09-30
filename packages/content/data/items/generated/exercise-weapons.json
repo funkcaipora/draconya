@@ -1,0 +1,380 @@
+[
+  {
+    "id": "durable-exercise-axe",
+    "name": "durable exercise axe",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 1800,
+    "exercise": {
+      "skillId": "axe"
+    },
+    "purchasable": true,
+    "buyPrice": 1250000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "durable-exercise-bow",
+    "name": "durable exercise bow",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 1800,
+    "exercise": {
+      "skillId": "distance"
+    },
+    "purchasable": true,
+    "buyPrice": 1250000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "durable-exercise-club",
+    "name": "durable exercise club",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 1800,
+    "exercise": {
+      "skillId": "club"
+    },
+    "purchasable": true,
+    "buyPrice": 1250000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "durable-exercise-rod",
+    "name": "durable exercise rod",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 1800,
+    "exercise": {
+      "skillId": "magic"
+    },
+    "purchasable": true,
+    "buyPrice": 1250000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "durable-exercise-shield",
+    "name": "durable exercise shield",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 1800,
+    "exercise": {
+      "skillId": "shielding"
+    },
+    "purchasable": true,
+    "buyPrice": 1250000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "durable-exercise-sword",
+    "name": "durable exercise sword",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 1800,
+    "exercise": {
+      "skillId": "sword"
+    },
+    "purchasable": true,
+    "buyPrice": 1250000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "durable-exercise-wand",
+    "name": "durable exercise wand",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 1800,
+    "exercise": {
+      "skillId": "magic"
+    },
+    "purchasable": true,
+    "buyPrice": 1250000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "exercise-axe",
+    "name": "exercise axe",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 500,
+    "exercise": {
+      "skillId": "axe"
+    },
+    "purchasable": true,
+    "buyPrice": 347222,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "exercise-bow",
+    "name": "exercise bow",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 500,
+    "exercise": {
+      "skillId": "distance"
+    },
+    "purchasable": true,
+    "buyPrice": 347222,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "exercise-club",
+    "name": "exercise club",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 500,
+    "exercise": {
+      "skillId": "club"
+    },
+    "purchasable": true,
+    "buyPrice": 347222,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "exercise-rod",
+    "name": "exercise rod",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 500,
+    "exercise": {
+      "skillId": "magic"
+    },
+    "purchasable": true,
+    "buyPrice": 347222,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "exercise-shield",
+    "name": "exercise shield",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 500,
+    "exercise": {
+      "skillId": "shielding"
+    },
+    "purchasable": true,
+    "buyPrice": 347222,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "exercise-sword",
+    "name": "exercise sword",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 500,
+    "exercise": {
+      "skillId": "sword"
+    },
+    "purchasable": true,
+    "buyPrice": 347222,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "exercise-wand",
+    "name": "exercise wand",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 500,
+    "exercise": {
+      "skillId": "magic"
+    },
+    "purchasable": true,
+    "buyPrice": 347222,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lasting-exercise-axe",
+    "name": "lasting exercise axe",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 14400,
+    "exercise": {
+      "skillId": "axe"
+    },
+    "purchasable": true,
+    "buyPrice": 10000000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lasting-exercise-bow",
+    "name": "lasting exercise bow",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 14400,
+    "exercise": {
+      "skillId": "distance"
+    },
+    "purchasable": true,
+    "buyPrice": 10000000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lasting-exercise-club",
+    "name": "lasting exercise club",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 14400,
+    "exercise": {
+      "skillId": "club"
+    },
+    "purchasable": true,
+    "buyPrice": 10000000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lasting-exercise-rod",
+    "name": "lasting exercise rod",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 14400,
+    "exercise": {
+      "skillId": "magic"
+    },
+    "purchasable": true,
+    "buyPrice": 10000000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lasting-exercise-shield",
+    "name": "lasting exercise shield",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 14400,
+    "exercise": {
+      "skillId": "shielding"
+    },
+    "purchasable": true,
+    "buyPrice": 10000000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lasting-exercise-sword",
+    "name": "lasting exercise sword",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 14400,
+    "exercise": {
+      "skillId": "sword"
+    },
+    "purchasable": true,
+    "buyPrice": 10000000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lasting-exercise-wand",
+    "name": "lasting exercise wand",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "charges": 14400,
+    "exercise": {
+      "skillId": "magic"
+    },
+    "purchasable": true,
+    "buyPrice": 10000000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  }
+]

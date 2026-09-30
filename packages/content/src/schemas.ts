@@ -1058,8 +1058,38 @@ export const itemSchema = z.strictObject({
      */
     keyId: z.number().int().positive().optional(),
   }).optional(),
+  /**
+   * O item É uma exercise weapon (#631, ADR 0059 d.1): usada num boneco, gasta UMA carga por golpe
+   * (`charges` é o total da definição — 500/1 800/14 400; as restantes são estado da INSTÂNCIA no
+   * overlay, `ItemInstanceOverlay.charges`) e credita a skill `skillId` (`SKILL_*` da tabela
+   * `exerciseWeaponsTable` de `exercise_training_weapons.lua`; `magic` para rod/wand). Só em
+   * `kind: 'other'` com `charges` — `buildContent` confere.
+   */
+  exercise: z.strictObject({ skillId: z.string().min(1) }).optional(),
+  /**
+   * Compra mínima por gold (#631, ADR 0059 d.2): enquanto não há loja geral (E5), `buy-item
+   * { itemId }` só aceita item com `purchasable: true`, ao `buyPrice` — o MENOR `buy` de NPC do
+   * Canary (`npc-prices.ts`, ADR 0038 d.6). A loja geral substitui o mecanismo sem mudar o dado.
+   * Os dois andam juntos (`superRefine` abaixo).
+   */
+  purchasable: z.literal(true).optional(),
+  buyPrice: z.number().int().positive().optional(),
   _open: z.string().optional(),
 }).superRefine((item, ctx) => {
+  // `purchasable` e `buyPrice` são um par: preço sem `purchasable` seria um número que ninguém lê,
+  // e `purchasable` sem preço, um item que se leva de graça.
+  if ((item.purchasable === true) !== (item.buyPrice !== undefined)) {
+    ctx.addIssue({ code: 'custom', message: '`purchasable` e `buyPrice` vão juntos' });
+  }
+  // Uma exercise weapon é um item de mochila com cargas: sem `charges` não haveria o que gastar, e
+  // com `slot`/`weapon` ela viraria uma arma que o combate leria.
+  if (item.exercise !== undefined) {
+    if (item.kind !== 'other') ctx.addIssue({ code: 'custom', message: '`exercise` só vale em `kind: "other"`' });
+    if (item.charges === undefined) ctx.addIssue({ code: 'custom', message: '`exercise` exige `charges`' });
+    if (item.slot !== undefined || item.weapon !== undefined) {
+      ctx.addIssue({ code: 'custom', message: '`exercise` não se veste nem é arma' });
+    }
+  }
   // O schema de campo opcional não sabe do `kind`; é aqui que a forma de um tipo não invade o
   // outro. Um `effect` num anel seria descartado em silêncio se o schema fosse aberto.
   if (item.kind === 'consumable') {
@@ -3638,6 +3668,85 @@ export const staminaSchema = z.object({
 });
 
 export type Stamina = z.infer<typeof staminaSchema>;
+
+/**
+ * O Treino do Tibia (#631, M44-13; ADR 0059, que implementa a decisão 4 do ADR 0045): exercise
+ * weapons num boneco e o banco de offline training. Substitui os Trainer Monks do PRD §11 —
+ * `docs/product/training.md` foi reescrito.
+ *
+ * **Tudo aqui é número do Canary** (`data/scripts/actions/items/exercise_training_weapons.lua`,
+ * `data/scripts/creaturescripts/player/offline_training.lua`, `src/creatures/players/player.cpp`,
+ * `data/items/items.xml`) — a fonte de cada valor está no `_open`/no comentário do campo, e o que
+ * o ADR 0059 decide por conta própria (teto por conta Free/Premium, o boneco no mapa da Cidade)
+ * está marcado. Nenhum destes valores mora em código (`sim` só lê o que vier daqui).
+ */
+export const trainingSchema = z.strictObject({
+  id: z.literal('baseline'),
+  /**
+   * O boneco (`<item id="28558|28565" name="exercise dummy">`, `type="dummy"` com `rate` 100 no
+   * `items.xml`). `rate` é o percentual do Canary (`dummies[dummyId] / 100`): 100 é 1× — os
+   * bonecos de casa, "expert", valem 110. Só o boneco livre entra (o de casa é a #630/casas).
+   */
+  dummy: z.strictObject({
+    id: z.string().min(1),
+    rate: z.number().int().positive(),
+  }),
+  /**
+   * O que cada golpe rende (`exercise_training_weapons.lua`): `addSkillTries(skill, 7 * rate)` e
+   * `addManaSpent(600 * rate)` para wand/rod — o `rate` já dividido por 100. Truncado (o Lua
+   * passa `double` a um `uint64_t`): com rate 100 é exato.
+   */
+  strike: z.strictObject({
+    triesPerCharge: z.number().int().positive(),
+    manaSpentPerCharge: z.number().int().positive(),
+  }),
+  /**
+   * Onde o boneco está NO MAPA DA CIDADE (ADR 0059 d.1 fala de "um mapa mínimo"; o boneco livre da
+   * Thais é um `exercise dummy` do próprio recorte OTBM da Cidade — `things/maps/otservbr.otbm`,
+   * item 28565 em (32347, 32240, 7) —, então a sessão de Treino reaproveita o mapa da Cidade em
+   * vez de importar um segundo recorte). Coordenadas do MAPA (`city.mapId`), não do OTBM: `stand`
+   * é o tile em que o personagem fica (adjacente ao boneco, que é bloqueante), `dummy` o do boneco.
+   */
+  place: z.strictObject({
+    stand: z.strictObject({ x: z.number().int().nonnegative(), y: z.number().int().nonnegative(), z: z.number().int() }),
+    dummy: z.strictObject({ x: z.number().int().nonnegative(), y: z.number().int().nonnegative(), z: z.number().int() }),
+  }),
+  /** O offline training (`offline_training.lua`, `player.cpp`) e o teto por conta do ADR 0059 d.4. */
+  offline: z.strictObject({
+    /** O banco (`Player::addOfflineTrainingTime`: `min(12 * 3600 * 1000, …)`), em ms. */
+    bankCapMs: z.number().int().positive(),
+    /** Carência: `if offlineTime < 600 then` não treina (600 s). */
+    graceMs: z.number().int().nonnegative(),
+    /** `math.min(os.time() - lastLogout, 86400 * 21)`: o "fora" nunca conta mais que 21 dias. */
+    maxAwayMs: z.number().int().positive(),
+    /**
+     * O teto de gasto por CONTA (ADR 0059 d.4, a forma do PRD §11.3): Free 6 h, Premium 12 h. É a
+     * divergência registrada do Tibia, onde offline training é só Premium — Premium é decisão de
+     * monetização, não mecânica de caça (ADR 0037 d.2 não a cobre).
+     */
+    spendCapMs: z.strictObject({
+      free: z.number().int().positive(),
+      premium: z.number().int().positive(),
+    }),
+    /** O escudo treina junto (`addOfflineTrainingTries(SKILL_SHIELD, trainingTime / 4)`). */
+    shieldingDivisor: z.number().int().positive(),
+    /**
+     * As skills que o livro (as estátuas `16198`–`16202`) oferece. `attacks`: `tries =
+     * (segundos / ataqueBase) / divisor` (melee 2, distância 4); `mana`: `segundos ×
+     * manaGainAmount / manaGainTicks` de mana gasta (magic level). Sem `fist`: a estátua de fist
+     * (50296) é do Monk, pós-13.32 (ADR 0038 d.5).
+     */
+    skills: z.array(z.discriminatedUnion('kind', [
+      z.strictObject({
+        skillId: z.string().min(1), kind: z.literal('attacks'), divisor: z.number().int().positive(),
+      }),
+      z.strictObject({ skillId: z.string().min(1), kind: z.literal('mana') }),
+    ])).min(1),
+  }),
+  _open: z.string().optional(),
+});
+
+export type Training = z.infer<typeof trainingSchema>;
 
 /**
  * A party de hunt (§15, ADR 0027, #188; fórmula e elegibilidade emendadas pelo ADR 0027 em

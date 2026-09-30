@@ -399,6 +399,66 @@ describe('loadContent', () => {
   });
 });
 
+describe('o Treino do Tibia (#631, ADR 0059)', () => {
+  const content = loadContent(DATA);
+
+  it('o boneco, o golpe e o offline training são os números do Canary', () => {
+    const training = content.training;
+    expect(training).toBeDefined();
+    // `exercise_training_weapons.lua`: 7 tries e 600 de mana gasta por carga, no rate 100 do boneco.
+    expect(training?.dummy.rate).toBe(100);
+    expect(training?.strike).toEqual({ triesPerCharge: 7, manaSpentPerCharge: 600 });
+    // `player.cpp` (banco 12 h) e `offline_training.lua` (carência 600 s, 21 dias, escudo /4).
+    expect(training?.offline).toMatchObject({
+      bankCapMs: 12 * 3_600_000, graceMs: 600_000, maxAwayMs: 21 * 86_400_000, shieldingDivisor: 4,
+      // ADR 0059 d.4 — a forma do PRD, não do Canary.
+      spendCapMs: { free: 6 * 3_600_000, premium: 12 * 3_600_000 },
+    });
+    expect(training?.offline.skills.map((entry) => entry.skillId).sort())
+      .toEqual(['axe', 'club', 'distance', 'magic', 'sword']);
+  });
+
+  it('o personagem treina num tile andável da Cidade, ao lado do boneco', () => {
+    const { stand, dummy } = content.training!.place;
+    expect(content.city).toBeDefined();
+    expect(isBlocked(content.city!, stand.x, stand.y, stand.z)).toBe(false);
+    // O boneco é uma estátua: bloqueia, como no OTBM (`exercise dummy`, item 28565).
+    expect(isBlocked(content.city!, dummy.x, dummy.y, dummy.z)).toBe(true);
+  });
+
+  it('as exercise weapons têm 500/1 800/14 400 cargas, skill de treino e preço de NPC', () => {
+    const weapons = [...content.items.values()].filter((item) => item.exercise !== undefined);
+    // 7 tipos (sword, axe, club, bow, rod, wand, shield) × 3 níveis; as exercise wraps de fist
+    // (Monk, pós-13.32) e o training weapon de 50 cargas (Daily Reward) ficam de fora.
+    expect(weapons).toHaveLength(21);
+    expect(new Set(weapons.map((item) => item.charges))).toEqual(new Set([500, 1_800, 14_400]));
+    expect(new Set(weapons.map((item) => item.exercise?.skillId)))
+      .toEqual(new Set(['sword', 'axe', 'club', 'distance', 'magic', 'shielding']));
+    // Preço do Canary (`npc/*.lua`): 347 222 / 1 250 000 / 10 000 000 por nível de carga.
+    const priceOf = (charges: number): Set<number | undefined> =>
+      new Set(weapons.filter((item) => item.charges === charges).map((item) => item.buyPrice));
+    expect(priceOf(500)).toEqual(new Set([347_222]));
+    expect(priceOf(1_800)).toEqual(new Set([1_250_000]));
+    expect(priceOf(14_400)).toEqual(new Set([10_000_000]));
+    for (const item of weapons) {
+      expect(item.purchasable).toBe(true);
+      // Nunca se veste, nunca é arma, e ninguém a compra de volta.
+      expect(item.slot).toBeUndefined();
+      expect(item.weapon).toBeUndefined();
+      expect(item.value).toBe(0);
+      expect(content.appearances?.items[item.id]).toBeGreaterThan(0);
+    }
+    expect(content.items.get('exercise-sword')).toMatchObject({
+      charges: 500, exercise: { skillId: 'sword' }, buyPrice: 347_222,
+    });
+  });
+
+  it('nenhum item comum é `purchasable` — a loja geral (E5) ainda não existe', () => {
+    const buyable = [...content.items.values()].filter((item) => item.purchasable === true);
+    expect(buyable.every((item) => item.exercise !== undefined)).toBe(true);
+  });
+});
+
 describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
   it('carrega a tabela real e resolve as entidades do repositório com ela', () => {
     const content = loadContent(DATA);

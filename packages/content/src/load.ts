@@ -27,6 +27,8 @@ export function loadContent(dir: string): Content {
     progression: readJsonDir(join(dir, 'progression')),
     combat: readJsonDir(join(dir, 'combat')),
     stamina: readJsonDir(join(dir, 'stamina')),
+    // O Treino do Tibia (#631, ADR 0059): o boneco, o golpe e o offline training.
+    training: readJsonDir(join(dir, 'training')),
     party: readJsonDir(join(dir, 'party')),
     bestiary: readJsonDir(join(dir, 'bestiary')),
     // Os 25 Charms do Canary (M39-02, #602) — uma entidade por arquivo/fatia, como `spells`.
