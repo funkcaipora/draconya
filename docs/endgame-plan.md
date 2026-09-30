@@ -296,7 +296,16 @@ produto. "Registro" é sempre no sentido do ADR 0052 d.1; "intenção de Cidade"
   manual `use-item-on` no cadáver dentro da vida dele (ADR 0049).
 - **#627 — Elemental bond e mana shield.** `elementalBond` (32 itens) soma dano no elemento no
   `combat-v4`; `magicShieldCapacityFlat/Percent` (4 itens) entram no cálculo do escudo em
-  `combat/outcome.ts`. Um vetor de cada.
+  `combat/outcome.ts`. Um vetor de cada. **Emenda (#627, achado desta issue):** a direção acima
+  descrevia efeitos que o Canary não tem. O bond não SOMA dano: troca o tipo de dano da magia
+  instantânea, e só para `VOCATION_MONK_CIP` (`combat.cpp:159-174`) — e os 32 itens são todos arma
+  `fist`, fora do corte (Monk, DT-01). A capacidade de magic shield só aparece na descrição do
+  item e na Cyclopedia (`item.cpp:134-141`, `protocolgame.cpp:5661-5663`): `magic_shield.lua`
+  monta o balde sem consultá-la, e nenhum script a lê. Pelo ADR 0037 d.6 a entrega é o DADO —
+  campos no schema, importador e catálogo (os 4 spellbooks) — sem estágio no `combat-v4` e sem
+  mexer em `combat/outcome.ts`; ver `docs/product/items.md`, "Atributos raros". Aplicar a
+  capacidade ao escudo exigiria antes o balde do Canary, que o Draconya não tem (o mana shield
+  absorve da mana até o prazo vencer, CMB-08), e ir além do que o Canary faz.
 - **#628 — Loyalty.** `api` calcula `loyaltyBonusPercent` na emissão do ticket a partir de
   `accounts.createdAt` (`loyaltyPointsPerCreationDay 1`, tabela de tiers do Tibia em conteúdo);
   fixo na sessão (ADR 0052 d.5); `sim` converte tries totais em níveis extras por skill e ML
