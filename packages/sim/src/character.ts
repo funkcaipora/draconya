@@ -317,6 +317,8 @@ export interface PendingManualActionState {
     | { readonly kind: 'monster'; readonly subject: string }
     | { readonly kind: 'character'; readonly characterId: string }
     | { readonly kind: 'position'; readonly position: { readonly x: number; readonly y: number; readonly z?: number } }
+    /** Um item que o personagem carrega (#621, Chameleon Rune) — a instância, nunca a aparência. */
+    | { readonly kind: 'item'; readonly instanceId: string }
     | { readonly kind: 'invalid' };
   readonly seq: number;
 }

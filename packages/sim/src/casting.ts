@@ -16,8 +16,8 @@
 
 import { matchesVocationRequirement, SPECIALIZED_MAGIC_ELEMENTS } from '@draconya/content';
 import type {
-  Combat, CompiledMitigation, DamageModifiers, DamageType, FieldSpec, SpecializedMagicElement,
-  Spell, SpellFormula, Supply,
+  Combat, CompiledMitigation, DamageModifiers, DamageType, FieldSpec, OutfitLook,
+  SpecializedMagicElement, Spell, SpellFormula, Supply,
 } from '@draconya/content';
 import { evaluateSpellPower } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
@@ -30,7 +30,7 @@ import { rollCombatValue } from './combat/combat-value.js';
 import { ActionCritical } from './combat/charms.js';
 import type { CharmAttackBonus } from './combat/charms.js';
 import { isV3OrLater } from './combat/profile.js';
-import { conditionFromSpec } from './conditions.js';
+import { conditionFromSpec, outfitConditionOf } from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import type { WorldPoint } from './movement.js';
 import type { Rng } from './rng.js';
@@ -67,6 +67,13 @@ export type CastRefusal =
    * monstros da sessão (invariante 1); esta função só devolve a recusa tipada.
    */
   | 'not-summonable'
+  /**
+   * A ilusão (#621, M44-03, Creature Illusion/Chameleon Rune): sem `monsterId` (a barra não
+   * passou parâmetro), monstro fora do catálogo ou `illusionable: false` — o
+   * `RETURNVALUE_CREATUREDOESNOTEXIST`/`RETURNVALUE_NOTPOSSIBLE` de `creature_illusion.lua` — ou,
+   * na runa, sem item apontado (`chameleon.lua`: `RETURNVALUE_NOTPOSSIBLE`). Nada é gasto.
+   */
+  | 'not-illusionable'
   /**
    * Stairhop (#554, M30-07, ADR 0040 decisão 1): o lançador trocou de andar ou foi
    * redirecionado por teleporte há pouco, e a magia é AGRESSIVA (`damage`/`damage-over-time` —
@@ -449,6 +456,14 @@ export const NOT_SUMMONABLE: CastRefused = {
 };
 
 /**
+ * A recusa da ilusão (#621): sem a aparência a vestir — monstro que não existe ou não é
+ * `illusionable`, ou item nenhum apontado. Congelada, como `NOT_SUMMONABLE`.
+ */
+export const NOT_ILLUSIONABLE: CastRefused = {
+  ok: false, reason: 'not-illusionable', retryInMs: NOT_WAITING,
+};
+
+/**
  * Lança a magia, se puder.
  *
  * A ordem das recusas é deliberada: level, cooldown, alvo, alcance e só então mana. **A mana
@@ -510,6 +525,13 @@ export function castSpell(
    * vocabulário; só quando este parâmetro é passado ele substitui a conferência e o débito.
    */
   manaCostOverride?: number,
+  /**
+   * A aparência que a Creature Illusion veste (#621, M44-03): o `{ monsterId }` que o RULESET já
+   * conferiu contra o catálogo e `illusionable` — `casting.ts` não conhece o catálogo de monstro
+   * (invariante 1), como não conhece o teto de invocações. Ausente numa magia `illusion` é a
+   * recusa `not-illusionable`, ANTES de qualquer mana sair.
+   */
+  illusionLook?: OutfitLook,
 ): CastResult {
   if (caster.level < spell.minLevel) {
     return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
@@ -578,6 +600,10 @@ export function castSpell(
   // `spell.manaCost` (`party-scaled`) escala é o MESMO `partyTargets.length` da checagem acima,
   // nunca uma segunda contagem.
   // A invocação (#598) paga o `manaCost` do MONSTRO — `manaCostOverride` vence o catálogo.
+  // Creature Illusion sem monstro a imitar (#621): recusa ANTES da mana, como o Lua (`return false`
+  // sem `addCondition`, e o cancel message antes de qualquer custo — o custo do Canary sai do
+  // `Spell::playerSpellCheck`/`postCastSpell` só depois de `onCastSpell` devolver `true`).
+  if (effect.kind === 'illusion' && illusionLook === undefined) return NOT_ILLUSIONABLE;
   const manaCost = manaCostOverride ?? (typeof spell.manaCost === 'number'
     ? spell.manaCost
     : partyScaledManaCost(spell.manaCost, partyTargets?.length ?? 0));
@@ -702,6 +728,13 @@ export function castSpell(
     // (`INVISIBLE_CONDITION_KEY`) é o que `Conditions.hasInvisible` reconhece, como mana-shield.
     case 'invisible':
       return cast({ key: 'invisible', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs });
+    // Creature Illusion (#621, `creature_illusion.lua`): a condição `outfit` do PRÓPRIO lançador,
+    // com o monstro que o ruleset conferiu. `addCondition` direto no Lua — sem o portão de
+    // imunidade, que só existe em monstro.
+    case 'illusion':
+      return cast(outfitConditionOf(
+        illusionLook as OutfitLook, effect.durationMs, caster.id, caster.id, nowMs, spell.id,
+      ));
     // Provocação (#589): não devolve condição do LANÇADOR — quem recebe o efeito é o(s)
     // monstro(s) atingido(s), e é o ruleset (que tem `#spellHits` e escreve `MonsterRuntime`)
     // quem aplica `targetId`/`ConditionState`, não `castSpell`. Aqui só confirma o sucesso.
@@ -821,6 +854,13 @@ export function useSupply(
    * ver o comentário do mesmo parâmetro em `castSpell`.
    */
   modifiers?: DamageModifiers,
+  /**
+   * A aparência que a Chameleon Rune veste (#621, M44-03): o `{ itemId }` do item que o usuário
+   * APONTOU, já resolvido pelo ruleset (só ele enxerga o inventário). Ausente numa runa
+   * `chameleon` é a recusa `not-illusionable` — o `RETURNVALUE_NOTPOSSIBLE` de `chameleon.lua`
+   * quando `item` é nulo —, ANTES do gold.
+   */
+  chameleonLook?: OutfitLook,
 ): CastResult {
   // O cooldown PRÓPRIO do supply (#592, Paralyze Rune: 6 s ao lado do grupo de 2 s) — ANTES de
   // qualquer outra recusa, como o `spellCooldownKey` de `castSpell`: sem `nowMs` (fixture) o
@@ -1025,6 +1065,39 @@ export function useSupply(
     return {
       ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS,
       goldSpent: paidFromStockCondition ? 0 : supply.price, condition,
+    };
+  }
+
+  // Chameleon Rune (#621, `chameleon.lua`): veste o item apontado. Auto-efeito, sem alcance (o
+  // alvo é uma instância do próprio personagem) — requisitos, item, e só então o gold, a mesma
+  // ordem de sempre. A condição sai com o USUÁRIO como alvo e origem; sem fusão própria
+  // (`strongest`, o mecanismo de `ConditionOutfit`).
+  if (supply.effect.kind === 'chameleon') {
+    const effect = supply.effect;
+    if (supply.requires.level !== undefined && user.level < supply.requires.level) {
+      return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
+      return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
+    }
+    if (supply.requires.magicLevel !== undefined
+      && (scaling?.magicLevel ?? scaling?.skillLevel ?? 0) < supply.requires.magicLevel) {
+      return { ok: false, reason: 'magic-level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (chameleonLook === undefined) return NOT_ILLUSIONABLE;
+    const hasStockChameleon = (user.supplyStock.get(supply.id) ?? 0) > 0;
+    if (!hasStockChameleon && !purse.canAfford(supply.price)) {
+      return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    }
+    const paidFromStockChameleon = hasStockChameleon && spendStock(user, supply.id);
+    if (!paidFromStockChameleon) purse.pay(supply.price);
+    startSupplyCooldown(user, supply, nowMs);
+    return {
+      ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS,
+      goldSpent: paidFromStockChameleon ? 0 : supply.price,
+      condition: outfitConditionOf(
+        chameleonLook, effect.durationMs, user.id, user.id, nowMs ?? 0, supply.id,
+      ),
     };
   }
 

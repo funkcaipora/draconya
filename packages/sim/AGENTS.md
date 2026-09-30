@@ -841,3 +841,23 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   usa esse parâmetro. O Carnage roda também para o monstro invocado (`Monster::death` não confere
   `isSummon()`). Os defeitos do `47dfd51` que ficaram de fora estão listados em
   `docs/product/combat-conformance.md`.
+- **A aparência emprestada é a condição `outfit` (#621, M44-03, ADR 0041 d.1), e o `sim` só diz
+  QUEM vestiu o quê.** `ConditionState.look` (`{ monsterId } | { itemId } | { objectKey }`) nunca
+  é arte; o evento `creature-look-changed { creatureId, look | null }` (`presence.ts`) sai em TODA
+  aplicação que vence (`#applyConditionTo`, inclusive a que substitui) e na volta (`null`) por
+  vencimento (`#onConditionExpire`), dispel ou saída do personagem — a apresentação nunca guarda a
+  aparência (`HuntRuleset#lookOf(session, id)` a lê da condição, para `creature-appear`/
+  `session-state`; invariante 3). **A fusão é a do Canary, por PRAZO**: `strengthOf` devolve
+  `expiresAtMs` para a condição com `look`, e `merge: 'strongest'` só mantém a anterior quando ela
+  acaba ESTRITAMENTE depois — a recusa não emite nada. **O ataque `outfit` de monstro não é golpe**
+  (`#executeOutfitAbility`, desvio no topo de `#executeMonsterAbility`): é condição NÃO agressiva,
+  então sem área vai no alvo e COM área pega todos os personagens E monstros na forma, o lançador
+  inclusive (`CombatFunc` só o exclui quando `aggressive`); nenhum `resolveDamage`, nenhum sorteio
+  além do `chance` do vencimento. A imunidade (`conditionImmunityOf` → `outfit`) só vale com
+  `fromCombat` e `caster != target`: o monstro imune ainda se disfarça (defesa) e a Creature
+  Illusion/Chameleon do jogador nunca é barrada. **Creature Illusion** recebe o `monsterId` do slot
+  (como a invocação), o ruleset confere `illusionable` e passa `illusionLook` a `castSpell`, que
+  recusa `not-illusionable` ANTES da mana; **Chameleon** recebe `UseSlotTarget { kind: 'item',
+  instanceId }`, resolvido por `Inventory.itemIdOf` (mochila, bolsa e corpo). `not-illusionable` é
+  o `RETURNVALUE_NOTPOSSIBLE` dos dois scripts. Toda condição `outfit` aplicada fora dessas portas
+  (um teste que faz `conditions.apply` direto) não emite o evento — use a magia ou a ability.

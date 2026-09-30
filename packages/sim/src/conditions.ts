@@ -30,21 +30,22 @@
 // esgotada, ela para de tiquetar ANTES do vencimento, como `ConditionDamage::executeCondition` do
 // Canary faz quando `damageList` esvazia.
 
-import type { ConditionEffect, ConditionImmunity, ConditionSpec } from '@draconya/content';
+import type { ConditionEffect, ConditionImmunity, ConditionSpec, OutfitLook } from '@draconya/content';
 import type { DamageType } from '@draconya/content';
 // `generateDamageList`/`damageOverTimeTicks` moram em `content` (achado da revisão do #557):
 // `conditionSpecSchema` também precisa delas para conferir `durationMs` contra o total da fila, e
 // duas implementações do mesmo cálculo é o defeito que a DT-03 já nomeia noutro lugar do content.
 import {
-  DAMAGE_OVER_TIME_CONDITION_IMMUNITY, DRUNK_CONDITION_KEY, SPEED_CONDITION_KEY, damageOverTimeTicks,
-  generateDamageList,
+  DAMAGE_OVER_TIME_CONDITION_IMMUNITY, DRUNK_CONDITION_KEY, OUTFIT_CONDITION_KEY, SPEED_CONDITION_KEY,
+  damageOverTimeTicks, generateDamageList,
 } from '@draconya/content';
 import type { Direction } from './area.js';
 import type { DamageSource } from './combat/damage.js';
 import type { Rng } from './rng.js';
 
 export type ConditionKind =
-  | 'speed' | 'buff' | 'mana-shield' | 'heal-over-time' | 'damage-over-time' | 'drunk' | 'invisible';
+  | 'speed' | 'buff' | 'mana-shield' | 'heal-over-time' | 'damage-over-time' | 'drunk' | 'invisible'
+  | 'outfit';
 
 /**
  * A POLÍTICA de fusão de uma condição (CMB-07, DT-02). Declarada no conteúdo, nunca um campo
@@ -134,6 +135,15 @@ export interface ConditionState {
    * uma.
    */
   readonly skillDeltas?: Readonly<Record<string, number>>;
+  /**
+   * A aparência que a criatura veste enquanto a condição dura (#621, `ConditionOutfit` do
+   * Canary). Só a chave reservada `outfit` (`OUTFIT_CONDITION_KEY`) a carrega, e nomeia
+   * CONTEÚDO — monstro, item ou chave de objeto —, nunca arte: quem resolve para o
+   * `outfitId`/`appearanceId` é o host, pela tabela de aparências (invariante 6). Opcional no
+   * estado serializado, como todo campo que uma condição ganhou depois do #155: um snapshot
+   * anterior não a tem, e nenhum `SNAPSHOT_FORMAT_VERSION` sobe por isso.
+   */
+  readonly look?: OutfitLook;
   /** Tique periódico: `amount` a cada `intervalMs`, até `expiresAtMs`. */
   readonly tick?: ConditionTick;
 }
@@ -212,6 +222,7 @@ export function sameTick(a: ConditionState, b: ConditionState): boolean {
  * - **`paralyze`**: a condição vive na chave RESERVADA `speed` (haste e paralyze dividem o slot,
  *   CMB-11), então só o sinal NEGATIVO conta — a imunidade nunca impede o monstro de se acelerar;
  * - **`drunk`**: casa direto pela chave reservada;
+ * - **`outfit`** (#621): casa direto pela chave reservada, como `drunk`;
  * - **DOT** (tique de dano): o tipo de dano do tique dá a condição do Tibia
  *   (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY` — `physical` sangra, `fire` queima…), como
  *   `Combat::DamageToConditionType`. Um tique sem `damageType` é físico, o mesmo default de
@@ -223,6 +234,9 @@ export function sameTick(a: ConditionState, b: ConditionState): boolean {
 export function conditionImmunityOf(condition: ConditionState): ConditionImmunity | null {
   if (condition.key === SPEED_CONDITION_KEY) return (condition.speedPercent ?? 0) < 0 ? 'paralyze' : null;
   if (condition.key === DRUNK_CONDITION_KEY) return 'drunk';
+  // `outfit` (#621, M44-03): a ilusão de um ataque de monstro não entra em quem o conteúdo declara
+  // imune (`CONDITION_OUTFIT` em `Monster::isImmune`, `monster.immunities[].condition`).
+  if (condition.key === OUTFIT_CONDITION_KEY) return 'outfit';
   if (condition.tick?.kind === 'damage') {
     return DAMAGE_OVER_TIME_CONDITION_IMMUNITY[condition.tick.damageType ?? 'physical'] ?? null;
   }
@@ -239,6 +253,11 @@ export function conditionImmunityOf(condition: ConditionState): ConditionImmunit
  * Postura o que ela soma. Empate fica com o novo.
  */
 function strengthOf(condition: ConditionState): number {
+  // `outfit` (#621): o Canary não compara magnitude — `Condition::updateCondition` só aceita a
+  // condição nova se ela acabar DEPOIS (ou junto) do que já está ativo (`condition.cpp:552`:
+  // `getEndTime() > now + novo.ticks` recusa). O prazo absoluto É essa comparação, e o empate
+  // fica com o novo — `strongest` só mantém o anterior quando ele é ESTRITAMENTE maior.
+  if (condition.look !== undefined) return condition.expiresAtMs;
   const tick = condition.tick;
   if (tick !== undefined) {
     const remaining = tick.queue?.reduce((sum, queued) => sum + queued.amount, 0) ?? 0;
@@ -383,6 +402,10 @@ export function conditionFromSpec(
       // Sem campo próprio (#592): a chave RESERVADA (`INVISIBLE_CONDITION_KEY`) é o que
       // `Conditions.hasInvisible` reconhece — o mesmo desenho de `hasDrunk`/`hasManaShield`.
       return { ...base };
+    case 'outfit':
+      // A aparência emprestada (#621): o `look` viaja no estado, e a fusão é SEMPRE `strongest`
+      // — o mecanismo de `ConditionOutfit`, que o schema já exige do conteúdo.
+      return { ...base, merge: 'strongest', look: effect.look };
     case 'heal-over-time':
       return { ...base, tick: { kind: 'heal', amount: effect.amount, intervalMs: effect.intervalMs } };
     case 'damage-over-time': {
@@ -409,6 +432,26 @@ export function specTickIntervalMs(spec: ConditionSpec): number | null {
   if (effect.kind === 'heal-over-time') return effect.intervalMs;
   if (effect.kind !== 'damage-over-time') return null;
   return effect.form === 'generated' ? effect.intervalMs : (effect.rounds[0]?.intervalMs ?? null);
+}
+
+/**
+ * A condição `outfit` de um LANÇAMENTO do jogador (#621): Creature Illusion e Chameleon Rune. O
+ * `look` não é conteúdo estático — sai do parâmetro da magia (o monstro escolhido) ou do item
+ * apontado —, então não passa por `conditionFromSpec`; o prazo e a fusão são os mesmos.
+ */
+export function outfitConditionOf(
+  look: OutfitLook, durationMs: number, targetId: string, sourceId: string, nowMs: number,
+  spellId?: string,
+): ConditionState {
+  return {
+    key: OUTFIT_CONDITION_KEY,
+    targetId,
+    ...(spellId === undefined ? {} : { spellId }),
+    sourceId,
+    expiresAtMs: nowMs + durationMs,
+    merge: 'strongest',
+    look,
+  };
 }
 
 export class Conditions {
@@ -500,6 +543,15 @@ export class Conditions {
    * vazio. É o que `chooseTarget` (`sim/monster/monster.ts`) confere via `Prey.invisible`. */
   hasInvisible(): boolean {
     return this.#active.has('invisible');
+  }
+
+  /**
+   * A aparência emprestada agora (#621), ou `null` quando a criatura veste a dela. É o que o
+   * host lê para desenhar quem entrou na tela no meio de uma ilusão — a apresentação nunca a
+   * guarda por conta própria (invariante 3).
+   */
+  look(): OutfitLook | null {
+    return this.#active.get(OUTFIT_CONDITION_KEY)?.look ?? null;
   }
 
   /**
