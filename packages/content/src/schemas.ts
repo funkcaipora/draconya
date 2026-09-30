@@ -653,6 +653,9 @@ export const ITEM_ORIGINS = [
   // A mochila que a morte devolve a quem ficou sem nenhuma (#571, ADR 0042 decisão 4): dada pelo
   // sistema, não dropada nem comprada — `Blessings.PlayerDeath` do Canary faz `addItem(ITEM_BAG)`.
   'death-replacement',
+  // Comprado do NPC por gold (#631, ADR 0059 d.2): a exercise weapon do `buy-item` — `market` é o
+  // comércio entre jogadores, e o NPC do Canary é outra proveniência.
+  'purchase',
 ] as const;
 export type ItemOrigin = (typeof ITEM_ORIGINS)[number];
 

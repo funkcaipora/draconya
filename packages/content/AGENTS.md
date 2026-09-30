@@ -502,6 +502,19 @@ família (a primeira em ordem de id), que também é paga. O primeiro colar (`gl
 (`wooden-shield`, `kind: 'shield'`, `slot: 'shield'`, `defense`) entram como itens; o consumo da
 carga é a AB-06 (#421).
 
+## O Treino (#631, ADR 0059)
+
+`data/training/baseline.json` (`trainingSchema`, `Content.training` opcional) guarda o boneco (`rate`
+100), o que cada golpe rende (`7` tries, `600` de mana gasta), onde ele está no mapa da Cidade
+(`place.stand`/`place.dummy`, conferidos no boot: o tile do personagem é andável e adjacente ao
+boneco) e o offline training (banco 12 h, carência 10 min, teto do "fora" 21 dias, teto de gasto
+Free 6 h / Premium 12 h, o livro). Todo número do Canary cita a fonte no `_open`. O item ganha três
+campos: `exercise: { skillId }` (só `kind: 'other'` com `charges`, e a skill tem de existir),
+`purchasable: true` e `buyPrice` — sempre JUNTOS. As 21 exercise weapons vêm do importador de itens
+(`scripts/catalog/items.ts`, fatia `exercise-weapons`): cargas e skill da tabela Lua, preço = o MENOR
+`buy` de NPC do Canary; as exercise wraps de fist (Monk) e as de 50 cargas ficam fora do corte.
+`ITEM_ORIGINS` ganhou `purchase` (a compra do NPC; `market` é o comércio entre jogadores).
+
 ## Como testar
 
 ```
