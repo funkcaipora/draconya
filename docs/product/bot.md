@@ -74,6 +74,16 @@ hunt sem gold para pagar o próximo supply e pode morrer.
   bêbado que se afasta da rota sozinho, ou perde um passo contra uma parede, não é bug do motor
   de bot: é a mesma condição que afetaria o jogador jogando manualmente (invariante 11 — não há
   exceção de automação). Ver "Drunk: desvio de passo" em `docs/product/combat.md`.
+- **`rooted`, `feared` e `pacified` (#622, M44-04) valem para o bot como para o jogador manual.**
+  Sob `rooted` ou `feared` o passo do bot (rota, follow, `walk-to`) é recusado em `HuntRuleset#step`
+  — o bot só manda intenção e não tem como escapar da recusa (invariante 11) —, e sob `feared` a
+  fuga forçada (`Runner.fearWalk`) assume o movimento: enquanto ela dura o bot não anda, e ao acabar
+  ele volta à rota pelo caminho de sempre (`not-adjacent` → resincroniza). Sob `feared` nenhuma
+  magia nem runa sai (`feared`, com o prazo do medo no `retryInMs`, para o bot re-armar quando o
+  medo acabar); a poção sai. Sob `pacified` (a trava de escada de 2 s e o Swift Foot) nem o golpe
+  básico nem a magia/runa agressiva saem, e o golpe volta no instante exato do vencimento; cura,
+  poção e o resto seguem. Nada disso é falha do motor de bot. Ver "Condições de controle" em
+  `docs/product/combat.md`.
 
 ## O vocabulário, por inteiro (AB-03, ADR 0032 d.1)
 

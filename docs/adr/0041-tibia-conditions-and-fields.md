@@ -126,3 +126,41 @@ A decisão 2 disse **o quê** (imunidade por condição é dado de monstro; imun
    hora; só o alvo fixado pelo jogador segue até o think.
 
 Nenhum invariante muda de texto.
+
+## Emenda — 2026-09-29 (#622): as condições de controle, e o que `feared` de fato é
+
+A decisão 1 listou `rooted`, `feared` e `pacified` como "entram no M44". O #622 as implementa, e
+três escolhas merecem registro porque não são as que o plano do endgame supunha:
+
+1. **`feared` não é "um passo de fuga sorteado como o drunk".** Lido no Canary
+   (`condition.cpp:2163-2380`), é uma caminhada FORÇADA: a cada segundo de pensamento a condição
+   escolhe uma direção a partir de onde o lançador estava (cinco regiões, sem sorteio — só o tile do
+   próprio lançador sorteia), busca um caminho até um ponto sintético (A*, caixa de sete tiles) e
+   entrega a lista a `Game::forcePlayerAutoWalk`, que substitui a caminhada do próprio jogador —
+   só jogador. Como `hunting mechanics must be IDENTICAL` (ADR 0037 d.6), o `sim` reproduz o
+   mecanismo e QUANDO ele dispara: o pensamento é um evento da fila com fase sorteada (o desenho do
+   `VISIBILITY_THINK` do #559), o fim da condição é o primeiro pensamento depois do prazo (a fuga do
+   último pensamento sai antes de ela fechar), a imunidade de 10 s e o orçamento de party
+   `(membros + 5) / 5` são os do Canary. As duas coisas que NÃO se reproduzem bit a bit — o
+   desempate entre nós de mesmo custo do A* (o `getBestNode` do Canary tem uma versão por conjunto
+   de instruções) e o primeiro passo forçado cair no próximo `PLAYER_STEP` em vez do
+   `getEventStepTicks` — não mudam o gatilho, e estão em `docs/product/combat.md`. As esquisitices
+   da fonte (o ponto sintético do `SOUTH`, o valor do enum gravado como índice) ficam preservadas.
+2. **`merge` ganha o valor `longest`.** `Condition::updateCondition` do Canary — que `rooted`,
+   `pacified` (`ConditionGeneric`) e `feared` usam — mantém a condição que já corre quando o prazo
+   novo terminaria antes dela. Nenhum dos três valores de fusão existentes diz isso: `refresh`
+   deixa o novo vencer sempre (uma troca de andar de 2 s encurtaria um Swift Foot de 10 s),
+   `strongest` compara magnitude, e estas condições não têm. O schema EXIGE `longest` nas três — não
+   é escolha do conteúdo. O `drunk` e o `invisible`, que têm a mesma regra no Canary, continuam com o
+   `merge` que o conteúdo declara (dívida registrada, fora do escopo).
+3. **A trava de escada do M30-07 É a condição `pacified`.** O instante solto
+   (`attackLockedUntil`) deixou de existir; um snapshot antigo é lido como um `pacified` que vence
+   no mesmo instante (ADR 0014). O Swift Foot passa a acelerar e pacificar pelos mesmos 10 s, como
+   `swift_foot.lua` (ramo sem a Roda) — o conteúdo deixa de carregar a redução de 30 % de dano do
+   TibiaWiki.
+
+**Vocabulário de imunidade.** `monster.conditionImmunities` sobe de onze para catorze nomes
+(`rooted`, `feared`, `pacified`). É vocabulário autoral: a ponte do Lua
+(`luaMonsterTypeConditionImmunities`) não os nomeia, e nenhum monstro do bestiário os declara.
+
+Nenhum invariante muda de texto.
