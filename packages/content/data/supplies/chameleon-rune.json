@@ -1,0 +1,19 @@
+{
+  "id": "chameleon-rune",
+  "name": "Chameleon Rune",
+  "description": "Veste a aparência do item apontado por 200 segundos.",
+  "price": 210,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "actionExhaustMs": 1000,
+  "requires": {
+    "level": 27,
+    "magicLevel": 4
+  },
+  "effect": {
+    "kind": "chameleon",
+    "durationMs": 200000
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Canary `data/scripts/runes/chameleon.lua` (47dfd51): `runeId(3178)`, `charges(1)`, `level(27)`, `magicLevel(4)`, `cooldown(2*1000)` AO LADO de `groupCooldown(2*1000)` (os dois livros, como a Paralyze Rune), `isSelfTarget(true)`/`allowFarUse(true)`, `isAggressive(false)`, `Condition(CONDITION_OUTFIT)` com `setTicks(200000)` e `setOutfit({ lookTypeEx = item.itemid })`; sem `vocation` — qualquer vocação com o level e o magic level usa. O alvo do Lua é um item MOVÍVEL (`isMovable`): do chão, de um container ou do corpo; aqui é uma instância que o personagem CARREGA (`target: { instanceId }`), a única forma de item que a hunt tem (o cadáver não é item movível). `price` 210: `buy` uniforme em `data-otservbr-global/npc/*.lua` (clientId 3178, 26 NPCs) — a runa PRONTA. Efeito visual `CONST_ME_MAGIC_RED` no usuário — sem linha em `appearances.supplies` (MUDA até a conferência contra PNG, biblioteca parcial)."
+}

@@ -1,0 +1,7 @@
+{
+  "id": "dragon",
+  "reason": "#621 (M44-03): o Canary declara `illusionable = true` (dragons/dragon.lua:65, `things/sources/canary/data-otservbr-global/monster/`), o que o Creature Illusion confere (`MonsterType::isIllusionable`). Esta entrada é das que o #581 regenerou uma única vez e que `pnpm catalog:promote-monsters` nunca reescreve (`HAND_AUTHORED_MONSTER_IDS`): o campo não existia quando ela foi gerada, e o importador (`flags.illusionable`) só o escreve na próxima regeneração deliberada — até lá, a correção é este override.",
+  "patch": {
+    "illusionable": true
+  }
+}

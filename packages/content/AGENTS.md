@@ -597,12 +597,27 @@ entre arquivos resolvem.
   PERCENTUAL INTEIRO, como o reflexo de item, e compilam no boot (`compileElementHealing`,
   `compileReflect` com `flat` zero); ausentes no monstro compilado quando nada cura/reflete.
 - **`monster.conditionImmunities` é o `monster.immunities[].condition` do Canary** (#559, ADR 0041
-  d.2) — distinto de `mitigation.immunities` (`combat = true`, DANO). Onze nomes:
-  `paralyze`, `drunk`, `invisible` e as oito DOTs (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY`, a
+  d.2) — distinto de `mitigation.immunities` (`combat = true`, DANO). Doze nomes:
+  `paralyze`, `drunk`, `invisible`, `outfit` (#621) e as oito DOTs (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY`, a
   `Combat::DamageToConditionType`: `physical` sangra, `earth` envenena, `fire` queima…) — o
   vocabulário do ADR, NÃO os nomes do Lua (`bleed`, `fire`, `earth`…), que o importador traduz.
   **`invisible` significa "enxerga o invisível"** (`Monster::canSeeInvisibility`), nunca "não pode
-  ficar invisível": é a exceção que não bloqueia a condição. `outfit` (119 monstros) fica fora até
-  o M44-03. Ausente é `[]`, sem imunidade nenhuma.
+  ficar invisível": é a exceção que não bloqueia a condição. `outfit` (119 monstros no Canary, 42
+  no catálogo gerado) entrou com o M44-03 (#621): barra o ataque `outfit` de OUTRO monstro, nunca a
+  ilusão do jogador nem a defesa do próprio monstro. Ausente é `[]`, sem imunidade nenhuma.
+- **A condição `outfit` referencia CONTEÚDO, nunca arte** (#621, M44-03, ADR 0041 d.1):
+  `outfitLookSchema` é `{ monsterId } | { itemId } | { objectKey }` (`strictObject` — um
+  `outfitId`/`appearanceId` escrito ali é recusado no boot), e quem resolve para o id do pacote é o
+  hospedeiro pela tabela de aparências (`appearances.monsters`/`items`/`looks`). `looks` é a seção
+  `chave de objeto → appearanceId` do `outfitItem` do Canary — chave sem linha é MUDA (vocabulário
+  semântico, como `abilities`), e `packProblems` confere os ids contra o inventário do pacote. A
+  chave `outfit` é reservada nos dois sentidos e a fusão é `strongest` DECLARADA (o mecanismo de
+  `ConditionOutfit`): `monsterId`/`itemId` que não existem recusam no boot (`buildContent`), mas
+  o `objectKey` não tem entidade do outro lado. `monster.illusionable` (default `false`, o do Canary)
+  é o que `validateBotConfigV2` confere na Creature Illusion — a ação do slot leva o `monsterId`, o
+  MESMO campo da invocação, conferido contra a flag PRÓPRIA de cada magia (`illusionable` ≠
+  `summonable`). As quatro entradas autorais que o #581 gerou (rat, dragon, dragon-lord,
+  dragon-lord-hatchling) ganharam o `illusionable` por `data/monsters/overrides/`, porque nunca são
+  reescritas pela promoção.
 
 Issue: FUN-8.

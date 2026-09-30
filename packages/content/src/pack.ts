@@ -71,6 +71,11 @@ export function packProblems(appearances: Appearances, pack: Pack): string[] {
   for (const [id, object] of Object.entries(appearances.corpses)) {
     check(`corpses.${id}`, 'object', object);
   }
+  // A aparência de objeto da condição `outfit` (#621): o mesmo quadrado invisível, agora no
+  // monstro inteiro enquanto a ilusão durar.
+  for (const [id, object] of Object.entries(appearances.looks)) {
+    check(`looks.${id}`, 'object', object);
+  }
   // O campo de tile (#561, M31-06): fogo/veneno/energia com id fora do pacote é o mesmo
   // quadrado invisível, agora no chão da hunt inteira.
   for (const [id, object] of Object.entries(appearances.fields)) {

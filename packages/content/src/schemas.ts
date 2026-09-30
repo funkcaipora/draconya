@@ -236,6 +236,15 @@ export const appearancesSchema = z.object({
    */
   corpses: z.record(z.string().min(1), appearanceId).default({}),
   /**
+   * `chave de objeto → appearanceId` (#621, M44-03): a aparência de OBJETO que uma criatura veste
+   * na condição `outfit` com `look: { objectKey }` — o `outfitItem` de um monstro do Canary (um
+   * verme, uma pedra). Chave SEMÂNTICA e compartilhada, como `abilities`: não há entidade de
+   * conteúdo de um lado, então chave sem uso é vocabulário à espera e uso sem chave é MUDO (a
+   * condição vale, só não desenha) — as duas válidas. O id é arte, e `packProblems` o confere
+   * contra o inventário do pacote.
+   */
+  looks: z.record(z.string().min(1), appearanceId).default({}),
+  /**
    * `id de campo de tile → appearanceId` (#561, M31-06): fogo, veneno, energia — o `sim` diz
    * QUE campo está ativo e ONDE (`FieldSpec.id`, declarado inline em spell/ability); a arte é
    * daqui (invariante 6). Campo sem linha não aparece — MUDO, não erro, como `spells`: um campo
@@ -1540,6 +1549,17 @@ export const supplySchema = z.object({
       kind: z.literal('destroy-field'),
       range: z.number().int().positive(),
     }),
+    /**
+     * Chameleon Rune (#621, M44-03, Canary `runes/chameleon.lua`: runeId 3178, level 27, magic
+     * level 4, 200 s, `isSelfTarget(true)`/`allowFarUse`): o usuário veste a aparência de OBJETO
+     * do item que apontou — `lookTypeEx = item.itemid`. O alvo é uma instância que o personagem
+     * carrega (`use-item-on`/`use-slot` com `target: { instanceId }`); o `look` sai como
+     * `{ itemId }` e o host o resolve em `appearances.items`. Só o prazo é conteúdo.
+     */
+    z.object({
+      kind: z.literal('chameleon'),
+      durationMs: z.number().int().positive(),
+    }),
   ]).refine(
     (effect) => effect.kind !== 'condition' || (effect.target === 'enemy') === (effect.range !== undefined),
     { message: 'o efeito condition com target "enemy" exige range, e só ele (#592)' },
@@ -1688,15 +1708,50 @@ export const DRUNK_CONDITION_KEY = 'drunk' as const;
 export const INVISIBLE_CONDITION_KEY = 'invisible' as const;
 
 /**
+ * A chave RESERVADA de uma condição `outfit` (#621, M44-03, `CONDITION_OUTFIT`). O que a
+ * distingue de um `buff` vazio é o `look` (`ConditionState.look`, `sim/conditions.ts`), mas a
+ * chave é a MESMA para toda fonte — Creature Illusion, Chameleon Rune, o ataque/defesa `outfit`
+ * de um monstro —, e é isso que faz uma criatura ter no máximo UMA aparência emprestada de cada
+ * vez, como o `Creature::getCondition(type, id, subId)` do Canary: um segundo `outfit` cai em
+ * `ConditionOutfit::addCondition` e se funde ao primeiro, nunca vira uma segunda condição.
+ */
+export const OUTFIT_CONDITION_KEY = 'outfit' as const;
+
+/**
+ * A APARÊNCIA que a condição `outfit` veste (#621, ADR 0041 decisão 1; invariante 6). Nunca um
+ * id de arte: o `look` nomeia uma entidade de CONTEÚDO, e quem a resolve para o `outfitId`/
+ * `appearanceId` do pacote é o host, pela tabela de aparências — trocar de pacote continua sendo
+ * editar `appearances/baseline.json`, e nada aqui.
+ *
+ * Três formas, as mesmas que o `Outfit_t` do Canary distingue (`lookType`/`lookTypeEx`):
+ * - `monsterId`: o OUTFIT de um monstro do catálogo (`lookType` = `monsterType->info.outfit`;
+ *   `appearances.monsters[monsterId]`) — Creature Illusion e o `outfitMonster` dos monstros;
+ * - `itemId`: a aparência de OBJETO de um item do catálogo (`lookTypeEx` = id do item;
+ *   `appearances.items[itemId]`) — a Chameleon Rune, que veste o item que o jogador aponta;
+ * - `objectKey`: a aparência de OBJETO que o monstro veste (`appearances.looks[key]`) — o
+ *   `outfitItem` do Lua (2096, 2324, 2916, 3058, 3976 e 7172 no Canary). Fica fora de `itemId`
+ *   porque o catálogo de caça só tem um desses seis itens, e `appearances.items` é conferida dos
+ *   dois lados contra ele. Chave semântica, como `abilities`: sem linha na tabela é MUDA — a
+ *   condição (e o prazo) valem igual, só não desenha.
+ */
+export const outfitLookSchema = z.union([
+  z.strictObject({ monsterId: z.string().min(1) }),
+  z.strictObject({ itemId: z.string().min(1) }),
+  z.strictObject({ objectKey: z.string().min(1) }),
+]);
+export type OutfitLook = z.infer<typeof outfitLookSchema>;
+
+/**
  * As condições a que um monstro pode declarar imunidade (`monster.immunities[].condition` do
  * Canary, ADR 0041 decisão 2): `paralyze` (o sinal NEGATIVO da condição de velocidade), `drunk`,
- * `invisible` (que o Canary reaproveita como "enxerga invisível", ver `monsterSchema`) e as oito
- * DOTs de `DAMAGE_OVER_TIME_CONDITION_IMMUNITY`. `outfit` — 119 monstros o declaram imune, mas o
- * Draconya ainda não tem a condição — entra com o M44-03.
+ * `invisible` (que o Canary reaproveita como "enxerga invisível", ver `monsterSchema`), as oito
+ * DOTs de `DAMAGE_OVER_TIME_CONDITION_IMMUNITY` e `outfit` (#621, M44-03 — 119 monstros o declaram
+ * imune: a ilusão de um ataque de monstro não entra neles).
  */
 export const CONDITION_IMMUNITIES = [
   'paralyze', 'drunk', 'invisible',
   'bleeding', 'poison', 'burning', 'electrified', 'cursed', 'drowning', 'freezing', 'dazzled',
+  'outfit',
 ] as const;
 export type ConditionImmunity = (typeof CONDITION_IMMUNITIES)[number];
 
@@ -1815,6 +1870,15 @@ export const conditionEffectSchema = z.discriminatedUnion('kind', [
    * (`chooseTarget`, `sim/monster/monster.ts`).
    */
   z.object({ kind: z.literal('invisible') }),
+  /**
+   * A aparência emprestada (#621, M44-03, `CONDITION_OUTFIT`/`ConditionOutfit` do Canary): a
+   * criatura passa a ser DESENHADA como `look` até a condição vencer — nada de número de combate
+   * muda (o Canary não lê o outfit em nenhuma conta de dano), só o que o cliente desenha e o
+   * prazo. O `look` nomeia conteúdo, nunca arte (`outfitLookSchema`, invariante 6). A fusão é a
+   * do Canary (`Condition::updateCondition`): o segundo `outfit` só entra se acabar DEPOIS do
+   * primeiro — `conditionSpecSchema` exige `merge: 'strongest'`, que o `sim` mede pelo prazo.
+   */
+  z.object({ kind: z.literal('outfit'), look: outfitLookSchema }),
   z.object({
     kind: z.literal('heal-over-time'),
     amount: z.number().int().positive(),
@@ -2017,6 +2081,18 @@ export const conditionSpecSchema = z.object({
     message: `a condição invisible precisa da chave reservada "${INVISIBLE_CONDITION_KEY}", `
       + 'e só ela',
   },
+).refine(
+  (spec) => (spec.effect.kind === 'outfit') === (spec.key === OUTFIT_CONDITION_KEY),
+  {
+    message: `a condição outfit precisa da chave reservada "${OUTFIT_CONDITION_KEY}", e só ela`,
+  },
+).refine(
+  // `Condition::updateCondition` do Canary (`condition.cpp:543-557`): o `outfit` relançado só
+  // vale se acabar DEPOIS do que já está ativo — `strongest`, medido pelo prazo. Declarado aqui,
+  // e não escolhido por quem escreve o conteúdo, porque é o mecanismo da classe e não um
+  // parâmetro da fonte: Creature Illusion, Chameleon e o ataque de monstro fundem do mesmo jeito.
+  (spec) => spec.effect.kind !== 'outfit' || spec.merge === 'strongest',
+  { message: 'a condição outfit funde como strongest (Condition::updateCondition do Canary)' },
 );
 export type ConditionSpec = z.infer<typeof conditionSpecSchema>;
 
@@ -2243,10 +2319,11 @@ export type MonsterClass = (typeof MONSTER_CLASSES)[number];
  * sentido vindo de um ATACANTE contra outra criatura — `drunk` (desvio de passo) e
  * `damage-over-time` ficam de fora por isso. `invisible` entrou no #559/#592 (Killer Rabbit e
  * afins, `{ name = "invisible", ... }` em `monster.defenses` — o monstro fica invisível sozinho,
- * o mesmo self-buff que `speed`/`buff` já são).
+ * o mesmo self-buff que `speed`/`buff` já são). `outfit` entrou no #621 (52 defesas do Canary: o
+ * monstro se disfarça de outro — o Aspect of Power vira um dos quatro Goshnar).
  */
 const DEFENSE_SELF_CONDITION_KINDS = new Set<ConditionEffect['kind']>([
-  'speed', 'buff', 'mana-shield', 'heal-over-time', 'invisible',
+  'speed', 'buff', 'mana-shield', 'heal-over-time', 'invisible', 'outfit',
 ]);
 
 /**
@@ -2703,6 +2780,13 @@ export const monsterSchema = z.strictObject({
    * atual (rat, rotworm, dragon, dragon-lord) declara.
    */
   summonable: z.boolean().default(false),
+  /**
+   * O monstro pode ser IMITADO pelo Creature Illusion (#621, M44-03; Canary `flags.illusionable`
+   * → `MonsterType::isIllusionable()`, o que `creature_illusion.lua` confere antes de vestir o
+   * outfit). 285 monstros do Canary o declaram. Ausente é `false` — o default do Canary
+   * (`isIllusionable = false`).
+   */
+  illusionable: z.boolean().default(false),
   /**
    * `manaCost` da invocação (#598, `MonsterType::info.manaCost`, o custo de mana que
    * `summon_creature.lua` debita do mestre por invocação) — 184 monstros do Canary o declaram.
@@ -4663,6 +4747,15 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
    * (`INVISIBLE_CONDITION_KEY`) é quem o `sim` reconhece, como `mana-shield`.
    */
   z.object({ kind: z.literal('invisible'), durationMs: z.number().int().positive() }),
+  /**
+   * Creature Illusion (#621, M44-03, Canary `creature_illusion.lua`: level 23, mana 100, 180 s,
+   * `hasParams(true)`): o lançador veste o outfit de OUTRO monstro, escolhido pelo PARÂMETRO da
+   * magia — `monsterId` da ação do slot (`botActionV2Schema`), o mesmo desenho de `summon`. O
+   * monstro precisa ser `illusionable` (`MonsterType::isIllusionable`; `PlayerFlag_CanIllusionAll`
+   * não existe aqui: nenhum personagem é GM). O efeito só declara o prazo; o `look` nasce no
+   * lançamento, em `HuntRuleset#castSpell`, como a invocação nasce o monstro.
+   */
+  z.object({ kind: z.literal('illusion'), durationMs: z.number().int().positive() }),
   /**
    * Remove condição do lançador, sem curar (#590, Canary `cure_{poison,burning,curse,
    * electrification,bleeding}.lua`: só `COMBAT_PARAM_DISPEL`, sem `COMBAT_PARAM_TYPE,
