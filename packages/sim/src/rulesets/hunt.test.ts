@@ -329,7 +329,7 @@ const content = (over: Partial<RawContent> = {}): Content => buildContent(raw(ov
 const character = (
   over: Partial<{
     health: number; staminaMs: number; skills: SkillsState; inventory: InventoryState;
-    bestiary: BestiaryState; gold: number;
+    bestiary: BestiaryState; gold: number; loyaltyBonusPercent: number;
   }> = {},
 ): CharacterRuntime => {
   const stats = statsForLevel(1, null, progression as Progression);
@@ -344,6 +344,7 @@ const character = (
     ...(over.skills === undefined ? {} : { skills: over.skills }),
     ...(over.inventory === undefined ? {} : { inventory: over.inventory }),
     ...(over.bestiary === undefined ? {} : { bestiary: over.bestiary }),
+    ...(over.loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent: over.loyaltyBonusPercent }),
   });
 };
 
@@ -357,7 +358,7 @@ function start(
   options: { difficulty?: 'cautious' | 'bold'; exitRules?: readonly HuntExitRule[];
     health?: number; staminaMs?: number; loaded?: Content; skills?: SkillsState;
     inventory?: InventoryState; bestiary?: BestiaryState; gold?: number;
-    boostedMonsterId?: string } = {},
+    boostedMonsterId?: string; loyaltyBonusPercent?: number } = {},
 ): Started {
   // `difficulty` não seleciona mais nada no conteúdo (#583) — é só um rótulo aceito e ignorado
   // pelo `sim`. "bold" aqui é o pedido de DENSIDADE que a dificuldade costumava dar de graça
@@ -379,6 +380,7 @@ function start(
     ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
     ...(options.bestiary === undefined ? {} : { bestiary: options.bestiary }),
     ...(options.gold === undefined ? {} : { gold: options.gold }),
+    ...(options.loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent: options.loyaltyBonusPercent }),
   });
   session.enter(hero);
   return { session, hero, ruleset: session.ruleset as HuntRuleset };
@@ -2988,6 +2990,11 @@ const withSpells = (
     combat?: readonly unknown[]; monstersRaw?: readonly unknown[];
     /** Equipamento inicial (M30-04, #551) — ausente é o herói nu de sempre. */
     inventory?: InventoryState;
+    /** O catálogo de skills do conteúdo (#628: curva REAL, para o Loyalty ter o que converter). */
+    skillsContent?: readonly unknown[];
+    /** As skills com que o herói entra e o bônus de Loyalty do ticket (#628). */
+    heroSkills?: SkillsState;
+    loyaltyBonusPercent?: number;
   } = {},
   difficulty: 'cautious' | 'bold' = 'cautious',
 ) => {
@@ -3007,6 +3014,7 @@ const withSpells = (
     ...(over.supplies === undefined ? {} : { supplies: over.supplies }),
     ...(over.combat === undefined ? {} : { combat: over.combat }),
     ...(over.monstersRaw === undefined ? {} : { monsters: over.monstersRaw }),
+    ...(over.skillsContent === undefined ? {} : { skills: over.skillsContent }),
   }));
   const session = createHuntSession({
     id: 'spell-session', content: loaded, huntId: 'arena', difficulty,
@@ -3021,6 +3029,8 @@ const withSpells = (
     staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
     gold: over.gold ?? 1_000, goldDelta: 0, alive: true, cooldowns: {},
     ...(over.inventory === undefined ? {} : { inventory: over.inventory }),
+    ...(over.heroSkills === undefined ? {} : { skills: over.heroSkills }),
+    ...(over.loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent: over.loyaltyBonusPercent }),
   });
   session.enter(hero);
   return { session, hero, ruleset: session.ruleset as HuntRuleset, content: loaded };
@@ -5186,6 +5196,143 @@ describe('skills sobem pelo uso, e a curva é conteúdo (FUN-75)', () => {
     const rapido = at(100);
     expect(at(1_000)).toEqual(rapido);
     expect(rapido.skills['melee']?.level).toBeGreaterThan(10);
+  });
+});
+
+// --- Loyalty: o bônus da idade da conta no nível efetivo (#628, ADR 0052 d.5) ------------------
+
+describe('Loyalty: o nível efetivo escala golpe e requisito de runa, e o dado persistido não muda (#628)', () => {
+  // A curva REAL do Canary (espada de Knight: base 50, ×1,1; ML de Druid: 1600, ×1,1). A das
+  // skills de fixture tem fator 1 — custo constante, que o Canary trata como "nível máximo" e
+  // que por isso nunca converteria bônus em nível.
+  const realSkills = skills.map((definition) => {
+    if (definition.id === 'melee') return { ...definition, curve: { base: 50, factor: 1.1 } };
+    if (definition.id === 'magic') return { ...definition, curve: { base: 1600, factor: 1.1 } };
+    return definition;
+  });
+  const comEspada: InventoryState = {
+    backpack: [], equipped: { hand: { instanceId: 'i1', itemId: 'sword', quantity: 1 } },
+  };
+  const meleeHit = (loyaltyBonusPercent: number | undefined) => {
+    const { session, hero } = start({
+      difficulty: 'bold', inventory: comEspada, loaded: content({ skills: realSkills }),
+      skills: { melee: { level: 30, points: 0 } },
+      ...(loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent }),
+    });
+    run(session, 20_000, 100);
+    return { session, hero };
+  };
+
+  it('50 % de Loyalty num melee 30 vale o nível 33, e é ESSE nível que escala o golpe', () => {
+    // Tries até o nível 30 (fator 1,1): 2.863; 50 % são 1.431 tries de graça, e o custo de
+    // sair do 30 (336), do 31 (370) e do 32 (407) soma 1.113 — três níveis. `damagePerLevel:
+    // 0,5` neste conteúdo: o poder da espada (200) vai de ×11 (nível 30) para ×12,5 (nível 33).
+    const plain = meleeHit(undefined);
+    const loyal = meleeHit(50);
+
+    expect(plain.session.aggregates.bestBasicHit).toBe(Math.round(200 * (1 + 0.5 * (30 - 10))));
+    expect(loyal.session.aggregates.bestBasicHit).toBe(Math.round(200 * (1 + 0.5 * (33 - 10))));
+    expect(loyal.session.aggregates.bestBasicHit).toBeGreaterThan(plain.session.aggregates.bestBasicHit);
+  });
+
+  it('o nível e os tries PERSISTIDOS não sabem do bônus (o extrato e o snapshot levam o de sempre)', () => {
+    const plain = meleeHit(undefined);
+    const loyal = meleeHit(50);
+    const stateOf = (hero: CharacterRuntime) => hero.skills.getState()['melee'];
+    // Mesmos golpes, mesmos tries e mesmo nível base — o bônus só muda o que a skill VALE.
+    expect(stateOf(loyal.hero)).toEqual(stateOf(plain.hero));
+    expect(stateOf(loyal.hero)?.level).toBe(30);
+  });
+
+  it('a skill não sobe MAIS rápido por causa do bônus: tries e rate leem o nível base', () => {
+    // O `getBaseMagicLevel`/`skills[].level` do Canary escolhe o estágio de rate e recebe os
+    // tries — o bônus é só de LEITURA. Se o estágio lesse o nível efetivo, o Loyalty aceleraria
+    // (ou travaria) a curva de quem já tem o bônus.
+    const stagedRates = {
+      ...progression,
+      rates: {
+        useStages: true,
+        skillStages: [{ minLevel: 1, maxLevel: 30, multiplier: 1 }, { minLevel: 31, multiplier: 4 }],
+      },
+    };
+    const at = (loyaltyBonusPercent: number) => {
+      const { session, hero } = start({
+        difficulty: 'bold', inventory: comEspada,
+        loaded: content({ skills: realSkills, progression: [stagedRates] }),
+        skills: { melee: { level: 30, points: 0 } }, loyaltyBonusPercent,
+      });
+      run(session, 20_000, 100);
+      return hero.skills.getState()['melee'];
+    };
+    // Nível base 30 (abaixo do estágio 31) nos dois: o bônus, que leva o efetivo ao 33, não pode
+    // mudar o estágio.
+    expect(at(50)).toEqual(at(0));
+  });
+
+  it('a mesma hunt a 10 Hz e a 1 Hz rende o mesmo com Loyalty (o bônus é leitura, não tick)', () => {
+    const at = (stepMs: number) => {
+      const { session, hero } = start({
+        difficulty: 'bold', inventory: comEspada, loaded: content({ skills: realSkills }),
+        skills: { melee: { level: 30, points: 0 } }, loyaltyBonusPercent: 50,
+      });
+      run(session, 60_000, stepMs);
+      return {
+        kills: session.aggregates.kills, best: session.aggregates.bestBasicHit,
+        skill: hero.skills.getState()['melee'], xp: hero.xp,
+      };
+    };
+    expect(at(1_000)).toEqual(at(100));
+  });
+
+  it('atravessa o snapshot: a sessão retomada continua com o mesmo bônus e o mesmo golpe', () => {
+    const { session, hero } = meleeHit(50);
+    expect(hero.loyaltyBonusPercent).toBe(50);
+    const loaded = content({ skills: realSkills });
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+    const heroRetomado = retomado.participants[0] as CharacterRuntime;
+    expect(heroRetomado.loyaltyBonusPercent).toBe(50);
+    // O golpe seguinte usa o nível efetivo 33, e não volta ao 30 por a sessão ter sido retomada.
+    run(retomado, 20_000, 100);
+    expect(retomado.aggregates.bestBasicHit).toBeGreaterThanOrEqual(Math.round(200 * (1 + 0.5 * (33 - 10))));
+  });
+
+  it('requisito de magic level de runa confere o ML COM Loyalty — e o espelho do slot coincide', () => {
+    // ML 4 com 500 de mana gasta e 50 %: 3.962 mana de graça fecham o ML 4 e chegam ao 5.
+    const rune = {
+      id: 'ml5-rune', name: 'ML5 Rune', price: 14, group: 'attack',
+      requires: { level: 1, magicLevel: 5 },
+      effect: { kind: 'damage', basePower: 400, range: 4, area: { shape: 'circle', radius: 3, centered: 'target' } },
+    };
+    const at = (loyaltyBonusPercent: number | undefined) => {
+      // Sem monstro: o que muda entre as duas é o requisito de ML (que vem ANTES do alvo), e
+      // com o ML satisfeito a recusa que sobra é `no-target`.
+      const { session, ruleset, hero } = withSpells(
+        botConfigV2([{ do: { kind: 'supply', supplyId: 'ml5-rune' } }]),
+        {
+          gold: 10_000, supplies: [...supplies, rune], health: 5_000, monsters: false,
+          skillsContent: realSkills, heroSkills: { magic: { level: 4, points: 500 } },
+          ...(loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent }),
+        },
+      );
+      const state = ruleset.slotStates(session, hero)[0];
+      const outcome = ruleset.useSlot(session, 'hero', 0, 0);
+      return { state, outcome, hero };
+    };
+
+    const plain = at(undefined);
+    expect(plain.state).toMatchObject({ state: 'blocked', reason: 'magic-level-too-low' });
+    expect(plain.outcome).toMatchObject({ ok: false, reason: 'magic-level-too-low' });
+
+    const loyal = at(50);
+    expect(loyal.state).toMatchObject({ state: 'blocked', reason: 'no-target' });
+    expect(loyal.outcome).toMatchObject({ ok: false, reason: 'no-target' });
+    // O ML persistido continua 4: só o que a runa CONFERE viu o 5.
+    expect(loyal.hero.skills.getState()['magic']?.level).toBe(4);
   });
 });
 

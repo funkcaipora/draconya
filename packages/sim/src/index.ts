@@ -22,6 +22,7 @@ export * from './food.js';
 export * from './blessings.js';
 export * from './item-loss.js';
 export * from './skills.js';
+export * from './loyalty.js';
 export * from './bestiary.js';
 export * from './charms.js';
 export * from './party.js';

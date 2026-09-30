@@ -137,6 +137,19 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **Skill nunca desce, e `Skills.merge` depende disso.** Ficar com o maior de cada uma é o que
   torna a fusão de extratos comutativa: um extrato antigo processado fora de ordem não rebaixa
   nada, e não é preciso guardar instante como a stamina guarda.
+- **Loyalty é LEITURA do nível, nunca escrita** (`loyalty.ts`, #628, ADR 0052 d.5). O bônus da
+  idade da conta chega no ticket como um percentual inteiro, fica em `CharacterRuntime.
+  loyaltyBonusPercent` (fixado como a versão de conteúdo, e no snapshot) e vira NÍVEIS extras por
+  `LoyaltyLevels.levelOf` — a conta de `getLoyaltySkill`/`getLoyaltyMagicLevel` do Canary, sobre
+  TRIES e na curva real da vocação, não `nível × (1 + p)`. **Toda leitura que ESCALA algo (golpe,
+  magia, defesa, cura, requisito de runa) passa por `HuntRuleset#loyaltyLevelOf` /
+  `#magicLevelOf`; ganhar tries, o estágio de rate, a penalidade de morte, o extrato e o
+  snapshot continuam no nível BASE** (`skills.levelOf`) — misturar os dois faria o bônus
+  acelerar (ou travar) a própria curva. Skill nova que escale algo lê pelo helper, não por
+  `character.skills.levelOf`. Sem bônus o helper devolve o nível base sem custo nenhum. O `sim`
+  nunca conta dias de conta nem lê relógio: quem calcula o percentual é a `api` (`server/src/
+  loyalty.ts`), com `loyaltyPointsOf`/`loyaltyBonusPercentOf` daqui (aritmética pura). O cache de
+  tries acumulados por skill é derivado, por personagem, e nunca vai ao snapshot.
 - **Bestiário é acumulador de ABATE, pelo mesmo argumento** (`bestiary.ts`, FUN-113, §18).
   Abate é a morte que `resolveDeath` resolve no instante em que vence — evento na fila, não
   grandeza por tick —, e o módulo é aritmética pura sobre um `Map`. `CharacterState.bestiary`
