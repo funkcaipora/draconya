@@ -118,6 +118,18 @@ que passar a hospedar entidade gerada precisa do mesmo campo; esquecê-lo só ap
 primeira entidade de verdade for importada, e o erro (`Unrecognized key: "source"`) não aponta
 para cá.
 
+**O boss é o monstro com bloco `bosstiary`** (#629): `monsterSchema.bosstiary = { rarity, raceId }`
+(`bane`/`archfoe`/`nemesis` e o `bossRaceId` do Canary, a chave do contador de abates) e `boss:
+true` — o `isBoss` do Canary É "tem bloco bosstiary" (`!bosstiaryClass.empty()`). O importador
+(`scripts/catalog/monsters.ts`, `readBosstiary`) escreve os dois juntos, e a promoção os leva a
+`data/monsters/generated/` como estão (é campo do schema, ao contrário de `bestiary`/`outfitId`);
+`buildContent` recusa `bosstiary` sem `boss` e duas raridades para o mesmo `raceId` (variantes do
+mesmo boss compartilham o contador). A tabela de níveis por raridade — abates e pontos de cada um
+dos três níveis, a `IOBosstiary::levelInfos` — é `data/bosstiary/baseline.json`, transcrita à mão
+de UM arquivo do Canary (bloco `source`, sem `_open`: o boot avisa todo `_open` como valor não
+decidido, e este é decidido). Boss não tem `bestiary` no Canary, e não entra em
+`bestiary/baseline.json`.
+
 ## Mapa e rota
 
 O mapa é **grade de caracteres**, uma string por linha: `#` bloqueia, o resto é livre. Escolha
