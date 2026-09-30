@@ -1,0 +1,18 @@
+{
+  "id": "ultimate-light-druid",
+  "name": "Ultimate Light",
+  "description": "Ilumina o seu redor por 33 minutos e 10 segundos. A luz diminui aos poucos.",
+  "vocationId": "druid",
+  "minLevel": 26,
+  "manaCost": 140,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "light",
+    "level": 8,
+    "color": 215,
+    "durationMs": 1990000
+  },
+  "_open": "Canary `data/scripts/spells/support/ultimate_light.lua` (47dfd51): words \"utevo vis lux\", id 75, level 26, mana 140, cooldown/groupCooldown 2000 (grupo support), `CONDITION_LIGHT` com LIGHT_LEVEL 8 (o mesmo do Great Light neste script, não 9 como no TFS), LIGHT_COLOR 215 e TICKS 60*33+10 = 1990 s, `isSelfTarget(true)`, `isAggressive(false)`, `isPremium(true)` (não modelado), `vocation(\"druid;true\", \"elder druid;true\", \"sorcerer;true\", \"master sorcerer;true\")` — arquivo duplicado por vocação (`ultimate-light-sorcerer.json`), como Invisibility. Efeito CONST_ME_MAGIC_BLUE (13). Condição de APRESENTAÇÃO — ver `docs/product/utility-spells.md`."
+}

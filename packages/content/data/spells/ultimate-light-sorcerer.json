@@ -1,0 +1,18 @@
+{
+  "id": "ultimate-light-sorcerer",
+  "name": "Ultimate Light",
+  "description": "Ilumina o seu redor por 33 minutos e 10 segundos. A luz diminui aos poucos.",
+  "vocationId": "sorcerer",
+  "minLevel": 26,
+  "manaCost": 140,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "light",
+    "level": 8,
+    "color": 215,
+    "durationMs": 1990000
+  },
+  "_open": "A mesma Ultimate Light de `ultimate-light-druid.json` — arquivo por vocação porque `vocationId` é um só (DT-02). Ver a nota completa lá: o Canary declara as duas vocações no MESMO `spell:vocation(...)` de `data/scripts/spells/support/ultimate_light.lua`."
+}

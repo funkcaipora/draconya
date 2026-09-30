@@ -1,0 +1,15 @@
+{
+  "id": "levitate-down",
+  "name": "Levitate (down)",
+  "description": "Desce um andar, para o tile à sua frente, quando não há chão ali.",
+  "minLevel": 12,
+  "manaCost": 50,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "levitate",
+    "direction": "down"
+  },
+  "_open": "A mesma Levitate de `levitate-up.json` com o parâmetro \"down\" — duas magias do catálogo porque o parâmetro de texto do Canary não tem lugar na barra de ações. Ver a nota completa lá (`data/scripts/spells/support/levitate.lua`, words \"exani hur\", id 81, level 12, mana 50, cooldown/groupCooldown 2000). Efeito CONST_ME_TELEPORT (11)."
+}

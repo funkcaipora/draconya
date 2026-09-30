@@ -1,0 +1,15 @@
+{
+  "id": "find-fiend",
+  "name": "Find Fiend",
+  "description": "Diz em que direção e a que distância está o monstro fiendish mais próximo.",
+  "minLevel": 25,
+  "manaCost": 20,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "find",
+    "target": "fiend"
+  },
+  "_open": "Canary `data/scripts/spells/support/find_fiend.lua` (47dfd51): words \"exiva moe res\", id 248, level 25, mana 20, cooldown/groupCooldown 2000 (grupo support), `isAggressive(false)`. Procura o monstro fiendish mais próximo (`ForgeMonster:pickClosestFiendish`); sem nenhum, recusa \"No creatures around\" e NÃO gasta mana. O monstro fiendish é do Exaltation Forge (#616/#617), que o dono deixou FORA por ora (2026-09-29) — enquanto ele não existir, nenhum monstro é fiendish e a magia sempre recusa, exatamente como o Canary faz num mundo sem fiendish. A parte da mensagem que depende do Forge (a dificuldade pelo Bestiário e o tempo até a troca) entra com ele. Vocação: TODAS, por isso sem `vocationId`. Efeito CONST_ME_MAGIC_BLUE (13)."
+}

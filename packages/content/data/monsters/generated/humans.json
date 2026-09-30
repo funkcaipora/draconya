@@ -1593,6 +1593,10 @@
           "chance": 0.095
         },
         {
+          "itemId": "roll",
+          "chance": 0.225
+        },
+        {
           "itemId": "heavily-rusted-armor",
           "chance": 0.0008
         }
@@ -2145,6 +2149,10 @@
         {
           "itemId": "sandals",
           "chance": 0.0089
+        },
+        {
+          "itemId": "bread",
+          "chance": 0.2055
         },
         {
           "itemId": "dark-rosary",
@@ -3356,6 +3364,10 @@
           "max": 3
         },
         {
+          "itemId": "grapes",
+          "chance": 0.1985
+        },
+        {
           "itemId": "small-notebook",
           "chance": 0.0093
         }
@@ -3663,6 +3675,12 @@
         {
           "itemId": "brass-armor",
           "chance": 0.0507
+        },
+        {
+          "itemId": "roll",
+          "chance": 0.1137,
+          "min": 1,
+          "max": 2
         },
         {
           "itemId": "sniper-gloves",
@@ -4869,6 +4887,10 @@
         {
           "itemId": "sandals",
           "chance": 0.0071
+        },
+        {
+          "itemId": "bread",
+          "chance": 0.2
         },
         {
           "itemId": "rope-belt",
@@ -6321,6 +6343,12 @@
         {
           "itemId": "leather-legs",
           "chance": 0.2674
+        },
+        {
+          "itemId": "roll",
+          "chance": 0.1111,
+          "min": 1,
+          "max": 2
         }
       ]
     },
@@ -6429,6 +6457,12 @@
         {
           "itemId": "black-shield",
           "chance": 0.0021
+        },
+        {
+          "itemId": "red-apple",
+          "chance": 0.075,
+          "min": 1,
+          "max": 2
         },
         {
           "itemId": "cultish-robe",
@@ -6580,6 +6614,10 @@
         "max": 30
       },
       "items": [
+        {
+          "itemId": "grapes",
+          "chance": 0.0121
+        },
         {
           "itemId": "meat",
           "chance": 0.0121,
@@ -7309,6 +7347,12 @@
           "chance": 0.1
         },
         {
+          "itemId": "red-apple",
+          "chance": 0.075,
+          "min": 1,
+          "max": 2
+        },
+        {
           "itemId": "girlish-hair-decoration",
           "chance": 0.059
         },
@@ -7436,6 +7480,10 @@
         "max": 30
       },
       "items": [
+        {
+          "itemId": "grapes",
+          "chance": 0.154
+        },
         {
           "itemId": "meat",
           "chance": 0.05

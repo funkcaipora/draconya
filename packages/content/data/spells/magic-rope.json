@@ -1,0 +1,14 @@
+{
+  "id": "magic-rope",
+  "name": "Magic Rope",
+  "description": "Sobe um andar quando você está sobre um lugar de corda.",
+  "minLevel": 9,
+  "manaCost": 20,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "magic-rope"
+  },
+  "_open": "Canary `data/scripts/spells/support/magic_rope.lua` (47dfd51): words \"exani tera\", id 76, level 9, mana 20, cooldown/groupCooldown 2000 (grupo support), `isSelfTarget(true)`, `isAggressive(false)`, `isPremium(true)` (não modelado). Exige `Tile:isRopeSpot()` no tile do lançador (`ropeSpots`/`specialRopeSpots` de `data/global.lua`, já classificados pelo importador como `rope-spot` — ADR 0050 d.1) e sobe pela `Position:moveUpstairs()` (`data/libs/functions/position.lua`). Vocação: TODAS, por isso sem `vocationId`. Efeito CONST_ME_TELEPORT (11)."
+}

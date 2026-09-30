@@ -1,0 +1,17 @@
+{
+  "id": "food",
+  "name": "Food",
+  "description": "Cria comida na sua mochila: sempre um item, e um segundo item em metade das vezes.",
+  "vocationId": "druid",
+  "minLevel": 14,
+  "manaCost": 120,
+  "soulCost": 1,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "food",
+    "items": ["meat", "ham", "grapes", "red-apple", "bread", "roll", "cheese"]
+  },
+  "_open": "Canary `data/scripts/spells/support/food.lua` (47dfd51): words \"exevo pan\", id 42, level 14, mana 120, soul 1, cooldown/groupCooldown 2000 (grupo support), `isAggressive(false)`, `vocation(\"druid;true\", \"elder druid;true\")`. A lista de comidas está NA ORDEM do script (3577 meat, 3582 ham, 3592 grapes, 3585 red apple, 3600 bread, 3601 roll, 3607 cheese) e o índice do sorteio é a posição: `if math.random(0, 1) == 1 then addItem(foods[math.random(#foods)]) end` e, sempre, mais um `addItem(foods[math.random(#foods)])`. Cria ITEM, como o Canary — quem o come soma `fedMs` (ADR 0049 d.5, `use-item`), não a magia; não há comida no chão neste modelo, então o que não cabe na mochila se perde (ver `docs/product/utility-spells.md`). Efeito CONST_ME_MAGIC_GREEN (15)."
+}

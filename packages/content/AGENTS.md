@@ -606,3 +606,13 @@ entre arquivos resolvem.
   o M44-03. Ausente é `[]`, sem imunidade nenhuma.
 
 Issue: FUN-8.
+- **Os efeitos utilitários de magia (#623: `light`, `levitate`, `magic-rope`, `find`, `food`)
+  vivem em `spellEffectSchema`, e cada um traz uma armadilha.** O parâmetro de TEXTO do Canary
+  (`exani hur up`/`down`) vira DOIS ids (`levitate-up`/`levitate-down`) — a barra de ações é do
+  Draconya, e um campo de parâmetro em `botActionV2Schema` só existe para a invocação (`monsterId`).
+  A vocação dupla do Canary vira um arquivo por vocação (`ultimate-light-druid`/`-sorcerer`); a
+  geral não declara `vocationId` (Light, Great Light, Levitate, Magic Rope, Find). `food.items` é
+  ORDENADO (o índice do sorteio é a posição) e `buildContent` exige que cada id seja comida de
+  verdade (consumível com efeito `food`) e que não repita. `light.color` é o índice da paleta de 216
+  cores do Tibia (215 é branco). Ultimate Light é nível 8 no Canary e 9 no TFS: vale o Canary
+  (ADR 0037 d.4).

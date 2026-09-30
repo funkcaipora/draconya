@@ -1106,6 +1106,10 @@
           "chance": 0.13
         },
         {
+          "itemId": "bread",
+          "chance": 0.07
+        },
+        {
           "itemId": "green-tunic",
           "chance": 0.07
         },

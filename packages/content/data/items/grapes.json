@@ -1,0 +1,10 @@
+{
+  "id": "grapes",
+  "name": "Grapes",
+  "kind": "consumable",
+  "weight": 2.5,
+  "value": 0,
+  "stackable": true,
+  "effect": { "kind": "food", "durationMs": 108000 },
+  "_open": "Comida que a magia Food cria na mochila (#623, M44-05). durationMs = 9 × 12 s (foods.lua do Canary, item 3592, valor 9) em ms; peso de items.xml (250 de weight ÷ 100). value 0: comida não tem preço de venda no NPC; a bolsa da party a devolve ao líder em vez de vender (ADR 0027)."
+}

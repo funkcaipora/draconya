@@ -1,0 +1,17 @@
+{
+  "id": "light",
+  "name": "Light",
+  "description": "Ilumina o seu redor por 6 minutos e 10 segundos. A luz diminui aos poucos.",
+  "minLevel": 8,
+  "manaCost": 20,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "light",
+    "level": 6,
+    "color": 215,
+    "durationMs": 370000
+  },
+  "_open": "Canary `data/scripts/spells/support/light.lua` (47dfd51): words \"utevo lux\", id 10, level 8, mana 20, cooldown/groupCooldown 2000 (grupo support), `CONDITION_LIGHT` com LIGHT_LEVEL 6, LIGHT_COLOR 215 e TICKS (6*60+10)*1000 = 370000, `isSelfTarget(true)`, `isAggressive(false)`. Vocação: TODAS (druid/elder druid, knight/elite knight, paladin/royal paladin, sorcerer/master sorcerer, monk/exalted monk — o Draconya não tem monge), por isso sem `vocationId`, como Cure Poison. `isPremium(true)` não existe neste script; nenhuma magia do catálogo modela Premium. Efeito CONST_ME_MAGIC_BLUE (13). É condição de APRESENTAÇÃO: o `sim` a guarda e a vence, o cliente ajusta a escuridão (ver `docs/product/utility-spells.md`)."
+}

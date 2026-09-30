@@ -2214,6 +2214,10 @@
           "chance": 0.07
         },
         {
+          "itemId": "bread",
+          "chance": 0.14
+        },
+        {
           "itemId": "holy-orchid",
           "chance": 0.021
         },
@@ -2395,6 +2399,10 @@
           "chance": 0.07
         },
         {
+          "itemId": "bread",
+          "chance": 0.14
+        },
+        {
           "itemId": "holy-orchid",
           "chance": 0.021
         },
@@ -2556,6 +2564,10 @@
         {
           "itemId": "sandals",
           "chance": 0.0118
+        },
+        {
+          "itemId": "grapes",
+          "chance": 0.1775
         },
         {
           "itemId": "heaven-blossom",
@@ -2967,6 +2979,10 @@
         {
           "itemId": "bow",
           "chance": 0.04
+        },
+        {
+          "itemId": "grapes",
+          "chance": 0.2
         },
         {
           "itemId": "heaven-blossom",
