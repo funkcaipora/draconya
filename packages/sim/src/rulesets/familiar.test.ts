@@ -130,7 +130,7 @@ const familiarSpell = {
 };
 // A Summon Creature de teste, para o teto: uma invocação comum ocupa um lugar do teto de 2.
 const minion = {
-  ...dummy, id: 'minion', name: 'Minion', summonable: true, manaCost: 20,
+  ...dummy, id: 'minion', name: 'Minion', summonable: true, manaCost: 20, speed: 300, aggroRadius: 11,
 };
 const summonSpell = {
   id: 'summon-test', name: 'Summon Creature', vocationId: 'knight', minLevel: 25, manaCost: 0,
@@ -526,13 +526,73 @@ describe('a morte e a saída do mestre', () => {
   });
 });
 
+describe('a invocação sem alvo SEGUE o mestre (`Monster::updateSummonTarget`)', () => {
+  /** O maior afastamento (Chebyshev) entre o herói e a invocação, amostrado a cada 500 ms. */
+  function followGap(
+    session: Session, hero: CharacterRuntime, ruleset: HuntRuleset, monsterId: string, durationMs: number,
+  ): { readonly maxGap: number; readonly moved: boolean; readonly spawnedAt: { x: number; y: number } } {
+    const first = ruleset.monsters.find((m) => m.monsterId === monsterId);
+    if (first === undefined) throw new Error('a invocação não nasceu');
+    const spawnedAt = { x: first.position.x, y: first.position.y };
+    let maxGap = 0;
+    let moved = false;
+    for (let t = 0; t < durationMs; t += 500) {
+      session.advanceBy(500);
+      session.drainEvents();
+      const summon = ruleset.monsters.find((m) => m.monsterId === monsterId);
+      if (summon === undefined) throw new Error('a invocação sumiu');
+      if (summon.position.x !== spawnedAt.x || summon.position.y !== spawnedAt.y) moved = true;
+      // Só depois do primeiro minuto de rota: antes, o herói ainda está saindo de junto dela.
+      if (t >= 5_000) {
+        maxGap = Math.max(maxGap, Math.abs(summon.position.x - hero.position.x), Math.abs(summon.position.y - hero.position.y));
+      }
+    }
+    return { maxGap, moved, spawnedAt };
+  }
+
+  it('o familiar acompanha o herói que anda pela rota, a poucos tiles dele (e não fica onde nasceu)', () => {
+    const { session, hero, ruleset } = start({ config: botConfig([manualFamiliar]) });
+    session.advanceBy(100);
+    expect(useCast(session, ruleset)).toEqual({ ok: true });
+    const result = followGap(session, hero, ruleset, 'knight-familiar', 90_000);
+    expect(result.moved).toBe(true);
+    // 2 tiles é a distância de parada; +2 é o que o herói anda entre uma amostra e a seguinte.
+    expect(result.maxGap).toBeLessThanOrEqual(4);
+    // Nunca dois no mesmo tile, e o familiar segue vivo (nada o atacou).
+    expect(familiarsOf(ruleset)).toHaveLength(1);
+  });
+
+  it('a Summon Creature comum também segue: é a mesma invocação de personagem', () => {
+    const { session, hero, ruleset } = start({ config: botConfig([manualSummon]) });
+    session.advanceBy(100);
+    expect(useCast(session, ruleset)).toEqual({ ok: true });
+    const result = followGap(session, hero, ruleset, 'minion', 90_000);
+    expect(result.moved).toBe(true);
+    expect(result.maxGap).toBeLessThanOrEqual(4);
+  });
+
+  it('com o mesmo resultado a 1 Hz e a 10 Hz (a perseguição é evento da fila, invariante 2)', () => {
+    const at = (stepMs: number) => {
+      const { session, ruleset } = start({ config: botConfig([manualFamiliar]) });
+      session.advanceBy(100);
+      useCast(session, ruleset);
+      run(session, 60_000, stepMs);
+      return ruleset.monsters.map((m) => [m.id, m.position.x, m.position.y]);
+    };
+    expect(at(1_000)).toEqual(at(100));
+  });
+});
+
 describe('o teleporte ao mestre (`Creature::checkSummonMove`)', () => {
   it('passou de 15 tiles em x ou em y: o familiar vai até o mestre, num tile livre ao lado', () => {
-    // A rota é um laço de 39 tiles por fileira: o herói se afasta do familiar (que não tem alvo e
-    // fica onde nasceu) e, ao passar de 15 tiles, ele é trazido.
+    // A rota é um laço de 39 tiles por fileira. O familiar SEGUE o mestre enquanto o enxerga (11
+    // tiles), e por isso o herói precisa de um jeito de deixá-lo para trás: a velocidade do
+    // familiar é a do mestre NO LANÇAMENTO, e uma haste que vem depois (aqui, o triplo) o deixa
+    // longe demais para segui-lo — ao passar de 15 tiles, ele é trazido.
     const { session, hero, ruleset } = start({ config: botConfig([manualFamiliar]) });
     session.advanceBy(100);
     useCast(session, ruleset);
+    hero.speed *= 3;
     const spawnedAt = { ...(familiarsOf(ruleset)[0] as { position: { x: number; y: number } }).position };
     const teleports: DomainEvent[] = [];
     let farBefore = false;

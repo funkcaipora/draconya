@@ -218,10 +218,12 @@ O familiar é uma invocação de personagem (o estágio #598) e só existe quand
 de level 200 — nenhum cenário SEM familiar muda de resultado nem de ordem de sorteio: o teleporte
 ao mestre e a travessia leem `#familiarIds` (vazio, um `Set.size`), o embaralhamento do tile de
 nascimento (10 sorteios do `Rng` da sessão) só roda dentro do lançamento, e a ability em área de
-uma invocação usa presas próprias só quando o lançador tem `masterId` de personagem. Duas mudanças
-tocam também a Summon Creature do #598, e ambas só atuam com invocação viva: o alvo herdado é o
-SELECIONADO do mestre (não o que a arma alcança) e a ability em área da invocação atinge só
-monstros hostis. O que o teste prende (`packages/sim/src/rulesets/familiar.test.ts`): duração e
+uma invocação usa presas próprias só quando o lançador tem `masterId` de personagem. Três mudanças
+tocam também a Summon Creature do #598, e todas só atuam com invocação viva: o alvo herdado é o
+SELECIONADO do mestre (não o que a arma alcança), a ability em área da invocação atinge só monstros
+hostis, e a invocação de personagem sem alvo passou a SEGUIR o mestre (`summonFollowStep`, o
+`updateSummonTarget` do Canary — a divergência que o #598 tinha deixado; a busca de caminho não
+sorteia nada). O que o teste prende (`packages/sim/src/rulesets/familiar.test.ts`): duração e
 cooldown como eventos da fila (1 Hz × 10 Hz, mesmo snapshot), o carimbo de parede que atravessa a
 saída, a recriação ao entrar, a morte, o teleporte, a travessia e a ability contra os hostis.
 

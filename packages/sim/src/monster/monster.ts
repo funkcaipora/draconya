@@ -17,7 +17,7 @@ import type { ContributionState } from '../death.js';
 import type { CooldownState } from '../cooldown.js';
 import type { Rng } from '../rng.js';
 import { rankTarget, type TargetRankCandidate } from './target-strategy.js';
-import { boundedPath, isExactly } from '../route/pathfind.js';
+import { boundedPath, cheapestPath, isExactly } from '../route/pathfind.js';
 import {
   canSeePoint, distance, fleeStep, greedyStep, randomStep, sameFloor, walkBackStep,
   type Blocked, type FloorPoint, type GridPoint,
@@ -798,6 +798,54 @@ export function walkBackPathStep(from: GridPoint, home: GridPoint, blocked: Bloc
 }
 
 /**
+ * Até onde a invocação de personagem se aproxima do mestre ao segui-lo
+ * (`Monster::getPathSearchParams`, `monster.cpp:3836-3838`: `master == creature` →
+ * `fpp.maxTargetDist = 2`, com `minTargetDist = 1`): qualquer tile a 1 ou 2 do mestre serve.
+ */
+export const SUMMON_FOLLOW_MAX_DISTANCE = 2;
+
+/**
+ * O raio da busca de caminho ao mestre (`Creature::getPathSearchParams`, `maxSearchDist = 12`).
+ * O mestre tem de estar na área de visão (`Creature::setFollowCreature` recusa quem `canSee` não
+ * alcança), então o caminho sempre cabe: a visão é 11.
+ */
+const SUMMON_FOLLOW_SEARCH_RADIUS = 12;
+
+/**
+ * O passo com que a invocação de personagem SEM alvo segue o mestre (#599; `Monster::
+ * updateSummonTarget` — "`master != followCreature` → `setFollowCreature(master)`" — e
+ * `doFollowCreature`, que anda o caminho até um tile a `SUMMON_FOLLOW_MAX_DISTANCE` do mestre).
+ * `null` é ficar onde está: o mestre não está na área de visão (a mesma condição do
+ * `setFollowCreature`: outro andar ou fora do quadrado de `viewRange`), já há um tile bom debaixo
+ * dela, ou nenhum caminho leva a um.
+ *
+ * É a BUSCA de caminho de menor custo (`cheapestPath`: cardinal 10, diagonal 35, o A* do Canary),
+ * não o passo guloso: o guloso, numa concavidade, faria a invocação oscilar na boca dela (o mesmo
+ * motivo da volta ao spawn, `nextWalkBackStep`), e o BFS de custo igual a faria andar de viés na
+ * diagonal — o triplo do tempo por tile. O objetivo é o tile MAIS BARATO a 1–2 do mestre com
+ * linha de visão livre até ele (`fpp.clearSight = true`); `blocked` é o predicado da busca de
+ * caminho — um tile a qualquer distância, criatura inclusa. Ordem de vizinhos fixa, sem sorteio.
+ */
+export function summonFollowStep(
+  monster: MonsterRuntime,
+  master: Prey,
+  viewRange: number,
+  blocked: Blocked,
+  sightClear: (from: FloorPoint, to: FloorPoint) => boolean = () => true,
+): GridPoint | null {
+  if (!master.alive || !sameFloor(monster.position.z, master.position.z)) return null;
+  if (!canSeePoint(monster.position, master.position, viewRange)) return null;
+  const z = monster.position.z;
+  const inRange = (p: GridPoint): boolean => {
+    const at = Math.max(Math.abs(p.x - master.position.x), Math.abs(p.y - master.position.y));
+    return at >= 1 && at <= SUMMON_FOLLOW_MAX_DISTANCE
+      && sightClear({ x: p.x, y: p.y, ...(z === undefined ? {} : { z }) }, master.position);
+  };
+  const path = cheapestPath(monster.position, inRange, blocked, SUMMON_FOLLOW_SEARCH_RADIUS);
+  return path?.[0] ?? null;
+}
+
+/**
  * `(x, y)` está dentro do raio de spawn do monstro (`Monster::isInSpawnRange`,
  * `monster.cpp:3323-3345`, com `deSpawnRadius` 50)? Sem spawn (invocação) sempre está.
  */
@@ -812,8 +860,10 @@ export function isInSpawnRange(monster: MonsterRuntime, x: number, y: number): b
  * hasFollowPath`, precedido pelo `updateIdleStatus` que o alimenta.
  *
  * - `idle`: `isIdle` — lista de alvos vazia, no spawn e sem condição nenhuma. O monstro nada faz.
- * - `still`: invocação sem alvo. O Canary a manda seguir o mestre (`updateSummonTarget`), o que
- *   este motor não modela; ela continua parada onde está, como antes desta issue.
+ * - `still`: invocação sem alvo. O Canary a manda seguir o mestre (`updateSummonTarget`); a de
+ *   PERSONAGEM o faz antes de chegar aqui (`summonFollowStep`, #599, decidido pelo ruleset), e
+ *   esta ação é o que sobra — a invocação de outro MONSTRO (#546), que este motor não modela
+ *   seguindo e continua parada onde está.
  * - `walk-back`: `doWalkBack`; `to` é o passo rumo ao `home` — o guloso, ou a busca de caminho
  *   depois que o guloso empacou fora do `home` —, ou `null` quando já chegou ou não há passo
  *   (nos dois casos `walkingBack` desliga).

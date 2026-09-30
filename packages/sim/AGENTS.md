@@ -474,7 +474,8 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   "congela" um monstro reposicionado à mão**: sem ninguém à vista e fora do `home` ele VOLTA; o
   teste que planta um monstro precisa plantar o `home` junto (`plant` em `hunt.test.ts`) — e o que
   conta `rng.integer` precisa isolar os três sorteios do passo aleatório. (5) Invocação nunca volta
-  nem fica ociosa (`masterId`), e sem alvo continua parada — seguir o mestre não é modelado. (6) **O
+  nem fica ociosa (`masterId`), e sem alvo a de PERSONAGEM segue o mestre (`summonFollowStep`, #599 —
+  a de outro monstro continua parada). (6) **O
   ocioso CALA defesa, troca de alvo e invocação** (o Canary tira o monstro do `onThink`):
   `MonsterRuntime.idle` é escrito por `#onMonsterStep` a cada decisão (liga no `idle`, desliga em
   qualquer outra) e `#onMonsterDefense`/`#onMonsterTargetChange`/`#onMonsterSummon` REAGENDAM e
@@ -839,7 +840,14 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   SELECIONADO do mestre e não o que a arma alcança; e o jogador atravessa o familiar por TROCA de
   tiles em `#step` (`#moverBlocked` e `#occupiedForPlayer` — o `world.occupied` das buscas de caminho do follow e do `walk-to` — deixam o caminho passar por ele) — sem isso um familiar parado
   num corredor tranca a party inteira. `#familiarIds` (vazio na hunt de sempre) existe para o custo:
-  o teleporte ao mestre e a travessia consultam-no a cada passo.
+  o teleporte ao mestre e a travessia consultam-no a cada passo. **A invocação de personagem SEM alvo
+  segue o mestre** (`#onMonsterStep` → `summonFollowStep`): a busca é `cheapestPath` (Dijkstra,
+  cardinal 10, diagonal 35 — o A* do Canary), e não o BFS de `boundedPath` nem o guloso — o BFS de
+  custo igual anda de viés na diagonal, e o passo diagonal dura o triplo; o guloso oscila na boca de
+  uma concavidade. Só enxerga quem está a ≤ `aggroRadius` no mesmo andar, e para a 1–2 tiles com linha
+  de visão livre (`getPathSearchParams`). Um teste que quer o familiar PARADO ou atrasado precisa de um
+  jeito de o herói deixá-lo para trás (a velocidade do familiar é a do mestre no lançamento: acelere o
+  herói DEPOIS de lançar), porque um familiar que enxerga o mestre o acompanha.
 - **Os Charms em combate (#603, M39-03, ADR 0053 d.5) vivem em `combat/charms.ts` (puro) e nos
   métodos `#charm*`/`#roll*` do `HuntRuleset`, e SÓ rolam no `combat-v4` (`hasCharmStage`).** Três
   armadilhas custam caro. (1) **O índice do tier é `tier − 1`**: o Canary guarda um `0` na frente do

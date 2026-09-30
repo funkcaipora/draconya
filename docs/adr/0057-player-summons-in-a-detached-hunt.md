@@ -116,3 +116,10 @@ divergências, está em `docs/product/combat.md` ("O familiar de vocação").
    alcança, e a ability em ÁREA de uma invocação de personagem atinge só monstros hostis (nunca a
    party): as duas eram lacunas do primitivo do #598 que o familiar, cuja ability é quase toda em
    área, expôs.
+6. **A invocação de personagem sem alvo SEGUE O MESTRE** (o `Monster::updateSummonTarget` do
+   Canary: `master != followCreature` → `setFollowCreature(master)`), o que o #598 deixara como
+   divergência aceita e a regra da caça idêntica ao Canary (ADR 0037 d.6) não admite. Só segue quem
+   enxerga o mestre (mesmo andar, visão de 11), pela busca de menor custo do A* do Canary
+   (cardinal 10, diagonal 35, `cheapestPath`), até um tile a 1–2 do mestre com linha de visão
+   livre (`getPathSearchParams`: `maxTargetDist = 2` para o mestre); a de outro monstro (#546)
+   continua parada. Vale para a Summon Creature e para o familiar.

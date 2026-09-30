@@ -107,7 +107,7 @@ import type { AutomationActuator, CompiledAutomations } from '../automation.js';
 import {
   CHALLENGE_CONDITION_KEY, FATAL_HOLD_CONDITION_KEY, MonsterRuntime, canMonsterEnterField, chooseTarget,
   decideMonsterAction, decideUnengagedMove, isInSpawnRange, isMonsterFleeing, monsterSubject,
-  nearestPrey, seesInvisible,
+  nearestPrey, seesInvisible, summonFollowStep,
 } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
 import { abilityBlockFlags, abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
@@ -8057,6 +8057,22 @@ const slots = bot.groups.get(group);
       // sem passo a dar, e é ele que roda `doFollowCreature` — e desliga o passo aleatório.
       monster.randomStepping = false;
       monster.idle = false;
+    } else if (liveTarget === null && typeof monster.masterId === 'string') {
+      // A invocação de PERSONAGEM sem alvo SEGUE O MESTRE (#599, `Monster::updateSummonTarget`:
+      // `master != followCreature` → `setFollowCreature(master)`; depois `doFollowCreature`). O
+      // mestre morto/ausente já zerou o alvo em `#chooseMonsterTarget`, e sem ele ela fica parada.
+      // É o ramo de perseguição do Canary (`randomStepping` desliga, o passo gasta o bypass de
+      // campo), só que rumo ao mestre em vez de rumo a um alvo.
+      monster.randomStepping = false;
+      monster.idle = false;
+      const master = findById(session.participants, monster.masterId);
+      const to = master === null
+        ? null
+        : summonFollowStep(
+          monster, master, definition.aggroRadius, this.#blockedForWalkBackPath(monster, definition),
+          (from, at) => isSightClear(this.#world.map, from, at),
+        );
+      if (to !== null) result = this.#step(session, monster, to, subject);
     } else {
       // Sem perseguição (#655): `updateIdleStatus` + os ramos `doWalkBack`/`doRandomStep` de
       // `Monster::getNextStep`. Ver `decideUnengagedMove`.

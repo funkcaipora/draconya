@@ -1806,9 +1806,9 @@ sem rolar nada, e a semente da sessão não é tocada. Sem esse corte, um Doom D
 daria haste sozinho (`doom_deer.lua`: defesa de velocidade, 30 % a cada 3 s, 8 s), a condição
 impediria o ocioso e ele passearia pelo spawn para sempre. O reverso vale igual: um monstro ferido
 que voltou e ficou ocioso NÃO se cura pela defesa enquanto ninguém o acorda. Invocação (`masterId`) nunca fica
-ociosa nem volta ao spawn (`spawnMonster.expired()` no Canary devolve "no spawn"); sem alvo ela
-continua parada — o Canary a manda seguir o mestre (`updateSummonTarget`), o que este motor não
-modela.
+ociosa nem volta ao spawn (`spawnMonster.expired()` no Canary devolve "no spawn"); sem alvo, a de
+PERSONAGEM segue o mestre (#599, `updateSummonTarget` — ver "O familiar de vocação"), e a invocação de
+outro MONSTRO (#546) continua parada — o que este motor não modela para ela.
 
 A retenção do alvo (`chooseTarget`) passou a exigir a mesma área de visão: o alvo que sai do
 `aggroRadius` é largado (`Creature::onCreatureMove` → `onCreatureDisappear`), mesmo com o
@@ -1871,7 +1871,8 @@ volta o zeram.
   seguinte e o monstro espera. Só vale para o `home` ocupado ou a região isolada — com caminho, a
   busca o acha.
 - **O teleporte de volta de `Monster::onThink`** para quem passa de `deSpawnRadius`.
-- **Seguir o mestre** (`Monster::updateSummonTarget`) — a invocação sem alvo continua parada.
+- **Seguir o mestre** (`Monster::updateSummonTarget`) — só a invocação de PERSONAGEM o faz (#599); a
+  invocação de outro monstro (#546) sem alvo continua parada.
 
 ### Efeito nas hunts
 
@@ -1989,13 +1990,19 @@ por `spell.manaCost`.
   contrário da invocação de MONSTRO (#546, que roda `chooseTarget` normal), a de PERSONAGEM tem o
   `targetId` PROPAGADO do alvo atual do mestre (`attackTargetOf`, a mesma resolução que já limpa
   alvo morto/fora de alcance) a cada passo/ataque/ability — e troca junto quando o mestre troca.
-  Sem mestre vivo ou mestre sem alvo, fica parada (`targetId: null`), sem sortear nada; não roda o
+  Sem mestre vivo ou mestre sem alvo, o `targetId` é `null` (sem sortear nada); não roda o
   timer de `targetChange` do próprio monstro (gated, mas continua reagendando — inofensivo, como
   o de `MONSTER_SUMMON` numa invocação que nunca arma a própria lista).
-  - **Divergência aceita:** sem alvo, a invocação NÃO persegue o mestre fisicamente (o
-    `follow` genérico de personagem só existe entre membros de party) — ela fica onde nasceu até
-    ter um alvo para seguir. Num mapa de rota fixa isso raramente importa (o combate normalmente
-    já está próximo quando a invocação nasce); registrado aqui, não escondido.
+  - **Sem alvo, ela SEGUE O MESTRE** (#599; antes era uma divergência aceita do #598): `Monster::
+    updateSummonTarget` manda `setFollowCreature(master)` quando o mestre não está atacando nada, e
+    `HuntRuleset#onMonsterStep` reproduz isso com `summonFollowStep` (`monster/monster.ts`): só
+    segue quem ENXERGA o mestre (mesmo andar, dentro da visão de 11 — a condição do
+    `setFollowCreature`), anda por uma BUSCA de caminho de menor custo (`cheapestPath`, cardinal 10 e
+    diagonal 35 como o A* do Canary, raio 12) até um tile a 1–2 do mestre COM linha de visão livre
+    até ele (`getPathSearchParams`: `maxTargetDist = 2` para o mestre, `clearSight`), e para lá.
+    Vale para a Summon Creature comum e para o familiar, que são a mesma invocação de personagem.
+    Não é o passo guloso: numa concavidade ele faria a invocação oscilar. A invocação de outro
+    MONSTRO (#546) sem alvo continua parada.
 - **Monstros HOSTIS a atacam** (`isOpponent` do Canary): a lista de presas de um monstro
   hostil (`masterId === null`, ou invocado por OUTRO monstro) é estendida pelas invocações de
   personagem VIVAS (`HuntRuleset#playerSummonPrey`/`#livePlayerSummons`) — devolve a MESMA
@@ -2107,6 +2114,9 @@ do script; o `spell:cooldown(0)` do Canary diz que quem cobra é a `CreateFamili
   houver sala. **A morte do familiar zera a recriação** (`FamiliarDeath`: `familiar-summon-time =
   os.time()`) e deixa o cooldown de pé. O mestre que sai da hunt leva o familiar junto (#598) e os
   carimbos ficam; a Cidade não simula nem tem invocação (`City#useSlot` recusa o efeito).
+- **Segue o mestre** (`Monster::updateSummonTarget`): sem alvo, o familiar anda até um tile a 1–2 do
+  mestre, se o enxerga (visão de 11), por uma busca de menor custo (cardinal 10, diagonal 35) — e
+  para lá; com alvo, luta. Além da visão ele fica onde está, e o teleporte abaixo o traz.
 - **Teleporte ao mestre** (`Creature::checkSummonMove`, a cada passo dele): outro andar OU mais de
   15 tiles em x/y (`FAMILIAR_TELEPORT_DISTANCE`) — a invocação comum só some além de 30 tiles/2
   andares, o familiar nunca.
@@ -2147,9 +2157,8 @@ do script; o `spell:cooldown(0)` do Canary diz que quem cobra é a `CreateFamili
 3. **O teleporte cai no tile livre mais perto do mestre, não NO tile dele** (`internalTeleport` com
    `FLAG_NOLIMIT`): o tile do `sim` é exclusivo (`TileOccupancy`).
 4. **Atravessar o familiar é uma TROCA de tiles, não dividir o tile** (mesma razão): o Canary deixa
-   o jogador e o familiar no mesmo tile. O familiar sem alvo fica onde nasceu — herança da
-   divergência do #598 (a invocação não segue o mestre quando ninguém tem alvo) —, e o teleporte
-   ao mestre (> 15 tiles/outro andar) e o fim dos 15 min o alcançam.
+   o jogador e o familiar no mesmo tile. O familiar sem alvo SEGUE o mestre (`summonFollowStep`,
+   acima), e o teleporte ao mestre cobre o que a visão de 11 não alcança (> 15 tiles/outro andar).
 5. **Sem as mensagens "Your summon will disappear in less than one minute / 10 seconds"** (texto
    privado ao mestre, `MESSAGE_LOOT`): apresentação, sem canal no protocolo.
 6. **O familiar nasce fora de escada e de teleporte** — o Canary o aceita em tile de mudança de
