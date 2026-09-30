@@ -348,6 +348,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 320,
     "aggroRadius": 11,
@@ -570,6 +571,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 310,
     "aggroRadius": 11,
@@ -771,6 +773,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 156,
     "aggroRadius": 11,
@@ -934,6 +937,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 186,
     "aggroRadius": 11,
@@ -1065,6 +1069,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 330,
     "aggroRadius": 11,
@@ -1702,6 +1707,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 180,
     "aggroRadius": 11,
@@ -1854,6 +1860,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 174,
     "aggroRadius": 11,
@@ -2297,6 +2304,30 @@
         }
       },
       {
+        "id": "outfit",
+        "cadenceMs": 2000,
+        "chance": 0.01,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "clay-guardian"
+            }
+          }
+        }
+      },
+      {
         "id": "paralyze",
         "cadenceMs": 2000,
         "chance": 0.25,
@@ -2475,6 +2506,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 120,
     "aggroRadius": 11,
@@ -2568,6 +2600,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 200,
     "aggroRadius": 11,
@@ -2711,6 +2744,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 200,
     "aggroRadius": 11,
@@ -3044,6 +3078,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 186,
     "aggroRadius": 11,

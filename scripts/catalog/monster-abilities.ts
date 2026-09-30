@@ -18,8 +18,8 @@
 //   Sem ele, a onda sai na forma `wave` antiga, que NÃO é a do Canary — TODO(#679).
 
 import {
-  damageOverTimeTotalMs, DRUNK_CONDITION_KEY, monsterAbilitySchema, SPEED_CONDITION_KEY,
-  spellAreaSchema, type DamageOverTimeEffect,
+  damageOverTimeTotalMs, DRUNK_CONDITION_KEY, monsterAbilitySchema, OUTFIT_CONDITION_KEY,
+  SPEED_CONDITION_KEY, spellAreaSchema, type DamageOverTimeEffect,
 } from '../../packages/content/src/schemas.js';
 import { MIXED_TABLE_ITEMS_KEY, type LuaValue } from './lua-table.js';
 import { meleePower, type MeleePowerVia } from './monster-melee.js';
@@ -258,6 +258,19 @@ export interface SpellContext {
    * é `nil` no Lua de verdade — sem efeito —, e não vira chave. Ausente: aceita toda constante.
    */
   readonly knownConstant?: (constant: string, role: 'missile' | 'effect') => boolean;
+  /**
+   * O slug de um nome do Tibia (`slugify`, `monsters.ts`) — o id que o monstro e o objeto de um
+   * `outfit` ganham. Injetado, e não importado, porque `monsters.ts` importa este módulo (#621).
+   */
+  readonly slug?: (name: string) => string;
+  /** `items.xml`: id do item → nome, para o `outfitItem` virar a chave de objeto (#621). */
+  readonly itemNames?: ReadonlyMap<number, string>;
+  /**
+   * Onde o mapeador anota o que só a promoção sabe gravar: a aparência de OBJETO de cada
+   * `outfitItem` (`chave → appearanceId`, que vira linha de `appearances.looks`). O `appearanceId`
+   * é arte (invariante 6) e nunca entra na condição — o leitor o leva à parte, como o `outfitId`.
+   */
+  readonly objectLooks?: Record<string, number>;
 }
 
 function unmapped(name: string, reason: string): SpellMapping {
@@ -583,14 +596,126 @@ function mapField(name: string, raw: LuaRecord, ctx: SpellContext): SpellMapping
 }
 
 /**
+ * O slug default quando o contexto não injeta o `slugify` do leitor (fixture de teste): o mesmo
+ * algoritmo, repetido só aqui para o mapeador ficar testável sem `monsters.ts`.
+ */
+function defaultSlug(name: string): string {
+  return name
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/['’]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * `outfit` (#621, M44-03): o monstro veste a aparência de OUTRO monstro (`outfitMonster`) ou de um
+ * objeto (`outfitItem`) por `duration` (default 10 s). A condição é SEMPRE não agressiva no Canary
+ * (`COMBAT_PARAM_AGGRESSIVE 0`, `Monsters::deserializeSpell`) e a forma é a de qualquer ability:
+ *
+ * - **ataque**, sem área: o alvo atacado (`castSpell(creature, target)` → `doCombat(creature,
+ *   target)`, o flag `target` do Lua só decide algo COM área); com `radius`, o círculo centrado no
+ *   alvo (`target = true`) ou no lançador — e a área de uma condição não agressiva pega TODAS as
+ *   criaturas nela, o lançador e os outros monstros inclusive (o `sim` sabe: `#executeOutfitAbility`).
+ *   O alcance é o declarado, ou a VISTA (11): o `sb.range` 0 do Canary é "sem limite além da
+ *   vista" (`Monster::canUseSpell`), e um círculo de `radius` ao redor do LANÇADOR acerta o
+ *   próprio lançador de qualquer distância do alvo — o alcance de anel que `geometryOf` daria
+ *   impediria o disfarce de sair com o alvo a dois tiles;
+ * - **defesa**: o próprio monstro (`castSpell(monster, monster)`). Uma defesa com `radius` atingiria
+ *   também quem está em volta, e o schema de defesa não tem área: descartada, com o motivo (o
+ *   Feverish Citizen, `feverish_citizen.lua`), nunca a metade da mecânica.
+ *
+ * O `outfitMonster` vira o id do monstro pelo slug do nome; o `outfitItem` vira a chave de objeto
+ * (slug do nome no `items.xml`, ou `item-<id>`), e o `appearanceId` dele — o próprio id do item —
+ * vai para `ctx.objectLooks`. Quem confere que o monstro imitado FOI gerado é o leitor do catálogo
+ * (`stripUnknownOutfits`), porque só ele conhece o conjunto inteiro.
+ */
+function mapOutfit(raw: LuaRecord, ctx: SpellContext): SpellMapping {
+  const slug = ctx.slug ?? defaultSlug;
+  const monsterName = str(raw['outfitMonster']);
+  const itemId = num(raw['outfitItem']) ?? 0;
+  let look: Record<string, string>;
+  if (monsterName !== undefined && monsterName !== '') {
+    look = { monsterId: slug(monsterName) };
+  } else if (itemId > 0) {
+    const name = ctx.itemNames?.get(itemId);
+    const objectKey = name === undefined ? `item-${String(itemId)}` : slug(name);
+    if (ctx.objectLooks !== undefined) ctx.objectLooks[objectKey] = itemId;
+    look = { objectKey };
+  } else {
+    // `deserializeSpell`: "Missing outfit monster or item in outfit spell" — o Lua falha, e o
+    // monstro do Canary nem carrega essa entrada.
+    return unmapped('outfit', 'outfit sem outfitMonster nem outfitItem');
+  }
+  const condition = {
+    key: OUTFIT_CONDITION_KEY, merge: 'strongest',
+    durationMs: num(raw['duration']) || DEFAULT_CONDITION_DURATION_MS,
+    effect: { kind: 'outfit', look },
+  };
+  const presentation = presentationOf(raw, ctx);
+  if (ctx.list === 'defenses') {
+    if ((num(raw['radius']) ?? 0) > 0 || (num(raw['length']) ?? 0) > 0) {
+      return { kind: 'dropped', reason: 'outfit: defesa com área (atinge quem está em volta) — o schema de defesa não tem área' };
+    }
+    return {
+      kind: 'defense',
+      notes: [],
+      defense: {
+        id: 'outfit', cadenceMs: cadence(raw), chance: chanceOf(raw), condition,
+        ...(presentation?.['impactKey'] === undefined ? {} : { presentation: { impactKey: presentation['impactKey'] } }),
+      },
+    };
+  }
+  const geometry = geometryOf(raw);
+  if (typeof geometry === 'string') return unmapped('outfit', geometry);
+  const declared = num(raw['range']) ?? 0;
+  return {
+    kind: 'ability',
+    notes: geometry.approximation === undefined ? [] : [geometry.approximation],
+    ability: ability({
+      id: 'outfit', cadenceMs: cadence(raw), chance: chanceOf(raw),
+      target: { ...geometry, range: declared > 0 ? Math.min(declared, CANARY_VIEW_RADIUS * 2) : CANARY_VIEW_RADIUS },
+      power: 0, damageType: 'physical', presentation, condition,
+    }),
+  };
+}
+
+/**
+ * Tira de um monstro gerado as entradas `outfit` cujo monstro imitado NÃO está no conjunto
+ * (#621): a condição referencia o monstro por id, e o boot recusa id que não existe (`buildContent`).
+ * O outfit de um monstro fora do catálogo — sem arte no pacote, ou bloqueado por outro motivo — não
+ * tem aparência a vestir, e a entrada inteira é uma troca puramente VISUAL: sai só ela, nunca o
+ * monstro, e a contagem vai para o relatório. Devolve quantas saíram.
+ */
+export function stripUnknownOutfits(
+  entity: Record<string, unknown>, known: ReadonlySet<string>,
+): number {
+  let removed = 0;
+  for (const field of ['abilities', 'defenses'] as const) {
+    const list = entity[field];
+    if (!Array.isArray(list)) continue;
+    const kept = (list as Record<string, unknown>[]).filter((entry) => {
+      const effect = (entry['condition'] as { effect?: { kind?: string; look?: { monsterId?: string } } } | undefined)?.effect;
+      const monsterId = effect?.kind === 'outfit' ? effect.look?.monsterId : undefined;
+      if (monsterId === undefined || known.has(monsterId)) return true;
+      removed += 1;
+      return false;
+    });
+    if (kept.length === list.length) continue;
+    if (kept.length === 0) delete entity[field];
+    else entity[field] = kept;
+  }
+  return removed;
+}
+
+/**
  * Nomes que o Canary lê e NÃO transformam em mecânica: `effect` e `strength` têm ramo vazio em
- * `deserializeSpell` (só o efeito visual), e `outfit` é a condição de aparência (#621) — nada
- * disso muda número de combate. Descartados com o motivo; o monstro segue.
+ * `deserializeSpell` (só o efeito visual) — nada disso muda número de combate. Descartados com o
+ * motivo; o monstro segue. (`outfit` saiu desta lista no #621: a condição existe, `mapOutfit`.)
  */
 const PRESENTATION_ONLY: Readonly<Record<string, string>> = {
   effect: 'só efeito visual (ramo vazio em deserializeSpell)',
   strength: 'só efeito visual (ramo vazio em deserializeSpell)',
-  outfit: 'condição de aparência, sem número de combate (#621)',
 };
 
 /** O motivo da `condition` de total sorteado — o relatório o usa para rever a meta. */
@@ -620,6 +745,7 @@ export function mapSpell(raw: LuaValue, ctx: SpellContext): SpellMapping {
     case 'drunk': return mapDrunk(raw, ctx);
     case 'firefield': case 'poisonfield': case 'energyfield': return mapField(name, raw, ctx);
     case 'invisible': return mapInvisible(raw, ctx);
+    case 'outfit': return mapOutfit(raw, ctx);
     default: {
       const dropped = PRESENTATION_ONLY[name];
       if (dropped !== undefined) return { kind: 'dropped', reason: `${name}: ${dropped}` };

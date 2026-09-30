@@ -100,6 +100,25 @@
     ],
     "defenses": [
       {
+        "id": "outfit",
+        "cadenceMs": 4000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "bat"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "groundshaker"
+        }
+      },
+      {
         "id": "haste",
         "cadenceMs": 2000,
         "chance": 0.15,
@@ -759,6 +778,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 140,
     "aggroRadius": 11,
@@ -1469,6 +1489,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 180,
     "aggroRadius": 11,
@@ -2592,6 +2613,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 480,
     "aggroRadius": 11,
@@ -2804,6 +2826,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 520,
     "aggroRadius": 11,
@@ -3249,6 +3272,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 160,
     "aggroRadius": 11,
@@ -3392,6 +3416,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 144,
     "aggroRadius": 11,
@@ -4559,6 +4584,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 154,
     "aggroRadius": 11,
@@ -5870,6 +5896,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 500,
     "aggroRadius": 11,
@@ -6079,6 +6106,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 150,
     "aggroRadius": 11,
@@ -6277,6 +6305,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 170,
     "aggroRadius": 11,
@@ -6453,6 +6482,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 180,
     "aggroRadius": 11,
@@ -6970,6 +7000,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 154,
     "aggroRadius": 11,
@@ -7277,6 +7308,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 150,
     "aggroRadius": 11,
@@ -7411,6 +7443,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 180,
     "aggroRadius": 11,
@@ -8189,6 +8222,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 150,
     "aggroRadius": 11,
@@ -8319,6 +8353,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 170,
     "aggroRadius": 11,
@@ -8451,6 +8486,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 238,
     "aggroRadius": 11,
@@ -8575,6 +8611,25 @@
       }
     ],
     "defenses": [
+      {
+        "id": "outfit",
+        "cadenceMs": 4000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "bat"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "groundshaker"
+        }
+      },
       {
         "id": "haste",
         "cadenceMs": 2000,

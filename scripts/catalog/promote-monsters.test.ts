@@ -127,6 +127,57 @@ describe('computePromotion', () => {
     expect(result.bestiaryEntries.get('badger')).toMatchObject({ class: 'mammal', toKill: 250 });
   });
 
+  describe('outfit (#621, M44-03)', () => {
+    const outfitAbility = (look: Record<string, string>) => ({
+      id: 'outfit', cadenceMs: 2000, chance: 0.1, target: { range: 11 }, power: 0, damageType: 'physical',
+      condition: { key: 'outfit', merge: 'strongest', durationMs: 4000, effect: { kind: 'outfit', look } },
+    });
+
+    it('`objectLooks` (staging-only) sai da entidade e vira as linhas de `appearances.looks`', () => {
+      workdir = mkdtempSync(join(tmpdir(), 'promote-monsters-'));
+      setupFixture(workdir, {
+        mammals: [
+          badger({ abilities: [outfitAbility({ objectKey: 'fallen-tree' })], objectLooks: { 'fallen-tree': 3976 } }),
+          badger({ id: 'stoat', name: 'Stoat', outfitId: 106, objectLooks: { 'fallen-tree': 3976, snowman: 7172 } }),
+        ],
+      });
+      const result = computePromotion(workdir);
+      expect(result.slices.get('mammals')?.every((entity) => !('objectLooks' in entity))).toBe(true);
+      expect([...result.lookEntries.entries()].sort()).toEqual([['fallen-tree', 3976], ['snowman', 7172]]);
+    });
+
+    it('dois monstros que pedem ids DIFERENTES para a mesma chave de objeto são um erro, não uma escolha calada', () => {
+      workdir = mkdtempSync(join(tmpdir(), 'promote-monsters-'));
+      setupFixture(workdir, {
+        mammals: [
+          badger({ objectLooks: { table: 2324 } }),
+          badger({ id: 'stoat', name: 'Stoat', outfitId: 106, objectLooks: { table: 9999 } }),
+        ],
+      });
+      expect(() => computePromotion(workdir as string)).toThrow(/appearances\.looks "table"/);
+    });
+
+    it('tira o `outfit` cujo monstro imitado NÃO foi promovido — e mantém o dos que foram (inclusive os autorais)', () => {
+      workdir = mkdtempSync(join(tmpdir(), 'promote-monsters-'));
+      setupFixture(workdir, {
+        mammals: [
+          badger({
+            abilities: [
+              outfitAbility({ monsterId: 'stoat' }), outfitAbility({ monsterId: 'rat' }),
+              outfitAbility({ monsterId: 'never-generated' }),
+            ],
+          }),
+          badger({ id: 'stoat', name: 'Stoat', outfitId: 106 }),
+        ],
+      });
+      const result = computePromotion(workdir);
+      const kept = result.slices.get('mammals')?.find((entity) => entity.id === 'badger')?.['abilities'] as
+        { condition: { effect: { look: { monsterId: string } } } }[];
+      expect(kept.map((ability) => ability.condition.effect.look.monsterId)).toEqual(['stoat', 'rat']);
+      expect([...result.strippedOutfits.entries()]).toEqual([['badger', 1]]);
+    });
+  });
+
   it('nunca promove rat/rotworm/dragon/dragon-lord — mesmo se o Canary os gerar (#581)', () => {
     workdir = mkdtempSync(join(tmpdir(), 'promote-monsters-'));
     setupFixture(workdir, {

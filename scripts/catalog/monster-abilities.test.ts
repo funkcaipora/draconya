@@ -3,7 +3,8 @@ import { monsterAbilitySchema, monsterDefenseSchema } from '../../packages/conte
 import type { LuaValue } from './lua-table.js';
 import {
   ABILITY_KIND_SUPPORTED, AREA_ROWS_SUPPORTED, CANARY_FIELD_ITEMS, mapSpell, mapSummons, monsterWaveWidths,
-  presentationKey, RANDOM_TOTAL_REASON, uniqueIds, type PresentationUse, type SpellMapping,
+  presentationKey, RANDOM_TOTAL_REASON, stripUnknownOutfits, uniqueIds, type PresentationUse, type SpellContext,
+  type SpellMapping,
 } from './monster-abilities.js';
 import { slugify } from './monsters.js';
 
@@ -150,8 +151,7 @@ describe('mapSpell — ataques', () => {
     expect(map({ name: 'poisonfield', radius: 3, target: false })).toMatchObject({ kind: 'unmapped' });
   });
 
-  it('outfit, effect e strength são descartados; magia com nome não mapeia', () => {
-    expect(map({ name: 'outfit', outfitMonster: 'Rat', duration: 5000 }).kind).toBe('dropped');
+  it('effect e strength são descartados; magia com nome não mapeia', () => {
     expect(map({ name: 'effect', effect: 'CONST_ME_POFF' }).kind).toBe('dropped');
     expect(map({ name: 'strength', effect: 'CONST_ME_POFF' }).kind).toBe('dropped');
     expect(map({ name: 'ice chain', chance: 10 })).toEqual({ kind: 'unmapped', name: 'ice chain', reason: 'magia com nome próprio (script Lua)' });
@@ -213,5 +213,113 @@ describe('uniqueIds e mapSummons', () => {
     });
     expect(mapSummons({ maxSummons: 0, summons: [{ name: 'Test Rat', chance: 10, interval: 2000 }] }, slugify))
       .toEqual({ summonedIds: [], problems: [] });
+  });
+});
+
+describe('outfit (#621, M44-03 — `{ name = "outfit" }` do Canary)', () => {
+  const ctx = (over: Partial<SpellContext> = {}, list: 'attacks' | 'defenses' = 'attacks'): SpellContext => ({
+    monsterId: 'test-beast', list, presentation: [], slug: slugify, ...over,
+  });
+
+  it('ataque sem área: o ALVO, alcance = a vista (o `range` 0 do Canary), condição `strongest` de 10 s por padrão', () => {
+    const mapping = mapSpell({ name: 'outfit', interval: 2000, chance: 1, target: true, outfitMonster: 'Green Frog' }, ctx());
+    expect(abilityOf(mapping)).toEqual({
+      id: 'outfit', cadenceMs: 2000, chance: 0.01, target: { range: 11 }, power: 0, damageType: 'physical',
+      condition: {
+        key: 'outfit', merge: 'strongest', durationMs: 10_000,
+        effect: { kind: 'outfit', look: { monsterId: 'green-frog' } },
+      },
+    });
+  });
+
+  it('o `target` do Lua só decide com ÁREA: sem `radius`, `target = false` ainda acerta o alvo (`castSpell(creature, target)`)', () => {
+    const single = (target: boolean) => abilityOf(mapSpell(
+      { name: 'outfit', interval: 2000, chance: 5, range: 7, target, duration: 3000, outfitMonster: 'Rat' }, ctx(),
+    ));
+    expect(single(false)).toEqual(single(true));
+    expect(single(true)).toMatchObject({ target: { range: 7 }, condition: { durationMs: 3000 } });
+  });
+
+  it('com `radius`: círculo no alvo (target = true) ou no lançador — e o alcance é a VISTA, não o anel', () => {
+    const onTarget = abilityOf(mapSpell(
+      { name: 'outfit', interval: 4000, chance: 12, range: 7, radius: 4, target: true, duration: 2000, outfitMonster: 'Rat' }, ctx(),
+    ));
+    expect(onTarget).toMatchObject({ target: { range: 7, area: { shape: 'circle', radius: 4, centered: 'target' } } });
+    // Centrado no lançador e sem `range`: o Canary nem limita o alcance (`sb.range` 0), e o anel de
+    // `geometryOf` (raio 3 → 1 tile) impediria o disfarce de sair com o alvo a dois tiles.
+    const onCaster = abilityOf(mapSpell(
+      { name: 'outfit', interval: 2000, chance: 6, radius: 3, target: false, duration: 6000, outfitMonster: 'bat' }, ctx(),
+    ));
+    expect(onCaster).toMatchObject({ target: { range: 11, area: { shape: 'circle', radius: 3, centered: 'caster' } } });
+  });
+
+  it('defesa: o próprio monstro, sem alcance nem área — e o efeito visual vira `impactKey`', () => {
+    const mapping = mapSpell({
+      name: 'outfit', interval: 4000, chance: 30, target: false, duration: 4000, effect: 'CONST_ME_MAGIC_BLUE',
+      outfitMonster: 'Werewolf',
+    }, ctx({}, 'defenses'));
+    expect(mapping.kind).toBe('defense');
+    if (mapping.kind !== 'defense') return;
+    expect(() => monsterDefenseSchema.parse(mapping.defense)).not.toThrow();
+    expect(mapping.defense).toEqual({
+      id: 'outfit', cadenceMs: 4000, chance: 0.3, presentation: { impactKey: 'blueshimmer' },
+      condition: {
+        key: 'outfit', merge: 'strongest', durationMs: 4000,
+        effect: { kind: 'outfit', look: { monsterId: 'werewolf' } },
+      },
+    });
+  });
+
+  it('defesa COM área atingiria quem está em volta — descartada com o motivo, nunca a metade da mecânica', () => {
+    const mapping = mapSpell({
+      name: 'outfit', interval: 2000, chance: 1, radius: 3, target: false, duration: 5000, outfitMonster: 'bog raider',
+    }, ctx({}, 'defenses'));
+    expect(mapping).toEqual({
+      kind: 'dropped',
+      reason: 'outfit: defesa com área (atinge quem está em volta) — o schema de defesa não tem área',
+    });
+  });
+
+  it('`outfitItem` vira a chave de OBJETO (slug do nome no items.xml) e anota o appearanceId à parte', () => {
+    const objectLooks: Record<string, number> = {};
+    const mapping = mapSpell(
+      { name: 'outfit', interval: 2000, chance: 1, range: 7, target: false, duration: 3000, outfitItem: 3976 },
+      ctx({ itemNames: new Map([[3976, 'fallen tree']]), objectLooks }),
+    );
+    expect(abilityOf(mapping)).toMatchObject({
+      condition: { effect: { kind: 'outfit', look: { objectKey: 'fallen-tree' } } },
+    });
+    // O id é ARTE (invariante 6): nunca entra na condição, só na linha de `appearances.looks`.
+    expect(objectLooks).toEqual({ 'fallen-tree': 3976 });
+    expect(JSON.stringify(mapping)).not.toContain('3976');
+  });
+
+  it('sem nome no items.xml, a chave é `item-<id>`', () => {
+    const objectLooks: Record<string, number> = {};
+    mapSpell({ name: 'outfit', interval: 2000, chance: 1, target: false, outfitItem: 99999 }, ctx({ objectLooks }));
+    expect(objectLooks).toEqual({ 'item-99999': 99999 });
+  });
+
+  it('sem `outfitMonster` nem `outfitItem`, não mapeia — o Lua falha com "Missing outfit monster or item"', () => {
+    expect(mapSpell({ name: 'outfit', interval: 2000, chance: 1, target: false }, ctx())).toEqual({
+      kind: 'unmapped', name: 'outfit', reason: 'outfit sem outfitMonster nem outfitItem',
+    });
+  });
+
+  it('`stripUnknownOutfits` tira SÓ a entrada cujo monstro imitado não existe, e limpa a lista vazia', () => {
+    const entity: Record<string, unknown> = {
+      id: 'caster',
+      abilities: [
+        { id: 'melee', condition: undefined },
+        { id: 'outfit', condition: { effect: { kind: 'outfit', look: { monsterId: 'gone' } } } },
+        { id: 'outfit-2', condition: { effect: { kind: 'outfit', look: { monsterId: 'rat' } } } },
+        { id: 'outfit-3', condition: { effect: { kind: 'outfit', look: { objectKey: 'worm' } } } },
+      ],
+      defenses: [{ id: 'outfit', condition: { effect: { kind: 'outfit', look: { monsterId: 'gone' } } } }],
+    };
+    expect(stripUnknownOutfits(entity, new Set(['rat']))).toBe(2);
+    expect((entity['abilities'] as { id: string }[]).map((ability) => ability.id)).toEqual(['melee', 'outfit-2', 'outfit-3']);
+    // A lista que ficou vazia sai inteira: `defenses` ausente é o default do schema.
+    expect(entity).not.toHaveProperty('defenses');
   });
 });
