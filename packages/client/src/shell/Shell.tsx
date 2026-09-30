@@ -166,7 +166,7 @@ export function Shell() {
               Pixi de forma imperativa. */}
           <PlayerVitalsOverlay />
         </div>
-        <WorldOverlay hunting={hunting} />
+        <WorldOverlay hunting={hunting} training={training} />
         {/* Condições ativas sobre o mundo (#348, SV-12): existe sozinha — devolve `null` sem
             nenhuma em `hud.conditions`. */}
         <BuffBar />

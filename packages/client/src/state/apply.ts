@@ -330,6 +330,10 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           // Os 25 Charms (M39-02, #602, ADR 0053 d.3): custo, chance e categoria de cada um,
           // fixados na sessão — a tela do Cyclopedia lê daqui.
           charms: message.charms,
+          // O Treino (#631, ADR 0059): o que uma carga rende, os tetos e o livro do offline
+          // training, fixados na sessão — a tela de Treino lê daqui. Ausente quando o servidor não
+          // tem Treino (o pill "Treino" não existe).
+          ...(message.training === undefined ? {} : { training: message.training }),
         },
       }));
       return;

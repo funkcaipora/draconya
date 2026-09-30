@@ -1306,6 +1306,31 @@ describe('o Treino (#631, ADR 0059)', () => {
     weapons: [{ instanceId: 'w1', itemId: 'exercise-sword', charges: 431 }], activeInstanceId: 'w1',
   };
 
+  it('o catálogo leva as regras do Treino e as exercise weapons — e sem elas o pill "Treino" não existe', () => {
+    // Mutação que mata: `apply` copia o catálogo CAMPO A CAMPO, e um campo novo que não entra ali some
+    // no caminho sem erro nenhum (foi o que o QA no navegador pegou: o `training` chegava e sumia).
+    const base = {
+      type: 'catalogue', hunts: [], monsters: [], charms: [], vocations: [], vocationLevel: 8,
+      bot: { vocabularyVersion: 2, spells: [], supplies: [], automations: [] },
+      items: [{
+        id: 'exercise-sword', name: 'exercise sword', appearanceId: 1, weight: 10, slot: null, twoHanded: false,
+        exercise: { skillId: 'sword', charges: 500 }, buyPrice: 347_222,
+      }],
+      ammunition: [],
+    };
+    const training = {
+      perCharge: { tries: 7, manaSpent: 600 }, bankCapMs: 43_200_000, graceMs: 600_000,
+      spendCapMs: { free: 21_600_000, premium: 43_200_000 },
+      offlineSkills: [{ skillId: 'sword', name: 'Espada', kind: 'attacks' }],
+    };
+    applyMessage({ ...base, training } as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue?.training).toEqual(training);
+    expect(hud.get().catalogue?.items[0]).toMatchObject({ exercise: { skillId: 'sword', charges: 500 }, buyPrice: 347_222 });
+
+    applyMessage(base as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue).not.toHaveProperty('training');
+  });
+
   it('ausente e vazio são coisas DIFERENTES: `null` até o servidor dizer', () => {
     // Um nó `game` sem Treino nunca manda — e o primeiro segundo de toda conexão também não mandou.
     expect(hud.get().training).toBeNull();
