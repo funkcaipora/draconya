@@ -1,6 +1,7 @@
 # 0052 — Estado de progressão do endgame e serviços de Cidade passam pela sessão dona e pelo extrato
 
 **Status:** proposto — decorre do [ADR 0037](0037-tfs-canary-fidelity-except-action-bar-and-automation.md)
+**Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30) — d.2 e d.6:** serviço em tile PZ do mundo; o “online” inclui o mundo.
 decisão 1 (o Tibia é a regra) e do [ADR 0024](0024-hot-state-and-hosted-session-are-not-the-same-thing.md)
 (a fronteira é "quente", não "sessão"); generaliza o caminho que [ADR 0048](0048-corpse-loot-and-per-character-quick-loot-filter.md)
 d.8 abriu para vender e descartar; é o ADR-mãe de [0053](0053-bestiary-xp-line-kept-and-charms-added.md)

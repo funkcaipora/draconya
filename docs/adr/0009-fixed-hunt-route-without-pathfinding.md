@@ -1,6 +1,7 @@
 # 0009 — Rota fixa sem pathfinding na hunt
 
 **Status:** aceito
+**Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30):** no mundo, andar-até e perseguição de monstro usam A* limitado e com andar (`maxSearchDist` 12, `creature.cpp:1038-1044`, sobre `Map::getPathMatching`, `canary/src/map/map.cpp:1009`); rota e passo guloso seguem na hunt.
 **Data:** 2026-09-07
 **Contexto técnico:** `sim/`, `content/hunts/`
 
