@@ -105,14 +105,18 @@ import { compileAutomations } from '../automation.js';
 import type { AutomationActuator, CompiledAutomations } from '../automation.js';
 import {
   CHALLENGE_CONDITION_KEY, FATAL_HOLD_CONDITION_KEY, MonsterRuntime, canMonsterEnterField, chooseTarget,
-  decideMonsterAction, decideUnengagedMove, isInSpawnRange, isMonsterFleeing, monsterSubject,
-  nearestPrey, seesInvisible,
+  decideMonsterAction, decideUnengagedMove, hasActiveCondition, isInSpawnRange, isMonsterFleeing,
+  monsterSubject, nearestPrey, seesInvisible,
 } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
 import { abilityBlockFlags, abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
+import {
+  FACTION_DEFAULT, FACTION_PLAYER, buildFactionTable, reachableMonsterIds,
+} from '../monster/faction.js';
+import type { FactionInfo } from '../monster/faction.js';
 import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
 import {
-  danceStep, distance, fleeStep, greedyStep, sameFloor, shuffledCardinals,
+  canSeePoint, danceStep, distance, fleeStep, greedyStep, sameFloor, shuffledCardinals,
 } from '../monster/step.js';
 import { isSightClear } from '../line-of-sight.js';
 import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from '../targeting.js';
@@ -1749,6 +1753,13 @@ export class HuntRuleset implements Ruleset {
    */
   readonly #injectedExitRules: readonly HuntExitRule[];
   #spawner: Spawner;
+  /**
+   * A facção dos monstros que PODEM nascer nesta hunt (#619) — só os que têm facção, por
+   * `monsterId`. Vazia é o caso comum (`#hasFactions` falso), e todo caminho novo do #619 sai por
+   * ela: sem facção nenhuma, escolha de alvo, área e morte são as de antes, bit a bit.
+   */
+  readonly #factions: ReadonlyMap<string, FactionInfo>;
+  readonly #hasFactions: boolean;
   #monsters: MonsterRuntime[] = [];
   /**
    * Índice `"m:<id>"` → monstro, para o despacho de evento não varrer a lista.
@@ -1877,6 +1888,10 @@ export class HuntRuleset implements Ruleset {
       'shield-block': [...options.skills.values()].filter((sk) => sk.gain.on === 'shield-block'),
     };
     this.#spawner = new Spawner(options.route.spawnPoints.length);
+    this.#factions = buildFactionTable(
+      options.monsters, reachableMonsterIds(options.route.spawnPoints, options.monsters),
+    );
+    this.#hasFactions = this.#factions.size > 0;
     this.#tileOverrides = TileOverrides.fromInteractables(options.map.interactables);
     this.#world = new TileOccupancy(
       options.map, { overrides: this.#tileOverrides, fields: this.#fields },
@@ -4154,12 +4169,187 @@ export class HuntRuleset implements Ruleset {
       return this.attackTargetOf(owner)?.subject ?? null;
     }
     // `knownSummons` (#655): quem já calculou a lista (o passo, que a reaproveita para a área de
-    // visão) a entrega em vez de varrer `#monsters` de novo.
+    // visão) a entrega em vez de varrer `#monsters` de novo. Desde o #619 ela é a lista de
+    // OPONENTES que não são personagem (`#opponentOthersOf`) — as invocações de personagem e, para
+    // o monstro de facção, os monstros inimigos.
+    if (this.#hasFactions) {
+      // A invocação de um monstro de facção fica OCIOSA quando o mestre não vê jogador
+      // (`#isFactionSummonIdle`): ela nem tem lista de alvos, e os eventos de ataque dela voltam
+      // aqui sem alvo — engatilham e esperam.
+      if (this.#isFactionSummonIdle(session, monster)) return null;
+      const others = knownSummons ?? this.#opponentOthersOf(monster, definition);
+      return chooseTarget(
+        monster, this.#targetPreyOf(session, monster, others), definition, session.rng, session.nowMs,
+      );
+    }
     const summons = knownSummons ?? this.#playerSummonPrey();
     const prey: readonly Prey[] = summons.length === 0
       ? session.participants
       : [...session.participants, ...summons];
     return chooseTarget(monster, prey, definition, session.rng, session.nowMs);
+  }
+
+  // --- facções (#619, Canary `Monster::isOpponent`/`isTarget`/`updateIdleStatus`) ------------------
+
+  /**
+   * A facção de um monstro COM facção, ou `null` — o monstro sem facção (o caso comum) e a
+   * invocação de PERSONAGEM, que tem regra própria (`isSummon() && masterPlayer`, o alvo do
+   * mestre). A INVOCAÇÃO de um monstro herda a do mestre inteira, facção e inimigas
+   * (`Monster::getFaction`/`isEnemyFaction`, `monster.cpp:260-273`): a Green Djinn que a Efreet
+   * invoca é da facção dela, não da própria — daí a recursão pelo mestre.
+   *
+   * Só chamada com `#hasFactions` verdadeiro: sem facção nenhuma na hunt a resposta é sempre
+   * `null`, e quem chama já saiu antes de pagar a busca do mestre.
+   */
+  #factionProfileOf(monster: MonsterRuntime): FactionInfo | null {
+    const master = monster.masterId;
+    if (typeof master === 'string') return null;
+    if (master !== null) {
+      const owner = this.#monsterBySubject.get(monsterSubject(master));
+      // O mestre já saiu (o cascade de `#removeSummon` ainda não rodou neste instante exato):
+      // como no Canary, sem mestre vale o tipo da própria criatura.
+      if (owner !== undefined) return this.#factionProfileOf(owner);
+    }
+    return this.#factions.get(monster.monsterId) ?? null;
+  }
+
+  /** O valor de `Faction_t` do monstro — `FACTION_PLAYER` para a invocação de personagem. */
+  #factionValueOf(monster: MonsterRuntime): number {
+    if (typeof monster.masterId === 'string') return FACTION_PLAYER;
+    return this.#factionProfileOf(monster)?.faction ?? FACTION_DEFAULT;
+  }
+
+  /** `monster` como candidato de OUTRO monstro: a forma `Prey`, com a facção dele. */
+  #factionPreyOf(monster: MonsterRuntime): Prey {
+    return {
+      id: monster.subject, position: monster.position, alive: monster.alive, health: monster.health,
+      invisible: monster.invisible, faction: this.#factionValueOf(monster),
+    };
+  }
+
+  /**
+   * Os OPONENTES de `monster` que não são personagem, à vista dele — a "lista de alvos" do
+   * Canary (`Monster::isOpponent`, `monster.cpp:836-869`) menos os jogadores, que
+   * `session.participants` já traz. O monstro sem facção só enxerga invocações de personagem
+   * (`#playerSummonPrey`) — a lista de sempre, com a MESMA referência e a mesma alocação. O de
+   * FACÇÃO soma os monstros das facções inimigas, e a invocação dele (que herda a facção do
+   * mestre) também.
+   *
+   * "À vista" é `canSeePoint` no `aggroRadius`, o mesmo que esvazia e enche `targetList` no
+   * Canary — e é ele, e não o andar, que filtra: o monstro de outro andar que a perspectiva
+   * deixa ver é oponente (segura a volta ao spawn) sem ser alvo (`chooseTarget` confere o andar).
+   * A ORDEM é contrato, como a de `#monsters` (a de nascimento): invocações de personagem
+   * primeiro, depois os inimigos — é ela que desempata dois inimigos da mesma facção à mesma
+   * distância.
+   */
+  #opponentOthersOf(monster: MonsterRuntime, definition: Monster): readonly Prey[] {
+    const summons = this.#playerSummonPrey();
+    if (!this.#hasFactions) return summons;
+    const profile = this.#factionProfileOf(monster);
+    if (profile === null) return summons;
+    let list: Prey[] | null = null;
+    for (const other of this.#monsters) {
+      // Invocação de personagem já está em `summons` (facção PLAYER, oponente de todo monstro).
+      if (other === monster || !other.alive || typeof other.masterId === 'string') continue;
+      if (!profile.enemies.has(this.#factionValueOf(other))) continue;
+      if (!canSeePoint(monster.position, other.position, definition.aggroRadius)) continue;
+      (list ??= [...summons]).push(this.#factionPreyOf(other));
+    }
+    return list ?? summons;
+  }
+
+  /**
+   * Os candidatos que `chooseTarget` recebe (`Monster::isTarget`, `monster.cpp:1434-1453`): dos
+   * oponentes (`session.participants` + `others`), só os que o monstro pode MIRAR. O monstro sem
+   * facção mira todos — a lista de sempre, sem alocar quando não há invocação. O de facção só mira
+   * a facção inimiga: jogador e invocação de jogador (facção PLAYER) só entram se `player` está
+   * em `enemyFactions`, e é por isso que a Lion, que não o lista, não caça o herói — embora ele
+   * seja oponente dela e a mantenha acordada. A INVOCAÇÃO de um monstro é a exceção do Canary
+   * (`if (!isSummon())` em `isTarget`): mira qualquer oponente, e o golpe que não pode dar
+   * (`#mayAttack`) é refutado depois.
+   */
+  #targetPreyOf(
+    session: Session, monster: MonsterRuntime, others: readonly Prey[],
+  ): readonly Prey[] {
+    const profile = typeof monster.masterId === 'string' ? null : this.#factionProfileOf(monster);
+    if (profile === null) {
+      return others.length === 0 ? session.participants : [...session.participants, ...others];
+    }
+    const summon = monster.masterId !== null;
+    const targets: Prey[] = summon || profile.enemies.has(FACTION_PLAYER) ? [...session.participants] : [];
+    for (const other of others) {
+      if (summon || profile.enemies.has(other.faction ?? FACTION_PLAYER)) targets.push(other);
+    }
+    return targets;
+  }
+
+  /**
+   * O golpe de `attacker` pode acertar `target` (`Combat::canDoCombat`, `combat.cpp:497-534`)?
+   * O monstro sem facção (e a invocação de personagem) segue a regra de sempre — o que chega aqui
+   * já é jogador ou invocação de jogador, ou é o alvo do mestre. O de facção só acerta a facção
+   * inimiga: jogador e invocação de jogador dependem de `player` em `enemyFactions`, outro monstro
+   * de a facção dele estar nela, e o monstro sem facção nunca (facção `default` não é inimiga de
+   * ninguém). Vale para o alvo principal e para cada criatura pega por uma área — a onda de fogo
+   * da Efreet não queima o Green Djinn ao lado.
+   */
+  #mayAttack(attacker: MonsterRuntime, target: CharacterRuntime | MonsterRuntime): boolean {
+    if (!this.#hasFactions) return true;
+    const profile = this.#factionProfileOf(attacker);
+    if (profile === null) return true;
+    if (target instanceof CharacterRuntime) return profile.enemies.has(FACTION_PLAYER);
+    return profile.enemies.has(this.#factionValueOf(target));
+  }
+
+  /**
+   * `prey` (personagens e invocações de personagem, a lista de área de sempre) MAIS os monstros
+   * vivos das facções inimigas de `attacker` — as entidades REAIS, não a forma `Prey`: quem aplica
+   * dano precisa delas. Sem facção (o monstro comum) devolve a MESMA lista. A ordem é a de
+   * nascimento, e é contrato pelo mesmo motivo de `abilityTargets`: cada alvo consome uma rolagem.
+   */
+  #withFactionEnemies(
+    attacker: MonsterRuntime, prey: readonly (CharacterRuntime | MonsterRuntime)[],
+  ): readonly (CharacterRuntime | MonsterRuntime)[] {
+    const profile = this.#factionProfileOf(attacker);
+    if (profile === null) return prey;
+    let list: (CharacterRuntime | MonsterRuntime)[] | null = null;
+    for (const other of this.#monsters) {
+      // A invocação de personagem já está em `prey` (`#livePlayerSummons`).
+      if (other === attacker || !other.alive || typeof other.masterId === 'string') continue;
+      if (!profile.enemies.has(this.#factionValueOf(other))) continue;
+      (list ??= [...prey]).push(other);
+    }
+    return list ?? prey;
+  }
+
+  /** Há jogador vivo à vista de `monster` — o `totalPlayersOnScreen > 0` do Canary. */
+  #playerInView(session: Session, monster: MonsterRuntime, radius: number): boolean {
+    for (const participant of session.participants) {
+      if (participant.alive && canSeePoint(monster.position, participant.position, radius)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * A invocação de um monstro de FACÇÃO fica ociosa enquanto o mestre não vê jogador
+   * (`Monster::updateIdleStatus`, `monster.cpp:1548-1551`): sem condição ativa, com facção
+   * (herdada) e `master->totalPlayersOnScreen == 0`, ela sai da lista de `onThink` — não anda,
+   * não ataca, esquece os alvos (`clearTargetList`) e o dano que levou (`onIdleStatus`). É a
+   * "atividade sem jogador" da issue: a Green Djinn invocada pela Efreet durante uma briga contra
+   * um Marid, sem herói por perto, não entra na briga.
+   *
+   * **Estado da SESSÃO, nunca do visualizador** (invariante 3): o que decide é a posição dos
+   * participantes — quem está dentro da hunt —, não quem tem o navegador aberto. O contador do
+   * mestre só existe para quem não é invocação (`countsAsPlayerOnScreenTarget`): o mestre que é
+   * ele mesmo uma invocação vale zero. Só o caso da invocação de MONSTRO entra aqui — o ramo
+   * `!isSummon()` da mesma cláusula do Canary não é alcançável (fica sob o `else if (master)`).
+   */
+  #isFactionSummonIdle(session: Session, monster: MonsterRuntime): boolean {
+    if (typeof monster.masterId !== 'number' || hasActiveCondition(monster)) return false;
+    const master = this.#monsterBySubject.get(monsterSubject(monster.masterId));
+    if (master === undefined || this.#factionProfileOf(master) === null) return false;
+    if (master.masterId !== null) return true;
+    const radius = this.#options.monsters.get(master.monsterId)?.aggroRadius ?? 0;
+    return !this.#playerInView(session, master, radius);
   }
 
   /**
@@ -7747,10 +7937,12 @@ const slots = bot.groups.get(group);
     // `CharacterRuntime` já satisfaz `Prey` — id, posição e vida. Montar um vetor novo a cada
     // evento era uma alocação por monstro por vencimento, e com 5.000 instâncias isso é o
     // coletor rodando o tempo todo — `#chooseMonsterTarget`/`#preyById` preservam isso quando
-    // não há invocação de personagem (#598): a mesma referência de `session.participants`. As
-    // invocações de personagem são calculadas UMA vez e servem à escolha do alvo E à área de
-    // visão de `decideUnengagedMove` (#655).
-    const summons = typeof monster.masterId === 'string' ? NO_PLAYER_SUMMONS : this.#playerSummonPrey();
+    // não há invocação de personagem (#598): a mesma referência de `session.participants`. Os
+    // oponentes que não são personagem — invocações de personagem e, para o monstro de facção
+    // (#619), os monstros inimigos — são calculados UMA vez e servem à escolha do alvo E à área
+    // de visão de `decideUnengagedMove` (#655).
+    const summons = typeof monster.masterId === 'string'
+      ? NO_PLAYER_SUMMONS : this.#opponentOthersOf(monster, definition);
     monster.targetId = this.#chooseMonsterTarget(session, monster, definition, summons);
     const target = this.#preyById(session, monster.targetId);
     const blocked = this.#blockedForMonster(monster, definition);
@@ -7799,8 +7991,13 @@ const slots = bot.groups.get(group);
       // `Monster::setIdle`: o flag acompanha a decisão — liga aqui e desliga em qualquer outra,
       // incluindo os ramos de perseguição acima. É ele que cala a defesa, a troca de alvo e a
       // invocação do monstro ocioso (`#onMonsterDefense` e os outros dois timers).
-      monster.idle = move.kind === 'idle';
-      if (move.kind === 'idle') {
+      //
+      // A invocação de um monstro de facção também fica ociosa (#619) — `factionIdle`, quando o
+      // mestre não vê jogador —, e o `chooseTarget` já lhe devolveu `null`: o `still` de cima é só
+      // o movimento (nenhum), e é este flag que a cala.
+      const factionIdle = this.#hasFactions && this.#isFactionSummonIdle(session, monster);
+      monster.idle = move.kind === 'idle' || factionIdle;
+      if (move.kind === 'idle' || factionIdle) {
         // `Monster::setIdle(true)` → `Creature::onIdleStatus`: quem ficou ocioso no spawn esquece
         // quem bateu nele (`damageMap.clear()`, `lastHitCreatureId = 0`).
         if (monster.contribution.actorCount > 0) monster.contribution.clear();
@@ -8011,14 +8208,25 @@ const slots = bot.groups.get(group);
     // invocações de personagem VIVAS, como `#chooseMonsterTarget` — mesma referência de
     // `session.participants` quando não há nenhuma (o caso comum hoje, sempre).
     const summons = this.#livePlayerSummons();
-    const prey: readonly (CharacterRuntime | MonsterRuntime)[] = summons.length === 0
+    let prey: readonly (CharacterRuntime | MonsterRuntime)[] = summons.length === 0
       ? session.participants
       : [...session.participants, ...summons];
+    // O monstro de FACÇÃO (#619) também pega, na área, os monstros das facções inimigas: a
+    // Efreet queima o Marid ao lado do alvo. Quem a facção NÃO deixa acertar (`#mayAttack`) sai
+    // do golpe todo — do alvo principal também: o Canary recusa em `Combat::canDoCombat`, antes de
+    // qualquer dano, sem sortear nada.
+    if (this.#hasFactions) prey = this.#withFactionEnemies(monster, prey);
     // Alvo secundário da FORMA sem visão livre do lançador não é atingido (#553, RF-05) — o
     // principal já passou pelo portão em `#onMonsterAttack`/`#onMonsterAbility`, mas a onda/
     // círculo pode cobrir alguém atrás de uma parede que o alvo principal não está.
-    const targets = abilityTargets(ability, this.#at(monster), primary, prey)
+    let targets = abilityTargets(ability, this.#at(monster), primary, prey)
       .filter((target) => isSightClear(this.#world.map, this.#at(monster), this.#at(target)));
+    if (this.#hasFactions) {
+      const allowed = targets.filter((target) => this.#mayAttack(monster, target));
+      // Nenhum alvo que a facção permita: o lançamento não acontece (nem evento, nem sorteio).
+      if (allowed.length === 0 && targets.length > 0) return;
+      targets = allowed;
+    }
     const melee = isMeleeAbility(ability);
     const source: 'melee' | 'spell' = melee ? 'melee' : 'spell';
     // A apresentação só sai quando há o que desenhar ou quando a ability NÃO é o corpo a corpo
@@ -8085,7 +8293,16 @@ const slots = bot.groups.get(group);
           session.rng,
           session.nowMs,
         );
-        this.#applyMonsterHitOnSummon(session, monster, character, result, source);
+        this.#applyMonsterHitOnMonster(session, monster, character, result, source);
+        // A condição da ability (CMB-07, #619) também entra no monstro que ela acertou — o DOT de
+        // veneno do Deepling no Deathling —, com a MESMA imunidade de condição que uma magia do
+        // jogador respeita (`fromCombat`). O dano acima já pode ter matado o alvo.
+        if (ability.condition !== undefined && character.alive) {
+          this.#applyConditionTo(session, character, conditionFromSpec(
+            ability.condition, character.subject, subject, session.nowMs, 'monster-attack',
+            { baseSpeed: character.speed, rng: session.rng },
+          ), true);
+        }
         continue;
       }
       const defender = this.#playerDefender(character, session);
@@ -8137,10 +8354,8 @@ const slots = bot.groups.get(group);
       // A condição da ability (CMB-07), aplicada a CADA alvo vivo que ela acertou. O tique de
       // dano entra no mesmo pipeline do golpe; quem aplicou (o monstro) leva a atribuição.
       //
-      // A invocação de personagem já saiu do laço acima (`continue`) — nunca chega aqui. Uma
-      // condição declarada numa ability que hoje só atinge invocação não seria aplicada; é o
-      // mesmo recorte de `#applyMonsterHitOnSummon` (sem mecanismo exclusivo do jogador), e
-      // fica registrado como divergência conhecida, não como pendência silenciosa.
+      // O monstro-alvo (invocação de personagem, #598, ou monstro inimigo, #619) já saiu do laço
+      // acima (`continue`), com a própria aplicação da condição — nunca chega aqui.
       if (ability.condition !== undefined && character.alive && !conditionBlocked) {
         this.#applyConditionTo(session, character, conditionFromSpec(
           ability.condition, character.id, subject, session.nowMs, 'monster-attack',
@@ -8279,8 +8494,15 @@ const slots = bot.groups.get(group);
    * dano dela entra no mapa de dano em nome de quem a invocou — é o que faz a XP por razão de
    * dano (#523) e o Bestiário renderem para o personagem, não para um `m:<id>` que `xpByDamage`
    * nunca reconheceria como participante.
+   *
+   * O terceiro sentido (#619, facções): um monstro de facção golpeando o de facção inimiga — o
+   * Deepling no Deathling. Aqui `attacker` é um monstro comum (sem `masterId` de personagem) e a
+   * atribuição fica com o `subject` DELE: o `m:<id>` entra no mapa de dano do alvo, e é isso que o
+   * abate lê para saber que NINGUÉM presente causou aquela morte (`#onMonsterDied`) — sem XP, sem
+   * loot com dono —, e que a XP de quem bateu antes é só a fatia dele no dano total. O cano é o
+   * mesmo do dano de jogador (`#drainMonster`), inclusive a cura por elemento do alvo (#683).
    */
-  #applyMonsterHitOnSummon(
+  #applyMonsterHitOnMonster(
     session: Session, attacker: MonsterRuntime, target: MonsterRuntime, outcome: DamageOutcome,
     source: 'melee' | 'spell',
   ): void {
@@ -8295,6 +8517,9 @@ const slots = bot.groups.get(group);
     this.#emitHealth(session, target);
     // O dano da invocação conta para o DPS do MESTRE (#431), como qualquer golpe dele.
     if (typeof attacker.masterId === 'string') session.creditDamage(attacker.masterId, applied.healthDamage);
+    // A cura por elemento do alvo (#683, `monster.heals`): `combatBlockHit` cura por último, depois
+    // do dano — o golpe que mata não cura (`#healMonsterByElement` confere `alive`).
+    this.#healMonsterByElement(session, target, outcome);
     if (target.health > 0) return;
     resolveDeath(session, { kind: 'monster', monster: target });
   }
@@ -8424,10 +8649,14 @@ const slots = bot.groups.get(group);
     // `z` antes da distância, como `chooseTarget` já faz. Estendido pelas invocações de
     // personagem VIVAS (#598), como `#chooseMonsterTarget` — mesma referência de
     // `session.participants` quando não há nenhuma.
-    const summons = this.#playerSummonPrey();
-    const prey: readonly Prey[] = summons.length === 0
-      ? session.participants
-      : [...session.participants, ...summons];
+    // Para o monstro de FACÇÃO (#619) a lista é a de `isTarget`: só a facção inimiga — os
+    // monstros dela entram, e o jogador só se `player` está em `enemyFactions`.
+    const summons = this.#opponentOthersOf(monster, definition);
+    const prey: readonly Prey[] = this.#hasFactions
+      ? this.#targetPreyOf(session, monster, summons)
+      : summons.length === 0
+        ? session.participants
+        : [...session.participants, ...summons];
     // `searchTarget` só olha quem `isTarget` aceita, e `isTarget` exige `canSeeCreature` (Canary
     // `monster.cpp:1435`) — quem não "vê invisível" nunca sorteia um alvo invisível (#559).
     const blind = !seesInvisible(definition);
@@ -9906,15 +10135,6 @@ const slots = bot.groups.get(group);
    */
   #onMonsterDied(session: Session, monster: MonsterRuntime, credit: KillCredit): void {
     const definition = this.#options.monsters.get(monster.monsterId);
-    const killer = findById(session.participants, credit.lastHitBy);
-    // O abate conta SEMPRE, para todo presente: "matei N" é a pergunta do analisador de cada
-    // um (#190, DT-01), e a party matou junto. Em solo é o de sempre — conta mesmo com a fonte
-    // sumida ou o dono morto; o extrato mentiria se dissesse que não.
-    for (const participant of session.participants) session.credit(participant.id, 'kills', 1);
-
-    const eligible = session.participants.length === 1
-      ? (killer !== null && killer.alive && !isExhausted(killer) ? [killer] : NO_MEMBERS)
-      : session.participants.filter((p) => p.alive && !isExhausted(p));
     // Invocação (#546, TFS `hasBeenSummoned()`/`setDropLoot(false)`/`setSkillLoss(false)`):
     // nunca paga loot, XP nem Bestiário — ela nasceu de outro monstro, não do Spawner, e o
     // abate dela não é o que a hunt existe para pagar (`Player::onKilledMonster` devolve cedo
@@ -9923,15 +10143,49 @@ const slots = bot.groups.get(group);
     // paga nada de mover a sequência de sorteio de toda a hunt (FUN-63) por uma rolagem que o
     // Tibia nem faz.
     const isSummon = monster.masterId !== null;
+    let killer = findById(session.participants, credit.lastHitBy);
+    // O GOLPE FINAL foi de OUTRO MONSTRO (#619, o Deepling que mata o Deathling)? O `subject` de
+    // um monstro é `m:<id>`, e é ele que `#applyMonsterHitOnMonster`/o tique de condição gravam.
+    // A invocação de personagem grava o MESTRE (#598), então o golpe dela nunca cai aqui.
+    //
+    // O Canary paga pelo `damageMap`, não pelo golpe final (`Creature::onDeath`): só quem está nele
+    // como jogador (ou mestre de invocação) entra em `killers`, ganha `floor(dano / total × XP)` —
+    // e o dano de OUTRO monstro conta no total — e conta o abate no Bestiário. Monstro que morre
+    // só por monstro não tem `killers`: sem XP, sem abate, e o cadáver não tem dono
+    // (`Monster::getCorpse` só grava `CORPSEOWNER` para jogador) — sem dono, sem loot (ADR 0048,
+    // alternativa "cadáver com loot para monstro sem dono" descartada).
+    const byMonster = !isSummon && killer === null
+      && credit.lastHitBy !== null && credit.lastHitBy.startsWith('m:');
+    // Alguém presente bateu neste monstro antes do golpe final? Sem isso a morte é só de monstro.
+    const rewarded = !byMonster || this.#participantsDealtDamage(session, credit);
+    // O dono do cadáver (`mostDamageCreature`) quando o golpe final não foi de jogador: o loot só
+    // existe se ele for um participante — se quem mais bateu foi um monstro, ninguém é dono.
+    if (byMonster) killer = this.#corpseOwnerOf(session, credit);
+    const payLoot = !isSummon && rewarded && (!byMonster || killer !== null);
+    // O abate conta SEMPRE, para todo presente: "matei N" é a pergunta do analisador de cada
+    // um (#190, DT-01), e a party matou junto. Em solo é o de sempre — conta mesmo com a fonte
+    // sumida ou o dono morto; o extrato mentiria se dissesse que não.
+    if (rewarded) for (const participant of session.participants) session.credit(participant.id, 'kills', 1);
+
+    // Em solo, a XP é de quem está presente — o matador, ou (morte por monstro com dano dele
+    // antes) o único participante, que bateu; em party, dos vivos com stamina, e `#xpShares` decide
+    // a cota de cada um.
+    const solo = session.participants.length === 1;
+    const payee = byMonster ? session.participants[0] ?? null : killer;
+    const eligible = !rewarded
+      ? NO_MEMBERS
+      : solo
+        ? (payee !== null && payee.alive && !isExhausted(payee) ? [payee] : NO_MEMBERS)
+        : session.participants.filter((p) => p.alive && !isExhausted(p));
     // Quem recebe o loot (#191): em solo, o matador — se pode receber; sem dono (fonte que
     // sumiu) ou dono morto, ninguém. Em party `split`, UM elegível sorteado; em `shared`,
     // ninguém — a bolsa (#192).
-    const recipient = isSummon ? null : this.#lootRecipient(session, killer, eligible);
+    const recipient = payLoot ? this.#lootRecipient(session, killer, eligible) : null;
     // O que o cadáver nasce carregando (ADR 0048 decisão 1) — vazio no modo bolsa (o loot vai
     // direto para ela, "como hoje") e quando não há destinatário nenhum.
     let corpseGold = 0;
     let corpseItems: CarriedItem[] = [];
-    if (!isSummon && definition !== undefined && this.#bag !== null && session.participants.length > 1) {
+    if (payLoot && definition !== undefined && this.#bag !== null && session.participants.length > 1) {
       // Modo compartilhado (#192): tudo cai na BOLSA — sem destinatário, sem modificador
       // individual, e a ordem do RNG é a de solo (gold, depois itens na ordem da tabela).
       // Só com alguém elegível: um monstro que morreu com todo mundo morto não paga ninguém.
@@ -9950,7 +10204,7 @@ const slots = bot.groups.get(group);
         this.#creditSupplies(session, session.participants, loot.supplies);
         this.#creditAmmunition(session, session.participants, loot.ammunition);
       }
-    } else if (!isSummon && definition !== undefined && recipient !== null) {
+    } else if (payLoot && definition !== undefined && recipient !== null) {
       // O sorteio é IDÊNTICO a antes deste ADR — gold, depois itens na ordem da tabela — e o
       // destino é o cadáver, não mais direto na mochila (ADR 0048 decisão 1). `corpseGold`/
       // `corpseItems` alimentam o cadáver logo abaixo, e `#collectFromCorpse` roda no MESMO
@@ -10037,6 +10291,7 @@ const slots = bot.groups.get(group);
     // continuaria na fila e venceria contra o vazio. O `resolveDeath` só cancela o `m:<id>`.
     this.#cancelConditions(session, monster);
     for (const character of session.participants) forgetActor(character.contribution, subject);
+    this.#forgetInMonsters(subject);
     // As abilities DECLARADAS têm subject DERIVADO (CMB-06), e o `resolveDeath` só cancelou o
     // `m:<id>`. Cancelar pelos ids que o conteúdo conhece é O(abilities), sem varrer a fila —
     // e é o que impede um monstro morto de acordar uma vez por cadência.
@@ -10086,6 +10341,20 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * Tira o monstro que saiu (`subject`) da atribuição de todos os OUTROS monstros (#619): o de
+   * facção apanha do inimigo e guarda `m:<id>` no `Contribution`, e como cada respawn tem id novo,
+   * sem a poda o mapa de quem sobrevive ganha uma chave por inimigo que já o feriu — a mesma razão
+   * de `forgetActor` nos participantes. Sem facção na hunt (o caso comum) nenhum monstro apanha de
+   * monstro e não há o que podar: nem varre a lista.
+   */
+  #forgetInMonsters(subject: string): void {
+    if (!this.#hasFactions) return;
+    for (const other of this.#monsters) {
+      if (other.contribution.actorCount > 0) forgetActor(other.contribution, subject);
+    }
+  }
+
+  /**
    * Uma invocação some porque o MESTRE morreu ou foi removido (#546, TFS `Game::removeCreature`:
    * `setSkillLoss(false)` e `removeCreature(summon)` para cada uma, sem passar pelo pipeline de
    * morte). Ela nunca pagou XP, loot nem Bestiário enquanto viva (`#onMonsterDied` já a exclui
@@ -10099,6 +10368,7 @@ const slots = bot.groups.get(group);
     const subject = summon.subject;
     this.#cancelConditions(session, summon);
     for (const character of session.participants) forgetActor(character.contribution, subject);
+    this.#forgetInMonsters(subject);
     for (const ability of definition?.abilities ?? []) {
       if (ability.id === BASIC_ABILITY_ID) continue;
       session.cancelEvent(MONSTER_ABILITY, monsterAbilitySubject(summon.id, ability.id));
@@ -10154,8 +10424,11 @@ const slots = bot.groups.get(group);
   ): ReadonlyMap<string, number> {
     const party = this.#party;
     const allMembers = session.participants.map((p) => ({ id: p.id, vocationId: this.#vocationOf(p)?.id ?? null }));
+    // O pool que a divisão IGUAL reparte encolhe pelo dano de monstro no abate (#619); a divisão
+    // por DANO (`xpByDamage`, abaixo) já lê o total do mapa e não pode encolher duas vezes.
+    const pool = this.#experiencePool(session, experience, credit);
     if (eligible.length <= 1 || party === undefined) {
-      const share = xpShare(experience, eligible, allMembers);
+      const share = xpShare(pool, eligible, allMembers);
       return new Map(eligible.map((member) => [member.id, share]));
     }
     const leader = session.participants.find((p) => p.id === party.leaderId);
@@ -10171,7 +10444,7 @@ const slots = bot.groups.get(group);
       highestLevel, leader.position, session.nowMs, rules,
     );
     if (canShare) {
-      const share = xpShare(experience, eligible, allMembers);
+      const share = xpShare(pool, eligible, allMembers);
       return new Map(eligible.map((member) => [member.id, share]));
     }
     return xpByDamage(experience, eligible, credit.damageByActor);
@@ -10510,6 +10783,61 @@ const slots = bot.groups.get(group);
     if (this.#party.splitLoot) return null;
     if (eligible.length === 0) return null;
     return eligible[session.rng.integer(0, eligible.length - 1)] ?? null;
+  }
+
+  /**
+   * Algum participante bateu neste monstro (#619)? É o `killers` de `Creature::onDeath`: quem está
+   * no `damageMap` como jogador. Só a morte por MONSTRO precisa perguntar — em toda outra o golpe
+   * final já é de um participante.
+   */
+  #participantsDealtDamage(session: Session, credit: KillCredit): boolean {
+    for (const participant of session.participants) {
+      if ((credit.damageByActor[participant.id] ?? 0) > 0) return true;
+    }
+    return false;
+  }
+
+  /**
+   * O dono do cadáver quando o golpe final foi de monstro (#619, `Monster::getCorpse`): quem
+   * causou MAIS dano entre as CRIATURAS — participante ou monstro (`m:<id>`); o dano de campo não
+   * tem atacante (`attackerId == 0`) e o `damageMap` do Canary o pula. É `null` quando o maior
+   * causador foi um monstro: o `CORPSEOWNER` só é gravado para jogador ou mestre jogador. Empate
+   * fica com o primeiro que bateu, a ordem do mapa (`Contribution.credit`).
+   */
+  #corpseOwnerOf(session: Session, credit: KillCredit): CharacterRuntime | null {
+    let owner: string | null = null;
+    let most = 0;
+    for (const [actorId, damage] of Object.entries(credit.damageByActor)) {
+      if (damage <= most) continue;
+      if (findById(session.participants, actorId) === null && !actorId.startsWith('m:')) continue;
+      most = damage;
+      owner = actorId;
+    }
+    return findById(session.participants, owner);
+  }
+
+  /**
+   * A XP de um abate ANTES da divisão entre os presentes, encolhida pelo dano de MONSTRO (#619):
+   * `Creature::getGainedExperience` é `floor(dano do atacante / dano TOTAL × XP)`, e o total
+   * soma todo mundo que bateu — o Deepling que já tinha ferido o Deathling leva a fatia dele, e o
+   * jogador só a dele. Cada participante entra com o próprio `floor` (o Canary acumula por
+   * atacante e entrega ao líder, na party). Sem nenhum dano de monstro no mapa — toda hunt sem
+   * facção — devolve `experience` intacta: a fatia do jogador é 1.
+   */
+  #experiencePool(session: Session, experience: number, credit: KillCredit): number {
+    let total = 0;
+    let monsterDamage = 0;
+    for (const [actorId, damage] of Object.entries(credit.damageByActor)) {
+      total += damage;
+      if (actorId.startsWith('m:')) monsterDamage += damage;
+    }
+    if (monsterDamage === 0) return experience;
+    let pool = 0;
+    for (const participant of session.participants) {
+      const damage = credit.damageByActor[participant.id] ?? 0;
+      if (damage > 0) pool += Math.floor((damage / total) * experience);
+    }
+    return pool;
   }
 
   /**

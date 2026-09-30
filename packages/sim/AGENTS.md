@@ -802,7 +802,7 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   campo `masterKind` à parte.** `HuntRuleset#chooseMonsterTarget` bifurca por isso: invocação de
   personagem NUNCA roda `chooseTarget` própria — herda o alvo do mestre (`attackTargetOf`) a
   cada passo/ataque/ability; invocação de monstro continua igual ao #546. **O dano dela credita
-  o MESTRE, nunca o `subject` dela** (`#applyMonsterHitOnSummon`, achado da implementação: sem o
+  o MESTRE, nunca o `subject` dela** (`#applyMonsterHitOnMonster`, ex-`...OnSummon`, achado da implementação: sem o
   redirecionamento, `xpByDamage` não reconhece um `m:<id>` como participante e o abate renderia
   ZERO XP para quem invocou). **`#hostileMonsters()` é o outro lado da mesma moeda — proteção
   contra FOGO AMIGO.** Estender a lista de presas de um monstro hostil (`#playerSummonPrey`) para
@@ -816,6 +816,37 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   subject certo, como cinto e suspensório contra o cliente pedindo por fora do auto-target. Ver
   "Invocação do PERSONAGEM" em `docs/product/combat.md` para o resto do contrato (teto de 2,
   mana do MONSTRO via `manaCostOverride`, `combat-v4`).
+- **Facções de monstro (#619, M44-01) são o `Faction_t` do Canary, e a regra é ANTES de tudo "sem
+  facção na hunt, nada muda".** `monster/faction.ts` (puro) tem os valores (`FACTION_PLAYER` = 1, o
+  peso `× 100` na distância e `× 100 000` na vida/dano) e a tabela; o `HuntRuleset` guarda
+  `#factions`/`#hasFactions` e TODO caminho novo sai por `#hasFactions` falso, devolvendo a MESMA
+  lista de antes — sem alocar e sem sortear. Cinco armadilhas. (1) **A tabela é do ALCANÇÁVEL, não do
+  conteúdo**: `options.monsters` traz o catálogo inteiro em toda hunt, então "existe algum monstro
+  com facção?" seria sempre sim; `reachableMonsterIds` segue os pontos de spawn e, transitivamente,
+  as invocações. (2) **Oponente não é alvo** (`isOpponent` × `isTarget`): `#opponentOthersOf` (mais
+  `session.participants`) é a `targetList` — o que segura a volta ao spawn e impede o ocioso —, e
+  `#targetPreyOf` é o que `chooseTarget` recebe. A Lion tem o herói na lista e não o mira. Trocar
+  uma pela outra some com a Lion ou faz ela caçar o herói. (3) **`Prey.faction` ausente vale PLAYER**
+  (personagem e invocação de personagem não dizem nada) — o desempate `d + faction × 100` é
+  constante para uma lista só deles, e é isso que preserva toda hunt sem facção; o jogador (1) ganha
+  de qualquer monstro inimigo (2+) na aquisição, por mais longe que esteja. Em "mais dano" o
+  Canary inverte (a facção MAIOR ganha) e `rankTarget` reproduz. (4) **`#mayAttack` vale para o alvo
+  principal e para cada criatura da área**, e a área de um monstro de facção soma os inimigos com
+  `#withFactionEnemies` — a lista de área de um monstro comum continua só personagens e
+  invocações de personagem. A invocação de monstro herda facção e inimigas do mestre
+  (`#factionProfileOf` recursivo); a de PERSONAGEM não usa a tabela (`null`). (5) **A morte por
+  monstro é decidida pelo `credit`, não pelo golpe final** (`#onMonsterDied`): `lastHitBy` que é
+  um `m:<id>` sem participante entre os que bateram = sem XP, sem abate, cadáver sem dono e sem loot;
+  com dano de participante a XP é `floor(dano ÷ total × XP)` (`#experiencePool`, o dano de monstro
+  entra no total) e o dono do cadáver é o maior causador (`#corpseOwnerOf`), participante ou não —
+  o dano de campo não entra. `#forgetInMonsters` poda o `m:<id>` que morreu do `Contribution` dos
+  outros monstros (só com facção). **A "atividade sem jogador" do `updateIdleStatus` do `47dfd51` só
+  alcança a INVOCAÇÃO de um monstro de facção** (`master->totalPlayersOnScreen == 0`, sob um `else if
+  (master)`): `#isFactionSummonIdle` lê a posição dos participantes — estado da sessão, nunca de quem
+  olha — e o monstro de facção comum com inimigo à vista brigando sem jogador NÃO fica ocioso. Testes
+  de facção precisam posicionar o herói ANTES do primeiro `advanceBy`: o monstro retém o alvo que
+  escolheu, e corrigir a posição depois testa a escolha de um herói na rota (`arena` em
+  `rulesets/factions.test.ts`). Ver "Facções de monstro" em `docs/product/combat.md`.
 - **Os Charms em combate (#603, M39-03, ADR 0053 d.5) vivem em `combat/charms.ts` (puro) e nos
   métodos `#charm*`/`#roll*` do `HuntRuleset`, e SÓ rolam no `combat-v4` (`hasCharmStage`).** Três
   armadilhas custam caro. (1) **O índice do tier é `tier − 1`**: o Canary guarda um `0` na frente do
