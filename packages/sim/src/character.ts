@@ -13,6 +13,8 @@ import { Bestiary } from './bestiary.js';
 import type { BestiaryState } from './bestiary.js';
 import { Charms } from './charms.js';
 import type { CharmsState } from './charms.js';
+import { OfflineTraining } from './offline-training.js';
+import type { OfflineTrainingState } from './offline-training.js';
 import { Conditions } from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import { Cooldowns } from './cooldown.js';
@@ -123,6 +125,12 @@ export interface CharacterState {
    * nunca gastou um ponto de Charm — a mesma degradação de `bestiary`.
    */
   readonly charms?: CharmsState;
+  /**
+   * O banco de offline training e a skill escolhida no livro (#631, ADR 0059 d.3, ADR 0052 d.1).
+   * Ausente é personagem anterior a esta issue, ou que nunca caçou: banco zerado e nenhuma skill
+   * escolhida — a mesma degradação de `charms`.
+   */
+  readonly training?: OfflineTrainingState;
   /**
    * Quanto ele aguenta carregar (§21.5). Vem da tabela de progressão, como `maxHealth`.
    *
@@ -403,6 +411,12 @@ export class CharacterRuntime {
   readonly bestiary: Bestiary;
   /** Mutado no lugar a cada intenção de Charm aceita — ver `Charms.unlock`/`assign`/`remove`. */
   readonly charms: Charms;
+  /**
+   * O banco de offline training e a escolha do livro (#631). Só a sessão dona escreve (invariante
+   * 9): o ruleset soma o tempo de hunt/treino no fim da participação, e o host aplica a intenção
+   * `set-offline-training-skill` — ver `OfflineTraining`.
+   */
+  readonly training: OfflineTraining;
   capacity: number;
   /** Mutado ao equipar e ao receber item. Só a sessão dona escreve (invariante 9). */
   readonly inventory: Inventory;
@@ -500,6 +514,7 @@ export class CharacterRuntime {
     this.skills = Skills.fromState(state.skills);
     this.bestiary = Bestiary.fromState(state.bestiary);
     this.charms = Charms.fromState(state.charms);
+    this.training = OfflineTraining.fromState(state.training);
     this.capacity = state.capacity ?? 0;
     this.inventory = Inventory.fromState(state.inventory);
     this.lootSeq = state.lootSeq ?? 0;
@@ -732,6 +747,7 @@ export class CharacterRuntime {
       skills: this.skills.getState(),
       bestiary: this.bestiary.getState(),
       charms: this.charms.getState(),
+      training: this.training.getState(),
       capacity: this.capacity,
       inventory: this.inventory.getState(),
       lootSeq: this.lootSeq,

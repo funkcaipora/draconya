@@ -7,6 +7,7 @@ import { readSourceCommit } from './env.js';
 import {
   classify, convertItem, parseVocationRequirement, readItemCatalog, reconcileAuthored, writeOverrides,
 } from './items.js';
+import type { ExerciseLookup, ItemPriceLookup } from './items.js';
 import type { CatalogImportContext } from './registry.js';
 import { childrenOf, parseXml } from './xml.js';
 
@@ -384,14 +385,14 @@ describe('classify', () => {
 });
 
 describe('exercise weapons (#631, ADR 0059)', () => {
-  const exercise = {
+  const exercise: ExerciseLookup = {
     skillNameByClientId: new Map([[90060, 'SKILL_SWORD'], [90061, 'SKILL_FIST']]),
   };
-  const prices = {
+  const prices: ItemPriceLookup = {
     sellMaxByClientId: new Map(),
     buyMinByClientId: new Map([[90060, { amount: 347_222, itemName: 'test exercise sword', npcFile: 'test.lua' }]]),
   };
-  const convertWith = (id: string, lookups: { prices?: typeof prices; exercise?: typeof exercise }) => {
+  const convertWith = (id: string, lookups: { prices?: ItemPriceLookup; exercise?: ExerciseLookup }) => {
     const item = itemsOf(ITEMS_XML).find((el) => el.attributes['id'] === id);
     if (item === undefined) throw new Error(`fixture sem item id ${id}`);
     return convertItem(item, PATH, COMMIT, lookups.prices, lookups.exercise);
