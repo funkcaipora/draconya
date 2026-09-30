@@ -212,6 +212,18 @@ criatura, e as duas coisas mudariam o que uma hunt congelada nesses perfis rende
 mecanismo inteiro (decisão e commit) sai sem efeito algum fora de `combat-v3`, mesmo que um
 monstro futuro declare `canPushCreatures: true`.
 
+**Monstro de facção caça o de facção inimiga, e o herói não precisa estar por perto (#619, Canary
+`monster.faction`/`enemyFactions`).** O Deepling ataca o Deathling, a Lion e os Usurpers se caçam:
+quem tem `faction` passa a considerar OPONENTE o monstro cuja facção está na sua `enemyFactions`,
+além do jogador, e a briga acontece pelo mesmo golpe, pela mesma defesa e pela mesma atribuição de
+dano de sempre. É só quem a hunt PODE gerar que paga o custo — uma hunt sem nenhum monstro de facção
+(todas as de hoje) roda o caminho de antes, bit a bit. O que o monstro vê e quem ele mira são duas
+perguntas (a Lion enxerga o herói e nunca o ataca), e o jogador (facção 1) é preferido a qualquer
+monstro inimigo na escolha do alvo: a briga de facções é a que sobra quando o herói está fora da
+vista. O que vale "sem jogador" é a posição dos participantes da sessão — nunca quem olha (invariante
+3). Mecanismo, tabela de perguntas do Canary e o que não foi modelado: "Facções de monstro" em
+[`combat.md`](./combat.md).
+
 ### Custo medido
 
 `pnpm bench:monster`, com 48 monstros, 4 jogadores e paredes espalhadas para exercitar o desvio:
@@ -643,6 +655,13 @@ Nos dois modelos, `0` desliga o loot sem consumir sorteio nenhum, para o loot de
 deslocar a sequência do resto da hunt. Os rates de vida,
 defesa e ataque de monstro e de boss também moram lá — ver [`progression.md`](./progression.md),
 "Rates do servidor".
+
+**O monstro que morre nas mãos de outro monstro (#619, facções) não paga o jogador.** O Canary paga
+pelo mapa de dano, não pelo golpe final: só quem está nele como jogador recebe
+`floor(dano ÷ dano total × XP)` e conta o abate — o dano do monstro entra no total. Uma morte só de
+monstro não dá XP, não conta abate e deixa um cadáver sem dono, e sem loot (ADR 0048: cadáver sem dono
+não guarda loot); com dano do herói antes do golpe final ele leva a fatia dele, e o cadáver é de quem
+causou MAIS dano, se for um participante. Ver `combat.md`, "Facções de monstro".
 
 ### Abate comum não é evento notável
 

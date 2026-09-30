@@ -308,6 +308,25 @@ Dodge, Parry (só o segundo ponto), Adrenaline Burst, Numb (idem imune), a ORDEM
 `charms-combat.test.ts`, as tabelas REAIS de Dragon, Dragon Lord, Rotworm e Cave Rat com o flag
 `creatureProduct` de cada creature product do Canary conferido contra o conteúdo carregado).
 
+### Estágio #619 (M44-01, facções de monstro): `additive`
+
+O monstro de facção vira alvo e agressor do de facção inimiga (`faction`/`enemyFactions`, ver
+"Facções de monstro" em `docs/product/combat.md`). **`additive`**: nenhum cenário sem facção muda de
+resultado ou de ordem de sorteio. O `HuntRuleset` só monta a tabela de facções dos monstros que a hunt
+PODE gerar (`reachableMonsterIds`), e com ela vazia (`#hasFactions` falso) as entradas novas —
+`#opponentOthersOf`, `#targetPreyOf`, `#mayAttack`, `#isFactionSummonIdle` — devolvem a mesma
+referência de antes ou `false`, sem alocar e sem sortear; o desempate por facção soma uma constante a
+uma lista só de personagens, e o corte de XP/loot da morte por monstro só dispara com um `m:<id>` no
+golpe final, que só existe com facção. A suíte de regressão inteira (que roda sob conteúdo sem facção)
+segue batendo os mesmos números, como no estágio do #598. **Uma versão de conteúdo COM facção é
+outro conteúdo (invariante 7)**: a sessão fixada na anterior não tem os campos e não muda.
+
+Duas completudes do golpe de monstro em monstro entram junto, e mexem no #598 (invocação de jogador) —
+`additive` também porque nenhum monstro do catálogo é `summonable`: a **condição** da ability passa a
+entrar no monstro-alvo (com a imunidade de condição do alvo) e a **cura por elemento** (#683) roda
+depois do golpe. O teste de conformance é `rulesets/factions.test.ts`; o de desempate,
+`monster/faction.test.ts`.
+
 ## Benchmark: o cenário misto
 
 ```
