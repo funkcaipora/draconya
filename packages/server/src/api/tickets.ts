@@ -3,8 +3,11 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { OutfitColors } from '@draconya/protocol';
-import { isFightMode, readItemOverlay } from '@draconya/sim';
-import type { BestiaryState, CharmsState } from '@draconya/sim';
+import { isFightMode, readItemOverlay, readOfflineTrainingState, settleOfflineTraining } from '@draconya/sim';
+import type {
+  BestiaryState, CharmsState, OfflineTrainingRules, OfflineTrainingSettlement, OfflineTrainingState,
+  SkillsState,
+} from '@draconya/sim';
 import { isAmmoSelection, isBestiaryState, isCharmsState, isStockMap } from '../tickets.js';
 import type { InitialCharacter, IssueFailure, TicketService } from '../tickets.js';
 import type { CharacterRecord, GameRepository } from '../db/repository.js';
@@ -63,6 +66,23 @@ export interface TicketRouteDependencies {
    * mesma degradação de `listItemInstances`: ausente é personagem sem storage nenhum setado.
    */
   readonly listCharacterStorages?: GameRepository['listCharacterStorages'];
+  /**
+   * O gasto do banco de offline training na emissão do ticket (#631, ADR 0059 d.3, ADR 0052 d.5).
+   *
+   * Vive AQUI, e não no `game`, pela razão do ADR 0052 d.5: é um cálculo que precisa saber que
+   * horas são (o `sim` não lê relógio, invariante 1) e só pode escrever na linha do personagem
+   * quando ele está em REPOUSO — sem sessão hospedada, o único momento em que a linha não tem dono
+   * quente (invariante 9, ADR 0024) —, e o `resolveNode` é quem diz isso. Ausente é `api` montado
+   * sem Redis ou conteúdo sem `training/`: nenhum banco é gasto, e nada se perde (fica na linha).
+   */
+  readonly offlineTraining?: {
+    /** As regras de conteúdo do gasto (`content.training` e o que `settleOfflineTraining` lê). */
+    readonly rules: OfflineTrainingRules;
+    /** Desde quando o personagem está sem sessão (`SessionDirectory.restedSince`), ou `null`. */
+    readonly restedSince: (characterId: string) => Promise<number | null>;
+    /** Relógio de parede; injetável para o teste. */
+    readonly now?: () => number;
+  };
 }
 
 /**
@@ -158,26 +178,61 @@ export function createTicketHandler(
     // sai da trava, como a resolução de nó (FUN-53): uma lentidão do Redis aqui não segura a
     // linha do personagem.
     const boostedMonsterId = await deps.currentBoostedMonsterId?.();
+    // Desde quando o personagem está em repouso (#631) — só quando o diretório o viu SEM sessão, e
+    // FORA da trava de linha pela mesma razão: é uma ida ao Redis. Ausente o carimbo, não há gasto.
+    const restedSince = resolution.resting === true
+      ? await deps.offlineTraining?.restedSince(body.data.characterId) ?? null
+      : null;
 
     // 404, e não 403: responder "existe, mas não é seu" transforma este endpoint num
     // verificador de nomes de personagem para qualquer conta autenticada.
-    const issued = await withOwnedCharacter(
+    const outcome = await withOwnedCharacter(
       principal.accountId,
       body.data.characterId,
-      async (character) => deps.tickets.issue(
-        principal.accountId,
-        character.id,
-        initialCharacterOf(
-          character,
-          await deps.listItemInstances?.(character.id) ?? [],
-          await deps.listCharacterStorages?.(character.id) ?? [],
-          boostedMonsterId,
-        ),
-        resolution.node,
-      ),
+      async (row, writer) => {
+        // O gasto do offline training, com a linha JÁ travada e o personagem em repouso (#631,
+        // ADR 0059 d.3): o ticket leva o resultado (skills e banco novos) e, depois de emitido, a
+        // MESMA transação o grava — o `game` nunca escreve a linha (invariante 9).
+        const spend = restedSince === null || deps.offlineTraining === undefined
+          ? null
+          : offlineSpendOf(row, restedSince, deps.offlineTraining);
+        const character = spend === null ? row : { ...row, skills: spend.skills, training: spend.training };
+        const result = await deps.tickets.issue(
+          principal.accountId,
+          character.id,
+          initialCharacterOf(
+            character,
+            await deps.listItemInstances?.(character.id) ?? [],
+            await deps.listCharacterStorages?.(character.id) ?? [],
+            boostedMonsterId,
+          ),
+          resolution.node,
+        );
+        // Só grava com o ticket na mão: recusado (`active-limit`), o banco não foi gasto por quem
+        // não vai jogar — a escolha do livro fica para o próximo login.
+        if (!result.ok || spend === null) return { result, spend: null };
+        await writer.applyOfflineTraining({
+          training: spend.training,
+          ...(spend.settlement === null ? {} : { skills: spend.skills }),
+          at: new Date(deps.offlineTraining?.now?.() ?? Date.now()),
+        });
+        return { result, spend };
+      },
     );
-    if (issued === null) {
+    if (outcome === null) {
       return reply.code(404).send({ error: 'character-not-found' });
+    }
+    const { result: issued, spend } = outcome;
+    if (spend !== null) {
+      request.log.info(
+        {
+          characterId: body.data.characterId,
+          trainedMs: spend.settlement?.trainedMs ?? 0,
+          skillId: spend.settlement?.skillId ?? null,
+          tries: spend.settlement?.tries ?? 0,
+        },
+        'Offline training settled',
+      );
     }
 
     if (!issued.ok) return reply.code(STATUS[issued.reason]).send({ error: issued.reason });
@@ -193,6 +248,41 @@ export function createTicketHandler(
       expiresAtMs: issued.value.expiresAtMs,
     });
   };
+}
+
+/** O resultado do gasto do banco para um ticket: o que o personagem passa a ter, e o que rendeu. */
+interface OfflineSpend {
+  readonly skills: SkillsState;
+  readonly training: OfflineTrainingState;
+  /** `null` quando a escolha do livro foi consumida mas nada rendeu (carência, banco vazio). */
+  readonly settlement: OfflineTrainingSettlement | null;
+}
+
+/**
+ * Calcula o gasto do banco de offline training do personagem (#631, ADR 0059 d.3-d.4), ou `null`
+ * quando não há nada a fazer — nenhuma skill escolhida no livro é o caso comum, e nele a linha não
+ * é tocada. `awayMs` é o tempo em repouso (agora − o carimbo do `release`); o teto por conta é
+ * Free 6 h / Premium 12 h, e o Premium é derivado AQUI contra o relógio, como no ticket.
+ */
+function offlineSpendOf(
+  character: CharacterRecord,
+  restedSinceMs: number,
+  offline: NonNullable<TicketRouteDependencies['offlineTraining']>,
+): OfflineSpend | null {
+  const training = readOfflineTrainingState(character.training);
+  if (training === undefined || training.offlineSkill === null) return null;
+  const nowMs = offline.now?.() ?? Date.now();
+  const skills = typeof character.skills === 'object' && character.skills !== null
+    ? character.skills as SkillsState
+    : undefined;
+  const result = settleOfflineTraining({
+    training,
+    skills,
+    awayMs: nowMs - restedSinceMs,
+    premium: character.premiumUntil !== null && character.premiumUntil.getTime() > nowMs,
+    vocationId: character.vocation,
+  }, offline.rules);
+  return { skills: result.skills, training: result.training, settlement: result.settlement };
 }
 
 /**
@@ -237,6 +327,8 @@ export function initialCharacterOf(
     ...(isStockMap(character.ammunitionStock) ? { ammunitionStock: character.ammunitionStock } : {}),
     // E a economia de Charms (M39-02, #602), pela mesma régua do Bestiário.
     ...charmsOf(character.charms),
+    // E o registro do Treino (#631, ADR 0059): a régua do `sim`, torto vira ausente.
+    ...trainingOf(character.training),
     // E os storages (#731, ADR 0050 d.6 T2): uma linha por chave, não uma coluna — a montagem é
     // a mesma ideia de `inventoryOf`, reduzindo as linhas do banco a um mapa.
     ...storagesOf(storages),
@@ -297,6 +389,12 @@ function bestiaryOf(stored: unknown): { bestiary?: BestiaryState } {
 /** A economia de Charms (M39-02, #602), pela mesma régua e razão de `bestiaryOf`. */
 function charmsOf(stored: unknown): { charms?: CharmsState } {
   return isCharmsState(stored) ? { charms: stored } : {};
+}
+
+/** O registro do Treino (#631, ADR 0059), pela mesma régua e razão de `charmsOf`. */
+function trainingOf(stored: unknown): { training?: OfflineTrainingState } {
+  const training = readOfflineTrainingState(stored);
+  return training === undefined ? {} : { training };
 }
 
 /**

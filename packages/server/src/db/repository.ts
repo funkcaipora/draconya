@@ -65,6 +65,14 @@ export interface CharacterRecord {
    * escreve é o ledger, na transação do extrato (ADR 0052 d.1).
    */
   readonly charms: unknown;
+  /**
+   * O registro do Treino (#631, ADR 0059 d.3): banco de offline training e skill do livro, como
+   * veio do banco. `unknown` pela mesma razão de `charms` — a forma (`OfflineTrainingState`) é do
+   * `sim`, e quem a confere é quem monta o ticket. `null` é quem nunca caçou nem treinou. Escrito
+   * pelo ledger (extrato da sessão dona) e, com o personagem em repouso, por
+   * `CharacterWriter.applyOfflineTraining` na emissão do ticket (ADR 0052 d.5).
+   */
+  readonly training: unknown;
   /** Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, em milissegundos. `0` é ninguém comeu. */
   readonly fedMs: number;
   /** As sete bênçãos PvE (#570, ADR 0052): BITMASK de `CharacterRuntime.blessings`. `0` é nenhuma. */
@@ -143,6 +151,29 @@ export interface FriendView {
   readonly createdAt: Date;
 }
 
+/**
+ * O que a operação de `withOwnedCharacter` pode ESCREVER na linha que ela acabou de travar (#631).
+ *
+ * Existe porque a escrita precisa acontecer na MESMA transação da trava — um método do repositório
+ * abriria outra conexão e esperaria, sem fim, pela linha que esta transação segura. É estreita de
+ * propósito: a `api` só escreve na linha do personagem quando ele está em repouso (sem sessão
+ * hospedada, ADR 0052 d.1/d.5), e o único cálculo que se faz fora de sessão é o gasto do banco de
+ * offline training (ADR 0059 d.3).
+ */
+export interface CharacterWriter {
+  /**
+   * Grava o resultado do gasto do banco: o registro `training` — a escolha do livro CONSUMIDA e o
+   * banco descontado — e, quando o treino rendeu, as skills novas com o instante (a guarda de
+   * instante de `jobs/ledger.ts` compara o `endedAtMs` da próxima sessão contra `skills_updated_at`).
+   * Uma escrita só. `skills` ausente é "nada rendeu": a coluna e o instante ficam como estavam.
+   */
+  applyOfflineTraining(update: {
+    readonly training: unknown;
+    readonly skills?: unknown;
+    readonly at: Date;
+  }): Promise<void>;
+}
+
 export interface GameRepository {
   ensureAccount(identity: { externalAuthId: string; email: string }): Promise<AccountRecord>;
   /**
@@ -183,7 +214,7 @@ export interface GameRepository {
   withOwnedCharacter<T>(
     accountId: string,
     characterId: string,
-    operation: (character: CharacterRecord) => Promise<T>,
+    operation: (character: CharacterRecord, writer: CharacterWriter) => Promise<T>,
   ): Promise<T | null>;
   softDeleteCharacter(
     accountId: string,
@@ -388,7 +419,7 @@ export class DrizzleGameRepository implements GameRepository {
   async withOwnedCharacter<T>(
     accountId: string,
     characterId: string,
-    operation: (character: CharacterRecord) => Promise<T>,
+    operation: (character: CharacterRecord, writer: CharacterWriter) => Promise<T>,
   ): Promise<T | null> {
     return this.#db.transaction(async (tx) => {
       const rows = await tx
@@ -402,7 +433,22 @@ export class DrizzleGameRepository implements GameRepository {
         .limit(1)
         .for('update');
       const character = rows[0];
-      return character === undefined ? null : operation(toCharacter(character));
+      if (character === undefined) return null;
+      // A escrita usa a MESMA transação `tx` que segura a trava (#631): o `training` e as skills
+      // andam juntos, escopados por este personagem.
+      const writer: CharacterWriter = {
+        applyOfflineTraining: async (update) => {
+          await tx
+            .update(characters)
+            .set({
+              training: update.training,
+              ...(update.skills === undefined
+                ? {} : { skills: update.skills, skillsUpdatedAt: update.at }),
+            })
+            .where(eq(characters.id, characterId));
+        },
+      };
+      return operation(toCharacter(character), writer);
     });
   }
 
@@ -589,6 +635,7 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     supplyStock: row.supplyStock,
     ammunitionStock: row.ammunitionStock,
     charms: row.charms,
+    training: row.training,
     fedMs: row.fedMs,
     blessings: row.blessings,
     fightMode: row.fightMode,

@@ -118,6 +118,54 @@ describe.runIf(databaseAvailable)('PostgreSQL game repository', () => {
     expect((await repository.listCharacters(account.id))[0]?.bestiary).toEqual(counts);
   });
 
+  it('o registro do Treino nasce nulo, volta como foi gravado e a `api` o escreve na MESMA transação da trava (#631)', async () => {
+    // A `api` só escreve na linha quando o personagem está em repouso (ADR 0052 d.5), e a escrita
+    // tem de usar a transação que segura a trava de linha: um método do repositório abriria outra
+    // conexão e esperaria, sem fim, pela linha que esta transação segura.
+    const account = await repository.ensureAccount({ externalAuthId: 'user_training', email: 'training@example.com' });
+    const character = await repository.createCharacter(account.id, 'Trainer Hero');
+    expect(character.training).toBeNull();
+
+    const at = new Date('2026-09-30T12:00:00.000Z');
+    const skills = { sword: { level: 12, points: 3 } };
+    const training = { offlineBankMs: 3_600_000, offlineSkill: null, version: 1 };
+    const seen = await repository.withOwnedCharacter(account.id, character.id, async (row, writer) => {
+      expect(row.training).toBeNull();
+      await writer.applyOfflineTraining({ training, skills, at });
+      return 'done';
+    });
+    expect(seen).toBe('done');
+
+    const after = await repository.getCharacter(account.id, character.id);
+    expect(after?.training).toEqual(training);
+    expect(after?.skills).toEqual(skills);
+    const [row] = await testDatabase.database.db
+      .select({ skillsUpdatedAt: characters.skillsUpdatedAt })
+      .from(characters).where(eq(characters.id, character.id));
+    // O instante das skills anda junto: é o que a guarda do ledger compara com o `endedAtMs` da próxima sessão.
+    expect(row?.skillsUpdatedAt).toEqual(at);
+  });
+
+  it('gastar o banco sem que nada tenha rendido grava só o registro: as skills e o instante delas ficam como estavam (#631)', async () => {
+    const account = await repository.ensureAccount({ externalAuthId: 'user_training2', email: 'training2@example.com' });
+    const character = await repository.createCharacter(account.id, 'Careful Hero');
+    const [before] = await testDatabase.database.db
+      .select({ skills: characters.skills, skillsUpdatedAt: characters.skillsUpdatedAt })
+      .from(characters).where(eq(characters.id, character.id));
+
+    const training = { offlineBankMs: 100, offlineSkill: null, version: 1 };
+    await repository.withOwnedCharacter(account.id, character.id, async (_row, writer) => {
+      await writer.applyOfflineTraining({ training, at: new Date('2030-01-01T00:00:00.000Z') });
+    });
+
+    const [after] = await testDatabase.database.db
+      .select({ skills: characters.skills, skillsUpdatedAt: characters.skillsUpdatedAt, training: characters.training })
+      .from(characters).where(eq(characters.id, character.id));
+    expect(after?.training).toEqual(training);
+    expect(after?.skills).toEqual(before?.skills);
+    expect(after?.skillsUpdatedAt).toEqual(before?.skillsUpdatedAt);
+  });
+
   it('uses the external identity as the account key under concurrent login', async () => {
     const results = await Promise.all([
       repository.ensureAccount({ externalAuthId: 'user_same', email: 'same@example.com' }),

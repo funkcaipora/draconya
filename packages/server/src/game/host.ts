@@ -12,6 +12,7 @@
 // (invariante 1). Os objetos ficam aqui. A ponte entre os dois é `session.attached`, que é o
 // que decide a taxa de tick — a sessão sabe SE alguém olha, nunca QUEM.
 
+import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import type {
   Aggregates, CombatEvent, EndReason, FollowState, GridPoint, ManualActionResult, MemberLeft,
@@ -23,16 +24,16 @@ import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProp
 import { ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
 import type {
   Ammunition, Appearances, Blessing, BotConfigV2, Charm, Item, ItemSlot, Monster, RemovedBotSlot,
-  Skill, Vocation,
+  Skill, Training, Vocation,
 } from '@draconya/content';
 import {
-  blessingCost, containerRulesFor, DEFAULT_FIGHT_MODE, hasBlessing, PartyFullError, shareCostsOf,
-  skillFactorFor, splitLootOf, withBlessing,
+  blessingCost, buyItem, containerRulesFor, DEFAULT_FIGHT_MODE, hasBlessing, PartyFullError,
+  shareCostsOf, skillFactorFor, splitLootOf, withBlessing,
 } from '@draconya/sim';
 import type {
-  AmmoRefusal, CarriedItem, CharacterRuntime, CharmAssignRefusal, CharmBestiaryEntry,
+  AmmoRefusal, BuyRefusal, CarriedItem, CharacterRuntime, CharmAssignRefusal, CharmBestiaryEntry,
   CharmRemoveRefusal, CharmUnlockRefusal, ConfigurePartyResult, ContainerRules, ExitStatus, FightMode,
-  HuntRuleset,
+  HuntRuleset, TrainingRuleset,
   InventoryRefusal, InventoryResult, InventoryState, ItemRef, PartyBagChanged, PartyEndVoteResult,
   PartySettingsPatch, Place, PromoteRefusal, SlotRefusal, SlotState, TakeLootRefusal,
   TileAppearanceChange, UseItemRefusal, UseOnMapRejection, UseSlotTarget, VocationRefusal,
@@ -58,11 +59,15 @@ export type SessionFactory = (
 /** Reconstrói uma sessão a partir de um snapshot. `null` = não dá para retomar (FUN-28). */
 export type SessionRestorer = (snapshot: SessionSnapshot) => Session | null;
 
-/** Para onde o personagem quer ir. `huntId` e `difficulty` só valem para `to: 'hunt'`. */
+/**
+ * Para onde o personagem quer ir. `huntId` e `difficulty` só valem para `to: 'hunt'`;
+ * `itemInstanceId` (a exercise weapon) só para `to: 'training'` (#631).
+ */
 export interface TransitionRequest {
   readonly to: SessionType;
   readonly huntId?: string;
   readonly difficulty?: string;
+  readonly itemInstanceId?: string;
   /**
    * A configuração do bot deste personagem, JÁ VALIDADA (FUN-81). Preenchida pelo host, nunca
    * pelo cliente — o cliente manda a configuração numa mensagem própria, e o que chega aqui é
@@ -167,6 +172,12 @@ export interface SessionHostOptions {
    * e a recusa é honesta — um host sem conteúdo não sabe o que é uma bênção.
    */
   readonly blessingCatalog?: ReadonlyMap<string, Blessing>;
+  /**
+   * O Treino (#631, ADR 0059): as regras que `set-offline-training-skill` confere — as skills do
+   * livro — e que decidem se o servidor tem Treino. Ausente: nenhuma escolha é aceita e
+   * `enter-training` é recusado, com a recusa honesta de um host sem conteúdo.
+   */
+  readonly training?: Training;
   /**
    * As vocações e o level da escolha (#154, ADR 0026 decisão 1), para `choose-vocation`.
    * Ausentes: nada se escolhe, e a recusa é honesta — como os itens.
@@ -295,6 +306,14 @@ const CHARM_ASSIGN_REFUSAL: Readonly<Record<CharmAssignRefusal, string>> = {
 const CHARM_REMOVE_REFUSAL: Readonly<Record<CharmRemoveRefusal, string>> = {
   'unknown-charm': 'Esse Charm não existe.',
   'not-assigned': 'Esse Charm não está atribuído a nenhuma criatura.',
+};
+
+/** A recusa de `buy-item` (#631, ADR 0059 d.2), em palavras. */
+const BUY_REFUSAL: Readonly<Record<BuyRefusal, string>> = {
+  'not-for-sale': 'Esse item não está à venda.',
+  'not-enough-gold': 'Você não tem gold suficiente.',
+  'over-capacity': 'Você não tem capacidade para carregar isso.',
+  'stack-too-large': 'Você não pode carregar tantos.',
 };
 
 /** A recusa de `open-corpse`/`take-loot` (#722, ADR 0048 d.4), em palavras — FUN-73. */
@@ -943,6 +962,13 @@ interface HostedSession {
    * únicas mudanças, e as duas precisam chegar a quem está olhando.
    */
   readonly sentBlessings: Map<string, number>;
+  /**
+   * A assinatura do último `training-state` ENTREGUE a quem olha cada personagem (#631), por
+   * `characterId` — o mesmo mecanismo de `sentExit`. O banco só muda no fim da sessão, mas as
+   * cargas da exercise weapon mudam a cada golpe do Treino, e compará-las é o que evita mandar de
+   * novo o que já foi. Entrada ausente é "ninguém recebeu ainda".
+   */
+  readonly sentTraining: Map<string, string>;
   /**
    * O último ESTADO de cada interativo ENTREGUE aos viewers da sessão (#734, ADR 0050 d.6 T3),
    * por `interactableId`. Cenário é COMPARTILHADO (DT-01 do #729) — uma entrada por sessão, não
@@ -1681,6 +1707,21 @@ export class SessionHost {
         // INTENÇÃO (invariante 4): o cliente diz QUAL posição; o texto vem do conteúdo, nunca
         // do cliente (#729, ADR 0050 d.7).
         this.#requestLook(viewer, message.position);
+        return;
+      case 'buy-item':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL item; `purchasable`, preço, saldo e capacidade
+        // são do servidor — serviço de Cidade, dentro da sessão dona (#631, ADR 0059 d.2).
+        this.#requestBuyItem(viewer, message.itemId);
+        return;
+      case 'set-offline-training-skill':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL skill do livro (ou `null`); quais existem é do
+        // conteúdo, e o gasto do banco é da `api` na próxima emissão de ticket (#631, ADR 0059 d.3).
+        this.#requestSetOfflineSkill(viewer, message.skillId);
+        return;
+      case 'enter-training':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL instância da mochila; que ela é uma exercise
+        // weapon com cargas e que o personagem está na Cidade é do servidor (#631, ADR 0059 d.1).
+        this.#requestEnterTraining(viewer, message.itemInstanceId);
         return;
       case 'promote-vocation':
         // INTENÇÃO (invariante 4): sem payload. Vocação, level, gold e "já promovido" são do
@@ -2581,6 +2622,157 @@ export class SessionHost {
   }
 
   /**
+   * O `training-state` do personagem, na forma que o fio manda (#631): o banco e a skill do livro,
+   * as exercise weapons que ele carrega com as cargas RESTANTES — o overlay da instância não viaja
+   * em `inventory` — e a instância que o Treino em curso gasta. Só quando o host TEM Treino
+   * (`options.training`): sem ele, nenhuma mensagem sai e o cliente não desenha a tela.
+   */
+  #trainingMessageFor(hosted: HostedSession, character: CharacterRuntime): S2CMessage {
+    const catalog = this.#options.itemCatalog ?? EMPTY_ITEMS;
+    const state = character.inventory.getState();
+    const carried: CarriedItem[] = [
+      ...state.backpack, ...(state.satchel ?? []), ...Object.values(state.equipped),
+    ].filter((item): item is CarriedItem => item !== null && item !== undefined);
+    const weapons = carried.flatMap((item) => {
+      const definition = catalog.get(item.itemId);
+      if (definition?.exercise === undefined || definition.charges === undefined) return [];
+      const charges = item.overlay?.charges ?? definition.charges;
+      return charges > 0 ? [{ instanceId: item.instanceId, itemId: item.itemId, charges }] : [];
+    });
+    const ruleset = hosted.session.ruleset as Partial<TrainingRuleset>;
+    return {
+      type: 'training-state',
+      offlineBankMs: character.training.bankMs,
+      offlineSkill: character.training.skill,
+      weapons,
+      activeInstanceId: hosted.session.ruleset.type === 'training' ? ruleset.itemInstanceId ?? null : null,
+    };
+  }
+
+  /**
+   * Manda o `training-state` a quem olha o personagem — só quando mudou desde o último entregue
+   * (`force` o manda sempre: é o `session-attach` e a chegada de uma sessão nova, em que a tela
+   * ainda não tem nada). Host sem Treino não manda nada.
+   */
+  #syncTraining(hosted: HostedSession, characterId: string, force = false): void {
+    if (this.#options.training === undefined) return;
+    const character = this.#participantOf(hosted, characterId);
+    if (character === undefined) return;
+    const message = this.#trainingMessageFor(hosted, character);
+    const signature = JSON.stringify(message);
+    if (!force && hosted.sentTraining.get(characterId) === signature) return;
+    hosted.sentTraining.set(characterId, signature);
+    this.#sendToViewersOf(hosted, characterId, message);
+  }
+
+  /**
+   * As cargas do Treino em curso, ao ritmo dos golpes (#631): cada golpe muda o overlay da arma, e
+   * a tela mostra o que resta. Só a sessão de Treino, e só com visualizador (a apresentação é o
+   * que se perde quando ninguém olha — nunca o resultado, invariante 3).
+   */
+  #presentTraining(hosted: HostedSession): void {
+    if (hosted.session.ruleset.type !== 'training' || hosted.viewers.size === 0) return;
+    for (const character of hosted.session.participants) this.#syncTraining(hosted, character.id);
+  }
+
+  /**
+   * Comprar UM item por gold na Cidade (#631, ADR 0059 d.2) — o mínimo que a exercise weapon
+   * precisa enquanto a loja geral (E5) não existe. Serviço de Cidade: só a sessão de Cidade aceita
+   * (ADR 0052 d.2), e o gold sai por `goldDelta`, liquidado pelo `#saveDurableReceipt` que já debita
+   * `sell-items` e `buy-blessing` na praça (invariante 10). O item nasce como instância NOVA de
+   * origem `purchase`, e o mesmo extrato a leva por `acquired` — o id carrega o do PERSONAGEM e um
+   * UUID por compra, porque a mesma cópia da Cidade é reaberta em outro dia e um `lootSeq` que
+   * recomeça em zero colidiria na chave primária de `item_instance`.
+   */
+  #requestBuyItem(viewer: Viewer, itemId: string): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    if (hosted.session.ruleset.type !== 'city') {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Só se compra na Cidade.' });
+      return;
+    }
+    const catalog = this.#options.itemCatalog ?? EMPTY_ITEMS;
+    const result = buyItem(character, catalog.get(itemId), {
+      catalog,
+      rules: this.#containerRules(character),
+      instanceId: `${hosted.session.id}:${character.id}:buy:${randomUUID()}`,
+    });
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: BUY_REFUSAL[result.reason] });
+      return;
+    }
+    this.#markDirty(character.id);
+    const stats = this.#statsOf(character);
+    hosted.sentStats.set(character.id, stats);
+    this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
+    // O inventário leva junto o `training-state` (`#sendInventory`): a arma comprada já aparece na
+    // tela de Treino, com as cargas cheias.
+    this.#sendInventory(character.id);
+  }
+
+  /**
+   * O livro do offline training (#631, ADR 0059 d.3, ADR 0052 d.2): a skill que a `api` vai treinar
+   * quando o personagem voltar. Serviço de Cidade, sem rolagem — o gasto do banco NÃO acontece
+   * aqui: é da `api`, na emissão do próximo ticket, com o personagem em repouso. `skillId: null`
+   * desmarca. Só as skills que o conteúdo oferece são aceitas (invariante 4).
+   */
+  #requestSetOfflineSkill(viewer: Viewer, skillId: string | null): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    const training = this.#options.training;
+    if (training === undefined) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Este servidor não tem Treino.' });
+      return;
+    }
+    if (hosted.session.ruleset.type !== 'city') {
+      viewer.send({
+        type: 'system-message', level: 'warning', text: 'O livro do offline training só se lê na Cidade.',
+      });
+      return;
+    }
+    const result = character.training.choose(skillId, training);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Essa skill não está no livro.' });
+      return;
+    }
+    this.#markDirty(character.id);
+    this.#syncTraining(hosted, character.id);
+  }
+
+  /**
+   * Entrar na sessão de Treino com uma exercise weapon da mochila (#631, ADR 0059 d.1). O host
+   * confere e responde em palavras o que o jogador precisa ler — sem Treino, fora da Cidade,
+   * instância que ele não carrega ou que não é exercise weapon —, e a transição em si é a de
+   * sempre (`#requestTransition`): o construtor de sessões a recusa de novo se algo não bater.
+   */
+  #requestEnterTraining(viewer: Viewer, itemInstanceId: string): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    if (this.#options.training === undefined) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Este servidor não tem Treino.' });
+      return;
+    }
+    if (hosted.session.ruleset.type !== 'city') {
+      viewer.send({
+        type: 'system-message', level: 'warning', text: 'Você precisa estar na Cidade para treinar.',
+      });
+      return;
+    }
+    const carried = character.inventory.carried(itemInstanceId);
+    const definition = carried === null ? undefined : this.#options.itemCatalog?.get(carried.itemId);
+    if (carried === null || definition?.exercise === undefined || definition.charges === undefined) {
+      viewer.send({
+        type: 'system-message', level: 'warning', text: 'Você não tem essa exercise weapon.',
+      });
+      return;
+    }
+    void this.#requestTransition(viewer, { to: 'training', itemInstanceId });
+  }
+
+  /**
    * Traduz a recusa do `sim` em algo que o jogador entenda, ou manda o inventário novo.
    *
    * O sucesso NÃO vira mensagem de sistema — vira o estado. "Equipado com sucesso" é ruído; o
@@ -2637,6 +2829,9 @@ export class SessionHost {
       supplies: [...character.supplyStock].map(([id, quantity]) => ({ id, quantity })),
       ammunition: [...character.ammunitionStock].map(([id, quantity]) => ({ id, quantity })),
     });
+    // As exercise weapons e as cargas dela vivem no overlay, que o `inventory` não leva (#631): o
+    // `training-state` acompanha toda mudança de mochila — só quando a assinatura mudou.
+    this.#syncTraining(hosted, characterId);
   }
 
   /**
@@ -2979,6 +3174,8 @@ export class SessionHost {
       // ver o marco chegar sem reconectar.
       this.#presentBestiary(hosted);
       this.#presentBlessings(hosted);
+      // E as cargas da exercise weapon, se o Treino gastou uma (#631).
+      this.#presentTraining(hosted);
       // E o cenário, se algo mudou de estado PASSIVAMENTE (#734, ADR 0050 d.6 T3) — o walker
       // abrindo uma porta sozinho, uma placa de pressão, um `TILE_REVERT`. `useOnMap` já manda
       // o próprio `tile-update` na hora (`#requestUseOnMap`); isto cobre o resto.
@@ -3650,6 +3847,10 @@ export class SessionHost {
     // E a economia de Charms (M39-02, #602), pela mesma razão do Bestiário: sem isto, quem
     // reconecta veria os Charms zerados até a próxima intenção aceita.
     if (participant !== undefined) viewer.send(this.#charmsMessageFor(participant));
+    // E o Treino (#631, ADR 0059): o banco, a skill do livro e as exercise weapons com as cargas.
+    // Sempre (`force`): quem reanexa PERDEU a tela, e comparar com o último entregue a deixaria
+    // vazia. Host sem Treino não manda nada.
+    if (participant !== undefined) this.#syncTraining(hosted, characterId, true);
     // E o estado dos slots (AB-09): a barra do conjunto ativo precisa dele ao montar, e a
     // Cidade não tem ciclo para o mandar depois. Ruleset sem slots (a Cidade) não manda nada.
     const slotStates = participant === undefined
@@ -4156,6 +4357,15 @@ export class SessionHost {
     // Sair de um SHARD não encerra nada e não credita nada (FUN-71, ADR 0023): a praça fica
     // de pé com quem ficou, e a Cidade não gera progresso (§37). Encerrar aqui mandaria um
     // extrato de Cidade — zerado — para todo mundo que estivesse lá dentro.
+    //
+    // O que a praça MUDOU, porém, é gravado antes de o personagem sair para uma sessão privada
+    // (#631): `#leaveForParty` já fazia o mesmo para a party, e sem isto a exercise weapon comprada
+    // aqui — uma instância NOVA, com o prefixo da sessão da praça — nunca chegaria ao banco, porque
+    // o extrato do Treino só leva o `acquired` que nasceu NELE; e o gold gasto sumiria junto, já que
+    // o `goldDelta` da praça não entra nos agregados da sessão de destino.
+    if (hosted.session.ruleset.shared === true && hosted.dirty.has(characterId)) {
+      await this.#saveDurableReceipt(characterId, hosted, 'manual-exit');
+    }
     if (hosted.session.ruleset.shared !== true) {
       // Party (#194, ADR 0027): com mais de um dono, sair é SAIR — o extrato é o dele, a hunt
       // continua para os outros, e a cascata do §13.9 roda no próximo evento do `sim`.
@@ -4248,6 +4458,7 @@ export class SessionHost {
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
       sentBlessings: new Map(),
+      sentTraining: new Map(),
       sentTileOverrides: new Map(),
       sentParty: null,
       lastPartyBag: null,
@@ -4533,6 +4744,9 @@ export class SessionHost {
       // E a economia de Charms (M39-02, #602, ADR 0052 d.1): ABSOLUTA como `ammo` — sem ela
       // aqui, um `charm-unlock`/`charm-assign` aceito na Cidade sumiria a cada logout.
       ...(owner === undefined ? {} : { charms: owner.charms.getState() }),
+      // E o registro do Treino (#631, ADR 0059 d.3): ABSOLUTO como `charms` — o banco que a sessão
+      // acabou de encher (`onEnd` de hunt e de treino) e a skill do livro.
+      ...(owner === undefined ? {} : { training: owner.training.getState() }),
       // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
       // login se ficasse só na sessão.
       ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
@@ -4641,6 +4855,9 @@ export class SessionHost {
       // equipamento — sem isto, um `charm-unlock`/`charm-assign`/`charm-remove` feito na praça
       // sumiria no logout, porque a Cidade não gera `Receipt` de progresso (ADR 0023).
       charms: owner.charms.getState(),
+      // O registro do Treino (#631, ADR 0059 d.3): escolher a skill do livro na praça marca
+      // `dirty`, e sem este campo a escolha sumiria no logout. ABSOLUTO, como `charms`.
+      training: owner.training.getState(),
       // O estoque de supply/munição (#792, ADR 0044 d.2): conjurar na Cidade credita
       // `supplyStock`/`ammunitionStock` do mesmo jeito que o loot da hunt credita — ABSOLUTO,
       // como `ammo` (`receipts.ts`). Sem isto, a carga conjurada na praça sumia no logout: o
@@ -5059,6 +5276,7 @@ export class SessionHost {
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
       sentBlessings: new Map(),
+      sentTraining: new Map(),
       sentTileOverrides: new Map(),
       sentParty: null,
       lastPartyBag: null,

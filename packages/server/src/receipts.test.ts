@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { CharmsState } from '@draconya/sim';
+import type { CharmsState, OfflineTrainingState } from '@draconya/sim';
 import { ReceiptStore, type SessionReceipt } from './receipts.js';
 import { connectTestRedis } from './testing/redis.js';
 
@@ -167,6 +167,29 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
 
     expect(found.find((receipt) => receipt.seq === 1)?.charms).toEqual(charms);
     expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('charms');
+  });
+
+  it('carries the offline training record through Redis and back, and a receipt without one stays without (#631)', async () => {
+    // A mesma lista de PERMISSÃO dos registros logo acima — e este é ABSOLUTO (ADR 0052 d.1): o banco
+    // sobe por tempo de sessão e desce quando a `api` o gasta, então nada de fusão por máximo. Além
+    // da ida e volta, a leitura é a defensiva do `sim`: o ledger grava o registro direto numa coluna
+    // `jsonb`, e um banco negativo ou uma skill torta não pode chegar lá.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const training: OfflineTrainingState = { offlineBankMs: 7_200_000, offlineSkill: 'sword', version: 1 };
+    await store.save(receiptOf(randomUUID(), characterId, { training }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+    await store.save(receiptOf(
+      randomUUID(), characterId,
+      { seq: 3, training: { offlineBankMs: -5, offlineSkill: 7, version: 1 } as unknown as OfflineTrainingState },
+    ));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.training).toEqual(training);
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('training');
+    // O torto some — o ledger não toca na coluna —, e o extrato em si continua valendo.
+    expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('training');
   });
 
   it('carries the ammo selection through Redis and back, and a receipt without one stays without (#152)', async () => {

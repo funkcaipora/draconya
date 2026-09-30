@@ -16,8 +16,10 @@
 import { randomBytes } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import { OutfitColors } from '@draconya/protocol';
-import { isCharacterStorageMap, isFightMode } from '@draconya/sim';
-import type { BestiaryState, CharacterStorageMap, CharmsState, FightMode } from '@draconya/sim';
+import { isCharacterStorageMap, isFightMode, readOfflineTrainingState } from '@draconya/sim';
+import type {
+  BestiaryState, CharacterStorageMap, CharmsState, FightMode, OfflineTrainingState,
+} from '@draconya/sim';
 import type { NodeStatus, SessionDirectory } from './directory.js';
 
 export interface TicketClaim {
@@ -177,6 +179,17 @@ export interface InitialCharacter {
    */
   readonly charms?: CharmsState;
   /**
+   * O registro do Treino (#631, ADR 0059 d.3, ADR 0052 d.1): o banco de offline training e a skill
+   * escolhida no livro. Entra na sessão, e não só sai dela: o banco CRESCE com o tempo de hunt e
+   * de treino, e o livro se escolhe na Cidade — sem o registro de entrada, a primeira hunt do dia
+   * partiria sempre de um banco zerado e o extrato sobrescreveria o que já estava na linha. O
+   * banco JÁ chega com o gasto do offline training feito (a `api` o calcula na emissão, com o
+   * personagem em repouso — o `sim` nunca lê relógio). Validado pela leitura defensiva do `sim`
+   * (`readOfflineTrainingState`); ausente é quem nunca caçou nem treinou, ou ticket de um `api`
+   * anterior: a sessão parte de banco zero e nenhuma skill escolhida.
+   */
+  readonly training?: OfflineTrainingState;
+  /**
    * Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, lido de `characters.fed_ms`.
    * Entra na sessão, e não só sai dela — sem isto, quem comeu antes de deslogar voltaria em
    * jejum. Ausente é quem nunca comeu, ou ticket de um `api` antigo: a sessão parte de `0`.
@@ -239,7 +252,17 @@ export interface IssuedTicket {
 
 /** O nó resolvido, ou por que não deu. Ver `resolveNode`. */
 export type NodeResolution =
-  | { readonly ok: true; readonly node: NodeStatus }
+  | {
+    readonly ok: true;
+    readonly node: NodeStatus;
+    /**
+     * O personagem está em REPOUSO: o diretório não tem sessão hospedada para ele (#631, ADR 0052
+     * d.5). É o único momento em que a linha do Postgres não tem dono quente — e por isso o único em
+     * que a `api` pode calcular e escrever algo nela (o gasto do offline training). Ausente é quem
+     * não sabe dizer, e é tratado como NÃO em repouso: nunca se escreve por palpite.
+     */
+    readonly resting?: boolean;
+  }
   | { readonly ok: false; readonly reason: IssueFailure };
 
 export type IssueFailure =
@@ -362,7 +385,9 @@ export class TicketService {
 
     if (existing === null) {
       const node = await this.#leastLoadedNode();
-      return node === null ? { ok: false, reason: 'no-node-available' } : { ok: true, node };
+      return node === null
+        ? { ok: false, reason: 'no-node-available' }
+        : { ok: true, node, resting: true };
     }
 
     let node = await this.#directory.node(existing.nodeId);
@@ -677,6 +702,9 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     // A economia de Charms (M39-02, #602): mesma régua do Bestiário/estoque — forma validada
     // por inteiro, torto vira AUSENTE, nunca ticket recusado.
     ...(isCharmsState(initial['charms']) ? { charms: initial['charms'] } : {}),
+    // O registro do Treino (#631): a leitura defensiva do `sim` — banco não negativo e skill não
+    // vazia —, e torto vira AUSENTE, nunca ticket recusado, como o Bestiário.
+    ...trainingOf(initial['training']),
     // Comida ativa (#726): inteiro seguro não negativo, ou AUSENTE — a mesma régua acima.
     ...(typeof initial['fedMs'] === 'number' && Number.isSafeInteger(initial['fedMs'])
       && initial['fedMs'] >= 0
@@ -739,6 +767,12 @@ export function isBestiaryState(value: unknown): value is BestiaryState {
     && typeof kills === 'number'
     && Number.isSafeInteger(kills)
     && kills >= 0);
+}
+
+/** O registro do Treino como o ticket o carrega, ou nada (#631): a régua do `sim`, uma só. */
+function trainingOf(stored: unknown): { training?: OfflineTrainingState } {
+  const training = readOfflineTrainingState(stored);
+  return training === undefined ? {} : { training };
 }
 
 /**

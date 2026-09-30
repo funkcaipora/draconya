@@ -230,6 +230,17 @@ export const characters = pgTable(
     charms: jsonb('charms'),
 
     /**
+     * O registro do Treino (#631, M44-13, ADR 0059 d.3): `{ offlineBankMs, offlineSkill, version }` —
+     * o banco de offline training (cresce 1:1 com o tempo de hunt/treino, teto 12 h) e a skill
+     * escolhida no livro. Nulável: `null` é quem nunca caçou nem treinou. ABSOLUTO e última escrita
+     * vence, como `charms` (o banco sobe por tempo de sessão e DESCE quando a `api` o gasta, então
+     * fundir por máximo ressuscitaria tempo já gasto). Escrito pelo ledger a partir do extrato da
+     * sessão dona e — o único caminho fora dela — pela `api` na emissão do ticket, com o
+     * personagem em repouso e sob a trava de linha (ADR 0052 d.1/d.5).
+     */
+    training: jsonb('training'),
+
+    /**
      * Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, em milissegundos — a
      * `CONDITION_REGENERATION` do Tibia. Drenado pelo TEMPO DE HUNT decorrido
      * (`packages/sim/src/food.ts`), não por job — não precisa de um `updatedAt` companheiro

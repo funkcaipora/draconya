@@ -853,6 +853,50 @@ quatro e cinco segundos cada, e o grupo do Postgres termina antes de o outro com
   FUN-109 nasce no level 1, com os máximos de `statsForLevel(1)` e uma progressão de teste com
   `startingMana` alto — e é ele que se copia para o próximo teste com magia.
 
+## O Treino: sessão de exercise weapon e banco de offline training (#631, ADR 0059)
+
+O Treino é o terceiro ruleset hospedado (`training`, depois de `hunt` e `city`): estado ATIVO,
+privado, de um dono só, orientado a evento a 2 Hz anexado / 1 Hz desanexado (o `hz` só diz com que
+frequência o host AVANÇA a fila — o resultado é o dos eventos). Contrato de protocolo: C2S
+`enter-training { itemInstanceId }` (36), `set-offline-training-skill { skillId | null }` (37),
+`buy-item { itemId }` (38); S2C `training-state` (46). Sair é o `leave-hunt` de sempre.
+
+- **`TransitionRequest.itemInstanceId`** vale só para `to: 'training'`. O host confere e responde em
+  palavras (`#requestEnterTraining`: sem Treino, fora da Cidade, instância que não carrega ou que
+  não é exercise weapon) e o construtor (`trainingFor`, `sessions.ts`) confere de novo e devolve
+  `null` — a segunda linha, porque é ele quem tem autoridade sobre o que a sessão pode ser. O
+  restaurador (`rulesetFor`) retoma um snapshot `training` por `trainingRulesetFromSnapshot`.
+- **Todo estado novo viaja pelo padrão do ADR 0052:** `characters.training` (`jsonb`, migração 0023)
+  → `InitialCharacter.training` (validado por `readOfflineTrainingState`, torto vira AUSENTE) →
+  `CharacterRuntime.training` → `SessionReceipt.training` (ABSOLUTO, última escrita vence — o banco
+  SOBE por tempo de sessão e DESCE quando a `api` o gasta, então nada de fusão por máximo) → ledger.
+  O extrato de hunt, o de estado durável da Cidade e a liquidação de snapshot irrestaurável o levam.
+- **O extrato durável da Cidade sai também na TRANSIÇÃO para uma sessão privada** (`#runTransition`,
+  como `#leaveForParty`): a exercise weapon comprada na praça é uma instância nova com o prefixo da
+  sessão DA PRAÇA, e o extrato do Treino só leva o `acquired` nascido nele — sem o flush a arma
+  nunca chegaria ao banco, e o gold gasto sumiria (o `goldDelta` da praça não entra nos agregados da
+  sessão de destino).
+- **`buy-item` cria a instância com id `${sessão}:${personagem}:buy:${UUID}`** — único por compra,
+  nunca derivado de `lootSeq` (recomeça em zero a cada login, e a mesma cópia da Cidade é reaberta em
+  outro dia: `ON CONFLICT DO NOTHING` engoliria a segunda compra).
+- **A `api` GASTA o banco na emissão do ticket, e só com o personagem em REPOUSO.** `TicketService.
+  resolveNode` devolve `resting: true` quando o diretório não tem sessão para ele — o único momento
+  em que a linha do Postgres não tem dono quente (invariante 9, ADR 0052 d.5). O "fora" é
+  `agora − SessionDirectory.restedSince(id)`: o carimbo `char:{id}:rest`, gravado no `release` (o
+  fim de uma sessão que TERMINOU, não o marco de stamina) e apagado no `register`. **Sem carimbo
+  não se gasta** (Redis reiniciado, queda sem `release`): o tempo fica no banco. A escrita usa o
+  `CharacterWriter` que `withOwnedCharacter` passa à operação — preso à `tx` da trava, porque um
+  método do repositório abriria outra conexão e esperaria pela linha travada — e só acontece com o
+  ticket EMITIDO (`active-limit` não gasta). Quem não escolheu skill no livro não tem a linha tocada.
+- **A stamina não anda no Treino:** `createSessionBuilder` chama `holdStamina` (não
+  `materializeStamina`) ao SAIR do Treino — o marco avança sem recuperar o tempo treinado (ADR 0060
+  d.14c). A entrada materializa como qualquer transição.
+- **Achado fora do escopo, sem correção aqui:** o `materializeStamina` de TODA transição também
+  roda ao SAIR da hunt, e o marco (`staminaUpdatedAtMs`) é o da ENTRADA — então o tempo de parede
+  da hunt inteira volta como recuperação, por cima do que `drainStamina` gastou. Sonda com uma hunt
+  silenciosa de 1 h simulada e 1 h de relógio: stamina 10 h na entrada, 10,86 h na Cidade. O Treino
+  não tem o problema (`holdStamina` só avança o marco); a hunt merece uma issue própria.
+
 ## Testes de autenticação e admissão
 
 `TEST_REDIS_URL` deve apontar para um Redis descartável; os bancos listados em `testing/redis.ts`

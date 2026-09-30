@@ -356,6 +356,48 @@ describe.runIf(available)('session ticket', () => {
     });
   });
 
+  it('carries the offline training record, and drops one it cannot trust (#631, ADR 0059 d.3)', async () => {
+    // O banco e a skill do livro entram na sessão: o banco CRESCE com o tempo de hunt, e sem o
+    // registro de entrada a primeira hunt do dia sobrescreveria a linha com um banco zerado. A
+    // leitura é a defensiva do `sim` — torto vira AUSENTE, nunca ticket recusado.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+    const training = { offlineBankMs: 3_600_000, offlineSkill: 'sword', version: 1 };
+    const issued = await tickets.issue('a1', 'p1', { level: 1, xp: 0, training });
+    if (!issued.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(issued.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1', initialCharacter: { level: 1, xp: 0, training },
+    });
+    await tickets.revoke(issued.value.ticket, 'a1', 'p1');
+
+    for (const torto of [{ offlineBankMs: -1, offlineSkill: null }, { offlineBankMs: 5, offlineSkill: 7 }, 'x', []]) {
+      const bad = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, training: torto } as unknown as InitialCharacter,
+      );
+      if (!bad.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(bad.value.ticket, 'n1')).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1', initialCharacter: { level: 1, xp: 0 },
+      });
+      await tickets.revoke(bad.value.ticket, 'a1', 'p1');
+    }
+  });
+
+  it('resolveNode says the character is RESTING only when the directory has no session for it (#631, ADR 0052 d.5)', async () => {
+    // É o único momento em que a linha do Postgres não tem dono quente — e por isso o único em que a
+    // `api` pode escrever nela. Sessão hospedada (mesmo em nó que morreu) NÃO é repouso.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+    expect(await tickets.resolveNode('p1')).toMatchObject({ ok: true, resting: true });
+
+    await directory.register('p1', { sessionId: 's1', nodeId: 'n1', type: 'city' });
+    const hosted = await tickets.resolveNode('p1');
+    expect(hosted.ok).toBe(true);
+    expect(hosted).not.toHaveProperty('resting', true);
+
+    await directory.release('p1');
+    expect(await tickets.resolveNode('p1')).toMatchObject({ ok: true, resting: true });
+  });
+
   it('revoke frees the slot, the ticket and the reservation (#195)', async () => {
     // O `start` de uma party emite N e desfaz os k−1 quando o k-ésimo falha. Mutação que
     // mata: `revoke` sem o `SREM` do slot ativo — o terceiro personagem da conta continuaria

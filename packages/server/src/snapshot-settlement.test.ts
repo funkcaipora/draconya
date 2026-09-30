@@ -126,6 +126,31 @@ describe('settleSnapshotAsReceipt (#527)', () => {
     expect(otherSaved[0]?.fightMode).toBe('attack');
   });
 
+  it('carries the offline training record and the exercise weapon charges of a Training snapshot (#631)', async () => {
+    // A sessão de Treino que caiu: o banco que ela já tinha acumulado (ABSOLUTO, como `charms`) e as
+    // cargas RESTANTES da arma — que moram no overlay da instância — voltam ao banco pelo extrato, e a
+    // arma não é destruída (`removedInstances` só sai quando a última carga foi gasta).
+    const { receipts, saved } = fakeReceipts();
+    const training = { offlineBankMs: 4_000, offlineSkill: 'sword', version: 1 };
+    const snapshot: SessionSnapshot = {
+      ...baseSnapshot,
+      id: 's-train',
+      type: 'training',
+      participants: [{
+        ...baseSnapshot.participants[0]!,
+        training,
+        inventory: {
+          backpack: [{ instanceId: 'w1', itemId: 'exercise-sword', quantity: 1, overlay: { charges: 2 } }],
+          equipped: {},
+        },
+      }],
+    };
+    await settleSnapshotAsReceipt(snapshot, { characterId: 'a', accountId: 'acc-a', receipts });
+    expect(saved[0]?.training).toEqual(training);
+    expect(saved[0]?.overlays).toEqual({ w1: { charges: 2 } });
+    expect(saved[0]).not.toHaveProperty('removedInstances');
+  });
+
   it('omits every optional field when the participant record has none of them', async () => {
     const { receipts, saved } = fakeReceipts();
     await settleSnapshotAsReceipt(baseSnapshot, { characterId: 'a', accountId: 'acc-a', receipts });
@@ -136,6 +161,7 @@ describe('settleSnapshotAsReceipt (#527)', () => {
     expect(receipt).not.toHaveProperty('ammo');
     expect(receipt).not.toHaveProperty('vocation');
     expect(receipt).not.toHaveProperty('equipment');
+    expect(receipt).not.toHaveProperty('training');
   });
 
   it('rejects when the character never participated in that session, leaving no receipt saved', async () => {

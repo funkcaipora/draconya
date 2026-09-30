@@ -17,10 +17,10 @@
 // índice troca isso por um `SMEMBERS` que quase sempre volta vazio.
 
 import type { ChainableCommander, Redis } from 'ioredis';
-import { isFightMode } from '@draconya/sim';
+import { isFightMode, readOfflineTrainingState } from '@draconya/sim';
 import type {
   Aggregates, BestiaryState, CharacterStorageMap, CharmsState, EndReason, FightMode,
-  ItemInstanceOverlay, NotableEvent, SkillsState,
+  ItemInstanceOverlay, NotableEvent, OfflineTrainingState, SkillsState,
 } from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
 
@@ -72,6 +72,13 @@ export interface SessionReceipt {
    * estado final da sessão dona.
    */
   readonly charms?: CharmsState;
+  /**
+   * O registro do Treino (#631, ADR 0059 d.3, ADR 0052 d.1): o banco de offline training e a skill
+   * escolhida no livro. ABSOLUTO e ÚLTIMA-ESCRITA-VENCE, como `charms` — o banco SOBE por tempo de
+   * hunt/treino e DESCE quando a `api` o gasta, então fundir por máximo ressuscitaria tempo já
+   * gasto. Extrato SEM o campo (nó antigo em deploy) não toca na coluna.
+   */
+  readonly training?: OfflineTrainingState;
   /**
    * A munição escolhida por família (#152): `{ arrow: 'sniper-arrow' }`. ABSOLUTA e
    * última-escrita-vence: é preferência do jogador, não progresso — um extrato antigo fora de
@@ -346,6 +353,7 @@ function parseReceipt(raw: string): SessionReceipt | null {
   ) {
     return null;
   }
+  const training = readOfflineTrainingState(value['training']);
   return {
     sessionId: value['sessionId'],
     characterId: value['characterId'],
@@ -377,6 +385,10 @@ function parseReceipt(raw: string): SessionReceipt | null {
     ...(typeof value['charms'] === 'object' && value['charms'] !== null
       ? { charms: value['charms'] as CharmsState }
       : {}),
+    // O registro do Treino (#631): lista de PERMISSÃO, pela razão das skills — e conferido pela
+    // MESMA leitura defensiva do `sim` que o ticket usa: o ledger o grava direto na coluna `jsonb`,
+    // e um banco negativo ou uma skill torta não pode chegar lá. Torto vira ausente.
+    ...(training === undefined ? {} : { training }),
     // A munição (#152): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['ammo'] === 'object' && value['ammo'] !== null
       ? { ammo: value['ammo'] as Record<string, string> }

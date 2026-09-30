@@ -54,6 +54,8 @@ export interface GameDependencies {
   readonly itemCatalog?: SessionHostOptions['itemCatalog'];
   /** O catálogo de munição abstrata, para `select-ammo` (#152). */
   readonly ammunitionCatalog?: SessionHostOptions['ammunitionCatalog'];
+  /** O Treino (#631, ADR 0059): as regras do livro do offline training, para as intenções de Treino. */
+  readonly training?: SessionHostOptions['training'];
   /** O catálogo dos 25 Charms, para `charm-unlock`/`charm-assign` (M39-02, #602). */
   readonly charmCatalog?: SessionHostOptions['charmCatalog'];
   /** A ficha de Bestiário de cada monstro, para a economia de Charms derivar pontos e completude. */
@@ -155,6 +157,7 @@ export function createGame(
       ...(dependencies.ammunitionCatalog === undefined
         ? {}
         : { ammunitionCatalog: dependencies.ammunitionCatalog }),
+      ...(dependencies.training === undefined ? {} : { training: dependencies.training }),
       ...(dependencies.charmCatalog === undefined
         ? {}
         : { charmCatalog: dependencies.charmCatalog }),
