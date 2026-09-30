@@ -816,6 +816,30 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   subject certo, como cinto e suspensório contra o cliente pedindo por fora do auto-target. Ver
   "Invocação do PERSONAGEM" em `docs/product/combat.md` para o resto do contrato (teto de 2,
   mana do MONSTRO via `manaCostOverride`, `combat-v4`).
+- **O familiar de vocação (#599, M38-02, ADR 0057 d.3 e a emenda de 2026-09-29) é uma invocação de
+  PERSONAGEM com três coisas a mais, e cada uma tem uma armadilha.** (1) **Os dois carimbos
+  (`CharacterRuntime.familiar`) são de relógio de PAREDE, e o "agora" é `session.createdAtMs +
+  session.nowMs`** (`HuntRuleset#wallNowMs`) — nunca o `Cooldowns` do personagem, que guarda instante
+  LÓGICO da sessão que o gravou (o relógio de cada sessão nasce em zero, e o objeto do personagem
+  atravessa as transições): um cooldown de 30 min ali seria lido na hunt seguinte como "daqui a 30
+  min de ZERO", ou, se a hunt anterior durou uma hora, como "daqui a uma hora e meia". O
+  `summonUntilMs` DESCE quando o familiar morre (`#onMonsterDied` grava o agora), por isso o ledger
+  o escreve por última-escrita-vence e nunca por máximo. (2) **A recusa por cooldown de parede
+  devolve `retryInMs: 0`, de propósito**: o bot reagenda o grupo pelo MAIOR prazo entre as recusas, e
+  30 min de sono trancariam a haste, que vive no grupo `support`. Quem precisa do prazo real
+  (`slotStates`, `useSlot`) o lê de `#cooldownWaitOf`, que soma `#familiarWaitOf`. (3) **A ordem da
+  recusa é a do Canary — level/cooldown/mana e SÓ ENTÃO `precondition` (teto de zero invocações,
+  sala), antes de qualquer débito** — por isso `castSpell` ganhou o parâmetro `precondition`; um
+  `castSpell` que debitasse a mana e deixasse a invocação sem tile perderia mana por nada. O
+  tile é escolhido pela `precondition` (10 sorteios do `Rng` da sessão, sempre) e usado depois de
+  `ok`: nada roda evento entre os dois. **A duração é o evento `familiar-expire`** com o subject
+  `m:<id>` do familiar — a morte (`resolveDeath`) e `#removeSummon` já o cancelam por esse subject.
+  **Três lacunas do primitivo do #598 que o familiar expôs**: a ability em ÁREA de uma invocação de
+  personagem usa `#hostileMonsters()` como presas (senão acertaria a party); o alvo herdado é o
+  SELECIONADO do mestre e não o que a arma alcança; e o jogador atravessa o familiar por TROCA de
+  tiles em `#step` (`#moverBlocked` e `#occupiedForPlayer` — o `world.occupied` das buscas de caminho do follow e do `walk-to` — deixam o caminho passar por ele) — sem isso um familiar parado
+  num corredor tranca a party inteira. `#familiarIds` (vazio na hunt de sempre) existe para o custo:
+  o teleporte ao mestre e a travessia consultam-no a cada passo.
 - **Os Charms em combate (#603, M39-03, ADR 0053 d.5) vivem em `combat/charms.ts` (puro) e nos
   métodos `#charm*`/`#roll*` do `HuntRuleset`, e SÓ rolam no `combat-v4` (`hasCharmStage`).** Três
   armadilhas custam caro. (1) **O índice do tier é `tier − 1`**: o Canary guarda um `0` na frente do

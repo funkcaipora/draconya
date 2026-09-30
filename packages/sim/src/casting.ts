@@ -68,6 +68,18 @@ export type CastRefusal =
    */
   | 'not-summonable'
   /**
+   * O familiar (#599, M38-02): o personagem já tem uma invocação viva — `CreateFamiliarSpell`
+   * recusa com "You can't have other summons." (`#self:getSummons() >= 1`, o teto do familiar é
+   * ZERO invocações vivas, e não os 2 da Summon Creature). Quem confere é o ruleset.
+   */
+  | 'has-summons'
+  /**
+   * O familiar (#599): nenhum dos doze tiles em volta do mestre serve (`RETURNVALUE_NOTENOUGHROOM`
+   * de `Game.createMonster`, o "There is not enough room."). Recusa ANTES de gastar mana e de
+   * armar o cooldown — no Canary a magia devolve `false` e o custo não sai.
+   */
+  | 'not-enough-room'
+  /**
    * Stairhop (#554, M30-07, ADR 0040 decisão 1): o lançador trocou de andar ou foi
    * redirecionado por teleporte há pouco, e a magia é AGRESSIVA (`damage`/`damage-over-time` —
    * `Spell::getAggressive` do Canary é `true` por padrão). Carrega prazo, como `on-cooldown`: o
@@ -128,6 +140,12 @@ export interface CastSuccess {
    * `condition`/`dispel` acima.
    */
   readonly summon?: true;
+  /**
+   * A magia é o familiar de vocação (#599, M38-02, ADR 0057 d.3) que SAIU — mana debitada,
+   * grupo trancado. Devolvido, não aplicado, como `summon`: quem nasce o familiar, arma a duração
+   * e grava os carimbos de relógio de parede no personagem é o RULESET (`HuntRuleset#castSpell`).
+   */
+  readonly familiar?: true;
   /**
    * A chave de condição a REMOVER do lançador, agora, sem evento (#596: `kind: 'remove-condition'`
    * — Cancel Magic Shield). Mutuamente exclusivo com `condition`: uma magia ou agenda algo, ou
@@ -448,6 +466,16 @@ export const NOT_SUMMONABLE: CastRefused = {
   ok: false, reason: 'not-summonable', retryInMs: NOT_WAITING,
 };
 
+/** O familiar recusa com outra invocação viva (#599). Congelada, como `NOT_SUMMONABLE`. */
+export const HAS_SUMMONS: CastRefused = {
+  ok: false, reason: 'has-summons', retryInMs: NOT_WAITING,
+};
+
+/** O familiar sem tile livre em volta do mestre (#599). Congelada, como `NOT_SUMMONABLE`. */
+export const NOT_ENOUGH_ROOM: CastRefused = {
+  ok: false, reason: 'not-enough-room', retryInMs: NOT_WAITING,
+};
+
 /**
  * Lança a magia, se puder.
  *
@@ -510,6 +538,14 @@ export function castSpell(
    * vocabulário; só quando este parâmetro é passado ele substitui a conferência e o débito.
    */
   manaCostOverride?: number,
+  /**
+   * O que SÓ o ruleset sabe conferir, e que no Canary mora no `onCastSpell` do script — DEPOIS de
+   * o framework conferir level, cooldown e mana, e ANTES de qualquer custo sair (#599: o familiar
+   * recusa com outra invocação viva ou sem sala, e nas duas a mana não é debitada). `null` deixa a
+   * magia sair. Chamado no máximo uma vez, sem efeito colateral algum: quem o passa pode gravar
+   * o que descobriu (o tile escolhido) num closure, e só usa depois de `ok`.
+   */
+  precondition?: () => CastRefused | null,
 ): CastResult {
   if (caster.level < spell.minLevel) {
     return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
@@ -599,6 +635,11 @@ export function castSpell(
   if (blankPrice > 0 && !purse.canAfford(blankPrice)) {
     return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
   }
+  // O `onCastSpell` do Canary roda aqui: depois do framework, antes do custo (#599).
+  if (precondition !== undefined) {
+    const refused = precondition();
+    if (refused !== null) return refused;
+  }
 
   caster.mana -= manaCost;
   caster.soul -= soulCost;
@@ -676,6 +717,10 @@ export function castSpell(
     // já debitados acima), e quem nasce a invocação de fato é o ruleset (`summon: true`).
     case 'summon':
       return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0, summon: true };
+    // O familiar (#599, ADR 0057 d.3): a mesma divisão da invocação — a magia SAIU, e o ruleset
+    // faz o familiar nascer, agenda a duração e grava os carimbos.
+    case 'familiar':
+      return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0, familiar: true };
     case 'heal-over-time':
       return cast({
         key: 'heal-over-time', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
