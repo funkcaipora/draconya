@@ -1,6 +1,7 @@
 # 0001 — Sessão desacoplada da conexão
 
 **Status:** aceito
+**Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30):** no mundo, a sessão sobrevive ao socket só até `canLogout` ou o idle kick.
 **Data:** 2026-09-07
 **Contexto técnico:** `server` (processo `game`), `sim/`, `protocol/` (`session-attach` / `session-state`)
 

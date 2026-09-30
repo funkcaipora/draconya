@@ -1,6 +1,7 @@
 # 0055 — Wheel of Destiny: estrutura transcrita como conteúdo, alocação só em zona de proteção, bônus pelo perfil de combate
 
 **Status:** proposto — substitui a "árvore de passivas por vocação" do PRD §9.5
+**Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30) — d.4:** a Roda aloca em tile PZ do mundo.
 (`docs/product/progression.md`) pela Roda do Tibia 13.x, sob o [ADR 0037](0037-tfs-canary-fidelity-except-action-bar-and-automation.md)
 decisão 1; persiste pelo [ADR 0052](0052-endgame-progression-state-and-city-services-through-the-owning-session.md)
 **Data:** 2026-09-27
