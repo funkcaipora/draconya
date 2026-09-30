@@ -29,8 +29,9 @@ O catálogo de magias do jogo usa como referência de escopo funcional as magias
 - A escolha de vocação ocorre no level 8 (ver `onboarding.md`).
 - Existe exatamente uma promoção de classe no MVP, permanente e única — obtida na Cidade (#566),
   não por quest.
-- Magias liberadas por level: a maioria; magias mais fortes: condicionadas à promoção (ainda não
-  ligado — ver "Em aberto").
+- Magia é **aprendida por gold**, como no Tibia (#624, ADR 0058): o level e a vocação liberam a
+  COMPRA, não o cast — o cast exige a magia aprendida. Ver "Aprender magia" abaixo. Magias mais
+  fortes condicionadas à promoção: ainda não ligado — ver "Em aberto".
 - Skills evoluem por uso, não por level.
 - Pontos de passiva são distribuídos em árvore própria por vocação (dano / suporte / sustain).
 - Respec de passivas é livre, ilimitado e restrito a PZ.
@@ -414,7 +415,85 @@ enquanto o personagem não promoveu.
 **O que ainda não está ligado.** `promotion.soulMax`/`promotion.soulGainTicksMs` existem no
 conteúdo (os números do Canary, 200/15.000 ms) mas não têm consumidor: dependem do mecanismo de
 soul (#593) mesclar primeiro. Liberação de magia por promoção (linha 12 acima) também não está
-ligada — depende do catálogo de magias que a exigiria.
+ligada — depende do catálogo de magias que a exigiria. (O aprendizado de magia por gold, esse sim,
+está ligado desde a #624 — ver "Aprender magia".)
+
+## Aprender magia (#624, ADR 0058)
+
+**Status:** implementado — registro `learnedSpells`, intenção `learn-spell`, cast que confere o
+aprendizado, preço importado dos NPCs do Canary, tela de serviço no modal Personagem e migração
+de concessão a quem já existia. **Não implementado:** a Great Death Beam (a Wheel of Destiny é a
+única que a concede no Canary, e o dono a deixou fora em 2026-09-29).
+
+**A regra é a do Canary com `toggleLearnSpells` ligado** (o padrão): toda magia INSTANTÂNEA exige
+`hasLearnedInstantSpell` no cast (`Spell::playerSpellCheck`, `RETURNVALUE_YOUNEEDTOLEARNTHISSPELL`).
+A **runa** (o item — `supply` no Draconya) não: exige só level e magic level. A **conjuração** da
+runa é magia e exige o aprendizado como qualquer outra. Aprender é o `StdModule.learnSpell` dos 51
+NPCs do Canary, sem o diálogo: o Draconya o mostra como **tela de serviço** (ADR 0042), uma seção
+"Magias" do modal Personagem, sem NPC dialogável.
+
+**O que a compra confere, na ordem do Canary:** a magia existe e tem `learnPrice`
+(`not-for-sale` senão) → ainda não foi aprendida (`already-learned`, **sem cobrar** — é a
+idempotência) → é da vocação do personagem (`wrong-vocation`) → ele tem o `minLevel`
+(`level-too-low`) → tem o gold (`insufficient-gold`). O gold sai pelo ledger
+(`goldDelta`, invariante 10): na Cidade só por `goldDelta`, liquidado no extrato de estado durável;
+na hunt também pelo agregado `goldSpent` da sessão. **É aceito nas duas** — não há rolagem (ADR
+0052 d.4), e o Tibia também não exige protect zone para o NPC ensinar. `magic level` que o Canary
+confere em `canLearnSpell` não existe aqui: nenhuma magia instantânea real declara `magicLevel`
+(só a `#example.lua`).
+
+**O que o bot faz.** Slot com magia não aprendida é **PULADO** como o de magia sem mana: a recusa
+(`spell-not-learned`) não tem prazo, o slot seguinte do mesmo grupo dispara no mesmo ciclo, e a
+hunt nunca encerra por isso. O slot continua na barra, **marcado** ("não aprendida" no tooltip e
+borda tracejada) — nada é escondido (ADR 0032 d.5). Aprender no meio da hunt acorda o bot na hora
+(`HuntRuleset#rearmBot`, um evento na fila, nada por tick).
+
+**De onde vem o preço.** `learnPrice` em `packages/content/data/spells/*.json`, importado por
+`pnpm catalog:spell-prices`: o **MENOR** preço entre os NPCs que ensinam a magia à vocação
+(ADR 0038 d.6), ligando pelo NOME (o Canary compara sem diferenciar caixa) e normalizando a
+vocação do NPC para a base (Master Sorcerer → Sorcerer). `premium` do NPC não entra. As básicas
+de cada vocação são de graça no Canary (`price = 0`), e `0` não é "sem preço". O relatório
+(`docs/reference/catalog/spell-prices-report.md`) lista o preço, o NPC de origem e quantos ensinam;
+`pnpm check` reprova se ele ou algum arquivo de magia divergir do Canary.
+
+**Sem NPC que ensine, o preço é curado à mão** (fallback do ADR 0058 d.3), com a fonte no `_open`
+do arquivo:
+
+| Magia | `learnPrice` | Situação |
+|---|---|---|
+| `challenge` | 2000 | **PROVISÓRIO** — TibiaWiki, sem conferência (o site ficou inacessível ao gravar) `[ABERTO — conferir]` |
+| `conjure-power-bolt` | 2200 | **PROVISÓRIO** — idem |
+| `conjure-sniper-arrow` | 800 | **PROVISÓRIO** — idem |
+| `great-death-beam` | ausente | Só a Wheel of Destiny a concede no Canary; `learn-spell` recusa `not-for-sale` |
+
+**Personagem que já existia (migração 0023, ADR 0014).** Quem existia quando a migração rodou
+recebe **todas as magias da vocação dele cujo `minLevel` é ≤ o level dele** (e as sem vocação,
+como Cure Poison, se ele tem o level) — "poder lançar" é capacidade persistida por level, e
+exigir que quem já jogava comprasse de novo o que lançava ontem seria regressão sem fonte que a
+justifique. É um retrato das 119 magias do dia, escrito no SQL da migração; magia criada depois
+é COMPRADA. **Personagem novo começa sem nenhuma**, como no Tibia, e o kit de nascimento (ADR
+0026) não muda — o que faz do primeiro passo depois da escolha de vocação uma ida à tela de
+Magias (ver `onboarding.md`).
+
+**Persistência.** Registro `jsonb` `characters.learned_spells` = `{ spellIds, version: 1 }`, lido
+INTEIRO no ticket, escrito INTEIRO pelo ledger a partir do extrato — **última escrita vence**,
+como `charms`. **Só viaja no extrato quando o registro é a verdade do personagem**
+(`LearnedSpells#recorded`): uma sessão retomada de um snapshot anterior à #624, ou um ticket de um
+`api` antigo, não sabe o que ele aprendeu, e gravar o vazio apagaria a concessão da migração.
+
+**Parâmetros:**
+
+| Parâmetro | Valor | Onde mora |
+|---|---|---|
+| Preço de aprender, por magia | menor `price` dos NPCs do Canary (0 nas básicas; 2 500 no Berserk; 15 000 nas Ultimate) | `packages/content/data/spells/*.json`, `learnPrice` |
+| Exigência de aprendizado no cast | toda magia instantânea; runa (supply) não | `packages/sim/src/casting.ts` (`spell-not-learned`) |
+| Registro | `{ spellIds, version: 1 }` | `packages/sim/src/learned-spells.ts`; coluna `characters.learned_spells` |
+| Intenção | `learn-spell { spellId }` (C2S 36); resposta `learned-spells` (S2C 46) | `packages/protocol/src/messages.ts` |
+
+**Divergências do Tibia:** (1) sem diálogo de NPC e sem ir até o NPC — é uma tela de serviço, ADR
+0042; (2) o gold é um só (`removeMoneyBank` do Canary tira do banco OU da mochila; aqui há um
+saldo); (3) o `premium` do NPC é ignorado; (4) a `level` que o NPC anuncia é ignorada — vale o
+`minLevel` da magia, que é o que o Canary confere de verdade.
 
 ## Skills sobem pelo USO (FUN-75)
 

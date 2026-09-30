@@ -72,3 +72,40 @@ level).
 ## Invariantes afetados
 
 Nenhum. **4** (só intenção), **9** e **10** (ADR 0052).
+
+## Emenda — 2026-09-29: a implementação (#624)
+
+A decisão não mudou; a implementação fechou cinco pontos que o texto deixava abertos.
+
+1. **`spell-not-learned` fica logo depois de level e vocação e ANTES de cooldown, alvo e mana**
+   (`casting.ts`). O Canary confere o aprendizado depois da mana (`playerSpellCheck`), mas a ordem
+   entre recusas que nunca melhoram esperando só é observável no texto da recusa — nunca no
+   resultado da hunt, porque nenhuma delas gasta nada. O ponto que importa é o do bot: a recusa
+   não tem prazo (`retryInMs: 0`), o slot é pulado e o grupo continua; e o slot da barra ganha o
+   motivo próprio `not-learned` (o espelho de `slotStates` coincide com `useSlot`, DT-08).
+2. **O registro só viaja no extrato quando é a verdade do personagem** (`LearnedSpells#recorded`).
+   O registro é ABSOLUTO e última-escrita-vence (ADR 0052 d.1), e uma sessão retomada de um
+   snapshot anterior à #624 — ou um ticket de um `api` ainda não atualizado — não sabe o que o
+   personagem aprendeu. Gravar o vazio apagaria a concessão da migração (viola o ADR 0014), então
+   o campo é OMITIDO e o ledger não toca na coluna. A compra ou a concessão (`grant`) tornam o
+   registro a verdade.
+3. **A migração 0023 é um retrato.** As 119 magias do dia (id, vocação, `minLevel`) estão no SQL,
+   porque a migração descreve o que era verdade na hora dela: uma magia que o conteúdo criar
+   depois é COMPRADA, e um teste (`learned-spells-migration.postgres.test.ts`) prende as regras
+   (limite exato de level, promoção não é outra vocação, quem não escolheu vocação, quem nasce
+   depois começa com `NULL`).
+4. **Preço sem NPC.** Três magias do catálogo (`challenge`, `conjure-power-bolt`,
+   `conjure-sniper-arrow`) não têm NPC que as ensine no `data-otservbr-global` — o fallback do d.3
+   é o TibiaWiki, que ficou inacessível na implementação: os três preços (2000 / 2200 / 800) são
+   **PROVISÓRIOS** e estão marcados `[ABERTO — conferir]` no `_open` de cada arquivo. A
+   **Great Death Beam** fica SEM `learnPrice`: no Canary só o Wheel of Destiny a concede
+   (`player_wheel.cpp`), e o dono deixou a Roda fora em 2026-09-29 — `learn-spell` recusa
+   `not-for-sale`, e a migração a concede a quem já tivesse o level 300.
+5. **Aprender no meio da hunt acorda o bot** (`HuntRuleset#rearmBot`): a recusa sem prazo deixa
+   o grupo engatilhado até o mundo mudar, e aprender uma magia não muda o mundo. É o mesmo
+   `#armBot` que dano e troca de configuração já chamam — um evento na fila, nada por tick, o mesmo
+   a 1 Hz e a 10 Hz.
+
+O que este ADR NÃO cobre e continua igual: o `premium` do NPC é ignorado, e o Draconya tem um saldo
+de gold só (o `removeMoneyBank` do Canary tira do banco ou da mochila). Ver `docs/product/progression.md`,
+"Aprender magia".

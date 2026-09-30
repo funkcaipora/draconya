@@ -22,7 +22,9 @@ esquerda para a direita, depois a fileira 2) e a **cadência é o grupo de coold
 (`attack`/`healing`/`support` para magia, mais `potion` para poção e `attack` para runa). A cada
 grupo pronto, os slots ligados são tentados em ordem; o primeiro que consegue executar tranca o
 grupo pelo cooldown dele, e quem não consegue agora é **pulado no mesmo ciclo** — sem mana, sem
-gold, sem alvo, ou em cooldown individual.
+gold, sem alvo, em cooldown individual, ou com a **magia ainda não aprendida** (#624, ADR 0058: o
+cast exige `learnedSpells`; a recusa não tem prazo, o slot fica marcado na barra, e a hunt nunca
+encerra por isso — aprender no meio dela acorda o bot na hora).
 
 Poção e runa ainda dividem um terceiro relógio, a **exaustão de ação** de 1000 ms (#690, o
 `nextPotionAction` do Canary, `actionExhaustMs` no supply): uma poção logo depois de uma runa de
@@ -651,7 +653,8 @@ mana e inicia cooldown é o servidor.
 | `select-ammo` | C2S | `{ ammoId }` — escolhe a munição da família; o servidor valida `requires.level` e responde em `player-stats.ammo` |
 | `target-changed` | S2C | o alvo autoritativo: `creatureId` positivo ou `null` (cancelamento confirmado), com o `seq` de volta quando veio de um `select-target` (#470) |
 | `target-cancel` | S2C | a recusa do `select-target` (criatura desconhecida ou morta); nada mudou (#470) |
-| `slot-state` | S2C | o estado dos 24 slots do conjunto ativo: `ready`/`cooldown`/`blocked`/`empty`, `remainingMs` e o motivo em palavras |
+| `slot-state` | S2C | o estado dos 24 slots do conjunto ativo: `ready`/`cooldown`/`blocked`/`empty`, `remainingMs` e o motivo em palavras (`not-learned` — "Você ainda não aprendeu essa magia." — para a magia comprada de menos, #624) |
+| `learn-spell` | C2S | `{ spellId }` — aprende a magia por gold, na Cidade ou na hunt (#624, ADR 0058); resposta `learned-spells` (S2C) com o registro inteiro |
 | `slot-result` | S2C | a resposta ao `use-slot`: `ok` e, quando falso, o motivo para o tooltip |
 
 **Manual é manual.** `use-slot` ignora as condições (`when`) e a chave automática (`auto`), mas

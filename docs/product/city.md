@@ -215,7 +215,17 @@ espalha — o corte aparece quando a Cidade tiver loja, depósito e ruas.
 - Teto de 200 por cópia; encheu, abre a próxima. Ninguém é recusado.
 - `say` de canal `local` alcança o campo de visão.
 
+## Serviço de Cidade: aprender magia (#624, ADR 0058)
+
+O modal Personagem tem a seção **Magias**: lista as magias da vocação e vende cada uma por
+`learnPrice` (`learn-spell`, sem diálogo de NPC — tela de serviço, ADR 0042). É intenção C2S
+tratada pela sessão dona (ADR 0052 d.2), nunca endpoint `api`, e o gold sai pelo ledger. **Vale
+também na hunt** (não rola nada, ADR 0052 d.4). Ver `progression.md`, "Aprender magia".
+
 ## Conjurar na Cidade (#792, ADR 0044 d.2)
+
+A conjuração é MAGIA, então exige o aprendizado como qualquer outra (`spell-not-learned` /
+`not-learned` no slot) — só a runa em si, o item, dispensa (#624).
 
 A Cidade tem `useSlot`: a barra de ações funciona ali, mas só para **conjuração**
 (`effect.kind === 'conjure'`) — o resto do vocabulário fica de fora, e por duas razões
