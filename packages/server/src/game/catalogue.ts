@@ -93,6 +93,9 @@ export function buildCatalogue(content: Content): Catalogue {
         // 7) e mostra o `base`, como o grimório do Tibia sempre mostrou.
         manaCost: manaCostDisplayOf(spell.manaCost),
         minLevel: spell.minLevel,
+        // O preço de aprender (#624, ADR 0058 d.3): ausente é "ninguém a ensina" — a tela não
+        // oferece a compra. `0` é de graça, e por isso a checagem é `undefined`, nunca truthy.
+        ...(spell.learnPrice === undefined ? {} : { learnPrice: spell.learnPrice }),
         // `null` e não ausente: a tela precisa distinguir "qualquer um lança" de "o servidor
         // não disse", e campo opcional colapsa os dois no mesmo `undefined`.
         vocationId: spell.vocationId ?? null,

@@ -112,6 +112,51 @@ describe.runIf(available)('session ticket', () => {
     }
   });
 
+  it('carries the learned spells, and drops a record it cannot trust (#624)', async () => {
+    // As magias entram na sessão pelo ticket porque o CAST as confere: um personagem que entrasse
+    // sem elas não lançaria nada, apesar de ter pago. Torto vira AUSENTE, nunca ticket recusado
+    // (a linha é `jsonb` sem CHECK). Mutação que mata: aceitar qualquer objeto — a lista com
+    // repetido, o id vazio e a lista que não é lista passariam.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+
+    const learnedSpells = { spellIds: ['berserk', 'wound-cleansing'], version: 1 };
+    const good = await tickets.issue('a1', 'p1', { level: 1, xp: 0, learnedSpells });
+    if (!good.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(good.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+      initialCharacter: { level: 1, xp: 0, learnedSpells },
+    });
+
+    // A lista VAZIA é válida: é o personagem novo, e distinguir "não veio" de "veio vazio" é do tipo.
+    const empty = await tickets.issue('a1', 'p1', { level: 1, xp: 0, learnedSpells: { spellIds: [], version: 1 } });
+    if (!empty.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(empty.value.ticket, 'n1')).toMatchObject({
+      initialCharacter: { level: 1, xp: 0, learnedSpells: { spellIds: [], version: 1 } },
+    });
+
+    for (const bad of [
+      { spellIds: ['berserk', 'berserk'], version: 1 },
+      { spellIds: [''], version: 1 },
+      { spellIds: [7], version: 1 },
+      { spellIds: 'berserk', version: 1 },
+      { spellIds: ['berserk'] },
+      { spellIds: ['berserk'], version: '1' },
+      ['berserk'],
+      'berserk',
+      null,
+    ]) {
+      const issued = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, learnedSpells: bad } as unknown as InitialCharacter,
+      );
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1'), JSON.stringify(bad)).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0 },
+      });
+    }
+  });
+
   it('carries the bestiary, and drops a map it cannot trust (FUN-113)', async () => {
     // Os abates entram na sessão pelo ticket porque o bônus dos marcos escala a XP DURANTE a
     // hunt (DT-01) — um personagem que entrasse em `{}` perderia o marco que já cruzou. E um

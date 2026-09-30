@@ -126,6 +126,23 @@ describe('settleSnapshotAsReceipt (#527)', () => {
     expect(otherSaved[0]?.fightMode).toBe('attack');
   });
 
+  it('carries the learned spells of the OWNER (#624), so a `learn-spell` accepted before the crash is not lost', async () => {
+    const { receipts, saved } = fakeReceipts();
+    const learnedSpells = { spellIds: ['berserk', 'wound-cleansing'], version: 1 };
+    const snapshot: SessionSnapshot = {
+      ...baseSnapshot,
+      participants: [{ ...baseSnapshot.participants[0]!, learnedSpells }],
+    };
+    await settleSnapshotAsReceipt(snapshot, { characterId: 'a', accountId: 'acc-a', receipts });
+    expect(saved[0]?.learnedSpells).toEqual(learnedSpells);
+
+    // Snapshot anterior à issue: sem a chave no dono, e o extrato NÃO inventa um registro vazio —
+    // o ledger não toca na coluna, e as magias do Postgres (migração 0023) continuam valendo.
+    const { receipts: legacy, saved: legacySaved } = fakeReceipts();
+    await settleSnapshotAsReceipt(baseSnapshot, { characterId: 'a', accountId: 'acc-a', receipts: legacy });
+    expect(legacySaved[0]).not.toHaveProperty('learnedSpells');
+  });
+
   it('omits every optional field when the participant record has none of them', async () => {
     const { receipts, saved } = fakeReceipts();
     await settleSnapshotAsReceipt(baseSnapshot, { characterId: 'a', accountId: 'acc-a', receipts });

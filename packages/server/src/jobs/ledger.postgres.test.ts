@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
 import { CharacterRuntime, createHuntSession, Inventory, levelForXp } from '@draconya/sim';
-import type { CharmsState, InventoryState } from '@draconya/sim';
+import type { CharmsState, InventoryState, LearnedSpellsState } from '@draconya/sim';
 import { NEUTRAL_RATES } from '@draconya/content';
 import type { Progression, Vocation } from '@draconya/content';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -110,7 +110,7 @@ const characterRow = async (
 ): Promise<{
   xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
   ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown;
-  charms: unknown; blessings: number;
+  charms: unknown; learnedSpells: unknown; blessings: number;
 }> => {
   const [row] = await database.database.db
     .select({
@@ -124,6 +124,7 @@ const characterRow = async (
       supplyStock: characters.supplyStock,
       ammunitionStock: characters.ammunitionStock,
       charms: characters.charms,
+      learnedSpells: characters.learnedSpells,
       blessings: characters.blessings,
     })
     .from(characters)
@@ -131,7 +132,7 @@ const characterRow = async (
   return row as {
     xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
     ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown;
-    charms: unknown; blessings: number;
+    charms: unknown; learnedSpells: unknown; blessings: number;
   };
 };
 
@@ -773,6 +774,51 @@ describe.runIf(ready)('a economia de Charms chega ao Postgres pelo extrato (M39-
     // O extrato SEM o campo (seq 3, uma sessão de Cidade que não mexeu em Charm) não apaga o
     // que o extrato anterior gravou.
     expect((await characterRow(database, characterId)).charms).toEqual(second);
+  });
+});
+
+describe.runIf(ready)('as magias aprendidas chegam ao Postgres pelo extrato (#624, ADR 0058, ADR 0052 d.1)', () => {
+  it('nasce nulo (personagem novo), grava o registro, a última escrita vence, e o extrato sem o campo não toca na coluna', async () => {
+    // ABSOLUTO como `charms`: o registro é o estado final da sessão dona, nunca fundido por união.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    expect((await characterRow(database, characterId)).learnedSpells).toBeNull();
+    const receipts = new ReceiptStore(redis);
+    const first: LearnedSpellsState = { spellIds: ['wound-cleansing'], version: 1 };
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), learnedSpells: first });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).learnedSpells).toEqual(first);
+
+    const second: LearnedSpellsState = { spellIds: ['wound-cleansing', 'berserk'], version: 1 };
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2, learnedSpells: second });
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    // O extrato SEM o campo (seq 3, um nó anterior a esta issue) não apaga o que o anterior gravou.
+    expect((await characterRow(database, characterId)).learnedSpells).toEqual(second);
+  });
+
+  it('o gold da compra e o registro entram no MESMO extrato: um retry não cobra duas vezes (invariante 10)', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    await database.database.db.update(characters).set({ gold: 10_000 }).where(eq(characters.id, characterId));
+    const before = (await characterRow(database, characterId)).gold;
+    expect(before).toBe(10_000);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const purchase = {
+      ...receiptOf(sessionId, characterId),
+      aggregates: { ...receiptOf(sessionId, characterId).aggregates, goldGained: 0, goldSpent: 2_500 },
+      learnedSpells: { spellIds: ['berserk'], version: 1 },
+    } satisfies Omit<SessionReceipt, 'endedAtMs'>;
+    // O MESMO `(session_id, seq)` duas vezes — o retry que o ledger existe para não duplicar.
+    await receipts.save(purchase);
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    await receipts.save(purchase);
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+
+    const row = await characterRow(database, characterId);
+    expect(row.gold).toBe(before - 2_500);
+    expect(row.learnedSpells).toEqual({ spellIds: ['berserk'], version: 1 });
   });
 });
 

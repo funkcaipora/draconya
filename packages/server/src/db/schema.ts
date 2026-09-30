@@ -230,6 +230,16 @@ export const characters = pgTable(
     charms: jsonb('charms'),
 
     /**
+     * As magias aprendidas (#624, ADR 0058 d.1, ADR 0052 d.1): `{ spellIds, version }` — os ids
+     * de `content.spells` que o personagem comprou dos NPCs (aqui, da tela de serviço). Nulável:
+     * `null` é personagem NOVO, que não sabe magia nenhuma, como no Tibia. Todo personagem que
+     * já existia quando a migração 0023 rodou ganhou o registro com as magias da vocação dele
+     * até o level dele (ADR 0058 d.4, ADR 0014). Lido INTEIRO no ticket, escrito INTEIRO pela
+     * transação do ledger a partir do extrato — ÚLTIMA ESCRITA VENCE, como `charms`.
+     */
+    learnedSpells: jsonb('learned_spells'),
+
+    /**
      * Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, em milissegundos — a
      * `CONDITION_REGENERATION` do Tibia. Drenado pelo TEMPO DE HUNT decorrido
      * (`packages/sim/src/food.ts`), não por job — não precisa de um `updatedAt` companheiro

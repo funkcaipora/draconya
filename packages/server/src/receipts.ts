@@ -20,7 +20,7 @@ import type { ChainableCommander, Redis } from 'ioredis';
 import { isFightMode } from '@draconya/sim';
 import type {
   Aggregates, BestiaryState, CharacterStorageMap, CharmsState, EndReason, FightMode,
-  ItemInstanceOverlay, NotableEvent, SkillsState,
+  ItemInstanceOverlay, LearnedSpellsState, NotableEvent, SkillsState,
 } from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
 
@@ -72,6 +72,14 @@ export interface SessionReceipt {
    * estado final da sessão dona.
    */
   readonly charms?: CharmsState;
+  /**
+   * As magias aprendidas (#624, ADR 0058 d.1, ADR 0052 d.1): os ids de `content.spells` que o
+   * personagem comprou. ABSOLUTA e ÚLTIMA-ESCRITA-VENCE, como `charms`/`ammo` — não fundida pelo
+   * maior: o registro é o estado final da sessão dona, e o extrato que o carrega é o mais novo
+   * (a Cidade e a hunt aceitam `learn-spell`, mas só uma sessão hospeda o personagem por vez,
+   * invariante 8). Extrato SEM o campo (nó antigo em deploy) não toca na coluna.
+   */
+  readonly learnedSpells?: LearnedSpellsState;
   /**
    * A munição escolhida por família (#152): `{ arrow: 'sniper-arrow' }`. ABSOLUTA e
    * última-escrita-vence: é preferência do jogador, não progresso — um extrato antigo fora de
@@ -376,6 +384,10 @@ function parseReceipt(raw: string): SessionReceipt | null {
     // A economia de Charms (M39-02, #602): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['charms'] === 'object' && value['charms'] !== null
       ? { charms: value['charms'] as CharmsState }
+      : {}),
+    // As magias aprendidas (#624): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['learnedSpells'] === 'object' && value['learnedSpells'] !== null
+      ? { learnedSpells: value['learnedSpells'] as LearnedSpellsState }
       : {}),
     // A munição (#152): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['ammo'] === 'object' && value['ammo'] !== null

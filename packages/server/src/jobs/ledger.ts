@@ -250,6 +250,12 @@ async function applyProgression(
   // externo monotônico a fundir, é o estado final da sessão dona. Extrato SEM o campo (Cidade
   // ou nó antigo em deploy) não toca na coluna.
   const charms = receipt.charms === undefined ? {} : { charms: receipt.charms };
+  // As magias aprendidas (#624, ADR 0058 d.1): ABSOLUTAS e última-escrita-vence, como `charms`. O
+  // registro só CRESCE (não existe esquecer magia), mas o valor que vale é o da sessão dona no fim
+  // dela — e é por isso que ele NÃO é fundido: uma migração de dado futura que revogue uma magia
+  // seria desfeita por uma fusão por união. Extrato SEM o campo não toca na coluna.
+  const learnedSpells = receipt.learnedSpells === undefined
+    ? {} : { learnedSpells: receipt.learnedSpells };
   // As bênçãos (#570, ADR 0052): ABSOLUTAS e última-escrita-vence, NUNCA fundidas pelo maior
   // (ao contrário do Bestiário/skills-antes-do-#569) — bênção DESCE na morte, e "ficar com o
   // maior de cada extrato" ressuscitaria uma bênção recém-consumida se um extrato antigo, fora
@@ -336,6 +342,7 @@ async function applyProgression(
       ...ammunitionStock,
       ...fedMs,
       ...charms,
+      ...learnedSpells,
       ...blessings,
       ...fightMode,
       // A vocação (#154, ADR 0026 decisão 1): escrita UMA vez. `coalesce` mantém o que já

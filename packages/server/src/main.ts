@@ -227,6 +227,9 @@ async function main(): Promise<void> {
       // As sete bênçãos PvE (#570, ADR 0052): o `buy-blessing` compra daqui, com o preço por
       // level em `progression.blessingPricing`.
       blessingCatalog: content.blessings,
+      // O catálogo de magias (#624, ADR 0058): o `learn-spell` confere vocação, level e preço
+      // (`learnPrice`) daqui — o host recebe o mapa, não o `Content` inteiro.
+      spellCatalog: content.spells,
       vocations: content.vocations,
       vocationLevel: content.progression.vocationLevel,
       progression: content.progression,

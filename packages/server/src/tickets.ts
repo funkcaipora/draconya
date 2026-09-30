@@ -17,7 +17,7 @@ import { randomBytes } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import { OutfitColors } from '@draconya/protocol';
 import { isCharacterStorageMap, isFightMode } from '@draconya/sim';
-import type { BestiaryState, CharacterStorageMap, CharmsState, FightMode } from '@draconya/sim';
+import type { BestiaryState, CharacterStorageMap, CharmsState, FightMode, LearnedSpellsState } from '@draconya/sim';
 import type { NodeStatus, SessionDirectory } from './directory.js';
 
 export interface TicketClaim {
@@ -176,6 +176,15 @@ export interface InitialCharacter {
    * ponto de Charm, ou ticket de um `api` anterior: a sessão parte vazia.
    */
   readonly charms?: CharmsState;
+  /**
+   * As magias aprendidas (#624, ADR 0058 d.1, ADR 0052 d.1): os ids de `content.spells` que o
+   * personagem comprou. Entra na sessão, e não só sai dela, porque o CAST confere o registro
+   * (`casting.ts`) e `learn-spell` é aceito em qualquer sessão (Cidade e hunt) — sem ele, quem
+   * comprou ontem entraria hoje sem lançar nada. Validado como o Bestiário/Charms
+   * (`isLearnedSpellsState`). Ausente é personagem novo, que não aprendeu nada, ou ticket de um
+   * `api` anterior: a sessão parte vazia.
+   */
+  readonly learnedSpells?: LearnedSpellsState;
   /**
    * Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, lido de `characters.fed_ms`.
    * Entra na sessão, e não só sai dela — sem isto, quem comeu antes de deslogar voltaria em
@@ -677,6 +686,9 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     // A economia de Charms (M39-02, #602): mesma régua do Bestiário/estoque — forma validada
     // por inteiro, torto vira AUSENTE, nunca ticket recusado.
     ...(isCharmsState(initial['charms']) ? { charms: initial['charms'] } : {}),
+    // As magias aprendidas (#624): mesma régua — forma validada por inteiro, torto vira AUSENTE,
+    // nunca ticket recusado.
+    ...(isLearnedSpellsState(initial['learnedSpells']) ? { learnedSpells: initial['learnedSpells'] } : {}),
     // Comida ativa (#726): inteiro seguro não negativo, ou AUSENTE — a mesma régua acima.
     ...(typeof initial['fedMs'] === 'number' && Number.isSafeInteger(initial['fedMs'])
       && initial['fedMs'] >= 0
@@ -767,6 +779,25 @@ export function isCharmsState(value: unknown): value is CharmsState {
   if (typeof assignments !== 'object' || assignments === null || Array.isArray(assignments)) return false;
   return Object.entries(assignments).every(([charmId, monsterId]) =>
     charmId.length > 0 && typeof monsterId === 'string' && monsterId.length > 0);
+}
+
+/**
+ * A forma de `LearnedSpellsState` (#624, ADR 0058, ADR 0052 d.1): `spellIds` é uma lista de ids
+ * não vazios, SEM repetição, e `version` um número — conferida por forma, nunca por conteúdo
+ * (um id fora do catálogo é dado do jogador, ADR 0014, e simplesmente não resolve nada). Um valor
+ * que não bate vira AUSENTE, nunca ticket recusado, pela mesma razão do Bestiário: a linha é
+ * `jsonb` sem CHECK.
+ *
+ * Exportada para o `api` conferir a linha com a MESMA régua que o `consume` usa.
+ */
+export function isLearnedSpellsState(value: unknown): value is LearnedSpellsState {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (typeof record['version'] !== 'number') return false;
+  const spellIds = record['spellIds'];
+  if (!Array.isArray(spellIds)) return false;
+  if (!spellIds.every((id) => typeof id === 'string' && id.length > 0)) return false;
+  return new Set(spellIds).size === spellIds.length;
 }
 
 /**

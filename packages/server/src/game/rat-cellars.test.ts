@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { loadContent } from '../../../content/src/load.js';
 import type { Content } from '@draconya/content';
 import {
-  CharacterRuntime, Rng, castSpell, createHuntSession, groupCooldownKey, secondaryCooldownKey,
-  spellCooldownKey, statsForLevel,
+  CharacterRuntime, Rng, castSpell, createHuntSession, groupCooldownKey, learnedSpellsStateOf,
+  secondaryCooldownKey, spellCooldownKey, statsForLevel,
 } from '@draconya/sim';
 import type { HuntRuleset, Session } from '@draconya/sim';
 
@@ -110,7 +110,9 @@ describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)
   // motor — `casting.test.ts` testa o motor com magias sintéticas. Level 150 (não mais 100,
   // #589): Strong Ethereal Spear e Fierce Berserk pedem 90, Ultimate Energy Strike pede 100,
   // Chivalrous Challenge pede 150 — o novo teto do Knight.
-  const caster = (content: Content, vocationId: string, level: number): CharacterRuntime => {
+  const caster = (
+    content: Content, vocationId: string, level: number, learnsEverything = true,
+  ): CharacterRuntime => {
     const vocation = content.vocations.get(vocationId) ?? null;
     const stats = statsForLevel(level, vocation, content.progression);
     return new CharacterRuntime({
@@ -120,6 +122,9 @@ describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)
       // da mana — o mesmo motivo de `mana: 100_000` acima, só que para os dois custos novos.
       soul: 100, gold: 100_000,
       level, xp: 0, vocationId, goldDelta: 0, alive: true, cooldowns: {},
+      // Sabe TODA magia do catálogo real (#624): o que se prende aqui é o número passando pelo
+      // motor, e o portão do aprendizado tem o teste dele logo abaixo.
+      ...(learnsEverything ? { learnedSpells: learnedSpellsStateOf(content.spells.keys()) } : {}),
     });
   };
   const aim = { distance: 1, targets: [{ armor: 0, dodgeChance: 0 }] };
@@ -172,6 +177,25 @@ describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)
       const highest = mine.reduce((a, b) => (a.minLevel > b.minLevel ? a : b));
       expect(castSpell(caster(content, vocationId, highest.minLevel - 1), highest, aim, 0, content.combat, Rng.fromSeed('x')))
         .toMatchObject({ ok: false, reason: 'level-too-low' });
+    });
+
+    it(`a ${vocationId} that has not learned a spell cannot cast it — and nothing is spent (#624)`, () => {
+      const content = real();
+      // A magia de MENOR level da vocação: a que o personagem alcança primeiro, e a que a
+      // migração 0023 concede a todo mundo que já tinha o level dela.
+      const first = [...content.spells.values()]
+        .filter((s) => s.vocationId === vocationId)
+        .reduce((a, b) => (a.minLevel < b.minLevel ? a : b));
+      const hero = caster(content, vocationId, 150, false);
+      const aimAt = first.effect.kind === 'damage' || first.effect.kind === 'challenge'
+        || first.effect.kind === 'damage-over-time' ? aim : null;
+      expect(castSpell(hero, first, aimAt, 0, content.combat, Rng.fromSeed('x')))
+        .toEqual({ ok: false, reason: 'spell-not-learned', retryInMs: 0 });
+      expect(hero.mana).toBe(100_000);
+      expect(hero.cooldowns.isReady(spellCooldownKey(first.id), 0)).toBe(true);
+      // Aprendida, a MESMA magia sai.
+      hero.learnedSpells.grant(first.id);
+      expect(castSpell(hero, first, aimAt, 0, content.combat, Rng.fromSeed('x')).ok).toBe(true);
     });
   }
 });
