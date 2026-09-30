@@ -68,7 +68,7 @@ export interface MountOptions {
   /** O relógio; um `testClock()` novo se ausente. Passe o MESMO à `SyntheticArt`. */
   readonly clock?: TestClock;
   /** Opções a mais do viewport — câmera, fonte de criaturas, animação (#661, #665, #666). */
-  readonly viewport?: Pick<ViewportOptions, 'camera' | 'creatures' | 'animateObjects'>;
+  readonly viewport?: Pick<ViewportOptions, 'camera' | 'creatures' | 'animateObjects' | 'random'>;
 }
 
 /** A raiz dos andares e os dois containers globais de HOJE, na ordem de `stage.children` (ADR 0034). */

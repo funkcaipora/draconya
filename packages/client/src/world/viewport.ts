@@ -32,6 +32,7 @@ import {
   TILE, prefetchTiles, renderTiles, sameWindow, tileAtScreen, tilesEntering, toScreen, viewFor,
   visibleTiles, zoomFor, type TileWindow,
 } from './camera.js';
+import { lightRings, lightTint } from './creature-light.js';
 import { CREATURE_SLOT, sceneZIndex } from './depth.js';
 import {
   FALLBACK_EFFECT_PHASES, effectPhaseAt, floatingTextColor, floatingTextOffset, loopPhaseAt, missileProgress,
@@ -49,6 +50,7 @@ import {
 import { paintOf } from './outfit-colors.js';
 import { pickCreature, pickGroundItem } from './pick.js';
 import type { Scene, StackedItem, TileStack } from './scene.js';
+import { SPEECH_COLOR, rollSpeech, speechDurationMs, startSpeech, type SpeechState } from './speech.js';
 import { TextureBook } from './textures.js';
 import { drawTile, type DrawLayer, type ObjectInfo } from './tile-stack.js';
 import {
@@ -98,6 +100,8 @@ const FLOATING_TEXT_ABOVE = 12;
 const HEALTH_BAR_ABOVE = 8;
 /** O nome termina um pixel acima da barra. */
 const NAME_GAP = 1;
+/** A altura do nome (dez pixels de Verdana em negrito), sobre a qual a fala do monstro (#620) fica. */
+const NAME_HEIGHT = 12;
 /** Metade da barra, arredondada para baixo: ver o comentário em `paintOverlay`. */
 const HEALTH_BAR_HALF = Math.floor(HEALTH_BAR_WIDTH / 2);
 
@@ -115,6 +119,24 @@ interface CreatureOverlay {
   drawnMaxHealth: number;
   drawnName: string;
   drawnColor: number;
+}
+
+/**
+ * A fala periódica de UM monstro (#620): o relógio da rolagem, as falas que o relógio serve (para
+ * notar que o conteúdo trocou), o texto sobre a criatura — criado na primeira fala — e até
+ * quando ele fica.
+ */
+interface CreatureSpeech {
+  readonly voices: NonNullable<Creature['voices']>;
+  readonly clock: SpeechState;
+  label: Text | null;
+  shownUntilMs: number;
+}
+
+/** O clarão da luz de UM monstro (#620) e a chave do que está desenhado nele (`nível:cor`). */
+interface CreatureGlow {
+  readonly glow: Graphics;
+  drawn: string;
 }
 
 /**
@@ -184,6 +206,12 @@ export interface ViewportOptions {
    * do mundo. Ausente, todo objeto fica na fase 0, como sempre.
    */
   readonly animateObjects?: boolean;
+  /**
+   * O sorteio da fala periódica do monstro (#620), `[0, 1)`. É o do CLIENTE — nunca o `Rng` da
+   * sessão: a fala é apresentação e não muda resultado (invariante 3). `Math.random` por padrão;
+   * o teste injeta um determinístico.
+   */
+  readonly random?: () => number;
 }
 
 /** De quanto em quanto tempo o terreno animado repinta. As fases do Tibia duram de 100 ms para cima. */
@@ -418,6 +446,11 @@ export async function mountViewport(
   const walkingTiles = new Map<number, number>();
   /** Barra e nome, pelo mesmo id. Nascem e morrem junto do sprite. */
   const overlays = new Map<number, CreatureOverlay>();
+  /** O sorteio das falas (#620): o do cliente, injetável. */
+  const random = options.random ?? Math.random;
+  /** A fala periódica e o clarão de luz (#620), pelo mesmo id: nascem e morrem junto do sprite. */
+  const speeches = new Map<number, CreatureSpeech>();
+  const glows = new Map<number, CreatureGlow>();
   /**
    * Os transitórios, pelo id local de cada lista. Um sprite nasce no primeiro quadro em que o
    * item é desenhado e morre quando ele expira — ou quando some da lista por baixo dele, que
@@ -830,15 +863,17 @@ export async function mountViewport(
     const moving = creature.step !== null && walkFrame(creature, nowMs, 1).moving;
     const frames = art.framesOf(creature.appearanceId, moving);
     const { phase } = walkFrame(creature, nowMs, frames);
-    // As cores são as DA CRIATURA, que o protocolo carrega desde a FUN-104; a reserva é para
-    // quem chegou sem — um nó `game` anterior, ou monstro, que nunca traz (`paintOf`). Toda
-    // criatura é pedida COM cores mesmo assim: o pacote devolve a base como está para quem
-    // não tem template (monstro), então passar cores a ele é inofensivo, e a chave leva as
-    // cores para o quadro pintado nunca cair na entrada do quadro cru.
+    // As cores são as DA CRIATURA, que o protocolo carrega desde a FUN-104 — e o monstro, desde o
+    // #620 —; a reserva é para quem chegou sem — um nó `game` anterior (`paintOf`). Toda criatura
+    // é pedida COM cores mesmo assim: o pacote devolve a base como está para quem não tem
+    // template (um monstro de uma camada), então passar cores a ele é inofensivo, e a chave leva
+    // as cores para o quadro pintado nunca cair na entrada do quadro cru. Os addons (#620) são a
+    // máscara do servidor, e mudam o quadro: outro bitmap, outra chave.
     const colors = paintOf(creature);
-    const key = creatureKey(creature.appearanceId, direction, moving, phase, colors);
+    const addons = creature.addons ?? 0;
+    const key = creatureKey(creature.appearanceId, direction, moving, phase, colors, addons);
     return book.get(
-      key, () => art.outfit(creature.appearanceId, direction, phase, moving, colors),
+      key, () => art.outfit(creature.appearanceId, direction, phase, moving, colors, addons),
     );
   }
 
@@ -916,6 +951,92 @@ export async function mountViewport(
     entry.label.y = barTop - NAME_GAP;
   }
 
+  /**
+   * O clarão da luz que a criatura carrega (#620, `monster.light`): um disco aditivo da cor do
+   * Canary, com o alcance dele em tiles, centrado no tile dela. Redesenha só quando `nível:cor`
+   * muda; o resto do quadro é mover o `Graphics`. Mora no `effects` — absoluto, por cima dos
+   * andares — e anda junto da criatura, com o alfa do andar dela.
+   */
+  function paintLight(creature: Creature, screen: { x: number; y: number }, alpha: number): void {
+    const light = creature.light;
+    let entry = glows.get(creature.id);
+    if (light === undefined) {
+      if (entry !== undefined) entry.glow.visible = false;
+      return;
+    }
+    if (entry === undefined) {
+      const glow = new Graphics();
+      glow.blendMode = 'add';
+      effects.addChild(glow);
+      entry = { glow, drawn: '' };
+      glows.set(creature.id, entry);
+    }
+    const key = `${light.level}:${light.color}`;
+    if (entry.drawn !== key) {
+      entry.drawn = key;
+      entry.glow.clear();
+      const tint = lightTint(light.color);
+      for (const [radius, ringAlpha] of lightRings(light.level)) {
+        entry.glow.circle(0, 0, radius).fill({ color: tint, alpha: ringAlpha });
+      }
+    }
+    entry.glow.visible = true;
+    entry.glow.alpha = alpha;
+    entry.glow.x = screen.x + TILE / 2;
+    entry.glow.y = screen.y + TILE / 2;
+  }
+
+  /**
+   * A fala periódica do monstro (#620, `monster.voices`): o relógio é do CLIENTE e o sorteio
+   * também (`random`) — o servidor só mandou as falas. Quando o relógio vence e a chance passa, o
+   * texto aparece sobre o nome por `speechDurationMs`. O relógio nasce quando o monstro é visto
+   * pela primeira vez, e anda só enquanto ele é desenhado.
+   */
+  function paintSpeech(
+    creature: Creature, screen: { x: number; y: number }, alpha: number, nowMs: number,
+  ): void {
+    const voices = creature.voices;
+    let entry = speeches.get(creature.id);
+    if (voices === undefined) {
+      if (entry?.label != null) entry.label.visible = false;
+      return;
+    }
+    if (entry === undefined || entry.voices !== voices) {
+      // As falas trocaram (ou é a primeira vez): relógio novo, e o texto que estava no ar fica.
+      entry = { voices, clock: startSpeech(voices, nowMs), label: entry?.label ?? null, shownUntilMs: entry?.shownUntilMs ?? 0 };
+      speeches.set(creature.id, entry);
+    }
+    const said = rollSpeech(voices, entry.clock, nowMs, random);
+    if (said !== null) {
+      if (entry.label === null) {
+        // Âncora embaixo, como o nome: a fala termina onde o nome começa.
+        entry.label = createLabel(said.text, SPEECH_COLOR, 1);
+        overlay.addChild(entry.label);
+      } else {
+        entry.label.text = said.text;
+      }
+      entry.shownUntilMs = nowMs + speechDurationMs(said.text);
+    }
+    const label = entry.label;
+    if (label === null) return;
+    if (nowMs >= entry.shownUntilMs) {
+      label.visible = false;
+      return;
+    }
+    label.visible = true;
+    label.alpha = alpha;
+    label.x = screen.x + TILE / 2;
+    label.y = screen.y - HEALTH_BAR_ABOVE - NAME_GAP - NAME_HEIGHT;
+  }
+
+  /** Esconde o clarão e a fala de uma criatura que não é desenhada agora (#620). */
+  function hidePresentation(id: number): void {
+    const glow = glows.get(id);
+    if (glow !== undefined) glow.glow.visible = false;
+    const speech = speeches.get(id)?.label;
+    if (speech != null) speech.visible = false;
+  }
+
   function paintCreatures(
     center: { x: number; y: number; z: number },
     visibility: { readonly floors: readonly number[]; readonly first: number; readonly last: number },
@@ -958,6 +1079,7 @@ export async function mountViewport(
         sprite.visible = false;
         head.bar.visible = false;
         head.label.visible = false;
+        hidePresentation(creature.id);
         continue;
       }
       sprite.visible = true;
@@ -975,6 +1097,7 @@ export async function mountViewport(
         sprite.visible = false;
         head.bar.visible = false;
         head.label.visible = false;
+        hidePresentation(creature.id);
         continue;
       }
 
@@ -1011,6 +1134,8 @@ export async function mountViewport(
         targetRect = `${tileScreen.x - lift},${tileScreen.y - lift},${TILE},${TILE}`;
       }
       paintOverlay(head, creature, lifted);
+      paintLight(creature, lifted, creatureAlpha);
+      paintSpeech(creature, lifted, creatureAlpha, nowMs);
       // O sprite mora num container que ANDA com a janela: posição local = tela − raiz.
       const local = { x: lifted.x - floorsRoot.x, y: lifted.y - floorsRoot.y };
       const texture = creatureTexture(creature, nowMs);
@@ -1045,6 +1170,16 @@ export async function mountViewport(
         gone.bar.destroy();
         gone.label.destroy();
         overlays.delete(id);
+      }
+      const glow = glows.get(id);
+      if (glow !== undefined) {
+        glow.glow.destroy();
+        glows.delete(id);
+      }
+      const speech = speeches.get(id);
+      if (speech !== undefined) {
+        speech.label?.destroy();
+        speeches.delete(id);
       }
     }
     // A moldura só é redesenhada quando o alvo ou o retângulo dele muda; criatura que sumiu
@@ -1229,7 +1364,7 @@ export async function mountViewport(
       let label = textLabels.get(text.id);
       if (label === undefined) {
         // Âncora no TOPO: o número nasce logo acima do tile e sobe dali — a subida é o `dy`.
-        label = createLabel(String(text.amount), floatingTextColor(text.kind, text.damageType), 0);
+        label = createLabel(String(text.amount), floatingTextColor(text.kind, text.damageType, text.race), 0);
         textLabels.set(text.id, label);
         overlay.addChild(label);
       } else {
@@ -1400,6 +1535,10 @@ export async function mountViewport(
         top.label.destroy();
       }
       overlays.clear();
+      for (const { glow } of glows.values()) glow.destroy();
+      glows.clear();
+      for (const { label } of speeches.values()) label?.destroy();
+      speeches.clear();
       for (const entry of effectSprites.values()) entry.sprite.destroy();
       effectSprites.clear();
       for (const sprite of missileSprites.values()) sprite.destroy();
