@@ -36,12 +36,20 @@ import {
 import type { MeleePowerVia } from './monster-melee.js';
 import { extractEnum, MAGIC_EFFECT_ENUM, MAGIC_EFFECT_HEADER, SHOOT_TYPE_ENUM } from './enums.js';
 import { repoRootFrom } from './env.js';
+import { Reader, WIRE_LENGTH, WIRE_VARINT } from '../../packages/client/src/assets/protobuf.js';
 
 /** A raiz dos monstros dentro do checkout do Canary. */
 export const CANARY_MONSTER_ROOT = 'data-otservbr-global/monster';
 
 /** `items.xml` — de onde sai o NOME de uma linha de loot declarada só por `id`. */
 export const CANARY_ITEMS_XML = 'data/items/items.xml';
+
+/**
+ * `appearances.dat` do Canary — o MESMO arquivo que o servidor carrega para saber, por item,
+ * `isCorpse`/`isMovable` (`items.cpp`: flags `corpse`/`player_corpse` e `unmove` da aparência). É de
+ * onde sai a Animate Dead (#600): o `items.xml` não diz se um estágio do cadáver é movível.
+ */
+export const CANARY_APPEARANCES_DAT = 'data/items/appearances.dat';
 
 /** A raiz dos monstros do TFS (a velocidade na escala clássica, ADR 0037 decisão 4). */
 export const TFS_MONSTER_ROOT = 'data/monster';
@@ -264,6 +272,100 @@ export function corpseTtlMsFromChain(
   return totalSeconds > 0 ? totalSeconds * 1000 : undefined;
 }
 
+/**
+ * Um item que o Canary trata como CADÁVER (`ItemType::isCorpse`): `movable` é `isMovable()`, o
+ * inverso da flag `unmove`. Só entram os ids com a flag `corpse`/`player_corpse` (3.640 dos 42 mil
+ * itens) — o resto nunca é consultado.
+ */
+export interface CorpseItemFlags {
+  readonly movable: boolean;
+}
+
+/** Campos de `AppearanceFlags` (`appearances.proto` do Canary) que a Animate Dead consulta. */
+const FLAG_UNMOVE = 14;
+const FLAG_CORPSE = 42;
+const FLAG_PLAYER_CORPSE = 43;
+
+/**
+ * `id → CorpseItemFlags` de todo objeto de `appearances.dat` com a flag de cadáver. Lê só os três
+ * campos varint acima e PULA o resto por wire type — o mesmo cuidado do leitor do cliente
+ * (`packages/client/src/assets/appearances.ts`), que é de onde vem o `Reader`. Arquivo ausente:
+ * mapa vazio, e o monstro fica sem janela de Animate Dead (o `--check` avisa pelo diff, nunca
+ * inventa um cadáver movível).
+ */
+export function readCorpseItemFlags(appearancesDatPath: string): Map<number, CorpseItemFlags> {
+  const flags = new Map<number, CorpseItemFlags>();
+  let bytes: Buffer;
+  try {
+    bytes = readFileSync(appearancesDatPath);
+  } catch {
+    return flags;
+  }
+  const reader = new Reader(bytes);
+  while (!reader.done) {
+    const { field, wire } = reader.tag();
+    // `Appearances.object` (campo 1) — outfit/effect/missile têm outros números e nunca são item.
+    if (field !== 1 || wire !== WIRE_LENGTH) { reader.skip(wire); continue; }
+    const appearance = reader.slice();
+    let id = 0;
+    let corpse = false;
+    let unmove = false;
+    while (!appearance.done) {
+      const tag = appearance.tag();
+      if (tag.field === 1 && tag.wire === WIRE_VARINT) { id = appearance.varint(); continue; }
+      if (tag.field === 3 && tag.wire === WIRE_LENGTH) {
+        const appearanceFlags = appearance.slice();
+        while (!appearanceFlags.done) {
+          const flag = appearanceFlags.tag();
+          if (flag.wire !== WIRE_VARINT) { appearanceFlags.skip(flag.wire); continue; }
+          const value = appearanceFlags.varint() !== 0;
+          if (flag.field === FLAG_CORPSE || flag.field === FLAG_PLAYER_CORPSE) corpse = corpse || value;
+          if (flag.field === FLAG_UNMOVE) unmove = value;
+        }
+        continue;
+      }
+      appearance.skip(tag.wire);
+    }
+    if (id !== 0 && corpse) flags.set(id, { movable: !unmove });
+  }
+  return flags;
+}
+
+/**
+ * As janelas, em ms desde a morte, em que o item de topo do cadáver É movível — o que a Animate
+ * Dead do Canary exige (`animate_dead_rune.lua`: `isCorpse() and isMovable()`) (#600). Segue a MESMA
+ * cadeia `duration`/`decayTo` de `corpseTtlMsFromChain`, estágio a estágio: cada estágio é um item
+ * com as flags PRÓPRIAS (o recém-abatido é `unmove` e vira movível no primeiro decaimento). Estágios
+ * movíveis contíguos viram UMA janela; `undefined` quando o monstro não tem cadáver resolvível ou
+ * quando nenhum estágio é movível.
+ */
+export function corpseAnimatableWindows(
+  corpseId: number | undefined,
+  chains: ReadonlyMap<number, DecayStage>,
+  flags: ReadonlyMap<number, CorpseItemFlags>,
+): { readonly fromMs: number; readonly untilMs: number }[] | undefined {
+  if (corpseId === undefined) return undefined;
+  const windows: { fromMs: number; untilMs: number }[] = [];
+  let current: number | undefined = corpseId;
+  let elapsedSeconds = 0;
+  const visited = new Set<number>();
+  for (let step = 0; step < MAX_DECAY_STAGES; step += 1) {
+    if (current === undefined || current === 0 || visited.has(current)) break;
+    visited.add(current);
+    const stage = chains.get(current);
+    if (stage === undefined) break;
+    const fromMs = elapsedSeconds * 1000;
+    elapsedSeconds += stage.durationSeconds;
+    if (flags.get(current)?.movable === true) {
+      const last = windows[windows.length - 1];
+      if (last !== undefined && last.untilMs === fromMs) last.untilMs = elapsedSeconds * 1000;
+      else windows.push({ fromMs, untilMs: elapsedSeconds * 1000 });
+    }
+    current = stage.decayTo;
+  }
+  return windows.length === 0 ? undefined : windows;
+}
+
 function walk(dir: string, suffix: string): string[] {
   const out: string[] = [];
   for (const name of readdirSync(dir).sort()) {
@@ -325,6 +427,11 @@ export interface MonsterReaderDeps {
   readonly missileIds: ReadonlyMap<string, number>;
   /** A cadeia de decaimento do `items.xml`, para `monster.corpse` virar `corpseTtlMs` (#585). */
   readonly corpseChains: ReadonlyMap<number, DecayStage>;
+  /**
+   * As flags de cadáver de `appearances.dat` (#600), para `monster.corpse` virar `corpseAnimatable`.
+   * Ausente (fixture sem o `.dat`): monstro sem janela de Animate Dead.
+   */
+  readonly corpseFlags?: ReadonlyMap<number, CorpseItemFlags>;
 }
 
 export interface LootLine {
@@ -802,6 +909,18 @@ export function convertMonster(
   // estágio nenhum no `items.xml` (monstro fica sem cadáver, o default seguro).
   const corpseTtlMs = corpseTtlMsFromChain(num(raw['corpse']), deps.corpseChains);
   if (corpseTtlMs !== undefined) entity['corpseTtlMs'] = corpseTtlMs;
+  // As janelas de Animate Dead (#600): as MESMAS etapas da cadeia acima, com a flag `movable` de
+  // cada uma vinda de `appearances.dat`. Ausente é "nunca" — sem `.dat`, ou cadeia sem estágio
+  // movível.
+  const animatable = corpseAnimatableWindows(num(raw['corpse']), deps.corpseChains, deps.corpseFlags ?? new Map());
+  if (animatable !== undefined) entity['corpseAnimatable'] = animatable;
+  // A Convince Creature Rune (#600): `flags.convinceable`, e o custo dela é o `manaCost` do
+  // monstro (`convince_creature.lua`) — lido para TODO monstro que o declara, `summonable` ou não.
+  // `summonable` em si NÃO é importado aqui: a Summon Creature (#598) depende do teto e dos
+  // efeitos de invocação que o #599 fecha, e ligá-la no catálogo real é decisão à parte.
+  if (bool(flags['convinceable']) === true) entity['convinceable'] = true;
+  const manaCost = num(raw['manaCost']);
+  if (manaCost !== undefined && manaCost > 0) entity['manaCost'] = manaCost;
   entity['source'] = source;
   if (summons.summons !== undefined) entity['summons'] = summons.summons;
   // Staging (#580 separa): a ficha de Bestiário e o outfit não moram na entidade de `data/`.
@@ -1083,6 +1202,7 @@ export function loadReaderDeps(ctx: CatalogImportContext, repoRoot: string): Mon
     tfsSpeeds: ctx.forgottenServerCommit === '' ? new Map() : readTfsSpeeds(ctx.forgottenServerDir),
     outfitRanges: readPackOutfits(join(repoRoot, 'packages', 'content', 'data', 'packs', 'tibia-1533.json')),
     corpseChains: readCorpseDecayChains(join(ctx.canaryDir, CANARY_ITEMS_XML)),
+    corpseFlags: readCorpseItemFlags(join(ctx.canaryDir, CANARY_APPEARANCES_DAT)),
     ...readPresentationEnums(ctx.canaryDir),
   };
 }

@@ -27,6 +27,15 @@ estrutura em memória, vai para `content.ts` e pode ser usada por qualquer um.
 
 ## O catálogo importado (ADR 0038, #572)
 
+**`convinceable`, `manaCost` e `corpseAnimatable` (#600).** O importador de monstros lê
+`flags.convinceable` e `manaCost` (de TODO monstro que o declara, `summonable` ou não — `summonable`
+em si continua NÃO importado) e gera `corpseAnimatable`, as janelas em ms desde a morte em que o item
+do topo do cadáver é `isCorpse() and isMovable()` — a Animate Dead do Canary. O dado é de cada
+estágio da cadeia `decayTo`, e a flag `unmove` vem de `data/items/appearances.dat` (lido por
+`readCorpseItemFlags`, sobre o `Reader` de protobuf do cliente), não do `items.xml`: o estágio
+recém-abatido é `unmove`, então a janela típica é `[10 000, corpseTtlMs)`. `pnpm catalog:import
+monsters` sem `appearances.dat` não gera janela nenhuma (monstro nunca animável), nunca inventa uma.
+
 **`staging/monsters/` não é conteúdo carregado** (#578/#579): é onde `pnpm catalog:import monsters`
 escreve — a transcrição PURA do Canary, item ainda por slug de nome, sem passar pelo catálogo de
 itens (#573/#574) nem pela tabela de aparências. `pnpm catalog:promote-monsters` (#580) é o passo

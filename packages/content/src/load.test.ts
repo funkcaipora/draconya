@@ -1369,6 +1369,59 @@ describe('wave and beam areas transcribed from the Canary AREA_* (#679)', () => 
     }
   });
 
+  it('as duas runas de invocação do Canary e o Skeleton que a Animate Dead ergue (#600)', () => {
+    // `convince_creature.lua`: level 16, ML 5, cooldown 2 s + grupo 2 s, sem `rune:vocation`;
+    // `animate_dead_rune.lua`: level 27, ML 4, idem — e o preço é o menor `buy` dos NPCs (80 e 375).
+    for (const [id, price, requires] of [
+      ['convince-creature-rune', 80, { level: 16, magicLevel: 5 }],
+      ['animate-dead-rune', 375, { level: 27, magicLevel: 4 }],
+    ] as const) {
+      const rune = content.supplies.get(id);
+      expect(rune, id).toMatchObject({ price, group: 'support', cooldownMs: 2_000, groupCooldownMs: 2_000, requires });
+      expect(rune?.requires.vocationId, id).toBeUndefined();
+    }
+    expect(content.supplies.get('convince-creature-rune')?.effect).toEqual({ kind: 'convince', range: 8 });
+    expect(content.supplies.get('animate-dead-rune')?.effect)
+      .toEqual({ kind: 'animate-dead', monsterId: 'skeleton', range: 8 });
+    // `skeleton.lua`: `manaCost = 300`, `convinceable`; o cadáver (5972, 10 s `unmove`) só vira
+    // movível no primeiro decaimento (4024) e a cadeia inteira dura 670 s.
+    expect(content.monsters.get('skeleton')).toMatchObject({
+      convinceable: true, manaCost: 300, corpseTtlMs: 670_000,
+      corpseAnimatable: [{ fromMs: 10_000, untilMs: 670_000 }],
+    });
+    // O Dragon não é convencível, e o cadáver dele também só é animável depois do estágio `unmove`.
+    expect(content.monsters.get('dragon')?.convinceable).toBe(false);
+    expect(content.monsters.get('dragon')?.corpseAnimatable).toEqual([{ fromMs: 10_000, untilMs: 670_000 }]);
+    // Rat e Rotworm (as hunts reais) são convencíveis no Canary, com a mana do `rat.lua`/`rotworm.lua`.
+    expect(content.monsters.get('rat')).toMatchObject({ convinceable: true, manaCost: 200 });
+    expect(content.monsters.get('rotworm')).toMatchObject({ convinceable: true, manaCost: 305 });
+    // 128 convencíveis no recorte gerado (139 no Canary inteiro, menos os que o pacote não desenha).
+    const convincible = [...content.monsters.values()].filter((monster) => monster.convinceable);
+    expect(convincible.length).toBeGreaterThan(100);
+    expect(convincible.every((monster) => monster.summonable === false)).toBe(true);
+  });
+
+  it('os cinco monstros preservados à mão carregam os campos do #600 do importador, por override (#600)', () => {
+    // `preserveHandAuthored` nunca reescreve rat/rotworm/dragon/dragon-lord/dragon-lord-hatchling; o que o
+    // importador gera de novo para eles entra por `data/monsters/overrides/`. Este teste prende cada
+    // override contra o `staging/` (a transcrição pura do Canary) — se o importador mudar, os dois
+    // divergem aqui em vez de em silêncio.
+    const staging = join(DATA, '..', 'staging', 'monsters', 'generated');
+    const staged = new Map<string, Record<string, unknown>>();
+    for (const file of readdirSync(staging)) {
+      for (const entity of JSON.parse(readFileSync(join(staging, file), 'utf8')) as Record<string, unknown>[]) {
+        staged.set(String(entity['id']), entity);
+      }
+    }
+    for (const id of ['rat', 'rotworm', 'dragon', 'dragon-lord', 'dragon-lord-hatchling']) {
+      const monster = content.monsters.get(id);
+      const source = staged.get(id);
+      expect(monster?.corpseAnimatable, id).toEqual(source?.['corpseAnimatable']);
+      expect(monster?.convinceable, id).toBe(source?.['convinceable'] === true);
+      expect(monster?.manaCost, id).toBe(source?.['manaCost'] as number | undefined);
+    }
+  });
+
   it('dragon and dragon lord corpses last 670000 ms, the Canary items.xml decay chain (#585)', () => {
     for (const id of ['dragon', 'dragon-lord']) {
       expect(content.monsters.get(id)?.corpseTtlMs, id).toBe(670000);
