@@ -11,6 +11,7 @@
 // próprio Lua descreve, a função diz qual e o que este motor faz no lugar — são as decisões que
 // a PR do #603 lista para revisão.
 
+import { FEARED_CONDITION_KEY, ROOTED_CONDITION_KEY } from '@draconya/content';
 import type { Charm, ConditionSpec, DamageModifiers, DamageType } from '@draconya/content';
 import type { AssignedCharm, AssignedCharms } from '../charms.js';
 import type { ConditionState } from '../conditions.js';
@@ -249,12 +250,14 @@ export function negatedOutcome(outcome: DamageOutcome): DamageOutcome {
 
 /**
  * O tipo de condição do Canary que o Cleanse remove: as dez de `Creature::getCleansableConditions`
- * que existem neste motor — os sete tipos de dano ao longo do tempo (veneno, fogo, energia,
- * sangramento, congelamento, deslumbramento, maldição) e a paralisia. `rooted` e `feared` chegam
- * com o M44-04 (#622).
+ * (`creature.cpp:1533`) — os sete tipos de dano ao longo do tempo (veneno, fogo, energia,
+ * sangramento, congelamento, deslumbramento, maldição), a paralisia e, desde o M44-04 (#622), as
+ * duas de controle que o Canary lista ao lado delas: `rooted` e `feared`. `pacified` NÃO é
+ * limpável.
  */
 export type CleanseType =
-  | 'poison' | 'fire' | 'energy' | 'bleeding' | 'freezing' | 'dazzled' | 'cursed' | 'paralyze';
+  | 'poison' | 'fire' | 'energy' | 'bleeding' | 'freezing' | 'dazzled' | 'cursed' | 'paralyze'
+  | 'rooted' | 'feared';
 
 /**
  * Do tipo de dano do DOT para a condição do Canary (a tabela de `docs/product/combat.md`):
@@ -278,6 +281,8 @@ export function cleanseTypeOfCondition(condition: ConditionState): CleanseType |
     return CLEANSE_BY_DAMAGE_TYPE[tick.damageType] ?? null;
   }
   if (condition.speedPercent !== undefined && condition.speedPercent < 0) return 'paralyze';
+  if (condition.key === ROOTED_CONDITION_KEY) return 'rooted';
+  if (condition.key === FEARED_CONDITION_KEY) return 'feared';
   return null;
 }
 
@@ -286,6 +291,8 @@ export function cleanseTypeOfSpec(spec: ConditionSpec): CleanseType | null {
   const effect = spec.effect;
   if (effect.kind === 'damage-over-time') return CLEANSE_BY_DAMAGE_TYPE[effect.damageType] ?? null;
   if (effect.kind === 'speed' && effect.type === 'paralyze') return 'paralyze';
+  if (effect.kind === 'rooted') return 'rooted';
+  if (effect.kind === 'feared') return 'feared';
   return null;
 }
 

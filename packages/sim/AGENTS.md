@@ -744,18 +744,50 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   escudo (`#shieldSkillLevelOf`) soma o bônus de equipamento** (`Inventory.skillBonus`) como
   `#skillLevelOf` já fazia para arma/punho — `getSkillLevel` do Canary não abre exceção para
   `SKILL_SHIELD`.
-- **Stairhop (#554, M30-07, ADR 0040 decisão 1): `#step` é quem detecta a travessia, não um
-  booleano "é escada?" separado.** Escada e teleporte (#734) são os DOIS únicos jeitos de
-  `move()` pousar num tile que não é o adjacente pedido — `z` diferente, ou distância — e é
-  ESSE sinal, lido do `MoveResult`, que grava `character.attackLockedUntil = session.nowMs +
-  stairhopDelayMs`. Um passo comum nunca bate essa condição. Só sob `combat-v3` (`#isV3`) e com
-  `combat.stairhopDelayMs` declarado (ausente é identidade, como `defense`/`modifiers`); v1/v2
-  nunca escrevem o campo. `#onPlayerAttack` reagenda para o INSTANTE EXATO do destravamento
-  (nunca para o intervalo normal de ataque) e `castSpell` (`casting.ts`) recusa só a magia
-  AGRESSIVA (`damage`/`damage-over-time`) com `attack-locked` — cura e o resto do vocabulário
-  continuam liberados, a mesma exceção do `Spell::aggressive` do Canary. `attackLockedUntil` é
-  campo solto no personagem, não `ConditionState`: migra para a condição `pacified` de verdade
-  quando ela existir (M44-04).
+- **Stairhop (#554, M30-07, ADR 0040 decisão 1; a condição `pacified` desde o #622): `#step` é quem
+  detecta a travessia, não um booleano "é escada?" separado.** Escada e teleporte (#734) são os DOIS
+  únicos jeitos de `move()` pousar num tile que não é o adjacente pedido — `z` diferente, ou
+  distância — e é ESSE sinal, lido do `MoveResult`, que APLICA `pacified` por `stairhopDelayMs`
+  (`#applyConditionTo`, `merge: 'longest'`). Um passo comum nunca bate essa condição. Só sob
+  `combat-v3` (`#isV3`) e com `combat.stairhopDelayMs` declarado (ausente é identidade, como
+  `defense`/`modifiers`); v1/v2 nunca aplicam a trava de escada. **O portão lê a CONDIÇÃO, em
+  qualquer perfil** (`Conditions.isActive`, o PRAZO — não o evento `condition-expire`, que vence
+  depois do ataque do mesmo instante): `#onPlayerAttack` reagenda para o INSTANTE EXATO do
+  vencimento (nunca para o intervalo normal de ataque) e `castSpell`/`useSupply` (`casting.ts`)
+  recusam a magia e a runa AGRESSIVAS com `attack-locked` — cura e o resto do vocabulário continuam
+  liberados, a mesma exceção do `Spell::aggressive` do Canary. `attackLockedUntil` deixou de
+  existir no runtime: o construtor de `CharacterRuntime` converte o campo de um snapshot antigo
+  num `pacified` que vence no mesmo instante, e `getState` nunca mais o escreve.
+- **As condições de controle (#622, M44-04, ADR 0041): `rooted`, `feared` e `pacified`.** Mesmo
+  desenho do drunk — chave RESERVADA, sem campo próprio, lida por `Conditions.isActive(key, nowMs)`
+  — mais `merge: 'longest'` (`Condition::updateCondition`: prazo menor não encurta o que já corre).
+  Nada de `hasRooted()`/`hasFeared()`: seriam três nomes para a mesma leitura.
+  - **`#step` é o portão dos três** (o único lugar que escreve posição). Sem `forced`, recusa a
+    caminhada PRÓPRIA antes de qualquer sorteio (`rooted`/`feared`, razões novas em `MoveRejection`);
+    depois do desvio de drunk, recusa `rooted` sempre e, sob `feared`, o campo que causa dano. O
+    parâmetro `forced` marca o que NÃO é a caminhada própria: a fuga do medo e o empurrão
+    (`#pushAside`). Esquecer `forced` num passo forçado o faria recusar sob `feared`; passá-lo num
+    passo próprio o faria fugir do medo.
+  - **O medo de PERSONAGEM não tem `condition-expire`.** Quem o encerra é o `FEAR_THINK` (o primeiro
+    pensamento DEPOIS do prazo) — porque o Canary só limpa a condição nesse pensamento, e a fuga do
+    último pensamento sai ANTES dele. Um `condition-expire` agendado limparia a condição antes desse
+    pensamento e a lista final nunca sairia; por isso `#applyConditionTo` retorna cedo para o medo
+    de personagem, e monstro (que não foge) segue com o `condition-expire` de sempre. Toda remoção
+    por fora (`#dispelConditions`, o Cleanse) passa por `#endFear`, e a morte/saída por
+    `#cancelConditions` — se uma remoção nova esquecer os dois, o `FEAR_THINK` fica órfão na fila e a
+    `fearWalk` continua andando.
+  - **`Runner.fearWalk` tem prioridade absoluta em `#playerStep`** (acima do `walk-to`, do
+    combate-stop, do follow e da rota) e persiste no snapshot (`RunnerState.fearWalk`). A lista guarda
+    valores do enum `Direction` do Canary (`fear.ts`), não `Direction` do `sim` — a fuga anda em
+    diagonal. `requestMove` a zera (um `startAutoWalk` novo limpa `listWalkDir`) e recusa antes de
+    guardar caminho quando a criatura está presa ou com medo.
+  - **`fear.ts` é PURO e transcreve números, não código** (ADR 0019): as cinco regiões, o vetor de
+    direções, o A* de `getPathMatchingCond`. As esquisitices da fonte estão PRESERVADAS de propósito
+    (o ponto sintético do `SOUTH` soma `+y` como o do `NORTH`; o sorteio grava o valor do enum como
+    índice) e fixadas em `fear.test.ts` — "corrigi" uma delas e o teste que a nomeia falha por
+    desenho. O desempate do `getBestNode` é o da versão escalar (índice menor).
+  - **Nunca `Math.random`/`Date.now` na fuga**: o `Rng` da sessão entra em DOIS lugares só — a
+    fase do primeiro pensamento (`[0, 1000)` ms) e o sorteio do tile do próprio lançador.
 - **Campo bloqueante é PAREDE, não desvio de dano** (#560). `Fields.blockedAt`/
   `TileOccupancy.blockedAt` bloqueiam para QUALQUER criatura, e valem em `canOccupy`/`move`
   sem checagem extra em `hunt.ts` — ao contrário do desvio de dano do M29-05

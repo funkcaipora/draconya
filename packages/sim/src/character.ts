@@ -1,6 +1,7 @@
 // Estado quente do personagem. A sessão dona é o único objeto que escreve aqui
 // (invariante 9) — é também o que dispensa lock sobre o gold.
 
+import { PACIFIED_CONDITION_KEY } from '@draconya/content';
 import type { AmmoFamily, Ammunition, Item, Vocation } from '@draconya/content';
 import type { Direction } from './area.js';
 import { FULL_BLOCK_CHARGE, isFullBlockCharge } from './combat/block-charge.js';
@@ -249,13 +250,14 @@ export interface CharacterState {
    */
   readonly pendingManualAction?: PendingManualActionState;
   /**
-   * A trava de ataque ao trocar de andar (#554, M30-07, ADR 0040 decisão 1): instante ABSOLUTO
-   * do relógio lógico até quando nem o golpe nem a magia AGRESSIVA saem — `Player::
-   * onChangeZone`/`player.cpp:12417-12423` do Canary, `stairJumpExhaustion` (`config.lua.dist:45`).
-   * Só `HuntRuleset#step` escreve, na troca de `z` ou no redirecionamento por teleporte, e só sob
-   * `combat-v3` com `combat.stairhopDelayMs` declarado (`CombatCompatibilityProfile`/`combatSchema`
-   * em `@draconya/content`). Ausente é `0` — nunca travado, o de sempre —, sem bump de
-   * `SNAPSHOT_FORMAT_VERSION`, como `blockCharge`/`attackPractice`.
+   * SÓ LEITURA, de snapshot antigo (#554 → #622). A trava de ataque ao trocar de andar era um
+   * instante ABSOLUTO solto no personagem (`Player::onChangeZone`/`player.cpp:12417-12423`,
+   * `stairJumpExhaustion`); desde o M44-04 ela é a condição `pacified` de verdade
+   * (`Conditions`, chave `pacified`), e este campo nunca mais é ESCRITO. O construtor de
+   * `CharacterRuntime` o converte: um snapshot com `attackLockedUntil` no futuro volta como um
+   * `pacified` que vence no mesmo instante, para uma hunt retomada no meio dos 2 s não perder a
+   * trava (ADR 0014 — nunca descartar dado só por trocar de forma). Sem bump de
+   * `SNAPSHOT_FORMAT_VERSION`.
    */
   readonly attackLockedUntil?: number;
   /**
@@ -447,10 +449,6 @@ export class CharacterRuntime {
   /** A ação manual adiada (#726). `null` é nenhuma. Só o ruleset escreve. */
   pendingManualAction: PendingManualActionState | null;
   /**
-   * A trava de stairhop (#554). Só `HuntRuleset#step` escreve — ver `CharacterState.attackLockedUntil`.
-   */
-  attackLockedUntil: number;
-  /**
    * Ver `CharacterState.lastCombatActionAtMs`. Só o ruleset da hunt escreve (invariante 9);
    * `null` é "nunca lutou".
    */
@@ -514,12 +512,20 @@ export class CharacterRuntime {
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
     this.direction = state.direction ?? 'south';
     this.conditions = Conditions.fromState(state.conditions);
+    // A trava de stairhop de um snapshot anterior ao #622 (ver `CharacterState.attackLockedUntil`):
+    // vira a condição `pacified`, e uma que JÁ existe (o snapshot novo) manda mais.
+    if (state.attackLockedUntil !== undefined && state.attackLockedUntil > 0
+      && this.conditions.get(PACIFIED_CONDITION_KEY) === null) {
+      this.conditions.replace({
+        key: PACIFIED_CONDITION_KEY, targetId: this.id, sourceId: this.id,
+        expiresAtMs: state.attackLockedUntil, merge: 'longest',
+      });
+    }
     this.blockCharge = state.blockCharge ?? FULL_BLOCK_CHARGE;
     this.attackPractice = state.attackPractice ?? INITIAL_ATTACK_PRACTICE;
     this.fedMs = state.fedMs ?? 0;
     this.blessings = state.blessings ?? 0;
     this.pendingManualAction = state.pendingManualAction ?? null;
-    this.attackLockedUntil = state.attackLockedUntil ?? 0;
     this.lastCombatActionAtMs = state.lastCombatActionAtMs ?? null;
     for (const [type, untilMs] of Object.entries(state.cleanseImmunity ?? {})) {
       this.cleanseImmunity.set(type, untilMs);
@@ -765,7 +771,6 @@ export class CharacterRuntime {
       ...(this.fedMs === 0 ? {} : { fedMs: this.fedMs }),
       ...(this.blessings === 0 ? {} : { blessings: this.blessings }),
       ...(this.pendingManualAction === null ? {} : { pendingManualAction: this.pendingManualAction }),
-      ...(this.attackLockedUntil === 0 ? {} : { attackLockedUntil: this.attackLockedUntil }),
       ...(this.lastCombatActionAtMs === null
         ? {} : { lastCombatActionAtMs: this.lastCombatActionAtMs }),
       ...(this.cleanseImmunity.size === 0

@@ -329,9 +329,11 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   'out-of-range': 'O alvo está fora de alcance.',
   'on-cooldown': 'Ainda em cooldown.',
   'group-cooldown': 'O grupo ainda está em cooldown.',
-  // Stairhop (#554, M30-07): trocou de andar ou foi teleportado há pouco — a mesma frase que o
-  // Canary usa (`RETURNVALUE_YOUAREEXHAUSTED`).
+  // Pacificação (#554, M30-07 → M44-04, #622): trocou de andar, foi teleportado ou está sob
+  // `pacified` — a mesma frase que o Canary usa (`RETURNVALUE_YOUAREEXHAUSTED`).
   'attack-locked': 'Você está exausto.',
+  // Medo (M44-04, #622): nenhuma magia nem runa sai — o "You are feared." do Canary.
+  'feared': 'Você está com medo.',
   // Magia agressiva disparada na Cidade (#792, ADR 0044 d.2): protect zone não aceita combate.
   'protection-zone': 'Você está em uma zona de proteção.',
   // A invocação (#598, M38-01, ADR 0057 decisão 3): monstro fora do catálogo, não invocável, ou
