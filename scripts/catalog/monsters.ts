@@ -20,7 +20,8 @@
 //
 // **O que fica de fora, e aparece no relatório** (`docs/reference/catalog/monsters-report.md`):
 // monstro com ataque/defesa sem mapeador ou que invoca um monstro não gerado; aparência que o
-// pacote 13.32 não desenha; e as pastas `familiars/`, `trainers/` e `traps/`, que não são caça.
+// pacote 13.32 não desenha; e as pastas `trainers/` e `traps/`, que não são caça. A pasta
+// `familiars/` entrou no #599 (M38-02): os quatro familiares de vocação, menos o do Monk.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
@@ -40,14 +41,31 @@ import { repoRootFrom } from './env.js';
 /** A raiz dos monstros dentro do checkout do Canary. */
 export const CANARY_MONSTER_ROOT = 'data-otservbr-global/monster';
 
+/** `FAMILIAR_ID` — o `lookType` de cada familiar, por nome (#599). */
+export const CANARY_FAMILIAR_LUA = 'data/libs/systems/familiar.lua';
+
 /** `items.xml` — de onde sai o NOME de uma linha de loot declarada só por `id`. */
 export const CANARY_ITEMS_XML = 'data/items/items.xml';
 
 /** A raiz dos monstros do TFS (a velocidade na escala clássica, ADR 0037 decisão 4). */
 export const TFS_MONSTER_ROOT = 'data/monster';
 
-/** Pastas que não são caça: o Draconya nunca gera monstro delas. */
-export const SKIPPED_FOLDERS: ReadonlySet<string> = new Set(['familiars', 'trainers', 'traps']);
+/**
+ * Pastas que não são caça: o Draconya nunca gera monstro delas. `familiars/` deixou de estar aqui
+ * no #599 (M38-02, ADR 0057 d.3) — os familiares de vocação são invocação do jogador, e a magia os
+ * lança pelo `monsterId`.
+ */
+export const SKIPPED_FOLDERS: ReadonlySet<string> = new Set(['trainers', 'traps']);
+
+/**
+ * Monstros lidos e barrados por decisão de recorte, com o motivo que vai para o relatório. O Monk e
+ * tudo que a ele pertence é mais novo que o pacote 13.32 (ADR 0051, decisão do dono de 2026-09-25 e
+ * 2026-09-29): o familiar dele (`monk_familiar.lua`) converteria sem bloqueio nenhum, e por isso
+ * precisa de uma linha explícita aqui — senão entraria no catálogo de graça.
+ */
+export const OUT_OF_CUT_MONSTERS: ReadonlyMap<string, string> = new Map([
+  ['monk-familiar', 'vocação Monk fora do corte (ADR 0051: sistemas mais novos que o 13.32)'],
+]);
 
 /**
  * O raio de agressão do monstro do Canary: `Creature::canSee` com `MAP_MAX_VIEW_PORT_X`/`_Y` = 11
@@ -325,6 +343,33 @@ export interface MonsterReaderDeps {
   readonly missileIds: ReadonlyMap<string, number>;
   /** A cadeia de decaimento do `items.xml`, para `monster.corpse` virar `corpseTtlMs` (#585). */
   readonly corpseChains: ReadonlyMap<number, DecayStage>;
+  /**
+   * `nome do familiar → lookType` de `data/libs/systems/familiar.lua` (`FAMILIAR_ID`, #599). O Lua
+   * do monstro deixa o `lookType` comentado — quem o define é a magia, na hora de invocar
+   * (`myFamiliar:setOutfit`) —, e a tabela por vocação é a fonte dele. Ausente (fixture sem `data/`):
+   * familiar sem aparência, e portanto bloqueado, como qualquer monstro sem `lookType`.
+   */
+  readonly familiarLooktypes?: ReadonlyMap<string, number>;
+}
+
+/**
+ * `nome → lookType` do `FAMILIAR_ID` do Canary (`data/libs/systems/familiar.lua`), lido como DADO: as
+ * chaves da tabela são expressões (`VOCATION.BASE_ID.SORCERER`) que o avaliador de Lua literal não
+ * resolve, então a leitura casa só os pares `{ id = N, name = "…" }` — números e nomes, nunca código
+ * (ADR 0019 limite 1, ADR 0038 decisão 7).
+ */
+export function readFamiliarLooktypes(familiarLuaPath: string): Map<string, number> {
+  const looktypes = new Map<string, number>();
+  let text: string;
+  try {
+    text = readFileSync(familiarLuaPath, 'utf8');
+  } catch {
+    return looktypes;
+  }
+  for (const match of text.matchAll(/\{\s*id\s*=\s*(\d+)\s*,\s*name\s*=\s*"([^"]+)"\s*\}/g)) {
+    looktypes.set(match[2] as string, Number(match[1]));
+  }
+  return looktypes;
 }
 
 export interface LootLine {
@@ -684,11 +729,20 @@ export function convertMonster(
 
   const blockers: string[] = [];
   const name = str(raw['name']) ?? typeName;
+  const outOfCut = OUT_OF_CUT_MONSTERS.get(id);
+  if (outOfCut !== undefined) blockers.push(outOfCut);
 
   // Aparência: só outfit (`lookType`) do pacote 13.32. `lookTypeEx` é monstro desenhado como
   // ITEM, e a tabela de aparências do Draconya só resolve outfit para monstro.
   const outfit = isRecord(raw['outfit']) ? raw['outfit'] : {};
-  const lookType = num(outfit['lookType']) ?? 0;
+  const flagsForOutfit = isRecord(raw['flags']) ? raw['flags'] : {};
+  // O familiar (#599) deixa o `lookType` comentado no Lua; a magia o define por vocação, e a
+  // tabela `FAMILIAR_ID` é a fonte. `?? 0` no fim: sem a tabela, cai no bloqueio de sempre.
+  const lookType = num(outfit['lookType'])
+    ?? (bool(flagsForOutfit['familiar']) === true
+      ? deps.familiarLooktypes?.get(str(raw['name']) ?? typeName)
+      : undefined)
+    ?? 0;
   const lookTypeEx = num(outfit['lookTypeEx']) ?? 0;
   if (lookType === 0) {
     blockers.push(lookTypeEx > 0 ? `aparência por item (lookTypeEx ${lookTypeEx}) — só outfit é resolvido` : 'sem aparência (lookType 0)');
@@ -779,6 +833,15 @@ export function convertMonster(
     ...(spells.abilities.length === 0 || isPlainMelee(spells.abilities) ? {} : { abilities: spells.abilities }),
     ...(spells.defenses.length === 0 ? {} : { defenses: spells.defenses }),
   };
+  // O familiar (#599): `flags.familiar` liga o teleporte ao mestre, a XP inteira e a velocidade do
+  // mestre; o `manaCost` (o do Lua, igual ao `spell:mana` da magia) fica no monstro para o boot
+  // conferir que os dois batem. `summonable` NÃO sai: o Canary o declara `false` nos quatro, e é isso
+  // que impede a Summon Creature de invocá-los.
+  if (bool(flags['familiar']) === true) {
+    entity['familiar'] = true;
+    const manaCost = num(raw['manaCost']);
+    if (manaCost !== undefined && manaCost > 0) entity['manaCost'] = manaCost;
+  }
   const changeInterval = num(changeTarget['interval']) ?? 0;
   if (changeInterval > 0) {
     entity['targetChange'] = { intervalMs: changeInterval, chance: (num(changeTarget['chance']) ?? 0) / 100 };
@@ -1083,6 +1146,7 @@ export function loadReaderDeps(ctx: CatalogImportContext, repoRoot: string): Mon
     tfsSpeeds: ctx.forgottenServerCommit === '' ? new Map() : readTfsSpeeds(ctx.forgottenServerDir),
     outfitRanges: readPackOutfits(join(repoRoot, 'packages', 'content', 'data', 'packs', 'tibia-1533.json')),
     corpseChains: readCorpseDecayChains(join(ctx.canaryDir, CANARY_ITEMS_XML)),
+    familiarLooktypes: readFamiliarLooktypes(join(ctx.canaryDir, CANARY_FAMILIAR_LUA)),
     ...readPresentationEnums(ctx.canaryDir),
   };
 }

@@ -877,15 +877,53 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     // metade Sorcerer de Explosion e de Heavy Magic Missile, 31→36), Druid +6 (Avalanche,
     // Intense/Ultimate Healing, Stone Shower, a metade Druid de Explosion e de Heavy Magic
     // Missile, 33→39); Knight não ganhou conjuração nenhuma nesta issue.
+    // #599 (M38-02) acrescentou o familiar de cada vocação (level 200): +1 em cada uma, e os
+    // números abaixo já a contam.
     const byVocation = new Map<string | undefined, number>();
     for (const spell of content.spells.values()) {
       byVocation.set(spell.vocationId, (byVocation.get(spell.vocationId) ?? 0) + 1);
     }
-    expect(byVocation.get('knight')).toBe(21);
-    expect(byVocation.get('paladin')).toBe(20);
-    expect(byVocation.get('sorcerer')).toBe(37);
-    expect(byVocation.get('druid')).toBe(40);
+    expect(byVocation.get('knight')).toBe(22);
+    expect(byVocation.get('paladin')).toBe(21);
+    expect(byVocation.get('sorcerer')).toBe(38);
+    expect(byVocation.get('druid')).toBe(41);
     expect(byVocation.get(undefined)).toBe(1);
+  });
+
+  it('os quatro familiares de vocação (#599, M38-02): level 200, mana e monstro do Canary, 15 min e 30 min', () => {
+    // `data/scripts/spells/familiar/*.lua` (level 200, mana 3000/1000/2000/3000) e
+    // `data-otservbr-global/monster/familiars/*.lua` (vida, manaCost, `familiar = true`), conferidos
+    // no `47dfd51`; a velocidade é a do TFS (309, ADR 0037 d.4) e o outfit, o do `FAMILIAR_ID`.
+    const expected = {
+      knight: { mana: 1_000, health: 10_000, outfitId: 991, targetDistance: 4 },
+      paladin: { mana: 2_000, health: 15_000, outfitId: 992, targetDistance: 2 },
+      sorcerer: { mana: 3_000, health: 20_000, outfitId: 994, targetDistance: 1 },
+      druid: { mana: 3_000, health: 20_000, outfitId: 993, targetDistance: 1 },
+    } as const;
+    for (const [vocationId, row] of Object.entries(expected)) {
+      const spell = content.spells.get(`summon-${vocationId}-familiar`);
+      expect(spell, vocationId).toMatchObject({
+        vocationId, minLevel: 200, manaCost: row.mana, group: 'support', groupCooldownMs: 2_000,
+        // `spell:cooldown(0)`: o cooldown real (30 min) mora no efeito.
+        cooldownMs: 2_000,
+        effect: { kind: 'familiar', monsterId: `${vocationId}-familiar`, durationMs: 900_000, cooldownMs: 1_800_000 },
+      });
+      const familiar = content.monsters.get(`${vocationId}-familiar`);
+      expect(familiar, vocationId).toMatchObject({
+        familiar: true, manaCost: row.mana, health: row.health, speed: 309, outfitId: row.outfitId,
+        targetDistance: row.targetDistance, blockable: false, experience: 0, staticAttack: 0.9,
+        conditionImmunities: ['invisible', 'paralyze'],
+      });
+      // O Canary declara `summonable = false`: a Summon Creature não invoca familiar.
+      expect(familiar?.summonable).toBe(false);
+      expect(familiar?.loot.items).toEqual([]);
+    }
+    // A provocação de 8 s (`summon challenge`) é dos dois familiares de magia; o do Monk não entra.
+    const challenges = (id: string) => content.monsters.get(id)?.abilities.find((a) => a.id === 'summon-challenge');
+    expect(challenges('druid-familiar')?.challenge).toEqual({ durationMs: 8_000 });
+    expect(challenges('sorcerer-familiar')?.challenge).toEqual({ durationMs: 8_000 });
+    expect(challenges('knight-familiar')).toBeUndefined();
+    expect(content.monsters.has('monk-familiar')).toBe(false);
   });
 
   it('Cancel Invisibility usa o `AREA_CIRCLE3X3` do Canary — o círculo de RAIO 3, o mesmo do Mass Healing (#559)', () => {

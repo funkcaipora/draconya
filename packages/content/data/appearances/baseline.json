@@ -251,6 +251,7 @@
     "dreadmaw": 358,
     "drillworm": 527,
     "dromedary": 404,
+    "druid-familiar": 993,
     "dryad": 137,
     "duke-krule": 1221,
     "duskbringer": 300,
@@ -466,6 +467,7 @@
     "killer-caiman": 358,
     "killer-rabbit": 74,
     "king-zelos": 1224,
+    "knight-familiar": 991,
     "knowledge-raider": 878,
     "kollos": 458,
     "kongra": 116,
@@ -504,6 +506,7 @@
     "lizard-zaogun": 343,
     "lost-basher": 538,
     "lost-berserker": 496,
+    "lost-exile": 537,
     "lost-gnome": 493,
     "lost-husher": 537,
     "lost-soul": 232,
@@ -665,6 +668,7 @@
     "orshabaal": 201,
     "overcharge": 290,
     "overcharged-energy-elemental": 290,
+    "paladin-familiar": 992,
     "panda": 123,
     "parasite": 82,
     "parder": 1533,
@@ -761,6 +765,7 @@
     "sandstone-scorpion": 398,
     "scar-tribe-shaman": 6,
     "scar-tribe-warrior": 7,
+    "scarlett-etzel": 1201,
     "schiach": 1162,
     "scorn-of-the-emperor": 351,
     "scorpion": 43,
@@ -796,6 +801,7 @@
     "snake-god-essence": 356,
     "somewhat-beatable": 34,
     "son-of-verminor": 19,
+    "sorcerer-familiar": 994,
     "soul-broken-harbinger": 1137,
     "soul-scourge": 300,
     "soulless-minion": 68,
@@ -1012,6 +1018,7 @@
     "wrath-of-the-emperor": 351,
     "wyvern": 239,
     "xenia": 137,
+    "xogixath": 842,
     "yalahari": 309,
     "yalahari-despoiler": 309,
     "yellow-butterfly": 10,
@@ -3285,6 +3292,18 @@
     },
     "summon-creature-druid": {
       "effect": 14
+    },
+    "summon-knight-familiar": {
+      "effect": 13
+    },
+    "summon-paladin-familiar": {
+      "effect": 13
+    },
+    "summon-sorcerer-familiar": {
+      "effect": 13
+    },
+    "summon-druid-familiar": {
+      "effect": 13
     },
     "physical-strike": {
       "effect": 10,

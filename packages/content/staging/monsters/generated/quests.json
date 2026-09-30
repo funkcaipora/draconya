@@ -38781,6 +38781,305 @@
     "outfitId": 95
   },
   {
+    "id": "scarlett-etzel",
+    "name": "Scarlett Etzel",
+    "health": 30000,
+    "experience": 20000,
+    "attack": {
+      "min": 0,
+      "max": 1200
+    },
+    "armor": 88,
+    "defense": 88,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 175,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.87,
+        "min": 100,
+        "max": 900
+      },
+      "items": [
+        {
+          "itemId": "energy-bar",
+          "chance": 1
+        },
+        {
+          "itemId": "green-gem",
+          "chance": 0.85
+        },
+        {
+          "itemId": "supreme-health-potion",
+          "chance": 0.537,
+          "min": 1,
+          "max": 14
+        },
+        {
+          "itemId": "ultimate-mana-potion",
+          "chance": 0.4815,
+          "min": 1,
+          "max": 20
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.425
+        },
+        {
+          "itemId": "ultimate-spirit-potion",
+          "chance": 0.34,
+          "min": 1,
+          "max": 6
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.296,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "royal-star",
+          "chance": 0.266,
+          "min": 1,
+          "max": 100
+        },
+        {
+          "itemId": "giant-shimmering-pearl",
+          "chance": 0.24
+        },
+        {
+          "itemId": "berserk-potion",
+          "chance": 0.203,
+          "min": 1,
+          "max": 10
+        },
+        {
+          "itemId": "blue-gem",
+          "chance": 0.185,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "bullseye-potion",
+          "chance": 0.185,
+          "min": 1,
+          "max": 10
+        },
+        {
+          "itemId": "transcendence-potion",
+          "chance": 0.185,
+          "min": 1,
+          "max": 10
+        },
+        {
+          "itemId": "magma-coat",
+          "chance": 0.166
+        },
+        {
+          "itemId": "terra-rod",
+          "chance": 0.011
+        },
+        {
+          "itemId": "violet-gem",
+          "chance": 0.09
+        },
+        {
+          "itemId": "terra-legs",
+          "chance": 0.085
+        },
+        {
+          "itemId": "terra-hood",
+          "chance": 0.074
+        },
+        {
+          "itemId": "terra-mantle",
+          "chance": 0.0725
+        },
+        {
+          "itemId": "magma-amulet",
+          "chance": 0.055
+        },
+        {
+          "itemId": "silver-token",
+          "chance": 0.06,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "gold-ingot",
+          "chance": 0.05
+        },
+        {
+          "itemId": "terra-amulet",
+          "chance": 0.048
+        },
+        {
+          "itemId": "giant-sapphire",
+          "chance": 0.048
+        },
+        {
+          "itemId": "magma-monocle",
+          "chance": 0.037
+        },
+        {
+          "itemId": "cobra-club",
+          "chance": 0.007
+        },
+        {
+          "itemId": "cobra-axe",
+          "chance": 0.006
+        },
+        {
+          "itemId": "cobra-crossbow",
+          "chance": 0.006
+        },
+        {
+          "itemId": "cobra-hood",
+          "chance": 0.004
+        },
+        {
+          "itemId": "cobra-rod",
+          "chance": 0.0065
+        },
+        {
+          "itemId": "cobra-sword",
+          "chance": 0.0065
+        },
+        {
+          "itemId": "cobra-wand",
+          "chance": 0.0065
+        },
+        {
+          "itemId": "cobra-amulet",
+          "chance": 0.0035
+        },
+        {
+          "itemId": "cobra-bo",
+          "chance": 0.006
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 1200
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "suddendeath",
+        "cadenceMs": 2000,
+        "chance": 0.16,
+        "target": {
+          "range": 11
+        },
+        "power": {
+          "min": 400,
+          "max": 600
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "holybeam",
+        "cadenceMs": 2000,
+        "chance": 0.13,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 450,
+          "max": 640
+        },
+        "damageType": "holy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "holyarea"
+        }
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 3,
+          "area": {
+            "shape": "circle",
+            "radius": 5,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 480,
+          "max": 800
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "explosionhit"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/grave_danger/bosses/scarlett_etzel.lua"
+    },
+    "outfitId": 1201
+  },
+  {
     "id": "schiach",
     "name": "Schiach",
     "class": "fey",
@@ -57101,6 +57400,213 @@
       ]
     },
     "outfitId": 351
+  },
+  {
+    "id": "xogixath",
+    "name": "Xogixath",
+    "health": 28000,
+    "experience": 22000,
+    "attack": {
+      "min": 0,
+      "max": 650
+    },
+    "armor": 86,
+    "defense": 86,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "ice": -0.1,
+        "death": 0.5
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 190,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 100,
+        "max": 900
+      },
+      "items": [
+        {
+          "itemId": "red-gem",
+          "chance": 0.65,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "green-crystal-shard",
+          "chance": 0.16
+        },
+        {
+          "itemId": "sea-horse-figurine",
+          "chance": 0.024
+        },
+        {
+          "itemId": "winged-boots",
+          "chance": 0.0012
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.48,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "stone-skin-amulet",
+          "chance": 0.54
+        },
+        {
+          "itemId": "gryphon-mask",
+          "chance": 0.065
+        },
+        {
+          "itemId": "fire-axe",
+          "chance": 0.34
+        },
+        {
+          "itemId": "enchanted-blister-ring",
+          "chance": 0.0052
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 650
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "suddendeath",
+        "cadenceMs": 2000,
+        "chance": 0.16,
+        "target": {
+          "range": 5
+        },
+        "power": {
+          "min": 450,
+          "max": 550
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 2000,
+        "chance": 0.14,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 400,
+          "max": 480
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "firearea"
+        }
+      },
+      {
+        "id": "fireburst",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 400,
+          "max": 550
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "explosionhit"
+        }
+      },
+      {
+        "id": "firewave",
+        "cadenceMs": 2000,
+        "chance": 0.12,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3
+            ]
+          }
+        },
+        "power": {
+          "min": 420,
+          "max": 600
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "hitbyfire"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 610000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/kilmaresh/xogixath.lua"
+    },
+    "outfitId": 842
   },
   {
     "id": "yalahari",

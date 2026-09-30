@@ -304,6 +304,7 @@ function ability(fields: {
   id: string; cadenceMs: number; chance?: number; target: Geometry; power: { min: number; max: number } | number;
   damageType: string; kind?: 'melee' | 'combat'; presentation?: Record<string, string> | undefined;
   condition?: Record<string, unknown>; field?: Record<string, unknown>;
+  challenge?: { durationMs: number };
 }): Record<string, unknown> {
   return {
     id: fields.id,
@@ -316,6 +317,7 @@ function ability(fields: {
     ...(fields.presentation === undefined ? {} : { presentation: fields.presentation }),
     ...(fields.condition === undefined ? {} : { condition: fields.condition }),
     ...(fields.field === undefined ? {} : { field: fields.field }),
+    ...(fields.challenge === undefined ? {} : { challenge: fields.challenge }),
   };
 }
 
@@ -582,6 +584,107 @@ function mapField(name: string, raw: LuaRecord, ctx: SpellContext): SpellMapping
   };
 }
 
+// ---------------------------------------------------------------------------------------------
+// Magias com NOME que o monstro lança (#599, M38-02: os familiares).
+//
+// `Monsters::deserializeSpell` procura o nome em `g_spells().getSpellByName` ANTES de montar o
+// combate genérico: achando, o monstro lança A MAGIA REGISTRADA (a do jogador, ou a de
+// `data-otservbr-global/scripts/spells/monster/`) em vez de um `combat` seu. Duas coisas decidem o
+// que isso vale para o Draconya: (1) o dano do monstro vem do `minDamage`/`maxDamage` da própria
+// entrada — `Monster::getCombatValues` devolve os `minCombatValue`/`maxCombatValue` que o monstro
+// acabou de copiar do bloco, e `Combat::getCombatDamage` os usa no lugar da fórmula de level/
+// magic level da magia (o monstro não tem nenhum dos dois); (2) o RESTO — tipo, alvo único, efeito
+// — é o do script da magia registrada, e a `range` dela (`spell:range(n)`) vale POR CIMA da do
+// monstro (`InstantSpell::canThrowSpell`).
+
+/** As magias de jogador que um monstro do catálogo lança por nome, com o que o script fixa. */
+const NAMED_PLAYER_SPELLS: Readonly<Record<string, {
+  readonly id: string; readonly damageType: string; readonly missile: string; readonly effect: string;
+  /** `spell:range(n)` do script — vale por cima do `range` do monstro (`canThrowSpell`). */
+  readonly spellRange?: number; readonly script: string;
+}>> = {
+  // `data/scripts/spells/attack/ice_strike.lua`: `COMBAT_ICEDAMAGE`, `CONST_ANI_SMALLICE`,
+  // `CONST_ME_ICEATTACK`, `spell:range(3)`, alvo único (`needCasterTargetOrDirection`).
+  'ice strike': {
+    id: 'icestrike', damageType: 'ice', missile: 'CONST_ANI_SMALLICE', effect: 'CONST_ME_ICEATTACK',
+    spellRange: 3, script: 'data/scripts/spells/attack/ice_strike.lua',
+  },
+  // `data/scripts/runes/sudden_death.lua`: `COMBAT_DEATHDAMAGE`, `CONST_ANI_SUDDENDEATH`,
+  // `CONST_ME_MORTAREA`, `needTarget(true)` — sem `range` próprio (a runa vale de longe).
+  'sudden death rune': {
+    id: 'suddendeath', damageType: 'death', missile: 'CONST_ANI_SUDDENDEATH', effect: 'CONST_ME_MORTAREA',
+    script: 'data/scripts/runes/sudden_death.lua',
+  },
+};
+
+/** Registra uma constante de apresentação FIXA da magia registrada, como `presentationOf` faria. */
+function presentationOfNamed(missile: string, effect: string, ctx: SpellContext): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  const read = (constant: string, role: 'missile' | 'effect', field: 'missileKey' | 'impactKey'): void => {
+    const key = presentationKey(constant);
+    if (key === undefined) return;
+    if (ctx.knownConstant !== undefined && !ctx.knownConstant(constant, role)) return;
+    out[field] = key;
+    ctx.presentation.push({ key, constant, role });
+  };
+  read(missile, 'missile', 'missileKey');
+  read(effect, 'effect', 'impactKey');
+  return Object.keys(out).length === 0 ? undefined : out;
+}
+
+/** `ice strike` e `sudden death rune`: dano de UM tipo em alvo único, com a faixa da entrada. */
+function mapNamedPlayerSpell(name: string, raw: LuaRecord, ctx: SpellContext): SpellMapping {
+  const spell = NAMED_PLAYER_SPELLS[name];
+  if (spell === undefined || ctx.list === 'defenses') return unmapped(name, `${name} em ${ctx.list}`);
+  const declared = Math.min(num(raw['range']) ?? 0, CANARY_VIEW_RADIUS * 2);
+  const monsterRange = declared > 0 ? declared : CANARY_VIEW_RADIUS;
+  const range = spell.spellRange === undefined ? monsterRange : Math.min(monsterRange, spell.spellRange);
+  return {
+    kind: 'ability',
+    notes: range === monsterRange ? [] : [
+      `${name}: alcance ${monsterRange} → ${range} (o \`spell:range(${spell.spellRange})\` da magia vale por cima do do monstro, canThrowSpell)`,
+    ],
+    ability: ability({
+      id: spell.id, cadenceMs: cadence(raw), chance: chanceOf(raw), target: { range },
+      power: power(raw), damageType: spell.damageType, kind: 'combat',
+      presentation: presentationOfNamed(spell.missile, spell.effect, ctx),
+    }),
+  };
+}
+
+/**
+ * `summon challenge` (`data-otservbr-global/scripts/spells/monster/summonchallenge.lua`, o ataque
+ * dos familiares Druid e Sorcerer): `doChallengeCreature(creature, target, 8000)` sobre a área
+ * `AREA_CIRCLE2X2` CENTRADA NO LANÇADOR (a magia não declara `needTarget` nem `needDirection`, então
+ * `InstantSpell::castSpell` usa a posição dele) — a provocação da magia Challenge do Knight, por 8 s,
+ * em quem estiver nos 21 tiles em volta. Sem dano.
+ *
+ * O `range` do monstro não é declarado (0 no Canary, "sem limite além da vista"), e é a vista (11)
+ * que o Draconya precisa de um número para: a provocação sai quando a chance passa, com o alvo onde
+ * estiver. A área é o `circle` de raio 4 da tabela de anéis de MONSTRO (`sim/src/area.ts`), que dá
+ * os mesmos 21 tiles (3/5/5/5/3) da matriz de magia `AREA_CIRCLE2X2` — outro mecanismo, mesma forma.
+ */
+const SUMMON_CHALLENGE_DURATION_MS = 8000;
+const SUMMON_CHALLENGE_MONSTER_RADIUS = 4;
+
+function mapSummonChallenge(raw: LuaRecord, ctx: SpellContext): SpellMapping {
+  if (ctx.list === 'defenses') return unmapped('summon challenge', 'summon challenge em defenses');
+  return {
+    kind: 'ability',
+    notes: [],
+    ability: ability({
+      id: 'summon-challenge', cadenceMs: cadence(raw), chance: chanceOf(raw),
+      target: {
+        range: CANARY_VIEW_RADIUS,
+        area: { shape: 'circle', radius: SUMMON_CHALLENGE_MONSTER_RADIUS, centered: 'caster' },
+      },
+      power: 0, damageType: 'physical',
+      presentation: presentationOfNamed('', 'CONST_ME_MAGIC_BLUE', ctx),
+      challenge: { durationMs: SUMMON_CHALLENGE_DURATION_MS },
+    }),
+  };
+}
+
 /**
  * Nomes que o Canary lê e NÃO transformam em mecânica: `effect` e `strength` têm ramo vazio em
  * `deserializeSpell` (só o efeito visual), e `outfit` é a condição de aparência (#621) — nada
@@ -620,6 +723,8 @@ export function mapSpell(raw: LuaValue, ctx: SpellContext): SpellMapping {
     case 'drunk': return mapDrunk(raw, ctx);
     case 'firefield': case 'poisonfield': case 'energyfield': return mapField(name, raw, ctx);
     case 'invisible': return mapInvisible(raw, ctx);
+    case 'ice strike': case 'sudden death rune': return mapNamedPlayerSpell(name, raw, ctx);
+    case 'summon challenge': return mapSummonChallenge(raw, ctx);
     default: {
       const dropped = PRESENTATION_ONLY[name];
       if (dropped !== undefined) return { kind: 'dropped', reason: `${name}: ${dropped}` };

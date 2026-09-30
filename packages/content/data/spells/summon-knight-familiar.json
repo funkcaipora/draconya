@@ -1,0 +1,18 @@
+{
+  "id": "summon-knight-familiar",
+  "name": "Summon Knight Familiar",
+  "description": "Invoca o familiar do Knight: uma criatura aliada que luta ao seu lado por 15 minutos e só pode ser invocada de novo 30 minutos depois do lançamento. Exige não ter outra invocação viva.",
+  "vocationId": "knight",
+  "minLevel": 200,
+  "manaCost": 1000,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "familiar",
+    "monsterId": "knight-familiar",
+    "durationMs": 900000,
+    "cooldownMs": 1800000
+  },
+  "_open": "Conferido contra `things/sources/canary` (47dfd51) em 2026-09-29: `data/scripts/spells/familiar/knight_familiar.lua` — id 194, palavras `utevo gran res eq`, level 200, mana 1000, grupo `support` com `groupCooldown(2 * 1000)`, `spell:cooldown(0)` (o cooldown real é calculado em `Player:CreateFamiliarSpell`, `data/libs/functions/player.lua`) e `vocation(\"knight;true\", \"elite knight;true\")`. Duração e cooldown: `familiarTime = 30` (`config.lua.dist:274`), `summonDuration = 60 × 30 / 2 = 900 s` e `cooldown = 2 × duração = 1800 s` — o cooldown conta do LANÇAMENTO, não do fim da invocação. `cooldownMs: 2000` da MAGIA é o valor do grupo de propósito: o cooldown de 30 min mora no efeito e vira carimbo de relógio de parede no personagem (ADR 0052 d.6, ADR 0057 d.3), porque um `Cooldowns` de sessão (instante lógico) não atravessa a saída da hunt. `isPremium` não é conferido — o catálogo inteiro de magias ignora a conta Premium (`scripts/catalog/spells.ts`). Efeito visual `CONST_ME_MAGIC_BLUE` no lançador e `CONST_ME_TELEPORT` no familiar (`Player:createFamiliar`): `effect: 13` na tabela de aparências, sem conferência de PNG."
+}

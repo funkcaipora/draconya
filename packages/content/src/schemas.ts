@@ -2180,6 +2180,15 @@ export const monsterAbilitySchema = z.strictObject({
    * indexa por tile; o campo vive no ruleset, nunca no `Tilemap`.
    */
   field: fieldSpecSchema.optional(),
+  /**
+   * A PROVOCAÇÃO que a ability lança (#599, M38-02; `doChallengeCreature(creature, target, ms)`
+   * do script `monster/summonchallenge.lua`, o "summon challenge" dos familiares Druid e
+   * Sorcerer): cada monstro atingido passa a mirar QUEM lançou por `durationMs`, e a fuga dele
+   * fica suspensa — o mesmo efeito da magia Challenge do Knight, na mão de uma invocação. Só
+   * faz sentido para uma invocação de personagem (o `sim` a aplica em monstros hostis; contra
+   * um jogador ela não faz nada) e não causa dano: `power` é 0. Ausente é a ability de sempre.
+   */
+  challenge: z.object({ durationMs: z.number().int().positive() }).optional(),
   _open: z.string().optional(),
 }).refine(
   // O Canary fixa `COMBAT_PHYSICALDAMAGE` no `melee` (#682): um `melee` de fogo é conteúdo
@@ -2212,6 +2221,8 @@ export interface MonsterAbility {
   readonly condition?: ConditionSpec;
   /** O campo que a ability deixa no chão, centrado no alvo (CMB-07). Ausente: nenhum. */
   readonly field?: FieldSpec;
+  /** A provocação que a ability lança (#599): quem for atingido passa a mirar o lançador. */
+  readonly challenge?: { readonly durationMs: number };
 }
 
 /**
@@ -2709,6 +2720,17 @@ export const monsterSchema = z.strictObject({
    * Obrigatório quando `summonable` é `true` (`.refine` abaixo); sem uso quando `false`.
    */
   manaCost: z.number().int().positive().optional(),
+  /**
+   * O monstro é um FAMILIAR de vocação (#599, M38-02, ADR 0057 d.3; Canary `monster.flags.
+   * familiar`, `Monster::isFamiliar()`): a invocação level 200 que o personagem mantém por 15
+   * min. **Não é `summonable`** — o Canary declara `summonable = false` nos quatro, e é isso que
+   * impede a Summon Creature de invocá-los; a única porta é a magia `familiar`
+   * (`spellEffectSchema`). O flag muda o que a invocação FAZ: o mestre recebe a XP inteira (uma
+   * invocação comum rende a metade, `Creature::onGainExperience`), ela é teleportada ao mestre
+   * quando se afasta (`Creature::checkSummonMove`) e nasce com a velocidade dele, se maior. Ausente
+   * é `false`.
+   */
+  familiar: z.boolean().default(false),
   /** Nota de proveniência do arquivo inteiro — número medido, fonte TFS/Canary, decisão tomada. */
   _open: z.string().optional(),
 }).refine(
@@ -4693,6 +4715,29 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
    * conhecer monstro nenhum.
    */
   z.object({ kind: z.literal('summon') }),
+  /**
+   * O familiar de vocação (#599, M38-02, ADR 0057 d.3; Canary `data/scripts/spells/familiar/*.lua`
+   * e `Player:CreateFamiliarSpell`, `data/libs/functions/player.lua`): invoca o monstro
+   * `monsterId` (um `familiar: true`) por `durationMs`, e depois disso a magia só sai de novo
+   * passados `cooldownMs` do LANÇAMENTO — no Canary o cooldown é a `CONDITION_SPELLCOOLDOWN` que
+   * `CreateFamiliarSpell` arma com `ticks = 2 × duração` (`familiarTime` 30 min ÷ 2 = 15 min, ×
+   * 2 = 30 min), e o `spell:cooldown(0)` do script só diz que quem cobra é ela.
+   *
+   * Por isso o `cooldownMs` DA MAGIA (`spellSchema.cooldownMs`) fica no valor do grupo (2 s,
+   * `groupCooldown` do script) e o cooldown de verdade mora aqui: ele atravessa a saída da hunt
+   * como carimbo de relógio de parede no `CharacterRuntime` (ADR 0052 d.6), e um cooldown de 30
+   * min no `Cooldowns` da sessão (instante LÓGICO dela) não sobreviveria a ela. `buildContent`
+   * confere que o monstro existe e é `familiar`, e que a magia declara vocação — cada vocação
+   * tem o SEU familiar (`FAMILIAR_ID`).
+   */
+  z.object({
+    kind: z.literal('familiar'),
+    monsterId: z.string().min(1),
+    /** Por quanto tempo a invocação dura — `60 × familiarTime / 2` s do Canary. */
+    durationMs: z.number().int().positive(),
+    /** Quanto tempo depois do lançamento a magia volta — `2 × duração` no Canary. */
+    cooldownMs: z.number().int().positive(),
+  }),
   /**
    * Remove uma condição do PRÓPRIO lançador, na hora (Cancel Magic Shield, #596) — o
    * `creature:removeCondition(...)` do Canary. Ao contrário de toda outra `SpellEffect`, esta não
