@@ -52,6 +52,18 @@ export const DamageType = z.enum([
 export type DamageType = z.infer<typeof DamageType>;
 
 /**
+ * A raça do monstro (#620), que decide a COR do número e o EFEITO do golpe físico que o atinge —
+ * sangue vermelho, veneno verde, morto-vivo cinza… Espelha `MONSTER_RACES` do conteúdo (o
+ * `Game::combatGetTypeInfo` do Canary), pela mesma razão do `DamageType` acima: o protocolo é a
+ * base da pilha e não importa `content`; `content/schemas.test.ts` prende as duas listas juntas.
+ * Fechada de propósito — uma raça que o cliente não conhece faria `decodeS2C` recusar a mensagem.
+ */
+export const MonsterRace = z.enum([
+  'venom', 'blood', 'undead', 'fire', 'energy', 'ink', 'chocolate', 'candy',
+]);
+export type MonsterRace = z.infer<typeof MonsterRace>;
+
+/**
  * Um lugar do inventário (#160): posição num container, ou um slot do corpo. O slot vem como
  * string e é conferido pelo CONTEÚDO no servidor, como em `unequip`.
  */
@@ -74,12 +86,37 @@ export type SkillProgress = z.infer<typeof SkillProgress>;
 
 /**
  * As cores com que um outfit de duas camadas é pintado (FUN-104): cabeça, corpo, pernas e
- * pés, cada um um índice da paleta. Do personagem, não do monstro — o rato é uma camada só.
+ * pés, cada um um índice da paleta. Do personagem e, desde o #620, do monstro que declara cor
+ * (`monster.outfit.look*`) — o rato é uma camada só, e nele a cor não muda nada.
  */
 export const OutfitColors = z.object({
   head: PaletteIndex, body: PaletteIndex, legs: PaletteIndex, feet: PaletteIndex,
 });
 export type OutfitColors = z.infer<typeof OutfitColors>;
+
+/**
+ * A luz que uma criatura carrega (#620): `level` é o alcance em tiles e `color` o índice na paleta
+ * de 216 cores do Tibia (`c = r·36 + g·6 + b`). Só o cliente a desenha.
+ */
+export const CreatureLight = z.object({
+  level: z.number().int().min(1).max(255),
+  color: z.number().int().min(0).max(215),
+});
+export type CreatureLight = z.infer<typeof CreatureLight>;
+
+/**
+ * As falas periódicas de um monstro (#620, `monster.voices` do Canary): a cada `intervalMs` o
+ * CLIENTE rola `chance` (percentual inteiro, o `chance >= uniform_random(1, 100)` do Canary) e, se
+ * passar, mostra UMA das `lines` sorteada sobre a criatura. **Quem sorteia é o cliente, e nunca o
+ * `Rng` da sessão** — a fala não muda resultado nenhum (invariante 3), então nem o servidor nem o
+ * `sim` sabem dela. `yell` é o grito (`TALKTYPE_MONSTER_YELL`); ausente é fala.
+ */
+export const CreatureVoices = z.object({
+  intervalMs: z.number().int().positive(),
+  chance: z.number().int().min(1).max(100),
+  lines: z.array(z.object({ text: z.string().min(1), yell: z.boolean().optional() })).min(1),
+});
+export type CreatureVoices = z.infer<typeof CreatureVoices>;
 
 /**
  * Uma criatura como ela chega no estado completo. O MESMO schema do `creature-appear`, de
@@ -96,9 +133,28 @@ const CreatureState = z.object({
   /**
    * **Opcional**, pela mesma razão dos agregados do analisador: um nó `game` anterior manda a
    * criatura sem cores, e um cliente que as exigisse recusaria a mensagem inteira — em
-   * silêncio. Ausente, o cliente pinta com as cores de personagem novo. Monstro nunca traz.
+   * silêncio. Ausente, o cliente pinta com as cores de personagem novo. O monstro as traz desde
+   * o #620 (`monster.outfit.look*` do Canary, neutro = tudo 0); o monstro de um nó anterior, ou
+   * o de teste sem conteúdo, continua sem elas.
    */
   colors: OutfitColors.optional(),
+  /**
+   * **A apresentação do MONSTRO** (#620) — os quatro campos abaixo saem do conteúdo fixado na
+   * sessão, sem efeito algum em combate, e são **opcionais** pela mesma razão de `colors`: um nó
+   * `game` anterior manda a criatura sem eles, e um cliente que os exigisse recusaria a mensagem
+   * inteira em silêncio. Ausentes são o neutro (sem addon, sem luz, mudo, `blood`).
+   *
+   * Os addons do outfit, a máscara de bits do Tibia: 1 = primeiro addon, 2 = segundo, 3 = os
+   * dois. As cores deles são as de `colors`, que o monstro passa a trazer — o neutro do Canary é
+   * tudo 0, e não as de personagem novo.
+   */
+  addons: z.number().int().min(0).max(3).optional(),
+  /** A raça (#620): a cor do número e o efeito do golpe físico. Ausente é `blood`. */
+  race: MonsterRace.optional(),
+  /** A luz que ele carrega (#620). Ausente é sem luz. */
+  light: CreatureLight.optional(),
+  /** As falas periódicas (#620), sorteadas no cliente. Ausente é mudo. */
+  voices: CreatureVoices.optional(),
   /**
    * O `characterId` do MESTRE, só para a invocação do JOGADOR (#598, M38-01, ADR 0057 decisão
    * 4). **Opcional**, pela mesma razão de `colors`: um nó `game` anterior manda a criatura sem
