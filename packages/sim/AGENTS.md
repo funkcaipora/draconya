@@ -389,7 +389,8 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
 - **O cadáver é um evento de presença, e é só visual** (`ground-item-appeared` /
   `ground-item-vanished`, FUN-123). O `sim` diz QUAL monstro morreu e ONDE; a arte é da tabela,
   resolvida no hospedeiro (invariante 6). O prazo é o evento `CORPSE` na fila, com
-  `corpseTtlMs` do MONSTRO (#585, era da hunt) — monstro sem o campo não deixa cadáver. Os cadáveres entram no snapshot
+  `corpseTtlMs` do MONSTRO (#585, era da hunt) — monstro sem o campo não deixa cadáver, e **invocação
+  nunca deixa** (#600, `Creature::dropCorpse`). Os cadáveres entram no snapshot
   (`corpses`, `nextGroundItemId`), e o evento de apodrecer volta com a fila. O loot NUNCA passa
   pelo cadáver: já foi para a caixa antes de ele cair.
 - **O ataque do monstro é uma faixa sorteada com o `Rng` da sessão** (`attackRange`, FUN-123):
@@ -816,6 +817,28 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   subject certo, como cinto e suspensório contra o cliente pedindo por fora do auto-target. Ver
   "Invocação do PERSONAGEM" em `docs/product/combat.md` para o resto do contrato (teto de 2,
   mana do MONSTRO via `manaCostOverride`, `combat-v4`).
+- **Convince Creature e Animate Dead (#600, M38-03, ADR 0057 d.5–d.6) são supply (`effect.kind`
+  `convince` / `animate-dead`), e o que o script do Canary recusa entra em `useSupply` como a
+  PRECONDIÇÃO `summonRune?.check`** (`HuntRuleset#summonRunePrecondition`) — depois de requisitos, mira e
+  alcance, ANTES do gold: a carga só sai quando o script devolve `true`. Cinco armadilhas. (1)
+  **`MonsterRuntime.masterId` é mutável só pelo Convince** (`#convertToSummon`, o ÚNICO escritor): o
+  monstro do Spawner vira invocação no meio da vida, e o que uma invocação nunca tem precisa ser
+  desarmado ali (lista de invocação própria, alvo antigo, "voltando ao spawn"). (2) **O convencido
+  MANTÉM o lugar no Spawner**: o Canary só o libera quando o monstro é removido, então o respawn NÃO
+  começa ao convencer — `#releaseSpawnSlot` (usado por `#onMonsterDied` E por `#removeSummon`) agenda o
+  respawn quando ele morre ou some com o mestre; esquecer o segundo deixa o ponto vazio para sempre.
+  (3) **`#inSightOf` recusa invocação de personagem** — é o que faz quem tinha o monstro na mira (o
+  mestre, o candidato do bot, um companheiro de party) largá-lo na leitura seguinte; sem isso o
+  convencido herdaria o PRÓPRIO subject como alvo do mestre. (4) **O cadáver animável é uma JANELA da
+  cadeia `decayTo`, não um booleano** (`monster.corpseAnimatable`): o estágio recém-abatido é `unmove`.
+  O tempo desde a morte sai de `session.dueAtOf('corpse', id)` menos `corpseTtlMs` — nunca de um
+  carimbo novo —, e o "topo da pilha" é o cadáver de MAIOR id do tile. (5) **Invocação nunca deixa
+  cadáver** (`#onMonsterDied` zera `corpseTtlMs` para `isSummon`, sem gastar `#nextGroundItemId`):
+  senão o Skeleton animado seria animável de novo. Nos testes (`summon-runes.test.ts`): a rota PRECISA
+  fechar o laço (`buildContent` recusa), `radius` do ponto de spawn é `> 0` (o centro vem primeiro na
+  busca), a capacidade do herói é recomputada da progressão ao entrar (o loot que "não cabe" pede um
+  item mais pesado que ela), e o respawn de quem não é `blockable` leva 4,2 s a mais que o
+  `respawnDelayMs` (o aviso de `SpawnMonster::scheduleSpawn`).
 - **Os Charms em combate (#603, M39-03, ADR 0053 d.5) vivem em `combat/charms.ts` (puro) e nos
   métodos `#charm*`/`#roll*` do `HuntRuleset`, e SÓ rolam no `combat-v4` (`hasCharmStage`).** Três
   armadilhas custam caro. (1) **O índice do tier é `tier − 1`**: o Canary guarda um `0` na frente do

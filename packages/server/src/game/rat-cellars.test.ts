@@ -2,10 +2,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from '../../../content/src/load.js';
-import type { Content } from '@draconya/content';
+import { BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, botConfigV2Schema, botSlotSchema } from '@draconya/content';
+import type { BotConfigV2, Content } from '@draconya/content';
 import {
   CharacterRuntime, Rng, castSpell, createHuntSession, groupCooldownKey, secondaryCooldownKey,
-  spellCooldownKey, statsForLevel,
+  spellCooldownKey, statsForLevel, totalXpForLevel,
 } from '@draconya/sim';
 import type { HuntRuleset, Session } from '@draconya/sim';
 
@@ -100,6 +101,73 @@ describe('a Rat Cellars real (FUN-123, #583, #586)', () => {
       fast.ruleset.monsters.map((m) => [m.id, m.alive, m.position]),
     );
     expect(slow.ruleset.groundItems).toEqual(fast.ruleset.groundItems);
+  });
+});
+
+describe('Convince Creature e Animate Dead com o conteúdo REAL da Rat Cellars (#600)', () => {
+  const runeConfig = (supplyId: string, auto: boolean): BotConfigV2 => {
+    const slots: (ReturnType<typeof botSlotSchema.parse> | null)[] = [
+      botSlotSchema.parse({ do: { kind: 'supply', supplyId }, auto }),
+    ];
+    while (slots.length < BOT_SLOTS_PER_SET) slots.push(null);
+    const empty = { slots: Array.from({ length: BOT_SLOTS_PER_SET }, () => null) };
+    return botConfigV2Schema.parse({
+      version: BOT_VOCABULARY_VERSION, activeSet: 0, sets: [{ slots }, empty, empty, empty],
+    });
+  };
+  // Level 30, magic level 10 (as runas pedem 5 e 4), com mana e gold de sobra — o herói não morre nem
+  // fica sem nada no meio do teste.
+  const enterWithRune = (content: Content, config: BotConfigV2): { session: Session; ruleset: HuntRuleset; hero: CharacterRuntime } => {
+    const session = createHuntSession({
+      id: 'runes', content, huntId: 'rat-cellars', difficulty: 'default', createdAtMs: 0, botConfig: config,
+    });
+    const stats = statsForLevel(30, null, content.progression);
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 8 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth, mana: 5_000, maxMana: 5_000,
+      // O XP do level 30: o level é derivado do XP, e o primeiro rato morto o recalcularia para baixo.
+      level: 30, xp: totalXpForLevel(30, content.progression), goldDelta: 0, gold: 100_000, alive: true,
+      cooldowns: {}, skills: { magic: { level: 10, points: 0 } },
+    });
+    session.enter(hero);
+    return { session, ruleset: session.ruleset as HuntRuleset, hero };
+  };
+
+  it('convence um Rat de verdade (mana 200 do rat.lua), e o ponto de spawn dele NÃO respawna enquanto ele vive', () => {
+    const content = real();
+    const { session, ruleset, hero } = enterWithRune(content, runeConfig('convince-creature-rune', false));
+    session.advanceBy(200);
+    const rat = ruleset.monsters.find((m) => m.alive && m.monsterId === 'rat');
+    if (rat === undefined) throw new Error('sem rato');
+    const before = ruleset.monsters.filter((m) => m.alive).length;
+
+    expect(ruleset.useSlot(session, 'hero', 0, 0, { kind: 'monster', subject: rat.subject })).toEqual({ ok: true });
+    expect(rat.masterId).toBe('hero');
+    expect(hero.mana).toBe(5_000 - 200);
+    // O preço real da runa (80, o menor `buy` dos NPCs do Canary).
+    expect(hero.goldDelta).toBe(-80);
+
+    // Um minuto depois nada respawnou no lugar dele (o respawn é de 90 s por ponto): a população
+    // vinda do Spawner só cai — nunca sobe — e o convencido continua sendo do herói.
+    run(session, 60_000, 100);
+    expect(rat.masterId).toBe('hero');
+    expect(ruleset.monsters.filter((m) => m.alive).length).toBeLessThanOrEqual(before);
+  });
+
+  it('o bot ergue Skeletons dos cadáveres da Rat Cellars, só depois da janela `unmove`, e o gold é o preço real (375)', () => {
+    const content = real();
+    const { session, ruleset, hero } = enterWithRune(content, runeConfig('animate-dead-rune', true));
+    // O herói mata os ratos sozinho pelo caminho de sempre; os cadáveres vivem 670 s.
+    run(session, 180_000, 100);
+    const skeletons = ruleset.monsters.filter((m) => m.alive && m.masterId === 'hero');
+    expect(skeletons.length).toBeGreaterThan(0);
+    expect(skeletons.length).toBeLessThanOrEqual(2);
+    expect(skeletons.every((m) => m.monsterId === 'skeleton')).toBe(true);
+    // Cada Skeleton custou UMA runa (375, o preço real) — e a mana nunca sai. Um Skeleton que já
+    // morreu em combate também custou a dele, então o total só tem piso.
+    expect(session.aggregates.goldSpent % 375).toBe(0);
+    expect(session.aggregates.goldSpent).toBeGreaterThanOrEqual(375 * skeletons.length);
+    expect(hero.mana).toBe(5_000);
   });
 });
 
