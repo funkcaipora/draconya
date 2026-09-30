@@ -202,6 +202,34 @@ export const CLIENT_TO_SERVER = {
    * 35: o 33 é do `charm-remove`, e o 34 é do `cancel-exit` (#802).
    */
   'set-fight-mode': 35,
+  /**
+   * Entrar numa sessão de Treino com uma exercise weapon (#631, M44-13; ADR 0059 d.1). INTENÇÃO:
+   * o cliente diz QUAL instância da mochila; existir, ser uma exercise weapon com cargas e o
+   * personagem estar na Cidade são conferidos pelo servidor (invariante 4). Sucesso é a troca de
+   * cena de sempre (`instance-enter` + `session-state` com `sessionType: 'training'`); recusa é
+   * `system-message`. Sair do treino é o `leave-hunt` (10), como sair de qualquer sessão privada.
+   *
+   * 36: o 35 é do `set-fight-mode`.
+   */
+  'enter-training': 36,
+  /**
+   * Escolher a skill do offline training — o "livro" do Tibia (#631, ADR 0059 d.3, ADR 0052 d.2).
+   * INTENÇÃO de Cidade: `skillId: null` desmarca. Só as skills que o conteúdo oferece
+   * (`catalogue.training.offlineSkills`) são aceitas; o gasto do banco é da `api`, na próxima
+   * emissão de ticket, nunca deste pedido. Sucesso é `training-state` reenviado.
+   *
+   * 37: o 36 é do `enter-training`.
+   */
+  'set-offline-training-skill': 37,
+  /**
+   * Comprar UM item por gold na Cidade (#631, ADR 0059 d.2) — o mínimo que a exercise weapon
+   * precisa enquanto a loja geral (E5) não existe. INTENÇÃO: só o id; `purchasable`, preço, saldo
+   * e capacidade são do servidor (invariante 4), e o gold sai pelo ledger (invariante 10). Sucesso
+   * é `inventory` (+ `player-stats` com o saldo novo); recusa é `system-message`.
+   *
+   * 38: o 37 é do `set-offline-training-skill`.
+   */
+  'buy-item': 38,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -449,6 +477,16 @@ export const SERVER_TO_CLIENT = {
    * 45: o 44 é do `charms`.
    */
   'exit-pending': 45,
+  /**
+   * O estado do Treino do personagem (#631, ADR 0059): o banco de offline training e a skill
+   * escolhida no livro, as exercise weapons que ele carrega (com as cargas RESTANTES — que moram
+   * no overlay da instância e não viajam em `inventory`) e qual delas o Treino em curso está
+   * gastando. Só para o dono, como `charms`. Sai no attach e a cada mudança: escolha do livro,
+   * compra, e a cada golpe do Treino (cada carga gasta é uma mudança).
+   *
+   * 46: o 45 é do `exit-pending`.
+   */
+  'training-state': 46,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

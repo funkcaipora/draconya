@@ -421,6 +421,22 @@ export const C2S_SCHEMAS = {
    * defesa e de mitigação que ele liga são do servidor (invariante 4).
    */
   'set-fight-mode': z.object({ mode: z.enum(FIGHT_MODES) }),
+  /**
+   * Entrar numa sessão de Treino com uma exercise weapon da mochila (#631, ADR 0059 d.1).
+   * INTENÇÃO: só a instância; que ela é uma exercise weapon com cargas e que o personagem está
+   * na Cidade é do servidor (invariante 4).
+   */
+  'enter-training': z.object({ itemInstanceId: z.string().min(1) }),
+  /**
+   * Escolher a skill do offline training (o livro do Tibia; #631, ADR 0059 d.3). `null` desmarca.
+   * INTENÇÃO: quais skills existem é do conteúdo, conferido pelo servidor (invariante 4).
+   */
+  'set-offline-training-skill': z.object({ skillId: z.string().min(1).nullable() }),
+  /**
+   * Comprar um item por gold na Cidade (#631, ADR 0059 d.2). INTENÇÃO: só o id do catálogo;
+   * `purchasable`, preço, saldo e capacidade são do servidor (invariante 4).
+   */
+  'buy-item': z.object({ itemId: z.string().min(1) }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */
@@ -1130,6 +1146,20 @@ export const S2C_SCHEMAS = {
        */
       shortLabel: z.string().min(1).optional(),
       /**
+       * A exercise weapon (#631, ADR 0059): a skill que ela treina e o TOTAL de cargas da
+       * definição (as restantes são da instância, em `training-state.weapons`). Opcional sem
+       * default: um nó anterior manda sem, e item nenhum é exercise weapon.
+       */
+      exercise: z.object({
+        skillId: z.string().min(1),
+        charges: z.number().int().positive(),
+      }).optional(),
+      /**
+       * O preço de compra (`buy-item`, #631, ADR 0059 d.2), só nos itens `purchasable` — a loja
+       * mínima que a exercise weapon precisa até a loja geral (E5). Opcional sem default.
+       */
+      buyPrice: z.number().int().positive().optional(),
+      /**
        * Como a arma bate (#152): o tipo e o alcance, para o tooltip. `ammoFamily` diz de que
        * família é a munição que a arma dispara — o seletor de munição a usa. Mana por golpe e
        * faixa de dano ficam de fora — são balanceamento que o cliente não simula (invariante 4).
@@ -1228,6 +1258,34 @@ export const S2C_SCHEMAS = {
         highMultiplier: z.number().int().positive(),
         highEnhancedMultiplier: z.number().int().positive(),
       }),
+    }).optional(),
+    /**
+     * O Treino (#631, ADR 0059), para a tela do livro e da loja de exercise weapons mostrar o que
+     * vale ANTES de o jogador agir — o gasto e a rolagem são do servidor (invariante 4).
+     * `.optional()`, como `blessings`: conteúdo sem `training/` manda `catalogue` sem a chave, e a
+     * tela de Treino não aparece.
+     *
+     * `perCharge` é o que UMA carga rende no boneco (`triesPerCharge × rate / 100`, e o análogo
+     * de mana gasta para wand/rod). `offlineSkills` é o livro: a skill, o nome para exibir e o
+     * tipo da conta (`attacks`: por ataque; `mana`: por mana). Os tetos são o do banco, o gasto
+     * por conta Free/Premium (ADR 0059 d.4) e a carência.
+     */
+    training: z.object({
+      perCharge: z.object({
+        tries: z.number().int().nonnegative(),
+        manaSpent: z.number().int().nonnegative(),
+      }),
+      bankCapMs: z.number().int().positive(),
+      graceMs: z.number().int().nonnegative(),
+      spendCapMs: z.object({
+        free: z.number().int().positive(),
+        premium: z.number().int().positive(),
+      }),
+      offlineSkills: z.array(z.object({
+        skillId: z.string().min(1),
+        name: z.string().min(1),
+        kind: z.enum(['attacks', 'mana']),
+      })),
     }).optional(),
   }),
   'creature-health': z.object({ id: z.number().int(), health: z.number(), maxHealth: z.number() }),
@@ -1480,6 +1538,23 @@ export const S2C_SCHEMAS = {
     reason: z.enum(['manual-exit', 'exit-rule']).optional(),
     phase: z.enum(['countdown', 'in-combat']).optional(),
     remainingMs: z.number().int().nonnegative().optional(),
+  }),
+  /**
+   * O estado do Treino do PRÓPRIO personagem (#631, ADR 0059): o banco de offline training (ms) e
+   * a skill escolhida no livro (`null`: nenhuma), as exercise weapons carregadas com as cargas
+   * RESTANTES — o overlay da instância não viaja em `inventory` — e a instância que o Treino em
+   * curso está gastando (`null` fora do Treino). O que cada arma rende e custa é do `catalogue`
+   * (fixado na sessão, invariante 7).
+   */
+  'training-state': z.object({
+    offlineBankMs: z.number().int().nonnegative(),
+    offlineSkill: z.string().min(1).nullable(),
+    weapons: z.array(z.object({
+      instanceId: z.string().min(1),
+      itemId: z.string().min(1),
+      charges: z.number().int().positive(),
+    })),
+    activeInstanceId: z.string().min(1).nullable(),
   }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
