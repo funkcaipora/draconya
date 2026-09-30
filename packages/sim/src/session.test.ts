@@ -2,6 +2,8 @@ import { compileMitigation, skillSchema } from '@draconya/content';
 import type { Combat } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from './character.js';
+import type { CharacterState } from './character.js';
+import { FULL_BLOCK_CHARGE, isFullBlockCharge } from './combat/block-charge.js';
 import { resolveDamage } from './combat/damage.js';
 import { Rng } from './rng.js';
 import { Session } from './session.js';
@@ -595,6 +597,155 @@ describe('entrada em curso: reversão e joinedAtMs (#397, ADR 0035 decisão 6)',
     stranger.lastAttackAtMs = 300;
     expect(() => session.enter(stranger)).toThrow('party cheia');
     expect(stranger.lastAttackAtMs).toBe(300);
+  });
+
+  describe('os instantes do relógio da sessão anterior não atravessam a entrada (#812)', () => {
+    /**
+     * Cada grandeza que o `CharacterRuntime` guarda como INSTANTE do relógio lógico da sessão: como
+     * gravar um valor de uma sessão que já andou 57,7 s, e como saber se ele ainda está lá. O
+     * valor é sempre um instante que, lido numa sessão que acabou de nascer (relógio em zero),
+     * significaria algo que ninguém fez ali.
+     */
+    interface ClockField {
+      readonly stale: (hero: CharacterRuntime) => void;
+      readonly cleared: (hero: CharacterRuntime) => boolean;
+    }
+    const CLOCK_FIELDS: Readonly<Record<string, ClockField>> = {
+      lastAttackAtMs: {
+        stale: (hero) => { hero.lastAttackAtMs = 57_700; },
+        cleared: (hero) => hero.lastAttackAtMs === null,
+      },
+      lastCombatActionAtMs: {
+        stale: (hero) => { hero.lastCombatActionAtMs = 57_700; },
+        cleared: (hero) => hero.lastCombatActionAtMs === null,
+      },
+      attackLockedUntil: {
+        stale: (hero) => { hero.attackLockedUntil = 59_700; },
+        cleared: (hero) => hero.attackLockedUntil === 0,
+      },
+      cleanseImmunity: {
+        stale: (hero) => { hero.cleanseImmunity.set('poison', 68_700); },
+        cleared: (hero) => hero.cleanseImmunity.size === 0,
+      },
+      blockCharge: {
+        stale: (hero) => { hero.blockCharge = { charges: 0, anchorMs: 57_700 }; },
+        cleared: (hero) => isFullBlockCharge(hero.blockCharge),
+      },
+      cooldowns: {
+        stale: (hero) => { hero.cooldowns.start('spell:exura', 57_700, 60_000); },
+        cleared: (hero) => hero.cooldowns.remainingMs('spell:exura', 0) === 0
+          && Object.keys(hero.cooldowns.getState().until).length === 0,
+      },
+      conditions: {
+        stale: (hero) => {
+          hero.conditions.apply({ key: 'haste', speedPercent: 30, expiresAtMs: 87_700 });
+        },
+        cleared: (hero) => hero.conditions.size === 0 && hero.conditions.speedScale() === 1,
+      },
+      pendingManualAction: {
+        stale: (hero) => { hero.pendingManualAction = { kind: 'item', ref: { instanceId: 'i-1' }, seq: 7 }; },
+        cleared: (hero) => hero.pendingManualAction === null,
+      },
+    };
+
+    /**
+     * TODO campo de `CharacterState` classificado: `true` é instante do relógio da sessão (e tem
+     * uma entrada em `CLOCK_FIELDS`), `false` é dado que atravessa a sessão de propósito. É um
+     * `Record<keyof CharacterState, …>`, então o campo NOVO que alguém acrescentar ao estado do
+     * personagem não compila até ser classificado aqui — é o que impede o próximo instante de
+     * vazar em silêncio, como estes vazaram (#550, #812).
+     */
+    const IS_SESSION_CLOCK: Readonly<Record<keyof CharacterState, boolean>> = {
+      lastAttackAtMs: true,
+      lastCombatActionAtMs: true,
+      attackLockedUntil: true,
+      cleanseImmunity: true,
+      blockCharge: true,
+      cooldowns: true,
+      conditions: true,
+      pendingManualAction: true,
+      // Identidade e progressão: atravessam a sessão, é para isso que existem.
+      id: false, position: false, health: false, maxHealth: false, mana: false, maxMana: false,
+      level: false, xp: false, soul: false, vocationId: false, boostedMonsterId: false, speed: false,
+      gold: false, goldDelta: false, alive: false, skills: false, bestiary: false, charms: false,
+      capacity: false, inventory: false, removedInstances: false, lootSeq: false,
+      contribution: false, ammo: false, supplyStock: false, ammunitionStock: false, storages: false,
+      direction: false, blessings: false, promoted: false, fightMode: false,
+      // Relógio de PAREDE (epoch), materializado na fronteira da transição (`materializeStamina`).
+      staminaMs: false, staminaUpdatedAtMs: false,
+      // DURAÇÃO restante, sem âncora num relógio: a comida que sobra, os contadores de prática
+      // (golpes que ainda treinam, sem instante nenhum).
+      fedMs: false, attackPractice: false,
+    };
+
+    const newSession = (id: string): Session => new Session({
+      id, contentVersion: 'v1', ruleset: joinedRuleset(),
+      rng: Rng.fromSeed(id), createdAtMs: 0,
+    });
+
+    it('todo campo do estado do personagem está classificado, e todo instante tem o seu teste', () => {
+      const clockKeys = Object.entries(IS_SESSION_CLOCK).filter(([, isClock]) => isClock)
+        .map(([key]) => key).sort();
+      expect(Object.keys(CLOCK_FIELDS).sort()).toEqual(clockKeys);
+    });
+
+    it.each(Object.entries(CLOCK_FIELDS))('%s: entrar numa sessão nova esquece o instante da anterior', (_name, field) => {
+      const hero = character('a');
+      field.stale(hero);
+      // A pré-condição: o valor de fato está lá, ou o teste passaria vazio.
+      expect(field.cleared(hero)).toBe(false);
+
+      const session = newSession('fresh');
+      session.enter(hero);
+      expect(session.nowMs).toBe(0);
+      expect(field.cleared(hero)).toBe(true);
+    });
+
+    it.each(Object.entries(CLOCK_FIELDS))('%s: o snapshot preserva o instante — o relógio é o mesmo, e restaurar não passa por enter', (_name, field) => {
+      const session = newSession('hot');
+      const hero = character('a');
+      session.enter(hero);
+      session.advanceBy(1_000);
+      field.stale(hero);
+      expect(field.cleared(hero)).toBe(false);
+
+      const restored = Session.fromSnapshot(session.snapshot(), joinedRuleset(), Rng.fromSeed('r'));
+      const [again] = restored.participants;
+      if (again === undefined) throw new Error('o snapshot perdeu o participante');
+      expect(field.cleared(again)).toBe(false);
+    });
+
+    it.each(Object.entries(CLOCK_FIELDS))('%s: a entrada RECUSADA não toca quem continua na sessão de origem', (_name, field) => {
+      const refused = character('refused');
+      field.stale(refused);
+      expect(() => newSession('full').enter(refused)).toThrow('party cheia');
+      expect(field.cleared(refused)).toBe(false);
+    });
+
+    it('o banco de cargas de bloqueio volta CHEIO — o estado de quem nunca bloqueou, não o zero de quem gastou', () => {
+      const hero = character('a');
+      hero.blockCharge = { charges: 0, anchorMs: 57_700 };
+      newSession('fresh').enter(hero);
+      expect(hero.blockCharge).toBe(FULL_BLOCK_CHARGE);
+    });
+
+    it('hunt → hunt com o mesmo objeto: nada da primeira chega à segunda, e o que a segunda grava vale', () => {
+      // Cada `enter` recomeça do zero, e o valor gravado DEPOIS de entrar (com o relógio da
+      // sessão em curso) continua valendo até a próxima entrada.
+      const hero = character('a');
+      const first = newSession('first');
+      first.enter(hero);
+      first.advanceBy(57_700);
+      for (const field of Object.values(CLOCK_FIELDS)) field.stale(hero);
+
+      const second = newSession('second');
+      second.enter(hero);
+      for (const field of Object.values(CLOCK_FIELDS)) expect(field.cleared(hero)).toBe(true);
+
+      second.advanceBy(2_000);
+      hero.lastCombatActionAtMs = second.nowMs;
+      expect(hero.lastCombatActionAtMs).toBe(2_000);
+    });
   });
 
   it('guarda o instante lógico da entrada e filtra o extrato por ele', () => {

@@ -74,4 +74,14 @@ export class Cooldowns {
   clear(key: string): void {
     this.#until.delete(key);
   }
+
+  /**
+   * Esquece TODOS os cooldowns (#812). É o que `CharacterRuntime.resetSessionClockState` chama ao
+   * entrar numa sessão nova: o `until` é instante do relógio lógico da sessão que o gravou, e o
+   * da sessão seguinte nasce em zero — um cooldown de 57 s da hunt anterior seguraria a magia
+   * por quase um minuto sem que nada nesta sessão o tenha causado.
+   */
+  clearAll(): void {
+    this.#until.clear();
+  }
 }

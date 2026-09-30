@@ -255,7 +255,9 @@ export interface CharacterState {
    * Só `HuntRuleset#step` escreve, na troca de `z` ou no redirecionamento por teleporte, e só sob
    * `combat-v3` com `combat.stairhopDelayMs` declarado (`CombatCompatibilityProfile`/`combatSchema`
    * em `@draconya/content`). Ausente é `0` — nunca travado, o de sempre —, sem bump de
-   * `SNAPSHOT_FORMAT_VERSION`, como `blockCharge`/`attackPractice`.
+   * `SNAPSHOT_FORMAT_VERSION`, como `blockCharge`/`attackPractice`. É instante do relógio da sessão
+   * que o gravou: `Session.enter` o zera na transição (#812, `resetSessionClockState`), o restore
+   * de snapshot o preserva.
    */
   readonly attackLockedUntil?: number;
   /**
@@ -266,8 +268,9 @@ export interface CharacterState {
    * régua de `Runner.lastCombatActionAtMs` (`rulesets/hunt.ts`), mas NÃO o mesmo campo: aquele
    * é só DADO, sem self-heal, e alimenta só a elegibilidade de XP compartilhada (#525); este
    * soma o recebido e não exclui nada, porque apanhar também deveria travar a saída no Tibia.
-   * Ausente é "nunca lutou nesta sessão" — sem bump de `SNAPSHOT_FORMAT_VERSION`, como
-   * `attackLockedUntil`.
+   * Ausente é "nunca lutou nesta sessão" — o relógio é da sessão, e `Session.enter` zera o
+   * carimbo na transição (#812, `resetSessionClockState`); o restore de snapshot o preserva. Sem
+   * bump de `SNAPSHOT_FORMAT_VERSION`, como `attackLockedUntil`.
    */
   readonly lastCombatActionAtMs?: number;
   /**
@@ -447,12 +450,13 @@ export class CharacterRuntime {
   /** A ação manual adiada (#726). `null` é nenhuma. Só o ruleset escreve. */
   pendingManualAction: PendingManualActionState | null;
   /**
-   * A trava de stairhop (#554). Só `HuntRuleset#step` escreve — ver `CharacterState.attackLockedUntil`.
+   * A trava de stairhop (#554). Só `HuntRuleset#step` escreve e `Session.enter` zera — ver
+   * `CharacterState.attackLockedUntil`.
    */
   attackLockedUntil: number;
   /**
-   * Ver `CharacterState.lastCombatActionAtMs`. Só o ruleset da hunt escreve (invariante 9);
-   * `null` é "nunca lutou".
+   * Ver `CharacterState.lastCombatActionAtMs`. Só o ruleset da hunt escreve (invariante 9) e
+   * `Session.enter` zera; `null` é "nunca lutou".
    */
   lastCombatActionAtMs: number | null;
   /**
@@ -559,6 +563,43 @@ export class CharacterRuntime {
   settleGoldDelta(): void {
     this.#gold += this.goldDelta;
     this.goldDelta = 0;
+  }
+
+  /**
+   * Esquece tudo o que o personagem guarda como INSTANTE do relógio lógico da sessão anterior
+   * (#812). Só `Session.enter` chama, depois de o `onEnter` do ruleset aceitar a entrada.
+   *
+   * O relógio de uma sessão nasce em zero (ADR 0020), mas o `CharacterRuntime` atravessa
+   * Cidade → hunt, hunt → hunt e a saída da party como o MESMO objeto. Um instante gravado por
+   * uma sessão e lido pela seguinte é lido no relógio errado: um carimbo de 57 700 ms vira
+   * "no futuro" numa sessão que está em 1 000 ms — e o resultado do combate passa a depender
+   * de por onde o objeto andou, e não do estado e da semente (invariante 3). Entre uma sessão e
+   * a outra o tempo real passa sem relógio nenhum (a Cidade não simula, ADR 0023), então "tudo
+   * vencido, nada em curso" é o único estado de entrada coerente — o mesmo que um personagem
+   * recém-criado a partir do ticket já tem.
+   *
+   * **Toda grandeza nova guardada como instante do relógio da sessão entra aqui**, e o que força
+   * isso é a tabela `IS_SESSION_CLOCK` de `session.test.ts`, um `Record<keyof CharacterState,
+   * boolean>`: o campo novo do estado não compila até ser classificado. O que é DURAÇÃO restante (o
+   * `fedMs`, o `durationRemainingMs` do overlay de item) atravessa como sempre — sem âncora
+   * num relógio, não há o que ler errado. O restore de snapshot NÃO passa por aqui: o relógio
+   * é o mesmo, e a janela quente atravessa.
+   *
+   * O que sai: o carimbo do último golpe de arma (`lastAttackAtMs`, #550), o do último ataque
+   * dado ou recebido (`lastCombatActionAtMs`, #625), a trava de stairhop (`attackLockedUntil`,
+   * #554), a imunidade do charm Cleanse, o banco de cargas de bloqueio (`blockCharge.anchorMs`,
+   * volta CHEIO — o estado de quem nunca bloqueou), os cooldowns, as condições e a ação manual
+   * adiada (cujo evento morava na fila da sessão anterior).
+   */
+  resetSessionClockState(): void {
+    this.lastAttackAtMs = null;
+    this.lastCombatActionAtMs = null;
+    this.attackLockedUntil = 0;
+    this.cleanseImmunity.clear();
+    this.blockCharge = FULL_BLOCK_CHARGE;
+    this.cooldowns.clearAll();
+    this.conditions.clearAll();
+    this.pendingManualAction = null;
   }
 
   /**

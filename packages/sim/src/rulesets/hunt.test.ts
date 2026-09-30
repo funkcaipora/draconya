@@ -4596,6 +4596,33 @@ describe('trava de combate na saída (#625)', () => {
     expect(session.ended).toBe('manual-exit');
   });
 
+  it('o carimbo de combate de uma hunt NÃO atravessa para a seguinte: quem não lutou nela sai na hora (#812)', () => {
+    // O `CharacterRuntime` é o MESMO objeto na transição (`createSessionBuilder`) e o relógio da
+    // sessão nova nasce em zero. O carimbo da primeira ficava no futuro da segunda, e a saída —
+    // que só conclui fora de combate — esperava os 60 s "desde" um golpe que esta sessão nunca
+    // viu. Combate DE VERDADE na primeira (o herói mata o rato), não um carimbo à mão.
+    const first = start({ health: 50_000 });
+    run(first.session, 10_000, 100);
+    const stamp = first.hero.lastCombatActionAtMs;
+    expect(stamp).not.toBeNull();
+    expect(stamp).toBeGreaterThan(0);
+
+    // Transição: sai da primeira e entra numa sessão NOVA, sem monstro nenhum (o assunto aqui é
+    // a trava, não o combate), com o mesmo objeto.
+    first.session.leave('hero');
+    const second = createHuntSession({
+      id: 'session-2', content: content({ routes: [{ ...route, spawnPoints: [] }] }),
+      huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+    });
+    second.enter(first.hero);
+    expect(second.nowMs).toBe(0);
+    expect(first.hero.lastCombatActionAtMs).toBeNull();
+
+    (second.ruleset as HuntRuleset).requestExit(second, first.hero.id);
+    // Sem `exitDelayMs` e sem combate nesta sessão: a saída conclui no ato.
+    expect(second.ended).toBe('manual-exit');
+  });
+
   it('um novo ataque durante a espera empurra a trava — a saída só conclui 60 s depois do ÚLTIMO', () => {
     const { session, hero, ruleset } = withExit([]);
     session.advanceBy(1_000);
@@ -15239,6 +15266,38 @@ describe('stairhop: trava de ataque ao trocar de andar (#554, M30-07, ADR 0040 d
     const monster = ruleset.monsters[0];
     if (monster === undefined) throw new Error('faltou rato');
     expect(monster.health).toBeLessThan(rat.health);
+  });
+
+  it('a trava de uma hunt NÃO atravessa para a seguinte: o mesmo herói, sessão nova, bate no ato (#812)', () => {
+    // O `CharacterRuntime` é o MESMO objeto na transição e o relógio da sessão nova nasce em
+    // zero: uma trava de 90 000 ms gravada na primeira segurava o golpe da segunda por um minuto e
+    // meio — um ataque bloqueado herdado de uma escada que esta sessão nunca viu. O atraso é
+    // exagerado (90 s, não os 2 s do conteúdo real) só para o teste não confundir a trava herdada
+    // com a janela de uma travessia legítima.
+    const first = start({
+      loaded: content({
+        maps: [stairsMap], routes: [stairsRoute], hunts: [stairsHunt],
+        combat: [{ ...combatV3, stairhopDelayMs: 90_000 }],
+      }),
+    });
+    first.session.advanceBy(1);
+    expect(first.hero.position).toEqual({ x: 3, y: 1, z: 6 });
+    expect(first.hero.attackLockedUntil).toBe(90_000);
+
+    // Transição: sai da primeira e entra numa sessão NOVA, sem escada, com o mesmo objeto.
+    first.session.leave('hero');
+    const second = createHuntSession({
+      id: 'session-2', content: content({ combat: [combatV3] }),
+      huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+    });
+    second.enter(first.hero);
+    expect(second.nowMs).toBe(0);
+    expect(first.hero.attackLockedUntil).toBe(0);
+
+    run(second, 5_000, 100);
+    // O golpe de arma saiu (`lastAttackAtMs` só é escrito quando ele sai) muito antes dos 90 s.
+    expect(first.hero.lastAttackAtMs).not.toBeNull();
+    expect(first.hero.attackLockedUntil).toBe(0);
   });
 
   it('sob combat-v1/v2, a travessia não trava nada mesmo com `stairhopDelayMs` no conteúdo', () => {

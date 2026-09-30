@@ -458,6 +458,17 @@ export class Conditions {
     return this.#active.get(key) ?? null;
   }
 
+  /**
+   * Esquece TODAS as condições, sem cancelar evento nenhum (#812) — quem chama não tem sessão
+   * onde cancelar. É o que `CharacterRuntime.resetSessionClockState` faz ao entrar numa sessão
+   * nova: o `expiresAtMs`/`nextTickAtMs` é do relógio da sessão anterior e o vencimento morava
+   * na fila dela, então na seguinte a condição nunca venceria (a haste, o Mana Shield ficariam
+   * para sempre, com um `remainingMs` que não significa nada).
+   */
+  clearAll(): void {
+    this.#active.clear();
+  }
+
   get size(): number {
     return this.#active.size;
   }
