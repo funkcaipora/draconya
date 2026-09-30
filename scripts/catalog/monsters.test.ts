@@ -3,11 +3,14 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { bestiaryEntrySchema, MONSTER_CLASSES, monsterSchema } from '../../packages/content/src/schemas.js';
+import {
+  bestiaryEntrySchema, MONSTER_CLASSES, MONSTER_FACTIONS, monsterSchema,
+} from '../../packages/content/src/schemas.js';
+import { extractEnum } from './enums.js';
 import { readSourceCommit } from './env.js';
 import type { CatalogEntity } from './generated-writer.js';
 import {
-  BESTIARY_CLASS_MAP, CANARY_LOOT_CHANCE_SCALE, convertMonster, corpseTtlMsFromChain,
+  BESTIARY_CLASS_MAP, CANARY_LOOT_CHANCE_SCALE, convertMonster, corpseTtlMsFromChain, FACTION_CONSTANTS,
   listMonsterFiles, loadReaderDeps, lootChance, readCorpseDecayChains, readMonsterCatalog,
   readTfsSpeeds, slugify, type DecayStage, type MonsterReaderDeps,
 } from './monsters.js';
@@ -368,6 +371,57 @@ describe('convertMonster (fixture sintética)', () => {
       const converted = withImmunities('{ { type = "fire", combat = true }, { type = "fire", condition = true } }');
       expect((converted.entity['mitigation'] as { immunities: string[] }).immunities).toEqual(['fire']);
       expect(converted.entity['conditionImmunities']).toEqual(['burning']);
+    });
+  });
+
+  describe('facção (`monster.faction`/`enemyFactions`, #619)', () => {
+    const withFaction = (lua: string) => {
+      const ctx = fixture(false);
+      const text = RAT.replace('monster.immunities = {}', `monster.immunities = {}\n${lua}`);
+      return convertMonster(text, 'x/mammals/test_rat.lua', 'mammals', COMMIT, deps(ctx));
+    };
+
+    it('lê a facção e as inimigas como nomes de `MONSTER_FACTIONS`, na ordem em que o Lua as declara', () => {
+      const converted = withFaction('monster.faction = FACTION_DEEPLING\nmonster.enemyFactions = { FACTION_PLAYER, FACTION_DEATHLING }');
+      expect(converted.blockers).toEqual([]);
+      expect(converted.entity['faction']).toBe('deepling');
+      expect(converted.entity['enemyFactions']).toEqual(['player', 'deathling']);
+      // Todo valor escrito é aceito pelo schema — a promoção não estoura.
+      expect(() => monsterSchema.parse(asMonster(converted.entity))).not.toThrow();
+      // O campo lido não vai mais para o relatório de "ignorados".
+      expect(converted.notes.ignoredFields.some((field) => field.startsWith('faction'))).toBe(false);
+      expect(converted.notes.ignoredFields.some((field) => field.startsWith('enemyFactions'))).toBe(false);
+    });
+
+    it('a Lion nomeia SÓ os Usurpers (sem `player`): o leitor não acrescenta o jogador', () => {
+      const converted = withFaction('monster.faction = FACTION_LION\nmonster.enemyFactions = { FACTION_LIONUSURPERS }');
+      expect(converted.entity['faction']).toBe('lion');
+      expect(converted.entity['enemyFactions']).toEqual(['lion-usurpers']);
+    });
+
+    it('sem facção o monstro fica SEM os dois campos — `FACTION_DEFAULT` não é escrito', () => {
+      expect(withFaction('').entity['faction']).toBeUndefined();
+      expect(withFaction('').entity['enemyFactions']).toBeUndefined();
+      const explicit = withFaction('monster.faction = FACTION_DEFAULT');
+      expect(explicit.entity['faction']).toBeUndefined();
+      expect(explicit.blockers).toEqual([]);
+    });
+
+    it('uma constante `FACTION_*` que o Canary não tem HOJE bloqueia o monstro, em vez de ser lida em silêncio', () => {
+      const converted = withFaction('monster.faction = FACTION_FUTURE\nmonster.enemyFactions = { FACTION_PLAYER, FACTION_OTHER }');
+      expect(converted.blockers).toEqual([
+        'facção desconhecida: FACTION_FUTURE', 'facção inimiga desconhecida: FACTION_OTHER',
+      ]);
+    });
+
+    it('`FACTION_CONSTANTS` cobre o `Faction_t` do Canary, na ordem do enum (só com o checkout real)', () => {
+      const canary = process.env['CANARY_DIR'];
+      if (canary === undefined || canary === '' || !existsSync(join(canary, 'src/game/game_definitions.hpp'))) return;
+      const enumValues = extractEnum(readFileSync(join(canary, 'src/game/game_definitions.hpp'), 'utf8'), 'Faction_t');
+      const { FACTION_LAST: _sentinel, ...real } = Object.fromEntries(enumValues);
+      // O índice de `MONSTER_FACTIONS` é o valor do enum: o desempate do `sim` soma `valor × 100`.
+      expect(Object.keys(FACTION_CONSTANTS).map((name) => [name, MONSTER_FACTIONS.indexOf(FACTION_CONSTANTS[name] as never)]))
+        .toEqual(Object.entries(real));
     });
   });
 

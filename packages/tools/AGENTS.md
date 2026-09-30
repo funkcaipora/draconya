@@ -30,7 +30,10 @@ passam pelos mapeadores por NOME de `scripts/catalog/monster-abilities.ts` (#579
 catálogo, e quem invoca um monstro que não foi gerado sai junto. O `immunities[].condition = true`
 do Lua vira `monster.conditionImmunities` pela tabela de `luaMonsterTypeConditionImmunities` do
 Canary (`bleed`/`fire`/`ice`… → a imunidade à DOT correspondente, #559); `outfit` é reportado por
-nome em `ignoredFields` até o M44-03. Dois
+nome em `ignoredFields` até o M44-03. `monster.faction`/`enemyFactions` viram `faction`/
+`enemyFactions` (#619) pela tabela `FACTION_CONSTANTS` (o `Faction_t`, `FACTION_DEFAULT` omitido) — uma
+constante que a tabela não conhece bloqueia o monstro, e o teste confere a tabela contra o enum do
+checkout real (`CANARY_DIR`) na ordem, que é o valor numérico. Dois
 campos saem CONDICIONADOS ao schema da base: `kind` (#682) e a onda de monstro em `rows` (#679,
 sem ele a onda sai na `wave` antiga — TODO). O que ficou fora vai para
 `docs/reference/catalog/monsters-report.md` com o motivo; o que foi lido e não coube (moeda

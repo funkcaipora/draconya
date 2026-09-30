@@ -117,8 +117,24 @@ export const COIN_VALUES: ReadonlyMap<string, number> = new Map([
 ]);
 
 /**
- * O resolvedor de identificador para um `.lua` de monstro. `COMBAT_*` e `BESTY_RACE_*` saem
- * como texto (tabelas acima); qualquer outro identificador em MAIÚSCULAS (`CONST_ME_*`,
+ * `FACTION_*` (`Faction_t`, `src/game/game_definitions.hpp:44-53`) → o nome da facção no
+ * `MONSTER_FACTIONS` do conteúdo (#619). Resolvida para TEXTO direto no avaliador, como
+ * `BESTY_RACE_*`: o número do enum só importa dentro do `sim` (o desempate do alvo), e lá ele é o
+ * índice de `MONSTER_FACTIONS`. `FACTION_LAST` é sentinela do C++ e nenhum Lua a usa.
+ */
+export const FACTION_CONSTANTS: Readonly<Record<string, string>> = {
+  FACTION_DEFAULT: 'default', FACTION_PLAYER: 'player', FACTION_LION: 'lion',
+  FACTION_LIONUSURPERS: 'lion-usurpers', FACTION_MARID: 'marid', FACTION_EFREET: 'efreet',
+  FACTION_DEEPLING: 'deepling', FACTION_DEATHLING: 'deathling', FACTION_ANUMA: 'anuma',
+  FACTION_FAFNAR: 'fafnar',
+};
+
+/** Os nomes de facção que o conteúdo conhece — o que `FACTION_CONSTANTS` resolve. */
+const KNOWN_FACTIONS: ReadonlySet<string> = new Set(Object.values(FACTION_CONSTANTS));
+
+/**
+ * O resolvedor de identificador para um `.lua` de monstro. `COMBAT_*`, `BESTY_RACE_*` e
+ * `FACTION_*` saem como texto (tabelas acima); qualquer outro identificador em MAIÚSCULAS (`CONST_ME_*`,
  * `CONST_ANI_*`, `CONDITION_*`) resolve para o próprio nome — é só a parte de ataque, que este
  * leitor não interpreta (M35-02), e travar o arquivo inteiro por um efeito visual seria perder o
  * monstro por nada.
@@ -129,6 +145,8 @@ function monsterConstants(): ConstantResolver {
       if (name.startsWith('COMBAT_')) return COMBAT_TYPE_CONSTANTS[name];
       const race = BESTIARY_RACE_CONSTANTS[name];
       if (race !== undefined) return race;
+      const faction = FACTION_CONSTANTS[name];
+      if (faction !== undefined) return faction;
       return /^[A-Z][A-Z0-9_]*$/.test(name) ? name : undefined;
     },
   };
@@ -397,13 +415,13 @@ const READ_FIELDS: ReadonlySet<string> = new Set([
   'name', 'description', 'experience', 'outfit', 'raceId', 'Bestiary', 'health', 'maxHealth', 'race',
   'speed', 'manaCost', 'changeTarget', 'strategiesTarget', 'flags', 'loot', 'attacks', 'defenses',
   'elements', 'immunities', 'summon', 'maxSummons', 'summons', 'critChance', 'corpse',
+  'faction', 'enemyFactions',
 ]);
 
 /** Campos que não entram NUNCA nesta issue, com o dono de cada um. */
 const IGNORED_FIELD_OWNERS: Readonly<Record<string, string>> = {
   events: 'M44', voices: 'M44', light: 'M44',
-  heals: '#683', reflects: '#683', bosstiary: 'sem sistema de Bosstiary', faction: 'sem facção',
-  enemyFactions: 'sem facção',
+  heals: '#683', reflects: '#683', bosstiary: 'sem sistema de Bosstiary',
 };
 
 /** A velocidade na escala do TFS (ADR 0037 d.4): o TFS quando tem o mesmo monstro, senão Canary × 2. */
@@ -794,6 +812,22 @@ export function convertMonster(
   if (runHealth > 0) entity['runOnHealth'] = runHealth;
   const staticChance = num(flags['staticAttackChance']);
   if (staticChance !== undefined) entity['staticAttack'] = Math.min(Math.max(staticChance, 0), 100) / 100;
+  // A facção (#619): `monster.faction` e `monster.enemyFactions`, os nomes de `MONSTER_FACTIONS`.
+  // `default` (o valor de quem não declara) fica AUSENTE, e uma constante que o Canary não
+  // conhece hoje (`FACTION_*` novo) é motivo para NÃO gerar — silenciar viraria um monstro que
+  // ataca quem não devia.
+  const faction = str(raw['faction']);
+  if (faction !== undefined) {
+    if (!KNOWN_FACTIONS.has(faction)) blockers.push(`facção desconhecida: ${faction}`);
+    else if (faction !== 'default') entity['faction'] = faction;
+  }
+  const enemyFactions = [...new Set(positionalOf(raw['enemyFactions']).filter(
+    (value): value is string => typeof value === 'string',
+  ))];
+  for (const enemy of enemyFactions) {
+    if (!KNOWN_FACTIONS.has(enemy)) blockers.push(`facção inimiga desconhecida: ${enemy}`);
+  }
+  if (enemyFactions.length > 0) entity['enemyFactions'] = enemyFactions;
   if (melee === undefined && spells.abilities.length === 0 && spells.unmapped.length === 0) {
     entity['_open'] = 'Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.';
   }
