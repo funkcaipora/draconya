@@ -1640,8 +1640,15 @@ export const damagePercentBySource = z.object({
 /**
  * A POLÍTICA de fusão de uma condição (CMB-07, DT-02): declarada no conteúdo, nunca um campo
  * por efeito. Evita timers paralelos quando a mesma condição é relançada.
+ *
+ * `longest` (M44-04, #622) é a regra de `Condition::updateCondition` do Canary para as condições
+ * GENÉRICAS (`ConditionGeneric` — rooted e pacified — e `ConditionFeared`): relançar só vale se o
+ * prazo novo NÃO termina antes do que já está correndo (`getEndTime() > now + novoTicks` mantém o
+ * antigo). É diferente de `refresh` (o novo sempre vence, mesmo mais curto) e de `strongest`
+ * (compara MAGNITUDE, e estas condições não têm magnitude) — um pacified de 10 s do Swift Foot não
+ * pode ser encurtado por uma troca de andar que só trava por 2 s.
  */
-export const conditionMergeSchema = z.enum(['replace', 'refresh', 'strongest']);
+export const conditionMergeSchema = z.enum(['replace', 'refresh', 'strongest', 'longest']);
 export type ConditionMerge = z.infer<typeof conditionMergeSchema>;
 
 /**
@@ -1688,15 +1695,35 @@ export const DRUNK_CONDITION_KEY = 'drunk' as const;
 export const INVISIBLE_CONDITION_KEY = 'invisible' as const;
 
 /**
+ * As chaves RESERVADAS das três condições de CONTROLE (M44-04, #622): `CONDITION_ROOTED`,
+ * `CONDITION_FEARED` e `CONDITION_PACIFIED` do Canary (`creatures_definitions.hpp:140-144`). Sem
+ * campo próprio no estado — a semântica inteira mora no `sim` (`Conditions.hasRooted`/
+ * `hasFeared`/`hasPacified`, reconhecidas pela chave, como `hasDrunk`) —, e por isso a chave é
+ * reservada: um `buff` copiado com `key: 'rooted'` por engano prenderia quem o carrega. `rooted`
+ * proíbe QUALQUER passo (`Game::internalMoveCreature`), `feared` força a fuga (`ConditionFeared`) e
+ * `pacified` proíbe o golpe e a magia agressiva (`Player::doAttacking`/`Spell::playerSpellCheck`).
+ */
+export const ROOTED_CONDITION_KEY = 'rooted' as const;
+export const FEARED_CONDITION_KEY = 'feared' as const;
+export const PACIFIED_CONDITION_KEY = 'pacified' as const;
+
+/**
  * As condições a que um monstro pode declarar imunidade (`monster.immunities[].condition` do
  * Canary, ADR 0041 decisão 2): `paralyze` (o sinal NEGATIVO da condição de velocidade), `drunk`,
  * `invisible` (que o Canary reaproveita como "enxerga invisível", ver `monsterSchema`) e as oito
  * DOTs de `DAMAGE_OVER_TIME_CONDITION_IMMUNITY`. `outfit` — 119 monstros o declaram imune, mas o
  * Draconya ainda não tem a condição — entra com o M44-03.
+ *
+ * `rooted`, `feared` e `pacified` (M44-04, #622) entram como vocabulário AUTORAL: o
+ * `Monster::isImmune(ConditionType_t)` do Canary é um `bitset` sobre TODO `ConditionType_t`, mas a
+ * ponte do Lua (`luaMonsterTypeConditionImmunities`) só nomeia os que estão acima — nenhum monstro
+ * do bestiário declara imunidade a estes três, então o importador nunca os escreve. Existem para o
+ * conteúdo que o Draconya autora (boss da Roda, Avatar): "imunidade por monstro" da issue.
  */
 export const CONDITION_IMMUNITIES = [
   'paralyze', 'drunk', 'invisible',
   'bleeding', 'poison', 'burning', 'electrified', 'cursed', 'drowning', 'freezing', 'dazzled',
+  'rooted', 'feared', 'pacified',
 ] as const;
 export type ConditionImmunity = (typeof CONDITION_IMMUNITIES)[number];
 
@@ -1815,6 +1842,21 @@ export const conditionEffectSchema = z.discriminatedUnion('kind', [
    * (`chooseTarget`, `sim/monster/monster.ts`).
    */
   z.object({ kind: z.literal('invisible') }),
+  /**
+   * As três condições de CONTROLE (M44-04, #622 — `CONDITION_ROOTED`/`CONDITION_FEARED`/
+   * `CONDITION_PACIFIED`). Sem campo próprio, como `drunk`: só `durationMs` (comum a toda
+   * condição) importa, e o `sim` reconhece cada uma pela chave reservada.
+   *
+   * - `rooted`: nenhum passo sai (`Game::internalMoveCreature` recusa, `game.cpp:1965`);
+   * - `feared`: o personagem foge do LANÇADOR — o `sim` guarda de onde no estado da condição
+   *   (`ConditionState.flee`) e conduz a caminhada forçada (`ConditionFeared`,
+   *   `condition.cpp:2163-2380`); não pode lançar magia nem usar runa (`spells.cpp:104,503`);
+   * - `pacified`: sem golpe e sem magia AGRESSIVA (`Player::doAttacking`, `player.cpp:3982`;
+   *   `Spell::playerSpellCheck`, `spells.cpp:517`).
+   */
+  z.object({ kind: z.literal('rooted') }),
+  z.object({ kind: z.literal('feared') }),
+  z.object({ kind: z.literal('pacified') }),
   z.object({
     kind: z.literal('heal-over-time'),
     amount: z.number().int().positive(),
@@ -1876,6 +1918,11 @@ export const conditionEffectSchema = z.discriminatedUnion('kind', [
   },
 );
 export type ConditionEffect = z.infer<typeof conditionEffectSchema>;
+
+/** Os `kind`s de controle (M44-04, #622) — o que `conditionSpecSchema` exige `merge: 'longest'`. */
+const CONTROL_CONDITION_KINDS: ReadonlySet<ConditionEffect['kind']> = new Set([
+  'rooted', 'feared', 'pacified',
+]);
 export type DamageOverTimeEffect = Extract<ConditionEffect, { kind: 'damage-over-time' }>;
 
 /**
@@ -1979,7 +2026,8 @@ export function damageOverTimeTotalMs(effect: DamageOverTimeEffect): number {
  * O efeito `speed` (CMB-11) exige `key: 'speed'` — a chave RESERVADA que faz haste e paralyze
  * de QUALQUER fonte se substituírem (ver `SPEED_CONDITION_KEY`), como no Tibia. O efeito `drunk`
  * (M31-03) exige `key: 'drunk'` pelo mesmo motivo: sem campo próprio no estado, é a chave que o
- * `sim` reconhece (ver `DRUNK_CONDITION_KEY`).
+ * `sim` reconhece (ver `DRUNK_CONDITION_KEY`). O mesmo vale para `invisible` e para as três de
+ * controle (`rooted`/`feared`/`pacified`, M44-04), que além da chave exigem `merge: 'longest'`.
  *
  * As duas checagens abaixo são as DUAS IMPLICAÇÕES, não só uma (achado da revisão do #651): sem
  * a volta, `key: 'speed'`/`key: 'drunk'` com um `effect.kind` DIFERENTE passa batido — e
@@ -2017,6 +2065,20 @@ export const conditionSpecSchema = z.object({
     message: `a condição invisible precisa da chave reservada "${INVISIBLE_CONDITION_KEY}", `
       + 'e só ela',
   },
+).refine(
+  (spec) => (spec.effect.kind === 'rooted') === (spec.key === ROOTED_CONDITION_KEY),
+  { message: `a condição rooted precisa da chave reservada "${ROOTED_CONDITION_KEY}", e só ela` },
+).refine(
+  (spec) => (spec.effect.kind === 'feared') === (spec.key === FEARED_CONDITION_KEY),
+  { message: `a condição feared precisa da chave reservada "${FEARED_CONDITION_KEY}", e só ela` },
+).refine(
+  (spec) => (spec.effect.kind === 'pacified') === (spec.key === PACIFIED_CONDITION_KEY),
+  { message: `a condição pacified precisa da chave reservada "${PACIFIED_CONDITION_KEY}", e só ela` },
+).refine(
+  // A fusão das três é a de `Condition::updateCondition` do Canary (ver `conditionMergeSchema`):
+  // não é uma escolha do conteúdo, e um `refresh` autorado à mão encurtaria o prazo que já corre.
+  (spec) => !CONTROL_CONDITION_KINDS.has(spec.effect.kind) || spec.merge === 'longest',
+  { message: 'as condições rooted, feared e pacified exigem merge "longest" (Condition::updateCondition)' },
 );
 export type ConditionSpec = z.infer<typeof conditionSpecSchema>;
 
@@ -3578,16 +3640,16 @@ export const combatSchema = z.object({
    * (`player.cpp:12417-12423`, `teleport || oldPos.z != newPos.z`) — `CONDITION_PACIFIED` por
    * `STAIRHOP_DELAY`, só para jogador. Em milissegundos: o passo que troca de `z` OU redireciona
    * por teleporte (escada e teleporte passam pelo mesmo `move()`, `packages/sim/src/movement.ts`)
-   * grava `character.attackLockedUntil = nowMs + stairhopDelayMs`, e nem o golpe corpo a corpo
-   * nem a magia AGRESSIVA (`damage`/`damage-over-time`) saem antes desse instante — cura,
-   * condição e o resto do vocabulário continuam liberados, como o Canary libera tudo que não é
-   * `aggressive` sob `CONDITION_PACIFIED` (`spells.cpp:517`, `Spell::aggressive` é `true` por
-   * padrão). **Ausente é IDENTIDADE**: sem o campo, nenhum passo grava trava nenhuma, e todo
+   * APLICA a condição `pacified` (M44-04, #622) por `stairhopDelayMs` ao personagem, e nem o
+   * golpe corpo a corpo nem a magia AGRESSIVA (`damage`/`damage-over-time`) saem enquanto ela
+   * durar — cura, condição e o resto do vocabulário continuam liberados, como o Canary libera
+   * tudo que não é `aggressive` sob `CONDITION_PACIFIED` (`spells.cpp:517`, `Spell::aggressive` é
+   * `true` por padrão). **Ausente é IDENTIDADE**: sem o campo, nenhum passo aplica a trava, e todo
    * conteúdo que não o declara — `combat-v1`/`v2` inclusive — segue bit a bit. Só o `combat-v3`
    * lê (`HuntRuleset#isV3`); um `combat-v1`/`v2` que declarasse o campo por engano seria
-   * ignorado do mesmo jeito. Migra para a condição `pacified` de verdade quando ela existir
-   * (M44-04) — até lá é um campo solto no personagem, porque não há efeito de RESOLUÇÃO de golpe
-   * recebido para compor: é só um portão de saída, como `blockCharge`/`attackPractice`.
+   * ignorado do mesmo jeito. Antes do #622 a trava era um instante solto no personagem
+   * (`attackLockedUntil`); agora é a condição de verdade, e o snapshot antigo com o campo é lido
+   * como um `pacified` que vence no mesmo instante.
    */
   stairhopDelayMs: z.number().int().positive().optional(),
   _open: z.string().optional(),
@@ -4611,12 +4673,19 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
     range: z.number().int().positive(),
     damageType: z.enum(DAMAGE_TYPES).default('arcane'),
   }),
-  /** Velocidade +`speedPercent` % por `durationMs`; Swift Foot também baixa o dano causado. */
+  /**
+   * Velocidade +`speedPercent` % por `durationMs`. `pacifies` (M44-04, #622) é o Swift Foot do
+   * Canary (`data/scripts/spells/support/swift_foot.lua`): a mesma magia que acelera aplica
+   * `CONDITION_PACIFIED` por `spellDuration` — o jogador corre, mas não ataca (nem golpe, nem
+   * magia agressiva) enquanto a haste dura. É o efeito do ramo sem Roda (`WHEEL_GRADE_NONE`); a
+   * Roda da Destino está fora do recorte. Ausente é a haste de sempre.
+   */
   z.object({
     kind: z.literal('haste'),
     speedPercent: z.number().int().positive(),
     durationMs: z.number().int().positive(),
     damageDealtPercent: damagePercentBySource.optional(),
+    pacifies: z.boolean().optional(),
   }),
   /**
    * Postura (Protector, Blood Rage, Sharpshooter…): percentuais por `durationMs` — no lançador,

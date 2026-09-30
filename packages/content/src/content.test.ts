@@ -2986,3 +2986,82 @@ describe('condição drunk — desvio de passo (M31-03, #558, ADR 0041)', () => 
     }))).toThrow(ContentError);
   });
 });
+
+describe('condições de controle: rooted, feared e pacified (M44-04, #622, ADR 0041)', () => {
+  // As três aplicadas por um ataque de monstro, como o `fear`/`root` do Canary
+  // (`data-otservbr-global/scripts/spells/monster/fear.lua`/`root.lua`: `CONDITION_PARAM_TICKS`
+  // 3000, alvo único).
+  const controlCondition = (kind: 'rooted' | 'feared' | 'pacified', over: Record<string, unknown> = {}) => ({
+    key: kind, merge: 'longest' as const, durationMs: 3_000, effect: { kind }, ...over,
+  });
+  const withCondition = (condition: unknown) => base({
+    monsters: [{
+      ...rat, abilities: [{ id: 'x', cadenceMs: 2_000, chance: 0.3, power: 0, target: { range: 7 }, condition }],
+    }],
+  });
+
+  it('monsterAbilitySchema aceita cada uma, com a chave reservada e merge `longest`', () => {
+    for (const kind of ['rooted', 'feared', 'pacified'] as const) {
+      const content = buildContent(withCondition(controlCondition(kind)));
+      expect(content.monsters.get('rat')?.abilities.find((a) => a.id === 'x')?.condition)
+        .toEqual(controlCondition(kind));
+    }
+  });
+
+  it('cada uma exige a chave reservada — e SÓ ela (as duas implicações)', () => {
+    for (const kind of ['rooted', 'feared', 'pacified'] as const) {
+      // A chave errada com o efeito certo.
+      expect(() => buildContent(withCondition(controlCondition(kind, { key: 'preso' })))).toThrow(ContentError);
+      // A chave reservada com um efeito que NÃO é o dela: `Conditions.isActive` reconhece pela
+      // chave, e um `buff` copiado com `key: 'rooted'` prenderia quem o carrega.
+      expect(() => buildContent(withCondition({
+        key: kind, merge: 'longest', durationMs: 3_000, effect: { kind: 'buff', damageTakenPercent: -20 },
+      }))).toThrow(ContentError);
+    }
+  });
+
+  it('exigem merge `longest` — `Condition::updateCondition`, não uma escolha do conteúdo', () => {
+    for (const kind of ['rooted', 'feared', 'pacified'] as const) {
+      for (const merge of ['refresh', 'replace', 'strongest'] as const) {
+        expect(() => buildContent(withCondition(controlCondition(kind, { merge }))), `${kind}/${merge}`)
+          .toThrow(ContentError);
+      }
+    }
+  });
+
+  it('não aceitam campo além do que toda condição já tem — só `kind`', () => {
+    // Como o `drunk`: o mecanismo inteiro mora no `sim`; um campo estranho é descartado.
+    expect(() => buildContent(withCondition(controlCondition('feared', {
+      effect: { kind: 'feared', flee: 'norte' },
+    })))).not.toThrow();
+  });
+
+  it('nunca como self-buff de DEFESA — o Canary só as aplica em ataque, contra o alvo', () => {
+    for (const kind of ['rooted', 'feared', 'pacified'] as const) {
+      expect(() => buildContent(base({
+        monsters: [{
+          ...rat, defenses: [{ id: 'd', cadenceMs: 1_000, chance: 1, condition: controlCondition(kind) }],
+        }],
+      })), kind).toThrow(ContentError);
+    }
+  });
+
+  it('monsterSchema.conditionImmunities aceita rooted/feared/pacified (imunidade por monstro)', () => {
+    const content = buildContent(base({
+      monsters: [{ ...rat, conditionImmunities: ['rooted', 'feared', 'pacified'] }],
+    }));
+    expect(content.monsters.get('rat')?.conditionImmunities).toEqual(['rooted', 'feared', 'pacified']);
+    expect(CONDITION_IMMUNITIES).toEqual(expect.arrayContaining(['rooted', 'feared', 'pacified']));
+  });
+
+  it('a runa/magia que aplica a condição em si também usa `conditionSpecSchema` — mesma regra', () => {
+    const pacifyRune = {
+      id: 'calm-rune', name: 'Calm', price: 10, group: 'support' as const, groupCooldownMs: 2_000,
+      effect: { kind: 'condition' as const, condition: controlCondition('pacified') },
+    };
+    expect(() => buildContent(base({ supplies: [pacifyRune] }))).not.toThrow();
+    expect(() => buildContent(base({
+      supplies: [{ ...pacifyRune, effect: { ...pacifyRune.effect, condition: controlCondition('pacified', { merge: 'refresh' }) } }],
+    }))).toThrow(ContentError);
+  });
+});
