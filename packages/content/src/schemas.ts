@@ -2238,6 +2238,29 @@ export const MONSTER_CLASSES = [
 export type MonsterClass = (typeof MONSTER_CLASSES)[number];
 
 /**
+ * As facções do Canary (`Faction_t`, `src/game/game_definitions.hpp:44-53`, conferido em
+ * 47dfd51), na ORDEM do enum: o índice de cada nome É o valor numérico da facção, e o valor
+ * importa — o Canary soma `faction × 100` à distância e `faction × 100 000` à vida/dano ao
+ * ranquear alvos (`Monster::searchTargetImmediate`, `monster_targeting.cpp`), então quem tem a
+ * facção de número MENOR ganha o desempate de "mais perto". `factionValue` devolve o número.
+ *
+ * `default` (0) é o monstro sem facção — o bestiário quase inteiro — e `player` (1) é a do
+ * jogador e de tudo que ele invoca; nenhum monstro DECLARA `faction: 'player'`, mas as listas
+ * `enemyFactions` de quase todos o citam (é o que faz o monstro de facção atacar o jogador).
+ * Identificador em inglês; nomes com hífen no lugar do `FACTION_LIONUSURPERS` colado do Canary.
+ */
+export const MONSTER_FACTIONS = [
+  'default', 'player', 'lion', 'lion-usurpers', 'marid', 'efreet', 'deepling', 'deathling',
+  'anuma', 'fafnar',
+] as const;
+export type MonsterFaction = (typeof MONSTER_FACTIONS)[number];
+
+/** O valor numérico de uma facção no enum do Canary — o índice em `MONSTER_FACTIONS`. */
+export function factionValue(faction: MonsterFaction): number {
+  return MONSTER_FACTIONS.indexOf(faction);
+}
+
+/**
  * Os `ConditionEffect.kind` que uma DEFESA de monstro pode aplicar a SI MESMA (#651): todo
  * self-buff que o bestiário do Canary/TFS usa em defesa própria, nunca um efeito que só faz
  * sentido vindo de um ATACANTE contra outra criatura — `drunk` (desvio de passo) e
@@ -2670,6 +2693,24 @@ export const monsterSchema = z.strictObject({
    * sorteiam. Ausente é o comportamento de sempre — ver `monsterTargetStrategySchema`.
    */
   targetStrategy: monsterTargetStrategySchema.optional(),
+  /**
+   * A facção do monstro (#619, Canary `monster.faction`, `MonsterType::info.faction`,
+   * `monsters.hpp:134`) — ver `MONSTER_FACTIONS`. Ausente é `default`, o monstro sem facção: só
+   * ataca jogador e invocação de jogador, e nenhum outro monstro o ataca, como sempre. Com
+   * facção, quem ele considera alvo passa a ser decidido por `enemyFactions` (abaixo), e uma
+   * invocação sua herda a facção do mestre (`Monster::getFaction`).
+   */
+  faction: z.enum(MONSTER_FACTIONS).optional(),
+  /**
+   * As facções INIMIGAS deste monstro (#619, Canary `monster.enemyFactions`,
+   * `MonsterType::info.enemyFactions`, `monsters.hpp:135`): só quem é de uma dessas facções é
+   * alvo dele (`Monster::isTarget`) e só a esses o golpe dele acerta (`Combat::canDoCombat`).
+   * `player` na lista é o que faz o monstro de facção caçar jogador — quase todo monstro de
+   * facção do Canary o declara; as três da Lion (`lion-knight`/`-archer`/`-warlock`) só nomeiam
+   * `lion-usurpers` e portanto ignoram o jogador. Ausente é nenhuma inimiga (o que, para um
+   * monstro COM facção, é não atacar ninguém).
+   */
+  enemyFactions: z.array(z.enum(MONSTER_FACTIONS)).optional(),
   /**
    * O HP em que o monstro passa a fugir (#518, TFS `runonhealth`, referência §15-19): abaixo ou
    * igual a este valor, ele se afasta do alvo em vez de aproximar, não dá golpe corpo a corpo,

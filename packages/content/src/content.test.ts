@@ -6,7 +6,8 @@ import {
 } from './content.js';
 import type { RawContent } from './content.js';
 import {
-  CONDITION_IMMUNITIES, DAMAGE_OVER_TIME_CONDITION_IMMUNITY, monsterSchema, NEUTRAL_RATES, ratesSchema, wallSetOf,
+  CONDITION_IMMUNITIES, DAMAGE_OVER_TIME_CONDITION_IMMUNITY, factionValue, MONSTER_FACTIONS, monsterSchema,
+  NEUTRAL_RATES, ratesSchema, wallSetOf,
 } from './schemas.js';
 import { loadContent } from './load.js';
 
@@ -1023,6 +1024,60 @@ describe('a estratégia ponderada de alvo (`monster.targetStrategy`, #541)', () 
     expect(() => buildContent(base({
       monsters: [{ ...rat, targetStrategy: { nearest: 100 } }],
     }))).toThrow();
+  });
+});
+
+describe('facções de monstro (`monster.faction`/`enemyFactions`, #619)', () => {
+  it('ausentes são `undefined` — o monstro sem facção, o comportamento de sempre', () => {
+    const monster = buildContent(base()).monsters.get('rat');
+    expect(monster?.faction).toBeUndefined();
+    expect(monster?.enemyFactions).toBeUndefined();
+  });
+
+  it('aceita a forma do Deepling (facção própria, inimigos: jogador e Deathling) e a expõe ao `sim`', () => {
+    const content = buildContent(base({
+      monsters: [{ ...rat, faction: 'deepling', enemyFactions: ['player', 'deathling'] }],
+    }));
+    const monster = content.monsters.get('rat');
+    expect(monster?.faction).toBe('deepling');
+    expect(monster?.enemyFactions).toEqual(['player', 'deathling']);
+  });
+
+  it('recusa nome de facção fora das dez do Canary', () => {
+    expect(() => buildContent(base({ monsters: [{ ...rat, faction: 'elves' }] }))).toThrow();
+    expect(() => buildContent(base({ monsters: [{ ...rat, enemyFactions: ['player', 'elves'] }] })))
+      .toThrow();
+  });
+
+  it('`factionValue` é o valor do enum `Faction_t` — a ORDEM de `MONSTER_FACTIONS` é contrato', () => {
+    // `game_definitions.hpp:44-53`: DEFAULT 0, PLAYER 1, LION 2, LIONUSURPERS 3, MARID 4,
+    // EFREET 5, DEEPLING 6, DEATHLING 7, ANUMA 8, FAFNAR 9. O `sim` soma `valor × 100` à
+    // distância no desempate de alvo, então trocar a ordem troca quem o monstro escolhe.
+    expect(MONSTER_FACTIONS).toEqual([
+      'default', 'player', 'lion', 'lion-usurpers', 'marid', 'efreet', 'deepling', 'deathling',
+      'anuma', 'fafnar',
+    ]);
+    expect(factionValue('default')).toBe(0);
+    expect(factionValue('player')).toBe(1);
+    expect(factionValue('deepling')).toBe(6);
+    expect(factionValue('deathling')).toBe(7);
+    expect(factionValue('fafnar')).toBe(9);
+  });
+
+  it('o catálogo importado do Canary carrega: Deepling e Deathling se enxergam como inimigos', () => {
+    const { monsters } = loadContent(join(dirname(fileURLToPath(import.meta.url)), '..', 'data'));
+    const deepling = monsters.get('deepling-brawler');
+    const deathling = monsters.get('deathling-scout');
+    expect(deepling?.faction).toBe('deepling');
+    expect(deepling?.enemyFactions).toEqual(['player', 'deathling']);
+    expect(deathling?.faction).toBe('deathling');
+    expect(deathling?.enemyFactions).toEqual(['player', 'deepling']);
+    // Lion ↔ Usurpers: a Lion NÃO lista o jogador (`lion_knight.lua`), então ignora quem caça.
+    expect(monsters.get('lion-knight')?.enemyFactions).toEqual(['lion-usurpers']);
+    expect(monsters.get('usurper-archer')?.enemyFactions).toEqual(['player', 'lion']);
+    // O rato e o Dragon (autorais) seguem sem facção.
+    expect(monsters.get('rat')?.faction).toBeUndefined();
+    expect(monsters.get('dragon')?.faction).toBeUndefined();
   });
 });
 

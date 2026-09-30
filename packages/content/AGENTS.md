@@ -604,5 +604,14 @@ entre arquivos resolvem.
   **`invisible` significa "enxerga o invisível"** (`Monster::canSeeInvisibility`), nunca "não pode
   ficar invisível": é a exceção que não bloqueia a condição. `outfit` (119 monstros) fica fora até
   o M44-03. Ausente é `[]`, sem imunidade nenhuma.
+- **`monster.faction`/`enemyFactions` são o `Faction_t` do Canary** (#619, M44-01): dez nomes em
+  `MONSTER_FACTIONS`, **na ordem do enum — o índice É o valor numérico** (`factionValue`), porque o
+  `sim` soma `valor × 100` à distância no desempate de alvo (o jogador = 1 antes de qualquer monstro
+  inimigo). `faction` ausente é `default`; `enemyFactions` só vale para quem tem facção
+  (`isEnemyFaction` só é consultado com `getFaction() != FACTION_DEFAULT`), e `player` na lista é o
+  que faz o monstro caçar o jogador — as três da Lion não o listam e o ignoram. Os nomes não são os
+  identificadores colados do Lua (`FACTION_LIONUSURPERS` → `lion-usurpers`); o importador traduz e
+  bloqueia uma constante desconhecida. Nenhum campo tem default preenchido: ausência é o monstro de
+  sempre.
 
 Issue: FUN-8.
