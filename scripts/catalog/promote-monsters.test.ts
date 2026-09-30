@@ -263,4 +263,60 @@ describe('writePromotion / checkPromotion', () => {
     const generatedAgain = readGeneratedSlice(join(monstersGeneratedDir, 'mammals.json'));
     expect(generatedAgain.map((e) => e.id).sort()).toEqual(['badger', 'rat']);
   });
+
+  describe('a apresentação (#620) é renovada até nos hand-authored', () => {
+    const LOOK = {
+      outfit: { head: 113, body: 120, legs: 95, feet: 115, addons: 3 },
+      voices: { intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!', yell: false }] },
+      light: { level: 4, color: 208 },
+      race: 'venom',
+    };
+
+    function setupRat(onDisk: Record<string, unknown>, fresh: Record<string, unknown>): string {
+      const root = mkdtempSync(join(tmpdir(), 'promote-monsters-'));
+      workdir = root;
+      setupFixture(root, { mammals: [badger(), badger({ id: 'rat', name: 'Rat', ...fresh })] });
+      const dir = join(root, 'packages/content/data/monsters/generated');
+      mkdirSync(dir, { recursive: true });
+      const { bestiary: _b, outfitId: _o, ...rat } = badger({ id: 'rat', name: 'Rat' });
+      writeFileSync(join(dir, 'mammals.json'), JSON.stringify([{ ...rat, blockable: false, ...onDisk }], null, 2));
+      return root;
+    }
+
+    it('o Rat commitado ganha a apresentação do staging, e o resto dele fica verbatim (#581)', () => {
+      // `rat` nunca é sobrescrito pela promoção — mas `outfit`/`voices`/`light`/`race` não são número
+      // de combate, e a fala do rato tem que acompanhar o Canary. Mutação que mata: voltar o
+      // `preserveHandAuthored` ao que era (o Rat nunca falaria).
+      const root = setupRat({ health: 99 }, LOOK);
+      writePromotion(root);
+      const rat = readGeneratedSlice(join(root, 'packages/content/data/monsters/generated/mammals.json'))
+        .find((entity) => entity.id === 'rat');
+      expect(rat?.['outfit']).toEqual(LOOK.outfit);
+      expect(rat?.['voices']).toEqual(LOOK.voices);
+      expect(rat?.['light']).toEqual(LOOK.light);
+      expect(rat?.['race']).toBe('venom');
+      // O número de combate é o que estava em disco: 99, e não os 23 do badger de staging.
+      expect(rat?.['health']).toBe(99);
+      // A apresentação entra ANTES de `source`, a posição em que o importador a escreve.
+      const keys = Object.keys(rat ?? {});
+      expect(keys.indexOf('race')).toBeLessThan(keys.indexOf('source'));
+    });
+
+    it('o que o Canary deixou de declarar SAI do Rat — a apresentação é do staging, não acumula', () => {
+      const root = setupRat(LOOK, {});
+      writePromotion(root);
+      const rat = readGeneratedSlice(join(root, 'packages/content/data/monsters/generated/mammals.json'))
+        .find((entity) => entity.id === 'rat');
+      for (const field of ['outfit', 'voices', 'light', 'race']) expect(rat, field).not.toHaveProperty(field);
+    });
+
+    it('é idempotente, e `--check` reconhece o que acabou de ser escrito como fresco', () => {
+      const root = setupRat({}, LOOK);
+      writePromotion(root);
+      const first = readFileSync(join(root, 'packages/content/data/monsters/generated/mammals.json'), 'utf8');
+      writePromotion(root);
+      expect(readFileSync(join(root, 'packages/content/data/monsters/generated/mammals.json'), 'utf8')).toBe(first);
+      expect(checkPromotion(root).find((o) => o.slice === 'mammals')).toEqual({ slice: 'mammals', status: 'fresh' });
+    });
+  });
 });

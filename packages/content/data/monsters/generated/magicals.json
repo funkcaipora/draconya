@@ -194,6 +194,11 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "light": {
+      "level": 4,
+      "color": 179
+    },
+    "race": "ink",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -434,6 +439,13 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 0,
+      "body": 50,
+      "legs": 42,
+      "feet": 79,
+      "addons": 3
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -641,6 +653,25 @@
     },
     "staticAttack": 0.6,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Tchhh!",
+          "yell": false
+        },
+        {
+          "text": "Slurp!",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 4,
+      "color": 30
+    },
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -869,6 +900,33 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You've got the look!",
+          "yell": false
+        },
+        {
+          "text": "Let me take a look at you.",
+          "yell": false
+        },
+        {
+          "text": "Eye for eye!",
+          "yell": false
+        },
+        {
+          "text": "I've got to look!",
+          "yell": false
+        },
+        {
+          "text": "Here's looking at you!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1038,6 +1096,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 17,
+      "body": 41,
+      "legs": 77,
+      "feet": 57,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "tzzzz tzzzzz tzzzzz",
+          "yell": false
+        },
+        {
+          "text": "tzuuuumme tzuuummmmee",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1288,6 +1368,33 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You have disturbed my thoughts!",
+          "yell": false
+        },
+        {
+          "text": "I will turn you into something more useful!",
+          "yell": false
+        },
+        {
+          "text": "Let me taste your brain!",
+          "yell": false
+        },
+        {
+          "text": "You will be punished!",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 3,
+      "color": 180
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1498,6 +1605,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 79,
+      "body": 113,
+      "legs": 78,
+      "feet": 112,
+      "addons": 0
+    },
+    "race": "ink",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1656,6 +1771,25 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "We will devour you ...",
+          "yell": false
+        },
+        {
+          "text": "Wait for us, little treat ...",
+          "yell": false
+        },
+        {
+          "text": "*Horrraa!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "chocolate",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1801,6 +1935,21 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Creak!",
+          "yell": false
+        },
+        {
+          "text": "Crackle!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1995,6 +2144,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 79,
+      "body": 81,
+      "legs": 93,
+      "feet": 0,
+      "addons": 0
+    },
+    "race": "ink",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2231,6 +2388,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Inferior creatures, bow before my power!",
+          "yell": false
+        },
+        {
+          "text": "Let me take a look at you!",
+          "yell": false
+        },
+        {
+          "text": "659978 54764!",
+          "yell": false
+        },
+        {
+          "text": "653768764!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2428,6 +2607,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 15,
+      "body": 91,
+      "legs": 85,
+      "feet": 0,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Flood the room with curious energy!",
+          "yell": false
+        },
+        {
+          "text": "zup zup zup zuuuuup!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "ink",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2535,6 +2736,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 86,
+      "body": 85,
+      "legs": 82,
+      "feet": 93,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Die, enervating mortal!",
+          "yell": false
+        },
+        {
+          "text": "Let the energy flow!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2628,6 +2851,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "ink",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2737,6 +2961,33 @@
     "runOnHealth": 30,
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Feel my claws, softskin.",
+          "yell": false
+        },
+        {
+          "text": "There is a stone in your shoe!",
+          "yell": false
+        },
+        {
+          "text": "Stone sweet stone.",
+          "yell": false
+        },
+        {
+          "text": "Harrrr harrrr!",
+          "yell": false
+        },
+        {
+          "text": "Chhhhhrrrrk!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2846,6 +3097,25 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Mommy!?",
+          "yell": false
+        },
+        {
+          "text": "Buuuuhaaaahhaaaaa!",
+          "yell": false
+        },
+        {
+          "text": "Me need mana!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3087,6 +3357,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 114,
+      "body": 39,
+      "legs": 113,
+      "feet": 114,
+      "addons": 1
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3382,6 +3659,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 910000,
+    "outfit": {
+      "head": 92,
+      "body": 52,
+      "legs": 0,
+      "feet": 79,
+      "addons": 3
+    },
+    "race": "ink",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3603,6 +3888,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 87,
+      "body": 85,
+      "legs": 79,
+      "feet": 0,
+      "addons": 0
+    },
+    "race": "ink",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3832,6 +4125,17 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 0,
+      "body": 112,
+      "legs": 3,
+      "feet": 79,
+      "addons": 0
+    },
+    "light": {
+      "level": 1,
+      "color": 0
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4016,6 +4320,31 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 50,
+      "body": 2,
+      "legs": 0,
+      "feet": 76,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Be gone, mortal! This is not your place!",
+          "yell": false
+        },
+        {
+          "text": "I won't tolerate any sacrilege!",
+          "yell": false
+        },
+        {
+          "text": "I guard this site in Suon's name!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4177,6 +4506,17 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 0,
+      "body": 59,
+      "legs": 67,
+      "feet": 85,
+      "addons": 0
+    },
+    "light": {
+      "level": 4,
+      "color": 107
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4376,6 +4716,23 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 116,
+      "body": 97,
+      "legs": 113,
+      "feet": 20,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I'm spotting my next meal",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4593,6 +4950,28 @@
     "runOnHealth": 600,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You will make sssuch a fine ssstatue!",
+          "yell": false
+        },
+        {
+          "text": "There isss no chhhanccce of essscape",
+          "yell": false
+        },
+        {
+          "text": "Are you tired or why are you moving thhat ssslow <chuckle>",
+          "yell": false
+        },
+        {
+          "text": "Jussst look at me!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4838,6 +5217,17 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 86,
+      "body": 51,
+      "legs": 83,
+      "feet": 91,
+      "addons": 3
+    },
+    "light": {
+      "level": 5,
+      "color": 184
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4997,6 +5387,28 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Groooooooar",
+          "yell": false
+        },
+        {
+          "text": "MEOW",
+          "yell": true
+        },
+        {
+          "text": "Groarrrrrrrr",
+          "yell": false
+        },
+        {
+          "text": "Purrrrrrr",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5177,6 +5589,36 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 0,
+      "body": 0,
+      "legs": 94,
+      "feet": 0,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "*chomp* Mmmoh! *chomp*",
+          "yell": false
+        },
+        {
+          "text": "Mwaaahgod! Overmwaaaaah",
+          "yell": false
+        },
+        {
+          "text": "*gurgle*",
+          "yell": false
+        },
+        {
+          "text": "Mmmwahmwahmwhah, mwaaah!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "candy",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5372,6 +5814,36 @@
     "runOnHealth": 300,
     "staticAttack": 0.9,
     "corpseTtlMs": 400000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Close your eyes... I want to show you something.",
+          "yell": false
+        },
+        {
+          "text": "I will haunt you forever!",
+          "yell": false
+        },
+        {
+          "text": "Pffffrrrrrrrrrrrr.",
+          "yell": false
+        },
+        {
+          "text": "I will make you scream.",
+          "yell": false
+        },
+        {
+          "text": "Take a ride with me.",
+          "yell": false
+        },
+        {
+          "text": "Weeeheeheeeheee!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5544,6 +6016,24 @@
     "runOnHealth": 300,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Weeeheeheee!",
+          "yell": false
+        },
+        {
+          "text": "Pffffrrrrrrrrrrrr.",
+          "yell": false
+        },
+        {
+          "text": "Peak a boo, I killed you!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5776,6 +6266,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 94,
+      "body": 78,
+      "legs": 79,
+      "feet": 57,
+      "addons": 0
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5893,6 +6391,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Kroaaah!!",
+          "yell": false
+        },
+        {
+          "text": "Butak <crooooarck> bana zamar!",
+          "yell": false
+        },
+        {
+          "text": "Krrrooow truaaak kiiiii!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6211,6 +6727,13 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 0,
+      "body": 39,
+      "legs": 0,
+      "feet": 3,
+      "addons": 1
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6380,6 +6903,17 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 79,
+      "body": 121,
+      "legs": 23,
+      "feet": 86,
+      "addons": 1
+    },
+    "light": {
+      "level": 4,
+      "color": 32
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6567,6 +7101,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 9,
+      "body": 21,
+      "legs": 3,
+      "feet": 57,
+      "addons": 0
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6798,6 +7340,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Uuuuuuuuuaaaaaarg!!!",
+          "yell": false
+        },
+        {
+          "text": "Nobody will ever escape from this place, muwahaha!!!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

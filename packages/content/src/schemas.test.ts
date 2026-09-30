@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { MonsterRace as ProtocolMonsterRace } from '@draconya/protocol';
 import {
   ammunitionSchema, appearancesSchema, botConditionSchema, botConfigV2Schema, botSetSchema,
-  botTargetPolicySchema, huntSchema, itemSchema, monsterSchema, routeSchema, spellAreaSchema, spellFormulaSchema,
-  tilemapSchema,
+  botTargetPolicySchema, DEFAULT_MONSTER_RACE, huntSchema, itemSchema, MONSTER_RACES, monsterSchema,
+  NEUTRAL_MONSTER_OUTFIT, routeSchema, spellAreaSchema, spellFormulaSchema, tilemapSchema,
 } from './schemas.js';
 
 describe('routeSchema.spawnPoints — `monsters` com peso na mesma posição (#582)', () => {
@@ -310,6 +311,86 @@ describe('monsterSchema — pushable/canPushCreatures/canPushItems (M29-08, #544
     expect(parsed.pushable).toBe(false);
     expect(parsed.canPushCreatures).toBe(true);
     expect(parsed.canPushItems).toBe(true);
+  });
+});
+
+// A apresentação do monstro (#620): cores e addons do outfit, falas, luz e raça. Tudo opcional, com o
+// neutro do Canary como default — o monstro sem os campos continua bit a bit o de antes.
+describe('monsterSchema — apresentação: outfit, voices, light, race (#620)', () => {
+  const base = {
+    id: 'rat', name: 'Rat', health: 20, experience: 5,
+    attack: 5, armor: 0, attackIntervalMs: 2000, speed: 172, aggroRadius: 11,
+  };
+
+  it('ausentes, os quatro ficam ausentes: quem lê aplica o neutro do Canary (tudo 0, sem falas nem luz, `blood`)', () => {
+    // Sem `.default()`: o campo obrigatório no tipo `Monster` obrigaria todo literal de teste a repeti-lo.
+    const parsed = monsterSchema.parse(base);
+    expect(parsed.outfit).toBeUndefined();
+    expect(parsed.voices).toBeUndefined();
+    expect(parsed.light).toBeUndefined();
+    expect(parsed.race).toBeUndefined();
+    expect(NEUTRAL_MONSTER_OUTFIT).toEqual({ head: 0, body: 0, legs: 0, feet: 0, addons: 0 });
+    expect(DEFAULT_MONSTER_RACE).toBe('blood');
+  });
+
+  it('declarados, os quatro campos sobrevivem à validação', () => {
+    const parsed = monsterSchema.parse({
+      ...base,
+      outfit: { head: 113, body: 120, legs: 95, feet: 115, addons: 3 },
+      voices: { intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!' }, { text: 'GRR', yell: true }] },
+      light: { level: 4, color: 208 },
+      race: 'fire',
+    });
+    expect(parsed.outfit).toEqual({ head: 113, body: 120, legs: 95, feet: 115, addons: 3 });
+    // `yell` ausente é fala, não grito.
+    expect(parsed.voices?.lines).toEqual([{ text: 'Meep!', yell: false }, { text: 'GRR', yell: true }]);
+    expect(parsed.light).toEqual({ level: 4, color: 208 });
+    expect(parsed.race).toBe('fire');
+  });
+
+  it('`addons` ausente num outfit declarado é 0', () => {
+    expect(monsterSchema.parse({ ...base, outfit: { head: 1, body: 2, legs: 3, feet: 4 } }).outfit?.addons).toBe(0);
+  });
+
+  it.each([
+    ['cor acima de 132', { outfit: { head: 133, body: 0, legs: 0, feet: 0 } }],
+    ['cor negativa', { outfit: { head: 0, body: -1, legs: 0, feet: 0 } }],
+    ['cor fracionária', { outfit: { head: 0, body: 0, legs: 1.5, feet: 0 } }],
+    ['addons acima de 3', { outfit: { head: 0, body: 0, legs: 0, feet: 0, addons: 4 } }],
+    ['outfit sem uma das quatro cores', { outfit: { head: 0, body: 0, legs: 0 } }],
+    ['outfit com campo de arte', { outfit: { head: 0, body: 0, legs: 0, feet: 0, lookType: 21 } }],
+    ['falas sem linha', { voices: { intervalMs: 5000, chance: 10, lines: [] } }],
+    ['falas com chance 0', { voices: { intervalMs: 5000, chance: 0, lines: [{ text: 'a' }] } }],
+    ['falas com chance acima de 100', { voices: { intervalMs: 5000, chance: 101, lines: [{ text: 'a' }] } }],
+    ['falas com intervalo 0', { voices: { intervalMs: 0, chance: 10, lines: [{ text: 'a' }] } }],
+    ['fala de texto vazio', { voices: { intervalMs: 5000, chance: 10, lines: [{ text: '' }] } }],
+    ['luz de nível 0', { light: { level: 0, color: 10 } }],
+    ['luz de cor fora da paleta de 216', { light: { level: 3, color: 216 } }],
+    ['raça desconhecida', { race: 'plasma' }],
+  ])('recusa %s', (_name, patch) => {
+    expect(() => monsterSchema.parse({ ...base, ...patch })).toThrow();
+  });
+
+  it('as raças do conteúdo são as MESMAS do protocolo — uma lista fora de sincronia faria o cliente recusar a mensagem inteira', () => {
+    // O protocolo é a base da pilha e repete a lista (não importa `content`); este teste é o que
+    // prende as duas juntas. Mutação que mata: acrescentar uma raça só de um lado.
+    expect([...MONSTER_RACES].sort()).toEqual([...ProtocolMonsterRace.options].sort());
+  });
+});
+
+describe('appearancesSchema — o efeito do golpe físico por raça (#620)', () => {
+  const base = {
+    id: 'baseline', pack: 'tibia-1533', monsters: {}, items: {}, spells: {}, supplies: {}, abilities: {},
+  };
+
+  it('`hits.byRace` é opcional: a tabela de antes continua válida', () => {
+    expect(appearancesSchema.parse({ ...base, hits: { melee: 1 } }).hits.byRace).toBeUndefined();
+  });
+
+  it('aceita um id por raça, e recusa raça desconhecida', () => {
+    expect(appearancesSchema.parse({ ...base, hits: { melee: 1, byRace: { venom: 17, undead: 10 } } }).hits.byRace)
+      .toEqual({ venom: 17, undead: 10 });
+    expect(() => appearancesSchema.parse({ ...base, hits: { byRace: { plasma: 17 } } })).toThrow();
   });
 });
 

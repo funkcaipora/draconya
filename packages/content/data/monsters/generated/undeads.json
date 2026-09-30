@@ -375,6 +375,41 @@
     "runOnHealth": 500,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Dance for me your dance of death!",
+          "yell": false
+        },
+        {
+          "text": "Let the music play!",
+          "yell": false
+        },
+        {
+          "text": "I will mourn your death!",
+          "yell": false
+        },
+        {
+          "text": "Are you ready to rock?",
+          "yell": false
+        },
+        {
+          "text": "Feel my gentle kiss of death.",
+          "yell": false
+        },
+        {
+          "text": "That's what I call easy listening!",
+          "yell": false
+        },
+        {
+          "text": "IIIIEEEeeeeeehhhHHHH!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -643,6 +678,23 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 9,
+      "body": 10,
+      "legs": 86,
+      "feet": 79,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "We came tooo thiiiiss wooorld to... get youuu!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -763,6 +815,29 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Aaaaahhhh!",
+          "yell": false
+        },
+        {
+          "text": "Hoooohhh!",
+          "yell": false
+        },
+        {
+          "text": "Uhhhhhhh!",
+          "yell": false
+        },
+        {
+          "text": "Chhhhhhh!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1118,6 +1193,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 460000,
+    "outfit": {
+      "head": 0,
+      "body": 19,
+      "legs": 0,
+      "feet": 38,
+      "addons": 0
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1242,6 +1325,7 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 600000,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1373,6 +1457,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1535,6 +1620,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1749,6 +1835,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 460000,
+    "outfit": {
+      "head": 0,
+      "body": 14,
+      "legs": 0,
+      "feet": 34,
+      "addons": 0
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1931,6 +2025,23 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 57,
+      "body": 96,
+      "legs": 38,
+      "feet": 105,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Mmmhaarrrgh!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2123,6 +2234,23 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 900000,
+    "outfit": {
+      "head": 57,
+      "body": 96,
+      "legs": 38,
+      "feet": 105,
+      "addons": 2
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Uuunngh!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2315,6 +2443,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 460000,
+    "outfit": {
+      "head": 0,
+      "body": 6,
+      "legs": 0,
+      "feet": 116,
+      "addons": 0
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2513,6 +2649,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 460000,
+    "outfit": {
+      "head": 0,
+      "body": 74,
+      "legs": 0,
+      "feet": 83,
+      "addons": 0
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2718,6 +2862,27 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 94,
+      "body": 21,
+      "legs": 77,
+      "feet": 78,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Deathhh... is... a.... doooor!!",
+          "yell": false
+        },
+        {
+          "text": "Tiiimeee... is... a... windowww!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2833,6 +2998,25 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Huh!",
+          "yell": false
+        },
+        {
+          "text": "Shhhhhh",
+          "yell": false
+        },
+        {
+          "text": "Buuuuuh",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3090,6 +3274,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 600000,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3312,6 +3497,24 @@
     "runOnHealth": 200,
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "High Five!",
+          "yell": false
+        },
+        {
+          "text": "scrabble",
+          "yell": false
+        },
+        {
+          "text": "Put it there!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3562,6 +3765,25 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Death!",
+          "yell": false
+        },
+        {
+          "text": "Come a little closer!",
+          "yell": false
+        },
+        {
+          "text": "The end is near!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3934,6 +4156,29 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Horestis curse upon you!",
+          "yell": false
+        },
+        {
+          "text": "Vengeance!",
+          "yell": false
+        },
+        {
+          "text": "Thy punishment is at hand!",
+          "yell": false
+        },
+        {
+          "text": "For the pharao!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4238,6 +4483,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Chaahrrr!",
+          "yell": false
+        },
+        {
+          "text": "Hrmmmh!",
+          "yell": false
+        },
+        {
+          "text": "Cathach!!",
+          "yell": false
+        },
+        {
+          "text": "Chaahrrr!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4415,6 +4682,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Pucataaan!",
+          "yell": false
+        },
+        {
+          "text": "Mahrrrca!",
+          "yell": false
+        },
+        {
+          "text": "Puccahtaaan!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4569,6 +4854,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Gnahrgh!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4766,6 +5061,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Attahch!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4951,6 +5256,25 @@
     "runOnHealth": 450,
     "staticAttack": 0.9,
     "corpseTtlMs": 360000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Mouuuurn meeee!",
+          "yell": false
+        },
+        {
+          "text": "Forgive Meee!",
+          "yell": false
+        },
+        {
+          "text": "Help meee!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5135,6 +5459,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 460000,
+    "outfit": {
+      "head": 0,
+      "body": 14,
+      "legs": 0,
+      "feet": 83,
+      "addons": 0
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5307,6 +5639,37 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I will ssswallow your sssoul!",
+          "yell": false
+        },
+        {
+          "text": "Mort ulhegh dakh visss.",
+          "yell": false
+        },
+        {
+          "text": "Flesssh to dussst!",
+          "yell": false
+        },
+        {
+          "text": "I will tassste life again!",
+          "yell": false
+        },
+        {
+          "text": "Ahkahra exura belil mort!",
+          "yell": false
+        },
+        {
+          "text": "Yohag Sssetham!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5469,6 +5832,33 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Yooh Ho Hooh Ho!",
+          "yell": false
+        },
+        {
+          "text": "Hell is waiting for You!",
+          "yell": false
+        },
+        {
+          "text": "It's alive!",
+          "yell": false
+        },
+        {
+          "text": "The curse! Aww the curse!",
+          "yell": false
+        },
+        {
+          "text": "You will not get my treasure.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5545,6 +5935,7 @@
     "runOnHealth": 20,
     "staticAttack": 0.9,
     "corpseTtlMs": 70000,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5702,6 +6093,21 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "We will make you one of us!",
+          "yell": false
+        },
+        {
+          "text": "Come to mummy!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5912,6 +6318,13 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 81,
+      "body": 78,
+      "legs": 61,
+      "feet": 94,
+      "addons": 0
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6026,6 +6439,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6153,6 +6567,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6256,6 +6671,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6371,6 +6787,17 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Huh!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6485,6 +6912,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Chaarr!!",
+          "yell": false
+        },
+        {
+          "text": "Ngl..Nglll...Gll",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6557,6 +6999,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grrrrrrrrrrrr",
+          "yell": false
+        },
+        {
+          "text": "Groooowl",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6741,6 +7198,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 910000,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6907,6 +7365,33 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 910000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Let's battle it out in a duel!",
+          "yell": false
+        },
+        {
+          "text": "Bring it!",
+          "yell": false
+        },
+        {
+          "text": "I'll fight here in eternity and beyond.",
+          "yell": false
+        },
+        {
+          "text": "I will not give up!",
+          "yell": false
+        },
+        {
+          "text": "Another foolish adventurer who tries to beat me.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7010,6 +7495,25 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ahrrr... uhmmm... hmm...",
+          "yell": false
+        },
+        {
+          "text": "Grrr...",
+          "yell": false
+        },
+        {
+          "text": "Urrrgh... gnarrr...",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7114,6 +7618,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Our mine... leave us alone.",
+          "yell": false
+        },
+        {
+          "text": "Turn back...",
+          "yell": false
+        },
+        {
+          "text": "These mine is ours... you shall not pass.",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7307,6 +7829,28 @@
     "runOnHealth": 30,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "BLOOD!",
+          "yell": true
+        },
+        {
+          "text": "Let me kiss your neck",
+          "yell": false
+        },
+        {
+          "text": "I smell warm blood!",
+          "yell": false
+        },
+        {
+          "text": "I call you, my bats! Come!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7511,6 +8055,36 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Kneel before your Mistress!",
+          "yell": false
+        },
+        {
+          "text": "Dead is the new alive.",
+          "yell": false
+        },
+        {
+          "text": "Come, let me kiss you, darling. Oh wait, I meant kill.",
+          "yell": false
+        },
+        {
+          "text": "Enjoy the pain - I know you love it.",
+          "yell": false
+        },
+        {
+          "text": "Are you suffering nicely enough?",
+          "yell": false
+        },
+        {
+          "text": "You won't regret you came to me, sweetheart.",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7648,6 +8222,25 @@
     "runOnHealth": 30,
     "staticAttack": 0.9,
     "corpseTtlMs": 360000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Leave this place... save yourself...",
+          "yell": false
+        },
+        {
+          "text": "The dark ones.. must be stopped... unholy, twisted, EVIL!",
+          "yell": false
+        },
+        {
+          "text": "No... don't go further stranger... danger lies in every step...",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7810,6 +8403,29 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 1210000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Mst.... klll....",
+          "yell": false
+        },
+        {
+          "text": "Whrrrr... ssss.... mmm.... grrrrl",
+          "yell": false
+        },
+        {
+          "text": "Dnnnt... cmmm... clsrrr....",
+          "yell": false
+        },
+        {
+          "text": "Httt.... hmnnsss...",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

@@ -1450,6 +1450,58 @@ describe('a perda de item na morte do conteúdo real (#571, ADR 0042 decisão 4)
   });
 });
 
+describe('a apresentação do monstro no conteúdo real (#620, M44-02)', () => {
+  // Números do Canary (`data-otservbr-global/monster/*`, conferidos em 2026-09-30): os campos
+  // `monster.outfit.look*`, `monster.voices`, `monster.light` e `monster.race` são apresentação —
+  // nenhum deles entra em combate, e nenhum é arte.
+  const { monsters, appearances } = loadContent(DATA);
+
+  it('o Rat fala, e o Dragon grita — `voices` do Canary, com intervalo 5000 ms e chance 10', () => {
+    expect(monsters.get('rat')?.voices).toEqual({
+      intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!', yell: false }],
+    });
+    const dragon = monsters.get('dragon')?.voices;
+    expect(dragon?.lines.map((line) => line.text)).toEqual(['FCHHHHH', 'GROOAAARRR']);
+    expect(dragon?.lines.every((line) => line.yell)).toBe(true);
+    // O Rotworm não declara fala com linha: mudo.
+    expect(monsters.get('rotworm')?.voices).toBeUndefined();
+  });
+
+  it('o Fire Elemental brilha (nível 4, cor 208) e queima; o Dark Magician traz as cores e o addon do Canary', () => {
+    expect(monsters.get('fire-elemental')).toMatchObject({ light: { level: 4, color: 208 }, race: 'fire' });
+    expect(monsters.get('dark-magician')?.outfit).toEqual({ head: 58, body: 95, legs: 51, feet: 131, addons: 2 });
+    // O `lookType` é o `outfitId` da tabela de aparências, nunca um campo do monstro (invariante 6).
+    expect(monsters.get('dark-magician')?.outfitId).toBe(appearances.monsters['dark-magician']);
+  });
+
+  it('o monstro comum não paga nada: sem `outfit`, `light`, `race` — o default do Canary é `blood` e cor 0', () => {
+    const rotworm = monsters.get('rotworm');
+    for (const field of ['outfit', 'light', 'race'] as const) expect(rotworm?.[field], field).toBeUndefined();
+  });
+
+  it('as contagens do catálogo: 235 com cores/addons, 562 com falas, 59 com luz e 407 com raça que não é `blood`', () => {
+    // Uma reimportação que mude isto sem querer (um leitor que passou a ler outra coisa) reprova
+    // aqui — `pnpm catalog:import monsters` é o único que as muda, e o relatório as conta.
+    const all = [...monsters.values()];
+    expect(all.filter((monster) => monster.outfit !== undefined)).toHaveLength(235);
+    expect(all.filter((monster) => monster.voices !== undefined)).toHaveLength(562);
+    expect(all.filter((monster) => monster.light !== undefined)).toHaveLength(59);
+    const races = new Map<string, number>();
+    for (const monster of all) if (monster.race !== undefined) races.set(monster.race, (races.get(monster.race) ?? 0) + 1);
+    expect(Object.fromEntries(races)).toEqual({ undead: 228, venom: 127, fire: 41, ink: 9, candy: 1, chocolate: 1 });
+  });
+
+  it('o efeito do golpe físico tem uma linha por raça, com os ids do Canary (`CONST_ME_*`)', () => {
+    // `Game::combatGetTypeInfo`: sangue 1, veneno 17, hit area 10 (morto-vivo e tinta), energia 12,
+    // cacau 270 e xarope 269; fogo reusa o sangue. Mutação que mata: uma raça sem linha — o golpe
+    // nela cairia em `hits.melee` sem ninguém notar.
+    expect(appearances.hits.byRace).toEqual({
+      blood: 1, venom: 17, undead: 10, fire: 1, energy: 12, ink: 10, chocolate: 270, candy: 269,
+    });
+    expect(appearances.hits.melee).toBe(1);
+  });
+});
+
 describe('alma da vocação promovida (#566 + #593)', () => {
   it('as quatro vocações promovidas carregam o teto e a cadência de alma do Canary (200 / 15 s)', () => {
     const content = loadContent(DATA);

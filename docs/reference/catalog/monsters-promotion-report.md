@@ -35,13 +35,13 @@ Separa `packages/content/staging/monsters/generated/*.json` (a transcrição pur
 
 | id | motivo |
 |---|---|
-| dragon | hand-authored — regenerado só pelo #581, nunca por esta promoção |
-| dragon-lord | hand-authored — regenerado só pelo #581, nunca por esta promoção |
-| dragon-lord-hatchling | hand-authored — regenerado só pelo #581, nunca por esta promoção |
+| dragon | hand-authored — regenerado só pelo #581, nunca por esta promoção (a apresentação, #620, é renovada) |
+| dragon-lord | hand-authored — regenerado só pelo #581, nunca por esta promoção (a apresentação, #620, é renovada) |
+| dragon-lord-hatchling | hand-authored — regenerado só pelo #581, nunca por esta promoção (a apresentação, #620, é renovada) |
 | eshtaba-the-conjurer | summons.entries repete o mesmo monsterId com chances diferentes — o sim só aceita uma entrada por id (content.ts) |
 | leiden | summons.entries repete o mesmo monsterId com chances diferentes — o sim só aceita uma entrada por id (content.ts) |
-| rat | hand-authored — regenerado só pelo #581, nunca por esta promoção |
-| rotworm | hand-authored — regenerado só pelo #581, nunca por esta promoção |
+| rat | hand-authored — regenerado só pelo #581, nunca por esta promoção (a apresentação, #620, é renovada) |
+| rotworm | hand-authored — regenerado só pelo #581, nunca por esta promoção (a apresentação, #620, é renovada) |
 
 ## Linhas de loot removidas (2786)
 

@@ -29,6 +29,12 @@
 // script de novo NUNCA sobrescreve essas quatro entradas — `preserveHandAuthored` as reconduz de
 // volta à fatia a cada escrita, e `--check` as trata como parte do "em dia" pela mesma função.
 //
+// **A apresentação dos quatro é a exceção (#620).** `outfit` (cores e addons), `voices`, `light` e
+// `race` são dado do Canary sem nenhuma decisão de balanceamento em cima — o Rat fala "Squeak!" e o
+// Dragon grita como no Tibia, e ninguém os editou à mão. `preserveHandAuthored` reconduz a entidade
+// commitada e SOBREPÕE esses quatro campos com o que o `staging/` diz hoje (`PRESENTATION_FIELDS`),
+// sem tocar em mais nada: o resto do monstro continua sendo o ato deliberado do #581.
+//
 // Determinístico e SEM depender de `CANARY_DIR`: a entrada é o que já está commitado em
 // `staging/monsters/generated/` e `data/items/`, então rodar duas vezes no mesmo commit produz
 // sempre a mesma saída — a mesma garantia que `generated-writer.ts` já dá para a importação.
@@ -54,6 +60,13 @@ export const HAND_AUTHORED_MONSTER_IDS: ReadonlySet<string> = new Set([
   'rat', 'rotworm', 'dragon', 'dragon-lord', 'dragon-lord-hatchling',
 ]);
 
+/**
+ * Os campos de APRESENTAÇÃO do monstro (#620): dado do Canary que nenhuma decisão do Draconya
+ * reescreve. É o que `preserveHandAuthored` renova nas cinco entidades hand-authored a cada
+ * promoção — todo o resto delas continua sendo só do #581.
+ */
+export const PRESENTATION_FIELDS: readonly string[] = ['outfit', 'voices', 'light', 'race'];
+
 export interface ItemCatalogEntry {
   readonly stackable: boolean;
 }
@@ -78,6 +91,8 @@ export interface PromotionResult {
   readonly appearanceEntries: ReadonlyMap<string, number>;
   readonly skipped: readonly SkippedPromotion[];
   readonly droppedLootLines: readonly DroppedLootLine[];
+  /** A apresentação que o `staging/` traz para cada id de `HAND_AUTHORED_MONSTER_IDS` (#620). */
+  readonly handAuthoredLook: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
 }
 
 /** Lê `id`/`stackable` de todo `*.json` direto de `dir`, mais `generated/` e `overrides/`
@@ -221,6 +236,7 @@ export function computePromotion(repoRoot: string): PromotionResult {
   const appearanceEntries = new Map<string, number>();
   const skipped: SkippedPromotion[] = [];
   const droppedLootLines: DroppedLootLine[] = [];
+  const handAuthoredLook = new Map<string, Record<string, unknown>>();
 
   const sliceNames = existsSync(stagingDir)
     ? readdirSync(stagingDir).filter((n) => n.endsWith('.json')).sort()
@@ -234,7 +250,12 @@ export function computePromotion(repoRoot: string): PromotionResult {
       const id = entity['id'];
       if (typeof id !== 'string') continue;
       if (HAND_AUTHORED_MONSTER_IDS.has(id)) {
-        skipped.push({ id, reason: 'hand-authored — regenerado só pelo #581, nunca por esta promoção' });
+        skipped.push({ id, reason: 'hand-authored — regenerado só pelo #581, nunca por esta promoção (a apresentação, #620, é renovada)' });
+        const look: Record<string, unknown> = {};
+        for (const field of PRESENTATION_FIELDS) {
+          if (entity[field] !== undefined) look[field] = entity[field];
+        }
+        handAuthoredLook.set(id, look);
         continue;
       }
       if (hasDuplicateSummonTarget(entity)) {
@@ -256,7 +277,7 @@ export function computePromotion(repoRoot: string): PromotionResult {
   }
 
   return {
-    slices, bestiaryEntries, appearanceEntries, skipped, droppedLootLines,
+    slices, bestiaryEntries, appearanceEntries, skipped, droppedLootLines, handAuthoredLook,
   };
 }
 
@@ -354,9 +375,38 @@ function formatReport(repoRoot: string, result: PromotionResult): string {
  * (ver `computePromotion`), então a união abaixo nunca duplica: é sempre fresh + o que já está
  * no disco para esses ids, e mais nada.
  */
-function preserveHandAuthored(fresh: readonly CatalogEntity[], onDisk: readonly CatalogEntity[]): CatalogEntity[] {
-  const preserved = onDisk.filter((entity) => HAND_AUTHORED_MONSTER_IDS.has(entity.id));
+function preserveHandAuthored(
+  fresh: readonly CatalogEntity[], onDisk: readonly CatalogEntity[],
+  look: ReadonlyMap<string, Readonly<Record<string, unknown>>>,
+): CatalogEntity[] {
+  const preserved = onDisk
+    .filter((entity) => HAND_AUTHORED_MONSTER_IDS.has(entity.id))
+    .map((entity) => withPresentation(entity, look.get(entity.id) ?? {}));
   return [...fresh, ...preserved];
+}
+
+/**
+ * A entidade hand-authored com a apresentação do `staging/` no lugar da que estava (#620): os
+ * campos de `PRESENTATION_FIELDS` saem e voltam antes de `source` — a mesma posição em que o
+ * importador os escreve —, e nada mais muda. Sem `source`, vão para o fim.
+ */
+function withPresentation(entity: CatalogEntity, look: Readonly<Record<string, unknown>>): CatalogEntity {
+  const out: Record<string, unknown> = {};
+  let placed = false;
+  const place = (): void => {
+    if (placed) return;
+    placed = true;
+    for (const field of PRESENTATION_FIELDS) {
+      if (look[field] !== undefined) out[field] = look[field];
+    }
+  };
+  for (const [key, value] of Object.entries(entity)) {
+    if (PRESENTATION_FIELDS.includes(key)) continue;
+    if (key === 'source') place();
+    out[key] = value;
+  }
+  place();
+  return out as unknown as CatalogEntity;
 }
 
 /** Escreve a promoção inteira em disco: `data/monsters/generated/`, os dois `baseline.json` e o
@@ -370,7 +420,10 @@ export function writePromotion(repoRoot: string): PromotionResult {
   const committedBefore = listGeneratedSlices(monstersGeneratedDir);
   for (const [slice, entities] of result.slices) {
     const onDisk = committedBefore.get(slice) ?? [];
-    writeGeneratedSlice(join(monstersGeneratedDir, `${slice}.json`), preserveHandAuthored(entities, onDisk));
+    writeGeneratedSlice(
+      join(monstersGeneratedDir, `${slice}.json`),
+      preserveHandAuthored(entities, onDisk, result.handAuthoredLook),
+    );
   }
   mergeJsonMap(
     join(repoRoot, 'packages/content/data/bestiary/baseline.json'),
@@ -417,7 +470,7 @@ export function checkPromotion(repoRoot: string): CheckOutcome[] {
       outcomes.push({ slice, status: 'stale', detail: `generated/${slice}.json não existe — rode pnpm catalog:promote-monsters` });
       continue;
     }
-    const expected = preserveHandAuthored(fresh, onDisk);
+    const expected = preserveHandAuthored(fresh, onDisk, result.handAuthoredLook);
     outcomes.push(formatGeneratedSlice(expected) === formatGeneratedSlice(onDisk)
       ? { slice, status: 'fresh' }
       : { slice, status: 'stale', detail: 'a fatia recomputada difere da versionada' });

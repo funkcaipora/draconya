@@ -211,6 +211,20 @@
     "runOnHealth": 300,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "FCHHHHH",
+          "yell": true
+        },
+        {
+          "text": "GROOAAARRR",
+          "yell": true
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -364,6 +378,20 @@
     "runOnHealth": 20,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Fchu?",
+          "yell": false
+        },
+        {
+          "text": "Rooawwrr",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -660,6 +688,20 @@
     "runOnHealth": 300,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "YOU WILL BURN!",
+          "yell": true
+        },
+        {
+          "text": "ZCHHHHHHH",
+          "yell": true
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -901,6 +943,20 @@
     "runOnHealth": 30,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Fchu?",
+          "yell": false
+        },
+        {
+          "text": "Rooawwrr",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1054,6 +1110,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Attack aggrezzively! Dezztroy zze intruderzz!",
+          "yell": false
+        },
+        {
+          "text": "Hizzzzzz!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1411,6 +1481,29 @@
     "runOnHealth": 250,
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "YOU WILL FREEZE!",
+          "yell": true
+        },
+        {
+          "text": "ZCHHHHH!",
+          "yell": true
+        },
+        {
+          "text": "I am so cool.",
+          "yell": false
+        },
+        {
+          "text": "Chill out!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1597,6 +1690,21 @@
     "runOnHealth": 80,
     "staticAttack": 0.9,
     "corpseTtlMs": 1570000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Rooawwrr",
+          "yell": false
+        },
+        {
+          "text": "Fchu?",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1850,6 +1958,20 @@
     "runOnHealth": 300,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "FCHHHHH",
+          "yell": true
+        },
+        {
+          "text": "HISSSS",
+          "yell": true
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2052,6 +2174,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 1200000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Just Look at me!",
+          "yell": false
+        },
+        {
+          "text": "I'll stare you down",
+          "yell": false
+        },
+        {
+          "text": "Let me have a look",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

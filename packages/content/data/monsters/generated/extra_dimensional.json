@@ -177,6 +177,25 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Die for us!",
+          "yell": false
+        },
+        {
+          "text": "Humans ought to be extinct!",
+          "yell": false
+        },
+        {
+          "text": "This belongs to us now!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -406,6 +425,21 @@
     },
     "staticAttack": 0.75,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "IIEEH!! Iiih iih ih iiih!!!",
+          "yell": true
+        },
+        {
+          "text": "Bsssssssm Bssssssm Bsssssssssssm!",
+          "yell": true
+        }
+      ]
+    },
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

@@ -129,6 +129,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Mine is the power of the night!",
+          "yell": false
+        },
+        {
+          "text": "You can not hope to stop us all!",
+          "yell": false
+        },
+        {
+          "text": "The power of darkness is with me!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -320,6 +338,31 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 95,
+      "body": 100,
+      "legs": 100,
+      "feet": 19,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Praise the voodoo!",
+          "yell": false
+        },
+        {
+          "text": "Power to the cult!",
+          "yell": false
+        },
+        {
+          "text": "Feel the power of the cult!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -540,6 +583,31 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 95,
+      "body": 94,
+      "legs": 94,
+      "feet": 19,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Feel the power of the cult!",
+          "yell": false
+        },
+        {
+          "text": "Praise the voodoo!",
+          "yell": false
+        },
+        {
+          "text": "Power to the cult!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -603,6 +671,13 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 93,
+      "body": 15,
+      "legs": 72,
+      "feet": 80,
+      "addons": 0
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -717,6 +792,31 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 113,
+      "body": 120,
+      "legs": 95,
+      "feet": 115,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Your head shall be mine!",
+          "yell": false
+        },
+        {
+          "text": "Your head will be mine!",
+          "yell": false
+        },
+        {
+          "text": "Yeeee ha!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -769,6 +869,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 92,
+      "body": 15,
+      "legs": 92,
+      "feet": 82,
+      "addons": 0
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -856,6 +963,27 @@
     "runOnHealth": 25,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 58,
+      "body": 40,
+      "legs": 24,
+      "feet": 95,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hand me your purse!",
+          "yell": false
+        },
+        {
+          "text": "Your money or your life!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -970,6 +1098,35 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 114,
+      "body": 113,
+      "legs": 132,
+      "feet": 94,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "YAAAHEEE!",
+          "yell": true
+        },
+        {
+          "text": "SLAUGHTER!",
+          "yell": true
+        },
+        {
+          "text": "CARNAGE!",
+          "yell": true
+        },
+        {
+          "text": "You can run but you can't hide",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1099,6 +1256,35 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 115,
+      "body": 86,
+      "legs": 119,
+      "feet": 113,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I will regain my honor with your blood!",
+          "yell": false
+        },
+        {
+          "text": "Surrender is not option!",
+          "yell": false
+        },
+        {
+          "text": "Its you or me!",
+          "yell": false
+        },
+        {
+          "text": "Die! Die! Die!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1196,6 +1382,31 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 0,
+      "body": 77,
+      "legs": 96,
+      "feet": 114,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You will become my trophy.",
+          "yell": false
+        },
+        {
+          "text": "Fight harder, coward.",
+          "yell": false
+        },
+        {
+          "text": "Show that you are a worthy opponent.",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1344,6 +1555,31 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 95,
+      "body": 95,
+      "legs": 94,
+      "feet": 95,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Darkness is the mother of all knowledge!",
+          "yell": false
+        },
+        {
+          "text": "Get thee gone, unworthy!",
+          "yell": false
+        },
+        {
+          "text": "The Black Sphinx will prevail!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1537,6 +1773,31 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 1,
+      "body": 1,
+      "legs": 102,
+      "feet": 78,
+      "addons": 2
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Think I can't see you? Think again...",
+          "yell": false
+        },
+        {
+          "text": "You don't stand a chance!",
+          "yell": false
+        },
+        {
+          "text": "What are you looking for?",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1611,6 +1872,47 @@
     "runOnHealth": 10,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 40,
+      "body": 19,
+      "legs": 21,
+      "feet": 97,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hehehe!",
+          "yell": false
+        },
+        {
+          "text": "Raahhh!",
+          "yell": false
+        },
+        {
+          "text": "You are one of THEM! Die!",
+          "yell": false
+        },
+        {
+          "text": "Wanna buy roses??",
+          "yell": false
+        },
+        {
+          "text": "Make it stop!",
+          "yell": false
+        },
+        {
+          "text": "They're coming! They're coming!",
+          "yell": false
+        },
+        {
+          "text": "Gimme money!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1759,6 +2061,35 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 78,
+      "body": 57,
+      "legs": 95,
+      "feet": 115,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Outch!",
+          "yell": false
+        },
+        {
+          "text": "I must dispose of my masters enemies!",
+          "yell": false
+        },
+        {
+          "text": "Oops, I did it again.",
+          "yell": false
+        },
+        {
+          "text": "From the spirits that I called Sir, deliver me!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1947,6 +2278,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 600000,
+    "outfit": {
+      "head": 76,
+      "body": 57,
+      "legs": 0,
+      "feet": 19,
+      "addons": 2
+    },
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2086,6 +2425,35 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 58,
+      "body": 95,
+      "legs": 51,
+      "feet": 131,
+      "addons": 2
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Feel the power of my runes!",
+          "yell": false
+        },
+        {
+          "text": "Killing you gets expensive.",
+          "yell": false
+        },
+        {
+          "text": "My secrets are mine alone!",
+          "yell": false
+        },
+        {
+          "text": "Stand still!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2236,6 +2604,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You are no match to us!",
+          "yell": false
+        },
+        {
+          "text": "Your end has come!",
+          "yell": false
+        },
+        {
+          "text": "This is where your path will end!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2465,6 +2851,28 @@
     },
     "staticAttack": 0.5,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Praise to my master Urgith!",
+          "yell": false
+        },
+        {
+          "text": "You will rise as my servant!",
+          "yell": false
+        },
+        {
+          "text": "Praise to my masters! Long live the triangle!",
+          "yell": false
+        },
+        {
+          "text": "You will die in the name of the triangle!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2594,6 +3002,52 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Arrrgh!",
+          "yell": false
+        },
+        {
+          "text": "I am the king of the world!",
+          "yell": false
+        },
+        {
+          "text": "Die Ferumbras!",
+          "yell": false
+        },
+        {
+          "text": "Tigerblood is running through my veins!",
+          "yell": false
+        },
+        {
+          "text": "You! It's you again!",
+          "yell": false
+        },
+        {
+          "text": "Stand still you tasty morsel!",
+          "yell": false
+        },
+        {
+          "text": "<giggle>",
+          "yell": false
+        },
+        {
+          "text": "Burn heretic! Burn!",
+          "yell": false
+        },
+        {
+          "text": "Harrr!",
+          "yell": false
+        },
+        {
+          "text": "This is Venore!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2664,6 +3118,39 @@
     "runOnHealth": 35,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 114,
+      "body": 19,
+      "legs": 23,
+      "feet": 40,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "This is our territory!",
+          "yell": false
+        },
+        {
+          "text": "Help me guys!",
+          "yell": false
+        },
+        {
+          "text": "I don't like the way you look!",
+          "yell": false
+        },
+        {
+          "text": "You're wearing the wrong colours!",
+          "yell": false
+        },
+        {
+          "text": "Don't mess with us!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2780,6 +3267,35 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 78,
+      "body": 3,
+      "legs": 79,
+      "feet": 114,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You are no match for me!",
+          "yell": false
+        },
+        {
+          "text": "Feel my prowess.",
+          "yell": false
+        },
+        {
+          "text": "Fight!",
+          "yell": false
+        },
+        {
+          "text": "Take this!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2953,6 +3469,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 115,
+      "body": 80,
+      "legs": 114,
+      "feet": 114,
+      "addons": 0
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3122,6 +3645,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 114,
+      "body": 114,
+      "legs": 110,
+      "feet": 114,
+      "addons": 0
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3248,6 +3778,13 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 57,
+      "body": 38,
+      "legs": 21,
+      "feet": 21,
+      "addons": 2
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3419,6 +3956,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Let's have a fight!",
+          "yell": false
+        },
+        {
+          "text": "I will sing a tune at your grave.",
+          "yell": false
+        },
+        {
+          "text": "Have you seen princess Lumelia?",
+          "yell": false
+        },
+        {
+          "text": "Welcome to my battleground!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3605,6 +4164,13 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 21,
+      "body": 3,
+      "legs": 20,
+      "feet": 57,
+      "addons": 0
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3715,6 +4281,35 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 95,
+      "body": 116,
+      "legs": 120,
+      "feet": 115,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Guess who we are hunting!",
+          "yell": false
+        },
+        {
+          "text": "Guess who we're hunting, hahaha!",
+          "yell": false
+        },
+        {
+          "text": "Bullseye!",
+          "yell": false
+        },
+        {
+          "text": "You'll make a nice trophy!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3912,6 +4507,31 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 0,
+      "body": 9,
+      "legs": 86,
+      "feet": 86,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "So you think you are cool?",
+          "yell": false
+        },
+        {
+          "text": "I hope it is not too cold for you! HeHeHe.",
+          "yell": false
+        },
+        {
+          "text": "Freeze!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4250,6 +4870,35 @@
     "runOnHealth": 900,
     "staticAttack": 0.95,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 78,
+      "body": 76,
+      "legs": 94,
+      "feet": 39,
+      "addons": 2
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Nothing will remain but your scorched bones!",
+          "yell": false
+        },
+        {
+          "text": "Some like it hot!",
+          "yell": false
+        },
+        {
+          "text": "It's cooking time!",
+          "yell": false
+        },
+        {
+          "text": "Feel the heat of battle!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4390,6 +5039,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 1810000,
+    "outfit": {
+      "head": 0,
+      "body": 78,
+      "legs": 57,
+      "feet": 57,
+      "addons": 2
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4505,6 +5161,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 1810000,
+    "outfit": {
+      "head": 0,
+      "body": 78,
+      "legs": 57,
+      "feet": 57,
+      "addons": 1
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4637,6 +5300,13 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 1810000,
+    "outfit": {
+      "head": 0,
+      "body": 78,
+      "legs": 96,
+      "feet": 76,
+      "addons": 0
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4806,6 +5476,35 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 39,
+      "body": 0,
+      "legs": 19,
+      "feet": 20,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Die in the name of Science!",
+          "yell": false
+        },
+        {
+          "text": "You will regret interrupting my studies!",
+          "yell": false
+        },
+        {
+          "text": "Let me test this!",
+          "yell": false
+        },
+        {
+          "text": "I will study your corpse!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4924,6 +5623,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Repent Heretic!",
+          "yell": false
+        },
+        {
+          "text": "A prayer to the almighty one!",
+          "yell": false
+        },
+        {
+          "text": "I will punish the sinners!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5188,6 +5905,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Taste the sweetness of death!",
+          "yell": false
+        },
+        {
+          "text": "Your corpse will be mine.",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5460,6 +6191,35 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 97,
+      "body": 39,
+      "legs": 40,
+      "feet": 3,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "We are the true sons of the desert!",
+          "yell": false
+        },
+        {
+          "text": "I will leave your remains to the vultures!",
+          "yell": false
+        },
+        {
+          "text": "Your riches will be mine!",
+          "yell": false
+        },
+        {
+          "text": "We are swift as the wind of the desert!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5582,6 +6342,35 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 104,
+      "body": 48,
+      "legs": 49,
+      "feet": 3,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I will leave your remains to the vultures!",
+          "yell": false
+        },
+        {
+          "text": "We are the true sons of the desert!",
+          "yell": false
+        },
+        {
+          "text": "We are swift as the wind of the desert!",
+          "yell": false
+        },
+        {
+          "text": "Your riches will be mine!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5709,6 +6498,35 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 96,
+      "body": 39,
+      "legs": 40,
+      "feet": 3,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I will leave your remains to the vultures!",
+          "yell": false
+        },
+        {
+          "text": "We are the true sons of the desert!",
+          "yell": false
+        },
+        {
+          "text": "We are swift as the wind of the desert!",
+          "yell": false
+        },
+        {
+          "text": "Your riches will be mine!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5865,6 +6683,31 @@
     "runOnHealth": 40,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 114,
+      "body": 114,
+      "legs": 76,
+      "feet": 114,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Fear us!",
+          "yell": false
+        },
+        {
+          "text": "You will not tell anyone what you have seen!",
+          "yell": false
+        },
+        {
+          "text": "Your curiosity will be punished!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6007,6 +6850,24 @@
     "runOnHealth": 50,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Give up!",
+          "yell": false
+        },
+        {
+          "text": "Hiyaa",
+          "yell": false
+        },
+        {
+          "text": "Plundeeeeer!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6149,6 +7010,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Give up!",
+          "yell": false
+        },
+        {
+          "text": "Plundeeeeer!",
+          "yell": false
+        },
+        {
+          "text": "Hiyaa!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6274,6 +7153,24 @@
     "runOnHealth": 20,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Plundeeeeer!",
+          "yell": false
+        },
+        {
+          "text": "Hiyaa!",
+          "yell": false
+        },
+        {
+          "text": "Give up!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6369,6 +7266,31 @@
     "runOnHealth": 5,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 60,
+      "body": 118,
+      "legs": 118,
+      "feet": 116,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You will not live to tell anyone!",
+          "yell": false
+        },
+        {
+          "text": "You are my game today!",
+          "yell": false
+        },
+        {
+          "text": "Look what has stepped into my trap!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6517,6 +7439,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Your energy is mine.",
+          "yell": false
+        },
+        {
+          "text": "Now your life is come to the end, hahahaha!",
+          "yell": false
+        },
+        {
+          "text": "Throw the soul on the altar!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6646,6 +7586,39 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 97,
+      "body": 113,
+      "legs": 76,
+      "feet": 98,
+      "addons": 2
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I'll teach you a lesson!",
+          "yell": false
+        },
+        {
+          "text": "Feel my steel!",
+          "yell": false
+        },
+        {
+          "text": "Take this!",
+          "yell": false
+        },
+        {
+          "text": "Let's see how good you are!",
+          "yell": false
+        },
+        {
+          "text": "A challenge at last!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6805,6 +7778,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "When I'm finished with you, you'll be a shadow of your former self.",
+          "yell": false
+        },
+        {
+          "text": "Come forth from the shadows, my minions...",
+          "yell": false
+        },
+        {
+          "text": "The shadows follow your every step...",
+          "yell": false
+        },
+        {
+          "text": "The shadows will swallow you...",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6909,6 +7904,27 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 95,
+      "body": 0,
+      "legs": 113,
+      "feet": 115,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You saw something you shouldn't!",
+          "yell": false
+        },
+        {
+          "text": "I will silence you forever!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7039,6 +8055,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 97,
+      "body": 116,
+      "legs": 95,
+      "feet": 95,
+      "addons": 0
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7253,6 +8276,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 1810000,
+    "outfit": {
+      "head": 76,
+      "body": 57,
+      "legs": 76,
+      "feet": 95,
+      "addons": 2
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7383,6 +8413,39 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 113,
+      "body": 38,
+      "legs": 76,
+      "feet": 96,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Another head for me!",
+          "yell": false
+        },
+        {
+          "text": "Head off!",
+          "yell": false
+        },
+        {
+          "text": "Your head will be mine!",
+          "yell": false
+        },
+        {
+          "text": "Stand still!",
+          "yell": false
+        },
+        {
+          "text": "One more head for me!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7536,6 +8599,35 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 97,
+      "body": 24,
+      "legs": 73,
+      "feet": 116,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Your stuff will be mine soon!",
+          "yell": false
+        },
+        {
+          "text": "I'll cut you a bloody grin!",
+          "yell": false
+        },
+        {
+          "text": "For hurting me, my sire will kill you!",
+          "yell": false
+        },
+        {
+          "text": "You shouldn't have come here!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7644,6 +8736,27 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 38,
+      "body": 38,
+      "legs": 38,
+      "feet": 38,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Gimme your money!",
+          "yell": false
+        },
+        {
+          "text": "An enemy!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7870,6 +8983,24 @@
     "runOnHealth": 30,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Herba budinia ex!",
+          "yell": false
+        },
+        {
+          "text": "Horax Pokti!",
+          "yell": false
+        },
+        {
+          "text": "Hihihihi!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

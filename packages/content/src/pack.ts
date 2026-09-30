@@ -105,8 +105,11 @@ export function packProblems(appearances: Appearances, pack: Pack): string[] {
     // fora do pacote é o mesmo quadrado invisível, agora a cada lançamento.
     check(`supplies.${id}.missile`, 'missile', supply.missile);
   }
-  for (const [id, effect] of Object.entries(appearances.hits)) {
-    check(`hits.${id}`, 'effect', effect);
+  check('hits.melee', 'effect', appearances.hits.melee);
+  // O efeito do golpe físico por raça (#620): cada linha é um id de arte, e um fora do pacote é o
+  // mesmo quadrado invisível, agora a cada golpe.
+  for (const [race, effect] of Object.entries(appearances.hits.byRace ?? {})) {
+    check(`hits.byRace.${race}`, 'effect', effect);
   }
   // As abilities de monstro (CMB-06, #242). As CHAVES são vocabulário semântico e não têm
   // entidade de conteúdo para cruzar — mas os ids que cada linha resolve SÃO de arte, e um

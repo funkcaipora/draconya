@@ -45,8 +45,10 @@ temporário que Rat Cellars e Rotworm Caves ainda exigiam com o modelo antigo de
 (M36-05) converteu as duas hunts para os spawns reais do Canary e apagou os dois arquivos — Rat e
 Rotworm caem no `blockable: false` do próprio Canary, como o resto do bestiário. `pnpm
 catalog:promote-monsters` (`preserveHandAuthored`) NUNCA sobrescreve essas quatro entradas numa
-reimportação futura — elas só mudam de novo por decisão deliberada, como o #581. `load.ts` não lê
-`staging/`, e nada do jogo deve ler.
+reimportação futura — elas só mudam de novo por decisão deliberada, como o #581. **A apresentação
+(`outfit`, `voices`, `light`, `race`, #620) é a exceção:** o `promote-monsters` a renova nessas
+quatro também (`PRESENTATION_FIELDS`, `withPresentation`) — a regra do #581 protege os números de
+combate, não a fala do rato. `load.ts` não lê `staging/`, e nada do jogo deve ler.
 
 **`staging/items/` também não é conteúdo carregado** (#573/#574): `pnpm catalog:import items`
 escreve lá — 1946 itens de caça. `items.ts` já resolve `slot: 'hand'` por default em TODA arma
@@ -245,6 +247,14 @@ MUDA, e muda é válida: exigir o outro lado obrigaria cada magia nova a nascer 
 nascer com número, que é a ordem errada. Por isso o placeholder emite as três seções vazias, e
 por isso `load.test.ts` — e não `buildContent` — é quem prende que todo spell do repositório
 tem efeito hoje.
+
+**`hits.byRace` é o efeito do golpe FÍSICO por raça do alvo** (#620, `Game::combatGetTypeInfo`):
+uma linha por `MonsterRace` (`blood`/`venom`/`undead`/`fire`/`energy`/`ink`/`chocolate`/`candy`),
+cada uma um id de efeito que o pacote tem. É opcional e o host cai em `hits.melee` para a raça sem
+linha — a tabela de antes da #620 (só `melee`) continua válida. O `monster.race`, o
+`monster.outfit` (cores e addons), as `voices` e a `light` do monstro são campos do `monsterSchema`,
+todos opcionais, todos APRESENTAÇÃO: `sim` e combate não os leem, e o que não é arte neles são
+índices (cor 0–132, luz 0–215, máscara de addons 0–3), nunca um id de desenho (invariante 6).
 
 **`appearances.abilities` é a única seção sem conferência dos dois lados** (CMB-06). As chaves
 dela são SEMÂNTICAS e compartilhadas (`spit`, `fire-impact`) — a ability de monstro aponta
