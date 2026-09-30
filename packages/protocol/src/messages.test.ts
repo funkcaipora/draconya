@@ -1317,6 +1317,28 @@ describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
     expect(decodeS2C(encodeS2C(msg))).toEqual([msg]);
   });
 
+  it('round trips a light condition with its radius, colour and total duration (#623)', () => {
+    const msg: S2CMessage = {
+      type: 'active-conditions',
+      conditions: [
+        { kind: 'light', remainingMs: 300_000, light: { level: 6, color: 215, durationMs: 370_000 } },
+        { kind: 'haste', remainingMs: 30_000 },
+      ],
+    };
+    expect(decodeS2C(encodeS2C(msg))).toEqual([msg]);
+  });
+
+  it('rejects a light with a non-positive radius or a non-integer duration (#623)', () => {
+    expect(decodeS2C(encodeS2C({
+      type: 'active-conditions',
+      conditions: [{ kind: 'light', remainingMs: 1, light: { level: 0, color: 215, durationMs: 370_000 } }],
+    } as unknown as S2CMessage))).toBeNull();
+    expect(decodeS2C(encodeS2C({
+      type: 'active-conditions',
+      conditions: [{ kind: 'light', remainingMs: 1, light: { level: 6, color: 215, durationMs: 1.5 } }],
+    } as unknown as S2CMessage))).toBeNull();
+  });
+
   it('round trips active-conditions with empty list', () => {
     const emptyMsg: S2CMessage = {
       type: 'active-conditions',

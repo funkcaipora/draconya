@@ -574,7 +574,7 @@ export const PartySummary = z.object({
  * As condições que a barra de buffs do cliente sabe desenhar (#341, SV-05). Vocabulário FECHADO
  * do contrato: o host só envia estas, e uma badge nova entra aqui e no cliente na mesma PR.
  */
-export const ACTIVE_CONDITION_KINDS = ['haste', 'buff', 'mana-shield', 'heal-over-time'] as const;
+export const ACTIVE_CONDITION_KINDS = ['haste', 'buff', 'mana-shield', 'heal-over-time', 'light'] as const;
 export type ActiveConditionKind = (typeof ACTIVE_CONDITION_KINDS)[number];
 
 /**
@@ -1354,6 +1354,19 @@ export const S2C_SCHEMAS = {
     conditions: z.array(z.object({
       kind: z.enum(ACTIVE_CONDITION_KINDS),
       remainingMs: z.number().int().nonnegative(),
+      /**
+       * Só em `kind: 'light'` (#623: Light, Great Light, Ultimate Light): o que o cliente precisa
+       * para ajustar a escuridão — o raio inicial em tiles, o índice de cor da paleta de 216 do
+       * Tibia e o prazo TOTAL da (re)aplicação. O raio decai 1 a cada `durationMs / level` (o
+       * `ConditionLight` do Canary), então o nível de agora é `ceil(level × remainingMs /
+       * durationMs)` — o cliente calcula, e o servidor não manda um tique de luz. Apresentação
+       * pura: nenhuma regra de jogo lê luz (invariante 3).
+       */
+      light: z.object({
+        level: z.number().int().positive(),
+        color: z.number().int().nonnegative(),
+        durationMs: z.number().int().positive(),
+      }).optional(),
     })),
   }),
   /**
