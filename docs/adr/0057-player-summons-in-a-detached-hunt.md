@@ -85,3 +85,30 @@ está olhando, como ela entra no snapshot, e se o bot pode ressumonar sozinho.
 
 Nenhum. O **3** é a decisão 1; o **11** é a decisão 4; o **2** é a razão de duração e cooldown
 serem eventos da fila.
+
+## Emenda — 2026-09-30: o respawn ao convencer e o cadáver animável (#600)
+
+A implementação do #600 conferiu as decisões 5 e 6 contra as fontes locais (Canary `47dfd51`, TFS
+`70793fd`) e corrige duas afirmações — a regra do dono é a mecânica de caça idêntica à do Canary,
+inclusive QUANDO ela dispara (ADR 0037 d.6):
+
+- **Decisão 5 — o ponto de spawn não começa o respawn ao convencer.** O texto dizia "imediatamente,
+  como se ele tivesse morrido (`spawn->removeMonster` no Canary)". Não é isso que o Canary faz:
+  `convince_creature.lua` chama `Creature:setSummon`, que chama `Creature::setMaster(master, true)` —
+  e `setMaster` não toca o spawn. O monstro continua em `SpawnMonster::spawnedMonsterMap`, e o
+  `SpawnMonster::cleanup` só o retira quando `monster->isRemoved()`. `SpawnMonster::removeMonster`
+  não tem chamador nenhum no Canary; no TFS o único é o ramo `monsterOverspawn` de `Monster::onThink`
+  (monstro fora do raio de despawn, config desligada por padrão), que nada tem a ver com convencer.
+  Logo: **o lugar continua ocupado enquanto o convencido vive, e o respawn do ponto corre quando ele
+  morre ou some** (com o mestre, ao sair da hunt), contado daquele instante — o mesmo caminho de
+  qualquer monstro do Spawner (`#releaseSpawnSlot`). O resto da decisão vale: custa `manaCost`,
+  transfere a posse, não dá XP nem loot ao morrer — e agora também não deixa cadáver
+  (`Creature::dropCorpse`, `!lootDrop`), regra que vale para TODA invocação.
+- **Decisão 6 — "cadáver vivo no tile-alvo" é "o item do topo é um cadáver MOVÍVEL agora".** O script
+  exige `itemType:isCorpse() and itemType:isMovable()` sobre `Tile:getTopDownItem()`, e as duas flags
+  são do estágio da cadeia `decayTo` em que o cadáver está (`appearances.dat`: `corpse`, sem `unmove`).
+  O primeiro estágio de quase todo monstro é `unmove`: o cadáver recém-abatido não pode ser animado;
+  vira movível no primeiro decaimento (10 s no caso comum). `monster.corpseAnimatable` (janelas em ms
+  desde a morte, gerado pelo importador) leva isso ao `sim`, que mede o tempo desde a morte pelo evento
+  `CORPSE` da fila. O topo da pilha é o cadáver mais recente do tile. O Animate Dead não custa mana (o
+  script não chama `addMana`).

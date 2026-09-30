@@ -212,6 +212,16 @@ invocação, nada muda" porque a suíte de regressão inteira (4.000+ casos, inc
 conformance do v3 acima) já roda sob o conteúdo real sem NENHUM monstro `summonable` — e continua
 batendo os mesmos números depois da mudança, o que é a prova por ausência de qualquer perturbação.
 
+### Estágio #600 (M38-03, Convince Creature e Animate Dead — ADR 0057 d.5–d.6)
+
+As duas runas só agem quando usadas, e nenhum sorteio novo entra no caminho de quem não as usa
+(`useSupply` roda a precondição só nos dois efeitos novos; a mira do bot para Animate Dead não
+consome `session.rng`). **`additive`**: os oráculos do v3 e do v4 acima seguem batendo os mesmos
+números. Uma regra do estágio vale para toda sessão, de qualquer perfil e com ou sem as runas: **a
+invocação que morre não deixa cadáver** (`Creature::dropCorpse`) — o cadáver não paga XP, loot nem sorteio, e
+o `nextGroundItemId` só avança para quem deixa cadáver. O detalhe está em "Convince Creature e Animate
+Dead" em `docs/product/combat.md`.
+
 ### Estágio #603 (M39-03, Charms em combate — ADR 0053 d.5): `breaking`
 
 O primeiro estágio do `combat-v4` que MUDA resultado e ordem de sorteio — por isso o perfil passa

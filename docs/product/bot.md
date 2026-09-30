@@ -301,6 +301,8 @@ O que ele faz, por tipo de ação:
 | `spell` com efeito `damage` | resolve o dano por `resolveDamage` com `kind: 'magic'`, aplica no alvo e **atribui** (`recordDamage`) | level, vocação, cooldown, sem alvo, fora de alcance, mana |
 | `supply` `heal`/`mana` | repõe HP ou mana (faixa fixa sorteada, `amountRange`, ou `alsoMana` junto — #524, kit level 200) e **debita `price` do gold** no ato | level, vocação (#524 — a poção do Tibia pede as duas, como a magia), sem gold |
 | `supply` `damage` (runa) | mira como a magia em área, escala pelo magic level, aplica pelo mesmo `#applyHits` e **debita `price` do gold** | level, vocação, magic level, sem alvo, fora de alcance, sem gold |
+| `supply` `convince` (Convince Creature, #600) | mira o alvo do bot como a runa de dano, confere `convinceable`/sem mestre/teto de 2/mana do monstro e **passa a posse** dele ao personagem; debita `price` e a `manaCost` do monstro | level, vocação, magic level, sem alvo, fora de alcance, alvo não `convinceable` ou com mestre (`not-possible`), teto (`too-many-summons`), mana, sem gold |
+| `supply` `animate-dead` (Animate Dead, #600) | sem mira manual, o bot escolhe o **cadáver animável mais próximo** ao alcance e à vista; consome o cadáver (e o loot que sobrou) e ergue o Skeleton; debita só `price` | level, vocação, magic level, sem cadáver movível ao alcance (`no-target`/`not-possible`), teto, sem gold |
 | `item` com efeito `blessing` | nada — quem o executa é a TP-03 (M22) | sempre |
 
 Três coisas que não podem mudar sem pensar duas vezes:
