@@ -8,6 +8,13 @@ Ferramentas de desenvolvimento e operação: o cliente sintético de carga, benc
 `build-asset-library.ts`), porque importam `packages/client/src/assets` por caminho relativo
 sob o `tsconfig.tooling.json` — ver `docs/asset-library.md`.
 
+**Fixture de tools que lança magia precisa do registro de aprendidas (#624):** o cast confere
+`CharacterRuntime.learnedSpells`. `dragon-party-movement.test.ts` monta os quatro level 200 com
+`learnedSpells: learnedSpellsStateOf(content.spells.keys())` (sem isso a rotação de magia REAL do
+`botConfigFor` nunca lança nada, e a semente 18 estourou o limite do líder parado), e
+`dragon-party-seed.ts` grava `characters.learned_spells` com as magias da vocação até o level 200 —
+a mesma regra da migração 0023 —, ou a party semeada para a QA ao vivo entraria sem lançar nada.
+
 O importador do CATÁLOGO do Tibia (item, monstro, magia — ADR 0038) mora em `scripts/catalog/`,
 pelo mesmo motivo e ao lado do importador de mapa, e não aqui: `pnpm catalog:import <tipo>
 [--check]` lê `things/sources/canary` (`CANARY_DIR`) e escreve `packages/content/data/<tipo>/

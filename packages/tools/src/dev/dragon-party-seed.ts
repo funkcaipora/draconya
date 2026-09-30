@@ -10,7 +10,7 @@
 
 import { eq } from 'drizzle-orm';
 import { schema, type Database } from '@draconya/server';
-import { statsForLevel, totalXpForLevel } from '@draconya/sim';
+import { learnedSpellsStateOf, statsForLevel, totalXpForLevel } from '@draconya/sim';
 import { validateBotConfigV2, type Content } from '@draconya/content';
 import {
   ammoFor, botConfigFor, DRAGON_PARTY_LEVEL, goldForOneHour, resolveEquipment, skillsFor,
@@ -69,6 +69,17 @@ export async function seedCharacterStats(
   // do personagem escrita pela metade.
   const equipment = resolveEquipment(content, vocationId);
 
+  // As magias que um level 200 desta vocação já lança (#624, ADR 0058 d.4): a mesma regra da
+  // migração 0023 — vocação e `minLevel` —, porque o cast confere o registro e uma party semeada
+  // sem ele entraria na hunt sem lançar nada da rotação que `botConfigFor` acabou de gravar.
+  const learnedSpells = learnedSpellsStateOf(
+    [...content.spells.values()]
+      .filter((spell) => (spell.vocationId === undefined || spell.vocationId === vocationId)
+        && spell.minLevel <= level)
+      .map((spell) => spell.id)
+      .sort(),
+  );
+
   await db.transaction(async (tx) => {
     await tx.update(schema.characters).set({
       vocation: vocationId,
@@ -78,6 +89,7 @@ export async function seedCharacterStats(
       gold,
       capacity: stats.capacity,
       botConfig,
+      learnedSpells,
       ...(ammo === null ? {} : { ammo }),
     }).where(eq(schema.characters.id, characterId));
 
