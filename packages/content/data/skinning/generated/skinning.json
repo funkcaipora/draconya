@@ -1,0 +1,1288 @@
+[
+  {
+    "id": "ancient-spawn-of-morgathla",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 21004,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 21005,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "angry-demon",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "demon-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5995,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4097,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "animated-clomp",
+    "toolId": "obsidian-knife",
+    "materialId": "raw-meat",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 22742,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 22743,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "animated-moohtant",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 20996,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 20997,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "apprentice-sheng",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5981,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4047,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "armenius-creature",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "vampire-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 6006,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4137,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "bane-of-light",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "vampire-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 6006,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4137,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "battlemaster-zunzu",
+    "toolId": "obsidian-knife",
+    "materialId": "lizard-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 10364,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "bazir",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "demon-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 4097,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "behemoth",
+    "toolId": "obsidian-knife",
+    "materialId": "perfect-behemoth-fang",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5999,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4112,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "clomp",
+    "toolId": "obsidian-knife",
+    "materialId": "raw-meat",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 22742,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 22743,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "demodras",
+    "toolId": "obsidian-knife",
+    "materialId": "red-dragon-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5984,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4062,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "demon",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "demon-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5995,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4097,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "demon-goblin",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "demon-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5995,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4097,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "demon-slave",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "demon-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5995,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4097,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "depowered-minotaur",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5969,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4011,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "diblis-the-fair",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "vampire-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 8109,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 8110,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "dragon",
+    "toolId": "obsidian-knife",
+    "materialId": "green-dragon-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5973,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4025,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "dragon-lord",
+    "toolId": "obsidian-knife",
+    "materialId": "red-dragon-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5984,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4062,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "dragon-servant",
+    "toolId": "obsidian-knife",
+    "materialId": "red-dragon-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5984,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4062,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "execowtioner",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 21004,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 21005,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "fatality",
+    "toolId": "obsidian-knife",
+    "materialId": "lizard-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 4239,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4321,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "fazzrah",
+    "toolId": "obsidian-knife",
+    "materialId": "lizard-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 10367,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 10364,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "general-murius",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 21091,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 21092,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "glooth-powered-minotaur",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 20996,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 20997,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "invading-demon",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "demon-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5995,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4097,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "kalyassa",
+    "toolId": "obsidian-knife",
+    "materialId": "red-dragon-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5984,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4062,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "killer-rabbit",
+    "toolId": "obsidian-knife",
+    "materialId": "rabbits-foot",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 6017,
+        "durationMs": 10000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "lizard-high-guard",
+    "toolId": "obsidian-knife",
+    "materialId": "lizard-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 10355,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 10352,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "lizard-legionnaire",
+    "toolId": "obsidian-knife",
+    "materialId": "lizard-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 10359,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 10356,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "lizard-noble",
+    "toolId": "obsidian-knife",
+    "materialId": "lizard-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 6041,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4327,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "lizard-sentinel",
+    "toolId": "obsidian-knife",
+    "materialId": "lizard-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 6040,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4324,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "lizard-templar",
+    "toolId": "obsidian-knife",
+    "materialId": "lizard-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 4239,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4321,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "lizard-zaogun",
+    "toolId": "obsidian-knife",
+    "materialId": "lizard-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 10367,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 10364,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "memory-of-a-lizard",
+    "toolId": "obsidian-knife",
+    "materialId": "lizard-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 10355,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 10352,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "memory-of-a-vampire",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "vampire-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 6006,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4137,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "menace",
+    "toolId": "obsidian-knife",
+    "materialId": "lizard-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 4239,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4321,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "minotaur",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5969,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4011,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "minotaur-archer",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5982,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4052,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "minotaur-bruiser",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5969,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4011,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "minotaur-cult-follower",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5969,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4011,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "minotaur-cult-zealot",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5983,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4057,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "minotaur-guard",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5983,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4057,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "minotaur-invader",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5983,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4057,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "minotaur-mage",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5981,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4047,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "minotaur-occultist",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5981,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4047,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "minotaur-poacher",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5982,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4052,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "moohtant",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 20996,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 20997,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "orshabaal",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "demon-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5995,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4097,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "rabbit",
+    "toolId": "obsidian-knife",
+    "materialId": "rabbits-foot",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 6017,
+        "durationMs": 10000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "reflection-of-mawhawk",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 21004,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 21005,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "sir-valorcrest",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "vampire-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 8109,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 8110,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "soulless-minion",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "vampire-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 6006,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4137,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "stonecracker",
+    "toolId": "obsidian-knife",
+    "materialId": "perfect-behemoth-fang",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5999,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4112,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "the-count",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "vampire-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 8109,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 8110,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "the-horned-fox",
+    "toolId": "obsidian-knife",
+    "materialId": "minotaur-leather",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5983,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4057,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "the-weakened-count",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "vampire-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 6006,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4137,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "unbound-demon",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "demon-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5995,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4097,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "ungreez",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "demon-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 5995,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4097,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "vampire",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "vampire-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 6006,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 4137,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "vampire-bride",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "vampire-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 8744,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 8738,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  },
+  {
+    "id": "zevelon-duskbringer",
+    "toolId": "blessed-wooden-stake",
+    "materialId": "vampire-dust",
+    "chance": 25000,
+    "stages": [
+      {
+        "canaryItemId": 8109,
+        "durationMs": 10000
+      },
+      {
+        "canaryItemId": 8110,
+        "durationMs": 300000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/scripts/actions/tools/skinning.lua"
+    }
+  }
+]

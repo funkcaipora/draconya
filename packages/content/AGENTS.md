@@ -80,6 +80,16 @@ cobrem o resto das ~120 magias e as runas fora das duas formas de fórmula que e
 reconhece (`docs/reference/catalog/spells-report.md`/`runes-report.md` listam o que ficou de
 fora, com o motivo).
 
+**`data/skinning/generated/` é a esfola de cadáver** (#626, ADR 0048 d.5/d.6): `pnpm catalog:import
+skinning` lê o `skinning.lua` do Canary (`config[ferramenta][id do cadáver]`) e a cruza com o
+`monster.corpse` e a cadeia de decaimento (`duration`/`decayTo`) de cada monstro do catálogo — uma
+linha por MONSTRO, com a ferramenta, o material, a `chance` (`SKINNING_CHANCE_SCALE = 100000`) e
+os `stages` esfoláveis do cadáver (`canaryItemId` é identidade para o Scavenge, nunca arte). Depende
+de `data/monsters/**` e `data/items/**` já promovidos: monstro, ferramenta ou material fora do
+catálogo saem em `skipped` no relatório, e o boot recusa referência solta. A obsidian knife, a
+blessed wooden stake e o `rabbits-foot` são itens AUTORAIS (o importador de itens não classifica
+`primarytype="tools"`); reimportar depois de promover mais monstros recupera o que ficou de fora.
+
 Qualquer `data/<tipo>/` (`items/`, `monsters/`) aceita, além do arquivo autoral direto na pasta,
 duas subpastas que `load.ts` lê sozinho, sem precisar de mudança em `content.ts`:
 
