@@ -990,6 +990,16 @@ export function buildContent(raw: RawContent): Content {
     if (item.extraDefense > 0 && item.kind !== 'weapon') {
       problems.push(`item "${item.id}": extraDefense só faz sentido em arma`);
     }
+    // O bond elemental (#627) é o da ARMA na mão (`casterPlayer->getWeapon(true)`, `combat.cpp:163`)
+    // — a mesma disciplina do `extraDefense`: fora de arma seria um número que nada lê.
+    if (item.elementalBond !== undefined && item.kind !== 'weapon') {
+      problems.push(`item "${item.id}": elementalBond só faz sentido em arma`);
+    }
+    // A capacidade de magic shield (#627) é `Abilities` do Canary: só vale em peça que se veste,
+    // como o `imbuementSlots` — num item sem slot ela nunca seria somada.
+    if (item.bonuses?.magicShieldCapacity !== undefined && item.slot === undefined) {
+      problems.push(`item "${item.id}": bonuses.magicShieldCapacity só vale em item que se veste`);
+    }
     if ((item.spellbook || item.quiver) && item.kind !== 'shield') {
       problems.push(`item "${item.id}": spellbook/quiver só fazem sentido em escudo`);
     }

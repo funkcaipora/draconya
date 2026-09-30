@@ -75,6 +75,21 @@ function numberValue(attrs: ReadonlyMap<string, XmlElement>, key: string): numbe
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+/**
+ * `numberValue` com a chave casada SEM distinguir caixa. O `ItemParse` do Canary minusculiza toda
+ * chave antes de despachar (`asLowerCaseString`, `item_parse.cpp`), então o `items.xml` escreve
+ * `magicshieldCapacityflat` (caixa mista, nos 4 itens que o têm) e o parser lê do mesmo jeito que
+ * leria `magicshieldcapacityflat` — um `attrs.get` exato perderia os quatro em silêncio (#627).
+ */
+function numberValueFolded(attrs: ReadonlyMap<string, XmlElement>, lowerKey: string): number | undefined {
+  for (const [key, element] of attrs) {
+    if (key.toLowerCase() !== lowerKey) continue;
+    const parsed = Number(element.attributes['value']);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Vocabulário do Canary → vocabulário do Draconya.
 
@@ -88,6 +103,9 @@ const SLOT_MAP: Readonly<Record<string, string>> = {
   ring: 'finger', necklace: 'neck', shield: 'shield', ammo: 'ammo', backpack: 'back', hand: 'hand',
   'right-hand': 'shield',
 };
+
+/** Os três textos que `ItemParse::parseElementalBond` reconhece (#627) — `ELEMENTAL_BOND_TYPES` do content. */
+const ELEMENTAL_BOND_VALUES: ReadonlySet<string> = new Set(['physical', 'earth', 'energy']);
 
 /** `wandType` (rod/wand) → `DamageType`. Sem `holy`/`physical`: nenhuma wand/rod do Canary os usa. */
 const WAND_TYPE_TO_DAMAGE: Readonly<Record<string, string>> = {
@@ -170,7 +188,8 @@ function hasBonusAttribute(attrs: ReadonlyMap<string, XmlElement>): boolean {
       || key === 'cleavepercent' || key === 'criticalhitchance' || key === 'criticalhitdamage'
       || key === 'lifeleechamount' || key === 'manaleechamount' || key === 'reflectdamage'
       || MELEE_SKILL_ATTR_TO_SKILL.has(key) || key === 'skilldist' || key === 'skillshield'
-      || key.startsWith('absorbpercent') || SPECIALIZED_MAGIC_ATTR_TO_ELEMENT.has(key)) return true;
+      || key.startsWith('absorbpercent') || SPECIALIZED_MAGIC_ATTR_TO_ELEMENT.has(key)
+      || key.toLowerCase().startsWith('magicshieldcapacity')) return true;
   }
   return false;
 }
@@ -259,6 +278,11 @@ const HANDLED_ATTRS: ReadonlySet<string> = new Set([
   // `containersize` é IGNORADO de propósito — o Draconya não guarda pilha física de munição
   // (ADR 0026 d.3), então o quiver entra como `kind: 'shield'` puro, nunca `kind: 'container'`.
   'perfectshotrange', 'perfectshotdamage', 'containersize',
+  // #627: `elementalbond` vira `elementalBond` (só arma); a capacidade de magic shield vira
+  // `bonuses.magicShieldCapacity`. As duas grafias da capacidade — o XML real escreve a caixa
+  // mista, o parser do Canary minusculiza (ver `numberValueFolded`).
+  'elementalbond', 'magicshieldcapacityflat', 'magicshieldcapacitypercent',
+  'magicshieldCapacityflat', 'magicshieldCapacitypercent',
   ...ELEMENT_ATTR_TO_DAMAGE.keys(), ...ABSORB_ATTR_TO_DAMAGE.keys(), ...SPECIALIZED_MAGIC_ATTR_TO_ELEMENT.keys(),
 ]);
 
@@ -448,6 +472,15 @@ export function convertItem(
   }
   const suppress: string[] = [];
   if (value(attrs, 'suppressdrunk') !== undefined) suppress.push('drunk');
+  // A capacidade de magic shield (#627): dois inteiros de `Abilities` (`item_parse.cpp:944-950`,
+  // `+=` de `pugi::cast<int32_t>`), os 4 spellbooks do `items.xml`. Só dado — ver
+  // `itemSchema.bonuses.magicShieldCapacity` para o que o Canary faz (e não faz) com ele.
+  const shieldCapacityFlat = numberValueFolded(attrs, 'magicshieldcapacityflat');
+  const shieldCapacityPercent = numberValueFolded(attrs, 'magicshieldcapacitypercent');
+  const magicShieldCapacity = {
+    flat: Math.trunc(shieldCapacityFlat ?? 0),
+    percent: Math.trunc(shieldCapacityPercent ?? 0),
+  };
 
   const bonuses: Record<string, unknown> = {};
   if (skills.length > 0) bonuses['skills'] = skills;
@@ -455,7 +488,16 @@ export function convertItem(
   if (Object.keys(specializedMagicLevel).length > 0) bonuses['specializedMagicLevel'] = specializedMagicLevel;
   if (regeneration !== undefined) bonuses['regeneration'] = regeneration;
   if (suppress.length > 0) bonuses['suppress'] = suppress;
+  if (magicShieldCapacity.flat !== 0 || magicShieldCapacity.percent !== 0) {
+    bonuses['magicShieldCapacity'] = magicShieldCapacity;
+  }
   if (Object.keys(bonuses).length > 0) entity['bonuses'] = bonuses;
+
+  // O `elementalBond` só vale em arma (`ItemType::elementalBond` é lido da arma na mão): em
+  // qualquer outro item o dado não tem para onde ir, e o relatório diz em vez de calar.
+  if (value(attrs, 'elementalbond') !== undefined && classification.kind !== 'weapon') {
+    ignoredFields.push('elementalbond em item que não é arma');
+  }
 
   // weapon (#152/#524/#687) — só em kind: 'weapon'.
   if (classification.kind === 'weapon') {
@@ -499,6 +541,14 @@ export function convertItem(
       if (found.length > 1) blockers.push(`mais de um elemento na arma (${found.map((f) => f.type).join(', ')})`);
       else if (found.length === 1 && found[0] !== undefined) weapon['element'] = { type: found[0].type, attack: found[0].amount };
     }
+    // O bond elemental (#627, `ItemParse::parseElementalBond`, `item_parse.cpp:764-778`): o parser
+    // só reconhece `energy`/`earth`/`physical` e deixa qualquer outro texto em `COMBAT_NONE` — o
+    // mesmo filtro aqui, sem valor desconhecido virando campo. Fica no ITEM, não em `weapon`: é
+    // `ItemType::elementalBond`. Hoje nenhum item chega até aqui com ele — os 32 do `items.xml`
+    // são todos `weapontype="fist"`, família que `classify` pula (DT-01) — e o teste usa um
+    // `<item>` sintético para provar o mapeamento.
+    const bond = value(attrs, 'elementalbond')?.trim();
+    if (bond !== undefined && ELEMENTAL_BOND_VALUES.has(bond)) entity['elementalBond'] = bond;
     if ((family === 'wand' || family === 'rod') && (weapon['manaPerHit'] === undefined || weapon['damage'] === undefined)) {
       blockers.push('wand/rod sem mana ou faixa de dano completa (script;weapon incompleto)');
     }

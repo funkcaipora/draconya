@@ -618,6 +618,26 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     }
   });
 
+  it('os 4 spellbooks do Canary com capacidade de magic shield a carregam no catálogo real (#627, M44-09)', () => {
+    // `magicshieldCapacityflat`/`percent` do items.xml (47dfd51) — o dado declarado, sem consumidor
+    // no `sim` (o Canary só o lê para descrição de item e Cyclopedia; ver `itemSchema`).
+    const { items } = loadContent(DATA);
+    const capacity = (id: string) => items.get(id)?.bonuses?.magicShieldCapacity;
+    expect(capacity('eldritch-folio')).toEqual({ flat: 80, percent: 8 });
+    expect(capacity('eldritch-tome')).toEqual({ flat: 80, percent: 8 });
+    expect(capacity('cocoa-grimoire')).toEqual({ flat: 150, percent: 3 });
+    expect(capacity('creamy-grimoire')).toEqual({ flat: 150, percent: 3 });
+    // E só esses quatro: mais um item com o campo seria um importador lendo o que não devia.
+    const withCapacity = [...items.values()].filter((item) => item.bonuses?.magicShieldCapacity !== undefined);
+    expect(withCapacity.map((item) => item.id).sort())
+      .toEqual(['cocoa-grimoire', 'creamy-grimoire', 'eldritch-folio', 'eldritch-tome']);
+  });
+
+  it('nenhum item do catálogo real carrega elementalBond: os 32 do Canary são arma fist, fora do corte (#627)', () => {
+    const { items } = loadContent(DATA);
+    expect([...items.values()].filter((item) => item.elementalBond !== undefined)).toEqual([]);
+  });
+
   it('data/supplies voltou a existir, e a poção não é mais item (ADR 0026 d.3)', () => {
     expect(existsSync(join(DATA, 'supplies'))).toBe(true);
     const content = loadContent(DATA);

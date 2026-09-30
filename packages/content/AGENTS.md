@@ -590,6 +590,15 @@ entre arquivos resolvem.
   o MESMO `absorbpercent*`: o schema recusa os dois no mesmo tipo. O reflexo compila no boot
   (`compileReflect`, tabela completa por tipo, ausente quando nada reflete) — é a forma que o
   reflexo de monstro (#683) reusa.
+- **`item.elementalBond` e `item.bonuses.magicShieldCapacity` são DADO sem consumidor no `sim`**
+  (#627, M44-09) — de propósito, e não por esquecimento. No Canary (47dfd51) o bond só troca o
+  tipo de dano da magia de `VOCATION_MONK_CIP` (`combat.cpp:159-174`) e os 32 itens são todos
+  arma `fist` (fora do corte: Monk e DT-01); a capacidade só aparece na descrição do item e na
+  Cyclopedia, e `magic_shield.lua` monta o balde sem consultá-la. Ligar qualquer um dos dois ao
+  combate seria comportamento que o Canary não tem (ADR 0037 d.6). O bond é só `kind: 'weapon'`
+  (`buildContent` recusa o resto) e a capacidade só em item com `slot`; o catálogo real tem zero
+  itens com bond e exatamente quatro com capacidade (`load.test.ts` prende as duas contagens).
+  Ver `docs/product/items.md`, "Atributos raros".
 - **O monstro tem schema de mitigação PRÓPRIO** (#683): `monsterMitigationSchema` aceita
   resistência em `[-2, 1)` (o `minElementalResistance` do Canary); o `mitigationSchema` do item
   continua `[-1, 1)`. Os dois são `mitigationSchemaWith(piso)` — alargar o compartilhado mudaria o
