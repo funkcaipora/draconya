@@ -101,6 +101,11 @@ export function buildCatalogue(content: Content): Catalogue {
         effect: spell.effect.kind,
         // O grupo (#155): a tela mostra ao lado do nome.
         group: spell.group ?? 'attack',
+        // Find Person (#623) precisa de MIRA: o "nome" do Canary é o personagem clicado, e o
+        // servidor não tem como adivinhar quem — o mesmo `targets: 'friend'` que arma a mira do
+        // `use-slot` (ADR 0049 d.2). Só ela declara: nenhuma outra magia publicava este campo.
+        ...(spell.effect.kind === 'find' && spell.effect.target === 'person'
+          ? { targets: 'friend' as const } : {}),
         // Os números de EXIBIÇÃO (ADR 0033): cooldown, grupo, descrição e o detalhe do efeito.
         cooldownMs: spell.cooldownMs,
         ...(spell.groupCooldownMs === undefined ? {} : { groupCooldownMs: spell.groupCooldownMs }),
