@@ -110,7 +110,7 @@ const characterRow = async (
 ): Promise<{
   xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
   ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown;
-  charms: unknown; blessings: number;
+  charms: unknown; familiar: unknown; blessings: number;
 }> => {
   const [row] = await database.database.db
     .select({
@@ -124,6 +124,7 @@ const characterRow = async (
       supplyStock: characters.supplyStock,
       ammunitionStock: characters.ammunitionStock,
       charms: characters.charms,
+      familiar: characters.familiar,
       blessings: characters.blessings,
     })
     .from(characters)
@@ -131,7 +132,7 @@ const characterRow = async (
   return row as {
     xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
     ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown;
-    charms: unknown; blessings: number;
+    charms: unknown; familiar: unknown; blessings: number;
   };
 };
 
@@ -773,6 +774,30 @@ describe.runIf(ready)('a economia de Charms chega ao Postgres pelo extrato (M39-
     // O extrato SEM o campo (seq 3, uma sessão de Cidade que não mexeu em Charm) não apaga o
     // que o extrato anterior gravou.
     expect((await characterRow(database, characterId)).charms).toEqual(second);
+  });
+});
+
+describe.runIf(ready)('o familiar chega ao Postgres pelo extrato (M38-02, #599, ADR 0057 d.3)', () => {
+  it('grava os carimbos, a última escrita vence — inclusive DESCENDO —, e o extrato sem o campo não toca na coluna', async () => {
+    // ABSOLUTO como `charms`, e NUNCA fundido pelo maior: o `summonUntilMs` DESCE quando o familiar
+    // morre (`FamiliarDeath` zera a recriação). É a segunda gravação abaixo que prova isso — com
+    // um `GREATEST` no ledger, o familiar morto voltaria na próxima entrada.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    expect((await characterRow(database, characterId)).familiar).toBeNull();
+    const receipts = new ReceiptStore(redis);
+    const first = { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 };
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), familiar: first });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).familiar).toEqual(first);
+
+    // O familiar morreu: o tempo que sobrava cai para o instante da morte, o cooldown segue.
+    const second = { ...first, summonUntilMs: 1_790_000_100_000 };
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2, familiar: second });
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    // O extrato SEM o campo (seq 3, uma sessão que não mexeu no familiar) não apaga o gravado.
+    expect((await characterRow(database, characterId)).familiar).toEqual(second);
   });
 });
 

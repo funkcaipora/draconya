@@ -26,8 +26,8 @@ import type {
   Skill, Vocation,
 } from '@draconya/content';
 import {
-  blessingCost, containerRulesFor, DEFAULT_FIGHT_MODE, hasBlessing, PartyFullError, shareCostsOf,
-  skillFactorFor, splitLootOf, withBlessing,
+  blessingCost, containerRulesFor, DEFAULT_FIGHT_MODE, hasBlessing, isEmptyFamiliarState,
+  PartyFullError, shareCostsOf, skillFactorFor, splitLootOf, withBlessing,
 } from '@draconya/sim';
 import type {
   AmmoRefusal, CarriedItem, CharacterRuntime, CharmAssignRefusal, CharmBestiaryEntry,
@@ -338,6 +338,10 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   // teto de 2 invocações vivas já atingido — as três causas caem na mesma frase, como
   // `not-in-catalog` já faz para magia/supply/level/vocação.
   'not-summonable': 'Você não pode invocar essa criatura agora.',
+  // O familiar (#599, M38-02): as duas frases do `CreateFamiliarSpell` do Canary — "You can't have
+  // other summons." e `RETURNVALUE_NOTENOUGHROOM`.
+  'has-summons': 'Você não pode ter outras invocações.',
+  'not-enough-room': 'Não há espaço suficiente.',
 };
 
 /**
@@ -4533,6 +4537,10 @@ export class SessionHost {
       // E a economia de Charms (M39-02, #602, ADR 0052 d.1): ABSOLUTA como `ammo` — sem ela
       // aqui, um `charm-unlock`/`charm-assign` aceito na Cidade sumiria a cada logout.
       ...(owner === undefined ? {} : { charms: owner.charms.getState() }),
+      // O familiar (M38-02, #599, ADR 0057 d.3): ABSOLUTO como `charms`, e omitido quando vazio —
+      // o personagem que nunca invocou não escreve a coluna. Sem isto o cooldown de 30 min não
+      // sobreviveria à saída da hunt: o ticket seguinte o leria como nunca lançado.
+      ...(owner === undefined || isEmptyFamiliarState(owner.familiar) ? {} : { familiar: owner.familiar }),
       // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
       // login se ficasse só na sessão.
       ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
@@ -4641,6 +4649,9 @@ export class SessionHost {
       // equipamento — sem isto, um `charm-unlock`/`charm-assign`/`charm-remove` feito na praça
       // sumiria no logout, porque a Cidade não gera `Receipt` de progresso (ADR 0023).
       charms: owner.charms.getState(),
+      // O familiar (M38-02, #599): o mesmo da hunt — o extrato de estado da Cidade o leva, para um
+      // logout depois de uma morte não perder o carimbo que a hunt acabou de gravar.
+      ...(isEmptyFamiliarState(owner.familiar) ? {} : { familiar: owner.familiar }),
       // O estoque de supply/munição (#792, ADR 0044 d.2): conjurar na Cidade credita
       // `supplyStock`/`ammunitionStock` do mesmo jeito que o loot da hunt credita — ABSOLUTO,
       // como `ammo` (`receipts.ts`). Sem isto, a carga conjurada na praça sumia no logout: o

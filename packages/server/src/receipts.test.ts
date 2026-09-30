@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { CharmsState } from '@draconya/sim';
+import type { CharmsState, FamiliarState } from '@draconya/sim';
 import { ReceiptStore, type SessionReceipt } from './receipts.js';
 import { connectTestRedis } from './testing/redis.js';
 
@@ -167,6 +167,26 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
 
     expect(found.find((receipt) => receipt.seq === 1)?.charms).toEqual(charms);
     expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('charms');
+  });
+
+  it('carries the familiar stamps through Redis and back, and drops a malformed record (#599)', async () => {
+    // Os carimbos de relógio de PAREDE do familiar: ABSOLUTOS e última-escrita-vence (ADR 0052 d.1).
+    // A ida e volta pelo Redis é a mesma conferência de `charms`: campo que não entra em
+    // `parseReceipt` some no caminho de volta sem erro — e aqui um registro torto também some.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const familiar: FamiliarState = { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 };
+    await store.save(receiptOf(randomUUID(), characterId, { familiar }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+    await store.save(receiptOf(randomUUID(), characterId, {
+      seq: 3, familiar: { version: 1, summonUntilMs: -5, cooldownUntilMs: 'x' } as unknown as FamiliarState,
+    }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.familiar).toEqual(familiar);
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('familiar');
+    expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('familiar');
   });
 
   it('carries the ammo selection through Redis and back, and a receipt without one stays without (#152)', async () => {

@@ -126,6 +126,23 @@ describe('settleSnapshotAsReceipt (#527)', () => {
     expect(otherSaved[0]?.fightMode).toBe('attack');
   });
 
+  it('carries the familiar stamps of the OWNER (#599), and a snapshot without them writes nothing', async () => {
+    // Sem os carimbos aqui, um familiar lançado antes da queda perderia o cooldown de 30 min junto
+    // com o snapshot irrestaurável — e o `familiar` ausente NÃO vira chave (o ledger não toca).
+    const { receipts, saved } = fakeReceipts();
+    const familiar = { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 };
+    const snapshot: SessionSnapshot = {
+      ...baseSnapshot,
+      participants: [{ ...baseSnapshot.participants[0]!, familiar }],
+    };
+    await settleSnapshotAsReceipt(snapshot, { characterId: 'a', accountId: 'acc-a', receipts });
+    expect(saved[0]?.familiar).toEqual(familiar);
+
+    const { receipts: other, saved: otherSaved } = fakeReceipts();
+    await settleSnapshotAsReceipt(baseSnapshot, { characterId: 'a', accountId: 'acc-a', receipts: other });
+    expect(otherSaved[0]).not.toHaveProperty('familiar');
+  });
+
   it('omits every optional field when the participant record has none of them', async () => {
     const { receipts, saved } = fakeReceipts();
     await settleSnapshotAsReceipt(baseSnapshot, { characterId: 'a', accountId: 'acc-a', receipts });

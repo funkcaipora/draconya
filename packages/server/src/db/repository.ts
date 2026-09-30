@@ -65,6 +65,12 @@ export interface CharacterRecord {
    * escreve é o ledger, na transação do extrato (ADR 0052 d.1).
    */
   readonly charms: unknown;
+  /**
+   * O familiar de vocação (M38-02, #599, ADR 0057 d.3), como veio do banco: `unknown` pela mesma
+   * razão de `charms` — a forma (`FamiliarState`) é do `sim`, e quem a confere é quem monta o
+   * ticket. `null` é personagem que nunca invocou. Sem método de escrita: quem escreve é o ledger.
+   */
+  readonly familiar: unknown;
   /** Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, em milissegundos. `0` é ninguém comeu. */
   readonly fedMs: number;
   /** As sete bênçãos PvE (#570, ADR 0052): BITMASK de `CharacterRuntime.blessings`. `0` é nenhuma. */
@@ -589,6 +595,7 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     supplyStock: row.supplyStock,
     ammunitionStock: row.ammunitionStock,
     charms: row.charms,
+    familiar: row.familiar,
     fedMs: row.fedMs,
     blessings: row.blessings,
     fightMode: row.fightMode,

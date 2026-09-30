@@ -368,6 +368,23 @@ describe('a postura de luta de entrada vem do TICKET, nunca do cliente (#550)', 
   });
 });
 
+describe('os carimbos do familiar de entrada vêm do TICKET, nunca do cliente (#599)', () => {
+  const content = testContent();
+
+  it('os carimbos persistidos chegam ao personagem da sessão — o cooldown de 30 min atravessa a saída', () => {
+    // Invariante 4: o cooldown vem do ticket (lido de `characters.familiar`), pela mesma razão do
+    // gold e da postura — um valor vindo do socket na criação seria um familiar sem cooldown.
+    const familiar = { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 };
+    const session = createCitySessionFactory(content)('p1', { level: 1, xp: 0, familiar });
+    expect(session.participants[0]?.familiar).toEqual(familiar);
+  });
+
+  it('ticket sem carimbo entra como quem nunca invocou', () => {
+    const session = createCitySessionFactory(content)('p1', { level: 1, xp: 0 });
+    expect(session.participants[0]?.familiar).toEqual({ version: 1, summonUntilMs: 0, cooldownUntilMs: 0 });
+  });
+});
+
 describe('stamina nas fronteiras da sessão (FUN-39)', () => {
   const content = testContent();
   const HOUR = 3_600_000;

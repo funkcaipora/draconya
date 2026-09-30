@@ -4800,6 +4800,32 @@ describe('a postura de luta pelo socket (M30-03, #550, ADR 0040)', () => {
     // `attack` no extrato — omitir a chave deixaria uma postura antiga do Postgres voltar.
     expect(saved[0]).toHaveProperty('fightMode', 'attack');
   });
+
+  it('o extrato de hunt leva os carimbos do familiar do dono, e quem nunca invocou não leva a chave (#599)', async () => {
+    // Sem os carimbos no extrato, o cooldown de 30 min NÃO atravessaria a saída da hunt: o ticket
+    // seguinte leria o personagem como quem nunca invocou. Quem nunca invocou fica sem a chave — o
+    // ledger não toca na coluna (o `receipts.ts` distingue "não veio" de "veio vazio").
+    const run = async (stamp: boolean) => {
+      const saved: Array<Record<string, unknown>> = [];
+      const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+      const directory = { register: async () => true } as unknown as SessionDirectory;
+      const { ruleset } = countingRuleset();
+      const { host, sessions } = buildHost(ruleset, { directory, receipts });
+      await host.prepare('p1', undefined, 'a1');
+      host.attach(new FakeSocket(), 'p1');
+      const hero = sessions[0]?.participants[0] as CharacterRuntime;
+      if (stamp) {
+        hero.familiar = { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 };
+      }
+      await host.drainAll('drain');
+      return saved[0];
+    };
+
+    expect(await run(true)).toMatchObject({
+      familiar: { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 },
+    });
+    expect(await run(false)).not.toHaveProperty('familiar');
+  });
 });
 
 describe('a economia de Charms pelo socket (M39-02, #602, ADR 0052/0053)', () => {

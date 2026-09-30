@@ -596,6 +596,17 @@ branch vai reivindicar o mesmo número até alguém mesclar — o merge é quem 
 Issues seguintes (Imbuements #605–#607, Wheel #608–#611, Prey #612–#615, Forja #616–#618, …):
 copie esta seção trocando `charms` pelo nome do sistema, e as seis regras continuam valendo.
 
+**O `familiar` (#599, M38-02) é a segunda aplicação do padrão, com duas particularidades.**
+`characters.familiar` (`jsonb`, migração `0023`) guarda `{ version, summonUntilMs, cooldownUntilMs }`
+— DOIS carimbos de relógio de PAREDE (epoch em ms), não conteúdo. (1) **Nunca funda por máximo:** o
+`summonUntilMs` desce quando o familiar morre (o `FamiliarDeath` do Canary zera a recriação), e um
+`GREATEST` no ledger ressuscitaria o familiar se um extrato antigo chegasse depois de um mais novo —
+`ledger.postgres.test.ts` prende a descida. (2) **O ticket é obrigatório para o cooldown:** o `sim`
+compara os carimbos com `Session.createdAtMs + Session.nowMs` (o `createdAtMs` que `sessions.ts` já
+passa), então o `api` os leva no ticket (`familiarOf`, `isFamiliarState`) e o `host` os leva no
+extrato — o da hunt e o de estado da Cidade. O extrato SEM o campo não toca a coluna (personagem que
+nunca invocou), e é por isso que o vazio (`isEmptyFamiliarState`) não é escrito.
+
 ## A munição é abstrata e escolhida por família (#152, #420)
 
 A munição é **abstrata** (ADR 0032 decisão 7): a escolha é por família, pelo opcode 14

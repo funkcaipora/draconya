@@ -250,6 +250,10 @@ async function applyProgression(
   // externo monotônico a fundir, é o estado final da sessão dona. Extrato SEM o campo (Cidade
   // ou nó antigo em deploy) não toca na coluna.
   const charms = receipt.charms === undefined ? {} : { charms: receipt.charms };
+  // O familiar (M38-02, #599, ADR 0057 d.3): ABSOLUTO e última-escrita-vence, como `charms` — e
+  // NUNCA fundido pelo maior, porque o `summonUntilMs` desce quando o familiar morre. Extrato SEM o
+  // campo (Cidade ou nó antigo em deploy) não toca na coluna.
+  const familiar = receipt.familiar === undefined ? {} : { familiar: receipt.familiar };
   // As bênçãos (#570, ADR 0052): ABSOLUTAS e última-escrita-vence, NUNCA fundidas pelo maior
   // (ao contrário do Bestiário/skills-antes-do-#569) — bênção DESCE na morte, e "ficar com o
   // maior de cada extrato" ressuscitaria uma bênção recém-consumida se um extrato antigo, fora
@@ -336,6 +340,7 @@ async function applyProgression(
       ...ammunitionStock,
       ...fedMs,
       ...charms,
+      ...familiar,
       ...blessings,
       ...fightMode,
       // A vocação (#154, ADR 0026 decisão 1): escrita UMA vez. `coalesce` mantém o que já

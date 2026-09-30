@@ -16,8 +16,10 @@
 import { randomBytes } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import { OutfitColors } from '@draconya/protocol';
-import { isCharacterStorageMap, isFightMode } from '@draconya/sim';
-import type { BestiaryState, CharacterStorageMap, CharmsState, FightMode } from '@draconya/sim';
+import { isCharacterStorageMap, isFamiliarState, isFightMode } from '@draconya/sim';
+import type {
+  BestiaryState, CharacterStorageMap, CharmsState, FamiliarState, FightMode,
+} from '@draconya/sim';
 import type { NodeStatus, SessionDirectory } from './directory.js';
 
 export interface TicketClaim {
@@ -176,6 +178,15 @@ export interface InitialCharacter {
    * ponto de Charm, ou ticket de um `api` anterior: a sessão parte vazia.
    */
   readonly charms?: CharmsState;
+  /**
+   * O familiar de vocação (M38-02, #599, ADR 0057 d.3, ADR 0052 d.1): os dois carimbos de relógio
+   * de PAREDE — até quando a invocação vale e até quando a magia volta (`packages/sim/src/
+   * familiar.ts`). Entra na sessão porque é ELA quem os compara com o relógio (o `sim` não lê
+   * relógio nenhum): o cooldown de 30 min tem de atravessar a saída da hunt, e a recriação ao
+   * entrar depende do `summonUntilMs`. Validado por forma (`isFamiliarState`). Ausente é quem
+   * nunca invocou, ou ticket de um `api` anterior: a sessão parte sem carimbo.
+   */
+  readonly familiar?: FamiliarState;
   /**
    * Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, lido de `characters.fed_ms`.
    * Entra na sessão, e não só sai dela — sem isto, quem comeu antes de deslogar voltaria em
@@ -677,6 +688,8 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     // A economia de Charms (M39-02, #602): mesma régua do Bestiário/estoque — forma validada
     // por inteiro, torto vira AUSENTE, nunca ticket recusado.
     ...(isCharmsState(initial['charms']) ? { charms: initial['charms'] } : {}),
+    // O familiar (M38-02, #599): mesma régua — forma validada, torto vira AUSENTE.
+    ...(isFamiliarState(initial['familiar']) ? { familiar: initial['familiar'] } : {}),
     // Comida ativa (#726): inteiro seguro não negativo, ou AUSENTE — a mesma régua acima.
     ...(typeof initial['fedMs'] === 'number' && Number.isSafeInteger(initial['fedMs'])
       && initial['fedMs'] >= 0
