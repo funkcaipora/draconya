@@ -25,8 +25,8 @@ import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, BotLoot, Charm, Combat,
   CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, FieldStage, Hunt,
   Item, ItemSlot, Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange,
-  PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina,
-  Supply, Tilemap, Vocation, WeaponFamily, WeaponProfile,
+  PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Skinning, Spell, SpellArea, SpawnPoint,
+  Stamina, Supply, Tilemap, Vocation, WeaponFamily, WeaponProfile,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, FORWARD, isSelfOrigin, tileKey } from '../area.js';
@@ -48,7 +48,7 @@ import { chestStorageKeyOf, isDoorKind, isToggleable, TileOverrides } from '../t
 import type { InteractableKind, InteractableTool, TileOverrideState } from '../tile-overrides.js';
 import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
-import { hasCharmStage } from '../combat/profile.js';
+import { hasCharmStage, hasSkinningStage } from '../combat/profile.js';
 import {
   ADRENALINE_BURST_CONDITION, ActionCritical, CHARM_PARALYZE_CONDITION, CLEANSE_IMMUNITY_MS,
   FATAL_HOLD_MS, carnageCharmDamage, charmAttackBonus, charmChance, cleanseTypeOfCondition,
@@ -88,6 +88,9 @@ import type { BestiaryConfig } from '../bestiary.js';
 import { pickByWeight, Spawner } from '../hunt/spawner.js';
 import type { SpawnArea, SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
+import {
+  SCAVENGE_CHARM_ID, rollSkinning, scavengeChanceFor, skinningChanceRange, skinningStageAt,
+} from '../skinning.js';
 import {
   applyAttackRate, applyRate, creatureRatesFor, experienceRateFor, skillRateFor,
 } from '../rates.js';
@@ -279,6 +282,19 @@ const PENDING_MANUAL_ACTION = 'pending-manual-action';
  * "Ex actions" do Tibia (`playerUseItemEx`), e são elas que essa constante regula.
  */
 const MANUAL_ITEM_EXHAUST_MS = 1_000;
+
+/**
+ * O alcance de `use-item-on` sobre um tile (ADR 0049 d.3): o `canUseFar` do Canary
+ * (`Actions::canUseFar`, `Position::areInRange<7, 5>`) — 7 tiles em x e 5 em y, no mesmo andar,
+ * com linha de visão.
+ */
+const CAN_USE_FAR_X = 7;
+const CAN_USE_FAR_Y = 5;
+
+/** O abate sem esfola: sem ferramenta, sem monstro esfolável ou fora do `combat-v4` (#626). */
+const NO_SKIN: { readonly attempted: boolean; readonly material: LootItem | null } = {
+  attempted: false, material: null,
+};
 
 /**
  * O vencimento de um item equipado por TEMPO (ADR 0032 d.8): o anel que gasta por duração. É
@@ -1050,6 +1066,12 @@ export interface HuntRulesetOptions {
    * que não fala de Charms, e todo personagem sem atribuição.
    */
   readonly charms?: ReadonlyMap<string, Charm>;
+  /**
+   * Como o cadáver de cada monstro esfolável é esfolado (#626, ADR 0048 d.5/d.6), por `monsterId`.
+   * Só o `combat-v4` (`hasSkinningStage`) esfola; ausente é uma hunt em que nenhuma ferramenta
+   * faz nada — o conteúdo de teste que não fala de esfola.
+   */
+  readonly skinning?: ReadonlyMap<string, Skinning>;
   readonly player: PlayerProfile;
   readonly exitRules?: readonly HuntExitRule[];
   /**
@@ -1112,6 +1134,13 @@ export interface HuntRulesetOptions {
  * `eligible` do abate (`null` em `splitLoot` — a bolsa é dona, e o cadáver não guarda nada).
  * Os quatro são OPCIONAIS na leitura (snapshot anterior a este ADR não os tem — `ausente` é
  * cadáver vazio, sem bump de `SNAPSHOT_FORMAT_VERSION`), mas sempre presentes ao criar.
+ *
+ * `diedAtMs`/`skinned` são da ESFOLA (#626): `diedAtMs` é o relógio lógico da morte — a idade do
+ * cadáver, que diz em que estágio da cadeia de decaimento ele está e, portanto, se a janela de
+ * esfola ainda está aberta —, e `skinned` marca que a esfola já foi tentada (com ou sem sucesso:
+ * o Canary transforma o cadáver no "esfolado" nos dois casos, e ele não é chave de tabela
+ * nenhuma). Opcionais na leitura pela mesma razão: snapshot anterior não os tem, e sem
+ * `diedAtMs` o cadáver não se esfola à mão (a idade é desconhecida — recusa em vez de adivinhar).
  */
 export interface CorpseState {
   readonly id: number;
@@ -1122,6 +1151,9 @@ export interface CorpseState {
   gold?: number;
   readonly ownerId?: string | null;
   readonly eligible?: readonly string[];
+  readonly diedAtMs?: number;
+  /** MUTÁVEL: vira `true` na primeira tentativa de esfola, do bot ou à mão. */
+  skinned?: boolean;
 }
 
 /** A recusa comum a `openCorpse`/`takeLoot` (#722, ADR 0048 d.4). */
@@ -1828,6 +1860,13 @@ export class HuntRuleset implements Ruleset {
   readonly #basicAmmo: ReadonlyMap<AmmoFamily, Ammunition>;
 
   /**
+   * Os ids dos itens que esfolam (#626): a `toolId` de cada entrada de `options.skinning`. É o que
+   * `use-item`/`use-item-on` confere para tratar uma instância como ferramenta — resolvido UMA vez,
+   * no boot da instância. Vazio é uma hunt sem esfola.
+   */
+  readonly #skinToolIds: ReadonlySet<string>;
+
+  /**
    * A mira da magia, reaproveitada pela mesma razão que `#botView` (FUN-92).
    *
    * Três vetores que andam juntos e são limpos a cada lançamento: os alvos como `castSpell` os
@@ -1887,6 +1926,7 @@ export class HuntRuleset implements Ruleset {
       if (!basics.has(ammo.family)) basics.set(ammo.family, ammo);
     }
     this.#basicAmmo = basics;
+    this.#skinToolIds = new Set([...(options.skinning?.values() ?? [])].map((entry) => entry.toolId));
   }
 
   get monsters(): readonly MonsterRuntime[] {
@@ -2110,6 +2150,8 @@ export class HuntRuleset implements Ruleset {
     const carried = [...character.inventory.backpack, ...character.inventory.satchel]
       .find((item) => item?.instanceId === instanceId);
     if (carried === undefined || carried === null) return refuseItem('not-carried', 0);
+    // A ferramenta de esfola (#626) age sobre o cadáver do tile apontado, e não é consumida.
+    if (this.#skinToolIds.has(carried.itemId)) return this.#performSkin(session, character, carried, target);
     const item = this.#options.items.get(carried.itemId);
     // `Item.effect` é opcional na forma (só `kind: 'consumable'` o declara — `buildContent`
     // confere isso no boot, não o tipo): o schema não dá o discriminante de graça ao TS.
@@ -9931,6 +9973,10 @@ const slots = bot.groups.get(group);
     // direto para ela, "como hoje") e quando não há destinatário nenhum.
     let corpseGold = 0;
     let corpseItems: CarriedItem[] = [];
+    // A esfola do bot (#626, ADR 0048 d.5): tentada no MESMO evento, DEPOIS de todo o sorteio de
+    // loot — a ordem do RNG é contrato (FUN-63), e o estágio novo entra por último para não
+    // deslocar nada do que já saía. `skinAttempted` só marca o cadáver quando houve sorteio.
+    let skinAttempted = false;
     if (!isSummon && definition !== undefined && this.#bag !== null && session.participants.length > 1) {
       // Modo compartilhado (#192): tudo cai na BOLSA — sem destinatário, sem modificador
       // individual, e a ordem do RNG é a de solo (gold, depois itens na ordem da tabela).
@@ -9949,6 +9995,11 @@ const slots = bot.groups.get(group);
         // (`presentAtDrop`, D4/§16.1), não o `eligible` de XP.
         this.#creditSupplies(session, session.participants, loot.supplies);
         this.#creditAmmunition(session, session.participants, loot.ammunition);
+        // Sem dono do cadáver, a esfola é de quem entre os elegíveis tem a ferramenta (na ordem
+        // da sessão) e o material cai na bolsa, como o resto do loot desta modalidade.
+        const skin = this.#skinAtDeath(session, monster, eligible);
+        skinAttempted = skin.attempted;
+        if (skin.material !== null) this.#deliverToBag(session, [skin.material]);
       }
     } else if (!isSummon && definition !== undefined && recipient !== null) {
       // O sorteio é IDÊNTICO a antes deste ADR — gold, depois itens na ordem da tabela — e o
@@ -9965,6 +10016,14 @@ const slots = bot.groups.get(group);
       // são abstratos, sem cadáver (ADR 0048 decisão 1).
       this.#creditSupplies(session, [recipient], loot.supplies);
       this.#creditAmmunition(session, [recipient], loot.ammunition);
+      // O material da esfola cai NO CADÁVER, ao lado do loot, e segue o filtro de Quick Loot do
+      // dono no `#collectFromCorpse` logo abaixo (ADR 0048 d.3/d.5) — sobra por filtro ou por
+      // capacidade fica lá, como qualquer item.
+      const skin = this.#skinAtDeath(session, monster, [recipient]);
+      skinAttempted = skin.attempted;
+      if (skin.material !== null) {
+        corpseItems = [...corpseItems, ...this.#instantiateCorpseItems(session, recipient, [skin.material])];
+      }
     }
     // A XP é da PARTY (#190, ADR 0027 decisão 3): pool por vocações únicas, dividido por igual
     // entre os elegíveis — e em solo o elegível é o matador, pela mesma condição de sempre.
@@ -10015,6 +10074,8 @@ const slots = bot.groups.get(group);
       gold: corpseGold,
       ownerId: recipient?.id ?? null,
       eligible: eligible.map((p) => p.id),
+      diedAtMs: session.nowMs,
+      ...(skinAttempted ? { skinned: true } : {}),
     };
     // O dono coleta AGORA, sem plateia (invariante 3, ADR 0048 decisão 3): o `autoLoot` do
     // Canary, sem trava de Premium. O que o filtro não aceita ou não cabe fica no cadáver.
@@ -10620,7 +10681,21 @@ const slots = bot.groups.get(group);
     }
     const items = corpse.items ?? [];
     if (items.length === 0) return;
+    corpse.items = this.#collectItems(session, character, items);
+    // Gatilho do §13: o loot pessoal mudou o peso da mochila, e com ele a capacidade disponível
+    // e as reservas da party. No-op quando não há bolsa, que é o caso comum.
+    this.#rebalanceBag(session);
+  }
 
+  /**
+   * O miolo do Quick Loot (ADR 0048 decisão 3): aplica o filtro, a autovenda e a capacidade de
+   * `character` a `items` e devolve o que FICOU — o que o filtro recusou e o que não coube. É a
+   * parte de `#collectFromCorpse` que também serve a esfola à mão (#626), onde só o material
+   * novo passa pelo filtro, sem reprocessar o que já esperava no cadáver.
+   */
+  #collectItems(
+    session: Session, character: CharacterRuntime, items: readonly CarriedItem[],
+  ): CarriedItem[] {
     const filter = this.#runnerOf(character.id).botConfig?.loot ?? DEFAULT_LOOT_FILTER;
     const autoSellIds = new Set(filter.autoSell.slice(0, this.#individualAutoSellLimit(character.id)));
     // A capacidade já descontada da reserva que a party fez dele (§11, DT-05) — como
@@ -10659,10 +10734,118 @@ const slots = bot.groups.get(group);
       runner.warnedFullBackpack = true;
       session.record('backpack-full', character.id);
     }
-    corpse.items = remaining;
-    // Gatilho do §13: o loot pessoal mudou o peso da mochila, e com ele a capacidade disponível
-    // e as reservas da party. No-op quando não há bolsa, que é o caso comum.
-    this.#rebalanceBag(session);
+    return remaining;
+  }
+
+  // --- Esfola de cadáver (#626, M44-08, ADR 0048 d.5/d.6, ADR 0053 d.5) -----------------------
+  //
+  // A matemática é `skinning.ts` (a janela por estágio, a chance, o Scavenge); aqui ficam o
+  // QUANDO e o PARA ONDE. Só o `combat-v4` esfola (`hasSkinningStage`): uma sessão fixada em
+  // `combat-v3` não reconhece ferramenta nenhuma (invariante 7). O bot esfola NO ABATE, dentro do
+  // mesmo evento que coleta o loot (`#onMonsterDied`), e o jogador presente esfola à mão com o
+  // `use-item-on` da ferramenta no tile do cadáver (`#performSkin`) — as duas rodam o MESMO
+  // sorteio (`#rollSkin`), e as duas só o consomem com ferramenta e monstro esfolável, que é o
+  // que faz uma hunt sem faca gastar exatamente o `session.rng` de antes.
+
+  /**
+   * A esfola do bot no abate: o primeiro candidato com a ferramenta do monstro na mochila esfola,
+   * com a idade zero do cadáver (a janela abre no primeiro estágio). `attempted` diz se houve
+   * sorteio — o cadáver nasce `skinned` — e `material` é o que o sorteio rendeu.
+   */
+  #skinAtDeath(
+    session: Session, monster: MonsterRuntime, candidates: readonly CharacterRuntime[],
+  ): { readonly attempted: boolean; readonly material: LootItem | null } {
+    const entry = this.#options.skinning?.get(monster.monsterId);
+    if (entry === undefined || !hasSkinningStage(this.#options.combat.compatibilityProfile)) return NO_SKIN;
+    const stage = skinningStageAt(entry, 0);
+    if (stage === null) return NO_SKIN;
+    for (const candidate of candidates) {
+      if (candidate.inventory.findStack(entry.toolId) === null) continue;
+      return { attempted: true, material: this.#rollSkin(session, candidate, entry, stage) };
+    }
+    return NO_SKIN;
+  }
+
+  /**
+   * O sorteio da esfola de `skinner` (UMA rolagem de `session.rng`): o `chanceRange` do Canary,
+   * encolhido pelo Scavenge dele quando o charm vale para o estágio em que o cadáver está agora
+   * (`scavengeChanceFor`). `null` é a tentativa que falhou.
+   */
+  #rollSkin(
+    session: Session, skinner: CharacterRuntime, entry: Skinning, stage: Skinning['stages'][number],
+  ): LootItem | null {
+    const assignedTo = skinner.charms.assignmentOf(SCAVENGE_CHARM_ID);
+    const scavenge = assignedTo === undefined
+      ? undefined
+      : scavengeChanceFor(
+        this.#options.charms?.get(SCAVENGE_CHARM_ID), skinner.charms.tierOf(SCAVENGE_CHARM_ID),
+        this.#options.skinning?.get(assignedTo), stage,
+      );
+    return rollSkinning(session.rng, entry, skinningChanceRange(scavenge))
+      ? { itemId: entry.materialId, quantity: 1 }
+      : null;
+  }
+
+  /**
+   * O cadáver que a ferramenta encontra num tile: o do TOPO da pilha — o Canary usa o
+   * `getTopDownItem` do tile, e o cadáver mais novo entra por cima. `undefined` sem cadáver ali.
+   */
+  #topCorpseAt(position: FloorPoint): CorpseState | undefined {
+    for (let i = this.#corpses.length - 1; i >= 0; i -= 1) {
+      const corpse = this.#corpses[i] as CorpseState;
+      if (corpse.position.x === position.x && corpse.position.y === position.y
+        && sameFloor(position.z, corpse.position.z)) {
+        return corpse;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * A esfola à mão (`use-item-on` da ferramenta com o TILE do cadáver por alvo — ADR 0049
+   * decisão 3): confere alcance (`canUseFar` do Canary, 7×5 no mesmo andar com linha de visão),
+   * que a ferramenta é a do monstro, que o cadáver não foi esfolado e que a janela do estágio
+   * ainda está aberta; sorteia; e o material passa pelo filtro de Quick Loot de quem esfolou —
+   * o que não é aceito, ou não cabe, fica no cadáver, como o resto do loot.
+   *
+   * Tudo que o Canary responde com "not possible" (sem cadáver, ferramenta errada, já esfolado,
+   * estágio fora da janela) é `not-usable`; alcance e linha de visão são `out-of-range`. A
+   * tentativa gasta o cadáver — `skinned` — com ou sem sucesso, e nenhuma recusa consome sorteio.
+   */
+  #performSkin(
+    session: Session, character: CharacterRuntime, tool: CarriedItem, target: UseSlotTarget | undefined,
+  ): UseItemOutcome {
+    if (!hasSkinningStage(this.#options.combat.compatibilityProfile)) return refuseItem('not-usable', 0);
+    if (target === undefined || target.kind !== 'position') return refuseItem('not-usable', 0);
+    const corpse = this.#topCorpseAt(target.position);
+    if (corpse === undefined) return refuseItem('not-usable', 0);
+
+    const from = character.position;
+    if (!sameFloor(from.z, corpse.position.z)
+      || Math.abs(from.x - corpse.position.x) > CAN_USE_FAR_X
+      || Math.abs(from.y - corpse.position.y) > CAN_USE_FAR_Y
+      || !isSightClear(this.#world.map, from, corpse.position)) {
+      return refuseItem('out-of-range', 0);
+    }
+
+    const entry = this.#options.skinning?.get(corpse.monsterId);
+    if (entry === undefined || entry.toolId !== tool.itemId
+      || corpse.skinned === true || corpse.diedAtMs === undefined) {
+      return refuseItem('not-usable', 0);
+    }
+    const stage = skinningStageAt(entry, session.nowMs - corpse.diedAtMs);
+    if (stage === null) return refuseItem('not-usable', 0);
+
+    corpse.skinned = true;
+    const material = this.#rollSkin(session, character, entry, stage);
+    if (material !== null) {
+      const left = this.#collectItems(session, character, this.#instantiateCorpseItems(session, character, [material]));
+      corpse.items = [...(corpse.items ?? []), ...left];
+      this.#rebalanceBag(session);
+    }
+    session.emit({ kind: 'equipment-changed', characterId: character.id });
+    character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
+    return { ok: true };
   }
 
   /** Ache o cadáver por id do item do chão (#722), ou `undefined` — já apodreceu ou nunca existiu. */
@@ -11679,6 +11862,7 @@ export function createHuntRuleset(
     party: content.party,
     ...(content.bestiary === undefined ? {} : { bestiary: content.bestiary }),
     charms: content.charms,
+    skinning: content.skinning,
     targetSearchRadius: content.bot.targetSearchRadius,
     spells: content.spells,
     supplies: content.supplies,
