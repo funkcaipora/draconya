@@ -65,10 +65,16 @@ const PaletteIndex = z.number().int().min(0).max(132);
 
 /**
  * Progresso até o próximo nível de uma skill (#340, SV-04): nível atual e percentual acumulado.
+ *
+ * `loyaltyLevel` (#628): o nível COM o bônus de Loyalty da conta — o `getLoyaltySkill` que o
+ * Canary manda ao lado do nível base. AUSENTE quando o bônus não muda o nível (a conta sem
+ * degrau, ou tries de bônus que ainda não fecham um nível): quem lê o trata como `level`. Um nó
+ * `game` anterior à issue nunca o manda, e o HUD mostra o nível base.
  */
 export const SkillProgress = z.object({
   level: z.number().int().nonnegative(),
   percentToNext: z.number().int().min(0).max(99),
+  loyaltyLevel: z.number().int().nonnegative().optional(),
 });
 export type SkillProgress = z.infer<typeof SkillProgress>;
 
@@ -690,6 +696,8 @@ export const S2C_SCHEMAS = {
       speed: z.number().int().nonnegative().default(0),
       skills: z.record(z.string().min(1), SkillProgress).default({}),
       magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
+      /** O bônus de Loyalty (#628), como em `player-stats` — para quem reanexa ver sem esperar. */
+      loyaltyBonusPercent: z.number().int().nonnegative().optional(),
       /** Pontos de alma (#593), como em `player-stats` — para quem reanexa ver sem esperar. */
       soul: z.number().int().nonnegative().default(0),
       soulMax: z.number().int().nonnegative().default(0),
@@ -1298,6 +1306,14 @@ export const S2C_SCHEMAS = {
     speed: z.number().int().nonnegative().default(0),
     skills: z.record(z.string().min(1), SkillProgress).default({}),
     magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
+    /**
+     * O bônus de Loyalty da CONTA (#628, ADR 0052 decisão 5), em percentual inteiro: fixado no
+     * ticket e constante pela sessão — o HUD o mostra ao lado das skills, e `loyaltyLevel` de
+     * cada uma diz quanto ele vale. Opcional, e não `default(0)`: ausente é zero para quem lê, e
+     * um nó `game` anterior (ou uma conta sem degrau) manda sem — o HUD não mostra bônus que não
+     * existiu.
+     */
+    loyaltyBonusPercent: z.number().int().nonnegative().optional(),
     /**
      * Pontos de alma (#593). `soulMax` é da VOCAÇÃO — zero é "sem vocação escolhida", o mesmo
      * "sem teto para mostrar" que `vocationId: null` já significa. `default(0)` nos dois: um

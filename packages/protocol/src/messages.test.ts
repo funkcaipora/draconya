@@ -773,6 +773,71 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
   });
 });
 
+describe('Loyalty in player-stats and session-state (#628, ADR 0052 d.5)', () => {
+  const stats = {
+    type: 'player-stats',
+    health: 150, maxHealth: 150, mana: 20, maxMana: 20,
+    level: 8, xp: 4200, capacity: 400, gold: 100, staminaMs: 86400000,
+    ammo: { arrow: null, bolt: null },
+    vocationId: 'knight',
+    promoted: false,
+    fightMode: 'balanced',
+    speed: 292,
+    skills: { sword: { level: 100, percentToNext: 45, loyaltyLevel: 104 } },
+    magicLevel: { level: 20, percentToNext: 80, loyaltyLevel: 22 },
+    loyaltyBonusPercent: 50,
+    soul: 42,
+    soulMax: 100,
+  } as const;
+
+  it('round-trips the bonus and each skill\'s effective level', () => {
+    expect(decodeS2C(encodeS2C(stats as S2CMessage))).toEqual([stats]);
+  });
+
+  it('decodes a message WITHOUT them (a `game` node before the issue, or an account with no tier)', () => {
+    // Ausente é "sem bônus" para quem lê: nada de default que invente um `0` no fio.
+    const { loyaltyBonusPercent: _bonus, ...older } = stats;
+    const withoutLevel = {
+      ...older,
+      skills: { sword: { level: 100, percentToNext: 45 } },
+      magicLevel: { level: 20, percentToNext: 80 },
+    };
+    const [decoded] = decodeS2C(encodeS2C(withoutLevel as S2CMessage)) ?? [];
+    expect(decoded).toEqual(withoutLevel);
+    expect(decoded).not.toHaveProperty('loyaltyBonusPercent');
+  });
+
+  it('carries the bonus in session-state.self too, for whoever reattaches', () => {
+    const state = {
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 8, xp: 0,
+        vocationId: 'knight', promoted: false, speed: 220,
+        skills: { sword: { level: 100, percentToNext: 0, loyaltyLevel: 104 } },
+        magicLevel: { level: 0, percentToNext: 0 },
+        loyaltyBonusPercent: 50,
+        soul: 0, soulMax: 0,
+      },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'arena', creatures: [] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    };
+    expect(decodeS2C(encodeS2C(state as S2CMessage))).toEqual([state]);
+  });
+
+  it('rejects an invalid bonus or effective level', () => {
+    const schema = S2C_SCHEMAS['player-stats'];
+    expect(schema.safeParse({ ...stats, loyaltyBonusPercent: -1 }).success).toBe(false);
+    expect(schema.safeParse({ ...stats, loyaltyBonusPercent: 12.5 }).success).toBe(false);
+    expect(schema.safeParse({
+      ...stats, skills: { sword: { level: 100, percentToNext: 45, loyaltyLevel: -1 } },
+    }).success).toBe(false);
+    expect(schema.safeParse({
+      ...stats, skills: { sword: { level: 100, percentToNext: 45, loyaltyLevel: 100.5 } },
+    }).success).toBe(false);
+  });
+});
+
 describe('move-item (#160)', () => {
   it('is intention only — two places — and the opcode is 16', () => {
     expect(CLIENT_TO_SERVER['move-item']).toBe(16);
