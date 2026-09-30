@@ -62,6 +62,19 @@ describe('loadContent', () => {
     expect(content.boosted?.rolloverHourUtc).toBe(0);
   });
 
+  it('carrega o Loyalty real: dez degraus de 360 em 360 pontos, de 5 % a 50 % (#628)', () => {
+    // Opcional no `buildContent` (fixture): sem ele nenhum ticket carrega bônus. Os números são
+    // os de `data/libs/functions/player.lua:762-790` e `config.lua.dist:239-244` do Canary.
+    // Mutação que mata: apagar `loyalty/` de `load.ts`, ou trocar um degrau.
+    const content = loadContent(DATA);
+    expect(content.loyalty).toMatchObject({
+      enabled: true, pointsPerCreationDay: 1, bonusPercentageMultiplier: 1,
+    });
+    expect(content.loyalty?.tiers).toEqual(
+      [5, 10, 15, 20, 25, 30, 35, 40, 45, 50].map((percent, index) => ({ minPoints: 360 * (index + 1), percent })),
+    );
+  });
+
   it('carrega a party real, e todo item do repositório tem preço de venda (#188)', () => {
     // O multiplicador de XP saiu do conteúdo no #525 (ADR 0027 emenda 2026-09-24/25) — é
     // `sharedExperiencePercent` em `packages/sim/src/party.ts`, a fórmula do Canary. E `value`

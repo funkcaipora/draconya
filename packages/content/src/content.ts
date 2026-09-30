@@ -19,12 +19,12 @@ import {
   packSchema,
   blessingSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
-  bestiarySchema, boostedSchema, charmSchema, itemSchema, partySchema, skillSchema, spellSchema,
+  bestiarySchema, boostedSchema, charmSchema, itemSchema, loyaltySchema, partySchema, skillSchema, spellSchema,
   staminaSchema, supplySchema, tilemapSchema, vocationSchema, weaponFamilySchema,
 } from './schemas.js';
 import type {
   Ammunition, AmmunitionDefinition, Appearances, Bestiary, Blessing, Boosted, BotLimits, Charm,
-  Combat, CompiledMitigation,
+  Combat, Loyalty, CompiledMitigation,
   CompiledReflect, DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
   MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Spell, Stamina, Supply,
   Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
@@ -69,6 +69,12 @@ export interface Content {
    * não fala de engajamento diário.
    */
   readonly boosted?: Boosted;
+  /**
+   * O Loyalty (M44, #628, ADR 0052 decisão 5): a tabela de degraus da idade da conta. Opcional —
+   * sem ela nenhum ticket carrega bônus, e o conteúdo de teste que não fala de Loyalty continua
+   * valendo o nível BASE de toda skill.
+   */
+  readonly loyalty?: Loyalty;
   /** Vocabulário e limites do bot (§13). Sem ele não há automação, que é o produto. */
   readonly bot: BotLimits;
   /** Catálogo de magias (§4.1). Custo, cooldown e efeito são conteúdo, nunca motor. */
@@ -144,6 +150,7 @@ export interface RawContent {
   readonly bestiary?: readonly unknown[];
   readonly charms?: readonly unknown[];
   readonly boosted?: readonly unknown[];
+  readonly loyalty?: readonly unknown[];
   readonly bot?: readonly unknown[];
   readonly spells?: readonly unknown[];
   readonly supplies?: readonly unknown[];
@@ -604,6 +611,7 @@ export function buildContent(raw: RawContent): Content {
   // independentes, cada uma com o próprio id).
   const charms = parseAll('charm', raw.charms ?? [], charmSchema, problems);
   const boosted = parseAll('boosted', raw.boosted ?? [], boostedSchema, problems).get('baseline');
+  const loyalty = parseAll('loyalty', raw.loyalty ?? [], loyaltySchema, problems).get('baseline');
   // Ausente é ERRO pela mesma razão dos outros dois: a stamina é o TETO DE SIMULAÇÃO do
   // projeto (ADR 0001), e um default em código faria o número que sustenta a projeção de
   // custo morar onde ninguém procura por ele.
@@ -1540,6 +1548,7 @@ export function buildContent(raw: RawContent): Content {
     ...(bestiary?._open === undefined ? [] : [`bestiary/${bestiary.id}: ${bestiary._open}`]),
     // `boosted` não tem `_open`: a hora de virada não é um número disputado do PRD, é
     // configuração de operação — não pede uma seção de `docs/product` para justificar.
+    ...(loyalty?._open === undefined ? [] : [`loyalty/${loyalty.id}: ${loyalty._open}`]),
     ...openOf('spell', spells),
     ...openOf('charm', charms),
     ...openOf('supply', supplies),
@@ -1578,6 +1587,7 @@ export function buildContent(raw: RawContent): Content {
     ...(bestiary === undefined ? {} : { bestiary }),
     charms,
     ...(boosted === undefined ? {} : { boosted }),
+    ...(loyalty === undefined ? {} : { loyalty }),
     maps,
     routes,
     openValues,
