@@ -277,9 +277,9 @@ export function move<P extends GridPoint>(
  * entrando pela porta dos fundos.
  *
  * Quem já está NESTE mundo e precisa saltar — teleporte, reentrada na rota, respawn de Guild
- * War — precisa liberar a origem, e isso é outra função. Ela não existe porque ainda não há
- * chamador; escrevê-la agora seria adivinhar a assinatura sem o caso de uso. **Não faça `place`
- * virar as duas coisas com um parâmetro booleano:** foi o que este comentário custou.
+ * War — precisa liberar a origem, e isso é outra função: `relocate` (#623, o Levitate e o Magic
+ * Rope foram o primeiro chamador). **Não faça `place` virar as duas coisas com um parâmetro
+ * booleano:** foi o que este comentário custou.
  */
 export function place<P extends GridPoint>(
   world: MovementWorld, mover: Movable<P>, at: P,
@@ -290,6 +290,38 @@ export function place<P extends GridPoint>(
   mover.position = at;
   world.occupy(at.x, at.y, z);
   return null;
+}
+
+/**
+ * O SALTO de quem já está NESTE mundo (#623: Levitate e Magic Rope): leva o mover a um tile
+ * qualquer — de outro andar, sem exigir adjacência — liberando a origem no mesmo commit. É a
+ * função que o comentário de `place` anunciava e que esperava um chamador para ter assinatura.
+ *
+ * Difere de `move` em dois pontos, de propósito: NÃO segue escada nem teleporte do destino (o
+ * chamador já escolheu o tile onde pousar) e NÃO exige um passo adjacente. Difere de `place` em um:
+ * libera o tile que o mover ocupa AGORA — ele é deste mundo, e deixá-lo ocupado seria um fantasma.
+ * A validade do destino é a de sempre (`tileAdmits`: mapa, bloqueio, ocupação), e nunca aplica
+ * pela metade. Só quem carrega `z` salta de andar: o monstro de andar único não tem para onde.
+ */
+export function relocate<P extends GridPoint>(
+  world: MovementWorld, mover: Movable<P>, to: WorldPoint,
+): MoveResult {
+  const from = mover.position;
+  const fromZ = zOf(from, world.map);
+  if (!('z' in from) && to.z !== fromZ) return { ok: false, reason: 'tile-blocked' };
+  if (to.x === from.x && to.y === from.y && to.z === fromZ) return { ok: false, reason: 'same-tile' };
+  const rejection = tileAdmits(world, to);
+  if (rejection !== null) return { ok: false, reason: rejection };
+
+  world.vacate(from.x, from.y, fromZ);
+  mover.position = ('z' in from ? { ...from, x: to.x, y: to.y, z: to.z } : { ...from, x: to.x, y: to.y }) as P;
+  world.occupy(to.x, to.y, to.z);
+  return {
+    ok: true,
+    from: { x: from.x, y: from.y, z: fromZ },
+    to,
+    durationMs: movementDuration(world, mover, from, to),
+  };
 }
 
 /**

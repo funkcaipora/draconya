@@ -25,7 +25,8 @@ import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, BotLoot, Charm, Combat,
   CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, FieldStage, Hunt,
   Item, ItemSlot, Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange,
-  PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina,
+  PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Spell, SpellArea, SpellEffect,
+  SpawnPoint, Stamina,
   Supply, Tilemap, Vocation, WeaponFamily, WeaponProfile,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
@@ -35,7 +36,9 @@ import {
   NOT_IN_CATALOG, NOT_SUMMONABLE, actionExhaustKey, balanceOf, castSpell, executeHealing,
   groupCooldownKey, ownPurse, spellCooldownKey, supplyCooldownKey, useSupply,
 } from '../casting.js';
-import type { CastRefused, CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
+import type {
+  CastRefused, CastResult, CastSuccess, Purse, SpellAim, SpellScaling, SpellTarget, UtilityRefusal,
+} from '../casting.js';
 import type { ConditionState } from '../conditions.js';
 import {
   advanceTick, conditionFromSpec, conditionImmunityOf, retiredTick, rollDrunkDeviation, sameTick,
@@ -125,7 +128,7 @@ import {
   containerRulesFor, equipmentAbsorb, equipmentCleavePercent, equipmentReflect, immunitiesOnly,
 } from '../inventory.js';
 import {
-  TileOccupancy, canOccupy, move, movementDuration, place, placeNear, tilesAround,
+  TileOccupancy, canOccupy, move, movementDuration, place, placeNear, relocate, tilesAround,
 } from '../movement.js';
 import type { Movable, MoveResult, WorldPoint } from '../movement.js';
 import type { RouteState } from '../route/walker.js';
@@ -134,6 +137,7 @@ import type { ScheduledEvent } from '../schedule.js';
 import { powerMultiplier, skillFactorFor } from '../skills.js';
 import { drainStamina, isExhausted } from '../stamina.js';
 import { drainFedMs, feed as feedCharacter, FOOD_CAP_MS } from '../food.js';
+import { findRelation, levitateDestination, ropeDestination } from '../utility-spells.js';
 import { blessingCount } from '../blessings.js';
 import { consumeLossAmulet, loseItemsOnDeath } from '../item-loss.js';
 import type { ItemLossOutcome } from '../item-loss.js';
@@ -484,7 +488,13 @@ export type SlotRefusal =
    * A invocação (#598, M38-01, ADR 0057 decisão 3): sem `monsterId`, monstro fora do catálogo,
    * não `summonable`, ou teto de 2 invocações vivas já atingido.
    */
-  | 'not-summonable';
+  | 'not-summonable'
+  /**
+   * As utilitárias (#623): Levitate/Magic Rope sem destino (`not-possible`), Magic Rope sem onde
+   * pousar (`not-enough-room`), Find Person sem o alvo na sessão (`person-not-found`) e Find
+   * Fiend sem monstro fiendish (`no-creatures-around`) — as quatro do `RETURNVALUE_*` do Canary.
+   */
+  | 'not-possible' | 'not-enough-room' | 'person-not-found' | 'no-creatures-around';
 
 /** O resultado do disparo manual: sucesso, ou recusa tipada com o prazo quando é cooldown. */
 export type SlotOutcome =
@@ -618,6 +628,10 @@ export function refusalOf(result: CastRefused): SlotRefusal {
     case 'not-enough-gold': return 'not-enough-gold';
     case 'attack-locked': return 'attack-locked';
     case 'not-summonable': return 'not-summonable';
+    case 'not-possible': return 'not-possible';
+    case 'not-enough-room': return 'not-enough-room';
+    case 'person-not-found': return 'person-not-found';
+    case 'no-creatures-around': return 'no-creatures-around';
   }
 }
 
@@ -5568,6 +5582,17 @@ const slots = bot.groups.get(group);
     session: Session, character: CharacterRuntime, action: BotAction, target: UseSlotTarget | undefined,
   ): { ok: true; recipient?: CharacterRuntime; explicit?: MonsterRuntime | FloorPoint }
     | { ok: false; reason: SlotRefusal } | null {
+    // Find Person (#623): o "nome" do Canary é o personagem que o jogador MIROU. O alvo vira o
+    // `recipient` — o mesmo canal da cura de amigo —, e qualquer outra mira (monstro, tile, criatura
+    // que já saiu de vista) é o `Player(name)` que não acha ninguém: `person-not-found`.
+    const findEffect = action.kind === 'spell' ? this.#options.spells.get(action.spellId)?.effect : undefined;
+    if (findEffect?.kind === 'find' && findEffect.target === 'person') {
+      if (target === undefined) return null;
+      if (target.kind !== 'character') return { ok: false, reason: 'person-not-found' };
+      const member = findById(session.participants, target.characterId);
+      if (member === null || !member.alive) return { ok: false, reason: 'person-not-found' };
+      return { ok: true, recipient: member };
+    }
     const healRange = this.#healRangeOf(action);
     if (healRange !== null) {
       // Ação de ALIADO: sem `target`, cai no default — `#perform` já assume `recipient =
@@ -5733,6 +5758,8 @@ const slots = bot.groups.get(group);
       this.#spellScaling(character), recipient, this.#attackerModifiers(character), partyAllies,
       // Bolsa default (solo); o `manaCost` REAL da invocação é do MONSTRO (ADR 0057 d.3).
       undefined, summonMonster?.manaCost,
+      // As utilitárias (#623) recusam pelo que só este ruleset vê — mapa, overlay e sessão.
+      this.#utilityRefusalOf(character, spell.effect, recipient),
     );
     if (!result.ok) return result;
     // A magia SAIU: a mana gasta é o que ela rende de skill (§9.4) — o custo REAL: o do
@@ -5748,6 +5775,10 @@ const slots = bot.groups.get(group);
     if (result.summon === true && summonMonster !== undefined) {
       this.#spawnPlayerSummon(session, character, summonMonster);
     }
+    // As utilitárias (#623) agem ANTES do `spell-cast`: o Levitate e o Magic Rope desenham o
+    // efeito de teleporte no tile de CHEGADA (`creature:getPosition():sendMagicEffect` roda depois
+    // do `move`), e o `casterPosition` do evento é lido logo abaixo.
+    this.#applyUtilityEffect(session, character, spell.effect, recipient, result);
 
     // UMA vez, ANTES dos golpes (FUN-109): o cliente desenha o efeito no lançador e nos alvos
     // e só depois faz cada número cair. A ordem é contrato.
@@ -5860,6 +5891,100 @@ const slots = bot.groups.get(group);
 
     this.#applyHits(session, character, result.hits, result.hitOutcomes ?? []);
     return result;
+  }
+
+  /**
+   * A recusa das magias utilitárias (#623), ou `null` quando a magia pode sair — PURA: não muda
+   * nada e não consome sorteio, porque `slotStates` (a apresentação) a chama pelo espelho
+   * (`#naturalStateOf`) e o `castSpell` a recebe como `preflight`, ANTES de gastar a mana.
+   *
+   * - **Levitate:** sem destino pelas regras de `levitateDestination` → `not-possible`.
+   * - **Magic Rope:** fora de um rope spot → `not-possible` (o `isRopeSpot` do Canary; o overlay
+   *   de cenário é quem sabe onde ele está); sem onde pousar → `not-enough-room`.
+   * - **Find Person:** o alvo é o `recipient` (o personagem que o `use-slot` mirou); sem alvo — o
+   *   `recipient` é o próprio lançador, o valor de "ninguém nomeado" — recusa `person-not-found`,
+   *   como o `Player("")` do Canary. Procurar a si mesmo não é oferecido: a resposta seria sempre
+   *   "ao lado de você".
+   * - **Find Fiend:** nenhum monstro é fiendish — o Exaltation Forge (#616) está fora do catálogo
+   *   por decisão do dono (2026-09-29) e `ForgeMonster:pickClosestFiendish` devolve `nil` num mundo
+   *   sem ele, então a magia recusa como o Canary ("No creatures around"). Quando o Forge pousar,
+   *   ESTE é o único ponto a ligar: um monstro fiendish achado troca a recusa pela mensagem.
+   */
+  #utilityRefusalOf(
+    character: CharacterRuntime, effect: SpellEffect, recipient: CharacterRuntime,
+  ): UtilityRefusal | null {
+    switch (effect.kind) {
+      case 'levitate':
+        return levitateDestination(this.#world, this.#at(character), character.direction, effect.direction) === null
+          ? 'not-possible' : null;
+      case 'magic-rope': {
+        const here = this.#at(character);
+        if (this.#tileOverrides.at(here)?.kind !== 'rope-spot') return 'not-possible';
+        return ropeDestination(this.#world, here) === null ? 'not-enough-room' : null;
+      }
+      case 'find':
+        if (effect.target === 'person') return recipient === character ? 'person-not-found' : null;
+        return 'no-creatures-around';
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * O efeito das utilitárias (#623) DEPOIS de `castSpell` ter pago e iniciado o cooldown: mover,
+   * dizer, criar. O que pode recusar já recusou em `#utilityRefusalOf` — o mapa não muda entre as
+   * duas chamadas —, então o destino aqui é o mesmo que a pré-conferência aprovou.
+   */
+  #applyUtilityEffect(
+    session: Session, character: CharacterRuntime, effect: SpellEffect, recipient: CharacterRuntime,
+    result: CastSuccess,
+  ): void {
+    switch (effect.kind) {
+      case 'levitate': {
+        const to = levitateDestination(this.#world, this.#at(character), character.direction, effect.direction);
+        if (to !== null) this.#relocateCharacter(session, character, to);
+        return;
+      }
+      case 'magic-rope': {
+        const to = ropeDestination(this.#world, this.#at(character));
+        if (to !== null) this.#relocateCharacter(session, character, to);
+        return;
+      }
+      case 'find':
+        if (effect.target !== 'person') return;
+        session.emit({
+          kind: 'find-result', characterId: character.id, target: 'person', subjectId: recipient.id,
+          relation: findRelation(this.#at(character), this.#at(recipient)),
+        });
+        return;
+      case 'food':
+        this.#createFood(session, character, result.foods ?? []);
+        return;
+      default:
+    }
+  }
+
+  /**
+   * Instancia a comida da magia Food na mochila do lançador (#623) — o `creature:addItem` do
+   * Canary. O mesmo caminho do prêmio de baú (`#useChest`): `instanceId` de `#newInstanceId`,
+   * `inventory.add` com a capacidade do personagem, e é isso que faz o item atravessar
+   * `SessionReceipt.acquired` até o ledger (invariante 10). O Canary, sem lugar na mochila,
+   * larga o item no chão (`canDropOnMap` é `true` por padrão); este modelo não tem item no chão
+   * além do cadáver (ADR 0048 d.8), então o que não coube SE PERDE — e é registrado, para o
+   * extrato acusar a comida que não coube. O `equipment-changed` é a confirmação visível: o
+   * cliente relê o `inventory`.
+   */
+  #createFood(session: Session, character: CharacterRuntime, foods: readonly string[]): void {
+    const wearer = withReservedCapacity(character, 0);
+    for (const itemId of foods) {
+      const carried: CarriedItem = {
+        instanceId: this.#newInstanceId(session, character), itemId, quantity: 1,
+      };
+      if (!character.inventory.add(carried, this.#options.items, wearer, this.#containerRules(character)).ok) {
+        session.record('food-not-carried', itemId);
+      }
+    }
+    session.emit({ kind: 'equipment-changed', characterId: character.id });
   }
 
   /**
@@ -7151,6 +7276,13 @@ const slots = bot.groups.get(group);
       }
       if (character.mana < (spell.manaCost as number)) return blocked('not-enough-mana');
       if (character.soul < (spell.soulCost ?? 0)) return blocked('not-enough-soul');
+      // As utilitárias (#623): o mesmo espelho do `preflight` do `castSpell`, DEPOIS da mana e da
+      // alma — a ordem do Canary. Find Person depende de QUEM o jogador mira no clique, que o
+      // espelho não vê: ele diz `person-not-found` só quando NÃO HÁ ninguém mais na sessão.
+      const utility = effect.kind === 'find' && effect.target === 'person'
+        ? (session.participants.length <= 1 ? 'person-not-found' : null)
+        : this.#utilityRefusalOf(character, effect, character);
+      if (utility !== null) return blocked(utility);
       if (this.#needsTarget(spell.effect)) {
         const range = 'range' in spell.effect ? spell.effect.range : undefined;
         if (this.#targetInRange(character, range) === null) return blocked('no-target');
@@ -8512,14 +8644,7 @@ const slots = bot.groups.get(group);
         // pelos DOIS mesmos redirecionamentos de `move()` (`packages/sim/src/movement.ts`), e um
         // que pousa fora do tile adjacente pedido É um dos dois — um passo comum nunca é. Só o
         // `combat-v3` lê (`#isV3`); ausente é identidade, e nenhuma sessão v1/v2 grava a trava.
-        const stairhopDelayMs = this.#options.combat.stairhopDelayMs;
-        if (stairhopDelayMs !== undefined && this.#isV3() && (
-          result.to.z !== result.from.z
-          || Math.abs(result.to.x - result.from.x) > 1
-          || Math.abs(result.to.y - result.from.y) > 1
-        )) {
-          mover.attackLockedUntil = session.nowMs + stairhopDelayMs;
-        }
+        this.#lockAfterJump(session, mover, result);
       }
       session.emit({
         kind: 'creature-moved', creatureId,
@@ -8540,6 +8665,45 @@ const slots = bot.groups.get(group);
       this.#onSteppedOffOf(session, character, result.from);
     }
     return result;
+  }
+
+  /**
+   * O stairhop (#554, M30-07): um passo que trocou de andar OU pousou fora do tile adjacente
+   * pedido tranca o ataque do personagem por `stairhopDelayMs`. Extraído de `#step` no #623 porque
+   * Levitate e Magic Rope também são saltos — `Player::onCreatureMove` do Canary trata do mesmo
+   * jeito qualquer `teleport || oldPos.z != newPos.z`, sem perguntar se foi escada, magia ou
+   * teleporte de cenário. Só o `combat-v3` lê; ausente é identidade.
+   */
+  #lockAfterJump(session: Session, mover: CharacterRuntime, result: MoveResult & { readonly ok: true }): void {
+    const stairhopDelayMs = this.#options.combat.stairhopDelayMs;
+    if (stairhopDelayMs !== undefined && this.#isV3() && (
+      result.to.z !== result.from.z
+      || Math.abs(result.to.x - result.from.x) > 1
+      || Math.abs(result.to.y - result.from.y) > 1
+    )) {
+      mover.attackLockedUntil = session.nowMs + stairhopDelayMs;
+    }
+  }
+
+  /**
+   * O SALTO do personagem para `to` (#623: Levitate, Magic Rope) — a mesma cauda de `#step`
+   * (stairhop, `creature-moved`, campo, placa de pressão), sem virar o personagem: o Canary não
+   * troca a direção de quem levita (`creature:move` não passa direção) nem de quem sobe pela corda.
+   * Devolve `false`, sem escrever nada, quando o destino recusa — `relocate` nunca aplica pela
+   * metade. Mora aqui, com `#step`, porque este é o outro único ponto que escreve posição.
+   */
+  #relocateCharacter(session: Session, character: CharacterRuntime, to: WorldPoint): boolean {
+    const result = relocate(this.#world, character, to);
+    if (!result.ok) return false;
+    this.#lockAfterJump(session, character, result);
+    session.emit({
+      kind: 'creature-moved', creatureId: character.id,
+      from: result.from, to: result.to, durationMs: result.durationMs,
+    });
+    this.#enterField(session, character);
+    this.#onSteppedOnto(session, character, result.to);
+    this.#onSteppedOffOf(session, character, result.from);
+    return true;
   }
 
   /**

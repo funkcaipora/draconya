@@ -34,6 +34,7 @@ import { conditionFromSpec } from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import type { WorldPoint } from './movement.js';
 import type { Rng } from './rng.js';
+import { rollFoods } from './utility-spells.js';
 
 /** Por que a ação não aconteceu. Tipada porque o jogador merece saber qual das sete foi. */
 export type CastRefusal =
@@ -73,7 +74,29 @@ export type CastRefusal =
    * `Spell::getAggressive` do Canary é `true` por padrão). Carrega prazo, como `on-cooldown`: o
    * bot volta sozinho no instante do destravamento, sem reagendar no vazio (FUN-84).
    */
-  | 'attack-locked';
+  | 'attack-locked'
+  /**
+   * Levitate/Magic Rope sem destino (#623): o `RETURNVALUE_NOTPOSSIBLE` do Canary ("Sorry, not
+   * possible") — fronteira de andar, sonda ocupada, destino sem chão, com escada, ocupado, ou
+   * Magic Rope fora de um rope spot. Quem decide é o RULESET (`HuntRuleset#utilityRefusalOf`),
+   * que tem o mapa; esta função só carrega a recusa, depois dos requisitos e antes de pagar.
+   */
+  | 'not-possible'
+  /** Magic Rope sem onde pousar no andar de cima: o `RETURNVALUE_NOTENOUGHROOM` ("There is not enough room"). */
+  | 'not-enough-room'
+  /**
+   * Find Person sem o alvo na sessão (#623): o `RETURNVALUE_PLAYERWITHTHISNAMEISNOTONLINE` do
+   * Canary. A hunt hospeda só os personagens da própria sessão, então "online" é "está nesta
+   * sessão" — ver `docs/product/utility-spells.md`.
+   */
+  | 'person-not-found'
+  /** Find Fiend sem nenhum monstro fiendish na sessão (#623): o "No creatures around" do Canary. */
+  | 'no-creatures-around';
+
+/** As quatro recusas que só o RULESET dá às magias utilitárias (#623) — o `preflight` de `castSpell`. */
+export type UtilityRefusal = Extract<
+  CastRefusal, 'not-possible' | 'not-enough-room' | 'person-not-found' | 'no-creatures-around'
+>;
 
 export interface CastSuccess {
   readonly ok: true;
@@ -143,6 +166,12 @@ export interface CastSuccess {
   readonly field?: { readonly spec: FieldSpec; readonly at: WorldPoint };
   /** Destroy Field (#591): o tile onde remover um campo — ver `field` acima. */
   readonly destroyFieldAt?: WorldPoint;
+  /**
+   * As comidas que a Food criou (#623), na ORDEM do sorteio — ids de item do conteúdo. Devolvidas,
+   * não creditadas, como `condition`/`dispel`: quem tem a mochila e a capacidade (o ruleset) é
+   * quem as instancia; o sorteio é daqui porque o `Rng` é.
+   */
+  readonly foods?: readonly string[];
 }
 
 export interface CastRefused {
@@ -510,6 +539,15 @@ export function castSpell(
    * vocabulário; só quando este parâmetro é passado ele substitui a conferência e o débito.
    */
   manaCostOverride?: number,
+  /**
+   * A recusa que só o RULESET sabe dar às magias utilitárias (#623: Levitate, Magic Rope, Find) —
+   * o destino, o rope spot, o alvo do Find dependem de mapa, overlay e sessão, que este arquivo não
+   * conhece (invariante 1). Entra DEPOIS de level, cooldown, mana e alma e ANTES de pagar, o que
+   * preserva a ordem do Canary: `Spell::playerSpellCheck` confere os requisitos e só o
+   * `onCastSpell` do script recusa o destino — sem custo, sem cooldown. `null` é "nada a
+   * recusar" (e o único valor de toda magia que não é utilitária).
+   */
+  preflight: UtilityRefusal | null = null,
 ): CastResult {
   if (caster.level < spell.minLevel) {
     return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
@@ -598,6 +636,16 @@ export function castSpell(
   const blankPrice = effect.kind === 'conjure' ? effect.blankPrice : 0;
   if (blankPrice > 0 && !purse.canAfford(blankPrice)) {
     return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+  }
+  // As utilitárias (#623) recusam pelo que o ruleset viu no mundo — DEPOIS de level, cooldown, mana
+  // e alma, e ANTES de pagar: é a ordem do Canary, onde `Spell::playerSpellCheck` confere os
+  // requisitos e só o `onCastSpell` do script recusa o destino (`RETURNVALUE_NOTPOSSIBLE`), sem
+  // custo e sem cooldown — `postCastSpell` só roda quando o script devolve `true`.
+  if (
+    preflight !== null
+    && (effect.kind === 'levitate' || effect.kind === 'magic-rope' || effect.kind === 'find')
+  ) {
+    return { ok: false, reason: preflight, retryInMs: NOT_WAITING };
   }
 
   caster.mana -= manaCost;
@@ -711,6 +759,35 @@ export function castSpell(
       return {
         ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0,
         removeConditionKey: effect.key,
+      };
+    /**
+     * Luz (#623): condição de APRESENTAÇÃO do lançador. O `Condition::updateCondition` do Canary
+     * NÃO deixa uma luz de prazo MAIS CURTO substituir a que ainda dura mais (`getEndTime() >
+     * now + ticks` recusa): um Light lançado com um Great Light ativo gasta a mana, e a luz
+     * maior segue. Prazo igual ou maior renova — e a nova (nível, cor, total) vale por inteiro.
+     */
+    case 'light': {
+      const expiresAtMs = nowMs + effect.durationMs;
+      const current = caster.conditions.get('light');
+      if (current !== null && current.expiresAtMs > expiresAtMs) {
+        return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0 };
+      }
+      return cast({
+        key: 'light', spellId: spell.id, expiresAtMs,
+        light: { level: effect.level, color: effect.color, durationMs: effect.durationMs },
+      });
+    }
+    // Levitate, Magic Rope e Find (#623) saem AQUI só para pagar e iniciar cooldown: o efeito é
+    // do ruleset (mover, dizer), que já conferiu o destino/alvo em `preflight`.
+    case 'levitate':
+    case 'magic-rope':
+    case 'find':
+      return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0 };
+    // Food (#623): o sorteio é daqui (o `Rng` é), a criação do item é do ruleset.
+    case 'food':
+      return {
+        ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0,
+        foods: rollFoods(rng, effect.items),
       };
     /**
      * Dano ao longo do tempo (CMB-07): a magia NÃO bate agora — devolve a condição, e quem a

@@ -841,3 +841,22 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   usa esse parâmetro. O Carnage roda também para o monstro invocado (`Monster::death` não confere
   `isSummon()`). Os defeitos do `47dfd51` que ficaram de fora estão listados em
   `docs/product/combat-conformance.md`.
+- **As utilitárias (#623, M44-05: Light, Levitate, Magic Rope, Find, Food) têm UM portão de
+  recusa e UM ponto de aplicação, e quebrar qualquer dos dois desincroniza a barra.**
+  (a) `HuntRuleset#utilityRefusalOf` é PURA e alimenta DOIS lugares — o `preflight` de `castSpell`
+  e o espelho `#naturalStateOf` (`slotStates`): um motivo novo entra nos dois ou o slot promete o
+  que o cast recusa (DT-08). O `preflight` vem DEPOIS de level, cooldown, mana e alma e ANTES de
+  pagar — a ordem do Canary, onde só o `onCastSpell` recusa o destino (sem custo, sem cooldown).
+  (b) O salto (`#relocateCharacter`, `movement.ts#relocate`) é o OUTRO escritor de posição e NÃO vira
+  o personagem (o Canary não passa direção); todo salto novo passa por `#lockAfterJump` (o stairhop
+  de `teleport || oldPos.z != newPos.z`, que `#step` também usa) e emite `creature-moved`.
+  (c) `levitateDestination` julga a sonda pela grade ESTÁTICA (`isBlocked`), nunca por `blockedAt`:
+  uma porta fechada tem chão por baixo, e o overlay a tomaria por vazio. O mapa não separa "sem
+  chão" de "parede" — a aproximação está marcada `[APROXIMAÇÃO]` no arquivo e em
+  `docs/product/utility-spells.md`. (d) No Find Person o alvo viaja como `recipient`, e
+  `recipient === character` é "ninguém nomeado" (`person-not-found`) — o mesmo canal da cura de
+  amigo, sem campo novo. (e) A ordem de consumo do `Rng` da Food é contrato, como a do loot: bônus
+  `[0,1]`, índice do extra (se houve), índice do garantido (`rollFoods`). (f) A luz é condição de
+  APRESENTAÇÃO (`ConditionState.light`): nenhuma regra a lê, e o `Condition::updateCondition` a
+  governa — o `castSpell` NÃO devolve condição para uma luz de prazo MAIS CURTO que a vigente, e a
+  mana é gasta do mesmo jeito.

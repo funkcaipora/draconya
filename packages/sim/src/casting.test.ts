@@ -275,6 +275,112 @@ describe('castSpell/useSupply — dispel (#590, Cure Poison e afins)', () => {
   });
 });
 
+describe('castSpell — as magias utilitárias (#623)', () => {
+  const levitate: Spell = {
+    id: 'levitate-up', name: 'Levitate (up)', manaCost: 50, cooldownMs: 2_000, minLevel: 12,
+    group: 'support', groupCooldownMs: 2_000, effect: { kind: 'levitate', direction: 'up' },
+  };
+  const light: Spell = {
+    id: 'light', name: 'Light', manaCost: 20, cooldownMs: 2_000, minLevel: 8,
+    effect: { kind: 'light', level: 6, color: 215, durationMs: 370_000 },
+  };
+  const greatLight: Spell = {
+    ...light, id: 'great-light', manaCost: 60,
+    effect: { kind: 'light', level: 8, color: 215, durationMs: 695_000 },
+  };
+  const food: Spell = {
+    id: 'food', name: 'Food', manaCost: 120, soulCost: 1, cooldownMs: 2_000, minLevel: 14,
+    effect: { kind: 'food', items: ['meat', 'ham', 'cheese'] },
+  };
+
+  it('a recusa do RULESET (`preflight`) sai DEPOIS de level e mana e ANTES de pagar — a ordem do Canary', () => {
+    // `Spell::playerSpellCheck` (cooldown, level, mana, alma) vem primeiro; só o `onCastSpell` do
+    // script recusa o destino — sem custo e sem cooldown (`postCastSpell` só roda com `true`).
+    const caster = hero({ mana: 100, level: 20 });
+    expect(castSpell(caster, levitate, null, 0, combat, rng(), undefined, caster, undefined, null, undefined, undefined, 'not-possible'))
+      .toEqual({ ok: false, reason: 'not-possible', retryInMs: 0 });
+    expect(caster.mana).toBe(100);
+    expect(caster.cooldowns.remainingMs('spell:levitate-up', 0)).toBe(0);
+    expect(caster.cooldowns.remainingMs('group:support', 0)).toBe(0);
+
+    // O level vem antes: quem não tem o level ouve o level, não o destino.
+    const novice = hero({ level: 1 });
+    expect(castSpell(novice, levitate, null, 0, combat, rng(), undefined, novice, undefined, null, undefined, undefined, 'not-possible'))
+      .toEqual({ ok: false, reason: 'level-too-low', retryInMs: 0 });
+    // A mana vem antes também: sem mana E sem destino, o jogador ouve a mana.
+    const dry = hero({ mana: 10, level: 20 });
+    expect(castSpell(dry, levitate, null, 0, combat, rng(), undefined, dry, undefined, null, undefined, undefined, 'not-possible'))
+      .toEqual({ ok: false, reason: 'not-enough-mana', retryInMs: 0 });
+  });
+
+  it('sem recusa do ruleset a magia sai: paga mana, inicia cooldown e grupo, e não devolve condição', () => {
+    const caster = hero({ mana: 100, level: 20 });
+    const result = castSpell(caster, levitate, null, 500, combat, rng());
+    expect(result).toEqual({ ok: true, healed: 0, manaRestored: 0, damage: 0, hits: [], goldSpent: 0 });
+    expect(caster.mana).toBe(50);
+    expect(caster.cooldowns.remainingMs('spell:levitate-up', 500)).toBe(2_000);
+    expect(caster.cooldowns.remainingMs('group:support', 500)).toBe(2_000);
+  });
+
+  it('a `preflight` é IGNORADA por quem não é utilitária: uma cura não lê a recusa do ruleset', () => {
+    const caster = hero({ health: 10 });
+    expect(castSpell(caster, heal, null, 0, combat, rng(), undefined, caster, undefined, null, undefined, undefined, 'not-possible').ok).toBe(true);
+  });
+
+  it('Light devolve a condição com o nível, a cor e o prazo TOTAL; sem sorteio', () => {
+    const caster = hero({ mana: 100, level: 10 });
+    const random = rng();
+    const before = random.getState();
+    const result = castSpell(caster, light, null, 1_000, combat, random);
+    expect(result).toMatchObject({
+      ok: true,
+      condition: {
+        key: 'light', spellId: 'light', expiresAtMs: 371_000,
+        light: { level: 6, color: 215, durationMs: 370_000 },
+      },
+    });
+    expect(caster.mana).toBe(80);
+    expect(random.getState()).toEqual(before);
+  });
+
+  it('Light com uma luz que dura MAIS: gasta a mana e NÃO devolve condição (`updateCondition`)', () => {
+    const caster = hero({ mana: 100, level: 20 });
+    caster.conditions.apply({
+      key: 'light', spellId: 'great-light', expiresAtMs: 695_000,
+      light: { level: 8, color: 215, durationMs: 695_000 },
+    });
+    const result = castSpell(caster, light, null, 0, combat, rng());
+    expect(result).toEqual({ ok: true, healed: 0, manaRestored: 0, damage: 0, hits: [], goldSpent: 0 });
+    expect(caster.mana).toBe(80);
+  });
+
+  it('a luz de prazo IGUAL renova (o Canary só recusa quando o fim atual é ESTRITAMENTE maior)', () => {
+    const caster = hero({ mana: 200, level: 20 });
+    caster.conditions.apply({ key: 'light', spellId: 'light', expiresAtMs: 370_000 });
+    const result = castSpell(caster, light, null, 0, combat, rng());
+    expect(result).toMatchObject({ ok: true, condition: { key: 'light', expiresAtMs: 370_000 } });
+    // E uma de prazo MAIOR sempre renova.
+    const later = castSpell(caster, greatLight, null, 5_000, combat, rng());
+    expect(later).toMatchObject({ ok: true, condition: { spellId: 'great-light', expiresAtMs: 700_000 } });
+  });
+
+  it('Food paga mana E alma e devolve o sorteio na ordem do script — ou recusa sem alma, sem nada gasto', () => {
+    const caster = hero({ mana: 200, soul: 3, level: 20 });
+    const result = castSpell(caster, food, null, 0, combat, rng());
+    expect(result.ok).toBe(true);
+    const foods = (result as { foods?: readonly string[] }).foods ?? [];
+    expect([1, 2]).toContain(foods.length);
+    for (const item of foods) expect(['meat', 'ham', 'cheese']).toContain(item);
+    expect(caster.mana).toBe(80);
+    expect(caster.soul).toBe(2);
+
+    const dry = hero({ mana: 200, soul: 0, level: 20 });
+    expect(castSpell(dry, food, null, 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'not-enough-soul', retryInMs: 0 });
+    expect(dry.mana).toBe(200);
+  });
+});
+
 describe('castSpell/useSupply — Paralyze Rune e Invisibility (#592)', () => {
   const invisibility: Spell = {
     ...heal, id: 'invisibility-druid', manaCost: 440, minLevel: 35,

@@ -44,7 +44,8 @@ import type { DamageSource } from './combat/damage.js';
 import type { Rng } from './rng.js';
 
 export type ConditionKind =
-  | 'speed' | 'buff' | 'mana-shield' | 'heal-over-time' | 'damage-over-time' | 'drunk' | 'invisible';
+  | 'speed' | 'buff' | 'mana-shield' | 'heal-over-time' | 'damage-over-time' | 'drunk' | 'invisible'
+  | 'light';
 
 /**
  * A POLÍTICA de fusão de uma condição (CMB-07, DT-02). Declarada no conteúdo, nunca um campo
@@ -134,8 +135,24 @@ export interface ConditionState {
    * uma.
    */
   readonly skillDeltas?: Readonly<Record<string, number>>;
+  /**
+   * A luz do lançador (#623: Light, Great Light, Ultimate Light — o `CONDITION_LIGHT` do Canary).
+   * Só APRESENTAÇÃO: nenhuma regra de jogo a lê, o cliente é quem ajusta a escuridão. Viaja com a
+   * condição (e no snapshot, opcional: o formato anterior nunca a teve, sem bump) porque o cliente
+   * precisa de `level`/`color`/`durationMs` para desenhar o decaimento — `level` cai 1 a cada
+   * `durationMs / level`, o `lightChangeInterval` do `ConditionLight`, e a conta mora no cliente
+   * (`expiresAtMs` já é o instante do fim).
+   */
+  readonly light?: LightInfo;
   /** Tique periódico: `amount` a cada `intervalMs`, até `expiresAtMs`. */
   readonly tick?: ConditionTick;
+}
+
+/** O que a condição de luz carrega (#623). `durationMs` é o prazo TOTAL da (re)aplicação. */
+export interface LightInfo {
+  readonly level: number;
+  readonly color: number;
+  readonly durationMs: number;
 }
 
 /** O tique normalizado: um snapshot antigo sem `kind` é cura. */

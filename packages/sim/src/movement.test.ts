@@ -2,7 +2,8 @@ import { buildTilemap } from '@draconya/content';
 import type { TilemapInteractable } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import {
-  TileOccupancy, canOccupy, move, movementDuration, place, placeNear, placeReachable, tilesAround,
+  TileOccupancy, canOccupy, move, movementDuration, place, placeNear, placeReachable, relocate,
+  tilesAround,
 } from './movement.js';
 import type { Movable, MoveRejection } from './movement.js';
 import { Fields } from './fields.js';
@@ -328,6 +329,62 @@ describe('andares e escadas (FUN-119)', () => {
     const hero: Movable<Ponto> & { alive: boolean } = { alive: true, position: { x: 1, y: 1, z: 5 }, speed: 300 };
     w.reset([hero]);
     expect(move(w, hero, { x: 2, y: 1, z: 5 })).toEqual({ ok: false, reason: 'tile-blocked' });
+  });
+});
+
+describe('relocate — o salto de quem já está no mundo (#623: Levitate, Magic Rope)', () => {
+  // Dois andares com a MESMA sala; o herói está no 7 e salta para o 8. `relocate` não segue
+  // escada nem exige adjacência: o chamador escolheu o tile.
+  const twoFloors = buildTilemap({
+    id: 'sala2', z: 7,
+    floors: {
+      '7': { grid: ['######', '#....#', '#.#..#', '#....#', '######'] },
+      '8': { grid: ['######', '#....#', '#.#..#', '#....#', '######'] },
+    },
+  });
+  const worldOf = (...creatures: ReturnType<typeof at>[]) => {
+    const w = new TileOccupancy(twoFloors);
+    w.reset(creatures);
+    return w;
+  };
+
+  it('vai a outro andar e a outro tile longe do adjacente: libera a origem e ocupa o destino', () => {
+    const hero = at(1, 1);
+    const w = worldOf(hero);
+    const result = relocate(w, hero, { x: 4, y: 3, z: 8 });
+    expect(result).toMatchObject({ ok: true, from: { x: 1, y: 1, z: 7 }, to: { x: 4, y: 3, z: 8 } });
+    expect(hero.position).toEqual({ x: 4, y: 3, z: 8 });
+    expect(w.occupied(1, 1, 7)).toBe(false);
+    expect(w.occupied(4, 3, 8)).toBe(true);
+    // A duração é a de um passo (positiva, múltiplo do compasso) — o cliente interpola o intervalo.
+    expect((result as { durationMs: number }).durationMs).toBeGreaterThan(0);
+  });
+
+  it('recusa parede, fora do mapa, andar que o mapa não tem, tile ocupado e o próprio tile — sem mexer em nada', () => {
+    const hero = at(1, 1);
+    const other = at(3, 3);
+    const w = worldOf(hero, other);
+    const before = { position: { ...hero.position }, here: w.occupied(1, 1, 7) };
+    const targets: ReadonlyArray<readonly [{ x: number; y: number; z: number }, string]> = [
+      [{ x: 2, y: 2, z: 8 }, 'tile-blocked'],
+      [{ x: 9, y: 9, z: 8 }, 'out-of-bounds'],
+      [{ x: 1, y: 1, z: 6 }, 'tile-blocked'],
+      [{ x: 3, y: 3, z: 7 }, 'tile-occupied'],
+      [{ x: 1, y: 1, z: 7 }, 'same-tile'],
+    ];
+    for (const [target, reason] of targets) {
+      expect(relocate(w, hero, target), reason).toEqual({ ok: false, reason });
+    }
+    expect({ position: { ...hero.position }, here: w.occupied(1, 1, 7) }).toEqual(before);
+  });
+
+  it('o monstro de andar único (sem `z`) salta no plano, mas não troca de andar', () => {
+    const rat: Movable<{ x: number; y: number }> = { position: { x: 1, y: 1 }, speed: 300 };
+    const w = worldOf();
+    w.occupy(1, 1, 7);
+    expect(relocate(w, rat, { x: 4, y: 3, z: 8 })).toEqual({ ok: false, reason: 'tile-blocked' });
+    expect(relocate(w, rat, { x: 4, y: 3, z: 7 })).toMatchObject({ ok: true });
+    expect(rat.position).toEqual({ x: 4, y: 3 });
   });
 });
 

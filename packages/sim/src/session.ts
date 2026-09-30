@@ -12,7 +12,7 @@ import type { CharacterState } from './character.js';
 import { resolveDeath } from './death.js';
 import type { KillCredit, Victim } from './death.js';
 import type { Rng, RngState } from './rng.js';
-import type { CombatEvent, PartyEvent } from './combat-events.js';
+import type { CharacterNotice, CombatEvent, PartyEvent } from './combat-events.js';
 import type { CreatureMoved, MoveResult } from './movement.js';
 import type { PresenceEvent } from './presence.js';
 import type { EquipmentChanged } from './inventory.js';
@@ -29,7 +29,7 @@ import type { ScheduleState, ScheduledEvent } from './schedule.js';
  * desanexada: o evento nasce dos dois lados, e só num deles alguém o serializa.
  */
 export type DomainEvent =
-  | CreatureMoved | PresenceEvent | CombatEvent | PartyEvent | EquipmentChanged;
+  | CreatureMoved | PresenceEvent | CombatEvent | PartyEvent | EquipmentChanged | CharacterNotice;
 
 /**
  * Teto de eventos de domínio guardados à espera de quem os leia.
