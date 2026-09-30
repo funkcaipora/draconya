@@ -719,6 +719,17 @@ function bestiaryTotal(counts: Readonly<Record<string, number>>): number {
   return total;
 }
 
+/**
+ * A soma dos abates de boss do Bosstiary (#629): o gatilho da mensagem `bosstiary` ao vivo. Um
+ * número só, pela razão de `bestiaryTotal`: abate nunca desce, então a soma muda se, e só se,
+ * algum contador mudou (e os pontos só mudam com um abate).
+ */
+function bosstiaryTotal(kills: Readonly<Record<string, number>>): number {
+  let total = 0;
+  for (const count of Object.values(kills)) total += count;
+  return total;
+}
+
 /** Igualdade de lista de ids de item, com `null` = coletar tudo (§6, D2). */
 function sameIdList(a: readonly string[] | null, b: readonly string[] | null): boolean {
   if (a === null || b === null) return a === b;
@@ -937,6 +948,11 @@ interface HostedSession {
    * e no ciclo com visualizador, pela razão registrada em `sentStats`.
    */
   readonly sentBestiary: Map<string, number>;
+  /**
+   * A soma dos abates do Bosstiary ENTREGUE a quem olha cada personagem (#629), por `characterId`
+   * — o mesmo mecanismo de `sentBestiary`, para outra grandeza que só sobe.
+   */
+  readonly sentBosstiary: Map<string, number>;
   /**
    * O último BITMASK de bênçãos ENTREGUE a quem olha cada personagem (#570, ADR 0052), por
    * `characterId` — o mesmo mecanismo de `sentBestiary`: compra (sobe) e morte (zera) são as
@@ -2978,6 +2994,9 @@ export class SessionHost {
       // E o Bestiário, se um abate contou (FUN-113): é progressão permanente, e a tela precisa
       // ver o marco chegar sem reconectar.
       this.#presentBestiary(hosted);
+      // E o Bosstiary (#629), pela mesma razão: o nível de um boss fecha no abate, e a tela precisa
+      // ver o número chegar sem reconectar.
+      this.#presentBosstiary(hosted);
       this.#presentBlessings(hosted);
       // E o cenário, se algo mudou de estado PASSIVAMENTE (#734, ADR 0050 d.6 T3) — o walker
       // abrindo uma porta sozinho, uma placa de pressão, um `TILE_REVERT`. `useOnMap` já manda
@@ -3547,6 +3566,23 @@ export class SessionHost {
   }
 
   /**
+   * O Bosstiary ao vivo (#629): os abates de boss e os pontos, para quem olha CADA personagem,
+   * quando a soma dos abates mudou desde a última entrega — a MESMA regra de `#presentBestiary`
+   * (por personagem, só com visualizador; sem ele o `sim` conta do mesmo jeito, invariante 3).
+   */
+  #presentBosstiary(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      const { kills, points } = character.bosstiary.getState();
+      const total = bosstiaryTotal(kills);
+      if (hosted.sentBosstiary.get(character.id) === total) continue;
+      hosted.sentBosstiary.set(character.id, total);
+      this.#sendToViewersOf(hosted, character.id, { type: 'bosstiary', kills, points });
+    }
+  }
+
+  /**
    * As bênçãos ao vivo (#570, ADR 0052), pela MESMA regra do Bestiário: só quem está olhando,
    * só quando o bitmask mudou desde a última entrega. A compra (`#requestBuyBlessing`) já manda
    * direto a quem comprou; isto cobre quem só está OLHANDO — e o consumo na morte, que a hunt
@@ -3643,6 +3679,11 @@ export class SessionHost {
     const counts = participant?.bestiary.getState() ?? {};
     hosted.sentBestiary.set(characterId, bestiaryTotal(counts));
     viewer.send({ type: 'bestiary', counts });
+    // E o Bosstiary (#629), pela mesma razão do Bestiário: sem isto, quem reconecta veria os
+    // abates de boss zerados até o próximo — na Cidade, que não tem ciclo, para sempre.
+    const bosstiary = participant?.bosstiary.getState() ?? { kills: {}, points: 0 };
+    hosted.sentBosstiary.set(characterId, bosstiaryTotal(bosstiary.kills));
+    viewer.send({ type: 'bosstiary', kills: bosstiary.kills, points: bosstiary.points });
     // E as bênçãos (#570, ADR 0052), pela mesma razão: quem reconecta precisa ver o que já
     // comprou, sem esperar a próxima compra/morte para descobrir.
     hosted.sentBlessings.set(characterId, participant?.blessings ?? 0);
@@ -4247,6 +4288,7 @@ export class SessionHost {
       lastTargetSeq: new Map(),
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
+      sentBosstiary: new Map(),
       sentBlessings: new Map(),
       sentTileOverrides: new Map(),
       sentParty: null,
@@ -4530,6 +4572,9 @@ export class SessionHost {
       // E o Bestiário (FUN-113), pela mesma razão: abate que não chega ao banco é abate que
       // some no próximo logout, e o marco 10 000 nunca chegaria.
       ...(owner === undefined ? {} : { bestiary: owner.bestiary.getState() }),
+      // E o Bosstiary (#629, ADR 0052 d.1), pela mesma razão: abate de boss que não chega ao
+      // banco é abate que some no próximo logout, e o nível 3 nunca fecharia.
+      ...(owner === undefined ? {} : { bosstiary: owner.bosstiary.getState() }),
       // E a economia de Charms (M39-02, #602, ADR 0052 d.1): ABSOLUTA como `ammo` — sem ela
       // aqui, um `charm-unlock`/`charm-assign` aceito na Cidade sumiria a cada logout.
       ...(owner === undefined ? {} : { charms: owner.charms.getState() }),
@@ -5058,6 +5103,7 @@ export class SessionHost {
       lastTargetSeq: new Map(),
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
+      sentBosstiary: new Map(),
       sentBlessings: new Map(),
       sentTileOverrides: new Map(),
       sentParty: null,

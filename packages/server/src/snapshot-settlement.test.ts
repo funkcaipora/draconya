@@ -110,6 +110,22 @@ describe('settleSnapshotAsReceipt (#527)', () => {
     ]);
   });
 
+  it('carries the Bosstiary of the OWNER (#629), and a snapshot without one omits the key', async () => {
+    // Monotônico como o Bestiário (o ledger funde pelo maior): sem ele aqui, o abate de boss de uma
+    // sessão irrestaurável sumia junto com o snapshot.
+    const { receipts, saved } = fakeReceipts();
+    const bosstiary = { kills: { '639': 3 }, points: 40, version: 1 };
+    const snapshot: SessionSnapshot = {
+      ...baseSnapshot,
+      participants: [{ ...baseSnapshot.participants[0]!, bosstiary }],
+    };
+    await settleSnapshotAsReceipt(snapshot, { characterId: 'a', accountId: 'acc-a', receipts });
+    expect(saved[0]?.bosstiary).toEqual(bosstiary);
+
+    await settleSnapshotAsReceipt(baseSnapshot, { characterId: 'a', accountId: 'acc-a', receipts });
+    expect(saved[1]).not.toHaveProperty('bosstiary');
+  });
+
   it('carries the posture of the OWNER (#550), and a snapshot without one is the Canary offensive default', async () => {
     const { receipts, saved } = fakeReceipts();
     const snapshot: SessionSnapshot = {
