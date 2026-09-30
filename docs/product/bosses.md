@@ -1,8 +1,12 @@
 # Bosses
 
-**Status:** não implementado
+**Status:** parcial — a instância, a sala e a recompensa de boss **não estão implementadas**; o
+**Bosstiary** (o registro paralelo de bosses: abates, nível e pontos de boss) existe desde o #629
+(seção abaixo). Boss Slot e boss boosted continuam fora, porque dependem do sistema de bosses.
 **PRD:** §27, §43.7
-**Épico:** E11
+**Épico:** E11 (o Bosstiary é do E7, progressão persistente)
+**ADRs:** [0052](../adr/0052-endgame-progression-state-and-city-services-through-the-owning-session.md)
+(estado durável do endgame — o registro `bosstiary`, com a emenda do #629)
 
 ## Comportamento
 
@@ -31,13 +35,85 @@ Ao derrotar o boss, cada jogador recebe uma tela de recompensa individual, na qu
 | Tamanho máximo do grupo | 10 | caminho previsto: `packages/content/bosses` |
 | Tentativas/recompensas por dia (MVP) | 1 | caminho previsto: `packages/content/bosses` |
 | Pity system | inexistente no MVP | caminho previsto: `packages/content/bosses` |
-| Flag de boss do monstro (#691, o `isBoss` do Canary) | `false` por default; nenhum monstro do catálogo declara `true` ainda | `packages/content/data/monsters/*.json`, `boss` |
+| Flag de boss do monstro (#691, o `isBoss` do Canary) | `false` por default; o importador escreve `true` nos 136 bosses do catálogo (#629), junto com `bosstiary` — `buildContent` recusa `bosstiary` sem `boss` | `packages/content/data/monsters/generated/*.json`, `boss` |
 | Escala de vida/ataque/defesa de boss (#691) | 1 / 1 / 1 (neutro) — o `rateBossHealth/Attack/Defense` do Canary | `packages/content/data/progression/baseline.json`, `rates.boss` |
+| Raridade e `raceId` de cada boss (#629) | Bane / Archfoe / Nemesis, do `monster.bosstiary` do Canary (136 bosses no catálogo) | `packages/content/data/monsters/generated/*.json`, `bosstiary` (escrito por `pnpm catalog:import monsters`) |
+| Abates e pontos por nível, por raridade (#629) | Bane 25/100/300 → 5/15/30; Archfoe 5/20/60 → 10/30/60; Nemesis 1/3/5 → 10/30/60 | `packages/content/data/bosstiary/baseline.json`, `levels` |
 
-O que já existe no motor (#691): o monstro declara `boss: true`, e isso só troca o bloco de
+O que já existe no motor (#691): o monstro declara `boss: true`, e isso troca o bloco de
 rates que vale para ele (`progression.rates.boss` no lugar de `rates.monster` — ver
-[`progression.md`](./progression.md), "Rates do servidor"). Instância, sala e recompensa
-continuam não implementadas; raridade e pontos do Bosstiary são o #629.
+[`progression.md`](./progression.md), "Rates do servidor"). Desde o #629 o importador escreve
+`boss: true` junto com o bloco `bosstiary` de cada boss do Canary (o `isBoss` do Canary É "tem
+bloco bosstiary"), e o boss deixa de contar no Bestiário e passa a contar no Bosstiary. Instância,
+sala e recompensa continuam não implementadas.
+
+## O Bosstiary (#629)
+
+O Bosstiary é o registro paralelo de bosses do Tibia 13.x: cada boss tem uma **raridade**
+(Bane, Archfoe ou Nemesis, `monster.bosstiary.bossRace` do Canary), o personagem acumula
+**abates por boss**, cada boss tem três **níveis** que fecham em abates fixos da raridade, e cada
+nível alcançado soma **pontos de boss**. Segue `IOBosstiary::addBosstiaryKill`
+(`src/io/io_bosstiary.cpp`) chamado por `Player::addBosstiaryKill` em `Player::onKilledMonster`,
+do Canary 47dfd51.
+
+**Onde o abate conta.** No MESMO evento e pela MESMA elegibilidade do Bestiário: em
+`#grantPartyXp` (`packages/sim/src/rulesets/hunt.ts`), para todo elegível (vivo e com stamina —
+abate com stamina zero não conta), e nunca para invocação (`hasBeenSummoned`). Um monstro conta em
+UM dos dois registros, como no Canary: `Player::addBestiaryKill` devolve cedo para `isBoss()` e
+`Player::addBosstiaryKill` devolve cedo para o contrário. Boss não soma no Bestiário, então não
+entra nos marcos de XP nem nos pontos de Charm.
+
+**A chave do contador é o `raceId` do Canary**, não o id de conteúdo: o Canary guarda o abate em
+`STORAGEVALUE_BESTIARYKILLCOUNT + raceid`, e quatro `raceId` são compartilhados por variantes do
+mesmo boss — as cinco formas de Urmahlullu (1811), as duas Goshnar's Megalomania (1969), os dois
+Voidborn (1406) e Rupture/Eradicator2 (1225). Abater qualquer variante soma no MESMO contador, e
+a tela lista o boss uma vez (`IOBosstiary::addBosstiaryMonster` ignora o `raceId` repetido).
+Divergência do desenho da issue (`kills: {monsterId → n}`), pelo motivo acima; no catálogo
+importado hoje só o par dos Voidborn tem os dois lados gerados.
+
+**Níveis e pontos** (`IOBosstiary::levelInfos`, `packages/content/data/bosstiary/baseline.json`):
+
+| Raridade | Nível 1 | Nível 2 | Nível 3 | Total de pontos |
+|---|---|---|---|---|
+| Bane | 25 abates → 5 pontos | 100 → 15 | 300 → 30 | 50 |
+| Archfoe | 5 → 10 | 20 → 30 | 60 → 60 | 100 |
+| Nemesis | 1 → 10 | 3 → 30 | 5 → 60 | 100 |
+
+O nível alcançado soma os pontos do PRÓPRIO nível ao total (`addBossPoints(levelInfos[raridade]
+[nível − 1].points)`); com o abate subindo de um em um, cada nível é alcançado por exatamente um
+abate. Fechar um nível é evento notável (`bosstiary-level`, detalhe `monsterId/nível`, em party
+`personagem/monsterId/nível`), como o marco do Bestiário: aparece na lista curta do analisador como
+"Bosstiary: Dreadmaw · nível 2".
+
+**Registro e persistência** (ADR 0052 d.1): `characters.bosstiary` (`jsonb`, migração
+`0023_629-bosstiary`), `{ kills: { "<raceId>": n }, points, version }`. Lido inteiro no ticket,
+mutado só pela sessão dona, saído inteiro no extrato (`SessionReceipt.bosstiary`, e no
+extrato de snapshot irrestaurável) e escrito pelo ledger — **fundido pelo maior** de cada boss e
+dos pontos (`Bosstiary.merge`), como o Bestiário, e não última-escrita-vence como `charms`:
+abate e ponto de boss só sobem, então um extrato antigo fora de ordem não rebaixa nada. Não há
+intenção C2S: o Bosstiary é só leitura (a mensagem `bosstiary`, S2C 46, sai no attach e a cada
+abate de boss).
+
+**O que a tela mostra.** A aba **Bosstiary** do Cyclopedia lista os bosses do catálogo (um por
+`raceId`) com raridade, nível N/3 e abates até o próximo nível (ou "✓" no nível 3), busca por nome,
+ordenação por abates/nome/raridade, e uma caixa com os pontos de boss, quantos bosses já foram
+abatidos e quantos estão no nível máximo. Nível e "quanto falta" são DERIVADOS no cliente do
+registro cru e da tabela do catálogo (`shell/bosstiary-progress.ts`); os pontos vêm do servidor.
+O Bestiary deixa de listar boss.
+
+**Fora do corte, e por quê.**
+
+- **Boss Slot e boss boosted** — dependem do sistema de bosses (instância, sala e recompensa,
+  acima); o `calculateLootBonus`/`getBossBonus` (bônus de loot do baú de recompensa) é a única
+  coisa que os pontos de boss compram no Canary, e não há baú de recompensa aqui. Os pontos são
+  contados e mostrados, mas ainda não gastam em nada.
+- **Podium of Vigour** (o item de casa que o Canary entrega no primeiro nível 2) — não há casa
+  nem Store inbox; o título "15 000 pontos" idem.
+- **Multiplicador de abate** (`bosstiaryKillMultiplier`, padrão 1, dobrado por evento de servidor
+  e triplicado para o boss boosted) — nenhum dos três existe; o abate é sempre 1.
+- **Cobertura do catálogo** — dos 249 bosses do Canary (60 Bane, 105 Archfoe, 84 Nemesis), 136
+  estão no catálogo importado hoje (42 Bane, 45 Archfoe, 49 Nemesis): os demais dependem de
+  mapeamento de ataque/defesa/invocação ainda ausente (`docs/reference/catalog/monsters-report.md`).
 
 ## Em aberto
 

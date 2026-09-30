@@ -222,7 +222,8 @@ cada aplicação curto-circuita e nenhum número muda — nem um arredondamento 
 | `monster` / `boss` `.attack` | golpe do monstro | `trunc(dano sorteado × mult)` — o sorteio é o mesmo, e a sequência do `Rng` não muda |
 
 `monster.boss: true` (o `MonsterType::isBoss` do Canary) escolhe o bloco `boss`; ausente é
-`false`. Só a flag: raridade e pontos do Bosstiary são o #629.
+`false`. Desde o #629 o importador o escreve junto com o bloco `bosstiary` (raridade e `raceId`) de
+cada boss do Canary — ver [`bosses.md`](./bosses.md), "O Bosstiary".
 
 Com `useStages`, a primeira faixa que contém o level vence (`getRateFromTable`), e sem faixa
 vale o rate simples. `buildContent` recusa faixa sem `maxLevel` que não seja a última, faixa com
