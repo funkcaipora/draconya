@@ -1804,3 +1804,46 @@ describe('saída pendente: cancel-exit, exit-pending (#802)', () => {
     }
   });
 });
+
+describe('a aparência emprestada: creature-update e a mira num item (#621, M44-03)', () => {
+  it('creature-update is S2C only, opcode 46, and round trips an outfit, an object and a return with colours', () => {
+    // Mutação que mata: reutilizar o 45 (`exit-pending`), apagar `creature-update: 46` de
+    // SERVER_TO_CLIENT (`decodeS2C` devolve `null`) ou tornar `object` obrigatório.
+    expect(SERVER_TO_CLIENT['creature-update']).toBe(46);
+    expect('creature-update' in C2S_SCHEMAS).toBe(false);
+    const outfit: S2CMessage = { type: 'creature-update', id: 7, appearanceId: 21 };
+    const object: S2CMessage = { type: 'creature-update', id: 7, appearanceId: 3976, object: true };
+    const back: S2CMessage = {
+      type: 'creature-update', id: 1, appearanceId: 128,
+      colors: { head: 78, body: 69, legs: 58, feet: 76 },
+    };
+    for (const message of [outfit, object, back]) {
+      expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+    }
+  });
+
+  it('rejects an update without an appearance, with a non-positive one, or with a bad colour index', () => {
+    const base = { type: 'creature-update', id: 7, appearanceId: 21 };
+    for (const patch of [{ appearanceId: 0 }, { appearanceId: -3 }, { appearanceId: 1.5 }, { id: 1.5 },
+      { colors: { head: 133, body: 0, legs: 0, feet: 0 } }]) {
+      expect(decodeS2C(encodeS2C({ ...base, ...patch } as unknown as S2CMessage))).toBeNull();
+    }
+  });
+
+  it('use-slot, use-item and use-item-on accept an item the character carries as the target', () => {
+    // A Chameleon Rune aponta um item do inventário: só a instância viaja — a aparência é do
+    // servidor (invariante 4). Mutação que mata: tirar a terceira variante de `manualTargetSchema`.
+    const slot: C2SMessage = { type: 'use-slot', set: 0, slot: 3, target: { instanceId: 'i-42' } };
+    const useItem: C2SMessage = {
+      type: 'use-item', ref: { supplyId: 'chameleon-rune' }, seq: 1, target: { instanceId: 'i-42' },
+    };
+    const useItemOn: C2SMessage = {
+      type: 'use-item-on', ref: { supplyId: 'chameleon-rune' }, seq: 2, target: { instanceId: 'i-42' },
+    };
+    for (const message of [slot, useItem, useItemOn]) {
+      expect(decodeC2S(encodeC2S(message))).toEqual([message]);
+    }
+    const empty = { type: 'use-item-on', ref: { supplyId: 'chameleon-rune' }, seq: 2, target: { instanceId: '' } };
+    expect(decodeC2S(encodeC2S(empty as unknown as C2SMessage))).toBeNull();
+  });
+});

@@ -449,6 +449,18 @@ export const SERVER_TO_CLIENT = {
    * 45: o 44 é do `charms`.
    */
   'exit-pending': 45,
+  /**
+   * A criatura trocou de APARÊNCIA (#621, M44-03): a condição `outfit` — Creature Illusion, Chameleon
+   * Rune, o ataque/defesa `outfit` de um monstro — começou, foi renovada ou acabou. Carrega a
+   * aparência que ela veste AGORA, já resolvida pelo servidor em id de pacote (invariante 6); quando a
+   * condição acaba, o servidor manda a aparência PRÓPRIA da criatura (o cliente nunca guarda a
+   * "original" para voltar). Broadcast para todos os viewers da sessão, como `creature-health`: a
+   * aparência é de quem está no mundo, não de um personagem. Só S2C — o cliente não escolhe o que
+   * veste (invariante 4).
+   *
+   * 46: o 45 é do `exit-pending` (#802).
+   */
+  'creature-update': 46,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */
