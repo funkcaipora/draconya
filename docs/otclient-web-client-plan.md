@@ -9,7 +9,7 @@ vira `docs/product/` e `AGENTS.md` do pacote.
 > recebeu sprites reais no Pixi, monstro no fio, efeitos/mísseis/dano flutuante, stats ao vivo,
 > paredes por vizinhança e a HUD com skin do Tibia (FUN-23, 103, 105, 106, 108, 109). Duas coisas
 > deste texto mudaram por isso e estão registradas na emenda do
-> [ADR 0060](adr/0060-otclient-web-as-world-renderer.md): a versão recomendada passa a ser
+> [ADR 0061](adr/0061-otclient-web-as-world-renderer.md): a versão recomendada passa a ser
 > **13.32** (a tabela de aparências, o `things/` local e o staging já são 13.32, e a tag pública
 > existe), e a régua da Fase 2 é o Pixi **de hoje**, não retângulos. O que segue está como foi
 > escrito; as tarefas do milestone "OTClient web · teste local" já refletem a atualização.
@@ -309,7 +309,7 @@ Os layouts de pacote mudam entre versões; escolher é obrigatório, e a escolha
 
 **Recomendação original: 13.10** — a única combinação engine + assets + flags validada
 end-to-end pelo tibia-idle, com o custo de remapear uma tabela de duas linhas.
-**Revisada em 2026-09-11 para 13.32** (emenda do ADR 0060): a tabela cresceu para dezenas de ids
+**Revisada em 2026-09-11 para 13.32** (emenda do ADR 0061): a tabela cresceu para dezenas de ids
 13.32, o pacote 13.32 é o que está nas máquinas e no staging, e existe tag pública
 (`dudantas/tibia-client@13.32.14520`). A validação que o tibia-idle fez para o 13.10 é substituída
 pelo spike da Fase 0, que valida a versão escolhida contra a engine real.
@@ -499,7 +499,7 @@ sobre a criatura; modo manual (E10) traduzindo `Attack`, `UseItem` e `Move`; pon
 
 ## 10. O que precisa ser decidido antes da Fase 1
 
-Quatro perguntas, cada uma com a recomendação deste plano. As respostas viram o **ADR 0060**
+Quatro perguntas, cada uma com a recomendação deste plano. As respostas viram o **ADR 0061**
 ("OTClient em WebAssembly como renderizador do mundo"), que substitui em parte o ADR 0007 e
 emenda o ADR 0016.
 

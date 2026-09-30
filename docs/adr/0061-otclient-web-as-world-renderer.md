@@ -1,4 +1,4 @@
-# 0060 — OTClient em WebAssembly como renderizador do mundo
+# 0061 — OTClient em WebAssembly como renderizador do mundo
 
 **Status:** proposto
 **Data:** 2026-09-10
