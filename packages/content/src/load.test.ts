@@ -1454,7 +1454,10 @@ describe('a apresentação do monstro no conteúdo real (#620, M44-02)', () => {
   // Números do Canary (`data-otservbr-global/monster/*`, conferidos em 2026-09-30): os campos
   // `monster.outfit.look*`, `monster.voices`, `monster.light` e `monster.race` são apresentação —
   // nenhum deles entra em combate, e nenhum é arte.
-  const { monsters, appearances } = loadContent(DATA);
+  const content = loadContent(DATA);
+  const { monsters } = content;
+  const { appearances } = content;
+  if (appearances === undefined) throw new Error('o conteúdo real não carregou a tabela de aparências');
 
   it('o Rat fala, e o Dragon grita — `voices` do Canary, com intervalo 5000 ms e chance 10', () => {
     expect(monsters.get('rat')?.voices).toEqual({
