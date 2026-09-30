@@ -8,8 +8,8 @@ contador, nunca guardados à parte). Desde o #602, a ECONOMIA de Charms existe: 
 do Canary `main` importados para `content/data/charms/generated/`, o registro `charms`
 (ADR 0052 d.1 — primeira issue a materializar o padrão) e as três intenções (`charm-unlock`,
 `charm-assign`, `charm-remove`), aceitas na Cidade e na hunt (ADR 0052 d.4). Desde o #603, os
-Charms AGEM em combate — 24 dos 25 (o Scavenge é a esfola do #626) rolam no perfil `combat-v4`,
-na ordem do Canary. Faltam as recompensas especiais por monstro do PRD (§18.4) e a regra de
+Charms AGEM em combate — 24 dos 25 rolam no perfil `combat-v4`, na ordem do Canary; o 25º, o
+Scavenge, age na esfola de cadáver (#626, ver `docs/product/items.md`). Faltam as recompensas especiais por monstro do PRD (§18.4) e a regra de
 Guild War (§18.5, que não tem Guild War para valer).
 **PRD:** §18
 **Épico:** E7
@@ -196,7 +196,7 @@ centrada em 0,5): um Dodge "de 5 %" dispara em ~1,4 % dos golpes. Só os ofensiv
 escrita. A tabela de números reais está em `docs/product/combat-conformance.md`.
 
 **O que fica de fora ou diverge do `47dfd51`** (cada item está justificado no comentário da função
-e na PR do #603): o Scavenge (#626); o Parry rolado duas vezes (o primeiro ponto do Canary cura o
+e na PR do #603): o Parry rolado duas vezes (o primeiro ponto do Canary cura o
 monstro por um erro de sinal); o teto de level dos elementais que o Canary reatribui globalmente
 depois da primeira morte por Carnage; o Gut, que no Canary confere um tipo de item que nenhum item
 declara (aqui vale para os creature products do importador); o `getCharmChanceModifier()` das
@@ -285,7 +285,10 @@ ordem faria o terceiro marco fechar antes do segundo.
   primeiro que pedir, não antes.
 - **Guild War** (§18.5): "os bônus valem só em PvE" é verdade por falta de PvP, não por regra
   escrita. A regra entra com a Guild War.
-- **O Scavenge** (esfola/dust) é o #626; o efeito dos outros 24 Charms em combate é o #603 (ver
+- **O Scavenge** (esfola/dust) age na esfola de cadáver (#626): encolhe o `chanceRange` do
+  `skinning.lua` e vale no cadáver do monstro escolhido e nos que compartilham o dele — ver
+  "Esfola de cadáver" em `docs/product/items.md`, inclusive a estranheza do Canary em que o
+  tier 3 fica abaixo da chance sem charm. O efeito dos outros 24 Charms em combate é o #603 (ver
   "Charms em combate").
 
 ## Divergências do PRD

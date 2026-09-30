@@ -166,3 +166,29 @@ capacidade e preço são do servidor. **9** — só a sessão dona toca cadáver
 `api` continua sem escrever nada. **10** — venda (automática ou manual) entra em `goldGained` e
 `removedInstances` viaja no extrato com `(session_id, seq)`; item apodrecido nunca existiu no
 banco. **11** — o `autoLoot` sem trava de Premium é a automação legítima.
+
+## Emenda — 2026-09-29: a esfola de cadáver (#626)
+
+As decisões 5 e 6 deste ADR e a direção do plano do endgame (`docs/endgame-plan.md` §3 M44-08)
+mandam o material da esfola cair no cadáver e seguir o filtro de Quick Loot. A implementação do
+#626 (`sim/skinning.ts`, `rulesets/hunt.ts`, `scripts/catalog/skinning.ts`) decidiu o resto dentro
+desse espaço — o detalhe de produto está em `docs/product/items.md` ("Esfola de cadáver") e o de RNG em
+`docs/product/combat-conformance.md` ("Estágio #626"):
+
+- **O bot esfola no abate, no mesmo evento em que coleta**, depois de todo o sorteio de loot, e o
+  material entra em `CorpseState.items` antes de `#collectFromCorpse` — passa pelo filtro, pela
+  autovenda e pela capacidade como qualquer item do cadáver (decisão 3). Sem ferramenta o
+  `session.rng` não é tocado (estágio declarado do `combat-v4`).
+- **A janela de esfola é por estágio da cadeia de decaimento**, não pela vida inteira do cadáver
+  que a decisão 6 descreve: o Canary esfola pelo id do item que o cadáver É agora, e o Dragon só é
+  esfolável nos 310 s dos 670 s. Por isso `CorpseState` ganha `diedAtMs` (a idade) e `skinned` (a
+  tentativa gasta o cadáver, com ou sem sucesso), ambos opcionais na leitura — sem bump de
+  `SNAPSHOT_FORMAT_VERSION`; cadáver sem `diedAtMs` não se esfola à mão (idade desconhecida).
+- **À mão é `use-item-on` com `target: { position }`** no tile do cadáver, com o alcance
+  `canUseFar` do ADR 0049 d.3 (7×5, mesmo andar, linha de visão). O material da esfola manual
+  passa só ele pelo filtro (`#collectItems`, extraído de `#collectFromCorpse`): o que já esperava
+  no cadáver não é reprocessado.
+- **Em party**, com `splitLoot` ligado esfola o primeiro elegível com a ferramenta e o material
+  vai para a bolsa; com ele desligado esfola o dono sorteado do cadáver.
+- **O material NÃO tem origem própria**: entra como `loot` (a origem padrão de `item_instance`),
+  porque nasce do abate e o ledger não distingue — nenhuma migração.
