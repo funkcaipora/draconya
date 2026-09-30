@@ -577,6 +577,79 @@ describe('HUD deltas', () => {
     });
   });
 
+  it('applies the Loyalty bonus and each skill\'s effective level from player-stats (#628)', () => {
+    applyMessage(
+      {
+        type: 'player-stats',
+        health: 150, maxHealth: 185, mana: 30, maxMana: 35,
+        level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+        ammo: { arrow: null, bolt: null },
+        vocationId: null,
+        promoted: false, fightMode: 'attack',
+        speed: 125,
+        skills: {
+          fist: { level: 11, percentToNext: 60 },
+          club: { level: 9, percentToNext: 10 },
+          sword: { level: 100, percentToNext: 40, loyaltyLevel: 104 },
+          axe: { level: 13, percentToNext: 5 },
+          distance: { level: 14, percentToNext: 75 },
+          magic: { level: 20, percentToNext: 20, loyaltyLevel: 22 },
+        },
+        magicLevel: { level: 20, percentToNext: 20, loyaltyLevel: 22 },
+        loyaltyBonusPercent: 50,
+        soul: 0,
+        soulMax: 0,
+      },
+      0,
+    );
+
+    expect(hud.get().loyaltyBonusPercent).toBe(50);
+    // O nível efetivo só existe onde o servidor o mandou; o resto fica sem a chave.
+    expect(hud.get().skills.sword).toEqual({ level: 100, percent: 40, loyaltyLevel: 104 });
+    expect(hud.get().skills.magic).toEqual({ level: 20, percent: 20, loyaltyLevel: 22 });
+    expect(hud.get().skills.fist).toEqual({ level: 11, percent: 60 });
+
+    // Um `player-stats` sem o bônus (conta sem degrau, ou nó anterior) volta a zero — e o nível
+    // efetivo some junto, em vez de ficar preso ao valor anterior.
+    applyMessage(
+      {
+        type: 'player-stats',
+        health: 150, maxHealth: 185, mana: 30, maxMana: 35,
+        level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+        ammo: { arrow: null, bolt: null },
+        vocationId: null,
+        promoted: false, fightMode: 'attack',
+        speed: 125,
+        skills: { sword: { level: 100, percentToNext: 40 }, magic: { level: 20, percentToNext: 20 } },
+        magicLevel: { level: 20, percentToNext: 20 },
+        soul: 0,
+        soulMax: 0,
+      },
+      0,
+    );
+    expect(hud.get().loyaltyBonusPercent).toBe(0);
+    expect(hud.get().skills.sword).toEqual({ level: 100, percent: 40 });
+  });
+
+  it('applies the Loyalty bonus from session-state.self too, for whoever reattaches (#628)', () => {
+    applyMessage({
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0,
+        skills: { sword: { level: 100, percentToNext: 0, loyaltyLevel: 104 } },
+        magicLevel: { level: 0, percentToNext: 0 },
+        loyaltyBonusPercent: 50,
+        soul: 0, soulMax: 0,
+      },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    } as S2CMessage, 0);
+    expect(hud.get().loyaltyBonusPercent).toBe(50);
+    expect(hud.get().skills.sword).toEqual({ level: 100, percent: 0, loyaltyLevel: 104 });
+  });
+
   it('keeps the skills a node older than SV-04 does not send, but takes its speed', () => {
     hud.set((state) => ({
       ...state,
