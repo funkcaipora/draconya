@@ -607,6 +607,11 @@ body {
 .action-slot-auto {
   animation: action-slot-auto-pulse 2s ease-in-out infinite;
 }
+/* Magia ainda NÃO aprendida (#624, ADR 0058 d.5): o slot fica na barra — nada é escondido (ADR
+   0032 d.5) —, apagado e com a borda tracejada; o servidor recusa o disparo de qualquer jeito. */
+.action-slot-unlearned {
+  opacity: .5; border-style: dashed; filter: grayscale(.6);
+}
 
 /* ---- O modal de configuração de slot (#437, AB-11, régua da imagem #435, ADR 0033) ---------- */
 .action-config-top {
@@ -1787,6 +1792,27 @@ div.hunt-pill-pending { cursor: default; }
   color: var(--gold-5); font: 8px var(--font-mono); padding: 2px 6px; cursor: pointer;
 }
 .blessing-buy:disabled { opacity: 0.45; cursor: default; }
+
+/* As magias da vocação, dentro do CharacterModal (#624, ADR 0058 d.2): a mesma forma de lista das
+   bênçãos, rolável — são dezenas por vocação. Sem arte (invariante 6). */
+.spell-shop-list {
+  list-style: none; margin: 0; padding: 0 4px 0 0; display: grid; gap: 4px;
+  max-height: 220px; overflow-y: auto;
+}
+.spell-shop-entry {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 4px 6px; background: var(--ash-2); border: 1px solid var(--ash-5); border-radius: 3px;
+  font: 8px var(--font-mono); color: var(--parchment-2);
+}
+.spell-shop-name { flex: 1 1 auto; }
+.spell-shop-meta { color: var(--text-faint); white-space: nowrap; }
+.spell-shop-state { color: var(--text-muted); white-space: nowrap; }
+.spell-shop-entry[data-status="learned"] .spell-shop-state { color: var(--gold-5); }
+.spell-shop-buy {
+  background: var(--ash-3); border: 1px solid var(--gold-4); border-radius: 3px;
+  color: var(--gold-5); font: 8px var(--font-mono); padding: 2px 6px; cursor: pointer;
+}
+.spell-shop-buy:disabled { opacity: 0.45; cursor: default; }
 
 /* ---- Explorador do mundo (#661) ---------------------------------------------------------- */
 /* O mapa inteiro com câmera livre, em /world. O mundo ocupa a tela; o painel flutua no canto. */

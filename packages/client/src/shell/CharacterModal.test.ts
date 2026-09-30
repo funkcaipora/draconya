@@ -132,6 +132,72 @@ describe('CharacterModal', () => {
     expect(html).not.toMatch(/guild|premium/i);
   });
 
+  describe('magias (#624, ADR 0058 d.2)', () => {
+    const CATALOGUE_WITH_SPELLS = {
+      ...CATALOGUE_WITH_BESTIARY,
+      bot: {
+        ...CATALOGUE_WITH_BESTIARY.bot,
+        spells: [
+          { id: 'wound-cleansing', name: 'Wound Cleansing', manaCost: 40, minLevel: 8, vocationId: 'knight', effect: 'heal', group: 'healing', learnPrice: 0 },
+          { id: 'berserk', name: 'Berserk', manaCost: 115, minLevel: 35, vocationId: 'knight', effect: 'damage', group: 'attack', learnPrice: 2_500 },
+          { id: 'annihilation', name: 'Annihilation', manaCost: 300, minLevel: 110, vocationId: 'knight', effect: 'damage', group: 'attack', learnPrice: 20_000 },
+          { id: 'haste-druid', name: 'Haste', manaCost: 60, minLevel: 14, vocationId: 'druid', effect: 'haste', group: 'support', learnPrice: 600 },
+          { id: 'great-death-beam', name: 'Great Death Beam', manaCost: 140, minLevel: 30, vocationId: 'knight', effect: 'damage', group: 'attack' },
+        ],
+      },
+    } as unknown as Catalogue;
+
+    it('lists the vocation spells with level, mana and price, and never the other vocations\'', async () => {
+      hud.set(() => ({
+        ...INITIAL_HUD, level: 40, gold: 10_000, vocationId: 'knight', catalogue: CATALOGUE_WITH_SPELLS,
+        learnedSpells: [],
+      }));
+
+      const html = await render();
+      expect(html).toContain('Magias');
+      expect(html).toContain('Berserk');
+      expect(html).toContain('LV 35 · 115 mana');
+      expect(html).toContain('2500 gold');
+      expect(html).toContain('Grátis');
+      expect(html).not.toContain('Haste');
+    });
+
+    it('offers the purchase only where the server would accept it, and says why otherwise', async () => {
+      hud.set(() => ({
+        ...INITIAL_HUD, level: 40, gold: 2_000, vocationId: 'knight', catalogue: CATALOGUE_WITH_SPELLS,
+        learnedSpells: ['wound-cleansing'],
+      }));
+
+      const html = await render();
+      // Aprendida: rótulo, sem botão. Sem saldo: o botão existe e está desabilitado. Sem level:
+      // rótulo do level, sem botão. Sem quem a ensine: "Indisponível".
+      expect(html).toContain('Aprendida');
+      expect(html).toContain('Level 110');
+      expect(html).toContain('Indisponível');
+      expect(html).toMatch(/<button[^>]*class="spell-shop-buy"[^>]*disabled/);
+      expect((html.match(/spell-shop-buy/g) ?? []).length).toBe(1);
+    });
+
+    it('enables the button when level, vocation and gold match', async () => {
+      hud.set(() => ({
+        ...INITIAL_HUD, level: 40, gold: 10_000, vocationId: 'knight', catalogue: CATALOGUE_WITH_SPELLS,
+        learnedSpells: [],
+      }));
+
+      const html = await render();
+      expect(html).not.toMatch(/<button[^>]*class="spell-shop-buy"[^>]*disabled/);
+      expect((html.match(/class="spell-shop-buy"/g) ?? []).length).toBe(2);
+    });
+
+    it('hides the box without a chosen vocation, or without the catalogue', async () => {
+      hud.set(() => ({ ...INITIAL_HUD, level: 40, vocationId: null, catalogue: CATALOGUE_WITH_SPELLS }));
+      expect(await render()).not.toContain('spell-shop-list');
+
+      hud.set(() => ({ ...INITIAL_HUD, level: 40, vocationId: 'knight', catalogue: null }));
+      expect(await render()).not.toContain('spell-shop-list');
+    });
+  });
+
   describe('promoção (#566, ADR 0042 decisão 1)', () => {
     it('shows the service box with requirement and price when the vocation can promote', async () => {
       hud.set(() => ({

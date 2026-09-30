@@ -381,6 +381,13 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       }));
       return;
 
+    case 'learned-spells':
+      // SUBSTITUI, como as bênçãos: é o registro INTEIRO das magias aprendidas (#624, ADR 0058),
+      // não um delta — o servidor manda no attach e a cada `learn-spell` aceito. A tela resolve
+      // nome, preço e requisito pelo catálogo (invariante 6).
+      hud.set((state) => ({ ...state, learnedSpells: message.spellIds }));
+      return;
+
     case 'blessings':
       // O BITMASK inteiro (#570, ADR 0052) — nunca um delta. Compra e consumo na morte chegam
       // pela mesma mensagem, e a tela resolve os nomes pelo catálogo (invariante 6).
