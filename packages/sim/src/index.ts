@@ -24,6 +24,7 @@ export * from './item-loss.js';
 export * from './skills.js';
 export * from './bestiary.js';
 export * from './charms.js';
+export * from './learned-spells.js';
 export * from './party.js';
 export * from './inventory.js';
 export * from './item-overlay.js';

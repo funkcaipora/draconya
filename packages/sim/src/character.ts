@@ -1,7 +1,7 @@
 // Estado quente do personagem. A sessão dona é o único objeto que escreve aqui
 // (invariante 9) — é também o que dispensa lock sobre o gold.
 
-import type { AmmoFamily, Ammunition, Item, Vocation } from '@draconya/content';
+import type { AmmoFamily, Ammunition, Item, Spell, Vocation } from '@draconya/content';
 import type { Direction } from './area.js';
 import { FULL_BLOCK_CHARGE, isFullBlockCharge } from './combat/block-charge.js';
 import type { BlockChargeState } from './combat/block-charge.js';
@@ -21,6 +21,8 @@ import { Contribution } from './death.js';
 import type { ContributionState } from './death.js';
 import { Inventory } from './inventory.js';
 import type { CarriedItem, ContainerRules, InventoryState } from './inventory.js';
+import { LearnedSpells } from './learned-spells.js';
+import type { LearnedSpellsState, LearnSpellResult } from './learned-spells.js';
 import { Skills } from './skills.js';
 import type { SkillsState } from './skills.js';
 import { UNSET_STORAGE_VALUE, readCharacterStorage } from './character-storage.js';
@@ -123,6 +125,14 @@ export interface CharacterState {
    * nunca gastou um ponto de Charm — a mesma degradação de `bestiary`.
    */
   readonly charms?: CharmsState;
+  /**
+   * As magias que o personagem APRENDEU (#624, ADR 0058 d.1, ADR 0052 d.1) — o cast confere
+   * (`casting.ts`). Ausente é personagem que nunca comprou magia nenhuma, ou snapshot anterior a
+   * esta issue — e aí ele não lança nada, que é o que o Tibia faz com quem não aprendeu. Quem
+   * já existia antes da #624 ganha o registro pela migração de dado do servidor (ADR 0014), não
+   * por este default.
+   */
+  readonly learnedSpells?: LearnedSpellsState;
   /**
    * Quanto ele aguenta carregar (§21.5). Vem da tabela de progressão, como `maxHealth`.
    *
@@ -403,6 +413,8 @@ export class CharacterRuntime {
   readonly bestiary: Bestiary;
   /** Mutado no lugar a cada intenção de Charm aceita — ver `Charms.unlock`/`assign`/`remove`. */
   readonly charms: Charms;
+  /** Mutado no lugar a cada `learn-spell` aceito — ver `learnSpell`. O cast confere `has`. */
+  readonly learnedSpells: LearnedSpells;
   capacity: number;
   /** Mutado ao equipar e ao receber item. Só a sessão dona escreve (invariante 9). */
   readonly inventory: Inventory;
@@ -500,6 +512,7 @@ export class CharacterRuntime {
     this.skills = Skills.fromState(state.skills);
     this.bestiary = Bestiary.fromState(state.bestiary);
     this.charms = Charms.fromState(state.charms);
+    this.learnedSpells = LearnedSpells.fromState(state.learnedSpells);
     this.capacity = state.capacity ?? 0;
     this.inventory = Inventory.fromState(state.inventory);
     this.lootSeq = state.lootSeq ?? 0;
@@ -699,6 +712,27 @@ export class CharacterRuntime {
   }
 
   /**
+   * Aprende uma magia por gold (#624, ADR 0058 d.2) — o `StdModule.learnSpell` do Canary: confere
+   * vocação, level e saldo, cobra `learnPrice` e marca a magia aprendida numa transação só. O
+   * saldo é `gold + goldDelta` (um gasto anterior na mesma sessão já baixou o que sobra), e o
+   * preço sai por `goldDelta`, liquidado pelo MESMO canal que já debita venda e promoção
+   * (invariante 10) — nenhum ledger novo. **Idempotente**: aprender de novo é recusado
+   * (`already-learned`) antes de qualquer débito, então repetir a intenção — retry do cliente,
+   * clique duplo — nunca cobra duas vezes.
+   *
+   * `spell` é a magia do CATÁLOGO (o chamador a resolve, `sim` não conhece o mapa); `undefined` é
+   * `unknown-spell`. Quem decide se a intenção chega aqui — Cidade ou hunt, invariante 9 — é o
+   * host: aprender não rola nada, então as duas sessões a aceitam (ADR 0052 d.4).
+   */
+  learnSpell(spell: Spell | undefined): LearnSpellResult {
+    const result = this.learnedSpells.learn(spell, {
+      level: this.level, vocationId: this.vocationId, gold: this.gold + this.goldDelta,
+    });
+    if (result.ok) this.goldDelta -= result.price;
+    return result;
+  }
+
+  /**
    * Escolhe a postura de luta (M30-03, #550) — o `Player::setFightMode` do Canary, sem o
    * `sendStats`/`sendSkills` (apresentação, do host). Devolve se o modo MUDOU: quem chama só
    * marca o personagem como sujo e reenvia os stats quando mudou, e escolher o modo em que já
@@ -732,6 +766,9 @@ export class CharacterRuntime {
       skills: this.skills.getState(),
       bestiary: this.bestiary.getState(),
       charms: this.charms.getState(),
+      // Só quando o registro é a verdade do personagem (`recorded`): um snapshot restaurado de antes
+      // da #624 não tem a chave, e reescrevê-la vazia apagaria a concessão da migração 0023.
+      ...(this.learnedSpells.recorded ? { learnedSpells: this.learnedSpells.getState() } : {}),
       capacity: this.capacity,
       inventory: this.inventory.getState(),
       lootSeq: this.lootSeq,

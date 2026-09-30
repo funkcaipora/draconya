@@ -11,6 +11,7 @@ import type { BestiaryState } from '../bestiary.js';
 import type { SkillsState } from '../skills.js';
 import type { InventoryState } from '../inventory.js';
 import { resolveDeath } from '../death.js';
+import { learnedSpellsStateOf } from '../learned-spells.js';
 import { DEFAULT_DIFFICULTY_NAME, huntListings } from '../hunt/catalogue.js';
 import { FORWARD } from '../area.js';
 import { CHALLENGE_CONDITION_KEY, MonsterRuntime, monsterSubject } from '../monster/monster.js';
@@ -326,6 +327,15 @@ const raw = (over: Partial<RawContent> = {}): RawContent => {
 
 const content = (over: Partial<RawContent> = {}): Content => buildContent(raw(over));
 
+/**
+ * O herói sabe TODA magia que o conteúdo do teste declara (#624). O portão do aprendizado é o
+ * assunto de um bloco só (`o aprendizado (#624)`), e o resto deste arquivo é sobre o que vem
+ * depois dele — cooldown, alvo, mana, o bot. Quem quer o herói que NÃO aprendeu monta o dele.
+ */
+function knowsEverythingIn(hero: CharacterRuntime, loaded: Content): void {
+  for (const id of loaded.spells.keys()) hero.learnedSpells.grant(id);
+}
+
 const character = (
   over: Partial<{
     health: number; staminaMs: number; skills: SkillsState; inventory: InventoryState;
@@ -380,6 +390,7 @@ function start(
     ...(options.bestiary === undefined ? {} : { bestiary: options.bestiary }),
     ...(options.gold === undefined ? {} : { gold: options.gold }),
   });
+  knowsEverythingIn(hero, options.loaded ?? defaultContent);
   session.enter(hero);
   return { session, hero, ruleset: session.ruleset as HuntRuleset };
 }
@@ -2795,6 +2806,7 @@ describe('cura em área — Mass Healing (#475, RF-05)', () => {
       level: 1, xp: 0, vocationId: null,
       staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
       gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+      learnedSpells: learnedSpellsStateOf(loaded.spells.keys()),
     });
     const caster = make('hero');
     session.enter(caster);
@@ -2852,6 +2864,7 @@ describe('alvo de party e custo por tamanho da party (#588)', () => {
     level: 1, xp: 0, vocationId: null,
     staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
     gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+    learnedSpells: learnedSpellsStateOf([...spells.map((spell) => spell.id), healParty.id]),
   });
 
   it('cobra o custo do Canary escalado por quem está no alcance, e aplica a MESMA condição a cada um', () => {
@@ -2988,6 +3001,12 @@ const withSpells = (
     combat?: readonly unknown[]; monstersRaw?: readonly unknown[];
     /** Equipamento inicial (M30-04, #551) — ausente é o herói nu de sempre. */
     inventory?: InventoryState;
+    /**
+     * As magias que o herói APRENDEU (#624). Ausente é o herói que sabe TODA magia do conteúdo
+     * (`knowsEverythingIn`) — o resto do arquivo é sobre o que vem depois do portão do
+     * aprendizado; quem prende o portão passa a lista, `[]` inclusive.
+     */
+    learned?: readonly string[];
   } = {},
   difficulty: 'cautious' | 'bold' = 'cautious',
 ) => {
@@ -3022,6 +3041,8 @@ const withSpells = (
     gold: over.gold ?? 1_000, goldDelta: 0, alive: true, cooldowns: {},
     ...(over.inventory === undefined ? {} : { inventory: over.inventory }),
   });
+  if (over.learned === undefined) knowsEverythingIn(hero, loaded);
+  else for (const id of over.learned) hero.learnedSpells.grant(id);
   session.enter(hero);
   return { session, hero, ruleset: session.ruleset as HuntRuleset, content: loaded };
 };
@@ -4823,6 +4844,7 @@ describe('a configuração do bot atravessa o snapshot (FUN-81)', () => {
       level: 1, xp: 0, vocationId: null, staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
       gold: 1_000, goldDelta: 0, alive: true, cooldowns: {},
     });
+    knowsEverythingIn(hero, loaded);
     session.enter(hero);
     return { session, hero, loaded };
   };
@@ -4938,6 +4960,7 @@ describe('trocar a configuração no meio da hunt (FUN-81)', () => {
       level: 1, xp: 0, vocationId: null, staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
       gold: 0, goldDelta: 0, alive: true, cooldowns: {},
     });
+    knowsEverythingIn(hero, loaded);
     session.enter(hero);
 
     run(session, 3_000, 100);
@@ -6116,6 +6139,7 @@ describe('o alcance da magia é o DELA, não o da arma (FUN-92)', () => {
       level: 1, xp: 0, vocationId: null, staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
       gold: 0, goldDelta: 0, alive: true, cooldowns: {},
     });
+    knowsEverythingIn(hero, loaded);
     session.enter(hero);
     const ruleset = session.ruleset as HuntRuleset;
 
@@ -10875,6 +10899,7 @@ describe('Invocação do PERSONAGEM (#598, M38-01, ADR 0057)', () => {
       mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
       staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0, goldDelta: 0, alive: true, cooldowns: {},
     });
+    knowsEverythingIn(a, loaded);
     session.enter(a);
     session.enter(b);
     const ruleset = session.ruleset as HuntRuleset;
@@ -11223,7 +11248,9 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
         id: `dragon-mitigation-${spellId}`, content: loaded, huntId: 'arena',
         difficulty: 'cautious', createdAtMs: 0, botConfig: config,
       });
-      session.enter(heroLevel200());
+      const hero = heroLevel200();
+      knowsEverythingIn(hero, loaded);
+      session.enter(hero);
       const events: DomainEvent[] = [];
       for (let t = 0; t < 10_000 && session.ended === null; t += 100) {
         session.advanceBy(100);
@@ -13683,6 +13710,7 @@ describe('cura e suporte com alvo (§D11, #399)', () => {
       level: 1, xp: 0, vocationId: null,
       staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
       gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+      learnedSpells: learnedSpellsStateOf(loaded().spells.keys()),
     });
 
   const healRule = (target: ReturnType<typeof botConfig>['heal'][number]['target']) => botConfig({
@@ -14640,6 +14668,114 @@ describe('estado dos slots (AB-09, UC-BAR-003)', () => {
     const outcomeNoGold = noGold.ruleset.useSlot(noGold.session, 'hero', 0, 0);
     expect(outcomeNoGold.ok).toBe(false);
     if (!outcomeNoGold.ok) expect(stateNoGold.reason).toBe(outcomeNoGold.reason);
+  });
+});
+
+describe('o aprendizado (#624, ADR 0058 d.1): magia não aprendida', () => {
+  // O bot PULA o slot — como pula a magia sem mana — e nunca encerra a hunt por isso; o manual
+  // recusa com motivo próprio; e o espelho do `slotStates` marca o slot (DT-08).
+  const grupo = [
+    {
+      id: 'cura-forte', name: 'Cura Forte', manaCost: 50, cooldownMs: 1_000,
+      group: 'healing', groupCooldownMs: 1_000, effect: { kind: 'heal', amount: 200 },
+    },
+    {
+      id: 'cura-fraca', name: 'Cura Fraca', manaCost: 10, cooldownMs: 1_000,
+      group: 'healing', groupCooldownMs: 1_000, effect: { kind: 'heal', amount: 20 },
+    },
+  ];
+  const cura = (spellId: string) => ({
+    when: { kind: 'hp' as const, op: '<=' as const, percent: 100 },
+    do: { kind: 'spell' as const, spellId },
+  });
+
+  it('o bot PULA o slot da magia não aprendida e o de baixo do MESMO grupo dispara no ciclo', () => {
+    const { session, hero } = withSpells(botConfig({
+      heal: [cura('cura-forte'), cura('cura-fraca')],
+    }), { health: 1_000, mana: 500, spells: [...spells, ...grupo], monsters: false, learned: ['cura-fraca'] });
+
+    session.advanceBy(50);
+
+    // `cura-forte` (200) NÃO foi aprendida e é pulada; `cura-fraca` (20, mana 10) sai no mesmo ciclo.
+    expect(hero.mana).toBe(490);
+    expect(hero.health).toBe(1_020);
+    expect(session.ended).toBeNull();
+  });
+
+  it('o slot não aprendido não gasta mana, não inicia cooldown e NÃO encerra a hunt', () => {
+    const { session, hero } = withSpells(botConfig({
+      heal: [cura('cura-forte')],
+    }), { health: 1_000, mana: 500, spells: [...spells, ...grupo], monsters: false, learned: [] });
+
+    run(session, 10_000, 100);
+
+    expect(hero.mana).toBe(500);
+    expect(hero.health).toBe(1_000);
+    expect(hero.cooldowns.remainingMs('spell:cura-forte', session.nowMs)).toBe(0);
+    expect(session.ended).toBeNull();
+  });
+
+  it('aprender NO MEIO da hunt destrava o slot: `rearmBot` acorda o bot, sem trocar a configuração', () => {
+    // `learn-spell` é aceito na hunt (ADR 0052 d.4) — o efeito é o registro do personagem, e a
+    // regra que estava sendo pulada passa a valer no ciclo seguinte.
+    const { session, hero } = withSpells(botConfig({
+      heal: [cura('cura-forte')],
+    }), { health: 1_000, mana: 500, spells: [...spells, ...grupo], monsters: false, learned: [] });
+    run(session, 2_000, 100);
+    expect(hero.mana).toBe(500);
+
+    // A recusa por `spell-not-learned` não tem prazo: o grupo fica ENGATILHADO até o mundo mudar,
+    // e aprender uma magia não muda o mundo. Numa hunt que anda o próximo passo já o reavalia;
+    // `rearmBot` é o que o faz NA HORA, inclusive com o personagem parado.
+    hero.learnedSpells.grant('cura-forte');
+    (session.ruleset as HuntRuleset).rearmBot(session, 'hero');
+    run(session, 1_000, 100);
+
+    expect(hero.mana).toBeLessThan(500);
+    expect(hero.health).toBeGreaterThan(1_000);
+  });
+
+  it('o resultado não depende da cadência: 10 Hz e 1 Hz pulam o mesmo slot e curam o mesmo tanto (invariante 2)', () => {
+    const at = (hz: number) => {
+      const { session, hero } = withSpells(botConfig({
+        heal: [cura('cura-forte'), cura('cura-fraca')],
+      }), { health: 1_000, mana: 500, spells: [...spells, ...grupo], monsters: false, learned: ['cura-fraca'] });
+      run(session, 10_000, 1000 / hz);
+      return { mana: hero.mana, health: hero.health };
+    };
+    expect(at(1)).toEqual(at(10));
+  });
+
+  it('o manual recusa com `not-learned` — e é o MESMO motivo que o espelho de `slotStates` mostra (DT-08)', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([spellSlot('heal')]), {
+      health: 100, mana: 200, monsters: false, learned: [],
+    });
+    const outcome = ruleset.useSlot(session, 'hero', 0, 0);
+    expect(outcome).toEqual({ ok: false, reason: 'not-learned', retryInMs: 0 });
+    // Marcado no espelho, sem mutar nada.
+    expect(ruleset.slotStates(session, hero)[0]).toMatchObject({ state: 'blocked', reason: 'not-learned' });
+    expect(hero.mana).toBe(200);
+    expect(hero.health).toBe(100);
+    expect(hero.cooldowns.remainingMs('spell:heal', session.nowMs)).toBe(0);
+  });
+
+  it('depois de aprender, o mesmo slot manual sai e o espelho volta a `ready`', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([spellSlot('heal')]), {
+      health: 100, mana: 200, monsters: false, learned: [],
+    });
+    expect(ruleset.useSlot(session, 'hero', 0, 0).ok).toBe(false);
+    hero.learnedSpells.grant('heal');
+    expect(ruleset.slotStates(session, hero)[0]).toMatchObject({ state: 'ready' });
+    expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+    expect(hero.health).toBe(160);
+  });
+
+  it('o supply (poção e runa) NÃO exige aprendizado: só a MAGIA', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([
+      { do: { kind: 'supply', supplyId: 'health-potion' } },
+    ]), { health: 1_000, gold: 100, monsters: false, learned: [] });
+    expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+    expect(hero.health).toBe(1_080);
   });
 });
 
@@ -15792,6 +15928,7 @@ describe('linha de visão (#553)', () => {
       staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
       gold: 0, goldDelta: 0, alive: true, cooldowns: {},
     });
+    knowsEverythingIn(hero, loaded);
     session.enter(hero);
     const ruleset = session.ruleset as HuntRuleset;
     session.advanceBy(50);

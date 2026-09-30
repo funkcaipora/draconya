@@ -484,7 +484,13 @@ export type SlotRefusal =
    * A invocação (#598, M38-01, ADR 0057 decisão 3): sem `monsterId`, monstro fora do catálogo,
    * não `summonable`, ou teto de 2 invocações vivas já atingido.
    */
-  | 'not-summonable';
+  | 'not-summonable'
+  /**
+   * A magia do slot ainda não foi APRENDIDA (#624, ADR 0058 d.1): `learn-spell` a compra. O slot
+   * continua na barra, marcado — nada é escondido (ADR 0032 d.5) —, e o disparo é recusado com
+   * este motivo, próprio para o tooltip dizer "aprenda" em vez de "indisponível".
+   */
+  | 'not-learned';
 
 /** O resultado do disparo manual: sucesso, ou recusa tipada com o prazo quando é cooldown. */
 export type SlotOutcome =
@@ -618,6 +624,7 @@ export function refusalOf(result: CastRefused): SlotRefusal {
     case 'not-enough-gold': return 'not-enough-gold';
     case 'attack-locked': return 'attack-locked';
     case 'not-summonable': return 'not-summonable';
+    case 'spell-not-learned': return 'not-learned';
   }
 }
 
@@ -5259,6 +5266,20 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
+   * Acorda o bot de um personagem cuja CAPACIDADE mudou por fora dele (#624): ele aprendeu uma
+   * magia no meio da hunt (`learn-spell` é aceito nela, ADR 0052 d.4), e a regra que o bot vinha
+   * PULANDO — recusa sem prazo, `spell-not-learned` — está engatilhada esperando o mundo mudar.
+   * Sem isto, uma cura recém-aprendida só voltaria a valer no próximo dano recebido, e uma de
+   * suporte talvez nunca. É o mesmo `#armBot` que dano, mana e troca de configuração já chamam:
+   * só toca grupo ENGATILHADO (quem tem evento pendente já vai vencer), e a reavaliação é um
+   * evento na fila no instante lógico atual — nada por tick, e o mesmo a 1 Hz e a 10 Hz.
+   */
+  rearmBot(session: Session, characterId: string): void {
+    if (findById(session.participants, characterId) === null) return;
+    this.#armBot(session, characterId);
+  }
+
+  /**
    * Um jogador pediu para andar (FUN-69). Mesmo caminho do bot, mesma razão de recusa.
    *
    * Não mexe no walker: se o passo tirou o personagem da rota, o vencimento seguinte de
@@ -7136,6 +7157,9 @@ const slots = bot.groups.get(group);
       if (spell.vocationId !== undefined && character.vocationId !== spell.vocationId) {
         return blocked('not-in-catalog');
       }
+      // O aprendizado (#624): a MESMA posição que `castSpell` confere — depois de level e
+      // vocação, antes de cooldown/mana/alvo (DT-08: o espelho coincide com o `#perform`).
+      if (!character.learnedSpells.has(spell.id)) return blocked('not-learned');
       // Alvo de party (#588): o mesmo espelho, SEM consumir sorteio nem mutar nada — `<= 1` é a
       // MESMA recusa "No party members in range" que `castSpell` daria, e vem ANTES da mana e da
       // alma, a mesma ordem de `castSpell`.
