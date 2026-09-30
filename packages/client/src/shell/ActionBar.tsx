@@ -114,6 +114,9 @@ export function ActionBar() {
               onClick: (event) => {
                 if (event.shiftKey) { setSlotAuto(index, false); return; }
                 if (view.needsAim) { aimTracker.startAim(activeSet, index); return; }
+                // A Chameleon Rune (#621) mira um ITEM do inventário: o clique seguinte num item da
+                // mochila/bolsa manda o `use-slot` com `target: { instanceId }`.
+                if (view.aimsAtItem) { aimTracker.startItemAim(activeSet, index); return; }
                 sendIntent({ type: 'use-slot', set: activeSet, slot: index });
               },
               // O clique direito CONFIGURA (ADR 0049 decisão 1) — onde o Tibia também põe.

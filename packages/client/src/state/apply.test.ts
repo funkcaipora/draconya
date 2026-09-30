@@ -324,6 +324,88 @@ describe('as cores de outfit (FUN-104)', () => {
   });
 });
 
+describe('a aparência emprestada: creature-update e `object` (#621, M44-03)', () => {
+  const colors = { head: 114, body: 3, legs: 40, feet: 95 };
+
+  it('creature-update troca a aparência e SUBSTITUI o objeto — a posição e o passo em curso ficam', () => {
+    // Mutação que mata: mutar `appearanceId` no lugar (é `readonly`) ou recriar a criatura do
+    // zero, o que apagaria o passo em curso e teleportaria o sprite.
+    applyMessage(spawn(1), 0);
+    applyMessage({ type: 'creature-move', id: 1, from: at(0, 0), to: at(1, 0), durationMs: 400 }, 100);
+    applyMessage({ type: 'creature-update', id: 1, appearanceId: 34 }, 200);
+    const creature = world.creatures.get(1);
+    expect(creature?.appearanceId).toBe(34);
+    expect(creature?.position).toEqual(at(1, 0));
+    expect(creature?.step?.to).toEqual(at(1, 0));
+    expect(creature?.name).toBe('rat-1');
+  });
+
+  it('`object: true` vira a chave do store, e ausente ou `false` a apagam — nunca `undefined`', () => {
+    applyMessage(spawn(1), 0);
+    applyMessage({ type: 'creature-update', id: 1, appearanceId: 3976, object: true }, 0);
+    expect(world.creatures.get(1)?.object).toBe(true);
+    // Voltar ao outfit: o servidor manda a aparência PRÓPRIA, sem `object`.
+    applyMessage({ type: 'creature-update', id: 1, appearanceId: 100 }, 0);
+    const back = world.creatures.get(1);
+    expect(back?.appearanceId).toBe(100);
+    expect(Object.hasOwn(back ?? {}, 'object')).toBe(false);
+    applyMessage({ type: 'creature-update', id: 1, appearanceId: 100, object: false }, 0);
+    expect(Object.hasOwn(world.creatures.get(1) ?? {}, 'object')).toBe(false);
+  });
+
+  it('as cores seguem a mensagem: a ilusão as apaga, e quem volta ao próprio outfit as recebe de novo', () => {
+    applyMessage({
+      type: 'creature-appear', id: 1, position: at(0, 0), appearanceId: 128, name: 'me',
+      health: 20, maxHealth: 20, colors,
+    }, 0);
+    applyMessage({ type: 'creature-update', id: 1, appearanceId: 21 }, 0);
+    expect(Object.hasOwn(world.creatures.get(1) ?? {}, 'colors')).toBe(false);
+    applyMessage({ type: 'creature-update', id: 1, appearanceId: 128, colors }, 0);
+    expect(world.creatures.get(1)?.colors).toEqual(colors);
+  });
+
+  it('update de criatura desconhecida é ignorado — filtrada pelo interesse, ou ainda não anunciada', () => {
+    applyMessage({ type: 'creature-update', id: 99, appearanceId: 34 }, 0);
+    expect(world.creatures.has(99)).toBe(false);
+  });
+
+  it('creature-appear e session-state carregam `object`: quem entra no meio da ilusão a vê vestida', () => {
+    applyMessage({
+      type: 'creature-appear', id: 1, position: at(0, 0), appearanceId: 3976, object: true, name: 'tree',
+      health: 20, maxHealth: 20,
+    }, 0);
+    expect(world.creatures.get(1)?.object).toBe(true);
+    applyMessage({
+      type: 'session-state',
+      sessionType: 'hunt',
+      elapsedMs: 0,
+      self: {
+        creatureId: 2, characterId: 'char-1',
+        health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
+        promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+      },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'rat-cellars',
+        creatures: [
+          { id: 2, position: at(0, 0), appearanceId: 7172, object: true, name: 'snowman', health: 1, maxHealth: 1 },
+          { id: 3, position: at(1, 0), appearanceId: 21, name: 'rat', health: 1, maxHealth: 1 },
+        ],
+      },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+    expect(world.creatures.get(2)?.object).toBe(true);
+    expect(Object.hasOwn(world.creatures.get(3) ?? {}, 'object')).toBe(false);
+  });
+
+  it('nunca avisa um assinante do HUD — a aparência é do mundo, como o passo', () => {
+    applyMessage(spawn(1), 0);
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state, notified);
+    applyMessage({ type: 'creature-update', id: 1, appearanceId: 34 }, 0);
+    expect(notified).not.toHaveBeenCalled();
+  });
+});
+
 describe('combat transients (FUN-106)', () => {
   // Efeito, projétil e número flutuante NÃO são HUD: chegam dezenas por segundo numa hunt, e o
   // caminho deles termina no `world`, que o viewport lê direto e expira sozinho.

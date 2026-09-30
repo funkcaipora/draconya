@@ -504,6 +504,31 @@ Três coisas que seguem disso:
   recém-chegado com o id no lugar do nome, e o teste da FUN-71 não via porque usa os dois
   iguais. O da FUN-104 usa nomes diferentes dos ids de propósito.
 
+## A aparência emprestada é resolvida AQUI, pela tabela (#621, M44-03)
+
+O `sim` emite `creature-look-changed { creatureId, look | null }` — QUEM vestiu o quê, como
+`{ monsterId } | { itemId } | { objectKey }`, nunca um id de arte (invariante 6) — e o hospedeiro o
+traduz em `creature-update` (S2C 46): `monsterId` → `outfitId` do `monsterCatalog`, `itemId` →
+`appearanceId` do `itemCatalog`, `objectKey` → `appearances.looks`; `object: true` marca o registro
+de OBJETO (a criatura virou uma coisa). Quem mexe aqui precisa saber quatro coisas:
+
+- **`#lookFor(hosted, key)` é a fonte ÚNICA do que uma criatura mostra agora** — `creature-appear`,
+  a lista do `session-state` (personagens E monstros) e o `creature-update` leem dele, que pergunta
+  a `HuntRuleset#lookOf` e cai na aparência PRÓPRIA (o outfit do monstro, ou `playerOutfitId` com as
+  cores do ticket). Duas montagens divergem na primeira regra nova, e o reanexado no meio da
+  ilusão precisa ver o mesmo que quem nunca saiu — o estado mora na condição do `sim`, nunca num
+  campo daqui (invariante 3).
+- **Aparência SEM linha na tabela é MUDA**, e o silêncio vale nas duas pontas: a troca não sai, e a
+  volta (`look: null`) sai como a aparência própria, redundante e inofensiva. A condição vale no
+  `sim` do mesmo jeito.
+- **A volta manda a aparência própria, não "a original"**: o cliente não guarda a aparência
+  anterior para voltar a ela, e o `creature-update` do personagem que volta leva as `colors` do
+  ticket de novo (um outfit de monstro não tem cor).
+- **`use-slot`/`use-item`/`use-item-on` aceitam `target: { instanceId }`** (a Chameleon Rune): o
+  host só traduz para `UseSlotTarget { kind: 'item' }` (`#resolveUseSlotTarget`); se a instância
+  existe e é do personagem é do `sim` (`not-illusionable`, "Não é possível."). O catálogo marca o
+  suprimento `chameleon` com `targets: 'item'` e os monstros ilusionáveis com `illusionable`.
+
 ## O Bestiário viaja como as skills: ticket → runtime → extrato → ledger (FUN-113)
 
 `characters.bestiary` é `jsonb` nulável (`{ monsterId: kills }`), e percorre o MESMO caminho

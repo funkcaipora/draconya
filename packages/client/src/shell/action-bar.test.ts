@@ -124,6 +124,23 @@ describe('slotView', () => {
     expect(view?.needsAim).toBe(true);
   });
 
+  it('a Chameleon Rune (`targets: \'item\'`) arma a mira de ITEM, não a de criatura (#621)', () => {
+    const chameleon = catalogue({
+      bot: {
+        ...catalogue().bot,
+        supplies: [{
+          id: 'chameleon-rune', name: 'Chameleon Rune', price: 210, effect: 'chameleon', group: 'support',
+          requires: {}, targets: 'item',
+        }],
+      },
+    });
+    const view = slotView({ do: { kind: 'supply', supplyId: 'chameleon-rune' }, when: [], auto: false }, chameleon, null);
+    expect(view?.aimsAtItem).toBe(true);
+    // A mira de criatura é a do aliado — a runa NÃO a pede (o mundo não tem o que apontar).
+    expect(view?.needsAim).toBe(false);
+    expect(slotView(spellSlot(), catalogue(), null)?.aimsAtItem).toBe(false);
+  });
+
   it('suprimento: nome do catálogo, sem pilha nem contagem', () => {
     const view = slotView(supplySlot(), catalogue(), null);
     expect(view).toMatchObject({ label: 'Poção de Vida', cooldownMs: 0, blocked: false });

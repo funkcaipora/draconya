@@ -75,6 +75,12 @@ export interface SlotView {
    * ação dispara na hora, com o alvo default de sempre (fixado, senão o candidato do bot).
    */
   readonly needsAim: boolean;
+  /**
+   * O clique deste slot precisa da mira num ITEM do inventário (#621, `targets: 'item'`): a
+   * Chameleon Rune veste a aparência do item apontado. O clique arma a mira de item, e o clique
+   * seguinte num item da mochila/bolsa completa o `use-slot`.
+   */
+  readonly aimsAtItem: boolean;
 }
 
 /**
@@ -102,6 +108,7 @@ export function slotView(
     blocked: state?.state === 'blocked',
     auto: slot.auto,
     needsAim: catalogued?.targets === 'friend',
+    aimsAtItem: catalogued?.targets === 'item',
   };
 }
 

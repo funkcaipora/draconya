@@ -71,6 +71,14 @@ function colorsOf(
   return creature.colors === undefined ? {} : { colors: creature.colors };
 }
 
+/**
+ * `object` do protocolo vira a chave do store só quando é `true` (#621): ausente e `false` são o
+ * mesmo outfit de sempre, e o store nunca guarda `undefined` (`exactOptionalPropertyTypes`).
+ */
+function objectOf(creature: { readonly object?: boolean | undefined }): Pick<Creature, 'object'> {
+  return creature.object === true ? { object: true } : {};
+}
+
 export function applyMessage(message: S2CMessage, nowMs: number): void {
   switch (message.type) {
     // --- mundo: nada aqui notifica ninguém ------------------------------------------------
@@ -154,6 +162,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         id: message.id,
         appearanceId: message.appearanceId,
         ...colorsOf(message),
+        ...objectOf(message),
         name: message.name,
         health: message.health,
         maxHealth: message.maxHealth,
@@ -184,6 +193,24 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       if (creature === undefined) return;
       creature.health = message.health;
       creature.maxHealth = message.maxHealth;
+      return;
+    }
+
+    // A criatura trocou de APARÊNCIA (#621, a condição `outfit`): a ilusão começou, foi renovada
+    // ou acabou — o servidor já resolveu a arte, inclusive a PRÓPRIA quando acaba. O objeto é
+    // SUBSTITUÍDO, não mutado: `appearanceId`/`colors`/`object` são `readonly` do store, e quem
+    // desenha lê `world.creatures` a cada quadro. Criatura desconhecida é normal (filtrada pelo
+    // interesse, ou ainda não anunciada) — ignorar, como `creature-health`.
+    case 'creature-update': {
+      const creature = world.creatures.get(message.id);
+      if (creature === undefined) return;
+      const { colors: _colors, object: _object, ...rest } = creature;
+      world.creatures.set(message.id, {
+        ...rest,
+        appearanceId: message.appearanceId,
+        ...colorsOf(message),
+        ...objectOf(message),
+      });
       return;
     }
 
@@ -472,6 +499,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           id: creature.id,
           appearanceId: creature.appearanceId,
           ...colorsOf(creature),
+          ...objectOf(creature),
           name: creature.name,
           health: creature.health,
           maxHealth: creature.maxHealth,
