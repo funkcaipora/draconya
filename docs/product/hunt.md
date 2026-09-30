@@ -133,10 +133,41 @@ o monstro **não guarda caminho**, não existe invalidação de rota — pôr um
 mapa custa **zero**, porque não há nada guardado para invalidar. É isso que torna magic wall
 barato na Fase 5 ([ADR 0009](../adr/0009-fixed-hunt-route-without-pathfinding.md)).
 
-O monstro **mantém o alvo** até ele morrer ou passar do raio de desistência, em vez de
-reprocurar a cada tick. Numa instância com 48 monstros, procurar sempre é trabalho jogado fora
-dezenas de vezes por segundo — e trocar de alvo porque outro jogador passou um tile mais perto
-não é o que os jogadores esperam.
+O monstro **mantém o alvo** até ele morrer, **sair da área de visão do monstro** (#655 — o
+`aggroRadius`, o quadrado de 11 tiles do `Creature::canSee` do Canary) ou passar do raio de
+desistência, em vez de reprocurar a cada tick. Numa instância com 48 monstros, procurar sempre é
+trabalho jogado fora dezenas de vezes por segundo — e trocar de alvo porque outro jogador passou
+um tile mais perto não é o que os jogadores esperam. O corte pela visão é o do Canary: o alvo que
+sai do `canSee` sai da `targetList` (`Creature::onCreatureMove` → `onCreatureDisappear`), e é o
+que esvazia a lista e manda o monstro de volta ao spawn (abaixo). Antes do #655 o monstro
+perseguia para sempre (o raio de desistência é zero em todo o catálogo).
+
+**Sem alvo à vista, ele volta ao spawn e fica ocioso lá (#655, TFS/Canary `Monster::
+updateIdleStatus`/`doWalkBack`, `monster.cpp:1521-1560`, `2501-2526`).** A "lista de alvos" do
+Canary é quem está na área de visão do monstro — aqui, algum participante VIVO (ou invocação de
+personagem viva) dentro do `aggroRadius`, no mesmo andar ou não (`canSee` com as regras de andar do
+Canary). Com ela vazia e o monstro fora do `home`, ele LIGA a volta e caminha até lá pelo passo
+guloso de sempre, um tile por vencimento, sem sortear nada; se o guloso empaca numa concavidade
+fora do `home`, a volta passa a pedir cada passo à busca de caminho limitada até chegar (o Canary
+usa A* aqui; ADR 0009, emenda de 2026-09-29) — o monstro sempre chega em casa quando há caminho. No
+`home`, com a lista vazia e sem nenhuma condição ativa (fogo, veneno, haste…), ele fica **ocioso**
+(`isIdle`): nenhum passo — e, ao ficar ocioso, esquece quem bateu nele (`Creature::onIdleStatus`: a
+atribuição de dano zera) e **não usa defesa, não troca de alvo e não invoca** (o Canary o tira do
+`onThink`; os timers seguem reagendando, mas vencem sem rolar). Uma condição ativa impede o ocioso,
+como no Canary (`conditions.empty()`) — exceto a provocação do Challenge, que no Canary é um
+contador e não uma `Condition`. A volta persiste ligada até o monstro chegar ou não achar passo —
+um alvo que aparece no meio dela não a desliga.
+
+**Com alvo à vista mas sem passo até ele, ele anda ao acaso (#655, `Monster::doRandomStep`/
+`getRandomStep`, `monster.cpp:2494-2499`, `2552`).** É o "preso" do parágrafo seguinte, e também o
+monstro que foge encurralado, e o que tem alguém à vista que não é alvo (invisível, outro andar).
+Quando o último passo dele foi há pelo menos 1000 ms de tempo lógico (`RANDOM_STEP_INTERVAL_MS`),
+as quatro direções cardinais (nunca diagonal) são embaralhadas com o `Rng` da sessão — três
+sorteios por tentativa, como o `std::ranges::shuffle` — e a primeira com tile livre vence
+(`Monster::canWalkTo`: sem criatura no tile MESMO que empurrável, sem escada nem teleporte, com o
+campo respeitando `canWalkOnFieldType`, dentro de 50 tiles do spawn — `deSpawnRadius`). O estado
+`randomStepping` liga aqui e só desliga quando a perseguição volta a rodar
+(`Monster::doFollowCreature`).
 
 **Ele evita campo de fogo, veneno e energia que não pode atravessar (M29-05, TFS/Canary
 `Monster::canWalkOnFieldType`).** `canWalkOnFire`/`canWalkOnPoison`/`canWalkOnEnergy` são
@@ -148,14 +179,15 @@ e na fuga — e, por construção, em qualquer decisão futura de movimento que 
 o campo proibido conta como bloqueado, exatamente como parede — sem caminho guardado para
 invalidar (ADR 0009), então a checagem é O(1) pelo índice numérico de `Fields`.
 
-**Preso atrás de um campo que ele não pode cruzar, ele fica ali para sempre — a menos que
-apanhe.** É o `ignoreFieldDamage` do TFS/Canary: levar dano ENQUANTO preso (a decisão de
-movimento não achou passo, nem aproximando nem fugindo) concede uma passagem TEMPORÁRIA pelo
-campo, consumida na decisão seguinte, tenha ela precisado ou não. O Canary tem um segundo
-gatilho para o mesmo bypass — o passo aleatório de quem não tem alvo (`randomStepping`) — que
-não existe aqui: este motor não faz o monstro "andar à toa" sem alvo (§ acima, "mantém o
-alvo"), então essa metade da condição do Canary nunca fica satisfeita, não por escolha, mas
-porque a situação que ela descreve não ocorre neste motor.
+**Preso atrás de um campo que ele não pode cruzar, ele anda ao acaso do lado de cá — e só cruza
+se apanhar.** É o `ignoreFieldDamage` do TFS/Canary: levar dano ENQUANTO preso (a decisão de
+movimento não achou passo, nem aproximando nem fugindo) OU andando ao acaso (`randomStepping`,
+#655 — o segundo gatilho da condição do Canary, `monster.cpp:3450`, que este motor não tinha
+porque o monstro dele nunca andava sem alvo) concede uma passagem TEMPORÁRIA pelo campo. A
+concessão é consumida pela decisão de perseguição ou de volta ao spawn seguinte, tenha ela
+precisado ou não; o passo aleatório e o ocioso NÃO a gastam (o Canary só a zera em
+`doFollowCreature`/`doWalkBack`). Sem dano, o monstro preso oscila atrás do fogo para sempre — o
+comportamento certo.
 
 **Ele empurra quem bloqueia o passo, em vez de tratar todo tile ocupado como parede (M29-08,
 TFS/Canary `Monster::pushCreatures`) — mas só sob `combat-v3`.** `canPushCreatures`, `pushable` e
@@ -756,6 +788,9 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | As seis hunts do primeiro lote por faixa de level (#587, M36-06) | Dwarf Mines (nível 8, 83 `spawnPoints`), Cyclopolis (34, 7), Minotaur Camp (60, 39), Bone Crypt (100, 24), Hydra Mountain (150, 21), Hellhound Den (250, 18) — cada `recommendedLevel` sourced de TibiaWiki quando existia um Gate/tabela de vocação clara (Dwarf Mines, Cyclopolis, Hydra Mountain), ou o piso da faixa que o #587 pedia por fallback (Minotaur Camp, Bone Crypt, Hellhound Den — sem Gate/wiki específico achado); roteiro completo em "O roteiro para importar uma hunt nova do Tibia" acima | `data/hunts/{dwarf-mines,cyclopolis,minotaur-camp,bone-crypt,hydra-mountain,hellhound-den}.json` |
 | Rate de loot e escala de monstro/boss (#691) | neutros (1); o conteúdo real não declara | `data/progression/baseline.json`, `rates.loot` / `rates.monster` / `rates.boss`; `data/monsters/*.json`, `boss` |
 | Monstro evita campo de fogo/veneno/energia (M29-05, `canWalkOnFieldType` do TFS/Canary) | `true` (anda por cima) é o default, como no Canary; nenhum dos quatro monstros do catálogo hoje declara `false` — Dragon e Dragon Lord declaram `true` explicitamente (`dragon.lua`/`dragon_lord.lua`, conferidos em 2026-09-25), rato e rotworm não declaram nada | `data/monsters/*.json`, campos `canWalkOnFire`/`canWalkOnPoison`/`canWalkOnEnergy` |
+| Área de visão do monstro (#655, `Creature::canSee` do Canary — a lista de alvos que decide ocioso, volta e passo aleatório, e o corte da retenção de alvo) | O `aggroRadius` do monstro — 11 tiles em TODO o catálogo (o `MAP_MAX_VIEW_PORT_X`/`_Y` do Canary); no mesmo andar é Chebyshev ≤ raio, entre andares valem as regras do Canary (superfície não vê subsolo; subsolo até ±2 andares; a caixa desliza 1 tile por andar) | `data/monsters/*.json`, campo `aggroRadius`; a regra em `packages/sim/src/monster/step.ts` (`canSeePoint`) |
+| Intervalo mínimo do passo aleatório (#655, `Monster::doRandomStep`) | 1000 ms de tempo lógico desde o último passo do monstro | `packages/sim/src/monster/monster.ts`, `RANDOM_STEP_INTERVAL_MS` — mecanismo, não conteúdo |
+| Raio de spawn do passo aleatório (#655, `Monster::isInSpawnRange`) e da busca de caminho da volta | ±50 tiles em torno do `home` (`deSpawnRadius` padrão do Canary, `config.lua.dist:612`); a busca de caminho da volta ao spawn usa o mesmo número como raio a partir do monstro; o teleporte de volta de `Monster::onThink` para quem passa dele NÃO existe aqui | `packages/sim/src/monster/monster.ts`, `DESPAWN_RADIUS` — mecanismo, não conteúdo |
 
 ## Em aberto
 

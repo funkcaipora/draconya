@@ -112,3 +112,56 @@ um jogador humano, seguindo manualmente, contornaria sem pensar.
 - A ordem de vizinho fixa do BFS (a mesma garantia de determinismo do passo guloso) é o que
   mantém a simulação reproduzível — dois nós que empatam em distância sempre resolvem para o
   mesmo caminho, nunca dependem de ordem de iteração de `Map`/`Set`.
+
+## Emenda — 2026-09-29 (#655): a volta ao spawn do monstro é gulosa, com busca de caminho de
+reserva, e o monstro larga o alvo que sai da área de visão
+
+O #655 dá ao monstro o que o Canary chama de `Monster::getNextStep` completo: além de perseguir,
+ele **volta ao spawn** quando a lista de alvos esvazia (`doWalkBack`), **anda ao acaso**
+(`doRandomStep`) quando tem alvo mas nenhum passo até ele, e fica **ocioso** no `home` sem ninguém
+à vista (`updateIdleStatus`). O Canary resolve a volta com A* (`getPathTo(masterPos, …)`).
+
+**Decisão da emenda:**
+
+- **A volta ao spawn usa o passo guloso como caminho rápido** (`walkBackStep`,
+  `packages/sim/src/monster/step.ts`), o mesmo da perseguição — e **a busca de caminho limitada
+  do #527 como reserva**, quando o guloso empaca fora do `home` (`walkBackPathStep`,
+  `packages/sim/src/monster/monster.ts`, sobre `boundedPath`). A regra da emenda do #527 — "o
+  monstro perseguindo alvo empaca numa concavidade e é o comportamento certo" — **não vale para
+  quem volta para casa**: o guloso pisa uma bolsa sem saída, nunca chega ao `home`, nunca fica
+  ocioso, nunca esquece quem bateu nele e mantém o slot de spawn ocupado (o spawner não o
+  repõe). Medido na Darashia Dragon Lair real (tiles a até 16 do spawn, nos 47 pontos reais): o
+  guloso sozinho deixa 24 % dos pares tile/spawn sem volta apesar de haver caminho; com a
+  reserva, nenhum. A divergência em relação ao Canary é só de CAMINHO — QUANDO a volta liga e
+  desliga (o gatilho, que é o que a regra de "caça idêntica" do ADR 0037 d.6 cobra) é o do Canary.
+- **A reserva PERSISTE até a chegada** (`MonsterRuntime.walkBackByPath`, entra no snapshot como
+  campo opcional). Não pode ser "tenta o guloso de novo no passo seguinte": do tile de fora da
+  bolsa o guloso a ENTRA outra vez, a busca a tira, e o monstro oscilaria na boca dela para
+  sempre. A busca é recalculada a cada passo, e não guardada: sem caminho em cache não há o que
+  invalidar quando uma criatura ou um campo muda o mapa, e o resultado do snapshot restaurado
+  é o mesmo.
+- **O raio da busca é o `deSpawnRadius` (50)**, e o `home` ocupado é recusado ANTES de varrer. O
+  Canary busca `distância` tiles por vez e re-planeja em trechos de 5, com passos aleatórios entre
+  as tentativas; um raio menor aqui deixava monstros encalhados (com `distância + 5`, 4 % dos
+  pares acima). O raio só custa quando NÃO há caminho: a busca para no primeiro passo que chega
+  ao `home`. Em conteúdo real, mediana de 0,2 ms e p95 de 3 ms por passo, só para o monstro que
+  já empacou — a volta comum continua O(1).
+- **Uma exceção ao guloso puro**, herdada do primeiro desenho do #655: a um tile do `home` só se
+  pisa nele (um `home` ocupado não faz o monstro rodeá-lo para sempre).
+- **O monstro larga o alvo que sai da área de visão dele** (o `aggroRadius`, o quadrado de
+  `Creature::canSee`), mesmo com o `leashRadius` zero — antes ele perseguia para sempre. É o que
+  esvazia a lista de alvos e liga a volta; sem isso o mecanismo nunca dispararia numa hunt real.
+  O `leashRadius` continua sendo o limite EXTRA do Draconya, e passou a filtrar também a aquisição.
+
+### Consequências da emenda
+
+- O custo continua O(1) por monstro por decisão no caminho comum. O estado novo no snapshot são
+  cinco campos opcionais do monstro (`walkingBack`, `walkBackByPath`, `randomStepping`,
+  `lastMoveAtMs`, `idle`), sem bump de `SNAPSHOT_FORMAT_VERSION`.
+- `packages/sim/src/route/pathfind.ts` ganha um segundo consumidor (a volta do monstro). A busca
+  usa um predicado próprio (`HuntRuleset#walkBackPathBlocked`), porque o do passo guloso
+  (`#monsterBlocked`, por `canOccupy`) só admite vizinhos do monstro.
+- O monstro perseguindo alvo continua só guloso, como na emenda do #527.
+- Rato e rotworm mudam de comportamento de propósito (o monstro que perdeu o alvo volta ao spawn e
+  fica ocioso, em vez de ficar onde estava) — registrado em `docs/product/combat.md` e
+  `docs/product/hunt.md`.

@@ -4,11 +4,14 @@
 // para o CONTRÁRIO: quando o passo guloso do follow (ou da travessia de escada do follow) empaca
 // contra uma parede que exige rodear — um corredor em "U", por exemplo, onde os três candidatos
 // do guloso (direção + dois vizinhos) são todos parede, mas existe caminho livre saindo pelo
-// lado OPOSTO. Um monstro empacado assim é o comportamento certo (ADR 0009: "não conserte"); um
-// SEGUIDOR empacado assim, 8 tiles do líder, é exatamente o defeito que uma QA ao vivo achou —
-// ele nunca tenta o único jeito de continuar. O bot é automação própria (ADR 0037), não uma
-// mecânica de jogo — path-find aqui não quebra a fidelidade ao Tibia que o resto da simulação
-// mantém.
+// lado OPOSTO. Um monstro empacado assim, PERSEGUINDO, é o comportamento certo (ADR 0009: "não
+// conserte"); um SEGUIDOR empacado assim, 8 tiles do líder, é exatamente o defeito que uma QA ao
+// vivo achou — ele nunca tenta o único jeito de continuar. O bot é automação própria (ADR 0037),
+// não uma mecânica de jogo — path-find aqui não quebra a fidelidade ao Tibia que o resto da
+// simulação mantém. O segundo consumidor é a VOLTA AO SPAWN do monstro (#655,
+// `walkBackPathStep` em `monster/monster.ts`): lá empacar não é o comportamento certo — o
+// Canary volta com A* —, e o monstro preso numa bolsa nunca ficaria ocioso (ADR 0009, emenda do
+// #655).
 
 import type { Blocked, GridPoint } from '../monster/step.js';
 

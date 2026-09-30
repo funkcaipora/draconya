@@ -84,6 +84,16 @@ export class Contribution {
   }
 
   /**
+   * Esquece TODA a atribuição (#655, `Creature::onIdleStatus`: `damageMap.clear()` e
+   * `lastHitCreatureId = 0`): o monstro que volta ao spawn e fica ocioso recomeça sem dono. Muta
+   * no lugar, como `record`.
+   */
+  clear(): void {
+    this.#damage.clear();
+    this.#lastHitBy = null;
+  }
+
+  /**
    * Esquece um ator que deixou de existir. Chamado quando um monstro morre, para cada
    * personagem em que ele bateu: sem isto, o mapa do personagem ganha uma chave por monstro
    * que já o atingiu — e como cada respawn tem id novo, numa hunt de oito horas são milhares

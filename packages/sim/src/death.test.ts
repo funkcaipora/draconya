@@ -69,6 +69,19 @@ describe('atribuição de dano', () => {
     expect(state.getState()).toEqual({ damageByActor: { 'm:1': 5 } });
   });
 
+  it('esquece TUDO ao ficar ocioso (#655, `Creature::onIdleStatus`), inclusive o último golpe', () => {
+    const state = emptyContribution();
+    recordDamage(state, 'a', 30);
+    recordDamage(state, 'b', 5);
+    state.clear();
+    expect(state.actorCount).toBe(0);
+    expect(state.getState()).toEqual({ damageByActor: {} });
+    expect(creditFor(state)).toEqual({ lastHitBy: null, mostDamageBy: null, damageByActor: {} });
+    // E recomeça do zero: o golpe seguinte é o único.
+    recordDamage(state, 'c', 2);
+    expect(creditFor(state).mostDamageBy).toBe('c');
+  });
+
   it('sobrevive ao snapshot da criatura, e a cópia não compartilha o mapa', () => {
     // Sem isto, o abate depois de uma retomada credita a quem bateu DEPOIS dela — quem
     // tirou 90% da vida antes da queda do nó desaparece da conta.

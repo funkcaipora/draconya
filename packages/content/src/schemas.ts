@@ -2538,7 +2538,10 @@ export const monsterSchema = z.strictObject({
   speed: z.number().int().positive(),
   /**
    * Raio de agressão, em tiles — a distância em que `chooseTarget` (`monster/monster.ts`) aceita
-   * um candidato novo (Chebyshev, como `distance`). É o mesmo raio de `Monster::canSee` do
+   * um candidato novo E em que MANTÉM o alvo retido: o alvo que sai dele é largado (#655, o
+   * Canary o tira da `targetList`), e é o mesmo quadrado que decide se o monstro está ocioso,
+   * volta ao spawn ou anda ao acaso (`decideUnengagedMove`) — a "lista de alvos" do Canary é quem
+   * o monstro enxerga (Chebyshev, como `distance`). É o mesmo raio de `Monster::canSee` do
    * TFS/Canary, que faz `updateTargetList`/`onCreatureFound` aceitar um jogador na lista de
    * alvos (#527): TFS restringe a `Monster::canSee` própria — quadrado de
    * `Map::maxClientViewportX + 1` = 9 (`src/monster.cpp`, `src/map.h`); o Canary NÃO sobrescreve
@@ -2659,7 +2662,8 @@ export const monsterSchema = z.strictObject({
    */
   defenses: z.array(monsterDefenseSchema).optional(),
   /** A troca de alvo por tempo (#518). Ausente é o comportamento de sempre: só troca quando o
-   * alvo atual morre ou sai do `leashRadius` (`chooseTarget`). */
+   * alvo atual morre, sai do `leashRadius` ou sai da área de visão — o `aggroRadius`, #655
+   * (`chooseTarget`). O timer não rola enquanto o monstro está ocioso (#655). */
   targetChange: monsterTargetChangeSchema.optional(),
   /**
    * O critério de seleção ponderada (#541) que `chooseTarget` e o vencimento de `targetChange`
