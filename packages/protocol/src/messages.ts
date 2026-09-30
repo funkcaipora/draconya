@@ -182,6 +182,26 @@ export const CLIENT_TO_SERVER = {
    * 33: o 32 é do `charm-assign`.
    */
   'charm-remove': 33,
+  /**
+   * Desistir da saída da hunt que o jogador pediu (#802). INTENÇÃO sem payload: `leave-hunt`
+   * (10) agora só PEDE a saída — o `sim` conclui quando o `exitDelayMs` vence e o personagem está
+   * fora de combate (#625) —, e este é o "esquece". Só a saída MANUAL pode ser desfeita; a de uma
+   * regra do bot não (a regra dispararia de novo). Quem decide se há o que cancelar é o
+   * servidor (invariante 4); sem saída pendente é um no-op, e o estado novo é `exit-pending`.
+   *
+   * 34: o 33 é do `charm-remove`.
+   */
+  'cancel-exit': 34,
+  /**
+   * Escolher a postura de luta (M30-03, #550; ADR 0040): ofensiva (`attack`), balanceada
+   * (`balanced`) ou defensiva (`defense`) — o `fightMode` do Canary. INTENÇÃO: o cliente diz
+   * QUAL modo; o efeito (o fator de ataque, o de defesa e o da mitigação) é do servidor
+   * (invariante 4), na sessão dona (invariante 9). A escolha aparece de volta em
+   * `player-stats.fightMode`. Aceita na Cidade e na hunt, como `select-ammo`.
+   *
+   * 35: o 33 é do `charm-remove`, e o 34 é do `cancel-exit` (#802).
+   */
+  'set-fight-mode': 35,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -417,6 +437,18 @@ export const SERVER_TO_CLIENT = {
    * 44: o 43 é do `blessings` (#570).
    */
   charms: 44,
+  /**
+   * A saída da hunt do personagem está pendente (#802): o jogador pediu (`leave-hunt`) ou uma
+   * regra do bot disparou, e o `sim` só a conclui depois do `exitDelayMs` e fora da janela de
+   * combate de 60 s (#625). `active: false` é o fim da espera — concluída (a `session-ended` vem
+   * junto), desfeita (`cancel-exit`) ou recusada. Por PERSONAGEM, como `active-conditions`: a
+   * saída de um membro da party não é da tela dos outros. Sai no attach (só quando há saída
+   * pendente, como `party-end-vote`) e a cada mudança de fase ou de prazo — um golpe novo em
+   * combate empurra `remainingMs`, e a contagem local do cliente não pode mentir.
+   *
+   * 45: o 44 é do `charms`.
+   */
+  'exit-pending': 45,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

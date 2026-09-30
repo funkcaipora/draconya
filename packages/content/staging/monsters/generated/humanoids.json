@@ -3956,6 +3956,7 @@
       ]
     },
     "conditionImmunities": [
+      "bleeding",
       "invisible"
     ],
     "defenseMitigation": 0,
@@ -9701,6 +9702,7 @@
       ]
     },
     "conditionImmunities": [
+      "bleeding",
       "invisible"
     ],
     "defenseMitigation": 0,

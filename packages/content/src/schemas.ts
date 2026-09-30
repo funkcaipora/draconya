@@ -650,6 +650,9 @@ export type SuppressibleCondition = (typeof SUPPRESSIBLE_CONDITIONS)[number];
  */
 export const ITEM_ORIGINS = [
   'loot', 'boss', 'quest', 'market', 'admin', 'starting-kit', 'vocation-choice',
+  // A mochila que a morte devolve a quem ficou sem nenhuma (#571, ADR 0042 decisão 4): dada pelo
+  // sistema, não dropada nem comprada — `Blessings.PlayerDeath` do Canary faz `addItem(ITEM_BAG)`.
+  'death-replacement',
 ] as const;
 export type ItemOrigin = (typeof ITEM_ORIGINS)[number];
 
@@ -857,6 +860,13 @@ export const itemSchema = z.strictObject({
    * carga única não-empilhável, e um consumível futuro pode voltar a precisar disso.
    */
   stackable: z.boolean().default(false),
+  /**
+   * É um creature product (#603, o `primarytype="creature products"` do Canary `items.xml`)? É o
+   * que o charm Gut lê: no `generateLootRoll` (`monstertype.lua`) a chance de drop de um item
+   * desta classe sobe `ceil(chance × charm / 100)` quando o dono do cadáver tem o charm para o
+   * monstro. Só o importador o escreve (fatia `creature-products`); ausente é "não é".
+   */
+  creatureProduct: z.literal(true).optional(),
   attack: z.number().int().nonnegative().default(0),
   armor: z.number().int().nonnegative().default(0),
   /**
@@ -1013,6 +1023,15 @@ export const itemSchema = z.strictObject({
    * própria de dano (`WeaponMelee::useWeapon`, `weapons.cpp:531-589`). Soma entre os equipados.
    */
   cleavePercent: z.number().int().positive().max(100).optional(),
+  /**
+   * O item PROTEGE quem o veste da perda de item na morte (#571, ADR 0042 decisão 4) — o
+   * Amulet of Loss (`ITEM_AMULETOFLOSS`, id 3057, `src/utils/utils_definitions.hpp:638` do
+   * Canary): `Blessings.PlayerDeath` (`data/libs/systems/blessing.lua:82-99`) confere só o slot do
+   * colar, então a flag só vale em item de `slot: 'neck'`. Protegido, NENHUM item é sorteado; e a
+   * morte consome UM colar assim (`Player::death`, `player.cpp:4215-4219`). Ausente é o item comum
+   * de sempre. É a MESMA leitura da regra do Canary, mas por dado em vez de por id fixo em código.
+   */
+  protectsOnDeath: z.boolean().default(false),
   /** Efeito passivo de anel, ativo enquanto vestido (§13.9, SV-16). Só em `kind: 'ring'`. */
   ringEffect: ringEffectSchema.optional(),
   /** O efeito do consumível. Só em `kind: 'consumable'` — hoje só a comida (#726). */
@@ -1296,6 +1315,47 @@ export const blessingPricingSchema = z.object({
 
 export type Blessing = z.infer<typeof blessingSchema>;
 export type BlessingPricing = z.infer<typeof blessingPricingSchema>;
+
+/**
+ * A perda de item na morte (#571, ADR 0042 decisão 4): `Blessings.PlayerDeath`/`DropLoot` do
+ * Canary (`data/libs/systems/blessing.lua:36-46,82-118`). O mecanismo mora em
+ * `packages/sim/src/item-loss.ts` — os números abaixo são os do Tibia, e são dado, não código.
+ *
+ * **`enabled` é a chave da decisão em aberto do dono** (ADR 0042, "Questões em aberto" e emenda de
+ * 2026-09-25): o Tibia larga o item perdido no cadáver do jogador, e o Draconya não tem item no
+ * chão — então "perder" aqui é DESTRUIR, e isso é irreversível para o jogador. Enquanto o dono
+ * não decidir entre destruir-e-registrar e manter "nunca perde item" (`docs/product/death.md`
+ * §3.8), o mecanismo inteiro existe e é testado mas o conteúdo real o entrega DESLIGADO
+ * (`enabled: false` → morte não toca em item nenhum). Ligar é trocar este `true` — sem código.
+ *
+ * Quem liga também decide a BOLSA (`satchel`): ela não tem equivalente no Tibia, o mecanismo a
+ * deixa de fora da perda, e o que o jogador guarda nela sobrevive a toda morte (`death.md`, "Em
+ * aberto"). Sem vocação, ou abaixo do level do Adventurer's Blessing com vocação, a morte também
+ * não perde item — as proteções do Canary/TFS, derivadas no `sim` (`item-loss.ts`).
+ */
+export const itemLossSchema = z.strictObject({
+  /** Liga a perda de item na morte. `false` é o "nunca perde item" provisório (ver acima). */
+  enabled: z.boolean(),
+  /**
+   * A chance, em PERCENTUAL, de perder cada item equipado por CONTAGEM de bênçãos — o índice é o
+   * número de bênçãos (`Blessings.LossPercent[n].item`). Contagem além do fim da lista usa a
+   * última entrada. Tibia: 100/70/45/25/10/0… (`blessing.lua:36-46`).
+   */
+  lossPercentByBlessings: z.array(z.number().min(0).max(100)).min(1),
+  /**
+   * Item que NÃO é container perde a chance dividida por isto (`chance / 10` em `DropLoot`,
+   * `blessing.lua:109`): a mochila (e a aljava, que no cliente é container) leva o percentual
+   * cheio, o resto um décimo dele. Tibia: 10.
+   */
+  nonContainerDivisor: z.number().positive(),
+  /**
+   * A mochila que a morte devolve a quem ficou sem nenhuma nas costas
+   * (`player:addItem(ITEM_BAG, 1, false, CONST_SLOT_BACKPACK)`, `blessing.lua:94-96`, `ITEM_BAG` =
+   * 2853). Precisa ser um `kind: 'container'` de `slot: 'back'` — `buildContent` confere.
+   */
+  replacementContainerId: z.string().min(1),
+});
+export type ItemLoss = z.infer<typeof itemLossSchema>;
 
 /**
  * Um SUPRIMENTO (FUN-77, §20.1). Poção e runa **não são itens físicos**: usar debita gold
@@ -1626,6 +1686,43 @@ export const DRUNK_CONDITION_KEY = 'drunk' as const;
  * reconhece a condição pela CHAVE — nenhum estado de runtime a distingue de um `buff` vazio.
  */
 export const INVISIBLE_CONDITION_KEY = 'invisible' as const;
+
+/**
+ * As condições a que um monstro pode declarar imunidade (`monster.immunities[].condition` do
+ * Canary, ADR 0041 decisão 2): `paralyze` (o sinal NEGATIVO da condição de velocidade), `drunk`,
+ * `invisible` (que o Canary reaproveita como "enxerga invisível", ver `monsterSchema`) e as oito
+ * DOTs de `DAMAGE_OVER_TIME_CONDITION_IMMUNITY`. `outfit` — 119 monstros o declaram imune, mas o
+ * Draconya ainda não tem a condição — entra com o M44-03.
+ */
+export const CONDITION_IMMUNITIES = [
+  'paralyze', 'drunk', 'invisible',
+  'bleeding', 'poison', 'burning', 'electrified', 'cursed', 'drowning', 'freezing', 'dazzled',
+] as const;
+export type ConditionImmunity = (typeof CONDITION_IMMUNITIES)[number];
+
+/**
+ * O tipo de condição de DANO AO LONGO DO TEMPO que cada tipo de dano gera no Tibia
+ * (`Combat::DamageToConditionType`, Canary `src/creatures/combat/combat.cpp:278-307`; o TFS tem o
+ * mesmo par): fogo queima, energia eletrifica, terra envenena, gelo congela, sagrado ofusca, morte
+ * amaldiçoa, afogamento afoga, físico sangra. `lifedrain`/`manadrain`/`arcane` não geram condição
+ * nenhuma (`CONDITION_NONE`) e por isso não têm entrada.
+ *
+ * É o nome com que o ADR 0041 decisão 1 batiza as oito condições de DOT — e o nome que
+ * `monster.conditionImmunities` usa para a imunidade a cada uma (`Monster::isImmune(ConditionType_t)`,
+ * `monster.cpp:3535`). Uma DOT no `sim` (`ConditionState.tick.damageType`) casa com a imunidade
+ * por esta tabela: a condição não é ADICIONADA a quem é imune, e o dano que ela carregaria nunca
+ * nasce.
+ */
+export const DAMAGE_OVER_TIME_CONDITION_IMMUNITY: Readonly<Partial<Record<DamageType, ConditionImmunity>>> = {
+  physical: 'bleeding',
+  earth: 'poison',
+  fire: 'burning',
+  energy: 'electrified',
+  death: 'cursed',
+  drown: 'drowning',
+  ice: 'freezing',
+  holy: 'dazzled',
+};
 
 /**
  * Uma RODADA do dano ao longo do tempo do Tibia (M31-02): `count` tiques do MESMO `damage`, a
@@ -2352,18 +2449,22 @@ export const monsterSchema = z.strictObject({
   mitigation: monsterMitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
   /**
    * As condições a que o monstro é IMUNE (#559/#592, ADR 0041 decisão 2 — `Monster::isImmune`
-   * do Canary/TFS, `monster.immunities[].condition`). `paralyze`/`drunk`: a condição não é
+   * do Canary/TFS, `monster.immunities[].condition`). `paralyze`/`drunk` e as oito DOTs
+   * (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY`: `bleeding`, `poison`, `burning`…): a condição não é
    * ADICIONADA — `#applyConditionTo` (`sim/rulesets/hunt.ts`) recusa antes de entrar, a mesma
-   * forma que a supressão de `drunk` por anel já usa. `invisible` é o CASO especial que o Canary
-   * também trata à parte: `Monster::canSeeInvisibility() { return isImmune(CONDITION_INVISIBLE);
-   * }` — a MESMA imunidade vira "enxerga quem está invisível", nunca "não pode ficar invisível".
+   * forma que a supressão de `drunk` por anel já usa, e só quando o chamador é um COMBATE (magia,
+   * runa, ability — `fromCombat`) contra outro alvo — `Combat::CombatConditionFunc` do Canary;
+   * campo de tile, auto-aplicação e o que entra por `addCondition` direto (os charms
+   * Cripple/Numb) não consultam a imunidade. `invisible` é o CASO especial que o Canary também
+   * trata à parte: `Monster::canSeeInvisibility() { return isImmune(CONDITION_INVISIBLE); }` — a
+   * MESMA imunidade vira "enxerga quem está invisível", nunca "não pode ficar invisível".
    * `chooseTarget` (`sim/monster/monster.ts`) lê esta chave para decidir se o monstro seleciona
    * ou retém um alvo invisível. Ausente é `[]`, o monstro de sempre, sem imunidade nenhuma —
-   * preserva bit a bit todo monstro já importado. Outras chaves do Canary sem modelo aqui
-   * (`outfit`, `bleed`…) ficam de fora, e o importador as reporta em vez de descartar em
-   * silêncio (`scripts/catalog/monsters.ts`).
+   * preserva bit a bit todo monstro já importado. `outfit` (119 monstros) fica de fora até o
+   * M44-03 trazer a condição; o importador o reporta em vez de descartar em silêncio
+   * (`scripts/catalog/monsters.ts`).
    */
-  conditionImmunities: z.array(z.enum(['paralyze', 'drunk', 'invisible'])).default([]),
+  conditionImmunities: z.array(z.enum(CONDITION_IMMUNITIES)).default([]),
   /**
    * A cura por elemento (#683, M30-G6; `monster.heals` do Canary): por tipo, o PERCENTUAL
    * INTEIRO do dano que o atinge — já crítico, ANTES de qualquer bloqueio, resistência ou
@@ -3054,6 +3155,13 @@ export const progressionSchema = z.object({
      * este campo é o ponto de extensão que ela vai acionar.
      */
     promotionReduction: z.number().min(0).max(1),
+    /**
+     * A perda de ITEM na morte (#571, ADR 0042 decisão 4) — ver `itemLossSchema`. Opcional:
+     * conteúdo de teste sem o bloco não perde item nenhum, e o conteúdo real o declara com
+     * `enabled: false` até o dono decidir (a mesma disciplina de `blessingPricing`: número é
+     * dado, nunca um default de código).
+     */
+    itemLoss: itemLossSchema.optional(),
   }),
   /**
    * O preço por level de bênção (#570). Opcional: conteúdo de teste sem Cidade/bênção não
@@ -3141,7 +3249,7 @@ export const COMBAT_V1: CombatCompatibilityProfile = {
  * O perfil `combat-v2` (ADR 0037, decisão 5): o próximo id livre depois do `combat-v1` — o
  * `combat-v2` que o ADR 0032 tinha reservado para a postura nunca chegou a existir em código, e
  * é por isso que esta é a primeira vez que o id é usado. **Rompimento**: o dano de arma passa a
- * ser o do Canary (fórmula, variância pela normal truncada e `attackFactor`), com chance de
+ * ser o do Canary (fórmula, variância pela normal truncada e o fator de ataque da postura), com chance de
  * acerto à distância por skill e por tile. Uma sessão fixada no `combat-v1` continua nele
  * (invariante 7); retomar sob um perfil `breaking` diferente do que a criou é recusado, nunca
  * reinterpretado (ADR 0031).
@@ -3200,14 +3308,28 @@ export const COMBAT_V3: CombatCompatibilityProfile = {
  * `chooseTarget` de monstro e credita dano ao MESTRE via `Contribution`/mapa de dano — não
  * existe hoje nenhum cenário sem invocação onde isso mude ordem de sorteio ou resultado
  * resolvido (o teste de conformance §11 prende que a hunt sem ninguém invocando consome
- * `session.rng` exatamente como antes). Por isso a política aqui é `additive`, como o
+ * `session.rng` exatamente como antes). Sozinho esse estágio seria `additive`, como o
  * `combat-v1`: o mecanismo é novo, mas nenhum abate ou golpe que já existia muda de número.
+ *
+ * **Estágio #603** (M39-03, Charms em combate — ADR 0053 d.5): os 24 Charms do Canary que agem
+ * em combate (todos menos o Scavenge, que é a esfola do #626) rolam na ordem do `Game::
+ * combatChangeHealth` — defensivos no golpe RECEBIDO de monstro (minor antes de major, antes do
+ * mana shield, o Dodge encerra o golpe), ofensivos no golpe DADO (`percent` da vida do monstro),
+ * passivos nos termos que já existem (crítico, leech, penalidade de morte, loot). Junto com ele
+ * entram três mudanças de resultado declaradas em `docs/product/combat-conformance.md`: **(a)** o
+ * Dodge do PRD (`dodgeChance` do jogador, `dodgeMultiplier`) SAI deste perfil — o único Dodge é o
+ * charm (ADR 0053 d.5), e por isso a exceção `dodge-halves-damage` também sai; **(b)** o crítico
+ * BASE de todo jogador (`playerBaseCriticalChance`/`Damage` do Canary, `combat.modifiers`), sem
+ * o qual Low Blow e Savage Blow — que somam a ele — não têm o que somar; **(c)** o estágio de
+ * Charms só roda neste perfil (`hasCharmStage`): a sessão ainda fixada em `combat-v3` não rola
+ * charm nenhum, mesmo com o registro do personagem cheio (invariante 7). Muda resultado e ordem
+ * de sorteio: a política passa a ser `breaking`.
  */
 export const COMBAT_V4: CombatCompatibilityProfile = {
   id: 'combat-v4',
   referenceRelease: 'tibia-13.32',
-  productExceptions: ['player-always-hit-melee', 'dodge-halves-damage', 'pve-only-bestiary-bonus'],
-  migrationPolicy: 'additive',
+  productExceptions: ['player-always-hit-melee', 'pve-only-bestiary-bonus'],
+  migrationPolicy: 'breaking',
 };
 
 /**
@@ -3363,12 +3485,11 @@ export const combatSchema = z.object({
    * ```
    *
    * `meleeCoefficient`/`distanceCoefficient` são os `0,085`/`0,09` do Canary
-   * (`Weapons::getMaxWeaponDamage`, `isMelee`). `attackFactor` é o `getAttackFactor()` do modo
-   * de luta (ofensivo 1,0 / equilibrado 0,75 / defensivo 0,5) — o Draconya **não tem seletor de
-   * postura ainda** (o primitivo de "Postura Defensiva/Balanceada/Atacante" nunca foi montado,
-   * `docs/hud-contract-plan.md`), então o valor é uma CONSTANTE de conteúdo fixada em `1,0`
-   * (ofensivo), e não o estado por personagem que uma UI de postura vai um dia escolher — trocar
-   * um escalar fixo por uma leitura de `CharacterState` não muda a fórmula nem exige perfil novo.
+   * (`Weapons::getMaxWeaponDamage`, `isMelee`). `attackFactor` NÃO é conteúdo: é o
+   * `getAttackFactor()` da POSTURA que o jogador escolheu (ofensivo 1,0 / equilibrado 0,75 /
+   * defensivo 0,5) e mora no estado do personagem (`CharacterRuntime.fightMode`, M30-03, #550) —
+   * uma constante aqui o fixaria numa postura só, que é o que o campo fazia até essa issue. A
+   * tabela dos três fatores é MECANISMO do Canary, código puro em `sim/src/combat/fight-mode.ts`.
    * `vocationMultiplier` vem de `vocation.meleeDamageMultiplier`/`distDamageMultiplier` — 1,0 em
    * toda vocação no Canary hoje (`vocations.xml`), e por isso em conteúdo e não constante mágica.
    * Obrigatório quando `compatibilityProfile` é `combat-v2`; `buildContent` recusa a ausência.
@@ -3376,7 +3497,6 @@ export const combatSchema = z.object({
   weaponDamage: z.object({
     meleeCoefficient: z.number().positive(),
     distanceCoefficient: z.number().positive(),
-    attackFactor: z.number().positive(),
   }).optional(),
   /**
    * A chance de acerto à distância do `combat-v2` (#522): só a DISTÂNCIA rola acerto ofensivo —
@@ -3477,7 +3597,10 @@ export const combatSchema = z.object({
   // O `combat-v3` (#548, ADR 0040) HERDA a exigência: ele não substitui o lado ofensivo do v2,
   // só o pipeline de RECEBIMENTO (defesa/armadura/mitigação) — um conteúdo v3 sem esses blocos
   // continua sem fórmula de dano de arma nenhuma.
-  if (combat.compatibilityProfile === 'combat-v2' || combat.compatibilityProfile === 'combat-v3') {
+  if (
+    combat.compatibilityProfile === 'combat-v2' || combat.compatibilityProfile === 'combat-v3'
+    || combat.compatibilityProfile === 'combat-v4'
+  ) {
     if (combat.weaponDamage === undefined) {
       context.addIssue({
         code: 'custom', message: `${combat.compatibilityProfile} exige o bloco "weaponDamage"`,
@@ -4548,8 +4671,10 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
    * ausente no alvo não é erro: a magia sai igual, sem efeito nenhum a remover.
    *
    * `area` (#592, Cancel Invisibility: `combat:setArea(createCombatArea(AREA_CIRCLE3X3))`) é a
-   * forma centrada no LANÇADOR cujos MONSTROS perdem as chaves — nunca os aliados na área, fora
-   * do recorte desta issue (§12). Ausente é o dispel de sempre, só no `recipient`.
+   * forma centrada no LANÇADOR — `AREA_CIRCLE3X3` é o círculo de RAIO 3 (37 tiles), não o 3x3 do
+   * nome — cujos MONSTROS perdem as chaves: nunca o lançador nem os aliados, porque o `combat` do
+   * script é agressivo por default e `Combat::CombatFunc` (`combat.cpp:1562`/`1610`) exclui o
+   * lançador (#559). Ausente é o dispel de sempre, só no `recipient`.
    */
   z.object({
     kind: z.literal('dispel'),

@@ -7,7 +7,7 @@
 // devolveria o problema que o ADR 0007 evita: o painel de inventário re-renderizando porque a
 // mana mexeu.
 
-import type { S2CProps } from '@draconya/protocol';
+import type { FightModeName, S2CProps } from '@draconya/protocol';
 
 export type ActiveCondition = S2CProps<'active-conditions'>['conditions'][number];
 
@@ -153,6 +153,19 @@ export type PartyEndVoteView = Readonly<S2CProps<'party-end-vote'>>;
  */
 export type FollowStateView = Readonly<S2CProps<'follow-state'>>;
 /**
+ * A saída da hunt pendente do PRÓPRIO personagem (#802): o `exit-pending` com `active: true`,
+ * mais o instante LOCAL em que a mensagem chegou — é ele que faz a contagem andar entre duas
+ * mensagens, porque `remainingMs` é uma DURAÇÃO medida no servidor e o relógio de lá não é o
+ * daqui. `null` é "nada pendente": o servidor disse `active: false`, a sessão acabou ou o
+ * personagem reanexou (o servidor reenvia se ainda houver).
+ */
+export interface ExitPendingView {
+  readonly reason: 'manual-exit' | 'exit-rule';
+  readonly phase: 'countdown' | 'in-combat';
+  readonly remainingMs: number;
+  readonly receivedAtMs: number;
+}
+/**
  * A seção PARTY do analisador (§32, ADR 0035 d.11) — o mesmo bloco de `analyzer.party` e de
  * `session-state.partySummary`. Ausente é solo, ou nó `game` anterior ao #400: nunca "0
  * jogadores" (D8).
@@ -248,6 +261,13 @@ export interface HudState {
    * vocação (`catalogue.vocations`) quando `true`. Chega em `player-stats`/`session-state`.
    */
   readonly promoted: boolean;
+  /**
+   * A postura de luta (M30-03, #550): a que o SERVIDOR confirmou em `player-stats`, nunca a que o
+   * clique pediu — o cliente não calcula nem antecipa o efeito (invariante 4), então o botão só
+   * marca o novo modo quando o `player-stats` volta. `attack` até chegar: é o `FIGHTMODE_ATTACK`
+   * do Canary, o que o servidor considera para quem nunca escolheu.
+   */
+  readonly fightMode: FightModeName;
 
   /** Ida e volta medida pelo `ping`/`pong`, ou `null` enquanto não houve nenhum. */
   readonly latencyMs: number | null;
@@ -341,6 +361,11 @@ export interface HudState {
    * `follow-state`; a tela só mostra "Follow interrompido" quando `active === false`.
    */
   readonly followState: FollowStateView | null;
+  /**
+   * A saída pendente do PRÓPRIO personagem (#802): `null` sem nenhuma. A tela só a espelha — quem
+   * conclui a saída, e quando, é o servidor; o cliente manda `leave-hunt` e `cancel-exit`.
+   */
+  readonly exitPending: ExitPendingView | null;
 
   /**
    * A janela do cadáver ABERTA agora (#722, ADR 0048 d.4): o que o servidor mandou no último
@@ -381,6 +406,7 @@ export const INITIAL_HUD: HudState = {
   soulMax: 0,
   vocationId: null,
   promoted: false,
+  fightMode: 'attack',
   latencyMs: null,
   connection: 'idle',
   onlinePlayers: null,
@@ -400,6 +426,7 @@ export const INITIAL_HUD: HudState = {
   partySpending: null,
   partyEndVote: null,
   followState: null,
+  exitPending: null,
   corpse: null,
   targetId: null,
   conditions: [],

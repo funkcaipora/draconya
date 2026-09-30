@@ -1055,6 +1055,28 @@ export function buildContent(raw: RawContent): Content {
     if (item.imbuementSlots !== undefined && (item.slot === undefined || item.stackable)) {
       problems.push(`item "${item.id}": imbuementSlots só vale em item que se veste e não empilha`);
     }
+    // A proteção contra a perda de item (#571) é a do colar: `Blessings.PlayerDeath` só olha o
+    // slot do pescoço (`CONST_SLOT_NECKLACE`), então a flag em qualquer outro slot seria um
+    // número que a morte nunca lê — e pareceria proteção sem proteger.
+    if (item.protectsOnDeath && item.slot !== 'neck') {
+      problems.push(`item "${item.id}": protectsOnDeath só vale em item de slot "neck"`);
+    }
+  }
+  // A perda de item na morte (#571): a mochila de reposição tem de ser uma mochila de verdade —
+  // `kind: 'container'` que veste nas costas —, senão a morte entregaria um item que nem cabe no
+  // slot dela, ou que não abre lugar nenhum para o loot.
+  const itemLoss = progression?.deathPenalty.itemLoss;
+  if (itemLoss !== undefined) {
+    const replacement = itemDefinitions.get(itemLoss.replacementContainerId);
+    if (replacement === undefined) {
+      problems.push(
+        `progression: deathPenalty.itemLoss.replacementContainerId "${itemLoss.replacementContainerId}" não existe`,
+      );
+    } else if (replacement.kind !== 'container' || replacement.slot !== 'back') {
+      problems.push(
+        `progression: "${replacement.id}" (replacementContainerId) precisa ser um container de slot "back"`,
+      );
+    }
   }
   for (const piece of progression?.startingKit ?? []) {
     const item = itemDefinitions.get(piece.itemId);

@@ -369,6 +369,14 @@ describe.runIf(ready)('critério de saída do M13 (§44.4, ADR 0027)', () => {
     expect(seen.aggregates.goldGained).toBe(0);
     expect(seen.partyBag?.gold).toBeGreaterThan(0);
     const bagValue = (seen.partyBag?.gold ?? 0) + (seen.partyBag?.items.reduce((n, item) => n + item.quantity, 0) ?? 0) * 3;
+    // A hunt do teste luta sem parar, e o `leave-hunt` em combate espera 60 s sem golpe (#802,
+    // `CONDITION_INFIGHT` do Canary): o assunto deste teste é o extrato, não a trava — ela tem
+    // teste próprio em `game/leave-hunt.test.ts`. Sem golpe recente a saída conclui na hora.
+    const [gameNode] = [...games];
+    const leaving = gameNode?.host?.sessionFor(c.characterId)?.participants
+      .find((participant) => participant.id === c.characterId);
+    expect(leaving).toBeDefined();
+    if (leaving !== undefined) leaving.lastCombatActionAtMs = null;
     inbox.send({ type: 'leave-hunt' });
     const ended = await inbox.waitForNext('session-ended');
     expect(ended.reason).toBe('manual-exit');

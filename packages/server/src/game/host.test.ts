@@ -8,6 +8,7 @@ import {
   itemSchema, migrateBotConfigV1, placeholderAppearances,
 } from '@draconya/content';
 import type { Ammunition, Appearances, BotConfig, Charm, Progression, RawContent, Vocation } from '@draconya/content';
+import { C2S_SCHEMAS } from '@draconya/protocol';
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import { createLogger } from '../log.js';
 import type { SessionDirectory } from '../directory.js';
@@ -962,6 +963,107 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
 
     host.cycle(1100);
     await vi.waitFor(() => expect(acts).toEqual(['remove:p1']));
+  });
+
+  it('a morte com perda de item (#571): o extrato leva o que caiu e a bag, e a tela de morte lista o que se perdeu', async () => {
+    // O caminho inteiro pelo host, com a hunt de verdade: `HuntRuleset#onCharacterDied` destrói as
+    // instâncias, o extrato as entrega ao `jobs` (`removedInstances`), a bag nova nasce como
+    // `acquired` já vestida em `equipment`, e o `session-ended` leva um evento por instância —
+    // sem ninguém olhar para nada disso acontecer (invariante 3).
+    const raw = rawTestContent();
+    const withLoss = buildContent({
+      ...raw,
+      items: [
+        { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', initialSlots: 20, weight: 18, value: 5 },
+        { id: 'bag', name: 'Bag', kind: 'container', slot: 'back', initialSlots: 8, weight: 8, value: 1 },
+        { id: 'gem', name: 'Gem', kind: 'other', weight: 1, value: 10, stackable: true },
+      ],
+      progression: [{
+        ...TEST_PROGRESSION,
+        deathPenalty: {
+          ...TEST_PROGRESSION.deathPenalty,
+          itemLoss: {
+            enabled: true, lossPercentByBlessings: [100, 70, 45, 25, 10, 0, 0, 0],
+            nonContainerDivisor: 10, replacementContainerId: 'bag',
+          },
+        },
+      }],
+      appearances: [placeholderAppearances({
+        ...raw,
+        items: [
+          { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', initialSlots: 20, weight: 18, value: 5 },
+          { id: 'bag', name: 'Bag', kind: 'container', slot: 'back', initialSlots: 8, weight: 8, value: 1 },
+          { id: 'gem', name: 'Gem', kind: 'other', weight: 1, value: 10, stackable: true },
+        ],
+      })],
+    } as unknown as RawContent);
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = {
+      save: async (r: Record<string, unknown>) => { saved.push(r); },
+    } as unknown as ReceiptStore;
+    const directory = {
+      register: async () => true, succeed: async () => true,
+    } as unknown as SessionDirectory;
+    let hero: CharacterRuntime | undefined;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: withLoss.version, logger, directory, receipts,
+      itemCatalog: withLoss.items, progression: withLoss.progression as Progression,
+      buildSession: citySuccessor(), now: () => 1000,
+      createSession: (characterId) => {
+        const session = createHuntSession({
+          id: `s-${characterId}`, content: withLoss, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+        });
+        hero = new CharacterRuntime({
+          id: characterId, position: { x: 0, y: 0, z: 7 },
+          // Com vocação: sem ela o Canary e o TFS não perdem item nenhum na morte.
+          health: 100, maxHealth: 100, mana: 0, maxMana: 0, level: 8, xp: 0, vocationId: 'knight',
+          gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+          inventory: {
+            backpack: [{ instanceId: 'i:gems', itemId: 'gem', quantity: 12 }],
+            equipped: { back: { instanceId: 'i:backpack', itemId: 'backpack', quantity: 1 } },
+          },
+        });
+        session.enter(hero);
+        // A morte acontece DENTRO do avanço do ciclo — o `cycle` pula sessão que já chegou
+        // encerrada —, como acontece numa hunt de verdade: o herói morre no meio de um `advanceBy`.
+        const advance = session.advanceBy.bind(session);
+        let killed = false;
+        (session as unknown as { advanceBy: (dtMs: number) => void }).advanceBy = (dtMs) => {
+          advance(dtMs);
+          if (killed) return;
+          killed = true;
+          session.kill(hero as CharacterRuntime);
+        };
+        return session;
+      },
+    });
+    await host.prepare('p1', undefined, 'a1');
+    const socket = new FakeSocket();
+    host.attach(socket, 'p1');
+
+    const session = host.sessionFor('p1') as Session;
+    host.cycle(1100);
+    await vi.waitFor(() => expect(host.sessionFor('p1')?.ruleset.type).toBe('city'));
+    host.flush();
+
+    // O extrato durável: o que o `jobs` apaga, a bag que ele insere, e onde ela está vestida.
+    expect(saved).toHaveLength(1);
+    expect(saved[0]?.['reason']).toBe('death');
+    expect(saved[0]?.['removedInstances']).toEqual(['i:backpack', 'i:gems']);
+    const bagId = `${session.id}:0`;
+    expect(saved[0]?.['acquired']).toEqual([
+      { instanceId: bagId, itemId: 'bag', quantity: 1, origin: 'death-replacement' },
+    ]);
+    expect(saved[0]?.['equipment']).toEqual({ back: bagId });
+    // A tela de morte: um evento por instância perdida, no formato que o cliente lê.
+    const ended = socket.received().find((m) => m.type === 'session-ended');
+    expect(ended?.type === 'session-ended' && ended.notableEvents
+      .filter((e) => e.type === 'item-lost-on-death').map((e) => e.detail))
+      .toEqual(['backpack/1/i:backpack/p1', 'gem/12/i:gems/p1']);
+    // E a Cidade que sucede já é a do inventário NOVO: a bag vestida, vazia.
+    const city = host.sessionFor('p1')?.participants[0];
+    expect(city?.inventory.equippedAt('back')?.itemId).toBe('bag');
+    expect(city?.inventory.backpack.every((slot) => slot === null)).toBe(true);
   });
 
   it('solta o personagem quando o registro no diretório trocou de dono', async () => {
@@ -4581,6 +4683,125 @@ describe('a munição escolhida pelo socket (#152, ADR 0026 decisão 4)', () => 
   });
 });
 
+describe('a postura de luta pelo socket (M30-03, #550, ADR 0040)', () => {
+  const shard: Ruleset = {
+    type: 'city', shared: true, hz: () => 0,
+    onEnter: () => {}, onEvent: () => {}, onCreatureDied: () => {}, onEnd: () => {},
+  };
+  const statsOf = (socket: FakeSocket, from = 0) =>
+    socket.received().slice(from).filter((m): m is S2CMessage & { type: 'player-stats' } => m.type === 'player-stats');
+  const attach = () => {
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset);
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    return { host, viewer, socket, hero, before: socket.received().length };
+  };
+
+  it('quem entra sem ter escolhido vê a ofensiva — o `FIGHTMODE_ATTACK` do Canary — no player-stats do attach', () => {
+    const { host, viewer, socket } = attach();
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    expect(statsOf(socket).at(-1)?.fightMode).toBe('attack');
+  });
+
+  it('escolhe a postura no personagem da sessão dona, e a resposta é player-stats com o modo NOVO', () => {
+    const { host, viewer, socket, hero, before } = attach();
+
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'defense' });
+    host.flush();
+
+    expect(hero.fightMode).toBe('defense');
+    expect(statsOf(socket, before).at(-1)?.fightMode).toBe('defense');
+    // E a troca é imediata em cada direção — os três modos, sem ordem.
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'balanced' });
+    host.flush();
+    expect(hero.fightMode).toBe('balanced');
+    expect(statsOf(socket, before).at(-1)?.fightMode).toBe('balanced');
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'attack' });
+    host.flush();
+    expect(hero.fightMode).toBe('attack');
+    expect(statsOf(socket, before).at(-1)?.fightMode).toBe('attack');
+  });
+
+  it('escolher o modo em que já está confirma do mesmo jeito (o cliente não fica sem resposta) e nada muda', () => {
+    const { host, viewer, socket, hero, before } = attach();
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'attack' });
+    host.flush();
+    expect(hero.fightMode).toBe('attack');
+    expect(statsOf(socket, before)).toHaveLength(1);
+    expect(statsOf(socket, before)[0]?.fightMode).toBe('attack');
+  });
+
+  it('um modo que o protocolo não conhece nunca chega ao personagem — o schema o barra antes', () => {
+    // O host confia no tipo do protocolo; quem recusa o lixo é `C2S_SCHEMAS` (invariante 4).
+    expect(C2S_SCHEMAS['set-fight-mode'].safeParse({ mode: 'aggressive' }).success).toBe(false);
+  });
+
+  it('quem reanexa vê a postura que ficou — a hunt desanexada continua com o modo que o jogador deixou', () => {
+    const { host, viewer, hero } = attach();
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'balanced' });
+    host.flush();
+    host.detach(viewer);
+
+    const socket = new FakeSocket();
+    const again = host.attach(socket, 'p1');
+    host.handle(again, { type: 'session-attach' });
+    host.flush();
+    expect(hero.fightMode).toBe('balanced');
+    expect(statsOf(socket).at(-1)?.fightMode).toBe('balanced');
+  });
+
+  it('na Cidade: escolher marca sujo, e o extrato durável leva a postura (ABSOLUTA) ao ledger', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const { host, sessions } = buildHost(shard, { receipts });
+    await host.prepare('p1', undefined, 'a1');
+    const viewer = host.attach(new FakeSocket(), 'p1');
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'defense' });
+    host.flush();
+    await host.release('p1', 1000, 'logout');
+
+    expect(hero.fightMode).toBe('defense');
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ fightMode: 'defense' });
+  });
+
+  it('na Cidade: quem nunca mexeu na postura não gera extrato só por causa dela', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const { host } = buildHost(shard, { receipts });
+    await host.prepare('p1', undefined, 'a1');
+    host.attach(new FakeSocket(), 'p1');
+    await host.release('p1', 1000, 'logout');
+    expect(saved).toHaveLength(0);
+  });
+
+  it('o extrato de hunt leva a postura do dono mesmo quando ele voltou à ofensiva (nunca gateada pelo default)', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, { directory, receipts });
+    await host.prepare('p1', undefined, 'a1');
+    const viewer = host.attach(new FakeSocket(), 'p1');
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'defense' });
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'attack' });
+    host.flush();
+    expect(hero.fightMode).toBe('attack');
+
+    await host.drainAll('drain');
+
+    // `attack` no extrato — omitir a chave deixaria uma postura antiga do Postgres voltar.
+    expect(saved[0]).toHaveProperty('fightMode', 'attack');
+  });
+});
+
 describe('a economia de Charms pelo socket (M39-02, #602, ADR 0052/0053)', () => {
   const WOUND: Charm = {
     id: 'wound', name: 'Wound', canaryCharmId: 0, category: 'major', type: 'offensive',
@@ -7005,6 +7226,27 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
     // `seq` anterior a um já processado é mensagem atrasada: ignorada em silêncio.
     await send({ type: 'select-target', creatureId: ratId, seq: 2 });
     expect(socket.received()).not.toContainEqual({ type: 'target-changed', creatureId: ratId, seq: 2 });
+  });
+
+  it('select-target num monstro INVISÍVEL é recusado com target-cancel — o jogador não o enxerga (#559)', async () => {
+    const { host, socket, viewer, runFor, send, sessions } = realHunt(true);
+    runFor(200);
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = socket.received().filter((m) => m.type === 'session-state').at(-1);
+    if (state?.type !== 'session-state') throw new Error('não veio session-state');
+    const rat = state.world.creatures.find((c) => c.name === 'Rat');
+    const ratId = rat?.id as number;
+    const monster = (sessions[0]?.ruleset as HuntRuleset).monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    monster.conditions.apply({ key: 'invisible', targetId: monster.subject, expiresAtMs: 999_999 });
+
+    // O auto-target (#444) pode já ter anunciado o rato ANTES de ele ficar invisível: o que se
+    // confere é que o pedido de seleção NÃO gera uma confirmação a mais.
+    const before = socket.received().filter((m) => m.type === 'target-changed').length;
+    await send({ type: 'select-target', creatureId: ratId, seq: 1 });
+    expect(socket.received()).toContainEqual({ type: 'target-cancel', seq: 1 });
+    expect(socket.received().filter((m) => m.type === 'target-changed')).toHaveLength(before);
   });
 
   it('slot-state sai no primeiro ciclo e só muda quando o par (state, reason) muda (RF-09)', async () => {

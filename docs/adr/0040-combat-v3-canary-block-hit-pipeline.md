@@ -376,3 +376,50 @@ OPCIONAL, ausente quando zero) — os traces do `combat-v1` passam sem edição.
   PRIMÁRIO com o tipo do secundário, `game.cpp:8016-8039`, e nenhum conteúdo o exercita), reflexo
   de tique de condição, reflexo `flat` de monstro, `addReflectElement` em jogo, Wheel e
   `BUFF_DAMAGERECEIVED`.
+
+## Emenda — 2026-09-29: a postura de luta (M30-03, #550)
+
+Mais uma emenda do perfil (d.3): `combat-v3` ainda não chegou à `main`. A postura era a peça que a
+decisão 1 listava ("a postura de luta") e que a M30-02 (#549) deixou como parâmetro fixo em
+`'attack'`; esta emenda a liga de verdade.
+
+- **É estado do PERSONAGEM, não conteúdo nem configuração do bot.** `CharacterRuntime.fightMode`
+  (`attack`/`balanced`/`defense`, os três do `FightMode_t` do Canary), persistido em
+  `character.fight_mode` (migração `0022`, `NOT NULL DEFAULT 'attack'`, CHECK dos três valores) —
+  o `FIGHTMODE_ATTACK` de `player.hpp:1857` para quem nunca escolheu, que é também o que todo
+  personagem existente já vivia (o `attackFactor` constante era 1,0 e a defesa lia o modo
+  ofensivo). A constante `combat.weaponDamage.attackFactor` SAIU do schema e do `baseline.json`.
+  O caminho é o de `blessings`: ticket → sessão → extrato → ledger, ABSOLUTO e última escrita
+  vence — não há ordem entre os três modos que uma fusão por máximo pudesse respeitar.
+- **A intenção é `set-fight-mode`** (C2S 35, `{ mode }`), tratada na chegada pela sessão dona
+  (invariante 9), na Cidade e na hunt, como `select-ammo`; a resposta é `player-stats.fightMode`,
+  e a marca do botão só troca quando ela chega (invariante 4: o cliente não antecipa o efeito). O
+  nome `set-stance` do ADR 0032 d.10 não foi usado — `stance` é, no Draconya, o buff de magia
+  (Blood Rage, Sharpshooter) e o campo reservado da config do bot.
+- **Os fatores são os do Canary, não os do TFS do ADR 0032 d.10.** Ataque 1,0/0,75/0,5
+  (`Player::getAttackFactor`) — o TFS usa 1,0/1,2/2,0 como DIVISOR, e a fórmula de arma do
+  Draconya é a do Canary, que multiplica (ADR 0037 d.4). Mitigação 0,8/1,0/1,2
+  (`calculateMitigation`). Defesa 0,5/0,75/1,0 — e aqui a M30-02 implementava a variante ESTÁTICA
+  (a que o Canary manda ao cliente); a variante que `Creature::blockHit` consome é a DINÂMICA
+  (`getDefenseFactor(false)`): nos modos ofensivo e balanceado o fator só cai enquanto o jogador
+  bateu há menos de um intervalo de ataque, e volta a 1,0 depois. Pela regra do ADR 0037 d.6 —
+  mecânica de caça idêntica, inclusive QUANDO ela dispara — a variante dinâmica é a implementada:
+  `CharacterRuntime.lastAttackAtMs` (relógio lógico da sessão, sem tick) guarda o instante do
+  último golpe de arma, escrito por `#onPlayerAttack` quando `#strike` devolve `true` — o `result`
+  de `Player::doAttacking`, que não é `true` para wand sem mana, arma abaixo do level, tiro sem
+  visão ou sem munição. A janela é `attackIntervalMs` (o `attackspeed` de 2000 ms das vocações).
+  Dois pontos que a revisão do PR #808 fechou: (1) o carimbo é do relógio da sessão que o
+  gravou, e o personagem atravessa a transição como o MESMO objeto — `Session.enter` o zera, e o
+  restore de snapshot (que não passa por `enter`) o preserva; um carimbo no futuro nunca é
+  "recente"; (2) o empate exato (`agora − lastAttack == attackspeed`) é janela ABERTA quando o
+  golpe do herói está agendado para o mesmo ms, porque no Canary quem bate sem parar nunca fecha
+  a janela (o golpe seguinte corre `attackspeed` mais a latência do despachante) e, no motor
+  discreto, monstro e herói que chegaram juntos batem no mesmo ms para sempre — sem essa
+  exceção a ordem da fila decidiria a defesa.
+- **Só o `combat-v3` lê a postura.** `combat-v1`/`v2` seguem no 1,0 fixo — `attackFactorOf`
+  (`weapon-power.ts`) é a única porta —, e o snapshot deles não ganha `lastAttackAtMs`. O
+  resultado de um perfil publicado continua bit a bit (ADR 0031).
+- **Fora desta emenda:** chase mode e secure mode (ADR 0037 d.2 — perseguição é do bot, modo
+  seguro é PvP); `Player::attackTotal` (o painel de dano do cliente do Canary — apresentação); a
+  variante estática do fator de defesa para esse mesmo painel; e qualquer troca automática de
+  postura pelo bot (a postura é escolha do jogador, e o vocabulário da automação não mudou).

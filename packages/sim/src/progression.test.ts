@@ -234,6 +234,23 @@ describe('penalidade de morte (#521/#569, ADR 0037 — a fórmula do Tibia)', ()
       .toBe(esperado);
   });
 
+  it('o charm Bless (#603) multiplica o que sobrou depois de bênção e promoção — não soma a elas', () => {
+    // `Player::death`: `deathLossPercent -= deathLossPercent × chance[tier] / 100`, DEPOIS de
+    // `getLostPercent()` já ter tirado bênção e promoção. Sete bênçãos (56 %) + Bless de 12 %:
+    // sobra 44 % × 88 %, não 32 %.
+    const withCharm = atLevel(24);
+    const without = atLevel(24);
+    const kept = (1 - baseline.deathPenalty.blessingReduction * 7) * (1 - 0.12);
+    const level = withCharm.level;
+    const rawLoss = ((level + 50) / 100) * 50 * (level * level - 5 * level + 8);
+    expect(applyDeathPenalty(
+      withCharm, { blessings: 7, charmBlessReduction: 0.12 }, null, baseline, NO_SKILLS,
+    ).xpLost).toBe(Math.round(rawLoss * kept));
+    // Sem o charm, exatamente o de antes.
+    expect(applyDeathPenalty(without, { blessings: 7 }, null, baseline, NO_SKILLS).xpLost)
+      .toBe(Math.round(rawLoss * (1 - baseline.deathPenalty.blessingReduction * 7)));
+  });
+
   it('promovido soma 30% de redução, ADITIVA à bênção e NUNCA tetada (#569)', () => {
     // `Player::getLostPercent`: `if (isPromoted()) percentReduction += 0.30` acontece DEPOIS
     // do teto de 50% do ramo `level < cubicFromLevel` — a promoção nunca passa pelo teto.
@@ -377,6 +394,16 @@ describe('perda de skill e de mana gasta na morte (#569, `Player::death` do Cana
     expect(magicLoss).toEqual({ skillId: 'magic', triesLost: 160, levelChange: { from: 1, to: 0 } });
     expect(character.skills.levelOf(magicSkill)).toBe(0);
     expect(character.skills.pointsOf(magicSkill)).toBe(1440);
+  });
+
+  it('o charm Bless (#603) reduz a perda de skill pelo MESMO fator da XP: floor(135 × 0,1 × 0,88) = 11 tries', () => {
+    // O `deathLossPercent` do Canary é um só e serve às duas somas; o Bless o multiplica por
+    // `1 − chance/100` antes de qualquer uma delas. Sem o charm o mesmo vetor perde 13 tries.
+    const character = withSkills({ fist: { level: 12, points: 10 }, magic: { level: 1, points: 0 } });
+    const penalty = applyDeathPenalty(
+      character, { blessings: 0, charmBlessReduction: 0.12 }, null, baseline, skillCatalog,
+    );
+    expect(penalty.skillLosses.find((loss) => loss.skillId === 'fist')?.triesLost).toBe(11);
   });
 
   it('perda pequena não cruza nível: só desconta os pontos, `levelChange` fica `null`', () => {

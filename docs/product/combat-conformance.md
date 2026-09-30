@@ -104,7 +104,7 @@ Cada peça tem a própria matriz de oráculos escritos à mão, no mesmo formato
 
 | Arquivo | O que prende |
 |---|---|
-| `packages/sim/src/combat/weapon-power.test.ts` | tabela (attack, skill, level, attackFactor, vocationMultiplier) → faixa `[min, max]` igual à conta do Canary; distribuição (média/desvio) da normal truncada numa amostra grande; retrocompatibilidade — sem `combat`, ou com `combat-v1`, a fórmula não muda |
+| `packages/sim/src/combat/weapon-power.test.ts` | tabela (attack, skill, level, vocationMultiplier) → faixa `[min, max]` igual à conta do Canary; distribuição (média/desvio) da normal truncada numa amostra grande; retrocompatibilidade — sem `combat`, ou com `combat-v1`, a fórmula não muda |
 | `packages/sim/src/combat/distance-hit.test.ts` | a tabela por skill/distância (1–7); o balde `ammunition.maxHitChance` (#524) — tabela ou chance fixa; o bônus/malus `weapon.hitChance` (#524); a rolagem sempre consumida |
 | `packages/sim/src/rulesets/weapons.test.ts` (`combat-v2: chance de acerto à distância`) | o `#strike` fim a fim: skill baixa erra mais que skill alta à mesma distância, `combat-v1` continua sempre acertando, 1 Hz == 10 Hz com a chance ligada |
 | `packages/server/src/game/rat-cellars.test.ts`, `rotworm-caves.test.ts` | conformance do CONTEÚDO REAL — inclusive frequência-invariância (`dez minutos a 1 Hz e a 10 Hz...`). Carregam `packages/content/data` direto (`loadContent(DATA)`), então rodam sob QUALQUER perfil que `combat/baseline.json` declarar no momento — `combat-v2` até esta issue, `combat-v3` desde que `baseline.json` passou a declará-lo (seção seguinte); a suite não fixa o perfil, só prova que o conteúdo real continua verde sob o que estiver em vigor |
@@ -181,6 +181,10 @@ O que muda, e o que NÃO muda:
 | `packages/content/src/content.test.ts` | `monsterSchema` aceita `defense`/`defenseMitigation`, default `0`; `combat-v3` exige `weaponDamage`/`distanceHitChance` como o v2 |
 | `packages/sim/src/rulesets/hunt.test.ts` (`defesa, escudo e prática de shielding`) | shielding treina por ORIGEM sob `combat-v3` — um ataque corpo a corpo elemental (que `combat.defense.blockTypes` recusaria) ainda treina, o oposto do `combat-v1`/`v2` |
 | `packages/sim/src/combat/damage.test.ts` (achado da revisão do PR #642) | o componente secundário (#473) herda a carga que o primário já gastou, e o `blockCharge` de nível superior — o único que `applyDamageOutcome` grava de volta — reflete o total consumido pelos dois |
+| `packages/sim/src/combat/fight-mode.test.ts` (#550, M30-03) | os três fatores da postura — ataque 1,0/0,75/0,5, defesa dinâmica 0,5·0,75·1,0 batendo e 1,0 parado, mitigação 0,8/1,0/1,2 — e `attackedRecently` (comparação estrita, `null` = nunca bateu) |
+| `packages/sim/src/combat/weapon-power.test.ts` (`a postura de luta escala o MÁXIMO`) | o teto do dano de arma por postura (espada 170/128/85, distância 38/29/20), o ofensivo bit a bit igual ao v2 de antes, o `combat-v2` IGNORANDO a postura, wand/rod fora |
+| `packages/sim/src/combat/player-defense.test.ts` (`o fator de postura é o DINÂMICO`) | `playerDefense` nos seis cenários modo × batendo/parado, e a mitigação por postura |
+| `packages/sim/src/rulesets/hunt.test.ts` (`postura de luta: o fightMode do personagem chega ao golpe e à defesa`) | fim a fim: o teto por postura no golpe da hunt, `lastAttackAtMs` só no v3 e só quando a arma sai, a defesa 11/17/22 batendo e 22 parado (wand sem mana), snapshot/retomada e 1 Hz == 10 Hz |
 
 ## O `combat-v4` (ADR 0052 decisão 7)
 
@@ -207,6 +211,102 @@ prova o mecanismo com invocação presente; nenhum teste de RNG dedicado foi nec
 invocação, nada muda" porque a suíte de regressão inteira (4.000+ casos, incluindo os oráculos de
 conformance do v3 acima) já roda sob o conteúdo real sem NENHUM monstro `summonable` — e continua
 batendo os mesmos números depois da mudança, o que é a prova por ausência de qualquer perturbação.
+
+### Estágio #603 (M39-03, Charms em combate — ADR 0053 d.5): `breaking`
+
+O primeiro estágio do `combat-v4` que MUDA resultado e ordem de sorteio — por isso o perfil passa
+a `migrationPolicy: 'breaking'` (era `additive` com o estágio #598). A partir dele, uma sessão
+fixada em `combat-v3` (conteúdo anterior) nunca rola charm nenhum, mesmo com o registro do
+personagem cheio (`hasCharmStage`, `combat/profile.ts`): o registro de Charms é do personagem,
+o perfil é da versão de conteúdo (invariante 7). São três mudanças declaradas, todas em
+`packages/content/data/combat/baseline.json` e `packages/sim/src/combat/charms.ts`:
+
+1. **O Dodge do PRD sai.** `player.dodgeChance` vale `0`, o resolver do `combat-v4` NEM sorteia o
+   Dodge (`resolveBlockHitProfile`: `dodged = false`, zero draws — a sequência do v4 é a do v3 sem
+   essa rolagem) e a exceção `dodge-halves-damage` sai de `productExceptions`. O único Dodge é o
+   charm, que NEGA o golpe inteiro — a #522 tinha mantido o Dodge de metade por acreditar que era
+   o charm, e o `Game::combatChangeHealth` (`return true` no ramo do Dodge) mostra que não é.
+2. **O crítico BASE de todo jogador** (`playerBaseCriticalChance` 0,05 e `playerBaseCriticalDamage`
+   0,1 do `config.lua.dist`, lidos em `Combat::applyExtensions`): `combat.modifiers.critical` =
+   `{ chance: 0.05, multiplier: 1.1 }`. A #551 tinha o crítico de item, mas não o base — e Low Blow
+   e Savage Blow SOMAM a ele (`baseChance + charm`), então sem ele o Savage Blow não teria crítico
+   nenhum a reforçar num personagem sem item de crítico. Todo golpe/magia/runa do jogador passa a
+   consumir UMA rolagem de crítico (sempre foi assim para quem declarava `critical`).
+3. **O estágio de Charms**, na ordem do Canary:
+
+| # | Onde | Quando | Rolagem |
+|---|---|---|---|
+| 1 | `Combat::applyExtensions` → `#hitModifiers`/`ActionCritical` | golpe/magia do jogador, ANTES do `blockHit` | crítico base (1 sorteio por ação); se falhou e há Low Blow contra o alvo, 2º sorteio com `base + charm` — UM por monstro-alvo do charm |
+| 2 | `Game::combatChangeHealth`, após defesa/armadura/reflexo | golpe de monstro no personagem — e cada TIQUE de condição que um monstro VIVO aplicou (`ConditionDamage::doDamage`) —, antes do mana shield | minor (Adrenaline Burst, Numb) e depois major (Parry, Dodge), cada um `chance ≥ normal(1, 10000)/100`; Dodge encerra |
+| 3 | `Game::combatChangeMana` | dreno de mana (`manadrain`) | Void Inversion (`chance > normal(0, 100)`) → major, minor (`normal(1, 10000)`); o Parry não rola nesse ramo |
+| 4 | `Combat::CombatConditionFunc` (`#cleanseBeforeCondition`) | depois de todo golpe de monstro que acertou, antes da condição da ability | Cleanse `chance ≥ normal(0, 10000)/100` e `uniform(0, n−1)` da condição sorteada; imunidade de 11 s por tipo |
+| 5 | `Game::applyCharmRune` (`#applyCharmsAfterHit`) | depois de todo golpe do jogador que TIROU VIDA de um monstro (extensão/cleave fora) | major e minor ofensivos, cada um `chance ≥ uniform(1, 100)`; a paralisia do Cripple ignora a imunidade a `paralyze` do monstro (ver abaixo) |
+| 6 | `Combat::CombatHealthFunc` (`#rollFatalHold`) | depois de todo dano do jogador a um monstro (o próprio dano dos charms inclusive) | Fatal Hold `chance > normal(0, 100)` |
+| 7 | `Monster::death` (`#carnage`) | morte de um monstro — invocado por outro monstro inclusive — para o jogador que o matou (ou que ele atacava) | Carnage `chance ≥ normal(1, 10000)/100` |
+| 8 | `Player::death` (`#charmBlessReductionOf`) | morte do personagem | sem sorteio: `chance/100` de redução multiplicativa quando o último golpe foi do monstro do Bless |
+| 9 | `generateLootRoll` (`#gutOf`) | loot do cadáver do monstro do Gut do MAIOR causador de dano | sem sorteio: `+ ceil(chance × charm / 100)` nos creature products |
+
+Vampiric Embrace e Void's Call somam ao leech por alvo (`ActionCritical.forTarget`, `combat/charms.ts`, sem sorteio; a fórmula do leech continua em `combat/modifiers.ts`). O Scavenge é a
+esfola do #626 e não entra aqui.
+
+**As probabilidades reais NÃO são as nominais.** `normal_random` centra em 0,5 (desvio 0,25) e
+rejeita fora de `[0, 1]`, então um charm defensivo de "5 %" dispara em ~1,4 % dos golpes (10 % →
+3,4 %; 11 % → 3,8 %; os minors 6/9/12 % → 1,7/2,9/4,3 %); Void Inversion e Fatal Hold caem de
+20/30/40 % para ~9/19/33 % e de 30/45/60 % para ~19/41/66 %. Só os ofensivos, que usam
+`uniform_random(1, 100)`, acertam exatamente a chance. Os números saem da CDF da normal truncada e
+são prendidos por `combat/charms.test.ts` com 300 mil sorteios por caso.
+
+**Defeitos do `47dfd51` que este estágio NÃO reproduz** (todos listados na PR do #603 para revisão
+do dono; cada um está no comentário da função que o evita):
+
+- **Parry, primeiro ponto** (`game.cpp:7944-7952`): o valor está no sinal de vida-de-alvo e o
+  `-realDamage` sai POSITIVO — `combatChangeHealth` o lê como cura, então o Parry curaria o monstro
+  que bateu, e anularia o segundo ponto (`:8566-8583`, o que de fato reflete). Só o segundo existe.
+- **`maxLevelsLimit` estático** (`iobestiary.cpp`): o ramo do Carnage o reatribui a 6, e depois da
+  primeira morte por Carnage do processo o teto de TODO charm elemental, de todo jogador, vira 6×
+  o level. Estado global de processo não cabe numa sessão determinística: elemental 2×, Carnage 6×.
+- **Gut inerte**: o `generateLootRoll` confere `iType:getType() == ITEM_TYPE_CREATUREPRODUCT`, mas
+  nenhum item do `items.xml` declara esse `type` (só o `primarytype`, outro campo) — no `47dfd51`
+  o charm nunca dispara. Aqui vale para os itens de `primarytype="creature products"`
+  (`Item.creatureProduct`, escrito pelo importador — e, nos cinco que já eram autorais, `worm` e as
+  peles e escamas dos dragões, por override), o que o Lua descreve.
+
+**Onde o Canary é reproduzido mesmo sendo estranho:** o teto de 2× o level dos elementais (não está
+na descrição do charm, está no código), a base do Low Blow somada duas vezes, Low Blow/Savage Blow/
+Vampiric/Void's Call valendo sem exigir item de crítico/leech, o Fatal Hold que nunca expira em
+monstro que foge e não troca de alvo (achad, drasilla, muglex-clan-assassin), o Bless como redução
+MULTIPLICATIVA sobre bênção e promoção, e o dano do charm passando pelo resolver como extensão
+(resistência, imunidade e cura por elemento do monstro valem; só o neutro os pula). Mais dois, ambos
+do ponto em que o Canary NÃO confere o que o resto do combate confere:
+
+- **O Cripple e o Numb paralisam o monstro imune a `paralyze`.** `iobestiary.cpp` aplica a
+  condição com `target->addCondition`, direto; a imunidade por condição (`Monster::isImmune`)
+  só é conferida em `Combat::CombatConditionFunc` (`combat.cpp:1079`), que o charm não atravessa, e
+  `Creature::addCondition` só recusa a supressão (`isSuppress`, que só o `Player` sobrescreve). O
+  `#applyConditionTo` ganha `ignoreImmunity` para esses dois — as demais paralisias (magia, runa,
+  ability) seguem barradas. 685 dos 1.028 monstros importados declaram `paralyze`: sem isto os dois
+  charms seriam inertes em dois terços do catálogo.
+- **O Carnage rola também para o monstro invocado por outro monstro.** O `Monster::death` não
+  confere `isSummon()`; só o loot, a XP e o Bestiário (`Player::onKilledMonster`) excluem a
+  invocação. A invocação do PERSONAGEM nunca é "morta pelo jogador", então não chega a rolar.
+
+**Conformance de RNG com e sem charms** (`packages/sim/src/rulesets/charms.test.ts`, "a
+conformance de RNG com e sem charms"): (a) sem charm nenhum e com charm atribuído a OUTRO monstro
+a luta é bit a bit a mesma — estado do `Rng`, vida, condições e cargas de bloqueio; o gate é
+aditivo; (b) com charm no monstro que luta a sequência muda; (c) 1 Hz == 10 Hz == 20 Hz com
+charms rolando, e (d) a retomada de um snapshot no meio da luta rende o mesmo que a sessão que
+nunca caiu (`cleanseImmunity` viaja no snapshot). `packages/server/src/game/charms-combat.test.ts`
+prova o mesmo contra a Rat Cellars real e confere cada id despachado contra o catálogo importado.
+
+**Um vetor por charm** (`rulesets/charms.test.ts`; as rolagens e os números em
+`combat/charms.test.ts`): Wound, Enflame, Poison, Freeze, Zap, Curse e Divine Wrath (`it.each`
+dos sete, tipo e teto), Overpower, Overflux (neutros, tetos), Cripple (e contra o monstro imune a
+`paralyze`), Carnage (vizinhos ortogonais, teto de level, neutro, cadeia, monstro invocado),
+Dodge, Parry (só o segundo ponto), Adrenaline Burst, Numb (idem imune), a ORDEM minor→major, Void Inversion, Cleanse (sequência remove/imuniza/expira), Fatal Hold
+(30 s e para sempre), Low Blow, Savage Blow, Vampiric Embrace, Void's Call, Bless
+(`progression.test.ts` e o vetor de morte) e Gut (`loot.test.ts`, o vetor de abates e, em
+`charms-combat.test.ts`, as tabelas REAIS de Dragon, Dragon Lord, Rotworm e Cave Rat com o flag
+`creatureProduct` de cada creature product do Canary conferido contra o conteúdo carregado).
 
 ## Benchmark: o cenário misto
 

@@ -7,6 +7,8 @@ import { FULL_BLOCK_CHARGE, isFullBlockCharge } from './combat/block-charge.js';
 import type { BlockChargeState } from './combat/block-charge.js';
 import { INITIAL_ATTACK_PRACTICE, isInitialAttackPractice } from './combat/attack-practice.js';
 import type { AttackPracticeState } from './combat/attack-practice.js';
+import { DEFAULT_FIGHT_MODE, isFightMode } from './combat/fight-mode.js';
+import type { FightMode } from './combat/fight-mode.js';
 import { Bestiary } from './bestiary.js';
 import type { BestiaryState } from './bestiary.js';
 import { Charms } from './charms.js';
@@ -269,11 +271,42 @@ export interface CharacterState {
    */
   readonly lastCombatActionAtMs?: number;
   /**
+   * A imunidade temporária que o charm Cleanse dá ao tipo de condição que acabou de remover (#603,
+   * `Player::setImmuneCleanse` do Canary — 11 s): `tipo → instante ABSOLUTO (relógio lógico) em que
+   * vence`. Só o ruleset da hunt escreve (invariante 9), e só sob `combat-v4`. Ausente é "nenhuma
+   * imunidade" — sem bump de `SNAPSHOT_FORMAT_VERSION`, como `attackLockedUntil`. Precisa viajar no
+   * snapshot: uma hunt retomada no meio dos 11 s que voltasse sem ela deixaria uma condição que a
+   * sessão original recusaria entrar.
+   */
+  readonly cleanseImmunity?: Readonly<Record<string, number>>;
+  /**
    * Promovido (#566, ADR 0042 decisão 1): estado que SÓ SOBE — não existe des-promoção no
    * Tibia. Ausente/`false` é "não promovido", o normal de todo personagem novo. Sem bump de
    * `SNAPSHOT_FORMAT_VERSION`, como `vocationId`/`blessings`.
    */
   readonly promoted?: boolean;
+  /**
+   * A postura de luta (M30-03, #550): o `fightMode` do Canary — ofensiva, balanceada ou
+   * defensiva —, escolhida pelo jogador com `set-fight-mode` e persistida em
+   * `character.fight_mode`. Escala o dano de arma (`attackFactor`), a defesa e a mitigação do
+   * `combat-v3` (`combat/fight-mode.ts`). Ausente é `'attack'`, o `FIGHTMODE_ATTACK` que o
+   * Canary usa quando ninguém escolheu (`player.hpp:1857`) — sem bump de
+   * `SNAPSHOT_FORMAT_VERSION`, como `promoted`.
+   */
+  readonly fightMode?: FightMode;
+  /**
+   * O instante (relógio lógico da sessão) do último golpe de ARMA do personagem — o `lastAttack`
+   * do Canary (`Player::updateLastAttack`, escrito só por `doAttacking` quando `useWeapon`/
+   * `useFist` devolve `true`), de onde sai o fator de defesa DINÂMICO da postura ofensiva e
+   * balanceada (`attackedRecently`, `combat/fight-mode.ts`). Só o ruleset da hunt escreve, no
+   * evento do golpe (invariante 9). Ausente é "nunca bateu nesta sessão" (fator 1,0) — o
+   * relógio é da sessão, então não sobrevive à troca de sessão nem vai para o Postgres, só no
+   * snapshot QUENTE, para a hunt retomada não perder a janela. Na transição o personagem é o
+   * MESMO objeto e o relógio da sessão nova nasce em zero: por isso `Session.enter` zera o
+   * carimbo (o restore de snapshot não passa por `enter`, e a janela quente atravessa). Sem bump
+   * de `SNAPSHOT_FORMAT_VERSION`, como `lastCombatActionAtMs`.
+   */
+  readonly lastAttackAtMs?: number;
 }
 
 /** Ver `CharacterState.pendingManualAction`. */
@@ -423,10 +456,26 @@ export class CharacterRuntime {
    */
   lastCombatActionAtMs: number | null;
   /**
+   * A imunidade de Cleanse por tipo de condição (#603) — ver `CharacterState.cleanseImmunity`.
+   * Só o ruleset da hunt escreve. Vazio é o caso de todo personagem sem o charm.
+   */
+  readonly cleanseImmunity = new Map<string, number>();
+  /**
    * Promovido (#566, ADR 0042 decisão 1). Só `promote()` escreve — nunca desce. Consumido pelo
    * regen (`#regenOf`) e pela penalidade de morte (`applyDeathPenalty`), os dois em `hunt.ts`.
    */
   promoted: boolean;
+  /**
+   * A postura de luta (M30-03, #550). Só `setFightMode` escreve, e só a sessão dona a chama
+   * (invariante 9) — pela intenção `set-fight-mode`, na Cidade e na hunt. Ver
+   * `CharacterState.fightMode`.
+   */
+  fightMode: FightMode;
+  /**
+   * Ver `CharacterState.lastAttackAtMs`. Só o ruleset da hunt escreve (invariante 9) e
+   * `Session.enter` zera; `null` é "nunca bateu nesta sessão".
+   */
+  lastAttackAtMs: number | null;
 
   constructor(state: CharacterState) {
     this.id = state.id;
@@ -472,7 +521,14 @@ export class CharacterRuntime {
     this.pendingManualAction = state.pendingManualAction ?? null;
     this.attackLockedUntil = state.attackLockedUntil ?? 0;
     this.lastCombatActionAtMs = state.lastCombatActionAtMs ?? null;
+    for (const [type, untilMs] of Object.entries(state.cleanseImmunity ?? {})) {
+      this.cleanseImmunity.set(type, untilMs);
+    }
     this.promoted = state.promoted ?? false;
+    // Defensivo, como `readCharacterStorage`: um valor que não é um dos três modos (snapshot
+    // gravado à mão, ticket torto) vira o default do Canary em vez de travar a sessão.
+    this.fightMode = isFightMode(state.fightMode) ? state.fightMode : DEFAULT_FIGHT_MODE;
+    this.lastAttackAtMs = state.lastAttackAtMs ?? null;
   }
 
   /** Haste (#155): o multiplicador que `movementDuration` lê. `speed` continua sendo a base da tabela. */
@@ -642,6 +698,18 @@ export class CharacterRuntime {
     return { ok: true };
   }
 
+  /**
+   * Escolhe a postura de luta (M30-03, #550) — o `Player::setFightMode` do Canary, sem o
+   * `sendStats`/`sendSkills` (apresentação, do host). Devolve se o modo MUDOU: quem chama só
+   * marca o personagem como sujo e reenvia os stats quando mudou, e escolher o modo em que já
+   * está é um pedido válido que não escreve nada.
+   */
+  setFightMode(mode: FightMode): boolean {
+    if (this.fightMode === mode) return false;
+    this.fightMode = mode;
+    return true;
+  }
+
   getState(): CharacterState {
     return {
       id: this.id,
@@ -700,7 +768,12 @@ export class CharacterRuntime {
       ...(this.attackLockedUntil === 0 ? {} : { attackLockedUntil: this.attackLockedUntil }),
       ...(this.lastCombatActionAtMs === null
         ? {} : { lastCombatActionAtMs: this.lastCombatActionAtMs }),
+      ...(this.cleanseImmunity.size === 0
+        ? {} : { cleanseImmunity: Object.fromEntries(this.cleanseImmunity) }),
       ...(this.promoted ? { promoted: true } : {}),
+      // Omitidos no default (ofensiva, nunca bateu): o construtor os repõe sozinho.
+      ...(this.fightMode === DEFAULT_FIGHT_MODE ? {} : { fightMode: this.fightMode }),
+      ...(this.lastAttackAtMs === null ? {} : { lastAttackAtMs: this.lastAttackAtMs }),
     };
   }
 

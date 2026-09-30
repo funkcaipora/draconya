@@ -27,7 +27,8 @@ import type { DamageOutcome, Defender } from './combat/damage.js';
 import type { DefenderReflect, ReflectAttacker } from './combat/reflect.js';
 import { MAGIC_BLOCK_FLAGS } from './combat/blockhit.js';
 import { rollCombatValue } from './combat/combat-value.js';
-import { rollSharedCriticalOutcome } from './combat/modifiers.js';
+import { ActionCritical } from './combat/charms.js';
+import type { CharmAttackBonus } from './combat/charms.js';
 import { isV3OrLater } from './combat/profile.js';
 import { conditionFromSpec } from './conditions.js';
 import type { ConditionState } from './conditions.js';
@@ -194,6 +195,12 @@ export interface SpellTarget {
    * acima lê; ausente em qualquer outro caminho (dano, cura), que nunca precisou de velocidade.
    */
   readonly speed?: number | undefined;
+  /**
+   * O que os Charms passivos do LANÇADOR somam a um golpe contra ESTE alvo (#603): Low Blow,
+   * Savage Blow, Vampiric Embrace e Void's Call — `combat/charms.ts`. Ausente é o alvo sem charm
+   * do lançador, o caso comum, e o intent segue idêntico ao de antes do #603.
+   */
+  readonly charm?: CharmAttackBonus | undefined;
 }
 
 /**
@@ -621,13 +628,16 @@ export function castSpell(
       // TODO alvo da mesma magia em área compartilha o mesmo resultado. Rolar aqui, ANTES do
       // laço, e forçar o mesmo resultado em cada `resolveDamage` por alvo (via
       // `rollSharedCriticalOutcome`) é o que impede um alvo criticar e outro não na MESMA magia.
-      const actionModifiers = rollSharedCriticalOutcome(modifiers, rng);
+      const action = new ActionCritical(modifiers, rng);
       const hits: number[] = [];
       const hitOutcomes: DamageOutcome[] = [];
       let total = 0;
       for (let i = 0; i < targets.length; i += 1) {
         const target = targets[i] as SpellTarget;
         const power = Math.round(powerOf(effect, caster, scaling, combat, rng) * dealt);
+        // Os charms passivos do lançador contra ESTE alvo (#603) somam ao crítico e ao leech da
+        // ação — sem charm, `forTarget` devolve o MESMO objeto de `action.modifiers`.
+        const actionModifiers = action.forTarget(target.charm, rng);
         const result = resolveDamage(
           {
             rawDamage: power, source: 'spell', damageType: effect.damageType,
@@ -849,12 +859,14 @@ export function useSupply(
     startSupplyCooldown(user, supply, nowMs);
     // O crítico é da AÇÃO (a mesma correção de `castSpell`, #551/#653): uma runa de área rola o
     // crítico UMA vez, e cada alvo herda o mesmo resultado via `rollSharedCriticalOutcome`.
-    const actionModifiers = rollSharedCriticalOutcome(modifiers, rng);
+    const action = new ActionCritical(modifiers, rng);
     const hits: number[] = [];
     const hitOutcomes: DamageOutcome[] = [];
     let total = 0;
     for (let i = 0; i < aim.targets.length; i += 1) {
       const target = aim.targets[i] as SpellTarget;
+      // Os charms passivos do usuário contra este alvo (#603) — o mesmo ponto de `castSpell`.
+      const actionModifiers = action.forTarget(target.charm, rng);
       // UMA rolagem por alvo, na ordem da mira — o contrato do loot e da magia. A fórmula
       // canônica (#476) VENCE o `basePower`; sem ela, o caminho do BP provisório continua bit a
       // bit (ADR 0031), porque os dois consomem exatamente UM sorteio de valor (`rollCombatValue`

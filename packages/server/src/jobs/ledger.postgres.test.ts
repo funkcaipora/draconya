@@ -896,6 +896,107 @@ describe.runIf(ready)('as sete bênçãos chegam ao Postgres pelo extrato, e a m
   });
 });
 
+describe.runIf(ready)('a postura de luta atravessa o banco: extrato → coluna → ticket → sessão (#550, M30-03)', () => {
+  const fightModeOf = async (database: NonNullable<typeof db>, characterId: string): Promise<string> => {
+    const [row] = await database.database.db
+      .select({ fightMode: characters.fightMode }).from(characters).where(eq(characters.id, characterId));
+    if (row === undefined) throw new Error('personagem não encontrado');
+    return row.fightMode;
+  };
+
+  it('todo personagem nasce na ofensiva — o `FIGHTMODE_ATTACK` do Canary, o que ele já vivia', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    expect(await fightModeOf(database, characterId)).toBe('attack');
+    const repository = new DrizzleGameRepository(database.database.db);
+    expect((await repository.getCharacterById(characterId))?.fightMode).toBe('attack');
+  });
+
+  it('a última escrita vence, em qualquer direção — e o extrato sem o campo não toca na coluna', async () => {
+    // ABSOLUTA, como as bênçãos: não há ordem entre os três modos, então NADA de fusão por
+    // máximo. Mutação que mata: `greatest`/`coalesce` no ledger — a defensiva não voltaria à
+    // ofensiva, ou a primeira escrita ficaria para sempre.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const flush = () => writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), fightMode: 'defense' });
+    await flush();
+    expect(await fightModeOf(database, characterId)).toBe('defense');
+
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2, fightMode: 'balanced' });
+    await flush();
+    expect(await fightModeOf(database, characterId)).toBe('balanced');
+
+    // De volta à ofensiva: o `attack` também É uma escolha e persiste (não é "ausente").
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3, fightMode: 'attack' });
+    await flush();
+    expect(await fightModeOf(database, characterId)).toBe('attack');
+
+    // Extrato de Cidade sem o campo (nada mudou ali, ou nó anterior à issue): nenhuma escrita.
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 4, fightMode: 'defense' });
+    await flush();
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 5 });
+    await flush();
+    expect(await fightModeOf(database, characterId)).toBe('defense');
+  });
+
+  it('volta pelo ticket: a coluna vira `initialCharacter.fightMode`, que o `CharacterRuntime` lê', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), fightMode: 'balanced' });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+
+    const repository = new DrizzleGameRepository(database.database.db);
+    const character = await repository.getCharacterById(characterId);
+    if (character === null) throw new Error('the seeded character is missing');
+    const initial = initialCharacterOf(character, await repository.listItemInstances(characterId));
+    expect(initial.fightMode).toBe('balanced');
+    const runtime = createCitySessionFactory(testContent())(characterId, initial).participants[0];
+    expect(runtime?.fightMode).toBe('balanced');
+  });
+
+  it('o banco recusa um modo fora dos três — o CHECK vale mesmo se um caminho novo de escrita esquecer', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    await expect(database.database.db.update(characters)
+      .set({ fightMode: 'aggressive' }).where(eq(characters.id, characterId)))
+      .rejects.toThrow();
+    expect(await fightModeOf(database, characterId)).toBe('attack');
+  });
+
+  it('uma sessão de verdade que teve a postura trocada a grava ponta a ponta (host → extrato → ledger)', async () => {
+    // O contrato isolado está acima; este é o caminho real — `CharacterRuntime` → `#receiptFor` →
+    // `receipts.save` → o MESMO `writePendingReceipts` — sem simular o extrato à mão.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const [owner] = await database.database.db.select({ accountId: characters.accountId })
+      .from(characters).where(eq(characters.id, characterId));
+    if (owner === undefined) throw new Error('Missing test character');
+    const receipts = new ReceiptStore(redis);
+    const content = testContent();
+    const session = createHuntSession({
+      id: randomUUID(), content, huntId: TEST_HUNT.id, difficulty: 'cautious', createdAtMs: 0,
+    });
+    const character = createCitySessionFactory(content)(characterId).participants[0];
+    if (character === undefined) throw new Error('Missing test runtime');
+    session.enter(character);
+    const host = new SessionHost({
+      nodeId: 'fight-mode-test', contentVersion: content.version, logger, receipts,
+      createSession: () => session,
+    });
+    await host.prepare(characterId, undefined, owner.accountId);
+    character.setFightMode('defense');
+
+    expect(await host.drainAll()).toBe(1);
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+
+    expect(await fightModeOf(database, characterId)).toBe('defense');
+  });
+});
+
 describe.runIf(ready)('o estoque de supply/munição do loot chega ao Postgres pelo extrato, e drenar até zero PERSISTE (#520, revisão do #536)', () => {
   it('loot (+N) grava a coluna, e uma sessão que esgota o estoque grava {} em vez de deixar a coluna intocada', async () => {
     // O achado [blocker] da revisão: `supplyStock`/`ammunitionStock`, ao contrário de `ammo`
@@ -1617,6 +1718,77 @@ describe.runIf(ready)('sell-items/discard-item apagam a instância no ledger (#7
       .from(itemInstances)
       .where(eq(itemInstances.id, instanceId));
     expect(row?.id).toBe(instanceId);
+  });
+
+  it('a MORTE com perda de item (#571): apaga o que caiu, entrega a bag, audita no ledger e não duplica', async () => {
+    // O que `HuntRuleset#onCharacterDied` produz quando o bloco `itemLoss` está ligado: as
+    // instâncias perdidas em `removedInstances`, a bag nova em `acquired` (origem própria) já
+    // vestida em `equipment`, e um evento notável por instância no `ref` da linha de ledger —
+    // a trilha de auditoria. Tudo na MESMA transação, atrás de `UNIQUE (session_id, seq)`.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const bag = `${sessionId}:0`;
+
+    await database.database.db.insert(itemInstances).values([
+      { id: 'lost:backpack', itemId: 'backpack', ownerCharacterId: characterId, origin: 'starting-kit', equippedSlot: 'back' },
+      { id: 'lost:armor', itemId: 'plate', ownerCharacterId: characterId, origin: 'loot', equippedSlot: 'chest' },
+      { id: 'lost:inside', itemId: 'spike-sword', ownerCharacterId: characterId, origin: 'loot', container: 'backpack', slotIndex: 0 },
+      { id: 'kept:satchel', itemId: 'spike-sword', ownerCharacterId: characterId, origin: 'loot', container: 'satchel', slotIndex: 0 },
+    ]);
+    const death = {
+      ...receiptOf(sessionId, characterId),
+      reason: 'death' as const,
+      notableEvents: [
+        { atMs: 10, type: 'death', detail: characterId },
+        { atMs: 10, type: 'item-lost-on-death', detail: `backpack/1/lost:backpack/${characterId}` },
+        { atMs: 10, type: 'item-lost-on-death', detail: `spike-sword/1/lost:inside/${characterId}` },
+        { atMs: 10, type: 'item-lost-on-death', detail: `plate/1/lost:armor/${characterId}` },
+        { atMs: 10, type: 'backpack-replaced', detail: 'bag' },
+      ],
+      acquired: [{ instanceId: bag, itemId: 'bag', quantity: 1, origin: 'death-replacement' as const }],
+      removedInstances: ['lost:backpack', 'lost:inside', 'lost:armor'],
+      equipment: { back: bag },
+      layout: { 'kept:satchel': { container: 'satchel' as const, index: 0 } },
+    };
+
+    await receipts.save(death);
+    expect(await writePendingReceipts({ database: database.database.db, receipts, logger, progression }))
+      .toEqual({ written: 1, failed: 0 });
+
+    const rows = await database.database.db
+      .select({
+        id: itemInstances.id, origin: itemInstances.origin, slot: itemInstances.equippedSlot,
+      })
+      .from(itemInstances)
+      .where(eq(itemInstances.ownerCharacterId, characterId))
+      .orderBy(asc(itemInstances.id));
+    expect(rows).toEqual([
+      { id: bag, origin: 'death-replacement', slot: 'back' },
+      { id: 'kept:satchel', origin: 'loot', slot: null },
+    ]);
+    // A auditoria: uma linha de ledger, com um evento `item-lost-on-death` por instância perdida.
+    const [row] = await database.database.db.select({ ref: ledger.ref }).from(ledger)
+      .where(eq(ledger.sessionId, sessionId));
+    const events = (row?.ref as { notableEvents: { type: string; detail?: string }[] }).notableEvents;
+    expect(events.filter((event) => event.type === 'item-lost-on-death').map((event) => event.detail))
+      .toEqual([
+        `backpack/1/lost:backpack/${characterId}`,
+        `spike-sword/1/lost:inside/${characterId}`,
+        `plate/1/lost:armor/${characterId}`,
+      ]);
+
+    // Retry do MESMO extrato (mesmo `(session_id, seq)`): a chave única o torna operação nula —
+    // a bag não é inserida de novo e nada mais é apagado.
+    await receipts.save(death);
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect(await countLedgerRows(database.database.db, sessionId)).toBe(1);
+    const again = await database.database.db
+      .select({ id: itemInstances.id })
+      .from(itemInstances)
+      .where(eq(itemInstances.ownerCharacterId, characterId));
+    expect(again.map((r) => r.id).sort()).toEqual([bag, 'kept:satchel'].sort());
   });
 
   it('extrato SEM `removedInstances` não toca a tabela', async () => {

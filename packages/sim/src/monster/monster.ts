@@ -206,11 +206,12 @@ export interface Prey {
    */
   readonly health: number;
   /**
-   * Invisível (#592, `CONDITION_INVISIBLE`). Ausente/`false` é o de sempre — só `CharacterRuntime`
-   * expõe `true` (via `Conditions.hasInvisible`); monstro nunca é alvo invisível de outro
-   * monstro. `chooseTarget` (abaixo) recusa como candidato — e DROPA o alvo já retido — quem
-   * carrega isto, a menos que `seesInvisible(definition)` seja `true` (`canSeeInvisibility` do
-   * Canary/TFS, ADR 0041 d.2 — a imunidade à condição `invisible`).
+   * Invisível (#592, `CONDITION_INVISIBLE`). Ausente/`false` é o de sempre — `CharacterRuntime` e
+   * `MonsterRuntime` expõem `true` (via `Conditions.hasInvisible`). `chooseTarget` (abaixo)
+   * recusa como CANDIDATO quem carrega isto, a menos que `seesInvisible(definition)` seja `true`
+   * (`canSeeInvisibility` do Canary/TFS, ADR 0041 d.2 — a imunidade à condição `invisible`). O
+   * alvo já RETIDO que fica invisível não é largado aqui: é o think agendado do ruleset
+   * (`visibility-think`) que o larga, como o `Creature::onThink` do Canary.
    */
   readonly invisible?: boolean;
 }
@@ -422,6 +423,17 @@ const TARGET_THINK_INTERVAL_MS = 1_000;
 const TARGET_THINK_COOLDOWN_KEY = 'target-think';
 
 /**
+ * `Monster::canSeeInvisibility()` do Canary/TFS (#559, ADR 0041 d.2): a MESMA imunidade a
+ * `invisible` que, para qualquer outra condição, bloquearia a aplicação — aqui vira "enxerga
+ * quem está invisível". Nunca lida como `conditionImmunities` genérico em `chooseTarget`: um
+ * monstro imune a `invisible` continuaria mirando alvo invisível igual, se a leitura fosse a
+ * mesma checagem de bloqueio que `#applyConditionTo` usa para `paralyze`/`drunk`.
+ */
+export function seesInvisible(definition: Pick<Monster, 'conditionImmunities'>): boolean {
+  return definition.conditionImmunities.includes('invisible');
+}
+
+/**
  * Escolhe alvo, e só quando precisa.
  *
  * Manter o alvo até ele morrer ou sair da área de visão (#655, o `aggroRadius`) — ou do raio de
@@ -453,17 +465,6 @@ const TARGET_THINK_COOLDOWN_KEY = 'target-think';
  * os demais devolvem o `current` retido, como o Canary faria entre um `onThink_async` e o
  * próximo.
  */
-/**
- * `Monster::canSeeInvisibility()` do Canary/TFS (#559, ADR 0041 d.2): a MESMA imunidade a
- * `invisible` que, para qualquer outra condição, bloquearia a aplicação — aqui vira "enxerga
- * quem está invisível". Nunca lida como `conditionImmunities` genérico em `chooseTarget`: um
- * monstro imune a `invisible` continuaria mirando alvo invisível igual, se a leitura fosse a
- * mesma checagem de bloqueio que `#applyConditionTo` usa para `paralyze`/`drunk`.
- */
-export function seesInvisible(definition: Pick<Monster, 'conditionImmunities'>): boolean {
-  return definition.conditionImmunities.includes('invisible');
-}
-
 export function chooseTarget(
   monster: MonsterRuntime,
   prey: readonly Prey[],
@@ -475,18 +476,15 @@ export function chooseTarget(
     ? undefined
     : prey.find((p) => p.id === monster.targetId);
 
-  // Invisibilidade (#559/#592): quem não "vê invisível" não retém o alvo que virou invisível —
-  // o `Creature::onAddCondition`/`canSee` do Canary/TFS já testado do lado de ATAQUE (o
-  // passo/ataque em si segue sem alvo, como qualquer outro `chooseTarget` devolvendo `null`).
-  // Cai direto para a reaquisição abaixo, que já filtra o mesmo candidato pela mesma razão —
-  // "largar" é não conseguir reter, nunca um terceiro ramo.
-  const currentVisible = current === undefined
-    || !current.invisible
-    || seesInvisible(definition);
-
+  // Invisibilidade (#559/#592): esta função NÃO larga o alvo retido que ficou invisível — o
+  // `Creature::onThink` do Canary/TFS só o faz no próximo think da criatura (até 1000 ms depois,
+  // numa fase sorteada), e quem reproduz isso é o evento `visibility-think` que o ruleset agenda
+  // no instante em que a invisibilidade começa (`HuntRuleset#onVisibilityThink`). Até lá o
+  // monstro segue com o alvo e ataca normalmente. O que esta função garante é o outro lado: a
+  // AQUISIÇÃO (abaixo, e o ramo estreito) nunca escolhe um candidato invisível — o `isTarget` do
+  // Canary exige `canSeeCreature`.
   const leash = definition.leashRadius;
-  if (currentVisible
-    && current !== undefined && current.alive && sameFloor(monster.position.z, current.position.z)) {
+  if (current !== undefined && current.alive && sameFloor(monster.position.z, current.position.z)) {
     // Só retém quem AINDA está na área de visão do monstro (#655, ADR 0037 d.6): o Canary larga o
     // alvo que sai do `canSee` (`Creature::onCreatureMove` → `onCreatureDisappear`) e o tira da
     // `targetList`, e é isso que esvazia a lista e liga a volta ao spawn. Sem este corte, com
@@ -584,13 +582,15 @@ export function nearestPrey(origin: GridPoint, candidates: readonly Prey[]): Pre
  *
  * Provocação (#589, Canary `Monster::isFleeing`: `challengeFocusDuration <= 0`) suspende a fuga
  * enquanto a condição `'challenge'` vale — o mesmo lookup O(1) em `Conditions` que qualquer
- * outra condição já usa, sem campo novo.
+ * outra condição já usa, sem campo novo. O Fatal Hold (#603, `fatalHoldDuration <= 0`, o
+ * charm do jogador) faz o mesmo com a condição `'fatal-hold'`.
  */
 export function isMonsterFleeing(monster: MonsterRuntime, definition: Monster): boolean {
   return definition.runOnHealth !== undefined
     && monster.alive
     && monster.health <= definition.runOnHealth
-    && monster.conditions.get(CHALLENGE_CONDITION_KEY) === null;
+    && monster.conditions.get(CHALLENGE_CONDITION_KEY) === null
+    && monster.conditions.get(FATAL_HOLD_CONDITION_KEY) === null;
 }
 
 /**
@@ -603,15 +603,24 @@ export function isMonsterFleeing(monster: MonsterRuntime, definition: Monster): 
 export const CHALLENGE_CONDITION_KEY = 'challenge';
 
 /**
+ * A chave do Fatal Hold (#603) em `MonsterRuntime.conditions` — pelo mesmo motivo da provocação:
+ * no Canary é o contador `fatalHoldDuration` do monstro (`monster.cpp:1456-1461`), que só
+ * `isFleeing` lê, nunca uma `Condition`.
+ */
+export const FATAL_HOLD_CONDITION_KEY = 'fatal-hold';
+
+/**
  * O monstro tem alguma CONDIÇÃO ativa no sentido do Canary (`!conditions.empty()`, o que
- * `Monster::updateIdleStatus` confere, `monster.cpp:1541`)? A provocação não conta — ver
- * `CHALLENGE_CONDITION_KEY` —, senão um monstro provocado que perdeu o alvo não voltaria ao spawn
- * nem ficaria ocioso até o prazo dela vencer, coisa que o Canary nunca faz. Sem alocação: só o
- * tamanho do mapa e um lookup.
+ * `Monster::updateIdleStatus` confere, `monster.cpp:1541`)? A provocação e o Fatal Hold não
+ * contam — ver `CHALLENGE_CONDITION_KEY`/`FATAL_HOLD_CONDITION_KEY` —, senão um monstro provocado
+ * ou preso pelo charm que perdeu o alvo não voltaria ao spawn nem ficaria ocioso até o prazo
+ * vencer, coisa que o Canary nunca faz. Sem alocação: o tamanho do mapa e dois lookups.
  */
 export function hasActiveCondition(monster: MonsterRuntime): boolean {
   const { conditions } = monster;
-  return conditions.size - (conditions.get(CHALLENGE_CONDITION_KEY) === null ? 0 : 1) > 0;
+  const timers = (conditions.get(CHALLENGE_CONDITION_KEY) === null ? 0 : 1)
+    + (conditions.get(FATAL_HOLD_CONDITION_KEY) === null ? 0 : 1);
+  return conditions.size - timers > 0;
 }
 
 /**

@@ -296,6 +296,8 @@ export function characterFromTicket(
       ...(initialCharacter.fedMs === undefined ? {} : { fedMs: initialCharacter.fedMs }),
       // As bênçãos (#570, ADR 0052): ausente, a sessão parte sem — ninguém comprou ainda.
       ...(initialCharacter.blessings === undefined ? {} : { blessings: initialCharacter.blessings }),
+      // A postura de luta (#550, M30-03): ausente, a sessão parte do `FIGHTMODE_ATTACK` do Canary.
+      ...(initialCharacter.fightMode === undefined ? {} : { fightMode: initialCharacter.fightMode }),
       // A mochila vem do ticket porque a arma equipada decide o dano (FUN-82). Entrada
       // quebrada vira "sem item", não sessão que não abre.
       ...(isInventoryState(initialCharacter.inventory)
@@ -385,12 +387,18 @@ export function createSessionBuilder(
   now: () => number = () => Date.now(),
   shard: CityShard = new CityShard(content, now),
 ): SessionBuilder {
-  return (request, from, characterId): Session | null => {
+  return (request, from, characterId, departed): Session | null => {
     // Quem atravessa é UM personagem, mesmo quando a origem tem duzentos (FUN-71). Mover
     // `from.participants` inteiro faria um jogador clicando em caçar levar a praça junto — e
     // a hunt recusa o segundo participante, então o sintoma seria a transição falhar para
     // todo mundo sempre que houvesse mais alguém na praça.
-    const character = from.participants.find((p) => p.id === characterId);
+    //
+    // Quem já SAIU da origem (#802) vem em `departed`: o membro de uma party que a deixou por
+    // dentro do `sim` — morte, regra de saída, a saída que o ruleset concluiu depois do
+    // `exitDelayMs` — não está mais em `from.participants`. Sem isto o construtor devolvia
+    // `null`, o host caía no `release`, e o `release` de uma sessão privada a ENCERRA: a saída
+    // de UM membro acabava a party inteira, com `manual-exit`, para os que ficaram.
+    const character = from.participants.find((p) => p.id === characterId) ?? departed;
     if (character === undefined) return null;
 
     // Materializar a stamina é da FRONTEIRA, e toda transição é uma (§10). Fazer aqui, e não

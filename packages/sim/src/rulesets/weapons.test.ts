@@ -403,7 +403,7 @@ describe('equivalência entre taxas com munição e arma na mão (#152, ADR 0020
 
 const combatV2 = {
   ...combat, compatibilityProfile: 'combat-v2',
-  weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+  weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09 },
   distanceHitChance: {
     defaultMaxHitChance: 90,
     buckets: [

@@ -4,7 +4,7 @@ import {
   CLIENT_TO_SERVER, BURNED_OPCODES_C2S, BURNED_OPCODES_S2C,
   OPCODE_TO_NAME_C2S, OPCODE_TO_NAME_S2C, SERVER_TO_CLIENT,
 } from './messages.js';
-import { C2S_SCHEMAS, S2C_SCHEMAS } from './types.js';
+import { C2S_SCHEMAS, FIGHT_MODES, S2C_SCHEMAS } from './types.js';
 import type { C2SMessage, S2CMessage } from './types.js';
 
 describe('English payload contract', () => {
@@ -666,6 +666,7 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
     ammo: { arrow: null, bolt: null },
     vocationId: 'knight',
     promoted: false,
+    fightMode: 'balanced',
     speed: 292,
     skills: {
       melee: { level: 15, percentToNext: 45 },
@@ -693,6 +694,7 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
       ...rawOlderNode,
       ammo: { arrow: null, bolt: null },
       promoted: false,
+      fightMode: 'attack',
       speed: 0,
       skills: {},
       magicLevel: { level: 0, percentToNext: 0 },
@@ -1401,7 +1403,8 @@ describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
       type: 'player-stats',
       health: 100, maxHealth: 100, mana: 50, maxMana: 50,
       level: 5, xp: 1000, capacity: 300, gold: 50, staminaMs: 50000,
-      ammo: { arrow: null, bolt: null }, vocationId: 'knight', promoted: false, speed: 250,
+      ammo: { arrow: null, bolt: null }, vocationId: 'knight', promoted: false,
+      fightMode: 'attack', speed: 250,
       skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
     };
     expect('targetId' in stats).toBe(false);
@@ -1693,6 +1696,61 @@ describe('blessings: buy-blessing, blessings (#570, ADR 0052)', () => {
   });
 });
 
+describe('set-fight-mode and player-stats.fightMode (M30-03, #550)', () => {
+  it('the opcode is 35 — the 34 is reserved to the cancel-exit of #802 (PR #806) —, and nothing is burned or reused', () => {
+    // O 33 é do `charm-remove`. Mutação que mata: trocar por 33 (duplicado) ou apagar a linha
+    // (o schema fica órfão e o teste estrutural do mapa reprova).
+    expect(CLIENT_TO_SERVER['charm-remove']).toBe(33);
+    expect(CLIENT_TO_SERVER['set-fight-mode']).toBe(35);
+  });
+
+  it('round trips each of the three modes through the codec', () => {
+    for (const mode of FIGHT_MODES) {
+      const message: C2SMessage = { type: 'set-fight-mode', mode };
+      expect(decodeC2S(encodeC2S(message))).toEqual([message]);
+    }
+  });
+
+  it('the closed vocabulary is the three Canary modes, and nothing else parses', () => {
+    expect([...FIGHT_MODES]).toEqual(['attack', 'balanced', 'defense']);
+    expect(C2S_SCHEMAS['set-fight-mode'].safeParse({ mode: 'attack' }).success).toBe(true);
+    // Nome do Huntera ou uma escala numérica NÃO entram: o contrato é o `fightMode` do
+    // Canary, e um valor solto (`3`, `'aggressive'`) é lixo do cliente, não intenção.
+    expect(C2S_SCHEMAS['set-fight-mode'].safeParse({ mode: 'aggressive' }).success).toBe(false);
+    expect(C2S_SCHEMAS['set-fight-mode'].safeParse({ mode: 3 }).success).toBe(false);
+    expect(C2S_SCHEMAS['set-fight-mode'].safeParse({}).success).toBe(false);
+  });
+
+  it('is intention only: the client has nowhere to send a factor', () => {
+    // O zod descarta chave desconhecida em vez de recusar — o que importa é que o resultado
+    // parseado só carrega `mode`, e nunca um fator de ataque, defesa ou mitigação.
+    const parsed = C2S_SCHEMAS['set-fight-mode'].parse({ mode: 'defense', attackFactor: 9 });
+    expect(parsed).toEqual({ mode: 'defense' });
+  });
+
+  it('player-stats carries the posture, offensive until the server says otherwise', () => {
+    // `default('attack')`: um nó `game` anterior manda sem, e o HUD mostra a ofensiva — o
+    // `FIGHTMODE_ATTACK` que o Canary usa quando ninguém escolheu.
+    const stats = S2C_SCHEMAS['player-stats'].parse({
+      health: 1, maxHealth: 1, mana: 1, maxMana: 1, level: 8, xp: 0, capacity: 0, gold: 0, staminaMs: 0,
+    });
+    expect(stats.fightMode).toBe('attack');
+    for (const mode of FIGHT_MODES) {
+      expect(S2C_SCHEMAS['player-stats'].parse({ ...stats, fightMode: mode }).fightMode).toBe(mode);
+    }
+    expect(S2C_SCHEMAS['player-stats'].safeParse({ ...stats, fightMode: 'balance' }).success).toBe(false);
+  });
+
+  it('round trips a player-stats with the posture through the codec', () => {
+    const message = S2C_SCHEMAS['player-stats'].parse({
+      health: 10, maxHealth: 20, mana: 5, maxMana: 5, level: 8, xp: 100, capacity: 400, gold: 3,
+      staminaMs: 1000, fightMode: 'defense',
+    });
+    const decoded = decodeS2C(encodeS2C({ type: 'player-stats', ...message }));
+    expect(decoded).toEqual([{ type: 'player-stats', ...message }]);
+  });
+});
+
 describe('enter-hunt without difficulty (#584, ADR 0039 — end of pull-by-difficulty)', () => {
   it('round trips huntId alone through the codec, difficulty absent', () => {
     // Um cliente NOVO nunca manda `difficulty` — o campo virou vestigial (ADR 0039). Se ele
@@ -1708,5 +1766,41 @@ describe('enter-hunt without difficulty (#584, ADR 0039 — end of pull-by-diffi
     // conteúdo (`'cautious'`/`'bold'`/`'reckless'`) — o protocolo aceita, sem validar o valor.
     const legacy: C2SMessage = { type: 'enter-hunt', huntId: 'rat-cellars', difficulty: 'bold' };
     expect(decodeC2S(encodeC2S(legacy))).toEqual([legacy]);
+  });
+});
+
+describe('saída pendente: cancel-exit, exit-pending (#802)', () => {
+  it('cancel-exit is C2S only, opcode 34, and takes no payload', () => {
+    // Mutação que mata: reutilizar o 33 (`charm-remove`), ou aceitar um campo — quem decide se
+    // há o que cancelar é o servidor, e o cliente não tem nada a dizer além do pedido.
+    expect(CLIENT_TO_SERVER['cancel-exit']).toBe(34);
+    expect('cancel-exit' in S2C_SCHEMAS).toBe(false);
+    const message: C2SMessage = { type: 'cancel-exit' };
+    expect(decodeC2S(encodeC2S(message))).toEqual([message]);
+    expect(C2S_SCHEMAS['cancel-exit'].safeParse({ force: true }).success).toBe(false);
+  });
+
+  it('exit-pending is S2C only, opcode 45, and round trips the countdown, in-combat and closed forms', () => {
+    // Mutação que mata: apagar `exit-pending: 45` de SERVER_TO_CLIENT (`decodeS2C` devolve
+    // `null`), ou tornar `remainingMs` obrigatório no estado fechado.
+    expect(SERVER_TO_CLIENT['exit-pending']).toBe(45);
+    expect('exit-pending' in C2S_SCHEMAS).toBe(false);
+    const countdown: S2CMessage = {
+      type: 'exit-pending', active: true, reason: 'manual-exit', phase: 'countdown', remainingMs: 5_000,
+    };
+    const inCombat: S2CMessage = {
+      type: 'exit-pending', active: true, reason: 'exit-rule', phase: 'in-combat', remainingMs: 41_250,
+    };
+    const closed: S2CMessage = { type: 'exit-pending', active: false };
+    for (const message of [countdown, inCombat, closed]) {
+      expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+    }
+  });
+
+  it('rejects an unknown reason, an unknown phase and a negative or fractional wait', () => {
+    const base = { type: 'exit-pending', active: true, reason: 'manual-exit', phase: 'countdown', remainingMs: 1_000 };
+    for (const patch of [{ reason: 'logout' }, { phase: 'later' }, { remainingMs: -1 }, { remainingMs: 1.5 }]) {
+      expect(decodeS2C(encodeS2C({ ...base, ...patch } as unknown as S2CMessage))).toBeNull();
+    }
   });
 });

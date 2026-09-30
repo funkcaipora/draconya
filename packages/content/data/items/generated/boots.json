@@ -822,9 +822,9 @@
     "bonuses": {
       "regeneration": {
         "healthGain": 3,
-        "healthTicksMs": 6000000,
+        "healthTicksMs": 6000,
         "manaGain": 12,
-        "manaTicksMs": 6000000
+        "manaTicksMs": 6000
       }
     },
     "source": {
@@ -1227,9 +1227,9 @@
       "speed": 30,
       "regeneration": {
         "healthGain": 3,
-        "healthTicksMs": 6000000,
+        "healthTicksMs": 6000,
         "manaGain": 12,
-        "manaTicksMs": 6000000
+        "manaTicksMs": 6000
       }
     },
     "source": {

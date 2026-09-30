@@ -83,6 +83,25 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   cada golpe — um `Record` com chave dinâmica e `delete` cai em modo dicionário — e mesmo assim
   a atribuição custa ~2 µs por tick por instância no `pnpm bench:hunts` (18 → 21). É o preço
   de saber quem matou; não o pague duas vezes registrando de novo em outro lugar.
+- **A perda de item na morte é `item-loss.ts` (#571, ADR 0042 d.4), DESLIGADA no conteúdo real
+  (`deathPenalty.itemLoss.enabled: false` — decisão do dono em aberto), e a ORDEM é contrato.**
+  `HuntRuleset#onCharacterDied` chama `loseItemsOnDeath` ANTES de `applyDeathPenalty` e do consumo
+  das bênçãos (o Canary roda `dropCorpse` antes de `death()`: a chance lê a contagem de bênçãos de
+  ANTES, e o Amulet of Loss protege antes de ser gasto) e `consumeLossAmulet` DEPOIS (lê o level já
+  rebaixado). Cada slot vestido consome UM sorteio na ordem de `CANARY_SLOT_ORDER` (`head, neck,
+  back, chest, shield, hand, legs, feet, finger, ammo` — o `RIGHT` do Canary, o escudo, antes do
+  `LEFT`, a arma) — inclusive o que não cai, e nenhum se o colar ou as bênçãos protegem: trocar a
+  ordem, ou parar na primeira perda, muda quem perde o quê com a mesma semente (e a absorção por
+  item de `equipmentAbsorb`, que usa a mesma constante). **Sem vocação (`vocationId === null`) não
+  há perda nem bag**, e **abaixo do level do Adventurer's Blessing com vocação
+  (`hasAdventurersBlessing`) vale cinco bênçãos** — o Canary/TFS devolvem antes da perda para o
+  Dawnport/`VOCATION_NONE` e concedem as bênçãos 2 a 6 no login; quem mexer nas proteções lê
+  `docs/product/death.md`. O item é DESTRUÍDO (`removedInstances`, o mesmo caminho de
+  `sell-items`): não há cadáver de jogador, então nada aqui devolve o item a lugar nenhum. A
+  mochila perdida leva o vetor inteiro (`Inventory.loseEquipped`), **a bolsa nunca — um abrigo que o
+  Tibia não tem, e decisão do dono em aberto** (`docs/product/death.md`, "Em aberto"). Container
+  para a regra é `kind: 'container'` OU `quiver` — a flag `container` do cliente. Sem estado novo:
+  nada disto entra no snapshot.
 - **Loot sorteia com o `Rng` da sessão, gold antes de item, e `chance: 0` não consome
   sorteio.** Ordem e semente são contrato: mudar qualquer um dos dois muda o que toda hunt
   retomada rende. `Math.random` continua proibido, e `grep -rn "Math.random" src` é vazio.
@@ -216,7 +235,8 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   `<=`, "sair abaixo de 100%" encerraria a hunt de quem entrou de vida cheia.
 - **"Em combate" tem UMA definição, `isInFight` (`combat/in-fight.ts`, #625), e é ela que
   conclui a saída da hunt.** Último ataque DADO ou RECEBIDO há menos de `IN_FIGHT_WINDOW_MS`
-  (60 000 ms — o `pzLocked`/`CONDITION_INFIGHT` do Canary), lido de
+  (60 000 ms — a janela do `pzLocked`/`CONDITION_INFIGHT` do Canary; o carimbo é por dano
+  APLICADO e não cobre tudo o que o Canary conta, ver o cabeçalho de `in-fight.ts`), lido de
   `CharacterRuntime.lastCombatActionAtMs`. **Não confundir com `Runner.lastCombatActionAtMs`**
   (a atividade de `canShareExperience`, §16 acima): aquele é só DADO e exclui self-heal, porque
   o que ele mede é engajamento com a party; este soma o RECEBIDO e não exclui nada, porque
@@ -241,6 +261,17 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   também o decaimento de imbuement fora de combate (#606): uma segunda fórmula de "em combate"
   em outro lugar seria a mesma divergência que `Skills.merge`/`Bestiary.merge` evitam vivendo
   cada um num arquivo só.
+- **A saída que o jogador pede tem três pontos de entrada no ruleset (#802).** `requestExit` é o
+  pedido (o `leave-hunt` do socket chama ESTE, e não mais `session.end`/`session.leave`);
+  `cancelExit` desfaz a saída MANUAL pendente (devolve `false` sem mexer em nada se não há uma, ou
+  se a pendente é a de uma regra do bot — que dispararia de novo no ciclo seguinte) e **cancela o
+  evento `EXIT_COUNTDOWN` agendado**, porque só zerar `pendingExit` deixaria o evento velho vencer
+  depois de um pedido novo e concluir a saída antes da hora dele; `exitStatus` é a leitura pura do
+  que o hospedeiro apresenta (`{ reason, phase, untilMs }`): a fase é `in-combat` quando o carimbo
+  de combate está dentro da janela, e `untilMs` é o MAIS TARDIO entre o `EXIT_COUNTDOWN` agendado
+  (`session.dueAtOf`) e o fim da janela — o evento só relê um golpe novo quando vence, mas o que o
+  jogador precisa ver já é o prazo empurrado. `exitStatus` não guarda estado nenhum (nada novo no
+  snapshot) e só varre a fila enquanto há saída pendente.
 - **A postura anda pelo `#step`, como todo mundo.** `movement.ts` segue sendo o único escritor de
   posição (FUN-69) e `pnpm source-policy` reprova o contrário. Recuar é `fleeStep`, que é o passo
   guloso com a ameaça espelhada — não um segundo algoritmo de desvio.
@@ -626,6 +657,48 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   para uma condição que pode ser `speed` precisa do mesmo. `min`/`max` da fórmula são TRUNCADOS
   (`Math.trunc`, como o C++ trunca `float` → `int32_t`), nunca arredondados, e `min === max` NÃO
   consome sorteio — a mesma regra do `uniform_random` do Canary quando os limites coincidem.
+- **Imunidade de condição e invisibilidade (#559, ADR 0041 d.2) têm UM portão cada, e a
+  invisibilidade tem um TIMING que é evento, não checagem.** (a) `#applyConditionTo` recusa a
+  condição de um combate para o monstro imune (`conditionImmunityOf`, `conditions.ts`: `paralyze`
+  = o sinal NEGATIVO de `speed`, `drunk`, e a DOT pelo `damageType` do tique) — **mas só quando o
+  chamador passa `fromCombat = true`** (o DOT de `#castSpell`, a Paralyze Rune de `#useSupply`, a
+  ability de monstro): no Canary só `Combat::CombatConditionFunc` bloqueia uma condição por
+  imunidade, e o que entra por `addCondition` direto (campo de tile, defesa própria, os charms
+  Cripple/Numb) não a consulta. Um chamador novo e não combativo (um charm) nasce SEM o portão;
+  ligá-lo por padrão a tudo que tem origem estrangeira paralisa Dragon Lord com Cripple. A
+  auto-aplicação (`condition.sourceId === target.subject`) pula o portão até dentro do combate, e
+  campo de tile NÃO passa por ele — `FIELD_TICK` tiqueta direto. `invisible` NUNCA entra: a
+  imunidade é `seesInvisible` (`monster.ts`), "enxerga o invisível". (b) **`#drainMonster` é o
+  `Monster::drainHealth`, o cano ÚNICO do dano de vida num `MonsterRuntime`** — golpe, magia/runa,
+  tique de DOT e de campo, reflexo, golpe de invocação: aplica o `applyDamageOutcome`, e com dano
+  REAL (`applied.healthDamage > 0`) arma o bypass de campo e revela o monstro invisível. Todo ponto
+  novo que tire vida de um monstro (os charms de dano, por exemplo) chama ELE, nunca o
+  `applyDamageOutcome` direto: um ponto que pule o cano esconde os dois efeitos sem teste nenhum
+  que o aponte. Só o monstro perde a invisibilidade por dano; a do JOGADOR não. (c) **Largar o
+  alvo que ficou invisível é o `Creature::onThink`, uma vez por 1000 ms numa fase por criatura — no
+  sim é o evento `visibility-think`** (`#scheduleVisibilityThinks`, agendado em `#applyConditionTo`
+  quando a invisibilidade COMEÇA, não quando é renovada): cada monstro que perseguia o invisível e
+  não o enxerga pensa uma vez em `[0, 1000)` ms (sorteio da sessão) e larga o alvo se ele ainda
+  estiver invisível. `chooseTarget` NÃO larga sozinho — largaria antes do Canary, porque roda a
+  cada passo — e só filtra a AQUISIÇÃO (aquisição, ramo estreito de fuga, `targetChange`,
+  `#applyChallenge`). Do lado do jogador, o alvo ELEITO pelo bot cai na hora (`selectTarget` nunca
+  escolhe invisível, targeting do bot é do Draconya, ADR 0037 d.2) e o FIXADO pelo jogador segue
+  até o think — e o golpe dele nesse intervalo revela o monstro. **O campo do alvo eleito é
+  limpo NO EVENTO em que a invisibilidade começa (`#scheduleVisibilityThinks`), nunca por um
+  leitor**: `#attackTargetOfRunner`/`#botCandidateOf` são alcançáveis da apresentação
+  (`slotStates` → `#targetInRange`, só com visualizador anexado), então para o invisível não
+  fixado eles devolvem `null` SEM escrever — escrever ali faz o snapshot depender de haver alguém
+  assistindo (invariante 3). Toda invisibilidade que entra sem passar por `#applyConditionTo` (um
+  teste que faz `conditions.apply` direto) não agenda think nem limpa o campo, e o monstro que a
+  persegue nunca a larga: use a magia ou a defesa de verdade. (d) **A recusa de monstro invisível
+  como alvo MANUAL (`setAttackTarget`, o `target-cancel` do host, `use-slot`/`use-item-on` de
+  efeito de alvo único) é um substituto de apresentação, não uma regra do Canary**: lá o cliente
+  nem recebe a criatura (`ProtocolGame::canSee`), e o servidor só decide o tile
+  (`Spell::playerRuneSpellCheck`, `needTarget`). O efeito de ÁREA/campo mirado no monstro invisível
+  sai no tile dele (`#resolveManualTarget`) — recusá-lo divergiria do Canary. (e) **Cancel
+  Invisibility dispensa só os MONSTROS da forma (círculo de raio 3, `AREA_CIRCLE3X3`)**: o `combat`
+  do script é agressivo por default e `CombatFunc` exclui o lançador; a invisibilidade do
+  próprio Paladin sobrevive a ele.
 - **A haste do JOGADOR (as quatro magias de vocação, Swift Foot) continua em `casting.ts`, à
   parte de `conditionFromSpec`.** `spellEffectSchema`'s `kind: 'haste'` (percentual FLAT, sem
   fórmula) não mudou nesta issue — as duas mecânicas escrevem o MESMO campo de runtime
@@ -636,9 +709,29 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   já escreveu (`defenseValue`/`shieldFactor`/`distanceFactor`), na ordem exata do Canary
   (`Player::getDefense`/`PlayerWheel::calculateMitigation`): trocar a ordem das duas checagens
   muda o resultado do Knight com Mystic Blade + Mastermind Shield (as duas contribuem juntas).
-  **`fightMode` é sempre `'attack'` em produção** (`hunt.ts#playerDefenseV3`/`#playerMitigationV3`)
-  até a M30-03 ligar um seletor de postura de verdade — a mesma decisão que
-  `combat.weaponDamage.attackFactor` já tomou para o `combat-v2`. **`#playerDefender` bifurca por
+  **`fightMode` é o estado do PERSONAGEM** (`CharacterRuntime.fightMode`, M30-03, #550), lido por
+  `hunt.ts#playerDefenseV3`/`#playerMitigationV3` — nunca um `'attack'` fixo, e a constante
+  `combat.weaponDamage.attackFactor` saiu do conteúdo. O fator de DEFESA é o dinâmico
+  (`Player::getDefenseFactor(false)`): `playerDefense` recebe `recentlyAttacked`, que o CHAMADOR
+  calcula com `attackedRecently(character.lastAttackAtMs, session.nowMs, attackIntervalMs)` —
+  relógio LÓGICO da sessão, nunca de parede (invariante 2). `lastAttackAtMs` só é escrito por
+  `#onPlayerAttack`, DEPOIS de `#strike` devolver `true` (a arma foi usada, como o `result` de
+  `Player::doAttacking`) e só no `combat-v3`; `#strike` devolve `false` para o tiro que não saiu
+  (sem visão, sem munição) — não copie o carimbo para um caminho que não é golpe de arma
+  (magia/runa não escrevem `lastAttack` no Canary). **O carimbo é do relógio da sessão que o
+  gravou**: `Session.enter` o zera (o `CharacterRuntime` atravessa a transição como o MESMO
+  objeto e o relógio da sessão nova nasce em zero — sem isso um carimbo de 57 700 ms ficaria no
+  futuro da hunt seguinte), e `attackedRecently` trata carimbo futuro como "nunca bateu"; o
+  restore de snapshot não passa por `enter`, então a janela quente atravessa. **O empate exato**
+  (`agora − lastAttack == attackIntervalMs`) só conta como janela aberta quando o golpe do herói
+  está agendado para ESTE ms (`session.dueAtOf(PLAYER_ATTACK, id) === session.nowMs`, lido só no
+  empate): monstro e herói que chegaram juntos batem no mesmo ms para sempre, e sem isso a ordem
+  da fila decidiria a defesa — o Canary nunca fecha a janela de quem bate sem parar. O reflexo do
+  próprio golpe roda com o evento do golpe já fora da fila e o `+ attackIntervalMs` reagendado,
+  então enxerga a janela fechada, como o Canary (o carimbo só é reescrito depois dele). O fator de ATAQUE entra por
+  `resolveWeaponPower`/`resolveWeaponHit` e é gated por perfil dentro delas (`attackFactorOf`):
+  `combat-v1`/`v2` ignoram a postura — é o que mantém o resultado do perfil publicado bit a bit.
+  **`#playerDefender` bifurca por
   `compatibilityProfile`**: `combat-v1`/`v2` continuam com os números antigos
   (`combat.player.armor` + equipado; `#defenseSourceOf`), só `combat-v3` usa as três funções
   novas — mexer nas duas sem entender a bifurcação quebra uma sessão v1/v2 congelada (ADR 0031).
@@ -723,3 +816,28 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   subject certo, como cinto e suspensório contra o cliente pedindo por fora do auto-target. Ver
   "Invocação do PERSONAGEM" em `docs/product/combat.md` para o resto do contrato (teto de 2,
   mana do MONSTRO via `manaCostOverride`, `combat-v4`).
+- **Os Charms em combate (#603, M39-03, ADR 0053 d.5) vivem em `combat/charms.ts` (puro) e nos
+  métodos `#charm*`/`#roll*` do `HuntRuleset`, e SÓ rolam no `combat-v4` (`hasCharmStage`).** Três
+  armadilhas custam caro. (1) **O índice do tier é `tier − 1`**: o Canary guarda um `0` na frente do
+  vetor de chance, então o tier 1 lê o PRIMEIRO valor do Lua (`charmChance`); `points` continua
+  indexado pelo tier ANTES de desbloquear. (2) **A rolagem certa em cada ponto é o mecanismo**:
+  defensivos usam `normal_random(1, 10000)/100` (~1,4 % a 4,3 % reais, não os 5–12 % nominais),
+  Cleanse a normal em `0..10000`, Void Inversion/Fatal Hold a normal em `0..100`, ofensivos a
+  uniforme `1..100` — trocar uma por outra "que dá o mesmo número" muda a probabilidade. (3) **O
+  crítico é decidido por AÇÃO, antes do `blockHit`** (`ActionCritical`): o crítico base rola uma vez
+  para todos os alvos da magia, e o Low Blow só rola se o base falhou, com `base + charm` e UM
+  sorteio por monstro-alvo do charm. `castSpell`/`useSupply` ganharam `SpellTarget.charm` por isso;
+  um caminho novo em que o jogador acerta um monstro precisa passar por `#hitModifiers` (golpe único)
+  ou por `SpellTarget.charm` (mira) E chamar `#applyCharmsAfterHit` depois de aplicar o dano — o
+  mesmo ponto único que `#afterMonsterHit` já é para reflexo e cura por elemento. O dano do charm é
+  EXTENSÃO (`source: 'charm'`, `extension: true`, neutro em Overpower/Overflux/Carnage/Parry): não
+  crítica, não faz leech, não reflete, e nunca dispara outro charm ofensivo. O Dodge do PRD NÃO
+  existe no `combat-v4` — `resolveBlockHitProfile` nem sorteia. `cleanseImmunity` é estado do
+  personagem e viaja no snapshot; o Fatal Hold é a condição `'fatal-hold'` do monstro (permanente,
+  `Number.MAX_SAFE_INTEGER`, quando ele foge e não tem `targetChange` — o Canary só drena o prazo
+  em quem troca de alvo). O Cripple e o Numb chamam `#applyConditionTo(..., true)` (`ignoreImmunity`):
+  o Canary os aplica com `target->addCondition`, sem o `Monster::isImmune` que só o
+  `CombatConditionFunc` confere — uma paralisia nova que passe pelo caminho de combate normal NÃO
+  usa esse parâmetro. O Carnage roda também para o monstro invocado (`Monster::death` não confere
+  `isSummon()`). Os defeitos do `47dfd51` que ficaram de fora estão listados em
+  `docs/product/combat-conformance.md`.

@@ -17,12 +17,12 @@
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
 
 import {
-  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY, ITEM_SLOTS,
-  SPEED_CONDITION_KEY, SPELL_SKILL_WEAPON, fieldStagesOf, floorChangeAt, floorChangeToward, isBlocked,
-  migrateBotConfigV1,
+  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY,
+  INVISIBLE_CONDITION_KEY, ITEM_SLOTS, SPELL_SKILL_WEAPON, fieldStagesOf, floorChangeAt,
+  floorChangeToward, isBlocked, migrateBotConfigV1,
 } from '@draconya/content';
 import type {
-  AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, BotLoot, Combat,
+  AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, BotLoot, Charm, Combat,
   CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, FieldStage, Hunt,
   Item, ItemSlot, Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange,
   PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina,
@@ -38,7 +38,8 @@ import {
 import type { CastRefused, CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
 import type { ConditionState } from '../conditions.js';
 import {
-  advanceTick, conditionFromSpec, retiredTick, rollDrunkDeviation, sameTick, specTickIntervalMs, tickOf,
+  advanceTick, conditionFromSpec, conditionImmunityOf, retiredTick, rollDrunkDeviation, sameTick,
+  specTickIntervalMs, tickOf,
 } from '../conditions.js';
 import type { NormalizedTick } from '../conditions.js';
 import { Fields } from '../fields.js';
@@ -47,12 +48,22 @@ import { chestStorageKeyOf, isDoorKind, isToggleable, TileOverrides } from '../t
 import type { InteractableKind, InteractableTool, TileOverrideState } from '../tile-overrides.js';
 import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
+import { hasCharmStage } from '../combat/profile.js';
+import {
+  ADRENALINE_BURST_CONDITION, ActionCritical, CHARM_PARALYZE_CONDITION, CLEANSE_IMMUNITY_MS,
+  FATAL_HOLD_MS, carnageCharmDamage, charmAttackBonus, charmChance, cleanseTypeOfCondition,
+  cleanseTypeOfSpec, findAssigned, negatedOutcome, offensiveCharmEffect, rollCleanseCharm,
+  rollDefensiveCharm, rollNormalPercentCharm, rollOffensiveCharm,
+} from '../combat/charms.js';
+import type { CharmAttackBonus, CleanseType } from '../combat/charms.js';
+import type { AssignedCharms } from '../charms.js';
 import { IN_FIGHT_WINDOW_MS, isInFight } from '../combat/in-fight.js';
 import type { DamageOutcome, Defender } from '../combat/damage.js';
 import { reflectedDamageIntent } from '../combat/reflect.js';
 import { cleavePower, cleaveTiles } from '../combat/cleave.js';
 import type { ReflectAttacker, ReflectedDamage } from '../combat/reflect.js';
 import { applyDamageOutcome } from '../combat/outcome.js';
+import type { AppliedDamageOutcome } from '../combat/outcome.js';
 import {
   combineCombatModifiers, monsterCriticalModifiers, rollSharedCriticalOutcome,
 } from '../combat/modifiers.js';
@@ -60,6 +71,7 @@ import type { DefenseSource } from '../combat/defense.js';
 import {
   DISTANCE_BLOCK_FLAGS, MAGIC_BLOCK_FLAGS, MELEE_BLOCK_FLAGS,
 } from '../combat/blockhit.js';
+import { attackedRecently } from '../combat/fight-mode.js';
 import { playerArmor, playerDefense, playerMitigation } from '../combat/player-defense.js';
 import type { PlayerMitigationVocation } from '../combat/player-defense.js';
 import { resolveWeaponPower } from '../combat/weapon-power.js';
@@ -85,15 +97,16 @@ import {
   splitLootOf, uniqueVocations, xpByDamage, xpShare,
 } from '../party.js';
 import type { MemberCapacity, PartyBagState } from '../party.js';
-import type { LootAmmunition, LootItem, LootResult, LootSupply } from '../loot.js';
+import type { LootAmmunition, LootGut, LootItem, LootResult, LootSupply } from '../loot.js';
 import type { CarriedItem, ContainerRules, EquipmentObserver, Wearer } from '../inventory.js';
 import { compileBot, percentOf } from '../bot.js';
 import type { BotActuator, BotView, CompiledBot, CompiledSlot, CooldownOfAction } from '../bot.js';
 import { compileAutomations } from '../automation.js';
 import type { AutomationActuator, CompiledAutomations } from '../automation.js';
 import {
-  CHALLENGE_CONDITION_KEY, MonsterRuntime, canMonsterEnterField, chooseTarget, decideMonsterAction,
-  decideUnengagedMove, isInSpawnRange, isMonsterFleeing, monsterSubject, nearestPrey,
+  CHALLENGE_CONDITION_KEY, FATAL_HOLD_CONDITION_KEY, MonsterRuntime, canMonsterEnterField, chooseTarget,
+  decideMonsterAction, decideUnengagedMove, isInSpawnRange, isMonsterFleeing, monsterSubject,
+  nearestPrey, seesInvisible,
 } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
 import { abilityBlockFlags, abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
@@ -122,6 +135,8 @@ import { powerMultiplier, skillFactorFor } from '../skills.js';
 import { drainStamina, isExhausted } from '../stamina.js';
 import { drainFedMs, feed as feedCharacter, FOOD_CAP_MS } from '../food.js';
 import { blessingCount } from '../blessings.js';
+import { consumeLossAmulet, loseItemsOnDeath } from '../item-loss.js';
+import type { ItemLossOutcome } from '../item-loss.js';
 import { RouteWalker } from '../route/walker.js';
 import { boundedPath, isAdjacentTo, isExactly } from '../route/pathfind.js';
 import { Session } from '../session.js';
@@ -190,6 +205,11 @@ const SUMMON_SPAWN_RADIUS = 1;
  * o usa.
  */
 const PLAYER_SUMMON_CAP = 2;
+/**
+ * Os quatro vizinhos ORTOGONAIS que o Carnage atinge, na ordem do Canary
+ * (`iobestiary.cpp: offsets = {{-1,0},{1,0},{0,-1},{0,1}}`).
+ */
+const CARNAGE_OFFSETS: readonly (readonly [number, number])[] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 /**
  * A troca de alvo por tempo (#518). Só existe UMA por monstro — o subject é o `m:<id>` de
  * sempre, e `resolveDeath` já a cancela junto do resto ao matar (`cancelEvents(subject)`).
@@ -293,6 +313,22 @@ const AUTOMATION = 'bot-automation';
 const AUTOMATION_INTERVAL_MS = 1_000;
 
 type ExitReason = 'manual-exit' | 'exit-rule';
+
+/**
+ * A saída pendente de um personagem, como o hospedeiro a apresenta (#802): o motivo, em que fase
+ * ela está e o instante LÓGICO em que ela conclui — o mais cedo que o ruleset a deixa terminar
+ * SE nenhum golpe novo empurrar a trava de combate. É leitura pura do que já está agendado
+ * (`EXIT_COUNTDOWN`) e do carimbo de combate: nada aqui é estado novo nem entra no snapshot.
+ *
+ * - `countdown`: a contagem VISUAL do `exitDelayMs` corre e o personagem está fora de combate;
+ * - `in-combat`: o personagem lutou há menos de `IN_FIGHT_WINDOW_MS` — a saída só conclui quando
+ *   a janela vence (a do `CONDITION_INFIGHT` do Canary, por dano aplicado — #625, `in-fight.ts`).
+ */
+export interface ExitStatus {
+  readonly reason: ExitReason;
+  readonly phase: 'countdown' | 'in-combat';
+  readonly untilMs: number;
+}
 /**
  * As condições (#155, CMB-07): o vencimento e o tique periódico. Eventos da fila (invariante 2),
  * nunca acumulador. `subject` é `<targetId>/<key>`: um cancelamento por condição, sem varrer a
@@ -301,6 +337,21 @@ type ExitReason = 'manual-exit' | 'exit-rule';
 const CONDITION_EXPIRE = 'condition-expire';
 const CONDITION_TICK = 'condition-tick';
 const conditionSubject = (targetId: string, key: string): string => `${targetId}/${key}`;
+/**
+ * O think de VISIBILIDADE (#559): o momento em que uma criatura larga o alvo que ficou invisível.
+ * No Canary/TFS é o `Creature::onThink` (`creature.cpp:130-140`) — `attackedCreature &&
+ * !canSeeCreature(attackedCreature)` — que roda UMA vez por `EVENT_CREATURE_THINK_INTERVAL`
+ * (1000 ms, `creature.hpp:47`), e cada criatura pensa numa fase própria e sorteada
+ * (`Game::addCreatureCheck`, `game.cpp:7672`: `uniform_random(0, EVENT_CREATURECOUNT - 1)`). O sim
+ * não tem um relógio de think por criatura (seria um evento por criatura por segundo, invariante
+ * 2), então o think que importa é AGENDADO no instante em que a invisibilidade começa
+ * (`#scheduleVisibilityThinks`): quem tinha a criatura como alvo pensa uma vez, num instante
+ * sorteado em [0, 1000) ms — a mesma distribuição da fase do Canary — e larga o alvo se ele
+ * continuar invisível. `subject` é a criatura que pensa (`m:<id>` ou o `characterId`), o que
+ * cancela o evento de graça quando ela morre (`resolveDeath`).
+ */
+const VISIBILITY_THINK = 'visibility-think';
+const VISIBILITY_THINK_INTERVAL_MS = 1_000;
 /**
  * A chave e a duração do `CONDITION_SOUL` do Canary (#593, `Player::onGainExperience`,
  * `data/events/scripts/player.lua`): quatro minutos, fixo — não é `_open` porque o Canary não
@@ -993,6 +1044,12 @@ export interface HuntRulesetOptions {
    * fala de progressão permanente. É a config quem define marco, não quem autoriza contar.
    */
   readonly bestiary?: BestiaryConfig;
+  /**
+   * O catálogo dos 25 Charms do Canary (#602/#603, ADR 0053 d.3), por id. Só o `combat-v4`
+   * (`hasCharmStage`) os rola; ausente é uma hunt em que nenhum charm dispara — o conteúdo de teste
+   * que não fala de Charms, e todo personagem sem atribuição.
+   */
+  readonly charms?: ReadonlyMap<string, Charm>;
   readonly player: PlayerProfile;
   readonly exitRules?: readonly HuntExitRule[];
   /**
@@ -2153,8 +2210,16 @@ export class HuntRuleset implements Ruleset {
   ): void {
     const runner = this.#runners.get(character.id);
     if (runner === undefined) return;
-    runner.attackTarget = target === null ? null : target.subject;
-    runner.attackTargetPinned = target !== null && pinned;
+    // Monstro invisível não é alvo (#559): o jogador não o enxerga (`Player::canSeeCreature`,
+    // `player.cpp:1418`) e o cliente do Canary nem recebe a criatura para clicar nela
+    // (`ProtocolGame::canSee`) — o `Game::playerSetAttackedCreature` do servidor não confere
+    // visibilidade nenhuma, a proteção é do lado do cliente. O cliente do Draconya ainda DESENHA
+    // o monstro invisível, então esta recusa é o substituto server-side dessa apresentação (não
+    // uma regra de caça: o alvo que um jogador do Canary poderia escolher é o mesmo). O alvo que
+    // JÁ estava fixado e ficou invisível é outro caso — cai no think agendado, não aqui.
+    const visible = target !== null && !target.invisible ? target : null;
+    runner.attackTarget = visible === null ? null : visible.subject;
+    runner.attackTargetPinned = visible !== null && pinned;
   }
 
   /**
@@ -2166,7 +2231,7 @@ export class HuntRuleset implements Ruleset {
   selectedTargetOf(character: CharacterRuntime): MonsterRuntime | null {
     const runner = this.#runners.get(character.id);
     if (runner === undefined) return null;
-    return this.#liveTargetOf(runner.attackTarget, character)
+    return this.#liveTargetOf(runner.attackTarget, character, runner.attackTargetPinned)
       ?? this.#liveTargetOf(runner.botCandidate, character);
   }
 
@@ -2946,8 +3011,52 @@ export class HuntRuleset implements Ruleset {
     });
   }
 
+  /**
+   * O jogador pede para sair (#802): o `leave-hunt` do socket chega aqui, e a sessão só termina
+   * quando `#finishExit` concluir — depois do `exitDelayMs` e fora da janela de combate (#625).
+   * Pedir de novo enquanto uma saída está pendente é ignorado, e não reinicia a contagem.
+   */
   requestExit(session: Session, characterId: string): void {
     this.#beginExit(session, characterId, 'manual-exit');
+  }
+
+  /**
+   * O jogador desiste da saída que pediu (#802). Devolve `true` se havia uma saída MANUAL
+   * pendente e ela foi desfeita; `false` (e nada muda) se não havia nenhuma, ou se a pendente é a
+   * de uma regra do bot — essa é a decisão da configuração dele, e a regra a dispararia de novo
+   * no ciclo seguinte enquanto a condição valer.
+   *
+   * O Canary não tem "logout pendente": recusa na hora quando o personagem está em combate
+   * (`RETURNVALUE_YOUMAYNOTLOGOUTDURINGAFIGHT`) e o jogador simplesmente tenta de novo depois.
+   * A espera é a forma do Draconya de fazer esse "tenta de novo" pelo jogador, e cancelá-la é só
+   * parar de tentar — não muda nenhuma regra de combate nem de trava.
+   *
+   * O `EXIT_COUNTDOWN` agendado é CANCELADO, e não apenas ignorado quando vencer: um pedido novo
+   * logo depois agendaria um segundo, e o velho concluiria a saída antes da hora do novo.
+   */
+  cancelExit(session: Session, characterId: string): boolean {
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined || runner.pendingExit !== 'manual-exit') return false;
+    session.cancelEvent(EXIT_COUNTDOWN, characterId);
+    runner.pendingExit = null;
+    return true;
+  }
+
+  /** A saída pendente do personagem, ou `null` (ver `ExitStatus`). Só lê. */
+  exitStatus(session: Session, characterId: string): ExitStatus | null {
+    const reason = this.#runners.get(characterId)?.pendingExit ?? null;
+    if (reason === null) return null;
+    const lastCombatAtMs = findById(session.participants, characterId)?.lastCombatActionAtMs ?? null;
+    const dueAtMs = session.dueAtOf(EXIT_COUNTDOWN, characterId) ?? session.nowMs;
+    if (lastCombatAtMs !== null && isInFight(session.nowMs, lastCombatAtMs)) {
+      // O evento agendado pode estar ANTES do fim da janela (um golpe novo só é relido quando ele
+      // vence, `#finishExit`): o que vale para o jogador é o mais tardio dos dois.
+      return {
+        reason, phase: 'in-combat',
+        untilMs: Math.max(dueAtMs, lastCombatAtMs + IN_FIGHT_WINDOW_MS),
+      };
+    }
+    return { reason, phase: 'countdown', untilMs: dueAtMs };
   }
 
   #newRunner(
@@ -3057,6 +3166,7 @@ export class HuntRuleset implements Ruleset {
       case END_VOTE_EXPIRE: return this.#onEndVoteExpire(session);
       case CONDITION_TICK: return this.#onConditionTick(session, event.subject);
       case CONDITION_EXPIRE: return this.#onConditionExpire(session, event.subject);
+      case VISIBILITY_THINK: return this.#onVisibilityThink(session, event.subject);
       case FIELD_STAGE_ADVANCE: return this.#onFieldStageAdvance(session, event.subject);
       case FIELD_TICK: return this.#onFieldTick(session, event.subject);
       case FIELD_EXPIRE: return this.#onFieldExpire(session, event.subject);
@@ -3178,11 +3288,30 @@ export class HuntRuleset implements Ruleset {
     // bênçãos (#570) é do PERSONAGEM morto — bênção é comprada por personagem, nunca por
     // sessão/party, ao contrário do antigo `premium` binário que este parâmetro substituiu.
     const blessings = blessingCount(character.blessings);
+    // A perda de ITEM (#571, ADR 0042 decisão 4) vem ANTES da penalidade e do consumo das bênçãos,
+    // como no Canary (`Creature::onDeath` chama `dropCorpse` antes de `death()`): a chance lê a
+    // contagem de bênçãos de ANTES de a morte as consumir, e o Amulet of Loss protege antes de ser
+    // gasto. O sorteio é do `Rng` da sessão, um por item vestido. Desligada (conteúdo real hoje —
+    // decisão do dono em aberto, ver `itemLossSchema`) não toca em item nenhum.
+    this.#recordItemLoss(session, character, loseItemsOnDeath(character, {
+      progression: this.#options.progression,
+      items: this.#options.items,
+      blessings,
+      rng: session.rng,
+      newInstanceId: () => this.#newInstanceId(session, character),
+    }));
+    // O charm Bless (#603, `Player::death`, `player.cpp:4085-4098`): se o ÚLTIMO golpe foi de um
+    // monstro ao qual o personagem atribuiu o charm, a perda cai `chance[tier]/100` por cima do que
+    // bênção e promoção já reduziram. O último golpe é o `lastHitBy` da atribuição do morto.
+    const charmBlessReduction = this.#charmBlessReductionOf(character);
     // Promovido (#566, ADR 0042 decisão 1) soma os 30% adicionais de redução, aditivos, nunca
     // tetados — ver o comentário de `promotionReduction` em `progression.ts`.
     const penalty = applyDeathPenalty(
       character,
-      { blessings, promoted: character.promoted },
+      {
+        blessings, promoted: character.promoted,
+        ...(charmBlessReduction === undefined ? {} : { charmBlessReduction }),
+      },
       this.#vocationOf(character),
       this.#options.progression,
       this.#options.skills,
@@ -3216,6 +3345,13 @@ export class HuntRuleset implements Ruleset {
         session.record('skill-down', `${loss.skillId}/${loss.levelChange.from} → ${loss.levelChange.to}`);
       }
     }
+    // O Amulet of Loss é gasto DEPOIS da penalidade (#571): no Canary a conferência do colar lê o
+    // level já rebaixado (`willNotLoseBless`), e o colar vestido se consome mesmo sem ter tido o
+    // que proteger.
+    const spentAmulet = consumeLossAmulet(character, {
+      progression: this.#options.progression, items: this.#options.items,
+    });
+    if (spentAmulet !== null) session.record('loss-amulet-consumed', spentAmulet.itemId);
 
     // Solo — ou party que virou solo —: a morte encerra a sessão (§26.1), como sempre. Em party
     // (#193, ADR 0027 decisão 7) o morto SAI com o próprio extrato — penalidade dentro, e a
@@ -3225,6 +3361,58 @@ export class HuntRuleset implements Ruleset {
       return;
     }
     this.#depart(session, character.id, 'death');
+  }
+
+  /**
+   * A redução que o charm Bless dá à penalidade de morte de `character` (#603): `chance[tier] /
+   * 100` quando o último golpe foi de um monstro ao qual ele o atribuiu, senão `undefined`. O
+   * monstro que matou ainda está vivo e indexado aqui — a morte do personagem é resolvida no
+   * mesmo evento do golpe.
+   */
+  #charmBlessReductionOf(character: CharacterRuntime): number | undefined {
+    const lastHit = character.contribution.lastHitBy;
+    if (lastHit === null) return undefined;
+    const killer = this.#monsterBySubject.get(lastHit);
+    if (killer === undefined) return undefined;
+    const assigned = this.#charmsAgainst(character, killer.monsterId);
+    const bless = assigned === undefined ? undefined : findAssigned(assigned, 'bless');
+    return bless === undefined ? undefined : charmChance(bless) / 100;
+  }
+
+  /**
+   * O que a perda de item da morte deixou no extrato (#571): um evento por instância destruída —
+   * é ele que vira `ledger.ref.notableEvents` e a lista da tela de morte —, mais a proteção que
+   * evitou o sorteio e a mochila de reposição. O `detail` de `item-lost-on-death` é
+   * `itemId/quantidade/instanceId/characterId`: o dono vai junto porque em party as linhas dos
+   * membros compartilham a mesma lista (`Session.notableEvents`), e o `instanceId` é o que liga a
+   * linha à instância apagada de `item_instance` (`removedInstances`).
+   */
+  #recordItemLoss(session: Session, character: CharacterRuntime, outcome: ItemLossOutcome): void {
+    for (const { item } of outcome.lost) {
+      session.record(
+        'item-lost-on-death',
+        `${item.itemId}/${String(item.quantity)}/${item.instanceId}/${character.id}`,
+      );
+    }
+    if (outcome.protectedBy === 'amulet') {
+      const amulet = character.inventory.equippedAt('neck');
+      session.record('item-loss-protected', amulet?.itemId ?? 'amulet');
+    } else if (outcome.protectedBy === 'blessings') {
+      session.record('item-loss-protected', 'blessings');
+    }
+    if (outcome.replacement !== null) session.record('backpack-replaced', outcome.replacement.itemId);
+  }
+
+  /**
+   * O id de uma instância NOVA criada por esta sessão para o personagem (`lootSeq`): o prefixo
+   * `${session.id}:` é o que `acquiredBy` filtra para virar linha de `item_instance`, e em party
+   * o id leva o dono no meio — dois membros com `lootSeq` 0 colidiriam. Mesmo formato de
+   * `#instantiateCorpseItems` e `#useChest`; o critério é o TIPO de sessão, não a contagem.
+   */
+  #newInstanceId(session: Session, character: CharacterRuntime): string {
+    return this.#party !== undefined
+      ? `${session.id}:${character.id}:${String(character.lootSeq++)}`
+      : `${session.id}:${String(character.lootSeq++)}`;
   }
 
   /**
@@ -3892,6 +4080,7 @@ export class HuntRuleset implements Ruleset {
     if (summons.length === 0) return NO_PLAYER_SUMMONS;
     return summons.map((monster) => ({
       id: monster.subject, position: monster.position, alive: monster.alive, health: monster.health,
+      invisible: monster.invisible,
     }));
   }
 
@@ -3936,6 +4125,7 @@ export class HuntRuleset implements Ruleset {
     if (monster === undefined) return null;
     return {
       id: monster.subject, position: monster.position, alive: monster.alive, health: monster.health,
+      invisible: monster.invisible,
     };
   }
 
@@ -5177,7 +5367,12 @@ export class HuntRuleset implements Ruleset {
     // Wand sem mana NÃO bate (#152): o golpe fica agendado para o intervalo seguinte, e sai
     // quando a mana tiver voltado. Não consome mana, não rende skill — como a magia recusada.
     if (how?.kind === 'wand' && character.mana < (how.manaPerHit ?? 0)) return;
-    this.#strike(session, character, target, weapon, how, damagePercent);
+    const used = this.#strike(session, character, target, weapon, how, damagePercent);
+    // O `Player::updateLastAttack` do Canary (M30-03, #550): só quando a arma foi usada, e DEPOIS
+    // do golpe — o reflexo que o golpe provocou ainda enxerga a janela anterior, como lá. Só o
+    // `combat-v3` lê este carimbo (o fator de defesa da postura); nos perfis anteriores o
+    // snapshot continua sem ele.
+    if (used && this.#isV3()) character.lastAttackAtMs = session.nowMs;
     // Quem aplica dano não decide morte: o pipeline resolve quem matou e devolve a
     // consequência a `onCreatureDied`, o mesmo caminho da morte do personagem.
     if (!target.alive) resolveDeath(session, { kind: 'monster', monster: target });
@@ -5407,6 +5602,22 @@ const slots = bot.groups.get(group);
       // alvo" — não "recusado", porque a invocação de outro dono é invisível para este gate
       // por design (só a masterId string do PRÓPRIO personagem importa aqui).
       if (monster.masterId === character.id) return { ok: false, reason: 'no-target' };
+      // Monstro invisível (#559). No Canary o cliente NUNCA recebe a criatura que o jogador não
+      // enxerga (`ProtocolGame::canSee` → `Player::canSeeCreature`, `player.cpp:1418`), então não
+      // há clique nela; o tile continua clicável, e o que o servidor decide é só o que a mira no
+      // TILE faz (`Spell::playerRuneSpellCheck`, `spells.cpp:704`): a runa que precisa de alvo
+      // (`needTarget`: Sudden Death, Fireball, Paralyze…) recusa o tile sem criatura VISÍVEL
+      // (`CANONLYUSETHISRUNEONCREATURES`), e a que não precisa (Great Fireball, Avalanche, os
+      // campos…) sai do mesmo jeito e atinge quem estiver lá — invisível inclusive, revelando-o.
+      // O cliente do Draconya ainda DESENHA o monstro invisível (a apresentação não some com ele),
+      // então este clique existe aqui; o `no-target` do efeito de alvo único é o substituto do
+      // filtro de apresentação do Canary, e o efeito de área/campo mira o tile do monstro, como o
+      // jogador faria ali. Não é regra de caça: a matemática é a do Canary nos dois casos.
+      if (monster.invisible) {
+        return this.#isSingleTargetEffect(damageEffect)
+          ? { ok: false, reason: 'no-target' }
+          : { ok: true, explicit: this.#at(monster) };
+      }
       return { ok: true, explicit: monster };
     }
     return { ok: true, explicit: target.position };
@@ -5491,7 +5702,8 @@ const slots = bot.groups.get(group);
 
     // Dispel em ÁREA (#592, Cancel Invisibility): a forma sai do LANÇADOR, como a cura em grupo
     // — `#aimFor` entra pelo ramo self-origin e colhe os MONSTROS na forma em `#spellHits`, sem
-    // mirar ninguém (sem alvo válido, `aim` vem `null`, e o dispel do lançador de sempre segue).
+    // mirar ninguém. Sem monstro na forma, `aim` vem `null` e nada é dispensado: a magia sai
+    // igual (gasta a mana, rende a skill), e o lançador nunca é o alvo do dispel (ver abaixo).
     const aim = spell.effect.kind === 'damage'
       ? this.#aimFor(character, spell.effect.range, spell.effect.area, explicit)
       : spell.effect.kind === 'damage-over-time'
@@ -5561,8 +5773,15 @@ const slots = bot.groups.get(group);
     // Dispel (#590): o `castSpell` devolve as CHAVES a remover, e quem tem a fila (para
     // cancelar `condition-expire`/`condition-tick`) é o ruleset — a mesma divisão da condição
     // abaixo. Vale para o RECIPIENTE: o mesmo alvo que a cura composta cura, quando há cura.
-    // Dispel em ÁREA (#592, Cancel Invisibility) vale para os MONSTROS colhidos na forma —
-    // nunca aliados, fora do recorte desta issue (§12) — em vez do recipiente único de sempre.
+    // Dispel em ÁREA (#592, Cancel Invisibility) vale para os MONSTROS colhidos na forma, em vez
+    // do recipiente único de sempre — e SÓ para eles (#559). `Combat::CombatFunc` (`combat.cpp:
+    // 1562`/`1610`) só inclui o lançador quando `!params.aggressive`, e o `combat` do Cancel
+    // Invisibility nunca chama `COMBAT_PARAM_AGGRESSIVE` — o `spell:isAggressive(false)` do
+    // script é o `Spell::aggressive` do portão de proteção, outro campo —, então vale o default
+    // do Canary (`CombatParams::aggressive = true`): `caster != creature`, o lançador NUNCA é
+    // atingido, e outro jogador só o seria com as regras de PvP (`canDoCombatWithExpertPvp`),
+    // que a hunt não tem (invariante 8: instanciada, PvE). Quem ficou invisível pelo Invisibility
+    // (`utana vid`) continua invisível depois do próprio Cancel Invisibility.
     if (result.dispel !== undefined) {
       if (spell.effect.kind === 'dispel' && spell.effect.area !== undefined) {
         for (const monster of this.#spellHits) this.#dispelConditions(session, monster, result.dispel);
@@ -5594,7 +5813,7 @@ const slots = bot.groups.get(group);
           ...result.condition,
           targetId: this.#subjectOf(target),
           sourceId: character.id,
-        });
+        }, true);
       }
       return result;
     }
@@ -5654,6 +5873,13 @@ const slots = bot.groups.get(group);
    */
   #applyChallenge(session: Session, character: CharacterRuntime, durationMs: number): void {
     for (const monster of this.#spellHits) {
+      // `Monster::challengeCreature` só vale se `selectTarget(creature)` aceita — e `isTarget`
+      // exige `canSeeCreature` (Canary `monster.cpp:3475`, `1435`): quem não "vê invisível" não é
+      // provocado por um lançador invisível, e a fuga dele não é suspensa (#559).
+      if (character.invisible) {
+        const definition = this.#options.monsters.get(monster.monsterId);
+        if (definition === undefined || !seesInvisible(definition)) continue;
+      }
       monster.targetId = character.id;
       this.#applyConditionTo(session, monster, {
         key: CHALLENGE_CONDITION_KEY,
@@ -5771,16 +5997,11 @@ const slots = bot.groups.get(group);
       session.credit(character.id, 'bestSpellHit', damage);
       // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe. Um
       // `manadrain` sai daqui com `healthDamage: 0` sempre — a vida do monstro nunca se move.
-      const applied = applyDamageOutcome(monster, outcome, character, 1, false, targetsAffected);
+      const applied = this.#drainMonster(session, monster, outcome, character, targetsAffected);
       // Magia e runa também passam pelo `blockHit` do alvo no Canary: um acerto limpo recarrega
       // os contadores de sangue e de escudo (#686). Não rendem try de ARMA — a prática delas é
       // de magia, por mana.
       this.#noteAttackBlock(character, outcome);
-      // O bypass de campo (M29-05, TFS/Canary `Monster::drainHealth`): levar dano ESTANDO preso
-      // (`lastStepBlocked`) ou andando ao acaso (`randomStepping`, #655) concede UMA passagem
-      // pelo campo que o prendia — nunca de graça, e nunca ao andar livre. Zero de dano
-      // (`chance: 0`/overkill de mira que já matou) não arma.
-      monster.noteDamageTaken(applied.healthDamage);
       // O DPS soma o APLICADO (#431), pela mesma razão do `#land`: a manopla do overkill não
       // entra na conta do dano causado.
       session.creditDamage(character.id, applied.healthDamage);
@@ -5803,6 +6024,10 @@ const slots = bot.groups.get(group);
       this.#emitHealed(session, character, applied.lifeLeechApplied, 'leech', character.id);
       // Reflexo e cura por elemento do monstro (#683) — o mesmo ponto do `#land`.
       this.#afterMonsterHit(session, character, monster, outcome);
+      // Os charms do jogador (#603) — o mesmo ponto do `#land`, por alvo da magia/runa.
+      this.#applyCharmsAfterHit(
+        session, character, monster, applied.healthDamage, outcome.intent.extension === true,
+      );
       if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
     }
   }
@@ -6032,26 +6257,43 @@ const slots = bot.groups.get(group);
    * Quando `strongest` mantém a condição que já estava, o mapa não muda e NADA é reagendado —
    * comparar a identidade do estado guardado com o que foi passado distingue os dois casos sem
    * um segundo retorno.
+   *
+   * `fromCombat` liga o portão de IMUNIDADE do monstro, e só o chamador que é um COMBATE o liga
+   * (magia, runa, ability): a imunidade de condição do Canary é consultada por
+   * `Combat::CombatConditionFunc` (`combat.cpp:1079`) e por mais ninguém que BLOQUEIE uma
+   * condição (`Monster::canSeeInvisibility` a lê, mas para outro fim) — o que entra por
+   * `Creature::addCondition` direto, que só confere `isSuppress`, não a consulta: o campo de
+   * tile, a defesa própria e os charms Cripple/Numb do Bestiário (`iobestiary.cpp:105-109` e
+   * `:144-152`, uma `ConditionSpeed(CONDITION_PARALYZE)` adicionada ao monstro sem checar
+   * imunidade). Por isso o portão é opt-in do chamador, e não um filtro de tudo que tem origem
+   * estrangeira: um chamador novo e não combativo nasce SEM ele, como no Canary.
    */
-  #applyConditionTo(session: Session, target: ConditionTarget, condition: ConditionState): void {
+  #applyConditionTo(
+    session: Session, target: ConditionTarget, condition: ConditionState, fromCombat = false,
+  ): void {
     // Item que suprime a condição (#688, Dwarven Ring): ela não entra, como a recusa de
     // `Creature::addCondition` do Canary. Só personagem veste item; monstro fica como estava.
     if (condition.key === DRUNK_CONDITION_KEY && target instanceof CharacterRuntime
       && target.inventory.suppresses(this.#options.items, DRUNK_CONDITION_KEY)) return;
-    // Imunidade de monstro por CONDIÇÃO (#559, ADR 0041 d.2): `Monster::isImmune` do Canary/TFS
-    // — quem o conteúdo declara imune não recebe a condição, ponto de aplicação único, nunca
-    // policiado por golpe. Personagem nunca é imune por conteúdo (só item, acima). `paralyze` é
-    // um CASO à parte: a chave de estado é `speed` (haste e paralyze compartilham a mesma, CMB-11),
-    // e só o sinal NEGATIVO (paralyze) é bloqueável — haste nunca é. `drunk` casa DIRETO com o
-    // nome da imunidade. `invisible` NUNCA entra aqui: a mesma imunidade, no Canary, é
-    // repropositada para "enxerga invisível" (`Monster::canSeeInvisibility`, ADR 0041 d.2) — ela
-    // filtra quem o monstro consegue MIRAR (`chooseTarget`, `monster/monster.ts`), nunca bloqueia
-    // o monstro de ficar invisível por conta própria (`monster.defenses`).
-    if (!(target instanceof CharacterRuntime)) {
+    // Imunidade de monstro por CONDIÇÃO (#559, ADR 0041 d.2): `Monster::isImmune(ConditionType_t)`
+    // do Canary/TFS, consultada por `Combat::CombatConditionFunc` — quem o conteúdo declara imune
+    // não recebe a condição de um golpe/magia/runa/ability, ponto de aplicação único, nunca
+    // policiado por golpe. Personagem nunca é imune por conteúdo (só item, acima). O `caster ==
+    // target` do Canary (`combat.cpp:1079`) pula a checagem: a auto-aplicação (a defesa que se
+    // acelera, o monstro que fica invisível) nunca é barrada. `conditionImmunityOf` (`conditions.ts`)
+    // traduz a condição para o nome da imunidade — `paralyze` (o sinal NEGATIVO da chave `speed`),
+    // `drunk` e as oito DOTs pelo tipo de dano do tique. `invisible` NUNCA entra: a mesma imunidade,
+    // no Canary, é repropositada para "enxerga invisível" (`Monster::canSeeInvisibility`, ADR 0041
+    // d.2) — ela filtra quem o monstro consegue MIRAR (`chooseTarget`, `monster/monster.ts`), nunca
+    // bloqueia o monstro de ficar invisível por conta própria (`monster.defenses`). Campo de tile
+    // não passa por aqui (`FIELD_TICK` tiqueta direto), e o Canary tampouco consulta a imunidade
+    // de condição no campo — só a de DANO, que já zera o tique.
+    if (fromCombat && !(target instanceof CharacterRuntime) && condition.sourceId !== target.subject) {
       const immunities = this.#options.monsters.get(target.monsterId)?.conditionImmunities;
-      const paralyzed = condition.key === SPEED_CONDITION_KEY && (condition.speedPercent ?? 0) < 0;
-      const blockable = paralyzed ? 'paralyze' : condition.key === DRUNK_CONDITION_KEY ? 'drunk' : null;
-      if (blockable !== null && immunities?.includes(blockable)) return;
+      if (immunities !== undefined && immunities.length > 0) {
+        const blockable = conditionImmunityOf(condition);
+        if (blockable !== null && immunities.includes(blockable)) return;
+      }
     }
     const subject = conditionSubject(this.#subjectOf(target), condition.key);
     const previous = target.conditions.get(condition.key);
@@ -6092,6 +6334,85 @@ const slots = bot.groups.get(group);
       session.scheduleIn(CONDITION_TICK, nextTickAtMs - session.nowMs, {
         priority: TICK_PRIORITY, subject,
       });
+    }
+    // A invisibilidade que COMEÇA agora (não a renovada) arma o think de quem a perseguia.
+    if (condition.key === INVISIBLE_CONDITION_KEY && previous === null) {
+      this.#scheduleVisibilityThinks(session, target);
+    }
+  }
+
+  /**
+   * `target` acabou de ficar invisível (#559): cada criatura que o tem como alvo e NÃO o enxerga
+   * pensa uma vez, num instante sorteado em [0, 1000) ms (`VISIBILITY_THINK`), e larga o alvo se
+   * ele continuar invisível — até lá segue com ele e ataca normalmente, como o Canary.
+   *
+   * - **Monstros** que o perseguem (`targetId`), exceto os que "veem invisível"
+   *   (`Monster::canSeeInvisibility`) — para eles `canSeeCreature` é sempre verdadeiro e o think
+   *   nunca larga nada. Ordem de `#monsters` (nascimento): a ordem dos sorteios é contrato.
+   * - **Personagens** cujo alvo de ataque é o `target` e foi FIXADO pelo jogador. O alvo ELEITO
+   *   pelo bot (`attackTarget` não fixado) e o `botCandidate` caem AQUI, na hora: a eleição
+   *   (`selectTarget`) nunca escolhe um invisível e o bot reelege a cada vencimento de monstro
+   *   (`#autoSelectTarget`) — o targeting do bot é do Draconya (ADR 0037 d.2), não do Canary. Sai
+   *   daqui, num EVENTO, e não da primeira leitura que notar a invisibilidade: os leitores
+   *   (`#attackTargetOfRunner`/`#botCandidateOf`) são alcançáveis da apresentação (`slotStates`),
+   *   e o campo que o snapshot guarda não pode depender de alguém estar olhando (invariante 3).
+   *   O jogador nunca "vê invisível" (`Player::canSeeCreature`, `player.cpp:1418`); só um alvo que
+   *   é MONSTRO importa aqui.
+   */
+  #scheduleVisibilityThinks(session: Session, target: ConditionTarget): void {
+    const id = this.#subjectOf(target);
+    for (const monster of this.#monsters) {
+      if (!monster.alive || monster.targetId !== id) continue;
+      const definition = this.#options.monsters.get(monster.monsterId);
+      if (definition === undefined || seesInvisible(definition)) continue;
+      this.#scheduleVisibilityThink(session, monster.subject);
+    }
+    if (!(target instanceof MonsterRuntime)) return;
+    for (const character of session.participants) {
+      const runner = this.#runners.get(character.id);
+      if (runner === undefined) continue;
+      if (runner.botCandidate === id) runner.botCandidate = null;
+      if (runner.attackTarget !== id) continue;
+      if (!runner.attackTargetPinned) runner.attackTarget = null;
+      else if (character.alive) this.#scheduleVisibilityThink(session, character.id);
+    }
+  }
+
+  #scheduleVisibilityThink(session: Session, subject: string): void {
+    session.scheduleIn(VISIBILITY_THINK, session.rng.integer(0, VISIBILITY_THINK_INTERVAL_MS - 1), {
+      priority: EventPriority.Movement, subject,
+    });
+  }
+
+  /**
+   * O think de visibilidade venceu (#559, `Creature::onThink`, `creature.cpp:130-140`): quem
+   * pensa larga o alvo que ainda esteja invisível — e só ele. Nada é largado se o alvo já mudou,
+   * morreu ou voltou a ficar visível no meio do caminho (a invisibilidade venceu, foi cancelada
+   * ou o dano a revelou): é a MESMA checagem `canSeeCreature` do Canary, feita no instante do
+   * think, não no da invisibilidade.
+   *
+   * O monstro larga (`targetId = null`) e o PRÓXIMO `chooseTarget` dele reelege entre quem ele
+   * enxerga; o personagem larga o alvo fixado (os campos do bot — `botCandidate` e o alvo não
+   * fixado — já saíram quando a invisibilidade começou, ver `#scheduleVisibilityThinks`).
+   */
+  #onVisibilityThink(session: Session, subject: string): void {
+    const monster = this.#monsterBySubject.get(subject);
+    if (monster !== undefined) {
+      if (!monster.alive) return;
+      const definition = this.#options.monsters.get(monster.monsterId);
+      if (definition === undefined || seesInvisible(definition)) return;
+      const target = this.#preyById(session, monster.targetId);
+      if (target !== null && target.invisible === true) monster.targetId = null;
+      return;
+    }
+    const character = findById(session.participants, subject);
+    const runner = character === null ? undefined : this.#runners.get(subject);
+    if (character === null || !character.alive || runner === undefined) return;
+    if (runner.attackTarget === null) return;
+    const attacked = this.#monsterBySubject.get(runner.attackTarget);
+    if (attacked !== undefined && attacked.invisible) {
+      runner.attackTarget = null;
+      runner.attackTargetPinned = false;
     }
   }
 
@@ -6188,10 +6509,31 @@ const slots = bot.groups.get(group);
     } as const;
     const attacker = condition.sourceId ?? 'field';
     if (target instanceof CharacterRuntime) {
-      const outcome = resolveDamage(
-        intent, this.#playerDefender(target), 'pve', this.#options.combat, session.rng,
+      const resolved = resolveDamage(
+        intent, this.#playerDefender(target, session), 'pve', this.#options.combat, session.rng,
         session.nowMs,
       );
+      // Os charms defensivos (#603, `combat-v4`) também rolam no tique de uma condição que um
+      // MONSTRO VIVO aplicou ao jogador: o `owner` da condição é o atacante do
+      // `combatChangeHealth`. Tique de campo (`sourceId` é o id do campo) ou de um monstro que já
+      // morreu não tem atacante.
+      const owner = condition.sourceId === undefined
+        ? undefined : this.#monsterBySubject.get(condition.sourceId);
+      const charmed = owner !== undefined && owner.alive && this.#charmStage()
+        ? this.#rollDefensiveCharms(
+          session, owner, target, intent.damageType, tick.amount, resolved,
+        )
+        : resolved;
+      // O Parry pode matar o dono do tique: a morte é resolvida DEPOIS do golpe, como em
+      // `#executeMonsterAbility`.
+      const resolveOwnerDeath = (): void => {
+        if (owner !== undefined && !owner.alive && this.#monsterBySubject.get(owner.subject) === owner) {
+          resolveDeath(session, { kind: 'monster', monster: owner });
+        }
+      };
+      // `null` é o Void Inversion (dreno de mana convertido em ganho): nada a aplicar.
+      if (charmed === null) { resolveOwnerDeath(); return; }
+      const outcome = charmed;
       // CMB-08: o mana shield entra como estágio explícito, e o hit/atribuição usam o HP
       // aplicado. Sem atacante para leech — o DOT não repõe vida de quem o aplicou.
       const applied = applyDamageOutcome(
@@ -6208,19 +6550,19 @@ const slots = bot.groups.get(group);
       });
       this.#emitCharacterHealth(session, target);
       if (target.health <= 0) session.kill(target);
+      resolveOwnerDeath();
       return;
     }
     const outcome = resolveDamage(
       intent, this.#monsterDefender(target), 'pve', this.#options.combat, session.rng,
       session.nowMs,
     );
-    const applied = applyDamageOutcome(target, outcome, null);
+    // O tique de condição/campo também passa pelo cano único do dano no monstro — um monstro
+    // preso que leva dano de um campo em que PODE pisar (ex.: fogo, enquanto preso atrás de um
+    // de veneno) ganha a passagem temporária pelo campo que o prende, e o invisível que leva
+    // dano do campo volta a ser visível (`#drainMonster`).
+    const applied = this.#drainMonster(session, target, outcome, null);
     recordDamage(target.contribution, attacker, applied.healthDamage);
-    // O bypass de campo (M29-05) — o mesmo mecanismo de `#applyHits`/`#land`, agora para o tique
-    // de condição/campo: no Canary TODO dano passa por um único cano (`Creature::drainHealth`),
-    // então um monstro preso que leva dano de um campo em que PODE pisar (ex.: fogo, enquanto
-    // preso atrás de um de veneno) também ganha a passagem temporária pelo campo que o prende.
-    target.noteDamageTaken(applied.healthDamage);
     session.emit({
       kind: 'creature-hit', creatureId: target.subject, attackerId: attacker,
       // `manaDamage` (#547): sempre zero aqui — monstro não tem mana —, mas a soma mantém o
@@ -6280,6 +6622,43 @@ const slots = bot.groups.get(group);
       session.cancelEvent(CONDITION_TICK, subject);
       target.conditions.remove(type);
     }
+  }
+
+  /**
+   * O cano ÚNICO do dano de vida que um MONSTRO sofre: `Monster::drainHealth` do Canary (`monster.
+   * cpp:3442-3458`), que `Game::combatChangeHealth` alcança com `realDamage > 0`
+   * (`game.cpp:8735`) para golpe, magia, runa, tique de DOT, campo, reflexo e golpe de invocação.
+   * Todo ponto do ruleset que tira vida de um `MonsterRuntime` passa por aqui, e é ISSO que
+   * impede que um ponto novo (os charms de dano, por exemplo) esqueça um dos dois efeitos do
+   * `drainHealth`: um sexto ponto que chame `applyDamageOutcome` direto num monstro esconderia o
+   * defeito, sem teste nenhum que o apontasse:
+   *
+   * - **O bypass de campo** (M29-05, #655): levar dano ESTANDO preso (`lastStepBlocked`) ou
+   *   andando ao acaso (`randomStepping`) concede UMA passagem pelo campo que o prendia
+   *   (`ignoresFieldDamage`, `MonsterRuntime.noteDamageTaken`) — nunca de graça, e nunca ao
+   *   andar livre. Zero de dano (`chance: 0`, overkill de mira que já matou) não arma.
+   * - **A revelação** (#559): `if (isInvisible()) removeCondition(CONDITION_INVISIBLE)`. O mesmo
+   *   `healthDamage` que o `applyDamageOutcome` devolve é a fronteira: dano integralmente
+   *   absorvido/bloqueado, ou de `manadrain`, não revela ninguém. O jogador NÃO tem este
+   *   comportamento (só `Monster::drainHealth` o tem): a invisibilidade dele só cai por prazo,
+   *   por Cancel Invisibility ou pelo equipamento.
+   *
+   * `attacker` é quem recebe o leech (`null` quando não há — DOT, reflexo, campo, golpe de
+   * monstro), e `targetsAffected` o divisor dele numa ação em área (`#applyHits`). A atribuição do
+   * dano (`recordDamage`/`creditDamage`) fica com o chamador: quem leva o crédito muda por caminho.
+   */
+  #drainMonster(
+    session: Session, monster: MonsterRuntime, outcome: DamageOutcome, attacker: CharacterRuntime | null,
+    targetsAffected = 1,
+  ): AppliedDamageOutcome {
+    const applied = applyDamageOutcome(monster, outcome, attacker, 1, false, targetsAffected);
+    monster.noteDamageTaken(applied.healthDamage);
+    if (applied.healthDamage > 0) {
+      // A remoção passa por `#dispelConditions` — é a fila do ruleset que cancela o
+      // `condition-expire` pendente, e um vencimento órfão é o defeito que CMB-07 proíbe.
+      if (monster.invisible) this.#dispelConditions(session, monster, [INVISIBLE_CONDITION_KEY]);
+    }
+    return applied;
   }
 
   // --- campos de tile (CMB-07) ---------------------------------------------------------------
@@ -6519,6 +6898,9 @@ const slots = bot.groups.get(group);
       // `target: 'enemy'` lê os dois, para montar o `ConditionState`/`SpeedContext` do alvo.
       creatureId: monster.subject,
       speed: monster.speed,
+      // Os charms passivos do lançador contra ESTE alvo (#603) — Low Blow, Savage Blow, Vampiric
+      // Embrace, Void's Call. Ausente (o caso comum) mantém o alvo como sempre foi.
+      charm: this.#charmAttackBonusAgainst(character, monster),
     });
   }
 
@@ -6620,7 +7002,9 @@ const slots = bot.groups.get(group);
         const conditionTarget = (supply.effect.kind === 'condition' && supply.effect.target === 'enemy')
           ? this.#spellHits[0]
           : character;
-        if (conditionTarget !== undefined) this.#applyConditionTo(session, conditionTarget, result.condition);
+        if (conditionTarget !== undefined) {
+          this.#applyConditionTo(session, conditionTarget, result.condition, true);
+        }
       }
       return result;
     }
@@ -6796,6 +7180,16 @@ const slots = bot.groups.get(group);
     // tooltip errado; `not-enough-item` fica com o consumível físico (carga de bênção, M22).
     if (balanceOf(character) < supply.price) return blocked('not-enough-gold');
     return { set, slot, state: 'ready', remainingMs: 0 };
+  }
+
+  /**
+   * O efeito é de ALVO ÚNICO — dano ou dano ao longo do tempo sem forma —, o análogo do
+   * `needTarget(true)` das runas do Canary (Sudden Death, Fireball, Icicle…)? A que tem forma no
+   * tile mirado (Great Fireball, Avalanche) e o campo não são: saem sobre o tile, com ou sem
+   * criatura visível nele (`Spell::playerRuneSpellCheck`, `spells.cpp:704`).
+   */
+  #isSingleTargetEffect(effect: { readonly kind: string; readonly area?: SpellArea | undefined }): boolean {
+    return (effect.kind === 'damage' || effect.kind === 'damage-over-time') && effect.area === undefined;
   }
 
   /**
@@ -7694,7 +8088,7 @@ const slots = bot.groups.get(group);
         this.#applyMonsterHitOnSummon(session, monster, character, result, source);
         continue;
       }
-      const defender = this.#playerDefender(character);
+      const defender = this.#playerDefender(character, session);
       const result = resolveDamage(
         {
           rawDamage, source: 'monster-attack', damageType: ability.damageType,
@@ -7726,7 +8120,20 @@ const slots = bot.groups.get(group);
       if (result.reflected !== undefined && monster.alive) {
         this.#reflectOntoMonster(session, character, monster, result.reflected);
       }
-      this.#applyMonsterHit(session, subject, character, ability, defender, result, source);
+      // Os charms defensivos (#603, `combat-v4`): DEPOIS do `blockHit` e do reflexo, ANTES do mana
+      // shield que `#applyMonsterHit` aplica. `null` é o Void Inversion (o dreno virou ganho de
+      // mana): nenhum golpe a aplicar.
+      const charmStage = this.#charmStage();
+      const landed = charmStage
+        ? this.#rollDefensiveCharms(session, monster, character, ability.damageType, rawDamage, result)
+        : result;
+      if (landed !== null) {
+        this.#applyMonsterHit(session, subject, character, ability, defender, landed, source);
+      }
+      // O Cleanse (#603) roda depois de todo golpe que acertou e antes da condição da ability: se
+      // limpou uma condição do jogador (ou o tipo da nova está imune), a nova não entra.
+      const conditionBlocked = charmStage && character.alive
+        && this.#cleanseBeforeCondition(session, monster, character, ability);
       // A condição da ability (CMB-07), aplicada a CADA alvo vivo que ela acertou. O tique de
       // dano entra no mesmo pipeline do golpe; quem aplicou (o monstro) leva a atribuição.
       //
@@ -7734,11 +8141,11 @@ const slots = bot.groups.get(group);
       // condição declarada numa ability que hoje só atinge invocação não seria aplicada; é o
       // mesmo recorte de `#applyMonsterHitOnSummon` (sem mecanismo exclusivo do jogador), e
       // fica registrado como divergência conhecida, não como pendência silenciosa.
-      if (ability.condition !== undefined && character.alive) {
+      if (ability.condition !== undefined && character.alive && !conditionBlocked) {
         this.#applyConditionTo(session, character, conditionFromSpec(
           ability.condition, character.id, subject, session.nowMs, 'monster-attack',
           { baseSpeed: character.speed, rng: session.rng },
-        ));
+        ), true);
       }
     }
     // O campo da ability (CMB-07): UMA vez, centrado no alvo principal. A geometria usa a
@@ -7770,9 +8177,8 @@ const slots = bot.groups.get(group);
       reflectedDamageIntent(reflected), this.#monsterDefender(monster), 'pve', this.#options.combat,
       session.rng, session.nowMs,
     );
-    const applied = applyDamageOutcome(monster, outcome, null);
+    const applied = this.#drainMonster(session, monster, outcome, null);
     recordDamage(monster.contribution, character.id, applied.healthDamage);
-    monster.noteDamageTaken(applied.healthDamage);
     session.emit({
       kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
       amount: applied.healthDamage + applied.manaDamage, source: 'melee', position: this.#at(monster),
@@ -7879,9 +8285,8 @@ const slots = bot.groups.get(group);
     source: 'melee' | 'spell',
   ): void {
     const creditId = typeof attacker.masterId === 'string' ? attacker.masterId : attacker.subject;
-    const applied = applyDamageOutcome(target, outcome, null);
+    const applied = this.#drainMonster(session, target, outcome, null);
     recordDamage(target.contribution, creditId, applied.healthDamage);
-    target.noteDamageTaken(applied.healthDamage);
     session.emit({
       kind: 'creature-hit', creatureId: target.subject, attackerId: attacker.subject,
       amount: applied.healthDamage + applied.manaDamage, source, position: this.#at(target),
@@ -8023,8 +8428,12 @@ const slots = bot.groups.get(group);
     const prey: readonly Prey[] = summons.length === 0
       ? session.participants
       : [...session.participants, ...summons];
+    // `searchTarget` só olha quem `isTarget` aceita, e `isTarget` exige `canSeeCreature` (Canary
+    // `monster.cpp:1435`) — quem não "vê invisível" nunca sorteia um alvo invisível (#559).
+    const blind = !seesInvisible(definition);
     const candidates = prey.filter((candidate) => candidate.alive
       && candidate.id !== monster.targetId
+      && !(blind && candidate.invisible === true)
       && sameFloor(monster.position.z, candidate.position.z)
       && distance(monster.position, candidate.position) <= definition.aggroRadius);
     if (candidates.length === 0) return;
@@ -8383,7 +8792,7 @@ const slots = bot.groups.get(group);
     const runner = this.#runners.get(characterId);
     const reason = runner?.pendingExit ?? null;
     if (runner === undefined || reason === null) return;
-    // A trava de combate (#625, CONDITION_INFIGHT do Canary): a saída — manual ou por regra do
+    // A trava de combate (#625, a janela do CONDITION_INFIGHT do Canary): a saída — manual ou por regra do
     // bot, as duas passam por `#beginExit`/`#finishExit` — só CONCLUI fora de combate. O
     // `exitDelayMs` continua a contagem VISUAL (o `#beginExit` acima); isto é uma segunda trava,
     // por cima, que reagenda para o instante em que o combate vence em vez de completar a
@@ -8417,13 +8826,19 @@ const slots = bot.groups.get(group);
    * O poder sai de `resolveWeaponPower` com o PERFIL da arma: o ruleset não conhece nome de
    * item nem vocação (DT-01). A família do perfil aponta a skill e a prática, e é por isso que
    * wand/rod não recebem multiplicador de weapon skill — o perfil deles não tem `power`.
+   *
+   * Devolve `true` quando a arma foi USADA — o `result` de `Player::doAttacking` do Canary
+   * (`useWeapon`/`useFist` devolvem `true`): o golpe saiu, tenha acertado ou errado. É o que
+   * `#onPlayerAttack` grava em `lastAttackAtMs` (M30-03, #550), de onde o fator de defesa da
+   * postura tira a janela "bateu há menos de um intervalo". `false` é o tiro que NÃO saiu — sem
+   * visão livre, sem munição, monstro fora do conteúdo —, que o Canary também não conta.
    */
   #strike(
     session: Session, character: CharacterRuntime, monster: MonsterRuntime,
     weapon: Item | null, how: ResolvedWeapon | undefined, damagePercent = 100,
-  ): void {
+  ): boolean {
     const definition = this.#options.monsters.get(monster.monsterId);
-    if (definition === undefined) return;
+    if (definition === undefined) return false;
     const defender = this.#monsterDefender(monster);
     // Contra quem o reflexo do monstro volta (#683) — ausente no monstro que não reflete.
     const reflectAttacker = this.#reflectAttackerFor(character, monster);
@@ -8433,19 +8848,19 @@ const slots = bot.groups.get(group);
       // nada. O alvo continua sendo o mesmo (a escolha ignora visão): o próximo vencimento
       // reavalia, e acerta assim que a linha abrir. Vale para o arremessável (#575) também —
       // ele só troca a fonte do projétil, nunca a exigência de linha de visão.
-      if (!isSightClear(this.#world.map, character.position, monster.position)) return;
+      if (!isSightClear(this.#world.map, character.position, monster.position)) return false;
       // O arremessável (#575): sem `ammoFamily`, o item na mão É o próprio projétil — não há
       // seleção por família nem lançador (ADR 0026 d.3 não se aplica a ele). `buildContent` já
       // garante que toda arma `distance` tem exatamente um dos dois campos.
       if (how.ammoFamily === undefined) {
         this.#throwWeapon(session, character, monster, weapon, how, damagePercent, defender, reflectAttacker);
-        return;
+        return true;
       }
       const ammo = this.#ammoFor(character, how.ammoFamily);
       // Sem munição paga pela família — catálogo vazio, ou saldo que não cobre o preço: o tiro
       // NÃO sai. Nada de dano inventado nem de munição grátis (ADR 0026 d.3): sem gold, a regra
       // de saída `out-of-gold` encerra a hunt, como para a poção.
-      if (ammo === null) return;
+      if (ammo === null) return false;
       // O estoque de loot (#520, revisão do #536) é gasto ANTES do gold — a mesma regra do
       // supply em `useSupply`. Estoque é PESSOAL, nunca rateado: quem tem Burst Arrow no
       // estoque atira das PRÓPRIAS, e o resto da party continua pagando gold pelas delas.
@@ -8489,8 +8904,10 @@ const slots = bot.groups.get(group);
           this.#practice(session, character, how.family, distanceTries(character.attackPractice));
         }
         // A munição é ABSTRATA: nada de pilha a consumir. O tiro errou, mas já pagou o preço, e
-        // o próximo usa a mesma seleção (ou a básica da família) enquanto houver gold.
-        return;
+        // o próximo usa a mesma seleção (ou a básica da família) enquanto houver gold. O tiro
+        // SAIU: é golpe de arma (`useWeapon` devolve `true` no Canary), e abre a janela do fator
+        // de defesa da postura.
+        return true;
       }
       // O `base` da fórmula e o TIPO são da MUNIÇÃO (o bow não tem attack próprio), e a família
       // e a escala vêm do perfil da arma. Uma alocação por tiro, como o `defender` acima.
@@ -8507,7 +8924,7 @@ const slots = bot.groups.get(group);
             + this.#perfectShotBonus(character, monster),
           source: 'basic-attack',
           damageType: profile.damageType,
-          modifiers: this.#attackerModifiers(character),
+          modifiers: this.#hitModifiers(session, character, monster),
           // Distância bloqueia por armadura, mas NÃO por escudo no `combat-v3` (#548) —
           // `WeaponDistance` do Canary não seta `blockedByShield`.
           blockable: DISTANCE_BLOCK_FLAGS,
@@ -8521,7 +8938,7 @@ const slots = bot.groups.get(group);
       }
       // A munição é ABSTRATA: nada de pilha a consumir. O tiro que saiu já pagou o preço, e o
       // próximo usa a mesma seleção (ou a básica da família) enquanto houver gold.
-      return;
+      return true;
     }
 
     if (weapon !== null && how?.kind === 'wand') {
@@ -8542,7 +8959,7 @@ const slots = bot.groups.get(group);
           rawDamage: this.#weaponPower(session, character, how, damagePercent).physical,
           source: 'basic-attack',
           damageType: how.damageType,
-          modifiers: this.#attackerModifiers(character),
+          modifiers: this.#hitModifiers(session, character, monster),
           // Wand/rod não bloqueiam nem por armadura nem por escudo no `combat-v3` (#548) — o
           // `WeaponWand` do Canary não declara nenhum dos dois; é dano MÁGICO.
           blockable: MAGIC_BLOCK_FLAGS,
@@ -8553,7 +8970,7 @@ const slots = bot.groups.get(group);
       this.#land(session, character, monster, result, 'spell');
       // Rende magia pela MANA gasta, como a magia (§9.4): é assim que a wand treina magic level.
       this.#practice(session, character, how.family, manaPerHit);
-      return;
+      return true;
     }
 
     // Corpo a corpo — ou desarmado: sem arma na mão vale o perfil `fist` (CMB-05), que carrega
@@ -8568,7 +8985,7 @@ const slots = bot.groups.get(group);
         rawDamage: hit.physical,
         source: 'basic-attack',
         damageType: profile.damageType,
-        modifiers: this.#attackerModifiers(character),
+        modifiers: this.#hitModifiers(session, character, monster),
         // Corpo a corpo (ou desarmado) bloqueia os dois — o default de `MELEE_BLOCK_FLAGS`,
         // explícito aqui só por simetria com os outros dois ramos de `#strike`.
         blockable: MELEE_BLOCK_FLAGS,
@@ -8594,6 +9011,7 @@ const slots = bot.groups.get(group);
     // é o tipo de bloqueio que decide: 1 try, ou 0 contra imune e bloqueado sem sangue.
     this.#practice(session, character, profile.family,
       this.#isV3() ? meleeTries(character.attackPractice) : 1);
+    return true;
   }
 
   /**
@@ -8687,7 +9105,7 @@ const slots = bot.groups.get(group);
       : vocation?.meleeDamageMultiplier ?? 1;
     const hit = resolveWeaponHit(
       profile, character.level, skillLevel, session.rng, this.#options.combat, vocationMultiplier,
-      damagePercent,
+      damagePercent, character.fightMode,
     );
     // A postura vale para as duas partes do golpe (#687), cada uma arredondada.
     if (family?.kind === 'distance' || family?.kind === 'melee') {
@@ -8714,6 +9132,353 @@ const slots = bot.groups.get(group);
       this.#options.combat.modifiers,
       character.inventory.combatModifiers(this.#options.items),
     );
+  }
+
+  // --- Charms em combate (#603, M39-03, ADR 0053 d.5) -----------------------------------------
+  //
+  // As rolagens e a ordem são as do Canary (`Game::combatChangeHealth`/`applyCharmRune`,
+  // `Combat::applyExtensions`, `Monster::death`, `Player::death`) — o contrato do estágio do
+  // `combat-v4` em `docs/product/combat-conformance.md`. Só o `combat-v4` (`hasCharmStage`) roda
+  // qualquer uma delas: numa sessão ainda fixada em `combat-v3` o registro de Charms do personagem
+  // existe e não dispara nada (invariante 7). Sem atribuição a este monstro o custo é um
+  // `size === 0` e nenhuma alocação — o caminho de toda hunt sem charm.
+
+  /** O estágio de Charms roda neste perfil? */
+  #charmStage(): boolean {
+    return hasCharmStage(this.#options.combat.compatibilityProfile);
+  }
+
+  /** Os charms do personagem que agem contra `monsterId`, ou `undefined` (o caso comum). */
+  #charmsAgainst(character: CharacterRuntime, monsterId: string): AssignedCharms | undefined {
+    const catalogue = this.#options.charms;
+    if (catalogue === undefined || !this.#charmStage()) return undefined;
+    return character.charms.assignedTo(monsterId, catalogue);
+  }
+
+  /** O que os charms PASSIVOS do personagem somam a um golpe contra `monster` — ver `CharmAttackBonus`. */
+  #charmAttackBonusAgainst(
+    character: CharacterRuntime, monster: MonsterRuntime,
+  ): CharmAttackBonus | undefined {
+    const assigned = this.#charmsAgainst(character, monster.monsterId);
+    return assigned === undefined ? undefined : charmAttackBonus(assigned, monster.monsterId);
+  }
+
+  /**
+   * Os modificadores de UM golpe dado a `monster`: os do atacante (`#attackerModifiers`) mais os
+   * charms passivos contra ele (Low Blow, Savage Blow, Vampiric Embrace, Void's Call). Sem charm é
+   * o MESMO objeto de sempre — o crítico segue sendo rolado dentro do `resolveDamage`, na posição
+   * de antes; com charm o crítico é decidido AQUI (`ActionCritical`, o `applyExtensions` do Canary
+   * roda antes do `blockHit`) e o Low Blow tem o segundo sorteio que o Canary tem.
+   */
+  #hitModifiers(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime,
+  ): DamageModifiers | undefined {
+    const base = this.#attackerModifiers(character);
+    const bonus = this.#charmAttackBonusAgainst(character, monster);
+    if (bonus === undefined) return base;
+    return new ActionCritical(base, session.rng).forTarget(bonus, session.rng);
+  }
+
+  /**
+   * O que os charms do jogador fazem DEPOIS de um golpe dele num monstro (`Game::applyCharmRune` e
+   * o Fatal Hold de `Combat::CombatHealthFunc`). Chamado por `#land` (arma, wand) e por
+   * `#applyHits` (magia e runa), o único par de caminhos em que o personagem acerta um monstro —
+   * e também pelo dano dos próprios charms, como no Canary.
+   *
+   * `extension` é o golpe que já é extensão de outro (o cleave): o Canary só roda os charms
+   * OFENSIVOS em `!damage.extension` — e o Fatal Hold, que mora um degrau acima, roda em todos.
+   * `healthDamage` é o HP de fato removido: golpe que não tirou vida não rola charm ofensivo
+   * (`realDamage == 0` sai antes de `applyCharmRune`). Monstro que morreu no golpe não tem o que
+   * receber: o Canary ainda gasta os sorteios e o dano dá zero, então pular é equivalente.
+   */
+  #applyCharmsAfterHit(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime,
+    healthDamage: number, extension: boolean,
+  ): void {
+    if (!monster.alive) return;
+    const assigned = this.#charmsAgainst(character, monster.monsterId);
+    if (assigned === undefined) return;
+    if (!extension && healthDamage > 0) {
+      // Major antes de minor, como `{ major, minor }` de `applyCharmRune`.
+      for (const entry of [assigned.major, assigned.minor]) {
+        if (!monster.alive) return;
+        if (entry === undefined || entry.charm.type !== 'offensive') continue;
+        if (!rollOffensiveCharm(session.rng, charmChance(entry))) continue;
+        const effect = offensiveCharmEffect(
+          entry.charm, character, this.#maxHealthOf(monster),
+        );
+        if (effect.kind === 'paralyze') {
+          // Cripple: `target->addCondition` direto, sem o portão de imunidade: sem `fromCombat` (ver `#applyConditionTo`).
+          this.#applyConditionTo(session, monster, conditionFromSpec(
+            CHARM_PARALYZE_CONDITION, monster.subject, character.id, session.nowMs, 'charm',
+            { baseSpeed: monster.speed, rng: session.rng },
+          ));
+        } else if (effect.kind === 'damage') {
+          this.#applyCharmDamage(
+            session, character, monster, effect.amount, effect.damageType, effect.neutral,
+          );
+        }
+      }
+    }
+    this.#rollFatalHold(session, character, monster, assigned);
+  }
+
+  /**
+   * O dano de um charm num monstro (`parseCharmCombat` → `Combat::doCombatHealth` com
+   * `damage.extension = true`): passa pelo MESMO resolver, contra a defesa do monstro, sem
+   * bloqueio por defesa/armadura (`CombatParams` sem `blockedByArmor`/`blockedByShield`), sem
+   * crítico, sem leech e sem reflexo — só o AUMENTO por tipo do atacante vale, como em
+   * `applyAbsorbDamageModifications`. O NEUTRO (Overpower, Overflux, Carnage, Parry) pula a
+   * absorção, a imunidade e a resistência, como o `COMBAT_NEUTRALDAMAGE` do Canary.
+   *
+   * Quem chama resolve a morte do monstro: aqui só o dano, a atribuição e o anúncio.
+   */
+  #applyCharmDamage(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime, amount: number,
+    damageType: DamageType, neutral: boolean,
+  ): void {
+    if (amount <= 0 || !monster.alive) return;
+    const increase = neutral ? undefined : this.#attackerModifiers(character)?.increase;
+    const outcome = resolveDamage(
+      {
+        rawDamage: amount, source: 'charm', damageType, blockable: MAGIC_BLOCK_FLAGS,
+        extension: true,
+        ...(neutral ? { neutral: true } : {}),
+        ...(increase === undefined ? {} : { modifiers: { increase } }),
+      },
+      this.#monsterDefender(monster), 'pve', this.#options.combat, session.rng, session.nowMs,
+    );
+    // O cano único do dano no monstro (`Monster::drainHealth`): o charm também revela o invisível
+    // e arma o bypass de campo, como qualquer outro dano.
+    const applied = this.#drainMonster(session, monster, outcome, null);
+    recordDamage(monster.contribution, character.id, applied.healthDamage);
+    session.emit({
+      kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
+      amount: applied.healthDamage, source: 'spell', position: this.#at(monster),
+      damageType: outcome.damageType,
+    });
+    this.#emitHealth(session, monster);
+    // O dano do charm conta para o DPS (`updatePlayerPartyHuntAnalyzer` roda em todo dano do
+    // jogador, extensão inclusive) — mas não é "golpe básico": não entra no recorde do extrato.
+    session.creditDamage(character.id, applied.healthDamage);
+    this.#healMonsterByElement(session, monster, outcome);
+    // O Fatal Hold mora em `CombatHealthFunc`, então o dano do próprio charm o rola de novo.
+    const assigned = this.#charmsAgainst(character, monster.monsterId);
+    if (assigned !== undefined) this.#rollFatalHold(session, character, monster, assigned);
+  }
+
+  /**
+   * Fatal Hold (`Combat::CombatHealthFunc`, `combat.cpp:919-937`): a cada golpe do jogador num
+   * monstro do charm, `chance > normal_random(0, 100)` prende o monstro — ele não foge por vida
+   * baixa por 30 s (`Monster::isFleeing`, `fatalHoldDuration <= 0`). Um novo acerto RENOVA o prazo.
+   *
+   * **O prazo do Canary só corre para quem troca de alvo** (`Monster::onThinkTarget` o drena dentro
+   * de `changeTargetSpeed != 0 && runAwayHealth > 0`): o monstro que foge e NÃO tem `targetChange`
+   * fica preso para sempre — três no catálogo (achad, drasilla, muglex-clan-assassin). É o
+   * mecanismo, e é reproduzido: sem `targetChange` o prazo é `Number.MAX_SAFE_INTEGER`. Monstro
+   * que nunca foge (`runOnHealth` ausente ou zero) não tem o que prender.
+   */
+  #rollFatalHold(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime, assigned: AssignedCharms,
+  ): void {
+    const fatal = findAssigned(assigned, 'fatal-hold');
+    if (fatal === undefined || !monster.alive) return;
+    if (!rollNormalPercentCharm(session.rng, charmChance(fatal))) return;
+    const definition = this.#options.monsters.get(monster.monsterId);
+    if (definition === undefined || (definition.runOnHealth ?? 0) <= 0) return;
+    this.#applyConditionTo(session, monster, {
+      key: FATAL_HOLD_CONDITION_KEY,
+      targetId: monster.subject,
+      sourceId: character.id,
+      expiresAtMs: definition.targetChange === undefined
+        ? Number.MAX_SAFE_INTEGER
+        : session.nowMs + FATAL_HOLD_MS,
+    });
+  }
+
+  /**
+   * Os charms DEFENSIVOS contra um golpe de monstro que acabou de passar pelo `blockHit`
+   * (`Game::combatChangeHealth`, `game.cpp:8566-8583`): DEPOIS da defesa, da armadura e do reflexo
+   * do equipamento, ANTES do mana shield. Minor antes de major, cada um com
+   * `chance >= normal_random(1, 10000) / 100`:
+   *
+   *   - Adrenaline Burst: haste de 10 s no jogador;
+   *   - Numb: paralisia de 10 s no monstro que bateu;
+   *   - Parry: o dano recebido volta ao monstro como NEUTRO;
+   *   - Dodge: o golpe inteiro é negado (o único Dodge deste perfil).
+   *
+   * O tique de uma condição que o MONSTRO aplicou ao jogador (`ConditionDamage::doDamage` resolve
+   * o `owner` para o atacante e chama o mesmo `combatChangeHealth`) rola exatamente igual, a cada
+   * tique — ver `#applyConditionTick`. O tique de campo, ou de um monstro que já morreu, não tem
+   * atacante e não rola.
+   *
+   * Um golpe que já chegou a zero não rola nada (`healthChange == 0` sai antes). O `manadrain` é
+   * outro ramo do Canary (`combatChangeMana`): o Void Inversion vem primeiro — converte o dreno em
+   * GANHO de mana, com o valor BRUTO — e depois major e minor, nesta ordem, sem o Parry.
+   *
+   * Devolve o outcome a aplicar: o mesmo quando nada nega o golpe, o ZERADO quando o Dodge o nega
+   * (o `blockHit` já gastou carga de bloqueio e treinou escudo, então o golpe segue pelo caminho
+   * normal com dano zero) ou `null` quando o Void Inversion o transformou em ganho de mana.
+   *
+   * **Parry: só o SEGUNDO ponto do Canary é reproduzido.** O `47dfd51` rola o Parry duas vezes por
+   * golpe — `game.cpp:7944-7952`, dentro de `combatBlockHit`, e `:8566-8583`. No primeiro, o valor
+   * já está no sinal de VIDA-DE-ALVO (`damage.primary.value` é negativo ali) e o `-realDamage` do
+   * `parseDefensiveCharmCombat` sai POSITIVO: `combatChangeHealth` o lê como CURA e o monstro
+   * recupera o que acabou de bater. Só o segundo (valores já em módulo) reflete de verdade. Esse
+   * primeiro ponto é o defeito descrito na PR do #603 — reproduzi-lo faria o Parry anular a si
+   * mesmo. Pelo mesmo sinal, o Parry no ramo de mana (`combatChangeMana`) não reflete: não rola.
+   */
+  #rollDefensiveCharms(
+    session: Session, monster: MonsterRuntime, character: CharacterRuntime, damageType: DamageType,
+    rawDamage: number, result: DamageOutcome,
+  ): DamageOutcome | null {
+    const assigned = this.#charmsAgainst(character, monster.monsterId);
+    if (assigned === undefined) return result;
+    const rng = session.rng;
+    if (damageType === 'manadrain') {
+      // O Void Inversion vem ANTES de tudo em `combatChangeMana` — antes até de o `blockHit` e da
+      // mana atual serem consultados: converte o dreno em ganho, mesmo com a mana zerada.
+      const inversion = findAssigned(assigned, 'void-inversion');
+      if (inversion !== undefined && rollNormalPercentCharm(rng, charmChance(inversion))) {
+        character.mana = Math.min(character.maxMana, character.mana + rawDamage);
+        return null;
+      }
+      // Sem mana para perder (`manaLoss <= 0`) ou imune ao dreno (`blockType != BLOCK_NONE`), o
+      // Canary sai antes de rolar qualquer charm.
+      if (character.mana <= 0 || result.immune) return result;
+      for (const entry of [assigned.major, assigned.minor]) {
+        if (entry === undefined || entry.charm.type !== 'defensive') continue;
+        if (entry.charm.id === 'cleanse' || entry.charm.id === 'parry') continue;
+        if (!rollDefensiveCharm(rng, charmChance(entry))) continue;
+        if (this.#applyDefensiveCharm(session, monster, character, entry.charm.id, 0)) {
+          return negatedOutcome(result);
+        }
+      }
+      return result;
+    }
+    const healthChange = result.resolvedDamage + (result.secondaryOutcome?.resolvedDamage ?? 0);
+    if (healthChange <= 0) return result;
+    for (const entry of [assigned.minor, assigned.major]) {
+      if (entry === undefined || entry.charm.type !== 'defensive' || entry.charm.id === 'cleanse') continue;
+      if (!rollDefensiveCharm(rng, charmChance(entry))) continue;
+      if (this.#applyDefensiveCharm(session, monster, character, entry.charm.id, healthChange)) {
+        return negatedOutcome(result);
+      }
+    }
+    return result;
+  }
+
+  /** O efeito de um charm defensivo que passou na rolagem. `true` é o Dodge: o golpe acaba aqui. */
+  #applyDefensiveCharm(
+    session: Session, monster: MonsterRuntime, character: CharacterRuntime, charmId: string,
+    healthChange: number,
+  ): boolean {
+    switch (charmId) {
+      case 'dodge':
+        return true;
+      case 'adrenaline-burst':
+        this.#applyConditionTo(session, character, conditionFromSpec(
+          ADRENALINE_BURST_CONDITION, character.id, character.id, session.nowMs, 'charm',
+          { baseSpeed: character.speed, rng: session.rng },
+        ));
+        return false;
+      case 'numb':
+        // Numb: `target->addCondition` direto, sem o portão de imunidade: sem `fromCombat` (ver `#applyConditionTo`).
+        this.#applyConditionTo(session, monster, conditionFromSpec(
+          CHARM_PARALYZE_CONDITION, monster.subject, character.id, session.nowMs, 'charm',
+          { baseSpeed: monster.speed, rng: session.rng },
+        ));
+        return false;
+      case 'parry':
+        this.#applyCharmDamage(session, character, monster, healthChange, 'physical', true);
+        return false;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * O Cleanse (`Combat::CombatConditionFunc`, `combat.cpp:1037-1062`) — roda depois de CADA golpe
+   * de monstro que acertou o jogador, e ANTES de a ability aplicar a condição dela: com o charm
+   * atribuído a este monstro e ao menos uma condição negativa ativa (`Creature::
+   * getCleansableConditions`), `chance >= normal_random(0, 10000) / 100` remove UMA delas,
+   * sorteada (`uniform_random`), e dá ao tipo removido 11 s de imunidade. A condição nova da
+   * ability NÃO entra nessa rodada.
+   *
+   * A imunidade vale contra a condição da ability (`isImmuneCleanse`) mesmo quando o Cleanse já
+   * não dispara — é estado do JOGADOR, não do charm. Devolve `true` quando a condição da ability
+   * não deve mais ser aplicada.
+   */
+  #cleanseBeforeCondition(
+    session: Session, monster: MonsterRuntime, character: CharacterRuntime, ability: MonsterAbility,
+  ): boolean {
+    const assigned = this.#charmsAgainst(character, monster.monsterId);
+    const cleanse = assigned === undefined ? undefined : findAssigned(assigned, 'cleanse');
+    if (cleanse !== undefined) {
+      const cleansable: { readonly key: string; readonly type: CleanseType }[] = [];
+      for (const condition of character.conditions.getState()) {
+        const type = cleanseTypeOfCondition(condition);
+        if (type !== null) cleansable.push({ key: condition.key, type });
+      }
+      if (cleansable.length > 0 && rollCleanseCharm(session.rng, charmChance(cleanse))) {
+        const picked = cleansable[session.rng.integer(0, cleansable.length - 1)] as {
+          readonly key: string; readonly type: CleanseType;
+        };
+        // `removeCondition(type)` do Canary tira TODAS as do tipo sorteado.
+        this.#dispelConditions(
+          session, character, cleansable.filter((entry) => entry.type === picked.type).map((e) => e.key),
+        );
+        character.cleanseImmunity.set(picked.type, session.nowMs + CLEANSE_IMMUNITY_MS);
+        return true;
+      }
+    }
+    if (ability.condition === undefined || character.cleanseImmunity.size === 0) return false;
+    const type = cleanseTypeOfSpec(ability.condition);
+    return type !== null && (character.cleanseImmunity.get(type) ?? -1) >= session.nowMs;
+  }
+
+  /**
+   * O Carnage (`Monster::death`, `monster.cpp:3283-3291`): ao morrer, o monstro ao qual o jogador
+   * atribuiu o charm rola `chance >= normal_random(1, 10000) / 100`, e cada monstro nos quatro
+   * tiles ORTOGONAIS leva `min(15 % da vida do morto, 6× o level)` de dano neutro. O jogador é
+   * quem deu o último golpe — ou, sem ele, quem o monstro estava atacando. Roda também para o
+   * monstro invocado por outro monstro (o `Monster::death` não confere `isSummon()`); invocação de
+   * jogador fica de fora como VÍTIMA (não é alvo hostil, `Combat::canDoCombat`).
+   *
+   * Roda no FIM de `#onMonsterDied`, com o morto já fora dos índices: as mortes que o Carnage causa
+   * são resolvidas depois de todos os golpes (a regra de colher antes de aplicar, FUN-92) e podem
+   * encadear outro Carnage.
+   */
+  #carnage(
+    session: Session, dead: MonsterRuntime, definition: Monster, credit: KillCredit,
+  ): void {
+    const killer = findById(session.participants, credit.lastHitBy)
+      ?? findById(session.participants, dead.targetId);
+    if (killer === null) return;
+    const assigned = this.#charmsAgainst(killer, dead.monsterId);
+    const carnage = assigned?.major?.charm.id === 'carnage' ? assigned.major : undefined;
+    if (carnage === undefined || !rollDefensiveCharm(session.rng, charmChance(carnage))) return;
+    const amount = carnageCharmDamage(definition.health, killer.level, carnage.charm.percent ?? 0);
+    const victims: MonsterRuntime[] = [];
+    for (const [dx, dy] of CARNAGE_OFFSETS) {
+      const x = dead.position.x + dx;
+      const y = dead.position.y + dy;
+      for (const candidate of this.#hostileMonsters()) {
+        if (candidate.alive && candidate.position.x === x && candidate.position.y === y
+          && sameFloor(candidate.position.z, dead.position.z)) {
+          victims.push(candidate);
+          break;
+        }
+      }
+    }
+    for (const victim of victims) {
+      this.#applyCharmDamage(session, killer, victim, amount, 'physical', true);
+    }
+    for (const victim of victims) {
+      if (!victim.alive && this.#monsterBySubject.get(victim.subject) === victim) {
+        resolveDeath(session, { kind: 'monster', monster: victim });
+      }
+    }
   }
 
   /** O nível da skill que a família aponta; sem família ou skill no catálogo, zero. */
@@ -8816,7 +9581,7 @@ const slots = bot.groups.get(group);
         rawDamage: power.physical + this.#perfectShotBonus(character, monster),
         source: 'basic-attack',
         damageType: how.damageType,
-        modifiers: this.#attackerModifiers(character),
+        modifiers: this.#hitModifiers(session, character, monster),
         // Como a munição por família (#548): bloqueia por armadura, nunca por escudo.
         blockable: DISTANCE_BLOCK_FLAGS,
         ...(reflectAttacker === undefined ? {} : { attacker: reflectAttacker }),
@@ -8927,12 +9692,9 @@ const slots = bot.groups.get(group);
     // O CMB-08: aplicar é o estágio explícito que passa pelo mana shield (no alvo), remove HP
     // efetivo e credita o leech clampado no atacante. O `outcome` já traz o resolvido e o
     // crítico; a atribuição e o hit usam o HP APLICADO, nunca a mana absorvida nem o overkill.
-    const applied = applyDamageOutcome(monster, outcome, character);
+    const applied = this.#drainMonster(session, monster, outcome, character);
     this.#noteAttackBlock(character, outcome);
     recordDamage(monster.contribution, character.id, applied.healthDamage);
-    // O bypass de campo (M29-05) — ver o comentário gêmeo em `#applyHits`, o mesmo mecanismo
-    // pelo caminho de golpe corpo a corpo/wand.
-    monster.noteDamageTaken(applied.healthDamage);
     this.#markCombatActive(session, character.id);
     // A definição única de "em combate" (#625): ataque DADO — o espelho de `#applyMonsterHit`,
     // que marca o RECEBIDO. Ver a nota de distinção com `Runner.lastCombatActionAtMs` acima.
@@ -8962,6 +9724,10 @@ const slots = bot.groups.get(group);
     // O reflexo e a cura por elemento do monstro (#683), nesta ordem — a do Canary no fim de
     // `combatBlockHit`. Ausentes do outcome (v1/v2, ou monstro que não os declara), nada acontece.
     this.#afterMonsterHit(session, character, monster, outcome);
+    // Os charms do jogador (#603): depois do dano aplicado e do leech, como `applyCharmRune`.
+    this.#applyCharmsAfterHit(
+      session, character, monster, applied.healthDamage, outcome.intent.extension === true,
+    );
   }
 
   /**
@@ -8994,8 +9760,8 @@ const slots = bot.groups.get(group);
     session: Session, character: CharacterRuntime, monster: MonsterRuntime, reflected: ReflectedDamage,
   ): void {
     const outcome = resolveDamage(
-      reflectedDamageIntent(reflected), this.#playerDefender(character), 'pve', this.#options.combat,
-      session.rng, session.nowMs,
+      reflectedDamageIntent(reflected), this.#playerDefender(character, session), 'pve',
+      this.#options.combat, session.rng, session.nowMs,
     );
     const applied = applyDamageOutcome(
       character, outcome, null, character.conditions.damageTakenScale(),
@@ -9170,7 +9936,7 @@ const slots = bot.groups.get(group);
       // individual, e a ordem do RNG é a de solo (gold, depois itens na ordem da tabela).
       // Só com alguém elegível: um monstro que morreu com todo mundo morto não paga ninguém.
       if (eligible.length > 0) {
-        const loot = this.#rollLootFor(monster, definition.loot, session.rng);
+        const loot = this.#rollLootFor(monster, definition.loot, session.rng, this.#gutOf(session, monster, credit));
         // Elegibilidade da bolsa (D4/§16.1): TODOS os presentes no instante do abate — o mesmo
         // conjunto que paga o rateio, não o `eligible` (vivo + stamina) que decide XP.
         const presentAtDrop = session.participants.map((p) => p.id);
@@ -9190,7 +9956,9 @@ const slots = bot.groups.get(group);
       // `corpseItems` alimentam o cadáver logo abaixo, e `#collectFromCorpse` roda no MESMO
       // evento (decisão 3): não há "segunda chance" para quem está olhando ainda em #721/W2 —
       // isso é o W3/#722.
-      const loot = this.#rollLootFor(monster, this.#lootTableFor(definition, recipient), session.rng);
+      const loot = this.#rollLootFor(
+        monster, this.#lootTableFor(definition, recipient), session.rng, this.#gutOf(session, monster, credit),
+      );
       corpseGold = loot.gold;
       corpseItems = this.#instantiateCorpseItems(session, recipient, loot.items);
       // Supply e munição (#520): o recipiente do loot leva o estoque inteiro, como o gold —
@@ -9307,6 +10075,14 @@ const slots = bot.groups.get(group);
     // já ter saído de `#monsters` alguns parágrafos acima.
     const summons = this.#monsters.filter((m) => m.masterId === monster.id);
     for (const summon of summons) this.#removeSummon(session, summon);
+    // O Carnage (#603) no FIM, com o morto já fora dos índices: as mortes que ele causa são
+    // resolvidas aqui dentro, depois de todos os golpes, e podem encadear outro Carnage. Vale para a
+    // invocação também: o `Monster::death` do Canary não confere `isSummon()` — só o loot, a XP e o
+    // Bestiário (`Player::onKilledMonster`) a excluem, e é por isso que o `isSummon` acima os guarda
+    // e este não. A invocação de PERSONAGEM nunca chega a um `killer`: quem a mata é monstro.
+    if (definition !== undefined && this.#charmStage()) {
+      this.#carnage(session, monster, definition, credit);
+    }
   }
 
   /**
@@ -9746,6 +10522,25 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * O charm Gut de quem é DONO do cadáver (#603): o Canary gera o loot uma vez, com o Gut de
+   * `Player(corpse:getCorpseOwner())` — e o dono é quem causou MAIS dano (`Monster::getCorpse`,
+   * `setAttribute(CORPSEOWNER, mostDamageCreature)`), não o destinatário do loot nem quem deu o
+   * último golpe. `undefined` sem o charm para este monstro: o sorteio é o de sempre.
+   */
+  #gutOf(session: Session, monster: MonsterRuntime, credit: KillCredit): LootGut | undefined {
+    if (!this.#charmStage()) return undefined;
+    const owner = findById(session.participants, credit.mostDamageBy);
+    if (owner === null) return undefined;
+    const assigned = this.#charmsAgainst(owner, monster.monsterId);
+    const gut = assigned === undefined ? undefined : findAssigned(assigned, 'gut');
+    if (gut === undefined) return undefined;
+    return {
+      percent: charmChance(gut),
+      isProduct: (itemId) => this.#options.items.get(itemId)?.creatureProduct === true,
+    };
+  }
+
+  /**
    * O sorteio de loot deste monstro — com o roll extra da Boosted Creature do dia (#615, ADR
    * 0054 decisão 7, `ondroploot_boosted.lua`, `factor 1.0`): a mesma tabela sorteada DE NOVO,
    * logo depois do sorteio normal, na mesma ordem (gold → itens na ordem da tabela) — nunca
@@ -9754,8 +10549,10 @@ const slots = bot.groups.get(group);
    * maior — é por quê o roll extra é uma tabela INTEIRA a mais, não uma chance melhorada na
    * mesma tabela: dobra a EXPECTATIVA de drop, não a chance de cada linha.
    */
-  #rollLootFor(monster: MonsterRuntime, table: Monster['loot'], rng: Rng): LootResult {
-    const first = rollLoot(table, rng, this.#options.progression.rates.loot);
+  #rollLootFor(monster: MonsterRuntime, table: Monster['loot'], rng: Rng, gut?: LootGut): LootResult {
+    // O Gut (#603) só entra no sorteio NORMAL: o roll extra da boosted (`ondroploot_boosted.lua`)
+    // passa `gut = false`.
+    const first = rollLoot(table, rng, this.#options.progression.rates.loot, gut);
     if (monster.monsterId !== this.#options.boostedMonsterId) return first;
     const second = rollLoot(table, rng, this.#options.progression.rates.loot);
     return {
@@ -10079,9 +10876,12 @@ const slots = bot.groups.get(group);
    * acrescenta. Substituir faria vestir a primeira armadura deixar o personagem mais frágil se
    * ela valesse menos que o número base.
    *
-   * Recebe o personagem porque a armadura passou a depender de quem é — antes era constante.
+   * Recebe o personagem porque a armadura passou a depender de quem é — antes era constante. E
+   * a `session` (o relógio lógico e a fila) porque, no `combat-v3`, a defesa da postura ofensiva
+   * e balanceada depende de o personagem ter batido há pouco (M30-03, #550) — e o empate exato
+   * da janela olha se o golpe dele está agendado para este ms (ver `attackedRecently`).
    */
-  #playerDefender(character: CharacterRuntime): Defender {
+  #playerDefender(character: CharacterRuntime, session: Session): Defender {
     // A resistência e a imunidade do EQUIPAMENTO (CMB-03), compiladas na hora do golpe a
     // partir dos poucos slots vestidos — não é varredura de tabela de resistência. `combat-v1`/
     // `v2` a usam inteira; o `combat-v3` (#552) tira dela a resistência, que vira `absorb`.
@@ -10115,7 +10915,7 @@ const slots = bot.groups.get(group);
         ...(reflect === undefined ? {} : { reflect: { reflector: 'player' as const, table: reflect } }),
         defense: {
           kind: shieldItem !== null ? 'shield' : weaponItem !== null ? 'weapon' : 'none',
-          defense: this.#playerDefenseV3(character, weaponItem, shieldItem),
+          defense: this.#playerDefenseV3(character, weaponItem, shieldItem, session),
         },
         defenseMitigation: this.#playerMitigationV3(character, weaponItem, shieldItem),
         blockCharge,
@@ -10187,7 +10987,7 @@ const slots = bot.groups.get(group);
    * do Canary e devolve o piso correto para um Sorcerer/Druid sem escudo.
    */
   #playerDefenseV3(
-    character: CharacterRuntime, weaponItem: Item | null, shieldItem: Item | null,
+    character: CharacterRuntime, weaponItem: Item | null, shieldItem: Item | null, session: Session,
   ): number {
     const fistFamily = this.#options.weaponFamilies.get('fist');
     const weaponFamily = weaponItem?.weapon?.family === undefined
@@ -10206,7 +11006,16 @@ const slots = bot.groups.get(group);
       ...(shieldItem === null ? {} : { shield: { defense: shieldItem.defense } }),
       fistSkillLevel: this.#skillLevelOf(character, fistFamily),
       shieldSkillLevel: this.#shieldSkillLevelOf(character),
-      fightMode: 'attack',
+      // A postura que o jogador escolheu (M30-03, #550) e a janela "bateu há menos de um
+      // intervalo de ataque" — o `Player::getDefenseFactor(false)` do Canary, calculado contra o
+      // relógio LÓGICO da sessão, nunca contra o de parede (invariante 2). No empate exato o
+      // golpe do herói agendado para ESTE ms conta como já dado (`attackedRecently`): a fila é a
+      // verdade única do prazo, e olhá-la só acontece nesse ms, não a cada golpe recebido.
+      fightMode: character.fightMode,
+      recentlyAttacked: attackedRecently(
+        character.lastAttackAtMs, session.nowMs, this.#options.player.attackIntervalMs,
+        () => session.dueAtOf(PLAYER_ATTACK, character.id) === session.nowMs,
+      ),
     });
   }
 
@@ -10235,7 +11044,9 @@ const slots = bot.groups.get(group);
           rangedFocus: shieldItem.spellbook || shieldItem.quiver,
         },
       }),
-      fightMode: 'attack',
+      // A postura escolhida (M30-03, #550): o `fightFactor` da mitigação é ESTÁTICO — não olha o
+      // relógio de ataque, diferente do da defesa acima.
+      fightMode: character.fightMode,
     });
   }
 
@@ -10349,10 +11160,13 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * O monstro vivo, dentro do raio de busca; senão `null`. **NÃO muta** — é a leitura que
-   * `selectedTargetOf` usa para a apresentação (invariante 3).
+   * O monstro vivo, no MESMO andar e dentro do raio de busca; senão `null`. A VISIBILIDADE fica
+   * de fora de propósito (#559): "saiu de cena" — morreu, mudou de andar, passou do raio — é o
+   * que os leitores que LIMPAM o campo (`#attackTargetOfRunner`/`#botCandidateOf`) perguntam, e
+   * um monstro apenas invisível NÃO saiu de cena: ele volta a ser visível por prazo ou por dano.
+   * **NÃO muta.**
    */
-  #liveTargetOf(subject: string | null, character: CharacterRuntime): MonsterRuntime | null {
+  #inSightOf(subject: string | null, character: CharacterRuntime): MonsterRuntime | null {
     if (subject === null) return null;
     const monster = this.#monsterBySubject.get(subject);
     if (monster === undefined || !monster.alive) return null;
@@ -10365,25 +11179,57 @@ const slots = bot.groups.get(group);
     return monster;
   }
 
-  /** O alvo de ATAQUE vivo; limpa o campo se morreu ou saiu da tela. `null` se não há. */
+  /**
+   * `#inSightOf` + a regra de visibilidade do JOGADOR. **NÃO muta** — é a leitura que
+   * `selectedTargetOf` usa para a apresentação (invariante 3).
+   *
+   * O jogador não enxerga monstro invisível (`Player::canSeeCreature`, Canary `player.cpp:1418`:
+   * só `CanSenseInvisibility`/GM vê) e `Creature::onThink` larga o alvo de ataque que ficou
+   * invisível (#559). O alvo FIXADO pelo jogador segue até o think agendado
+   * (`#onVisibilityThink`, `keepInvisible`) — até lá ele ainda ataca, e o golpe REVELA o
+   * monstro (`#drainMonster`). O alvo ELEITO pelo bot não é devolvido: o targeting do bot é do
+   * Draconya (ADR 0037 d.2) e `selectTarget` nunca escolhe um invisível.
+   */
+  #liveTargetOf(
+    subject: string | null, character: CharacterRuntime, keepInvisible = false,
+  ): MonsterRuntime | null {
+    const monster = this.#inSightOf(subject, character);
+    return monster !== null && monster.invisible && !keepInvisible ? null : monster;
+  }
+
+  /**
+   * O alvo de ATAQUE vivo; limpa o campo se morreu ou saiu da tela. `null` se não há.
+   *
+   * Invisível e não fixado devolve `null` SEM limpar (#559): este leitor é alcançável da
+   * apresentação (`slotStates` → `#targetInRange`), e o que chega ao snapshot não pode depender
+   * de haver alguém assistindo (invariante 3). O campo do alvo eleito que fica invisível é
+   * limpo NO EVENTO em que a invisibilidade começa (`#scheduleVisibilityThinks`), nunca aqui.
+   */
   #attackTargetOfRunner(character: CharacterRuntime): MonsterRuntime | null {
     const runner = this.#runners.get(character.id);
     if (runner === undefined || runner.attackTarget === null) return null;
-    const monster = this.#liveTargetOf(runner.attackTarget, character);
+    const monster = this.#inSightOf(runner.attackTarget, character);
     if (monster === null) {
       runner.attackTarget = null;
       runner.attackTargetPinned = false;
+      return null;
     }
-    return monster;
+    return monster.invisible && !runner.attackTargetPinned ? null : monster;
   }
 
-  /** O candidato do AUTO-TARGET vivo; limpa o campo se morreu ou saiu da tela. */
+  /**
+   * O candidato do AUTO-TARGET vivo; limpa o campo se morreu ou saiu da tela. O mesmo contrato de
+   * `#attackTargetOfRunner` para o invisível: `null` sem escrever nada.
+   */
   #botCandidateOf(character: CharacterRuntime): MonsterRuntime | null {
     const runner = this.#runners.get(character.id);
     if (runner === undefined || runner.botCandidate === null) return null;
-    const monster = this.#liveTargetOf(runner.botCandidate, character);
-    if (monster === null) runner.botCandidate = null;
-    return monster;
+    const monster = this.#inSightOf(runner.botCandidate, character);
+    if (monster === null) {
+      runner.botCandidate = null;
+      return null;
+    }
+    return monster.invisible ? null : monster;
   }
 
   /** O alvo corrente é do JOGADOR (AB-09), ou só uma eleição do bot (#480)? */
@@ -10832,6 +11678,7 @@ export function createHuntRuleset(
     // `exactOptionalPropertyTypes`.
     party: content.party,
     ...(content.bestiary === undefined ? {} : { bestiary: content.bestiary }),
+    charms: content.charms,
     targetSearchRadius: content.bot.targetSearchRadius,
     spells: content.spells,
     supplies: content.supplies,

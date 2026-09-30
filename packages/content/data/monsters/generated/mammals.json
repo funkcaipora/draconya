@@ -1737,6 +1737,7 @@
       ]
     },
     "conditionImmunities": [
+      "bleeding",
       "invisible",
       "paralyze"
     ],

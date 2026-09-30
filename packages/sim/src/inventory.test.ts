@@ -1026,3 +1026,88 @@ describe('overlay por instância: imbuements (#604, ADR 0046)', () => {
     expect(back.equippedAt('chest')?.overlay).toEqual(imbued);
   });
 });
+
+describe('perder e receber uma peça vestida (#571, perda de item na morte)', () => {
+  const backpack = define({ id: 'backpack', kind: 'container', slot: 'back', weight: 18, value: 0, initialSlots: 20 });
+  const bag = define({ id: 'bag', kind: 'container', slot: 'back', weight: 8, value: 0, initialSlots: 8 });
+  const withContainers = new Map<string, Item>([...catalog, ['backpack', backpack], ['bag', bag]]);
+  const huntera: ContainerRules = { backpackSlots: 20, satchelSlots: 10, row: 5 };
+
+  const dressed = (): Inventory => {
+    const inventory = Inventory.fromState({
+      backpack: [carried('rock', 'r1'), null, carried('rock', 'r2')],
+      satchel: [carried('rock', 's1')],
+      equipped: {
+        back: carried('backpack', 'kit:back'),
+        chest: carried('armor', 'kit:armor'),
+      },
+    });
+    inventory.ensureContainers(huntera);
+    return inventory;
+  };
+
+  it('perder a MOCHILA leva o que ela carrega e zera o vetor — a bolsa, do personagem, fica', () => {
+    const inventory = dressed();
+
+    const lost = inventory.loseEquipped('back');
+
+    expect(lost?.item.instanceId).toBe('kit:back');
+    expect(lost?.contents.map((c) => c.instanceId)).toEqual(['r1', 'r2']);
+    expect(inventory.equippedAt('back')).toBeNull();
+    // O vetor de 20 lugares era DA mochila que se foi: não sobra um container órfão.
+    expect(inventory.backpack).toEqual([]);
+    expect(inventory.satchel.filter((c) => c !== null).map((c) => c?.instanceId)).toEqual(['s1']);
+    // O tamanho inicial volta a zero: `ensureContainers` da bag nova não herda os 20 de antes.
+    inventory.grantEquipped('back', carried('bag', 'death:bag'));
+    inventory.ensureContainers({ backpackSlots: 8, satchelSlots: 10, row: 5 });
+    expect(inventory.backpack).toHaveLength(8);
+  });
+
+  it('perder outra peça vestida não mexe na mochila nem no que ela carrega', () => {
+    const inventory = dressed();
+
+    const lost = inventory.loseEquipped('chest');
+
+    expect(lost).toEqual({ slot: 'chest', item: carried('armor', 'kit:armor'), contents: [] });
+    expect(inventory.equippedAt('back')?.instanceId).toBe('kit:back');
+    expect(inventory.backpack.filter((c) => c !== null)).toHaveLength(2);
+    expect(inventory.loseEquipped('chest')).toBeNull();
+  });
+
+  it('avisa o observer como `destroy`: quem cancela o prazo do anel e a bota de haste depende dele', () => {
+    const inventory = dressed();
+    const seen: string[] = [];
+    inventory.setEquipmentObserver({
+      onEquip: (slot, item) => seen.push(`equip:${slot}:${item.instanceId}`),
+      onUnequip: (slot, item) => seen.push(`unequip:${slot}:${item.instanceId}`),
+    });
+
+    inventory.loseEquipped('chest');
+    inventory.loseEquipped('back');
+    inventory.grantEquipped('back', carried('bag', 'death:bag'));
+
+    expect(seen).toEqual(['unequip:chest:kit:armor', 'unequip:back:kit:back', 'equip:back:death:bag']);
+  });
+
+  it('`grantEquipped` recusa slot ocupado — trocar por cima destruiria em silêncio o que estava lá', () => {
+    const inventory = dressed();
+    expect(inventory.grantEquipped('back', carried('bag', 'death:bag'))).toBe(false);
+    expect(inventory.equippedAt('back')?.instanceId).toBe('kit:back');
+    expect(inventory.grantEquipped('head', carried('helmet', 'gift:helmet'))).toBe(true);
+    expect(inventory.equippedAt('head')?.instanceId).toBe('gift:helmet');
+  });
+
+  it('sem mochila nas costas o loot vai para a bolsa, e com a bag concedida volta a ir para ela', () => {
+    const inventory = dressed();
+    inventory.loseEquipped('back');
+    const rich = wearer({ capacity: 10_000 });
+    // Sem mochila: a bolsa recebe (ADR 0026 d.6).
+    expect(inventory.add(carried('rock', 'loot-1'), withContainers, rich, huntera).ok).toBe(true);
+    expect(inventory.satchel.some((c) => c?.instanceId === 'loot-1')).toBe(true);
+    // Com a bag, o próximo loot cai nela.
+    inventory.grantEquipped('back', carried('bag', 'death:bag'));
+    inventory.ensureContainers({ backpackSlots: 8, satchelSlots: 10, row: 5 });
+    expect(inventory.add(carried('rock', 'loot-2'), withContainers, rich, huntera).ok).toBe(true);
+    expect(inventory.backpack[0]?.instanceId).toBe('loot-2');
+  });
+});

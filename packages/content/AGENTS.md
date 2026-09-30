@@ -472,6 +472,17 @@ sobrevive como fallback legado do conteúdo de teste — se ele e o kit coexiste
 a arma declarada seja uma das peças, porque o host prefere o kit e o campo ficaria só a mentira
 de exibição; é daí que o `catalogue` deriva a arma que o diálogo do level 8 mostra.
 
+**`creatureProduct: true` é do importador — e o override o leva ao item autoral** (#603, o charm
+Gut): o `scripts/catalog/items.ts` o escreve em todo item da fatia `creature-products`
+(`primarytype="creature products"`), e `sim/loot.ts` o lê para somar o Gut à chance de drop. Item
+autoral (`data/items/*.json`) vence o gerado no mesmo slug, então o flag nunca chegaria a ele: o
+`reconcileAuthored` emite o override `data/items/overrides/<id>.json` (`patch.creatureProduct:
+true`, com o motivo) sozinho, a cada `pnpm catalog:import items`. São cinco hoje — `worm`,
+`green-dragon-leather`, `green-dragon-scale`, `red-dragon-leather`, `red-dragon-scale`, justo os
+drops do Dragon, do Dragon Lord, do Rotworm e da Cave Rat. Item autoral novo que o Canary declare
+creature product não precisa de edição à mão: reimporte. O teste de `charms-combat.test.ts` cruza o
+staging inteiro com o conteúdo carregado, então o esquecimento quebra o `pnpm check`.
+
 ## Munição (#151, AB-02, ADR 0032 decisão 7)
 
 **Munição é abstrata** (ADR 0032 d.7; a decisão 3 do ADR 0026 volta a valer): flecha e virote
@@ -585,5 +596,13 @@ entre arquivos resolvem.
   item sem pedido. `monster.elementHealing` (teto 500) e `monster.reflect` (teto 200) são
   PERCENTUAL INTEIRO, como o reflexo de item, e compilam no boot (`compileElementHealing`,
   `compileReflect` com `flat` zero); ausentes no monstro compilado quando nada cura/reflete.
+- **`monster.conditionImmunities` é o `monster.immunities[].condition` do Canary** (#559, ADR 0041
+  d.2) — distinto de `mitigation.immunities` (`combat = true`, DANO). Onze nomes:
+  `paralyze`, `drunk`, `invisible` e as oito DOTs (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY`, a
+  `Combat::DamageToConditionType`: `physical` sangra, `earth` envenena, `fire` queima…) — o
+  vocabulário do ADR, NÃO os nomes do Lua (`bleed`, `fire`, `earth`…), que o importador traduz.
+  **`invisible` significa "enxerga o invisível"** (`Monster::canSeeInvisibility`), nunca "não pode
+  ficar invisível": é a exceção que não bloqueia a condição. `outfit` (119 monstros) fica fora até
+  o M44-03. Ausente é `[]`, sem imunidade nenhuma.
 
 Issue: FUN-8.

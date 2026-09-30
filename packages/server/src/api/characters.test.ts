@@ -69,6 +69,7 @@ class MemoryRepository implements GameRepository {
       charms: null,
       fedMs: 0,
       blessings: 0,
+      fightMode: 'attack',
       createdAt: now,
     };
     this.characters.set(character.id, character);

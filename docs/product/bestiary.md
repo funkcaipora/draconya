@@ -7,10 +7,10 @@ estrelas de dificuldade, ocorrência e pontos de Charm — os dois primeiros DER
 contador, nunca guardados à parte). Desde o #602, a ECONOMIA de Charms existe: os 25 Charms
 do Canary `main` importados para `content/data/charms/generated/`, o registro `charms`
 (ADR 0052 d.1 — primeira issue a materializar o padrão) e as três intenções (`charm-unlock`,
-`charm-assign`, `charm-remove`), aceitas na Cidade e na hunt (ADR 0052 d.4). Faltam as
-recompensas especiais por monstro do PRD (§18.4), a regra de Guild War (§18.5, que não tem
-Guild War para valer) e o EFEITO dos Charms em combate — Wound causando dano, Dodge esquivando,
-etc. (#603, que abre o `combat-v4`).
+`charm-assign`, `charm-remove`), aceitas na Cidade e na hunt (ADR 0052 d.4). Desde o #603, os
+Charms AGEM em combate — 24 dos 25 (o Scavenge é a esfola do #626) rolam no perfil `combat-v4`,
+na ordem do Canary. Faltam as recompensas especiais por monstro do PRD (§18.4) e a regra de
+Guild War (§18.5, que não tem Guild War para valer).
 **PRD:** §18
 **Épico:** E7
 **ADRs:** [0053](../adr/0053-bestiary-xp-line-kept-and-charms-added.md) (decisão sobre este
@@ -91,7 +91,7 @@ por monstro (`CharmBestiaryEntry`, `packages/sim/src/charms.ts`), passados pelo 
 de Charms (desbloquear, atribuir, remover) precisa saber quantos pontos o Bestiário já rendeu e
 se a ficha de um alvo está completa — a mesma conta de `charmPointsEarned`, agora do lado do
 servidor porque decide se uma intenção é aceita (invariante 4). O efeito dos Charms em combate
-(#603) ainda não existe.
+é o #603 — ver "Charms em combate" abaixo.
 
 **O leitor de monstros do Canary (#578) gera a ficha junto com o monstro.** `scripts/catalog/
 monsters.ts` converte `monster.Bestiary` e `monster.raceId` para a forma de `bestiaryEntrySchema`
@@ -155,9 +155,53 @@ do mesmo jeito que `bestiary-progress.ts` já faz para o bônus de XP — se div
 conta do servidor é a verdadeira. A terceira aba do Cyclopedia ("Charms") lista o catálogo com
 tier atual, custo do próximo, alvo atribuído e os três botões de intenção.
 
-**Fora do escopo desta issue:** o EFEITO dos Charms em combate (Wound/Poison/etc. causando dano,
-Dodge esquivando, Bless reduzindo perda por morte, Scavenge/Gut no loot) — isso é o #603, que
-abre o perfil `combat-v4` (ADR 0052 d.7).
+## Charms em combate (#603, ADR 0053 d.5)
+
+Um charm atribuído a um monstro age quando o personagem luta contra ELE, e só nele — a chave é o
+`monsterId` da atribuição (`Charms.assignedTo`, `packages/sim/src/charms.ts`; um major e um
+minor por criatura). O estágio inteiro vive no perfil `combat-v4` (`hasCharmStage`): numa sessão
+fixada em `combat-v3` o registro existe e não dispara nada. Onde cada rolagem acontece e a ordem
+delas: `docs/product/combat-conformance.md`, "Estágio #603"; a matemática de combate:
+`docs/product/combat.md`, "Charms em combate". Resumo do que cada um faz, com o tier 3 do catálogo:
+
+| Charm | Tipo | O que faz (números do Canary `47dfd51`) |
+|---|---|---|
+| Wound, Enflame, Poison, Freeze, Zap, Curse, Divine Wrath | major ofensivo, 5/10/11 % | depois do golpe, dano do próprio tipo: `min(2× level, 5 % da vida do monstro)` |
+| Overpower / Overflux | major ofensivo, 5/10/11 % | dano neutro: `min(8 % da vida do alvo, 5 % da vida máx. / 2,5 % da mana máx. do jogador)` |
+| Carnage | major ofensivo, 10/20/22 % | na morte do monstro, neutro nos 4 vizinhos: `min(15 % da vida do morto, 6× level)` |
+| Cripple | minor ofensivo, 6/9/12 % | paralisia de 10 s no monstro |
+| Dodge | major defensivo, 5/10/11 % | nega o golpe inteiro |
+| Parry | major defensivo, 5/10/11 % | devolve o dano recebido, neutro |
+| Adrenaline Burst / Numb | minor defensivo, 6/9/12 % | haste de 10 s no jogador / paralisia de 10 s no monstro |
+| Cleanse | minor defensivo, 6/9/12 % | remove UMA condição negativa, imuniza o tipo por 11 s, e a condição nova não entra |
+| Low Blow / Savage Blow | major passivo | +4/8/9 % de chance de crítico / +20/40/44 % de dano de crítico contra o monstro |
+| Vampiric Embrace / Void's Call | minor passivo | +1,6/2,4/3,2 % de life leech / +0,8/1,2/1,6 % de mana leech |
+| Fatal Hold | minor passivo, 30/45/60 % | o monstro não foge por vida baixa por 30 s |
+| Void Inversion | minor passivo, 20/30/40 % | dreno de mana vira ganho de mana |
+| Bless | minor passivo, 6/9/12 % | a perda de morte cai `chance` % quando o último golpe é do monstro |
+| Gut | minor passivo, 6/9/12 % | `+ceil(chance × charm/100)` na chance de drop dos creature products |
+
+**Onde moram os números.** O catálogo (`percent`, `chance[3]`, `points[3]`) é conteúdo
+(`content/data/charms/generated/charms.json`); as constantes de MECANISMO que só existem no C++ do
+Canary — 10 s das condições, 30 s do Fatal Hold, 11 s da imunidade do Cleanse, os tetos de 2×/6× o
+level e 8 % da vida do alvo, as fórmulas de haste/paralisia — moram em
+`packages/sim/src/combat/charms.ts`, cada uma com o arquivo do Canary de onde saiu. O flag
+`creatureProduct` do item (o `primarytype="creature products"`) é escrito pelo importador
+(`scripts/catalog/items.ts`) — nos itens gerados direto, nos cinco autorais (`worm` e as peles e
+escamas dos dragões) por override em `content/data/items/overrides/`, que o `reconcileAuthored`
+grava.
+
+**A probabilidade real não é a nominal.** As rolagens defensivas usam `normal_random` (truncada,
+centrada em 0,5): um Dodge "de 5 %" dispara em ~1,4 % dos golpes. Só os ofensivos acertam a chance
+escrita. A tabela de números reais está em `docs/product/combat-conformance.md`.
+
+**O que fica de fora ou diverge do `47dfd51`** (cada item está justificado no comentário da função
+e na PR do #603): o Scavenge (#626); o Parry rolado duas vezes (o primeiro ponto do Canary cura o
+monstro por um erro de sinal); o teto de level dos elementais que o Canary reatribui globalmente
+depois da primeira morte por Carnage; o Gut, que no Canary confere um tipo de item que nenhum item
+declara (aqui vale para os creature products do importador); o `getCharmChanceModifier()` das
+Concoctions (M42), sempre zero enquanto a fonte não existir; `rooted`/`feared` no Cleanse
+(M44-04).
 
 ## Regras
 
@@ -217,6 +261,8 @@ abre o perfil `combat-v4` (ADR 0052 d.7).
 | Slots de atribuição de Charm | 2 Free / 6 Premium (Charm Expansion de 25, Loja/M22, fora do corte) | `charmSlotsFor`, `packages/sim/src/charms.ts` |
 | Echoes por tier major desbloqueado | `25·t² + 25·t + 50` (t = tier antes do desbloqueio: 0, 1, 2) | `Charms.echoesEarned`, `packages/sim/src/charms.ts` |
 | Custo de remover a atribuição de um Charm | `level × 100` gold | `#requestCharmRemove`, `packages/server/src/game/host.ts` |
+| Constantes de mecanismo dos Charms em combate (#603) | 10 s (haste/paralisia), 30 s (Fatal Hold), 11 s (imunidade do Cleanse), tetos 2× e 6× o level, 8 % da vida do alvo | `packages/sim/src/combat/charms.ts` |
+| Crítico BASE do jogador (#603, `playerBaseCriticalChance`/`Damage` do Canary) | 5 % de chance, +10 % de dano | `packages/content/data/combat/baseline.json`, `modifiers.critical` |
 
 O schema (`bestiarySchema`, em `packages/content/src/schemas.ts`) exige os marcos em ordem
 crescente: o `sim` para de contar no primeiro que o contador não alcança, e uma lista fora de
@@ -239,9 +285,8 @@ ordem faria o terceiro marco fechar antes do segundo.
   primeiro que pedir, não antes.
 - **Guild War** (§18.5): "os bônus valem só em PvE" é verdade por falta de PvP, não por regra
   escrita. A regra entra com a Guild War.
-- **O efeito dos Charms em combate** (Wound/Poison/etc. causando dano, Dodge esquivando, Bless
-  reduzindo perda por morte, Scavenge/Gut no loot) é o #603, que abre o `combat-v4` (ADR 0052
-  d.7) — ainda não implementado. A economia (desbloquear, atribuir, remover, #602) já existe.
+- **O Scavenge** (esfola/dust) é o #626; o efeito dos outros 24 Charms em combate é o #603 (ver
+  "Charms em combate").
 
 ## Divergências do PRD
 

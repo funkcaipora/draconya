@@ -15,11 +15,24 @@ import type { Rng } from './rng.js';
 export const CANARY_LOOT_CHANCE_SCALE = 100_000;
 
 /**
- * O `config.factor` do `generateLootRoll` (prey de loot, wealth duplex, boosted creature, charm
- * Gut): 1 até esses sistemas existirem, cada um no seu épico. O `rateLoot` do servidor (#691) não é
- * o fator: ele divide a rolagem em `rollCanaryLine`.
+ * O `config.factor` do `generateLootRoll` (prey de loot, wealth duplex, boosted creature): 1 até
+ * esses sistemas existirem, cada um no seu épico. O `rateLoot` do servidor (#691) não é o fator: ele
+ * divide a rolagem em `rollCanaryLine`. O charm Gut (#603) também NÃO é o fator — no Canary é o
+ * `config.gut`, uma soma sobre a chance ajustada só dos creature products (`LootGut`).
  */
 const LOOT_FACTOR = 1;
+
+/**
+ * O charm Gut de quem é dono do cadáver (#603, `generateLootRoll` de `monstertype.lua`): sobe a
+ * chance de drop dos creature products do monstro do charm. `percent` é o `charm->chance[tier]`
+ * (6/9/12) e vale só na tabela `canary` — o Gut é mecanismo do `generateLootRoll` do Canary, e o
+ * modelo FUN-63 (`rollLine`) não tem o que ele altere. `isProduct` responde pelo catálogo de itens
+ * (`Item.creatureProduct`): `loot.ts` não conhece item, só id.
+ */
+export interface LootGut {
+  readonly percent: number;
+  readonly isProduct: (itemId: string) => boolean;
+}
 
 export interface LootItem {
   readonly itemId: string;
@@ -69,7 +82,7 @@ const EMPTY_LOOT: LootResult = { gold: 0, items: NO_ITEMS, supplies: NO_SUPPLIES
  * `supplyId` ou `ammunitionId`; separar os três resultados em listas diferentes DEPOIS de
  * sortear não muda a sequência nenhuma (FUN-63).
  */
-export function rollLoot(table: LootTable, rng: Rng, lootRate = 1): LootResult {
+export function rollLoot(table: LootTable, rng: Rng, lootRate = 1, gut?: LootGut): LootResult {
   // `rateLoot <= 0` desliga o loot (#691, `monster.cpp:3431` do Canary): nada cai, e NENHUM
   // sorteio é consumido — o loot desligado não pode deslocar a sequência do resto da hunt. Vale
   // para os dois modelos: no Canary o `rateLoot` 0 nem chega ao `generateLootRoll`.
@@ -84,7 +97,10 @@ export function rollLoot(table: LootTable, rng: Rng, lootRate = 1): LootResult {
   let supplies: LootSupply[] | null = null;
   let ammunition: LootAmmunition[] | null = null;
   for (const line of table.items) {
-    const quantity = roll(line, rng, lootRate);
+    // O Gut só age em creature product (`itemId`): supply e munição nunca são, e o ouro tampouco.
+    const gutPercent = gut !== undefined && line.itemId !== undefined && gut.isProduct(line.itemId)
+      ? gut.percent : undefined;
+    const quantity = roll(line, rng, lootRate, gutPercent);
     if (quantity === 0) continue;
     if (line.itemId !== undefined) {
       (items ??= []).push({ itemId: line.itemId, quantity });
@@ -107,7 +123,7 @@ export function rollLoot(table: LootTable, rng: Rng, lootRate = 1): LootResult {
  * sequência das outras — semente é contrato. `min === max` também não consome o sorteio de
  * intervalo, pela mesma razão: quantidade fixa não tem o que sortear.
  */
-function rollLine(line: LootRoll, rng: Rng, lootRate: number): number {
+function rollLine(line: LootRoll, rng: Rng, lootRate: number, _gutPercent?: number): number {
   if (line.chance <= 0) return 0;
   // O rate de loot (#691) multiplica a CHANCE, com teto 1 — o `getLootRandom` do Canary
   // (`random × 100 / max(1, rateLoot)`): um rate entre 0 e 1 age como 1. Com rate 1 a chamada
@@ -128,12 +144,15 @@ function rollLine(line: LootRoll, rng: Rng, lootRate: number): number {
  * Linha não-empilhável chega aqui com `min = max = 1` (o `buildContent` recusa o resto), e a
  * conta devolve 1 — o mesmo que o ramo não-empilhável do Canary.
  */
-function rollCanaryLine(line: LootRoll, rng: Rng, lootRate: number): number {
+function rollCanaryLine(line: LootRoll, rng: Rng, lootRate: number, gutPercent?: number): number {
   const chance = Math.round(line.chance * CANARY_LOOT_CHANCE_SCALE);
   // A ordem das operações é a do Canary: reassociar muda o último bit do double e, na fronteira,
   // o drop.
   const dynamicFactor = LOOT_FACTOR * (rng.integer(95, 105) / 100);
-  const adjustedChance = chance * dynamicFactor;
+  let adjustedChance = chance * dynamicFactor;
+  // O charm Gut (#603): `adjustedChance + ceil(adjustedChance × charm / 100)`, só em creature
+  // product e só depois do fator — a mesma ordem do `generateLootRoll`. Não consome sorteio.
+  if (gutPercent !== undefined) adjustedChance += Math.ceil((adjustedChance * gutPercent) / 100);
   // `getLootRandom`: inteiro em [0, 100000], os DOIS extremos inclusos, DIVIDIDO pelo rate de
   // loot (#691, `random × 100 / max(1, rateLoot × SCHEDULE_LOOT_RATE)`, com o schedule em 100):
   // no modelo `canary` o rate não multiplica a chance como no `rollLine` — ele encolhe a

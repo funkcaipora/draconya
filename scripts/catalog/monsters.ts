@@ -542,19 +542,26 @@ interface MitigationResult {
   readonly unmapped: string[];
   /** Imunidade de CONDIÇÃO (#559, ADR 0041 decisão 2) que o schema reconhece hoje. */
   readonly conditionImmunities: string[];
-  /** Imunidade de condição que o Lua declara mas o schema/sim ainda não modela (outfit, bleed…). */
+  /** Imunidade de condição que o Lua declara mas o schema/sim ainda não modela (`outfit`, até o M44-03). */
   readonly unmatchedConditionImmunities: string[];
 }
 
 /**
  * O `type` do `immunities[].condition` do Canary → a chave de `monsterSchema.conditionImmunities`
- * (#559). `invisible` aqui é `Monster::canSeeInvisibility` (ADR 0041 decisão 2: a imunidade À
- * condição É o que faz o monstro ENXERGAR quem a carrega, não o monstro resistir a ficar
- * invisível). `outfit`/`bleed`/os demais ficam de fora — o schema não os modela ainda, e entram
- * em `unmatchedConditionImmunities` para o relatório, nunca descartados em silêncio.
+ * (#559). É a tabela de `MonsterTypeFunctions::luaMonsterTypeConditionImmunities`
+ * (`src/lua/functions/creatures/monster/monster_type_functions.cpp:915-968`): os nomes de ELEMENTO
+ * (`fire`, `earth`, `ice`…) e `bleed` viram a imunidade à DOT que o elemento gera
+ * (`Combat::DamageToConditionType`), com `poison`/`earth` e `physical`/`bleed` como sinônimos.
+ * `invisible` aqui é `Monster::canSeeInvisibility` (ADR 0041 decisão 2: a imunidade À condição É o
+ * que faz o monstro ENXERGAR quem a carrega, não o monstro resistir a ficar invisível). `outfit`
+ * fica de fora — o schema não tem a condição até o M44-03 —, e entra em
+ * `unmatchedConditionImmunities` para o relatório, nunca descartado em silêncio.
  */
-const CONDITION_IMMUNITY_MAP: ReadonlyMap<string, string> = new Map([
-  ['paralyze', 'paralyze'], ['drunk', 'drunk'], ['invisible', 'invisible'],
+const CONDITION_IMMUNITY_MAP: ReadonlyMap<string, string> = new Map<string, string>([
+  ['paralyze', 'paralyze'], ['drunk', 'drunk'], ['invisible', 'invisible'], ['invisibility', 'invisible'],
+  ['physical', 'bleeding'], ['bleed', 'bleeding'], ['energy', 'electrified'], ['fire', 'burning'],
+  ['poison', 'poison'], ['earth', 'poison'], ['drown', 'drowning'], ['ice', 'freezing'],
+  ['holy', 'dazzled'], ['death', 'cursed'],
 ]);
 
 function readElements(elements: readonly LuaValue[], immunitiesRaw: readonly LuaValue[]): MitigationResult {
@@ -591,7 +598,7 @@ function readElements(elements: readonly LuaValue[], immunitiesRaw: readonly Lua
     resistances[type] = percent / 100;
   }
   // `immunities` do Lua com `combat = true` é imunidade de DANO (a forma antiga); `condition = true`
-  // (paralyze, invisible, outfit, drunk, bleed) é imunidade de CONDIÇÃO (#559, ADR 0041 d.2) —
+  // (paralyze, invisible, outfit, drunk, bleed, fire, ice) é imunidade de CONDIÇÃO (#559, ADR 0041 d.2) —
   // um monstro pode ter as DUAS entradas para o MESMO nome (ex. `poison`: dano E condição), então
   // as duas leituras seguem, sem `continue`/`else` entre si.
   for (const raw of immunitiesRaw) {
@@ -726,9 +733,9 @@ export function convertMonster(
     .map((field) => `${field}${IGNORED_FIELD_OWNERS[field] === undefined ? '' : ` (${IGNORED_FIELD_OWNERS[field]})`}`)
     .sort();
   for (const key of [...loot.extraKeys].sort()) ignoredFields.push(`loot.${key}`);
-  // #559: paralyze/drunk/invisible viram `conditionImmunities`; o resto (outfit, bleed…) o
-  // schema ainda não modela, e cada nome entra individualmente — nunca a mensagem genérica de
-  // antes, que escondia QUAL condição foi descartada.
+  // #559: paralyze/drunk/invisible e as DOTs (bleed, fire, ice…) viram `conditionImmunities`; o
+  // que o schema ainda não modela (`outfit`) entra individualmente — nunca a mensagem genérica
+  // de antes, que escondia QUAL condição foi descartada.
   for (const unmatched of elements.unmatchedConditionImmunities) {
     ignoredFields.push(`immunities.condition.${unmatched} (sem imunidade de condição no schema)`);
   }

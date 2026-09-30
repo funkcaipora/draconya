@@ -366,6 +366,15 @@ primeira vez que uma sessão faz uma linha de item deixar de existir. Na Cidade,
 `goldDelta` em `aggregates` — antes sempre zerado, porque equipar e escolher vocação nunca
 mexiam em gold.
 
+**A morte é a segunda exceção nomeada (#571, ADR 0042 decisão 4): ela também destrói item**, pelo
+mesmo `removedInstances`. `Blessings.PlayerDeath` do Canary larga o item perdido no cadáver do
+jogador; o Draconya não tem item no chão (ADR 0037, Alternativas), então a instância é apagada do
+banco pelo `jobs` na mesma transação da linha de ledger, e o extrato registra um evento
+`item-lost-on-death` por instância. A bag de reposição (`origin: 'death-replacement'`, a única
+origem nova desde `market`) entra pelo caminho de sempre — `acquired` + `equipment`. **Está
+DESLIGADA no conteúdo real** (`deathPenalty.itemLoss.enabled: false`) até o dono decidir entre
+destruir e manter "nunca perde item": ver `docs/product/death.md`, "Perda de item na morte".
+
 ### A tela (#161, ADR 0026 decisão 7)
 
 A coluna da DIREITA do OTClient: o **painel do set** (`EquipmentPanel`) com os dez slots no
@@ -614,7 +623,9 @@ a condição ativa ao mesmo tempo, o personagem continua absorvendo o dano uma v
 mana a cada 6 s**, os números do Canary `items.xml` id 3089 (`healthgain`/`healthticks`,
 `managain`/`manaticks`). Não é `ringEffect`: é `bonuses.regeneration`, o mesmo campo que
 qualquer item com regeneração usa (ring of healing, terran rainbow shield… entram pelo importador,
-#573). No Canary é uma `CONDITION_REGENERATION` presa ao slot; aqui cada ganho é um evento
+#573). `healthticks`/`manaticks` já são milissegundos no Canary e entram como estão: até o #804 o
+importador multiplicava por 1000, e todo item de regeneração do catálogo curava a cada 100 min
+(o Ring of Healing é +6 de vida e +24 de mana a cada 6 s). No Canary é uma `CONDITION_REGENERATION` presa ao slot; aqui cada ganho é um evento
 `item-regen` da fila, por slot e por recurso (`<characterId>:<slot>:<health|mana>`), no instante
 exato — a 1 Hz desanexada rende o mesmo que a 10 Hz (invariante 2). O primeiro ganho sai 6 s
 DEPOIS de vestir (a condição do Canary acumula o intervalo antes de curar), e trocar Life Ring

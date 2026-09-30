@@ -3485,6 +3485,7 @@
       ]
     },
     "conditionImmunities": [
+      "bleeding",
       "invisible",
       "paralyze"
     ],
