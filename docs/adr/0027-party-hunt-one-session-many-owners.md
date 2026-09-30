@@ -1,6 +1,7 @@
 # 0027 — Party de hunt: uma sessão com N donos, XP por vocação única e dois modos de loot e custo
 
 **Status:** aceito — decisão 5 emendada por #359 (custo e loot como dois eixos independentes) e pelo [ADR 0035](0035-party-v2-runtime-settings-shared-bag-and-live-join.md); decisões 8 e 9 emendadas pelo [ADR 0035](0035-party-v2-runtime-settings-shared-bag-and-live-join.md); decisão 8 emendada de novo pelo [ADR 0036](0036-party-standalone-surface-and-leader-start.md) (fim da aprovação pré-start); decisão 3 emendada em 2026-09-24/25 (#525) pela fidelidade CANARY do ADR 0037 decisão 4 (ainda em outra branch, `docs/adr-0037-tibia-fidelity`, não mesclada nesta)
+**Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30):** passa a existir party no mundo, além da party de hunt.
 **Data:** 2026-09-15
 **Contexto técnico:** `packages/sim` (session, hunt ruleset, novo `party.ts`), `packages/content`
 (`party/`, `item.value`), `packages/protocol` (party no ticket e no `session-state`),

@@ -1,6 +1,7 @@
 # 0059 — Treino: exercise weapon numa sessão de Treino por eventos; offline training é um banco gasto na volta
 
 **Status:** proposto — implementa a decisão 4 do [ADR 0045](0045-tibia-bestiary-charms-prey-and-training.md)
+**Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30) — d.1 e d.3:** o treino é online; o banco cresce no mundo; o “fora” é o repouso.
 (exercise weapons e offline training no lugar dos Trainer Monks); persiste pelo
 [ADR 0052](0052-endgame-progression-state-and-city-services-through-the-owning-session.md)
 **Data:** 2026-09-27

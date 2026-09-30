@@ -1,6 +1,7 @@
 # 0025 — O mapa real vem de um OTBM: recorte por região, pilha de aparências por tile, andares
 
 **Status:** aceito
+**Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30) — d.9:** `TILE_FLAGS` passam a ser importados, e as `floorChanges` dos recortes passam a ser derivadas.
 **Data:** 2026-09-12
 **Contexto técnico:** `content` (schema de mapa), `sim` (movimento, andares), `server` (o que a
 sessão diz ao cliente), `client` (desenho do tile), `tools` (importador), `things/` (onde o
