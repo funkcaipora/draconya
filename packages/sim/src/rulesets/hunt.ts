@@ -85,6 +85,7 @@ import {
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
 import type { KillCredit, Victim } from '../death.js';
 import type { BestiaryConfig } from '../bestiary.js';
+import type { BosstiaryConfig } from '../bosstiary.js';
 import { pickByWeight, Spawner } from '../hunt/spawner.js';
 import type { SpawnArea, SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
@@ -1044,6 +1045,12 @@ export interface HuntRulesetOptions {
    * fala de progressão permanente. É a config quem define marco, não quem autoriza contar.
    */
   readonly bestiary?: BestiaryConfig;
+  /**
+   * Os níveis do Bosstiary por raridade (#629). Ausente é uma hunt em que o abate de boss conta,
+   * mas nenhum nível fecha e nenhum ponto de boss é ganho — o conteúdo de teste que não fala de
+   * progressão permanente, como `bestiary` ausente.
+   */
+  readonly bosstiary?: BosstiaryConfig;
   /**
    * O catálogo dos 25 Charms do Canary (#602/#603, ADR 0053 d.3), por id. Só o `combat-v4`
    * (`hasCharmStage`) os rola; ausente é uma hunt em que nenhum charm dispara — o conteúdo de teste
@@ -10241,10 +10248,27 @@ const slots = bot.groups.get(group);
       // O abate conta no Bestiário de TODO elegível (ADR 0027 decisão 4), pela MESMA condição
       // que paga a XP (§18.6): stamina zero não conta abate. E fechar um marco é evento
       // notável, como o level up: acontece cinco vezes por monstro na vida do personagem.
-      const reached = member.bestiary.record(monster.monsterId, this.#options.bestiary);
-      if (reached.milestoneReached !== null) {
-        const detail = `${monster.monsterId}/${String(reached.milestoneReached)}`;
-        session.record('bestiary-milestone', solo ? detail : `${member.id}/${detail}`);
+      //
+      // BOSS não conta no Bestiário e conta no Bosstiary (#629): `Player::addBestiaryKill`
+      // devolve cedo para `isBoss()` e `Player::addBosstiaryKill` para o contrário — a ordem do
+      // `onKilledMonster` do Canary, Bestiário e depois Bosstiary, e o mesmo evento e a mesma
+      // elegibilidade. Um boss sem `bosstiary` (fixture de teste com `boss: true`) não conta em
+      // nenhum dos dois, como o Canary faria com um `isBoss` sem `bossRaceId`.
+      if (!definition.boss) {
+        const reached = member.bestiary.record(monster.monsterId, this.#options.bestiary);
+        if (reached.milestoneReached !== null) {
+          const detail = `${monster.monsterId}/${String(reached.milestoneReached)}`;
+          session.record('bestiary-milestone', solo ? detail : `${member.id}/${detail}`);
+        }
+      } else if (definition.bosstiary !== undefined) {
+        const boss = definition.bosstiary;
+        const recorded = member.bosstiary.record(boss.raceId, boss.rarity, this.#options.bosstiary);
+        // Fechar um nível é evento notável, como o marco do Bestiário: três vezes por boss na
+        // vida do personagem.
+        if (recorded.levelReached !== null) {
+          const detail = `${monster.monsterId}/${String(recorded.levelReached)}`;
+          session.record('bosstiary-level', solo ? detail : `${member.id}/${detail}`);
+        }
       }
     }
   }
@@ -11678,6 +11702,7 @@ export function createHuntRuleset(
     // `exactOptionalPropertyTypes`.
     party: content.party,
     ...(content.bestiary === undefined ? {} : { bestiary: content.bestiary }),
+    ...(content.bosstiary === undefined ? {} : { bosstiary: content.bosstiary }),
     charms: content.charms,
     targetSearchRadius: content.bot.targetSearchRadius,
     spells: content.spells,

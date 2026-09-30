@@ -145,6 +145,14 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   não conta abate (§18.6) pela MESMA condição que não paga XP nem loot — duas condições
   divergem na primeira mudança em uma delas. `Bestiary.merge` fica com o maior por monstro,
   pela razão de `Skills.merge`.
+- **O Bosstiary é o irmão do Bestiário, e o boss conta em UM dos dois** (`bosstiary.ts`, #629,
+  ADR 0052 emenda de 2026-09-29). Mesmo lugar (`#grantPartyXp`, dentro do `if` de recompensa),
+  mesma elegibilidade, mesma fusão por máximo (`Bosstiary.merge`) — mas o contador é chaveado pelo
+  `raceId` do boss (em TEXTO: objeto JSON só tem chave de texto), e não pelo id de conteúdo,
+  porque variantes do mesmo boss compartilham o `raceId` no Canary. **`definition.boss` decide a
+  porta:** boss não soma no `Bestiary` (`Player::addBestiaryKill` devolve cedo para `isBoss()`) —
+  esquecer o `if` faria o boss entrar nos marcos de XP. Os pontos são os do PRÓPRIO nível
+  alcançado, somados ao total; nível fechado é o evento notável `bosstiary-level`.
 - **A party é aritmética pura em `party.ts` (#189, ADR 0027; fórmula e elegibilidade emendadas
   pelo #525 em 2026-09-24/25, fidelidade CANARY do ADR 0037 d.4 — não TFS: as duas engines
   divergem no multiplicador, e é o Canary que manda em fórmula), e o ruleset só chama.**
