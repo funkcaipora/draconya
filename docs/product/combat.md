@@ -2869,6 +2869,103 @@ O contrato do ADR 0031 virou executável em dois lugares, e os dois são complem
 O método, a máquina da medição e a interpretação da linha de base estão em
 [`combat-conformance.md`](./combat-conformance.md).
 
+## Apresentação do monstro: cores e addons, falas, luz e raça (#620, M44-02)
+
+O Canary declara, por monstro, o que o veste e o que o acompanha além do desenho: as cores e os
+addons do outfit (`monster.outfit.lookHead/lookBody/lookLegs/lookFeet/lookAddons`), as falas
+periódicas (`monster.voices`), a luz (`monster.light`) e a raça (`monster.race`). **Nada disso
+entra em combate** — o `sim` não lê nenhum dos quatro, e nenhum deles muda dano, alvo ou loot. É
+só o que o cliente desenha, e por isso cabe inteiro na regra de sempre: **índices e ids, nunca arte**
+(invariante 6; o id do desenho, `lookType`, continua sendo o `outfitId` da tabela de aparências) e
+**o resultado da hunt não depende de haver alguém olhando** (invariante 3).
+
+### O que vem do Canary, e onde mora no conteúdo
+
+O importador de monstros (`scripts/catalog/monsters.ts`, `pnpm catalog:import monsters`) lê os
+quatro e os escreve no monstro, **só quando diferem do default** — o monstro comum não ganha linha
+nenhuma. `pnpm catalog:promote-monsters` os leva para `data/monsters/generated/<fatia>.json`;
+Rat, Rotworm, Dragon e Dragon Lord (`HAND_AUTHORED_MONSTER_IDS`) continuam hand-authored, mas a
+apresentação deles é renovada a cada promoção (`withPresentation`) — a regra do #581 protege os
+números de combate, não a fala do rato.
+
+| Campo de `monsterSchema` | Canary | Default (ausente) | Faixa |
+|---|---|---|---|
+| `outfit` `{ head, body, legs, feet, addons }` | `outfit.lookHead/Body/Legs/Feet/lookAddons` | tudo 0, sem addon (o `Outfit_t` zerado) | cor 0–132 (a paleta de 133 cores do outfit); addons é a máscara do Tibia, 0–3 |
+| `voices` `{ intervalMs, chance, lines[{ text, yell }] }` | `voices.interval/chance` + uma tabela posicional por linha (`register_monster_type.lua`, `registerMonsterType.voices`) | mudo | `chance` inteiro 1–100 (a escala do Lua) |
+| `light` `{ level, color }` | `light.level/color` (`registerMonsterType.light`) | sem luz | `level` 1–255 (alcance em tiles; os monstros vão de 1 a 6), `color` 0–215 (paleta de 216 cores) |
+| `race` | `monster.race` (`RaceType_t`) | `blood` (`RACE_BLOOD`, `monsters.hpp`) | `venom`, `blood`, `undead`, `fire`, `energy`, `ink`, `chocolate`, `candy` |
+
+No conteúdo de hoje (1028 monstros gerados): **235** com cores/addons de outfit (109 deles com
+addon), **562** com falas (todas com intervalo de 5000 ms e chance 10; 1605 linhas, 169 gritos),
+**59** com luz (níveis 1–6) e **407** com raça diferente de `blood` — `undead` 228, `venom` 127,
+`fire` 41, `ink` 9, `candy` 1, `chocolate` 1. O resto é `blood`, o default. As contagens por
+importação saem em `docs/reference/catalog/monsters-report.md`.
+
+**A montaria (`lookMount`) não entra.** Só UM monstro do Canary declara uma — `mounted-thorn-knight`,
+fora do corte de caça (não é gerado) —, então o schema não tem o campo `mount`: não haveria
+ninguém para usá-lo. O importador a lê e a conta no relatório; se um monstro montado entrar no
+corte, é este o lugar de acrescentá-la.
+
+### O caminho até a tela
+
+- **Protocolo.** `creature-appear` e a criatura do `session-state` (o MESMO schema) ganharam os
+  opcionais `addons`, `race`, `light` e `voices`, e `colors` passou a valer também para o monstro:
+  o servidor manda as cores do conteúdo — o neutro 0/0/0/0 incluído, senão o cliente pintaria o
+  monstro com as de personagem novo. Todos opcionais pela regra de sempre (um nó `game` anterior
+  manda sem eles), e a ausência é o neutro: sem addon, `blood`, sem luz, mudo.
+  `addons`, `race`, `light` e `voices` saem só quando diferem do default, para a mensagem do
+  monstro comum não crescer. O host os monta em `packages/server/src/game/monster-look.ts`, pela
+  definição do catálogo **fixado na sessão** (invariante 7) — é a mesma fonte do nome.
+- **Cores e addons.** O cliente já pintava o outfit de duas camadas por template (FUN-104); o
+  monstro agora chega com as cores dele. Os **addons** são as linhas 1 e 2 do padrão do outfit
+  (`patternHeight` 3): cada um é pintado com as MESMAS quatro cores e composto por cima do base,
+  em ordem, num bitmap só (`OutfitComposer`, `compositeOver`). O bit de uma linha que o outfit não
+  tem (`patternHeight` menor), ou um outfit de uma camada só, fica sem o addon — o desenho base
+  aparece, e o monstro não some.
+- **A cor do número e o efeito do golpe físico seguem a raça** (`Game::combatGetTypeInfo`,
+  `game.cpp`). O **efeito** (`creature-hit` físico corpo a corpo → `effect`) sai da tabela
+  `appearances.hits.byRace`: sangue (1) para `blood` e `fire`, `CONST_ME_HITBYPOISON` (17) para
+  `venom`, `CONST_ME_HITAREA` (10) para `undead` e `ink`, `CONST_ME_ENERGYHIT` (12) para `energy`,
+  `CONST_ME_CACAO` (270) para `chocolate` e `CONST_ME_SIRUP` (269) para `candy`; a raça sem linha cai
+  em `hits.melee`, e sem nenhum dos dois o golpe não tem efeito (`CONST_ME_NONE`). O host guarda a
+  raça de cada monstro que não é `blood` até o `creature-disappear`, e não a consulta no `sim` na
+  hora do golpe: o abate TIRA o monstro do ruleset antes de o golpe que o matou ser apresentado.
+  A **cor do número** é `TextColor_t` do Canary na paleta de 216 cores: `blood` vermelho (180),
+  `venom` verde (30), `undead`/`ink`/`chocolate` cinza (129), `candy` vermelho-escuro (108), `fire`
+  laranja (198), `energy` roxo (154) — só para o golpe `physical`; o elemento tem a cor dele e a
+  cura continua verde. O cliente fotografa a raça do alvo quando o golpe chega (o golpe fatal chega
+  no mesmo lote do `creature-disappear`), e raças diferentes no mesmo tile não se somam.
+- **Luz.** O viewport da hunt não escurece o andar (só tinge a caverna, `ambience: 'cavern'`), então
+  a luz do monstro é um **clarão aditivo**: um disco suave da cor do Canary, com `level` tiles de
+  alcance (teto de 12), centrado no tile dele e que anda junto — `world/creature-light.ts`,
+  `paintLight` no viewport. É a mesma informação (quanto e de que cor) que o escurecimento do
+  explorador do mundo (#666) usa. Não há escurecimento de ambiente na hunt, e isto não o cria.
+- **Fala.** `Monster::onThinkYell` acumula um relógio por monstro até `interval`, zera, rola
+  `chance >= uniform_random(1, 100)` e diz UMA linha sorteada por igual. O **cliente** faz tudo
+  isso (`world/speech.ts`): o relógio nasce quando o monstro é visto, a rolagem é uma por
+  intervalo (um quadro atrasado rola uma vez, não uma por intervalo perdido — o `yellTicks = 0`
+  do Canary) e o sorteio é o `random` do cliente, **nunca o `Rng` da sessão** nem o servidor. O
+  texto aparece em laranja (`TEXTCOLOR_ORANGE`) sobre o nome por `2500 ms + 50 ms por caractere`
+  — os dois números são apresentação nossa, o Canary não os tem. O grito (`yell`) viaja e fica no
+  conteúdo, mas se desenha como a fala: a diferença no Canary é o alcance de quem a ouve.
+
+### Invariantes
+
+- O `sim` não importa nem lê nada disto: `monster-look.ts` vive no `server`, e o que o cliente
+  sorteia (a fala) não tem caminho de volta — não existe mensagem C2S que carregue fala, luz ou cor.
+- A hunt rende o mesmo com ou sem visualizador, a 1 Hz ou a 20 Hz: nenhum evento novo entrou na
+  fila, nenhum sorteio novo saiu do `Rng` da sessão, e os testes de frequência/retomada do `sim`
+  não mudaram.
+
+### Divergências do Tibia (todas de apresentação, nenhuma regra de caça)
+
+- Sem escurecimento de ambiente na hunt: a luz é um clarão aditivo (acima).
+- O splash de sangue no chão (`ITEM_SMALLSPLASH`, `FLUID_*`) que o Canary põe sob o alvo não é
+  modelado: é item de chão decorativo, e o efeito do golpe (acima) cobre o que o jogador lê.
+- O efeito por raça só sai no golpe corpo a corpo (`kind: melee`), como o de sangue já era; o
+  físico de magia/ability ainda não tem efeito de raça.
+- Sem montaria (acima).
+
 ## O que o jogador vê (FUN-106, FUN-109)
 
 O combate é calculado no `sim` e **apresentado** pelo host, como o passo (§12). Cada golpe

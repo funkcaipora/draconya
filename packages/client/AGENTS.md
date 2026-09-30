@@ -252,10 +252,17 @@ pnpm tsx scripts/make-sheet-fixture.ts
   protocolo carrega em `creature-appear` e em cada criatura do `session-state`; o store guarda
   o campo só quando ele veio, tipado pelo PROTOCOLO e não por `assets/outfit.ts` — o store não
   depende da camada de arte. `DEFAULT_OUTFIT_COLORS` (`world/outfit-colors.ts`) é a RESERVA
-  para quem chegou sem: um nó `game` anterior num deploy em rolagem, um personagem que nunca
-  escolheu, ou monstro, que nunca traz. Reserva e não "sem pintar" porque um template que sobra
-  sem multiplicar é um boneco de cores primárias na tela; e para monstro passar cores é
-  inofensivo, o pacote devolve a base como está. O que era de antes continua: câmera do tamanho
+  para quem chegou sem: um nó `game` anterior num deploy em rolagem, ou um personagem que nunca
+  escolheu — o monstro traz as dele desde o #620. Reserva e não "sem pintar" porque um template
+  que sobra sem multiplicar é um boneco de cores primárias na tela; e para um monstro de uma
+  camada passar cores é inofensivo, o pacote devolve a base como está. **A apresentação do
+  monstro (#620)** — `Creature.addons`/`race`/`light`/`voices`, todos opcionais e todos só
+  desenho: os **addons** são linhas do padrão do outfit compostas por cima do base no
+  `OutfitComposer` (`compositeOver`, `AssetPack.outfit(…, addons)`); a **luz** é um clarão aditivo
+  (`world/creature-light.ts`, no `effects`); a **fala** é sorteada AQUI, por um relógio por monstro
+  (`world/speech.ts`), com o `random` do cliente e nunca o `Rng` da sessão; a **raça** é
+  fotografada no número flutuante quando o golpe chega e escolhe a cor do físico
+  (`floatingTextColor`). O que era de antes continua: câmera do tamanho
   do canvas, camadas, ordem de desenho por `y`, pool e interpolação, e três janelas de câmera em
   `camera.ts` — visível (0), render (`RENDER_OVERSCAN_TILES` = 3, o que o viewport pinta) e
   prefetch (`PREFETCH_TILES` = 5, o que o viewport aquece) — porque a textura de uma coluna
