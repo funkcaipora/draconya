@@ -5112,10 +5112,19 @@ describe('aprender magia pelo socket (#624, ADR 0058, ADR 0052)', () => {
     const hunt = host.sessionFor('p1');
     const hero = hunt?.participants[0] as CharacterRuntime;
     expect(hunt?.ruleset.type).toBe('hunt');
+    // O bot que vinha PULANDO a magia (recusa sem prazo) precisa acordar na compra — só nela.
+    const rearm = vi.spyOn(hunt?.ruleset as HuntRuleset, 'rearmBot');
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'unknown-spell' });
+    host.flush();
+    expect(rearm).not.toHaveBeenCalled();
+    socket.frames.length = 0;
 
     host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
     host.flush();
 
+    expect(rearm).toHaveBeenCalledTimes(1);
+    expect(rearm).toHaveBeenCalledWith(hunt, 'p1');
     expect(warnings(socket)).toEqual([]);
     expect(hero.learnedSpells.has('berserk')).toBe(true);
     expect(hero.gold + hero.goldDelta).toBe(7_500);

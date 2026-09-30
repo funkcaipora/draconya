@@ -2505,6 +2505,11 @@ export class SessionHost {
       hosted.session.credit(viewer.characterId, 'goldSpent', result.price);
     }
     this.#markDirty(character.id);
+    // No meio de uma hunt, a magia recém-aprendida destrava a regra do bot que vinha sendo
+    // pulada (`spell-not-learned` não tem prazo): sem acordá-lo, ela só voltaria a valer no
+    // próximo dano recebido. Um evento na fila (ADR 0058 emenda 5), nada por tick; a Cidade não
+    // tem bot, e o ruleset dela não tem o método.
+    (hosted.session.ruleset as Partial<HuntRuleset>).rearmBot?.(hosted.session, character.id);
     // O gold gasto muda o `player-stats` (saldo) de quem olha — a mesma razão da compra de bênção.
     const stats = this.#statsOf(character);
     hosted.sentStats.set(character.id, stats);
