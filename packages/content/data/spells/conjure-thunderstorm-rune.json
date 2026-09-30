@@ -4,6 +4,7 @@
   "description": "Conjura cargas da Thunderstorm Rune, consumindo uma runa em branco.",
   "vocationId": "sorcerer",
   "minLevel": 28,
+  "learnPrice": 1100,
   "manaCost": 430,
   "soulCost": 3,
   "group": "support",

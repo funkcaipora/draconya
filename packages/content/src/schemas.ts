@@ -4822,6 +4822,17 @@ export const spellSchema = z.object({
   /** Level mínimo. */
   minLevel: z.number().int().positive().default(1),
   /**
+   * O preço, em gold, de APRENDER a magia (#624, ADR 0058 d.3): no Tibia toda magia
+   * instantânea é comprada de um NPC (`StdModule.learnSpell`) e o cast confere
+   * `hasLearnedInstantSpell`. Importado dos NPCs do Canary por `pnpm catalog:spell-prices` — o
+   * MENOR preço entre os que ensinam à vocação (ADR 0038 d.6) —, com TibiaWiki curado à mão
+   * para a magia que nenhum NPC ensina (fonte no `_open`). `0` é magia grátis (as básicas de
+   * cada vocação, como no Canary); AUSENTE é "nenhum NPC a ensina" (Great Death Beam, que só a
+   * Wheel of Destiny concede): `learn-spell` recusa `not-for-sale`. OPCIONAL no tipo, como
+   * `soulCost`: o `Spell` literal de fixture de `sim`/cliente não precisa declarar o campo.
+   */
+  learnPrice: z.number().int().nonnegative().optional(),
+  /**
    * Vocação exigida (§9.2, FUN-92). Ausente é magia que qualquer um lança.
    *
    * O personagem nasce SEM vocação e escolhe no level 8 (§7.4), então uma magia com requisito

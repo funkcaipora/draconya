@@ -4,6 +4,7 @@
   "description": "Conjura cargas da Great Fireball Rune, consumindo uma runa em branco.",
   "vocationId": "sorcerer",
   "minLevel": 30,
+  "learnPrice": 1200,
   "manaCost": 530,
   "soulCost": 3,
   "group": "support",

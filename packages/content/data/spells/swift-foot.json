@@ -4,6 +4,7 @@
   "description": "Aumenta a sua velocidade de movimento em 80% por 10 segundos, reduzindo o dano que você causa em 30%.",
   "vocationId": "paladin",
   "minLevel": 55,
+  "learnPrice": 6000,
   "manaCost": 400,
   "group": "support",
   "groupCooldownMs": 2000,

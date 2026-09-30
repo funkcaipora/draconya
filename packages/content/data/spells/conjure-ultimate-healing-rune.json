@@ -4,6 +4,7 @@
   "description": "Conjura uma carga da Ultimate Healing Rune, consumindo uma runa em branco.",
   "vocationId": "druid",
   "minLevel": 24,
+  "learnPrice": 1500,
   "manaCost": 400,
   "soulCost": 3,
   "group": "support",

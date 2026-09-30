@@ -4,6 +4,7 @@
   "description": "Causa dano mágico numa área de 7x7 ao seu redor.",
   "vocationId": "knight",
   "minLevel": 33,
+  "learnPrice": 1500,
   "manaCost": 160,
   "group": "attack",
   "groupCooldownMs": 2000,

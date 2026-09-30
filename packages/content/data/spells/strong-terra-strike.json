@@ -4,6 +4,7 @@
   "description": "Lança um raio de terra no seu alvo atual.",
   "vocationId": "druid",
   "minLevel": 70,
+  "learnPrice": 6000,
   "manaCost": 60,
   "group": "attack",
   "groupCooldownMs": 2000,

@@ -4,6 +4,7 @@
   "description": "Invoca uma criatura aliada para lutar ao seu lado.",
   "vocationId": "sorcerer",
   "minLevel": 25,
+  "learnPrice": 2000,
   "manaCost": 0,
   "group": "support",
   "groupCooldownMs": 2000,

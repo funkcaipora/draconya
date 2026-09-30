@@ -4,6 +4,7 @@
   "description": "Cura você.",
   "vocationId": "paladin",
   "minLevel": 60,
+  "learnPrice": 8000,
   "manaCost": 210,
   "group": "healing",
   "groupCooldownMs": 1000,
