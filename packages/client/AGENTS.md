@@ -448,6 +448,21 @@ pnpm tsx scripts/make-sheet-fixture.ts
   vazio. A RC-06 (#319) substituiu o painel fixo pelo `CharacterModal` tabulado, aberto por
   `open.character` — o antigo `CharacterPanel.tsx` saiu do repositório no mesmo commit.
 
+## O Treino (#631, ADR 0059)
+
+O pill "Treino" (ao lado de "Escolher caçada", só na Cidade e só com `catalogue.training`) abre o
+`TrainingModal`: o banco de offline training, o livro (um select com as skills do CONTEÚDO), as
+exercise weapons carregadas com as cargas RESTANTES e a loja mínima. **Tudo é intenção**
+(`training-view.ts`: `enterTrainingMessage`/`buyItemMessage`/`offlineSkillMessage` dizem só QUAL id),
+e o que se mostra vem do `training-state` (o overlay da instância não viaja em `inventory`, então as
+cargas só chegam por ali) e do catálogo fixado na sessão — nenhum nome de skill nem preço em código
+(invariante 6/7). `hud.training` é `null` até o servidor dizer, e SUBSTITUI a cada mensagem: cada
+golpe do Treino reenvia as cargas. **`isHunting('training')` é `false`**: o Treino é uma sessão
+privada que não caça, então não tem analisador, "Sair da caçada" nem party — a casca mostra
+`TrainingStatus` (a arma, a skill, as cargas e "Parar treino", o `leave-hunt` de sempre) no lugar das
+pills de caçada. Um novo tipo de sessão que também não caça entra na mesma função, e não num `!==`
+espalhado.
+
 ## Como testar
 
 ```

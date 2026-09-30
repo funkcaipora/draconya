@@ -381,6 +381,21 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       }));
       return;
 
+    case 'training-state':
+      // SUBSTITUI, como `charms`: o estado INTEIRO do Treino (banco, skill do livro, exercise weapons
+      // com as cargas restantes, e a instância em uso) — o servidor manda no attach, a cada mudança
+      // da mochila e a cada golpe do Treino (#631, ADR 0059).
+      hud.set((state) => ({
+        ...state,
+        training: {
+          offlineBankMs: message.offlineBankMs,
+          offlineSkill: message.offlineSkill,
+          weapons: message.weapons,
+          activeInstanceId: message.activeInstanceId,
+        },
+      }));
+      return;
+
     case 'blessings':
       // O BITMASK inteiro (#570, ADR 0052) — nunca um delta. Compra e consumo na morte chegam
       // pela mesma mensagem, e a tela resolve os nomes pelo catálogo (invariante 6).
@@ -425,9 +440,12 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         exitPending: null,
         systemMessages: appendCapped(state.systemMessages, {
           level: 'warning',
-          text: `${REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
-            + ` · ${aggregates.xpGained} XP · ${aggregates.goldGained - aggregates.goldSpent} gold`
-            + ` · ${aggregates.kills} abate(s)`,
+          // O Treino não rende XP, gold nem abate: o extrato dele é o tempo e o porquê (#631).
+          text: state.analyzer.sessionType === 'training'
+            ? `Treino: ${REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
+            : `${REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
+              + ` · ${aggregates.xpGained} XP · ${aggregates.goldGained - aggregates.goldSpent} gold`
+              + ` · ${aggregates.kills} abate(s)`,
           atMs: nowMs,
         }),
       }));

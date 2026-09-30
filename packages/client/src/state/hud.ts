@@ -127,6 +127,14 @@ export type CharmDefinition = Catalogue['charms'][number];
  * que já deriva o bônus de XP do Bestiário (`bestiary-progress.ts`).
  */
 export type CharmsRegister = Readonly<S2CProps<'charms'>>;
+/**
+ * O Treino do personagem (#631, ADR 0059): o banco de offline training, a skill do livro, as
+ * exercise weapons que ele carrega com as cargas RESTANTES e a que o Treino em curso gasta. O que
+ * cada carga rende e o livro oferece é do catálogo (`TrainingRules`, fixado na sessão).
+ */
+export type TrainingRegister = Readonly<S2CProps<'training-state'>>;
+/** As regras do Treino do catálogo (#631). Ausente: este servidor não tem Treino. */
+export type TrainingRules = NonNullable<Catalogue['training']>;
 /** As sete bênçãos e o preço por level (#570). Ausente do catálogo: este servidor não as tem. */
 export type BlessingsConfig = NonNullable<Catalogue['blessings']>;
 export type BlessingDefinition = BlessingsConfig['list'][number];
@@ -332,6 +340,12 @@ export interface HudState {
    */
   readonly charms: CharmsRegister | null;
   /**
+   * O Treino (#631, ADR 0059). `null` até chegar — o primeiro segundo de toda conexão, ou um nó
+   * `game` sem Treino. SUBSTITUI: é o estado inteiro (banco, skill do livro, armas e cargas), não
+   * um delta — cada golpe do Treino reenvia as cargas.
+   */
+  readonly training: TrainingRegister | null;
+  /**
    * As sete bênçãos PvE (#570, ADR 0052): o BITMASK — um bit por `order` do catálogo
    * (`catalogue.blessings.list`), nunca uma lista de nomes (invariante 6: a tela resolve o
    * nome pelo catálogo, o servidor só manda o número). `0` até o attach/enter responder — é
@@ -419,6 +433,7 @@ export const INITIAL_HUD: HudState = {
   slotResults: {},
   bestiary: null,
   charms: null,
+  training: null,
   blessings: 0,
   party: null,
   partyBag: null,

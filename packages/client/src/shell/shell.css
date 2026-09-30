@@ -888,6 +888,34 @@ div.hunt-pill-pending { cursor: default; }
 .hunts-modal-empty { color: var(--text-faint); margin: 8px 0; font: 11px var(--font-mono); }
 .hunts-modal-footer-note { font: 7px var(--font-mono); color: var(--text-faint); }
 
+/* ---- O Treino (#631, M44-13, ADR 0059) --------------------------------------------------- */
+/* O pill "Treino" na Cidade e o estado do Treino em curso reusam `.hunt-pill`; só o botão de
+   parar (`.hunt-pill-danger` é a METADE ESQUERDA de um botão partido) fecha os 4 cantos aqui, sem
+   o chevron de regras ao lado, e o estado não é clicável. */
+.training-stop { border-radius: 3px; }
+.training-status { cursor: default; white-space: nowrap; }
+/* O modal: três seções empilhadas (livro, armas carregadas, loja) numa coluna que rola. */
+.training-modal-body { display: flex; flex-direction: column; gap: 14px; height: 430px; overflow: auto;
+  padding: 0 2px 0 0; }
+.training-section { display: flex; flex-direction: column; gap: 6px; }
+.training-note { margin: 0; font: 8px var(--font-mono); color: var(--text-muted); line-height: 1.6; }
+.training-note-faint { color: var(--text-faint); }
+.training-bank-bar { height: 6px; border: 1px solid var(--ash-5); border-radius: 3px;
+  background: var(--ash-1); overflow: hidden; }
+.training-bank-fill { display: block; height: 100%; background: var(--gold-4); }
+.training-book { display: flex; align-items: center; gap: 8px; font: 700 8px var(--font-display);
+  letter-spacing: .1em; text-transform: uppercase; color: var(--parchment-2); }
+.training-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.training-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 8px;
+  align-items: center; padding: 6px; border: 1px solid var(--ash-5); border-radius: 3px;
+  background: var(--ash-1); }
+.training-row-text strong { display: block; font: 600 10px var(--font-display); color: var(--parchment-1); }
+.training-row-text > span { display: block; }
+.training-row-text .entry-meta { font: 8px var(--font-mono); color: var(--text-muted); }
+/* `.item-sprite` é `position: absolute; inset: 1px` sobre um ancestral quadrado (a mesma nota de
+   `.hunts-modal-sprite`): este span é esse ancestral, do lado da lista de armas. */
+.training-sprite { position: relative; width: 42px; height: 42px; }
+
 /* ---- A pill permanente "Party" (#503, DT-03 de #499) ------------------------------------- */
 /* Irmã de `.hunt-actions` (D6): sobre o mundo, sempre visível na Cidade e na hunt — mas à
    DIREITA, para não disputar o centro com as pills de caçada. A pill é o `.hunt-pill` do kit,

@@ -1300,6 +1300,63 @@ describe('o bestiário (FUN-113, §18)', () => {
   });
 });
 
+describe('o Treino (#631, ADR 0059)', () => {
+  const state: S2CMessage = {
+    type: 'training-state', offlineBankMs: 3_600_000, offlineSkill: 'sword',
+    weapons: [{ instanceId: 'w1', itemId: 'exercise-sword', charges: 431 }], activeInstanceId: 'w1',
+  };
+
+  it('ausente e vazio são coisas DIFERENTES: `null` até o servidor dizer', () => {
+    // Um nó `game` sem Treino nunca manda — e o primeiro segundo de toda conexão também não mandou.
+    expect(hud.get().training).toBeNull();
+    applyMessage({
+      type: 'training-state', offlineBankMs: 0, offlineSkill: null, weapons: [], activeInstanceId: null,
+    }, 0);
+    expect(hud.get().training).toEqual({ offlineBankMs: 0, offlineSkill: null, weapons: [], activeInstanceId: null });
+  });
+
+  it('SUBSTITUI o estado inteiro a cada mensagem — cada golpe do Treino reenvia as cargas', () => {
+    applyMessage(state, 0);
+    expect(hud.get().training?.weapons).toEqual([{ instanceId: 'w1', itemId: 'exercise-sword', charges: 431 }]);
+    applyMessage({ ...state, weapons: [{ instanceId: 'w1', itemId: 'exercise-sword', charges: 430 }] } as S2CMessage, 2_000);
+    expect(hud.get().training?.weapons).toEqual([{ instanceId: 'w1', itemId: 'exercise-sword', charges: 430 }]);
+    // A arma acabou: some da lista, e a instância ativa some junto.
+    applyMessage({ ...state, weapons: [], activeInstanceId: null } as S2CMessage, 4_000);
+    expect(hud.get().training).toMatchObject({ weapons: [], activeInstanceId: null, offlineBankMs: 3_600_000 });
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    // Chega a cada golpe (a cada ~2 s): não pode redesenhar o inventário nem as barras.
+    const notified = vi.fn();
+    subscribeSlice(hud, (current) => current.inventory, notified);
+    subscribeSlice(hud, (current) => current.health, notified);
+    applyMessage(state, 0);
+    expect(notified).not.toHaveBeenCalled();
+  });
+
+  it('o extrato do Treino diz o porquê e o tempo — não XP, gold nem abate, que ele não rende', () => {
+    applyMessage({
+      type: 'session-state', sessionType: 'training', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'me', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0,
+        vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        soul: 0, soulMax: 0,
+      },
+      world: { mapId: 'city', creatures: [], groundItems: [], tileUpdates: [], fields: [] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    } as unknown as S2CMessage, 0);
+    applyMessage({
+      type: 'session-ended', reason: 'completed',
+      aggregates: { durationMs: 960_000, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+    const line = hud.get().systemMessages.at(-1);
+    expect(line?.text).toBe('Treino: Concluído · 16 min');
+    expect(line?.text).not.toContain('XP');
+  });
+});
+
 describe('a resposta do bot (FUN-89)', () => {
   beforeEach(() => { bot.set(() => INITIAL_BOT); });
 

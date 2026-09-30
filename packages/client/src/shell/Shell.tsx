@@ -57,6 +57,8 @@ import { BuffBar } from './BuffBar.js';
 import { PlayerVitalsOverlay } from './PlayerVitalsOverlay.js';
 import type { WindowId } from './TopBar.js';
 import { chatBadgeTier } from './chat-badge.js';
+import { isHunting } from './is-hunting.js';
+import { TrainingModal } from './TrainingModal.js';
 
 /**
  * Quais janelas nascem abertas: as do loop de todo dia. Bot e Bestiário são visita. Set,
@@ -127,7 +129,15 @@ export function Shell() {
   // `sessionType` do analisador é o que o servidor disse por último — o cliente não adivinha
   // onde está (#259, o mesmo cálculo que o menu de hunts de antes já fazia).
   const sessionType = useHudSlice((state) => state.analyzer.sessionType);
-  const hunting = sessionType !== null && sessionType !== 'city';
+  const hunting = isHunting(sessionType);
+  // O Treino (#631, ADR 0059) é uma sessão privada que não caça: o pill dele mostra as cargas e o
+  // "Parar treino"; na Cidade o pill abre a tela de Treino.
+  const training = sessionType === 'training';
+  const [trainingOpen, setTrainingOpen] = useState(false);
+  // Entrar no Treino fecha a tela dele — e ela não pode reaparecer sozinha na volta à Cidade.
+  useEffect(() => {
+    if (training) setTrainingOpen(false);
+  }, [training]);
   // A party de formação (HTTP): decide se a pill abre `mine` ou `home` (DT-02 de #499).
   const formationParty = useStoreSlice(party, (state) => state.party);
 
@@ -237,7 +247,12 @@ export function Shell() {
             ações desde o AB-10 (`bottom: calc(var(--actionbar-h) + 6px)`). O modal abre pelo
             MESMO `open.hunts` que a pill aciona, ou pelo ícone "Hunts" do topo — os dois só
             alternam a mesma fatia. */}
-        <HuntActions hunting={hunting} onChoose={() => { toggle('hunts'); }} />
+        <HuntActions
+          hunting={hunting}
+          training={training}
+          onChoose={() => { toggle('hunts'); }}
+          onTraining={() => { setTrainingOpen(true); }}
+        />
         {/* A pill permanente "Party" (#503, RF-11): na Cidade e na hunt, à direita. Com party
             ela abre `mine`; sem, `home`. */}
         <PartyActions onOpen={() => { openPartyModal(formationParty !== null ? 'mine' : 'home'); }} />
@@ -259,6 +274,9 @@ export function Shell() {
           />
         )}
         {open.character && <CharacterModal onClose={() => { toggle('character'); }} />}
+        {/* O Treino (#631, ADR 0059): o livro do offline training, a loja mínima de exercise weapons
+            e as armas que o personagem carrega — só na Cidade, aberto pelo pill "Treino". */}
+        {trainingOpen && <TrainingModal onClose={() => { setTrainingOpen(false); }} />}
         {/* Cyclopedia (#321, RC-08): o mesmo ícone de topo agora abre um modal, não um painel
             da coluna. Só a aba Bestiary é montada enquanto as demais não têm sistema atrás. */}
         {open.bestiary && <CyclopediaModal onClose={() => { toggle('bestiary'); }} />}
