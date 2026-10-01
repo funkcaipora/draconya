@@ -181,12 +181,19 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     await store.save(receiptOf(randomUUID(), characterId, {
       seq: 3, familiar: { version: 1, summonUntilMs: -5, cooldownUntilMs: 'x' } as unknown as FamiliarState,
     }));
+    // Instante fracionário: a forma é INTEIRO SEGURO, e é o `sim` quem arredonda ao gravar o carimbo
+    // (`#wallStampMs`) — o relógio lógico do hospedeiro é `performance.now()`, nunca inteiro. Este é o
+    // lado que recusa: um carimbo fracionário que chegasse aqui some em silêncio, e o cooldown junto.
+    await store.save(receiptOf(randomUUID(), characterId, {
+      seq: 4, familiar: { version: 1, summonUntilMs: 1_790_000_900_000.4, cooldownUntilMs: 1_790_001_800_000 },
+    }));
 
     const found = await store.pendingFor(characterId);
 
     expect(found.find((receipt) => receipt.seq === 1)?.familiar).toEqual(familiar);
     expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('familiar');
     expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('familiar');
+    expect(found.find((receipt) => receipt.seq === 4)).not.toHaveProperty('familiar');
   });
 
   it('carries the ammo selection through Redis and back, and a receipt without one stays without (#152)', async () => {

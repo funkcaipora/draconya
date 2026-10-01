@@ -4993,7 +4993,14 @@ export class SessionHost {
     }
     if (stored === null) return null;
 
-    const session = restore(stored.snapshot);
+    // O intervalo em que o nó esteve fora é DESCARTADO (ADR 0018): o relógio lógico da sessão continua
+    // de onde parou. Mas `createdAtMs + nowMs` é o relógio de PAREDE que o `sim` compara com os
+    // carimbos do familiar (#599, ADR 0052 d.6) — sem recolocar o anchor, ele passaria a ficar
+    // atrasado em relação ao real pelo tempo todo da queda, e o cooldown de 30 min gravado por uma
+    // sessão retomada nasceria já vencido em parte. Somar o intervalo descartado ao anchor devolve a
+    // soma a "agora"; é dado entregue à sessão (como na criação), nunca relógio que o `sim` leia.
+    const gapMs = Math.max(0, Date.now() - stored.savedAtMs);
+    const session = restore({ ...stored.snapshot, createdAtMs: stored.snapshot.createdAtMs + gapMs });
     if (session === null) {
       // Não dá para reconstruir: formato antigo, ruleset desconhecido, ou versão de conteúdo
       // diferente da deste nó (invariante 7).
@@ -5010,7 +5017,7 @@ export class SessionHost {
       await snapshots.remove(characterId).catch(() => undefined);
       return null;
     }
-    return { session, gapMs: Math.max(0, Date.now() - stored.savedAtMs) };
+    return { session, gapMs };
   }
 
   /**
