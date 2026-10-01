@@ -596,8 +596,20 @@ branch vai reivindicar o mesmo número até alguém mesclar — o merge é quem 
 Issues seguintes (Imbuements #605–#607, Wheel #608–#611, Prey #612–#615, Forja #616–#618, …):
 copie esta seção trocando `charms` pelo nome do sistema, e as seis regras continuam valendo.
 
-**O `familiar` (#599, M38-02) é a segunda aplicação do padrão, com duas particularidades.**
-`characters.familiar` (`jsonb`, migração `0023`) guarda `{ version, summonUntilMs, cooldownUntilMs }`
+**A regra 1 tem UMA exceção de fusão, e o #629 (Bosstiary) é quem a usa: contador monotônico é
+fundido por MÁXIMO no ledger, não última-escrita-vence.** "Última escrita vence" serve ao registro
+de ESTADO (Charms, Roda, Prey), cujo valor final pode descer. O `bosstiary` (`{ kills, points,
+version }`, `kills` chaveado pelo `raceId` do boss em texto) só sobe — a natureza do Bestiário —, e
+recebe a mesma fusão: `Bosstiary.merge` em `jobs/ledger.ts`, que lê a coluna sob a trava de linha
+e funde com o extrato. Um registro novo que só cresce (contagem, pontos) copia o `bosstiary`; um que
+sobe e desce (alocação, gasto) copia os `charms`. Nos dois a lista de PERMISSÃO de `parseReceipt`,
+`snapshot-settlement.ts` e o extrato do `#persistReceipt` precisam do campo — `receipts.test.ts`,
+`snapshot-settlement.test.ts` e `host.test.ts` são quem pega a omissão. O extrato de Cidade
+(`#saveDurableReceipt`) NÃO leva o `bosstiary`: só a hunt abate boss, e omitir o campo é "não
+toca na coluna".
+
+**O `familiar` (#599, M38-02) é uma aplicação do padrão que mantém a regra 1 (última escrita vence), com duas particularidades.**
+`characters.familiar` (`jsonb`, migração `0024`) guarda `{ version, summonUntilMs, cooldownUntilMs }`
 — DOIS carimbos de relógio de PAREDE (epoch em ms), não conteúdo. (1) **Nunca funda por máximo:** o
 `summonUntilMs` desce quando o familiar morre (o `FamiliarDeath` do Canary zera a recriação), e um
 `GREATEST` no ledger ressuscitaria o familiar se um extrato antigo chegasse depois de um mais novo —

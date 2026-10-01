@@ -19,11 +19,11 @@ import {
   packSchema,
   blessingSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
-  bestiarySchema, boostedSchema, charmSchema, itemSchema, partySchema, skillSchema, spellSchema,
+  bestiarySchema, boostedSchema, bosstiarySchema, charmSchema, itemSchema, partySchema, skillSchema, spellSchema,
   staminaSchema, supplySchema, tilemapSchema, vocationSchema, weaponFamilySchema,
 } from './schemas.js';
 import type {
-  Ammunition, AmmunitionDefinition, Appearances, Bestiary, Blessing, Boosted, BotLimits, Charm,
+  Ammunition, AmmunitionDefinition, Appearances, Bestiary, Blessing, Boosted, BotLimits, Bosstiary, Charm,
   Combat, CompiledMitigation,
   CompiledReflect, DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
   MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Spell, Stamina, Supply,
@@ -56,6 +56,14 @@ export interface Content {
    * não fala de progressão permanente. O conteúdo REAL o tem, e `load.test.ts` prende.
    */
   readonly bestiary?: Bestiary;
+  /**
+   * Os níveis do Bosstiary por raridade (#629): quantos abates levam a cada um dos três níveis e
+   * quantos pontos de boss cada nível rende (`IOBosstiary::levelInfos` do Canary). Opcional, como
+   * `bestiary`: sem ele o abate de boss continua contado no personagem, só não há nível nem
+   * ponto — é o conteúdo de teste que não fala de progressão permanente. O conteúdo REAL o tem,
+   * e `load.test.ts` prende.
+   */
+  readonly bosstiary?: Bosstiary;
   /**
    * O catálogo dos 25 Charms do Canary (M39-02, #602; ADR 0053 d.3): `content/data/charms/
    * generated/charms.json`, chave `charmId` (o slug). Vazio no conteúdo de teste que não fala
@@ -142,6 +150,8 @@ export interface RawContent {
   readonly stamina?: readonly unknown[];
   readonly party?: readonly unknown[];
   readonly bestiary?: readonly unknown[];
+  /** Os níveis do Bosstiary (#629), `bosstiary/baseline.json`. */
+  readonly bosstiary?: readonly unknown[];
   readonly charms?: readonly unknown[];
   readonly boosted?: readonly unknown[];
   readonly bot?: readonly unknown[];
@@ -601,6 +611,9 @@ export function buildContent(raw: RawContent): Content {
   const staminas = parseAll('stamina', raw.stamina ?? [], staminaSchema, problems);
   const stamina = staminas.get('baseline');
   const bestiary = parseAll('bestiary', raw.bestiary ?? [], bestiarySchema, problems).get('baseline');
+  // Os níveis do Bosstiary (#629): um documento `baseline` único, como `bestiary` — a tabela de
+  // 3 raridades × 3 níveis é uma coisa só, e o `id` fixo é o que impede duas versões dela.
+  const bosstiary = parseAll('bosstiary', raw.bosstiary ?? [], bosstiarySchema, problems).get('baseline');
   // O catálogo de Charms (M39-02, #602): uma entidade por charm, como `spells`/`items` — não
   // um documento `baseline` único como `bestiary` (aqui não há "marco global", só 25 fichas
   // independentes, cada uma com o próprio id).
@@ -1484,6 +1497,28 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
+  // O boss (#629): `bosstiary` sem `boss` seria um monstro que conta no Bosstiary e, ao mesmo
+  // tempo, no Bestiário e nos rates de monstro comum — o `isBoss` do Canary é "tem bloco
+  // bosstiary", e a flag existe para o resto do motor não precisar olhar o bloco.
+  // O contador é do `raceId`, e variantes de um boss o compartilham (`monsterSchema.bosstiary`):
+  // o NÍVEL de um contador compartilhado sai de UMA raridade, então duas raridades para o mesmo
+  // `raceId` fariam o nível depender de qual variante foi abatida por último.
+  const rarityByRaceId = new Map<number, string>();
+  for (const monster of monsterDefinitions.values()) {
+    if (monster.bosstiary === undefined) continue;
+    if (!monster.boss) {
+      problems.push(`monstro "${monster.id}": declara bosstiary e não declara boss: true`);
+    }
+    const seen = rarityByRaceId.get(monster.bosstiary.raceId);
+    if (seen === undefined) rarityByRaceId.set(monster.bosstiary.raceId, monster.bosstiary.rarity);
+    else if (seen !== monster.bosstiary.rarity) {
+      problems.push(
+        `monstro "${monster.id}": bosstiary.raceId ${String(monster.bosstiary.raceId)} é compartilhado `
+          + `com um boss de raridade "${seen}", e este declara "${monster.bosstiary.rarity}"`,
+      );
+    }
+  }
+
   // As abilities DECLARADAS (CMB-06, área estendida em #518), conferidas no arquivo CRU — o
   // compilado já tem a básica sintetizada, e validá-lo reprovaria todo monstro legado pelo id
   // reservado. O `basic` é do BOOT; a duplicata tornaria a escolha por id ambígua. `wave`, `rows`
@@ -1577,6 +1612,7 @@ export function buildContent(raw: RawContent): Content {
     ...(stamina?._open === undefined ? [] : [`stamina/${stamina.id}: ${stamina._open}`]),
     ...(party?._open === undefined ? [] : [`party/${party.id}: ${party._open}`]),
     ...(bestiary?._open === undefined ? [] : [`bestiary/${bestiary.id}: ${bestiary._open}`]),
+    ...(bosstiary?._open === undefined ? [] : [`bosstiary/${bosstiary.id}: ${bosstiary._open}`]),
     // `boosted` não tem `_open`: a hora de virada não é um número disputado do PRD, é
     // configuração de operação — não pede uma seção de `docs/product` para justificar.
     ...openOf('spell', spells),
@@ -1615,6 +1651,7 @@ export function buildContent(raw: RawContent): Content {
     stamina: stamina as Stamina,
     party: party as PartyConfig,
     ...(bestiary === undefined ? {} : { bestiary }),
+    ...(bosstiary === undefined ? {} : { bosstiary }),
     charms,
     ...(boosted === undefined ? {} : { boosted }),
     maps,

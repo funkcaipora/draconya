@@ -112,6 +112,54 @@ describe.runIf(available)('session ticket', () => {
     }
   });
 
+  it('carries the Bosstiary, and drops a record it cannot trust (#629)', async () => {
+    // Entra na sessão pelo ticket porque o nível de um boss depende do abate anterior — um
+    // personagem que entrasse vazio recomeçaria a contagem do boss a cada hunt. E um valor torto
+    // vira AUSENTE, nunca ticket recusado: a linha é `jsonb` sem CHECK.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+
+    const bosstiary = { kills: { '639': 3, '1811': 20 }, points: 70, version: 1 };
+    const bom = await tickets.issue('a1', 'p1', { level: 1, xp: 0, bosstiary });
+    if (!bom.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(bom.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+      initialCharacter: { level: 1, xp: 0, bosstiary },
+    });
+
+    // O registro VAZIO é válido: é o personagem que nunca abateu um boss, e atravessa igual.
+    const empty = { kills: {}, points: 0, version: 1 };
+    const vazio = await tickets.issue('a1', 'p1', { level: 1, xp: 0, bosstiary: empty });
+    if (!vazio.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(vazio.value.ticket, 'n1')).toMatchObject({
+      initialCharacter: { level: 1, xp: 0, bosstiary: empty },
+    });
+
+    for (const ruim of [
+      { kills: { '639': -1 }, points: 0, version: 1 },
+      { kills: { '639': 1.5 }, points: 0, version: 1 },
+      { kills: { '': 1 }, points: 0, version: 1 },
+      { kills: [3], points: 0, version: 1 },
+      { kills: {}, points: -5, version: 1 },
+      { kills: {}, points: 1.5, version: 1 },
+      { kills: {}, points: 0 },
+      { points: 0, version: 1 },
+      { '639': 3 },
+      [10],
+      'muitos',
+      null,
+    ]) {
+      const issued = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, bosstiary: ruim } as unknown as InitialCharacter,
+      );
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1'), JSON.stringify(ruim)).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0 },
+      });
+    }
+  });
+
   it('carries the familiar stamps, and drops a record it cannot trust (#599)', async () => {
     // Os dois carimbos de relógio de PAREDE do familiar entram na sessão pelo ticket: é ELA quem os
     // compara com o relógio, e o cooldown de 30 min tem de atravessar a saída da hunt. Um registro

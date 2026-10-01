@@ -19,7 +19,8 @@
 import type { ChainableCommander, Redis } from 'ioredis';
 import { isFamiliarState, isFightMode } from '@draconya/sim';
 import type {
-  Aggregates, BestiaryState, CharacterStorageMap, CharmsState, EndReason, FamiliarState, FightMode,
+  Aggregates, BestiaryState, BosstiaryState, CharacterStorageMap, CharmsState, EndReason, FamiliarState,
+  FightMode,
   ItemInstanceOverlay, NotableEvent, SkillsState,
 } from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
@@ -65,6 +66,13 @@ export interface SessionReceipt {
    * banco daria o mesmo número, com uma chance a mais de contar duas vezes.
    */
   readonly bestiary?: BestiaryState;
+  /**
+   * O Bosstiary (#629, ADR 0052 d.1): abates por boss (chave = `raceId`), pontos de boss e a
+   * versão. Valor ABSOLUTO, como o Bestiário, e pela mesma razão: abate e ponto só sobem, então o
+   * ledger funde pelo MAIOR de cada boss e dos pontos — um extrato antigo processado fora de
+   * ordem não tem como rebaixar nada, sem guarda de instante.
+   */
+  readonly bosstiary?: BosstiaryState;
   /**
    * A economia de Charms (M39-02, #602, ADR 0052 d.1): pontos/echoes gastos, tier de cada
    * charm e as atribuições. ABSOLUTA e ÚLTIMA-ESCRITA-VENCE, como `ammo`/`equipment` — NÃO
@@ -381,6 +389,10 @@ function parseReceipt(raw: string): SessionReceipt | null {
     // linha existir é a mesma que a do comentário delas.
     ...(typeof value['bestiary'] === 'object' && value['bestiary'] !== null
       ? { bestiary: value['bestiary'] as BestiaryState }
+      : {}),
+    // O Bosstiary (#629): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['bosstiary'] === 'object' && value['bosstiary'] !== null
+      ? { bosstiary: value['bosstiary'] as BosstiaryState }
       : {}),
     // A economia de Charms (M39-02, #602): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['charms'] === 'object' && value['charms'] !== null

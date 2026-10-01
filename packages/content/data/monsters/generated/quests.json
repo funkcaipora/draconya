@@ -766,6 +766,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/dangerous_depth/bosses/ancient_spawn_of_morgathla.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1551
     }
   },
   {
@@ -3032,6 +3037,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_inquisition/annihilon.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 418
     }
   },
   {
@@ -4328,6 +4338,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1559
     }
   },
   {
@@ -4743,6 +4758,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1560
     }
   },
   {
@@ -5227,6 +5247,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 567
     }
   },
   {
@@ -5856,6 +5881,11 @@
           "count": 5
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1645
     }
   },
   {
@@ -7362,6 +7392,11 @@
           "count": 4
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1753
     }
   },
   {
@@ -8761,6 +8796,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/dazed_leaf_golem.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1578
     }
   },
   {
@@ -8937,6 +8977,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1047
     }
   },
   {
@@ -9480,6 +9525,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/bigfoots_burden/bosses/deathstrike.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 892
     }
   },
   {
@@ -9637,6 +9687,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/hero_of_rathleton/deep_terror.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1087
     }
   },
   {
@@ -10816,6 +10871,11 @@
           "count": 4
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 87
     }
   },
   {
@@ -11274,6 +11334,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/pits_of_inferno/dracola.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 302
     }
   },
   {
@@ -12704,6 +12769,11 @@
           "count": 4
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1758
     }
   },
   {
@@ -14470,6 +14540,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 569
     }
   },
   {
@@ -14796,6 +14871,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_dream_courts/bosses/faceless_bane.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1727
     }
   },
   {
@@ -16543,6 +16623,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_first_dragon/bosses/gelidrazah_the_frozen.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1379
     }
   },
   {
@@ -16792,6 +16877,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/bosses/ghulosh.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1608
     }
   },
   {
@@ -17284,6 +17374,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/bigfoots_burden/bosses/gnomevil.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 893
     }
   },
   {
@@ -17898,6 +17993,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_inquisition/golgordan.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 416
     }
   },
   {
@@ -18316,6 +18416,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/bosses/gorzindel.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1591
     }
   },
   {
@@ -18504,6 +18609,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/soul_war/goshnars_malice.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1901
     }
   },
   {
@@ -18735,6 +18845,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/bosses/grand_canon_dominus.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1584
     }
   },
   {
@@ -18977,6 +19092,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/bosses/grand_chaplain_gaunder.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1579
     }
   },
   {
@@ -19135,6 +19255,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/bosses/grand_commander_soeren.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1582
     }
   },
   {
@@ -19349,6 +19474,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/bosses/grand_master_oberon.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1576
     }
   },
   {
@@ -20183,6 +20313,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_inquisition/hellgorak.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 403
     }
   },
   {
@@ -20588,6 +20723,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 713
     }
   },
   {
@@ -21533,6 +21673,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/feaster_of_souls/irgix_the_flimsy.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1890
     }
   },
   {
@@ -21835,6 +21980,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_dream_courts/bosses/izcandar_the_banished.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 1699
     }
   },
   {
@@ -22090,6 +22240,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/jailer.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1577
     }
   },
   {
@@ -22436,6 +22591,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/liquid_black/jaul.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 773
     }
   },
   {
@@ -22738,6 +22898,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1389
     }
   },
   {
@@ -23237,6 +23402,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/grave_danger/bosses/king_zelos.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1784
     }
   },
   {
@@ -23707,6 +23877,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_inquisition/latrivan.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 417
     }
   },
   {
@@ -25871,6 +26046,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_inquisition/madareth.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 414
     }
   },
   {
@@ -26517,6 +26697,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_dream_courts/bosses/malofur_mangrinder.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 1696
     }
   },
   {
@@ -26673,6 +26858,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/pits_of_inferno/massacre.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 305
     }
   },
   {
@@ -27147,6 +27337,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/isle_of_evil/mephiles.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 566
     }
   },
   {
@@ -28073,6 +28268,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 568
     }
   },
   {
@@ -28326,6 +28526,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 84
     }
   },
   {
@@ -28485,6 +28690,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/kilmaresh/mozradek.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1829
     }
   },
   {
@@ -28545,6 +28755,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/pits_of_inferno/mr._punish.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 303
     }
   },
   {
@@ -29041,6 +29256,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/kilmaresh/neferi_the_spy.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 2105
     }
   },
   {
@@ -29843,6 +30063,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/liquid_black/obujos.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 774
     }
   },
   {
@@ -30070,6 +30295,11 @@
           "count": 4
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 90
     }
   },
   {
@@ -32151,6 +32381,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/bosses/preceptor_lazare.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1583
     }
   },
   {
@@ -32693,6 +32928,11 @@
           "count": 1
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 88
     }
   },
   {
@@ -32913,6 +33153,11 @@
           "count": 1
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 2006
     }
   },
   {
@@ -35732,6 +35977,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/grave_danger/bosses/scarlett_etzel.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1804
     }
   },
   {
@@ -36444,6 +36694,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1561
     }
   },
   {
@@ -37069,6 +37324,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1755
     }
   },
   {
@@ -37237,6 +37497,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1754
     }
   },
   {
@@ -40681,6 +40946,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/liquid_black/tanjis.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 775
     }
   },
   {
@@ -40983,6 +41253,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/ferumbras_ascension/bosses/tarbaz.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1188
     }
   },
   {
@@ -41198,6 +41473,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_first_dragon/bosses/tazhadur.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1390
     }
   },
   {
@@ -41324,6 +41604,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/cults_of_tibia/bosses/the_armored_voidborn.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1406
     }
   },
   {
@@ -41779,6 +42064,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/dangerous_depth/bosses/the_baron_from_below.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1518
     }
   },
   {
@@ -41894,6 +42184,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/the_blazing_rose.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1600
     }
   },
   {
@@ -42657,6 +42952,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/dangerous_depth/bosses/the_count_of_the_core.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1519
     }
   },
   {
@@ -43090,6 +43390,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/the_diamond_blossom.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1598
     }
   },
   {
@@ -43448,6 +43753,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/dangerous_depth/bosses/the_duke_of_the_depths.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1520
     }
   },
   {
@@ -43880,6 +44190,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/forgotten_knowledge/bosses/the_enraged_thorn_knight.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1297
     }
   },
   {
@@ -44079,6 +44394,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/cults_of_tibia/bosses/the_false_god.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1409
     }
   },
   {
@@ -44366,6 +44686,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/feaster_of_souls/the_fear_feaster.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1873
     }
   },
   {
@@ -44973,6 +45298,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/pits_of_inferno/the_handmaiden.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 301
     }
   },
   {
@@ -45447,6 +45777,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/the_lily_of_night.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1602
     }
   },
   {
@@ -46723,6 +47058,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/feaster_of_souls/the_pale_worm.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1881
     }
   },
   {
@@ -47162,6 +47502,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/cults_of_tibia/bosses/the_sandking.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1444
     }
   },
   {
@@ -47579,6 +47924,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/ferumbras_ascension/bosses/the_shatterer.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1165
     }
   },
   {
@@ -48181,6 +48531,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/cults_of_tibia/bosses/the_unarmored_voidborn.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1406
     }
   },
   {
@@ -48491,6 +48846,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1868
     }
   },
   {
@@ -49748,6 +50108,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/feaster_of_souls/unaz_the_mean.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1891
     }
   },
   {
@@ -50985,6 +51350,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_inquisition/ushuriel.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 415
     }
   },
   {
@@ -51279,6 +51649,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 85
     }
   },
   {
@@ -51567,6 +51942,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/feaster_of_souls/vok_the_freakish.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1892
     }
   },
   {
@@ -52823,6 +53203,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/kilmaresh/xogixath.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1827
     }
   },
   {
@@ -53320,6 +53705,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/ancient_feud/yirkas_blue_scales.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1982
     }
   },
   {
@@ -53961,6 +54351,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_inquisition/zugurosh.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 434
     }
   }
 ]

@@ -1,6 +1,7 @@
 # 0042 — Morte do Tibia: promoção, bênçãos e perda de item sem item no chão
 
 **Status:** proposto — decorre do [ADR 0037](0037-tfs-canary-fidelity-except-action-bar-and-automation.md)
+**Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30) — d.4:** vale até existir item no chão; a morte no mundo segue a tela de relogin.
 decisão 1 (mecânica de jogo segue o Tibia); bloqueada por duas questões em aberto (ver seção
 própria); avaliadas contra o Huntera em 2026-09-25 sem evidência aplicável — as duas seguem
 abertas, capturas pendentes registradas (ver emenda)

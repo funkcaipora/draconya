@@ -66,6 +66,12 @@ export interface CharacterRecord {
    */
   readonly charms: unknown;
   /**
+   * O Bosstiary (#629), como veio do banco. `unknown` pela mesma razão de `bestiary`: a forma
+   * (`BosstiaryState`) é do `sim`, e quem a confere é quem monta o ticket. `null` é personagem
+   * que nunca abateu um boss. Sem método de escrita: quem escreve é o ledger (ADR 0052 d.1).
+   */
+  readonly bosstiary: unknown;
+  /**
    * O familiar de vocação (M38-02, #599, ADR 0057 d.3), como veio do banco: `unknown` pela mesma
    * razão de `charms` — a forma (`FamiliarState`) é do `sim`, e quem a confere é quem monta o
    * ticket. `null` é personagem que nunca invocou. Sem método de escrita: quem escreve é o ledger.
@@ -595,6 +601,7 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     supplyStock: row.supplyStock,
     ammunitionStock: row.ammunitionStock,
     charms: row.charms,
+    bosstiary: row.bosstiary,
     familiar: row.familiar,
     fedMs: row.fedMs,
     blessings: row.blessings,

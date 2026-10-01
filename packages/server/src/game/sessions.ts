@@ -288,6 +288,10 @@ export function characterFromTicket(
       // (`isCharmsState`); ausente, a sessão parte sem nenhum ponto/tier/atribuição — o mesmo
       // personagem novo que `bestiary` ausente já descreve.
       ...(initialCharacter.charms === undefined ? {} : { charms: initialCharacter.charms }),
+      // O Bosstiary (#629, ADR 0052 d.1): validado na emissão e no consumo (`isBosstiaryState`);
+      // ausente, a sessão parte sem nenhum abate de boss — o mesmo personagem novo que `bestiary`
+      // ausente já descreve.
+      ...(initialCharacter.bosstiary === undefined ? {} : { bosstiary: initialCharacter.bosstiary }),
       // O familiar (M38-02, #599, ADR 0057 d.3): os carimbos de parede do cooldown e da recriação
       // — validados na emissão e no consumo (`isFamiliarState`); ausente, o personagem nunca
       // invocou, e a sessão parte sem carimbo.

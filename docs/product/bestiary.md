@@ -35,14 +35,16 @@ Fechar um marco é evento notável, como o level up: aparece na lista curta do a
 (§16.2) como "Bestiário: Rato · marco 1 (+1 % XP)". O abate comum não aparece, pela regra de
 sempre — uma hunt de oito horas com uma linha por rato não é lista, é log.
 
-**O que a tela mostra.** O ícone Cyclopedia da barra abre um modal com as abas Itens e Bestiary,
-não uma seção fixa na coluna. Na aba Bestiary, o modal traz busca por nome, ordenação
+**O que a tela mostra.** O ícone Cyclopedia da barra abre um modal com as abas Itens, Bestiary,
+Bosstiary (#629) e Charms, não uma seção fixa na coluna. Na aba Bestiary, o modal traz busca por nome, ordenação
 por progresso/nome/abates e alternância entre grade e lista; cada monstro mostra o placeholder de
 sprite, abates, estrelas do MARCO DE XP alcançado (o "★N" do FUN-113) e a barra até o próximo
 marco (ou cheia e verde depois do último). A caixa "Progresso no Bestiário" soma os marcos reais
 dos monstros presentes no catálogo e mostra o bônus global de XP; ela não aparece quando o
-servidor não trouxe configuração de marcos. Bosstiary e sprite real permanecem ausentes até os
-respectivos sistemas transportarem esses dados.
+servidor não trouxe configuração de marcos. Sprite real permanece ausente até o sistema de
+aparência transportar esse dado. **Boss não aparece nesta aba** (#629): `Player::addBestiaryKill`
+devolve cedo para `isBoss()` no Canary, então boss não soma no Bestiário — ele conta no Bosstiary,
+que é a aba ao lado (ver [`bosses.md`](./bosses.md), "O Bosstiary").
 
 **Desde o #601, cada monstro também mostra a ficha do Canary — um segundo vocabulário de
 progresso, lado a lado com o marco de XP (ADR 0053 d.2).** Quando `catalogue.monsters[].bestiary`

@@ -5,8 +5,8 @@ import { z } from 'zod';
 import { OutfitColors } from '@draconya/protocol';
 import { isFightMode, readItemOverlay } from '@draconya/sim';
 import { isFamiliarState } from '@draconya/sim';
-import type { BestiaryState, CharmsState, FamiliarState } from '@draconya/sim';
-import { isAmmoSelection, isBestiaryState, isCharmsState, isStockMap } from '../tickets.js';
+import type { BestiaryState, BosstiaryState, CharmsState, FamiliarState } from '@draconya/sim';
+import { isAmmoSelection, isBestiaryState, isBosstiaryState, isCharmsState, isStockMap } from '../tickets.js';
 import type { InitialCharacter, IssueFailure, TicketService } from '../tickets.js';
 import type { CharacterRecord, GameRepository } from '../db/repository.js';
 
@@ -238,6 +238,8 @@ export function initialCharacterOf(
     ...(isStockMap(character.ammunitionStock) ? { ammunitionStock: character.ammunitionStock } : {}),
     // E a economia de Charms (M39-02, #602), pela mesma régua do Bestiário.
     ...charmsOf(character.charms),
+    // E o Bosstiary (#629), pela mesma régua do Bestiário.
+    ...bosstiaryOf(character.bosstiary),
     // E o familiar (M38-02, #599, ADR 0057 d.3): os carimbos de parede que o cooldown de 30 min e a
     // recriação ao entrar consultam — sem eles, sair da hunt zeraria o cooldown.
     ...familiarOf(character.familiar),
@@ -296,6 +298,11 @@ function outfitColorsOf(stored: unknown): { outfitColors?: OutfitColors } {
  */
 function bestiaryOf(stored: unknown): { bestiary?: BestiaryState } {
   return isBestiaryState(stored) ? { bestiary: stored } : {};
+}
+
+/** O Bosstiary (#629), pela mesma régua e razão de `bestiaryOf`: torto ou `null` vira ausente. */
+function bosstiaryOf(stored: unknown): { bosstiary?: BosstiaryState } {
+  return isBosstiaryState(stored) ? { bosstiary: stored } : {};
 }
 
 /** A economia de Charms (M39-02, #602), pela mesma régua e razão de `bestiaryOf`. */

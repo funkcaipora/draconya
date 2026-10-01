@@ -23,6 +23,7 @@ export * from './blessings.js';
 export * from './item-loss.js';
 export * from './skills.js';
 export * from './bestiary.js';
+export * from './bosstiary.js';
 export * from './charms.js';
 export * from './familiar.js';
 export * from './party.js';

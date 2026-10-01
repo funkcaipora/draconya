@@ -3587,6 +3587,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/event_creatures/the_mutated_pumpkin.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 466
     }
   },
   {

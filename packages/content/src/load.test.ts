@@ -55,6 +55,37 @@ describe('loadContent', () => {
     expect(content.bestiary?.xpBonusPercentPerMilestone).toBe(1);
   });
 
+  it('carrega o Bosstiary real: a tabela do Canary por raridade, e os bosses importados (#629)', () => {
+    // Opcional no `buildContent` (fixture), obrigatório no conteúdo de verdade. Mutação que
+    // mata: apagar `bosstiary/` de `load.ts`, ou trocar um número da tabela do `io_bosstiary`.
+    const content = loadContent(DATA);
+    expect(content.bosstiary?.levels).toEqual({
+      bane: [{ kills: 25, points: 5 }, { kills: 100, points: 15 }, { kills: 300, points: 30 }],
+      archfoe: [{ kills: 5, points: 10 }, { kills: 20, points: 30 }, { kills: 60, points: 60 }],
+      nemesis: [{ kills: 1, points: 10 }, { kills: 3, points: 30 }, { kills: 5, points: 60 }],
+    });
+    // O `isBoss` do Canary é "tem bloco bosstiary": as duas flags andam juntas no catálogo.
+    const bosses = [...content.monsters.values()].filter((monster) => monster.bosstiary !== undefined);
+    expect(bosses.length).toBeGreaterThan(100);
+    for (const monster of bosses) expect(monster.boss, monster.id).toBe(true);
+    for (const monster of content.monsters.values()) {
+      if (monster.boss) expect(monster.bosstiary, monster.id).toBeDefined();
+    }
+    // As três raridades existem no catálogo, e a contagem por raridade confere com o Canary.
+    const byRarity = (rarity: string) => bosses.filter((monster) => monster.bosstiary?.rarity === rarity).length;
+    expect(byRarity('bane')).toBeGreaterThan(0);
+    expect(byRarity('archfoe')).toBeGreaterThan(0);
+    expect(byRarity('nemesis')).toBeGreaterThan(0);
+    // Dreadmaw: Nemesis, raceId 639 (`reptiles/dreadmaw.lua`).
+    expect(content.monsters.get('dreadmaw')?.bosstiary).toEqual({ rarity: 'nemesis', raceId: 639 });
+    // Os dois Voidborn compartilham o raceId 1406 — um contador só (`io_bosstiary`, storage por raceid).
+    expect(content.monsters.get('the-armored-voidborn')?.bosstiary?.raceId).toBe(1406);
+    expect(content.monsters.get('the-unarmored-voidborn')?.bosstiary?.raceId).toBe(1406);
+    // Monstro de caça comum não é boss.
+    expect(content.monsters.get('rat')?.bosstiary).toBeUndefined();
+    expect(content.monsters.get('rat')?.boss).toBe(false);
+  });
+
   it('carrega a Boosted Creature real: vira à meia-noite UTC (#615)', () => {
     // Opcional no `buildContent` (fixture): sem ele o `jobs` não sorteia nada. Mutação que
     // mata: apagar `boosted/` de `load.ts`.

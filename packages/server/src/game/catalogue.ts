@@ -281,6 +281,11 @@ export function buildCatalogue(content: Content): Catalogue {
                 charmsPoints: bestiaryEntry.charmsPoints,
               },
             }),
+          // O boss no Bosstiary (#629): a raridade escolhe a linha da tabela de níveis abaixo, e o
+          // `raceId` é a chave do contador de abates — nível e pontos são DERIVADOS no cliente.
+          ...(monster.bosstiary === undefined
+            ? {}
+            : { bosstiary: { rarity: monster.bosstiary.rarity, raceId: monster.bosstiary.raceId } }),
         };
       })
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
@@ -294,6 +299,21 @@ export function buildCatalogue(content: Content): Catalogue {
         bestiary: {
           milestones: [...content.bestiary.milestones],
           xpBonusPercentPerMilestone: content.bestiary.xpBonusPercentPerMilestone,
+        },
+      }),
+    // Os níveis do Bosstiary por raridade (#629), do conteúdo fixado na sessão (invariante 7). A
+    // chave só existe quando o conteúdo tem a tabela: ausente, a tela mostra só a contagem de
+    // abates — o conteúdo de teste, que não fala de progressão permanente. Só `levels`: `id`,
+    // `source` e `_open` são assunto do carregador.
+    ...(content.bosstiary === undefined
+      ? {}
+      : {
+        bosstiary: {
+          levels: {
+            bane: content.bosstiary.levels.bane.map((level) => ({ ...level })),
+            archfoe: content.bosstiary.levels.archfoe.map((level) => ({ ...level })),
+            nemesis: content.bosstiary.levels.nemesis.map((level) => ({ ...level })),
+          },
         },
       }),
     // Os 25 Charms do Canary (M39-02, #602, ADR 0053 d.3), do conteúdo fixado na sessão

@@ -8,7 +8,7 @@ const CHARACTER: CharacterRecord = {
   id: 'p1', accountId: 'a1', name: 'Hero', vocation: null, promoted: false, level: 1, xp: 0, soul: 0, gold: 0,
   capacity: 400, premiumUntil: null, staminaMs: 86400000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
-  ammo: null, supplyStock: null, ammunitionStock: null, charms: null, familiar: null, fedMs: 0, blessings: 0, fightMode: 'attack',
+  ammo: null, supplyStock: null, ammunitionStock: null, charms: null, bosstiary: null, familiar: null, fedMs: 0, blessings: 0, fightMode: 'attack',
   createdAt: new Date(),
 };
 
@@ -221,6 +221,31 @@ describe('POST /api/tickets', () => {
     expect(await issuedWith(null)).not.toHaveProperty('bestiary');
     expect(await issuedWith({ rat: -1 })).not.toHaveProperty('bestiary');
     expect(await issuedWith([10_000])).not.toHaveProperty('bestiary');
+  });
+
+  it('o Bosstiary da linha entra no ticket; nulo ou corrompido, fica de fora (#629)', async () => {
+    // A mesma régua do Bestiário: a linha é `jsonb` sem CHECK, e um registro torto cai fora aqui
+    // sem trancar o login; o `null` de quem nunca abateu um boss NÃO vira chave.
+    const issuedWith = async (bosstiary: unknown) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, bosstiary })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    const record = { kills: { '639': 3 }, points: 40, version: 1 };
+    expect(await issuedWith(record)).toMatchObject({ bosstiary: record });
+    expect(await issuedWith(null)).not.toHaveProperty('bosstiary');
+    expect(await issuedWith({ kills: { '639': -1 }, points: 0, version: 1 })).not.toHaveProperty('bosstiary');
+    expect(await issuedWith({ kills: {} })).not.toHaveProperty('bosstiary');
+    expect(await issuedWith([1])).not.toHaveProperty('bosstiary');
   });
 
   it('leva os carimbos do familiar quando a linha tem um registro válido, e descarta o torto (#599)', async () => {

@@ -230,6 +230,16 @@ export const characters = pgTable(
     charms: jsonb('charms'),
 
     /**
+     * O Bosstiary (#629): abates por boss (chave = `raceId` do Canary, em texto), pontos de boss e
+     * a versão — `{ kills, points, version }`. Nulável: `null` é quem nunca abateu um boss.
+     * Registro `jsonb` por sistema (ADR 0052 d.1), lido INTEIRO no ticket e escrito INTEIRO pela
+     * transação do ledger a partir do extrato — mas FUNDIDO pelo MAIOR de cada boss e dos pontos,
+     * como o Bestiário, e não última-escrita-vence como `charms`: abate e ponto de boss só sobem,
+     * então um extrato antigo processado fora de ordem não pode rebaixar nada.
+     */
+    bosstiary: jsonb('bosstiary'),
+
+    /**
      * O familiar de vocação (M38-02, #599, ADR 0057 d.3, ADR 0052 d.1): os dois carimbos de
      * relógio de PAREDE — `{ version, summonUntilMs, cooldownUntilMs }` — que o personagem
      * carrega entre hunts (`packages/sim/src/familiar.ts`): até quando a invocação vale

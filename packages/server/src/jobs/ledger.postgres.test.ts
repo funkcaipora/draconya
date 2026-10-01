@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
 import { CharacterRuntime, createHuntSession, Inventory, levelForXp } from '@draconya/sim';
-import type { CharmsState, InventoryState } from '@draconya/sim';
+import type { BosstiaryState, CharmsState, InventoryState } from '@draconya/sim';
 import { NEUTRAL_RATES } from '@draconya/content';
 import type { Progression, Vocation } from '@draconya/content';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -110,7 +110,7 @@ const characterRow = async (
 ): Promise<{
   xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
   ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown;
-  charms: unknown; familiar: unknown; blessings: number;
+  charms: unknown; bosstiary: unknown; familiar: unknown; blessings: number;
 }> => {
   const [row] = await database.database.db
     .select({
@@ -124,6 +124,7 @@ const characterRow = async (
       supplyStock: characters.supplyStock,
       ammunitionStock: characters.ammunitionStock,
       charms: characters.charms,
+      bosstiary: characters.bosstiary,
       familiar: characters.familiar,
       blessings: characters.blessings,
     })
@@ -132,7 +133,7 @@ const characterRow = async (
   return row as {
     xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
     ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown;
-    charms: unknown; familiar: unknown; blessings: number;
+    charms: unknown; bosstiary: unknown; familiar: unknown; blessings: number;
   };
 };
 
@@ -774,6 +775,36 @@ describe.runIf(ready)('a economia de Charms chega ao Postgres pelo extrato (M39-
     // O extrato SEM o campo (seq 3, uma sessão de Cidade que não mexeu em Charm) não apaga o
     // que o extrato anterior gravou.
     expect((await characterRow(database, characterId)).charms).toEqual(second);
+  });
+});
+
+describe.runIf(ready)('o Bosstiary chega ao Postgres pelo extrato (#629, ADR 0052 d.1)', () => {
+  it('nasce nulo, funde pelo MAIOR de cada boss e dos pontos, e o extrato sem o campo não toca na coluna', async () => {
+    // Como o Bestiário — e ao contrário dos Charms: abate e ponto de boss só sobem, então um
+    // extrato ANTIGO processado fora de ordem não pode rebaixar o que um mais novo já gravou.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    expect((await characterRow(database, characterId)).bosstiary).toBeNull();
+    const receipts = new ReceiptStore(redis);
+
+    const newer: BosstiaryState = { kills: { '639': 5, '1811': 2 }, points: 100, version: 1 };
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), bosstiary: newer });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).bosstiary).toEqual(newer);
+
+    // Um extrato mais velho (menos abates de um boss, um boss a mais) chega depois: fica o maior
+    // de cada um, e o boss novo entra.
+    const older: BosstiaryState = { kills: { '639': 3, '100': 1 }, points: 40, version: 1 };
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2, bosstiary: older });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).bosstiary)
+      .toEqual({ kills: { '639': 5, '1811': 2, '100': 1 }, points: 100, version: 1 });
+
+    // Extrato de Cidade (sem o campo) não apaga nada.
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).bosstiary)
+      .toEqual({ kills: { '639': 5, '1811': 2, '100': 1 }, points: 100, version: 1 });
   });
 });
 
