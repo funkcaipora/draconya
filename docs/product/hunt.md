@@ -751,6 +751,54 @@ abates passavam a divergir entre taxas (299 a 20 Hz contra 277 a 1 Hz), porque u
 ficava pronto no meio do tick disparava atrasado e o resto era descartado. O que resolveu não foi
 trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 
+### A fila por dentro: cancelamento preguiçoso e desempate (#827, OW-06)
+
+A fila de eventos (`packages/sim/src/schedule.ts`) ganhou duas coisas para o mundo aberto (ADR 0060
+d.5c), sem mudar nada do que a instância despacha: o resultado da hunt é byte a byte o de antes.
+
+**Dois regimes de cancelamento, escolhidos pelo tamanho da fila.** `cancel` e `cancelSubject`
+filtravam e reempilhavam o heap inteiro: O(n log n) por morte, e o mundo tem centenas de criaturas
+numa fila só.
+- **Fila pequena (até `DEFAULT_INDEX_ABOVE`, 1.024 eventos) — a da hunt.** Não há índice nem lápide:
+  cancelar filtra o vetor e reempilha em O(n) (Floyd). Com dezenas de eventos isso custa ~1 µs, e o
+  evento continua sendo o objeto de cinco chaves de sempre. É a escolha que mantém a instância, a
+  base econômica do jogo, como era em CPU e em memória: o índice custa ~100 bytes por par
+  `(kind, subject)` e um acesso a `Map` por evento, e medido numa sessão fria do `bench:hunts` isso
+  eram +11 KiB (+12%) de memória e +25% a +50% no custo da própria fila — para nada, porque uma
+  hunt cancela pouco.
+- **Fila grande (o mundo) — cancelamento O(1) amortizado.** Cada par guarda um slot (`floorSeq`,
+  vivos, lápides) e cancelar grava nele o próximo `seq`: todo evento do par com `seq` menor é lápide.
+  O `seq` já é único e crescente, então ele É a geração — o evento não carrega campo novo, e o
+  snapshot não muda. `pop` e `peek` descartam a lápide que encontram no topo; a fila compacta
+  (O(n), e só então) quando **mais da metade** do heap é lápide — conta amortizada, porque a
+  reconstrução paga o que pelo menos n/2 cancelamentos acumularam; `size` (e `Session.pendingEvents`)
+  conta só os vivos, `getState` nunca serializa lápide e `dueAtOf` as ignora.
+- A fila indexa ao passar de 1.024 eventos e larga o índice ao cair a um quarto disso (histerese:
+  oscilar em torno do limiar não constrói e destrói o índice a cada evento). Os slots de pares
+  ociosos são varridos em lote, quando o registro dobra de tamanho: o id de monstro só cresce, e sem
+  a varredura o mapa teria um subject por criatura que já nasceu. O slot NÃO é apagado no `pop`,
+  porque o ciclo do timer é vencer e se reagendar no mesmo despacho.
+- A ordem de despacho é a mesma nos dois regimes, e a prova é um oráculo: o teste mantém a fila de
+  antes do #827 e roda sequências aleatórias de agendar, cancelar, avançar, restaurar e esvaziar nas
+  duas filas, em três regimes e com 7 ou 150 subjects. E o resultado de hunts reais também: 60 hunts de
+  30 minutos, a 1 Hz e a 10 Hz, nos cenários frio e de combate, dão os mesmos eventos de domínio e o
+  mesmo snapshot com o índice desligado e com ele ligado desde o primeiro evento.
+- Custo medido, fila isolada (M2, arm64, 500 criaturas × 6 timers): cancelar uma criatura que morre
+  fica ~10× mais barato (4,4 µs → 0,45 µs por iteração com uma morte a cada 20 despachos) e o ciclo
+  `pop` + reagendamento fica ~70 ns mais caro (contabilidade do slot) — o que o mundo paga e a hunt
+  não. Os números do `bench:hunts` estão no PR #827.
+
+**`tieBreak`: `'insertion'` (default) ou `'stable'`.** A ordem do mesmo `(dueAtMs, priority)` era a
+da inserção (`seq`). `'stable'` ordena por `(dueAtMs, priority, subject, kind, seq)` — comparando
+strings por unidade de código, nunca por locale — e é o que a dormência do mundo precisa: o timer
+que sai da fila ao dormir e volta ao acordar ganha um `seq` novo, e só uma ordem que não olha a
+inserção o devolve ao lugar em que estaria. O `seq` fica no fim só para a ordem seguir total.
+- A instância NÃO usa: `Session` nasce `'insertion'`, e `SessionOptions.tieBreak: 'stable'` é do
+  mundo (ainda sem quem o chame: a sessão do mundo é a OW-29/OW-30).
+- A escolha vai no `ScheduleState` (`tieBreak: 'stable'`), e SÓ no `'stable'`: o snapshot da
+  instância não ganha chave nenhuma. Restaurar um snapshot do mundo devolve uma fila estável sem
+  que quem restaura precise saber.
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
