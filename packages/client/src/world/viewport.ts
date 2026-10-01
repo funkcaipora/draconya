@@ -62,6 +62,9 @@ import {
 } from './visibility.js';
 import { NO_DISPLACEMENT, walkingTile } from './walking-tile.js';
 
+/** A célula do padrão de um objeto que uma criatura vestiu (#621): o objeto parado, sem tile que o repita. */
+const OBJECT_LOOK_CELL = { x: 0, y: 0 } as const;
+
 export type { MapTiles } from './scene.js';
 
 /**
@@ -412,6 +415,8 @@ export async function mountViewport(
    * novas, e o que o anterior aqueceu não vale para ele.
    */
   const warmedOutfits = new Set<number>();
+  /** Os objetos que uma criatura vestiu (#621) e que já foram pedidos — separado dos outfits. */
+  const warmedObjectLooks = new Set<number>();
   /** RC-13: recebe um delta por quadro e só é lido uma vez por segundo no overlay DOM. */
   const fps = createFpsMeter();
   /**
@@ -639,11 +644,16 @@ export async function mountViewport(
     if (art === null) return;
     for (const creature of creatureList()) {
       const { appearanceId } = creature;
-      if (appearanceId <= 0 || warmedOutfits.has(appearanceId)) continue;
+      // Uma criatura sob a condição `outfit` de OBJETO (#621) pede a folha do objeto, não a do
+      // outfit: os ids dos dois registros se sobrepõem (o outfit 1 e o objeto 1 são coisas
+      // diferentes), então cada um tem o próprio conjunto de "já pedi".
+      const warmed = creature.object === true ? warmedObjectLooks : warmedOutfits;
+      if (appearanceId <= 0 || warmed.has(appearanceId)) continue;
       const at = creature.step?.to ?? creature.position;
       if (at.x < window.minX || at.x > window.maxX || at.y < window.minY || at.y > window.maxY) continue;
-      warmedOutfits.add(appearanceId);
-      void art.warmOutfit(appearanceId);
+      warmed.add(appearanceId);
+      if (creature.object === true) void art.warmObjects([appearanceId]);
+      else void art.warmOutfit(appearanceId);
     }
   }
 
@@ -862,6 +872,10 @@ export async function mountViewport(
   function creatureTexture(creature: Creature, nowMs: number): Texture | null | undefined {
     const art = pack;
     if (art === null || creature.appearanceId <= 0) return null;
+    // A criatura que virou um OBJETO (#621, `lookTypeEx`: a Chameleon Rune, o `outfitItem` de
+    // monstro) é desenhada como o objeto — o quadro do tile, sem direção nem fase de passo, na
+    // célula 0 do padrão: uma coisa parada, como o Tibia a mostra.
+    if (creature.object === true) return objectTexture(creature.appearanceId, OBJECT_LOOK_CELL, nowMs);
     const direction = facingOf(creature);
     const moving = creature.step !== null && walkFrame(creature, nowMs, 1).moving;
     const frames = art.framesOf(creature.appearanceId, moving);
@@ -1140,7 +1154,7 @@ export async function mountViewport(
       // são o mesmo tile durante metade do passo. `logical` é o destino do passo em curso: é
       // em volta dele que o OTClient procura, e é ele que a criatura parada devolve.
       const art = pack;
-      const displacement = art === null
+      const displacement = art === null || creature.object === true
         ? NO_DISPLACEMENT
         : art.outfitDisplacement(creature.appearanceId);
       const tile = walkingTile({
@@ -1491,6 +1505,7 @@ export async function mountViewport(
       // inteira no próximo quadro. `null` também zera — não fica nada pendente para o próximo.
       warmed = null;       // era `if (next !== null && scene !== null) warm(scene);`
       warmedOutfits.clear();
+      warmedObjectLooks.clear();
       objectPhaseCache.clear();
       fadeKey = '';        // as flags vêm do pacote: `dontHide`, `unsight`, `bottom`
       // Os efeitos em voo nasceram com a linha do tempo de reserva; renascem no próximo

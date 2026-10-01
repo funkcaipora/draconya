@@ -612,6 +612,8 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       class: 'mammal',
       health: 20,
       experience: 5,
+      // O Creature Illusion confere `illusionable` (#621, Canary `flags.illusionable`): o rato o é.
+      illusionable: true,
       bestiary: {
         stars: 1, occurrence: 0, firstUnlock: 10, secondUnlock: 100, toKill: 250, charmsPoints: 5,
       },
@@ -622,6 +624,25 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     const withoutClass = buildCatalogue(content).monsters[0];
     expect(withoutClass).toBeDefined();
     expect('class' in (withoutClass ?? {})).toBe(false);
+  });
+
+  it('a Chameleon Rune pede a mira num ITEM e a Creature Illusion leva o prazo; os monstros ilusionáveis vêm marcados (#621)', () => {
+    const real = loadContent(DATA);
+    const catalogue = buildCatalogue(real);
+    // `targets: 'item'`: o clique no slot arma a mira de ITEM, não a de criatura (aliado).
+    const rune = catalogue.bot.supplies.find((supply) => supply.id === 'chameleon-rune');
+    expect(rune).toMatchObject({ effect: 'chameleon', targets: 'item', price: 210 });
+    expect(catalogue.bot.supplies.filter((supply) => supply.targets === 'item').map((supply) => supply.id))
+      .toEqual(['chameleon-rune']);
+    // A magia leva o PRAZO no detalhe de exibição, e o efeito é o que o modal usa para o seletor.
+    const illusion = catalogue.bot.spells.find((spell) => spell.id === 'creature-illusion-druid');
+    expect(illusion).toMatchObject({ effect: 'illusion', detail: { durationMs: 180_000 } });
+    // O seletor só oferece quem o servidor marcou; o resto da lista não carrega a chave.
+    const marked = catalogue.monsters.filter((monster) => monster.illusionable === true).map((monster) => monster.id);
+    expect(marked).toContain('dragon');
+    expect(marked).not.toContain('rotworm');
+    expect(catalogue.monsters.find((monster) => monster.id === 'rotworm')).not.toHaveProperty('illusionable');
+    expect(marked.length).toBe([...real.monsters.values()].filter((monster) => monster.illusionable).length);
   });
 
   it('leva a ficha do Canary por monstro quando content.bestiary.entries a tem, e omite quando não (#601, ADR 0053 d.1)', () => {

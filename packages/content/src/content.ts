@@ -25,9 +25,9 @@ import {
 } from './schemas.js';
 import type {
   Ammunition, AmmunitionDefinition, Appearances, Bestiary, Blessing, Boosted, BotLimits, Bosstiary, Charm,
-  Combat, Loyalty, CompiledMitigation,
+  Combat, Loyalty, CompiledMitigation, ConditionSpec,
   CompiledReflect, DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
-  MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Skinning, Spell, Stamina, Supply,
+  MonsterDefinition, OutfitLook, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Skinning, Spell, Stamina, Supply,
   Training, Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
   WeaponPowerFormula, WeaponProfile, World,
 } from './schemas.js';
@@ -1754,6 +1754,39 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
+  // A aparência emprestada de uma condição `outfit` (#621, invariante 6): o `look` nomeia um
+  // monstro ou um item do catálogo, e o nome precisa existir — a mesma referência cruzada de
+  // `summons.entries`. `objectKey` não tem entidade de conteúdo do outro lado (é vocabulário
+  // semântico, como `appearances.abilities`): sem linha em `appearances.looks`, a ilusão é MUDA.
+  const outfitLookProblem = (look: OutfitLook): string | null => {
+    if ('monsterId' in look) {
+      return monsterDefinitions.has(look.monsterId) ? null : `monstro "${look.monsterId}"`;
+    }
+    if ('itemId' in look) {
+      return itemDefinitions.has(look.itemId) ? null : `item "${look.itemId}"`;
+    }
+    return null;
+  };
+  for (const monster of rawMonsterDefinitions.values()) {
+    const conditions: [string, ConditionSpec | undefined][] = [
+      ...(monster.abilities ?? []).map((ability): [string, ConditionSpec | undefined] => [
+        `ability "${ability.id}"`, ability.condition,
+      ]),
+      ...(monster.defenses ?? []).map((defense): [string, ConditionSpec | undefined] => [
+        `defense "${defense.id}"`, defense.condition,
+      ]),
+    ];
+    for (const [where, condition] of conditions) {
+      if (condition?.effect.kind !== 'outfit') continue;
+      const missing = outfitLookProblem(condition.effect.look);
+      if (missing !== null) {
+        problems.push(
+          `monstro "${monster.id}": ${where} veste o outfit de ${missing}, que não existe no catálogo`,
+        );
+      }
+    }
+  }
+
   // Referência cruzada: validar formato não basta. Um ponto de spawn apontando monstro
   // inexistente passa em qualquer schema e só falha quando alguém entra na hunt (#583, ADR
   // 0039 — toda hunt nasce dos pontos de spawn da rota, não de uma composição por dificuldade).
@@ -1931,6 +1964,8 @@ export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
     weapons: {},
     // Sem cadáver: fixture não fala de arte, e monstro sem linha aqui é válido (FUN-123).
     corpses: {},
+    // Sem aparência de objeto emprestada: chave sem linha é MUDA (#621).
+    looks: {},
     // Sem campo: fixture não fala de arte, e campo sem linha aqui é válido (#561, M31-06).
     fields: {},
     // Sem estágio de campo: idem, campo sem cadeia de arte é válido (#560).

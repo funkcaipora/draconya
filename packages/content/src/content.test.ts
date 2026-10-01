@@ -3315,7 +3315,7 @@ describe('imunidade de condição, invisibilidade e a Paralyze Rune (#559/#592, 
     expect(() => buildContent(base({ monsters: [{ ...rat, defenses: [chaveErrada] }] }))).toThrow(ContentError);
   });
 
-  it('monsterSchema.conditionImmunities aceita paralyze/drunk/invisible e as oito DOTs, e só elas', () => {
+  it('monsterSchema.conditionImmunities aceita paralyze/drunk/invisible/outfit e as oito DOTs, e só elas', () => {
     const content = buildContent(base({
       monsters: [{ ...rat, conditionImmunities: ['paralyze', 'invisible', 'bleeding', 'burning'] }],
     }));
@@ -3325,10 +3325,10 @@ describe('imunidade de condição, invisibilidade e a Paralyze Rune (#559/#592, 
       expect(() => buildContent(base({ monsters: [{ ...rat, conditionImmunities: [dot] }] })), dot)
         .not.toThrow();
     }
+    // `outfit` entrou com o M44-03 (#621): 119 monstros do Canary são imunes à ilusão.
     expect(() => buildContent(base({
-      // `outfit` não tem modelo ainda (M44-03) — o importador o reporta, o schema recusa.
       monsters: [{ ...rat, conditionImmunities: ['outfit'] }],
-    }))).toThrow(ContentError);
+    }))).not.toThrow();
     // O nome do CANARY (`bleed`) é do importador; o schema fala o vocabulário do ADR 0041.
     expect(() => buildContent(base({
       monsters: [{ ...rat, conditionImmunities: ['bleed'] }],

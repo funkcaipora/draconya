@@ -84,6 +84,12 @@ export interface SlotView {
    * o que o personagem aprendeu (`learned-spells` não chegou).
    */
   readonly unlearned: boolean;
+  /**
+   * O clique deste slot precisa da mira num ITEM do inventário (#621, `targets: 'item'`): a
+   * Chameleon Rune veste a aparência do item apontado. O clique arma a mira de item, e o clique
+   * seguinte num item da mochila/bolsa completa o `use-slot`.
+   */
+  readonly aimsAtItem: boolean;
 }
 
 /**
@@ -118,6 +124,7 @@ export function slotView(
     // Ação de aliado (`targets: 'friend'`) OU magia de mira manual (`aim: 'character'`, o Find
     // Person, #623) — dois campos porque só o primeiro abre o seletor de alvo do editor do bot.
     needsAim: catalogued?.targets === 'friend' || spell?.aim === 'character',
+    aimsAtItem: catalogued?.targets === 'item',
     unlearned: action.kind === 'spell' && !isSpellLearned(action.spellId, learnedSpells),
   };
 }

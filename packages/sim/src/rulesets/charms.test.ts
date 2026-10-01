@@ -1266,3 +1266,113 @@ describe('Cleanse também limpa rooted e feared (M44-04, #622, `Creature::getCle
     });
   }
 });
+
+describe('Cleanse também vale para o ataque `outfit` de monstro (#621, `CombatConditionFunc`)', () => {
+  // O ataque `outfit` não é golpe (`COMBAT_NONE`: sem bloqueio, esquiva nem dano), mas o primeiro
+  // bloco da `CombatConditionFunc` (`combat.cpp:1039-1062`) roda para QUALQUER condição de monstro
+  // num jogador: com o charm atribuído e uma condição limpável ativa, ele rola, limpa UMA, dá os
+  // 11 s de imunidade e `return`a antes de aplicar — a aparência não entra.
+  const illusionist = {
+    ...biter, id: 'illusionist', name: 'Illusionist',
+    abilities: [{
+      id: 'outfit', cadenceMs: 2_000, chance: 1, target: { range: 1 }, power: 0, damageType: 'physical',
+      condition: {
+        key: 'outfit', merge: 'strongest', durationMs: 30_000,
+        effect: { kind: 'outfit', look: { monsterId: 'bat' } },
+      },
+    }],
+  };
+  /** Um veneno ativo e longo, posto no herói ANTES da hunt (a fonte não importa para o Cleanse). */
+  const poisoned: ConditionState = {
+    key: 'poison', targetId: 'hero', expiresAtMs: 60_000, merge: 'refresh',
+    tick: { kind: 'damage', amount: 1, intervalMs: 1_000, damageType: 'earth' }, nextTickAtMs: 1_000,
+  };
+  const outfitRoute = {
+    ...route,
+    spawnPoints: [{ routeIndex: 0, radius: 3, monsterId: 'illusionist', respawnDelayMs: 600_000 }],
+  };
+  const scene = (opts: {
+    readonly assign?: Readonly<Record<string, string>>; readonly chance?: number;
+    readonly conditions?: readonly ConditionState[]; readonly profile?: string;
+  }) => {
+    const loaded = buildContent(raw({
+      monsters: [illusionist, bat], charms: catalogue({ cleanse: opts.chance ?? ALWAYS }),
+      routes: [outfitRoute],
+      ...(opts.profile === undefined ? {} : { combat: [{ ...combatV4, compatibilityProfile: opts.profile }] }),
+    }));
+    const started = start({
+      content: loaded, maxHealth: 100_000,
+      ...(opts.assign === undefined ? {} : { assign: opts.assign }),
+      ...(opts.conditions === undefined ? {} : { conditions: opts.conditions }),
+    });
+    started.session.advanceBy(50);
+    place(started.ruleset, [{ x: 1, y: 2 }]);
+    return started;
+  };
+  /** Avança até o `n`-ésimo lançamento do ataque `outfit` do monstro (um `monster-ability-cast`). */
+  const untilCast = (started: ReturnType<typeof scene>, n: number): void => {
+    let casts = 0;
+    for (let t = 0; t < 20_000 && casts < n; t += 50) {
+      started.session.advanceBy(50);
+      casts += started.session.drainEvents()
+        .filter((e) => e.kind === 'monster-ability-cast' && e.abilityId === 'outfit').length;
+    }
+    expect(casts).toBe(n);
+  };
+  const lookOfHero = (started: ReturnType<typeof scene>) => started.ruleset.lookOf(started.session, 'hero');
+
+  it('sem o charm, o ataque veste a aparência e o veneno segue (a linha de base)', () => {
+    const started = scene({ conditions: [poisoned] });
+    untilCast(started, 1);
+    expect(lookOfHero(started)).toEqual({ monsterId: 'bat' });
+    expect(started.hero.conditions.get('poison')).not.toBeNull();
+    expect(started.hero.cleanseImmunity.size).toBe(0);
+  });
+
+  it('com o charm e um veneno ativo: o lançamento limpa o veneno, dá 11 s de imunidade e NÃO veste a aparência', () => {
+    const started = scene({ assign: { cleanse: 'illusionist' }, conditions: [poisoned] });
+    untilCast(started, 1);
+    expect(started.hero.conditions.get('poison')).toBeNull();
+    expect(started.hero.conditions.get('outfit')).toBeNull();
+    expect(lookOfHero(started)).toBeNull();
+    const until = started.hero.cleanseImmunity.get('poison') ?? -1;
+    expect(until).toBeGreaterThan(started.session.nowMs + 10_000);
+    expect(until).toBeLessThanOrEqual(started.session.nowMs + 11_000);
+  });
+
+  it('sem condição limpável não há rolagem: o lançamento seguinte veste a aparência', () => {
+    const started = scene({ assign: { cleanse: 'illusionist' }, conditions: [poisoned] });
+    untilCast(started, 1); // o veneno vai embora, a aparência não entra
+    untilCast(started, 1); // nada a limpar agora: o `getCleansableConditions` vazio não rola
+    expect(lookOfHero(started)).toEqual({ monsterId: 'bat' });
+    expect(started.hero.conditions.get('outfit')).not.toBeNull();
+  });
+
+  it('com o charm mas sem condição limpável desde o início: veste no 1º lançamento, sem imunidade', () => {
+    const started = scene({ assign: { cleanse: 'illusionist' } });
+    untilCast(started, 1);
+    expect(lookOfHero(started)).toEqual({ monsterId: 'bat' });
+    expect(started.hero.cleanseImmunity.size).toBe(0);
+  });
+
+  it('chance zero: o charm não limpa e a aparência entra com o veneno ainda ativo', () => {
+    const started = scene({ assign: { cleanse: 'illusionist' }, chance: NEVER, conditions: [poisoned] });
+    untilCast(started, 1);
+    expect(started.hero.conditions.get('poison')).not.toBeNull();
+    expect(lookOfHero(started)).toEqual({ monsterId: 'bat' });
+  });
+
+  it('o charm atribuído a OUTRO monstro não rola contra este', () => {
+    const started = scene({ assign: { cleanse: 'bat' }, conditions: [poisoned] });
+    untilCast(started, 1);
+    expect(started.hero.conditions.get('poison')).not.toBeNull();
+    expect(lookOfHero(started)).toEqual({ monsterId: 'bat' });
+  });
+
+  it('só no estágio de Charms: o `combat-v3` não rola o Cleanse nem para o `outfit`', () => {
+    const started = scene({ assign: { cleanse: 'illusionist' }, conditions: [poisoned], profile: 'combat-v3' });
+    untilCast(started, 1);
+    expect(started.hero.conditions.get('poison')).not.toBeNull();
+    expect(lookOfHero(started)).toEqual({ monsterId: 'bat' });
+  });
+});
