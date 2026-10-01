@@ -1,0 +1,10 @@
+{
+  "id": "red-apple",
+  "name": "Red Apple",
+  "kind": "consumable",
+  "weight": 1.5,
+  "value": 0,
+  "stackable": true,
+  "effect": { "kind": "food", "durationMs": 72000 },
+  "_open": "Comida que a magia Food cria na mochila (#623, M44-05). durationMs = 6 × 12 s (foods.lua do Canary, item 3585, valor 6) em ms; peso de items.xml (150 de weight ÷ 100). value 0: comida não tem preço de venda no NPC; a bolsa da party a devolve ao líder em vez de vender (ADR 0027)."
+}

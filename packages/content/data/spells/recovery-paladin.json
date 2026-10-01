@@ -4,6 +4,7 @@
   "description": "Cura 20 pontos de vida a cada 3 segundos, por 60 segundos.",
   "vocationId": "paladin",
   "minLevel": 50,
+  "learnPrice": 4000,
   "manaCost": 75,
   "group": "healing",
   "groupCooldownMs": 1000,

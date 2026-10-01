@@ -1,0 +1,12 @@
+{
+  "id": "blessed-wooden-stake",
+  "name": "Blessed Wooden Stake",
+  "kind": "other",
+  "weight": 5,
+  "value": 0,
+  "source": {
+    "engine": "canary",
+    "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+    "path": "data/items/items.xml"
+  }
+}

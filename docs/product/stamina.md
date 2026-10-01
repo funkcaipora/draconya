@@ -19,7 +19,7 @@ Quando a stamina chega a zero, a hunt não é interrompida: o personagem continu
   (M32-01, #562). Eram 24 horas antes desta issue, um número nosso sem fonte no Tibia.
 - Recuperação fora de hunt: 1 minuto de tempo real recupera 1 minuto de stamina (proporção 1:1).
 - Treino conta como "fora de hunt" para fins de recuperação de stamina.
-- Em stamina zero, dentro da hunt: personagem continua se movendo, atacando, consumindo supplies/gold e pode morrer; não recebe XP; não recebe loot; abates não contam para a Bestiário.
+- Em stamina zero, dentro da hunt: personagem continua se movendo, atacando, consumindo supplies/gold e pode morrer; não recebe XP; não recebe loot; abates não contam para a Bestiário. **O abate de boss conta no Bosstiary mesmo assim** (#629): no Canary só `Player::gainExperience` tem o portão de stamina, e `addBosstiaryKill` não — ver [`bosses.md`](./bosses.md), "O Bosstiary".
 - Stamina zero, por si só, nunca encerra a hunt automaticamente.
 
 ## Não é um recurso "ticado", e isso é o desenho inteiro

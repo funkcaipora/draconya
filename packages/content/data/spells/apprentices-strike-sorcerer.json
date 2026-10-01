@@ -4,6 +4,7 @@
   "description": "Lança uma rajada de fogo no seu alvo atual.",
   "vocationId": "sorcerer",
   "minLevel": 8,
+  "learnPrice": 0,
   "manaCost": 6,
   "group": "attack",
   "groupCooldownMs": 2000,

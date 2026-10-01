@@ -202,6 +202,19 @@ export const CLIENT_TO_SERVER = {
    * 35: o 33 é do `charm-remove`, e o 34 é do `cancel-exit` (#802).
    */
   'set-fight-mode': 35,
+  /**
+   * Aprender UMA magia por gold (#624, ADR 0058 d.2; ADR 0052 d.2/d.4) — o `StdModule.learnSpell`
+   * do Tibia, como tela de serviço, sem diálogo de NPC. INTENÇÃO: o cliente diz QUAL magia
+   * (`spellId` do catálogo `content.spells`); vocação, level, "já aprendida", preço
+   * (`learnPrice`) e saldo são conferidos pelo servidor (invariante 4), dentro da sessão dona do
+   * personagem — nunca um endpoint `api` (invariante 9). Aceita na Cidade E na hunt: não há
+   * rolagem (ADR 0052 d.4), e no Tibia aprender magia não exige protect zone. O gold sai pelo
+   * ledger (invariante 10). Sucesso é `learned-spells` com o registro novo; recusa é
+   * `system-message`.
+   *
+   * 36: o 35 é do `set-fight-mode` (#550).
+   */
+  'learn-spell': 36,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -449,6 +462,28 @@ export const SERVER_TO_CLIENT = {
    * 45: o 44 é do `charms`.
    */
   'exit-pending': 45,
+  /**
+   * O Bosstiary do personagem (#629, ADR 0052 d.1): os abates por boss (chaveados pelo `raceId`
+   * do Canary, em texto), os pontos de boss e nada mais — o registro cru, como `bestiary` manda
+   * os abates crus. A tabela de níveis e a raridade de cada boss vêm no `catalogue` (fixadas na
+   * sessão, invariante 7); o cliente deriva o nível de cada boss do mesmo jeito que já deriva o
+   * marco do Bestiário (`bosstiary-progress.ts`). Sai no attach e sempre que um abate de boss
+   * muda o registro. Por PERSONAGEM, como `bestiary`: o Bosstiary é do personagem.
+   *
+   * 46: o 45 é do `exit-pending`.
+   */
+  bosstiary: 46,
+  /**
+   * As magias que o personagem APRENDEU (#624, ADR 0058 d.1): o registro cru de
+   * `CharacterRuntime.learnedSpells` (ids de `content.spells`). O que cada magia custa, exige e
+   * faz é do `catalogue` (fixado na sessão, invariante 7); a tela deriva "aprendida / à venda /
+   * bloqueada" e marca no slot da barra a magia ainda não aprendida — o cast é recusado no
+   * servidor (`spell-not-learned`) de qualquer jeito. Só para o DONO, como `blessings`/`charms`.
+   * Sai no attach e a cada `learn-spell` aceito.
+   *
+   * 47: o 46 é do `bosstiary` (#629), e o 45 é do `exit-pending` (#802).
+   */
+  'learned-spells': 47,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

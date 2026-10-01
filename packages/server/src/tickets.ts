@@ -17,7 +17,9 @@ import { randomBytes } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import { OutfitColors } from '@draconya/protocol';
 import { isCharacterStorageMap, isFightMode } from '@draconya/sim';
-import type { BestiaryState, CharacterStorageMap, CharmsState, FightMode } from '@draconya/sim';
+import type {
+  BestiaryState, BosstiaryState, CharacterStorageMap, CharmsState, FightMode, LearnedSpellsState,
+} from '@draconya/sim';
 import type { NodeStatus, SessionDirectory } from './directory.js';
 
 export interface TicketClaim {
@@ -177,6 +179,23 @@ export interface InitialCharacter {
    */
   readonly charms?: CharmsState;
   /**
+   * O Bosstiary (#629, ADR 0052 d.1): abates por boss (chave = `raceId`), pontos de boss e a
+   * versão. Entra na sessão, e não só sai dela, porque o nível de um boss depende do abate
+   * anterior — sem o registro de entrada, o abate 5 de um Nemesis na segunda hunt do dia seria
+   * o 1º. Validado como o Bestiário (`isBosstiaryState`). Ausente é quem nunca abateu um boss,
+   * ou ticket de um `api` anterior: a sessão parte vazia.
+   */
+  readonly bosstiary?: BosstiaryState;
+  /**
+   * As magias aprendidas (#624, ADR 0058 d.1, ADR 0052 d.1): os ids de `content.spells` que o
+   * personagem comprou. Entra na sessão, e não só sai dela, porque o CAST confere o registro
+   * (`casting.ts`) e `learn-spell` é aceito em qualquer sessão (Cidade e hunt) — sem ele, quem
+   * comprou ontem entraria hoje sem lançar nada. Validado como o Bestiário/Charms
+   * (`isLearnedSpellsState`). Ausente é personagem novo, que não aprendeu nada, ou ticket de um
+   * `api` anterior: a sessão parte vazia.
+   */
+  readonly learnedSpells?: LearnedSpellsState;
+  /**
    * Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, lido de `characters.fed_ms`.
    * Entra na sessão, e não só sai dela — sem isto, quem comeu antes de deslogar voltaria em
    * jejum. Ausente é quem nunca comeu, ou ticket de um `api` antigo: a sessão parte de `0`.
@@ -228,6 +247,14 @@ export interface InitialCharacter {
    * rodou), ou `api` antigo em deploy em rolagem — nenhuma hunt aplica o bônus.
    */
   readonly boostedMonsterId?: string;
+  /**
+   * O bônus de Loyalty (M44, #628, ADR 0052 decisão 5), em percentual inteiro: a `api` o calcula
+   * de `account.created_at` na hora da EMISSÃO (`loyalty.ts`) e o `game` o fixa no
+   * `CharacterRuntime` — nunca recalculado durante a sessão, como a versão de conteúdo. Ausente é
+   * conta abaixo do primeiro degrau, conteúdo sem `loyalty/` ou `api` antigo em deploy em
+   * rolagem: a sessão vale o nível BASE de toda skill.
+   */
+  readonly loyaltyBonusPercent?: number;
 }
 
 export interface IssuedTicket {
@@ -677,6 +704,11 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     // A economia de Charms (M39-02, #602): mesma régua do Bestiário/estoque — forma validada
     // por inteiro, torto vira AUSENTE, nunca ticket recusado.
     ...(isCharmsState(initial['charms']) ? { charms: initial['charms'] } : {}),
+    // O Bosstiary (#629): mesma régua — forma validada por inteiro, torto vira AUSENTE.
+    ...(isBosstiaryState(initial['bosstiary']) ? { bosstiary: initial['bosstiary'] } : {}),
+    // As magias aprendidas (#624): mesma régua — forma validada por inteiro, torto vira AUSENTE,
+    // nunca ticket recusado.
+    ...(isLearnedSpellsState(initial['learnedSpells']) ? { learnedSpells: initial['learnedSpells'] } : {}),
     // Comida ativa (#726): inteiro seguro não negativo, ou AUSENTE — a mesma régua acima.
     ...(typeof initial['fedMs'] === 'number' && Number.isSafeInteger(initial['fedMs'])
       && initial['fedMs'] >= 0
@@ -705,6 +737,13 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     // nunca ticket recusado — como a vocação.
     ...(typeof initial['boostedMonsterId'] === 'string' && initial['boostedMonsterId'].length > 0
       ? { boostedMonsterId: initial['boostedMonsterId'] }
+      : {}),
+    // O bônus de Loyalty (#628): inteiro de 1 a 65535 (o `uint16_t` do Canary) ou AUSENTE, nunca
+    // ticket recusado — a mesma régua da boosted. Um valor torto vale o nível base.
+    ...(typeof initial['loyaltyBonusPercent'] === 'number'
+      && Number.isInteger(initial['loyaltyBonusPercent'])
+      && initial['loyaltyBonusPercent'] > 0 && initial['loyaltyBonusPercent'] <= 65_535
+      ? { loyaltyBonusPercent: initial['loyaltyBonusPercent'] }
       : {}),
   };
 }
@@ -742,6 +781,28 @@ export function isBestiaryState(value: unknown): value is BestiaryState {
 }
 
 /**
+ * A forma de `BosstiaryState` (#629, ADR 0052 d.1): `kills` é um mapa de inteiros seguros não
+ * negativos sob chaves não vazias (o `raceId` em texto), `points` um inteiro seguro não negativo e
+ * `version` um número. Por forma, nunca por conteúdo de domínio — um `raceId` que nenhum boss do
+ * catálogo tem simplesmente não resolve nada. Um valor que não bate vira AUSENTE, nunca ticket
+ * recusado, pela mesma razão do Bestiário: a linha é `jsonb` sem CHECK.
+ *
+ * Exportada para o `api` conferir a linha com a MESMA régua que o `consume` usa.
+ */
+export function isBosstiaryState(value: unknown): value is BosstiaryState {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record['points'] !== 'number' || !Number.isSafeInteger(record['points']) || record['points'] < 0
+    || typeof record['version'] !== 'number'
+  ) return false;
+  const kills = record['kills'];
+  if (typeof kills !== 'object' || kills === null || Array.isArray(kills)) return false;
+  return Object.entries(kills).every(([raceId, count]) =>
+    raceId.length > 0 && typeof count === 'number' && Number.isSafeInteger(count) && count >= 0);
+}
+
+/**
  * A forma de `CharmsState` (M39-02, #602, ADR 0052 d.1): os quatro campos do registro, cada um
  * conferido por forma — nunca por conteúdo de domínio (isso é `Charms.unlock`/`assign`/`remove`,
  * no `sim`). Um valor que não bate vira AUSENTE, nunca ticket recusado, pela mesma razão do
@@ -767,6 +828,25 @@ export function isCharmsState(value: unknown): value is CharmsState {
   if (typeof assignments !== 'object' || assignments === null || Array.isArray(assignments)) return false;
   return Object.entries(assignments).every(([charmId, monsterId]) =>
     charmId.length > 0 && typeof monsterId === 'string' && monsterId.length > 0);
+}
+
+/**
+ * A forma de `LearnedSpellsState` (#624, ADR 0058, ADR 0052 d.1): `spellIds` é uma lista de ids
+ * não vazios, SEM repetição, e `version` um número — conferida por forma, nunca por conteúdo
+ * (um id fora do catálogo é dado do jogador, ADR 0014, e simplesmente não resolve nada). Um valor
+ * que não bate vira AUSENTE, nunca ticket recusado, pela mesma razão do Bestiário: a linha é
+ * `jsonb` sem CHECK.
+ *
+ * Exportada para o `api` conferir a linha com a MESMA régua que o `consume` usa.
+ */
+export function isLearnedSpellsState(value: unknown): value is LearnedSpellsState {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (typeof record['version'] !== 'number') return false;
+  const spellIds = record['spellIds'];
+  if (!Array.isArray(spellIds)) return false;
+  if (!spellIds.every((id) => typeof id === 'string' && id.length > 0)) return false;
+  return new Set(spellIds).size === spellIds.length;
 }
 
 /**

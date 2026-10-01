@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { CharmsState } from '@draconya/sim';
+import type { BosstiaryState, CharmsState, LearnedSpellsState } from '@draconya/sim';
 import { ReceiptStore, type SessionReceipt } from './receipts.js';
 import { connectTestRedis } from './testing/redis.js';
 
@@ -151,6 +151,22 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('bestiary');
   });
 
+  it('carries the Bosstiary through Redis and back, and a receipt without one stays without (#629)', async () => {
+    // A mesma lista de PERMISSÃO do Bestiário e dos Charms: campo que não entra em `parseReceipt`
+    // some no caminho de volta sem erro nenhum, e o ledger nunca veria um abate de boss.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const bosstiary: BosstiaryState = { kills: { '639': 3, '1811': 20 }, points: 70, version: 1 };
+    await store.save(receiptOf(randomUUID(), characterId, { bosstiary }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.bosstiary).toEqual(bosstiary);
+    // Sem o campo, sem a chave: o ledger distingue "não veio" (não toca na coluna) de "veio vazio".
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('bosstiary');
+  });
+
   it('carries the Charms economy through Redis and back, and a receipt without one stays without (#602)', async () => {
     // A mesma lista de PERMISSÃO do Bestiário logo acima. Diferente dele, este registro é
     // ABSOLUTO (última escrita vence, ADR 0052 d.1) — mas a ida e volta pelo Redis é a MESMA
@@ -167,6 +183,22 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
 
     expect(found.find((receipt) => receipt.seq === 1)?.charms).toEqual(charms);
     expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('charms');
+  });
+
+  it('carries the learned spells through Redis and back, and a receipt without one stays without (#624)', async () => {
+    // A mesma lista de PERMISSÃO do Bestiário e dos Charms: campo que não entra em
+    // `parseReceipt` some no caminho de volta sem erro — e o personagem perderia a magia que
+    // pagou no próximo logout.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const learnedSpells: LearnedSpellsState = { spellIds: ['berserk', 'wound-cleansing'], version: 1 };
+    await store.save(receiptOf(randomUUID(), characterId, { learnedSpells }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.learnedSpells).toEqual(learnedSpells);
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('learnedSpells');
   });
 
   it('carries the ammo selection through Redis and back, and a receipt without one stays without (#152)', async () => {

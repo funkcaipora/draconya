@@ -4,6 +4,7 @@
   "description": "Fere o seu alvo, causando dano físico ao longo do tempo.",
   "vocationId": "knight",
   "minLevel": 40,
+  "learnPrice": 2500,
   "manaCost": 30,
   "group": "attack",
   "groupCooldownMs": 2000,

@@ -110,6 +110,22 @@ describe('settleSnapshotAsReceipt (#527)', () => {
     ]);
   });
 
+  it('carries the Bosstiary of the OWNER (#629), and a snapshot without one omits the key', async () => {
+    // Monotônico como o Bestiário (o ledger funde pelo maior): sem ele aqui, o abate de boss de uma
+    // sessão irrestaurável sumia junto com o snapshot.
+    const { receipts, saved } = fakeReceipts();
+    const bosstiary = { kills: { '639': 3 }, points: 40, version: 1 };
+    const snapshot: SessionSnapshot = {
+      ...baseSnapshot,
+      participants: [{ ...baseSnapshot.participants[0]!, bosstiary }],
+    };
+    await settleSnapshotAsReceipt(snapshot, { characterId: 'a', accountId: 'acc-a', receipts });
+    expect(saved[0]?.bosstiary).toEqual(bosstiary);
+
+    await settleSnapshotAsReceipt(baseSnapshot, { characterId: 'a', accountId: 'acc-a', receipts });
+    expect(saved[1]).not.toHaveProperty('bosstiary');
+  });
+
   it('carries the posture of the OWNER (#550), and a snapshot without one is the Canary offensive default', async () => {
     const { receipts, saved } = fakeReceipts();
     const snapshot: SessionSnapshot = {
@@ -124,6 +140,23 @@ describe('settleSnapshotAsReceipt (#527)', () => {
     const { receipts: other, saved: otherSaved } = fakeReceipts();
     await settleSnapshotAsReceipt(baseSnapshot, { characterId: 'a', accountId: 'acc-a', receipts: other });
     expect(otherSaved[0]?.fightMode).toBe('attack');
+  });
+
+  it('carries the learned spells of the OWNER (#624), so a `learn-spell` accepted before the crash is not lost', async () => {
+    const { receipts, saved } = fakeReceipts();
+    const learnedSpells = { spellIds: ['berserk', 'wound-cleansing'], version: 1 };
+    const snapshot: SessionSnapshot = {
+      ...baseSnapshot,
+      participants: [{ ...baseSnapshot.participants[0]!, learnedSpells }],
+    };
+    await settleSnapshotAsReceipt(snapshot, { characterId: 'a', accountId: 'acc-a', receipts });
+    expect(saved[0]?.learnedSpells).toEqual(learnedSpells);
+
+    // Snapshot anterior à issue: sem a chave no dono, e o extrato NÃO inventa um registro vazio —
+    // o ledger não toca na coluna, e as magias do Postgres (migração 0024) continuam valendo.
+    const { receipts: legacy, saved: legacySaved } = fakeReceipts();
+    await settleSnapshotAsReceipt(baseSnapshot, { characterId: 'a', accountId: 'acc-a', receipts: legacy });
+    expect(legacySaved[0]).not.toHaveProperty('learnedSpells');
   });
 
   it('omits every optional field when the participant record has none of them', async () => {

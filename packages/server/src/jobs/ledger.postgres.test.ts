@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
 import { CharacterRuntime, createHuntSession, Inventory, levelForXp } from '@draconya/sim';
-import type { CharmsState, InventoryState } from '@draconya/sim';
+import type { BosstiaryState, CharmsState, InventoryState, LearnedSpellsState } from '@draconya/sim';
 import { NEUTRAL_RATES } from '@draconya/content';
 import type { Progression, Vocation } from '@draconya/content';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -110,7 +110,7 @@ const characterRow = async (
 ): Promise<{
   xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
   ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown;
-  charms: unknown; blessings: number;
+  charms: unknown; bosstiary: unknown; learnedSpells: unknown; blessings: number;
 }> => {
   const [row] = await database.database.db
     .select({
@@ -124,6 +124,8 @@ const characterRow = async (
       supplyStock: characters.supplyStock,
       ammunitionStock: characters.ammunitionStock,
       charms: characters.charms,
+      bosstiary: characters.bosstiary,
+      learnedSpells: characters.learnedSpells,
       blessings: characters.blessings,
     })
     .from(characters)
@@ -131,7 +133,7 @@ const characterRow = async (
   return row as {
     xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
     ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown;
-    charms: unknown; blessings: number;
+    charms: unknown; bosstiary: unknown; learnedSpells: unknown; blessings: number;
   };
 };
 
@@ -750,7 +752,7 @@ describe.runIf(ready)('a munição escolhida chega ao Postgres pelo extrato (#15
 });
 
 describe.runIf(ready)('a economia de Charms chega ao Postgres pelo extrato (M39-02, #602, ADR 0052 d.1)', () => {
-  it('grava o registro, a última escrita vence, e o extrato sem o campo não toca na coluna', async () => {
+  it('grava o registro, cresce a cada extrato, e o extrato sem o campo não toca na coluna', async () => {
     // ABSOLUTA como `ammo` — NÃO fundida pelo maior como o Bestiário: não há aqui um contador
     // externo monotônico a fundir, é o estado final da sessão dona.
     const database = db as NonNullable<typeof db>;
@@ -773,6 +775,151 @@ describe.runIf(ready)('a economia de Charms chega ao Postgres pelo extrato (M39-
     // O extrato SEM o campo (seq 3, uma sessão de Cidade que não mexeu em Charm) não apaga o
     // que o extrato anterior gravou.
     expect((await characterRow(database, characterId)).charms).toEqual(second);
+  });
+});
+
+describe.runIf(ready)('o Bosstiary chega ao Postgres pelo extrato (#629, ADR 0052 d.1)', () => {
+  it('nasce nulo, funde pelo MAIOR de cada boss e dos pontos, e o extrato sem o campo não toca na coluna', async () => {
+    // Como o Bestiário — e ao contrário dos Charms: abate e ponto de boss só sobem, então um
+    // extrato ANTIGO processado fora de ordem não pode rebaixar o que um mais novo já gravou.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    expect((await characterRow(database, characterId)).bosstiary).toBeNull();
+    const receipts = new ReceiptStore(redis);
+
+    const newer: BosstiaryState = { kills: { '639': 5, '1811': 2 }, points: 100, version: 1 };
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), bosstiary: newer });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).bosstiary).toEqual(newer);
+
+    // Um extrato mais velho (menos abates de um boss, um boss a mais) chega depois: fica o maior
+    // de cada um, e o boss novo entra.
+    const older: BosstiaryState = { kills: { '639': 3, '100': 1 }, points: 40, version: 1 };
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2, bosstiary: older });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).bosstiary)
+      .toEqual({ kills: { '639': 5, '1811': 2, '100': 1 }, points: 100, version: 1 });
+
+    // Extrato de Cidade (sem o campo) não apaga nada.
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).bosstiary)
+      .toEqual({ kills: { '639': 5, '1811': 2, '100': 1 }, points: 100, version: 1 });
+  });
+});
+
+describe.runIf(ready)('as magias aprendidas chegam ao Postgres pelo extrato (#624, ADR 0058, ADR 0052 d.1)', () => {
+  it('nasce nulo (personagem novo), grava o registro, cresce a cada extrato, e o extrato sem o campo não toca na coluna', async () => {
+    // O registro só CRESCE, e o ledger o FUNDE pela união (ADR 0058, Emenda, ponto 6) — ao contrário
+    // de `charms`, que é última-escrita-vence. Este caso é o caminho feliz; a ordem trocada e a
+    // base desconhecida têm teste próprio abaixo.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    expect((await characterRow(database, characterId)).learnedSpells).toBeNull();
+    const receipts = new ReceiptStore(redis);
+    const first: LearnedSpellsState = { spellIds: ['wound-cleansing'], version: 1 };
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), learnedSpells: first });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).learnedSpells).toEqual(first);
+
+    const second: LearnedSpellsState = { spellIds: ['wound-cleansing', 'berserk'], version: 1 };
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2, learnedSpells: second });
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    // O extrato SEM o campo (seq 3, um nó anterior a esta issue) não apaga o que o anterior gravou.
+    expect((await characterRow(database, characterId)).learnedSpells).toEqual(second);
+  });
+
+  it('extratos fora de ordem: o antigo chegando DEPOIS do novo não derruba a magia já paga', async () => {
+    // O `SCAN` de `pending()` não ordena. A ida da Cidade para a hunt grava um extrato durável
+    // com `[wound-cleansing]`; na hunt o jogador compra o Berserk e o extrato final leva os dois,
+    // com os 2 500 já em `goldSpent`. Se a varredura atrasa, os dois ficam pendentes juntos.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    await database.database.db.update(characters).set({ gold: 10_000 }).where(eq(characters.id, characterId));
+    const receipts = new ReceiptStore(redis);
+    const sweep = () => writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    const spent = (goldSpent: number) => ({
+      aggregates: { ...receiptOf('x', characterId).aggregates, goldGained: 0, goldSpent },
+    });
+    const city = {
+      ...receiptOf(randomUUID(), characterId, spent(0)),
+      seq: 1,
+      learnedSpells: { spellIds: ['wound-cleansing'], version: 1 } satisfies LearnedSpellsState,
+    };
+    const hunt = {
+      ...receiptOf(randomUUID(), characterId, spent(2_500)),
+      seq: 2,
+      learnedSpells: { spellIds: ['wound-cleansing', 'berserk'], version: 1 } satisfies LearnedSpellsState,
+    };
+
+    // O mais NOVO primeiro, o mais antigo depois — a ordem que quebrava a última-escrita-vence.
+    await receipts.save(hunt);
+    await sweep();
+    await receipts.save(city);
+    await sweep();
+
+    const row = await characterRow(database, characterId);
+    expect(row.learnedSpells).toEqual({ spellIds: ['wound-cleansing', 'berserk'], version: 1 });
+    // O gold é delta: os 2 500 ficaram debitados UMA vez, e agora a magia que eles pagaram ficou.
+    expect(row.gold).toBe(10_000 - 2_500);
+  });
+
+  it('extrato de base desconhecida (só a compra) não apaga a concessão da migração (ADR 0014)', async () => {
+    // Uma sessão retomada de um snapshot anterior à #624 não sabe o registro; ao comprar UMA magia
+    // o extrato leva `[berserk]`. A linha já tem as magias que a migração 0024 concedeu.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const granted: LearnedSpellsState = { spellIds: ['wound-cleansing', 'brutal-strike'], version: 1 };
+    await database.database.db.update(characters).set({ learnedSpells: granted }).where(eq(characters.id, characterId));
+    const receipts = new ReceiptStore(redis);
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId), learnedSpells: { spellIds: ['berserk'], version: 1 },
+    });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+
+    expect((await characterRow(database, characterId)).learnedSpells)
+      .toEqual({ spellIds: ['wound-cleansing', 'brutal-strike', 'berserk'], version: 1 });
+  });
+
+  it('uma linha torta (que o ticket já trataria como ausente) não derruba o extrato nem vira o registro', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    await database.database.db.update(characters)
+      .set({ learnedSpells: { spellIds: 'not-a-list' } }).where(eq(characters.id, characterId));
+    const receipts = new ReceiptStore(redis);
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId), learnedSpells: { spellIds: ['berserk'], version: 1 },
+    });
+    const result = await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+
+    expect(result).toEqual({ written: 1, failed: 0 });
+    expect((await characterRow(database, characterId)).learnedSpells)
+      .toEqual({ spellIds: ['berserk'], version: 1 });
+  });
+
+  it('o gold da compra e o registro entram no MESMO extrato: um retry não cobra duas vezes (invariante 10)', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    await database.database.db.update(characters).set({ gold: 10_000 }).where(eq(characters.id, characterId));
+    const before = (await characterRow(database, characterId)).gold;
+    expect(before).toBe(10_000);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const purchase = {
+      ...receiptOf(sessionId, characterId),
+      aggregates: { ...receiptOf(sessionId, characterId).aggregates, goldGained: 0, goldSpent: 2_500 },
+      learnedSpells: { spellIds: ['berserk'], version: 1 },
+    } satisfies Omit<SessionReceipt, 'endedAtMs'>;
+    // O MESMO `(session_id, seq)` duas vezes — o retry que o ledger existe para não duplicar.
+    await receipts.save(purchase);
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    await receipts.save(purchase);
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+
+    const row = await characterRow(database, characterId);
+    expect(row.gold).toBe(before - 2_500);
+    expect(row.learnedSpells).toEqual({ spellIds: ['berserk'], version: 1 });
   });
 });
 

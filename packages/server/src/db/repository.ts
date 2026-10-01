@@ -65,6 +65,19 @@ export interface CharacterRecord {
    * escreve é o ledger, na transação do extrato (ADR 0052 d.1).
    */
   readonly charms: unknown;
+  /**
+   * O Bosstiary (#629), como veio do banco. `unknown` pela mesma razão de `bestiary`: a forma
+   * (`BosstiaryState`) é do `sim`, e quem a confere é quem monta o ticket. `null` é personagem
+   * que nunca abateu um boss. Sem método de escrita: quem escreve é o ledger (ADR 0052 d.1).
+   */
+  readonly bosstiary: unknown;
+  /**
+   * As magias aprendidas (#624, ADR 0058), como vieram do banco. `unknown` pela mesma razão de
+   * `charms`: a forma (`LearnedSpellsState`) é do `sim`, e quem a confere é quem monta o ticket.
+   * `null` é personagem novo, que não aprendeu nada. Sem método de escrita: quem escreve é o
+   * ledger, na transação do extrato (ADR 0052 d.1).
+   */
+  readonly learnedSpells: unknown;
   /** Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, em milissegundos. `0` é ninguém comeu. */
   readonly fedMs: number;
   /** As sete bênçãos PvE (#570, ADR 0052): BITMASK de `CharacterRuntime.blessings`. `0` é nenhuma. */
@@ -145,6 +158,13 @@ export interface FriendView {
 
 export interface GameRepository {
   ensureAccount(identity: { externalAuthId: string; email: string }): Promise<AccountRecord>;
+  /**
+   * Quando a conta nasceu (`account.created_at`) — a idade que o Loyalty (#628, ADR 0052 d.5)
+   * conta na emissão do ticket. `null` para uma conta que não existe. Leitura só do carimbo, e
+   * não o `AccountRecord` inteiro: quem chama é a `api`, uma vez por ticket, e a linha da conta
+   * não tem mais nada de que o ticket precise.
+   */
+  getAccountCreatedAt(accountId: string): Promise<Date | null>;
   /**
    * Cria o personagem. `initial.botConfig` é a configuração de bot com que ele NASCE (FUN-114)
    * — a padrão do conteúdo, gravada aqui porque o personagem novo precisa entrar na primeira
@@ -251,6 +271,15 @@ export class DrizzleGameRepository implements GameRepository {
       }
       throw error;
     }
+  }
+
+  async getAccountCreatedAt(accountId: string): Promise<Date | null> {
+    const rows = await this.#db
+      .select({ createdAt: accounts.createdAt })
+      .from(accounts)
+      .where(eq(accounts.id, accountId))
+      .limit(1);
+    return rows[0]?.createdAt ?? null;
   }
 
   async createCharacter(
@@ -589,6 +618,8 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     supplyStock: row.supplyStock,
     ammunitionStock: row.ammunitionStock,
     charms: row.charms,
+    bosstiary: row.bosstiary,
+    learnedSpells: row.learnedSpells,
     fedMs: row.fedMs,
     blessings: row.blessings,
     fightMode: row.fightMode,

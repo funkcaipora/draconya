@@ -4,6 +4,7 @@
   "description": "Causa dano mágico no seu alvo atual.",
   "vocationId": "druid",
   "minLevel": 16,
+  "learnPrice": 800,
   "manaCost": 20,
   "group": "attack",
   "groupCooldownMs": 2000,

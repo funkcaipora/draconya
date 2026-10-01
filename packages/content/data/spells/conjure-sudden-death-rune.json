@@ -4,6 +4,7 @@
   "description": "Conjura cargas da Sudden Death Rune, consumindo uma runa em branco.",
   "vocationId": "sorcerer",
   "minLevel": 45,
+  "learnPrice": 3000,
   "manaCost": 985,
   "soulCost": 5,
   "group": "support",
