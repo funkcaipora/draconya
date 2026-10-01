@@ -159,6 +159,9 @@ function start(
     gold: over.gold ?? 1_000, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
     ...(over.inventory === undefined ? {} : { inventory: over.inventory }),
   });
+  // O herói sabe toda magia do conteúdo do teste (#624): o portão do aprendizado não é o assunto
+  // deste arquivo (a Creature Illusion de teste é uma magia como as outras).
+  for (const id of loaded.spells.keys()) hero.learnedSpells.grant(id);
   session.enter(hero);
   // O nascimento inicial é um evento da fila (`SPAWN`, atraso 0): sem este primeiro avanço a cena
   // ainda não tem monstro nenhum.

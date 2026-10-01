@@ -4,6 +4,7 @@
   "description": "Veste o aspecto de outro monstro por 180 segundos.",
   "vocationId": "druid",
   "minLevel": 23,
+  "learnPrice": 1000,
   "manaCost": 100,
   "group": "support",
   "groupCooldownMs": 2000,
