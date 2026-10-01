@@ -50,7 +50,8 @@ const KNOWN_SPELLS = [
   'flame-strike', 'great-death-beam', 'great-energy-beam', 'great-fireball-rune', 'haste', 'heal',
   'heal-party', 'ice-strike', 'intense-healing', 'intense-healing-rune', 'invisibility-druid',
   'light-healing', 'long', 'magic-shield', 'nature-heal', 'paralyze-rune', 'player-fire-field',
-  'protect-party', 'recovery', 'short', 'strike', 'sudden-death-rune', 'ultimate-healing-rune',
+  'protect-party', 'recovery', 'short', 'strike', 'sudden-death-rune', 'summon-creature', 'swift-foot',
+  'ultimate-healing-rune',
 ];
 
 const hero = (over: Partial<{
