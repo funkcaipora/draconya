@@ -49,7 +49,7 @@ import type { Logger } from '../log.js';
 import type { InitialCharacter, PartyTicket } from '../tickets.js';
 import { AreaOfInterest } from './aoi.js';
 import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
-import { hitEffectOf, monsterLookOf } from './monster-look.js';
+import { hitEffectOf, isPhysicalHit, monsterLookOf } from './monster-look.js';
 import { REFUSAL_TEXT, TransitionError, refuseTransition } from './transitions.js';
 import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
 
@@ -3264,7 +3264,8 @@ export class SessionHost {
    *
    * O `sim` diz O QUE aconteceu; a tabela de aparências diz o que DESENHAR (invariante 6):
    *
-   *   creature-hit     → o número, e o sangue do corpo a corpo (`hits.melee`) — só quando
+   *   creature-hit     → o número, e o efeito do golpe FÍSICO (`hits.byRace` pela raça do alvo,
+   *                      `hits.melee` sem ela; #620) — de corpo a corpo OU de magia, e só quando
    *                      saiu vida: golpe absorvido inteiro mostra "0", como no Tibia, mas não
    *                      sangra, porque sangue é o que a armadura acabou de impedir;
    *   creature-healed  → o número em verde. O efeito da cura NÃO sai daqui: ele é do
@@ -3305,10 +3306,14 @@ export class SessionHost {
         });
         // O efeito do golpe físico segue a RAÇA de quem o levou (#620, `combatGetTypeInfo` do
         // Canary): sangue, gota de veneno, "hit area" cinza… Só a apresentação lê a raça.
-        const blood = appearances === undefined
+        // O gatilho é o ELEMENTO do golpe, e não a origem: `Game::sendEffects` roda em todo dano
+        // com valor, de corpo a corpo, de magia ou de runa, e só `COMBAT_PHYSICALDAMAGE` cai no
+        // `switch` da raça — o mesmo critério que colore o número no cliente (`isPhysicalHit`).
+        const blood = appearances === undefined || event.amount <= 0
+          || !isPhysicalHit(event.source, event.damageType)
           ? undefined
           : hitEffectOf(appearances.hits, hosted.raceBySubject.get(String(event.creatureId)));
-        if (event.source === 'melee' && event.amount > 0 && blood !== undefined) {
+        if (blood !== undefined) {
           messages.push({ type: 'effect', position: event.position, effectId: blood });
         }
         break;

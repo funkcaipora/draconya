@@ -68,3 +68,14 @@ export function hitEffectOf(
 ): number | undefined {
   return hits.byRace?.[race ?? DEFAULT_MONSTER_RACE] ?? hits.melee;
 }
+
+/**
+ * O golpe é FÍSICO? É o gatilho do efeito por raça (#620): `Game::combatGetTypeInfo` do Canary só
+ * escolhe cor e efeito pela raça do alvo quando o tipo é `COMBAT_PHYSICALDAMAGE`, seja de corpo a
+ * corpo, de magia ou de runa — e é por isso que `source` sozinho não decide. Sem o elemento (um
+ * emissor ou nó anterior à #479) vale a leitura de antes: corpo a corpo é físico, e é a mesma
+ * regra que o cliente usa para colorir o número (`floatingTextColor`).
+ */
+export function isPhysicalHit(source: 'melee' | 'spell', damageType: string | undefined): boolean {
+  return damageType === undefined ? source === 'melee' : damageType === 'physical';
+}

@@ -493,7 +493,8 @@ criaturas do `session-state`. **O monstro também a traz desde o #620**, mas do 
 luz e falas), só lido da definição do catálogo fixado na sessão e sem que o `sim` leia nada.
 `raceBySubject` (no `HostedSession`) guarda a raça dos monstros que não são `blood` até o
 `creature-disappear`: o abate tira o monstro do ruleset antes de o golpe fatal ser apresentado, e a
-raça é o que escolhe o efeito do golpe (`appearances.hits.byRace`).
+raça é o que escolhe o efeito do golpe FÍSICO (`appearances.hits.byRace`), de corpo a corpo ou de
+magia — o gatilho é o elemento (`isPhysicalHit`), como o `Game::sendEffects` do Canary, e não a origem.
 
 Três coisas que seguem disso:
 

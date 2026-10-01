@@ -3641,6 +3641,8 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     skills: readonly unknown[];
     /** O `hits` da tabela de aparências, trocado por cima do de teste (#620: o efeito por raça). */
     hits: Record<string, unknown>;
+    /** Magias a mais no conteúdo, além de `strike` e `blast` (#620: o golpe FÍSICO de magia). */
+    spells: readonly unknown[];
   }> = {}) {
     const raw = rawTestContent();
     // As armas precisam de linha na tabela de aparência (FUN-94); a munição abstrata, só do
@@ -3674,7 +3676,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
       }),
       ...armory,
       appearances: [placeholderAppearances({ ...raw, ...armory })],
-      spells: [...(raw.spells ?? []), STRIKE, BLAST],
+      spells: [...(raw.spells ?? []), STRIKE, BLAST, ...(over.spells ?? [])],
       progression: [{
         ...TEST_PROGRESSION, startingMana: 200,
         ...(over.regen === false ? { regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } } : {}),
@@ -4346,6 +4348,49 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     // Os dois lados aconteceram: sem isso o teste só provaria um deles.
     expect(onRat).toBeGreaterThan(0);
     expect(onHero).toBeGreaterThan(0);
+  });
+
+  it('o golpe físico de MAGIA também segue a raça — o gatilho é o elemento, e não a origem (#620)', () => {
+    // `Game::sendEffects` roda em todo dano com valor, de corpo a corpo ou de magia, e só o tipo
+    // `COMBAT_PHYSICALDAMAGE` cai no `switch` da raça. A magia física (Explosion, Inflict Wound…)
+    // num rato venenoso solta a gota de veneno (17) logo depois do `creature-hit`; a de
+    // elemento — o `strike` de teste é `arcane` — não solta efeito de raça nenhum.
+    //
+    // Mutação que mata: voltar a guarda para `event.source === 'melee'` — o golpe `spell`
+    // físico fica sem o efeito 17; ou tirar a guarda do elemento — o `strike` arcano passa a
+    // soltar 17 também.
+    const physical = {
+      id: 'wound', name: 'Ferida', manaCost: 15, cooldownMs: 2_000,
+      effect: { kind: 'damage', power: 40, range: 3, damageType: 'physical' },
+    };
+    const run = (spellId: string) => {
+      const { runFor, received, heroId } = hunt({
+        rat: { race: 'venom', health: 200 }, hits: { melee: 1, byRace: { venom: 17 } },
+        spells: [physical],
+        bot: rules({ attack: [{
+          when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId },
+        }] }),
+      });
+      runFor(5_000);
+      const all = received();
+      return all
+        .map((message, index) => ({ message, next: all[index + 1] }))
+        .filter(({ message }) => message.type === 'creature-hit' && message.kind === 'spell'
+          && message.id !== heroId && message.amount > 0);
+    };
+
+    const physicalHits = run('wound');
+    expect(physicalHits.length).toBeGreaterThan(0);
+    for (const { message, next } of physicalHits) {
+      expect(message).toMatchObject({ damageType: 'physical' });
+      expect(next).toMatchObject({ type: 'effect', effectId: 17 });
+    }
+    const arcaneHits = run('strike');
+    expect(arcaneHits.length).toBeGreaterThan(0);
+    for (const { message, next } of arcaneHits) {
+      expect(message).toMatchObject({ damageType: 'arcane' });
+      expect(next?.type === 'effect' && next.effectId === 17).toBe(false);
+    }
   });
 
   it('sem `byRace` na tabela, todo golpe físico sangra com hits.melee como antes (#620)', () => {

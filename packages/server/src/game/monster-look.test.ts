@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { monsterSchema } from '@draconya/content';
 import type { Monster } from '@draconya/content';
 import { CreatureVoices, MonsterRace } from '@draconya/protocol';
-import { hitEffectOf, monsterLookOf } from './monster-look.js';
+import { hitEffectOf, isPhysicalHit, monsterLookOf } from './monster-look.js';
 
 /** Um monstro na forma que o catálogo entrega: `outfitId` resolvido, o resto do schema. */
 function monsterWith(patch: Record<string, unknown>): Monster {
@@ -86,5 +86,23 @@ describe('hitEffectOf (#620)', () => {
   it('sem linha nenhuma o golpe não tem efeito — o CONST_ME_NONE do Canary', () => {
     expect(hitEffectOf({}, 'venom')).toBeUndefined();
     expect(hitEffectOf({ byRace: { venom: 17 } }, 'undead')).toBeUndefined();
+  });
+});
+
+describe('isPhysicalHit (#620)', () => {
+  it('o elemento decide: `physical` é físico seja a origem corpo a corpo ou magia', () => {
+    expect(isPhysicalHit('melee', 'physical')).toBe(true);
+    expect(isPhysicalHit('spell', 'physical')).toBe(true);
+  });
+
+  it('outro elemento NÃO é físico, nem no corpo a corpo: o efeito de raça é só do `COMBAT_PHYSICALDAMAGE`', () => {
+    expect(isPhysicalHit('melee', 'fire')).toBe(false);
+    expect(isPhysicalHit('spell', 'earth')).toBe(false);
+    expect(isPhysicalHit('spell', 'arcane')).toBe(false);
+  });
+
+  it('sem o elemento (emissor anterior à #479) vale a origem: corpo a corpo é físico, magia não', () => {
+    expect(isPhysicalHit('melee', undefined)).toBe(true);
+    expect(isPhysicalHit('spell', undefined)).toBe(false);
   });
 });
