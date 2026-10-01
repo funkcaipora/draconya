@@ -118,7 +118,11 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   (`#retimeCorpse`, `Skinning.stages[].afterTtlMs`): o `transform(skin.after)` do Canary reinicia o
   decaimento, e o cadáver esfolado vive 360 s da tentativa, não o que faltava dos 670 s. Quem
   esfola um cadáver por um caminho novo tem que passar por `#retimeCorpse`, senão o loot que
-  sobrou no cadáver vive mais que no Canary. **O alcance manual é o `canUse` adjacente (1×1, sem
+  sobrou no cadáver vive mais que no Canary. **O ramo garantido da faca (`Skinning.guaranteed`,
+  `guaranteedStageAt`) é conferido ANTES da tabela em `#performSkin` e NÃO é uma tentativa**: sem
+  sorteio, sem `skinned`, sem `#retimeCorpse` — o Lua não faz `transform` ali, e a faca rende de novo
+  a cada uso. Pô-lo depois do `skinningStageAt`, ou fazê-lo marcar o cadáver, quebra o coelho.
+  **O alcance manual é o `canUse` adjacente (1×1, sem
   linha de visão), NÃO o `canUseFar` 7×5**: o `skinning.lua` não chama `allowFarUse`, e herdar o
   7×5 das runas por ser "um tile" foi o erro que a revisão do #626 pegou (ADR 0049, emenda).
 - **Um evento que se reagenda usa `session.nowMs + intervalo`**, e é exato porque `nowMs` durante

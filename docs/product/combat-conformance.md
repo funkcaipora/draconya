@@ -324,7 +324,9 @@ num monstro sem entrada de esfola ou fora do `combat-v4`, o `session.rng` NÃO �
 quem nunca teve faca consome exatamente o que consumia (`rulesets/skinning.test.ts`, "sem
 ferramenta não consome RNG", e `server/src/game/skinning-real.test.ts` contra a Minotaur Camp real).
 O Scavenge muda o INTERVALO, nunca a quantidade de sorteios (mesmo estado final do gerador com e sem
-charm). 1 Hz == 10 Hz e a retomada de snapshot (`skinned`/`diedAtMs` viajam no `CorpseState`) estão
+charm). O ramo garantido da faca (`Skinning.guaranteed`, o `target.itemid == 4301` do coelho,
+conferido por `#performSkin` antes do sorteio) NÃO sorteia: rende o material sem tocar o
+`session.rng`, sem marcar o cadáver e sem reiniciar o decaimento (`rulesets/skinning.test.ts`). 1 Hz == 10 Hz e a retomada de snapshot (`skinned`/`diedAtMs` viajam no `CorpseState`) estão
 prendidos nos mesmos arquivos.
 
 **O que o Canary tem de estranho e este estágio reproduz**: o Scavenge ENCOLHE o intervalo em

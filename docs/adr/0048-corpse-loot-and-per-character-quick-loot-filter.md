@@ -205,6 +205,16 @@ desse espaço — o detalhe de produto está em `docs/product/items.md` ("Esfola
   recusa `out-of-range` sem andar por ele, como `take-loot` (decisão 4) e `useOnMap` (ADR 0050). O
   material da esfola manual passa só ele pelo filtro (`#collectItems`, extraído de
   `#collectFromCorpse`): o que já esperava no cadáver não é reprocessado.
+- **O ramo garantido da faca também é caça, e está implementado.** O `skinning.lua` confere
+  `elseif target.itemid == 4301` antes da tabela: a faca no 2º estágio do cadáver do coelho (`6017`
+  10 s → `4301` 300 s) rende o `12172` sem sorteio, sem conferir quest e sem transformar o cadáver.
+  A primeira versão do #626 o deixou fora como "objetivo de quest", mas o ramo não confere
+  armazenamento algum, e a regra do dono (ADR 0037 d.6) é caça idêntica ao Canary. Vive em
+  `Skinning.guaranteed` (lido do Lua e da cadeia `decayTo` por `scripts/catalog/skinning.ts`): o
+  material passa pelo mesmo filtro de Quick Loot, o `session.rng` não é tocado, o cadáver não fica
+  `skinned` e o decaimento não reinicia — a faca rende de novo a cada uso até os 310 s. Só o bot
+  que esfola no abate não o alcança (gasta o cadáver aos 10 s do sorteio): é automação, não regra de
+  caça, e `docs/product/items.md` o registra para o dono.
 - **Em party**, com `splitLoot` ligado esfola o primeiro elegível com a ferramenta e o material
   vai para a bolsa; com ele desligado esfola o dono sorteado do cadáver.
 - **O material NÃO tem origem própria**: entra como `loot` (a origem padrão de `item_instance`),

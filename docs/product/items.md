@@ -490,7 +490,8 @@ chave é.
 agora, e o cadáver troca de id a cada estágio da cadeia de decaimento (`items.xml`). O Dragon é
 `5973` por 10 s, `4025` por 300 s, `4026` por 300 s e `4027` por 60 s (670 s no total, o
 `corpseTtlMs` do #585), e só os dois primeiros ids são chave: **310 s de esfola**, e os 360 s
-finais o cadáver continua no chão mas a ferramenta responde "not possible". O coelho tem 10 s.
+finais o cadáver continua no chão mas a ferramenta responde "not possible". O coelho sorteia nos 10 s
+do `6017` e tem, depois deles, o ramo garantido da faca (abaixo).
 `CorpseState.diedAtMs` (o relógio lógico da morte) dá a idade, e a fronteira pertence ao estágio
 seguinte.
 
@@ -519,6 +520,20 @@ cadáver do TOPO da pilha do tile (o `getTopDownItem` do Canary). O material pas
 quem esfolou; o que sobra fica no cadáver, sem reprocessar o que já esperava lá. A exaustão de ação
 (1 s) é a de todo `use-item`.
 
+**O ramo garantido da faca: o pé de coelho no 2º estágio do coelho.** O `skinning.lua` confere
+`elseif target.itemid == 4301` ANTES da tabela, dentro do `if` da faca (`5908`): o cadáver do coelho
+é o `6017` por 10 s e o `4301` por 300 s (`items.xml`), e a faca no `4301` rende o `12172` — **sem
+sorteio, sem conferir quest e sem transformar o cadáver**. O comentário do Lua diz "Rottin Wood and
+the Married Men", mas o ramo não confere armazenamento nenhum (os outros ramos de quest do mesmo
+`if` conferem), então aqui ele vale para qualquer um, como no Canary. Está em
+`Skinning.guaranteed` (`startMs` 10 000, `durationMs` 300 000, `materialId`, `quantity`), que o
+importador lê do Lua e da cadeia `decayTo` — só os dois coelhos (Rabbit e Killer Rabbit) o têm — e
+`#performSkin` o confere antes do sorteio: o material sai pelo mesmo filtro de Quick Loot da esfola
+(`#deliverSkinMaterial`), o `session.rng` NÃO é tocado, o cadáver NÃO fica `skinned` e o
+decaimento NÃO reinicia (não há `transform`), então **a faca rende de novo a cada uso, passada a
+exaustão de 1 s, até o cadáver virar o `4302` aos 310 s**. O cadáver já esfolado (`skinned`, que é o
+`4302` no Canary) não o tem: quem esfolou nos 10 s do sorteio, acertando ou errando, perdeu o ramo.
+
 **A tentativa REINICIA o decaimento do cadáver.** Com ou sem sucesso o Canary roda
 `topItem:transform(skin.after)`, e o `Item::setID` do item novo reinicia o `duration`: o cadáver
 esfolado vive o `duration` do `after` mais a cadeia `decayTo` dele (o Dragon esfolado vira o `4026`,
@@ -546,7 +561,8 @@ rever.
 `durationMs` + `afterTtlMs`, a vida do cadáver depois da tentativa, que o importador soma do `after`
 do Lua e da cadeia `decayTo` dele no `items.xml`):
 `packages/content/data/skinning/generated/skinning.json` (`skinningSchema`,
-`SKINNING_CHANCE_SCALE = 100000`). Os três itens novos — `obsidian-knife`, `blessed-wooden-stake`
+`SKINNING_CHANCE_SCALE = 100000`; `Skinning.guaranteed` é o ramo garantido, opcional, só nas duas
+linhas do coelho). Os três itens novos — `obsidian-knife`, `blessed-wooden-stake`
 e `rabbits-foot` (o material do coelho) — são AUTORAIS em `content/data/items/` (peso do
 `items.xml`; o importador de itens não classifica `primarytype="tools"`), com a linha de
 aparência em `appearances/baseline.json`. O `rabbits-foot` vale **50 gp**, o preço de compra dos
@@ -568,9 +584,15 @@ NÃO é `creatureProduct`, porque o flag vem do `primarytype="creature products"
   menu da mochila só mostra "Usar" para `kind: 'consumable'`, e o `resolveAim` do cliente só
   manda `creatureId`. O servidor aceita a intenção completa; a tela é pendência registrada.
 - **Fora do corte, e não é caça**: a lista de prêmios do boss da abóbora (armazenamento de quest
-  de 4 h), o mármore e o gelo (escultura de item de mapa) e o ramo `target.itemid == 4301` da
-  faca (quest Rottin Wood: `12172` garantido no segundo estágio do cadáver do coelho, sem sorteio
-  e sem consumir o cadáver, sem conferir a quest). O `sim` não tem quest.
+  de 4 h), o mármore e o gelo (escultura de item de mapa) e os ramos `target.itemid ==` da faca que
+  dependem de quest (`getStorageValue`), transformam o alvo ou sorteiam inline — o `sim` não tem
+  quest. O ramo `target.itemid == 4301` NÃO está aqui: ele não confere quest nenhuma e está
+  implementado (acima).
+- **O bot que esfola no abate nunca recebe o pé garantido**: ele sorteia aos 10 s do `6017` (idade
+  zero) e o cadáver fica `skinned`, que no Canary é o `4302` — então o ramo garantido do `4301` só
+  se alcança à mão, num cadáver que ninguém esfolou (sem faca no abate, ou com a faca chegando
+  depois). É a automação (a emenda do ADR 0048: o bot esfola no abate, sem presença), não uma regra
+  de caça, e fica para o dono decidir se o bot passa a esperar os 10 s e usar a faca no `4301`.
 - **O dono do cadáver não é limpo pela esfola.** O `Item::setID` do `transform(skin.after)` limpa o
   `CORPSEOWNER` (e o faz em toda troca de id, o primeiro decaimento aos 10 s inclusive), então no
   Canary o cadáver esfolado abre para qualquer um. Aqui `ownerId`/`eligible` seguem os do abate

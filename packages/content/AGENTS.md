@@ -87,7 +87,11 @@ linha por MONSTRO, com a ferramenta, o material, a `chance` (`SKINNING_CHANCE_SC
 os `stages` esfoláveis do cadáver (`canaryItemId` é identidade para o Scavenge, nunca arte;
 `afterTtlMs` é a vida do cadáver DEPOIS da tentativa — o `duration` do `after` do Lua mais a cadeia
 `decayTo` dele no `items.xml`, 360 s em todas as 62 entradas, porque o `transform` do Canary reinicia
-o decaimento). Depende
+o decaimento). `guaranteed` (opcional, só nas duas linhas do coelho) é o ramo `elseif target.itemid
+== 4301` do Lua, que rende o material SEM sorteio e sem gastar o cadáver (`startMs` é a soma das
+durações anteriores da cadeia; `buildContent` recusa estágio que sobrepõe a janela do sorteio ou passa
+da vida do cadáver). O importador só aceita como garantido o ramo cujo corpo é fala, `addItem` e
+`return true` — condição de quest, sorteio ou `transform` ficam de fora. Depende
 de `data/monsters/**` e `data/items/**` já promovidos: monstro, ferramenta ou material fora do
 catálogo saem em `skipped` no relatório, e o boot recusa referência solta. A obsidian knife, a
 blessed wooden stake e o `rabbits-foot` são itens AUTORAIS (o importador de itens não classifica
