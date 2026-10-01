@@ -496,7 +496,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_order_of_lion/bosses/ancient_lion_knight.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "ancient-lion-warlock",
@@ -795,7 +796,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1551
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "angry-demon",
@@ -4262,7 +4264,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/biting_cold.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "black-vixen",
@@ -4490,7 +4493,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1559
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "blazing-fire-elemental",
@@ -4922,7 +4926,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1560
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "bloodpaw",
@@ -5423,7 +5428,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 567
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "bound-astral-power",
@@ -6015,7 +6021,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/bretzecutioner.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "brokul",
@@ -6305,7 +6312,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1645
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "brother-chill",
@@ -6421,7 +6429,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/brother_chill.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "brother-freeze",
@@ -6537,7 +6546,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/brother_freeze.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "brother-worm",
@@ -6688,7 +6698,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/feaster_of_souls/brother_worm.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "captured-dwarf",
@@ -7011,7 +7022,8 @@
           "count": 2
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "charged-energy-elemental",
@@ -7448,7 +7460,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/concentrated_death.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "condensed-sin",
@@ -7870,7 +7883,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1753
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "cult-believer",
@@ -8752,7 +8766,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/dark_knowledge.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "dark-paladin",
@@ -9316,7 +9331,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 1578
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "death-priest-shargon",
@@ -9497,7 +9513,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 1047
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "deathbine",
@@ -9678,7 +9695,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/deathbine.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "deathbringer",
@@ -10057,7 +10075,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 892
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "deep-terror",
@@ -10225,7 +10244,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 1087
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "demodras",
@@ -10513,7 +10533,8 @@
           "count": 2
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "demon-blood",
@@ -11920,7 +11941,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 302
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "dragon-essence",
@@ -12683,7 +12705,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/forgotten_knowledge/bosses/dragonking_zyrtarch.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "drasilla",
@@ -13385,7 +13408,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1758
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "earth-overlord",
@@ -13561,7 +13585,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_elemental_spheres/earth_overlord.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "earworm",
@@ -14514,7 +14539,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_elemental_spheres/energy_overlord.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "enraged-sand-brood",
@@ -14966,7 +14992,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/esmeralda.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "evil-mastermind",
@@ -15198,7 +15225,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 569
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "faceless-bane",
@@ -15535,7 +15563,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1727
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "fallen-challenger",
@@ -15870,7 +15899,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/fazzrah.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "feeble-glooth-horror",
@@ -16312,7 +16342,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_elemental_spheres/fire_overlord.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "flame-of-omrafir",
@@ -17042,7 +17073,8 @@
           "count": 2
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "gelidrazah-the-frozen",
@@ -17335,7 +17367,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1379
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "ghulosh",
@@ -17595,7 +17628,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1608
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "ghulosh-deathgaze",
@@ -18104,7 +18138,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 893
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "gnorre-chyllson",
@@ -18943,7 +18978,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/gorgo.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "gorzindel",
@@ -19158,7 +19194,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1591
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "goshnars-malice",
@@ -19357,7 +19394,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1901
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "grand-canon-dominus",
@@ -19599,7 +19637,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 1584
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "grand-chaplain-gaunder",
@@ -19852,7 +19891,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 1579
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "grand-commander-soeren",
@@ -20021,7 +20061,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 1582
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "grand-master-oberon",
@@ -20246,7 +20287,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1576
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "greater-death-minion",
@@ -21260,7 +21302,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/hide.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "horestis",
@@ -21950,7 +21993,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_elemental_spheres/ice_overlord.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "imp-intruder",
@@ -22517,7 +22561,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1890
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "izcandar-the-banished",
@@ -22830,7 +22875,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 1699
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "jagged-earth-elemental",
@@ -23102,7 +23148,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 1577
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "jaul",
@@ -23459,7 +23506,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 773
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "kalyassa",
@@ -24020,7 +24068,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/kerberos.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "king-zelos",
@@ -24288,7 +24337,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1784
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "knowledge-raider",
@@ -24491,7 +24541,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/cults_of_tibia/bosses/last_planegazer.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "latrivan",
@@ -25394,7 +25445,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/leviathan.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "librarian",
@@ -27672,7 +27724,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 1696
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "massacre",
@@ -27839,7 +27892,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 305
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "mean-maw",
@@ -28336,7 +28390,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 566
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "mighty-splinter-of-madness",
@@ -29292,7 +29347,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 568
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "morguthis",
@@ -29726,7 +29782,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 1829
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "mr-punish",
@@ -29797,7 +29854,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 303
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "mutated-zalamon",
@@ -29949,7 +30007,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/wrath_of_the_emperor/mutated_zalamon.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "nargol-the-impaler",
@@ -30092,7 +30151,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/grave_danger/nargol_the_impaler.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "neferi-the-spy",
@@ -31129,7 +31189,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 774
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "omruc",
@@ -33091,7 +33152,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/primal_ordeal_quest/plunder_patriarch.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "poor-soul",
@@ -33513,7 +33575,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 1583
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "prince-drazzak",
@@ -33673,7 +33736,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/roshamuul/prince_drazzak.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "psychic-spirit-elemental",
@@ -34303,7 +34367,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 2006
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "ravenous-beyondling",
@@ -35004,7 +35069,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/mysterious_ornate_chest/reflection_of_obujos.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "regenerating-mass",
@@ -37188,7 +37254,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1804
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "schiach",
@@ -37582,7 +37649,8 @@
           "count": 2
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "security-golem",
@@ -37923,7 +37991,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1561
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "shard-of-corruption",
@@ -38023,7 +38092,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_new_frontier/shard_of_corruption.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "shard-of-magnor",
@@ -38333,7 +38403,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/shardhead.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "sir-baeloc",
@@ -38571,7 +38642,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1755
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "sir-nictros",
@@ -39101,7 +39173,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/wrath_of_the_emperor/snake_god_essence.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "somewhat-beatable",
@@ -40146,7 +40219,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_elemental_spheres/spirit_overlord.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "spite-of-the-emperor",
@@ -40327,7 +40401,8 @@
           "count": 2
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "spiteful-spitter",
@@ -41323,7 +41398,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/stonecracker.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "strange-slime",
@@ -41675,7 +41751,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/sulphur_scuttler.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "supercharged-mazzinor",
@@ -41720,7 +41797,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/supercharged_mazzinor.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "superior-death-minion",
@@ -42241,7 +42319,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 775
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "tarbaz",
@@ -42548,7 +42627,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1188
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "tazhadur",
@@ -42774,7 +42854,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1390
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-armored-voidborn",
@@ -42905,7 +42986,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1406
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-axeorcist",
@@ -43377,7 +43459,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 1518
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-blazing-rose",
@@ -43503,7 +43586,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1600
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-bloodtusk",
@@ -43785,7 +43869,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/the_bloodweb.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-cold-of-winter",
@@ -44301,7 +44386,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 1519
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-dark-dancer",
@@ -44628,7 +44714,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/the_devourer_of_secrets.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-diamond-blossom",
@@ -44751,7 +44838,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1598
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-dreadorian",
@@ -45126,7 +45214,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 1520
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-end-of-days",
@@ -45569,7 +45658,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1297
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-false-god",
@@ -45773,7 +45863,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1409
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-fear-feaster",
@@ -46071,7 +46162,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1873
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-fire-empowered-duke",
@@ -46695,7 +46787,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 301
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-heat-of-summer",
@@ -47063,7 +47156,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/wrath_of_the_emperor/the_keeper.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-lily-of-night",
@@ -47186,7 +47280,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1602
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-many",
@@ -47418,7 +47513,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/the_many.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-masked-marauder",
@@ -48176,7 +48272,8 @@
           "count": 2
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-pale-worm",
@@ -48491,7 +48588,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1881
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-pit-lord",
@@ -48941,7 +49039,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1444
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-sandking-fake",
@@ -49180,7 +49279,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/the_scion_of_havoc.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-shatterer",
@@ -49679,7 +49779,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/the_snapper.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-spellstealer",
@@ -49795,7 +49896,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/the_spellstealer.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-unarmored-voidborn",
@@ -50006,7 +50108,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1406
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-unwelcome",
@@ -50327,7 +50430,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1868
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-weakened-count",
@@ -50461,7 +50565,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_inquisition/the_weakened_count.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "thorn-minion",
@@ -50696,7 +50801,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/forgotten_knowledge/bosses/thorn_steed.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "tormented-ghost",
@@ -50982,7 +51088,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/tormentor.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "travelling-merchant",
@@ -51627,7 +51734,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1891
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "unbeatable-dragon",
@@ -53491,7 +53599,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1892
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "war-servant",
@@ -54567,7 +54676,8 @@
           "count": 2
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "xogixath",
@@ -54778,7 +54888,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 1827
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "yalahari",
@@ -55304,7 +55415,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1982
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "zamulosh2",

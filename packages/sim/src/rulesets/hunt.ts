@@ -10848,8 +10848,8 @@ const slots = bot.groups.get(group);
    * um item no chão que vira Fungosaurus em 4 s (ou causa dano a quem o pisa entre 2 e 4 s), e o
    * Draconya ainda não tem item no chão além do cadáver (ADR 0048 d.8) — a direção da issue o
    * adia. A rolagem dele continua consumida e continua impedindo o Plunder, porque é ela que dá ao
-   * Plunder a chance que o Canary dá. Fora também: o portão `isRewardBoss` do Lua — nenhum monstro
-   * desta zona é chefe de recompensa.
+   * Plunder a chance que o Canary dá. O portão `isRewardBoss` do Lua vale (`MonsterDefinition.
+   * rewardBoss`): a morte do próprio Plunder Patriarch, que é um chefe de recompensa, não rola nada.
    */
   #hazardOnMonsterDeath(
     session: Session, dead: MonsterRuntime, credit: KillCredit,
@@ -10874,6 +10874,11 @@ const slots = bot.groups.get(group);
       }
     }
 
+    // O chefe de recompensa NÃO rola casulo nem Plunder (`PrimalHazardDeath`: "don't spawn pods or
+    // plunder if the monster is a reward boss"): sem as duas rolagens e sem gerar outro. O
+    // próprio Plunder Patriarch é um — a flag vem do Canary (`flags.rewardBoss`). Depois da subida
+    // de nível, que é outro script (`the_primal_menace_killed`) e não confere a flag.
+    if (this.#options.monsters.get(dead.monsterId)?.rewardBoss === true) return;
     if (zone.plunderMonsterId === undefined || points < 1) return;
     if (session.rng.integer(1, 10_000) <= points * config.podDropMultiplier) return;
     if (session.rng.integer(1, 100_000) > points * config.plunderSpawnMultiplier) return;

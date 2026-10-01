@@ -644,6 +644,30 @@ describe('convertMonster: convinceable, manaCost e corpseAnimatable (#600)', () 
   });
 });
 
+describe('o chefe de recompensa do Canary (#632)', () => {
+  const convertWithFlags = (flags: string) => {
+    const ctx = fixture(false);
+    const text = CONVINCEABLE.replace(
+      'monster.flags = { summonable = true, convinceable = true, targetDistance = 1 }',
+      `monster.flags = { ${flags} targetDistance = 1 }`,
+    );
+    return convertMonster(text, 'x/undeads/test_skeleton.lua', 'undeads', COMMIT, deps(ctx));
+  };
+
+  it('`flags.rewardBoss = true` vira `rewardBoss: true`, e o schema aceita', () => {
+    const converted = convertWithFlags('rewardBoss = true,');
+    expect(converted.blockers).toEqual([]);
+    expect(converted.entity['rewardBoss']).toBe(true);
+    expect(() => monsterSchema.parse(asMonster(converted.entity))).not.toThrow();
+  });
+
+  it('sem a flag, ou com ela falsa, a chave nem existe (o default do schema é `false`)', () => {
+    expect(convertWithFlags('').entity['rewardBoss']).toBeUndefined();
+    expect(convertWithFlags('rewardBoss = false,').entity['rewardBoss']).toBeUndefined();
+    expect(monsterSchema.parse(asMonster(convertWithFlags('').entity)).rewardBoss).toBe(false);
+  });
+});
+
 describe('o Bosstiary do Canary (#629)', () => {
   const convertBoss = (bosstiary: string) => {
     const ctx = fixture(false);

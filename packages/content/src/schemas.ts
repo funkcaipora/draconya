@@ -2780,6 +2780,16 @@ export const monsterSchema = z.strictObject({
    */
   boss: z.boolean().default(false),
   /**
+   * É chefe de recompensa (#632)? O `flags.rewardBoss` do Canary (`MonsterType::isRewardBoss`,
+   * `register_monster_type.lua`), que o importador escreve como está. Hoje só uma regra o lê: a
+   * morte de um monstro de zona de Hazard NÃO rola casulo nem Plunder Patriarch quando o morto é
+   * chefe de recompensa (`PrimalHazardDeath`, `hazard_primal.lua`: "don't spawn pods or plunder if
+   * the monster is a reward boss") — o próprio Plunder Patriarch é um, e sem o portão cada morte
+   * dele poderia gerar outro. O que o Canary mais faz com a flag (o baú de recompensa no lugar do
+   * cadáver) ainda não existe aqui. Ausente é `false`.
+   */
+  rewardBoss: z.boolean().default(false),
+  /**
    * O boss no Bosstiary (#629; `monster.bosstiary` do Canary): a raridade — Bane, Archfoe ou
    * Nemesis, que escolhe a linha de `content.bosstiary.levels` (quantos abates levam a cada
    * nível, e quantos pontos cada nível rende) — e o `raceId` (`bossRaceId` do Canary), a CHAVE do

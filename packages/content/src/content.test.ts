@@ -3230,6 +3230,12 @@ describe('o Hazard (M44-14, #632, ADR 0052 d.5)', () => {
     expect(() => buildContent(base({ hazard: [hazard], hunts: [hazardHunt] }))).not.toThrow();
   });
 
+  it.each(['constructor', '__proto__', 'toString'])(
+    'o hazardZoneId `%s` não é zona: o nome que um objeto comum herda é recusado', (zoneId) => {
+      expect(() => buildContent(base({ hazard: [hazard], hunts: [{ ...cellars, hazardZoneId: zoneId }] })))
+        .toThrow(/zona de hazard inexistente/);
+    });
+
   it('o schema é estrito na zona e recusa campo estranho e valor inválido', () => {
     const strange = { ...hazard, zones: { gardens: { ...hazard.zones.gardens, hazardLevel: 3 } } };
     expect(() => buildContent(base({ hazard: [strange] }))).toThrow(ContentError);
@@ -3252,6 +3258,10 @@ describe('o Hazard (M44-14, #632, ADR 0052 d.5)', () => {
       minLevel: 1, maxLevel: 12, crit: true, dodge: true, damageBoost: true, defenseBoost: true,
       levelUpMonsterId: 'the-primal-menace', plunderMonsterId: 'plunder-patriarch',
     });
+    // O Plunder Patriarch é chefe de recompensa no Canary (`flags.rewardBoss`): é o que impede a
+    // morte dele de rolar casulo e Plunder (`PrimalHazardDeath`). Um monstro comum da zona não é.
+    expect(real.monsters.get('plunder-patriarch')?.rewardBoss).toBe(true);
+    expect(real.monsters.get('hulking-prehemoth')?.rewardBoss).toBe(false);
     expect(real.hazard).toMatchObject({
       criticalIntervalMs: 2000, criticalChance: 750, criticalMultiplier: 25, damageMultiplier: 200,
       defenseMultiplier: 0, dodgeMultiplier: 85, expBonusMultiplier: 2, lootBonusMultiplier: 2,

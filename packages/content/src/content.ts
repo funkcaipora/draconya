@@ -1747,7 +1747,7 @@ export function buildContent(raw: RawContent): Content {
       problems.push(
         `hunt "${hunt.id}" declara hazardZoneId "${hunt.hazardZoneId}" mas não há hazard/baseline.json`,
       );
-    } else if (hazard.zones[hunt.hazardZoneId] === undefined) {
+    } else if (!Object.hasOwn(hazard.zones, hunt.hazardZoneId)) {
       problems.push(`hunt "${hunt.id}" referencia zona de hazard inexistente "${hunt.hazardZoneId}"`);
     }
   }

@@ -721,4 +721,9 @@ decisão nossa, então não há `_open`; mudar um é mudar a versão de conteúd
 `gnomprona-gardens` é o recorte real (`pnpm map:import` + `route:trace` + `catalog:spawns`, comandos
 no `_open` dela): geometria gerada com o pacote 1332 e idêntica à do 1533 na região medida; o
 `catalog:spawns --check` dela está no `pnpm check` e acusa quando o catálogo ganhar uma espécie.
+**`monster.rewardBoss` é o `flags.rewardBoss` do Canary** (`MonsterType::isRewardBoss`): o importador
+o escreve como está (só quando `true`), e hoje uma regra o lê — a morte de um monstro de zona de
+Hazard não rola casulo nem Plunder Patriarch quando o morto é chefe de recompensa (o próprio
+Patriarch é um). O baú de recompensa no lugar do cadáver, que o Canary também liga a essa flag, não
+existe aqui.
 
