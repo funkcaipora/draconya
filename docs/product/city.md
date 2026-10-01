@@ -141,6 +141,41 @@ entrada e as escadas:
 - **O templo não tem escada para cima**, e a do porão dele leva ao andar 8, que fica fora do
   recorte: pisar nela hoje é pisar num tile comum.
 
+### Zonas por tile (#830, OW-09, ADR 0060)
+
+`thais.json` carrega, por andar, a camada `zones`: o que é protect zone, no-pvp, no-logout e
+arena em cada tile, lido de `TILE_FLAGS` do OTBM — a base de `canLogout`, do portão de combate e
+dos serviços em PZ do mundo (OW-10, OW-27). **É só dado**: nada na Cidade de hoje a consulta, e a
+Cidade continua sendo protect zone por construção (ADR 0004) até o mundo existir.
+
+O que o recorte tem (z4–z7, medido sobre o OTBM por `pnpm map:import --id thais --zones-only`):
+
+| andar | PZ | PZ + no-logout | só no-logout |
+|---|---|---|---|
+| z4 | 230 | 0 | 0 |
+| z5 | 844 | 3 | 0 |
+| z6 | 3.328 | 10 | 0 |
+| z7 | 3.762 | 1 | 2 |
+
+Thais não tem no-pvp nem arena. O templo é PZ — o tile de entrada, `(94, 88, 7)`, e a coluna que
+desce dele até `(94, 96, 7)`; do `(94, 97, 7)` em diante é rua, normal. Os tiles de casa são PZ
+(`House::addTile`, `canary/src/map/house/house.cpp:26-28`), e já traziam a flag no arquivo.
+
+**A forma.** Um caractere por tile, na mesma forma de `speed` e `sight`, com a paleta fixa
+`ZONE_PALETTE` (`.` normal, `p` PZ, `n` no-pvp, `a` arena, `l` só no-logout, `P`/`N`/`A` a zona
+mais no-logout). Em memória, `Floor.zones` guarda a soma dos bits do OTBM (PZ 1, no-pvp 4,
+no-logout 8, arena 16), já normalizada como o Canary: PZ, no-pvp e arena são exclusivos, no-logout
+soma (`canary/src/io/iomap.cpp:165-177`). A precedência de quem consulta é a de
+`Tile::getZoneType` — PZ, no-pvp, arena, no-logout, normal (`canary/src/items/tile.hpp:188-199`) —
+e é do `sim`. Arena é tratada como no-pvp no primeiro corte: divergência registrada no ADR 0060 d.8.
+
+**O que não muda.** Os outros recortes (Rat Cellars, Rotworm Caves, Darashia Dragon Lair e os que
+vieram depois) não têm a camada: `Floor.zones` é `null`, tudo é normal, e as hunts ficam como
+estão. A geometria de Thais — bloqueio, velocidade, visão, escadas — também ficou byte a byte; o
+diff do arquivo é só acréscimo. A versão global de conteúdo mudou, como em toda mudança de
+conteúdo: a hunt em voo no deploy é creditada e descartada pelo caminho de sempre (ADR 0010,
+ADR 0018).
+
 O servidor **diz qual mapa desenhar**: `instance-enter { instanceId, map }` sai no
 `session-attach` e em toda transição, ANTES do `session-state`, e `session-state.world.mapId` é o
 mesmo id. Era um opcode definido, tratado pelo cliente e nunca enviado. Desenhar a Thais é o

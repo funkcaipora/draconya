@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync,
 } from 'node:fs';
@@ -6,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from './load.js';
-import { floorChangeAt, isBlocked } from './map.js';
+import { floorChangeAt, isBlocked, ZONE_FLAG, zoneFlagsAt } from './map.js';
 import { BOT_CATEGORIES, manaCostDisplayOf, NEUTRAL_RATES } from './schemas.js';
 
 const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
@@ -256,6 +257,50 @@ describe('loadContent', () => {
     // e descer de (75,73,6) chega em (75,74,7).
     expect(floorChangeAt(city, 75, 73, 7)).toEqual({ x: 75, y: 72, z: 6 });
     expect(floorChangeAt(city, 75, 73, 6)).toEqual({ x: 75, y: 74, z: 7 });
+  });
+
+  it('Thais traz as zonas do OTBM: o templo é PZ, a rua é normal, e há no-logout (#830, OW-09)', () => {
+    const city = loadContent(DATA).city;
+    if (city === undefined) throw new Error('o conteúdo real não tem Cidade');
+    // O tile do templo (32369, 32241, 7 → local 94, 88, 7): onde se nasce, e PZ.
+    expect(zoneFlagsAt(city, 94, 88, 7)).toBe(ZONE_FLAG.protection);
+    // A PZ do templo desce em coluna até o local (94, 96); do (94, 97) em diante é rua — o
+    // limite é uma coluna de tiles, e prender os dois lados dele prende a direção do deslocamento.
+    expect(zoneFlagsAt(city, 94, 96, 7)).toBe(ZONE_FLAG.protection);
+    expect(zoneFlagsAt(city, 94, 97, 7)).toBe(0);
+    expect(zoneFlagsAt(city, 94, 102, 7)).toBe(0);
+    // No-logout SOZINHO (dois tiles de z7) e no-logout somado à PZ (um tile do andar de cima do
+    // templo): a soma de bits que o Canary guarda, não uma zona por tile.
+    expect(zoneFlagsAt(city, 77, 56, 7)).toBe(ZONE_FLAG.noLogout);
+    expect(zoneFlagsAt(city, 94, 93, 6)).toBe(ZONE_FLAG.protection | ZONE_FLAG.noLogout);
+    // Thais não tem no-pvp nem arena: a camada só traz o que o OTBM trouxe.
+    const floors = [...city.floors.values()];
+    for (const floor of floors) {
+      expect(floor.zones, `z${floor.z} sem a camada`).not.toBeNull();
+      for (const value of floor.zones ?? []) {
+        expect(value & (ZONE_FLAG.noPvp | ZONE_FLAG.pvpZone)).toBe(0);
+      }
+    }
+  });
+
+  it('Thais ganhou `zones` SEM mexer na geometria: bloqueio, velocidade, visão e escadas byte a byte (#830)', () => {
+    // A impressão digital é do thais.json de antes da #830 (tibia-parity 85c3f32f), SEM a camada
+    // nova: o JSON do arquivo, andar a andar, com `zones` tirado. Se ela mudar, alguém regenerou
+    // a geometria — com outro pacote de arte, ou editando à mão —, e a mudança merece uma
+    // explicação própria no commit que a faz (atualize o hash junto dela, nunca antes).
+    const raw = JSON.parse(readFileSync(join(DATA, 'maps', 'thais.json'), 'utf8')) as {
+      floors: Record<string, { zones?: unknown }>;
+    };
+    for (const floor of Object.values(raw.floors)) delete floor.zones;
+    const fingerprint = createHash('sha256').update(JSON.stringify(raw)).digest('hex');
+    expect(fingerprint).toBe('f8ebc5c5fccef7970b28f5231c1d1e002514404e76c9a1904b3d956e17729303');
+  });
+
+  it('o recorte de hunt sem `zones` carrega com `zones = null` — a Rat Cellars não muda (#830)', () => {
+    const map = loadContent(DATA).maps.get('rat-cellars');
+    if (map === undefined) throw new Error('o conteúdo real não tem a rat-cellars');
+    for (const floor of map.floors.values()) expect(floor.zones).toBeNull();
+    expect(zoneFlagsAt(map, 10, 10, map.z)).toBe(0);
   });
 
   it('nenhuma vocação está em aberto: os ganhos por level são os do Tibia (ADR 0026, decisão 5)', () => {

@@ -4938,6 +4938,15 @@ const floorSchema = z.object({
    * não reimportado com a camada nova).
    */
   sight: z.array(z.string().min(1)).optional(),
+  /**
+   * Zonas do tile (#830, OW-09, ADR 0060 d.8): protect zone, no-pvp, no-logout e arena, lidas do
+   * `OTBM_ATTR_TILE_FLAGS` de cada tile — um caractere por tile, na mesma forma de `speed` e
+   * `sight`, resolvido pela paleta FIXA `ZONE_PALETTE` (`./map.ts`; `.` é o tile normal). Fixa e
+   * não por mapa, como `speedPalette`, porque são só oito estados e o significado é o do Canary,
+   * nunca uma escolha do mapa. Ausente: nenhum tile deste andar tem zona (tudo normal) — o mapa
+   * autorado à mão e o recorte ainda não reimportado com a camada, e as hunts não mudam.
+   */
+  zones: z.array(z.string().min(1)).optional(),
 });
 
 export const tilemapSchema = z.object({

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildRoute, buildTilemap, isBlocked, validateRoute } from './map.js';
+import {
+  buildRoute, buildTilemap, isBlocked, validateRoute, ZONE_FLAG, ZONE_PALETTE, zoneChar, zoneFlagsAt,
+} from './map.js';
+import { tilemapSchema } from './schemas.js';
 import type { RouteData, TilemapInput } from './schemas.js';
 
 const mapData: TilemapInput = {
@@ -74,6 +77,75 @@ describe('camada de bloqueio de visão (#553)', () => {
     expect(floor?.blocksSight?.[2 * withSight.width + 2]).toBe(1);
     expect(floor?.blocksSight?.[1 * withSight.width + 1]).toBe(0);
     expect(isBlocked(withSight, 2, 2)).toBe(false); // passo continua livre
+  });
+});
+
+describe('camada de zonas (#830, OW-09)', () => {
+  // `.` normal, `p` PZ, `n` no-pvp, `a` arena, `l` só no-logout, `P`/`N`/`A` a zona mais no-logout.
+  const zoned = buildTilemap({
+    id: 'z', z: 7,
+    floors: {
+      7: {
+        grid: ['#####', '#...#', '#...#', '#...#', '#####'],
+        zones: ['ppppp', 'p.nPa', '.lN.A', 'pp', 'p'],
+      },
+      6: { grid: ['###', '#.#', '###'] },
+    },
+  });
+
+  it('sem `zones` declarado, `zones` é `null` e todo tile é normal — a hunt não muda', () => {
+    expect(map.floors.get(7)?.zones).toBeNull();
+    expect(zoneFlagsAt(map, 1, 1)).toBe(0);
+    // O andar sem a camada, num mapa que a declara em outro andar, é igual.
+    expect(zoned.floors.get(6)?.zones).toBeNull();
+    expect(zoneFlagsAt(zoned, 1, 1, 6)).toBe(0);
+  });
+
+  it('cada caractere da paleta vira a soma de bits do OTBM', () => {
+    expect(zoneFlagsAt(zoned, 0, 0)).toBe(ZONE_FLAG.protection);
+    expect(zoneFlagsAt(zoned, 1, 1)).toBe(0);
+    expect(zoneFlagsAt(zoned, 2, 1)).toBe(ZONE_FLAG.noPvp);
+    expect(zoneFlagsAt(zoned, 3, 1)).toBe(ZONE_FLAG.protection | ZONE_FLAG.noLogout);
+    expect(zoneFlagsAt(zoned, 4, 1)).toBe(ZONE_FLAG.pvpZone);
+    expect(zoneFlagsAt(zoned, 1, 2)).toBe(ZONE_FLAG.noLogout);
+    expect(zoneFlagsAt(zoned, 2, 2)).toBe(ZONE_FLAG.noPvp | ZONE_FLAG.noLogout);
+    expect(zoneFlagsAt(zoned, 4, 2)).toBe(ZONE_FLAG.pvpZone | ZONE_FLAG.noLogout);
+  });
+
+  it('os valores são os bits de `TILE_FLAGS` do Canary: 1, 4, 8 e 16', () => {
+    // `canary/src/io/io_definitions.hpp:73-76`. O bit 2 (valor 2) não existe: o Canary pulou.
+    expect(ZONE_FLAG).toEqual({ protection: 1, noPvp: 4, noLogout: 8, pvpZone: 16 });
+    // Cada valor da paleta é distinto, e `zoneChar` é o inverso exato dela.
+    const values = Object.values(ZONE_PALETTE);
+    expect(new Set(values).size).toBe(values.length);
+    for (const [char, value] of Object.entries(ZONE_PALETTE)) expect(zoneChar(value)).toBe(char);
+  });
+
+  it('linha mais curta que a largura é normal no resto — o inverso de `grid`, que bloqueia', () => {
+    expect(zoneFlagsAt(zoned, 1, 3)).toBe(ZONE_FLAG.protection); // dentro do que a linha diz
+    expect(zoneFlagsAt(zoned, 4, 3)).toBe(0); // depois do fim da linha
+    expect(zoneFlagsAt(zoned, 0, 4)).toBe(ZONE_FLAG.protection);
+    expect(zoneFlagsAt(zoned, 1, 4)).toBe(0);
+  });
+
+  it('fora do mapa, ou andar que o mapa não tem, é normal — bloqueio é de `isBlocked`', () => {
+    expect(zoneFlagsAt(zoned, -1, 0)).toBe(0);
+    expect(zoneFlagsAt(zoned, 99, 0)).toBe(0);
+    expect(zoneFlagsAt(zoned, 0, 0, 3)).toBe(0);
+  });
+
+  it('o schema aceita `zones` e o formato de arquivo sem a camada continua válido', () => {
+    expect(tilemapSchema.parse({ id: 'a', z: 7, floors: { 7: { grid: ['.'], zones: ['p'] } } }).floors?.['7']?.zones)
+      .toEqual(['p']);
+    expect(tilemapSchema.parse({ id: 'a', z: 7, floors: { 7: { grid: ['.'] } } }).floors?.['7']?.zones).toBeUndefined();
+  });
+
+  it('caractere fora da paleta derruba a montagem — nunca vira "normal" em silêncio', () => {
+    expect(() => buildTilemap({ id: 'x', z: 7, floors: { 7: { grid: ['...'], zones: ['p?p'] } } }))
+      .toThrow(/zona "\?" em \(1,0\) não está em ZONE_PALETTE/);
+    expect(() => zoneChar(3)).toThrow(/não está em ZONE_PALETTE/); // PZ + bit 1, que o Canary não tem
+    // PZ e no-pvp juntos (5) são exclusivos: o importador normaliza, e a paleta não os tem.
+    expect(() => zoneChar(ZONE_FLAG.protection | ZONE_FLAG.noPvp)).toThrow(/não está em ZONE_PALETTE/);
   });
 });
 
