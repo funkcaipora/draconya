@@ -1310,6 +1310,18 @@ describe('a saída pendente da hunt (#802)', () => {
   });
 });
 
+describe('as mensagens do mundo ainda sem tela (OW-11, #832)', () => {
+  it('logout-refused e world-full chegam sem derrubar o cliente nem mexer no HUD', () => {
+    // Nenhum servidor as emite ainda (OW-14, OW-21) e a tela é da OW-23. O que se prende é que o
+    // `switch` exaustivo as conhece — sem o caso, o `satisfies never` não compilaria — e que
+    // aplicá-las não fabrica estado: o HUD continua exatamente como estava.
+    const before = hud.get();
+    applyMessage({ type: 'logout-refused', reason: 'in-fight' }, 1);
+    applyMessage({ type: 'world-full', position: 3, retryAfterMs: 10_000, huntAvailable: true }, 2);
+    expect(hud.get()).toBe(before);
+  });
+});
+
 describe('a configuração do bot no session-state (FUN-111)', () => {
   const state = (over: Record<string, unknown> = {}): S2CMessage => ({
     type: 'session-state', sessionType: 'hunt', elapsedMs: 0,

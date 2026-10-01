@@ -4,6 +4,7 @@
 //   pnpm map:import --id thais --x 32275..32458 --y 32153..32291 --z 4..7 --entry 32369,32241,7
 //   pnpm map:import --id rat-cellars --x 32022..32139 --y 32168..32247 --z 8
 //   pnpm map:import --check      # regenera em memória cada mapa importado e compara (pnpm check)
+//   pnpm map:import --id thais --zones-only   # só a camada `zones`, a partir do OTBM; geometria intacta
 //
 //   packages/content/data/maps/<id>.json   geometria para o SERVIDOR: bloqueio e velocidade de
 //                                          chão por andar, escadas, entrada, `source`. Versionado.
@@ -15,9 +16,14 @@
 // tile sem chão e sem item fica fora do mapa. O `sim` nunca vê flag — vê `#` e `.`.
 //
 // Um mesmo tile pode vir duas vezes do arquivo (o editor fecha e reabre o bloco): o ÚLTIMO
-// vence, e o relatório conta. `TILE_FLAGS` (PZ, no-logout) são ignorados — a Cidade inteira já
-// é PZ por construção (ADR 0004). As escadas NÃO são derivadas: o importador lista os candidatos
+// vence, e o relatório conta. As escadas NÃO são derivadas: o importador lista os candidatos
 // pelo nome da aparência, e quem autora `floorChanges` é um humano, no JSON do mapa.
+//
+// `TILE_FLAGS` (PZ, no-pvp, no-logout, arena) viram a camada `zones` de cada andar (#830, OW-09,
+// ADR 0060 d.8, que reverte a decisão 9 do ADR 0025): um caractere por tile, paleta
+// `ZONE_PALETTE`. Ela não depende do pacote de arte — só das flags do arquivo —, e por isso
+// `--zones-only` a acrescenta a um mapa já importado sem tocar na geometria, e `--check` a confere
+// mesmo na máquina que não tem o pacote contra o qual a geometria foi gerada.
 
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -28,10 +34,10 @@ import { NO_FLAGS, readAppearances } from '../packages/client/src/assets/appeara
 import type { AppearanceCatalogue, AppearanceFlags } from '../packages/client/src/assets/appearances.js';
 import { readCatalog } from '../packages/client/src/assets/catalog.js';
 import { Reader, WIRE_LENGTH, WIRE_VARINT } from '../packages/client/src/assets/protobuf.js';
-import { DEFAULT_GROUND_SPEED } from '../packages/content/src/map.js';
+import { DEFAULT_GROUND_SPEED, ZONE_FLAG, zoneChar } from '../packages/content/src/map.js';
 import { tilemapSchema } from '../packages/content/src/schemas.js';
 import type { Point, TilemapInput } from '../packages/content/src/schemas.js';
-import { readOtbmTiles } from './otbm.js';
+import { readOtbmTiles, TILE_FLAG } from './otbm.js';
 import type { OtbmItem, OtbmTile, Region } from './otbm.js';
 import { buildSceneryIndex, classifyByAttributes } from './scenery.js';
 import type { CanaryTables, ClassifiedFeature, SceneryIndex } from './scenery.js';
@@ -53,6 +59,10 @@ export interface RegionTile {
   readonly z: number;
   readonly ground: number | null;
   readonly items: readonly OtbmItem[];
+  /** `OTBM_ATTR_TILE_FLAGS` cru do arquivo (#830) — a camada `zones` nasce daqui. */
+  readonly flags: number;
+  /** Só em tile de casa (`OTBM_HOUSETILE`): no Canary a casa é protect zone, com ou sem a flag. */
+  readonly houseId?: number;
 }
 
 export interface ImportOptions {
@@ -134,13 +144,116 @@ export function collectTiles(tiles: Iterable<OtbmTile>): { tiles: Map<string, Re
     read += 1;
     const k = key(tile.x, tile.y, tile.z);
     if (map.has(k)) conflicts += 1;
-    map.set(k, { x: tile.x, y: tile.y, z: tile.z, ground: tile.ground, items: tile.items });
+    map.set(k, {
+      x: tile.x, y: tile.y, z: tile.z, ground: tile.ground, items: tile.items, flags: tile.flags,
+      ...(tile.houseId === undefined ? {} : { houseId: tile.houseId }),
+    });
   }
   return { tiles: map, conflicts, read };
 }
 
 /** Um tile existe quando tem chão OU item. Fora disso é vazio — fora do mapa. */
 const exists = (tile: RegionTile): boolean => tile.ground !== null || tile.items.length > 0;
+
+/**
+ * A zona do tile, normalizada como o Canary carrega o OTBM (#830, OW-09, ADR 0060 d.8): PZ,
+ * no-pvp e arena são exclusivos entre si — o primeiro desta ordem que o arquivo traz vence — e
+ * no-logout soma por cima de qualquer um (`canary/src/io/iomap.cpp:165-177`). O resultado é a
+ * soma de `ZONE_FLAG` que `Floor.zones` guarda; quem consulta aplica a precedência de
+ * `Tile::getZoneType` (`canary/src/items/tile.hpp:188-199`), que é do `sim`.
+ *
+ * Tile de casa é PZ mesmo sem a flag no arquivo: `House::addTile` a põe ao registrar o tile
+ * (`canary/src/map/house/house.cpp:26-28`). Em Thais isso não muda nada — os 5.800 tiles de casa
+ * do recorte já trazem a flag, medido —, mas é o que o Canary faz, e vale para a próxima região.
+ */
+export function zoneFlagsOf(tile: Pick<RegionTile, 'flags' | 'houseId'>): number {
+  const raw = tile.houseId === undefined ? tile.flags : tile.flags | TILE_FLAG.protectionZone;
+  let zone = 0;
+  if ((raw & TILE_FLAG.protectionZone) !== 0) zone = ZONE_FLAG.protection;
+  else if ((raw & TILE_FLAG.noPvp) !== 0) zone = ZONE_FLAG.noPvp;
+  else if ((raw & TILE_FLAG.pvpZone) !== 0) zone = ZONE_FLAG.pvpZone;
+  return (raw & TILE_FLAG.noLogout) !== 0 ? zone | ZONE_FLAG.noLogout : zone;
+}
+
+/** Só os tiles com zona, esparso: chave `x,y,z` → valor normalizado. Tile normal não entra. */
+function collectZones(tiles: ReadonlyMap<string, RegionTile>): Map<string, number> {
+  const zones = new Map<string, number>();
+  for (const [k, tile] of tiles) {
+    const value = zoneFlagsOf(tile);
+    if (value !== 0) zones.set(k, value);
+  }
+  return zones;
+}
+
+/**
+ * As linhas da camada `zones`, por andar (`z` como chave de texto, como em `floors`), sobre a
+ * caixa de `region`. Andar sem nenhum tile com zona fica de FORA — "ausente, tudo é normal", e o
+ * arquivo não ganha linhas de ponto que ninguém pediu. Tile fora do mapa é normal.
+ */
+export function zoneRowsOf(
+  zones: ReadonlyMap<string, number>, region: Region, floors: readonly number[],
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const z of floors) {
+    const rows: string[] = [];
+    let any = false;
+    for (let y = region.y[0]; y <= region.y[1]; y++) {
+      let row = '';
+      for (let x = region.x[0]; x <= region.x[1]; x++) {
+        const value = zones.get(key(x, y, z)) ?? 0;
+        if (value !== 0) any = true;
+        row += zoneChar(value);
+      }
+      rows.push(row);
+    }
+    if (any) out[String(z)] = rows;
+  }
+  return out;
+}
+
+/**
+ * A camada `zones` direto do OTBM, SEM o pacote de arte: as zonas vêm só de `TILE_FLAGS` e de o
+ * tile existir (chão ou item), e nada disso depende de id de aparência. É o que permite
+ * `--zones-only` e a conferência do `--check` numa máquina cujo pacote não é o contra o qual a
+ * geometria versionada foi gerada.
+ *
+ * Concorda com `importRegion` por construção: os dois passam por `collectTiles`, pelo mesmo
+ * filtro de existência e por `zoneRowsOf`. `region` é a caixa FINAL do mapa (`source.region`) e
+ * `floors` os andares dele.
+ */
+export function deriveZones(
+  source: Iterable<OtbmTile>, region: Region, floors: readonly number[],
+): Record<string, string[]> {
+  const { tiles } = collectTiles(source);
+  for (const [k, tile] of tiles) if (!exists(tile)) tiles.delete(k);
+  return zoneRowsOf(collectZones(tiles), region, floors);
+}
+
+/**
+ * Troca a camada `zones` de um mapa já importado e devolve o resto intacto — a escrita de
+ * `--zones-only`. Andar sem zona no `derived` perde a camada: a regeneração é a fonte, nunca uma
+ * linha herdada.
+ */
+export function applyZones(content: TilemapInput, derived: Readonly<Record<string, readonly string[]>>): TilemapInput {
+  const floors: NonNullable<TilemapInput['floors']> = {};
+  for (const [z, floor] of Object.entries(content.floors ?? {})) {
+    const { zones: _previous, ...rest } = floor;
+    const rows = derived[z];
+    floors[z] = rows === undefined ? rest : { ...rest, zones: [...rows] };
+  }
+  return { ...content, floors };
+}
+
+/** Quantos tiles de cada zona há por andar — o número que o relatório e o PR citam. */
+export function summarizeZones(floors: TilemapInput['floors']): Array<{ z: string; counts: Record<string, number> }> {
+  return Object.entries(floors ?? {}).map(([z, floor]) => {
+    const counts: Record<string, number> = {};
+    for (const row of floor.zones ?? []) {
+      for (const char of row) if (char !== '.') counts[char] = (counts[char] ?? 0) + 1;
+    }
+    return { z, counts };
+  });
+}
 
 /**
  * Bloqueado quando o chão ou qualquer item da pilha tem `unpass`. Tile sem chão e com item é
@@ -242,6 +355,10 @@ export function importRegion(source: Iterable<OtbmTile>, options: ImportOptions)
     blocked.set(k, blockedOf(tile, options.flagsOf, new Set(), options.sceneryIndex));
     blocksSight.set(k, blocksSightOf(tile, options.flagsOf, new Set()));
   }
+  // As zonas (#830) saem do que existe no arquivo, ANTES do recorte à componente: o mesmo que
+  // `deriveZones` enxerga sem o pacote de arte, e por isso as duas concordam. O tile podado fica
+  // fora do mapa (`#` nas outras camadas), onde ninguém pisa — a zona dele não tem consumidor.
+  const zoneFlags = collectZones(collected.tiles);
 
   // Recorte à componente: fica a componente andável mais a borda de um tile (paredes, decoração).
   //
@@ -320,7 +437,8 @@ export function importRegion(source: Iterable<OtbmTile>, options: ImportOptions)
     charOf.set(speed, char);
   });
 
-  const floors: Record<string, { grid: string[]; speed: string[]; sight: string[] }> = {};
+  const zoneRows = zoneRowsOf(zoneFlags, region, floorsPresent);
+  const floors: Record<string, { grid: string[]; speed: string[]; sight: string[]; zones?: string[] }> = {};
   const perFloor: Array<{ z: number; tiles: number; blocked: number; walkable: number }> = [];
   for (const z of floorsPresent) {
     const grid: string[] = [];
@@ -349,7 +467,8 @@ export function importRegion(source: Iterable<OtbmTile>, options: ImportOptions)
       speedRows.push(speedRow);
       sightRows.push(sightRow);
     }
-    floors[String(z)] = { grid, speed: speedRows, sight: sightRows };
+    const zones = zoneRows[String(z)];
+    floors[String(z)] = { grid, speed: speedRows, sight: sightRows, ...(zones === undefined ? {} : { zones }) };
     perFloor.push({ z, tiles: count, blocked: blockedCount, walkable: count - blockedCount });
   }
 
@@ -517,21 +636,15 @@ export function formatContentMap(map: TilemapInput): string {
   const entries = Object.entries(map.floors ?? {});
   entries.forEach(([z, floor], index) => {
     lines.push(`    "${z}": {`);
-    lines.push('      "grid": [');
-    floor.grid.forEach((row, i) => lines.push(`        ${JSON.stringify(row)}${i === floor.grid.length - 1 ? '' : ','}`));
-    const hasMore = floor.speed !== undefined || floor.sight !== undefined;
-    lines.push(hasMore ? '      ],' : '      ]');
-    if (floor.speed !== undefined) {
-      const moreAfterSpeed = floor.sight !== undefined;
-      lines.push('      "speed": [');
-      floor.speed.forEach((row, i) => lines.push(`        ${JSON.stringify(row)}${i === floor.speed!.length - 1 ? '' : ','}`));
-      lines.push(moreAfterSpeed ? '      ],' : '      ]');
-    }
-    if (floor.sight !== undefined) {
-      lines.push('      "sight": [');
-      floor.sight.forEach((row, i) => lines.push(`        ${JSON.stringify(row)}${i === floor.sight!.length - 1 ? '' : ','}`));
-      lines.push('      ]');
-    }
+    // As camadas, na ordem de sempre — `grid`, `speed`, `sight` e, desde a #830, `zones` —, cada
+    // uma com uma linha por linha da grade; só a presente é escrita.
+    const layers = ([['grid', floor.grid], ['speed', floor.speed], ['sight', floor.sight], ['zones', floor.zones]] as const)
+      .flatMap(([name, rows]) => (rows === undefined ? [] : [[name, rows] as const]));
+    layers.forEach(([name, rows], layer) => {
+      lines.push(`      "${name}": [`);
+      rows.forEach((row, i) => lines.push(`        ${JSON.stringify(row)}${i === rows.length - 1 ? '' : ','}`));
+      lines.push(layer === layers.length - 1 ? '      ]' : '      ],');
+    });
     lines.push(`    }${index === entries.length - 1 ? '' : ','}`);
   });
   lines.push('  },');
@@ -629,6 +742,12 @@ export interface CheckOutcome {
   readonly file: string;
   readonly status: 'fresh' | 'stale' | 'absent' | 'hand-made';
   readonly detail?: string;
+  /**
+   * `true` quando a camada `zones` foi conferida contra o OTBM (#830) — o que acontece mesmo num
+   * `absent` por falta do pacote de arte, e é o que o relatório precisa dizer para o "pulado"
+   * não parecer que nada foi olhado.
+   */
+  readonly zonesChecked?: true;
 }
 
 /**
@@ -659,13 +778,34 @@ export function checkMaps(
     if (sha256 !== committed.source.sha256) {
       return { file, status: 'stale', detail: `o OTBM mudou: sha256 ${committed.source.sha256.slice(0, 12)}… no arquivo, ${sha256.slice(0, 12)}… no disco` };
     }
+    const region = committed.source.region;
+    // As zonas (#830) são a única camada que o OTBM sozinho decide — vêm de `TILE_FLAGS`, sem id
+    // de aparência —, então são conferidas ANTES de o pacote de arte entrar em cena: na máquina
+    // que não o tem a geometria vira `absent`, mas uma camada `zones` editada à mão ou um OTBM
+    // que mudou as zonas continuam sendo pegos. Só confere o mapa que JÁ tem a camada: um recorte
+    // ainda não reimportado com ela é "tudo normal", e as hunts dele não mudam (ADR 0060 d.8).
+    let zonesChecked = false;
+    if (Object.values(committed.floors ?? {}).some((floor) => floor.zones !== undefined)) {
+      const derived = deriveZones(readOtbmTiles(bytes, region), region, Object.keys(committed.floors ?? {}).map(Number));
+      for (const [z, floor] of Object.entries(committed.floors ?? {})) {
+        if (JSON.stringify(floor.zones ?? null) !== JSON.stringify(derived[z] ?? null)) {
+          return {
+            file, status: 'stale',
+            detail: `as zonas (zones) do andar ${z} diferem das dos TILE_FLAGS do OTBM — rode pnpm map:import --id ${committed.id} --zones-only`,
+          };
+        }
+      }
+      zonesChecked = true;
+    }
     // Com o OTBM mas sem o pacote de arte, a geometria não é regenerável: é aviso, como faltar
     // o próprio OTBM — nunca uma exceção que derruba o `pnpm check`.
     if (pack === null && !existsSync(join(thingsDir, version, 'catalog-content.json'))) {
-      return { file, status: 'absent', detail: `pacote ${version} não está em ${thingsDir}` };
+      return {
+        file, status: 'absent', detail: `pacote ${version} não está em ${thingsDir}`,
+        ...(zonesChecked ? { zonesChecked: true as const } : {}),
+      };
     }
     pack ??= loadPack(thingsDir, version);
-    const region = committed.source.region;
     const entry = committed.entryPoint === undefined
       ? undefined
       : { x: committed.entryPoint.x + region.x[0], y: committed.entryPoint.y + region.y[0], z: committed.entryPoint.z ?? committed.z };
@@ -675,8 +815,12 @@ export function checkMaps(
       defaultZ: committed.z, source: { file: committed.source.file, sha256 }, version, allowUnknown: true,
       ...(sceneryIndex === undefined ? {} : { sceneryIndex }),
     });
-    const before = JSON.stringify({ floors: committed.floors, speedPalette: committed.speedPalette ?? {} });
-    const after = JSON.stringify({ floors: regenerated.content.floors, speedPalette: regenerated.content.speedPalette ?? {} });
+    // Sem `zones` dos dois lados: o importador as gera sempre, o mapa ainda não migrado não as
+    // tem, e elas já foram conferidas acima, sem depender do pacote.
+    const geometry = (floors: TilemapInput['floors']): unknown =>
+      Object.fromEntries(Object.entries(floors ?? {}).map(([z, { zones: _zones, ...layers }]) => [z, layers]));
+    const before = JSON.stringify({ floors: geometry(committed.floors), speedPalette: committed.speedPalette ?? {} });
+    const after = JSON.stringify({ floors: geometry(regenerated.content.floors), speedPalette: regenerated.content.speedPalette ?? {} });
     if (before !== after) {
       return { file, status: 'stale', detail: 'a geometria regenerada difere da versionada — o recorte foi editado à mão, ou o pacote mudou' };
     }
@@ -713,7 +857,8 @@ export function checkMaps(
 
 function usage(): string {
   return 'Usage: pnpm map:import --id <id> --x a..b --y a..b --z a..b [--entry x,y,z] [--keep-from x,y,z]'
-    + ' [--default-z n] [--otbm <file>] [--things <dir>] [--version <n>] [--allow-unknown] | --check';
+    + ' [--default-z n] [--otbm <file>] [--things <dir>] [--version <n>] [--allow-unknown]'
+    + ' | --check | --id <id> --zones-only';
 }
 
 if (import.meta.main) {
@@ -723,7 +868,7 @@ if (import.meta.main) {
       id: { type: 'string' }, x: { type: 'string' }, y: { type: 'string' }, z: { type: 'string' },
       entry: { type: 'string' }, 'keep-from': { type: 'string' }, 'default-z': { type: 'string' },
       otbm: { type: 'string' }, things: { type: 'string' }, version: { type: 'string' },
-      'allow-unknown': { type: 'boolean' }, check: { type: 'boolean' },
+      'allow-unknown': { type: 'boolean' }, check: { type: 'boolean' }, 'zones-only': { type: 'boolean' },
     },
     strict: true,
   });
@@ -737,10 +882,52 @@ if (import.meta.main) {
     for (const outcome of outcomes) {
       if (outcome.status === 'fresh') console.log(`maps/${outcome.file}: confere com o OTBM`);
       else if (outcome.status === 'hand-made') console.log(`maps/${outcome.file}: autorado à mão, nada a conferir`);
-      else if (outcome.status === 'absent') console.log(`maps/${outcome.file}: ${outcome.detail ?? 'OTBM não está nesta máquina'} — pulado (rode pnpm map:fetch e traga o pacote de arte)`);
+      else if (outcome.status === 'absent') {
+        // A camada `zones` (#830) não precisa do pacote: quando o mapa a tem, ela foi conferida
+        // mesmo aqui, e o "pulado" é só da geometria.
+        const skipped = outcome.zonesChecked === true ? 'zonas (zones) conferem com o OTBM; geometria pulada' : 'pulado';
+        console.log(`maps/${outcome.file}: ${outcome.detail ?? 'OTBM não está nesta máquina'} — ${skipped} (rode pnpm map:fetch e traga o pacote de arte)`);
+      }
       else { stale = true; console.error(`maps/${outcome.file}: DESATUALIZADO — ${outcome.detail ?? ''}`); }
     }
     process.exit(stale ? 1 : 0);
+  }
+
+  // `--zones-only` (#830): a camada `zones` de um mapa JÁ importado, direto do OTBM da `source`
+  // dele, sem pacote de arte e sem tocar em mais nada — nem na geometria, nem em `things/`.
+  if (values['zones-only']) {
+    if (values.id === undefined) {
+      console.error(usage());
+      process.exit(2);
+    }
+    const mapPath = join(MAPS_DIR, `${values.id}.json`);
+    if (!existsSync(mapPath)) { console.error(`${mapPath} não existe — importe o mapa antes`); process.exit(1); }
+    const committed = tilemapSchema.parse(JSON.parse(readFileSync(mapPath, 'utf8')));
+    if (committed.source === undefined) {
+      console.error(`${values.id} é autorado à mão: não tem OTBM de origem (source) de onde ler zonas`);
+      process.exit(1);
+    }
+    const otbmPath = join(otbmDir, committed.source.file);
+    if (!existsSync(otbmPath)) { console.error(`${otbmPath} não existe — rode pnpm map:fetch`); process.exit(1); }
+    const otbmBytes = new Uint8Array(readFileSync(otbmPath));
+    const otbmSha = createHash('sha256').update(otbmBytes).digest('hex');
+    if (otbmSha !== committed.source.sha256) {
+      console.error(`o OTBM mudou: sha256 ${committed.source.sha256.slice(0, 12)}… no mapa, ${otbmSha.slice(0, 12)}… no disco — reimporte o mapa inteiro`);
+      process.exit(1);
+    }
+    const derived = deriveZones(
+      readOtbmTiles(otbmBytes, committed.source.region), committed.source.region,
+      Object.keys(committed.floors ?? {}).map(Number),
+    );
+    const updated = applyZones(committed, derived);
+    writeFileSync(mapPath, formatContentMap(updated));
+    console.log(`zonas de "${values.id}" regeneradas do OTBM (geometria intacta)`);
+    for (const { z, counts } of summarizeZones(updated.floors)) {
+      const summary = Object.entries(counts).map(([char, n]) => `${char}: ${n}`).join(', ');
+      console.log(`  z${z}: ${summary === '' ? 'tudo normal (sem camada)' : summary}`);
+    }
+    console.log(`  escrito: ${mapPath}`);
+    process.exit(0);
   }
 
   if (values.id === undefined || values.x === undefined || values.y === undefined || values.z === undefined) {
@@ -816,6 +1003,10 @@ if (import.meta.main) {
   console.log(`  região: x ${report.region.x[0]}..${report.region.x[1]}, y ${report.region.y[0]}..${report.region.y[1]}, z ${report.region.z[0]}..${report.region.z[1]} (${result.stack.width}×${result.stack.height})`);
   console.log(`  tiles lidos: ${report.tilesRead}; conflitos (último venceu): ${report.conflicts}; descartados: ${report.dropped}`);
   for (const floor of report.perFloor) console.log(`  z${floor.z}: ${floor.tiles} tiles, ${floor.walkable} andáveis, ${floor.blocked} bloqueados`);
+  for (const { z, counts } of summarizeZones(result.content.floors)) {
+    const summary = Object.entries(counts).map(([char, n]) => `${char}: ${n}`).join(', ');
+    if (summary !== '') console.log(`  zonas z${z} (#830): ${summary}`);
+  }
   console.log(`  aparências distintas: ${report.distinctIds}; desconhecidas no pacote: ${report.unknownIds.length}${report.unknownIds.length > 0 ? ` (${report.unknownIds.slice(0, 20).join(', ')})` : ''}`);
   console.log(`  candidatos a escada (autorar em floorChanges): ${report.stairCandidates.length}`);
   for (const candidate of report.stairCandidates.slice(0, 80)) {
