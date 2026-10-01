@@ -148,3 +148,28 @@ entra e os Charms rolam —, então `COMBAT_V4.migrationPolicy` é `breaking` a 
 conteúdo real (`baseline.json`) passa a declarar `combat-v4`. O detalhe dos estágios está em
 `docs/product/combat-conformance.md` ("Estágio #603") e a decisão sobre os charms na emenda de
 2026-09-29 do [ADR 0053](0053-bestiary-xp-line-kept-and-charms-added.md).
+
+## Emenda — 2026-09-30: onde o nível de hazard é escolhido e o que o registro guarda (#632)
+
+A decisão 5 diz que o "nível de hazard escolhido na entrada" viaja no ticket e fica fixado na
+sessão, e a decisão 1 nomeia o registro `hazard { maxLevel: {zoneId → n} }`. A implementação do
+Hazard (#632, [`docs/product/hazard.md`](../product/hazard.md)) precisou de duas precisões, e
+nenhuma muda a regra:
+
+1. **O registro guarda também o nível ESCOLHIDO** — `hazard { maxLevel: {zoneId → n},
+   currentLevel: {zoneId → n}, version }`, o `max-level`/`current-level` do `hazard.lua` do
+   Canary. O ticket carrega o REGISTRO (como `charms`), e não um campo `hazardLevel` à parte: o
+   nível "escolhido na entrada" é o `currentLevel` que o personagem deixou antes de entrar, lido a
+   cada golpe pela hunt (o menor entre os membros da party). Ele é **fixo** na sessão porque a
+   escolha é uma intenção de Cidade (`set-hazard-level`, decisão 2) que a hunt RECUSA — não por um
+   campo copiado na entrada.
+2. **A escolha da Cidade grava o extrato de estado na hora**, e não só no `release`. A decisão 3
+   registrou como alternativa "escrever o extrato da Cidade a cada compra", adiada enquanto a perda
+   não incomodasse. O Hazard é o primeiro caso em que ela incomoda: o ticket de uma party é emitido
+   pela `api` a partir da LINHA do banco (ADR 0027), e o nível que o membro acabou de escolher na
+   praça só chega lá pelo extrato, que a `api` liquida antes de emitir (ADR 0028 d.5). Os demais
+   serviços de Cidade seguem no `release`.
+
+O estágio do `combat-v4` da decisão 7 está declarado em `docs/product/combat-conformance.md`
+("Estágio #632").
+

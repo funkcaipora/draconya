@@ -530,6 +530,17 @@ Efeitos, só para o monstro que É a boosted do dia (`packages/sim/src/rulesets/
 Sem `boosted/baseline.json` no conteúdo, ou sem `content.bestiary`, o `jobs` não sorteia nada e
 nenhum efeito liga — é o conteúdo de teste que não fala de engajamento diário.
 
+## Hazard — o nível de perigo opcional de uma zona (#632)
+
+Uma hunt com `hazardZoneId` (`data/hunts/gnomprona-gardens.json`) deixa o jogador escolher, NA
+CIDADE, o nível de hazard de 1 a 12 que o personagem desbloqueou; o nível fica fixo na entrada e
+liga os estágios do `combat-v4` (reforço e crítico do monstro, esquiva do monstro, XP, loot extra,
+Plunder Patriarch). O sistema inteiro — fórmulas, parâmetros, persistência e o que ficou de fora —
+está em [`hazard.md`](./hazard.md). A hunt da zona é o recorte real da componente central dos
+Jardins de Gnomprona (151×141, andar 14, rota de 1.828 tiles) com os 73 pontos de spawn que o
+catálogo resolve hoje (Hulking Prehemoth e Stalking Stalk); as outras 13 espécies do Canary são
+relatadas por `pnpm catalog:spawns` e entram quando o catálogo as tiver.
+
 ## O ruleset, e por que ele é o molde dos outros cinco
 
 Um ruleset define **quatro** coisas, e são as mesmas para hunt, treino, quest, boss e guild war:
