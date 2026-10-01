@@ -90,6 +90,7 @@ describe('HuntActions e o Treino (#631, ADR 0059)', () => {
     perCharge: { tries: 7, manaSpent: 600 }, bankCapMs: 43_200_000, graceMs: 600_000,
     spendCapMs: { free: 21_600_000, premium: 43_200_000 },
     offlineSkills: [{ skillId: 'sword', name: 'Espada', kind: 'attacks' as const }],
+    skills: [{ skillId: 'sword', name: 'Espada', kind: 'attacks' as const }],
   };
   const withTraining = (): void => {
     hud.set((state) => ({
