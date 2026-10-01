@@ -129,13 +129,16 @@ pnpm map:import --id thais --x 32275..32458 --y 32153..32291 --z 4..7 --entry 32
 pnpm map:import --id rat-cellars --x 32022..32139 --y 32168..32247 --z 8
 pnpm map:import --id rotworm-caves --x 33098..33185 --y 32401..32473 --z 8..8
 pnpm map:import --check                          # dentro do pnpm check; sem o OTBM, avisa e pula
+pnpm map:import --id thais --zones-only          # só a camada `zones` (#830), direto do OTBM; geometria intacta
 ```
 
 Cada importação escreve dois arquivos, um por consumidor:
 
 - `packages/content/data/maps/<id>.json` — o que o **servidor** precisa: por andar, a grade de
-  bloqueio (`#`/`.`) e a de velocidade de chão (um caractere por tile, resolvido por
-  `speedPalette`), `entryPoint`, `floorChanges` e `source` (arquivo, SHA-256, região). É
+  bloqueio (`#`/`.`), a de velocidade de chão (um caractere por tile, resolvido por
+  `speedPalette`) e, desde a #830, a de zonas (PZ, no-pvp, no-logout e arena, lidas de
+  `TILE_FLAGS`, com a paleta fixa `ZONE_PALETTE`), `entryPoint`, `floorChanges` e `source`
+  (arquivo, SHA-256, região). É
   versionado, e é a única coisa do mapa que entra em `computeVersion`.
 - `things/<versão>/maps/<id>.json` — a **pilha de aparências por tile**, para o cliente, em
   coordenadas locais ao recorte (`[x, y, z, chão, [itens…]]`). Servido por `/things/`, nunca
