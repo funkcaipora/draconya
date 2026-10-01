@@ -3,8 +3,8 @@
 **Status:** parcial — protect zone com mapa, ponto de entrada e movimento (FUN-60, FUN-69),
 **shard compartilhado** com entrada, saída e visibilidade entre jogadores (FUN-71),
 **interest management por célula com teto de 200 por cópia** (FUN-33) e **a Thais real, com
-andares e escadas, como mapa da Cidade** (FUN-120, ADR 0025); faltam loja, depósito e Market
-(E5, E13)
+andares e escadas, como mapa da Cidade** (FUN-120, ADR 0025); o custo do leque de saída está
+medido (OW-07, #828); faltam loja, depósito e Market (E5, E13)
 **PRD:** §6, §37
 **Épico:** E1 (sessão e visualizador)
 **Referência técnica:** [ADR 0004](../adr/0004-city-as-protect-zone.md) (Cidade como protect
@@ -240,7 +240,8 @@ duzentos é o canal global com outro nome.
 
 ### Medido
 
-`pnpm bench:city`, com as pessoas espalhadas pelo mapa:
+`MAP=square pnpm bench:city` (a praça sintética de antes da Thais), com as pessoas espalhadas pelo
+mapa:
 
 | jogadores | vizinhos por jogador | sem AOI | mensagens | sem AOI |
 |---|---|---|---|---|
@@ -251,7 +252,7 @@ duzentos é o canal global com outro nome.
 Quintuplicar a população não mexeu em quantos recebem cada passo — é a propriedade que a issue
 pede. Sem interest management, o total de mensagens cresce 25 vezes para 5 vezes mais gente.
 
-**Na Thais real** (`MAP=thais pnpm bench:city`, FUN-120), com todo mundo chegando no templo — a
+**Na Thais real** (`pnpm bench:city`, hoje o padrão; FUN-120), com todo mundo chegando no templo — a
 hora do login — e depois espalhados pelas ruas, cada um num alvo a pé a intervalos iguais da
 entrada:
 
@@ -280,6 +281,103 @@ faixa morta dos dois limiares é o que evita o `appear`/`disappear` a cada passo
 nada, todo mundo fica no mesmo punhado de tiles, e quem está ao alcance da vista É a praça inteira:
 500 jogadores dão 374 vizinhos em vez de 499. A AOI não tem o que cortar enquanto ninguém se
 espalha — o corte aparece quando a Cidade tiver loja, depósito e ruas.
+
+**As duas tabelas de mensagens acima são anteriores ao FUN-122 e não se reproduzem mais.** O bench
+de então fixava o relógio do hospedeiro em zero; desde que o hospedeiro recusa o `walk` adiantado
+(um passo por vez, FUN-122) todo passo depois do primeiro era recusado, e a tabela continuava saindo
+— 100 pessoas no templo davam 7,5 mil mensagens em vez das 35 mil publicadas, e a dispersão parava
+na quarta rodada. O número que continua valendo é o de **vizinhos por jogador**, que a tabela nova
+repete; os totais de mensagens passam a ser os dela.
+
+### Custo do leque de saída (OW-07, #828)
+
+Até aqui o bench só contava mensagem. O ADR 0060 aposta que o que cede primeiro quando o mundo
+enche é o **leque de saída** — cada passo vira uma mensagem por vizinho, codificada uma vez por
+destinatário em `viewer.ts` — e não a CPU do `sim`. O OW-22 vai mexer nesse leque, e precisa de um
+antes para comparar: `pnpm bench:city` agora reporta, por cenário, a **CPU por ciclo** (p50 e p99),
+os **bytes por visualizador por segundo** e a **fila máxima por flush**.
+
+**Como se mede.**
+
+- `SessionHost`, `CityShard` e `Viewer` de verdade, com o codec real (`encodeS2C` + `packBatch`).
+  O socket só conta os bytes do frame; o uWS roda sem compressão (`server.ts` não configura
+  `compression`), então o frame é o fio, mais 2 a 10 bytes de cabeçalho do WebSocket por quadro.
+- Relógio simulado, no ritmo de produção: o passo da Cidade é de 150 ms (`city.json`) e o
+  hospedeiro fecha um ciclo a cada 100 ms (`CYCLE_MS` em `host.ts`), com um frame por visualizador.
+  Cada jogador pisa uma vez por período de passo, defasado dos outros. Um teste prende que o
+  `CYCLE_MS` do bench é o do hospedeiro.
+- CPU é `process.cpuUsage()` em volta dos `walk` do ciclo (enfileirar: movimento, AOI, montar a
+  mensagem de cada destinatário) e do `host.cycle` (esvaziar: codificar e escrever). `p99 / ciclo` é
+  o p99 de CPU como fração dos 100 ms.
+- 200 passos medidos por jogador (300 ciclos) depois de 30 de aquecimento; no cenário espalhado,
+  cada um caminha antes até o próprio alvo. Cada linha é a melhor de 2 rodadas (`REPEAT=2`, a de
+  menor p50 de CPU).
+
+**Máquina:** Apple M2, 8 núcleos (4 de desempenho e 4 de eficiência), `darwin arm64`, Node 24.14.1,
+8 GiB — a máquina de desenvolvimento, **com outros processos rodando** (carga de 10 a 22 durante a
+medição). O `cpuUsage` não conta o tempo em que o processo esteve preemptado, e a CPU do processo
+ficou em 78 a 107 % da parede; mesmo assim um núcleo disputado é um núcleo mais lento: numa
+execução anterior, com a carga de 17 a 25 e a CPU em 30 % da parede, as mesmas linhas deram de 1,5
+a 2,6 vezes estes valores. **Leia as colunas de CPU como teto**, e compare antes e depois sempre na
+mesma máquina, sob carga parecida. A medição no destino (ADR 0013) continua por fazer.
+
+Todo mundo no templo, como na hora do login:
+
+| jogadores | vizinhos | passos/s | CPU p50 µs | CPU p99 µs | flush p50 µs | p99 / ciclo | B/vis/s | msg/vis/s | fila máx | quedas |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 98,7 | 2,3 | 4.206 | 10.861 | 2.809 | 10,9 % | 21.735 | 228 | 32 | 0 |
+| 200 | 181,5 | 1,0 | 8.749 | 25.871 | 5.260 | 25,9 % | 16.822 | 175 | 50 | 0 |
+| 500 | 293,8 | 1,1 | 65.396 | 113.972 | 22.877 | 114,0 % | 26.547 | 275 | 77 | 0 |
+
+As pessoas espalhadas pelas ruas:
+
+| jogadores | vizinhos | passos/s | CPU p50 µs | CPU p99 µs | flush p50 µs | p99 / ciclo | B/vis/s | msg/vis/s | fila máx | quedas |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 7,8 | 6,4 | 1.016 | 4.170 | 666 | 4,2 % | 5.478 | 56 | 13 | 0 |
+| 200 | 16,0 | 6,4 | 4.416 | 13.217 | 2.463 | 13,2 % | 10.552 | 109 | 23 | 0 |
+| 500 | 37,9 | 6,3 | 53.179 | 98.825 | 17.703 | 98,8 % | 23.601 | 243 | 53 | 0 |
+
+**Como ler.** `passos/s` são os passos *aceitos* por jogador por segundo; o ideal é 6,7 (1000 ÷ 150).
+Espalhados chega perto. No templo fica em 1 a 2: tile é exclusivo, e quinhentas pessoas num salão só
+andam quando alguém sai da frente — a linha mede uma multidão quase parada, que é o login. `CPU µs`
+soma os `walk` do ciclo e o `host.cycle`; `flush` é só a parte que codifica e escreve. `fila máx` é a
+maior fila de um visualizador no instante do flush, contra o teto de 512 do `Viewer`. `quedas` conta
+os visualizadores derrubados por esse teto; diferente de zero, a linha não mede o jogo.
+
+**O que a linha de base mostra.**
+
+- **O ciclo de 500 pessoas está no limite dos 100 ms.** O p50 de CPU é de 53 ms (espalhados) e de
+  65 ms (templo), e o p99 chega a 99 e 114 ms: sem folga, num nó em que o `sim` ainda nem roda
+  monstro. Com 100 e 200 pessoas há folga larga — p99 de 4 a 26 ms.
+- **O que cresce é enfileirar, e não codificar.** Dividindo a CPU p50 pelas mensagens entregues por
+  ciclo (jogadores × msg/vis/s ÷ 10), o custo por mensagem entregue passa de 1,8–2,5 µs (100 e 200)
+  para 4,4–4,8 µs (500). O `flush` (codificar e escrever) quase não se mexe — de 1,1 a 1,7 µs por
+  mensagem —; o resto (CPU p50 menos `flush` p50, o `walk`) vai de 0,6 a 3,1 µs, quase na proporção
+  dos visualizadores. É a assinatura de `#sendToViewersOf`, que percorre todos os visualizadores
+  para achar os de cada destinatário: custo por passo de vizinhos × visualizadores. Um perfil
+  anterior (`node --cpu-prof`, 500 no templo, processo inteiro, carregamento do conteúdo incluído)
+  pôs no topo `buildFrame` do codec (11,7 %), a coleta de lixo (9,9 %), `#presentMoves` (9,1 %),
+  `#sendToViewersOf` (6,3 %) e o `TextEncoder` (6,1 %).
+- **Uma mensagem custa cerca de 96 bytes, em todas as linhas** (B/vis/s ÷ msg/vis/s dá de 95 a 98).
+  `creature-move` é `[opcode, {id, from, to, durationMs}]` em JSON, com 5 bytes de cabeçalho próprio
+  e 4 de prefixo no lote; e o lote nunca é comprimido — `packBatch` só marca `BATCH_FLAG`, e a
+  compressão do `buildFrame` só vale por mensagem de 8 KiB ou mais. Com 500 espalhados são 24 KB/s
+  por visualizador (cerca de 190 kbit/s) e 11,8 MB/s para a praça inteira; com 500 no templo, 13,3
+  MB/s.
+- **A fila não é o limite hoje.** O máximo foi de 77 mensagens (templo, 500) contra o teto de 512,
+  com zero quedas em todas as linhas. Ela cresce com vizinhos × passos por ciclo, e o templo de 500
+  anda a um sexto da velocidade: uma multidão que andasse inteira mediria bem mais.
+
+**O que esta medição não cobre.**
+
+- O passo é um zigue-zague de um tile (norte, leste, sul, oeste), então quase ninguém cruza a
+  célula da AOI e `creature-appear` / `creature-disappear` ficam sub-representados.
+- É só movimento de jogador na Thais pacífica: sem monstro, golpe, magia, chat nem os
+  `player-stats` e inventário dos ciclos reais.
+- Uma cópia só, com o teto alargado para caber todos; o teto de 200 por cópia do FUN-33 não vale
+  aqui. Só o andar 7.
+- `pnpm bench:city` com `AOI=both` roda também o grupo de controle (a sessão inteira); `MAP=square`
+  roda a praça sintética; `FORMAT=markdown` imprime a tabela pronta para esta página.
 
 ## Regras
 
