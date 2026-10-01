@@ -6849,6 +6849,19 @@ const slots = bot.groups.get(group);
       const subject = conditionSubject(character.id, condition.key);
       session.cancelEvent(CONDITION_EXPIRE, subject);
       session.cancelEvent(CONDITION_TICK, subject);
+      if (condition.key === FEARED_CONDITION_KEY) {
+        // O medo de um PERSONAGEM não tem `condition-expire` (M44-04, #622, ver `FEAR_THINK`): quem
+        // o fecha é o pensamento depois do prazo, e a fuga do último pensamento sai ANTES de ele
+        // fechar. Um `condition-expire` aqui o removeria no instante do prazo, antes dessa fuga e
+        // sem a imunidade de 10 s. Entrando por transição o medo volta no próximo instante da grade
+        // de pensamento do personagem NESTA sessão — o `flee` viaja na condição, a caminhada
+        // forçada (do runner) não: a próxima fuga é decidida de novo.
+        session.cancelEvent(FEAR_THINK, character.id);
+        session.scheduleIn(FEAR_THINK, this.#thinkDelayMs(session, character.id, session.nowMs), {
+          priority: EventPriority.Movement, subject: character.id,
+        });
+        continue;
+      }
       session.scheduleIn(CONDITION_EXPIRE, Math.max(0, condition.expiresAtMs - session.nowMs), {
         priority: EXPIRE_PRIORITY, subject,
       });

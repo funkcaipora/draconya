@@ -878,7 +878,12 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
     de personagem, e monstro (que não foge) segue com o `condition-expire` de sempre. Toda remoção
     por fora (`#dispelConditions`, o Cleanse) passa por `#endFear`, e a morte/saída por
     `#cancelConditionEvents` — se uma remoção nova esquecer os dois, o `FEAR_THINK` fica órfão na
-    fila e a `fearWalk` continua andando.
+    fila e a `fearWalk` continua andando. **A condição atravessa a troca de sessão** (#812, como todas:
+    `onLeave` só tira os eventos, não a condição) e `#armConditions` a REARMA no `onEnter` — para o
+    medo de personagem agenda um `FEAR_THINK` na grade da sessão nova, nunca um `condition-expire`
+    (que fecharia o medo no instante do prazo, antes da última fuga). `rooted` e `pacified` usam o
+    `condition-expire` genérico; o golpe estacionado (`attackParked`) e a `fearWalk` são do runner e
+    morrem com a sessão — a nova decide de novo, pela condição.
   - **`Runner.fearWalk` tem prioridade absoluta em `#playerStep`** (acima do `walk-to`, do
     combate-stop, do follow e da rota) e persiste no snapshot (`RunnerState.fearWalk`). A lista guarda
     valores do enum `Direction` do Canary (`fear.ts`), não `Direction` do `sim` — a fuga anda em

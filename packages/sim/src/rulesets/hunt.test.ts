@@ -18394,6 +18394,116 @@ describe('condições de controle: rooted, feared e pacified (M44-04, #622, ADR 
       expect(feared.map((member) => member.id)).toEqual(['hero', 'second']);
     });
   });
+
+  // A transição entre sessões (#812) leva as condições de controle como qualquer condição: o prazo
+  // é traduzido para o relógio da sessão que entra, e a hunt que entra rearma o que a fila da
+  // anterior levava. O medo de personagem é o caso especial — não tem `condition-expire`, e quem o
+  // fecha é o pensamento (`FEAR_THINK`).
+  describe('a transição entre sessões (#812)', () => {
+    /** O mesmo herói, de uma sessão que andou `elapsedMs` para uma NOVA arena, como o servidor faz. */
+    function crossOver(
+      before: { readonly session: Session; readonly hero: CharacterRuntime },
+      elapsedMs: number,
+    ): { readonly session: Session; readonly ruleset: HuntRuleset } {
+      advance(before.session, elapsedMs);
+      before.session.leave(before.hero.id);
+      const session = createHuntSession({
+        id: 'session-2', content: arena([casterOf([])]), huntId: 'arena', difficulty: 'cautious',
+        createdAtMs: 0,
+      });
+      session.enter(before.hero);
+      return { session, ruleset: session.ruleset as HuntRuleset };
+    }
+
+    it('rooted: o prazo atravessa traduzido, o herói segue preso e solta no instante exato', () => {
+      const first = start({ loaded: arena([casterOf([])]) });
+      first.hero.conditions.apply({ key: 'rooted', expiresAtMs: 3_000, merge: 'longest' });
+      const { session, ruleset } = crossOver(first, 1_000);
+      // Faltavam 2 000 ms e é isso que a sessão nova enxerga.
+      expect(first.hero.conditions.get('rooted')?.expiresAtMs).toBe(2_000);
+      expect(session.dueAtOf('condition-expire', 'hero/rooted')).toBe(2_000);
+      const from = { ...first.hero.position };
+      session.advanceBy(1_999);
+      expect(first.hero.position).toEqual(from);
+      expect(ruleset.requestMove(session, first.hero.id, { x: from.x + 1, y: from.y }))
+        .toEqual({ ok: false, reason: 'rooted' });
+      session.advanceBy(1);
+      expect(first.hero.conditions.get('rooted')).toBeNull();
+      // O pedido é relativo ao tile ONDE O HERÓI ESTÁ: o bot solta no mesmo instante e já pode ter andado.
+      const now = first.hero.position;
+      expect(ruleset.requestMove(session, first.hero.id, { x: now.x, y: now.y + 1 }).ok).toBe(true);
+    });
+
+    it('pacified: o golpe fica estacionado até o pensamento seguinte ao prazo traduzido', () => {
+      const dummy = casterOf([], { attackRange: 1 });
+      const first = start({ loaded: arena([dummy], { x: 22, y: 20 }) });
+      first.hero.conditions.apply({ key: 'pacified', expiresAtMs: 10_000, merge: 'longest' });
+      advance(first.session, 4_000);
+      first.session.leave(first.hero.id);
+      const session = createHuntSession({
+        id: 'session-2', content: arena([dummy], { x: 22, y: 20 }), huntId: 'arena',
+        difficulty: 'cautious', createdAtMs: 0,
+      });
+      session.enter(first.hero);
+      const ruleset = session.ruleset as HuntRuleset;
+      // Faltavam 6 000 ms.
+      expect(first.hero.conditions.get('pacified')?.expiresAtMs).toBe(6_000);
+      session.advanceBy(1);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou o alvo');
+      plant(monster, { x: first.hero.position.x + 1, y: first.hero.position.y, z: 7 });
+      const full = monster.health;
+      session.advanceBy(5_500 - session.nowMs);
+      expect(monster.health).toBe(full);
+      // O golpe volta no PENSAMENTO seguinte ao prazo traduzido (6 000 ms), nunca antes dele — e
+      // não no instante cru que a hunt anterior guardava (10 000 ms).
+      while (monster.health === full && session.nowMs < 9_000) session.advanceBy(1);
+      expect(monster.health).toBeLessThan(full);
+      expect(session.nowMs).toBeGreaterThanOrEqual(6_000);
+      expect(session.nowMs).toBeLessThan(7_000);
+    });
+
+    it('feared: o medo NÃO ganha `condition-expire` na entrada — o pensamento o fecha, com a imunidade de 10 s', () => {
+      const first = start({ loaded: arena([casterOf([])]) });
+      first.hero.conditions.apply({
+        key: 'feared', expiresAtMs: 3_000, merge: 'longest', flee: { from: { x: 16, y: 20, z: 7 }, index: 2 },
+      });
+      const { session } = crossOver(first, 1_000);
+      const fear = first.hero.conditions.get('feared');
+      // O prazo e o `flee` atravessaram: faltavam 2 000 ms, e a direção de fuga é a mesma.
+      expect(fear).toMatchObject({ expiresAtMs: 2_000, flee: { from: { x: 16, y: 20, z: 7 }, index: 2 } });
+      // Quem fecha é o pensamento, agendado na grade da sessão nova — e nunca o vencimento, que o
+      // removeria no instante do prazo, antes da última fuga e sem a imunidade.
+      expect(session.dueAtOf('condition-expire', 'hero/feared')).toBeNull();
+      const thinkAt = session.dueAtOf('fear-think', 'hero');
+      expect(thinkAt).not.toBeNull();
+      expect(thinkAt ?? -1).toBeLessThan(1_000);
+      // O medo continua valendo até o PRIMEIRO pensamento depois do prazo, que o fecha.
+      advance(session, 1_900);
+      expect(first.hero.conditions.get('feared')).not.toBeNull();
+      advance(session, 1_200);
+      expect(first.hero.conditions.get('feared')).toBeNull();
+      expect(first.hero.cleanseImmunity.get('feared')).toBeGreaterThan(session.nowMs);
+      expect(session.dueAtOf('fear-think', 'hero')).toBeNull();
+    });
+
+    it('feared: sair da hunt tira o pensamento e a fuga da fila, e deixa a condição no personagem', () => {
+      const first = start({
+        loaded: arena([casterOf([controlAbility('feared', { cadenceMs: 4_000 })])]),
+      });
+      first.session.advanceBy(1);
+      const monster = first.ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou o lançador');
+      plant(monster, { x: 16, y: 20, z: 7 });
+      advance(first.session, 1_200);
+      // Com medo de verdade (a ability o aplicou): o pensamento está na fila.
+      expect(first.hero.conditions.get('feared')).not.toBeNull();
+      expect(first.session.dueAtOf('fear-think', 'hero')).not.toBeNull();
+      first.session.leave(first.hero.id);
+      expect(first.session.dueAtOf('fear-think', 'hero')).toBeNull();
+      expect(first.hero.conditions.get('feared')).not.toBeNull();
+    });
+  });
 });
 
 // A transição leva os PRAZOS do personagem (#812, emenda do ADR 0020). O `CharacterRuntime` é o

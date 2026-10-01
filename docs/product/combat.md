@@ -2602,7 +2602,11 @@ tile do próprio lançador, abaixo). O mecanismo, na ordem em que acontece:
    personagem: o pensamento é quem o fecha, e por isso a condição continua no estado (com
    `isActive` falso) até esse pensamento. Consequência que é do Canary e não bug: uma oferta do
    mesmo medo nesse intervalo (a condição existe, `hasCondition` já é falso, a imunidade ainda não
-   começou) o renova.
+   começou) o renova. **Troca de sessão (#812):** as três condições de controle atravessam como
+   qualquer condição — prazo traduzido para o relógio da sessão nova, pausado na Cidade — e a hunt
+   que entra as rearma: `rooted` e `pacified` com o `condition-expire` de sempre, o medo de
+   personagem com um `FEAR_THINK` no próximo instante da grade de pensamento da sessão nova (e a
+   fuga recalculada, porque a caminhada forçada é do runner e não atravessa).
 6. **O que ele proíbe.** Nenhuma magia nem runa (`spells.cpp:104,503`, "You are feared" — razão
    `feared` em `CastRefusal`/`SlotRefusal`, retry no prazo do medo); a poção não passa por esse
    checklist e continua liberada. O equipar do Canary (`game.cpp:4191`) não tem equivalente numa
