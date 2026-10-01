@@ -356,18 +356,36 @@ const conditionSubject = (targetId: string, key: string): string => `${targetId}
 const VISIBILITY_THINK = 'visibility-think';
 const VISIBILITY_THINK_INTERVAL_MS = 1_000;
 /**
+ * O pensamento do PERSONAGEM (`Game::checkCreatures`, `game.cpp:7726`): o Canary roda `onThink`,
+ * `onAttacking` e `executeConditions` de cada criatura UMA vez por `EVENT_CREATURE_THINK_INTERVAL`
+ * (1000 ms, `creature.hpp:47`), numa fase própria e sorteada ao entrar no jogo
+ * (`Game::addCreatureCheck`). O `sim` não tem um relógio de think por criatura (invariante 2): a
+ * fase é SORTEADA UMA VEZ por personagem, com o `Rng` da sessão, na primeira vez que alguém precisa
+ * dela (`#thinkDelayMs`), e persiste no snapshot (`RunnerState.thinkPhaseMs`) — é a grade de
+ * pensamentos do personagem, a mesma para o medo e para a retomada do golpe. Quem depende do
+ * pensamento é AGENDADO para o próximo instante da grade, nunca um evento por segundo.
+ */
+const CREATURE_THINK_INTERVAL_MS = 1_000;
+/**
  * O pensamento da condição `feared` do PERSONAGEM (M44-04, #622): o `ConditionFeared::
- * executeCondition` do Canary, que `Game::checkCreatures` roda uma vez por
- * `EVENT_CREATURE_THINK_INTERVAL` (1000 ms) numa fase por criatura sorteada ao entrar no jogo.
- * Como o `VISIBILITY_THINK` acima, o `sim` não tem relógio de think por criatura (invariante 2):
- * o pensamento é AGENDADO quando o medo começa, numa fase sorteada em [0, 1000) ms com o `Rng`
- * da sessão, e se re-arma a cada 1000 ms até o primeiro pensamento DEPOIS do prazo — que fecha
- * a condição (o Canary só a limpa nesse pensamento, e a fuga do último pensamento sai antes de
- * a condição fechar). O `subject` é o `characterId`. Não há `CONDITION_EXPIRE` para o `feared`
- * de personagem: quem o encerra é este evento.
+ * executeCondition` do Canary, no pensamento do personagem (`CREATURE_THINK_INTERVAL_MS`). É
+ * AGENDADO quando o medo começa, no próximo instante da grade do personagem, e se re-arma a cada
+ * 1000 ms até o primeiro pensamento DEPOIS do prazo — que fecha a condição (o Canary só a limpa
+ * nesse pensamento, e a fuga do último pensamento sai antes de a condição fechar). O `subject` é o
+ * `characterId`. Não há `CONDITION_EXPIRE` para o `feared` de personagem: quem o encerra é este
+ * evento.
  */
 const FEAR_THINK = 'fear-think';
-const FEAR_THINK_INTERVAL_MS = 1_000;
+/**
+ * O pensamento que RETOMA o golpe depois de `pacified` (M44-04, #622): `Player::doAttacking` volta
+ * antes de qualquer golpe sob a condição (`player.cpp:3982`) e NINGUÉM re-arma o ataque quando ela
+ * acaba — a cadeia de golpes do Canary morre ali, e o próximo golpe sai no primeiro gatilho depois
+ * do prazo: o pensamento seguinte do personagem (`Game::checkCreatures` chama `onAttacking`) ou um
+ * passo dele/do alvo (`Creature::onCreatureMove`, o `#armPlayerAttack` deste motor). Este evento é
+ * o pensamento: agendado UMA vez por pacificação, no primeiro instante da grade do personagem a
+ * partir do vencimento. O `subject` é o `characterId`.
+ */
+const ATTACK_THINK = 'attack-think';
 /**
  * A imunidade a novo medo depois que um acaba (`Player::setImmuneFear()`, `player.cpp:1930`,
  * default `10000`): 10 s em que `Combat::checkFearConditionAffected` recusa reaplicar. O Cleanse
@@ -897,6 +915,8 @@ function runnerState(runner: Runner): RunnerState {
     ...(runner.manualWalkTo === null ? {} : { manualWalkTo: runner.manualWalkTo }),
     ...(runner.manualWalkHoldUntilMs === null ? {} : { manualWalkHoldUntilMs: runner.manualWalkHoldUntilMs }),
     ...(runner.fearWalk === null ? {} : { fearWalk: runner.fearWalk }),
+    ...(runner.thinkPhaseMs === null ? {} : { thinkPhaseMs: runner.thinkPhaseMs }),
+    ...(runner.attackParked ? { attackParked: true } : {}),
   };
 }
 
@@ -1653,6 +1673,22 @@ interface Runner {
    * razão de `manualWalkTo`: fechar o navegador no meio da fuga não pode apagá-la (invariante 3).
    */
   fearWalk: readonly number[] | null;
+  /**
+   * A fase do pensamento do personagem (`CREATURE_THINK_INTERVAL_MS`), em [0, 1000) ms do relógio
+   * lógico: `Game::addCreatureCheck` sorteia a fase de cada criatura uma vez, e esta é a dela.
+   * Sorteada preguiçosamente por `#thinkDelayMs` e persistida — fechar o navegador no meio de uma
+   * pacificação não pode mover o instante em que o golpe volta (invariante 3). `null` é "ainda não
+   * sorteada".
+   */
+  thinkPhaseMs: number | null;
+  /**
+   * O golpe está ESTACIONADO esperando o primeiro gatilho depois de `pacified` (M44-04, #622,
+   * `#parkAttack`): `playerAttackReady` verdadeiro, nenhum `PLAYER_ATTACK` na fila e um
+   * `ATTACK_THINK` agendado. Só o pensamento (ou um passo do personagem ou do alvo, depois do
+   * vencimento) o solta — os gatilhos genéricos de `#armPlayerAttack` passam a ignorá-lo, porque a
+   * cadeia de golpes do Canary morreu e um personagem parado nunca a reacende por conta própria.
+   */
+  attackParked: boolean;
 }
 
 /**
@@ -1743,6 +1779,13 @@ export interface RunnerState {
    * Ausente é "não está fugindo", o que todo snapshot anterior a esta issue tem.
    */
   readonly fearWalk?: readonly number[];
+  /**
+   * A fase do pensamento do personagem (M44-04, #622) — ver `Runner.thinkPhaseMs`. Ausente é "ainda
+   * não sorteada", o que todo snapshot anterior a esta issue tem.
+   */
+  readonly thinkPhaseMs?: number;
+  /** O golpe está estacionado esperando o pensamento depois de `pacified` (M44-04, #622) — ver `Runner.attackParked`. */
+  readonly attackParked?: boolean;
 }
 
 export class HuntRuleset implements Ruleset {
@@ -3151,6 +3194,8 @@ export class HuntRuleset implements Ruleset {
       manualWalkTo: state?.manualWalkTo ?? null,
       manualWalkHoldUntilMs: state?.manualWalkHoldUntilMs ?? null,
       fearWalk: state?.fearWalk ?? null,
+      thinkPhaseMs: state?.thinkPhaseMs ?? null,
+      attackParked: state?.attackParked === true,
     };
     // O atuador fecha sobre o PRÓPRIO runner (o `ringReplaced` das automações), então só pode
     // ser montado depois que o objeto existe — e é a razão de ele não entrar no literal.
@@ -3214,6 +3259,7 @@ export class HuntRuleset implements Ruleset {
       case CONDITION_EXPIRE: return this.#onConditionExpire(session, event.subject);
       case VISIBILITY_THINK: return this.#onVisibilityThink(session, event.subject);
       case FEAR_THINK: return this.#onFearThink(session, event.subject);
+      case ATTACK_THINK: return this.#onAttackThink(session, event.subject);
       case FIELD_STAGE_ADVANCE: return this.#onFieldStageAdvance(session, event.subject);
       case FIELD_TICK: return this.#onFieldTick(session, event.subject);
       case FIELD_EXPIRE: return this.#onFieldExpire(session, event.subject);
@@ -4927,13 +4973,25 @@ export class HuntRuleset implements Ruleset {
         return null;
       }
     }
-    const result = this.#step(session, character, at, character.id);
+    // `forced`: o passo de um caminho JÁ guardado continua a lista de passos do jogador
+    // (`getNextStep`), que o `startAutoWalk` recusou no INÍCIO (`requestMove`, acima) e que nenhuma
+    // condição de controle interrompe por conta própria — sob `feared` ela segue andando
+    // (M44-04, #622: o pensamento do medo só foge quando restam menos de dois passos).
+    const result = this.#step(session, character, at, character.id, true, true);
     if (result.ok) {
       runner.manualWalkTo = { destination: manual.destination, path: manual.path.slice(1) };
+    } else if (result.reason === 'rooted') {
+      // Preso no meio do caminho (M44-04, #622): `Creature::onCreatureMove` zera a lista de passos
+      // de quem está enraizado (`resetMovementState`, `creature.cpp:503`) e cada passo recusado
+      // por `internalMoveCreature` sai dela de qualquer jeito — o caminho NÃO resiste à condição.
+      // Sem isto o personagem retomava sozinho, ao fim da raiz, uma caminhada que ninguém mais
+      // pediu. O bot retoma pelo tile mais próximo, como no abandono da porta trancada.
+      runner.manualWalkTo = null;
     }
-    // Recusado (tile temporariamente ocupado por outra criatura, por exemplo): o caminho
-    // continua de pé, e o vencimento seguinte tenta o MESMO tile de novo — a mesma tolerância a
-    // bloqueio passageiro que a rota autorada já tem, nunca um recálculo a cada tentativa.
+    // Recusado por outro motivo (tile temporariamente ocupado por outra criatura, por exemplo): o
+    // caminho continua de pé, e o vencimento seguinte tenta o MESMO tile de novo — a mesma
+    // tolerância a bloqueio passageiro que a rota autorada já tem, nunca um recálculo a cada
+    // tentativa.
     return result;
   }
 
@@ -5402,14 +5460,14 @@ export class HuntRuleset implements Ruleset {
     }
 
     // `pacified` (#554, M30-07, ADR 0040 decisão 1; a condição de verdade desde o M44-04, #622 —
-    // `Player::doAttacking` volta antes de qualquer golpe, `player.cpp:3982`): reagenda para o
-    // INSTANTE em que a condição vence, sem golpe — nunca engatilha (o alvo continua ao alcance)
-    // e nunca dobra o evento, a mesma invariante de `#schedulePlayerAttack`. A trava de escada só
-    // existe no `combat-v3`, então v1/v2 nunca entram aqui — a menos que o CONTEÚDO aplique
-    // `pacified` por outro caminho (o Swift Foot).
+    // `Player::doAttacking` volta antes de qualquer golpe, `player.cpp:3982`): sem golpe, e SEM
+    // re-armar — a cadeia de golpes do Canary morre ali, e o golpe volta no primeiro gatilho
+    // depois do vencimento (`#parkAttack`). A trava de escada só existe no `combat-v3`, então
+    // v1/v2 nunca entram aqui — a menos que o CONTEÚDO aplique `pacified` por outro caminho (o
+    // Swift Foot).
     const pacified = character.conditions.get(PACIFIED_CONDITION_KEY);
     if (pacified !== null && pacified.expiresAtMs > session.nowMs) {
-      this.#schedulePlayerAttack(session, characterId, pacified.expiresAtMs - session.nowMs);
+      this.#parkAttack(session, character, pacified.expiresAtMs);
       return;
     }
 
@@ -6406,9 +6464,9 @@ const slots = bot.groups.get(group);
     if (target.conditions.get(condition.key) !== effective) return;
     if (characterFear) {
       // Sem `condition-expire`: o pensamento fecha o medo (ver `FEAR_THINK`). Um medo NOVO arma o
-      // primeiro pensamento numa fase sorteada em [0, 1000) ms — a fase da criatura no Canary.
+      // primeiro pensamento no próximo instante da grade do personagem — a fase da criatura.
       if (previous === null) {
-        session.scheduleIn(FEAR_THINK, session.rng.integer(0, FEAR_THINK_INTERVAL_MS - 1), {
+        session.scheduleIn(FEAR_THINK, this.#thinkDelayMs(session, target.id, session.nowMs), {
           priority: EventPriority.Movement, subject: target.id,
         });
       }
@@ -6698,12 +6756,17 @@ const slots = bot.groups.get(group);
       session.cancelEvent(CONDITION_TICK, subject);
       target.conditions.remove(condition.key);
     }
-    // O pensamento do medo e a caminhada forçada também são dele (M44-04, #622): quem morreu ou
-    // saiu não foge mais, e o evento de `FEAR_THINK` não pode ficar órfão na fila.
+    // O pensamento do medo, a retomada do golpe e a caminhada forçada também são dele (M44-04,
+    // #622): quem morreu ou saiu não foge mais, e os eventos de `FEAR_THINK`/`ATTACK_THINK` não
+    // podem ficar órfãos na fila.
     if (target instanceof CharacterRuntime) {
       session.cancelEvent(FEAR_THINK, id);
+      session.cancelEvent(ATTACK_THINK, id);
       const runner = this.#runners.get(id);
-      if (runner !== undefined) runner.fearWalk = null;
+      if (runner !== undefined) {
+        runner.fearWalk = null;
+        runner.attackParked = false;
+      }
     }
   }
 
@@ -7830,10 +7893,91 @@ const slots = bot.groups.get(group);
   }
 
   #armPlayerAttack(session: Session, character: CharacterRuntime): void {
-    if (!this.#runnerOf(character.id).playerAttackReady) return;
+    const runner = this.#runnerOf(character.id);
+    if (!runner.playerAttackReady) return;
     if (!character.alive) return;
+    // Estacionado depois de `pacified` (M44-04, #622): só o pensamento ou um passo solta o golpe.
+    if (runner.attackParked) return;
     if (this.#attackTarget(character) === null) return;
+    // `pacified`: o gatilho existe, mas `doAttacking` volta — o golpe fica estacionado até o
+    // primeiro gatilho DEPOIS do vencimento. Sem esta checagem cada passo de monstro agendaria um
+    // golpe que `#onPlayerAttack` só reestacionaria.
+    const pacified = character.conditions.size === 0
+      ? null : character.conditions.get(PACIFIED_CONDITION_KEY);
+    if (pacified !== null && pacified.expiresAtMs > session.nowMs) {
+      this.#parkAttack(session, character, pacified.expiresAtMs);
+      return;
+    }
     this.#schedulePlayerAttack(session, character.id, 0);
+  }
+
+  /**
+   * O golpe do personagem ESPERA a `pacified` acabar (M44-04, #622): fica ENGATILHADO — o
+   * `playerAttackReady` que `#armPlayerAttack` já usa para "pronto, sem evento" — e ESTACIONADO
+   * (`Runner.attackParked`): o gatilho que o traz de volta é o pensamento seguinte ao vencimento
+   * (`ATTACK_THINK`), ou um passo do personagem ou do alvo que chegue depois dele
+   * (`#releaseParkedAttacks`, o `onCreatureMove` do Canary). NUNCA o instante exato do
+   * vencimento: o Canary não re-arma o ataque quando a condição acaba, e o golpe sai até 1000 ms
+   * depois, na fase de pensamento do personagem. Um pensamento por estacionamento: ele agenda o
+   * próximo se acordar ainda sob a condição (ela foi estendida).
+   */
+  #parkAttack(session: Session, character: CharacterRuntime, pacifiedUntilMs: number): void {
+    const runner = this.#runnerOf(character.id);
+    runner.playerAttackReady = true;
+    if (runner.attackParked) return;
+    runner.attackParked = true;
+    session.scheduleIn(
+      ATTACK_THINK,
+      pacifiedUntilMs - session.nowMs + this.#thinkDelayMs(session, character.id, pacifiedUntilMs),
+      { priority: EventPriority.Attack, subject: character.id },
+    );
+  }
+
+  /** O pensamento do personagem depois de `pacified`: o primeiro gatilho que traz o golpe de volta. */
+  #onAttackThink(session: Session, characterId: string): void {
+    const character = findById(session.participants, characterId);
+    const runner = this.#runners.get(characterId);
+    if (character === null || runner === undefined || !runner.attackParked) return;
+    runner.attackParked = false;
+    if (!character.alive) return;
+    this.#armPlayerAttack(session, character);
+  }
+
+  /**
+   * Um passo aceito pode soltar o golpe estacionado (`Creature::onCreatureMove` com
+   * `hasExtraSwing`, `creature.cpp:569`): quando é o do PRÓPRIO personagem ou o do alvo dele — o
+   * Canary só olha esses dois —, e a `pacified` já venceu (sob ela `doAttacking` volta). O golpe
+   * estacionado só existe durante e logo depois de uma pacificação, então o caminho quente — um
+   * passo qualquer de um monstro qualquer — paga uma leitura por participante.
+   */
+  #releaseParkedAttacks(session: Session, mover: CharacterRuntime | MonsterRuntime): void {
+    for (const character of session.participants) {
+      const runner = this.#runners.get(character.id);
+      if (runner === undefined || !runner.attackParked) continue;
+      if (character.conditions.isActive(PACIFIED_CONDITION_KEY, session.nowMs)) continue;
+      if (mover !== character && (mover instanceof CharacterRuntime
+        || this.#attackTarget(character) !== mover)) continue;
+      runner.attackParked = false;
+      session.cancelEvent(ATTACK_THINK, character.id);
+      this.#armPlayerAttack(session, character);
+    }
+  }
+
+  /**
+   * Quanto falta, a partir de `fromMs`, para o próximo instante da grade de pensamento do
+   * personagem (`CREATURE_THINK_INTERVAL_MS`): zero se `fromMs` já cai nela. A fase é a do
+   * personagem — sorteada na primeira vez que alguém pergunta (`Runner.thinkPhaseMs`) e igual
+   * daí em diante.
+   */
+  #thinkDelayMs(session: Session, characterId: string, fromMs: number): number {
+    const runner = this.#runners.get(characterId);
+    let phase = runner?.thinkPhaseMs ?? null;
+    if (phase === null) {
+      phase = session.rng.integer(0, CREATURE_THINK_INTERVAL_MS - 1);
+      if (runner !== undefined) runner.thinkPhaseMs = phase;
+    }
+    return (((phase - fromMs) % CREATURE_THINK_INTERVAL_MS) + CREATURE_THINK_INTERVAL_MS)
+      % CREATURE_THINK_INTERVAL_MS;
   }
 
   /**
@@ -8579,12 +8723,15 @@ const slots = bot.groups.get(group);
    * tentativa física de chegar lá.
    *
    * `forced` (M44-04, #622) marca o passo que NÃO é a caminhada própria da criatura: a fuga do
-   * medo e o empurrão. As condições de controle o tratam diferente — `feared` recusa o caminhar do
-   * próprio jogador (`Creature::startAutoWalk`, antes de qualquer sorteio) mas não a fuga que ele
-   * mesmo impõe (`forcePlayerAutoWalk` passa `ignoreConditions`); `rooted` recusa TODO passo, o
-   * forçado inclusive (`Game::internalMoveCreature`, DEPOIS do desvio de drunk — o sorteio de quem
-   * está preso e bêbado ao mesmo tempo acontece igual). Um passo forçado dentro de um campo que
-   * causa dano é recusado sob `feared` (`game.cpp:1975`): a fuga desvia dele, nunca o atravessa.
+   * medo, o passo de um `walk-to` já guardado e o empurrão. As condições de controle o tratam
+   * diferente — `feared` recusa o INÍCIO do caminhar do próprio jogador (`Creature::startAutoWalk`,
+   * antes de qualquer sorteio) mas não a lista de passos que já corre nem a fuga que ele mesmo
+   * impõe (`forcePlayerAutoWalk` passa `ignoreConditions`); `rooted` recusa TODO passo, o forçado
+   * inclusive (`Game::internalMoveCreature`, DEPOIS do desvio de drunk — o sorteio de quem está
+   * preso e bêbado ao mesmo tempo acontece igual). Um passo forçado dentro de um campo que causa
+   * dano é recusado sob `feared` (`game.cpp:1975-1980`): a fuga desvia dele, nunca o atravessa — e
+   * para o PERSONAGEM o campo do tile PEDIDO é olhado ANTES do desvio (`Player::onWalk`), sem
+   * sorteio nenhum.
    *
    * Para um MONSTRO, o DESVIO DE DANO é revalidado aqui, no COMMIT — não só na decisão (M29-05,
    * achado da revisão do #650): `decideMonsterAction` já filtrou os candidatos com
@@ -8609,6 +8756,15 @@ const slots = bot.groups.get(group);
       // sorteio (M44-04, #622): nem o `walk` do socket, nem a rota do bot, nem o passo do monstro.
       const refusal = this.#controlRefusal(mover, session.nowMs);
       if (refusal !== null) return { ok: false, reason: refusal };
+    }
+    // `Player::onWalk` (`player.cpp:2942-2955`) olha o campo de dano do tile PEDIDO antes do
+    // `Creature::onWalk` — que é onde o drunk sorteia: sob `feared`, um passo da lista de passos
+    // para um campo que causa dano volta aí, sem sorteio e sem desvio. O mesmo campo no tile
+    // desviado é recusado mais abaixo, por `internalMoveCreature`.
+    if (rollDrunk && controlled && forced && mover instanceof CharacterRuntime
+      && mover.conditions.isActive(FEARED_CONDITION_KEY, session.nowMs)
+      && this.#harmfulFieldAt(to, this.#floorOf(mover))) {
+      return { ok: false, reason: 'feared' };
     }
     const target = rollDrunk ? this.#drunkTarget(session, mover, to) : to;
     if (controlled) {
@@ -8664,6 +8820,11 @@ const slots = bot.groups.get(group);
         kind: 'creature-moved', creatureId,
         from: result.from, to: result.to, durationMs: result.durationMs,
       });
+      // Um passo do personagem ou do alvo dele solta o golpe estacionado depois de `pacified`
+      // (M44-04, #622): `Creature::onCreatureMove`, o "extra swing" do Canary.
+      if (mover instanceof CharacterRuntime || mover instanceof MonsterRuntime) {
+        this.#releaseParkedAttacks(session, mover);
+      }
       // A entrada num campo (CMB-07) é observada SÓ depois de um passo ACEITO: `movement`
       // devolve resultado e nunca infringe dano. Um tile recusado não aplica o campo.
       if (mover instanceof CharacterRuntime || mover instanceof MonsterRuntime) {
@@ -8818,7 +8979,7 @@ const slots = bot.groups.get(group);
 
   /**
    * O tile tem um campo que causa dano e NÃO bloqueia (`field && !field->isBlocking() &&
-   * field->getDamage() != 0`, `game.cpp:1975` e `condition.cpp:2214`)? É o campo que a fuga do
+   * field->getDamage() != 0`, `game.cpp:1975-1980` e `condition.cpp:2214`)? É o campo que a fuga do
    * medo nunca pisa. "Causa dano" é uma condição de dano ao longo do tempo no estágio VIGENTE do
    * campo — o estágio mudo do fire field (`decayTo` sem dano) e o campo só de bloqueio não valem.
    */
@@ -8869,7 +9030,7 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * `ConditionFeared::startCondition` (`condition.cpp:2393`): a direção de fuga inicial, a partir de
+   * `ConditionFeared::startCondition` (`condition.cpp:2396`): a direção de fuga inicial, a partir de
    * ONDE o lançador está agora (`CONDITION_PARAM_CASTER_POSITION`, que `CombatConditionFunc` grava
    * no clone). Sem lançador conhecido (campo, ou um que já saiu do mundo), o tile do próprio
    * personagem — o caso do sorteio, o único que consome o `Rng` da sessão.
@@ -8883,7 +9044,7 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * O corpo de `ConditionFeared::executeCondition` que decide a fuga (`condition.cpp:2340`): com
+   * O corpo de `ConditionFeared::executeCondition` que decide a fuga (`condition.cpp:2403-2427`): com
    * MENOS de dois passos por dar, escolhe a direção (se ainda não escolheu) e busca o caminho.
    * Devolve a lista a entregar a `forcePlayerAutoWalk` — possivelmente vazia —, ou `null` quando
    * o Canary devolve `false` (preso: nenhum vizinho aceita o passo). O índice de fuga que a busca
@@ -8913,7 +9074,7 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * O medo do personagem acabou (`ConditionFeared::endCondition`, `condition.cpp:2422`): a
+   * O medo do personagem acabou (`ConditionFeared::endCondition`, `condition.cpp:2429-2438`): a
    * caminhada forçada para (`stopEventWalk`) e ele ganha 10 s de imunidade a um medo novo
    * (`Player::setImmuneFear`). Serve o fim natural (o pensamento depois do prazo) e a remoção por
    * fora (Cleanse, cura) — quem chama já tirou a condição, ou é ela que este método tira.
@@ -8940,11 +9101,16 @@ const slots = bot.groups.get(group);
     if (character === null || !character.alive || runner === undefined) return;
     const condition = character.conditions.get(FEARED_CONDITION_KEY);
     if (condition === null) return;
-    const path = (runner.fearWalk?.length ?? 0) < 2 ? this.#fleeFor(session, character, condition) : null;
+    // `creature->getWalkSize() < 2`: a lista de passos é UMA no Canary, e aqui ela mora em dois
+    // lugares — a fuga e o `walk-to` distante que o jogador já tinha guardado (os dois nunca
+    // coexistem: `#startFleeWalk` e `requestMove` limpam um ao pôr o outro). Com dois passos ou
+    // mais por andar, o medo ainda não foge: o jogador termina o caminho dele.
+    const walkSize = runner.fearWalk?.length ?? runner.manualWalkTo?.path.length ?? 0;
+    const path = walkSize < 2 ? this.#fleeFor(session, character, condition) : null;
     if (condition.expiresAtMs < session.nowMs) {
       this.#endFear(session, character);
     } else {
-      session.scheduleIn(FEAR_THINK, FEAR_THINK_INTERVAL_MS, {
+      session.scheduleIn(FEAR_THINK, CREATURE_THINK_INTERVAL_MS, {
         priority: EventPriority.Movement, subject: characterId,
       });
     }

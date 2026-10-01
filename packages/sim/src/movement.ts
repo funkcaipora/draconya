@@ -48,7 +48,7 @@ export type MoveRejection =
    * Só de `HuntRuleset#step` (M44-04, #622): quem anda está sob `feared` e o passo NÃO é o da
    * fuga forçada (`Creature::startAutoWalk` recusa o caminhar do próprio jogador, do bot e do
    * `walk` do socket), OU a própria fuga pisaria num campo que causa dano
-   * (`Game::internalMoveCreature`, `game.cpp:1975`).
+   * (`Game::internalMoveCreature`, `game.cpp:1975-1980`).
    */
   | 'feared';
 

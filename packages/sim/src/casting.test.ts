@@ -145,6 +145,26 @@ describe('castSpell — o portão, na ordem em que ele custa a descobrir', () =>
       expect(castSpell(caster, heal, null, 0, combatV3, rng()).ok).toBe(true);
     });
 
+    it('Summon Creature é AGRESSIVA por padrão no Canary: recusa com `attack-locked`, sem gastar mana (#622)', () => {
+      // `summon_creature.lua` não chama `isAggressive(false)` — toda cura, condição própria e
+      // conjuração chama —, e `Spell::playerSpellCheck` recusa a magia agressiva sob
+      // `CONDITION_PACIFIED` (`spells.cpp:517`) ANTES do script que cria a invocação.
+      const summon: Spell = {
+        id: 'summon-creature', name: 'Summon Creature', manaCost: 0, cooldownMs: 2_000, minLevel: 1,
+        effect: { kind: 'summon' },
+      };
+      const caster = hero();
+      pacify(caster, 2_000);
+      const cast = (nowMs: number) => castSpell(
+        caster, summon, null, nowMs, combatV3, rng(), undefined, undefined, undefined, undefined,
+        undefined, 30,
+      );
+      expect(cast(500)).toEqual({ ok: false, reason: 'attack-locked', retryInMs: 1_500 });
+      expect(caster.mana).toBe(100);
+      expect(cast(2_000)).toMatchObject({ ok: true, summon: true });
+      expect(caster.mana).toBe(70);
+    });
+
     it('a condição é o portão, em QUALQUER perfil: a trava de escada só a aplica no combat-v3, mas o conteúdo pode aplicá-la', () => {
       const caster = hero();
       pacify(caster, 2_000);

@@ -70,9 +70,10 @@ export type CastRefusal =
   | 'not-summonable'
   /**
    * Stairhop (#554, M30-07, ADR 0040 decisão 1): o lançador trocou de andar ou foi
-   * redirecionado por teleporte há pouco, e a magia é AGRESSIVA (`damage`/`damage-over-time` —
-   * `Spell::getAggressive` do Canary é `true` por padrão). Carrega prazo, como `on-cooldown`: o
-   * bot volta sozinho no instante do destravamento, sem reagendar no vazio (FUN-84).
+   * redirecionado por teleporte há pouco, e a magia é AGRESSIVA (`damage`/`damage-over-time`/
+   * `summon` — `Spell::getAggressive` do Canary é `true` por padrão, e só os scripts que o
+   * desligam com `isAggressive(false)` passam). Carrega prazo, como `on-cooldown`: o bot volta
+   * sozinho no instante do destravamento, sem reagendar no vazio (FUN-84).
    *
    * Desde o M44-04 (#622) é a recusa da condição `pacified` em GERAL — a trava de escada é só uma
    * das fontes dela: `Spell::playerSpellCheck` recusa toda magia/runa agressiva sob
@@ -581,12 +582,14 @@ export function castSpell(
 
   const effect = spell.effect;
   // `pacified` (M44-04, #622 — a trava de escada de 2 s do #554 e qualquer outra fonte): magia
-  // AGRESSIVA recusa enquanto a condição valer — cura, condição e o resto do vocabulário
-  // continuam liberados, como o Canary libera tudo que não é `aggressive` sob `CONDITION_PACIFIED`
-  // (`spells.cpp:517`). Antes do alcance/mana, pela mesma posição relativa do checklist do Canary
-  // (`playerSpellCheck`, antes de `CastSpell`). A condição só existe onde alguém a aplicou (o
-  // stairhop só no `combat-v3`), então nenhuma sessão v1/v2 a enxerga por acidente.
-  if (effect.kind === 'damage' || effect.kind === 'damage-over-time') {
+  // AGRESSIVA recusa enquanto a condição valer — dano, dano ao longo do tempo e a invocação
+  // (`Spell::aggressive` é `true` por padrão, e o `summon_creature.lua` não o desliga), como o
+  // Canary recusa sob `CONDITION_PACIFIED` (`spells.cpp:517`). Cura, condição própria, haste,
+  // postura e o resto do vocabulário continuam liberados: são os scripts que marcam
+  // `isAggressive(false)`. Antes do alcance/mana, pela mesma posição relativa do checklist do
+  // Canary (`playerSpellCheck`, antes de `CastSpell`). A condição só existe onde alguém a aplicou
+  // (o stairhop só no `combat-v3`), então nenhuma sessão v1/v2 a enxerga por acidente.
+  if (effect.kind === 'damage' || effect.kind === 'damage-over-time' || effect.kind === 'summon') {
     const pacifiedFor = controlRemainingMs(caster, PACIFIED_CONDITION_KEY, nowMs);
     if (pacifiedFor > 0) return { ok: false, reason: 'attack-locked', retryInMs: pacifiedFor };
   }

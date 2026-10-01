@@ -250,7 +250,7 @@ export function negatedOutcome(outcome: DamageOutcome): DamageOutcome {
 
 /**
  * O tipo de condição do Canary que o Cleanse remove: as dez de `Creature::getCleansableConditions`
- * (`creature.cpp:1533`) — os sete tipos de dano ao longo do tempo (veneno, fogo, energia,
+ * (`creature.cpp:1527-1549`) — os sete tipos de dano ao longo do tempo (veneno, fogo, energia,
  * sangramento, congelamento, deslumbramento, maldição), a paralisia e, desde o M44-04 (#622), as
  * duas de controle que o Canary lista ao lado delas: `rooted` e `feared`. `pacified` NÃO é
  * limpável.

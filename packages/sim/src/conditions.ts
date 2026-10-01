@@ -533,9 +533,9 @@ export class Conditions {
    * um evento da fila (`condition-expire`, `Housekeeping`), que vence DEPOIS do movimento e do
    * ataque do mesmo instante — e o Canary consulta `hasCondition` contra o `endTime`, não contra o
    * evento que limpa a lista (`Creature::hasCondition`, `creature.cpp:1585`). Ler o prazo daqui é
-   * o que faz a trava de escada de 2 s soltar no instante EXATO em que vence (o golpe reagendado
-   * para esse instante já enxerga a janela fechada), sem depender da ordem dos eventos. O vencimento
-   * é exclusivo: em `expiresAtMs` a condição já não vale.
+   * o que faz um portão (o golpe, a magia, o passo) enxergar a janela fechada no instante EXATO em
+   * que a condição vence, sem depender da ordem dos eventos. O vencimento é exclusivo: em
+   * `expiresAtMs` a condição já não vale.
    *
    * É o portão de `rooted`, `feared` e `pacified` (M44-04, #622): `hasRooted`/`hasFeared`/
    * `hasPacified` seriam três nomes para a mesma leitura pela chave reservada.
