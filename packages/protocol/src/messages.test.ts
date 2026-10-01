@@ -1196,6 +1196,27 @@ describe('catalogue bot targets (#393)', () => {
       [],
     )).success).toBe(false);
   });
+
+  it('carries the manual aim of a spell apart from `targets`, and leaves an older node without it (#623)', () => {
+    // Find Person pede mira SEM ser ação de aliado: `aim` é lido só pela barra de ação, e
+    // `targets: 'friend'` abriria o seletor de alvo do editor do bot.
+    const parsed = S2C_SCHEMAS.catalogue.parse(catalogue(
+      [{ id: 'find-person', name: 'Find Person', manaCost: 20, minLevel: 8, vocationId: null, effect: 'find', aim: 'character' }],
+      [],
+    ));
+    expect(parsed.bot.spells[0]?.aim).toBe('character');
+    expect(parsed.bot.spells[0]?.targets).toBeUndefined();
+
+    const older = S2C_SCHEMAS.catalogue.parse(catalogue(
+      [{ id: 'find-person', name: 'Find Person', manaCost: 20, minLevel: 8, vocationId: null, effect: 'find' }],
+      [],
+    ));
+    expect(older.bot.spells[0]?.aim).toBeUndefined();
+    expect(S2C_SCHEMAS.catalogue.safeParse(catalogue(
+      [{ id: 'find-person', name: 'Find Person', manaCost: 20, minLevel: 8, vocationId: null, effect: 'find', aim: 'monster' }],
+      [],
+    )).success).toBe(false);
+  });
 });
 
 describe('catalogue supply vocationId (#524, kit level 200)', () => {

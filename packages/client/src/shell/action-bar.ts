@@ -71,7 +71,8 @@ export interface SlotView {
   readonly auto?: boolean;
   /**
    * O clique deste slot precisa de MIRA (ADR 0049 decisão 2) — a ação é de aliado
-   * (`targets: 'friend'`, catálogo v2) e o servidor não tem como adivinhar QUEM. Toda outra
+   * (`targets: 'friend'`, catálogo v2) ou a magia nomeia um personagem (`aim: 'character'`, o
+   * Find Person), e o servidor não tem como adivinhar QUEM. Toda outra
    * ação dispara na hora, com o alvo default de sempre (fixado, senão o candidato do bot).
    */
   readonly needsAim: boolean;
@@ -90,9 +91,13 @@ export function slotView(
 ): SlotView | null {
   if (slot === null) return null;
   const action = slot.do;
-  const catalogued = action.kind === 'spell'
-    ? catalogue.bot.spells.find((spell) => spell.id === action.spellId)
-    : catalogue.bot.supplies?.find((supply) => supply.id === action.supplyId);
+  const spell = action.kind === 'spell'
+    ? catalogue.bot.spells.find((entry) => entry.id === action.spellId)
+    : undefined;
+  const supply = action.kind === 'supply'
+    ? catalogue.bot.supplies?.find((entry) => entry.id === action.supplyId)
+    : undefined;
+  const catalogued = spell ?? supply;
   const label = catalogued?.name ?? (action.kind === 'spell' ? action.spellId : action.supplyId);
   return {
     label,
@@ -101,7 +106,9 @@ export function slotView(
     cooldownMs: state?.remainingMs ?? 0,
     blocked: state?.state === 'blocked',
     auto: slot.auto,
-    needsAim: catalogued?.targets === 'friend',
+    // Ação de aliado (`targets: 'friend'`) OU magia de mira manual (`aim: 'character'`, o Find
+    // Person, #623) — dois campos porque só o primeiro abre o seletor de alvo do editor do bot.
+    needsAim: catalogued?.targets === 'friend' || spell?.aim === 'character',
   };
 }
 

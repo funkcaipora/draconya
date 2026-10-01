@@ -1027,6 +1027,15 @@ export const S2C_SCHEMAS = {
          */
         targets: z.enum(['self', 'friend']).optional(),
         /**
+         * A magia pede MIRA do jogador no disparo manual (#623: Find Person — o "nome" do Canary é
+         * o personagem clicado), sem ser uma ação de aliado. Campo SEPARADO de `targets` de
+         * propósito: `targets: 'friend'` também abre o seletor de alvo do editor de slot do bot, e
+         * o servidor recusa salvar esse alvo em qualquer efeito que não seja cura/mana — uma
+         * magia de mira manual não pode prometer ao editor o que a validação nega. Só a barra de
+         * ação lê (`needsAim`). Opcional SEM `default`: um nó `game` anterior manda sem.
+         */
+        aim: z.enum(['character']).optional(),
+        /**
          * Os números de EXIBIÇÃO (#436, ADR 0033), para o `ActionConfigModal`. Opcionais SEM
          * `default`: um nó `game` anterior manda sem, e o cliente novo não pode recusar a
          * mensagem — o painel só omite a linha que falta (RF-09).

@@ -124,6 +124,20 @@ describe('slotView', () => {
     expect(view?.needsAim).toBe(true);
   });
 
+  it('magia de mira MANUAL (`aim: \'character\'`, o Find Person, #623) precisa de MIRA sem ser de aliado', () => {
+    const aimCatalogue = catalogue({
+      bot: {
+        ...catalogue().bot,
+        spells: [{
+          id: 'find-person', name: 'Find Person', manaCost: 20, minLevel: 8, vocationId: null,
+          effect: 'find', group: 'support', aim: 'character',
+        }],
+      },
+    });
+    const view = slotView({ do: { kind: 'spell', spellId: 'find-person' }, when: [], auto: false }, aimCatalogue, null);
+    expect(view?.needsAim).toBe(true);
+  });
+
   it('suprimento: nome do catálogo, sem pilha nem contagem', () => {
     const view = slotView(supplySlot(), catalogue(), null);
     expect(view).toMatchObject({ label: 'Poção de Vida', cooldownMs: 0, blocked: false });
