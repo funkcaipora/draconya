@@ -773,6 +773,71 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
   });
 });
 
+describe('Loyalty in player-stats and session-state (#628, ADR 0052 d.5)', () => {
+  const stats = {
+    type: 'player-stats',
+    health: 150, maxHealth: 150, mana: 20, maxMana: 20,
+    level: 8, xp: 4200, capacity: 400, gold: 100, staminaMs: 86400000,
+    ammo: { arrow: null, bolt: null },
+    vocationId: 'knight',
+    promoted: false,
+    fightMode: 'balanced',
+    speed: 292,
+    skills: { sword: { level: 100, percentToNext: 45, loyaltyLevel: 104 } },
+    magicLevel: { level: 20, percentToNext: 80, loyaltyLevel: 22 },
+    loyaltyBonusPercent: 50,
+    soul: 42,
+    soulMax: 100,
+  } as const;
+
+  it('round-trips the bonus and each skill\'s effective level', () => {
+    expect(decodeS2C(encodeS2C(stats as S2CMessage))).toEqual([stats]);
+  });
+
+  it('decodes a message WITHOUT them (a `game` node before the issue, or an account with no tier)', () => {
+    // Ausente é "sem bônus" para quem lê: nada de default que invente um `0` no fio.
+    const { loyaltyBonusPercent: _bonus, ...older } = stats;
+    const withoutLevel = {
+      ...older,
+      skills: { sword: { level: 100, percentToNext: 45 } },
+      magicLevel: { level: 20, percentToNext: 80 },
+    };
+    const [decoded] = decodeS2C(encodeS2C(withoutLevel as S2CMessage)) ?? [];
+    expect(decoded).toEqual(withoutLevel);
+    expect(decoded).not.toHaveProperty('loyaltyBonusPercent');
+  });
+
+  it('carries the bonus in session-state.self too, for whoever reattaches', () => {
+    const state = {
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 8, xp: 0,
+        vocationId: 'knight', promoted: false, speed: 220,
+        skills: { sword: { level: 100, percentToNext: 0, loyaltyLevel: 104 } },
+        magicLevel: { level: 0, percentToNext: 0 },
+        loyaltyBonusPercent: 50,
+        soul: 0, soulMax: 0,
+      },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'arena', creatures: [] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    };
+    expect(decodeS2C(encodeS2C(state as S2CMessage))).toEqual([state]);
+  });
+
+  it('rejects an invalid bonus or effective level', () => {
+    const schema = S2C_SCHEMAS['player-stats'];
+    expect(schema.safeParse({ ...stats, loyaltyBonusPercent: -1 }).success).toBe(false);
+    expect(schema.safeParse({ ...stats, loyaltyBonusPercent: 12.5 }).success).toBe(false);
+    expect(schema.safeParse({
+      ...stats, skills: { sword: { level: 100, percentToNext: 45, loyaltyLevel: -1 } },
+    }).success).toBe(false);
+    expect(schema.safeParse({
+      ...stats, skills: { sword: { level: 100, percentToNext: 45, loyaltyLevel: 100.5 } },
+    }).success).toBe(false);
+  });
+});
+
 describe('move-item (#160)', () => {
   it('is intention only — two places — and the opcode is 16', () => {
     expect(CLIENT_TO_SERVER['move-item']).toBe(16);
@@ -1802,5 +1867,74 @@ describe('saída pendente: cancel-exit, exit-pending (#802)', () => {
     for (const patch of [{ reason: 'logout' }, { phase: 'later' }, { remainingMs: -1 }, { remainingMs: 1.5 }]) {
       expect(decodeS2C(encodeS2C({ ...base, ...patch } as unknown as S2CMessage))).toBeNull();
     }
+  });
+});
+
+describe('Bosstiary (#629, ADR 0052 d.1)', () => {
+  it('bosstiary is S2C only, opcode 46, and round trips the raw register', () => {
+    // Mutação que mata: apagar `bosstiary: 46` de SERVER_TO_CLIENT (`decodeS2C` devolve `null`),
+    // ou reusar o 45 (`exit-pending`).
+    expect(SERVER_TO_CLIENT['bosstiary']).toBe(46);
+    expect('bosstiary' in C2S_SCHEMAS).toBe(false);
+    const message: S2CMessage = { type: 'bosstiary', kills: { '639': 3, '1811': 20 }, points: 70 };
+    expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+    const empty: S2CMessage = { type: 'bosstiary', kills: {}, points: 0 };
+    expect(decodeS2C(encodeS2C(empty))).toEqual([empty]);
+  });
+
+  it('rejects a negative or fractional count and negative points', () => {
+    for (const patch of [{ kills: { '639': -1 } }, { kills: { '639': 1.5 } }, { points: -5 }, { kills: { '': 1 } }]) {
+      expect(decodeS2C(encodeS2C({ type: 'bosstiary', kills: {}, points: 0, ...patch } as unknown as S2CMessage))).toBeNull();
+    }
+  });
+
+  it('the catalogue carries the boss rarity per monster and the level table, and an older node decodes without them', () => {
+    const base = {
+      type: 'catalogue' as const,
+      hunts: [],
+      vocations: [],
+      vocationLevel: 0,
+      bot: {
+        vocabularyVersion: 2, setCount: 4, slotsPerSet: 24,
+        setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'], hotkeys: ['1'], groups: [],
+        spells: [], automations: [], supplies: [],
+      },
+      items: [], ammunition: [],
+      charms: [],
+    };
+    const withBosstiary = {
+      ...base,
+      monsters: [{ id: 'dreadmaw', name: 'Dreadmaw', bosstiary: { rarity: 'nemesis' as const, raceId: 639 } }],
+      bosstiary: {
+        levels: {
+          bane: [{ kills: 25, points: 5 }, { kills: 100, points: 15 }, { kills: 300, points: 30 }],
+          archfoe: [{ kills: 5, points: 10 }, { kills: 20, points: 30 }, { kills: 60, points: 60 }],
+          nemesis: [{ kills: 1, points: 10 }, { kills: 3, points: 30 }, { kills: 5, points: 60 }],
+        },
+      },
+    } as unknown as S2CMessage;
+    expect(decodeS2C(encodeS2C(withBosstiary))).toEqual([withBosstiary]);
+
+    // Nó anterior: nem `bosstiary` no catálogo nem no monstro — o catálogo ainda decodifica.
+    const older = { ...base, monsters: [{ id: 'rat', name: 'Rat' }] } as unknown as S2CMessage;
+    const decoded = decodeS2C(encodeS2C(older)) as Array<Record<string, unknown>> | null;
+    expect(decoded?.[0]).not.toHaveProperty('bosstiary');
+    expect((decoded?.[0]?.['monsters'] as Array<Record<string, unknown>>)[0]).not.toHaveProperty('bosstiary');
+  });
+
+  it('rejects an unknown rarity or a non-positive raceId on a catalogue monster', () => {
+    const catalogue = (bosstiary: unknown) => ({
+      type: 'catalogue', hunts: [], vocations: [], vocationLevel: 0,
+      bot: {
+        vocabularyVersion: 2, setCount: 4, slotsPerSet: 24,
+        setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'], hotkeys: ['1'], groups: [],
+        spells: [], automations: [], supplies: [],
+      },
+      items: [], ammunition: [], charms: [],
+      monsters: [{ id: 'boss', name: 'Boss', bosstiary }],
+    } as unknown as S2CMessage);
+    expect(decodeS2C(encodeS2C(catalogue({ rarity: 'legendary', raceId: 1 })))).toBeNull();
+    expect(decodeS2C(encodeS2C(catalogue({ rarity: 'bane', raceId: 0 })))).toBeNull();
+    expect(decodeS2C(encodeS2C(catalogue({ rarity: 'bane', raceId: 1 })))).not.toBeNull();
   });
 });

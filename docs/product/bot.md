@@ -64,6 +64,10 @@ hunt sem gold para pagar o próximo supply e pode morrer.
   comportamento de antes deste ADR) e `autoSell` (vende ao coletar, cortado pelo limite do
   PRÓPRIO Premium — 5 tipos Free, 20 Premium, o mesmo `party.autoSellItemTypes`). Campo novo com
   default, como `follow`: config salva antes deste ADR volta pegando tudo, sem venda automática.
+- **O bot esfola sozinho, sem configuração nenhuma** (#626, ADR 0048 d.5): quem tem a faca ou a
+  estaca na mochila esfola o cadáver no mesmo evento em que coleta o loot, e o material segue o
+  filtro de Quick Loot acima. Não há regra a ligar — é a automação que o Tibia deixa à mão do
+  jogador, legítima pelo invariante 11. Ver "Esfola de cadáver" em `docs/product/items.md`.
 - Usar um supply debita o `price` do gold na hora (`useSupply`); o saldo nunca fica negativo, e a
   garantia é a ordem — o débito é recusado antes, não corrigido depois.
 - Personagem sem configuração não agenda nada.

@@ -19,7 +19,9 @@ import { distance } from '../monster/step.js';
 import type { GridPoint } from '../monster/step.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
-import { MAX_PENDING_DOMAIN_EVENTS, SNAPSHOT_FORMAT_VERSION, Session } from '../session.js';
+import {
+  MAX_PENDING_DOMAIN_EVENTS, SNAPSHOT_FORMAT_VERSION, Session, progressOf,
+} from '../session.js';
 import type { DomainEvent, SessionSnapshot } from '../session.js';
 import {
   HuntRuleset, PartyFullError, changeDifficulty, compileExitRules, createHuntRuleset, createHuntSession,
@@ -329,7 +331,7 @@ const content = (over: Partial<RawContent> = {}): Content => buildContent(raw(ov
 const character = (
   over: Partial<{
     health: number; staminaMs: number; skills: SkillsState; inventory: InventoryState;
-    bestiary: BestiaryState; gold: number;
+    bestiary: BestiaryState; gold: number; loyaltyBonusPercent: number;
   }> = {},
 ): CharacterRuntime => {
   const stats = statsForLevel(1, null, progression as Progression);
@@ -344,6 +346,7 @@ const character = (
     ...(over.skills === undefined ? {} : { skills: over.skills }),
     ...(over.inventory === undefined ? {} : { inventory: over.inventory }),
     ...(over.bestiary === undefined ? {} : { bestiary: over.bestiary }),
+    ...(over.loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent: over.loyaltyBonusPercent }),
   });
 };
 
@@ -357,7 +360,7 @@ function start(
   options: { difficulty?: 'cautious' | 'bold'; exitRules?: readonly HuntExitRule[];
     health?: number; staminaMs?: number; loaded?: Content; skills?: SkillsState;
     inventory?: InventoryState; bestiary?: BestiaryState; gold?: number;
-    boostedMonsterId?: string } = {},
+    boostedMonsterId?: string; loyaltyBonusPercent?: number } = {},
 ): Started {
   // `difficulty` não seleciona mais nada no conteúdo (#583) — é só um rótulo aceito e ignorado
   // pelo `sim`. "bold" aqui é o pedido de DENSIDADE que a dificuldade costumava dar de graça
@@ -379,6 +382,7 @@ function start(
     ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
     ...(options.bestiary === undefined ? {} : { bestiary: options.bestiary }),
     ...(options.gold === undefined ? {} : { gold: options.gold }),
+    ...(options.loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent: options.loyaltyBonusPercent }),
   });
   session.enter(hero);
   return { session, hero, ruleset: session.ruleset as HuntRuleset };
@@ -433,6 +437,13 @@ describe('entrada', () => {
     expect(session.participants).toHaveLength(2);
     expect(other.position).not.toEqual(hero.position);
     expect(Math.max(Math.abs(other.position.x - hero.position.x), Math.abs(other.position.y - hero.position.y))).toBeLessThanOrEqual(3);
+  });
+
+  it('a hunt não declara `progress`: ausente, ela credita no fim, como sempre (OW-03)', () => {
+    // A instância é byte a byte a de antes: declarar o campo aqui mudaria o que o hospedeiro lê.
+    const { session } = start();
+    expect('progress' in session.ruleset).toBe(false);
+    expect(progressOf(session.ruleset)).toBe('at-end');
   });
 
   it('aceita QUALQUER string de dificuldade, e ignora — o conteúdo não define mais nenhuma (#583)', () => {
@@ -2988,6 +2999,11 @@ const withSpells = (
     combat?: readonly unknown[]; monstersRaw?: readonly unknown[];
     /** Equipamento inicial (M30-04, #551) — ausente é o herói nu de sempre. */
     inventory?: InventoryState;
+    /** O catálogo de skills do conteúdo (#628: curva REAL, para o Loyalty ter o que converter). */
+    skillsContent?: readonly unknown[];
+    /** As skills com que o herói entra e o bônus de Loyalty do ticket (#628). */
+    heroSkills?: SkillsState;
+    loyaltyBonusPercent?: number;
   } = {},
   difficulty: 'cautious' | 'bold' = 'cautious',
 ) => {
@@ -3007,6 +3023,7 @@ const withSpells = (
     ...(over.supplies === undefined ? {} : { supplies: over.supplies }),
     ...(over.combat === undefined ? {} : { combat: over.combat }),
     ...(over.monstersRaw === undefined ? {} : { monsters: over.monstersRaw }),
+    ...(over.skillsContent === undefined ? {} : { skills: over.skillsContent }),
   }));
   const session = createHuntSession({
     id: 'spell-session', content: loaded, huntId: 'arena', difficulty,
@@ -3021,6 +3038,8 @@ const withSpells = (
     staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
     gold: over.gold ?? 1_000, goldDelta: 0, alive: true, cooldowns: {},
     ...(over.inventory === undefined ? {} : { inventory: over.inventory }),
+    ...(over.heroSkills === undefined ? {} : { skills: over.heroSkills }),
+    ...(over.loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent: over.loyaltyBonusPercent }),
   });
   session.enter(hero);
   return { session, hero, ruleset: session.ruleset as HuntRuleset, content: loaded };
@@ -5189,6 +5208,162 @@ describe('skills sobem pelo uso, e a curva é conteúdo (FUN-75)', () => {
   });
 });
 
+// --- Loyalty: o bônus da idade da conta no nível efetivo (#628, ADR 0052 d.5) ------------------
+
+describe('Loyalty: o nível efetivo escala golpe e requisito de runa, e o dado persistido não muda (#628)', () => {
+  // A curva REAL do Canary (espada de Knight: base 50, ×1,1; ML de Druid: 1600, ×1,1). A das
+  // skills de fixture tem fator 1 — custo constante, que o Canary trata como "nível máximo" e
+  // que por isso nunca converteria bônus em nível.
+  const realSkills = skills.map((definition) => {
+    if (definition.id === 'melee') return { ...definition, curve: { base: 50, factor: 1.1 } };
+    if (definition.id === 'magic') return { ...definition, curve: { base: 1600, factor: 1.1 } };
+    return definition;
+  });
+  const comEspada: InventoryState = {
+    backpack: [], equipped: { hand: { instanceId: 'i1', itemId: 'sword', quantity: 1 } },
+  };
+  const meleeHit = (loyaltyBonusPercent: number | undefined) => {
+    const { session, hero } = start({
+      difficulty: 'bold', inventory: comEspada, loaded: content({ skills: realSkills }),
+      skills: { melee: { level: 30, points: 0 } },
+      ...(loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent }),
+    });
+    run(session, 20_000, 100);
+    return { session, hero };
+  };
+
+  it('50 % de Loyalty num melee 30 vale o nível 33, e é ESSE nível que escala o golpe', () => {
+    // Tries até o nível 30 (fator 1,1): 2.863; 50 % são 1.431 tries de graça, e o custo de
+    // sair do 30 (336), do 31 (370) e do 32 (407) soma 1.113 — três níveis. `damagePerLevel:
+    // 0,5` neste conteúdo: o poder da espada (200) vai de ×11 (nível 30) para ×12,5 (nível 33).
+    const plain = meleeHit(undefined);
+    const loyal = meleeHit(50);
+
+    expect(plain.session.aggregates.bestBasicHit).toBe(Math.round(200 * (1 + 0.5 * (30 - 10))));
+    expect(loyal.session.aggregates.bestBasicHit).toBe(Math.round(200 * (1 + 0.5 * (33 - 10))));
+    expect(loyal.session.aggregates.bestBasicHit).toBeGreaterThan(plain.session.aggregates.bestBasicHit);
+  });
+
+  it('o nível e os tries PERSISTIDOS não sabem do bônus (o extrato e o snapshot levam o de sempre)', () => {
+    const plain = meleeHit(undefined);
+    const loyal = meleeHit(50);
+    const stateOf = (hero: CharacterRuntime) => hero.skills.getState()['melee'];
+    // Mesmos golpes, mesmos tries e mesmo nível base — o bônus só muda o que a skill VALE.
+    expect(stateOf(loyal.hero)).toEqual(stateOf(plain.hero));
+    expect(stateOf(loyal.hero)?.level).toBe(30);
+  });
+
+  it('a skill não sobe MAIS rápido por causa do bônus: tries e rate leem o nível base', () => {
+    // O `getBaseMagicLevel`/`skills[].level` do Canary escolhe o estágio de rate e recebe os
+    // tries — o bônus é só de LEITURA. Se o estágio lesse o nível efetivo, o Loyalty aceleraria
+    // (ou travaria) a curva de quem já tem o bônus.
+    const stagedRates = {
+      ...progression,
+      rates: {
+        useStages: true,
+        skillStages: [{ minLevel: 1, maxLevel: 30, multiplier: 1 }, { minLevel: 31, multiplier: 4 }],
+      },
+    };
+    const at = (loyaltyBonusPercent: number) => {
+      const { session, hero } = start({
+        difficulty: 'bold', inventory: comEspada,
+        loaded: content({ skills: realSkills, progression: [stagedRates] }),
+        skills: { melee: { level: 30, points: 0 } }, loyaltyBonusPercent,
+      });
+      run(session, 20_000, 100);
+      return hero.skills.getState()['melee'];
+    };
+    // Nível base 30 (abaixo do estágio 31) nos dois: o bônus, que leva o efetivo ao 33, não pode
+    // mudar o estágio.
+    expect(at(50)).toEqual(at(0));
+  });
+
+  it('a mesma hunt a 10 Hz e a 1 Hz rende o mesmo com Loyalty (o bônus é leitura, não tick)', () => {
+    const at = (stepMs: number) => {
+      const { session, hero } = start({
+        difficulty: 'bold', inventory: comEspada, loaded: content({ skills: realSkills }),
+        skills: { melee: { level: 30, points: 0 } }, loyaltyBonusPercent: 50,
+      });
+      run(session, 60_000, stepMs);
+      return {
+        kills: session.aggregates.kills, best: session.aggregates.bestBasicHit,
+        skill: hero.skills.getState()['melee'], xp: hero.xp,
+      };
+    };
+    expect(at(1_000)).toEqual(at(100));
+  });
+
+  it('atravessa o snapshot: a sessão retomada continua com o mesmo bônus e o mesmo golpe', () => {
+    const { session, hero } = meleeHit(50);
+    expect(hero.loyaltyBonusPercent).toBe(50);
+    const loaded = content({ skills: realSkills });
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    // `bestBasicHit` é um MAX que o snapshot carrega: com o recorde dos primeiros 20 s intacto, a
+    // asserção abaixo passaria mesmo se todo golpe pós-restauração saísse no nível base. Zerar o
+    // recorde (na soma e no do participante) obriga o número a vir de um golpe NOVO.
+    const semRecorde = {
+      ...snapshot,
+      aggregates: { ...snapshot.aggregates, bestBasicHit: 0 },
+      aggregatesByCharacter: Object.fromEntries(
+        Object.entries(snapshot.aggregatesByCharacter ?? {}).map(
+          ([id, own]) => [id, { ...own, bestBasicHit: 0 }],
+        ),
+      ),
+    } as SessionSnapshot;
+    expect(semRecorde.aggregates.bestBasicHit).toBe(0);
+    const retomado = Session.fromSnapshot(
+      semRecorde,
+      huntRulesetFromSnapshot(semRecorde, loaded) as HuntRuleset,
+      Rng.fromSeed(semRecorde.id),
+    );
+    const heroRetomado = retomado.participants[0] as CharacterRuntime;
+    expect(heroRetomado.loyaltyBonusPercent).toBe(50);
+    expect(retomado.aggregates.bestBasicHit).toBe(0);
+    // O golpe seguinte usa o nível efetivo 33, e não volta ao 30 por a sessão ter sido retomada:
+    // o recorde que sobra é de um golpe pós-restauração, e é o do nível 33 (2.500), não o do 30
+    // (2.200) que uma restauração que perdesse o bônus produziria.
+    run(retomado, 20_000, 100);
+    const efetivo = Math.round(200 * (1 + 0.5 * (33 - 10)));
+    const base = Math.round(200 * (1 + 0.5 * (30 - 10)));
+    expect(retomado.aggregates.bestBasicHit).toBe(efetivo);
+    expect(retomado.aggregates.bestBasicHit).toBeGreaterThan(base);
+  });
+
+  it('requisito de magic level de runa confere o ML COM Loyalty — e o espelho do slot coincide', () => {
+    // ML 4 com 500 de mana gasta e 50 %: 3.962 mana de graça fecham o ML 4 e chegam ao 5.
+    const rune = {
+      id: 'ml5-rune', name: 'ML5 Rune', price: 14, group: 'attack',
+      requires: { level: 1, magicLevel: 5 },
+      effect: { kind: 'damage', basePower: 400, range: 4, area: { shape: 'circle', radius: 3, centered: 'target' } },
+    };
+    const at = (loyaltyBonusPercent: number | undefined) => {
+      // Sem monstro: o que muda entre as duas é o requisito de ML (que vem ANTES do alvo), e
+      // com o ML satisfeito a recusa que sobra é `no-target`.
+      const { session, ruleset, hero } = withSpells(
+        botConfigV2([{ do: { kind: 'supply', supplyId: 'ml5-rune' } }]),
+        {
+          gold: 10_000, supplies: [...supplies, rune], health: 5_000, monsters: false,
+          skillsContent: realSkills, heroSkills: { magic: { level: 4, points: 500 } },
+          ...(loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent }),
+        },
+      );
+      const state = ruleset.slotStates(session, hero)[0];
+      const outcome = ruleset.useSlot(session, 'hero', 0, 0);
+      return { state, outcome, hero };
+    };
+
+    const plain = at(undefined);
+    expect(plain.state).toMatchObject({ state: 'blocked', reason: 'magic-level-too-low' });
+    expect(plain.outcome).toMatchObject({ ok: false, reason: 'magic-level-too-low' });
+
+    const loyal = at(50);
+    expect(loyal.state).toMatchObject({ state: 'blocked', reason: 'no-target' });
+    expect(loyal.outcome).toMatchObject({ ok: false, reason: 'no-target' });
+    // O ML persistido continua 4: só o que a runa CONFERE viu o 5.
+    expect(loyal.hero.skills.getState()['magic']?.level).toBe(4);
+  });
+});
+
 describe('defesa, escudo e prática de shielding (CMB-04)', () => {
   const shieldItem = {
     id: 'shield', name: 'Shield', kind: 'shield', slot: 'shield',
@@ -6012,6 +6187,272 @@ describe('Bestiário: abates por monstro, marcos e bônus de XP (FUN-113)', () =
     const fast = at(100);
     expect(at(1_000)).toEqual(fast);
     expect(fast.bestiary['rat']).toBeGreaterThanOrEqual(5);
+  });
+});
+
+describe('Bosstiary: abates de boss, níveis e pontos (#629)', () => {
+  // A tabela REAL do Canary (`IOBosstiary::levelInfos`): Nemesis fecha o nível nos abates 1, 3 e
+  // 5, rendendo 10, 30 e 60 pontos. Um boss "Nemesis" de teste dá para contar na mão.
+  const bosstiary = {
+    id: 'baseline',
+    levels: {
+      bane: [{ kills: 25, points: 5 }, { kills: 100, points: 15 }, { kills: 300, points: 30 }],
+      archfoe: [{ kills: 5, points: 10 }, { kills: 20, points: 30 }, { kills: 60, points: 60 }],
+      nemesis: [{ kills: 1, points: 10 }, { kills: 3, points: 30 }, { kills: 5, points: 60 }],
+    },
+  };
+  // Um rato que é boss: o mesmo corpo do `rat` (5 XP, 50 de vida), só a flag e o bloco `bosstiary`.
+  const bossRat = {
+    ...rat, id: 'boss-rat', name: 'Boss Rat', boss: true, bosstiary: { rarity: 'nemesis', raceId: 9001 },
+  };
+  const bossRoute = {
+    ...route,
+    spawnPoints: Array.from({ length: 3 }, () => (
+      { routeIndex: 4, radius: 2, monsterId: 'boss-rat', respawnDelayMs: 10_000 }
+    )),
+  };
+  const withBoss = (over: Partial<RawContent> = {}) => content({
+    monsters: [rat, bossRat], routes: [bossRoute], bosstiary: [bosstiary], ...over,
+  });
+  /** Vinte minutos de jogo: chega com folga aos cinco abates do último nível Nemesis. */
+  const until5Kills = (started: Started): void => {
+    for (let i = 0; i < 1_200 && started.session.aggregates.kills < 5; i += 1) started.session.advanceBy(1_000);
+    expect(started.session.aggregates.kills).toBeGreaterThanOrEqual(5);
+  };
+
+  it('o abate de boss conta no Bosstiary pelo raceId e NÃO no Bestiário; a XP é paga como de sempre', () => {
+    const started = start({ loaded: withBoss() });
+    until5Kills(started);
+    const { session, hero } = started;
+    // `Player::addBestiaryKill` devolve cedo para boss, e `addBosstiaryKill` conta.
+    expect(hero.bestiary.getState()).toEqual({});
+    expect(hero.bosstiary.killsOf(9001)).toBe(session.aggregates.kills);
+    expect(hero.getState().bosstiary?.kills).toEqual({ '9001': session.aggregates.kills });
+    // O rate de boss é neutro (1/1/1): o abate paga os 5 XP do corpo do rato.
+    expect(hero.xp).toBe(session.aggregates.kills * bossRat.experience);
+  });
+
+  it('cada nível fecha no abate da tabela, soma os pontos do PRÓPRIO nível e vira evento notável', () => {
+    const started = start({ loaded: withBoss() });
+    // Abate a abate: 1 → nível 1 (10), 3 → nível 2 (30), 5 → nível 3 (60).
+    const seen: Array<{ kills: number; points: number }> = [];
+    let lastKills = 0;
+    for (let i = 0; i < 1_200 && started.session.aggregates.kills < 5; i += 1) {
+      started.session.advanceBy(1_000);
+      if (started.session.aggregates.kills !== lastKills) {
+        lastKills = started.session.aggregates.kills;
+        seen.push({ kills: lastKills, points: started.hero.bosstiary.points });
+      }
+    }
+    expect(seen.map((entry) => entry.points)).toEqual([10, 10, 40, 40, 100]);
+    const events = started.session.notableEvents.filter((event) => event.type === 'bosstiary-level');
+    expect(events.map((event) => event.detail)).toEqual(['boss-rat/1', 'boss-rat/2', 'boss-rat/3']);
+    // O abate comum NÃO vira evento, como no Bestiário: só o nível.
+    expect(started.session.notableEvents.filter((event) => event.type === 'bestiary-milestone')).toHaveLength(0);
+  });
+
+  it('monstro comum continua no Bestiário e não toca o Bosstiary, mesmo com a tabela no conteúdo', () => {
+    const started = start({
+      difficulty: 'bold', loaded: content({ routes: [threeRatsRoute], bosstiary: [bosstiary] }),
+    });
+    run(started.session, 60_000, 100);
+    expect(started.hero.bestiary.killsOf('rat')).toBe(started.session.aggregates.kills);
+    expect(started.hero.bosstiary.getState()).toEqual({ kills: {}, points: 0, version: 1 });
+  });
+
+  it('sem a tabela no conteúdo o abate conta, mas nenhum nível fecha e nenhum ponto é ganho', () => {
+    const started = start({ loaded: withBoss({ bosstiary: [] }) });
+    until5Kills(started);
+    expect(started.hero.bosstiary.killsOf(9001)).toBe(started.session.aggregates.kills);
+    expect(started.hero.bosstiary.points).toBe(0);
+    expect(started.session.notableEvents.filter((event) => event.type === 'bosstiary-level')).toHaveLength(0);
+  });
+
+  it('abate com stamina zero CONTA — abate, nível e pontos —, e só a XP continua bloqueada', () => {
+    // Canary: `Player::onKilledMonster` chama `addBosstiaryKill` sem olhar stamina; só
+    // `Player::gainExperience` tem o portão (`staminaMinutes == 0`). Stamina zero não encerra a
+    // hunt (`isExhausted`, stamina.md), então o herói continua matando boss — e o registro sobe.
+    const started = start({ staminaMs: 0, loaded: withBoss() });
+    until5Kills(started);
+    const { session, hero } = started;
+    expect(hero.bosstiary.killsOf(9001)).toBe(session.aggregates.kills);
+    expect(hero.bosstiary.points).toBe(100);
+    const events = session.notableEvents.filter((event) => event.type === 'bosstiary-level');
+    expect(events.map((event) => event.detail)).toEqual(['boss-rat/1', 'boss-rat/2', 'boss-rat/3']);
+    // A XP segue bloqueada, e o Bestiário (portão da XP, pré-existente) não ganhou o boss.
+    expect(hero.xp).toBe(0);
+    expect(hero.bestiary.getState()).toEqual({});
+  });
+
+  it('variantes do mesmo boss (mesmo raceId) somam no MESMO contador', () => {
+    // As cinco formas de Urmahlullu declaram o mesmo `bossRaceId` no Canary.
+    const variantA = { ...bossRat, id: 'boss-a', name: 'Boss A' };
+    const variantB = { ...bossRat, id: 'boss-b', name: 'Boss B' };
+    const twoVariants = {
+      ...route,
+      spawnPoints: [
+        { routeIndex: 4, radius: 2, monsterId: 'boss-a', respawnDelayMs: 10_000 },
+        { routeIndex: 4, radius: 2, monsterId: 'boss-b', respawnDelayMs: 10_000 },
+      ],
+    };
+    const started = start({
+      loaded: content({ monsters: [variantA, variantB], routes: [twoVariants], bosstiary: [bosstiary] }),
+    });
+    run(started.session, 120_000, 100);
+    expect(started.session.aggregates.kills).toBeGreaterThan(2);
+    expect(started.hero.bosstiary.getState().kills).toEqual({ '9001': started.session.aggregates.kills });
+  });
+
+  it('em party o abate conta para TODO elegível, e o evento diz DE QUEM', () => {
+    const session = createHuntSession({
+      id: 'boss-party', content: withBoss(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+    });
+    const first = character();
+    const second = new CharacterRuntime({ ...character().getState(), id: 'other' });
+    session.enter(first);
+    session.enter(second);
+    for (let i = 0; i < 1_200 && session.aggregates.kills < 10; i += 1) session.advanceBy(1_000);
+
+    const kills = session.aggregates.kills / 2;
+    expect(kills).toBeGreaterThanOrEqual(1);
+    for (const member of [first, second]) {
+      expect(member.bosstiary.killsOf(9001)).toBe(kills);
+      expect(member.bestiary.getState()).toEqual({});
+    }
+    const events = session.notableEvents.filter((event) => event.type === 'bosstiary-level');
+    expect(events.map((event) => event.detail).sort()).toContain('hero/boss-rat/1');
+    expect(events.map((event) => event.detail).sort()).toContain('other/boss-rat/1');
+  });
+
+  describe('quem é matador: o conjunto `killers` do Canary, e não a elegibilidade da XP', () => {
+    // O herói B não bate em ninguém: a wand do fixture pede 999 de mana e ele tem zero (a mesma
+    // arma "que nunca atira" do teste do #216). Vivo, na party, no alcance — e sem dano.
+    const idle = (): CharacterRuntime => new CharacterRuntime({
+      ...character().getState(), id: 'b',
+      inventory: { backpack: [], equipped: { hand: { instanceId: 'i-wand', itemId: 'wand', quantity: 1 } } },
+    });
+    const partyOf = (members: readonly CharacterRuntime[], mode: 'split' | 'shared' = 'shared'): Session => {
+      const session = createHuntSession({
+        id: 'boss-killers', content: withBoss(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+        partyOptions: { leaderId: 'hero', mode },
+      });
+      for (const member of members) session.enter(member);
+      return session;
+    };
+    const untilKills = (session: Session, kills: number): void => {
+      for (let i = 0; i < 1_200 && session.aggregates.kills < kills; i += 1) session.advanceBy(1_000);
+      expect(session.aggregates.kills).toBeGreaterThanOrEqual(kills);
+    };
+
+    it('party com TODOS exaustos: ninguém recebe XP, e o boss conta para todos', () => {
+      // `eligible` fica vazio e `#grantPartyXp` devolve cedo — o Bosstiary não depende dele.
+      const first = character({ staminaMs: 0 });
+      const second = new CharacterRuntime({ ...character({ staminaMs: 0 }).getState(), id: 'b' });
+      const session = partyOf([first, second]);
+      untilKills(session, 10);
+      for (const member of [first, second]) {
+        expect(member.bosstiary.killsOf(9001)).toBeGreaterThan(0);
+        expect(member.bosstiary.points).toBeGreaterThan(0);
+        expect(member.xp).toBe(0);
+      }
+    });
+
+    it('membro exausto conta o boss na party, ao lado do que recebe XP', () => {
+      const tired = new CharacterRuntime({ ...character({ staminaMs: 0 }).getState(), id: 'b' });
+      const fresh = character();
+      const session = partyOf([fresh, tired]);
+      untilKills(session, 10);
+      expect(fresh.bosstiary.killsOf(9001)).toBeGreaterThan(0);
+      expect(tired.bosstiary.killsOf(9001)).toBeGreaterThan(0);
+      expect(fresh.xp).toBeGreaterThan(0);
+      expect(tired.xp).toBe(0);
+    });
+
+    it('sem XP compartilhada, quem NÃO bateu no boss não conta (Canary: só o `damageMap`)', () => {
+      // B está vivo e com stamina — o `eligible` antigo o creditava —, mas nunca agiu: a
+      // atividade falha, a XP compartilhada fica inativa (`Party::canUseSharedExperience`), e o
+      // Canary só põe em `killers` quem tem dano. Sem isto, um alt parado na party farmaria ponto
+      // de boss.
+      const hero = character();
+      const loafer = idle();
+      const session = partyOf([hero, loafer]);
+      untilKills(session, 3);
+      expect(loafer.lastCombatActionAtMs).toBeNull();
+      expect(hero.bosstiary.killsOf(9001)).toBe(session.aggregates.kills / 2);
+      expect(loafer.bosstiary.getState()).toEqual({ kills: {}, points: 0, version: 1 });
+      expect(session.aggregatesOf('b').xpGained).toBe(0);
+      expect(session.notableEvents.filter((event) => event.type === 'bosstiary-level')
+        .every((event) => event.detail?.startsWith('hero/') === true)).toBe(true);
+    });
+
+    it('com a XP compartilhada ATIVA, o roster inteiro conta — inclusive quem não bateu', () => {
+      // `Creature::onDeath` acrescenta o líder e todos os membros a `killers` quando
+      // `isSharedExperienceActive()` — ao ver UM atacante da party. B não bate, mas age "agora"
+      // (injetado no snapshot, que é como a atividade sobrevive à retomada): a janela de 2 min
+      // do TFS/Canary vale e os dois dividem o abate e contam o boss.
+      const hero = character();
+      const session = partyOf([hero, idle()]);
+      session.advanceBy(100);
+      const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+      const runners = (snapshot.ruleset as { runners?: Record<string, { lastCombatActionAtMs?: number }> }).runners;
+      expect(runners?.['b']).toBeDefined();
+      (runners?.['b'] as { lastCombatActionAtMs?: number }).lastCombatActionAtMs = snapshot.logicalNowMs;
+      const resumed = Session.fromSnapshot(
+        snapshot, huntRulesetFromSnapshot(snapshot, withBoss()) as HuntRuleset, Rng.fromSeed('boss-killers'),
+      );
+      untilKills(resumed, 4);
+      const loafer = resumed.participants.find((p) => p.id === 'b');
+      const leader = resumed.participants.find((p) => p.id === 'hero');
+      expect(loafer?.lastCombatActionAtMs ?? null).toBeNull();
+      expect(leader?.bosstiary.killsOf(9001)).toBeGreaterThan(0);
+      expect(loafer?.bosstiary.killsOf(9001)).toBe(leader?.bosstiary.killsOf(9001));
+    });
+  });
+
+  it('o Bosstiary atravessa o snapshot', () => {
+    const started = start({ loaded: withBoss() });
+    until5Kills(started);
+    const before = started.hero.bosstiary.getState();
+    expect(before.points).toBe(100);
+
+    const snapshot = JSON.parse(JSON.stringify(started.session.snapshot())) as SessionSnapshot;
+    const resumed = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, withBoss()) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+    expect(resumed.participants[0]?.bosstiary.getState()).toEqual(before);
+  });
+
+  it('personagem SEM Bosstiary gravado começa do zero, e não quebra', () => {
+    // É o personagem de antes desta issue. Campo opcional, sem bump de formato.
+    const { session } = start({ loaded: withBoss() });
+    run(session, 5_000, 100);
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    delete (snapshot.participants[0] as { bosstiary?: unknown }).bosstiary;
+
+    const resumed = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, withBoss()) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+    expect(resumed.participants[0]?.bosstiary.getState()).toEqual({ kills: {}, points: 0, version: 1 });
+    expect(() => run(resumed, 5_000, 100)).not.toThrow();
+  });
+
+  it('1 Hz e 10 Hz contam o MESMO — abate de boss é evento, não tick', () => {
+    const at = (stepMs: number) => {
+      const started = start({ loaded: withBoss() });
+      run(started.session, 300_000, stepMs);
+      return {
+        bosstiary: started.hero.bosstiary.getState(),
+        events: started.session.notableEvents.filter((event) => event.type === 'bosstiary-level').length,
+      };
+    };
+    const fast = at(100);
+    expect(at(1_000)).toEqual(fast);
+    expect(fast.bosstiary.kills['9001']).toBeGreaterThanOrEqual(5);
+    expect(fast.events).toBe(3);
   });
 });
 

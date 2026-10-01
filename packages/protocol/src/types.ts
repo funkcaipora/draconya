@@ -65,10 +65,16 @@ const PaletteIndex = z.number().int().min(0).max(132);
 
 /**
  * Progresso até o próximo nível de uma skill (#340, SV-04): nível atual e percentual acumulado.
+ *
+ * `loyaltyLevel` (#628): o nível COM o bônus de Loyalty da conta — o `getLoyaltySkill` que o
+ * Canary manda ao lado do nível base. AUSENTE quando o bônus não muda o nível (a conta sem
+ * degrau, ou tries de bônus que ainda não fecham um nível): quem lê o trata como `level`. Um nó
+ * `game` anterior à issue nunca o manda, e o HUD mostra o nível base.
  */
 export const SkillProgress = z.object({
   level: z.number().int().nonnegative(),
   percentToNext: z.number().int().min(0).max(99),
+  loyaltyLevel: z.number().int().nonnegative().optional(),
 });
 export type SkillProgress = z.infer<typeof SkillProgress>;
 
@@ -690,6 +696,8 @@ export const S2C_SCHEMAS = {
       speed: z.number().int().nonnegative().default(0),
       skills: z.record(z.string().min(1), SkillProgress).default({}),
       magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
+      /** O bônus de Loyalty (#628), como em `player-stats` — para quem reanexa ver sem esperar. */
+      loyaltyBonusPercent: z.number().int().nonnegative().optional(),
       /** Pontos de alma (#593), como em `player-stats` — para quem reanexa ver sem esperar. */
       soul: z.number().int().nonnegative().default(0),
       soulMax: z.number().int().nonnegative().default(0),
@@ -813,6 +821,17 @@ export const S2C_SCHEMAS = {
    */
   bestiary: z.object({
     counts: z.record(z.string().min(1), z.number().int().nonnegative()),
+  }),
+  /**
+   * O Bosstiary do personagem (#629, ADR 0052 d.1): o registro CRU — abates por boss e pontos de
+   * boss —, como `bestiary` manda os abates crus. A chave de `kills` é o `raceId` do Canary em
+   * texto (`catalogue.monsters[].bosstiary.raceId`): o contador é compartilhado entre variantes
+   * do mesmo boss. Os níveis e a raridade vêm no `catalogue`, fixados na sessão (invariante 7).
+   * SUBSTITUI o anterior, não soma: é um contador permanente e a tela mostra o total.
+   */
+  bosstiary: z.object({
+    kills: z.record(z.string().min(1), z.number().int().nonnegative()),
+    points: z.number().int().nonnegative(),
   }),
   /**
    * O que o servidor decidiu sobre a configuração de bot que chegou (FUN-89).
@@ -964,6 +983,16 @@ export const S2C_SCHEMAS = {
         toKill: z.number().int().positive(),
         charmsPoints: z.number().int().nonnegative(),
       }).optional(),
+      /**
+       * O boss no Bosstiary (#629): a raridade (Bane/Archfoe/Nemesis, que escolhe a linha de
+       * `catalogue.bosstiary.levels`) e o `raceId` que CHAVEIA o contador de abates em
+       * `bosstiary.kills` — variantes do mesmo boss compartilham o `raceId`. Ausente: monstro
+       * comum (conta no Bestiário) ou nó `game` anterior a esta issue.
+       */
+      bosstiary: z.object({
+        rarity: z.enum(['bane', 'archfoe', 'nemesis']),
+        raceId: z.number().int().positive(),
+      }).optional(),
     })).default([]),
     /**
      * Os marcos do Bestiário e o bônus de XP por marco (§18, FUN-113), do conteúdo fixado na
@@ -972,6 +1001,18 @@ export const S2C_SCHEMAS = {
     bestiary: z.object({
       milestones: z.array(z.number().int().positive()),
       xpBonusPercentPerMilestone: z.number().nonnegative(),
+    }).optional(),
+    /**
+     * Os níveis do Bosstiary por raridade (#629; `IOBosstiary::levelInfos` do Canary), do conteúdo
+     * fixado na sessão: quantos abates levam a cada nível e quantos pontos ele rende. Ausente: o
+     * servidor não tem Bosstiary configurado, e a tela mostra só a contagem de abates.
+     */
+    bosstiary: z.object({
+      levels: z.object({
+        bane: z.array(z.object({ kills: z.number().int().positive(), points: z.number().int().positive() })),
+        archfoe: z.array(z.object({ kills: z.number().int().positive(), points: z.number().int().positive() })),
+        nemesis: z.array(z.object({ kills: z.number().int().positive(), points: z.number().int().positive() })),
+      }),
     }).optional(),
     /**
      * Os 25 Charms do Canary (M39-02, #602, ADR 0053 d.3): nome, categoria, tipo, elemento e o
@@ -1298,6 +1339,14 @@ export const S2C_SCHEMAS = {
     speed: z.number().int().nonnegative().default(0),
     skills: z.record(z.string().min(1), SkillProgress).default({}),
     magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
+    /**
+     * O bônus de Loyalty da CONTA (#628, ADR 0052 decisão 5), em percentual inteiro: fixado no
+     * ticket e constante pela sessão — o HUD o mostra ao lado das skills, e `loyaltyLevel` de
+     * cada uma diz quanto ele vale. Opcional, e não `default(0)`: ausente é zero para quem lê, e
+     * um nó `game` anterior (ou uma conta sem degrau) manda sem — o HUD não mostra bônus que não
+     * existiu.
+     */
+    loyaltyBonusPercent: z.number().int().nonnegative().optional(),
     /**
      * Pontos de alma (#593). `soulMax` é da VOCAÇÃO — zero é "sem vocação escolhida", o mesmo
      * "sem teto para mostrar" que `vocationId: null` já significa. `default(0)` nos dois: um

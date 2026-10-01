@@ -1,6 +1,7 @@
 # 0024 — Estado quente e sessão hospedada não são a mesma coisa
 
 **Status:** aceito
+**Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30):** repouso é o personagem deslogado, com posição, cidade e vitais; o recolhimento de 5 min não vale no mundo.
 **Data:** 2026-09-10
 **Contexto técnico:** invariantes 8 e 9; `server` (processo `game`, processo `api`, processo `jobs`)
 

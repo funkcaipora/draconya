@@ -156,6 +156,11 @@
         }
       ]
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 440
+    },
     "outfitId": 264
   },
   {
@@ -299,6 +304,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/battlemaster_zunzu.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 635
     },
     "outfitId": 343
   },
@@ -620,6 +630,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/captain_jones.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 430
     },
     "outfitId": 196
   },
@@ -1413,6 +1428,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/fleabringer.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 640
+    },
     "outfitId": 341
   },
   {
@@ -1485,6 +1505,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/foreman_kneebiter.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 424
     },
     "outfitId": 70
   },
@@ -1942,6 +1967,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/grorlam.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 205
+    },
     "outfitId": 205
   },
   {
@@ -2218,6 +2248,11 @@
         }
       ]
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 338
+    },
     "outfitId": 128
   },
   {
@@ -2419,6 +2454,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/mawhawk.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1028
     },
     "outfitId": 595
   },
@@ -2815,6 +2855,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/ocyakao.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 970
     },
     "outfitId": 259
   },
@@ -4032,6 +4077,11 @@
         }
       ]
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 201
+    },
     "outfitId": 201
   },
   {
@@ -4337,6 +4387,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/rotworm_queen.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 459
+    },
     "outfitId": 295
   },
   {
@@ -4506,6 +4561,11 @@
           "count": 4
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 476
     },
     "outfitId": 287
   },
@@ -4979,6 +5039,11 @@
         }
       ]
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 972
+    },
     "outfitId": 557
   },
   {
@@ -5116,6 +5181,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/xenia.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 428
+    },
     "outfitId": 137
   },
   {
@@ -5189,6 +5259,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/zomba.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 956
     },
     "outfitId": 570
   },
@@ -5469,6 +5544,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/zulazza_the_corruptor.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 628
     },
     "outfitId": 334
   }

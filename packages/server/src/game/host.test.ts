@@ -1,13 +1,14 @@
 import {
-  CharacterRuntime, HuntRuleset, PartyFullError, Rng, Session, createHuntSession, statsForLevel, totalXpForLevel,
-  type CharmBestiaryEntry, type EndReason, type Ruleset, type SessionSnapshot,
+  CharacterRuntime, HuntRuleset, PartyFullError, Rng, Session, createHuntSession, pointsForLevel, statsForLevel,
+  totalXpForLevel,
+  type CharmBestiaryEntry, type EndReason, type Ruleset, type SessionSnapshot, type SkillsState,
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigSchema, buildContent, compileItem,
-  itemSchema, migrateBotConfigV1, placeholderAppearances,
+  itemSchema, migrateBotConfigV1, placeholderAppearances, skillSchema,
 } from '@draconya/content';
-import type { Ammunition, Appearances, BotConfig, Charm, Progression, RawContent, Vocation } from '@draconya/content';
+import type { Ammunition, Appearances, BotConfig, Charm, Progression, RawContent, Skill, Vocation } from '@draconya/content';
 import { C2S_SCHEMAS } from '@draconya/protocol';
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import { createLogger } from '../log.js';
@@ -185,6 +186,34 @@ describe('session host', () => {
     await host.drainAll('drain');
 
     expect(saved[0]?.bestiary).toEqual({ rat: 2, bat: 1 });
+  });
+
+  it('the receipt carries the Bosstiary of the owner, absolute (#629)', async () => {
+    // O abate de boss que não chega ao extrato some no próximo logout, e o nível 3 nunca
+    // fecharia. Absoluto como o Bestiário: o ledger funde pelo maior. Mutação que mata: apagar a
+    // linha do `bosstiary` em `#persistReceipt` (a lista de permissão do `parseReceipt` está
+    // coberta em `receipts.test.ts`; esta é a outra ponta).
+    const saved: Array<{ bosstiary?: { kills: Record<string, number>; points: number; version: number } }> = [];
+    const receipts = {
+      save: async (r: { bosstiary?: { kills: Record<string, number>; points: number; version: number } }) => {
+        saved.push(r);
+      },
+    } as unknown as ReceiptStore;
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, { directory, receipts });
+    await host.prepare('p1', undefined, 'a1');
+    const owner = sessions[0]?.participants[0];
+    if (owner === undefined) throw new Error('sem personagem');
+    const table = { levels: {
+      bane: [{ kills: 25, points: 5 }], archfoe: [{ kills: 5, points: 10 }], nemesis: [{ kills: 1, points: 10 }],
+    } };
+    owner.bosstiary.record(639, 'nemesis', table);
+    owner.bosstiary.record(639, 'nemesis', table);
+
+    await host.drainAll('drain');
+
+    expect(saved[0]?.bosstiary).toEqual({ kills: { '639': 2 }, points: 10, version: 1 });
   });
 
   it('saves the receipt before telling the player', async () => {
@@ -666,12 +695,12 @@ describe('session host', () => {
 
     host.handle(viewer, { type: 'session-attach' });
     expect(socket.frames).toHaveLength(0);
-    // Sete: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
+    // Oito: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
     // e stamina só viajam na segunda —, o alvo (`target-changed`, #470), as condições ativas
     // (`active-conditions`, #341), o Bestiário (`bestiary`, FUN-113), as bênçãos (`blessings`,
-    // #570, ADR 0052) e a economia de Charms (`charms`, M39-02, #602). Os sete na FILA, nenhum
-    // no fio.
-    expect(viewer.queued).toBe(7);
+    // #570, ADR 0052), a economia de Charms (`charms`, M39-02, #602) e o Bosstiary (`bosstiary`,
+    // #629). Os oito na FILA, nenhum no fio.
+    expect(viewer.queued).toBe(8);
 
     host.flush();
     const state = socket.received().find((m) => m.type === 'session-state');
@@ -2830,6 +2859,8 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     wide: boolean;
     /** O rato deixa cadáver (FUN-123): aparência 7 na tabela, meio segundo no chão. */
     corpses: boolean;
+    /** O rato é um BOSS Nemesis (raceId 9001, #629) e o conteúdo tem a tabela de níveis do Canary. */
+    boss: boolean;
   }> = {}) {
     const raw = rawTestContent();
     const withCorpses = (base: RawContent): RawContent => ({
@@ -2838,7 +2869,23 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
       monsters: (base.monsters as Array<Record<string, unknown>>).map((m) => ({ ...m, corpseTtlMs: 500 })),
       appearances: (base.appearances as Array<Record<string, unknown>>).map((a) => ({ ...a, corpses: { rat: 7 } })),
     });
-    const content = over.corpses === true
+    const content = over.boss === true
+      ? buildContent({
+        ...raw,
+        monsters: (raw.monsters as Array<Record<string, unknown>>).map((m) =>
+          m['id'] === 'rat'
+            ? {
+              ...m, ...(over.tanky === true ? { health: 100_000 } : {}),
+              boss: true, bosstiary: { rarity: 'nemesis', raceId: 9001 },
+            }
+            : m),
+        bosstiary: [{ id: 'baseline', levels: {
+          bane: [{ kills: 25, points: 5 }, { kills: 100, points: 15 }, { kills: 300, points: 30 }],
+          archfoe: [{ kills: 5, points: 10 }, { kills: 20, points: 30 }, { kills: 60, points: 60 }],
+          nemesis: [{ kills: 1, points: 10 }, { kills: 3, points: 30 }, { kills: 5, points: 60 }],
+        } }],
+      })
+      : over.corpses === true
       ? buildContent(withCorpses(raw))
       : over.wide === true
         ? buildContent(wideArena())
@@ -3134,6 +3181,61 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
 
     expect(host.sessionFor('hero')?.aggregates.kills).toBe(0);
     expect(received().filter((m) => m.type === 'bestiary')).toHaveLength(before);
+  });
+
+  it('o Bosstiary chega no session-attach, DEPOIS do Bestiário, mesmo sem abate nenhum (#629)', () => {
+    // Pela mesma razão do Bestiário: progressão que só viaja em mensagem própria, e a Cidade não
+    // tem ciclo para mandar depois. Mutação que mata: apagar o `viewer.send` do Bosstiary em
+    // `#sendState`.
+    const { socket, viewer, stateOf, received } = hunt({ boss: true });
+    stateOf(socket, viewer);
+
+    const types = received().map((m) => m.type);
+    const bosstiary = received().filter((m) => m.type === 'bosstiary');
+    expect(bosstiary).toHaveLength(1);
+    expect(bosstiary[0]).toEqual({ type: 'bosstiary', kills: {}, points: 0 });
+    expect(types.indexOf('bosstiary')).toBeGreaterThan(types.indexOf('bestiary'));
+  });
+
+  it('o abate de boss sobe o Bosstiary ao vivo, e o Bestiário fica de fora dele (#629)', () => {
+    // O contador sobe no `sim` com ou sem visualizador (invariante 3); a mensagem é apresentação,
+    // e sai quando a SOMA dos abates mudou. Mutação que mata: apagar a chamada de
+    // `#presentBosstiary` no ciclo (nenhuma mensagem além do attach), ou apagar a comparação com
+    // `sentBosstiary` (uma por ciclo, e a lista teria repetição).
+    const { host, socket, viewer, stateOf, runFor, received } = hunt({ boss: true });
+    stateOf(socket, viewer);
+    runFor(60_000);
+    const hero = host.sessionFor('hero')?.participants[0];
+    const kills = hero?.bosstiary.killsOf(9001) ?? 0;
+    expect(kills).toBeGreaterThan(1);
+    // Nemesis: nível 1 no abate 1 (10 pontos) — e o boss NÃO conta no Bestiário.
+    expect(hero?.bosstiary.points).toBeGreaterThanOrEqual(10);
+    expect(hero?.bestiary.getState()).toEqual({});
+
+    const updates = received().filter((m) => m.type === 'bosstiary') as unknown as
+      Array<{ kills: Record<string, number>; points: number }>;
+    // A do attach (vazia) e pelo menos uma por abate contado depois dela.
+    expect(updates.length).toBeGreaterThan(1);
+    expect(updates.at(-1)?.kills).toEqual({ '9001': kills });
+    expect(updates.at(-1)?.points).toBe(hero?.bosstiary.points);
+    const totals = updates.map((u) => u.kills['9001'] ?? 0);
+    expect(new Set(totals).size).toBe(totals.length);
+    // O Bestiário não recebe nada do boss.
+    const bestiary = received().filter((m) => m.type === 'bestiary') as unknown as Array<{ counts: object }>;
+    expect(bestiary.every((message) => Object.keys(message.counts).length === 0)).toBe(true);
+    expect(kills).toBe(host.sessionFor('hero')?.aggregates.kills);
+  });
+
+  it('sem abate de boss não sai Bosstiary nenhum — o tempo não é gatilho (#629)', () => {
+    const { host, socket, viewer, stateOf, runFor, received } = hunt({ boss: true, tanky: true });
+    stateOf(socket, viewer);
+    const before = received().filter((m) => m.type === 'bosstiary').length;
+    expect(before).toBe(1);
+
+    runFor(2_000);
+
+    expect(host.sessionFor('hero')?.aggregates.kills).toBe(0);
+    expect(received().filter((m) => m.type === 'bosstiary')).toHaveLength(before);
   });
 
   it('a vida do monstro desce por creature-health, e a morte vira creature-disappear', () => {
@@ -3637,6 +3739,9 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     weapon: 'bow' | 'wand';
     /** Skills do conteúdo de teste (#340, SV-04). */
     skills: readonly unknown[];
+    /** As skills com que o herói nasce e o bônus de Loyalty que o ticket lhe deu (#628). */
+    heroSkills: SkillsState;
+    loyaltyBonusPercent: number;
   }> = {}) {
     const raw = rawTestContent();
     // As armas precisam de linha na tabela de aparência (FUN-94); a munição abstrata, só do
@@ -3722,6 +3827,8 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
           level: 1, xp: 0, gold: over.gold ?? 0, goldDelta: 0, alive: true, cooldowns: {},
           staminaMs: over.stamina ?? FULL_STAMINA_MS, staminaUpdatedAtMs: 0,
           ...armed,
+          ...(over.heroSkills === undefined ? {} : { skills: over.heroSkills }),
+          ...(over.loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent: over.loyaltyBonusPercent }),
         }));
         return session;
       },
@@ -3966,6 +4073,92 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     // Próximo ciclo sem mudanças: nenhum player-stats adicional
     runFor(100);
     expect(ofType(received(), 'player-stats').length).toBe(2);
+  });
+
+  it('o HUD recebe o bônus de Loyalty e o nível efetivo de cada skill; sem bônus, a forma é a de sempre (#628)', () => {
+    // O Canary manda ao cliente o nível COM Loyalty ao lado do base. Aqui: `loyaltyLevel` só
+    // viaja quando o bônus muda o nível, e `loyaltyBonusPercent` só quando é > 0 — o
+    // `player-stats` da conta sem degrau não ganha campo nenhum. O percentual continua o do
+    // nível BASE, e o dado persistido (`level`) também.
+    //
+    // Mutações que matam: tirar `loyaltyLevel` de `skillProgressOf` (a skill vai sem o nível
+    // efetivo), ou `loyaltyBonusPercent` de `playerStatsOf`/do `session-state.self`.
+    const loyal = hunt({
+      regen: false, stamina: MID_MINUTE_STAMINA_MS, monsters: false, skills: [TEST_MELEE_SKILL],
+      heroSkills: { melee: { level: 100, points: 0 } }, loyaltyBonusPercent: 50,
+    });
+    const stats = ofType(loyal.received(), 'player-stats')[0];
+    expect(stats?.loyaltyBonusPercent).toBe(50);
+    // Tries até o 100 (fator 1,1): 2.655.971; 50 % fecham quatro níveis (ver `loyalty.test.ts`).
+    expect(stats?.skills.melee).toEqual({ level: 100, percentToNext: 0, loyaltyLevel: 104 });
+    const attach = ofType(loyal.socket.received(), 'session-state').at(-1);
+    expect(attach?.self.loyaltyBonusPercent).toBe(50);
+    expect(attach?.self.skills.melee).toEqual({ level: 100, percentToNext: 0, loyaltyLevel: 104 });
+    // O persistido não sabe do bônus.
+    expect(loyal.hero().skills.getState()['melee']).toEqual({ level: 100, points: 0 });
+
+    const plain = hunt({
+      regen: false, stamina: MID_MINUTE_STAMINA_MS, monsters: false, skills: [TEST_MELEE_SKILL],
+      heroSkills: { melee: { level: 100, points: 0 } },
+    });
+    const plainStats = ofType(plain.received(), 'player-stats')[0];
+    expect(plainStats).not.toHaveProperty('loyaltyBonusPercent');
+    expect(plainStats?.skills.melee).toEqual({ level: 100, percentToNext: 0 });
+    const plainAttach = ofType(plain.socket.received(), 'session-state').at(-1);
+    expect(plainAttach?.self).not.toHaveProperty('loyaltyBonusPercent');
+  });
+
+  it('uma mudança SÓ do nível efetivo (Loyalty) gera player-stats — a comparação olha loyaltyLevel (#628)', () => {
+    // O nível efetivo sobe em passos que não coincidem com o nível/percentual BASE: existe um
+    // try que fecha o nível efetivo sem mexer em nenhum dos dois. Este teste o ENCONTRA (bisseção
+    // sobre os tries de um nível de custo alto, onde um try é uma fração de percentual ínfima) e
+    // ganha exatamente esse try — o HUD tem de receber o novo `loyaltyLevel` mesmo assim.
+    //
+    // Mutação que mata: tirar `a.loyaltyLevel === b.loyaltyLevel` de `sameSkillProgress`.
+    const melee: Skill = skillSchema.parse(TEST_MELEE_SKILL);
+    const at = (level: number, points: number) => new CharacterRuntime({
+      id: 'probe', position: { x: 0, y: 0, z: 7 }, health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+      level: 1, xp: 0, goldDelta: 0, alive: true, cooldowns: {}, skills: { melee: { level, points } },
+      loyaltyBonusPercent: 50,
+    });
+    let boundary: { level: number; points: number } | null = null;
+    for (let level = 40; level < 120 && boundary === null; level += 1) {
+      const cost = pointsForLevel(melee, level, 1.1);
+      const effective = (points: number) => at(level, points).loyaltyLevelOf(melee, 1.1);
+      if (effective(cost - 1) === effective(0)) continue;
+      let low = 0;
+      let high = cost - 1; // efetivo(low) < efetivo(high)
+      while (high - low > 1) {
+        const mid = Math.floor((low + high) / 2);
+        if (effective(mid) === effective(0)) low = mid; else high = mid;
+      }
+      const percent = (points: number) => at(level, points).skills.progressOf(melee, 1.1).percentToNext;
+      // Só serve se o try do meio NÃO mexe no percentual base (senão o teste não isola nada).
+      if (percent(low) === percent(high)) boundary = { level, points: low };
+    }
+    if (boundary === null) throw new Error('nenhum nível de custo alto tem um try de fronteira isolado');
+
+    const { runFor, received, hero } = hunt({
+      regen: false, stamina: MID_MINUTE_STAMINA_MS, monsters: false, skills: [TEST_MELEE_SKILL],
+      heroSkills: { melee: boundary }, loyaltyBonusPercent: 50,
+    });
+    const before = ofType(received(), 'player-stats');
+    expect(before).toHaveLength(1);
+    const beforeMelee = before[0]?.skills.melee;
+
+    hero().skills.gain(melee, 1);
+    runFor(100);
+
+    const stats = ofType(received(), 'player-stats');
+    expect(stats).toHaveLength(2);
+    const afterMelee = stats[1]?.skills.melee;
+    // Nível e percentual BASE iguais; só o efetivo andou um nível.
+    expect(afterMelee?.level).toBe(beforeMelee?.level);
+    expect(afterMelee?.percentToNext).toBe(beforeMelee?.percentToNext);
+    expect(afterMelee?.loyaltyLevel).toBe((beforeMelee?.loyaltyLevel ?? 0) + 1);
+    // Ciclo seguinte sem mudança: nenhum pacote a mais.
+    runFor(100);
+    expect(ofType(received(), 'player-stats')).toHaveLength(2);
   });
 
   it('a magia com tabela vira missile do conjurador ao alvo e effect NO alvo, com os ids da tabela', () => {

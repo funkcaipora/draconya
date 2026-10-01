@@ -105,6 +105,22 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **Loot sorteia com o `Rng` da sessão, gold antes de item, e `chance: 0` não consome
   sorteio.** Ordem e semente são contrato: mudar qualquer um dos dois muda o que toda hunt
   retomada rende. `Math.random` continua proibido, e `grep -rn "Math.random" src` é vazio.
+- **A esfola de cadáver (#626, `skinning.ts`) é o ÚLTIMO sorteio do abate, e só existe com
+  ferramenta.** `#onMonsterDied` rola loot, credita supply/munição e SÓ ENTÃO rola a esfola — um
+  sorteio, no `combat-v4`, quando quem coleta tem a ferramenta do monstro. Sem ferramenta, sem
+  entrada em `content.skinning` ou fora do v4 o `session.rng` não é tocado (`rulesets/skinning.
+  test.ts` prende); pôr qualquer sorteio DEPOIS dele, ou antes dele por um caminho que nem todo
+  abate percorre, desloca a sequência de quem tem faca. A janela é por ESTÁGIO do cadáver
+  (`Skinning.stages`), não a vida inteira (`corpseTtlMs`), e `CorpseState.diedAtMs` é o que dá a
+  idade — um snapshot anterior sem ele não se esfola à mão. O Scavenge encolhe o intervalo, e no tier
+  3 é PIOR que sem charm (a fórmula do Canary, decisão a rever em `docs/product/items.md`). **A
+  tentativa — a do bot e a manual, com ou sem sucesso — reagenda o evento `CORPSE`**
+  (`#retimeCorpse`, `Skinning.stages[].afterTtlMs`): o `transform(skin.after)` do Canary reinicia o
+  decaimento, e o cadáver esfolado vive 360 s da tentativa, não o que faltava dos 670 s. Quem
+  esfola um cadáver por um caminho novo tem que passar por `#retimeCorpse`, senão o loot que
+  sobrou no cadáver vive mais que no Canary. **O alcance manual é o `canUse` adjacente (1×1, sem
+  linha de visão), NÃO o `canUseFar` 7×5**: o `skinning.lua` não chama `allowFarUse`, e herdar o
+  7×5 das runas por ser "um tile" foi o erro que a revisão do #626 pegou (ADR 0049, emenda).
 - **Um evento que se reagenda usa `session.nowMs + intervalo`**, e é exato porque `nowMs` durante
   o despacho É o instante do vencimento. Não há erro a herdar, e por isso não há acumulador.
 - **`pnpm source-policy` reprova nome de contador de tick** (`remainingTicks`, `cooldownTicks`, …)
@@ -137,6 +153,19 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **Skill nunca desce, e `Skills.merge` depende disso.** Ficar com o maior de cada uma é o que
   torna a fusão de extratos comutativa: um extrato antigo processado fora de ordem não rebaixa
   nada, e não é preciso guardar instante como a stamina guarda.
+- **Loyalty é LEITURA do nível, nunca escrita** (`loyalty.ts`, #628, ADR 0052 d.5). O bônus da
+  idade da conta chega no ticket como um percentual inteiro, fica em `CharacterRuntime.
+  loyaltyBonusPercent` (fixado como a versão de conteúdo, e no snapshot) e vira NÍVEIS extras por
+  `LoyaltyLevels.levelOf` — a conta de `getLoyaltySkill`/`getLoyaltyMagicLevel` do Canary, sobre
+  TRIES e na curva real da vocação, não `nível × (1 + p)`. **Toda leitura que ESCALA algo (golpe,
+  magia, defesa, cura, requisito de runa) passa por `HuntRuleset#loyaltyLevelOf` /
+  `#magicLevelOf`; ganhar tries, o estágio de rate, a penalidade de morte, o extrato e o
+  snapshot continuam no nível BASE** (`skills.levelOf`) — misturar os dois faria o bônus
+  acelerar (ou travar) a própria curva. Skill nova que escale algo lê pelo helper, não por
+  `character.skills.levelOf`. Sem bônus o helper devolve o nível base sem custo nenhum. O `sim`
+  nunca conta dias de conta nem lê relógio: quem calcula o percentual é a `api` (`server/src/
+  loyalty.ts`), com `loyaltyPointsOf`/`loyaltyBonusPercentOf` daqui (aritmética pura). O cache de
+  tries acumulados por skill é derivado, por personagem, e nunca vai ao snapshot.
 - **Bestiário é acumulador de ABATE, pelo mesmo argumento** (`bestiary.ts`, FUN-113, §18).
   Abate é a morte que `resolveDeath` resolve no instante em que vence — evento na fila, não
   grandeza por tick —, e o módulo é aritmética pura sobre um `Map`. `CharacterState.bestiary`
@@ -145,6 +174,23 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   não conta abate (§18.6) pela MESMA condição que não paga XP nem loot — duas condições
   divergem na primeira mudança em uma delas. `Bestiary.merge` fica com o maior por monstro,
   pela razão de `Skills.merge`.
+- **O Bosstiary é o irmão do Bestiário, e o boss conta em UM dos dois** (`bosstiary.ts`, #629,
+  ADR 0052 emenda de 2026-09-29). Mesmo evento (`#onMonsterDied`) e mesma fusão por máximo
+  (`Bosstiary.merge`) — mas **NÃO a mesma elegibilidade**: o Bestiário ainda corre dentro do
+  `for (const member of eligible)` de `#grantPartyXp` (vivo e com stamina), e o Bosstiary roda
+  FORA dele, em `#creditBosstiary`, sobre os `killers` do Canary (`#killersOf`: todo jogador com
+  dano no monstro, mais o roster inteiro com a XP compartilhada ativa). `Player::onKilledMonster`
+  não tem portão de stamina nem de vida — só `Player::gainExperience` tem —, então um herói
+  exausto conta o boss, e quem não bateu (sem XP compartilhada) não. Os `killers` saem ANTES da
+  XP do abate: o level up dele não pode mexer na régua de nível de `canShareExperience`. Mover o
+  Bosstiary de volta para dentro do `eligible` "para ficar igual ao Bestiário" reabre a
+  divergência — o que está desalinhado é o Bestiário (ADR 0043 d.1 / 0053 d.1), não o Bosstiary.
+  O contador é chaveado pelo `raceId` do boss (em TEXTO: objeto JSON só tem chave de texto), e não
+  pelo id de conteúdo, porque variantes do mesmo boss compartilham o `raceId` no Canary.
+  **`definition.boss` decide a porta:** boss não soma no `Bestiary` (`Player::addBestiaryKill`
+  devolve cedo para `isBoss()`) — esquecer o `if` faria o boss entrar nos marcos de XP. Os pontos
+  são os do PRÓPRIO nível alcançado, somados ao total; nível fechado é o evento notável
+  `bosstiary-level`.
 - **A party é aritmética pura em `party.ts` (#189, ADR 0027; fórmula e elegibilidade emendadas
   pelo #525 em 2026-09-24/25, fidelidade CANARY do ADR 0037 d.4 — não TFS: as duas engines
   divergem no multiplicador, e é o Canary que manda em fórmula), e o ruleset só chama.**
@@ -338,7 +384,25 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   era do jogador e termina com o dedo vazio.
 - **`Session.leave` vale em qualquer sessão com mais de um dono** (FUN-71, ADR 0023; #187, ADR
   0027): o shard da Cidade e a party de hunt. Numa sessão de um dono só sair é encerrar.
-  `Ruleset.shared` continua dizendo se é shard — o que muda é ter extrato e snapshot.
+  `Ruleset.shared` diz SÓ "sair é `leave`"; quem diz se a sessão credita é `Ruleset.progress`
+  (`'none' | 'checkpointed'`, OW-03, ADR 0060 d.10b), e `progressOf(ruleset)` o resolve — ausente,
+  a privada é `'at-end'` (credita no `end`) e a compartilhada é `'none'`. Cidade e hunt NÃO
+  declaram o campo, de propósito: declarar mudaria o que o hospedeiro lê.
+- **`Session.checkpoint(id, reason)` é o extrato parcial, com a semântica de delta de `leave`**
+  (OW-03): emite o extrato (`seq` novo), zera os agregados DAQUELE personagem e o deixa na sessão.
+  Três armadilhas. (1) A SOMA `session.aggregates` NÃO é zerada — segue o acumulado da sessão,
+  como depois de um `leave` —, então `Σ aggregatesOf(p) ≠ aggregates` numa sessão que já
+  checkpointou. (2) O marco dos eventos notáveis é uma POSIÇÃO na lista (`#notableCursor`), e
+  não só `joinedAtMs` (que o checkpoint também move): o tempo sozinho repete ou perde os eventos
+  do instante exato do checkpoint, e os de instante lógico igual chegam depois dele quando uma
+  intenção cai entre dois `advanceBy`. O cursor não entra no snapshot — a sessão `checkpointed`
+  não tem snapshot (ADR 0060 d.10a). (3) Depois do `end` devolve `null`: os agregados dele
+  continuam na sessão e um extrato novo os creditaria de novo.
+- **Os tetos são por sessão** (OW-03): `SessionOptions` (e o 4º argumento de `fromSnapshot`)
+  aceita `maxPendingDomainEvents`, `maxEventsPerAdvance` — com as constantes de sempre como
+  default — e `maxNotableEventsPerCharacter`, sem default. O evento notável não tem dono, então o
+  teto é da LISTA (`× max(1, participantes)`), e quem indexa `notableEvents` por posição — o
+  analisador do hospedeiro — precisa somar `session.notableEventsDropped`.
 - **A hunt hospeda N participantes, e o que é de um vive num `Runner`** (#203). Caminhante da
   rota, bot compilado, grupos engatilhados, lure, anel, golpe engatilhado e os três avisos
   são POR PARTICIPANTE, num `Map` por id; todo evento de personagem já carrega `subject`, e

@@ -1,6 +1,7 @@
 # 0003 — Tick variável por sessão
 
 **Status:** aceito
+**Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30):** o mundo roda a 10 Hz fixos.
 **Data:** 2026-09-07
 **Contexto técnico:** `sim/`, `server` (processo `game`)
 

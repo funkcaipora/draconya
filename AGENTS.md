@@ -1,10 +1,12 @@
 # Draconya
 
-MMORPG de navegador em grade de tiles, server-authoritative e idle-first. A hunt — o loop
-principal de progressão — é uma sessão que vive no servidor e continua rodando com o navegador
-fechado: o jogador entra, direciona o bot, e sair não interrompe nada. Conteúdo manual (quest,
-boss, guild war) é instanciado à parte, exige o jogador presente, e reaproveita o mesmo motor de
-movimento e ação por tile que a hunt usa.
+MMORPG de navegador em grade de tiles, server-authoritative, que é o Tibia: um mundo aberto sem
+PvP — o mapa real, os spawns do Canary, outros jogadores — onde se anda, se caça e se encontra
+gente com o personagem presente. O adicional do Draconya é a hunt idle: uma sessão instanciada,
+dirigida pelo bot, que vive no servidor e continua rodando com o navegador fechado. Entra-se nela
+saindo do mundo ou direto do login, e fechar o navegador não interrompe nada. Conteúdo manual
+(quest, boss, guild war) é instanciado à parte e exige o jogador presente. Mundo, hunt e conteúdo
+manual usam o mesmo motor de movimento, combate e ação por tile (ADR 0060).
 
 ## Os onze invariantes inegociáveis
 
@@ -25,9 +27,13 @@ pode morar (ver `docs/harness-plan.md` §1).
    de cada fórmula ter sido escrita com cuidado.
 
 3. **O resultado da simulação não depende de haver alguém assistindo.** Cai a apresentação, nunca
-   a matemática.
-   Por quê: o jogo é idle-first — a hunt é o modo default e precisa sobreviver ao navegador
-   fechado, não só tolerar uma reconexão.
+   a matemática. `attached` decide só a taxa de atualização (`Ruleset.hz`), nunca um resultado.
+   O que o mundo ativa — monstro acordado, respawn bloqueado — depende da posição de PERSONAGENS.
+   Perder a conexão chega ao `sim` como intenção do servidor, no instante lógico, nunca como
+   leitura de socket.
+   Por quê: a hunt idle precisa sobreviver ao navegador fechado, não só tolerar uma reconexão. E,
+   no mundo aberto, presença é o que o personagem faz — sair por `canLogout` —, não quem está
+   olhando (ADR 0060).
 
 4. **O cliente só manda intenção.** Nunca dano, posição resolvida, loot, XP ou resultado de
    transação.
@@ -46,13 +52,22 @@ pode morar (ver `docs/harness-plan.md` §1).
    Por quê: sem isso, um deploy no meio de milhares de hunts desanexadas produz resultado
    inconsistente e impossível de auditar.
 
-8. **Todo personagem está sempre em exatamente um estado**, cidade inclusive — e um estado
+8. **Todo personagem está sempre em exatamente um estado**, mundo inclusive — e um estado
    ATIVO é sempre exatamente uma sessão hospedada.
    Por quê: transforma "estado exclusivo" de regra policiada em propriedade estrutural — não
    existe lugar onde o personagem esteja em dois estados ao mesmo tempo.
-   O repouso é o estado sem sessão: a Cidade não simula nada (§37), e depois de um prazo sem
-   visualizador a sessão dela é recolhida (ADR 0024). O personagem continua na Cidade por
-   `characters.state`, que é uma linha só e não admite ambiguidade.
+
+   O repouso é o estado sem sessão: o personagem deslogado, sem registro no diretório. Ele existe
+   só na linha de `characters` — mundo, posição, cidade, vida e mana —, que é uma linha só e não
+   admite ambiguidade (ADR 0024).
+
+   Estar no mundo é estar na sessão do seu mundo: uma por mundo, muitos personagens dentro. Do
+   mundo para uma instância é uma troca atômica (`directory.succeed`), que só acontece quando o
+   Tibia deixaria deslogar (`canLogout`). Do repouso se entra direto numa instância.
+
+   Da instância só se volta ao mundo com alguém olhando; sem visualizador, o personagem vai ao
+   repouso. Morrer no mundo também leva ao repouso, no templo, como a tela de relogin do Tibia
+   (ADR 0060).
 
 9. **Estado QUENTE só é escrito pela sessão dona.** Nenhum outro processo toca o
    `CharacterRuntime` em memória — isto é absoluto e não tem exceção.
@@ -61,13 +76,17 @@ pode morar (ver `docs/harness-plan.md` §1).
    **A linha do Postgres não é estado quente.** Ela é durável, é escrita por `jobs` e por `api`,
    e o que serializa as duas é a trava de linha mais a chave única do invariante 10 — que já
    existiam. Ver ADR 0024, inclusive por que essa é a fronteira certa.
+   Um mundo é uma sessão num processo só. Com mais de um nó, a trava `world:{id}:owner` garante
+   isso. Mundo repartido entre processos, com estado no Redis, continua recusado (ADR 0023,
+   ADR 0060).
 
 10. **Movimentação de valor passa pelo ledger** com `(session_id, seq)` único. Retry nunca
     duplica.
 
 11. **A automação é legítima** — "parece bot" nunca é sinal de punição.
-    Por quê: o motor de bot server-side é funcionalidade central de um jogo idle-first. O que
-    precisa de defesa é multiconta e RMT, não automação.
+    Por quê: o motor de bot server-side é funcionalidade central da hunt idle, o adicional do
+    Draconya. O que precisa de defesa é multiconta e RMT, não automação. No mundo aberto, o que
+    se exige é presença — `canLogout` e o idle kick —, não ausência de automação (ADR 0060).
 
 ## Stack
 
