@@ -647,6 +647,8 @@ describe('entrada em curso: reversão e joinedAtMs (#397, ADR 0035 decisão 6)',
       // DURAÇÃO restante sem âncora num relógio: a comida que sobra, os contadores de prática
       // (golpes que ainda treinam, sem instante nenhum).
       fedMs: 'none', attackPractice: 'none',
+      // O bônus de Loyalty é um percentual fixado no ticket (#628): não ancora num relógio.
+      loyaltyBonusPercent: 'none',
     };
 
     interface StampField {
