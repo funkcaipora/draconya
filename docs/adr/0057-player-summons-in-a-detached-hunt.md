@@ -112,3 +112,27 @@ inclusive QUANDO ela dispara (ADR 0037 d.6):
   desde a morte, gerado pelo importador) leva isso ao `sim`, que mede o tempo desde a morte pelo evento
   `CORPSE` da fila. O topo da pilha é o cadáver mais recente do tile. O Animate Dead não custa mana (o
   script não chama `addMana`).
+- **Decisão 6, acréscimo — o tile sólido recusa antes do script.** `animate_dead_rune.lua` registra
+  `rune:isBlocking(true)` (`blockingSolid`), e `Spell::playerRuneSpellCheck` recusa o tile com
+  `TILESTATE_BLOCKSOLID` e sem criatura visível (`RETURNVALUE_NOTENOUGHROOM`) ANTES de o script rodar:
+  um campo bloqueante (Magic Wall, Wild Growth) sobre o cadáver o protege, e nem o cadáver, nem o gold,
+  nem o cooldown são tocados. O motor recusa `not-possible` (não tem recusa própria para "sem espaço";
+  o texto é apresentação). O vizinho livre só vale quando o tile do cadáver está ocupado por alguém.
+- **Decisão 1, acréscimo — o jogador atravessa a invocação de jogador, e a área dele não a atinge.**
+  Duas regras do mundo no-pvp (ADR 0060) que o #598 não precisava porque o catálogo real ainda não tinha
+  nenhuma invocação de jogador: (a) `Player::canWalkthrough` libera o tile de uma invocação de jogador,
+  e como a ocupação aqui é exclusiva (invariante 8) o passo do personagem vira TROCA de lugar com ela
+  (`swapPlaces`), no `HuntRuleset#step` — sem isso a invocação em cima do próximo tile da rota, que o
+  mestre nunca mata, travava o passo do herói pelo resto da hunt; (b) `Combat::canTargetCreature` recusa
+  o ataque do jogador a `target->isSummon() && targetMasterPlayer`, então a colheita de toda área (as
+  duas formas de `#aimFor` e o golpe de varredura) pula a invocação de qualquer jogador, a do
+  companheiro de party inclusive, e a mira explícita de dano nela é `no-target`.
+- **Nota de fonte — `getManaCost` não existe como método Lua.** `convince_creature.lua` escreve
+  `target:getType():getManaCost()` e `summon_creature.lua` escreve `monsterType:getManaCost()`, mas nem
+  o Canary (`monster_type_functions.cpp`) nem o TFS (`luascript.cpp`) registram esse nome: o binding é
+  `monsterType:manaCost()`, e só o C++ `Monster::getManaCost()` existe, lendo `info.manaCost`. Os
+  scripts, como escritos, falhariam com "attempt to call method" nos motores de referência. O catálogo
+  implementa a INTENÇÃO evidente deles — o custo é o `manaCost` do monstro (ausente = 0) — e não o
+  comportamento literal (erro de script). O respawn do convencido que some com o mestre, por sua vez,
+  parte de `Monster::onRemoveCreature` (ramo da própria remoção → `startSpawnMonsterCheck`), não de
+  `onCreatureLeave`, que é o tratador de OUTRA criatura saindo.

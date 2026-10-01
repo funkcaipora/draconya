@@ -2694,8 +2694,9 @@ export const monsterSchema = z.strictObject({
    * O monstro pode ser CONVENCIDO pela Convince Creature Rune (#600, ADR 0057 d.5; Canary
    * `monster.flags.convinceable`, lido por `MonsterType::isConvinceable` em `convince_creature.lua`).
    * Ausente é `false` — o default do Canary: 139 dos monstros do bestiário o declaram. O custo da
-   * convicção é o `manaCost` abaixo (ausente conta como zero: `MonsterType::getManaCost` devolve o
-   * `info.manaCost` zerado, e o script debita esse valor).
+   * convicção é o `manaCost` abaixo (ausente conta como zero: `MonsterType::info.manaCost`, o que o
+   * binding `monsterType:manaCost()` devolve, fica zerado, e o script debita esse valor — ver a nota
+   * de `manaCost` sobre o `getManaCost` que o script chama).
    */
   convinceable: z.boolean().default(false),
   /**
@@ -2757,8 +2758,15 @@ export const monsterSchema = z.strictObject({
    * `manaCost` da invocação (#598, `MonsterType::info.manaCost`, o custo de mana que
    * `summon_creature.lua` debita do mestre por invocação) — 184 monstros do Canary o declaram.
    * Obrigatório quando `summonable` é `true` (`.refine` abaixo). Também é o custo da Convince
-   * Creature Rune (#600, `convince_creature.lua`: `manaCost = monsterType:getManaCost()`) — por
+   * Creature Rune (#600, `convince_creature.lua`: `manaCost = target:getType():getManaCost()`) — por
    * isso o importador o traz para todo monstro que o declara, `summonable` ou não. Ausente é zero.
+   *
+   * **Nota de fonte:** nenhum dos dois motores registra um `MonsterType:getManaCost()` — o binding Lua
+   * é `monsterType:manaCost()` (Canary `monster_type_functions.cpp`, "manaCost"; TFS `luascript.cpp`,
+   * "manaCost"), e só o C++ `Monster::getManaCost()` existe, lendo `info.manaCost`. Os scripts
+   * `convince_creature.lua` e `summon_creature.lua` chamam o nome que não existe e, como escritos,
+   * falhariam com "attempt to call method". O catálogo segue a INTENÇÃO evidente deles (o custo é o
+   * `info.manaCost` do monstro), registrada no ADR 0057 (emenda de 2026-09-30).
    */
   manaCost: z.number().int().positive().optional(),
   /** Nota de proveniência do arquivo inteiro — número medido, fonte TFS/Canary, decisão tomada. */
@@ -4739,7 +4747,7 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
    * `monsterId`, ver `botActionV2Schema`) ou do preset do bot, e é ele que escolhe QUAL
    * `summonable` nascer. A magia em si só declara o portão (level, vocação, cooldown, grupo) —
    * `manaCost` do CATÁLOGO desta magia fica sem uso aqui: o custo real é o `manaCost` do
-   * MONSTRO (`MonsterType::getManaCost()`), e é assim que a mesma "Summon Creature" custa mais
+   * MONSTRO (`MonsterType::info.manaCost`), e é assim que a mesma "Summon Creature" custa mais
    * mana para um Fire Elemental do que para um Poison Spider. `HuntRuleset#castSpell` lê o
    * monstro do catálogo e faz esse desvio — `casting.ts` continua puro e genérico, sem
    * conhecer monstro nenhum.

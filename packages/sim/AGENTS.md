@@ -838,7 +838,14 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   fechar o laço (`buildContent` recusa), `radius` do ponto de spawn é `> 0` (o centro vem primeiro na
   busca), a capacidade do herói é recomputada da progressão ao entrar (o loot que "não cabe" pede um
   item mais pesado que ela), e o respawn de quem não é `blockable` leva 4,2 s a mais que o
-  `respawnDelayMs` (o aviso de `SpawnMonster::scheduleSpawn`).
+  `respawnDelayMs` (o aviso de `SpawnMonster::scheduleSpawn`). **Duas regras do mundo no-pvp que só
+  aparecem com invocação de jogador de verdade** (revisão do #600): (a) **o personagem ATRAVESSA a
+  invocação de jogador** — o passo para o tile dela vira TROCA de lugar (`swapPlaces` em
+  `movement.ts`, chamada pelo `HuntRuleset#step`; a ocupação continua exclusiva), e sem isso a
+  invocação em cima do próximo tile da rota trava o herói pelo resto da hunt; a troca NÃO passa por
+  `vacate`/`occupy` (porta não fecha, placa não solta); (b) **toda colheita de ÁREA do personagem
+  pula `typeof masterId === 'string'`** — as duas formas de `#aimFor` e o `#cleave` varrem
+  `#monsters` direto, e quem esquecer o corte mata a invocação no primeiro Great Fireball.
 - **Os Charms em combate (#603, M39-03, ADR 0053 d.5) vivem em `combat/charms.ts` (puro) e nos
   métodos `#charm*`/`#roll*` do `HuntRuleset`, e SÓ rolam no `combat-v4` (`hasCharmStage`).** Três
   armadilhas custam caro. (1) **O índice do tier é `tier − 1`**: o Canary guarda um `0` na frente do

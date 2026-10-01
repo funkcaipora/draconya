@@ -541,7 +541,7 @@ export function castSpell(
   /**
    * O custo de mana REAL, quando ele não é `spell.manaCost` (#598, M38-01, ADR 0057 decisão 3):
    * a Summon Creature custa o `manaCost` do MONSTRO invocado — o mesmo mecanismo do Canary
-   * (`MonsterType::getManaCost()`), variável por monstro, não um número fixo do catálogo de
+   * (`MonsterType::info.manaCost`), variável por monstro, não um número fixo do catálogo de
    * magia. `spell.manaCost` continua sendo o número de EXIBIÇÃO/ADR 0033 para o resto do
    * vocabulário; só quando este parâmetro é passado ele substitui a conferência e o débito.
    */

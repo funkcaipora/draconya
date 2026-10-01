@@ -1995,7 +1995,8 @@ por `spell.manaCost`.
   - **Divergência aceita:** sem alvo, a invocação NÃO persegue o mestre fisicamente (o
     `follow` genérico de personagem só existe entre membros de party) — ela fica onde nasceu até
     ter um alvo para seguir. Num mapa de rota fixa isso raramente importa (o combate normalmente
-    já está próximo quando a invocação nasce); registrado aqui, não escondido.
+    já está próximo quando a invocação nasce) — e a invocação parada no caminho não trava a rota,
+    porque o personagem a atravessa (bullet abaixo); registrado aqui, não escondido.
 - **Monstros HOSTIS a atacam** (`isOpponent` do Canary): a lista de presas de um monstro
   hostil (`masterId === null`, ou invocado por OUTRO monstro) é estendida pelas invocações de
   personagem VIVAS (`HuntRuleset#playerSummonPrey`/`#livePlayerSummons`) — devolve a MESMA
@@ -2013,7 +2014,24 @@ por `spell.manaCost`.
   é `#monsters` menos as invocações de personagem vivas (mesma referência quando não há
   nenhuma); `chooseTarget`/`#resolveManualTarget` recusam explicitamente `monster.masterId ===
   character.id` mesmo com o subject certo — defesa em profundidade contra o cliente pedindo por
-  fora do auto-target.
+  fora do auto-target. **A colheita das ÁREAS também pula a invocação de jogador** (#600): as duas
+  formas de `#aimFor` (a centrada no lançador e a centrada no alvo) e o golpe de varredura
+  (`#cleave`) varrem `#monsters` direto, e sem o corte a primeira Great Fireball ou Exori Mas perto
+  do convencido (ou do Skeleton animado) o mataria — o jogador pagou a runa e perdia a invocação. É a
+  regra do mundo no-pvp (ADR 0060; Canary `Combat::canTargetCreature`: `target->isSummon() &&
+  targetMasterPlayer` recusa), e vale para a invocação de QUALQUER jogador, a do companheiro de party
+  inclusive; a mira explícita de um efeito de dano numa invocação alheia também é `no-target` (a
+  Convince Creature fica de fora: ela chega ao script, que recusa `not-possible`).
+- **O jogador ATRAVESSA a invocação de jogador** (#600, `Player::canWalkthrough`, mundo no-pvp): o
+  Canary deixa as duas criaturas dividirem o tile; este motor tem ocupação exclusiva (invariante 8),
+  então o passo do personagem para o tile de uma invocação vira TROCA de lugar (`swapPlaces`, em
+  `movement.ts`, chamada por `HuntRuleset#step` — o ponto único de todo passo: a rota do bot, o follow
+  e o `walk` à mão). Os dois tiles continuam ocupados, então porta não fecha e placa de pressão não
+  solta; o personagem leva o dano do campo do tile novo, e a invocação — que no Canary nem se mexeu —
+  não leva o do tile velho. A invocação NÃO atravessa nada sozinha: monstro hostil continua bloqueado
+  por ela. Sem isto, o Skeleton animado (ou o convencido) em cima do próximo tile da rota travava o
+  passo do herói pelo resto da hunt — a invocação nunca morre pela mão do mestre e o bot não a
+  ataca.
 - **O dano da invocação credita o MESTRE, nunca ela mesma** (ADR 0057 decisão 2,
   `Creature::getGainedExperience`/`attackerMaster` do Canary): quando o ATACANTE de um golpe
   monstro-contra-monstro tem `masterId` string, `#applyMonsterHitOnSummon` redireciona o
@@ -2073,8 +2091,13 @@ e `too-many-summons` ("You cannot control more creatures."), ao lado de `not-eno
 - **A ordem do script**: o alvo é `convinceable` (`monster.convinceable`, `MonsterType::
   isConvinceable`) e NÃO tem mestre nenhum — nem o de outro personagem (`target:getMaster()`) —, senão
   `not-possible`; menos de 2 invocações vivas (`getSummons() >= 2`), senão `too-many-summons`; mana >=
-  `monster.manaCost`, senão `not-enough-mana`. `manaCost` ausente é zero: `getManaCost()` devolve o
-  campo zerado, e o convencimento é de graça.
+  `monster.manaCost`, senão `not-enough-mana`. `manaCost` ausente é zero: o `info.manaCost` do monstro
+  fica zerado, e o convencimento é de graça. **Nota de fonte:** o script escreve `target:getType():
+  getManaCost()` (e `summon_creature.lua`, `monsterType:getManaCost()`), mas nem o Canary nem o TFS
+  registram esse método — o binding Lua é `monsterType:manaCost()`, e só o C++ `Monster::getManaCost()`
+  existe, lendo `info.manaCost`. Como escritos, os dois scripts falhariam com "attempt to call method"
+  nos motores de referência; o catálogo implementa a INTENÇÃO evidente (o custo é o `manaCost` do
+  monstro), e isso fica registrado aqui e na emenda do ADR 0057.
 - **O custo é a mana DO MONSTRO** (`addMana(-manaCost)`), e o magic level sobe por ela
   (`addManaSpent` → `#gainSkills(..., 'spell-cast', manaCost)`, a mesma conta da Summon Creature).
   O gold da runa (`price`) sai por cima.
@@ -2116,8 +2139,15 @@ e `too-many-summons` ("You cannot control more creatures."), ao lado de `not-eno
   alguém olhar (invariante 3). Monstro sem janela (cadeia sem estágio movível, ou sem cadáver) nunca
   é animável. O "topo" é o cadáver mais RECENTE do tile (`Tile::getTopDownItem` devolve o último
   item posto): um cadáver novo ainda `unmove` cobre o velho, que não conta.
-- **A ordem do script**: sem cadáver movível no topo, `not-possible`; com 2 invocações vivas,
-  `too-many-summons`; e nasce o Skeleton.
+- **A ordem do script**: tile SÓLIDO sem criatura visível, `not-possible` (abaixo); sem cadáver
+  movível no topo, `not-possible`; com 2 invocações vivas, `too-many-summons`; e nasce o Skeleton.
+- **Tile sólido recusa antes do script** (`rune:isBlocking(true)` = `blockingSolid`, Canary
+  `Spell::playerRuneSpellCheck`: `tile->hasFlag(TILESTATE_BLOCKSOLID) && !topVisibleCreature` →
+  `RETURNVALUE_NOTENOUGHROOM`): com um campo bloqueante (Magic Wall, Wild Growth) em cima do tile do
+  cadáver e ninguém visível nele, a runa recusa SEM consumir o cadáver, o gold nem o cooldown —
+  `not-possible` no motor, que não tem recusa própria para "sem espaço" (o texto do Canary é outro; é
+  apresentação, não regra). Criatura visível no tile (personagem, ou monstro não invisível) dispensa a
+  recusa, como no Canary.
 - **Consome o cadáver e destrói o loot que ainda estava nele** (ADR 0048 d.5: o item no cadáver nunca
   foi instância no banco, então não há linha de ledger a fechar nem `removedInstances`): o cadáver sai
   de `#corpses`, o evento `CORPSE` é cancelado (nada de segundo `ground-item-disappear`), o cliente
@@ -2130,7 +2160,9 @@ e `too-many-summons` ("You cannot control more creatures."), ao lado de `not-eno
   true)`), empilhado com quem estiver ali; o tile é exclusivo neste motor (invariante 8), então nasce
   no tile ou no primeiro vizinho livre da ordem fixa de `tilesAround` — e sem nenhum livre a runa
   recusa `not-possible` antes de gastar a carga (no Canary a colocação forçada não falha). Divergência
-  de geometria, não de regra de caça.
+  de geometria, não de regra de caça: o vizinho só entra quando o tile do cadáver está OCUPADO por
+  alguém (a colocação à força do Canary o empilharia); o tile sólido é a recusa de cima, e nunca
+  desvia o Skeleton para o lado.
 
 ### O que mudou fora das duas runas
 
