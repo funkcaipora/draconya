@@ -18,23 +18,24 @@
 
 import {
   BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY,
-  FEARED_CONDITION_KEY, INVISIBLE_CONDITION_KEY, ITEM_SLOTS, PACIFIED_CONDITION_KEY,
+  FEARED_CONDITION_KEY, INVISIBLE_CONDITION_KEY, ITEM_SLOTS, OUTFIT_CONDITION_KEY, PACIFIED_CONDITION_KEY,
   ROOTED_CONDITION_KEY, SPELL_SKILL_WEAPON, fieldStagesOf, floorChangeAt,
   floorChangeToward, isBlocked, migrateBotConfigV1,
 } from '@draconya/content';
 import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, BotLoot, Charm, Combat,
-  CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, FieldStage, Hunt,
+  CompiledWeaponFamily, ConditionSpec, Content, DamageModifiers, DamageType, FieldSpec, FieldStage, Hunt,
   Item, ItemSlot, Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange,
-  PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Skinning, Spell, SpellArea, SpellEffect,
-  SpawnPoint, Stamina, Supply, Tilemap, Training, Vocation, WeaponFamily, WeaponProfile,
+  OutfitLook, PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Skinning, Spell, SpellArea,
+  SpellEffect, SpawnPoint, Stamina, Supply, Tilemap, Training, Vocation, WeaponFamily, WeaponProfile,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, FORWARD, isSelfOrigin, tileKey } from '../area.js';
 import type { AreaSource, Direction } from '../area.js';
 import {
-  HAS_SUMMONS, NOT_ENOUGH_ROOM, NOT_IN_CATALOG, NOT_POSSIBLE, NOT_SUMMONABLE, TOO_MANY_SUMMONS, actionExhaustKey,
-  balanceOf, castSpell, executeHealing, groupCooldownKey, ownPurse, spellCooldownKey, supplyCooldownKey, useSupply,
+  HAS_SUMMONS, NOT_ENOUGH_ROOM, NOT_IN_CATALOG, NOT_ILLUSIONABLE, NOT_POSSIBLE, NOT_SUMMONABLE, TOO_MANY_SUMMONS,
+  actionExhaustKey, balanceOf, castSpell, executeHealing, groupCooldownKey, ownPurse, spellCooldownKey,
+  supplyCooldownKey, useSupply,
 } from '../casting.js';
 import type {
   CastRefused, CastResult, CastSuccess, Purse, SpellAim, SpellScaling, SpellTarget, UtilityRefusal,
@@ -506,6 +507,12 @@ export type UseSlotTarget =
   | { readonly kind: 'character'; readonly characterId: string }
   | { readonly kind: 'position'; readonly position: FloorPoint }
   /**
+   * Um item que o PERSONAGEM carrega, apontado pela instância (#621, Chameleon Rune: o "usar com"
+   * de `chameleon.lua` sobre um item do container ou do corpo). Só a runa `chameleon` o lê; para
+   * qualquer outra ação é ruído, ignorado como um `character` numa ação de dano (RF-12).
+   */
+  | { readonly kind: 'item'; readonly instanceId: string }
+  /**
    * O `creatureId` do fio não resolveu para NENHUM personagem/monstro conhecido do host
    * (criatura já saiu de vista/sessão). Distinto de "ausente" (`undefined`): o jogador MIROU
    * algo, e isso precisa recusar `no-target` numa ação mirável — não cair em silêncio no
@@ -590,7 +597,13 @@ export type SlotRefusal =
    * monstro fiendish (`no-creatures-around`) — as do `RETURNVALUE_*` do Canary.
    */
   | 'not-possible' | 'too-many-summons'
-  | 'not-enough-room' | 'person-not-found' | 'no-creatures-around';
+  | 'not-enough-room' | 'person-not-found' | 'no-creatures-around'
+  /**
+   * A ilusão (#621, M44-03, Creature Illusion/Chameleon Rune): sem `monsterId`, monstro fora do
+   * catálogo ou não `illusionable`; na runa, sem item apontado (ou item que o personagem não
+   * carrega).
+   */
+  | 'not-illusionable';
 
 /** O resultado do disparo manual: sucesso, ou recusa tipada com o prazo quando é cooldown. */
 export type SlotOutcome =
@@ -725,6 +738,7 @@ export function refusalOf(result: CastRefused): SlotRefusal {
     case 'attack-locked': return 'attack-locked';
     case 'feared': return 'feared';
     case 'not-summonable': return 'not-summonable';
+    case 'not-illusionable': return 'not-illusionable';
     case 'has-summons': return 'has-summons';
     case 'not-enough-room': return 'not-enough-room';
     case 'spell-not-learned': return 'not-learned';
@@ -2195,8 +2209,9 @@ export class HuntRuleset implements Ruleset {
     const recipient = resolved?.ok === true && resolved.recipient !== undefined
       ? resolved.recipient : character;
     const explicit = resolved?.ok === true ? resolved.explicit : undefined;
+    const itemInstanceId = resolved?.ok === true ? resolved.itemInstanceId : undefined;
 
-    const result = this.#perform(session, character, entry.do, recipient, explicit);
+    const result = this.#perform(session, character, entry.do, recipient, explicit, itemInstanceId);
     if (!result.ok) return refuse(refusalOf(result), result.retryInMs);
     // A ação SAIU: o ciclo automático passa a respeitar o cooldown que ela acabou de iniciar.
     this.#armBot(session, characterId);
@@ -2333,8 +2348,9 @@ export class HuntRuleset implements Ruleset {
     const recipient = resolved?.ok === true && resolved.recipient !== undefined
       ? resolved.recipient : character;
     const explicit = resolved?.ok === true ? resolved.explicit : undefined;
+    const itemInstanceId = resolved?.ok === true ? resolved.itemInstanceId : undefined;
 
-    const result = this.#useSupply(session, character, supplyId, recipient, explicit);
+    const result = this.#useSupply(session, character, supplyId, recipient, explicit, itemInstanceId);
     if (!result.ok) return refuseItem(refusalOf(result), result.retryInMs);
     character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
     return { ok: true };
@@ -6249,6 +6265,8 @@ const slots = bot.groups.get(group);
     session: Session, character: CharacterRuntime, action: BotAction | BotActionV2,
     recipient: CharacterRuntime = character,
     explicit?: MonsterRuntime | FloorPoint,
+    /** O item que a Chameleon Rune aponta (#621) — só a runa `chameleon` o lê. */
+    itemInstanceId?: string,
   ): CastResult {
     switch (action.kind) {
       // `monsterId` (#598, M38-01, ADR 0057 decisão 4) só existe no vocabulário v2 — a v1 não
@@ -6257,7 +6275,9 @@ const slots = bot.groups.get(group);
         session, character, action.spellId, recipient, explicit,
         'monsterId' in action ? action.monsterId : undefined,
       );
-      case 'supply': return this.#useSupply(session, character, action.supplyId, recipient, explicit);
+      case 'supply': return this.#useSupply(
+        session, character, action.supplyId, recipient, explicit, itemInstanceId,
+      );
       // O item de slot saiu no vocabulário v2 (AB-03): o consumível abstrato é `supply`, com
       // gold no uso, e o item de equipamento é das automações.
       case 'item': return NOT_IN_CATALOG;
@@ -6297,8 +6317,19 @@ const slots = bot.groups.get(group);
    */
   #resolveManualTarget(
     session: Session, character: CharacterRuntime, action: BotAction, target: UseSlotTarget | undefined,
-  ): { ok: true; recipient?: CharacterRuntime; explicit?: MonsterRuntime | FloorPoint }
-    | { ok: false; reason: SlotRefusal } | null {
+  ): {
+    ok: true; recipient?: CharacterRuntime; explicit?: MonsterRuntime | FloorPoint;
+    itemInstanceId?: string;
+  } | { ok: false; reason: SlotRefusal } | null {
+    // A Chameleon Rune (#621) mira um ITEM do personagem, nunca criatura nem tile: o único alvo que
+    // ela lê é `{ kind: 'item' }`. Qualquer outra mira (ou nenhuma) não a recusa aqui — `useSupply`
+    // devolve `not-illusionable` ("item nenhum apontado"), o `RETURNVALUE_NOTPOSSIBLE` do Lua.
+    if (action.kind === 'supply'
+      && this.#options.supplies.get(action.supplyId)?.effect.kind === 'chameleon') {
+      return target?.kind === 'item' ? { ok: true, itemInstanceId: target.instanceId } : null;
+    }
+    // Um item apontado numa ação que não é a Chameleon é ruído (RF-12), ignorado sem recusa.
+    if (target?.kind === 'item') return null;
     // Find Person (#623): o "nome" do Canary é o personagem que o jogador MIROU. O alvo vira o
     // `recipient` — o mesmo canal da cura de amigo —, e qualquer outra mira (monstro, tile, criatura
     // que já saiu de vista, ninguém) é o nome que `getPlayerByNameWildcard` não acha. Essa recusa
@@ -6456,6 +6487,15 @@ const slots = bot.groups.get(group);
       if (summonMonster === undefined || !summonMonster.summonable) return NOT_SUMMONABLE;
       if (this.#playerSummonCountOf(character.id) >= PLAYER_SUMMON_CAP) return NOT_SUMMONABLE;
     }
+    // A ilusão (#621, Creature Illusion): o PARÂMETRO é o monstro a imitar, e a conferência é a de
+    // `creature_illusion.lua` — o monstro existe (`MonsterType(variant:getString())`) e é
+    // `illusionable` (`monsterType:isIllusionable()`, sem a exceção `PlayerFlag_CanIllusionAll`,
+    // que é do GM). Recusa ANTES da mana, dentro de `castSpell` (`illusionLook` ausente).
+    let illusionLook: OutfitLook | undefined;
+    if (spell.effect.kind === 'illusion') {
+      const illusionMonster = monsterId === undefined ? undefined : this.#options.monsters.get(monsterId);
+      if (illusionMonster?.illusionable === true) illusionLook = { monsterId: illusionMonster.id };
+    }
 
     // O familiar (#599, M38-02, ADR 0057 d.3; `Player:CreateFamiliarSpell`): o cooldown de PAREDE é
     // conferido primeiro — no Canary é a `CONDITION_SPELLCOOLDOWN`, que o framework confere antes
@@ -6521,6 +6561,7 @@ const slots = bot.groups.get(group);
       undefined, summonMonster?.manaCost, precondition,
       // As utilitárias (#623) recusam pelo que só este ruleset vê — mapa, overlay e sessão.
       this.#utilityRefusalOf(character, spell.effect, recipient, session.nowMs),
+      illusionLook,
     );
     if (!result.ok) return result;
     // A magia SAIU: a mana gasta é o que ela rende de skill (§9.4) — o custo REAL: o do
@@ -7315,6 +7356,33 @@ const slots = bot.groups.get(group);
     if (condition.key === INVISIBLE_CONDITION_KEY && previous === null) {
       this.#scheduleVisibilityThinks(session, target);
     }
+    // A aparência emprestada (#621, `ConditionOutfit::startCondition`/`addCondition`): a criatura
+    // muda de aparência AGORA — na primeira aplicação e em toda que vence a anterior (`strongest`
+    // manteve a dela: a saída acima, sem evento, como `updateCondition` devolvendo `false`).
+    if (condition.key === OUTFIT_CONDITION_KEY && condition.look !== undefined) {
+      this.#emitLook(session, target, condition.look);
+    }
+  }
+
+  /**
+   * A criatura trocou de aparência (#621): `look` é o que ela veste AGORA, ou `null` quando volta
+   * à dela. Só apresentação — nenhuma conta de combate lê o outfit (`ConditionOutfit` não mexe
+   * em número nenhum) —, então nada aqui muda o resultado de quem não assiste (invariante 3).
+   */
+  #emitLook(session: Session, target: ConditionTarget, look: OutfitLook | null): void {
+    session.emit({ kind: 'creature-look-changed', creatureId: this.#subjectOf(target), look });
+  }
+
+  /**
+   * A aparência emprestada de uma criatura agora (#621), ou `null` quando ela veste a dela —
+   * `creatureId` é o `subject` do monstro (`m:<id>`) ou o `characterId`. É a leitura do HOSPEDEIRO
+   * para quem entra na tela no meio de uma ilusão (`creature-appear`/`session-state`): o estado
+   * mora na condição, nunca num campo de apresentação que dependeria de haver alguém olhando.
+   */
+  lookOf(session: Session, creatureId: string): OutfitLook | null {
+    const monster = this.#monsterBySubject.get(creatureId);
+    if (monster !== undefined) return monster.alive ? monster.conditions.look() : null;
+    return findById(session.participants, creatureId)?.conditions.look() ?? null;
   }
 
   /**
@@ -7445,8 +7513,11 @@ const slots = bot.groups.get(group);
   #onConditionExpire(session: Session, subject: string): void {
     const separator = subject.lastIndexOf('/');
     if (separator < 0) return;
-    this.#conditionTargetOf(session, subject.slice(0, separator))
-      ?.conditions.remove(subject.slice(separator + 1));
+    const target = this.#conditionTargetOf(session, subject.slice(0, separator));
+    if (target === null) return;
+    const removed = target.conditions.remove(subject.slice(separator + 1));
+    // A ilusão acabou (#621, `ConditionOutfit::endCondition`): a criatura volta à aparência dela.
+    if (removed?.look !== undefined) this.#emitLook(session, target, null);
   }
 
   /**
@@ -7582,7 +7653,14 @@ const slots = bot.groups.get(group);
    */
   #cancelConditions(session: Session, target: ConditionTarget): void {
     this.#cancelConditionEvents(session, target);
-    for (const condition of target.conditions.getState()) target.conditions.remove(condition.key);
+    for (const condition of target.conditions.getState()) {
+      target.conditions.remove(condition.key);
+      // O personagem que morre disfarçado volta à aparência dele (#621); o monstro que morreu some
+      // da tela de qualquer jeito, e um `creature-update` a mais só sujaria o fio.
+      if (condition.look !== undefined && target instanceof CharacterRuntime) {
+        this.#emitLook(session, target, null);
+      }
+    }
   }
 
   /**
@@ -7666,7 +7744,8 @@ const slots = bot.groups.get(group);
       const subject = conditionSubject(id, type);
       session.cancelEvent(CONDITION_EXPIRE, subject);
       session.cancelEvent(CONDITION_TICK, subject);
-      target.conditions.remove(type);
+      const removed = target.conditions.remove(type);
+      if (removed?.look !== undefined) this.#emitLook(session, target, null);
       // O `endCondition` do medo (M44-04, #622): a caminhada forçada para e a imunidade de 10 s
       // começa, seja qual for quem removeu a condição — o Cleanse, uma cura ou uma magia.
       if (type === FEARED_CONDITION_KEY && target instanceof CharacterRuntime) {
@@ -8259,6 +8338,12 @@ const slots = bot.groups.get(group);
     session: Session, character: CharacterRuntime, supplyId: string,
     recipient: CharacterRuntime = character,
     explicit?: MonsterRuntime | FloorPoint,
+    /**
+     * O item que a Chameleon Rune aponta (#621): a INSTÂNCIA que o personagem carrega, resolvida
+     * aqui em `{ itemId }` — só o ruleset enxerga o inventário (invariante 1). Uma instância que
+     * ele não tem é item nenhum apontado, e `useSupply` recusa `not-illusionable`.
+     */
+    itemInstanceId?: string,
   ): CastResult {
     const supply = this.#options.supplies.get(supplyId);
     if (supply === undefined) return NOT_IN_CATALOG;
@@ -8302,9 +8387,12 @@ const slots = bot.groups.get(group);
     // — e é a bolsa quem credita `goldSpent` a cada um pelo que pagou.
     const shared = this.#party !== undefined && this.#party.shareCosts && session.participants.length > 1;
     const purse = shared ? this.#sharedPurse(session, character) : ownPurse(character);
+    const pointedItemId = itemInstanceId === undefined || supply.effect.kind !== 'chameleon'
+      ? null : character.inventory.itemIdOf(itemInstanceId);
     const result = useSupply(
       character, supply, aim, this.#options.combat, session.rng, this.#runeScaling(character), purse,
       recipient, session.nowMs, this.#attackerModifiers(character), summonRune?.check,
+      pointedItemId === null ? undefined : { itemId: pointedItemId },
     );
     if (result.ok) {
       // Gold gasto é agregado da SESSÃO, como `goldGained` é no abate: o extrato leva os dois
@@ -9539,6 +9627,13 @@ const slots = bot.groups.get(group);
     session: Session, monster: MonsterRuntime, ability: MonsterAbility,
     primary: CharacterRuntime | MonsterRuntime,
   ): void {
+    // O ataque `outfit` (#621) não é um golpe: sem dano, sem defesa, sem sorteio — é uma condição
+    // NÃO agressiva, e o que ela atinge é outro conjunto de criaturas. Sai aqui, antes do
+    // pipeline de dano.
+    if (ability.condition?.effect.kind === 'outfit') {
+      this.#executeOutfitAbility(session, monster, ability, ability.condition, primary);
+      return;
+    }
     const subject = monster.subject;
     // O conjunto de presas de uma ability em ÁREA (#598, ADR 0057 decisão 1): estendido pelas
     // invocações de personagem VIVAS, como `#chooseMonsterTarget` — mesma referência de
@@ -9741,6 +9836,65 @@ const slots = bot.groups.get(group);
     // O reflexo (#552) pode ter matado o monstro no meio da ability. Quem aplica dano não decide
     // morte: o pipeline resolve depois do golpe inteiro, como faz depois do golpe do personagem.
     if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
+  }
+
+  /**
+   * O ataque `outfit` de um monstro (#621, M44-03): veste a aparência de outro monstro (ou de um
+   * objeto) em quem a ability atinge. No Canary é `combat->setParam(COMBAT_PARAM_AGGRESSIVE, 0)` +
+   * `addCondition(ConditionOutfit)` (`Monsters::deserializeSpell`, `monsters.cpp:156-182`) — e o
+   * que isso muda, diante de uma ability agressiva, é QUEM entra:
+   *
+   * - **não agressiva**: `Combat::CombatFunc` só exclui o lançador (`caster != creature`) quando
+   *   `params.aggressive` — aqui todo mundo na forma entra, o LANÇADOR inclusive, e os outros
+   *   MONSTROS também (a ilusão do Halloween Hare vira os bichos em volta dele). Sem forma é o
+   *   alvo principal (`castSpell(creature, target)` sem área → `doCombat(creature, target)`);
+   * - **sem dano nem defesa**: `combatType` é `COMBAT_NONE` → `CombatNullFunc` → só
+   *   `CombatConditionFunc`, que NÃO rola bloqueio, esquiva nem crítico. O único sorteio que sai
+   *   daqui, além do `chance` que quem chamou já rolou, é o do **Cleanse**: o primeiro bloco da
+   *   `CombatConditionFunc` (`combat.cpp:1039-1062`) roda para QUALQUER condição de monstro num
+   *   jogador, o `outfit` inclusive — com o charm atribuído a este monstro e uma condição
+   *   limpável ativa, ele rola, remove uma, dá os 11 s de imunidade e `return`a SEM vestir a
+   *   aparência (`#cleanseBeforeCondition`, a mesma peça e a mesma ordem de sorteio do golpe);
+   * - **a imunidade** é `!target->isImmune(CONDITION_OUTFIT)` — exceto `caster == target`, que a
+   *   pula (`#applyConditionTo` com `fromCombat`, e `sourceId` = o próprio monstro).
+   *
+   * O alvo de uma forma tem visão livre do lançador, como o de toda ability (#553, RF-05).
+   */
+  #executeOutfitAbility(
+    session: Session, monster: MonsterRuntime, ability: MonsterAbility, spec: ConditionSpec,
+    primary: CharacterRuntime | MonsterRuntime,
+  ): void {
+    const subject = monster.subject;
+    const from = this.#at(monster);
+    const candidates: readonly (CharacterRuntime | MonsterRuntime)[] = [
+      ...session.participants, ...this.#monsters,
+    ];
+    const targets = abilityTargets(ability, from, primary, candidates)
+      .filter((target) => target === monster || isSightClear(this.#world.map, from, this.#at(target)));
+    session.emit({
+      kind: 'monster-ability-cast', casterId: subject, abilityId: ability.id, casterPosition: from,
+      targets: targets.map((target) => ({
+        creatureId: target instanceof MonsterRuntime ? target.subject : target.id,
+        position: this.#at(target),
+      })),
+      tiles: abilityTiles(ability, from, this.#at(primary)),
+      ...(ability.presentation?.missileKey === undefined
+        ? {} : { missileKey: ability.presentation.missileKey }),
+      ...(ability.presentation?.impactKey === undefined
+        ? {} : { impactKey: ability.presentation.impactKey }),
+    });
+    const charmStage = this.#charmStage();
+    for (const target of targets) {
+      if (!target.alive) continue;
+      // O Cleanse (#603) é do jogador atingido, nunca de monstro: `targetPlayer && casterMonster`.
+      // Se limpou uma condição dele, a aparência NÃO entra — o `return` do Canary aborta toda a
+      // `conditionList` da ability, e aqui ela só tem o `outfit`.
+      if (charmStage && target instanceof CharacterRuntime
+        && this.#cleanseBeforeCondition(session, monster, target, ability)) continue;
+      this.#applyConditionTo(session, target, conditionFromSpec(
+        spec, this.#subjectOf(target), subject, session.nowMs, 'monster-attack',
+      ), true);
+    }
   }
 
   /**

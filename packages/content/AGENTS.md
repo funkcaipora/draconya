@@ -148,7 +148,7 @@ data/items/backpack.json             # autoral, uma entidade por arquivo (de sem
 data/items/generated/weapons.json    # promovido por `pnpm catalog:promote-items` — um ARRAY por fatia
 data/items/overrides/*.json          # correção nossa: { id, reason, patch }
 data/monsters/generated/mammals.json # promovido/regenerado — um ARRAY (Rat mora aqui desde o #581)
-data/monsters/overrides/*.json       # correção nossa: { id, reason, patch } — nenhuma hoje (#586 apagou as duas que existiam)
+data/monsters/overrides/*.json       # correção nossa: { id, reason, patch } — quatro (rat, dragon, dragon-lord, dragon-lord-hatchling: #600 e #621; o #586 apagou as duas de antes)
 ```
 
 Um arquivo — autoral ou gerado — que contém um **array** vira várias entidades; um objeto solto
@@ -742,14 +742,16 @@ entre arquivos resolvem.
   PERCENTUAL INTEIRO, como o reflexo de item, e compilam no boot (`compileElementHealing`,
   `compileReflect` com `flat` zero); ausentes no monstro compilado quando nada cura/reflete.
 - **`monster.conditionImmunities` é o `monster.immunities[].condition` do Canary** (#559, ADR 0041
-  d.2) — distinto de `mitigation.immunities` (`combat = true`, DANO). Catorze nomes:
-  `paralyze`, `drunk`, `invisible`, as oito DOTs (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY`, a
+  d.2) — distinto de `mitigation.immunities` (`combat = true`, DANO). Quinze nomes:
+  `paralyze`, `drunk`, `invisible`, `outfit` (#621), as oito DOTs (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY`, a
   `Combat::DamageToConditionType`: `physical` sangra, `earth` envenena, `fire` queima…) e, desde o
   #622, `rooted`, `feared` e `pacified` — o vocabulário do ADR, NÃO os nomes do Lua (`bleed`,
-  `fire`, `earth`…), que o importador traduz. Os três últimos são AUTORAIS: o Lua não os nomeia, e
+  `fire`, `earth`…), que o importador traduz. Os três de controle são AUTORAIS: o Lua não os nomeia, e
   nenhum monstro do bestiário os declara. **`invisible` significa "enxerga o invisível"**
   (`Monster::canSeeInvisibility`), nunca "não pode ficar invisível": é a exceção que não bloqueia a
-  condição. `outfit` (119 monstros) fica fora até o M44-03. Ausente é `[]`, sem imunidade nenhuma.
+  condição. `outfit` (119 monstros no Canary, 42 no catálogo gerado) entrou com o M44-03 (#621): barra
+  o ataque `outfit` de OUTRO monstro, nunca a ilusão do jogador nem a defesa do próprio monstro.
+  Ausente é `[]`, sem imunidade nenhuma.
 - **As condições de controle (#622, M44-04) são chave RESERVADA sem campo próprio, como o drunk:**
   `rooted`, `feared` e `pacified` (`ROOTED_CONDITION_KEY`… em `schemas.ts`), e `conditionSpecSchema`
   confere as duas implicações (a chave só com o efeito dela, e vice-versa). **Exigem
@@ -767,6 +769,20 @@ entre arquivos resolvem.
   identificadores colados do Lua (`FACTION_LIONUSURPERS` → `lion-usurpers`); o importador traduz e
   bloqueia uma constante desconhecida. Nenhum campo tem default preenchido: ausência é o monstro de
   sempre.
+- **A condição `outfit` referencia CONTEÚDO, nunca arte** (#621, M44-03, ADR 0041 d.1):
+  `outfitLookSchema` é `{ monsterId } | { itemId } | { objectKey }` (`strictObject` — um
+  `outfitId`/`appearanceId` escrito ali é recusado no boot), e quem resolve para o id do pacote é o
+  hospedeiro pela tabela de aparências (`appearances.monsters`/`items`/`looks`). `looks` é a seção
+  `chave de objeto → appearanceId` do `outfitItem` do Canary — chave sem linha é MUDA (vocabulário
+  semântico, como `abilities`), e `packProblems` confere os ids contra o inventário do pacote. A
+  chave `outfit` é reservada nos dois sentidos e a fusão é `strongest` DECLARADA (o mecanismo de
+  `ConditionOutfit`): `monsterId`/`itemId` que não existem recusam no boot (`buildContent`), mas
+  o `objectKey` não tem entidade do outro lado. `monster.illusionable` (default `false`, o do Canary)
+  é o que `validateBotConfigV2` confere na Creature Illusion — a ação do slot leva o `monsterId`, o
+  MESMO campo da invocação, conferido contra a flag PRÓPRIA de cada magia (`illusionable` ≠
+  `summonable`). As quatro entradas autorais que o #581 gerou (rat, dragon, dragon-lord,
+  dragon-lord-hatchling) ganharam o `illusionable` por `data/monsters/overrides/`, porque nunca são
+  reescritas pela promoção.
 
 Issue: FUN-8.
 - **Os efeitos utilitários de magia (#623: `light`, `levitate`, `magic-rope`, `find`, `food`)

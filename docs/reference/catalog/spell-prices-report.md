@@ -39,6 +39,8 @@ O preço de `learnPrice` é o MENOR entre os NPCs que ensinam a magia à vocaç�
 | `conjure-sudden-death-rune` | sorcerer | 3000 | `barnabas_dee.lua` | 12 | 3000 |
 | `conjure-thunderstorm-rune` | sorcerer | 1100 | `barnabas_dee.lua` | 8 | 1100 |
 | `conjure-ultimate-healing-rune` | druid | 1500 | `azalea.lua` | 12 | 1500 |
+| `creature-illusion-druid` | druid | 1000 | `azalea.lua` | 22 | 1000 |
+| `creature-illusion-sorcerer` | sorcerer | 1000 | `azalea.lua` | 22 | 1000 |
 | `cure-bleeding-druid` | druid | 2500 | `azalea.lua` | 14 | 2500 |
 | `cure-bleeding-knight` | knight | 2500 | `azalea.lua` | 15 | 2500 |
 | `cure-burning` | druid | 2000 | `azalea.lua` | 8 | 2000 |

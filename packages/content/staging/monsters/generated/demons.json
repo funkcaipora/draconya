@@ -1798,6 +1798,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 180,
     "aggroRadius": 11,
@@ -2532,6 +2533,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 190,
     "aggroRadius": 11,
@@ -2735,6 +2737,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 2.75,
@@ -3471,6 +3474,63 @@
           "effect": {
             "kind": "invisible"
           }
+        }
+      },
+      {
+        "id": "outfit-3",
+        "cadenceMs": 1500,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "the-count"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "outfit-4",
+        "cadenceMs": 1500,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "grim-reaper"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "outfit-5",
+        "cadenceMs": 1500,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "tarantula"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
         }
       }
     ],

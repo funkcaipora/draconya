@@ -198,7 +198,10 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
                     draggable
                     onDragStart={(event) => { startDrag(place, event); }}
                     // O clique veste — o caminho do celular. Quem confere se dá é o servidor.
+                    // Com a mira de ITEM armada (#621, a Chameleon Rune), o clique a COMPLETA: o
+                    // item vira o alvo do `use-slot`, e nada é vestido.
                     onClick={() => {
+                      if (aimTracker.resolveItemAim(item.instanceId, sendIntent)) return;
                       if (!wearable) return;
                       const intent = clickIntent(place, inventory);
                       if (intent !== null) sendIntent(intent);

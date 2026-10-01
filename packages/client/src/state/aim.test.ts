@@ -102,3 +102,52 @@ describe('mira do "usar com…" da mochila (#726, ADR 0049 decisão 3)', () => {
     expect(sent).toEqual([{ type: 'use-item-on', ref: { instanceId: 'i9' }, seq: 2, target: { creatureId: 3 } }]);
   });
 });
+
+describe('mira de ITEM do inventário — a Chameleon Rune (#621, `targets: \'item\'`)', () => {
+  it('`startItemAim` arma; o clique num ITEM resolve com `use-slot.target.instanceId` e desarma', () => {
+    const tracker = createAimTracker();
+    const { send, sent } = senderSpy();
+
+    tracker.startItemAim(1, 4);
+    expect(tracker.isAiming()).toBe(true);
+    expect(tracker.isAimingItem()).toBe(true);
+
+    expect(tracker.resolveItemAim('i-42', send)).toBe(true);
+    expect(sent).toEqual([{ type: 'use-slot', set: 1, slot: 4, target: { instanceId: 'i-42' } }]);
+    expect(tracker.isAiming()).toBe(false);
+  });
+
+  it('o clique no MUNDO/Batalha não resolve uma mira de item, e ela continua armada', () => {
+    // Mutação que mata: deixar `resolveAim` consumir a mira de item — o jogador clicaria num
+    // monstro e o `use-slot` sairia com `creatureId` numa runa que só lê item.
+    const tracker = createAimTracker();
+    const { send, sent } = senderSpy();
+    tracker.startItemAim(0, 2);
+
+    expect(tracker.resolveAim(9, send)).toBe(false);
+    expect(sent).toEqual([]);
+    expect(tracker.isAimingItem()).toBe(true);
+  });
+
+  it('o clique num item sem mira de item armada devolve `false` — o clique segue (vestir)', () => {
+    const tracker = createAimTracker();
+    const { send, sent } = senderSpy();
+
+    expect(tracker.resolveItemAim('i-1', send)).toBe(false);
+    tracker.startAim(0, 1); // a mira de criatura NÃO é de item
+    expect(tracker.isAimingItem()).toBe(false);
+    expect(tracker.resolveItemAim('i-1', send)).toBe(false);
+    expect(sent).toEqual([]);
+    expect(tracker.isAiming()).toBe(true);
+  });
+
+  it('`cancelAim` e `reset` desarmam a mira de item também', () => {
+    const tracker = createAimTracker();
+    tracker.startItemAim(0, 0);
+    tracker.cancelAim();
+    expect(tracker.isAimingItem()).toBe(false);
+    tracker.startItemAim(0, 0);
+    tracker.reset();
+    expect(tracker.isAimingItem()).toBe(false);
+  });
+});

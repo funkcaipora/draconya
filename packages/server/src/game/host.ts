@@ -24,8 +24,8 @@ import type {
 } from '@draconya/protocol';
 import { DEFAULT_MONSTER_RACE, ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
 import type {
-  Ammunition, Appearances, Blessing, BotConfigV2, Charm, Item, ItemSlot, Monster, RemovedBotSlot,
-  Skill, Spell, Training, Vocation,
+  Ammunition, Appearances, Blessing, BotConfigV2, Charm, Item, ItemSlot, Monster, OutfitLook,
+  RemovedBotSlot, Skill, Spell, Training, Vocation,
 } from '@draconya/content';
 import {
   blessingCost, buyItem, containerRulesFor, DEFAULT_FIGHT_MODE, hasBlessing, holdStamina, isEmptyFamiliarState,
@@ -50,7 +50,7 @@ import type { InitialCharacter, PartyTicket } from '../tickets.js';
 import { AreaOfInterest } from './aoi.js';
 import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
 import { findPersonText } from './find-text.js';
-import { hitEffectOf, isPhysicalHit, monsterLookOf } from './monster-look.js';
+import { hitEffectOf, isPhysicalHit, monsterLookOf, monsterOutfitOf, monsterPresentationOf } from './monster-look.js';
 import { REFUSAL_TEXT, TransitionError, refuseTransition } from './transitions.js';
 import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
 
@@ -387,6 +387,9 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   // teto de 2 invocações vivas já atingido — as três causas caem na mesma frase, como
   // `not-in-catalog` já faz para magia/supply/level/vocação.
   'not-summonable': 'Você não pode invocar essa criatura agora.',
+  // A ilusão (#621, M44-03): monstro que não existe ou não é ilusionável, ou item nenhum apontado
+  // — o `RETURNVALUE_NOTPOSSIBLE` ("Sorry, not possible.") de `creature_illusion.lua`/`chameleon.lua`.
+  'not-illusionable': 'Não é possível.',
   // A magia do slot ainda não foi aprendida (#624, ADR 0058 d.1): a tela oferece a compra.
   'not-learned': 'Você ainda não aprendeu essa magia.',
   // `not-possible` tem duas fontes. As runas de invocação restantes (#600, M38-03): o
@@ -2317,6 +2320,9 @@ export class SessionHost {
       // entra a chave quando o cliente de fato mandou o andar.
       return { kind: 'position', position: z === undefined ? { x, y } : { x, y, z } };
     }
+    // Um item que o personagem carrega (#621, Chameleon Rune): só a instância — quem confere que
+    // ela existe e é dele é o `sim` (`useSupply` recusa `not-illusionable` se não for).
+    if ('instanceId' in target) return { kind: 'item', instanceId: target.instanceId };
     const subject = this.#subjectOfCreature(hosted, target.creatureId);
     if (subject === null) return { kind: 'invalid' };
     return subject.startsWith('m:')
@@ -3403,6 +3409,7 @@ export class SessionHost {
         case 'creature-appeared':
         case 'creature-vanished':
         case 'creature-health-changed':
+        case 'creature-look-changed':
         case 'ground-item-appeared':
         case 'ground-item-vanished':
         case 'field-appeared':
@@ -3585,6 +3592,15 @@ export class SessionHost {
         // invocação". Ausente para todo o resto, inclusive invocação de MONSTRO (#546).
         ...(event.masterId === undefined ? {} : { masterId: event.masterId }),
       };
+    } else if (event.kind === 'creature-look-changed') {
+      // A aparência emprestada (#621): quem nunca foi anunciado não tem o que atualizar — o
+      // `creature-appear`/`session-state` que vier já a carrega (`#lookFor`).
+      const id = hosted.creatureIds.get(key);
+      if (id === undefined) return;
+      // Uma aparência SEM linha na tabela é MUDA (invariante 6): a condição vale no `sim`, e a
+      // criatura continua desenhada como estava — a mesma regra de `field-appear` sem arte.
+      if (event.look !== null && this.#resolveLook(event.look) === null) return;
+      message = { type: 'creature-update', id, ...this.#lookFor(hosted, key) };
     } else if (event.kind === 'creature-vanished') {
       const id = hosted.creatureIds.get(key);
       // Nunca anunciado — morreu antes de alguém olhar. Não há o que retirar da tela.
@@ -4400,12 +4416,71 @@ export class SessionHost {
       type: 'creature-appear',
       id: this.#creatureId(hosted, characterId),
       position: character?.position ?? { x: 0, y: 0, z: 0 },
-      appearanceId: this.#options.playerOutfitId ?? 0,
       name: this.#nameByCharacter.get(characterId) ?? characterId,
       health: character?.health ?? 0,
       maxHealth: character?.maxHealth ?? 0,
-      ...this.#colorsOf(characterId),
+      // A aparência de AGORA (#621): quem entra na tela no meio de uma ilusão a vê já vestida.
+      ...this.#lookFor(hosted, characterId),
     };
+  }
+
+  /**
+   * A aparência de uma aparência emprestada (#621, M44-03) em id de pacote — a MESMA indireção de
+   * `creature-appear` (invariante 6): o `sim` diz QUEM (monstro, item, chave de objeto), e a tabela
+   * diz o id. `object` separa o registro (`lookTypeEx`: a criatura virou uma coisa). `null` é
+   * aparência sem linha na tabela — MUDA, como o campo sem arte.
+   */
+  #resolveLook(look: OutfitLook): {
+    readonly appearanceId: number;
+    readonly object: boolean;
+    readonly colors?: OutfitColors;
+    readonly addons?: number;
+  } | null {
+    if ('monsterId' in look) {
+      const definition = this.#options.monsterCatalog?.get(look.monsterId);
+      // O outfit de monstro leva as cores e os addons dele (#620): são parte do `Outfit_t` que a
+      // condição troca por inteiro, e sem eles o cliente pintaria o outfit emprestado com as cores
+      // do dono — ou com as de personagem novo.
+      return definition === undefined
+        ? null
+        : { appearanceId: definition.outfitId, object: false, ...monsterOutfitOf(definition) };
+    }
+    const objectId = 'itemId' in look
+      ? this.#options.itemCatalog?.get(look.itemId)?.appearanceId
+      : this.#options.appearances?.looks[look.objectKey];
+    return objectId === undefined ? null : { appearanceId: objectId, object: true };
+  }
+
+  /**
+   * A aparência que a criatura `key` (o `subject` do `sim`) mostra AGORA, nos campos do fio
+   * (`appearanceId`, `object`, `colors`, `addons`): a emprestada, se há uma e ela tem arte; senão a
+   * PRÓPRIA — o outfit do monstro, com as cores e os addons dele, ou o do personagem com as cores
+   * do ticket. É o que `creature-appear`,
+   * `session-state` e `creature-update` compartilham, para o reanexado ver o mesmo que quem nunca
+   * saiu (invariante 3: o estado mora na condição do `sim`, nunca num campo daqui).
+   */
+  #lookFor(
+    hosted: HostedSession, key: string,
+  ): { appearanceId: number; object?: true; colors?: OutfitColors; addons?: number } {
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    const worn = ruleset.lookOf?.(hosted.session, key) ?? null;
+    const borrowed = worn === null ? null : this.#resolveLook(worn);
+    if (borrowed !== null) {
+      if (borrowed.object) return { appearanceId: borrowed.appearanceId, object: true };
+      return {
+        appearanceId: borrowed.appearanceId,
+        ...(borrowed.colors === undefined ? {} : { colors: borrowed.colors }),
+        ...(borrowed.addons === undefined ? {} : { addons: borrowed.addons }),
+      };
+    }
+    if (key.startsWith('m:')) {
+      const monster = ruleset.monsters?.find((candidate) => candidate.subject === key);
+      const definition = monster === undefined ? undefined : this.#options.monsterCatalog?.get(monster.monsterId);
+      // O outfit PRÓPRIO do monstro — com as cores e os addons (#620): quando a condição acaba, o
+      // `creature-update` os devolve junto do `appearanceId`, e o cliente nunca guarda os "originais".
+      return { appearanceId: definition?.outfitId ?? 0, ...monsterOutfitOf(definition) };
+    }
+    return { appearanceId: this.#options.playerOutfitId ?? 0, ...this.#colorsOf(key) };
   }
 
   /**
@@ -5242,13 +5317,13 @@ export class SessionHost {
     const creatures = visible.map((participant) => ({
       id: this.#creatureId(hosted, participant.id),
       position: participant.position,
-      appearanceId: this.#options.playerOutfitId ?? 0,
       name: this.#nameByCharacter.get(participant.id) ?? participant.id,
       health: participant.health,
       maxHealth: participant.maxHealth,
-      // As cores do ticket (FUN-104), pelo MESMO espalhamento do `creature-appear`: o cliente
-      // aplica os dois pelo mesmo caminho, e o reanexado precisa ver o vizinho pintado igual.
-      ...this.#colorsOf(participant.id),
+      // A aparência de AGORA e as cores do ticket (FUN-104), pelo MESMO espalhamento do
+      // `creature-appear`: o cliente aplica os dois pelo mesmo caminho, e o reanexado precisa ver o
+      // vizinho pintado igual — e ilusionado igual (#621).
+      ...this.#lookFor(hosted, participant.id),
     }));
 
     // Os monstros VIVOS da hunt entram na mesma lista (FUN-103): quem reanexa no meio precisa
@@ -5266,13 +5341,16 @@ export class SessionHost {
         // errado até aqui. `?? ruleset.floor ?? 0` sobra para o monstro de snapshot anterior a
         // esta issue, sem `z` nenhum na posição.
         position: { ...monster.position, z: monster.position.z ?? ruleset.floor ?? 0 },
-        appearanceId: definition?.outfitId ?? 0,
+        // A aparência de AGORA (#621): o outfit do monstro, ou a que ele tomou emprestada.
+        ...this.#lookFor(hosted, monster.subject),
         name: definition?.name ?? monster.monsterId,
         health: monster.health,
         maxHealth: definition?.health ?? monster.health,
         // A apresentação (#620), pelo MESMO espalhamento do `creature-appear`: quem reanexa no
-        // meio vê o monstro pintado, com luz e falas, sem esperar um segundo aparecimento.
-        ...monsterLookOf(definition),
+        // meio vê o monstro com luz e falas, sem esperar um segundo aparecimento. Só o que NÃO é do
+        // outfit: as cores e os addons já vêm de `#lookFor`, e o monstro ilusionado os tem do
+        // outfit que veste (#621) — espalhar os do monstro de novo os trocaria pelos do dono.
+        ...monsterPresentationOf(definition),
         // A invocação do JOGADOR (#598) — o mesmo espalhamento do `creature-appear`, para quem
         // reanexa no meio ver a invocação já marcada, sem esperar um segundo aparecimento.
         ...(typeof monster.masterId === 'string' ? { masterId: monster.masterId } : {}),
