@@ -606,3 +606,17 @@ entre arquivos resolvem.
   o M44-03. Ausente é `[]`, sem imunidade nenhuma.
 
 Issue: FUN-8.
+
+## O Hazard (#632, M44-14)
+
+`data/hazard/baseline.json` é um documento só (`hazardSchema`), como `boosted`/`bestiary`: os dez
+multiplicadores do `config.lua.dist` do Canary e as zonas por id (`zones`, `hazardZoneSchema`
+estrito). A hunt aponta a zona por `hazardZoneId` (opcional); `buildContent` recusa a zona
+inexistente, `minLevel > maxLevel` e `plunderMonsterId` fora do catálogo. **O `levelUpMonsterId`
+NÃO é conferido contra o catálogo**: The Primal Menace é chefe de quest ainda sem entrada, e o id
+fica declarado para o dia em que ele existir. Os valores são transcrição do Canary — nenhum é
+decisão nossa, então não há `_open`; mudar um é mudar a versão de conteúdo (invariante 7). A hunt
+`gnomprona-gardens` é o recorte real (`pnpm map:import` + `route:trace` + `catalog:spawns`, comandos
+no `_open` dela): geometria gerada com o pacote 1332 e idêntica à do 1533 na região medida; o
+`catalog:spawns --check` dela está no `pnpm check` e acusa quando o catálogo ganhar uma espécie.
+

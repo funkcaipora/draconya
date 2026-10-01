@@ -2757,6 +2757,13 @@ export const huntSchema = z.object({
    * escrito. Só apresentação; a simulação não lê isto.
    */
   description: z.string().min(1).optional(),
+  /**
+   * A zona de Hazard desta hunt (M44-14, #632): a chave de `hazard/baseline.json.zones`. Ausente é
+   * uma hunt sem Hazard — todas as que existiam antes da issue. Com ela, todo monstro da hunt é
+   * um monstro de zona de hazard, e o nível é o que cada jogador escolheu na Cidade (fixado na
+   * entrada, ADR 0052 d.5). `buildContent` confere que a zona existe.
+   */
+  hazardZoneId: z.string().min(1).optional(),
 });
 
 /**
@@ -3852,6 +3859,80 @@ export const boostedSchema = z.object({
   rolloverHourUtc: z.number().int().min(0).max(23),
 });
 export type Boosted = z.infer<typeof boostedSchema>;
+
+/**
+ * Uma zona de Hazard (M44-14, #632, ADR 0052 d.5/d.7): o nível de perigo opcional de uma zona
+ * de hunt. É o `Hazard.new` de `data/libs/systems/hazard.lua` do Canary — `minLevel` (1 por
+ * padrão), `maxLevel` e os quatro efeitos que a zona liga (`crit`, `dodge`, `damageBoost`,
+ * `defenseBoost`). O Canary só registra UMA zona (`hazard.gnomprona-gardens`, em
+ * `data-otservbr-global/scripts/systems/hazard_primal.lua`), e é a única que este conteúdo traz.
+ *
+ * A zona do Canary é uma CAIXA de coordenadas (`from`/`to`); aqui ela é uma HUNT — `hazardZoneId`
+ * no `huntSchema` aponta a chave de `hazardSchema.zones` — porque a sessão é instanciada: todo
+ * monstro da hunt nasce dentro da zona, e o que o `HazardMonster.onSpawn` decide por posição a
+ * instância decide por construção.
+ */
+export const hazardZoneSchema = z.strictObject({
+  /** Nome de exibição (o `name` do `Hazard.new`, sem o prefixo `hazard.`). */
+  name: z.string().min(1),
+  /** O nível mínimo e o de quem nunca escolheu: `prototype.minLevel or 1`. */
+  minLevel: z.number().int().positive(),
+  /** O teto da zona (`maxLevel`): `setPlayerMaxLevel` o clampa, o `levelUp` nunca passa dele. */
+  maxLevel: z.number().int().positive(),
+  /** O monstro da zona dá crítico (`monster:hazardCrit`). */
+  crit: z.boolean(),
+  /** O monstro da zona esquiva golpes do jogador (`monster:hazardDodge`). */
+  dodge: z.boolean(),
+  /** O monstro da zona bate mais forte (`monster:hazardDamageBoost`). */
+  damageBoost: z.boolean(),
+  /** O monstro da zona reduz o dano que leva (`monster:hazardDefenseBoost`). */
+  defenseBoost: z.boolean(),
+  /**
+   * O monstro cuja morte sobe o nível máximo de quem o feriu no nível máximo
+   * (`creaturescripts_the_primal_menace_killed.lua` → `Hazard:levelUp`). NÃO é validado contra
+   * o catálogo de monstros: The Primal Menace é chefe de quest (instância à parte), ainda sem
+   * entrada no catálogo — o id fica declarado para o dia em que ele existir, e o `sim` já o lê.
+   */
+  levelUpMonsterId: z.string().min(1).optional(),
+  /**
+   * O monstro que pode nascer da morte de um monstro da zona (`hazard_primal.lua`, o
+   * "Plunder Patriarch rises from the ashes"). Esse, ao contrário do anterior, TEM de existir no
+   * catálogo: o boot o confere.
+   */
+  plunderMonsterId: z.string().min(1).optional(),
+});
+export type HazardZone = z.infer<typeof hazardZoneSchema>;
+
+/**
+ * O Hazard (M44-14, #632): os multiplicadores do `config.lua.dist` do Canary (`hazard*`, blocos
+ * `loadIntConfig`/`loadFloatConfig` de `configmanager.cpp`) e as zonas. Valores do Canary `47dfd51`,
+ * transcritos — `docs/product/hazard.md` diz onde cada um entra.
+ */
+export const hazardSchema = z.object({
+  id: z.literal('baseline'),
+  /** `hazardCriticalInterval`: o intervalo mínimo entre dois críticos no MESMO jogador, em ms. */
+  criticalIntervalMs: z.number().int().nonnegative(),
+  /** `hazardCriticalChance`: o teto da rolagem `normal_random(1, 10000)` para o crítico. */
+  criticalChance: z.number().int().nonnegative(),
+  /** `hazardCriticalMultiplier`: cada nível acima do 1º soma isto (em 1/10000) aos +50 % do crítico. */
+  criticalMultiplier: z.number().int().nonnegative(),
+  /** `hazardDamageMultiplier`: o dano do monstro sobe `nível × isto` (em 1/10000). */
+  damageMultiplier: z.number().int().nonnegative(),
+  /** `hazardDefenseMultiplier`: o dano do jogador cai `nível × isto` (em 1/10000). Zero no Canary. */
+  defenseMultiplier: z.number().int().nonnegative(),
+  /** `hazardDodgeMultiplier`: a chance de o monstro esquivar é `nível × isto` (em 1/10000). */
+  dodgeMultiplier: z.number().int().nonnegative(),
+  /** `hazardExpBonusMultiplier`: a XP sobe `1,75 × nível × isto` por cento. */
+  expBonusMultiplier: z.number().nonnegative(),
+  /** `hazardLootBonusMultiplier`: as rolagens extras de loot são `2 × nível × isto / 100`. */
+  lootBonusMultiplier: z.number().int().nonnegative(),
+  /** `hazardPodsDropMultiplier`: a chance (em 1/10000 por nível) do casulo — que consome a rolagem do Plunder. */
+  podDropMultiplier: z.number().int().nonnegative(),
+  /** `hazardSpawnPlunderMultiplier`: a chance (em 1/100000 por nível) do Plunder Patriarch. */
+  plunderSpawnMultiplier: z.number().int().nonnegative(),
+  zones: z.record(z.string().min(1), hazardZoneSchema),
+});
+export type Hazard = z.infer<typeof hazardSchema>;
 
 /**
  * Vocabulário do bot (FUN-73, ADR 0002, §13).

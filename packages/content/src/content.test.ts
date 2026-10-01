@@ -2986,3 +2986,79 @@ describe('condição drunk — desvio de passo (M31-03, #558, ADR 0041)', () => 
     }))).toThrow(ContentError);
   });
 });
+
+describe('o Hazard (M44-14, #632, ADR 0052 d.5)', () => {
+  // Os multiplicadores do `config.lua.dist` do Canary (`47dfd51`) e a zona de `hazard_primal.lua`.
+  const hazard = {
+    id: 'baseline', criticalIntervalMs: 2000, criticalChance: 750, criticalMultiplier: 25,
+    damageMultiplier: 200, defenseMultiplier: 0, dodgeMultiplier: 85, expBonusMultiplier: 2,
+    lootBonusMultiplier: 2, podDropMultiplier: 87, plunderSpawnMultiplier: 25,
+    zones: {
+      gardens: {
+        name: 'Gnomprona Gardens', minLevel: 1, maxLevel: 12, crit: true, dodge: true,
+        damageBoost: true, defenseBoost: true, levelUpMonsterId: 'the-primal-menace',
+        plunderMonsterId: 'rat',
+      },
+    },
+  };
+  const hazardHunt = { ...cellars, hazardZoneId: 'gardens' };
+
+  it('monta o Hazard e a zona que a hunt aponta', () => {
+    const content = buildContent(base({ hazard: [hazard], hunts: [hazardHunt] }));
+    expect(content.hazard?.zones['gardens']?.maxLevel).toBe(12);
+    expect(content.hazard?.dodgeMultiplier).toBe(85);
+    expect(content.hunts.get('rat-cellars')?.hazardZoneId).toBe('gardens');
+  });
+
+  it('uma hunt sem hazardZoneId continua sem Hazard, com ou sem o documento', () => {
+    expect(buildContent(base({ hazard: [hazard] })).hunts.get('rat-cellars')?.hazardZoneId).toBeUndefined();
+    expect(buildContent(base()).hazard).toBeUndefined();
+  });
+
+  it('recusa a hunt que aponta zona inexistente ou que declara zona sem o documento', () => {
+    expect(() => buildContent(base({ hazard: [hazard], hunts: [{ ...cellars, hazardZoneId: 'nope' }] })))
+      .toThrow(/zona de hazard inexistente "nope"/);
+    expect(() => buildContent(base({ hunts: [hazardHunt] })))
+      .toThrow(/não há hazard\/baseline.json/);
+  });
+
+  it('recusa zona com minLevel acima do maxLevel e Plunder fora do catálogo', () => {
+    const inverted = { ...hazard, zones: { gardens: { ...hazard.zones.gardens, minLevel: 13 } } };
+    expect(() => buildContent(base({ hazard: [inverted] }))).toThrow(/minLevel 13 acima do maxLevel 12/);
+    const ghost = { ...hazard, zones: { gardens: { ...hazard.zones.gardens, plunderMonsterId: 'ghost' } } };
+    expect(() => buildContent(base({ hazard: [ghost] }))).toThrow(/plunderMonsterId "ghost" inexistente/);
+  });
+
+  it('o levelUpMonsterId NÃO é conferido contra o catálogo: o chefe de quest ainda não foi importado', () => {
+    expect(() => buildContent(base({ hazard: [hazard], hunts: [hazardHunt] }))).not.toThrow();
+  });
+
+  it('o schema é estrito na zona e recusa campo estranho e valor inválido', () => {
+    const strange = { ...hazard, zones: { gardens: { ...hazard.zones.gardens, hazardLevel: 3 } } };
+    expect(() => buildContent(base({ hazard: [strange] }))).toThrow(ContentError);
+    const zero = { ...hazard, zones: { gardens: { ...hazard.zones.gardens, maxLevel: 0 } } };
+    expect(() => buildContent(base({ hazard: [zero] }))).toThrow(ContentError);
+    expect(() => buildContent(base({ hazard: [{ ...hazard, dodgeMultiplier: -1 }] }))).toThrow(ContentError);
+  });
+
+  it('entra na versão de conteúdo: mudar um multiplicador muda a versão (invariante 7)', () => {
+    const versionOf = (over: object) => computeVersion(base({ hazard: [{ ...hazard, ...over }] }));
+    expect(versionOf({})).toBe(versionOf({}));
+    expect(versionOf({})).not.toBe(versionOf({ dodgeMultiplier: 100 }));
+    expect(computeVersion(base())).not.toBe(versionOf({}));
+  });
+
+  it('o conteúdo REAL traz a zona do Canary (Gnomprona Gardens, níveis 1 a 12) e os multiplicadores', () => {
+    const real = loadContent(join(dirname(fileURLToPath(import.meta.url)), '..', 'data'));
+    const zone = real.hazard?.zones['gnomprona-gardens'];
+    expect(zone).toMatchObject({
+      minLevel: 1, maxLevel: 12, crit: true, dodge: true, damageBoost: true, defenseBoost: true,
+      levelUpMonsterId: 'the-primal-menace', plunderMonsterId: 'plunder-patriarch',
+    });
+    expect(real.hazard).toMatchObject({
+      criticalIntervalMs: 2000, criticalChance: 750, criticalMultiplier: 25, damageMultiplier: 200,
+      defenseMultiplier: 0, dodgeMultiplier: 85, expBonusMultiplier: 2, lootBonusMultiplier: 2,
+      podDropMultiplier: 87, plunderSpawnMultiplier: 25,
+    });
+  });
+});
