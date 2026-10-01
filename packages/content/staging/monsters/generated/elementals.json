@@ -187,6 +187,25 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 15000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Come into my fluffy embrace!",
+          "yell": false
+        },
+        {
+          "text": "Want fairy floss? I will feed you up.",
+          "yell": false
+        },
+        {
+          "text": "Did you have to come here, little one? I just wanted to lay around and take it easy.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -386,6 +405,11 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 510000,
+    "light": {
+      "level": 4,
+      "color": 208
+    },
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -561,6 +585,10 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 510000,
+    "light": {
+      "level": 4,
+      "color": 143
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -726,6 +754,21 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "*Squelch*",
+          "yell": false
+        },
+        {
+          "text": "**Slurp**",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -866,6 +909,11 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "light": {
+      "level": 5,
+      "color": 192
+    },
+    "race": "fire",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

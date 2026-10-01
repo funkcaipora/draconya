@@ -131,6 +131,56 @@ export function colorize(
 }
 
 /**
+ * Quais linhas de addon (`y` do padrão do outfit) uma máscara de addons liga, em ordem.
+ *
+ * A máscara é a do Tibia: bit 0 = primeiro addon = linha 1, bit 1 = segundo addon = linha 2, e
+ * `3` liga as duas. A linha 0 é o desenho base, sempre desenhado — não entra aqui. Acima de 3 é
+ * lixo, e bit fora das duas linhas é ignorado em vez de pedir um quadro que o pacote não tem.
+ */
+export function addonRowsOf(addons: number): readonly number[] {
+  const rows: number[] = [];
+  if ((addons & 1) !== 0) rows.push(1);
+  if ((addons & 2) !== 0) rows.push(2);
+  return rows;
+}
+
+/**
+ * Desenha `over` POR CIMA de `under`, pixel a pixel (#620, os addons do outfit do monstro).
+ *
+ * É o "over" comum de composição, sem pré-multiplicar: onde `over` é opaco ele vence, onde é
+ * transparente sobra `under`, e a borda suave (alfa parcial) mistura. Os dois quadros têm que
+ * ter o MESMO tamanho — são a mesma direção e fase do mesmo grupo, e o pacote não mistura
+ * tamanhos dentro de um grupo —, e quem chama confere antes.
+ */
+export function compositeOver(
+  under: Uint8ClampedArray, over: Uint8ClampedArray,
+): Uint8ClampedArray {
+  if (under.length !== over.length) {
+    throw new Error('outfit: o addon tem tamanho diferente do desenho base');
+  }
+  const out = new Uint8ClampedArray(under);
+  for (let at = 0; at < under.length; at += 4) {
+    const alpha = (over[at + 3] ?? 0) / 255;
+    if (alpha === 0) continue;
+    if (alpha === 1) {
+      out[at] = over[at] ?? 0;
+      out[at + 1] = over[at + 1] ?? 0;
+      out[at + 2] = over[at + 2] ?? 0;
+      out[at + 3] = 255;
+      continue;
+    }
+    const underAlpha = ((under[at + 3] ?? 0) / 255) * (1 - alpha);
+    const total = alpha + underAlpha;
+    for (let channel = 0; channel < 3; channel += 1) {
+      out[at + channel] = (((over[at + channel] ?? 0) * alpha)
+        + ((under[at + channel] ?? 0) * underAlpha)) / total;
+    }
+    out[at + 3] = total * 255;
+  }
+  return out;
+}
+
+/**
  * Uma chave por combinação. A cor sozinha não basta: cada direção e fase é um bitmap.
  *
  * **O grupo de quadros entra na chave, e separado da fase.** Parado e andando são dois
@@ -140,16 +190,19 @@ export function colorize(
  */
 export function outfitKey(
   outfitId: number, colors: OutfitColors, group: number, direction: number, phase: number,
+  addons = 0,
 ): string {
+  // A máscara de addons entra só quando há addon (#620): o outfit sem eles guarda a chave de
+  // antes, e o mesmo desenho com um addon a mais é OUTRO bitmap — o quadro composto.
   return `${outfitId}:${colors.head},${colors.body},${colors.legs},${colors.feet}`
-    + `:${group}:${direction}:${phase}`;
+    + `:${group}:${direction}:${phase}${addons > 0 ? `:a${addons}` : ''}`;
 }
 
 export interface OutfitComposerOptions {
   readonly maxBytes: number;
   /** A base e o template daquele quadro, já recortados da folha (FUN-18). */
   readonly layersOf: (
-    outfitId: number, group: number, direction: number, phase: number,
+    outfitId: number, group: number, direction: number, phase: number, addonRow?: number,
   ) => Promise<{ base: Uint8ClampedArray; template: Uint8ClampedArray;
     width: number; height: number } | null>;
   readonly createBitmap: (
@@ -187,17 +240,22 @@ export class OutfitComposer {
 
   get bytes(): number { return this.#budget.bytes; }
 
+  /**
+   * `addons` é a máscara do Tibia (#620): 0 nenhum, 1 o primeiro, 2 o segundo, 3 os dois. Cada
+   * addon é pintado com as MESMAS quatro cores e desenhado por cima do base, na ordem.
+   */
   async get(
     outfitId: number, colors: OutfitColors, group: number, direction: number, phase: number,
+    addons = 0,
   ): Promise<Sprite | null> {
-    const key = outfitKey(outfitId, colors, group, direction, phase);
+    const key = outfitKey(outfitId, colors, group, direction, phase, addons);
     const cached = this.#budget.get(key);
     if (cached !== undefined) return cached;
 
     const flying = this.#inFlight.get(key);
     if (flying !== undefined) return flying;
 
-    const promise = this.#compose(key, outfitId, colors, group, direction, phase)
+    const promise = this.#compose(key, outfitId, colors, group, direction, phase, addons)
       .finally(() => { this.#inFlight.delete(key); });
     this.#inFlight.set(key, promise);
     return promise;
@@ -207,11 +265,18 @@ export class OutfitComposer {
 
   async #compose(
     key: string, outfitId: number, colors: OutfitColors,
-    group: number, direction: number, phase: number,
+    group: number, direction: number, phase: number, addons: number,
   ): Promise<Sprite | null> {
     const layers = await this.#options.layersOf(outfitId, group, direction, phase);
     if (layers === null) return null;
-    const painted = colorize(layers.base, layers.template, colors);
+    let painted = colorize(layers.base, layers.template, colors);
+    // Os addons por cima, um a um. Uma linha que o pacote não tem (ou de outro tamanho) é
+    // pulada: o monstro aparece sem aquele addon, e não some.
+    for (const row of addonRowsOf(addons)) {
+      const addon = await this.#options.layersOf(outfitId, group, direction, phase, row);
+      if (addon === null || addon.width !== layers.width || addon.height !== layers.height) continue;
+      painted = compositeOver(painted, colorize(addon.base, addon.template, colors));
+    }
     const sprite = await this.#options.createBitmap(painted, layers.width, layers.height);
     this.#budget.put(key, sprite);
     return sprite;

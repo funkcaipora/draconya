@@ -27,6 +27,8 @@ export class Container {
   alpha = 1;
   visible = true;
   tint = 0xffffff;
+  /** O modo de mistura (#620: o clarão de luz é `'add'`). */
+  blendMode = 'normal';
   /**
    * Quantas vezes `zIndex` foi escrito. O viewport só reescreve na TROCA de walking tile
    * (#386, DT-05): reescrever todo quadro marcaria `sortDirty` e reordenaria 60 vezes por
@@ -157,8 +159,15 @@ export class Graphics extends Container {
     return this;
   }
 
-  fill(color: number): this {
-    this.ops.push({ kind: 'fill', color });
+  circle(x: number, y: number, radius: number): this {
+    this.ops.push({ kind: 'circle', x, y, radius });
+    return this;
+  }
+
+  /** O `fill` do Pixi v8 aceita a cor solta ou `{ color, alpha }` (#620: o clarão de luz). */
+  fill(style: number | { color: number; alpha?: number }): this {
+    if (typeof style === 'number') this.ops.push({ kind: 'fill', color: style });
+    else this.ops.push({ kind: 'fill', color: style.color, ...(style.alpha === undefined ? {} : { alpha: style.alpha }) });
     return this;
   }
 
@@ -236,7 +245,8 @@ export function lastApplication(): Application | null { return last; }
 
 export type GraphicsOp =
   | { readonly kind: 'rect'; readonly x: number; readonly y: number; readonly width: number; readonly height: number }
-  | { readonly kind: 'fill'; readonly color: number }
+  | { readonly kind: 'circle'; readonly x: number; readonly y: number; readonly radius: number }
+  | { readonly kind: 'fill'; readonly color: number; readonly alpha?: number }
   | { readonly kind: 'stroke'; readonly width: number; readonly color: number };
 
 /**

@@ -30,6 +30,23 @@ export const DAMAGE_TYPES = [
 export type DamageType = (typeof DAMAGE_TYPES)[number];
 
 /**
+ * As raças de monstro do Canary (`RaceType_t`, `creatures_definitions.hpp`; `monster.race` no
+ * Lua, lido por `MonsterType:race`, `monster_type_functions.cpp`). A raça decide de que COR e com
+ * que EFEITO o golpe físico que atinge o monstro se desenha (`Game::combatGetTypeInfo`,
+ * `game.cpp`): sangue vermelho, veneno verde, morto-vivo cinza, fogo laranja, energia roxa, tinta,
+ * chocolate e doce. **Só apresentação** (#620) — nenhum sistema de combate a lê. O protocolo
+ * repete a lista (`MonsterRace`, `protocol/types.ts`): é a base da pilha e não importa `content`,
+ * e `schemas.test.ts` confere que as duas são o mesmo conjunto.
+ */
+export const MONSTER_RACES = [
+  'venom', 'blood', 'undead', 'fire', 'energy', 'ink', 'chocolate', 'candy',
+] as const;
+export type MonsterRace = (typeof MONSTER_RACES)[number];
+
+/** A raça do monstro que o Canary não declara: `MonsterType::info.race = RACE_BLOOD` (`monsters.hpp`). */
+export const DEFAULT_MONSTER_RACE: MonsterRace = 'blood';
+
+/**
  * Os elementos que têm MAGIC LEVEL ESPECIALIZADO no Canary (#680): as oito chaves
  * `<elemento>magiclevelpoints` de `item_parse.cpp:915-941`. `healing` é o da cura; `drown`,
  * `lifedrain`, `manadrain` e `arcane` não têm chave lá, e por isso não têm aqui.
@@ -318,6 +335,14 @@ export const appearancesSchema = z.object({
    */
   hits: z.object({
     melee: appearanceId.optional(),
+    /**
+     * O efeito do golpe FÍSICO por RAÇA do alvo (#620, `Game::combatGetTypeInfo` do Canary):
+     * sangue para `blood`, gota de veneno para `venom`, o "hit area" cinza para `undead`/`ink`…
+     * O host o escolhe pela `race` do monstro atingido no lugar do `melee`, que continua sendo o
+     * efeito quando a raça não tem linha (e o do jogador atingido, que é `blood`). Raça sem linha
+     * nem `melee` é golpe sem efeito — o `CONST_ME_NONE` do Canary.
+     */
+    byRace: z.partialRecord(z.enum(MONSTER_RACES), appearanceId).optional(),
   }).default({}),
   /**
    * `chave semântica → { missile, effect }` para as abilities de monstro (CMB-06). A ability
@@ -2566,6 +2591,64 @@ export const monsterSummonsSchema = z.strictObject({
 });
 export type MonsterSummons = z.infer<typeof monsterSummonsSchema>;
 
+/** Um índice na paleta de 133 cores do outfit (a mesma faixa de `OutfitColors` do protocolo). */
+const outfitPaletteIndex = z.number().int().min(0).max(132);
+
+/**
+ * O que veste o monstro além do desenho (#620, `monster.outfit` do Canary: `lookHead`, `lookBody`,
+ * `lookLegs`, `lookFeet`, `lookAddons`): as quatro cores do template e os addons. **São índices e
+ * máscaras, nunca arte** (invariante 6) — o id do desenho (`lookType`) é `outfitId`, e vive na
+ * tabela de aparências. Cor `0` é o branco da paleta, o neutro: um outfit de duas camadas com o
+ * template todo em 0 se desenha como a base crua, e é o que a maioria dos monstros declara.
+ * `addons` é a máscara de bits do Tibia: 1 = primeiro addon, 2 = segundo, 3 = os dois (o
+ * bestiário inteiro do Canary usa só 0–3, conferido em 2026-09-30).
+ */
+export const monsterOutfitSchema = z.strictObject({
+  head: outfitPaletteIndex,
+  body: outfitPaletteIndex,
+  legs: outfitPaletteIndex,
+  feet: outfitPaletteIndex,
+  addons: z.number().int().min(0).max(3).default(0),
+});
+export type MonsterOutfit = z.infer<typeof monsterOutfitSchema>;
+
+/** Sem `outfit` declarado o monstro veste cor 0 em tudo e nenhum addon — o `Outfit_t` zerado do Canary. */
+export const NEUTRAL_MONSTER_OUTFIT: MonsterOutfit = { head: 0, body: 0, legs: 0, feet: 0, addons: 0 };
+
+/** Uma fala de monstro: o texto e se é grito (`TALKTYPE_MONSTER_YELL`) em vez de fala. */
+export const monsterVoiceLineSchema = z.strictObject({
+  text: z.string().min(1),
+  yell: z.boolean().default(false),
+});
+
+/**
+ * As falas periódicas de um monstro (#620; `monster.voices` do Canary, `registerMonsterType.voices`
+ * em `register_monster_type.lua`, `Monster::onThinkYell`, `monster.cpp`). A cada `intervalMs` o
+ * monstro rola `chance` (percentual INTEIRO 0–100, a mesma escala do Lua — o Canary compara
+ * `chance >= uniform_random(1, 100)`) e, se passar, diz UMA das `lines` sorteada. **O sorteio é da
+ * APRESENTAÇÃO**: o cliente o faz, nunca o `Rng` da sessão — a fala não muda resultado nenhum
+ * (invariante 3) e o `sim` nem a conhece. O Canary calcula um intervalo e uma chance só por
+ * monstro (o `addVoice` de cada linha sobrescreve os dois), e por isso o bloco os tem uma vez.
+ */
+export const monsterVoicesSchema = z.strictObject({
+  intervalMs: z.number().int().positive(),
+  chance: z.number().int().min(1).max(100),
+  lines: z.array(monsterVoiceLineSchema).min(1),
+});
+export type MonsterVoices = z.infer<typeof monsterVoicesSchema>;
+
+/**
+ * A luz que o monstro carrega (#620; `monster.light` do Canary → `MonsterType::light(color, level)`,
+ * `LightInfo`). `level` é o alcance em tiles e `color` o índice na paleta de 216 cores do Tibia
+ * (`c = r·36 + g·6 + b`, a mesma do automapa) — dado do cliente de referência, não arte. Só os 102
+ * monstros do Canary com nível maior que 0 declaram; ausente é sem luz.
+ */
+export const monsterLightSchema = z.strictObject({
+  level: z.number().int().min(1).max(255),
+  color: z.number().int().min(0).max(215),
+});
+export type MonsterLight = z.infer<typeof monsterLightSchema>;
+
 export const monsterSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -2829,6 +2912,29 @@ export const monsterSchema = z.strictObject({
    * esperar e desaparece — o mesmo "hunt sem o campo" de antes desta issue, só que por monstro.
    */
   corpseTtlMs: z.number().int().positive().optional(),
+  /**
+   * As cores e os addons com que o outfit dele é pintado (#620, `monster.outfit.look*` do Canary).
+   * Ausente é o neutro (`NEUTRAL_MONSTER_OUTFIT`, tudo 0) — o que o Canary faz sem declarar, e o
+   * importador só escreve o campo quando algo difere. É APRESENTAÇÃO: o `sim` nunca lê, e o `id`
+   * do desenho continua na tabela de aparências. Ver `monsterOutfitSchema`. **Sem `.default()` de
+   * propósito:** o default no schema tornaria o campo obrigatório no tipo `Monster`, e cada
+   * literal de monstro de teste, de bench e de fixture teria de repeti-lo — quem lê aplica o
+   * neutro (`monster.outfit ?? NEUTRAL_MONSTER_OUTFIT`).
+   */
+  outfit: monsterOutfitSchema.optional(),
+  /**
+   * As falas periódicas (#620, `monster.voices`). Ausente é mudo. O sorteio é do cliente — ver
+   * `monsterVoicesSchema`.
+   */
+  voices: monsterVoicesSchema.optional(),
+  /** A luz que ele carrega (#620, `monster.light`). Ausente é sem luz. Ver `monsterLightSchema`. */
+  light: monsterLightSchema.optional(),
+  /**
+   * A raça — cor e efeito do golpe físico que o atinge (#620, `monster.race`). Ausente é
+   * `blood`, o `RACE_BLOOD` que o Canary assume (`DEFAULT_MONSTER_RACE`; quem lê aplica, pela
+   * mesma razão de `outfit`). Só apresentação.
+   */
+  race: z.enum(MONSTER_RACES).optional(),
   /**
    * As JANELAS do cadáver em que a Animate Dead Rune o aceita (#600, ADR 0057 d.6): `fromMs`
    * inclusive, `untilMs` exclusivo, em milissegundos desde a morte — o mesmo relógio de

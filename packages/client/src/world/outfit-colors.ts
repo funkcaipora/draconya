@@ -2,8 +2,10 @@
 //
 // O protocolo carrega as cores de cada criatura desde a FUN-104 (`CreatureState.colors`), e
 // o viewport pinta com as dela. Esta constante ficou, e agora é a reserva: a criatura que
-// chegou SEM cores — um nó `game` anterior num deploy em rolagem, um personagem que nunca
-// escolheu, ou monstro, que nunca traz — é pintada com estas.
+// chegou SEM cores — um nó `game` anterior num deploy em rolagem, ou um personagem que nunca
+// escolheu — é pintada com estas. O monstro passou a trazer as dele desde o #620
+// (`monster.outfit.look*` do Canary, neutro = tudo 0); o que chega sem elas é o de um nó
+// anterior, ou o de um host de teste sem catálogo.
 //
 // **Por que uma reserva, e não deixar de pintar.** Um outfit de duas camadas que sobra sem
 // multiplicar aparece na tela como um boneco de cores primárias — amarelo, vermelho, verde e
