@@ -846,7 +846,31 @@ numa fila só.
 - Custo medido, fila isolada (M2, arm64, 500 criaturas × 6 timers): cancelar uma criatura que morre
   fica ~10× mais barato (4,4 µs → 0,45 µs por iteração com uma morte a cada 20 despachos) e o ciclo
   `pop` + reagendamento fica ~70 ns mais caro (contabilidade do slot) — o que o mundo paga e a hunt
-  não. Os números do `bench:hunts` estão no PR #827.
+  não.
+- **`bench:hunts` pareado, a linha de base que a OW-13 e a OW-30 comparam (#827, PR #901).** Base =
+  `tibia-parity` em `609d88c1`; branch = a mesma árvore com o #827. Máquina darwin arm64, Apple M2 ×
+  8, Node v24.14.1, compartilhada com outros agentes — por isso cada medida é um PAR rodado ao mesmo
+  tempo (a ordem de largada alterna a cada rodada) e o que vale é a diferença dentro do par, não o
+  valor absoluto, que varia de 108 a 175 µs com a carga. 600 hunts desanexadas × 5 min a 1 Hz,
+  `node --expose-gc`; reproduz com `HUNTS=600 MINUTES=5 [SCENARIO=combat] pnpm bench:hunts` em duas
+  worktrees ao mesmo tempo.
+
+  | cenário | rodada | por tick/instância, base → branch | CPU, base → branch | memória por sessão | snapshot por sessão | abates |
+  |---|---|---|---|---|---|---|
+  | frio | a | 175,0 → 175,2 µs | 13,8 → 13,8 s | 91,1 → 91,2 KiB | 15,8 KiB | 10.800 |
+  | frio | b | 169,0 → 169,7 µs | 13,4 → 13,7 s | 91,2 → 91,2 KiB | 15,8 KiB | 10.800 |
+  | frio | c | 148,5 → 151,7 µs | 11,8 → 12,1 s | 91,1 → 91,2 KiB | 15,8 KiB | 10.800 |
+  | frio | d | 107,7 → 108,8 µs | 9,4 → 9,6 s | 91,2 → 91,2 KiB | 15,8 KiB | 10.800 |
+  | combate | a | 239,3 → 241,6 µs | 19,7 → 19,8 s | 94,0 → 94,1 KiB | 18,8 KiB | 6.041 |
+  | combate | b | 314,4 → 314,4 µs | 24,2 → 24,3 s | 94,0 → 93,6 KiB | 18,8 KiB | 6.041 |
+  | combate | c | 230,0 → 231,5 µs | 18,2 → 18,4 s | 94,0 → 94,1 KiB | 18,8 KiB | 6.041 |
+  | combate | d | 122,8 → 121,3 µs | 11,9 → 11,7 s | 94,0 → 94,1 KiB | 18,8 KiB | 6.041 |
+
+  O custo por tick fica a +0,1% a +2,2% no frio (média ~+0,9%) e a −1,2% a +1,0% no combate (média
+  ~+0,1%), dentro do ruído de uma máquina disputada; a memória por sessão varia em ~0,1 KiB, até 0,4 KiB para menos
+  (o par de campos novos do `Schedule`, mais o ruído do GC); o snapshot e os abates são IDÊNTICOS em todas as oito medidas. Quem
+  mexer em `schedule.ts` de novo repete o par contra a `tibia-parity` do momento, não contra estes
+  valores.
 
 **`tieBreak`: `'insertion'` (default) ou `'stable'`.** A ordem do mesmo `(dueAtMs, priority)` era a
 da inserção (`seq`). `'stable'` ordena por `(dueAtMs, priority, subject, kind, seq)` — comparando
@@ -854,7 +878,8 @@ strings por unidade de código, nunca por locale — e é o que a dormência do 
 que sai da fila ao dormir e volta ao acordar ganha um `seq` novo, e só uma ordem que não olha a
 inserção o devolve ao lugar em que estaria. O `seq` fica no fim só para a ordem seguir total.
 - A instância NÃO usa: `Session` nasce `'insertion'`, e `SessionOptions.tieBreak: 'stable'` é do
-  mundo (ainda sem quem o chame: a sessão do mundo é a OW-29/OW-30).
+  mundo (ainda sem quem o chame: o primeiro chamador é `createWorldSession`, a OW-13 (#834); a
+  dormência da OW-30 (#853) é quem depende da ordem estável).
 - A escolha vai no `ScheduleState` (`tieBreak: 'stable'`), e SÓ no `'stable'`: o snapshot da
   instância não ganha chave nenhuma. Restaurar um snapshot do mundo devolve uma fila estável sem
   que quem restaura precise saber.
