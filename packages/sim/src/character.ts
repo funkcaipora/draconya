@@ -373,6 +373,8 @@ export interface PendingManualActionState {
     | { readonly kind: 'monster'; readonly subject: string }
     | { readonly kind: 'character'; readonly characterId: string }
     | { readonly kind: 'position'; readonly position: { readonly x: number; readonly y: number; readonly z?: number } }
+    /** Um item que o personagem carrega (#621, Chameleon Rune) — a instância, nunca a aparência. */
+    | { readonly kind: 'item'; readonly instanceId: string }
     | { readonly kind: 'invalid' };
   readonly seq: number;
 }
@@ -466,6 +468,12 @@ export class CharacterRuntime {
   goldDelta: number;
   alive: boolean;
   speed: number;
+  /**
+   * O personagem dissolve a parede de personagem ao pisar (OW-05, #826) — ver
+   * `Movable.dissolvesSafeWalls`. Sempre `true`, e é o que a distingue do monstro, que não tem
+   * o campo.
+   */
+  readonly dissolvesSafeWalls = true;
   /** Mutadas no lugar a cada uso — ver `Skills.gain`. */
   readonly skills: Skills;
   /** Mutado no lugar a cada abate recompensado — ver `Bestiary.record`. */

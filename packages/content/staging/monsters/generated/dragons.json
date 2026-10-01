@@ -30,6 +30,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 172,
     "aggroRadius": 11,
@@ -225,6 +226,20 @@
     "runOnHealth": 300,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "FCHHHHH",
+          "yell": true
+        },
+        {
+          "text": "GROOAAARRR",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -280,6 +295,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 170,
     "aggroRadius": 11,
@@ -400,6 +416,20 @@
     "runOnHealth": 20,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Fchu?",
+          "yell": false
+        },
+        {
+          "text": "Rooawwrr",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -455,6 +485,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 200,
     "aggroRadius": 11,
@@ -732,6 +763,20 @@
     "runOnHealth": 300,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "YOU WILL BURN!",
+          "yell": true
+        },
+        {
+          "text": "ZCHHHHHHH",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -787,6 +832,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 190,
     "aggroRadius": 11,
@@ -995,6 +1041,20 @@
     "runOnHealth": 30,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Fchu?",
+          "yell": false
+        },
+        {
+          "text": "Rooawwrr",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1190,6 +1250,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Attack aggrezzively! Dezztroy zze intruderzz!",
+          "yell": false
+        },
+        {
+          "text": "Hizzzzzz!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1579,6 +1653,29 @@
     "runOnHealth": 250,
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "YOU WILL FREEZE!",
+          "yell": true
+        },
+        {
+          "text": "ZCHHHHH!",
+          "yell": true
+        },
+        {
+          "text": "I am so cool.",
+          "yell": false
+        },
+        {
+          "text": "Chill out!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1635,6 +1732,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 200,
     "aggroRadius": 11,
@@ -1787,6 +1885,21 @@
     "runOnHealth": 80,
     "staticAttack": 0.9,
     "corpseTtlMs": 1570000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Rooawwrr",
+          "yell": false
+        },
+        {
+          "text": "Fchu?",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1844,6 +1957,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 206,
     "aggroRadius": 11,
@@ -2066,6 +2180,20 @@
     "runOnHealth": 300,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "FCHHHHH",
+          "yell": true
+        },
+        {
+          "text": "HISSSS",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2292,6 +2420,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 1200000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Just Look at me!",
+          "yell": false
+        },
+        {
+          "text": "I'll stare you down",
+          "yell": false
+        },
+        {
+          "text": "Let me have a look",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 300000,

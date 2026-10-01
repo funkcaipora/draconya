@@ -51,16 +51,19 @@ export function objectKey(appearanceId: number, cell: { readonly x: number; read
  *
  * As cores entram na chave: o mesmo outfit com cores diferentes são bitmaps diferentes, e o
  * quadro pintado não pode reaproveitar a entrada do quadro cru. Sem cores, um marcador fixo —
- * é a entrada de monstro, que não tem cor de jogador.
+ * é a entrada de quem chegou sem elas.
  */
 export function creatureKey(
   appearanceId: number, direction: Direction, moving: boolean, phase: number,
-  colors?: OutfitColors,
+  colors?: OutfitColors, addons = 0,
 ): string {
   const paint = colors === undefined
     ? '-'
     : `${colors.head},${colors.body},${colors.legs},${colors.feet}`;
-  return `outfit:${appearanceId}:${direction}:${moving ? 'w' : 's'}:${phase}:${paint}`;
+  // Os addons (#620) também mudam o bitmap — o quadro composto —, mas a chave de quem não os
+  // tem continua a de antes.
+  return `outfit:${appearanceId}:${direction}:${moving ? 'w' : 's'}:${phase}:${paint}`
+    + (addons > 0 ? `:a${addons}` : '');
 }
 
 /**

@@ -10,6 +10,7 @@
 // `sim` não conhece nome nem arte (FUN-58, invariante 6). O hospedeiro resolve os dois pelo
 // `monsterId`, no catálogo de conteúdo fixado na sessão (invariante 7).
 
+import type { OutfitLook } from '@draconya/content';
 import type { WorldPoint } from './movement.js';
 
 export interface CreatureAppeared {
@@ -49,6 +50,20 @@ export interface CreatureHealthChanged {
   readonly creatureId: string | number;
   readonly health: number;
   readonly maxHealth: number;
+}
+
+/**
+ * A criatura trocou de APARÊNCIA (#621, M44-03: a condição `outfit` — Creature Illusion,
+ * Chameleon Rune, o ataque e a defesa `outfit` de um monstro). `look` é o que ela veste AGORA,
+ * ou `null` quando a condição acabou e ela volta à dela — o `internalCreatureChangeOutfit` do
+ * Canary, nas duas pontas de `ConditionOutfit`. É o `sim` que diz QUEM vestiu o quê; a arte é da
+ * tabela de aparências, resolvida pelo hospedeiro (invariante 6). Só apresentação: nenhuma conta
+ * de combate lê o outfit.
+ */
+export interface CreatureLookChanged {
+  readonly kind: 'creature-look-changed';
+  readonly creatureId: string | number;
+  readonly look: OutfitLook | null;
 }
 
 /**
@@ -104,6 +119,6 @@ export interface FieldStageChanged {
 }
 
 export type PresenceEvent =
-  | CreatureAppeared | CreatureVanished | CreatureHealthChanged
+  | CreatureAppeared | CreatureVanished | CreatureHealthChanged | CreatureLookChanged
   | GroundItemAppeared | GroundItemVanished
   | FieldAppeared | FieldVanished | FieldStageChanged;

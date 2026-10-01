@@ -2725,8 +2725,9 @@ interface FieldSpec {                     // declarado em content
   `appearances.fields`, como sempre) — campo sem entrada troca de estágio MUDO. Quem reanexa no
   MEIO da cadeia recebe, no `session-state`, a arte do estágio ATUAL, não sempre a do nascimento.
 - **Campo bloqueante (Magic Wall, Wild Growth, #560).** `blocksMovement` (default falso) faz o
-  campo agir como PAREDE — para QUALQUER criatura, jogador e monstro, diferente do desvio de
-  dano do M29-05 (`canMonsterEnterField`), que só o monstro respeita e só quando o campo tem
+  campo agir como PAREDE — para QUALQUER criatura, jogador e monstro (salvo a parede de
+  personagem, que cede a quem é personagem — ver "Campo com dono", abaixo), diferente do desvio
+  de dano do M29-05 (`canMonsterEnterField`), que só o monstro respeita e só quando o campo tem
   `damageType`. Mecanismo: `Fields.blockedAt`/`blocksProjectileAt` (novos métodos em
   `sim/fields.ts`) e `TileOccupancy.blockedAt` os combina com o mapa e com `TileOverrides`
   (#728) — a MESMA composição de três fontes, uma pergunta só para `canOccupy`/`move`, o passo
@@ -2771,6 +2772,44 @@ interface FieldSpec {                     // declarado em content
   fechando o TODO(#560) que só o Dragon Lord tinha cadeia real: fire field (2118→2119→2120,
   a mesma cadeia do Dragon Lord) agora sai assim para TODO monstro gerado; poison (105) e energy
   (2122) declaram `stages` de um elemento só (redundante com `fieldStagesOf`, mas explícito).
+
+- **Campo com dono: o campo de personagem não fere personagem (OW-05, #826, ADR 0060 d.8).** O
+  no-pvp do Canary aplicado ao campo, e uma correção de paridade que vale já para a hunt de
+  party: até aqui o fire field de um membro queimava a própria party. `TileFieldState.owner`
+  (`{ kind: 'character' | 'monster', id }`) é gravado por `applyField` — a runa de campo grava o
+  PERSONAGEM que a lançou, a ability de monstro grava o monstro (`subject` `m:<id>`) e a de uma
+  INVOCAÇÃO de personagem grava o MESTRE, porque o Canary trata a invocação como o jogador dela
+  (`caster->isSummon()`, `combat.cpp:1198-1204`). O campo sem `owner` é de MAPA e segue pegando
+  todo mundo; o snapshot de antes restaura assim, sem subir `SNAPSHOT_FORMAT_VERSION`.
+
+  | Campo de | Fere personagem | Fere invocação de personagem | Fere monstro |
+  |---|---|---|---|
+  | personagem (ou invocação de personagem) | **não**, nem o lançador (`combat.cpp:2616-2619`) | **não** | sim |
+  | monstro, ou de mapa (sem dono) | sim | sim | sim |
+
+  O portão é `HuntRuleset#fieldHarms`, conferido no tique do campo (`#onFieldTick`) e na entrada
+  no tile (`#enterField`), ANTES de montar a condição — quem o campo não fere não gasta sorteio
+  do `Rng`. É a versão do `canDoCombat` que o Canary faz dentro da condição
+  (`condition.cpp:2015-2020`): num mundo no-pvp ele recusa jogador e invocação de jogador contra
+  jogador e invocação de jogador (`combat.cpp:551-565`). O dono atravessa os estágios da cadeia
+  (`decayTo`) e o relançamento do mesmo id o troca.
+
+  **A parede de personagem é a variante SEGURA** (`ITEM_MAGICWALL_SAFE`/`ITEM_WILDGROWTH_SAFE`,
+  `combat.cpp:1207-1218`): segue barrando monstro, invocação e projétil, mas quem é personagem
+  a atravessa e ela some no passo (`Tile::queryAdd`, `tile.cpp:864-876`). Qualquer personagem a
+  dissolve, não só o lançador. Mecanismo: `Movable.dissolvesSafeWalls` (só `CharacterRuntime`)
+  faz `canOccupy`/`move` a admitirem — o bot, o `walk-to`, o BFS do follow e a busca da fuga do
+  medo a tratam como passável —, e `HuntRuleset#step` a remove depois do passo aceito, antes da entrada no campo
+  que estiver por baixo dela. A parede de MONSTRO ou de mapa barra o personagem como sempre.
+
+  **Divergências registradas.** (1) O crédito do dano do campo não vai ao dono: a condição segue
+  com `sourceId` = id do campo e o abate por campo de personagem não rende XP a ele (no Canary o
+  dono vai em `CONDITION_PARAM_OWNER`) — é o crédito do Canary, OW-28. (2) A parede de vários
+  tiles é uma entidade só e some inteira ao primeiro passo; o conteúdo de hoje só planta parede
+  de um tile (Magic Wall e Wild Growth são `point`, como os itens do Canary). (3) O campo de
+  dano de PvP dos jogadores do Canary (a metade do dano em `condition.cpp:2011-2013`) não
+  existe: aqui não há PvP. (4) Campo em zona `PVPZONE` e a recusa por PZ são o portão no-pvp
+  completo, OW-27.
 
 **Fora do escopo**, por decisão: novo pathfinding, dispel, invisibilidade, PvP e a UI detalhada
 de buff.
@@ -3157,16 +3196,16 @@ mecanismo morto.
 
 - **`Monster.conditionImmunities`** (`packages/content/src/schemas.ts`) é o `monster.immunities`
   do Canary com `condition = true` (`Monster::isImmune`, `src/creatures/monsters/monsters.hpp`) —
-  distinto da imunidade de DANO (`mitigation.immunities`, `combat = true`), que já existia. **Onze
-  nomes, o vocabulário do ADR 0041 d.1** (`CONDITION_IMMUNITIES`): `paralyze`, `drunk`, `invisible`
-  e as oito DOTs — `bleeding`, `poison`, `burning`, `electrified`, `cursed`, `drowning`,
-  `freezing`, `dazzled`. O importador (`scripts/catalog/monsters.ts`, `CONDITION_IMMUNITY_MAP`)
+  distinto da imunidade de DANO (`mitigation.immunities`, `combat = true`), que já existia. **Doze
+  nomes, o vocabulário do ADR 0041 d.1** (`CONDITION_IMMUNITIES`): `paralyze`, `drunk`,
+  `invisible`, `outfit` (#621) e as oito DOTs — `bleeding`, `poison`, `burning`, `electrified`,
+  `cursed`, `drowning`, `freezing`, `dazzled`. O importador (`scripts/catalog/monsters.ts`, `CONDITION_IMMUNITY_MAP`)
   traduz os nomes do Lua pela tabela de `luaMonsterTypeConditionImmunities` do Canary
   (`monster_type_functions.cpp:915-968`): `bleed`/`physical` → `bleeding`, `fire` → `burning`,
   `ice` → `freezing`, `poison`/`earth` → `poison`, `energy` → `electrified`, `holy` → `dazzled`,
-  `death` → `cursed`, `drown` → `drowning`, `invisibility` → `invisible`. Só `outfit` (119 monstros
-  imunes) fica de fora até o M44-03 trazer a condição, e o importador o reporta em
-  `ignoredFields` por NOME. Dos monstros do Canary, só 14 declaram uma DOT imune (`bleed` ×12,
+  `death` → `cursed`, `drown` → `drowning`, `invisibility` → `invisible`. `outfit` (119 monstros
+  imunes) entrou com o M44-03 (#621, seção "Condição de outfit", adiante) e vira o décimo
+  segundo nome. Dos monstros do Canary, só 14 declaram uma DOT imune (`bleed` ×12,
   `fire` ×1, `ice` ×1) e 6 `drunk`; as 1 244 imunidades a `paralyze` e 1 385 a `invisible` são a
   maioria. Ausente é `[]`: todo monstro sem a entrada continua sem imunidade nenhuma, bit a bit.
 - **O ponto de bloqueio é ÚNICO** — `HuntRuleset#applyConditionTo` (`sim/rulesets/hunt.ts`), o
@@ -3316,8 +3355,8 @@ mecanismo morto.
   iniciada por nada — só CONSULTADA pelo caminho manual de `#groupOrIndividualWaitOf`, #726) passa
   a ser iniciada por `startSupplyCooldown` quando o supply o declara. Um supply sem `cooldownMs`
   continua exatamente como antes: só o livro do grupo.
-- **Fora do escopo** (§12, como toda spec): `outfit` em `conditionImmunities` (o M44-03 traz a
-  condição) e a extração AUTOMÁTICA de imunidade de DOT a partir de `mitigation.immunities` (o
+- **Fora do escopo** (§12, como toda spec): `outfit` em `conditionImmunities` (o M44-03, #621, o
+  trouxe depois — seção "Condição de outfit") e a extração AUTOMÁTICA de imunidade de DOT a partir de `mitigation.immunities` (o
   Canary não a deriva — `immunities` de dano e de condição são listas independentes no Lua); a
   Paralyze Rune com `area` (o Canary não a tem); o `invisible` de `monster.attacks` (só o Tirecz,
   chefe de quest, o declara — o resto está em `defenses`); a invisibilidade por EQUIPAMENTO
@@ -3327,6 +3366,150 @@ mecanismo morto.
   a tela não some com ele; a invocação de personagem herda o alvo do mestre
   (`#chooseMonsterTarget`) sem passar pelo think de visibilidade — nenhum monstro do catálogo é
   `summonable` ainda (#598).
+
+## Condição de outfit: ilusão de monstro e do jogador (M44-03, #621, ADR 0041 d.1)
+
+O Tibia troca a aparência de uma criatura por um tempo com UMA condição, `CONDITION_OUTFIT`
+(`ConditionOutfit`, `src/creatures/combat/condition.cpp:2664-2753`), e três fontes a aplicam: o
+ataque e a defesa `outfit` de monstro (118 usos no bestiário do Canary — 63 ataques e 55 defesas),
+a magia Creature Illusion (`data/scripts/spells/support/creature_illusion.lua`) e a Chameleon Rune
+(`data/scripts/runes/chameleon.lua`). É mecanismo **visual**: nenhuma conta de dano, defesa, mana
+ou XP lê o outfit, e por isso o que importa copiar é o que o resultado observável depende — QUEM
+entra, QUANDO sai, como duas fontes se fundem e quem recusa —, não um número de combate. É a base
+do Avatar do Wheel of Destiny (#610, fora do corte).
+
+- **A condição carrega uma referência, nunca arte (invariante 6).** `conditionEffectSchema` ganhou
+  `{ kind: 'outfit', look }` (`packages/content/src/schemas.ts`), e `look` é UMA de três formas
+  (`outfitLookSchema`, `strictObject` — um campo de arte escapa do schema): `{ monsterId }` (o
+  OUTFIT de um monstro do catálogo, o `lookType` do Canary), `{ itemId }` (a aparência de OBJETO de
+  um item do catálogo, o `lookTypeEx` da Chameleon Rune) e `{ objectKey }` (a aparência de objeto
+  que um monstro veste — o `outfitItem` do Lua —, por chave semântica). Quem resolve para o
+  `outfitId`/`appearanceId` do pacote é o HOSPEDEIRO, pela tabela de aparências: `monsterId` →
+  `appearances.monsters`, `itemId` → `appearances.items`, `objectKey` → `appearances.looks` (seção
+  nova, `chave → appearanceId`, conferida contra o inventário do pacote por `packProblems`; chave
+  sem linha é MUDA, como `abilities`). O `outfitItem` precisa da seção nova porque só um dos seis
+  itens que o Canary usa (2096, 2324, 2916, 3058, 3976, 7172 — `dried well`, `table`, `used lamp`,
+  `strange symbol`, `fallen tree`, `snowman`) está no catálogo de caça, e `appearances.items` é
+  conferida dos dois lados contra ele.
+- **Uma condição por criatura, chave reservada, fusão do Canary.** `OUTFIT_CONDITION_KEY =
+  'outfit'` (exigida nos dois sentidos por `conditionSpecSchema`, como `drunk`/`invisible`): uma
+  criatura tem no máximo UM outfit emprestado, e um segundo cai em `ConditionOutfit::addCondition`
+  (`condition.cpp:2724`) e se FUNDE ao primeiro — `Condition::updateCondition`
+  (`condition.cpp:543-557`) só aceita a nova se ela acabar DEPOIS (ou junto) do que já está ativo
+  (`getEndTime() > now + novo.ticks` recusa); aceita, a aparência e o prazo passam a ser os dela.
+  No motor é `merge: 'strongest'` com a força medida pelo PRAZO ABSOLUTO (`strengthOf`,
+  `sim/conditions.ts`: `expiresAtMs`, empate com a nova), e o schema exige `merge: 'strongest'`
+  explícito — é o mecanismo da classe, não um parâmetro da fonte. A recusa não emite evento: o
+  cliente nunca fica sabendo de uma troca que não aconteceu.
+- **O ataque é uma condição NÃO agressiva, e isso muda QUEM ela atinge.** `Monsters::
+  deserializeSpell` (`monsters.cpp:156-182`) faz `combat->setParam(COMBAT_PARAM_AGGRESSIVE, 0)` e
+  `addCondition(ConditionOutfit)`. Três consequências, todas reproduzidas em
+  `HuntRuleset#executeOutfitAbility`: (1) **sem área**, o ataque vai no ALVO (`castSpell(creature,
+  target)` sem área → `doCombat(creature, target)`; o flag `target` do Lua só decide algo COM
+  área — `CombatSpell::castSpell`, `spells.cpp:420-465`); (2) **com área** (`radius`, centrada no
+  alvo com `target = true`, senão no lançador — 22 ataques do Canary são o círculo em volta do
+  PRÓPRIO monstro), `Combat::CombatFunc` só exclui o lançador quando `params.aggressive`
+  (`combat.cpp:1562`/`1610`), então **todo mundo na forma entra: o lançador, os outros monstros e os
+  personagens** (o Halloween Hare transforma os bichos em volta dele); (3) **não há golpe**:
+  `combatType` é `COMBAT_NONE` e o caminho é `CombatNullFunc` → só `CombatConditionFunc`, sem
+  bloqueio, esquiva, crítico nem dano — o ataque sai ANTES do pipeline de dano
+  (`#executeMonsterAbility`), nenhum `creature-hit` é emitido e o único sorteio além do `chance` que
+  o vencimento da cadência já rolou é o do **Cleanse** (#603): o primeiro bloco da
+  `CombatConditionFunc` (`combat.cpp:1039-1062`) roda para QUALQUER condição de monstro num jogador,
+  o `outfit` inclusive — com o charm atribuído a este monstro e uma condição limpável ativa, rola
+  `chance ≥ normal(0, 10000)/100`, remove UMA, dá os 11 s de imunidade e `return`a SEM vestir a
+  aparência. `#executeOutfitAbility` o chama por personagem atingido (`#cleanseBeforeCondition`, só
+  no estágio `combat-v4`), na mesma ordem de sorteio do golpe, e só para jogador — o monstro e a
+  defesa (o próprio monstro) nunca o rolam. O alvo de uma forma tem visão livre do lançador, como toda
+  ability (#553). O importador mapeia a ability com `power: 0` e `damageType: 'physical'` — o que
+  o schema exige —, o `range` declarado ou a VISTA (11): o `sb.range` 0 do Canary é "sem limite além da
+  vista" (`Monster::canUseSpell`), e um círculo em volta do lançador o acerta de qualquer distância
+  do alvo (o anel de `geometryOf` impediria o disfarce de sair com o alvo a dois tiles).
+- **A defesa é o monstro em si** (`Monster::onThinkDefense` → `castSpell(monster, monster)`,
+  `monster.cpp:2220`), e `caster == target` PULA a imunidade (`CombatConditionFunc`,
+  `combat.cpp:1079`) — um monstro imune a `outfit` ainda se disfarça. `DEFENSE_SELF_CONDITION_KINDS`
+  aceita `outfit` (55 defesas do Canary). A defesa passa por `#applyConditionTo` SEM `fromCombat`,
+  e o ataque COM: o portão de imunidade de monstro (#559) agora conhece `outfit`
+  (`conditionImmunityOf`), então o monstro de `conditionImmunities: ['outfit']` (119 no Canary, 42
+  no catálogo gerado) recusa o ataque de OUTRO monstro, e a ilusão do jogador — `addCondition`
+  direto no Lua, sem o portão — nunca é barrada.
+- **Creature Illusion** (`creature-illusion-druid`/`-sorcerer`, `spellEffectSchema.kind:
+  'illusion'`): `words("utevo res ina")`, id 38, level 23, mana 100, cooldown 2 s e grupo `support`
+  2 s, `ticks` 180 000, druid/elder druid/sorcerer/master sorcerer — um arquivo por vocação, como
+  `invisibility-*`. O parâmetro (`hasParams(true)`) é o **`monsterId` da ação do slot**
+  (`botActionV2Schema`, o MESMO campo da invocação #598): `validateBotConfigV2` exige `monsterId`
+  numa magia `illusion` e confere contra `Monster.illusionable` (`MonsterType::isIllusionable`,
+  `flags.illusionable` do Lua — 285 monstros no Canary, 247 no catálogo gerado; o rato, o dragão,
+  o Dragon Lord e o hatchling ganham o campo por `data/monsters/overrides/`, porque o #581 os
+  gerou antes de ele existir; o rotworm é `false` no Canary). Sem `monsterId`, monstro inexistente ou
+  não ilusionável, o lançamento recusa `not-illusionable` (o `RETURNVALUE_NOTPOSSIBLE` do Lua)
+  ANTES de gastar mana ou iniciar cooldown — `castSpell` confere `illusionLook` antes do débito.
+  `PlayerFlag_CanIllusionAll` (o GM) não existe aqui. O efeito é a condição do PRÓPRIO lançador
+  (`outfitConditionOf`, `sim/conditions.ts`), sem o portão de imunidade.
+- **Chameleon Rune** (`chameleon-rune`, `supplySchema.effect.kind: 'chameleon'`): `runeId(3178)`,
+  level 27, magic level 4, preço 210 (`buy` uniforme em 26 NPCs do Canary), `cooldown` 2 s AO LADO
+  do `groupCooldown` 2 s, `ticks` 200 000, sem vocação. O alvo do Lua é um item MOVÍVEL do chão, de
+  um container ou do corpo; aqui é uma **instância que o personagem carrega** — mochila, bolsa OU
+  vestida, `Inventory.itemIdOf` —, mirada por `target: { instanceId }` em `use-slot`,
+  `use-item` ou `use-item-on` (`manualTargetSchema` ganhou a terceira forma; o servidor confere que
+  a instância existe e é dele — invariante 4). Sem item apontado, ou instância que ele não tem,
+  recusa `not-illusionable` antes do gold. O catálogo marca a runa com `targets: 'item'`, o clique no
+  slot arma a mira de ITEM (`aimTracker.startItemAim`) e o clique seguinte num item da mochila
+  manda o `use-slot`. **Não é automatizável**: um slot automático da runa, sem item, só recusa
+  (`no-target` do ponto de vista do bot — engatilha, nunca consome).
+- **Expira na fila (invariante 2) e a aparência mora na condição (invariante 3).** O vencimento é o
+  `condition-expire` de sempre (`#onConditionExpire`), que emite a volta à aparência própria; o
+  mesmo vale para `#dispelConditions` e para a MORTE do personagem (`#cancelConditions` — o monstro
+  que morre some da tela de qualquer jeito e não emite). A saída para outra sessão (#812) NÃO desfaz
+  a ilusão: a condição, com o `look`, segue o personagem, e a sessão que o recebe a rearma. O `ConditionState.look` é opcional no
+  snapshot (sem bump de `SNAPSHOT_FORMAT_VERSION`), a hunt retomada no meio da ilusão volta com a
+  aparência e as trocas seguintes caem nos mesmos instantes, e 1 Hz == 10 Hz == 20 Hz
+  (`outfit-condition.test.ts`).
+- **No fio e na tela.** O `sim` emite `creature-look-changed { creatureId, look | null }`
+  (`presence.ts`) — quem vestiu o quê, nunca um id de arte —, e o hospedeiro o resolve em
+  `creature-update { id, appearanceId, object?, colors?, addons? }` (S2C 51, broadcast como
+  `creature-health`). `object: true` separa o registro de OBJETO (`lookTypeEx`) do de outfit;
+  quando a condição acaba, o servidor manda a aparência PRÓPRIA (o cliente nunca guarda a
+  "original"), com as cores do ticket no caso do personagem e as cores e os addons do monstro
+  (#620) no caso dele — o outfit emprestado de um monstro leva os DELE, porque o Canary troca o
+  `Outfit_t` inteiro. `creature-appear` e `session-state`
+  passam pela mesma resolução (`HuntRuleset#lookOf` + `#lookFor`, no hospedeiro), então quem entra
+  na tela ou reanexa no meio da ilusão a vê vestida. Aparência sem linha na tabela é MUDA: a
+  condição vale no `sim`, e o cliente nunca é avisado de uma arte que a tabela não tem
+  (invariante 6). O cliente substitui a criatura no store (`creature-update` em `state/apply.ts`) e
+  o viewport desenha `creature.object` como o objeto — o quadro do tile, parado, sem direção —,
+  aquecendo a folha do objeto (`warmObjects`) em vez da do outfit. O `ActionConfigModal` oferece o
+  seletor de monstro (`catalogue.monsters[].illusionable`) para a Creature Illusion.
+- **O que o importador entrega** (`scripts/catalog/monster-abilities.ts#mapOutfit`; o nome saiu de
+  `PRESENTATION_ONLY`): 47 ataques e 27 defesas `outfit` em 36 monstros gerados, `outfitMonster` → `monsterId` pelo slug do nome, `outfitItem` → `objectKey` (slug do
+  nome no `items.xml`; a aparência — o próprio id do item — vai para `staging` como `objectLooks`
+  e a promoção a move para `appearances.looks`, nunca para a entidade), e a imunidade
+  (`CONDITION_IMMUNITY_MAP`, `outfit` → `outfit`). **O monstro imitado precisa existir**: a
+  condição o nomeia por id e o boot recusa id que não existe, então a entrada cujo alvo não foi
+  gerado/promovido SAI — só ela, nunca o monstro, porque a troca é visual — e a contagem vai para o
+  relatório (`stripUnknownOutfits`: 14 entradas no importador, e a promoção refaz a conta contra o
+  conjunto promovido). `docs/reference/catalog/monsters-report.md` e
+  `monsters-promotion-report.md` listam os números.
+- **Parâmetros** (todos em conteúdo, nenhum em código): `creature-illusion-*.json` e
+  `chameleon-rune.json` (prazo, mana, preço, level, cooldowns), `data/monsters/generated/*.json`
+  (`illusionable`, `conditionImmunities`, abilities/defenses `outfit` com `durationMs`, `chance`,
+  `cadenceMs`, `look`), `data/monsters/overrides/` (o `illusionable` das quatro entradas autorais),
+  `data/appearances/baseline.json` (`looks`, e as linhas de efeito das duas magias/runa).
+- **Divergências e o que fica de fora** (nenhuma é regra de caça — o outfit não entra em conta
+  nenhuma): (1) a **defesa `outfit` com área** (o Feverish Citizen, `radius = 3`, `target = false`)
+  atingiria quem está em volta, e o schema de defesa não tem área: a entrada é DESCARTADA com o
+  motivo, nunca a metade da mecânica; (2) as **cores** do outfit imitado (`lookHead`/… do monstro)
+  não viajam — o `creature-update` de um outfit de monstro vai sem `colors`, e o monstro de duas
+  camadas (um humano) sai na cor de reserva até a #620 levar as cores do monstro no protocolo;
+  (3) a Chameleon mira um item que o personagem CARREGA — o item do chão, o cadáver e o cenário
+  ficam fora (a hunt só tem cadáver e cenário usável, e o cliente não mira o chão); (4) sem
+  montaria (`Player::onAddCondition` desmonta, `player.cpp:6314`, e `Game::playerChangeOutfit`
+  recusa trocar de outfit sob `CONDITION_OUTFIT`) e sem tela de outfit, essas duas pontas do
+  Canary não têm o que fazer; (5) o monstro do Canary cujo PRÓPRIO outfit é um item
+  (`lookTypeEx`, 87 arquivos) continua bloqueado no importador (`aparência por item`), como
+  antes — só o disfarce por `outfitItem` entrou; (6) a
+  apresentação de quem vê: o Canary manda `sendCreatureChangeOutfit` a todo espectador, e o
+  `creature-update` é broadcast para os viewers da sessão, o mesmo alcance de `creature-health`.
 
 ## O Dragon e o Dragon Lord (#520): a primeira ability wave/circle/defesa/fuga de verdade
 
@@ -3501,6 +3684,124 @@ O contrato do ADR 0031 virou executável em dois lugares, e os dois são complem
 
 O método, a máquina da medição e a interpretação da linha de base estão em
 [`combat-conformance.md`](./combat-conformance.md).
+
+## Apresentação do monstro: cores e addons, falas, luz e raça (#620, M44-02)
+
+O Canary declara, por monstro, o que o veste e o que o acompanha além do desenho: as cores e os
+addons do outfit (`monster.outfit.lookHead/lookBody/lookLegs/lookFeet/lookAddons`), as falas
+periódicas (`monster.voices`), a luz (`monster.light`) e a raça (`monster.race`). **Nada disso
+entra em combate** — o `sim` não lê nenhum dos quatro, e nenhum deles muda dano, alvo ou loot. É
+só o que o cliente desenha, e por isso cabe inteiro na regra de sempre: **índices e ids, nunca arte**
+(invariante 6; o id do desenho, `lookType`, continua sendo o `outfitId` da tabela de aparências) e
+**o resultado da hunt não depende de haver alguém olhando** (invariante 3).
+
+### O que vem do Canary, e onde mora no conteúdo
+
+O importador de monstros (`scripts/catalog/monsters.ts`, `pnpm catalog:import monsters`) lê os
+quatro e os escreve no monstro, **só quando diferem do default** — o monstro comum não ganha linha
+nenhuma. `pnpm catalog:promote-monsters` os leva para `data/monsters/generated/<fatia>.json`;
+As cinco entradas hand-authored (`HAND_AUTHORED_MONSTER_IDS`: Rat, Rotworm, Dragon, Dragon Lord e
+Dragon Lord Hatchling) continuam hand-authored, mas a apresentação delas é renovada a cada promoção (`withPresentation`) — a regra do #581 protege os
+números de combate, não a fala do rato.
+
+| Campo de `monsterSchema` | Canary | Default (ausente) | Faixa |
+|---|---|---|---|
+| `outfit` `{ head, body, legs, feet, addons }` | `outfit.lookHead/Body/Legs/Feet/lookAddons` | tudo 0, sem addon (o `Outfit_t` zerado) | cor 0–132 (a paleta de 133 cores do outfit); addons é a máscara do Tibia, 0–3 |
+| `voices` `{ intervalMs, chance, lines[{ text, yell }] }` | `voices.interval/chance` + uma tabela posicional por linha (`register_monster_type.lua`, `registerMonsterType.voices`) | mudo | `chance` inteiro 1–100 (a escala do Lua) |
+| `light` `{ level, color }` | `light.level/color` (`registerMonsterType.light`) | sem luz | `level` 1–255 (alcance em tiles; os 59 monstros gerados vão de 1 a 6, e o Canary tem um de 10, o Lava Golem, fora do corte), `color` 0–215 (paleta de 216 cores) |
+| `race` | `monster.race` (`RaceType_t`) | `blood` (`RACE_BLOOD`, `monsters.hpp`) | `venom`, `blood`, `undead`, `fire`, `energy`, `ink`, `chocolate`, `candy` |
+
+No conteúdo de hoje (1040 monstros gerados): **239** com cores/addons de outfit (113 deles com
+addon), **568** com falas (todas com intervalo de 5000 ms e chance 10; 1618 linhas, 170 gritos),
+**59** com luz (níveis 1–6) e **412** com raça diferente de `blood` — `undead` 232, `venom` 127,
+`fire` 42, `ink` 9, `candy` 1, `chocolate` 1. O resto é `blood`, o default. As contagens por
+importação saem em `docs/reference/catalog/monsters-report.md`.
+
+**A montaria (`lookMount`) não entra.** Só UM monstro do Canary declara uma — `mounted-thorn-knight`,
+fora do corte de caça (não é gerado) —, então o schema não tem o campo `mount`: não haveria
+ninguém para usá-lo. O importador a lê e a conta no relatório; se um monstro montado entrar no
+corte, é este o lugar de acrescentá-la.
+
+### O caminho até a tela
+
+- **Protocolo.** `creature-appear` e a criatura do `session-state` (o MESMO schema) ganharam os
+  opcionais `addons`, `race`, `light` e `voices`, e `colors` passou a valer também para o monstro:
+  o servidor manda as cores do conteúdo — o neutro 0/0/0/0 incluído, senão o cliente pintaria o
+  monstro com as de personagem novo. Todos opcionais pela regra de sempre (um nó `game` anterior
+  manda sem eles), e a ausência é o neutro: sem addon, `blood`, sem luz, mudo.
+  `addons`, `race`, `light` e `voices` saem só quando diferem do default, para a mensagem do
+  monstro comum não crescer. O host os monta em `packages/server/src/game/monster-look.ts`, pela
+  definição do catálogo **fixado na sessão** (invariante 7) — é a mesma fonte do nome.
+- **Cores e addons.** O cliente já pintava o outfit de duas camadas por template (FUN-104); o
+  monstro agora chega com as cores dele. Os **addons** são as linhas 1 e 2 do padrão do outfit
+  (`patternHeight` 3): cada um é pintado com as MESMAS quatro cores e composto por cima do base,
+  em ordem, num bitmap só (`OutfitComposer`, `compositeOver`). O bit de uma linha que o outfit não
+  tem (`patternHeight` menor), ou um outfit de uma camada só, fica sem o addon — o desenho base
+  aparece, e o monstro não some.
+- **A cor do número e o efeito do golpe físico seguem a raça** (`Game::combatGetTypeInfo`,
+  `game.cpp`). O **efeito** (`creature-hit` FÍSICO → `effect`, de corpo a corpo ou de magia: o gatilho é o elemento do golpe, e não a origem, como o `Game::sendEffects`) sai da tabela
+  `appearances.hits.byRace`: sangue (1) para `blood` e `fire`, `CONST_ME_HITBYPOISON` (17) para
+  `venom`, `CONST_ME_HITAREA` (10) para `undead` e `ink`, `CONST_ME_ENERGYHIT` (12) para `energy`,
+  `CONST_ME_CACAO` (270) para `chocolate` e `CONST_ME_SIRUP` (269) para `candy`; a raça sem linha cai
+  em `hits.melee`, e sem nenhum dos dois o golpe não tem efeito (`CONST_ME_NONE`). O host guarda a
+  raça de cada monstro que não é `blood` até o `creature-disappear`, e não a consulta no `sim` na
+  hora do golpe: o abate TIRA o monstro do ruleset antes de o golpe que o matou ser apresentado.
+  A **cor do número** é `TextColor_t` do Canary na paleta de 216 cores: `blood` vermelho (180),
+  `venom` verde (30), `undead`/`ink`/`chocolate` cinza (129), `candy` vermelho-escuro (108), `fire`
+  laranja (198), `energy` roxo (154) — só para o golpe `physical`; o elemento tem a cor dele e a
+  cura continua verde. O cliente fotografa a raça do alvo quando o golpe chega (o golpe fatal chega
+  no mesmo lote do `creature-disappear`), e raças diferentes no mesmo tile não se somam.
+- **Luz.** O viewport da hunt não escurece o andar (só tinge a caverna, `ambience: 'cavern'`), então
+  a luz do monstro é um **clarão aditivo**: um disco suave da cor do Canary, com `level` tiles de
+  alcance (teto de 12), centrado no tile dele e que anda junto — `world/creature-light.ts`,
+  `paintLight` no viewport. É a mesma informação (quanto e de que cor) que o escurecimento do
+  explorador do mundo (#666) usa. Não há escurecimento de ambiente na hunt, e isto não o cria.
+- **Fala.** `Monster::onThinkYell` acumula um relógio por monstro (`yellTicks`) até `interval`,
+  zera, rola `chance >= uniform_random(1, 100)` e diz UMA linha sorteada por igual. O **cliente**
+  faz tudo isso (`world/speech.ts`, `rollCreatureSpeech` no viewport): o relógio nasce quando o
+  monstro é visto, a rolagem é uma por intervalo (um quadro atrasado rola uma vez, não uma por
+  intervalo perdido — o `yellTicks = 0` do Canary) e o sorteio é o `random` do cliente, **nunca o
+  `Rng` da sessão** nem o servidor. O relógio roda para toda criatura da lista, desenhada ou não —
+  o do Canary não depende de quem olha.
+  **Dois portões, como no Canary.** (1) **O relógio só anda com o monstro acordado:**
+  `Monster::onThink_async` devolve no topo quando `isIdle` (`monster.cpp:1709`) e o `onThinkYell`
+  só é alcançado depois (`monster.cpp:1747`) — o monstro parado no spawn, sem ninguém à vista, não
+  acumula `yellTicks` nem fala; acordar não zera o relógio, só o deixa andar de novo. Em hunt todo
+  monstro vai ao cliente (não há interesse gerenciado), então o "acordado" é calculado ali, com o
+  herói de quem olha: ele está no quadrado de **11 tiles** que o monstro enxerga
+  (`Creature::canSee`, `canSeePoint` no `sim`; `monsterAwake`), com as regras de andar do Canary.
+  (2) **A fala só chega a quem está perto:** `Game::internalCreatureSay` (`game.cpp:7634-7637`)
+  manda o `say` aos jogadores a até **8 colunas e 6 linhas** do monstro, no mesmo andar
+  (`MAP_MAX_CLIENT_VIEW_PORT_X`/`_Y`), e o `yell` a **18 × 14** (`(8+1)*2` × `(6+1)*2`), em vários
+  andares (`speechHeard`). Fora do alcance a rolagem acontece e gasta o sorteio, e ninguém vê o
+  texto — como o monstro que grita para ninguém. O texto aparece em laranja sobre o nome por
+  `2500 ms + 50 ms por caractere`: os dois números e a cor (o índice 198 da paleta de 216 cores)
+  são **escolha do cliente**, e não valor do Canary — o servidor manda só o tipo de fala
+  (`TALKTYPE_MONSTER_SAY` 36 / `_YELL` 37), a posição e o texto (`ProtocolGame::sendCreatureSay`),
+  e a cor sai do cliente do Tibia a partir do tipo. O grito se desenha como a fala; o que o
+  distingue é o alcance, acima.
+
+### Invariantes
+
+- O `sim` não importa nem lê nada disto: `monster-look.ts` vive no `server`, e o que o cliente
+  sorteia (a fala) não tem caminho de volta — não existe mensagem C2S que carregue fala, luz ou cor.
+- A hunt rende o mesmo com ou sem visualizador, a 1 Hz ou a 20 Hz: nenhum evento novo entrou na
+  fila, nenhum sorteio novo saiu do `Rng` da sessão, e os testes de frequência/retomada do `sim`
+  não mudaram.
+
+### Divergências do Tibia (todas de apresentação, nenhuma regra de caça)
+
+- Sem escurecimento de ambiente na hunt: a luz é um clarão aditivo (acima).
+- O splash de sangue no chão (`ITEM_SMALLSPLASH`, `FLUID_*`) que o Canary põe sob o alvo não é
+  modelado: é item de chão decorativo, e o efeito do golpe (acima) cobre o que o jogador lê.
+- **O monstro ocioso é aproximado no cliente** (a fala, acima): o protocolo não carrega o estado
+  `idle` do `sim`, e mandá-lo seria um evento novo só para uma fala. O monstro está "acordado"
+  quando o herói de quem olha está no quadrado de 11 tiles dele. O Canary diz outra coisa só em
+  dois casos: o monstro fora do spawn ou com condição ativa NÃO fica ocioso mesmo sem alvo (e
+  fala), e um alvo que seja outro membro da party o acorda para quem está longe. Como o `say` só
+  chega a 8 × 6 tiles, dentro dos 11, o que se perde é o grito de quem está entre 12 e 18 tiles
+  do herói nesses dois casos.
+- Sem montaria (acima).
 
 ## O que o jogador vê (FUN-106, FUN-109)
 
@@ -3691,7 +3992,7 @@ do Sorcerer, 17 estágios de dano DECRESCENTE) ficou de fora: a forma não é um
 curva —, e `damage-over-time` não a modela; reportada, não aproximada (ver `EXCLUDED_SPELLS` em
 `load.test.ts`).
 
-**Ficam de fora, por nome** (ADR 0026 decisão 5): Light, Great Light, Ultimate Light, Find Person, Find Fiend, Magic Rope, Levitate, Invisible, Cancel Invisibility, Creature Illusion (utilidade); Cure Poison, Cure Bleeding, Cure Curse, Cure Electrification, Cure Burning (condição); Curse (dano ao longo do tempo, forma não reconhecida — ver acima); Shield Bash, Shield Slam (defesa de escudo); Train Party, Protect Party, Enchant Party, Heal Party, Shared Conservation (party); Elemental Synthesis, Master of Decay/Flames/Thunder (elemento); Arrow Call, Conjure Arrow, Conjure Explosive Arrow, Enchant Spear, Conjure Wand of Darkness, Food (conjuração); Summon Creature (convocação); e o que só existe no Wheel of Destiny do Canary moderno — Divine Grenade, Executioner's Throw, Ice Burst, Terra Burst, Fair Wound Cleansing, Great Death Beam (level 300 + grade, não modelado). O Sorcerer não tem Light Healing nem Intense Healing no TibiaWiki de 2026 — a cura dele é Magic Patch e Ultimate Healing. Challenge/Chivalrous Challenge (#589) e Cancel Magic Shield (#596) SAÍRAM desta lista — estão implementadas, acima. As três magias genéricas pré-vocação (`heal`, `strike`, `blast`) e as quatro sem fonte no Canary (`divine-defiance`, `divine-barrage`, `ethereal-barrage`, `forked-thorns`) saíram do CATÁLOGO no #596 — o Tibia não dá magia nenhuma antes da escolha de vocação, e não havia "fórmula do Canary" para nenhuma das sete; Cure Poison é a única magia que segue sem `vocationId`.
+**Ficam de fora, por nome** (ADR 0026 decisão 5): Light, Great Light, Ultimate Light, Find Person, Find Fiend, Magic Rope, Levitate, Invisible, Cancel Invisibility (utilidade); Cure Poison, Cure Bleeding, Cure Curse, Cure Electrification, Cure Burning (condição); Curse (dano ao longo do tempo, forma não reconhecida — ver acima); Shield Bash, Shield Slam (defesa de escudo); Train Party, Protect Party, Enchant Party, Heal Party, Shared Conservation (party); Elemental Synthesis, Master of Decay/Flames/Thunder (elemento); Arrow Call, Conjure Arrow, Conjure Explosive Arrow, Enchant Spear, Conjure Wand of Darkness, Food (conjuração); Summon Creature (convocação); e o que só existe no Wheel of Destiny do Canary moderno — Divine Grenade, Executioner's Throw, Ice Burst, Terra Burst, Fair Wound Cleansing, Great Death Beam (level 300 + grade, não modelado). O Sorcerer não tem Light Healing nem Intense Healing no TibiaWiki de 2026 — a cura dele é Magic Patch e Ultimate Healing. Challenge/Chivalrous Challenge (#589), Cancel Magic Shield (#596) e Creature Illusion (#621, seção "Condição de outfit") SAÍRAM desta lista — estão implementadas. As três magias genéricas pré-vocação (`heal`, `strike`, `blast`) e as quatro sem fonte no Canary (`divine-defiance`, `divine-barrage`, `ethereal-barrage`, `forked-thorns`) saíram do CATÁLOGO no #596 — o Tibia não dá magia nenhuma antes da escolha de vocação, e não havia "fórmula do Canary" para nenhuma das sete; Cure Poison é a única magia que segue sem `vocationId`.
 
 ## Em aberto
 

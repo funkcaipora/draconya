@@ -11,7 +11,8 @@
 //     `packages/content/data/items/generated/*.json` já usa (ADR 0038 decisão 2);
 //   - `bestiary` vira uma linha em `packages/content/data/bestiary/baseline.json` (`entries`);
 //   - `outfitId` vira uma linha em `packages/content/data/appearances/baseline.json`
-//     (`monsters`).
+//     (`monsters`); `objectLooks` (#621, o `appearanceId` de cada `outfitItem`) vira as linhas de
+//     `looks` do mesmo arquivo — a condição `outfit` só carrega a chave.
 //
 // Loot é validado contra o catálogo de itens REAL — `packages/content/data/items`, o que
 // `loadContent` de fato carrega hoje. Desde a promoção de itens (#748, `promote-items.ts`) isso
@@ -21,13 +22,20 @@
 // `packages/content/src/load.ts` para qualquer `data/<tipo>/`. Uma linha de `loot.items` cujo
 // `itemId` não existe nesse catálogo, ou que pede `max > 1` de um item que não empilha
 // (`rollModel: "canary"`, a mesma regra de `content.ts`), é removida e contada no relatório —
-// nunca falha o boot em silêncio. Rat, Rotworm, Dragon e Dragon Lord nunca são promovidos POR
-// ESTE SCRIPT — o #581 é quem os regenerou, uma única vez, direto em `generated/<fatia>.json`
-// (Rat em `mammals.json`, Rotworm em `vermins.json`, Dragon e Dragon Lord em `dragons.json`),
+// nunca falha o boot em silêncio. Rat, Rotworm, Dragon, Dragon Lord e Dragon Lord Hatchling nunca
+// são promovidos POR ESTE SCRIPT — o #581 é quem os regenerou, uma única vez, direto em
+// `generated/<fatia>.json` (Rat em `mammals.json`, Rotworm em `vermins.json`, os três dragões em
+// `dragons.json`),
 // com override próprio (`data/monsters/overrides/`) para o que o Draconya ainda precisa manter
 // diferente do Canary puro (`blockable`, até o #582+/M36-05 converter as duas hunts). Rodar este
-// script de novo NUNCA sobrescreve essas quatro entradas — `preserveHandAuthored` as reconduz de
+// script de novo NUNCA sobrescreve essas cinco entradas — `preserveHandAuthored` as reconduz de
 // volta à fatia a cada escrita, e `--check` as trata como parte do "em dia" pela mesma função.
+//
+// **A apresentação das cinco é a exceção (#620).** `outfit` (cores e addons), `voices`, `light` e
+// `race` são dado do Canary sem nenhuma decisão de balanceamento em cima — o Rat fala "Meep!" e o
+// Dragon grita como no Tibia, e ninguém os editou à mão. `preserveHandAuthored` reconduz a entidade
+// commitada e SOBREPÕE esses quatro campos com o que o `staging/` diz hoje (`PRESENTATION_FIELDS`),
+// sem tocar em mais nada: o resto do monstro continua sendo o ato deliberado do #581.
 //
 // Determinístico e SEM depender de `CANARY_DIR`: a entrada é o que já está commitado em
 // `staging/monsters/generated/` e `data/items/`, então rodar duas vezes no mesmo commit produz
@@ -42,6 +50,7 @@ import { repoRootFrom } from './env.js';
 import {
   formatGeneratedSlice, listGeneratedSlices, writeGeneratedSlice, type CatalogEntity,
 } from './generated-writer.js';
+import { stripUnknownOutfits } from './monster-abilities.js';
 
 /** Rat, Rotworm, Dragon e Dragon Lord — regenerados só pelo #581, nunca por esta promoção. Desde
  *  o #581 eles JÁ VIVEM em `generated/<fatia>.json` (`preserveHandAuthored` os mantém lá); este
@@ -53,6 +62,13 @@ import {
 export const HAND_AUTHORED_MONSTER_IDS: ReadonlySet<string> = new Set([
   'rat', 'rotworm', 'dragon', 'dragon-lord', 'dragon-lord-hatchling',
 ]);
+
+/**
+ * Os campos de APRESENTAÇÃO do monstro (#620): dado do Canary que nenhuma decisão do Draconya
+ * reescreve. É o que `preserveHandAuthored` renova nas cinco entidades hand-authored a cada
+ * promoção — todo o resto delas continua sendo só do #581.
+ */
+export const PRESENTATION_FIELDS: readonly string[] = ['outfit', 'voices', 'light', 'race'];
 
 export interface ItemCatalogEntry {
   readonly stackable: boolean;
@@ -76,8 +92,14 @@ export interface PromotionResult {
   readonly slices: ReadonlyMap<string, CatalogEntity[]>;
   readonly bestiaryEntries: ReadonlyMap<string, Record<string, unknown>>;
   readonly appearanceEntries: ReadonlyMap<string, number>;
+  /** `chave de objeto → appearanceId` (#621): as linhas de `appearances.looks`. */
+  readonly lookEntries: ReadonlyMap<string, number>;
+  /** Monstro → quantas entradas `outfit` saíram porque o monstro imitado não foi promovido (#621). */
+  readonly strippedOutfits: ReadonlyMap<string, number>;
   readonly skipped: readonly SkippedPromotion[];
   readonly droppedLootLines: readonly DroppedLootLine[];
+  /** A apresentação que o `staging/` traz para cada id de `HAND_AUTHORED_MONSTER_IDS` (#620). */
+  readonly handAuthoredLook: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
 }
 
 /** Lê `id`/`stackable` de todo `*.json` direto de `dir`, mais `generated/` e `overrides/`
@@ -219,8 +241,10 @@ export function computePromotion(repoRoot: string): PromotionResult {
   const slices = new Map<string, CatalogEntity[]>();
   const bestiaryEntries = new Map<string, Record<string, unknown>>();
   const appearanceEntries = new Map<string, number>();
+  const lookEntries = new Map<string, number>();
   const skipped: SkippedPromotion[] = [];
   const droppedLootLines: DroppedLootLine[] = [];
+  const handAuthoredLook = new Map<string, Record<string, unknown>>();
 
   const sliceNames = existsSync(stagingDir)
     ? readdirSync(stagingDir).filter((n) => n.endsWith('.json')).sort()
@@ -234,7 +258,12 @@ export function computePromotion(repoRoot: string): PromotionResult {
       const id = entity['id'];
       if (typeof id !== 'string') continue;
       if (HAND_AUTHORED_MONSTER_IDS.has(id)) {
-        skipped.push({ id, reason: 'hand-authored — regenerado só pelo #581, nunca por esta promoção' });
+        skipped.push({ id, reason: 'hand-authored — regenerado só pelo #581, nunca por esta promoção (a apresentação, #620, é renovada)' });
+        const look: Record<string, unknown> = {};
+        for (const field of PRESENTATION_FIELDS) {
+          if (entity[field] !== undefined) look[field] = entity[field];
+        }
+        handAuthoredLook.set(id, look);
         continue;
       }
       if (hasDuplicateSummonTarget(entity)) {
@@ -244,8 +273,15 @@ export function computePromotion(repoRoot: string): PromotionResult {
         });
         continue;
       }
-      const { bestiary, outfitId, ...monster } = entity;
+      const { bestiary, outfitId, objectLooks, ...monster } = entity;
       if (typeof outfitId === 'number') appearanceEntries.set(id, outfitId);
+      for (const [key, appearanceId] of Object.entries((objectLooks ?? {}) as Record<string, number>)) {
+        const existing = lookEntries.get(key);
+        if (existing !== undefined && existing !== appearanceId) {
+          throw new Error(`appearances.looks "${key}": dois monstros pedem ids diferentes (${String(existing)} e ${String(appearanceId)})`);
+        }
+        lookEntries.set(key, appearanceId);
+      }
       if (bestiary !== undefined && typeof bestiary === 'object') {
         bestiaryEntries.set(id, bestiary as Record<string, unknown>);
       }
@@ -255,8 +291,24 @@ export function computePromotion(repoRoot: string): PromotionResult {
     slices.set(slice, promoted);
   }
 
+  // O `outfit` de monstro nomeia o monstro imitado por id, e o boot recusa id que não existe
+  // (#621): o conjunto que existe DEPOIS da promoção é o promovido mais os quatro autorais (que já
+  // moram em `generated/` e nunca saem daqui). A entrada cujo alvo ficou de fora sai — só ela, e a
+  // contagem vai para o relatório —, porque a troca é puramente visual.
+  const known = new Set<string>(HAND_AUTHORED_MONSTER_IDS);
+  for (const entities of slices.values()) for (const entity of entities) known.add(entity.id);
+  const strippedOutfits = new Map<string, number>();
+  for (const entities of slices.values()) {
+    for (const entity of entities) {
+      const record = entity as unknown as Record<string, unknown>;
+      const removed = stripUnknownOutfits(record, known);
+      if (removed > 0) strippedOutfits.set(entity.id, removed);
+    }
+  }
+
   return {
-    slices, bestiaryEntries, appearanceEntries, skipped, droppedLootLines,
+    slices, bestiaryEntries, appearanceEntries, lookEntries, strippedOutfits, skipped, droppedLootLines,
+    handAuthoredLook,
   };
 }
 
@@ -314,6 +366,25 @@ function formatReport(repoRoot: string, result: PromotionResult): string {
   }
   lines.push(
     '',
+    `## Entradas \`outfit\` removidas (${[...result.strippedOutfits.values()].reduce((sum, n) => sum + n, 0)})`,
+    '',
+  );
+  if (result.strippedOutfits.size === 0) {
+    lines.push('Nenhuma — todo monstro imitado por um `outfit` foi promovido.');
+  } else {
+    lines.push(
+      'Ataque/defesa `outfit` cujo monstro imitado não foi promovido (#621): a condição o nomeia por id, '
+        + 'e o boot recusa id que não existe. Sai só a entrada — a troca é puramente visual.',
+      '',
+      '| monstro | entradas removidas |',
+      '|---|---|',
+    );
+    for (const [id, count] of [...result.strippedOutfits.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      lines.push(`| ${id} | ${count} |`);
+    }
+  }
+  lines.push(
+    '',
     `## Linhas de loot removidas (${result.droppedLootLines.length})`,
     '',
     'Item referenciado por `loot.items` que não existe no catálogo real, ou que excede a pilha '
@@ -354,9 +425,38 @@ function formatReport(repoRoot: string, result: PromotionResult): string {
  * (ver `computePromotion`), então a união abaixo nunca duplica: é sempre fresh + o que já está
  * no disco para esses ids, e mais nada.
  */
-function preserveHandAuthored(fresh: readonly CatalogEntity[], onDisk: readonly CatalogEntity[]): CatalogEntity[] {
-  const preserved = onDisk.filter((entity) => HAND_AUTHORED_MONSTER_IDS.has(entity.id));
+function preserveHandAuthored(
+  fresh: readonly CatalogEntity[], onDisk: readonly CatalogEntity[],
+  look: ReadonlyMap<string, Readonly<Record<string, unknown>>>,
+): CatalogEntity[] {
+  const preserved = onDisk
+    .filter((entity) => HAND_AUTHORED_MONSTER_IDS.has(entity.id))
+    .map((entity) => withPresentation(entity, look.get(entity.id) ?? {}));
   return [...fresh, ...preserved];
+}
+
+/**
+ * A entidade hand-authored com a apresentação do `staging/` no lugar da que estava (#620): os
+ * campos de `PRESENTATION_FIELDS` saem e voltam antes de `source` — a mesma posição em que o
+ * importador os escreve —, e nada mais muda. Sem `source`, vão para o fim.
+ */
+function withPresentation(entity: CatalogEntity, look: Readonly<Record<string, unknown>>): CatalogEntity {
+  const out: Record<string, unknown> = {};
+  let placed = false;
+  const place = (): void => {
+    if (placed) return;
+    placed = true;
+    for (const field of PRESENTATION_FIELDS) {
+      if (look[field] !== undefined) out[field] = look[field];
+    }
+  };
+  for (const [key, value] of Object.entries(entity)) {
+    if (PRESENTATION_FIELDS.includes(key)) continue;
+    if (key === 'source') place();
+    out[key] = value;
+  }
+  place();
+  return out as unknown as CatalogEntity;
 }
 
 /** Escreve a promoção inteira em disco: `data/monsters/generated/`, os dois `baseline.json` e o
@@ -370,7 +470,10 @@ export function writePromotion(repoRoot: string): PromotionResult {
   const committedBefore = listGeneratedSlices(monstersGeneratedDir);
   for (const [slice, entities] of result.slices) {
     const onDisk = committedBefore.get(slice) ?? [];
-    writeGeneratedSlice(join(monstersGeneratedDir, `${slice}.json`), preserveHandAuthored(entities, onDisk));
+    writeGeneratedSlice(
+      join(monstersGeneratedDir, `${slice}.json`),
+      preserveHandAuthored(entities, onDisk, result.handAuthoredLook),
+    );
   }
   mergeJsonMap(
     join(repoRoot, 'packages/content/data/bestiary/baseline.json'),
@@ -381,6 +484,11 @@ export function writePromotion(repoRoot: string): PromotionResult {
     join(repoRoot, 'packages/content/data/appearances/baseline.json'),
     'monsters',
     result.appearanceEntries,
+  );
+  mergeJsonMap(
+    join(repoRoot, 'packages/content/data/appearances/baseline.json'),
+    'looks',
+    result.lookEntries,
   );
   const reportPath = join(repoRoot, 'docs/reference/catalog/monsters-promotion-report.md');
   mkdirSync(join(reportPath, '..'), { recursive: true });
@@ -417,7 +525,7 @@ export function checkPromotion(repoRoot: string): CheckOutcome[] {
       outcomes.push({ slice, status: 'stale', detail: `generated/${slice}.json não existe — rode pnpm catalog:promote-monsters` });
       continue;
     }
-    const expected = preserveHandAuthored(fresh, onDisk);
+    const expected = preserveHandAuthored(fresh, onDisk, result.handAuthoredLook);
     outcomes.push(formatGeneratedSlice(expected) === formatGeneratedSlice(onDisk)
       ? { slice, status: 'fresh' }
       : { slice, status: 'stale', detail: 'a fatia recomputada difere da versionada' });

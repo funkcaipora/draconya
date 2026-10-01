@@ -215,6 +215,12 @@ describe('ActionBar — clique dispara, clique direito configura, mira (ADR 0049
     expect(source).toContain('aimTracker.startAim(activeSet, index)');
   });
 
+  it('um slot `aimsAtItem` (Chameleon Rune, #621) arma a mira de ITEM em vez de disparar sem alvo', async () => {
+    const source = await readFile(new URL('./ActionBar.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('view.aimsAtItem');
+    expect(source).toContain('aimTracker.startItemAim(activeSet, index)');
+  });
+
   it('o clique direito (qualquer slot) abre o ActionConfigModal e não deixa o menu nativo abrir', async () => {
     const source = await readFile(new URL('./ActionBar.tsx', import.meta.url), 'utf8');
     // Duas ocorrências: o slot vazio e o preenchido — os dois ganham `onContextMenu`.

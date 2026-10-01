@@ -71,6 +71,11 @@ export function packProblems(appearances: Appearances, pack: Pack): string[] {
   for (const [id, object] of Object.entries(appearances.corpses)) {
     check(`corpses.${id}`, 'object', object);
   }
+  // A aparência de objeto da condição `outfit` (#621): o mesmo quadrado invisível, agora no
+  // monstro inteiro enquanto a ilusão durar.
+  for (const [id, object] of Object.entries(appearances.looks)) {
+    check(`looks.${id}`, 'object', object);
+  }
   // O campo de tile (#561, M31-06): fogo/veneno/energia com id fora do pacote é o mesmo
   // quadrado invisível, agora no chão da hunt inteira.
   for (const [id, object] of Object.entries(appearances.fields)) {
@@ -105,8 +110,11 @@ export function packProblems(appearances: Appearances, pack: Pack): string[] {
     // fora do pacote é o mesmo quadrado invisível, agora a cada lançamento.
     check(`supplies.${id}.missile`, 'missile', supply.missile);
   }
-  for (const [id, effect] of Object.entries(appearances.hits)) {
-    check(`hits.${id}`, 'effect', effect);
+  check('hits.melee', 'effect', appearances.hits.melee);
+  // O efeito do golpe físico por raça (#620): cada linha é um id de arte, e um fora do pacote é o
+  // mesmo quadrado invisível, agora a cada golpe.
+  for (const [race, effect] of Object.entries(appearances.hits.byRace ?? {})) {
+    check(`hits.byRace.${race}`, 'effect', effect);
   }
   // As abilities de monstro (CMB-06, #242). As CHAVES são vocabulário semântico e não têm
   // entidade de conteúdo para cruzar — mas os ids que cada linha resolve SÃO de arte, e um

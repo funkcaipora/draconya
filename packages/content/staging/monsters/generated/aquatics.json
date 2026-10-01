@@ -28,6 +28,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 280,
     "aggroRadius": 11,
@@ -140,6 +141,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 160,
     "aggroRadius": 11,
@@ -260,6 +262,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 160,
     "aggroRadius": 11,
@@ -291,6 +294,21 @@
     "staticAttack": 0.95,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Bubble!",
+          "yell": false
+        },
+        {
+          "text": "Bobble!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -343,6 +361,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 144,
     "aggroRadius": 11,
@@ -397,6 +416,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -522,6 +542,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Chrchrchr",
+          "yell": false
+        },
+        {
+          "text": "Klonklonk",
+          "yell": false
+        },
+        {
+          "text": "Chrrrrr",
+          "yell": false
+        },
+        {
+          "text": "Crunch crunch",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -757,6 +799,20 @@
       "deepling"
     ],
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "VBOX°O",
+          "yell": false
+        },
+        {
+          "text": "O(J-\"LJ-T =|-°",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -1004,6 +1060,20 @@
       "deepling"
     ],
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "BOQOL\"°",
+          "yell": false
+        },
+        {
+          "text": "QOL\" VBOXCL°",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -1151,6 +1221,16 @@
       "deathling"
     ],
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "?",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -1565,6 +1645,16 @@
       "deathling"
     ],
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "QJELL NETA NA!!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1724,6 +1814,28 @@
       "deathling"
     ],
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Njaaarh!!",
+          "yell": false
+        },
+        {
+          "text": "Begjone, intrjuder!!",
+          "yell": false
+        },
+        {
+          "text": "Djon't djare stjare injo the eyes of the djeep!",
+          "yell": false
+        },
+        {
+          "text": "Ljeave this sjacred pljace while you cjan",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1939,6 +2051,16 @@
       "deathling"
     ],
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "QJELL NETA NA!!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -2136,6 +2258,16 @@
       "deathling"
     ],
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Jou wjil ajll djie!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2269,6 +2401,16 @@
       "deathling"
     ],
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Qjell afar gou jey!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -2322,6 +2464,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 380,
     "aggroRadius": 11,
@@ -2440,6 +2583,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 180,
     "aggroRadius": 11,
@@ -2463,6 +2607,21 @@
     "runOnHealth": 25,
     "staticAttack": 0.95,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Blib!",
+          "yell": false
+        },
+        {
+          "text": "Blub!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "convinceable": true,
     "manaCost": 305,
     "source": {
@@ -2514,6 +2673,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 170,
     "aggroRadius": 11,
@@ -2575,6 +2735,21 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 430000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Luuurrrp!",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 5,
+      "color": 65
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2631,6 +2806,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 200,
     "aggroRadius": 11,
@@ -2732,6 +2908,16 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Flap flap flap!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -2784,6 +2970,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 210,
     "aggroRadius": 11,
@@ -2807,6 +2994,7 @@
     "runOnHealth": 95,
     "staticAttack": 0.95,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "race": "undead",
     "convinceable": true,
     "manaCost": 315,
     "source": {
@@ -2859,6 +3047,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 150,
     "aggroRadius": 11,
@@ -2954,6 +3143,32 @@
     "runOnHealth": 45,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Tssss!",
+          "yell": false
+        },
+        {
+          "text": "Gaaahhh!",
+          "yell": false
+        },
+        {
+          "text": "Gluh! Gluh!",
+          "yell": false
+        },
+        {
+          "text": "Boohaa!",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 2,
+      "color": 35
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3251,6 +3466,40 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Qua hah tsh!",
+          "yell": false
+        },
+        {
+          "text": "Teech tsha tshul!",
+          "yell": false
+        },
+        {
+          "text": "Quara tsha Fach!",
+          "yell": false
+        },
+        {
+          "text": "Tssssha Quara!",
+          "yell": false
+        },
+        {
+          "text": "Blubber.",
+          "yell": false
+        },
+        {
+          "text": "Blup.",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 2,
+      "color": 35
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3552,6 +3801,41 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Qua hah tsh!",
+          "yell": false
+        },
+        {
+          "text": "Teech tsha tshul!",
+          "yell": false
+        },
+        {
+          "text": "Quara tsha Fach!",
+          "yell": false
+        },
+        {
+          "text": "Tssssha Quara!",
+          "yell": false
+        },
+        {
+          "text": "Blubber.",
+          "yell": false
+        },
+        {
+          "text": "Blup.",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 2,
+      "color": 35
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3726,6 +4010,24 @@
     "runOnHealth": 40,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Shrrrr",
+          "yell": false
+        },
+        {
+          "text": "Zuerk Pachak!",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 2,
+      "color": 35
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3855,6 +4157,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Shrrrr",
+          "yell": false
+        },
+        {
+          "text": "Zuerk Pachak!",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 2,
+      "color": 35
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4026,6 +4346,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Clank! Clank!",
+          "yell": false
+        },
+        {
+          "text": "Clap!",
+          "yell": false
+        },
+        {
+          "text": "Crrrk! Crrrk!",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 2,
+      "color": 35
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4175,6 +4517,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Clank! Clank!",
+          "yell": false
+        },
+        {
+          "text": "Clap!",
+          "yell": false
+        },
+        {
+          "text": "Crrrk! Crrrk!",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 2,
+      "color": 35
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4231,6 +4595,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 450,
     "aggroRadius": 11,
@@ -4363,6 +4728,32 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Gnarrr!",
+          "yell": false
+        },
+        {
+          "text": "Tcharrr!",
+          "yell": false
+        },
+        {
+          "text": "Rrrah!",
+          "yell": false
+        },
+        {
+          "text": "Rraaar!",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 2,
+      "color": 35
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4419,6 +4810,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 170,
     "aggroRadius": 11,
@@ -4501,6 +4893,32 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Gnarrr!",
+          "yell": false
+        },
+        {
+          "text": "Tcharrr!",
+          "yell": false
+        },
+        {
+          "text": "Rrrah!",
+          "yell": false
+        },
+        {
+          "text": "Rraaar!",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 2,
+      "color": 35
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4730,6 +5148,10 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "light": {
+      "level": 2,
+      "color": 35
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4892,6 +5314,10 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "light": {
+      "level": 2,
+      "color": 35
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -5101,6 +5527,10 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "light": {
+      "level": 2,
+      "color": 35
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -5157,6 +5587,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 450,
     "aggroRadius": 11,
@@ -5305,6 +5736,10 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "light": {
+      "level": 2,
+      "color": 35
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -5361,6 +5796,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 230,
     "aggroRadius": 11,
@@ -5433,6 +5869,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Rarr chomp chomp!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,

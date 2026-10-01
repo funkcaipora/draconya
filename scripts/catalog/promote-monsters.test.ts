@@ -127,6 +127,57 @@ describe('computePromotion', () => {
     expect(result.bestiaryEntries.get('badger')).toMatchObject({ class: 'mammal', toKill: 250 });
   });
 
+  describe('outfit (#621, M44-03)', () => {
+    const outfitAbility = (look: Record<string, string>) => ({
+      id: 'outfit', cadenceMs: 2000, chance: 0.1, target: { range: 11 }, power: 0, damageType: 'physical',
+      condition: { key: 'outfit', merge: 'strongest', durationMs: 4000, effect: { kind: 'outfit', look } },
+    });
+
+    it('`objectLooks` (staging-only) sai da entidade e vira as linhas de `appearances.looks`', () => {
+      workdir = mkdtempSync(join(tmpdir(), 'promote-monsters-'));
+      setupFixture(workdir, {
+        mammals: [
+          badger({ abilities: [outfitAbility({ objectKey: 'fallen-tree' })], objectLooks: { 'fallen-tree': 3976 } }),
+          badger({ id: 'stoat', name: 'Stoat', outfitId: 106, objectLooks: { 'fallen-tree': 3976, snowman: 7172 } }),
+        ],
+      });
+      const result = computePromotion(workdir);
+      expect(result.slices.get('mammals')?.every((entity) => !('objectLooks' in entity))).toBe(true);
+      expect([...result.lookEntries.entries()].sort()).toEqual([['fallen-tree', 3976], ['snowman', 7172]]);
+    });
+
+    it('dois monstros que pedem ids DIFERENTES para a mesma chave de objeto são um erro, não uma escolha calada', () => {
+      workdir = mkdtempSync(join(tmpdir(), 'promote-monsters-'));
+      setupFixture(workdir, {
+        mammals: [
+          badger({ objectLooks: { table: 2324 } }),
+          badger({ id: 'stoat', name: 'Stoat', outfitId: 106, objectLooks: { table: 9999 } }),
+        ],
+      });
+      expect(() => computePromotion(workdir as string)).toThrow(/appearances\.looks "table"/);
+    });
+
+    it('tira o `outfit` cujo monstro imitado NÃO foi promovido — e mantém o dos que foram (inclusive os autorais)', () => {
+      workdir = mkdtempSync(join(tmpdir(), 'promote-monsters-'));
+      setupFixture(workdir, {
+        mammals: [
+          badger({
+            abilities: [
+              outfitAbility({ monsterId: 'stoat' }), outfitAbility({ monsterId: 'rat' }),
+              outfitAbility({ monsterId: 'never-generated' }),
+            ],
+          }),
+          badger({ id: 'stoat', name: 'Stoat', outfitId: 106 }),
+        ],
+      });
+      const result = computePromotion(workdir);
+      const kept = result.slices.get('mammals')?.find((entity) => entity.id === 'badger')?.['abilities'] as
+        { condition: { effect: { look: { monsterId: string } } } }[];
+      expect(kept.map((ability) => ability.condition.effect.look.monsterId)).toEqual(['stoat', 'rat']);
+      expect([...result.strippedOutfits.entries()]).toEqual([['badger', 1]]);
+    });
+  });
+
   it('leva `boss` e `bosstiary` para o monstro promovido, e o boss não ganha ficha de Bestiário (#629)', () => {
     // `bosstiary` é campo do `monsterSchema` (ao contrário de `bestiary`/`outfitId`): vai para
     // `data/monsters` como está. E um boss não tem `bestiary` no Canary, então nada é escrito em
@@ -281,5 +332,61 @@ describe('writePromotion / checkPromotion', () => {
     writePromotion(workdir);
     const generatedAgain = readGeneratedSlice(join(monstersGeneratedDir, 'mammals.json'));
     expect(generatedAgain.map((e) => e.id).sort()).toEqual(['badger', 'rat']);
+  });
+
+  describe('a apresentação (#620) é renovada até nos hand-authored', () => {
+    const LOOK = {
+      outfit: { head: 113, body: 120, legs: 95, feet: 115, addons: 3 },
+      voices: { intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!', yell: false }] },
+      light: { level: 4, color: 208 },
+      race: 'venom',
+    };
+
+    function setupRat(onDisk: Record<string, unknown>, fresh: Record<string, unknown>): string {
+      const root = mkdtempSync(join(tmpdir(), 'promote-monsters-'));
+      workdir = root;
+      setupFixture(root, { mammals: [badger(), badger({ id: 'rat', name: 'Rat', ...fresh })] });
+      const dir = join(root, 'packages/content/data/monsters/generated');
+      mkdirSync(dir, { recursive: true });
+      const { bestiary: _b, outfitId: _o, ...rat } = badger({ id: 'rat', name: 'Rat' });
+      writeFileSync(join(dir, 'mammals.json'), JSON.stringify([{ ...rat, blockable: false, ...onDisk }], null, 2));
+      return root;
+    }
+
+    it('o Rat commitado ganha a apresentação do staging, e o resto dele fica verbatim (#581)', () => {
+      // `rat` nunca é sobrescrito pela promoção — mas `outfit`/`voices`/`light`/`race` não são número
+      // de combate, e a fala do rato tem que acompanhar o Canary. Mutação que mata: voltar o
+      // `preserveHandAuthored` ao que era (o Rat nunca falaria).
+      const root = setupRat({ health: 99 }, LOOK);
+      writePromotion(root);
+      const rat = readGeneratedSlice(join(root, 'packages/content/data/monsters/generated/mammals.json'))
+        .find((entity) => entity.id === 'rat');
+      expect(rat?.['outfit']).toEqual(LOOK.outfit);
+      expect(rat?.['voices']).toEqual(LOOK.voices);
+      expect(rat?.['light']).toEqual(LOOK.light);
+      expect(rat?.['race']).toBe('venom');
+      // O número de combate é o que estava em disco: 99, e não os 23 do badger de staging.
+      expect(rat?.['health']).toBe(99);
+      // A apresentação entra ANTES de `source`, a posição em que o importador a escreve.
+      const keys = Object.keys(rat ?? {});
+      expect(keys.indexOf('race')).toBeLessThan(keys.indexOf('source'));
+    });
+
+    it('o que o Canary deixou de declarar SAI do Rat — a apresentação é do staging, não acumula', () => {
+      const root = setupRat(LOOK, {});
+      writePromotion(root);
+      const rat = readGeneratedSlice(join(root, 'packages/content/data/monsters/generated/mammals.json'))
+        .find((entity) => entity.id === 'rat');
+      for (const field of ['outfit', 'voices', 'light', 'race']) expect(rat, field).not.toHaveProperty(field);
+    });
+
+    it('é idempotente, e `--check` reconhece o que acabou de ser escrito como fresco', () => {
+      const root = setupRat({}, LOOK);
+      writePromotion(root);
+      const first = readFileSync(join(root, 'packages/content/data/monsters/generated/mammals.json'), 'utf8');
+      writePromotion(root);
+      expect(readFileSync(join(root, 'packages/content/data/monsters/generated/mammals.json'), 'utf8')).toBe(first);
+      expect(checkPromotion(root).find((o) => o.slice === 'mammals')).toEqual({ slice: 'mammals', status: 'fresh' });
+    });
   });
 });

@@ -138,6 +138,7 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -345,6 +346,7 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -520,6 +522,7 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -672,6 +675,7 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

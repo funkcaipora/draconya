@@ -354,6 +354,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 320,
     "aggroRadius": 11,
@@ -527,6 +528,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Oink!",
+          "yell": false
+        },
+        {
+          "text": "Hungerrr!",
+          "yell": false
+        },
+        {
+          "text": "Grunt!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -582,6 +601,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 310,
     "aggroRadius": 11,
@@ -738,6 +758,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ungh! Ungh!",
+          "yell": false
+        },
+        {
+          "text": "Klack klack!",
+          "yell": false
+        },
+        {
+          "text": "Hugah!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -789,6 +827,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 156,
     "aggroRadius": 11,
@@ -1082,6 +1121,27 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 85,
+      "body": 1,
+      "legs": 85,
+      "feet": 105,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Rraaaaa!",
+          "yell": false
+        },
+        {
+          "text": "CHEHEHE!!!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1124,6 +1184,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 186,
     "aggroRadius": 11,
@@ -1261,6 +1322,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 330,
     "aggroRadius": 11,
@@ -1378,6 +1440,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Growl!",
+          "yell": false
+        },
+        {
+          "text": "Meat!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1531,6 +1607,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hizzzzzzz!",
+          "yell": false
+        },
+        {
+          "text": "To armzzzz!",
+          "yell": false
+        },
+        {
+          "text": "Engage zze aggrezzor!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1701,6 +1795,16 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Tssss!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1868,6 +1972,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Where are zhe guardz when you need zhem!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1922,6 +2036,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 180,
     "aggroRadius": 11,
@@ -2029,6 +2144,16 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Tssss!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2082,6 +2207,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 174,
     "aggroRadius": 11,
@@ -2158,6 +2284,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hissss!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2346,6 +2482,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hissss!",
+          "yell": false
+        },
+        {
+          "text": "Cowardzz!",
+          "yell": false
+        },
+        {
+          "text": "Softzzkinzz from zze zzouzz!",
+          "yell": false
+        },
+        {
+          "text": "Zztand and fight!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2537,6 +2695,30 @@
         }
       },
       {
+        "id": "outfit",
+        "cadenceMs": 2000,
+        "chance": 0.01,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "clay-guardian"
+            }
+          }
+        }
+      },
+      {
         "id": "paralyze",
         "cadenceMs": 2000,
         "chance": 0.25,
@@ -2671,6 +2853,29 @@
     "runOnHealth": 275,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "HISSSS",
+          "yell": true
+        },
+        {
+          "text": "I bring you deathhhh, mortalssss",
+          "yell": false
+        },
+        {
+          "text": "Sssssouls for the one",
+          "yell": false
+        },
+        {
+          "text": "Tsssse one will risssse again",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2721,6 +2926,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 120,
     "aggroRadius": 11,
@@ -2770,6 +2976,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Zzzzzzt",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -2821,6 +3037,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 200,
     "aggroRadius": 11,
@@ -2972,6 +3189,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 200,
     "aggroRadius": 11,
@@ -3266,6 +3484,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Krk! Krk!",
+          "yell": false
+        },
+        {
+          "text": "BONK!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3319,6 +3551,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 186,
     "aggroRadius": 11,
@@ -3509,6 +3742,16 @@
     "runOnHealth": 300,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Shriiiek",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,

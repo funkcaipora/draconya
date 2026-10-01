@@ -128,6 +128,35 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 78,
+      "body": 97,
+      "legs": 95,
+      "feet": 121,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "To me, creatures of the wild!",
+          "yell": false
+        },
+        {
+          "text": "My instincts tell me about your cowardice.",
+          "yell": false
+        },
+        {
+          "text": "Mine is the power of rage!",
+          "yell": false
+        },
+        {
+          "text": "I'll be triumphant!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -287,6 +316,16 @@
     "runOnHealth": 150,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hissss!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -585,6 +624,30 @@
           "missileKey": "death",
           "impactKey": "smallclouds"
         }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 3
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "explosion"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 4000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "skeleton"
+            }
+          }
+        }
       }
     ],
     "defenses": [
@@ -613,6 +676,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Join my crew ... forever.",
+          "yell": false
+        },
+        {
+          "text": "You are lost!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -734,6 +812,25 @@
         "presentation": {
           "impactKey": "blueshimmer"
         }
+      },
+      {
+        "id": "outfit-2",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "chayenne"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "energyhit"
+        }
       }
     ],
     "targetChange": {
@@ -748,6 +845,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 3610000,
+    "outfit": {
+      "head": 78,
+      "body": 0,
+      "legs": 105,
+      "feet": 99,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -889,6 +993,39 @@
     "runOnHealth": 150,
     "staticAttack": 0.5,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 115,
+      "body": 76,
+      "legs": 33,
+      "feet": 117,
+      "addons": 2
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Let's kill 'em",
+          "yell": false
+        },
+        {
+          "text": "Arrrgh!",
+          "yell": false
+        },
+        {
+          "text": "You'll never take me alive!",
+          "yell": false
+        },
+        {
+          "text": "§%§&§! #*$§$!!",
+          "yell": false
+        },
+        {
+          "text": "You won't get me alive!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1085,6 +1222,24 @@
     "runOnHealth": 350,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "EEHEEHEEHEEH",
+          "yell": true
+        },
+        {
+          "text": "SCREEEEECH",
+          "yell": true
+        },
+        {
+          "text": "GRRR",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1260,6 +1415,25 @@
         "presentation": {
           "impactKey": "magic-red"
         }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 1000,
+        "chance": 0.05,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 14000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "war-wolf"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
       }
     ],
     "targetChange": {
@@ -1274,6 +1448,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You desecrated this place!",
+          "yell": false
+        },
+        {
+          "text": "Yoooohuuuu!",
+          "yell": false
+        },
+        {
+          "text": "I will cleanse this isle!",
+          "yell": false
+        },
+        {
+          "text": "Grrrrrrr",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1436,6 +1632,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "By Durin's beard!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1508,6 +1714,7 @@
     "runOnHealth": 6,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1963,6 +2170,13 @@
     },
     "staticAttack": 0.5,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 77,
+      "body": 0,
+      "legs": 76,
+      "feet": 115,
+      "addons": 3
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2114,6 +2328,39 @@
     "runOnHealth": 50,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 77,
+      "body": 59,
+      "legs": 20,
+      "feet": 76,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "THE MONKS ARE MINE!",
+          "yell": true
+        },
+        {
+          "text": "I will rope you up! All of you!",
+          "yell": false
+        },
+        {
+          "text": "Have you seen my old pal Frack?",
+          "yell": false
+        },
+        {
+          "text": "A MIC to rule them all!",
+          "yell": false
+        },
+        {
+          "text": "Let me put my rope around your neck!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2297,6 +2544,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Better flee now!",
+          "yell": false
+        },
+        {
+          "text": "Watch my maws!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2515,6 +2776,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You will rise as my servant!",
+          "yell": false
+        },
+        {
+          "text": "Praise to my master Urgith!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2666,6 +2941,36 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Chikuva!",
+          "yell": false
+        },
+        {
+          "text": "Jinuma jamjam!",
+          "yell": false
+        },
+        {
+          "text": "Grrrr! Kisavuta!",
+          "yell": false
+        },
+        {
+          "text": "Suvituka siq chuqua!",
+          "yell": false
+        },
+        {
+          "text": "Kiyosa sipaju!",
+          "yell": false
+        },
+        {
+          "text": "Aiiee!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2858,6 +3163,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ranat Ulderek!",
+          "yell": false
+        },
+        {
+          "text": "Orc buta bana!",
+          "yell": false
+        },
+        {
+          "text": "Ikem rambo zambo!",
+          "yell": false
+        },
+        {
+          "text": "Fetchi Maruk Buta",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3045,6 +3372,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ranat Ulderek!",
+          "yell": false
+        },
+        {
+          "text": "Orc buta bana!",
+          "yell": false
+        },
+        {
+          "text": "Ikem rambo zambo!",
+          "yell": false
+        },
+        {
+          "text": "Fetchi Maruk Buta",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3143,6 +3492,24 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grak brrretz!",
+          "yell": false
+        },
+        {
+          "text": "Grow truk grrrrr.",
+          "yell": false
+        },
+        {
+          "text": "Prek tars, dekklep zurk.",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3331,6 +3698,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ranat Ulderek!",
+          "yell": false
+        },
+        {
+          "text": "Orc buta bana!",
+          "yell": false
+        },
+        {
+          "text": "Ikem rambo zambo!",
+          "yell": false
+        },
+        {
+          "text": "Fetchi Maruk Buta",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3762,6 +4151,33 @@
     "runOnHealth": 2500,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "PRAISED BE MY MASTERS, THE RUTHLESS SEVEN!",
+          "yell": true
+        },
+        {
+          "text": "YOU ARE DOOMED!",
+          "yell": true
+        },
+        {
+          "text": "ORSHABAAL IS BACK!",
+          "yell": true
+        },
+        {
+          "text": "Be prepared for the day my masters will come for you!",
+          "yell": false
+        },
+        {
+          "text": "SOULS FOR ORSHABAAL!",
+          "yell": true
+        }
+      ]
+    },
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3913,6 +4329,23 @@
     "runOnHealth": 250,
     "staticAttack": 0.5,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 95,
+      "body": 94,
+      "legs": 117,
+      "feet": 59,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Muahaha!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4245,6 +4678,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I challenge you!",
+          "yell": false
+        },
+        {
+          "text": "A battle makes the blood so hot and sweet.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4415,6 +4863,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You will never get me!",
+          "yell": false
+        },
+        {
+          "text": "I'll be back!",
+          "yell": false
+        },
+        {
+          "text": "Catch me, if you can!",
+          "yell": false
+        },
+        {
+          "text": "Help me, Boys!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4660,6 +5130,36 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Feel the hungry kiss of death!",
+          "yell": false
+        },
+        {
+          "text": "The monsters in the mirror will come eat your dreams.",
+          "yell": false
+        },
+        {
+          "text": "Your pitiful life has come to an end!",
+          "yell": false
+        },
+        {
+          "text": "I will squish you like a maggot and suck you dry!",
+          "yell": false
+        },
+        {
+          "text": "Yield to the inevitable!",
+          "yell": false
+        },
+        {
+          "text": "Some day I shall see my beautiful face in a mirror again.",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4812,6 +5312,31 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 95,
+      "body": 116,
+      "legs": 39,
+      "feet": 76,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Yeeyeeyeee!",
+          "yell": false
+        },
+        {
+          "text": "Fight me if you dare!",
+          "yell": false
+        },
+        {
+          "text": "I challenge you!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4857,6 +5382,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 180,
     "aggroRadius": 11,
@@ -4890,6 +5416,16 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Groarrrr! Rwarrrr!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -5140,6 +5676,28 @@
     "runOnHealth": 1500,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I'm Zulazza, and you won't forget me that fazzt.",
+          "yell": false
+        },
+        {
+          "text": "Oh, HE will take revenge on zzizz azzault when you zztep in front of HIZZ fazze!",
+          "yell": false
+        },
+        {
+          "text": "Zzaion is our last zztand! I will not leave wizzout a fight!",
+          "yell": false
+        },
+        {
+          "text": "Behind zze Great Gate liezz your doom!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,

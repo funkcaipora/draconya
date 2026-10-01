@@ -28,7 +28,9 @@ const COMMIT = 'c'.repeat(40);
 
 /** A entidade de staging sem os dois campos que o #580 separa — o que vai para `data/monsters`. */
 function asMonster(entity: CatalogEntity): Record<string, unknown> {
-  const { bestiary: _bestiary, outfitId: _outfitId, ...monster } = entity as Record<string, unknown>;
+  const {
+    bestiary: _bestiary, outfitId: _outfitId, objectLooks: _objectLooks, ...monster
+  } = entity as Record<string, unknown>;
   return monster;
 }
 
@@ -297,6 +299,75 @@ function deps(ctx: CatalogImportContext): MonsterReaderDeps {
   return loadReaderDeps(ctx, REPO_ROOT);
 }
 
+describe('outfit e illusionable no leitor (#621, M44-03)', () => {
+  const illusionist = (attacks: string, defenses = '{ defense = 5, armor = 1 }', flags = '{ targetDistance = 0 }') =>
+    RAT
+      .replace('monster.attacks = { { name = "melee", interval = 2000, chance = 100, skill = 10, attack = 20 } }', `monster.attacks = ${attacks}`)
+      .replace('monster.defenses = { defense = 5, armor = 1 }', `monster.defenses = ${defenses}`)
+      .replace('monster.flags = { targetDistance = 0 }', `monster.flags = ${flags}`);
+  const convert = (text: string) => {
+    const ctx = fixture(false);
+    return convertMonster(text, 'x/mammals/test_rat.lua', 'mammals', COMMIT, deps(ctx));
+  };
+
+  it('`flags.illusionable = true` vira o campo do monstro; ausente ou false, nada (o default do Canary)', () => {
+    expect(convert(illusionist('{ { name = "melee", interval = 2000, chance = 100, skill = 10, attack = 20 } }', undefined,
+      '{ targetDistance = 0, illusionable = true }')).entity['illusionable']).toBe(true);
+    expect(convert(RAT).entity['illusionable']).toBeUndefined();
+    expect(convert(illusionist('{ { name = "melee", interval = 2000, chance = 100, skill = 10, attack = 20 } }', undefined,
+      '{ targetDistance = 0, illusionable = false }')).entity['illusionable']).toBeUndefined();
+  });
+
+  it('o ataque e a defesa `outfit` saem mapeados, sem ser mais descartados; o monstro continua gerado', () => {
+    const converted = convert(illusionist(
+      `{
+        { name = "melee", interval = 2000, chance = 100, skill = 10, attack = 20 },
+        { name = "outfit", interval = 2000, chance = 50, range = 5, target = true, duration = 3000, outfitMonster = "Test Drake" },
+      }`,
+      `{ defense = 5, armor = 1,
+        { name = "outfit", interval = 4000, chance = 30, target = false, duration = 4000, outfitMonster = "Test Rat" },
+      }`,
+    ));
+    expect(converted.blockers).toEqual([]);
+    expect(converted.notes.droppedSpells).toEqual([]);
+    const abilities = converted.entity['abilities'] as { id: string; condition?: { effect: unknown } }[];
+    expect(abilities.map((ability) => ability.id)).toEqual(['melee', 'outfit']);
+    expect(abilities[1]?.condition?.effect).toEqual({ kind: 'outfit', look: { monsterId: 'test-drake' } });
+    expect((converted.entity['defenses'] as { id: string }[]).map((defense) => defense.id)).toEqual(['outfit']);
+    // Nada de arte na entidade: o monstro imitado é um id de conteúdo.
+    expect(() => monsterSchema.parse(asMonster(converted.entity))).not.toThrow();
+  });
+
+  it('`outfitItem` anota a aparência do objeto em `objectLooks` (staging-only) e a condição só a chave', () => {
+    const converted = convert(illusionist(
+      `{ { name = "outfit", interval = 2000, chance = 10, range = 7, target = false, duration = 3000, outfitItem = 3449 } }`,
+    ));
+    expect(converted.blockers).toEqual([]);
+    // O nome vem do `items.xml` da fixture (3449 = "burst arrow"); a chave é o slug dele.
+    expect(converted.entity['objectLooks']).toEqual({ 'burst-arrow': 3449 });
+    expect(JSON.stringify(converted.entity['abilities'])).toContain('"objectKey":"burst-arrow"');
+    expect(JSON.stringify(converted.entity['abilities'])).not.toContain('"appearanceId"');
+  });
+
+  it('o catálogo tira o `outfit` cujo monstro imitado NÃO foi gerado — só a entrada, e o relatório conta', () => {
+    const ctx = fixture(false);
+    const dir = join(ctx.canaryDir, 'data-otservbr-global', 'monster', 'mammals');
+    writeFileSync(join(dir, 'test_mimic.lua'), illusionist(
+      `{
+        { name = "melee", interval = 2000, chance = 100, skill = 10, attack = 20 },
+        { name = "outfit", interval = 2000, chance = 50, target = true, duration = 3000, outfitMonster = "Test Rat" },
+        { name = "outfit", interval = 2000, chance = 50, target = true, duration = 3000, outfitMonster = "Not Generated" },
+      }`,
+    ).replace('Game.createMonsterType("Test Rat")', 'Game.createMonsterType("Test Mimic")'));
+    const catalog = readMonsterCatalog(ctx, deps(ctx));
+    const mimic = catalog.slices.get('mammals')?.find((entity) => entity.id === 'test-mimic');
+    const outfits = (mimic?.['abilities'] as { id: string; condition?: { effect?: { look?: { monsterId?: string } } } }[])
+      .filter((ability) => ability.condition?.effect?.look !== undefined);
+    expect(outfits.map((ability) => ability.condition?.effect?.look?.monsterId)).toEqual(['test-rat']);
+    expect(catalog.notes?.some((note) => note.startsWith('Outfit (#621)') && note.includes('`test-mimic` 1'))).toBe(true);
+  });
+});
+
 describe('slugify', () => {
   it('bate com os ids autorais: apóstrofo some, espaço vira hífen, acento cai', () => {
     expect(slugify("Dragon's Tail")).toBe('dragons-tail');
@@ -444,11 +515,18 @@ describe('convertMonster (fixture sintética)', () => {
       expect(converted.entity['conditionImmunities']).toBeUndefined();
     });
 
-    it('`outfit` (sem condição no Draconya até o M44-03) é REPORTADO por nome, não descartado em silêncio', () => {
+    it('`outfit` virou imunidade de verdade (#621, M44-03) — e `condition = false` (o rato) não', () => {
       const converted = withImmunities('{ { type = "outfit", condition = true }, { type = "fire", condition = true } }');
-      expect(converted.entity['conditionImmunities']).toEqual(['burning']);
+      expect(converted.entity['conditionImmunities']).toEqual(['burning', 'outfit']);
+      expect(converted.notes.ignoredFields.some((field) => field.startsWith('immunities.condition.'))).toBe(false);
+      const rat = withImmunities('{ { type = "outfit", condition = false } }');
+      expect(rat.entity['conditionImmunities']).toBeUndefined();
+    });
+
+    it('um nome fora da tabela continua REPORTADO por nome, não descartado em silêncio', () => {
+      const converted = withImmunities('{ { type = "teleport", condition = true } }');
       expect(converted.notes.ignoredFields).toContain(
-        'immunities.condition.outfit (sem imunidade de condição no schema)',
+        'immunities.condition.teleport (sem imunidade de condição no schema)',
       );
     });
 
@@ -567,6 +645,118 @@ describe('convertMonster (fixture sintética)', () => {
   });
 });
 
+// A apresentação (#620): cores e addons do outfit, falas, luz e raça. Lua SINTÉTICO, no formato do
+// Canary (`register_monster_type.lua`: `voices`, `light`, `race`; `monster.outfit.look*`).
+describe('a apresentação do monstro (#620)', () => {
+  /** O Test Rat com o outfit trocado e mais `extra` antes do `register`. */
+  function look(outfit: string, extra = '') {
+    const ctx = fixture(false);
+    const text = RAT
+      .replace('monster.outfit = { lookType = 21 }', `monster.outfit = ${outfit}`)
+      .replace('mType:register(monster)', `${extra}\nmType:register(monster)`);
+    return convertMonster(text, 'x/mammals/test_rat.lua', 'mammals', COMMIT, deps(ctx));
+  }
+
+  it('cores e addons do outfit viram `outfit`, e o `lookType` continua sendo só o `outfitId`', () => {
+    // Mutação que mata: copiar `lookType` para dentro de `outfit` (arte no conteúdo, invariante 6),
+    // ou ler `lookAddons` como cor.
+    const converted = look('{ lookType = 130, lookHead = 113, lookBody = 120, lookLegs = 95, lookFeet = 115, lookAddons = 3, lookMount = 0 }');
+    expect(converted.entity['outfit']).toEqual({ head: 113, body: 120, legs: 95, feet: 115, addons: 3 });
+    expect(converted.entity['outfitId']).toBe(130);
+    expect(converted.notes.look).toEqual({ mount: undefined, clamped: false, unknownRace: undefined, silentVoices: false });
+    expect(() => monsterSchema.parse(asMonster(converted.entity))).not.toThrow();
+  });
+
+  it('tudo em zero é o default do schema: a chave nem é escrita', () => {
+    const converted = look('{ lookType = 21, lookHead = 0, lookBody = 0, lookLegs = 0, lookFeet = 0, lookAddons = 0 }');
+    expect('outfit' in converted.entity).toBe(false);
+    // E só um addon já basta para o monstro ganhar `outfit` — um addon é apresentação.
+    const onlyAddon = look('{ lookType = 130, lookAddons = 1 }');
+    expect(onlyAddon.entity['outfit']).toEqual({ head: 0, body: 0, legs: 0, feet: 0, addons: 1 });
+  });
+
+  it('índice fora da paleta (cor 0–132, addons 0–3) é recortado e contado, nunca escrito inválido', () => {
+    const converted = look('{ lookType = 130, lookHead = 200, lookBody = -4, lookAddons = 7 }');
+    expect(converted.entity['outfit']).toEqual({ head: 132, body: 0, legs: 0, feet: 0, addons: 3 });
+    expect(converted.notes.look.clamped).toBe(true);
+    expect(() => monsterSchema.parse(asMonster(converted.entity))).not.toThrow();
+  });
+
+  it('a montaria é lida e contada, mas o conteúdo não tem `mount`', () => {
+    // O único monstro do Canary com `lookMount` está fora do corte; o schema não tem o campo.
+    const converted = look('{ lookType = 130, lookMount = 626 }');
+    expect(converted.notes.look.mount).toBe(626);
+    expect(JSON.stringify(converted.entity)).not.toContain('626');
+  });
+
+  it('as falas: o intervalo e a chance vêm do BLOCO, uma vez, e cada tabela posicional é uma linha', () => {
+    // `registerMonsterType.voices`: `interval`/`chance` no bloco, `{ text, yell }` por linha.
+    const converted = look('{ lookType = 21 }', 'monster.voices = { interval = 5000, chance = 10, { text = "Meep!" }, { text = "FCHHHHH", yell = true } }');
+    expect(converted.entity['voices']).toEqual({
+      intervalMs: 5000, chance: 10,
+      lines: [{ text: 'Meep!', yell: false }, { text: 'FCHHHHH', yell: true }],
+    });
+    expect(() => monsterSchema.parse(asMonster(converted.entity))).not.toThrow();
+  });
+
+  it('bloco de falas que nunca dispara no Canary não é gerado, e é contado', () => {
+    // `onThinkYell` não fala sem intervalo, sem chance ou sem linha: gerá-lo seria fala que o jogo
+    // original nunca diz. A maioria do Canary declara só `interval` e `chance`, sem linha.
+    for (const block of [
+      '{ interval = 5000, chance = 10 }',
+      '{ interval = 0, chance = 10, { text = "x" } }',
+      '{ interval = 5000, chance = 0, { text = "x" } }',
+      '{ interval = 5000, chance = 10, { text = "" } }',
+    ]) {
+      const converted = look('{ lookType = 21 }', `monster.voices = ${block}`);
+      expect('voices' in converted.entity, block).toBe(false);
+      expect(converted.notes.look.silentVoices, block).toBe(true);
+    }
+  });
+
+  it('a chance acima de 100 é recortada em 100 — `chance >= uniform_random(1, 100)` sempre passa', () => {
+    const converted = look('{ lookType = 21 }', 'monster.voices = { interval = 5000, chance = 250, { text = "x" } }');
+    expect((converted.entity['voices'] as { chance: number }).chance).toBe(100);
+  });
+
+  it('a luz: só com `level` positivo, e a cor sem `color` é 0', () => {
+    expect(look('{ lookType = 21 }', 'monster.light = { level = 4, color = 208 }').entity['light']).toEqual({ level: 4, color: 208 });
+    expect(look('{ lookType = 21 }', 'monster.light = { level = 3 }').entity['light']).toEqual({ level: 3, color: 0 });
+    // `registerMonsterType.light` só registra com `level`; nível 0 é sem luz.
+    expect('light' in look('{ lookType = 21 }', 'monster.light = { color = 208 }').entity).toBe(false);
+    expect('light' in look('{ lookType = 21 }', 'monster.light = { level = 0, color = 208 }').entity).toBe(false);
+    // Cor fora da paleta de 216 é recortada e contada.
+    const clamped = look('{ lookType = 21 }', 'monster.light = { level = 3, color = 300 }');
+    expect(clamped.entity['light']).toEqual({ level: 3, color: 215 });
+    expect(clamped.notes.look.clamped).toBe(true);
+  });
+
+  it('a raça: `blood` é o default e não é escrita; as outras sete sim; a desconhecida é contada', () => {
+    // `MonsterType::info.race = RACE_BLOOD`. Mutação que mata: escrever `race: 'blood'` em todo
+    // monstro (quatrocentas linhas de nada), ou aceitar um nome que o Canary recusa.
+    expect('race' in look('{ lookType = 21 }', 'monster.race = "blood"').entity).toBe(false);
+    expect('race' in look('{ lookType = 21 }').entity).toBe(false);
+    for (const race of ['venom', 'undead', 'fire', 'energy', 'ink', 'chocolate', 'candy']) {
+      expect(look('{ lookType = 21 }', `monster.race = "${race}"`).entity['race'], race).toBe(race);
+    }
+    const unknown = look('{ lookType = 21 }', 'monster.race = "plasma"');
+    expect('race' in unknown.entity).toBe(false);
+    expect(unknown.notes.look.unknownRace).toBe('plasma');
+  });
+
+  it('a apresentação entra na entidade ANTES de `source`, e o `voices`/`light` já não são campos ignorados', () => {
+    const converted = look(
+      '{ lookType = 21, lookHead = 5 }',
+      'monster.voices = { interval = 5000, chance = 10, { text = "x" } }\nmonster.light = { level = 2, color = 1 }\nmonster.race = "undead"',
+    );
+    const keys = Object.keys(converted.entity);
+    for (const field of ['outfit', 'voices', 'light', 'race']) {
+      expect(keys.indexOf(field), field).toBeGreaterThanOrEqual(0);
+      expect(keys.indexOf(field), field).toBeLessThan(keys.indexOf('source'));
+    }
+    expect(converted.notes.ignoredFields.some((field) => field === 'voices' || field === 'light')).toBe(false);
+  });
+});
 
 // ---------------------------------------------------------------------------------------------
 // Convince Creature e Animate Dead (#600): `convinceable`, `manaCost` e as janelas do cadáver.
@@ -856,6 +1046,26 @@ describe.skipIf(!HAS_CANARY)('leitor contra o Canary real (CANARY_DIR)', () => {
     return convertMonster(readFileSync(full, 'utf8'), `data-otservbr-global/monster/${path}`, path.split('/')[0] ?? '', ctx.canaryCommit, deps(ctx));
   }
 
+  it('a apresentação de monstros reais (#620): o Rat fala, o Fire Elemental brilha e queima, o Dark Magician traz addon', () => {
+    // Rat: `monster.voices` com UMA linha e `yell = false`; sem cor, sem luz, raça `blood` (default).
+    const rat = convertReal('mammals/rat.lua').entity;
+    expect(rat['voices']).toEqual({ intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!', yell: false }] });
+    for (const field of ['outfit', 'light', 'race']) expect(field in rat, field).toBe(false);
+    // Fire Elemental: `light = { level = 4, color = 208 }`, `race = "fire"`, e `voices` SÓ com
+    // intervalo e chance (sem linha — não é gerado). As cores são zero: sem `outfit`.
+    const fire = convertReal('elementals/fire_elemental.lua').entity;
+    expect(fire['light']).toEqual({ level: 4, color: 208 });
+    expect(fire['race']).toBe('fire');
+    expect('voices' in fire).toBe(false);
+    expect('outfit' in fire).toBe(false);
+    // Dark Magician: `lookAddons = 2` com as quatro cores, `light.level = 0` (sem luz), raça `blood`.
+    const magician = convertReal('humans/dark_magician.lua').entity;
+    expect(magician['outfit']).toEqual({ head: 58, body: 95, legs: 51, feet: 131, addons: 2 });
+    expect(magician['outfitId']).toBe(133);
+    expect('light' in magician).toBe(false);
+    expect('race' in magician).toBe(false);
+  });
+
   it('Dragon 172, Dragon Lord 200 e Rat 134 na escala do TFS; gold do Dragon exato; classe dragon', () => {
     const dragon = convertReal('dragons/dragon.lua');
     expect(dragon.entity['speed']).toBe(172);
@@ -895,6 +1105,45 @@ describe.skipIf(!HAS_CANARY)('leitor contra o Canary real (CANARY_DIR)', () => {
     ] as const) {
       expect(generated[field], field).toEqual(authored[field]);
     }
+  });
+
+  it('o `outfit` do Canary (#621): o Werewolf se disfarça no alvo, e toda referência a monstro/objeto fecha', () => {
+    // `lycanthropes/werewolf.lua`: `{ name = "outfit", interval = 2000, chance = 1, radius = 1,
+    // effect = CONST_ME_SOUND_BLUE, target = true, duration = 2000, outfitMonster = "werewolf" }`.
+    const werewolf = convertReal('lycanthropes/werewolf.lua');
+    const outfit = (werewolf.entity['abilities'] as { id: string }[]).find((ability) => ability.id === 'outfit');
+    expect(outfit).toMatchObject({
+      id: 'outfit', cadenceMs: 2000, chance: 0.01, power: 0, damageType: 'physical',
+      target: { range: 11, area: { shape: 'circle', radius: 1, centered: 'target' } },
+      presentation: { impactKey: 'sound-blue' },
+      condition: {
+        key: 'outfit', merge: 'strongest', durationMs: 2000,
+        effect: { kind: 'outfit', look: { monsterId: 'werewolf' } },
+      },
+    });
+
+    // O catálogo inteiro: a condição nomeia o monstro imitado por id, e o boot recusa id que não
+    // existe — então todo alvo de todo `outfit` tem de ter sido gerado, e toda chave de objeto
+    // tem a aparência anotada no PRÓPRIO monstro (que a promoção leva para `appearances.looks`).
+    const catalog = readMonsterCatalog(ctx, deps(ctx));
+    const ids = new Set([...catalog.slices.values()].flatMap((entities) => entities.map((entity) => entity.id)));
+    let outfits = 0;
+    for (const entities of catalog.slices.values()) {
+      for (const entity of entities) {
+        const looks = entity['objectLooks'] as Record<string, number> | undefined;
+        for (const list of [entity['abilities'], entity['defenses']] as (readonly { condition?: { effect?: { kind?: string; look?: Record<string, string> } } }[] | undefined)[]) {
+          for (const entry of list ?? []) {
+            const effect = entry.condition?.effect;
+            if (effect?.kind !== 'outfit') continue;
+            outfits += 1;
+            const look = effect.look ?? {};
+            if (look['monsterId'] !== undefined) expect(ids.has(look['monsterId']), `${entity.id} → ${look['monsterId']}`).toBe(true);
+            if (look['objectKey'] !== undefined) expect(looks?.[look['objectKey']], `${entity.id} → ${look['objectKey']}`).toBeGreaterThan(0);
+          }
+        }
+      }
+    }
+    expect(outfits).toBeGreaterThan(50);
   });
 
   it('Convince e Animate Dead (#600): o Skeleton é convencível (mana 300) e só animável 10 s depois da morte', () => {

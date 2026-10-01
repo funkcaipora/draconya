@@ -3,7 +3,9 @@ import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { BotSlot } from '@draconya/content';
-import { ActionConfigModal, acceptsFriend, withDo } from './ActionConfigModal.js';
+import {
+  ActionConfigModal, acceptsFriend, illusionMonsters, needsIllusionMonster, withDo,
+} from './ActionConfigModal.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue, PartyView } from '../state/hud.js';
 import { INITIAL_BOT, bot, edit } from '../bot/store.js';
@@ -435,5 +437,73 @@ describe('ActionConfigModal — Alvo da cura/suporte (#406, §26-30, ADR 0035 d.
   it('RF-07: o clique da lista usa withDo com acceptsFriend (por fonte)', async () => {
     const source = await readFile(new URL('./ActionConfigModal.tsx', import.meta.url), 'utf8');
     expect(source).toContain('setDraft(withDo(draft, actionOf(entry), acceptsFriend(entry)))');
+  });
+});
+
+describe('ActionConfigModal — a Creature Illusion pede o monstro (#621, M44-03)', () => {
+  const illusionCatalogue = (): Catalogue => {
+    const base = catalogue();
+    return {
+      ...base,
+      monsters: [
+        { id: 'rat', name: 'Rat', illusionable: true },
+        { id: 'dragon', name: 'Dragon', illusionable: true },
+        { id: 'demon', name: 'Demon' },
+      ],
+      bot: {
+        ...base.bot,
+        spells: [...base.bot.spells, {
+          id: 'creature-illusion-druid', name: 'Creature Illusion', manaCost: 100, minLevel: 1,
+          vocationId: null, effect: 'illusion', group: 'support', cooldownMs: 2000,
+          detail: { durationMs: 180_000 },
+        }],
+      },
+    };
+  };
+  const illusionSlot = (monsterId?: string): BotSlot => ({
+    do: monsterId === undefined
+      ? { kind: 'spell', spellId: 'creature-illusion-druid' }
+      : { kind: 'spell', spellId: 'creature-illusion-druid', monsterId },
+    when: [], auto: false,
+  });
+
+  it('o seletor só lista os monstros que o servidor marcou `illusionable`, por nome', () => {
+    expect(illusionMonsters(illusionCatalogue())).toEqual([
+      { id: 'dragon', name: 'Dragon' }, { id: 'rat', name: 'Rat' },
+    ]);
+  });
+
+  it('só a magia de efeito `illusion` precisa do monstro', () => {
+    const catalog = illusionCatalogue();
+    const illusion = catalog.bot.spells.find((spell) => spell.id === 'creature-illusion-druid');
+    const heal = catalog.bot.spells.find((spell) => spell.id === 'heal');
+    if (illusion === undefined || heal === undefined) throw new Error('catálogo de teste incompleto');
+    expect(needsIllusionMonster({ kind: 'spell', spell: illusion })).toBe(true);
+    expect(needsIllusionMonster({ kind: 'spell', spell: heal })).toBe(false);
+    expect(needsIllusionMonster(null)).toBe(false);
+  });
+
+  it('o slot sem monstro mostra o seletor e bloqueia o Salvar com o motivo', async () => {
+    hud.set((state) => ({ ...state, catalogue: illusionCatalogue() }));
+    withSlot(0, illusionSlot());
+    const html = await render(0);
+    expect(html).toContain('>Monstro<');
+    expect(html).toContain('>Dragon<');
+    expect(html).not.toContain('>Demon<');
+    expect(html).toContain('Escolha o monstro que a magia vai imitar.');
+  });
+
+  it('com o monstro escolhido, o seletor o marca e o Salvar destrava', async () => {
+    hud.set((state) => ({ ...state, catalogue: illusionCatalogue() }));
+    withSlot(0, illusionSlot('dragon'));
+    const html = await render(0);
+    expect(html).toMatch(/<option[^>]*value="dragon"[^>]*selected/);
+    expect(html).not.toContain('Escolha o monstro que a magia vai imitar.');
+  });
+
+  it('o seletor não aparece para uma magia que não imita', async () => {
+    hud.set((state) => ({ ...state, catalogue: illusionCatalogue() }));
+    withSlot(0, spellSlot());
+    expect(await render(0)).not.toContain('>Monstro<');
   });
 });

@@ -438,6 +438,10 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "light": {
+      "level": 3,
+      "color": 66
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -473,6 +477,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 160,
     "aggroRadius": 11,
@@ -500,6 +505,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -555,6 +561,7 @@
     "runOnHealth": 2,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -854,6 +861,17 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 60,
+      "body": 77,
+      "legs": 64,
+      "feet": 70,
+      "addons": 3
+    },
+    "light": {
+      "level": 3,
+      "color": 100
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -893,6 +911,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 166,
     "aggroRadius": 11,
@@ -952,6 +971,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -982,6 +1002,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 180,
     "aggroRadius": 11,
@@ -1011,6 +1032,7 @@
     "staticAttack": 0.5,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 90000,
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1048,6 +1070,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 200,
     "aggroRadius": 11,
@@ -1165,6 +1188,7 @@
     "runOnHealth": 40,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1404,6 +1428,17 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Screeech!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1808,6 +1843,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Krrrk!",
+          "yell": false
+        },
+        {
+          "text": "Knarrrk!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1935,6 +1985,17 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Bzzzzz!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2028,6 +2089,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -2150,6 +2212,7 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 910000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2604,6 +2667,7 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2673,6 +2737,10 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "light": {
+      "level": 5,
+      "color": 197
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2776,6 +2844,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 3000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -2881,6 +2950,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Klk! Klk!",
+          "yell": false
+        },
+        {
+          "text": "Chrrr! Chrr!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2995,6 +3079,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3136,6 +3221,21 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Kropp!",
+          "yell": false
+        },
+        {
+          "text": "Flzlzlzlzlzlzlz!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3193,6 +3293,10 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "light": {
+      "level": 5,
+      "color": 35
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3234,6 +3338,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 200,
     "aggroRadius": 11,
@@ -3311,6 +3416,17 @@
     "runOnHealth": 60,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Nee Pah!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3353,6 +3469,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 124,
     "aggroRadius": 11,
@@ -3412,6 +3529,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3604,6 +3722,11 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "light": {
+      "level": 3,
+      "color": 205
+    },
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3640,6 +3763,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 180,
     "aggroRadius": 11,
@@ -3706,6 +3830,7 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3746,6 +3871,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 175,
     "aggroRadius": 11,
@@ -3795,6 +3921,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3832,6 +3959,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 160,
     "aggroRadius": 11,
@@ -3892,6 +4020,7 @@
     "runOnHealth": 6,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4105,6 +4234,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4140,6 +4270,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 170,
     "aggroRadius": 11,
@@ -4172,6 +4303,17 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Chrk chrk!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -4213,6 +4355,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 150,
     "aggroRadius": 11,
@@ -4268,6 +4411,7 @@
     "runOnHealth": 5,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4310,6 +4454,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 150,
     "aggroRadius": 11,
@@ -4376,6 +4521,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Sluuurz",
+          "yell": false
+        },
+        {
+          "text": "Sluuuurp",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4411,6 +4571,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 152,
     "aggroRadius": 11,
@@ -4444,6 +4605,7 @@
     "runOnHealth": 6,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 310000,
@@ -4608,6 +4770,21 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Eeeeeeyyyyh!",
+          "yell": false
+        },
+        {
+          "text": "Iiiiieeeeeeh!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -4713,6 +4890,7 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 660000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -4756,6 +4934,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 190,
     "aggroRadius": 11,
@@ -4914,6 +5093,17 @@
     "runOnHealth": 40,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Spotz!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4956,6 +5146,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 190,
     "aggroRadius": 11,
@@ -5065,6 +5256,21 @@
     "runOnHealth": 50,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Flzlzlzlzlzlzlz!",
+          "yell": false
+        },
+        {
+          "text": "Rzlrzlrzlrzlrzlrzl!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -5103,6 +5309,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 190,
     "aggroRadius": 11,
@@ -5158,6 +5365,16 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Flzlzlzlzlzlzlz?",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -5193,10 +5410,14 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "outfit"
+    ],
     "defenseMitigation": 0.51,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 214,
     "aggroRadius": 11,
@@ -5319,6 +5540,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -5361,6 +5583,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 200,
     "aggroRadius": 11,
@@ -5429,6 +5652,17 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Zrp zrp!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -5651,6 +5885,17 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 60,
+      "body": 84,
+      "legs": 40,
+      "feet": 94,
+      "addons": 3
+    },
+    "light": {
+      "level": 3,
+      "color": 106
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -5872,6 +6117,10 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "light": {
+      "level": 3,
+      "color": 71
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -6082,6 +6331,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -6119,6 +6369,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 1500,
     "speed": 320,
     "aggroRadius": 11,
@@ -6173,6 +6424,17 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Bssssss",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -6218,6 +6480,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 210,
     "aggroRadius": 11,
@@ -6348,6 +6611,21 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Peeex!",
+          "yell": false
+        },
+        {
+          "text": "Bzzzzzzzrrrrzzzzzzrrrrr!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,

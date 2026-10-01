@@ -73,6 +73,27 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 87,
+      "body": 85,
+      "legs": 85,
+      "feet": 87,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ribbit!",
+          "yell": false
+        },
+        {
+          "text": "Ribbit! Ribbit!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -105,6 +126,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 200,
     "aggroRadius": 11,
@@ -129,6 +151,20 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ribbit!",
+          "yell": false
+        },
+        {
+          "text": "Ribbit! Ribbit!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -215,6 +251,27 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 114,
+      "body": 79,
+      "legs": 78,
+      "feet": 114,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ribbit!",
+          "yell": false
+        },
+        {
+          "text": "Ribbit! Ribbit!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -303,6 +360,27 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 94,
+      "body": 78,
+      "legs": 77,
+      "feet": 112,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ribbit!",
+          "yell": false
+        },
+        {
+          "text": "Ribbit! Ribbit!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -416,6 +494,13 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 114,
+      "body": 98,
+      "legs": 97,
+      "feet": 114,
+      "addons": 0
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -447,6 +532,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 210,
     "aggroRadius": 11,
@@ -586,6 +672,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 200,
     "aggroRadius": 11,
@@ -609,6 +696,21 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ribbit!",
+          "yell": false
+        },
+        {
+          "text": "Ribbit! Ribbit!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -733,6 +835,24 @@
     "runOnHealth": 40,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ribbit!",
+          "yell": false
+        },
+        {
+          "text": "Ribbit! Ribbit!",
+          "yell": false
+        },
+        {
+          "text": "No Kisses for you!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -819,6 +939,27 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 71,
+      "body": 14,
+      "legs": 71,
+      "feet": 70,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ribbit!",
+          "yell": false
+        },
+        {
+          "text": "Ribbit! Ribbit!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -945,6 +1086,16 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Chrrch!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -982,6 +1133,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 210,
     "aggroRadius": 11,
@@ -1091,6 +1243,20 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ribbit! Ribbit!",
+          "yell": false
+        },
+        {
+          "text": "Ribbit!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,

@@ -347,6 +347,196 @@ describe('as cores de outfit (FUN-104)', () => {
   });
 });
 
+describe('a apresentação do monstro: addons, raça, luz e falas (#620)', () => {
+  const look = {
+    addons: 3,
+    race: 'venom' as const,
+    light: { level: 4, color: 208 },
+    voices: { intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!' }, { text: 'GRR', yell: true }] },
+  };
+
+  it('uma criatura que aparece COM a apresentação a guarda inteira', () => {
+    // Mutação que mata: tirar `...presentationOf(message)` do `case 'creature-appear'` — o monstro
+    // perderia addon, luz e fala sem nada acusar, porque continuaria aparecendo.
+    applyMessage({ ...spawn(1), ...look } as S2CMessage, 0);
+    const creature = world.creatures.get(1);
+    expect(creature?.addons).toBe(3);
+    expect(creature?.race).toBe('venom');
+    expect(creature?.light).toEqual({ level: 4, color: 208 });
+    expect(creature?.voices).toEqual(look.voices);
+  });
+
+  it('SEM ela, os quatro campos ficam AUSENTES (não `undefined`): ausência é o neutro', () => {
+    // O viewport aplica o neutro — sem addon, `blood`, sem luz, mudo — e o store não o inventa.
+    // Mutação que mata: copiar `message.addons` etc. direto no literal.
+    applyMessage(spawn(1), 0);
+    const creature = world.creatures.get(1) ?? {};
+    for (const key of ['addons', 'race', 'light', 'voices']) expect(Object.hasOwn(creature, key), key).toBe(false);
+  });
+
+  it('o session-state a carrega por criatura, para quem reanexa ver o monstro pintado e falante', () => {
+    // Mutação que mata: tirar `...presentationOf(creature)` do laço do `session-state`.
+    applyMessage({
+      type: 'session-state',
+      sessionType: 'hunt',
+      elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'char-1',
+        health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
+        promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+      },
+      world: { groundItems: [], tileUpdates: [], fields: [],
+        mapId: 'rat-cellars',
+        creatures: [
+          { id: 1, position: at(0, 0), appearanceId: 128, name: 'me', health: 1, maxHealth: 1 },
+          { id: 2, position: at(1, 0), appearanceId: 21, name: 'elemental', health: 1, maxHealth: 1, ...look },
+        ],
+      },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+
+    expect(world.creatures.get(2)?.light).toEqual({ level: 4, color: 208 });
+    expect(world.creatures.get(2)?.voices).toEqual(look.voices);
+    expect(world.creatures.get(2)?.addons).toBe(3);
+    expect(world.creatures.get(2)?.race).toBe('venom');
+    expect(world.creatures.get(1)?.light).toBeUndefined();
+  });
+
+  it('o golpe fotografa a RAÇA do alvo — inclusive o que mata, que chega junto do `creature-disappear`', () => {
+    // A criatura já não existe quando o viewport desenha o número, então a cor tem que estar no
+    // texto. Mutação que mata: ler a raça no viewport, em vez de fotografá-la em `addFloatingText`.
+    applyMessage({ ...spawn(1, at(2, 2)), race: 'venom' } as S2CMessage, 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 40, kind: 'melee', damageType: 'physical' }, 100);
+    applyMessage({ type: 'creature-disappear', id: 1 }, 100);
+    const text = world.texts[0];
+    expect(text?.race).toBe('venom');
+    expect(floatingTextColor(text!.kind, text!.damageType, text!.race)).toBe(0x00ff00);
+  });
+
+  it('o monstro comum e o herói não trazem raça: o número é vermelho, como sempre', () => {
+    applyMessage(spawn(1, at(2, 2)), 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 40, kind: 'melee', damageType: 'physical' }, 100);
+    expect(Object.hasOwn(world.texts[0] ?? {}, 'race')).toBe(false);
+    expect(floatingTextColor('melee', 'physical', world.texts[0]?.race)).toBe(0xff0000);
+  });
+
+  it('raças diferentes no mesmo tile não se somam: o jogador leria veneno como sangue', () => {
+    applyMessage({ ...spawn(1, at(2, 2)), race: 'venom' } as S2CMessage, 0);
+    applyMessage({ ...spawn(2, at(2, 2)), race: 'undead' } as S2CMessage, 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 10, kind: 'melee', damageType: 'physical' }, 0);
+    applyMessage({ type: 'creature-hit', id: 2, amount: 20, kind: 'melee', damageType: 'physical' }, 10);
+    expect(world.texts).toHaveLength(2);
+    // E a mesma raça, no mesmo tile e na mesma janela, SOMA como sempre.
+    applyMessage({ type: 'creature-hit', id: 2, amount: 5, kind: 'melee', damageType: 'physical' }, 20);
+    expect(world.texts).toHaveLength(2);
+    expect(world.texts[1]?.amount).toBe(25);
+  });
+});
+
+describe('a aparência emprestada: creature-update e `object` (#621, M44-03)', () => {
+  const colors = { head: 114, body: 3, legs: 40, feet: 95 };
+
+  it('creature-update troca a aparência e SUBSTITUI o objeto — a posição e o passo em curso ficam', () => {
+    // Mutação que mata: mutar `appearanceId` no lugar (é `readonly`) ou recriar a criatura do
+    // zero, o que apagaria o passo em curso e teleportaria o sprite.
+    applyMessage(spawn(1), 0);
+    applyMessage({ type: 'creature-move', id: 1, from: at(0, 0), to: at(1, 0), durationMs: 400 }, 100);
+    applyMessage({ type: 'creature-update', id: 1, appearanceId: 34 }, 200);
+    const creature = world.creatures.get(1);
+    expect(creature?.appearanceId).toBe(34);
+    expect(creature?.position).toEqual(at(1, 0));
+    expect(creature?.step?.to).toEqual(at(1, 0));
+    expect(creature?.name).toBe('rat-1');
+  });
+
+  it('`object: true` vira a chave do store, e ausente ou `false` a apagam — nunca `undefined`', () => {
+    applyMessage(spawn(1), 0);
+    applyMessage({ type: 'creature-update', id: 1, appearanceId: 3976, object: true }, 0);
+    expect(world.creatures.get(1)?.object).toBe(true);
+    // Voltar ao outfit: o servidor manda a aparência PRÓPRIA, sem `object`.
+    applyMessage({ type: 'creature-update', id: 1, appearanceId: 100 }, 0);
+    const back = world.creatures.get(1);
+    expect(back?.appearanceId).toBe(100);
+    expect(Object.hasOwn(back ?? {}, 'object')).toBe(false);
+    applyMessage({ type: 'creature-update', id: 1, appearanceId: 100, object: false }, 0);
+    expect(Object.hasOwn(world.creatures.get(1) ?? {}, 'object')).toBe(false);
+  });
+
+  it('as cores seguem a mensagem: a ilusão as apaga, e quem volta ao próprio outfit as recebe de novo', () => {
+    applyMessage({
+      type: 'creature-appear', id: 1, position: at(0, 0), appearanceId: 128, name: 'me',
+      health: 20, maxHealth: 20, colors,
+    }, 0);
+    applyMessage({ type: 'creature-update', id: 1, appearanceId: 21 }, 0);
+    expect(Object.hasOwn(world.creatures.get(1) ?? {}, 'colors')).toBe(false);
+    applyMessage({ type: 'creature-update', id: 1, appearanceId: 128, colors }, 0);
+    expect(world.creatures.get(1)?.colors).toEqual(colors);
+  });
+
+  it('os addons seguem a mensagem como as cores; a raça, a luz e as falas (#620) ficam com a criatura', () => {
+    // Mutação que mata: manter `addons` sobre a aparência nova (o outfit do outro ganharia o
+    // addon do dono) ou apagar `race`/`light`/`voices` junto — esses são da criatura, não do outfit.
+    const voices = { intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!' }] };
+    applyMessage({
+      ...spawn(1), addons: 3, race: 'venom', light: { level: 4, color: 208 }, voices,
+    } as S2CMessage, 0);
+    applyMessage({ type: 'creature-update', id: 1, appearanceId: 34, colors, addons: 1 }, 0);
+    const lent = world.creatures.get(1);
+    expect(lent?.addons).toBe(1);
+    expect(lent?.colors).toEqual(colors);
+    expect(lent?.race).toBe('venom');
+    expect(lent?.light).toEqual({ level: 4, color: 208 });
+    expect(lent?.voices).toEqual(voices);
+
+    // Sem addons na mensagem, o addon antigo SAI — nunca fica sobre o outfit novo.
+    applyMessage({ type: 'creature-update', id: 1, appearanceId: 21 }, 0);
+    expect(Object.hasOwn(world.creatures.get(1) ?? {}, 'addons')).toBe(false);
+    expect(world.creatures.get(1)?.race).toBe('venom');
+  });
+
+  it('update de criatura desconhecida é ignorado — filtrada pelo interesse, ou ainda não anunciada', () => {
+    applyMessage({ type: 'creature-update', id: 99, appearanceId: 34 }, 0);
+    expect(world.creatures.has(99)).toBe(false);
+  });
+
+  it('creature-appear e session-state carregam `object`: quem entra no meio da ilusão a vê vestida', () => {
+    applyMessage({
+      type: 'creature-appear', id: 1, position: at(0, 0), appearanceId: 3976, object: true, name: 'tree',
+      health: 20, maxHealth: 20,
+    }, 0);
+    expect(world.creatures.get(1)?.object).toBe(true);
+    applyMessage({
+      type: 'session-state',
+      sessionType: 'hunt',
+      elapsedMs: 0,
+      self: {
+        creatureId: 2, characterId: 'char-1',
+        health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
+        promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+      },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'rat-cellars',
+        creatures: [
+          { id: 2, position: at(0, 0), appearanceId: 7172, object: true, name: 'snowman', health: 1, maxHealth: 1 },
+          { id: 3, position: at(1, 0), appearanceId: 21, name: 'rat', health: 1, maxHealth: 1 },
+        ],
+      },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+    expect(world.creatures.get(2)?.object).toBe(true);
+    expect(Object.hasOwn(world.creatures.get(3) ?? {}, 'object')).toBe(false);
+  });
+
+  it('nunca avisa um assinante do HUD — a aparência é do mundo, como o passo', () => {
+    applyMessage(spawn(1), 0);
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state, notified);
+    applyMessage({ type: 'creature-update', id: 1, appearanceId: 34 }, 0);
+    expect(notified).not.toHaveBeenCalled();
+  });
+});
+
 describe('combat transients (FUN-106)', () => {
   // Efeito, projétil e número flutuante NÃO são HUD: chegam dezenas por segundo numa hunt, e o
   // caminho deles termina no `world`, que o viewport lê direto e expira sozinho.
@@ -1220,6 +1410,18 @@ describe('a saída pendente da hunt (#802)', () => {
     }, 0);
     applyMessage(stateMessage(), 1);
     expect(hud.get().exitPending).toBeNull();
+  });
+});
+
+describe('as mensagens do mundo ainda sem tela (OW-11, #832)', () => {
+  it('logout-refused e world-full chegam sem derrubar o cliente nem mexer no HUD', () => {
+    // Nenhum servidor as emite ainda (OW-14, OW-21) e a tela é da OW-23. O que se prende é que o
+    // `switch` exaustivo as conhece — sem o caso, o `satisfies never` não compilaria — e que
+    // aplicá-las não fabrica estado: o HUD continua exatamente como estava.
+    const before = hud.get();
+    applyMessage({ type: 'logout-refused', reason: 'in-fight' }, 1);
+    applyMessage({ type: 'world-full', position: 3, retryAfterMs: 10_000, huntAvailable: true }, 2);
+    expect(hud.get()).toBe(before);
   });
 });
 

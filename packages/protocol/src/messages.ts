@@ -522,6 +522,41 @@ export const SERVER_TO_CLIENT = {
    * 48: o 47 é do `learned-spells` (#624), o 46 é do `bosstiary` (#629) e o 45 é do `exit-pending`.
    */
   'training-state': 48,
+  /**
+   * O mundo recusou o logout do jogador (OW-11, #832, ADR 0060 d.7): o `logout` passou por
+   * `canLogout` e a resposta é não, com o motivo do Canary — tile de no-logout
+   * (`RETURNVALUE_YOUCANNOTLOGOUTHERE`) ou personagem em luta fora da PZ
+   * (`RETURNVALUE_YOUMAYNOTLOGOUTDURINGAFIGHT`), `canary/src/server/network/protocol/
+   * protocolgame.cpp:1151-1162`. Só S2C, só para quem pediu: a saída que dá certo não tem
+   * mensagem própria (é o fim da conexão, ou a `session-ended` da transição para a hunt).
+   *
+   * 49: o 48 é do `training-state` (#631), o 47 do `learned-spells` (#624), o 46 do `bosstiary`
+   * (#629) e o 45 do `exit-pending` (#802).
+   */
+  'logout-refused': 49,
+  /**
+   * O mundo está cheio (OW-11, #832, ADR 0060 d.2b): a entrada vinda do repouso bateu no
+   * `capacity` do mundo. Responde como a fila do Canary — a posição e o tempo para tentar de
+   * novo (`protocolgame.cpp:1005-1008`) — e diz se a hunt idle está ao alcance, que é a saída
+   * que o ADR 0060 oferece no lugar de um "Thais 2" (d.6b). Só S2C.
+   *
+   * 50: o 49 é do `logout-refused`.
+   */
+  'world-full': 50,
+  /**
+   * A criatura trocou de APARÊNCIA (#621, M44-03): a condição `outfit` — Creature Illusion, Chameleon
+   * Rune, o ataque/defesa `outfit` de um monstro — começou, foi renovada ou acabou. Carrega a
+   * aparência que ela veste AGORA, já resolvida pelo servidor em id de pacote (invariante 6); quando a
+   * condição acaba, o servidor manda a aparência PRÓPRIA da criatura (o cliente nunca guarda a
+   * "original" para voltar). Broadcast para todos os viewers da sessão, como `creature-health`: a
+   * aparência é de quem está no mundo, não de um personagem. Só S2C — o cliente não escolhe o que
+   * veste (invariante 4).
+   *
+   * 51: o 45 é do `exit-pending` (#802), o 46 é do `bosstiary` (#629), o 47 é do `learned-spells`
+   * (#624), o 48 é do `training-state` (#631), o 49 é do `logout-refused` (#832) e o 50 é do
+   * `world-full` (#832).
+   */
+  'creature-update': 51,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

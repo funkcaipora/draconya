@@ -178,16 +178,27 @@ export function validateBotConfigV2(config: BotConfigV2, content: Content): stri
       // A invocação (#598, M38-01, ADR 0057 decisão 4): `monsterId` só faz sentido junto de uma
       // magia cujo efeito é `summon`, e uma magia `summon` SEM `monsterId` nunca vai saber o que
       // invocar — o mesmo formato "slot morto sem dizer por quê" que o resto desta função evita.
+      //
+      // A ilusão (#621, M44-03, Creature Illusion — `hasParams(true)`) é a segunda magia com
+      // parâmetro de monstro: o MESMO `monsterId`, conferido contra `illusionable` em vez de
+      // `summonable` (`MonsterType::isIllusionable`).
       if (slot.do.kind === 'spell') {
         const spellEffect = content.spells.get(slot.do.spellId)?.effect;
+        const needsMonster = spellEffect?.kind === 'summon' || spellEffect?.kind === 'illusion';
         if (spellEffect?.kind === 'summon' && slot.do.monsterId === undefined) {
           problems.push(`${where}: magia "${slot.do.spellId}" invoca e precisa de "monsterId"`);
-        } else if (spellEffect !== undefined && spellEffect.kind !== 'summon' && slot.do.monsterId !== undefined) {
-          problems.push(`${where}: "monsterId" só vale numa magia que invoca`);
+        } else if (spellEffect?.kind === 'illusion' && slot.do.monsterId === undefined) {
+          problems.push(`${where}: magia "${slot.do.spellId}" imita um monstro e precisa de "monsterId"`);
+        } else if (spellEffect !== undefined && !needsMonster && slot.do.monsterId !== undefined) {
+          problems.push(`${where}: "monsterId" só vale numa magia que invoca ou imita um monstro`);
         } else if (slot.do.monsterId !== undefined) {
           const monster = content.monsters.get(slot.do.monsterId);
           if (monster === undefined) {
             problems.push(`${where}: monstro "${slot.do.monsterId}" não existe`);
+          } else if (spellEffect?.kind === 'illusion') {
+            if (!monster.illusionable) {
+              problems.push(`${where}: monstro "${slot.do.monsterId}" não pode ser imitado`);
+            }
           } else if (!monster.summonable) {
             problems.push(`${where}: monstro "${slot.do.monsterId}" não é invocável`);
           }

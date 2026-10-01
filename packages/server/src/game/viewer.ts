@@ -33,7 +33,11 @@ export interface ViewerOptions {
 }
 
 const DEFAULT_MAX_BUFFERED_BYTES = 1024 * 1024;
-const DEFAULT_MAX_QUEUED = 512;
+/**
+ * Teto de mensagens entre dois flushes. Exportado para o `bench:city` (OW-07) comparar a fila
+ * medida com o teto de verdade, e não com uma cópia dele que um dia diverge.
+ */
+export const DEFAULT_MAX_QUEUED = 512;
 
 export class Viewer {
   readonly id: string = randomUUID();

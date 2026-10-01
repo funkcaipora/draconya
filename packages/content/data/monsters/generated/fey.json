@@ -141,6 +141,31 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 85,
+      "body": 0,
+      "legs": 0,
+      "feet": 85,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Dance with me!",
+          "yell": false
+        },
+        {
+          "text": "In vino veritas! Hahaha!",
+          "yell": false
+        },
+        {
+          "text": "Wine, women and song!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -180,6 +205,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 280,
     "aggroRadius": 11,
@@ -202,6 +228,25 @@
     },
     "runOnHealth": 76,
     "staticAttack": 0.9,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Just taking a walk, friend.",
+          "yell": false
+        },
+        {
+          "text": "Work in the Chocolate Mines? No, no, leave it to the sugar cubes.",
+          "yell": false
+        },
+        {
+          "text": "Nothing better than to lie on the vanilla sugar beach on a sunny day.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -385,6 +430,35 @@
     "runOnHealth": 20,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 94,
+      "body": 95,
+      "legs": 0,
+      "feet": 94,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "This will be your last dance!",
+          "yell": false
+        },
+        {
+          "text": "This is a nightmare and you won't wake up!",
+          "yell": false
+        },
+        {
+          "text": "Blood, fight and rage!",
+          "yell": false
+        },
+        {
+          "text": "You're a threat to this realm! You have to die!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -488,6 +562,27 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 99,
+      "body": 41,
+      "legs": 5,
+      "feet": 102,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Feel the wrath of mother Tibia!",
+          "yell": false
+        },
+        {
+          "text": "Defiler of nature!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -679,6 +774,31 @@
     "runOnHealth": 20,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 61,
+      "body": 96,
+      "legs": 95,
+      "feet": 62,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "In vino veritas! Hahaha!",
+          "yell": false
+        },
+        {
+          "text": "Wine, women and song!",
+          "yell": false
+        },
+        {
+          "text": "Are you posing a threat to this realm? I suppose so.",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -718,6 +838,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 280,
     "aggroRadius": 11,
@@ -740,6 +861,25 @@
     },
     "runOnHealth": 63,
     "staticAttack": 0.9,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You're very sweet!",
+          "yell": false
+        },
+        {
+          "text": "Have you ever seen the Big Ice Cream Machine?",
+          "yell": false
+        },
+        {
+          "text": "Hello, sweetie!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -923,6 +1063,28 @@
     "runOnHealth": 20,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Looking at a nymph can blind you. Be careful, mortal being!",
+          "yell": false
+        },
+        {
+          "text": "Are you one of those evil nightmare creatures? Leave this realm alone!",
+          "yell": false
+        },
+        {
+          "text": "Come here, sweetheart! I won't hurt you! *giggle*",
+          "yell": false
+        },
+        {
+          "text": "I'm just protecting nature's beauty!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1091,6 +1253,24 @@
     "runOnHealth": 20,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "This was the initial trick, but the second follows quick!",
+          "yell": false
+        },
+        {
+          "text": "Hoppel-di-hopp!",
+          "yell": false
+        },
+        {
+          "text": "Jinx!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1129,6 +1309,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 480,
     "aggroRadius": 11,
@@ -1152,6 +1333,25 @@
     "runOnHealth": 28,
     "staticAttack": 0.9,
     "corpseTtlMs": 15000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "No I don't work in the mines right now. That's my day off.",
+          "yell": false
+        },
+        {
+          "text": "Catch me if you can!",
+          "yell": false
+        },
+        {
+          "text": "No touching please.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -1190,6 +1390,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 480,
     "aggroRadius": 11,
@@ -1213,6 +1414,25 @@
     "runOnHealth": 65,
     "staticAttack": 0.9,
     "corpseTtlMs": 15000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Please do not obstruct our work.",
+          "yell": false
+        },
+        {
+          "text": "So much work in the Chocolate Mines!",
+          "yell": false
+        },
+        {
+          "text": "Petulant sugar balls ...",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -1424,6 +1644,35 @@
     "runOnHealth": 20,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 0,
+      "body": 0,
+      "legs": 114,
+      "feet": 78,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Nightmarish monster! This dream is not meant for you!",
+          "yell": false
+        },
+        {
+          "text": "You won't steal my robe! Back off!",
+          "yell": false
+        },
+        {
+          "text": "You are not allowed to lay eyes on me in this shape!",
+          "yell": false
+        },
+        {
+          "text": "Are you stalking me? You will bitterly regret this!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1466,6 +1715,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 170,
     "aggroRadius": 11,
@@ -1570,6 +1820,21 @@
     "runOnHealth": 115,
     "staticAttack": 0.15,
     "corpseTtlMs": 310000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "*Crinkle*",
+          "yell": false
+        },
+        {
+          "text": "*Sizzle*",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1609,6 +1874,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 290,
     "aggroRadius": 11,
@@ -1631,6 +1897,25 @@
     },
     "runOnHealth": 70,
     "staticAttack": 0.9,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "What a beautiful day in Candia.",
+          "yell": false
+        },
+        {
+          "text": "Time for a bath in the Hot Milk Springs, I guess.",
+          "yell": false
+        },
+        {
+          "text": "What should I bake next?",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1664,6 +1949,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 320,
     "aggroRadius": 11,
@@ -1686,6 +1972,25 @@
     },
     "runOnHealth": 54,
     "staticAttack": 0.9,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You have to taste my latest creation!",
+          "yell": false
+        },
+        {
+          "text": "Please stand still and try my newest creation.",
+          "yell": false
+        },
+        {
+          "text": "Delicious!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1722,6 +2027,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 162,
     "aggroRadius": 11,
@@ -1821,6 +2127,25 @@
     "runOnHealth": 115,
     "staticAttack": 0.15,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Crackle!",
+          "yell": false
+        },
+        {
+          "text": "Tsshh",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 4,
+      "color": 204
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
