@@ -3528,10 +3528,10 @@ números de combate, não a fala do rato.
 | `light` `{ level, color }` | `light.level/color` (`registerMonsterType.light`) | sem luz | `level` 1–255 (alcance em tiles; os 59 monstros gerados vão de 1 a 6, e o Canary tem um de 10, o Lava Golem, fora do corte), `color` 0–215 (paleta de 216 cores) |
 | `race` | `monster.race` (`RaceType_t`) | `blood` (`RACE_BLOOD`, `monsters.hpp`) | `venom`, `blood`, `undead`, `fire`, `energy`, `ink`, `chocolate`, `candy` |
 
-No conteúdo de hoje (1028 monstros gerados): **235** com cores/addons de outfit (109 deles com
-addon), **562** com falas (todas com intervalo de 5000 ms e chance 10; 1605 linhas, 169 gritos),
-**59** com luz (níveis 1–6) e **407** com raça diferente de `blood` — `undead` 228, `venom` 127,
-`fire` 41, `ink` 9, `candy` 1, `chocolate` 1. O resto é `blood`, o default. As contagens por
+No conteúdo de hoje (1040 monstros gerados): **239** com cores/addons de outfit (113 deles com
+addon), **568** com falas (todas com intervalo de 5000 ms e chance 10; 1618 linhas, 170 gritos),
+**59** com luz (níveis 1–6) e **412** com raça diferente de `blood` — `undead` 232, `venom` 127,
+`fire` 42, `ink` 9, `candy` 1, `chocolate` 1. O resto é `blood`, o default. As contagens por
 importação saem em `docs/reference/catalog/monsters-report.md`.
 
 **A montaria (`lookMount`) não entra.** Só UM monstro do Canary declara uma — `mounted-thorn-knight`,

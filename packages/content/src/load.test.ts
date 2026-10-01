@@ -1759,16 +1759,16 @@ describe('a apresentação do monstro no conteúdo real (#620, M44-02)', () => {
     for (const field of ['outfit', 'light', 'race'] as const) expect(rotworm?.[field], field).toBeUndefined();
   });
 
-  it('as contagens do catálogo: 235 com cores/addons, 562 com falas, 59 com luz e 407 com raça que não é `blood`', () => {
+  it('as contagens do catálogo: 238 com cores/addons, 567 com falas, 59 com luz e 412 com raça que não é `blood`', () => {
     // Uma reimportação que mude isto sem querer (um leitor que passou a ler outra coisa) reprova
     // aqui — `pnpm catalog:import monsters` é o único que as muda, e o relatório as conta.
     const all = [...monsters.values()];
-    expect(all.filter((monster) => monster.outfit !== undefined)).toHaveLength(235);
-    expect(all.filter((monster) => monster.voices !== undefined)).toHaveLength(562);
+    expect(all.filter((monster) => monster.outfit !== undefined)).toHaveLength(238);
+    expect(all.filter((monster) => monster.voices !== undefined)).toHaveLength(567);
     expect(all.filter((monster) => monster.light !== undefined)).toHaveLength(59);
     const races = new Map<string, number>();
     for (const monster of all) if (monster.race !== undefined) races.set(monster.race, (races.get(monster.race) ?? 0) + 1);
-    expect(Object.fromEntries(races)).toEqual({ undead: 228, venom: 127, fire: 41, ink: 9, candy: 1, chocolate: 1 });
+    expect(Object.fromEntries(races)).toEqual({ undead: 232, venom: 127, fire: 42, ink: 9, candy: 1, chocolate: 1 });
   });
 
   it('o efeito do golpe físico tem uma linha por raça, com os ids do Canary (`CONST_ME_*`)', () => {
