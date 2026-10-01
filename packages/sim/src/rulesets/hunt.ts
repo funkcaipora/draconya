@@ -9745,7 +9745,9 @@ const slots = bot.groups.get(group);
     // O jogador atravessa o familiar (#599, `Player::canWalkthrough` — qualquer familiar, de
     // qualquer dono): o Canary o deixa dividir o tile, e o tile do `sim` é exclusivo, então o
     // familiar libera o tile POR UM INSTANTE, o passo acontece, e ele ocupa o tile que o jogador
-    // acabou de deixar (a troca). Recusado o passo, o familiar volta a ocupar o dele.
+    // acabou de deixar (a troca). Recusado o passo, o familiar volta a ocupar o dele. A invocação
+    // COMUM de jogador (a mesma função do Canary, a cláusula do mundo no-pvp) é atravessada logo
+    // abaixo, pela troca de `swapPlaces`; os predicados do planejador valem para as duas.
     const through = mover instanceof CharacterRuntime && this.#familiarIds.size > 0
       ? this.#familiarAt(target.x, target.y, this.#floorOf(mover))
       : null;
@@ -9776,7 +9778,7 @@ const slots = bot.groups.get(group);
     let walkedThrough: MonsterRuntime | null = null;
     let walkedThroughStep: Extract<MoveResult, { ok: true }> | null = null;
     if (!result.ok && result.reason === 'tile-occupied' && mover instanceof CharacterRuntime) {
-      const summon = this.#playerSummonAt(target, this.#floorOf(mover));
+      const summon = this.#playerSummonAt(target.x, target.y, this.#floorOf(mover));
       if (summon !== null) {
         const swapped = swapPlaces(this.#world, mover, summon);
         if (swapped.ok) {
@@ -9900,16 +9902,20 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * A invocação de jogador VIVA em `at` (#600) — a que o personagem atravessa em vez de bater nela.
-   * `Player::canWalkthrough` do Canary (`player.cpp`) libera a criatura cujo mestre é um jogador no
-   * mundo no-pvp (ADR 0060), de QUALQUER dono: a do próprio personagem e a de um companheiro de party.
-   * Linear sobre `#monsters`, e só no caminho de um passo recusado por ocupação — o mesmo custo de
-   * `#monsterAt`.
+   * A invocação de jogador VIVA em `(x, y, z)` (#600) — a que o personagem atravessa em vez de bater
+   * nela. `Player::canWalkthrough` do Canary (`player.cpp:1424-1444`) libera a criatura cujo mestre é
+   * um jogador no mundo no-pvp (ADR 0060: `noPvpThroughAtSummon`) — e o familiar, de qualquer mundo —,
+   * de QUALQUER dono: a do próprio personagem e a de um companheiro de party. É a mesma pergunta que o
+   * commit do passo (`#step`) e os predicados do planejador (`#moverBlocked`, `#occupiedForPlayer`)
+   * fazem, e por isso é UMA função: o planejador que visse parede onde o passo atravessa deixava o
+   * `walk-to` e o follow "inalcançáveis" num corredor que o bot da rota cruzava sem esforço.
+   * Linear sobre `#monsters`, e só para um tile que `world.occupied` já disse ocupado — o mesmo custo
+   * de `#monsterAt`. Coordenadas soltas, não um ponto: os predicados rodam por tile de uma busca.
    */
-  #playerSummonAt(at: GridPoint, z: number): MonsterRuntime | null {
+  #playerSummonAt(x: number, y: number, z: number): MonsterRuntime | null {
     for (const candidate of this.#monsters) {
       if (!candidate.alive || typeof candidate.masterId !== 'string') continue;
-      if (candidate.position.x !== at.x || candidate.position.y !== at.y) continue;
+      if (candidate.position.x !== x || candidate.position.y !== y) continue;
       if (!sameFloor(candidate.position.z, z)) continue;
       return candidate;
     }
@@ -13199,23 +13205,24 @@ const slots = bot.groups.get(group);
     this.#probe.y = y;
     const rejection = canOccupy(this.#world, this.#mover as Movable<GridPoint>, this.#probe);
     if (rejection === null) return false;
-    // O JOGADOR atravessa o familiar (#599, `Player::canWalkthrough`: `monster->isFamiliar()`): o
-    // tile ocupado só por ele não bloqueia o caminho de um personagem — o passo troca os dois de
-    // lugar (`#step`). Só o `tile-occupied`, e só quando há familiar vivo (`Set.size`).
+    // O JOGADOR atravessa a invocação de qualquer jogador (#599/#600, `Player::canWalkthrough`:
+    // `monster->isFamiliar() || noPvpThroughAtSummon`): o tile ocupado só por ela não bloqueia o
+    // caminho de um personagem — o passo troca os dois de lugar (`#step`). Só o `tile-occupied`; o
+    // varrer de `#monsters` só roda aí, e `#playerSummonAt` sai na primeira invocação de jogador do tile.
     return !(rejection === 'tile-occupied' && this.#mover instanceof CharacterRuntime
-      && this.#familiarIds.size > 0
-      && this.#familiarAt(x, y, this.#floorOf(this.#mover)) !== null);
+      && this.#playerSummonAt(x, y, this.#floorOf(this.#mover)) !== null);
   };
 
   /**
-   * O tile está ocupado para um PERSONAGEM que anda (#599)? O familiar não conta: o jogador o
-   * atravessa (`Player::canWalkthrough`), e o passo troca os dois de lugar (`#step`). É o
+   * O tile está ocupado para um PERSONAGEM que anda (#599)? A invocação de jogador não conta: o
+   * jogador a atravessa (`Player::canWalkthrough`: o familiar de qualquer dono, e toda invocação cujo
+   * mestre é jogador no mundo no-pvp, ADR 0060), e o passo troca os dois de lugar (`#step`). É o
    * `world.occupied` das buscas de caminho do personagem (follow, `walk-to`) — o mesmo critério de
-   * `#moverBlocked`, que o passo guloso e o commit já usam.
+   * `#moverBlocked`, que o passo guloso e o commit já usam. Sem ele o planejador via parede onde o
+   * passo atravessa: o `walk-to` atrás da invocação num corredor de um tile era `unreachable`.
    */
   #occupiedForPlayer(x: number, y: number, z: number): boolean {
-    return this.#world.occupied(x, y, z)
-      && !(this.#familiarIds.size > 0 && this.#familiarAt(x, y, z) !== null);
+    return this.#world.occupied(x, y, z) && this.#playerSummonAt(x, y, z) === null;
   }
 
   /** O familiar VIVO (de qualquer personagem) que ocupa (x, y, z), ou `null` (#599). */

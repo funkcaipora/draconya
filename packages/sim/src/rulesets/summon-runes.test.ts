@@ -88,6 +88,11 @@ const convincible = {
   convinceable: true, manaCost: 20,
   corpseTtlMs: CORPSE_TTL_MS, corpseAnimatable: [{ fromMs: UNMOVABLE_MS, untilMs: CORPSE_TTL_MS }],
 };
+/**
+ * O convencido que ENXERGA o mestre (`aggroRadius`): é o que o faz segui-lo até o tile a 2 dele (`summonFollowStep`) —
+ * `convincible` tem `aggroRadius: 0` e passeia ao acaso, e o teste de caminho precisa dele num tile conhecido.
+ */
+const escort = { ...convincible, id: 'escort', name: 'Escort', aggroRadius: 8 };
 /** Sem `convinceable` — a runa recusa. */
 const stubborn = { ...convincible, id: 'stubborn', name: 'Stubborn', convinceable: false };
 /** `convinceable` sem `manaCost`: o script debita `getManaCost()` zerado — de graça. */
@@ -126,7 +131,7 @@ const animateRune = {
 
 const raw = (over: Partial<RawContent> = {}): RawContent => {
   const baseContent: RawContent = {
-    monsters: [convincible, stubborn, freebie, skeleton, victim, heavy, richVictim, tough], hunts: [hunt],
+    monsters: [convincible, escort, stubborn, freebie, skeleton, victim, heavy, richVictim, tough], hunts: [hunt],
     vocations: [], progression: [progression], combat: [combat], stamina: [stamina], party: [party],
     spells: [], skills, weaponFamilies, items: [anvil], ammunition: [],
     supplies: [convinceRune, animateRune],
@@ -179,6 +184,8 @@ interface StartOptions {
   readonly layout?: { readonly map: typeof map; readonly tiles: readonly object[] };
   readonly attackPower?: number;
   readonly seed?: string;
+  /** A config de cada herói que não usa `config` (o follow de um e o slot manual de outro). */
+  readonly configs?: Readonly<Record<string, BotConfigV2>>;
 }
 
 function start(options: StartOptions = {}) {
@@ -191,7 +198,7 @@ function start(options: StartOptions = {}) {
     ...(options.spells === undefined ? {} : { spells: options.spells }),
     combat: [{ ...combat, player: { ...combat.player, attackPower: options.attackPower ?? 0 } }],
   }));
-  const botConfigs = Object.fromEntries(heroIds.map((id) => [id, config]));
+  const botConfigs = Object.fromEntries(heroIds.map((id) => [id, options.configs?.[id] ?? config]));
   const session = createHuntSession({
     id: options.seed ?? 'runes-session', content: loaded, huntId: 'field', difficulty: 'cautious',
     createdAtMs: 0, botConfigs,
@@ -802,6 +809,90 @@ describe('o jogador atravessa a invocação de jogador (`Player::canWalkthrough`
       expect(lap(1_000, how)).toEqual(fast);
     },
   );
+});
+
+describe('a BUSCA de caminho do jogador atravessa a invocação de jogador (`Player::canWalkthrough`, mundo no-pvp)', () => {
+  /**
+   * O passo em si (`#step`) já trocava de lugar com a invocação; o que faltava era o PREDICADO de quem planeja
+   * — o `walk-to` distante e o follow olhavam o tile dela como parede, e o mesmo corredor que o passo atravessa
+   * era "inalcançável" para o planejador. O convencido enxerga o mestre (`aggroRadius`): é o que o faz segui-lo
+   * até o tile a 2 dele (`summonFollowStep`), e deixa a cena determinística.
+   */
+  const withEscort = (extra: StartOptions = {}) => {
+    const started = start({
+      layout: corridor, spawnPoints: [spawnAt(3, 'escort', 3_600_000)], config: manualRune('convince-test'),
+      ...extra,
+    });
+    const { session, ruleset } = started;
+    // A rota anda sozinha: o cenário é parado desde o primeiro instante.
+    for (const hero of started.heroes) session.cancelEvent('player-step', hero.id);
+    session.advanceBy(100);
+    const pet = onlyMonster(ruleset, 'escort');
+    return { ...started, pet };
+  };
+  const tile = (c: { position: { x: number; y: number } }) => `${String(c.position.x)},${String(c.position.y)}`;
+
+  it('o `walk-to` para depois da invocação num corredor de um tile NÃO é `unreachable`: troca de lugar e chega — 10 Hz e 1 Hz iguais', () => {
+    const walk = (stepMs: number) => {
+      const { session, hero, ruleset, pet } = withEscort({ seed: 'walk-to-through' });
+      expect(ruleset.useSlot(session, 'hero', 0, 0, aimAt(pet))).toEqual({ ok: true });
+      run(session, 20_000, stepMs);
+      // A invocação alcançou o mestre e parou a 2 dele: está entre o herói e o resto do corredor.
+      expect([hero.position.x, pet.position.x]).toEqual([1, 3]);
+
+      expect(ruleset.requestMove(session, 'hero', { x: 6, y: 1 })).toMatchObject({ ok: true });
+      let farthest = 0;
+      for (let t = 0; t < 20_000; t += stepMs) {
+        run(session, stepMs, stepMs);
+        farthest = Math.max(farthest, hero.position.x);
+        expect(tile(hero), `t = ${String(t)} ms: o herói e a invocação dividem o tile`).not.toBe(tile(pet));
+      }
+      // Chegou ao tile pedido (depois da pausa do passo manual o bot retoma a rota, e o teste não é sobre ela).
+      expect(farthest).toBeGreaterThanOrEqual(6);
+      expect(pet.alive).toBe(true);
+      expect(pet.masterId).toBe('hero');
+      return { hero: tile(hero), pet: tile(pet), farthest };
+    };
+    const fast = walk(100);
+    expect(walk(1_000)).toEqual(fast);
+  });
+
+  it('o FOLLOW de um companheiro passa pela invocação no corredor, e os dois nunca dividem o tile — 10 Hz e 1 Hz iguais', () => {
+    // `a` é o líder e fica parado; `b` o segue. Cada um tem um `follow` (o de `a` aponta para ninguém), o que
+    // desliga a RESERVA do próximo tile da rota do líder: o assunto aqui é só a invocação no caminho.
+    const withFollow = (config: BotConfigV2, follow: object): BotConfigV2 =>
+      botConfigV2Schema.parse({ ...config, follow });
+    const rune = manualRune('convince-test');
+    const follow = (stepMs: number) => {
+      const { session, ruleset, heroes, pet } = withEscort({
+        heroes: ['a', 'b'], seed: 'follow-through',
+        configs: { a: withFollow(rune, { kind: 'member', characterId: 'nobody' }) },
+      });
+      const [a, b] = heroes as [CharacterRuntime, CharacterRuntime];
+      expect(ruleset.useSlot(session, 'a', 0, 0, aimAt(pet))).toEqual({ ok: true });
+      run(session, 20_000, stepMs);
+      // `b` (2,1) ficou entre `a` (1,1) e a invocação, que parou atrás dele (a 2 do mestre).
+      expect([a.position.x, b.position.x, pet.position.x]).toEqual([1, 2, 3]);
+      // `b` passa por ela (o passo adjacente troca de lugar) e se afasta, e já sai seguindo `a`: o passo manual
+      // devolve o `b` ao bot, e a configuração do follow chega no MESMO instante lógico — nenhum passo de rota
+      // no meio.
+      expect(ruleset.requestMove(session, 'b', { x: 3, y: 1 })).toMatchObject({ ok: true });
+      expect(tile(b)).toBe('3,1');
+      expect(tile(pet)).toBe('2,1');
+      expect(ruleset.requestMove(session, 'b', { x: 4, y: 1 })).toMatchObject({ ok: true });
+      ruleset.configureBot(session, withFollow(rune, { kind: 'member', characterId: 'a' }), 'b');
+      for (let t = 0; t < 20_000; t += stepMs) {
+        run(session, stepMs, stepMs);
+        expect(new Set([tile(a), tile(b), tile(pet)]).size, `t = ${String(t)} ms: dois no mesmo tile`).toBe(3);
+      }
+      // `b` chegou ao lado de `a`, atravessando a invocação que estava no corredor.
+      expect(b.position.x - a.position.x).toBe(1);
+      expect(pet.alive).toBe(true);
+      return { a: tile(a), b: tile(b), pet: tile(pet) };
+    };
+    const fast = follow(100);
+    expect(follow(1_000)).toEqual(fast);
+  });
 });
 
 describe('a área do mestre nunca atinge a invocação de jogador (`Combat::canTargetCreature`, mundo no-pvp)', () => {
