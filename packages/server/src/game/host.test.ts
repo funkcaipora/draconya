@@ -669,12 +669,12 @@ describe('session host', () => {
 
     host.handle(viewer, { type: 'session-attach' });
     expect(socket.frames).toHaveLength(0);
-    // Sete: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
+    // Oito: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
     // e stamina só viajam na segunda —, o alvo (`target-changed`, #470), as condições ativas
     // (`active-conditions`, #341), o Bestiário (`bestiary`, FUN-113), as bênçãos (`blessings`,
-    // #570, ADR 0052) e a economia de Charms (`charms`, M39-02, #602). Os sete na FILA, nenhum
-    // no fio.
-    expect(viewer.queued).toBe(7);
+    // #570, ADR 0052), a economia de Charms (`charms`, M39-02, #602) e o Hazard (`hazard`, M44-14,
+    // #632). Os oito na FILA, nenhum no fio.
+    expect(viewer.queued).toBe(8);
 
     host.flush();
     const state = socket.received().find((m) => m.type === 'session-state');
