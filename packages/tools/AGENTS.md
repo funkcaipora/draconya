@@ -8,6 +8,13 @@ Ferramentas de desenvolvimento e operação: o cliente sintético de carga, benc
 `build-asset-library.ts`), porque importam `packages/client/src/assets` por caminho relativo
 sob o `tsconfig.tooling.json` — ver `docs/asset-library.md`.
 
+**Fixture de tools que lança magia precisa do registro de aprendidas (#624):** o cast confere
+`CharacterRuntime.learnedSpells`. `dragon-party-movement.test.ts` monta os quatro level 200 com
+`learnedSpells: learnedSpellsStateOf(content.spells.keys())` (sem isso a rotação de magia REAL do
+`botConfigFor` nunca lança nada, e a semente 18 estourou o limite do líder parado), e
+`dragon-party-seed.ts` grava `characters.learned_spells` com as magias da vocação até o level 200 —
+a mesma regra da migração 0024 —, ou a party semeada para a QA ao vivo entraria sem lançar nada.
+
 O importador do CATÁLOGO do Tibia (item, monstro, magia — ADR 0038) mora em `scripts/catalog/`,
 pelo mesmo motivo e ao lado do importador de mapa, e não aqui: `pnpm catalog:import <tipo>
 [--check]` lê `things/sources/canary` (`CANARY_DIR`) e escreve `packages/content/data/<tipo>/
@@ -30,7 +37,10 @@ passam pelos mapeadores por NOME de `scripts/catalog/monster-abilities.ts` (#579
 catálogo, e quem invoca um monstro que não foi gerado sai junto. O `immunities[].condition = true`
 do Lua vira `monster.conditionImmunities` pela tabela de `luaMonsterTypeConditionImmunities` do
 Canary (`bleed`/`fire`/`ice`… → a imunidade à DOT correspondente, #559); `outfit` é reportado por
-nome em `ignoredFields` até o M44-03. Dois
+nome em `ignoredFields` até o M44-03. `monster.faction`/`enemyFactions` viram `faction`/
+`enemyFactions` (#619) pela tabela `FACTION_CONSTANTS` (o `Faction_t`, `FACTION_DEFAULT` omitido) — uma
+constante que a tabela não conhece bloqueia o monstro, e o teste confere a tabela contra o enum do
+checkout real (`CANARY_DIR`) na ordem, que é o valor numérico. Dois
 campos saem CONDICIONADOS ao schema da base: `kind` (#682) e a onda de monstro em `rows` (#679,
 sem ele a onda sai na `wave` antiga — TODO). O que ficou fora vai para
 `docs/reference/catalog/monsters-report.md` com o motivo; o que foi lido e não coube (moeda

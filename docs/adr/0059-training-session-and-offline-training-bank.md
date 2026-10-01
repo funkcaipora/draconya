@@ -1,6 +1,6 @@
 # 0059 — Treino: exercise weapon numa sessão de Treino por eventos; offline training é um banco gasto na volta
 
-**Status:** proposto — implementa a decisão 4 do [ADR 0045](0045-tibia-bestiary-charms-prey-and-training.md)
+**Status:** aceito (#631) — implementa a decisão 4 do [ADR 0045](0045-tibia-bestiary-charms-prey-and-training.md)
 **Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30) — d.1 e d.3:** o treino é online; o banco cresce no mundo; o “fora” é o repouso.
 (exercise weapons e offline training no lugar dos Trainer Monks); persiste pelo
 [ADR 0052](0052-endgame-progression-state-and-city-services-through-the-owning-session.md)
@@ -84,3 +84,70 @@ training precisa saber quanto tempo o personagem passou fora — e o `sim` não 
 
 Nenhum. **8** (sessão de Treino como estado ATIVO), **2** (golpe é evento), **3** (idêntico
 desanexado), **1** (a `api` calcula o offline, não o `sim`).
+
+## Emenda — 2026-09-30: a implementação (#631)
+
+O que a implementação decidiu onde o ADR era genérico, e o que ela alinhou ao [ADR 0060](0060-tibia-open-world-without-pvp.md).
+
+1. **O "fora" do offline training é o repouso, medido por um carimbo no diretório** (d.3, emendada
+   pelo ADR 0060 d.14c). O `game` grava `char:{id}:rest` — o instante do `release` — no Redis, no
+   `SessionDirectory.release`; a `api` o lê no `resolveNode` (que diz se o personagem está em repouso:
+   nenhum registro de sessão) e o `register` o apaga. Não é coluna do Postgres: é dado de duração curta
+   (o "fora" nunca conta mais que 21 dias) e de leitura barata no ticket. **Sem carimbo — Redis
+   reiniciado, ou a sessão que caiu sem `release` — a `api` não gasta o banco naquele login**: o tempo
+   continua nele, a escolha do livro também, e nada se perde. A alternativa "agora − `stamina_updated_at`"
+   foi descartada: esse marco é o do último login/transição e contaria como "fora" o tempo online na
+   Cidade.
+2. **A `api` escreve na MESMA transação da trava de linha do ticket.** `withOwnedCharacter` passa à
+   operação um `CharacterWriter` (`applyOfflineTraining`) preso à `tx` que segura a linha — um método
+   do repositório abriria outra conexão e esperaria, sem fim, pela linha travada. O ticket leva o
+   resultado (skills e banco novos), e a escrita só acontece com o ticket emitido: `active-limit` não
+   gasta o banco. Quando nada rendeu (carência, banco vazio) só `characters.training` é escrito — as
+   skills e o instante delas (`skills_updated_at`, a guarda do ledger) ficam como estavam.
+3. **A stamina não anda no Treino** — a d.1 dizia "recupera como na Cidade"; o ADR 0060 d.14c
+   corrigiu para "não recupera", porque o exercise training do Canary é online e o Canary só regenera
+   stamina deslogado. Implementado como `holdStamina` (`packages/sim/src/stamina.ts`): sair do Treino
+   só avança o marco; a entrada materializa como sempre (o tempo antes do treino é recuperação).
+4. **Compra e persistência.** `buy-item` cria a instância de origem `purchase` (nova em
+   `ITEM_ORIGINS`), com id `${sessão da praça}:${personagem}:buy:${UUID}` — único por compra, porque a
+   mesma cópia da Cidade é reaberta em outro dia. O extrato de estado durável da Cidade agora **também
+   sai na transição para uma sessão privada** quando há estado sujo (`#runTransition`, como
+   `#leaveForParty` já fazia): sem isso, a arma comprada (prefixo da sessão da praça) nunca chegaria ao
+   banco — o extrato do Treino só leva o `acquired` nascido NELE — e o gold gasto sumiria junto, já que
+   o `goldDelta` da praça não entra nos agregados da sessão de destino.
+5. **O corte do catálogo**: 21 exercise weapons (sword, axe, club, bow, rod, wand e shield × 500 / 1 800
+   / 14 400 cargas). As exercise wraps de fist (Monk, pós-13.32) e as de 50 cargas de treino ficam
+   fora, com o boneco livre (`rate` 100); o boneco de casa (110) espera o sistema de casas.
+6. **O boneco mora no mapa da Cidade**, e não num recorte OTBM mínimo à parte (d.1 previa um): o
+   boneco livre da Thais é um item do próprio recorte da Cidade (`things/maps/otservbr.otbm`, item
+   28565 em (32347, 32240, 7) = (72, 87, 7)), então a sessão de Treino reaproveita `content.city` e o
+   tile do personagem é conferido no boot (`buildContent`).
+
+**Status:** implementado na #631.
+
+## Emenda — 2026-10-01: correções da revisão (#631)
+
+A revisão da PR achou onde a implementação divergia do Canary e deste ADR; o que ela corrigiu:
+
+1. **A stamina é segurada em TODA saída do Treino**, e não só no `leave-hunt` (emenda de 2026-09-30,
+   item 3). A saída pela transição constrói a Cidade ANTES de gravar o extrato, mas a arma que acaba
+   sozinha (`#settleOne` grava e só depois constrói), o logout dentro do Treino, a drenagem e o
+   snapshot irrestaurável gravavam o marco da ENTRADA — e o ticket seguinte devolvia como recuperação
+   o tempo de treino inteiro (uma arma de 14 400 cargas são oito horas). Agora o extrato carrega o
+   marco do fim: `#persistReceipt` segura o marco (`holdStamina` com o relógio de parede `wallNow` do
+   host) quando a sessão é `training`, e `settleSnapshotAsReceipt` o faz com o `nowMs` de quem liquida.
+2. **O `training-exhaustion` do Canary entra** (`exerciseExhaustedUntilMs`, `startCooldownMs` = 10 s):
+   o Canary recusa um novo início de Treino por 10 s ("This exercise dummy can only be used after a
+   10 seconds cooldown."), e sem isso entrar/sair/entrar a cada ciclo creditava um golpe por entrada.
+   É cooldown de PAREDE do ADR 0052 d.6: carimbo no registro `training` (campo aditivo, sem migração),
+   comparado com o relógio que o servidor passa. Nenhuma divergência: o jogo recusa quando e como o
+   Canary recusa.
+3. **O banco de offline training lê o tempo EXATO da participação** (`Session.inSessionMsOf`), e não o
+   `durationMs` dos agregados, que soma a janela do `advanceBy` inteira antes dos eventos: uma sessão
+   que acaba por evento no meio da janela (arma esgotada, morte) gravava um banco que dependia do Hz
+   do host (invariante 3).
+4. **O escudo do offline training segue o `sendUpdate` do Canary**: `Skill.percent` é um `double` de 2
+   casas comparado com o percentual novo truncado, e não "o inteiro mudou" — para quem tem decimais
+   guardados o escudo treina quase sempre (d.3, item 8 de `docs/product/training.md`).
+5. **O catálogo leva o nome e o tipo de TODA skill que o Treino toca** (`catalogue.training.skills`), e
+   não só as do livro: o exercise shield treina o `shielding`, que o livro não oferece.

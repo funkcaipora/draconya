@@ -1,0 +1,18 @@
+{
+  "id": "great-light",
+  "name": "Great Light",
+  "description": "Ilumina um raio maior ao seu redor por 11 minutos e 35 segundos. A luz diminui aos poucos.",
+  "minLevel": 13,
+  "learnPrice": 500,
+  "manaCost": 60,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "light",
+    "level": 8,
+    "color": 215,
+    "durationMs": 695000
+  },
+  "_open": "Canary `data/scripts/spells/support/great_light.lua` (47dfd51): words \"utevo gran lux\", id 11, level 13, mana 60, cooldown/groupCooldown 2000 (grupo support), `CONDITION_LIGHT` com LIGHT_LEVEL 8, LIGHT_COLOR 215 e TICKS (11*60+35)*1000 = 695000, `isSelfTarget(true)`, `isAggressive(false)`. Vocação: TODAS (mesma lista de `light.json`), por isso sem `vocationId`. Efeito CONST_ME_MAGIC_BLUE (13). Condição de APRESENTAÇÃO — ver `docs/product/utility-spells.md`."
+}

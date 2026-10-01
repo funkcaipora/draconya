@@ -74,6 +74,27 @@ Isso tem uma obrigação junto: ao voltar de uma hunt, o snapshot **da hunt** é
 deixado de reescrever. Sem isso, quem morre volta para a praça, o snapshot da hunt já creditada
 fica de pé no Redis, e a próxima conexão retoma uma hunt encerrada.
 
+### O que "não credita" quer dizer no `sim` (OW-03, ADR 0060 d.10b)
+
+Até aqui a Cidade não creditar era o mesmo que ser shard (`Ruleset.shared`), e o hospedeiro lia
+um campo para as duas perguntas. O ADR 0060 torna a Cidade o primeiro mundo — um shard que
+**credita** —, e o `sim` já separa as duas coisas, sem mudar o comportamento de ninguém:
+
+- **`Ruleset.shared`** diz só "sair é `leave`".
+- **`Ruleset.progress`** (`'none' | 'checkpointed'`) diz se a sessão credita. `progressOf(ruleset)`
+  devolve o valor resolvido, que o hospedeiro passa a ler na OW-04: ausente, a sessão privada é
+  `'at-end'` (credita no `end`) e a compartilhada é `'none'`. **A Cidade e a hunt não declaram o
+  campo**, então nada muda para elas enquanto `OPEN_WORLD` não existe.
+- **`Session.checkpoint(characterId, reason)`** emite o extrato de quem continua na sessão e
+  recomeça a contar dele, com a semântica de delta do `leave`: o segundo checkpoint leva só o que
+  rendeu desde o primeiro, o `seq` cresce, e o `leave`/`end` seguinte leva só o resto. Não zera a
+  soma da sessão, não toca a janela de DPS, não sorteia nem agenda — o resultado é o mesmo com ou
+  sem checkpoint, a 1 Hz ou a 10 Hz. Nenhum hospedeiro o chama ainda (OW-16).
+- **Tetos por sessão**: `maxPendingDomainEvents` e `maxEventsPerAdvance` (default, as constantes
+  de hoje) e `maxNotableEventsPerCharacter` (sem default — sem ele a lista cresce sem limite, como
+  sempre cresceu). É o que permite ao mundo aparar a lista de eventos notáveis sem que a hunt
+  perceba.
+
 ### Desconectar não tira ninguém da praça na hora
 
 A carência de repouso (FUN-52) vale por **personagem**, não pela sessão: cinco minutos sem ninguém
@@ -313,7 +334,17 @@ os visualizadores derrubados por esse teto; diferente de zero, a linha não mede
 - Teto de 200 por cópia; encheu, abre a próxima. Ninguém é recusado.
 - `say` de canal `local` alcança o campo de visão.
 
+## Serviço de Cidade: aprender magia (#624, ADR 0058)
+
+O modal Personagem tem a seção **Magias**: lista as magias da vocação e vende cada uma por
+`learnPrice` (`learn-spell`, sem diálogo de NPC — tela de serviço, ADR 0042). É intenção C2S
+tratada pela sessão dona (ADR 0052 d.2), nunca endpoint `api`, e o gold sai pelo ledger. **Vale
+também na hunt** (não rola nada, ADR 0052 d.4). Ver `progression.md`, "Aprender magia".
+
 ## Conjurar na Cidade (#792, ADR 0044 d.2)
+
+A conjuração é MAGIA, então exige o aprendizado como qualquer outra (`spell-not-learned` /
+`not-learned` no slot) — só a runa em si, o item, dispensa (#624).
 
 A Cidade tem `useSlot`: a barra de ações funciona ali, mas só para **conjuração**
 (`effect.kind === 'conjure'`) — o resto do vocabulário fica de fora, e por duas razões

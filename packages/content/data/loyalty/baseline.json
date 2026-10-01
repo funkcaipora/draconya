@@ -1,0 +1,18 @@
+{
+  "id": "baseline",
+  "enabled": true,
+  "pointsPerCreationDay": 1,
+  "bonusPercentageMultiplier": 1,
+  "tiers": [
+    { "minPoints": 360, "percent": 5 },
+    { "minPoints": 720, "percent": 10 },
+    { "minPoints": 1080, "percent": 15 },
+    { "minPoints": 1440, "percent": 20 },
+    { "minPoints": 1800, "percent": 25 },
+    { "minPoints": 2160, "percent": 30 },
+    { "minPoints": 2520, "percent": 35 },
+    { "minPoints": 2880, "percent": 40 },
+    { "minPoints": 3240, "percent": 45 },
+    { "minPoints": 3600, "percent": 50 }
+  ]
+}

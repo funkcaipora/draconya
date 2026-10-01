@@ -210,6 +210,34 @@
     "runOnHealth": 20,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I will protect the secrets of my master!",
+          "yell": false
+        },
+        {
+          "text": "Kaplar!",
+          "yell": false
+        },
+        {
+          "text": "This isle will become ours alone",
+          "yell": false
+        },
+        {
+          "text": "You already know too much.",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -375,6 +403,23 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You know what, I changed my mind. BRING IT!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -913,6 +958,35 @@
     "runOnHealth": 3000,
     "staticAttack": 0.95,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "COME HERE! FREE ITEMS FOR EVERYONE!",
+          "yell": true
+        },
+        {
+          "text": "BOW TO THE POWER OF THE RUTHLESS SEVEN!",
+          "yell": true
+        },
+        {
+          "text": "Slay your friends and I will spare you!",
+          "yell": false
+        },
+        {
+          "text": "DON'T BE AFRAID!  I AM COMING IN PEACE!",
+          "yell": true
+        }
+      ]
+    },
+    "race": "fire",
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1138,10 +1212,35 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Don't run, you'll just lose precious fat.",
+          "yell": false
+        },
+        {
+          "text": "Hex hex!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/bibby_bloodbath.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 900
     },
     "outfitId": 2
   },
@@ -1221,6 +1320,26 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Me big nauti! Hehehe!",
+          "yell": false
+        },
+        {
+          "text": "Frind or day?!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1236,6 +1355,11 @@
           "count": 5
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 432
     },
     "outfitId": 281
   },
@@ -1416,10 +1540,54 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 95,
+      "body": 95,
+      "legs": 95,
+      "feet": 95,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "NO PRISONERS!",
+          "yell": true
+        },
+        {
+          "text": "By Bolg's blood!",
+          "yell": false
+        },
+        {
+          "text": "You're no match for me!",
+          "yell": false
+        },
+        {
+          "text": "NO MERCY!",
+          "yell": true
+        },
+        {
+          "text": "MINE!",
+          "yell": true
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/black_knight.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 46
     },
     "outfitId": 131
   },
@@ -1487,6 +1655,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1782,10 +1957,44 @@
     },
     "staticAttack": 0.98,
     "corpseTtlMs": 180000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "The light... that... drains!",
+          "yell": false
+        },
+        {
+          "text": "RAAAR!",
+          "yell": false
+        },
+        {
+          "text": "WILL ... PUNISH ... YOU!",
+          "yell": false
+        },
+        {
+          "text": "Darkness ... devours!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 180000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/chagorz.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 2366
     },
     "outfitId": 1666
   },
@@ -1885,10 +2094,29 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Vae Victis.",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 4,
+      "color": 5
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/chikhaton.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 647
     },
     "outfitId": 361
   },
@@ -2058,6 +2286,22 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Orc arga Huummmak!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2273,6 +2517,38 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Feel my wrath!",
+          "yell": false
+        },
+        {
+          "text": "No one will stop my ascension!",
+          "yell": false
+        },
+        {
+          "text": "My powers are divine!",
+          "yell": false
+        },
+        {
+          "text": "You desecrated this temple!",
+          "yell": false
+        },
+        {
+          "text": "Muahahaha!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2288,6 +2564,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 203
     },
     "outfitId": 203
   },
@@ -2437,6 +2718,35 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Not in my face you barbarian!",
+          "yell": false
+        },
+        {
+          "text": "I envy you to be slain by someone as beautiful as me.",
+          "yell": false
+        },
+        {
+          "text": "I will drain your ugly corpses of the last drop of blood.",
+          "yell": false
+        },
+        {
+          "text": "My brides will feast on your souls!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2452,6 +2762,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 477
     },
     "outfitId": 287
   },
@@ -2638,10 +2953,48 @@
     "runOnHealth": 1,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "People like you are the plague and I'll be the cure!",
+          "yell": false
+        },
+        {
+          "text": "You all will pay for not helping me!",
+          "yell": false
+        },
+        {
+          "text": "Cough! Cough!",
+          "yell": false
+        },
+        {
+          "text": "Desolate! Everything is so desolate!",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 4,
+      "color": 30
+    },
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/diseased_bill.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 485
     },
     "outfitId": 299
   },
@@ -2827,10 +3180,48 @@
     "runOnHealth": 1,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Can't think ... must kill!",
+          "yell": false
+        },
+        {
+          "text": "Where ... where am I?",
+          "yell": false
+        },
+        {
+          "text": "Is that you, Tom?",
+          "yell": false
+        },
+        {
+          "text": "Phew, what an awful smell ... oh, that's me.",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 4,
+      "color": 30
+    },
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/diseased_dan.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 486
     },
     "outfitId": 299
   },
@@ -3017,10 +3408,48 @@
     "runOnHealth": 1,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You will suffer the same fate as I do!",
+          "yell": false
+        },
+        {
+          "text": "The pain! The pain!",
+          "yell": false
+        },
+        {
+          "text": "Stay away! I am contagious!",
+          "yell": false
+        },
+        {
+          "text": "The plague will get you!",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 4,
+      "color": 30
+    },
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/diseased_fred.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 484
     },
     "outfitId": 299
   },
@@ -3235,10 +3664,21 @@
     "runOnHealth": 30,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/ekatrix.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1140
     },
     "outfitId": 54
   },
@@ -3302,10 +3742,47 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Didn't think a dwarf girl could be so pretty and strong at the same time, did you?",
+          "yell": false
+        },
+        {
+          "text": "Hail no one except for me!",
+          "yell": false
+        },
+        {
+          "text": "You won't get this bag, I worked hard for this!",
+          "yell": false
+        },
+        {
+          "text": "Keep your hands off!",
+          "yell": false
+        },
+        {
+          "text": "How did you find us?!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/elvira_hammerthrust.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 766
     },
     "outfitId": 70
   },
@@ -3355,10 +3832,21 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/fleshslicer.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 858
     },
     "outfitId": 457
   },
@@ -3556,6 +4044,34 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You will get what you deserve!",
+          "yell": false
+        },
+        {
+          "text": "Feel the power of the Mooh'Tah!",
+          "yell": false
+        },
+        {
+          "text": "For the king!",
+          "yell": false
+        },
+        {
+          "text": "Guards!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3577,6 +4093,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 207
     },
     "outfitId": 611
   },
@@ -3705,6 +4226,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/glitterscale.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 670
     },
     "outfitId": 34
   },
@@ -3884,6 +4410,34 @@
     },
     "staticAttack": 0.5,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I will bring peace to your misguided soul!",
+          "yell": false
+        },
+        {
+          "text": "Your intrusion can't be tolerated!",
+          "yell": false
+        },
+        {
+          "text": "You should have joined us when there was time!",
+          "yell": false
+        },
+        {
+          "text": "Rejoice! You will die in the name of the triangle!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3905,6 +4459,11 @@
           "count": 1
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 431
     },
     "outfitId": 193
   },
@@ -4018,10 +4577,39 @@
     "runOnHealth": 60,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I sjaw the eyes of the djeep!",
+          "yell": false
+        },
+        {
+          "text": "I mjake sjure yjou wjill njot sjufer the sjame fjate Ij djid!",
+          "yell": false
+        },
+        {
+          "text": "Yjou, intrjuder!!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/groam.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 736
     },
     "outfitId": 413
   },
@@ -4295,10 +4883,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 38,
+      "body": 20,
+      "legs": 21,
+      "feet": 2,
+      "addons": 2
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/guard_captain_quaid.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1791
     },
     "outfitId": 1217
   },
@@ -4385,10 +4991,39 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hugah!",
+          "yell": false
+        },
+        {
+          "text": "Huaauaauaauaa!",
+          "yell": false
+        },
+        {
+          "text": "Ungh! Ungh!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/hairman_the_huge.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 425
     },
     "outfitId": 116
   },
@@ -4447,6 +5082,38 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 3610000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Stupid people!",
+          "yell": false
+        },
+        {
+          "text": "Everyone is so stupid!",
+          "yell": false
+        },
+        {
+          "text": "Feel the wrath of the witch!",
+          "yell": false
+        },
+        {
+          "text": "Oh how you will regret to have disturbed me!",
+          "yell": false
+        },
+        {
+          "text": "I will teach them all to leave me alone!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 3610000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4841,6 +5508,23 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 43,
+      "body": 78,
+      "legs": 43,
+      "feet": 43,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Dream or nightmare?",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5238,6 +5922,23 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 48,
+      "body": 38,
+      "legs": 48,
+      "feet": 48,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Dream or nightmare?",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5301,10 +6002,54 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 95,
+      "body": 95,
+      "legs": 95,
+      "feet": 113,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "That banker never saw it coming!",
+          "yell": false
+        },
+        {
+          "text": "You will not take this gold from me!",
+          "yell": false
+        },
+        {
+          "text": "KEEP YOUR HANDS OFF THAT BAG!",
+          "yell": true
+        },
+        {
+          "text": "Kill him, men!",
+          "yell": false
+        },
+        {
+          "text": "Take from the rich, keep it for yourself. That's my motto.",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/jesse_the_wicked.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 763
     },
     "outfitId": 134
   },
@@ -5402,6 +6147,38 @@
     },
     "staticAttack": 0.85,
     "corpseTtlMs": 370000,
+    "outfit": {
+      "head": 117,
+      "body": 58,
+      "legs": 117,
+      "feet": 0,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "STEP A BIT CLOSER, RIGHT THERE, HAHAHA!",
+          "yell": true
+        },
+        {
+          "text": "COME AND DIE!",
+          "yell": true
+        },
+        {
+          "text": "ROOKIE FOR BREAKFAST",
+          "yell": true
+        }
+      ]
+    },
+    "race": "fire",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 370000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5709,6 +6486,34 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Did it not come to your mind that I placed them here for a reason?",
+          "yell": false
+        },
+        {
+          "text": "Now I have to create new servants! Do you want to spread this pest beyond these safe walls?",
+          "yell": false
+        },
+        {
+          "text": "What have you done!",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 4,
+      "color": 204
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5724,6 +6529,11 @@
           "count": 1
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 703
     },
     "outfitId": 394
   },
@@ -5868,6 +6678,34 @@
     "runOnHealth": 150,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I'm going to make them an offer they can't refuse.",
+          "yell": false
+        },
+        {
+          "text": "My masterplan cannot fail!",
+          "yell": false
+        },
+        {
+          "text": "Gentlemen, you can't fight here! This is the War Room!",
+          "yell": false
+        },
+        {
+          "text": "I love the smell of firebombs in the morning.",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5991,6 +6829,41 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 38,
+      "body": 19,
+      "legs": 19,
+      "feet": 95,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "To be the one you'll have to beat the one!",
+          "yell": false
+        },
+        {
+          "text": "Where did I put my ultimate health potion again?",
+          "yell": false
+        },
+        {
+          "text": "I am the best!",
+          "yell": false
+        },
+        {
+          "text": "I'll take your ears as a trophy!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6110,10 +6983,43 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Come on, you don't really need this. Just let me go.",
+          "yell": false
+        },
+        {
+          "text": "Let us leave safely and maybe we'll give you a few coins.",
+          "yell": false
+        },
+        {
+          "text": "That cowardish dwarven bank keeper ran when he saw the three of us.",
+          "yell": false
+        },
+        {
+          "text": "You humans have enough to spare. We live in poverty.",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/mornenion.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 765
     },
     "outfitId": 64
   },
@@ -6549,10 +7455,39 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Revenge for my little brother!",
+          "yell": false
+        },
+        {
+          "text": "You are starting to annoy me!",
+          "yell": false
+        },
+        {
+          "text": "I will restore our family honor!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/morshabaal.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 2118
     },
     "outfitId": 1468
   },
@@ -6629,6 +7564,26 @@
     "runOnHealth": 10,
     "staticAttack": 0.8,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Meep!",
+          "yell": false
+        },
+        {
+          "text": "Meeeeep!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6920,6 +7875,26 @@
     "runOnHealth": 1500,
     "staticAttack": 0.8,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I'm Zulazza, and you won't forget me that fazzt.",
+          "yell": false
+        },
+        {
+          "text": "Oh, HE will take revenge on zzizz azzault when you zztep in front of HIZZ fazze!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7116,6 +8091,29 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "YOU'LL NEVER GET MY TREASURE!",
+          "yell": true
+        },
+        {
+          "text": "MINIONS, MEET YOUR NEW BROTHER!",
+          "yell": true
+        },
+        {
+          "text": "YOU WILL REGRET THAT YOU ARE BORN!",
+          "yell": true
+        },
+        {
+          "text": "YOU MADE A HUGE WASTE!",
+          "yell": true
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7244,10 +8242,46 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 79,
+      "body": 95,
+      "legs": 81,
+      "feet": 79,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "This is a nightmare and you won't wake up!",
+          "yell": false
+        },
+        {
+          "text": "This was your last chance!",
+          "yell": false
+        },
+        {
+          "text": "Blood, fight and rage!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/raxias.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 1624
     },
     "outfitId": 980
   },
@@ -7399,6 +8433,22 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Harga puchak muhmak!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7461,10 +8511,50 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 96,
+      "body": 132,
+      "legs": 118,
+      "feet": 114,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Banks are meant to be robbed. It's my job!",
+          "yell": false
+        },
+        {
+          "text": "That bank chick was trembling in fear. I love it!",
+          "yell": false
+        },
+        {
+          "text": "You won't get this gold!",
+          "yell": false
+        },
+        {
+          "text": "This is MY gold now!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/robby_the_reckless.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 764
     },
     "outfitId": 129
   },
@@ -7652,10 +8742,54 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 95,
+      "body": 95,
+      "legs": 95,
+      "feet": 95,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I can kill a man in a thousand ways. And that`s only with a spoon!",
+          "yell": false
+        },
+        {
+          "text": "You shouldn`t have come here!",
+          "yell": false
+        },
+        {
+          "text": "Haiiii!",
+          "yell": false
+        },
+        {
+          "text": "You are no match for a master assassin!",
+          "yell": false
+        },
+        {
+          "text": "I'll teach you the art of death!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/rukor_zad.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 435
     },
     "outfitId": 152
   },
@@ -7762,6 +8896,45 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 57,
+      "body": 0,
+      "legs": 77,
+      "feet": 95,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I will make your death look like an accident!",
+          "yell": false
+        },
+        {
+          "text": "You should not have interferred with my business!",
+          "yell": false
+        },
+        {
+          "text": "Bribes are expensive, murder ist cheap!",
+          "yell": false
+        },
+        {
+          "text": "I see some profit in your death!",
+          "yell": false
+        },
+        {
+          "text": "I expect you to die!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7777,6 +8950,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 436
     },
     "outfitId": 134
   },
@@ -7996,6 +9174,46 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Qua hah tsh!",
+          "yell": false
+        },
+        {
+          "text": "Teech tsha tshul!",
+          "yell": false
+        },
+        {
+          "text": "Quara tsha Fach!",
+          "yell": false
+        },
+        {
+          "text": "Tssssha Quara!",
+          "yell": false
+        },
+        {
+          "text": "Blubber.",
+          "yell": false
+        },
+        {
+          "text": "Blup.",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 2,
+      "color": 35
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8230,10 +9448,52 @@
       "random": 10
     },
     "staticAttack": 0.98,
+    "outfit": {
+      "head": 0,
+      "body": 0,
+      "legs": 0,
+      "feet": 0,
+      "addons": 2
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "SUGAR!!!",
+          "yell": false
+        },
+        {
+          "text": "Sweet vengeance!",
+          "yell": false
+        },
+        {
+          "text": "Let me have a bite!",
+          "yell": false
+        },
+        {
+          "text": "YOU HAVE BAD BREATH, TAKE A MINT!!!",
+          "yell": false
+        },
+        {
+          "text": "I LOOOOOOVE CHOCOLATE TRUFFLES!!!",
+          "yell": false
+        },
+        {
+          "text": "Yummy!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/sugar_daddy.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 2562
     },
     "outfitId": 1764
   },
@@ -8417,10 +9677,32 @@
       "random": 10
     },
     "staticAttack": 0.98,
+    "outfit": {
+      "head": 0,
+      "body": 0,
+      "legs": 0,
+      "feet": 0,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "SUGAR!!!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/sugar_mommy.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 2580
     },
     "outfitId": 1764
   },
@@ -8502,6 +9784,27 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Who Disturbs my slumber?",
+          "yell": false
+        },
+        {
+          "text": "Mourn the dead, do not hunt them!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8787,10 +10090,80 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I AM THE ESSENCE OF DEATH!",
+          "yell": true
+        },
+        {
+          "text": "YOU CAN NOT ESCAPE ME!",
+          "yell": true
+        },
+        {
+          "text": "DESTRUCTION!",
+          "yell": true
+        },
+        {
+          "text": "DRUIDS! ... LIKE ... DRUID FLAVOUR!",
+          "yell": true
+        },
+        {
+          "text": "WILL EAT DRUIDS!",
+          "yell": true
+        },
+        {
+          "text": "KNIGHTS! ... DELICIOUS KNIGHTS!",
+          "yell": true
+        },
+        {
+          "text": "WILL EAT KNIGHTS!",
+          "yell": true
+        },
+        {
+          "text": "PALADINS!... TASTY!",
+          "yell": true
+        },
+        {
+          "text": "WILL EAT PALADINS!",
+          "yell": true
+        },
+        {
+          "text": "SORCERERS! ... MUST EAT SORCERERS!",
+          "yell": true
+        },
+        {
+          "text": "WILL EAT SORCERERS!",
+          "yell": true
+        },
+        {
+          "text": "HUNGER ... SO ... GREAT! YOU ALL .. WILL .... DIE!!!",
+          "yell": true
+        },
+        {
+          "text": "DIIIIEEEEE!",
+          "yell": true
+        }
+      ]
+    },
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/the_abomination.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 373
     },
     "outfitId": 1393
   },
@@ -8883,10 +10256,22 @@
     "runOnHealth": 80,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/the_blightfather.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 638
     },
     "outfitId": 348
   },
@@ -8999,6 +10384,7 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -9294,6 +10680,38 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 94,
+      "body": 88,
+      "legs": 88,
+      "feet": 114,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Feel the power of death unleashed!",
+          "yell": false
+        },
+        {
+          "text": "I will rule again and my realm of death will span the world!",
+          "yell": false
+        },
+        {
+          "text": "My lich-knights will conquer this world for me!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -9309,6 +10727,11 @@
           "count": 1
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 2055
     },
     "outfitId": 1412
   },
@@ -9443,6 +10866,17 @@
     },
     "runOnHealth": 20,
     "staticAttack": 0.5,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Leave as long as you can.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -9746,6 +11180,26 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Inferior creatures, bow before my power!",
+          "yell": false
+        },
+        {
+          "text": "653768764!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -9767,6 +11221,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 210
     },
     "outfitId": 210
   },
@@ -9973,10 +11432,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 570000,
+    "outfit": {
+      "head": 94,
+      "body": 80,
+      "legs": 101,
+      "feet": 79,
+      "addons": 3
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 570000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/the_first_dragon.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 1368
     },
     "outfitId": 947
   },
@@ -10028,10 +11505,47 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 69,
+      "body": 66,
+      "legs": 69,
+      "feet": 66,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Don't Kill me!!!",
+          "yell": false
+        },
+        {
+          "text": "Have mercy!",
+          "yell": false
+        },
+        {
+          "text": "Perhaps a kiss might release me!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/the_frog_prince.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 420
     },
     "outfitId": 224
   },
@@ -10249,10 +11763,16 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/the_rootkraken.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 2528
     },
     "outfitId": 1765
   },
@@ -10570,10 +12090,44 @@
     },
     "staticAttack": 0.98,
     "corpseTtlMs": 180000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "The light... that... drains!",
+          "yell": false
+        },
+        {
+          "text": "RAAAR!",
+          "yell": false
+        },
+        {
+          "text": "WILL ... PUNISH ... YOU!",
+          "yell": false
+        },
+        {
+          "text": "Darkness ... devours!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 180000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/vemiath.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 2365
     },
     "outfitId": 1668
   },
@@ -10687,6 +12241,34 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Gadarat Ulderek!",
+          "yell": false
+        },
+        {
+          "text": "Ruzad buta bana!",
+          "yell": false
+        },
+        {
+          "text": "Rahi Gosh!",
+          "yell": false
+        },
+        {
+          "text": "Ikem rambo zambo!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -10702,6 +12284,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 419
     },
     "outfitId": 2
   },
@@ -10763,6 +12350,23 @@
       "random": 10
     },
     "staticAttack": 0.85,
+    "outfit": {
+      "head": 92,
+      "body": 0,
+      "legs": 95,
+      "feet": 100,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "UH?",
+          "yell": true
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -10867,10 +12471,22 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/williwasp.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 955
     },
     "outfitId": 44
   },
@@ -11027,6 +12643,47 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I want Your Blood",
+          "yell": false
+        },
+        {
+          "text": "Come Here!",
+          "yell": false
+        },
+        {
+          "text": "I will be still around when my 'noble' race is gone.",
+          "yell": false
+        },
+        {
+          "text": "Human blood is not suitable for drinking!",
+          "yell": false
+        },
+        {
+          "text": "Human blood is a hardly suitable drink.",
+          "yell": false
+        },
+        {
+          "text": "Your short live is coming to an end.",
+          "yell": false
+        },
+        {
+          "text": "Ashari Mortals. Come and stay forever!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -11042,6 +12699,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 475
     },
     "outfitId": 287
   },
@@ -11271,6 +12933,34 @@
     },
     "staticAttack": 0.98,
     "corpseTtlMs": 370000,
+    "outfit": {
+      "head": 0,
+      "body": 98,
+      "legs": 86,
+      "feet": 94,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I AM ZORALURK, THE DEMON WITH A THOUSAND FACES",
+          "yell": true
+        },
+        {
+          "text": "BRING IT, COCKROACHES!",
+          "yell": true
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 370000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -11618,10 +13308,58 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 0,
+      "body": 10,
+      "legs": 0,
+      "feet": 4,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Cool down, will you?",
+          "yell": false
+        },
+        {
+          "text": "And stay cool.",
+          "yell": false
+        },
+        {
+          "text": "Your cold dead body will be a marvelous ice statue.",
+          "yell": false
+        },
+        {
+          "text": "Pay for your ignorance!",
+          "yell": false
+        },
+        {
+          "text": "Is this all you've got?",
+          "yell": false
+        },
+        {
+          "text": "Freeze!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/zushuka.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 969
     },
     "outfitId": 149
   }

@@ -375,6 +375,16 @@ origem nova desde `market`) entra pelo caminho de sempre — `acquired` + `equip
 DESLIGADA no conteúdo real** (`deathPenalty.itemLoss.enabled: false`) até o dono decidir entre
 destruir e manter "nunca perde item": ver `docs/product/death.md`, "Perda de item na morte".
 
+**A exercise weapon é o único item COMPRADO do NPC por gold (#631, ADR 0059 d.2).** O `buy-item { itemId }` mínimo só aceita `purchasable:
+true`, ao `buyPrice`, uma unidade por pedido; a instância nasce de origem **`purchase`** (nova em
+`ITEM_ORIGINS`: `market` é o comércio entre jogadores, e o NPC do Canary é outra proveniência) e
+entra pelo caminho de sempre — `goldDelta` para o gold e `acquired` para o item, gravados pelo
+extrato de estado durável da Cidade. O id da instância leva o do personagem e um UUID por compra:
+a mesma cópia da Cidade é reaberta em outro dia, e um id derivado do `lootSeq` (que recomeça em
+zero) colidiria na chave primária. As cargas restantes vivem no **overlay** da instância
+(`ItemInstanceOverlay.charges`, "ausente é cheia") e a arma esgotada é destruída por
+`removedInstances`, o mesmo caminho de vender, descartar e morrer — ver `docs/product/training.md`.
+
 ### A tela (#161, ADR 0026 decisão 7)
 
 A coluna da DIREITA do OTClient: o **painel do set** (`EquipmentPanel`) com os dez slots no
@@ -467,6 +477,115 @@ O que o `docs/product/items.md` anterior a este ADR marcava como "ainda não imp
 item na lista `autoSell` do filtro vende ao `value` do catálogo assim que é coletado, cortado
 pelo mesmo limite (5 tipos Free, 20 Premium) — mas lido do Premium do **próprio personagem**,
 não do líder da party (a versão de party continua igual, em `party.md`). Ver `economy.md`.
+
+### Esfola de cadáver (#626, M44-08, ADR 0048 d.5/d.6, ADR 0053 d.5)
+
+A faca (**obsidian knife**, `5908` no Canary) e a estaca (**blessed wooden stake**, `5942`) tiram
+material do cadáver: pele, presa, pó. É o `skinning.lua` do Canary (`47dfd51`), transcrito —
+números, janela e sorteio, nunca o código (ADR 0019). Só o `combat-v4` esfola
+(`hasSkinningStage`): uma sessão fixada em `combat-v3` não reconhece ferramenta nenhuma
+(invariante 7).
+
+**O que existe.** `content/data/skinning/generated/skinning.json` (`pnpm catalog:import
+skinning`, relatório em `docs/reference/catalog/skinning-report.md`): **62 monstros** do catálogo
+têm esfola — do Rabbit ao Demon, chefes inclusive, porque o Canary decide pelo ITEM que o cadáver
+é e vários monstros compartilham o cadáver (o `5969` é do Minotaur, do Minotaur Bruiser e do
+Depowered Minotaur; o `5995`, de todo demônio e do Orshabaal). Cada linha diz a ferramenta, o
+material, a `chance` (`25 000` de `100 000`, o `CREATURE_SKINNING_CHANCE`) e os **estágios**
+esfoláveis do cadáver. A issue fala em "87 mapeamentos": é a contagem da palavra `newItem` no
+arquivo, que inclui o código da função e os prêmios de quest — o relatório explica o que cada
+chave é.
+
+**A janela é por estágio, não pela vida inteira.** O Canary confere o id do item que o cadáver É
+agora, e o cadáver troca de id a cada estágio da cadeia de decaimento (`items.xml`). O Dragon é
+`5973` por 10 s, `4025` por 300 s, `4026` por 300 s e `4027` por 60 s (670 s no total, o
+`corpseTtlMs` do #585), e só os dois primeiros ids são chave: **310 s de esfola**, e os 360 s
+finais o cadáver continua no chão mas a ferramenta responde "not possible". O coelho tem 10 s.
+`CorpseState.diedAtMs` (o relógio lógico da morte) dá a idade, e a fronteira pertence ao estágio
+seguinte.
+
+**O bot esfola no abate, no mesmo evento em que coleta.** Depois de todo o sorteio de loot — a
+ordem do RNG é contrato (FUN-63) — o `#onMonsterDied` rola UMA vez `rng.integer(1, range) <=
+chance`, e SÓ com a ferramenta do monstro na mochila ou na bolsa e o monstro esfolável. Sem
+ferramenta, sem monstro esfolável ou fora do `combat-v4` o `session.rng` não é tocado: a hunt de
+quem nunca teve uma faca consome exatamente o que consumia (`rulesets/skinning.test.ts` prende).
+A ferramenta não é consumida. O material (uma unidade) cai **no cadáver**, ao lado do loot, e
+segue o filtro de Quick Loot do dono — aceito e cabendo vai para a mochila, na lista `autoSell`
+vira gold, o resto espera no cadáver como qualquer item (ADR 0048 d.3). Em party com `splitLoot`
+desligado esfola o dono do cadáver; com `splitLoot` ligado esfola o primeiro elegível (na ordem
+da sessão) que tenha a ferramenta, e o material vai para a bolsa. A tentativa marca o cadáver
+(`skinned`), com ou sem sucesso: o Canary o transforma no "esfolado" nos dois casos, e esse não
+é chave de tabela nenhuma — **esfola-se uma vez só**.
+
+**À mão: `use-item-on` da ferramenta com o tile do cadáver por alvo** (`target: { position }`).
+O servidor confere alcance — o `Actions::canUse` do Canary: **mesmo andar e adjacente, `|dx| <= 1` e
+`|dy| <= 1`, sem linha de visão** (`out-of-range`); o `skinning.lua` registra a `Action` sem
+`allowFarUse`, então o `canUseFar` 7×5 das runas (ADR 0049 d.3) NÃO vale aqui, e é a mesma régua de
+`use-on-map` (ADR 0050) e de `take-loot`. Longe, o Canary recusa `TOOFARAWAY` e anda o jogador até o
+cadáver: aqui o cliente manda o `walk-to` antes e o servidor não anda por ele. Confere ainda que a
+ferramenta é a do monstro, que o cadáver não foi esfolado e que o estágio atual é esfolável — tudo
+o que o Canary responde com "not possible" é `not-usable`, e nenhuma recusa consome sorteio. Vale o
+cadáver do TOPO da pilha do tile (o `getTopDownItem` do Canary). O material passa pelo filtro de
+quem esfolou; o que sobra fica no cadáver, sem reprocessar o que já esperava lá. A exaustão de ação
+(1 s) é a de todo `use-item`.
+
+**A tentativa REINICIA o decaimento do cadáver.** Com ou sem sucesso o Canary roda
+`topItem:transform(skin.after)`, e o `Item::setID` do item novo reinicia o `duration`: o cadáver
+esfolado vive o `duration` do `after` mais a cadeia `decayTo` dele (o Dragon esfolado vira o `4026`,
+300 s, e depois o `4027`, 60 s — **360 s a partir da tentativa**, em qualquer idade em que se esfolou
+e para todos os 62 monstros da tabela). Aqui a tentativa — a do bot no abate e a manual, e só a que
+chega a sortear (a recusada não mexe) — cancela o evento `CORPSE` que o abate marcou em
+`corpseTtlMs` e agenda outro `afterTtlMs` à frente (`#retimeCorpse`). O loot que o filtro deixou no
+cadáver, ou que não coube, vive esse prazo: uma pele de Dragon deixa o cadáver ficar 310 s a menos
+do que o de um Dragon que ninguém esfolou. O prazo está na fila da sessão, então sobrevive ao
+snapshot e não depende de haver alguém olhando.
+
+**O Scavenge (charm menor, 60/90/120 por tier) ENCOLHE o `chanceRange`**: `100 000 × chance / 100`
+em vez de `100 000`, e o sucesso continua `random <= value` — a chance vira `25 000 / range`, e o
+charm não muda a quantidade de sorteios. Só vale quando o cadáver esfolado é o do monstro
+escolhido **ou o estágio seguinte dele** (`charmCorpse == target.itemid or
+ItemType(charmCorpse):getDecayId() == target.itemid`), comparado pelo id do item do estágio em
+que o alvo está agora: o Scavenge no Minotaur vale no Minotaur Bruiser, e o do Demon no
+Orshabaal. **A fórmula do Canary tem uma estranheza que aqui é reproduzida como está** (ADR 0037
+d.6, caça idêntica): o intervalo CRESCE com o tier, então o tier 1 (60 → **41,7 %**) é o melhor,
+o tier 2 (90 → 27,8 %) mal passa dos 25 % e o **tier 3 (120 → 20,8 %) fica abaixo da chance sem
+charm**. Está em `sim/skinning.ts` (`skinningChanceRange`) e a PR do #626 a lista para o dono
+rever.
+
+**Parâmetros e onde moram.** A chance, o material, a ferramenta e os estágios (`canaryItemId` +
+`durationMs` + `afterTtlMs`, a vida do cadáver depois da tentativa, que o importador soma do `after`
+do Lua e da cadeia `decayTo` dele no `items.xml`):
+`packages/content/data/skinning/generated/skinning.json` (`skinningSchema`,
+`SKINNING_CHANCE_SCALE = 100000`). Os três itens novos — `obsidian-knife`, `blessed-wooden-stake`
+e `rabbits-foot` (o material do coelho) — são AUTORAIS em `content/data/items/` (peso do
+`items.xml`; o importador de itens não classifica `primarytype="tools"`), com a linha de
+aparência em `appearances/baseline.json`. O `rabbits-foot` vale **50 gp**, o preço de compra dos
+NPCs (`data/scripts/lib/shops.lua:638` e `grizzly_adams.lua:61`) — o `items.xml` só dá o peso — e
+NÃO é `creatureProduct`, porque o flag vem do `primarytype="creature products"` do `items.xml` e o
+12172 não o declara (o Gut não o soma). A faca e a estaca valem 0: nenhuma loja de NPC (`shops.lua`) as lista. O charm:
+`charms/generated/charms.json` (`scavenge`, `chance [60, 90, 120]`).
+
+**O que diverge do Tibia, e por quê.**
+
+- **O material cai no cadáver e passa pelo Quick Loot**, em vez de ir direto para a mochila como
+  o `player:addItem` do Canary — é a decisão do plano (ADR 0048 d.5/d.6), e a hunt desanexada
+  precisa que o resultado não dependa de alguém abrir nada (invariante 3).
+- **A faca e a estaca não têm fonte no jogo ainda**: nenhum NPC do catálogo as vende e nenhuma
+  quest as dá, então um personagem só as tem por concessão (o `sim` e os testes as põem na
+  mochila). Comprá-las ou ganhá-las entra com a compra de item em NPC e com as quests, que ainda
+  não existem.
+- **O cliente ainda não oferece "Usar com…" para a ferramenta nem resolve a mira num tile**: o
+  menu da mochila só mostra "Usar" para `kind: 'consumable'`, e o `resolveAim` do cliente só
+  manda `creatureId`. O servidor aceita a intenção completa; a tela é pendência registrada.
+- **Fora do corte, e não é caça**: a lista de prêmios do boss da abóbora (armazenamento de quest
+  de 4 h), o mármore e o gelo (escultura de item de mapa) e o ramo `target.itemid == 4301` da
+  faca (quest Rottin Wood: `12172` garantido no segundo estágio do cadáver do coelho, sem sorteio
+  e sem consumir o cadáver, sem conferir a quest). O `sim` não tem quest.
+- **O dono do cadáver não é limpo pela esfola.** O `Item::setID` do `transform(skin.after)` limpa o
+  `CORPSEOWNER` (e o faz em toda troca de id, o primeiro decaimento aos 10 s inclusive), então no
+  Canary o cadáver esfolado abre para qualquer um. Aqui `ownerId`/`eligible` seguem os do abate
+  durante toda a vida do cadáver (ADR 0048 d.4 — a janela de dono do Canary, de um estágio, nunca
+  foi modelada, nem para o cadáver que ninguém esfola): fica para o dia em que ela for.
 
 ### O id da instância é determinístico, e é isso que dá idempotência
 
@@ -779,6 +898,93 @@ concordam em peso, `hitChance`, alcance e `attack`.
 | escudo | Mastermind Shield | — (besta de duas mãos) | Spellbook of Mind Control | Spellbook of Mind Control |
 | amuleto | Dragon Necklace | Dragon Necklace | Dragon Necklace | Dragon Necklace |
 | anel | Might Ring | Might Ring | Might Ring | Might Ring |
+
+## Atributos raros: elemental bond e capacidade de Magic Shield (#627, M44-09)
+
+Os dois últimos atributos de item do Canary que faltavam no schema. **Os dois entraram como DADO e
+nenhum dos dois move o combate** — porque o Canary (47dfd51) também não os move para nenhuma vocação
+ou item que o Draconya tenha. A issue e o `docs/endgame-plan.md` §3 descreviam os dois como efeitos
+("soma dano no elemento", "entram no cálculo do escudo"); a leitura do código dá outra coisa, e a
+regra do ADR 0037 d.6 (mecânica de caça IDÊNTICA à do Canary, inclusive QUANDO dispara) manda ficar
+com o código.
+
+**Capacidade de Magic Shield** — `item.bonuses.magicShieldCapacity: { flat, percent }`, inteiros,
+o `magicshieldCapacityflat`/`magicshieldCapacitypercent` do `items.xml` (`Abilities`,
+`items.hpp:50-51`). São 4 itens, todos spellbooks: eldritch folio e eldritch tome (`flat 80`,
+`percent 8`), cocoa grimoire e creamy grimoire (`flat 150`, `percent 3`) — o importador os lê
+(`numberValueFolded`: o XML real escreve a chave em caixa mista, e o `Items::parseItemNode` do
+Canary a minusculiza — `items.cpp:383` — antes de chamar o `ItemParse::initParse`) e o catálogo
+real os carrega.
+
+O que o Canary FAZ com o número, verificado por `grep` no checkout inteiro (`src/`, `data/`,
+`data-otservbr-global/`):
+
+- soma os equipados (`Player::getMagicShieldCapacityFlat`/`Percent`, `player.cpp:7633-7681`);
+- mostra na descrição do item (`item.cpp:134-141`, `:2727-2735`) e no pacote de defesa da
+  Cyclopedia (`protocolgame.cpp:5661-5663`);
+- expõe o getter ao Lua — e **nenhum script de `data/` o chama**.
+
+O que o Canary NÃO faz: aplicá-lo ao escudo. A Magic Shield (`magic_shield.lua`) monta o balde com
+`300 + 7.6 × level + 7 × ML` (× 1,25 na Roda, que está fora), e o `ConditionManaShield`
+(`condition.cpp:1630-1669`) só copia o parâmetro para `Creature::manaShield`; o estágio de dano
+(`game.cpp:8592-8625`) só consulta esse balde. Por isso o `sim` NÃO lê `magicShieldCapacity`:
+aplicá-lo ao escudo seria comportamento que o Canary não tem.
+
+**Divergência já existente, NÃO tocada por esta issue:** o Draconya não tem o balde. O mana shield
+absorve da própria mana até o prazo vencer (CMB-08, `docs/product/combat.md` "Mana shield como
+estágio visível"): nenhum tamanho o esgota, e ele continua ativo mesmo com a mana em zero. No
+Canary o balde da magia/poção esvazia e derruba a condição, que também cai quando a mana zera
+(`game.cpp:8592-8625`); só o Energy Ring (`CONDITION_MANASHIELD` sem parâmetro, balde zero)
+absorve até a mana acabar, que é o que o Draconya faz hoje para os dois. Enquanto não houver
+balde não há onde a capacidade entrar, mesmo que um dia se decida aplicá-la — é assunto de outra
+issue, e de uma decisão do dono: aplicar a capacidade ao balde seria ir além do Canary.
+
+**Elemental bond** — `item.elementalBond: 'physical' | 'earth' | 'energy'` (`ELEMENTAL_BOND_TYPES`),
+só em `kind: 'weapon'` (o boot recusa o resto). São os três textos que
+`ItemParse::parseElementalBond` (`item_parse.cpp:764-778`) reconhece; qualquer outro deixa o bond
+em `COMBAT_NONE`, e o importador faz o mesmo. É **`ItemType::elementalBond`**, o tipo de dano que
+TROCA o da magia quando a arma está na mão — não um dano somado. Dois pontos leem o bond, e **os
+portões deles não são os mesmos**; os dois leem a arma por `Player::getWeapon(true)`
+(`player.cpp:405-464`: mão esquerda, depois a direita), que não confere vocação nem registro de
+arma:
+
+- `Combat::getCombatDamage` (`combat.cpp:159-174`) substitui `damage.primary.type` pelo bond da
+  arma equipada. Aqui o portão é triplo (`combat.cpp:162`): `VOCATION_MONK_CIP`, **magia
+  instantânea** (o `instantSpellName` do próprio `Combat`, que só `setInstantSpellName` preenche —
+  `combat.cpp:1866`, `combat_functions.cpp:189` —, então runa fica de fora) e tipo de dano **que
+  não seja cura**.
+- `Combat::sendCombatEffect` (`combat.cpp:1143-1159`) recolore o efeito visual. Aqui o portão é
+  só **o Monk com uma arma de bond na mão** — sem checar instantânea nem cura, então passa por ele
+  todo efeito de impacto de `Combat`, de magia instantânea ou de runa: o do tile (`:1255`), o da
+  corrente (`:1332-1335`) e o dos `doCombatHealth`/`Mana`/`Condition`/`Dispel` com alvo (`:1654`,
+  `:1727`, `:1769`, `:1804`). Quem recolore é `monkEffectByElementalBond` (`combat.cpp:1105-1141`),
+  e só nos cinco efeitos brancos do Monk (whirlwind blow, pulse, claw, outburst e blow): `earth`
+  dá verde, `fire` rosa e `ice` azul (este só no blow); `physical` e `energy` ficam no branco.
+
+Os 32 itens do `items.xml` são todos `weapontype="fist"`, e a vocação é o que separa o que o bond
+faz de fato (varredura de `elementalbond` em `data/items/items.xml`, 32 ocorrências):
+
+- 30 pedem `vocation="Monk;true, Exalted Monk"` — quem os equipa é Monk, que é a única vocação
+  para a qual o Canary lê o bond;
+- `traditional sai` (`items.xml:27190-27211`) pede Knight: o Knight o equipa, mas o bond fica mudo
+  porque nenhum dos dois pontos o lê para quem não é Monk;
+- **`transcendent bo`** (`items.xml:84976-84998`, bond `energy`) **não é mudo para o Monk**: não
+  tem `script`, nem vocação, e nenhum `moveevent` o restringe (grep em `data/` e em
+  `data-otservbr-global/`), então o Monk pode equipá-lo e o bond dele dispara como o dos outros 30.
+  Só deixa de valer para as demais vocações.
+
+Nada disso é alcançável no Draconya hoje, **e a razão é o corte, não o dado**: o Monk está fora do
+corte (ADR 0038 d.5, e o pacote 15.33 não o move — `docs/endgame-plan.md` §1.3), a família `fist`
+não é declarável (DT-01, o importador a pula) e o `promote-items` exclui o que exige Monk. Quando o
+Monk entrar, o `transcendent bo` entra com ele, e o bond tem de ser lido nos dois pontos acima,
+cada um com o seu portão. O catálogo real tem ZERO itens com `elementalBond`, e um teste
+(`load.test.ts`) prende isso; o campo existe para o importador não perder o dado e para o dia em
+que o corte mudar. Ligar o estágio exigiria uma vocação que o Draconya não tem — e fazê-lo para
+outra seria a divergência que o ADR 0037 proíbe.
+
+Parâmetros: o schema em `packages/content/src/schemas.ts` (`itemSchema.bonuses.magicShieldCapacity`,
+`itemSchema.elementalBond`); os quatro valores em
+`packages/content/data/items/generated/shields.json`.
 
 ## O importador de itens do Canary (M34-02, #573)
 

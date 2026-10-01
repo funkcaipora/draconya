@@ -10,8 +10,14 @@ describe('isHunting (#502)', () => {
     expect(isHunting(null)).toBe(false);
   });
 
-  it('is true for any session that is not the City (hunt or manual content)', () => {
+  it('is true for any session that is not the City or the Training (hunt or manual content)', () => {
     expect(isHunting('hunt')).toBe(true);
     expect(isHunting('manual')).toBe(true);
+    expect(isHunting('quest')).toBe(true);
+  });
+
+  it('is false in the Training (#631): a private session that does not hunt', () => {
+    // O Treino não tem analisador, "Sair da caçada" nem party — a casca mostra o estado dele à parte.
+    expect(isHunting('training')).toBe(false);
   });
 });

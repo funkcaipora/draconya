@@ -133,7 +133,8 @@ daquele socket, e o servidor guarda o último enviado **por personagem** — doi
 sessão não compartilham o "já mandei isto".
 
 Os eventos notáveis são os da sessão, para todos, e em party dizem de quem: `level-up` com
-`id/level`, `bestiary-milestone` com `id/monstro/marco`, `exit-rule` com a regra (inclusive
+`id/level`, `bestiary-milestone` com `id/monstro/marco`, `bosstiary-level` com `id/boss/nível`
+(#629), `exit-rule` com a regra (inclusive
 `party-member-lost`), e **`party-settlement`** com `total/presentes` — a bolsa foi vendida e
 dividida (ao sair alguém e no fim). O extrato final (`session-ended`) é o de quem saiu: um
 `Receipt` por membro, com `seq` próprio, e a tela de retorno mostra o dele. Ver `party.md`.

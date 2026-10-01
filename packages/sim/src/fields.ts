@@ -12,9 +12,32 @@
 //
 // Nada aqui sabe o que o campo FAZ: a condição é conteúdo (`ConditionSpec`), e quem a aplica e
 // agenda os tiques é o `HuntRuleset`.
+//
+// **O campo tem DONO (OW-05, #826, ADR 0060 d.8).** Quem lançou o campo decide em quem ele
+// pega: o campo de personagem — ou de invocação de personagem — não fere personagem nem
+// invocação de personagem, e a parede dele (Magic Wall, Wild Growth) cede a quem é personagem.
+// É o no-pvp do Canary aplicado ao campo (`canary/src/creatures/combat/combat.cpp:1207-1218`,
+// `:2611-2640`; o portão final em `condition.cpp:2015-2020`). Campo sem dono é campo de MAPA e
+// continua pegando todo mundo.
 
 import type { ConditionSpec, FieldStage } from '@draconya/content';
 import type { WorldPoint } from './movement.js';
+
+/**
+ * Quem lançou o campo (OW-05, #826). É um REGISTRO do lançamento, gravado por `applyField` e
+ * nunca relido para achar a criatura: o que ele decide é só o `kind`, e por isso o campo
+ * continua valendo depois de o dono sair da sessão, morrer ou ser desfeito (a invocação some
+ * antes do campo — `Condition` do Canary guarda o mesmo id solto, `CONDITION_PARAM_OWNER`).
+ *
+ * - `character`: um personagem OU uma invocação de personagem (ADR 0057) — o Canary trata as
+ *   duas como jogador (`caster->isSummon() ? master->getPlayer() : caster->getPlayer()`,
+ *   `combat.cpp:1198-1204`). `id` é o id do personagem (o mestre, no caso da invocação).
+ * - `monster`: qualquer outro monstro. `id` é o `subject` dele (`m:<id>`).
+ */
+export interface FieldOwner {
+  readonly kind: 'character' | 'monster';
+  readonly id: string;
+}
 
 /**
  * O estado de um campo no chão. O `id` é o do conteúdo; relançar o mesmo id REINICIA.
@@ -61,6 +84,35 @@ export interface TileFieldState {
   readonly blocksMovement?: boolean;
   /** Bloqueia projétil/LOS (#560)? Ver `blocksMovement`. Ausente é `false`. */
   readonly blocksProjectile?: boolean;
+  /**
+   * Quem lançou (OW-05, #826). Ausente é campo de MAPA — o de todo snapshot gravado antes desta
+   * issue, que restaura igual e sem subir `SNAPSHOT_FORMAT_VERSION`: nenhum campo de então tinha
+   * dono, e o campo sem dono continua pegando todo mundo. Sobrevive à troca de estágio
+   * (`HuntRuleset#onFieldStageAdvance` o repassa) e ao relançamento do MESMO id, que o troca
+   * pelo de quem relançou.
+   */
+  readonly owner?: FieldOwner;
+}
+
+/**
+ * O campo é de um personagem (ou de invocação de personagem)? É o que o no-pvp lê: o campo
+ * assim não fere personagem (`HuntRuleset#fieldHarms`) e, sendo parede, cede a quem é
+ * personagem (`isSafeWall`).
+ */
+export function isCharacterOwned(field: TileFieldState): boolean {
+  return field.owner?.kind === 'character';
+}
+
+/**
+ * A parede de personagem — a variante SEGURA do Canary (`ITEM_MAGICWALL_SAFE`/
+ * `ITEM_WILDGROWTH_SAFE`, `combat.cpp:1207-1218`). Ela segue bloqueando monstro, invocação e
+ * projétil, como a parede comum; quem a atravessa é o personagem: o passo dele a remove e ele
+ * segue (`Tile::queryAdd`, `canary/src/items/tile.cpp:864-876`, "NO PVP magic wall or wild
+ * growth field check"; `MagicField::onStepInField`, `combat.cpp:2594-2602`). Vale para QUALQUER
+ * personagem, não só o lançador — o Canary confere `creature->getPlayer()`, nunca o dono.
+ */
+export function isSafeWall(field: TileFieldState): boolean {
+  return field.blocksMovement === true && isCharacterOwned(field);
 }
 
 /**
@@ -156,9 +208,15 @@ export class Fields {
    * O tile tem um campo bloqueante AGORA (#560)? Vale para QUALQUER criatura — é
    * `TileOccupancy.blockedAt` quem combina isto com a geometria do mapa e com `TileOverrides`,
    * a mesma composição de três fontes que já existe para porta/capim/stone-pile.
+   *
+   * `dissolvesSafeWalls` (OW-05, #826) é a pergunta de QUEM é personagem: a parede de
+   * personagem (`isSafeWall`) não o bloqueia, porque o passo dele a desfaz. Ausente é `false` —
+   * a pergunta de sempre, que monstro e invocação continuam fazendo.
    */
-  blockedAt(point: WorldPoint): boolean {
-    return this.at(point)?.blocksMovement ?? false;
+  blockedAt(point: WorldPoint, dissolvesSafeWalls = false): boolean {
+    const field = this.at(point);
+    if (field === null || field.blocksMovement !== true) return false;
+    return !(dissolvesSafeWalls && isSafeWall(field));
   }
 
   /** O tile tem um campo que bloqueia projétil/LOS AGORA (#560)? Ver `blockedAt`. */

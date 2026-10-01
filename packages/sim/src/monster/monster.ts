@@ -16,8 +16,9 @@ import { Contribution } from '../death.js';
 import type { ContributionState } from '../death.js';
 import type { CooldownState } from '../cooldown.js';
 import type { Rng } from '../rng.js';
+import { FACTION_PLAYER, NEAREST_FACTION_WEIGHT } from './faction.js';
 import { rankTarget, type TargetRankCandidate } from './target-strategy.js';
-import { boundedPath, isExactly } from '../route/pathfind.js';
+import { boundedPath, cheapestPath, isExactly } from '../route/pathfind.js';
 import {
   canSeePoint, distance, fleeStep, greedyStep, randomStep, sameFloor, walkBackStep,
   type Blocked, type FloorPoint, type GridPoint,
@@ -214,6 +215,15 @@ export interface Prey {
    * (`visibility-think`) que o larga, como o `Creature::onThink` do Canary.
    */
   readonly invisible?: boolean;
+  /**
+   * O valor de `Faction_t` do candidato (#619, `Creature::getFaction`): só o desempate lê — a
+   * busca do mais perto soma `faction × 100` à distância, e as por vida e por dano `× 100 000`
+   * (ver `faction.ts`). Ausente é `FACTION_PLAYER` (1): `CharacterRuntime` e a invocação de
+   * personagem — a lista que `chooseTarget` sempre recebeu — não dizem nada, e o desempate fica
+   * uniforme entre eles. Só o monstro de facção que vira candidato de OUTRO monstro carrega o
+   * próprio valor.
+   */
+  readonly faction?: number;
 }
 
 /**
@@ -265,8 +275,13 @@ export class MonsterRuntime {
   readonly scheduledAbilities: Set<string>;
   /** Ver `MonsterState.scheduledDefenses` (#518). */
   readonly scheduledDefenses: Set<string>;
-  /** Ver `MonsterState.masterId` (#546/#598). `null` é "não é invocação" — o de sempre. */
-  readonly masterId: number | string | null;
+  /**
+   * Ver `MonsterState.masterId` (#546/#598). `null` é "não é invocação" — o de sempre. **Mutável só
+   * pela Convince Creature Rune** (#600, `Creature::setMaster`): o monstro que nasceu do Spawner passa
+   * a ter o personagem por mestre no meio da vida. `HuntRuleset#convertToSummon` é o ÚNICO escritor —
+   * ele também cancela o que uma invocação nunca arma (a lista de invocação própria) e reavalia o alvo.
+   */
+  masterId: number | string | null;
   /** Ver `MonsterState.scheduledSummons` (#546). */
   readonly scheduledSummons: Set<string>;
   /** Mutadas pelo ruleset ao lançar e ao vencer — ver `Conditions` (CMB-07). */
@@ -517,6 +532,7 @@ export function chooseTarget(
           candidates.push({
             id: candidate.id, distance: d, health: candidate.health,
             damage: monster.contribution.damageBy(candidate.id),
+            ...(candidate.faction === undefined ? {} : { faction: candidate.faction }),
           });
         }
         if (candidates.length > 0) return rankTarget(strategy, candidates, rng);
@@ -529,8 +545,14 @@ export function chooseTarget(
   // `TARGETSEARCH_NEAREST` fixo — `monster.cpp:1736`): só o mais perto, zero sorteio, zero
   // alocação nova, e o `targetStrategy` do conteúdo NUNCA é consultado aqui — a estratégia
   // ponderada só entra no ramo estreito acima.
+  //
+  // O desempate por FACÇÃO (#619, `searchTargetImmediate`/`MonsterTargetRanker::rank`): a
+  // distância comparada é `d + faction × 100`, então um candidato de facção MENOR ganha de um de
+  // facção maior por mais longe que esteja — o jogador (1) antes de qualquer monstro inimigo. Com
+  // todos os candidatos na mesma facção (o caso de toda hunt sem facção: só personagens e
+  // invocações de personagem) o somando é uma constante, e a escolha é a de sempre.
   let closest: Prey | null = null;
-  let closestDistance = Number.POSITIVE_INFINITY;
+  let closestKey = Number.POSITIVE_INFINITY;
   for (const candidate of prey) {
     if (!candidate.alive) continue;
     if (candidate.invisible && !seesInvisible(definition)) continue;
@@ -540,13 +562,15 @@ export function chooseTarget(
     // através do chão.
     if (!sameFloor(monster.position.z, candidate.position.z)) continue;
     const d = distance(monster.position, candidate.position);
-    if (d > definition.aggroRadius || d >= closestDistance) continue;
+    if (d > definition.aggroRadius) continue;
+    const key = d + (candidate.faction ?? FACTION_PLAYER) * NEAREST_FACTION_WEIGHT;
+    if (key >= closestKey) continue;
     // Quem está além do leash não é candidato: desistir do alvo que passou dele não vale se a
     // aquisição logo o pegasse de volta (o alvo retido está sempre dentro do `aggroRadius`
     // depois do corte por visão acima, então sem isto o leash nunca soltaria ninguém).
     if (leash !== 0 && distance(monster.home, candidate.position) > leash) continue;
     closest = candidate;
-    closestDistance = d;
+    closestKey = key;
   }
   return closest?.id ?? null;
 }
@@ -555,19 +579,21 @@ export function chooseTarget(
  * O candidato mais perto (Chebyshev), com o mesmo desempate FIXO do Canary que a aquisição de
  * `chooseTarget` já usa: o primeiro da lista que bate o recorde fica — comparação ESTRITA,
  * nunca sorteada (#645, `searchTargetImmediate`, `TARGETSEARCH_NEAREST`, `monster.cpp:944-964`).
- * Draconya não modela facção, então o offset de facção do Canary (`getFaction() * 100`) nunca
- * entra — é sempre zero para todo mundo. `candidates` já vem filtrado por quem chama (vivo,
- * mesmo andar, dentro do raio) — usada pelo vencimento de `targetChange` em `hunt.ts`, que
- * precisa da MESMA regra de desempate sem duplicá-la.
+ * O offset de facção (#619, `getFaction() * 100`) entra na distância comparada, como na
+ * aquisição: sem `faction` no candidato vale `FACTION_PLAYER`, uniforme para toda a lista de
+ * sempre. `candidates` já vem filtrado por quem chama (vivo, mesmo andar, dentro do raio) —
+ * usada pelo vencimento de `targetChange` em `hunt.ts`, que precisa da MESMA regra de
+ * desempate sem duplicá-la.
  */
 export function nearestPrey(origin: GridPoint, candidates: readonly Prey[]): Prey | null {
   let closest: Prey | null = null;
-  let closestDistance = Number.POSITIVE_INFINITY;
+  let closestKey = Number.POSITIVE_INFINITY;
   for (const candidate of candidates) {
-    const d = distance(origin, candidate.position);
-    if (d >= closestDistance) continue;
+    const key = distance(origin, candidate.position)
+      + (candidate.faction ?? FACTION_PLAYER) * NEAREST_FACTION_WEIGHT;
+    if (key >= closestKey) continue;
     closest = candidate;
-    closestDistance = d;
+    closestKey = key;
   }
   return closest;
 }
@@ -798,6 +824,91 @@ export function walkBackPathStep(from: GridPoint, home: GridPoint, blocked: Bloc
 }
 
 /**
+ * A distância a que a invocação de personagem para ao seguir o mestre (`Monster::
+ * getPathSearchParams`, `monster.cpp:3836-3838`: `master == creature` → `fpp.maxTargetDist = 2`,
+ * com `minTargetDist = 1`). É o ALVO da busca: `FrozenPathingConditionCall`
+ * (`creature.cpp:1819-1847`) só trata `testDist == maxTargetDist` como acerto perfeito — a 1 tile
+ * é "o melhor até agora", e a busca segue procurando um tile a 2 (ver `summonFollowStep`).
+ */
+export const SUMMON_FOLLOW_DISTANCE = 2;
+
+/**
+ * O raio da busca de caminho ao mestre (`Creature::getPathSearchParams`, `maxSearchDist = 12`).
+ * O mestre tem de estar na área de visão (`Creature::setFollowCreature` recusa quem `canSee` não
+ * alcança), então o caminho sempre cabe: a visão é 11.
+ */
+const SUMMON_FOLLOW_SEARCH_RADIUS = 12;
+
+/**
+ * O que a invocação de personagem SEM alvo faz a cada vencimento (`Monster::getNextStep` com o
+ * mestre como `followCreature`, `Monster::updateSummonTarget`):
+ * - `step`: o próximo passo do caminho até o tile a `SUMMON_FOLLOW_DISTANCE` do mestre;
+ * - `stay`: segue o mestre e não anda — já está num tile bom, ou não PODE seguir (`Creature::
+ *   goToFollowCreature` esvazia a lista de passos da invocação comum quando `canFollowMaster`
+ *   falha: mestre invisível que ela não enxerga);
+ * - `wander`: não há `followCreature` ou `hasFollowPath` é falso — o mestre fora da área de visão
+ *   (`setFollowCreature` recusa) ou nenhum caminho até um tile bom (`getPathTo` falha) —, e o
+ *   `getNextStep` do Canary cai em `doRandomStep`: quem decide é `decideUnengagedMove`.
+ */
+export type SummonFollow =
+  | { readonly kind: 'step'; readonly to: GridPoint }
+  | { readonly kind: 'stay' }
+  | { readonly kind: 'wander' };
+
+/**
+ * O que a invocação de personagem SEM alvo faz para seguir o mestre (#599; `Monster::
+ * updateSummonTarget` — "`master != followCreature` → `setFollowCreature(master)`" — e
+ * `doFollowCreature`, que anda o caminho até o tile a `SUMMON_FOLLOW_DISTANCE` do mestre).
+ *
+ * **O objetivo é DUAS camadas, como `FrozenPathingConditionCall`.** O A* do Canary só encerra a
+ * busca num tile a EXATAMENTE 2 do mestre com linha de visão livre (`clearSight`); um tile a 1 é só
+ * o "melhor até agora" (o primeiro encontrado, o tile atual inclusive), guardado enquanto a busca
+ * continua. Por isso a invocação encostada no mestre se afasta até a 2, e só se nenhum tile a 2 for
+ * alcançável (corredor de uma casa, mestre cercado) ela fica a 1. `currentPositionSatisfiesFollow`
+ * só existe quando `minTargetDist == maxTargetDist`, e aqui são 1 e 2.
+ *
+ * É a BUSCA de caminho de menor custo (`cheapestPath`: cardinal 10, diagonal 35, o A* do Canary),
+ * não o passo guloso: o guloso, numa concavidade, faria a invocação oscilar na boca dela (o mesmo
+ * motivo da volta ao spawn, `nextWalkBackStep`), e o BFS de custo igual a faria andar de viés na
+ * diagonal — o triplo do tempo por tile. `blocked` é o predicado da busca de caminho — um tile a
+ * qualquer distância, criatura inclusa. Ordem de vizinhos fixa, sem sorteio.
+ *
+ * `canFollowMaster` é o `Creature::canFollowMaster` do Canary para a invocação COMUM: falso quando
+ * o mestre está invisível e ela não enxerga invisível (o familiar passa por cima: `!isFamiliar()`
+ * é parte da condição) — o chamador já resolveu, e aqui só vale DEPOIS de o mestre estar à vista,
+ * porque `setFollowCreature` é anterior a `goToFollowCreature`.
+ */
+export function summonFollowStep(
+  monster: MonsterRuntime,
+  master: Prey,
+  viewRange: number,
+  blocked: Blocked,
+  sightClear: (from: FloorPoint, to: FloorPoint) => boolean = () => true,
+  canFollowMaster = true,
+): SummonFollow {
+  // O mestre morto sai da conta antes de tudo: sem ele a invocação some (`Game::removeCreature`),
+  // e até lá fica parada — nunca passeia atrás de um corpo.
+  if (!master.alive) return { kind: 'stay' };
+  if (!sameFloor(monster.position.z, master.position.z)) return { kind: 'wander' };
+  if (!canSeePoint(monster.position, master.position, viewRange)) return { kind: 'wander' };
+  if (!canFollowMaster) return { kind: 'stay' };
+  const z = monster.position.z;
+  const at = (p: GridPoint): number => Math.max(Math.abs(p.x - master.position.x), Math.abs(p.y - master.position.y));
+  const clear = (p: GridPoint): boolean =>
+    sightClear({ x: p.x, y: p.y, ...(z === undefined ? {} : { z }) }, master.position);
+  const path = cheapestPath(
+    monster.position,
+    (p) => at(p) === SUMMON_FOLLOW_DISTANCE && clear(p),
+    blocked,
+    SUMMON_FOLLOW_SEARCH_RADIUS,
+    (p) => at(p) >= 1 && at(p) < SUMMON_FOLLOW_DISTANCE && clear(p),
+  );
+  if (path === null) return { kind: 'wander' };
+  const next = path[0];
+  return next === undefined ? { kind: 'stay' } : { kind: 'step', to: next };
+}
+
+/**
  * `(x, y)` está dentro do raio de spawn do monstro (`Monster::isInSpawnRange`,
  * `monster.cpp:3323-3345`, com `deSpawnRadius` 50)? Sem spawn (invocação) sempre está.
  */
@@ -812,8 +923,11 @@ export function isInSpawnRange(monster: MonsterRuntime, x: number, y: number): b
  * hasFollowPath`, precedido pelo `updateIdleStatus` que o alimenta.
  *
  * - `idle`: `isIdle` — lista de alvos vazia, no spawn e sem condição nenhuma. O monstro nada faz.
- * - `still`: invocação sem alvo. O Canary a manda seguir o mestre (`updateSummonTarget`), o que
- *   este motor não modela; ela continua parada onde está, como antes desta issue.
+ * - `still`: invocação sem alvo. O Canary a manda seguir o mestre (`updateSummonTarget`); a de
+ *   PERSONAGEM o faz antes de chegar aqui (`summonFollowStep`, #599, decidido pelo ruleset) — e
+ *   quando ele devolve `wander` (sem mestre à vista, sem caminho) cai no `random-step` abaixo, como
+ *   o `getNextStep` do Canary —, e esta ação é o que sobra: a invocação de outro MONSTRO (#546),
+ *   que este motor não modela seguindo e continua parada onde está.
  * - `walk-back`: `doWalkBack`; `to` é o passo rumo ao `home` — o guloso, ou a busca de caminho
  *   depois que o guloso empacou fora do `home` —, ou `null` quando já chegou ou não há passo
  *   (nos dois casos `walkingBack` desliga).
@@ -898,9 +1012,24 @@ export function decideUnengagedMove(
     }
     monster.walkingBack = true;
   }
-  if (isSummon && target === null) return { kind: 'still' };
+  // A invocação de MONSTRO (#546) sem alvo fica parada: este motor não a modela seguindo o mestre.
+  // A de PERSONAGEM (`masterId` de texto, #599) chega aqui só quando NÃO tem `followCreature` ou
+  // caminho até o mestre — o `getNextStep` do Canary cai então em `doRandomStep`, como para
+  // qualquer monstro sem perseguição (e o `walkingBack` nunca liga: a invocação não tem spawn).
+  if (isSummon && target === null && typeof monster.masterId !== 'string') return { kind: 'still' };
 
   if (monster.walkingBack) {
+    // O monstro de FACÇÃO não volta ao spawn com jogador à vista (#619, Canary `Monster::
+    // doWalkBack`: `totalPlayersOnScreen > 0` desliga `isWalkingBack` e não dá passo). O contador
+    // é de quem NÃO é invocação, tem facção (`countsAsPlayerOnScreenTarget`) e enxerga um jogador
+    // na lista de alvos — vivo e dentro da visão, o mesmo `anyInView` da lista vazia acima. Serve
+    // à volta que já estava ligada (`walkingBack` persiste, ver acima) quando o jogador reaparece.
+    if (!isSummon && definition.faction !== undefined && definition.faction !== 'default'
+      && anyInView(monster, participants, definition.aggroRadius)) {
+      monster.walkingBack = false;
+      monster.walkBackByPath = false;
+      return { kind: 'walk-back', to: null };
+    }
     const to = sameFloor(monster.position.z, monster.home.z)
       ? nextWalkBackStep(monster, blocked, pathBlocked)
       : null;

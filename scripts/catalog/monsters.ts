@@ -20,7 +20,8 @@
 //
 // **O que fica de fora, e aparece no relatório** (`docs/reference/catalog/monsters-report.md`):
 // monstro com ataque/defesa sem mapeador ou que invoca um monstro não gerado; aparência que o
-// pacote 13.32 não desenha; e as pastas `familiars/`, `trainers/` e `traps/`, que não são caça.
+// pacote 13.32 não desenha; e as pastas `trainers/` e `traps/`, que não são caça. A pasta
+// `familiars/` entrou no #599 (M38-02): os quatro familiares de vocação, menos o do Monk.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
@@ -36,18 +37,43 @@ import {
 import type { MeleePowerVia } from './monster-melee.js';
 import { extractEnum, MAGIC_EFFECT_ENUM, MAGIC_EFFECT_HEADER, SHOOT_TYPE_ENUM } from './enums.js';
 import { repoRootFrom } from './env.js';
+import { Reader, WIRE_LENGTH, WIRE_VARINT } from '../../packages/client/src/assets/protobuf.js';
 
 /** A raiz dos monstros dentro do checkout do Canary. */
 export const CANARY_MONSTER_ROOT = 'data-otservbr-global/monster';
 
+/** `FAMILIAR_ID` — o `lookType` de cada familiar, por nome (#599). */
+export const CANARY_FAMILIAR_LUA = 'data/libs/systems/familiar.lua';
+
 /** `items.xml` — de onde sai o NOME de uma linha de loot declarada só por `id`. */
 export const CANARY_ITEMS_XML = 'data/items/items.xml';
+
+/**
+ * `appearances.dat` do Canary — o MESMO arquivo que o servidor carrega para saber, por item,
+ * `isCorpse`/`isMovable` (`items.cpp`: flags `corpse`/`player_corpse` e `unmove` da aparência). É de
+ * onde sai a Animate Dead (#600): o `items.xml` não diz se um estágio do cadáver é movível.
+ */
+export const CANARY_APPEARANCES_DAT = 'data/items/appearances.dat';
 
 /** A raiz dos monstros do TFS (a velocidade na escala clássica, ADR 0037 decisão 4). */
 export const TFS_MONSTER_ROOT = 'data/monster';
 
-/** Pastas que não são caça: o Draconya nunca gera monstro delas. */
-export const SKIPPED_FOLDERS: ReadonlySet<string> = new Set(['familiars', 'trainers', 'traps']);
+/**
+ * Pastas que não são caça: o Draconya nunca gera monstro delas. `familiars/` deixou de estar aqui
+ * no #599 (M38-02, ADR 0057 d.3) — os familiares de vocação são invocação do jogador, e a magia os
+ * lança pelo `monsterId`.
+ */
+export const SKIPPED_FOLDERS: ReadonlySet<string> = new Set(['trainers', 'traps']);
+
+/**
+ * Monstros lidos e barrados por decisão de recorte, com o motivo que vai para o relatório. O Monk e
+ * tudo que a ele pertence é mais novo que o pacote 13.32 (ADR 0051, decisão do dono de 2026-09-25 e
+ * 2026-09-29): o familiar dele (`monk_familiar.lua`) converteria sem bloqueio nenhum, e por isso
+ * precisa de uma linha explícita aqui — senão entraria no catálogo de graça.
+ */
+export const OUT_OF_CUT_MONSTERS: ReadonlyMap<string, string> = new Map([
+  ['monk-familiar', 'vocação Monk fora do corte (ADR 0051: sistemas mais novos que o 13.32)'],
+]);
 
 /**
  * O raio de agressão do monstro do Canary: `Creature::canSee` com `MAP_MAX_VIEW_PORT_X`/`_Y` = 11
@@ -92,6 +118,15 @@ const BESTIARY_RACE_CONSTANTS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * `RARITY_*` (`BosstiaryRarity_t`, `src/io/io_bosstiary.hpp`) → a raridade do Bosstiary no
+ * vocabulário do Draconya (`BOSSTIARY_RARITIES`, `packages/content/src/schemas.ts`, #629). O
+ * `BOSS_INVALID` do Canary é só marcador de leitura do servidor e nenhum monstro o declara.
+ */
+export const BOSSTIARY_RARITY_CONSTANTS: Readonly<Record<string, string>> = {
+  RARITY_BANE: 'bane', RARITY_ARCHFOE: 'archfoe', RARITY_NEMESIS: 'nemesis',
+};
+
+/**
  * `COMBAT_*` (`CombatType_t`) → o `DamageType` do Draconya. Os quatro sem par (`UNDEFINED`,
  * `HEALING`, `AGONY`, `NEUTRAL`) resolvem para o próprio nome, e quem lê decide o que fazer — em
  * elemento de monstro, viram nota no relatório. Um `COMBAT_*` que o enum do Canary NÃO tem
@@ -117,8 +152,24 @@ export const COIN_VALUES: ReadonlyMap<string, number> = new Map([
 ]);
 
 /**
- * O resolvedor de identificador para um `.lua` de monstro. `COMBAT_*` e `BESTY_RACE_*` saem
- * como texto (tabelas acima); qualquer outro identificador em MAIÚSCULAS (`CONST_ME_*`,
+ * `FACTION_*` (`Faction_t`, `src/game/game_definitions.hpp:44-53`) → o nome da facção no
+ * `MONSTER_FACTIONS` do conteúdo (#619). Resolvida para TEXTO direto no avaliador, como
+ * `BESTY_RACE_*`: o número do enum só importa dentro do `sim` (o desempate do alvo), e lá ele é o
+ * índice de `MONSTER_FACTIONS`. `FACTION_LAST` é sentinela do C++ e nenhum Lua a usa.
+ */
+export const FACTION_CONSTANTS: Readonly<Record<string, string>> = {
+  FACTION_DEFAULT: 'default', FACTION_PLAYER: 'player', FACTION_LION: 'lion',
+  FACTION_LIONUSURPERS: 'lion-usurpers', FACTION_MARID: 'marid', FACTION_EFREET: 'efreet',
+  FACTION_DEEPLING: 'deepling', FACTION_DEATHLING: 'deathling', FACTION_ANUMA: 'anuma',
+  FACTION_FAFNAR: 'fafnar',
+};
+
+/** Os nomes de facção que o conteúdo conhece — o que `FACTION_CONSTANTS` resolve. */
+const KNOWN_FACTIONS: ReadonlySet<string> = new Set(Object.values(FACTION_CONSTANTS));
+
+/**
+ * O resolvedor de identificador para um `.lua` de monstro. `COMBAT_*`, `BESTY_RACE_*` e
+ * `FACTION_*` saem como texto (tabelas acima); qualquer outro identificador em MAIÚSCULAS (`CONST_ME_*`,
  * `CONST_ANI_*`, `CONDITION_*`) resolve para o próprio nome — é só a parte de ataque, que este
  * leitor não interpreta (M35-02), e travar o arquivo inteiro por um efeito visual seria perder o
  * monstro por nada.
@@ -129,6 +180,10 @@ function monsterConstants(): ConstantResolver {
       if (name.startsWith('COMBAT_')) return COMBAT_TYPE_CONSTANTS[name];
       const race = BESTIARY_RACE_CONSTANTS[name];
       if (race !== undefined) return race;
+      const faction = FACTION_CONSTANTS[name];
+      if (faction !== undefined) return faction;
+      const rarity = BOSSTIARY_RARITY_CONSTANTS[name];
+      if (rarity !== undefined) return rarity;
       return /^[A-Z][A-Z0-9_]*$/.test(name) ? name : undefined;
     },
   };
@@ -264,6 +319,100 @@ export function corpseTtlMsFromChain(
   return totalSeconds > 0 ? totalSeconds * 1000 : undefined;
 }
 
+/**
+ * Um item que o Canary trata como CADÁVER (`ItemType::isCorpse`): `movable` é `isMovable()`, o
+ * inverso da flag `unmove`. Só entram os ids com a flag `corpse`/`player_corpse` (3.640 dos 42 mil
+ * itens) — o resto nunca é consultado.
+ */
+export interface CorpseItemFlags {
+  readonly movable: boolean;
+}
+
+/** Campos de `AppearanceFlags` (`appearances.proto` do Canary) que a Animate Dead consulta. */
+const FLAG_UNMOVE = 14;
+const FLAG_CORPSE = 42;
+const FLAG_PLAYER_CORPSE = 43;
+
+/**
+ * `id → CorpseItemFlags` de todo objeto de `appearances.dat` com a flag de cadáver. Lê só os três
+ * campos varint acima e PULA o resto por wire type — o mesmo cuidado do leitor do cliente
+ * (`packages/client/src/assets/appearances.ts`), que é de onde vem o `Reader`. Arquivo ausente:
+ * mapa vazio, e o monstro fica sem janela de Animate Dead (o `--check` avisa pelo diff, nunca
+ * inventa um cadáver movível).
+ */
+export function readCorpseItemFlags(appearancesDatPath: string): Map<number, CorpseItemFlags> {
+  const flags = new Map<number, CorpseItemFlags>();
+  let bytes: Buffer;
+  try {
+    bytes = readFileSync(appearancesDatPath);
+  } catch {
+    return flags;
+  }
+  const reader = new Reader(bytes);
+  while (!reader.done) {
+    const { field, wire } = reader.tag();
+    // `Appearances.object` (campo 1) — outfit/effect/missile têm outros números e nunca são item.
+    if (field !== 1 || wire !== WIRE_LENGTH) { reader.skip(wire); continue; }
+    const appearance = reader.slice();
+    let id = 0;
+    let corpse = false;
+    let unmove = false;
+    while (!appearance.done) {
+      const tag = appearance.tag();
+      if (tag.field === 1 && tag.wire === WIRE_VARINT) { id = appearance.varint(); continue; }
+      if (tag.field === 3 && tag.wire === WIRE_LENGTH) {
+        const appearanceFlags = appearance.slice();
+        while (!appearanceFlags.done) {
+          const flag = appearanceFlags.tag();
+          if (flag.wire !== WIRE_VARINT) { appearanceFlags.skip(flag.wire); continue; }
+          const value = appearanceFlags.varint() !== 0;
+          if (flag.field === FLAG_CORPSE || flag.field === FLAG_PLAYER_CORPSE) corpse = corpse || value;
+          if (flag.field === FLAG_UNMOVE) unmove = value;
+        }
+        continue;
+      }
+      appearance.skip(tag.wire);
+    }
+    if (id !== 0 && corpse) flags.set(id, { movable: !unmove });
+  }
+  return flags;
+}
+
+/**
+ * As janelas, em ms desde a morte, em que o item de topo do cadáver É movível — o que a Animate
+ * Dead do Canary exige (`animate_dead_rune.lua`: `isCorpse() and isMovable()`) (#600). Segue a MESMA
+ * cadeia `duration`/`decayTo` de `corpseTtlMsFromChain`, estágio a estágio: cada estágio é um item
+ * com as flags PRÓPRIAS (o recém-abatido é `unmove` e vira movível no primeiro decaimento). Estágios
+ * movíveis contíguos viram UMA janela; `undefined` quando o monstro não tem cadáver resolvível ou
+ * quando nenhum estágio é movível.
+ */
+export function corpseAnimatableWindows(
+  corpseId: number | undefined,
+  chains: ReadonlyMap<number, DecayStage>,
+  flags: ReadonlyMap<number, CorpseItemFlags>,
+): { readonly fromMs: number; readonly untilMs: number }[] | undefined {
+  if (corpseId === undefined) return undefined;
+  const windows: { fromMs: number; untilMs: number }[] = [];
+  let current: number | undefined = corpseId;
+  let elapsedSeconds = 0;
+  const visited = new Set<number>();
+  for (let step = 0; step < MAX_DECAY_STAGES; step += 1) {
+    if (current === undefined || current === 0 || visited.has(current)) break;
+    visited.add(current);
+    const stage = chains.get(current);
+    if (stage === undefined) break;
+    const fromMs = elapsedSeconds * 1000;
+    elapsedSeconds += stage.durationSeconds;
+    if (flags.get(current)?.movable === true) {
+      const last = windows[windows.length - 1];
+      if (last !== undefined && last.untilMs === fromMs) last.untilMs = elapsedSeconds * 1000;
+      else windows.push({ fromMs, untilMs: elapsedSeconds * 1000 });
+    }
+    current = stage.decayTo;
+  }
+  return windows.length === 0 ? undefined : windows;
+}
+
 function walk(dir: string, suffix: string): string[] {
   const out: string[] = [];
   for (const name of readdirSync(dir).sort()) {
@@ -325,6 +474,38 @@ export interface MonsterReaderDeps {
   readonly missileIds: ReadonlyMap<string, number>;
   /** A cadeia de decaimento do `items.xml`, para `monster.corpse` virar `corpseTtlMs` (#585). */
   readonly corpseChains: ReadonlyMap<number, DecayStage>;
+  /**
+   * `nome do familiar → lookType` de `data/libs/systems/familiar.lua` (`FAMILIAR_ID`, #599). O Lua
+   * do monstro deixa o `lookType` comentado — quem o define é a magia, na hora de invocar
+   * (`myFamiliar:setOutfit`) —, e a tabela por vocação é a fonte dele. Ausente (fixture sem `data/`):
+   * familiar sem aparência, e portanto bloqueado, como qualquer monstro sem `lookType`.
+   */
+  readonly familiarLooktypes?: ReadonlyMap<string, number>;
+  /**
+   * As flags de cadáver de `appearances.dat` (#600), para `monster.corpse` virar `corpseAnimatable`.
+   * Ausente (fixture sem o `.dat`): monstro sem janela de Animate Dead.
+   */
+  readonly corpseFlags?: ReadonlyMap<number, CorpseItemFlags>;
+}
+
+/**
+ * `nome → lookType` do `FAMILIAR_ID` do Canary (`data/libs/systems/familiar.lua`), lido como DADO: as
+ * chaves da tabela são expressões (`VOCATION.BASE_ID.SORCERER`) que o avaliador de Lua literal não
+ * resolve, então a leitura casa só os pares `{ id = N, name = "…" }` — números e nomes, nunca código
+ * (ADR 0019 limite 1, ADR 0038 decisão 7).
+ */
+export function readFamiliarLooktypes(familiarLuaPath: string): Map<string, number> {
+  const looktypes = new Map<string, number>();
+  let text: string;
+  try {
+    text = readFileSync(familiarLuaPath, 'utf8');
+  } catch {
+    return looktypes;
+  }
+  for (const match of text.matchAll(/\{\s*id\s*=\s*(\d+)\s*,\s*name\s*=\s*"([^"]+)"\s*\}/g)) {
+    looktypes.set(match[2] as string, Number(match[1]));
+  }
+  return looktypes;
 }
 
 export interface LootLine {
@@ -380,6 +561,8 @@ export interface MonsterNotes {
   readonly meleeVia: readonly MeleePowerVia[];
   /** Os monstros que este invoca — o catálogo confere que cada um foi gerado. */
   readonly summonedIds: readonly string[];
+  /** O que a leitura da apresentação (#620) observou e não coube no schema. */
+  readonly look: LookNotes;
 }
 
 export interface ConvertedMonster {
@@ -394,16 +577,18 @@ export interface ConvertedMonster {
 
 /** Os campos que o leitor lê para `monsterSchema`; o resto vira `ignoredFields`. */
 const READ_FIELDS: ReadonlySet<string> = new Set([
-  'name', 'description', 'experience', 'outfit', 'raceId', 'Bestiary', 'health', 'maxHealth', 'race',
-  'speed', 'manaCost', 'changeTarget', 'strategiesTarget', 'flags', 'loot', 'attacks', 'defenses',
+  'name', 'description', 'experience', 'outfit', 'raceId', 'Bestiary', 'bosstiary', 'health', 'maxHealth',
+  'race', 'speed', 'manaCost', 'changeTarget', 'strategiesTarget', 'flags', 'loot', 'attacks', 'defenses',
   'elements', 'immunities', 'summon', 'maxSummons', 'summons', 'critChance', 'corpse',
+  // A apresentação (#620): cores/addons do outfit, falas periódicas e luz.
+  'voices', 'light',
+  'faction', 'enemyFactions',
 ]);
 
 /** Campos que não entram NUNCA nesta issue, com o dono de cada um. */
 const IGNORED_FIELD_OWNERS: Readonly<Record<string, string>> = {
-  events: 'M44', voices: 'M44', light: 'M44',
-  heals: '#683', reflects: '#683', bosstiary: 'sem sistema de Bosstiary', faction: 'sem facção',
-  enemyFactions: 'sem facção',
+  events: 'M44',
+  heals: '#683', reflects: '#683',
 };
 
 /** A velocidade na escala do TFS (ADR 0037 d.4): o TFS quando tem o mesmo monstro, senão Canary × 2. */
@@ -624,6 +809,127 @@ function readElements(elements: readonly LuaValue[], immunitiesRaw: readonly Lua
   };
 }
 
+// ---------------------------------------------------------------------------------------------
+// A apresentação do monstro (#620): cores e addons do outfit, falas, luz e raça.
+
+/** As raças do Canary (`MonsterType:race`, `monster_type_functions.cpp`) — o vocabulário de `MONSTER_RACES`. */
+const CANARY_RACES: ReadonlySet<string> = new Set([
+  'venom', 'blood', 'undead', 'fire', 'energy', 'ink', 'chocolate', 'candy',
+]);
+
+/** A raça que o Canary assume sem `monster.race` (`RACE_BLOOD`, `monsters.hpp`) — o default do schema. */
+const DEFAULT_RACE = 'blood';
+
+/** O maior índice da paleta de 133 cores do outfit e a maior máscara de addons. */
+const MAX_PALETTE_INDEX = 132;
+const MAX_ADDONS = 3;
+/** O maior índice da paleta de 216 cores da luz. */
+const MAX_LIGHT_COLOR = 215;
+
+/** O que a leitura da apresentação observou e não coube — vira nota no relatório. */
+export interface LookNotes {
+  /** `lookMount` diferente de 0: montaria, que este catálogo não desenha (ver o relatório). */
+  readonly mount: number | undefined;
+  /** Algum índice de cor, addon ou luz fora da faixa do schema, recortado nela. */
+  readonly clamped: boolean;
+  /** `monster.race` que o Canary não conhece — ele avisa e fica em `blood`. */
+  readonly unknownRace: string | undefined;
+  /** Um bloco de falas que nunca dispara no Canary (intervalo 0, chance 0 ou sem linha) e não foi gerado. */
+  readonly silentVoices: boolean;
+}
+
+export interface MonsterLook {
+  readonly outfit?: Record<string, number>;
+  readonly voices?: {
+    readonly intervalMs: number;
+    readonly chance: number;
+    readonly lines: ReadonlyArray<{ readonly text: string; readonly yell: boolean }>;
+  };
+  readonly light?: { readonly level: number; readonly color: number };
+  readonly race?: string;
+  readonly notes: LookNotes;
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  return Math.min(Math.max(Math.trunc(value), min), max);
+}
+
+/**
+ * A apresentação de UM monstro: `monster.outfit.look*` (cores e addons, só quando algum é diferente
+ * de zero — o schema assume o neutro), `monster.voices`, `monster.light` e `monster.race`. Nada
+ * daqui é arte (invariante 6) nem entra em combate; `lookType` é `outfitId` e segue para a tabela de
+ * aparências pelo caminho de sempre. As leituras seguem o registro do Canary
+ * (`register_monster_type.lua`): o intervalo e a chance das falas vêm do bloco, uma vez só, e
+ * `light` só vale com `level` declarado.
+ */
+export function readMonsterLook(raw: Readonly<Record<string, LuaValue>>): MonsterLook {
+  let clamped = false;
+  const bounded = (value: number, max: number): number => {
+    const result = clampInteger(value, 0, max);
+    if (result !== Math.trunc(value)) clamped = true;
+    return result;
+  };
+
+  const outfit = isRecord(raw['outfit']) ? raw['outfit'] : {};
+  const colors = {
+    head: bounded(num(outfit['lookHead']) ?? 0, MAX_PALETTE_INDEX),
+    body: bounded(num(outfit['lookBody']) ?? 0, MAX_PALETTE_INDEX),
+    legs: bounded(num(outfit['lookLegs']) ?? 0, MAX_PALETTE_INDEX),
+    feet: bounded(num(outfit['lookFeet']) ?? 0, MAX_PALETTE_INDEX),
+    addons: bounded(num(outfit['lookAddons']) ?? 0, MAX_ADDONS),
+  };
+  const mount = num(outfit['lookMount']) ?? 0;
+  const hasLook = Object.values(colors).some((value) => value !== 0);
+
+  // As falas: `interval` e `chance` valem para o bloco todo, e cada tabela posicional é uma linha.
+  // O Canary só fala com intervalo E chance positivos e ao menos uma linha (`onThinkYell`).
+  let voices: MonsterLook['voices'];
+  let silentVoices = false;
+  const voicesRaw = raw['voices'];
+  if (isRecord(voicesRaw) || Array.isArray(voicesRaw)) {
+    const named = isRecord(voicesRaw) ? voicesRaw : {};
+    const intervalMs = Math.trunc(num(named['interval']) ?? 0);
+    const chance = Math.trunc(num(named['chance']) ?? 0);
+    const lines: Array<{ text: string; yell: boolean }> = [];
+    for (const entry of positionalOf(voicesRaw)) {
+      if (!isRecord(entry)) continue;
+      const text = str(entry['text']);
+      if (text === undefined || text.length === 0) continue;
+      lines.push({ text, yell: bool(entry['yell']) === true });
+    }
+    if (intervalMs > 0 && chance > 0 && lines.length > 0) {
+      voices = { intervalMs, chance: Math.min(chance, 100), lines };
+    } else {
+      silentVoices = true;
+    }
+  }
+
+  // A luz: só com `level` declarado e maior que zero (`registerMonsterType.light`).
+  let light: MonsterLook['light'];
+  const lightRaw = raw['light'];
+  if (isRecord(lightRaw)) {
+    const level = num(lightRaw['level']) ?? 0;
+    if (level > 0) {
+      const boundedLevel = clampInteger(level, 1, 255);
+      const color = bounded(num(lightRaw['color']) ?? 0, MAX_LIGHT_COLOR);
+      if (boundedLevel !== Math.trunc(level)) clamped = true;
+      light = { level: boundedLevel, color };
+    }
+  }
+
+  const raceRaw = str(raw['race']);
+  const unknownRace = raceRaw !== undefined && !CANARY_RACES.has(raceRaw) ? raceRaw : undefined;
+  const race = raceRaw !== undefined && CANARY_RACES.has(raceRaw) && raceRaw !== DEFAULT_RACE ? raceRaw : undefined;
+
+  return {
+    ...(hasLook ? { outfit: colors } : {}),
+    ...(voices === undefined ? {} : { voices }),
+    ...(light === undefined ? {} : { light }),
+    ...(race === undefined ? {} : { race }),
+    notes: { mount: mount > 0 ? mount : undefined, clamped, unknownRace, silentVoices },
+  };
+}
+
 function readBestiary(raw: LuaValue | undefined, raceId: number | undefined): BestiaryDraft | string | undefined {
   if (!isRecord(raw)) return undefined;
   const className = str(raw['class']);
@@ -645,6 +951,33 @@ function readBestiary(raw: LuaValue | undefined, raceId: number | undefined): Be
   return draft;
 }
 
+/** O bloco `monster.bosstiary` de um boss do Canary (#629): a raridade e o `raceId` do contador. */
+export interface BosstiaryDraft {
+  readonly rarity: string;
+  readonly raceId: number;
+}
+
+/**
+ * `monster.bosstiary = { bossRaceId, bossRace }` (`register_monster_type.lua`, `bosstiary`). O
+ * Canary recusa o boss SEM `bossRace` (`Attempting to register a bosstiary boss without a race`
+ * — `mtype:bossRace` nunca roda, e o monstro não vira boss); sem `bossRaceId` ele registra a
+ * raridade mas o `raceid` fica 0, e `IOBosstiary::addBosstiaryKill` devolve cedo com `bossId == 0`
+ * — o boss nunca conta abate. Nos dois casos o que sai aqui é um bloqueio com o motivo, e nenhum
+ * monstro do Canary 47dfd51 cai nele (os 249 declaram os dois campos).
+ */
+function readBosstiary(raw: LuaValue | undefined): BosstiaryDraft | string | undefined {
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) return 'bosstiary não é uma tabela';
+  // `RARITY_*` já saiu do avaliador como o texto do Draconya (`monsterConstants`).
+  const rarity = str(raw['bossRace']);
+  if (rarity === undefined || !(Object.values(BOSSTIARY_RARITY_CONSTANTS) as string[]).includes(rarity)) {
+    return `raridade de Bosstiary desconhecida: ${rarity ?? 'nil'}`;
+  }
+  const raceId = num(raw['bossRaceId']);
+  if (raceId === undefined || !Number.isInteger(raceId) || raceId <= 0) return 'bosstiary sem bossRaceId';
+  return { rarity, raceId };
+}
+
 /** O nome do `Game.createMonsterType("…")` — a chave única de registro do Canary. */
 export function monsterTypeName(source: string): string | undefined {
   return /Game\.createMonsterType\(\s*"([^"]+)"/.exec(source)?.[1];
@@ -664,6 +997,7 @@ export function convertMonster(
     droppedCoinLines: [], clampedWeaknesses: [], elementImmunities: [], unmappedElements: [],
     speedSource: 'canary-x2', mitigationClamped: false, ignoredFields: [],
     unmappedSpells: [], droppedSpells: [], spellNotes: [], presentation: [], meleeVia: [], summonedIds: [],
+    look: { mount: undefined, clamped: false, unknownRace: undefined, silentVoices: false },
   };
   if (typeName === undefined) {
     return {
@@ -684,11 +1018,20 @@ export function convertMonster(
 
   const blockers: string[] = [];
   const name = str(raw['name']) ?? typeName;
+  const outOfCut = OUT_OF_CUT_MONSTERS.get(id);
+  if (outOfCut !== undefined) blockers.push(outOfCut);
 
   // Aparência: só outfit (`lookType`) do pacote 13.32. `lookTypeEx` é monstro desenhado como
   // ITEM, e a tabela de aparências do Draconya só resolve outfit para monstro.
   const outfit = isRecord(raw['outfit']) ? raw['outfit'] : {};
-  const lookType = num(outfit['lookType']) ?? 0;
+  const flagsForOutfit = isRecord(raw['flags']) ? raw['flags'] : {};
+  // O familiar (#599) deixa o `lookType` comentado no Lua; a magia o define por vocação, e a
+  // tabela `FAMILIAR_ID` é a fonte. `?? 0` no fim: sem a tabela, cai no bloqueio de sempre.
+  const lookType = num(outfit['lookType'])
+    ?? (bool(flagsForOutfit['familiar']) === true
+      ? deps.familiarLooktypes?.get(str(raw['name']) ?? typeName)
+      : undefined)
+    ?? 0;
   const lookTypeEx = num(outfit['lookTypeEx']) ?? 0;
   if (lookType === 0) {
     blockers.push(lookTypeEx > 0 ? `aparência por item (lookTypeEx ${lookTypeEx}) — só outfit é resolvido` : 'sem aparência (lookType 0)');
@@ -723,6 +1066,8 @@ export function convertMonster(
 
   const bestiary = readBestiary(raw['Bestiary'], num(raw['raceId']));
   if (typeof bestiary === 'string') blockers.push(bestiary);
+  const bosstiary = readBosstiary(raw['bosstiary']);
+  if (typeof bosstiary === 'string') blockers.push(bosstiary);
 
   const flags = isRecord(raw['flags']) ? raw['flags'] : {};
   const changeTarget = isRecord(raw['changeTarget']) ? raw['changeTarget'] : {};
@@ -779,6 +1124,15 @@ export function convertMonster(
     ...(spells.abilities.length === 0 || isPlainMelee(spells.abilities) ? {} : { abilities: spells.abilities }),
     ...(spells.defenses.length === 0 ? {} : { defenses: spells.defenses }),
   };
+  // O familiar (#599): `flags.familiar` liga o teleporte ao mestre, a XP inteira e a velocidade do
+  // mestre; o `manaCost` (o do Lua, igual ao `spell:mana` da magia) fica no monstro para o boot
+  // conferir que os dois batem. `summonable` NÃO sai: o Canary o declara `false` nos quatro, e é isso
+  // que impede a Summon Creature de invocá-los.
+  if (bool(flags['familiar']) === true) {
+    entity['familiar'] = true;
+    const manaCost = num(raw['manaCost']);
+    if (manaCost !== undefined && manaCost > 0) entity['manaCost'] = manaCost;
+  }
   const changeInterval = num(changeTarget['interval']) ?? 0;
   if (changeInterval > 0) {
     entity['targetChange'] = { intervalMs: changeInterval, chance: (num(changeTarget['chance']) ?? 0) / 100 };
@@ -794,6 +1148,22 @@ export function convertMonster(
   if (runHealth > 0) entity['runOnHealth'] = runHealth;
   const staticChance = num(flags['staticAttackChance']);
   if (staticChance !== undefined) entity['staticAttack'] = Math.min(Math.max(staticChance, 0), 100) / 100;
+  // A facção (#619): `monster.faction` e `monster.enemyFactions`, os nomes de `MONSTER_FACTIONS`.
+  // `default` (o valor de quem não declara) fica AUSENTE, e uma constante que o Canary não
+  // conhece hoje (`FACTION_*` novo) é motivo para NÃO gerar — silenciar viraria um monstro que
+  // ataca quem não devia.
+  const faction = str(raw['faction']);
+  if (faction !== undefined) {
+    if (!KNOWN_FACTIONS.has(faction)) blockers.push(`facção desconhecida: ${faction}`);
+    else if (faction !== 'default') entity['faction'] = faction;
+  }
+  const enemyFactions = [...new Set(positionalOf(raw['enemyFactions']).filter(
+    (value): value is string => typeof value === 'string',
+  ))];
+  for (const enemy of enemyFactions) {
+    if (!KNOWN_FACTIONS.has(enemy)) blockers.push(`facção inimiga desconhecida: ${enemy}`);
+  }
+  if (enemyFactions.length > 0) entity['enemyFactions'] = enemyFactions;
   if (melee === undefined && spells.abilities.length === 0 && spells.unmapped.length === 0) {
     entity['_open'] = 'Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.';
   }
@@ -802,8 +1172,33 @@ export function convertMonster(
   // estágio nenhum no `items.xml` (monstro fica sem cadáver, o default seguro).
   const corpseTtlMs = corpseTtlMsFromChain(num(raw['corpse']), deps.corpseChains);
   if (corpseTtlMs !== undefined) entity['corpseTtlMs'] = corpseTtlMs;
+  // A apresentação (#620): cores e addons, falas, luz e raça — só o que difere do default do schema.
+  const look = readMonsterLook(raw);
+  if (look.outfit !== undefined) entity['outfit'] = look.outfit;
+  if (look.voices !== undefined) entity['voices'] = look.voices;
+  if (look.light !== undefined) entity['light'] = look.light;
+  if (look.race !== undefined) entity['race'] = look.race;
+  // As janelas de Animate Dead (#600): as MESMAS etapas da cadeia acima, com a flag `movable` de
+  // cada uma vinda de `appearances.dat`. Ausente é "nunca" — sem `.dat`, ou cadeia sem estágio
+  // movível.
+  const animatable = corpseAnimatableWindows(num(raw['corpse']), deps.corpseChains, deps.corpseFlags ?? new Map());
+  if (animatable !== undefined) entity['corpseAnimatable'] = animatable;
+  // A Convince Creature Rune (#600): `flags.convinceable`, e o custo dela é o `manaCost` do
+  // monstro (`convince_creature.lua`) — lido para TODO monstro que o declara, `summonable` ou não.
+  // `summonable` em si NÃO é importado aqui: a Summon Creature (#598) depende do teto e dos
+  // efeitos de invocação que o #599 fecha, e ligá-la no catálogo real é decisão à parte.
+  if (bool(flags['convinceable']) === true) entity['convinceable'] = true;
+  const manaCost = num(raw['manaCost']);
+  if (manaCost !== undefined && manaCost > 0) entity['manaCost'] = manaCost;
   entity['source'] = source;
   if (summons.summons !== undefined) entity['summons'] = summons.summons;
+  // O boss (#629): `isBoss` do Canary é "tem bloco bosstiary", e o `boss: true` escolhe os rates de
+  // boss e tira o monstro do Bestiário. Vai para `data/` como está — `bosstiary` é campo do
+  // `monsterSchema`, ao contrário de `bestiary`/`outfitId`, que `promote-monsters` separa.
+  if (typeof bosstiary === 'object') {
+    entity['boss'] = true;
+    entity['bosstiary'] = bosstiary;
+  }
   // Staging (#580 separa): a ficha de Bestiário e o outfit não moram na entidade de `data/`.
   if (typeof bestiary === 'object') entity['bestiary'] = bestiary;
   if (lookType > 0) entity['outfitId'] = lookType;
@@ -827,6 +1222,7 @@ export function convertMonster(
       presentation: spells.presentation,
       meleeVia: spells.meleeVia,
       summonedIds: summons.summonedIds,
+      look: look.notes,
     },
   };
 }
@@ -932,9 +1328,30 @@ export function readMonsterCatalog(ctx: CatalogImportContext, deps: MonsterReade
   if (mitigation.length > 0) notes.push(`\`defenses.mitigation\` acima de 30 recortada: ${mitigation.join(', ')}.`);
   notes.push(`Campos lidos e ignorados nesta issue (arquivos gerados): ${countBy(generated.flatMap((m) => m.notes.ignoredFields)) || 'nenhum'}.`);
   notes.push(`Pastas fora do catálogo: ${[...SKIPPED_FOLDERS].sort().map((folder) => `\`${folder}/\``).join(', ')}.`);
+  notes.push(lookNote(converted, generated));
   notes.push(...spellNotes(converted, generated, summonBlocked, deps));
 
   return { slices, skipped, notes, converted };
+}
+
+/**
+ * A apresentação (#620), sobre os monstros GERADOS: quantos trazem cores/addons, falas, luz e uma raça
+ * diferente de `blood`, e o que foi lido e NÃO coube — a montaria (`lookMount`, que o catálogo não
+ * desenha), os blocos de fala que nunca disparam no Canary e a raça que ele não conhece.
+ */
+function lookNote(converted: readonly ConvertedMonster[], generated: readonly ConvertedMonster[]): string {
+  const count = (field: string): number => generated.filter((monster) => monster.entity[field] !== undefined).length;
+  const races = generated.flatMap((monster) => (typeof monster.entity['race'] === 'string' ? [monster.entity['race']] : []));
+  const mounted = converted.filter((monster) => monster.notes.look.mount !== undefined);
+  const generatedIds = new Set(generated.map((monster) => monster.id));
+  const silent = converted.filter((monster) => monster.notes.look.silentVoices).length;
+  const unknown = converted.flatMap((monster) => (monster.notes.look.unknownRace === undefined ? [] : [monster.notes.look.unknownRace]));
+  const clamped = converted.filter((monster) => monster.notes.look.clamped).length;
+  return `Apresentação (#620), ${generated.length} gerado(s): ${count('outfit')} com cores/addons de outfit, ${count('voices')} com falas, `
+    + `${count('light')} com luz, ${races.length} com raça diferente de \`blood\` (${countBy(races) || 'nenhuma'}; ausente é \`blood\`, o default do Canary). `
+    + `Montaria (\`lookMount\`, lida e NÃO desenhada): ${mounted.length === 0 ? 'nenhum monstro lido' : mounted.map((monster) => `\`${monster.id}\` (outfit ${monster.notes.look.mount ?? 0}, ${generatedIds.has(monster.id) ? 'gerado' : 'não gerado'})`).join(', ')}. `
+    + `Bloco de falas sem efeito no Canary (intervalo 0, chance 0 ou sem nenhuma linha — a maioria declara só \`interval\` e \`chance\`), monstros lidos: ${silent}. `
+    + `Raça desconhecida (o Canary avisa e fica em \`blood\`): ${countBy(unknown) || 'nenhuma'}. Índice recortado na faixa do schema: ${clamped}.`;
 }
 
 /** A meta de cobertura do M35-02: fração dos monstros de caça importáveis que sai gerada. */
@@ -1083,6 +1500,8 @@ export function loadReaderDeps(ctx: CatalogImportContext, repoRoot: string): Mon
     tfsSpeeds: ctx.forgottenServerCommit === '' ? new Map() : readTfsSpeeds(ctx.forgottenServerDir),
     outfitRanges: readPackOutfits(join(repoRoot, 'packages', 'content', 'data', 'packs', 'tibia-1533.json')),
     corpseChains: readCorpseDecayChains(join(ctx.canaryDir, CANARY_ITEMS_XML)),
+    familiarLooktypes: readFamiliarLooktypes(join(ctx.canaryDir, CANARY_FAMILIAR_LUA)),
+    corpseFlags: readCorpseItemFlags(join(ctx.canaryDir, CANARY_APPEARANCES_DAT)),
     ...readPresentationEnums(ctx.canaryDir),
   };
 }
