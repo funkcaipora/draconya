@@ -181,6 +181,8 @@ export function Events({ events }: { events: readonly NotableEvent[] }) {
     monsters: new Map(catalogue?.monsters.map((monster) => [monster.id, monster.name]) ?? []),
     // A perda de item na morte (#571) diz qual item: o nome vem do catálogo de definições.
     items: new Map(catalogue?.items.map((item) => [item.id, item.name]) ?? []),
+    // A subida de nível de hazard (#632) diz qual zona.
+    hazardZones: new Map((catalogue?.hazardZones ?? []).map((zone) => [zone.id, zone.name])),
     // O bônus por marco (FUN-113) só entra quando o catálogo o trouxe: a chave ausente é
     // "não sei", e `exactOptionalPropertyTypes` não deixa escrever `undefined` no lugar.
     ...(catalogue?.bestiary === undefined

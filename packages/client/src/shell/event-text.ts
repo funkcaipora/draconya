@@ -30,6 +30,8 @@ export interface EventNames {
   readonly monsters?: ReadonlyMap<string, string>;
   /** `itemId` → nome (`catalogue.items`): a perda de item na morte (#571) diz QUAL item. */
   readonly items?: ReadonlyMap<string, string>;
+  /** `zoneId` → nome (`catalogue.hazardZones`): a subida de nível de hazard (#632) diz QUAL zona. */
+  readonly hazardZones?: ReadonlyMap<string, string>;
   /**
    * Quanto vale um marco do Bestiário, em pontos percentuais (`catalogue.bestiary`). Sem ele
    * a linha diz só o marco: escrever "+1 %" de cabeça seria afirmar um número que o servidor
@@ -78,6 +80,15 @@ export function describeEvent(event: NotableEvent, names: EventNames = {}): stri
         ? ''
         : ` (+${percent.format(names.percentPerMilestone)} % XP)`;
       return `Bestiário: ${monster} · marco ${milestone}${bonus}`;
+    }
+    case 'hazard-level-up': {
+      // `zona/nível` em solo, `membro/zona/nível` em party (#632): o teto de hazard subiu — a única
+      // linha do extrato que fala do Hazard, porque é progressão permanente.
+      const parts = detail.split('/');
+      const [zoneId = '', level = ''] = parts.slice(-2);
+      const zone = names.hazardZones?.get(zoneId) ?? zoneId;
+      const who = parts.length > 2 ? `${parts[0] ?? ''} · ` : '';
+      return `${who}Hazard: ${zone} · nível ${level} liberado`;
     }
     case 'item-lost-on-death': {
       // `itemId/quantidade/instanceId/dono` (#571): o cliente mostra o item e a quantidade; o

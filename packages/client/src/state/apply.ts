@@ -330,6 +330,8 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           // Os 25 Charms (M39-02, #602, ADR 0053 d.3): custo, chance e categoria de cada um,
           // fixados na sessão — a tela do Cyclopedia lê daqui.
           charms: message.charms,
+          // As zonas de Hazard (M44-14, #632): nome e faixa, para o seletor de nível.
+          ...(message.hazardZones === undefined ? {} : { hazardZones: message.hazardZones }),
         },
       }));
       return;
@@ -378,6 +380,16 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           tiers: message.tiers,
           assignments: message.assignments,
         },
+      }));
+      return;
+
+    case 'hazard':
+      // SUBSTITUI, como os Charms: o registro INTEIRO (teto e nível escolhido de cada zona), não um
+      // delta — o servidor manda no attach, a cada escolha na Cidade e a cada subida de nível
+      // (M44-14, #632, ADR 0052 d.1).
+      hud.set((state) => ({
+        ...state,
+        hazard: { maxLevel: message.maxLevel, currentLevel: message.currentLevel },
       }));
       return;
 

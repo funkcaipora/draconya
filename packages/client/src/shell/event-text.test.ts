@@ -5,6 +5,7 @@ const names = {
   hunts: new Map([['rat-cellars', 'Rat Cellars']]),
   supplies: new Map([['mana-potion', 'Poção de Mana']]),
   monsters: new Map([['rat', 'Rato']]),
+  hazardZones: new Map([['gardens', 'Gnomprona Gardens']]),
   percentPerMilestone: 1,
 };
 
@@ -23,6 +24,8 @@ describe('describeEvent (FUN-110)', () => {
       ['skill-up', 'melee/11', 'Corpo a corpo subiu para 11'],
       ['skill-up', 'distance/11', 'Distância subiu para 11'],
       ['bestiary-milestone', 'rat/1', 'Bestiário: Rato · marco 1 (+1 % XP)'],
+      ['hazard-level-up', 'gardens/4', 'Hazard: Gnomprona Gardens · nível 4 liberado'],
+      ['hazard-level-up', 'ally/gardens/4', 'ally · Hazard: Gnomprona Gardens · nível 4 liberado'],
       ['death', 'c1', 'Morreu'],
       ['stamina-exhausted', 'c1', 'Stamina esgotada'],
       ['backpack-full', 'c1', 'Mochila cheia'],

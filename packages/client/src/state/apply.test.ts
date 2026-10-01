@@ -1268,6 +1268,41 @@ describe('o catálogo (FUN-79, FUN-89)', () => {
   });
 });
 
+describe('o Hazard (M44-14, #632, ADR 0052 d.1)', () => {
+  it('ausente e vazio são coisas DIFERENTES: `null` é "ainda não chegou"', () => {
+    expect(hud.get().hazard).toBeNull();
+    applyMessage({ type: 'hazard', maxLevel: {}, currentLevel: {} }, 0);
+    expect(hud.get().hazard).toEqual({ maxLevel: {}, currentLevel: {} });
+  });
+
+  it('SUBSTITUI o registro inteiro, nunca acumula: o nível escolhido pode DESCER', () => {
+    applyMessage({ type: 'hazard', maxLevel: { gardens: 5 }, currentLevel: { gardens: 5 } }, 0);
+    applyMessage({ type: 'hazard', maxLevel: { gardens: 5 }, currentLevel: { gardens: 2 } }, 1_000);
+    expect(hud.get().hazard).toEqual({ maxLevel: { gardens: 5 }, currentLevel: { gardens: 2 } });
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state.inventory, notified);
+    subscribeSlice(hud, (state) => state.health, notified);
+    applyMessage({ type: 'hazard', maxLevel: { gardens: 2 }, currentLevel: { gardens: 1 } }, 0);
+    expect(notified).not.toHaveBeenCalled();
+  });
+
+  it('o catálogo leva as zonas, e sem elas a chave fica AUSENTE (nó anterior)', () => {
+    const hazardZones = [{ id: 'gardens', name: 'Gnomprona Gardens', minLevel: 1, maxLevel: 12 }];
+    applyMessage({
+      type: 'catalogue', hunts: [], monsters: [], bot: {}, items: [], hazardZones,
+    } as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue?.hazardZones).toEqual(hazardZones);
+
+    applyMessage({
+      type: 'catalogue', hunts: [], monsters: [], bot: {}, items: [],
+    } as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue).not.toHaveProperty('hazardZones');
+  });
+});
+
 describe('o bestiário (FUN-113, §18)', () => {
   it('ausente e vazio são coisas DIFERENTES', () => {
     // `null` é "ainda não chegou": um nó anterior à FUN-113 nunca manda, e o primeiro

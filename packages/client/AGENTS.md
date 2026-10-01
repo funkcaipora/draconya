@@ -754,3 +754,14 @@ suba o `pnpm dev` e olhe cada cenário na tela do mundo:
   `magic`, `melee` e `distance` exibem a barra de progresso sob o valor, `magic` ganha o tom
   `vital-mp`, e `speed` não tem barra.
 
+## O seletor de Hazard (#632, M44-14)
+
+O modal "Escolha uma caçada" mostra, sob a lista, o seletor "Hazard · <zona>" só quando a hunt
+selecionada tem `hazardZoneId` (`hazardChoiceOf`, função pura e testada, em `HuntsModal.tsx`). Ele
+oferece os níveis de `zone.minLevel` ao TETO que o `hazard` (S2C, registro cru em `hud.hazard`)
+diz que o personagem desbloqueou, e manda `set-hazard-level { zoneId, level }` — o servidor confere
+o teto e recusa fora da Cidade, então com uma caçada em curso o seletor aparece desabilitado.
+**O cliente não calcula nenhum efeito do hazard** (invariante 4): XP, dano e loot são do servidor, e
+a frase "mais perigo, mais XP e mais loot" é só rótulo. `catalogue.hazardZones` é opcional no
+protocolo (nó anterior a esta issue não manda), e `apply.ts` só o copia quando presente.
+
