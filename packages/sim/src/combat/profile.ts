@@ -28,3 +28,14 @@ export function isV3OrLater(compatibilityProfile: string | undefined): boolean {
 export function hasCharmStage(compatibilityProfile: string | undefined): boolean {
   return compatibilityProfile === 'combat-v4';
 }
+
+/**
+ * O perfil executa o estágio de Hazard (#632, ADR 0052 d.7): o crítico e o reforço do monstro, a
+ * esquiva do monstro, a XP e as rolagens extras de loot de uma hunt com `hazardZoneId`. Só o
+ * `combat-v4` — como os Charms, o estágio muda resultado e ordem de sorteio, e uma sessão fixada
+ * em `combat-v3` (conteúdo anterior) não pode mudar no meio dela (invariante 7). Sem este
+ * predicado verdadeiro, o nível de hazard escolhido existe e não faz nada.
+ */
+export function hasHazardStage(compatibilityProfile: string | undefined): boolean {
+  return compatibilityProfile === 'combat-v4';
+}

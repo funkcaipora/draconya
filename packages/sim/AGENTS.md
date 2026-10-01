@@ -841,3 +841,22 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   usa esse parâmetro. O Carnage roda também para o monstro invocado (`Monster::death` não confere
   `isSummon()`). Os defeitos do `47dfd51` que ficaram de fora estão listados em
   `docs/product/combat-conformance.md`.
+- **O Hazard (#632, M44-14, ADR 0052 d.5/d.7) vive em `hazard.ts` (o registro `HazardProgress`, do
+  personagem), `combat/hazard.ts` (puro) e nos métodos `#hazard*` do `HuntRuleset`, e SÓ roda no
+  `combat-v4` (`hasHazardStage`) numa hunt com `hazardZoneId`.** Quatro armadilhas custam caro. (1)
+  **Todo golpe de monstro no jogador passa por `#hazardOnMonsterHit` ANTES dos charms defensivos, e
+  todo golpe do jogador num monstro por `#hazardOnPlayerHit` ANTES de a vida mudar** — são oito
+  pontos (habilidade, tique de condição de monstro VIVO e reflexo do lado do monstro; `#land`,
+  `#applyHits`, dano de charm, reflexo e tique de condição de personagem do lado do jogador): um
+  caminho novo em que um dos dois acerta o outro precisa chamar o seu. (2) **O golpe reforçado é
+  `extension`, e `extension` pula `#rollDefensiveCharms`** — não "arrume": é o
+  `!damage.extension` do `Game::combatChangeHealth`. (3) **O nível é o MENOR entre os participantes**
+  (`#hazardPoints`) lido a cada golpe, e é fixo porque a escolha é recusada dentro da hunt, não por
+  cópia; na morte o nível é o menor entre os FERIDORES. (4) **A rolagem é sempre consumida**: a
+  normal de `1..10000` do crítico/esquiva e a `0..100` do loot saem mesmo sem efeito, e a
+  `normal_random` é truncada — as probabilidades reais (~2,3 % o crítico, ~0,2 %–3,4 % a esquiva)
+  são o comportamento do Canary, não um defeito deste motor. Invocação (`masterId !== null`) NÃO é
+  monstro de hazard (`isHazardMonster`). O carimbo `hazardCriticalAtMs` é do relógio LÓGICO da
+  sessão: viaja no snapshot e `Session.enter` o zera. `HazardProgress.revision` é só para o host
+  comparar um inteiro por ciclo; não é persistido.
+

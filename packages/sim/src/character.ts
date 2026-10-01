@@ -13,6 +13,8 @@ import { Bestiary } from './bestiary.js';
 import type { BestiaryState } from './bestiary.js';
 import { Charms } from './charms.js';
 import type { CharmsState } from './charms.js';
+import { HazardProgress } from './hazard.js';
+import type { HazardState } from './hazard.js';
 import { Conditions } from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import { Cooldowns } from './cooldown.js';
@@ -123,6 +125,12 @@ export interface CharacterState {
    * nunca gastou um ponto de Charm — a mesma degradação de `bestiary`.
    */
   readonly charms?: CharmsState;
+  /**
+   * O Hazard (M44-14, #632, ADR 0052 d.1): o nível máximo desbloqueado e o escolhido de cada zona.
+   * Ausente é personagem anterior a esta issue, ou que nunca escolheu nem subiu nível nenhum — a
+   * mesma degradação de `charms`: toda zona vale o `minLevel`.
+   */
+  readonly hazard?: HazardState;
   /**
    * Quanto ele aguenta carregar (§21.5). Vem da tabela de progressão, como `maxHealth`.
    *
@@ -280,6 +288,14 @@ export interface CharacterState {
    */
   readonly cleanseImmunity?: Readonly<Record<string, number>>;
   /**
+   * O instante (relógio lógico da sessão) do último crítico de Hazard que este jogador levou
+   * (#632, `lastHazardSystemCriticalHit` do Canary): o intervalo de `hazardCriticalInterval` conta
+   * a partir dele. Só o ruleset da hunt escreve (invariante 9), e só sob `combat-v4`. Ausente é
+   * "nunca levou um crítico". Precisa viajar no snapshot — uma hunt retomada dentro da janela
+   * que voltasse sem ele rolaria um crítico que a sessão original recusaria.
+   */
+  readonly hazardCriticalAtMs?: number;
+  /**
    * Promovido (#566, ADR 0042 decisão 1): estado que SÓ SOBE — não existe des-promoção no
    * Tibia. Ausente/`false` é "não promovido", o normal de todo personagem novo. Sem bump de
    * `SNAPSHOT_FORMAT_VERSION`, como `vocationId`/`blessings`.
@@ -403,6 +419,11 @@ export class CharacterRuntime {
   readonly bestiary: Bestiary;
   /** Mutado no lugar a cada intenção de Charm aceita — ver `Charms.unlock`/`assign`/`remove`. */
   readonly charms: Charms;
+  /**
+   * O Hazard do personagem (#632): mutado no lugar pela escolha de nível na Cidade
+   * (`HazardProgress.select`) e pela morte do chefe da zona (`levelUp`). Só a sessão dona escreve.
+   */
+  readonly hazard: HazardProgress;
   capacity: number;
   /** Mutado ao equipar e ao receber item. Só a sessão dona escreve (invariante 9). */
   readonly inventory: Inventory;
@@ -461,6 +482,11 @@ export class CharacterRuntime {
    */
   readonly cleanseImmunity = new Map<string, number>();
   /**
+   * Ver `CharacterState.hazardCriticalAtMs`. Só o ruleset da hunt escreve (invariante 9);
+   * `Session.enter` zera — o carimbo é do relógio lógico da sessão que o gravou. `null` é nunca.
+   */
+  hazardCriticalAtMs: number | null = null;
+  /**
    * Promovido (#566, ADR 0042 decisão 1). Só `promote()` escreve — nunca desce. Consumido pelo
    * regen (`#regenOf`) e pela penalidade de morte (`applyDeathPenalty`), os dois em `hunt.ts`.
    */
@@ -500,6 +526,7 @@ export class CharacterRuntime {
     this.skills = Skills.fromState(state.skills);
     this.bestiary = Bestiary.fromState(state.bestiary);
     this.charms = Charms.fromState(state.charms);
+    this.hazard = HazardProgress.fromState(state.hazard);
     this.capacity = state.capacity ?? 0;
     this.inventory = Inventory.fromState(state.inventory);
     this.lootSeq = state.lootSeq ?? 0;
@@ -524,6 +551,7 @@ export class CharacterRuntime {
     for (const [type, untilMs] of Object.entries(state.cleanseImmunity ?? {})) {
       this.cleanseImmunity.set(type, untilMs);
     }
+    this.hazardCriticalAtMs = state.hazardCriticalAtMs ?? null;
     this.promoted = state.promoted ?? false;
     // Defensivo, como `readCharacterStorage`: um valor que não é um dos três modos (snapshot
     // gravado à mão, ticket torto) vira o default do Canary em vez de travar a sessão.
@@ -732,6 +760,9 @@ export class CharacterRuntime {
       skills: this.skills.getState(),
       bestiary: this.bestiary.getState(),
       charms: this.charms.getState(),
+      // Omitido enquanto vazio (ninguém escolheu nem subiu nível nenhum): não infla o snapshot de
+      // toda hunt sem Hazard — o construtor repõe o vazio sozinho.
+      ...(this.hazard.isEmpty ? {} : { hazard: this.hazard.getState() }),
       capacity: this.capacity,
       inventory: this.inventory.getState(),
       lootSeq: this.lootSeq,
@@ -770,6 +801,7 @@ export class CharacterRuntime {
         ? {} : { lastCombatActionAtMs: this.lastCombatActionAtMs }),
       ...(this.cleanseImmunity.size === 0
         ? {} : { cleanseImmunity: Object.fromEntries(this.cleanseImmunity) }),
+      ...(this.hazardCriticalAtMs === null ? {} : { hazardCriticalAtMs: this.hazardCriticalAtMs }),
       ...(this.promoted ? { promoted: true } : {}),
       // Omitidos no default (ofensiva, nunca bateu): o construtor os repõe sozinho.
       ...(this.fightMode === DEFAULT_FIGHT_MODE ? {} : { fightMode: this.fightMode }),

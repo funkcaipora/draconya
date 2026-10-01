@@ -26,6 +26,8 @@ export interface HuntListing {
    */
   readonly difficulties: readonly HuntDifficultyName[];
   readonly description?: string;
+  /** A zona de Hazard da hunt (#632): a chave de `content.hazard.zones`. Ausente é sem hazard. */
+  readonly hazardZoneId?: string;
 }
 
 /** O único nome de "dificuldade" que sobrou depois do #583 — ver `HuntListing.difficulties`. */
@@ -48,6 +50,7 @@ export function huntListings(content: Content): HuntListing[] {
       recommendedLevel: hunt.recommendedLevel,
       difficulties: [DEFAULT_DIFFICULTY_NAME],
       ...(hunt.description === undefined ? {} : { description: hunt.description }),
+      ...(hunt.hazardZoneId === undefined ? {} : { hazardZoneId: hunt.hazardZoneId }),
     }))
     .sort((a, b) => a.recommendedLevel - b.recommendedLevel || a.id.localeCompare(b.id));
 }

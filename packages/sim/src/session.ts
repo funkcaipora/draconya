@@ -500,6 +500,8 @@ export class Session {
     // (party cheia) não apagar a janela de quem continua na sessão de origem. O restore de
     // snapshot NÃO passa por `enter` — o relógio é o mesmo, e a janela quente atravessa.
     character.lastAttackAtMs = null;
+    // O carimbo do último crítico de Hazard (#632) é do mesmo relógio lógico, e pela mesma razão.
+    character.hazardCriticalAtMs = null;
   }
 
   /**
