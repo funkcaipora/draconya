@@ -1,6 +1,7 @@
 # 0047 — O mundo inteiro em setores de 32×32, fora do repositório, lido sob demanda
 
 **Status:** aceito
+**Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30) — d.6:** a fase 6 começa por este ADR.
 **Data:** 2026-09-26
 **Contexto técnico:** `tools` (`scripts/world-map.ts`), `client` (`src/world/sector.ts`),
 `things/<versão>/world/`

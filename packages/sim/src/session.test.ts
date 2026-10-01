@@ -6,8 +6,10 @@ import type { CharacterState } from './character.js';
 import { FULL_BLOCK_CHARGE, isFullBlockCharge } from './combat/block-charge.js';
 import { resolveDamage } from './combat/damage.js';
 import { Rng } from './rng.js';
-import { Session } from './session.js';
-import type { EndReason, Ruleset } from './session.js';
+import {
+  MAX_EVENTS_PER_ADVANCE, MAX_PENDING_DOMAIN_EVENTS, SNAPSHOT_FORMAT_VERSION, Session, progressOf,
+} from './session.js';
+import type { DomainEvent, EndReason, Receipt, Ruleset, SessionLimits } from './session.js';
 import { EventPriority } from './schedule.js';
 
 /**
@@ -1109,5 +1111,399 @@ describe('DPS/HPS por evento com janela de 60 s (#431, ADR 0032 d.14)', () => {
       };
     };
     expect(runAt(1_000)).toEqual(runAt(100));
+  });
+});
+
+describe('progress e progressOf (OW-03, ADR 0060 d.10b)', () => {
+  it('ausente mantém o sentido de hoje: a privada credita no fim, a compartilhada não credita', () => {
+    expect(progressOf({})).toBe('at-end');
+    expect(progressOf({ shared: false })).toBe('at-end');
+    expect(progressOf({ shared: true })).toBe('none');
+  });
+
+  it('declarado, vale o declarado — inclusive um shard que credita, que é o mundo', () => {
+    expect(progressOf({ shared: true, progress: 'checkpointed' })).toBe('checkpointed');
+    expect(progressOf({ progress: 'checkpointed' })).toBe('checkpointed');
+    expect(progressOf({ shared: false, progress: 'none' })).toBe('none');
+  });
+});
+
+describe('checkpoint: extrato parcial com semântica de delta (OW-03, ADR 0060 d.10b)', () => {
+  /** O mundo em miniatura: compartilhado, credita em checkpoints, e não agenda nada por conta própria. */
+  const worldRuleset = (): Ruleset => ({
+    type: 'hunt',
+    shared: true,
+    progress: 'checkpointed',
+    hz: () => 10,
+    onEnter: () => {},
+    onCreatureDied: () => {},
+    onEnd: () => {},
+    onEvent: () => {},
+  });
+
+  const sessionWith = (ids: readonly string[], limits: SessionLimits = {}): Session => {
+    const session = new Session({
+      id: 'world', contentVersion: 'v1', ruleset: worldRuleset(),
+      rng: Rng.fromSeed('world'), createdAtMs: 0, ...limits,
+    });
+    for (const id of ids) session.enter(character(id));
+    return session;
+  };
+
+  const partial = (receipt: Receipt | null): Receipt => {
+    if (receipt === null) throw new Error('expected a receipt');
+    return receipt;
+  };
+
+  it('dois checkpoints seguidos: o segundo leva só o delta, e o seq cresce', () => {
+    // Mutação que mata: não zerar os agregados — o segundo extrato repetiria o primeiro e o
+    // ledger creditaria o mesmo XP duas vezes.
+    const session = sessionWith(['a']);
+    session.credit('a', 'xpGained', 100);
+    session.credit('a', 'goldGained', 30);
+    session.credit('a', 'kills', 2);
+    session.credit('a', 'bestBasicHit', 40);
+    session.advanceBy(10_000);
+    const first = partial(session.checkpoint('a', 'drain'));
+    expect(first).toMatchObject({ sessionId: 'world', characterId: 'a', reason: 'drain', seq: 1 });
+    expect(first.aggregates).toMatchObject({
+      xpGained: 100, goldGained: 30, kills: 2, bestBasicHit: 40, durationMs: 10_000,
+    });
+
+    session.credit('a', 'xpGained', 7);
+    session.credit('a', 'goldGained', 5);
+    session.credit('a', 'bestBasicHit', 10);
+    session.advanceBy(5_000);
+    const second = partial(session.checkpoint('a', 'drain'));
+    expect(second.seq).toBe(2);
+    // `bestBasicHit` é o máximo DA JANELA: o 40 do primeiro extrato não volta.
+    expect(second.aggregates).toMatchObject({
+      xpGained: 7, goldGained: 5, kills: 0, bestBasicHit: 10, durationMs: 5_000,
+    });
+
+    // Nada novo: a sessão ainda emite o extrato — quem decide pular o vazio é o hospedeiro.
+    const third = partial(session.checkpoint('a', 'drain'));
+    expect(third.seq).toBe(3);
+    expect(third.aggregates).toEqual({
+      durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0,
+      suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0, damageDealt: 0, healingDone: 0,
+    });
+    expect(session.ledgerSeq).toBe(3);
+  });
+
+  it('o personagem continua na sessão, e a soma da sessão segue cumulativa (como após um leave)', () => {
+    const session = sessionWith(['a', 'b']);
+    session.credit('a', 'xpGained', 100);
+    session.credit('b', 'xpGained', 11);
+    session.checkpoint('a', 'drain');
+    expect(session.participants.map((p) => p.id)).toEqual(['a', 'b']);
+    expect(session.ended).toBeNull();
+    expect(session.aggregatesOf('a').xpGained).toBe(0);
+    // O outro não sabe que alguém tirou um extrato.
+    expect(session.aggregatesOf('b').xpGained).toBe(11);
+    expect(session.aggregates.xpGained).toBe(111);
+    session.credit('a', 'xpGained', 4);
+    expect(session.aggregatesOf('a').xpGained).toBe(4);
+    expect(session.aggregates.xpGained).toBe(115);
+  });
+
+  it('leave e end depois de um checkpoint levam só o resto', () => {
+    const session = sessionWith(['a', 'b']);
+    session.credit('a', 'xpGained', 100);
+    session.credit('b', 'xpGained', 9);
+    partial(session.checkpoint('a', 'drain'));
+    partial(session.checkpoint('b', 'drain'));
+    session.credit('a', 'xpGained', 3);
+    session.credit('b', 'xpGained', 2);
+
+    const departure = session.leave('a', 'manual-exit');
+    expect(departure?.receipt.aggregates.xpGained).toBe(3);
+    expect(departure?.receipt.seq).toBe(3);
+    const ended = session.end('manual-exit');
+    expect(ended.map((r) => [r.characterId, r.aggregates.xpGained, r.seq])).toEqual([['b', 2, 4]]);
+  });
+
+  it('quem sai e volta começa limpo: o checkpoint de antes não vaza para a nova entrada', () => {
+    const session = sessionWith(['a']);
+    session.record('antes');
+    partial(session.checkpoint('a', 'drain'));
+    session.leave('a', 'manual-exit');
+    session.advanceBy(1_000);
+    session.enter(character('a'));
+    session.record('depois');
+    expect(session.checkpoint('a', 'drain')?.notableEvents.map((e) => e.type)).toEqual(['depois']);
+  });
+
+  it('o extrato leva e entrega as instâncias removidas, como o leave', () => {
+    const session = sessionWith(['a']);
+    const hero = session.participants[0] as CharacterRuntime;
+    hero.removedInstances.push('inst-1', 'inst-2');
+    expect(partial(session.checkpoint('a', 'drain')).removedInstances).toEqual(['inst-1', 'inst-2']);
+    expect(partial(session.checkpoint('a', 'drain')).removedInstances).toEqual([]);
+  });
+
+  it('os eventos notáveis não se repetem, nem no MESMO instante lógico do checkpoint', () => {
+    // O caso que o tempo sozinho não resolve: `atMs >= marco` repetiria 'a2' no segundo extrato e
+    // `atMs > marco` perderia 'b1' — que é gravado depois do checkpoint, no mesmo instante, por
+    // uma intenção que chega entre dois `advanceBy`.
+    const session = sessionWith(['a', 'b']);
+    session.record('a1');
+    session.advanceBy(1_000);
+    session.record('a2');
+    const first = partial(session.checkpoint('a', 'drain'));
+    session.record('b1'); // ainda t = 1000
+    session.advanceBy(1_000);
+    session.record('b2');
+    const second = partial(session.checkpoint('a', 'drain'));
+
+    expect(first.notableEvents.map((e) => e.type)).toEqual(['a1', 'a2']);
+    expect(second.notableEvents.map((e) => e.type)).toEqual(['b1', 'b2']);
+    expect(partial(session.checkpoint('a', 'drain')).notableEvents).toEqual([]);
+    // O marco anda para o instante do checkpoint...
+    expect(session.joinedAtMsOf('a')).toBe(2_000);
+    // ...e quem não tirou extrato continua levando a sessão inteira.
+    expect(session.leave('b', 'manual-exit')?.receipt.notableEvents.map((e) => e.type))
+      .toEqual(['a1', 'a2', 'b1', 'b2']);
+  });
+
+  it('devolve null para quem não é participante e para a sessão que já acabou, sem gastar seq', () => {
+    const session = sessionWith(['a']);
+    session.credit('a', 'xpGained', 5);
+    expect(session.checkpoint('zz', 'drain')).toBeNull();
+    expect(session.ledgerSeq).toBe(0);
+
+    const ended = session.end('manual-exit');
+    expect(ended[0]?.aggregates.xpGained).toBe(5);
+    // O `end` já creditou; um extrato depois dele creditaria o mesmo XP de novo.
+    expect(session.checkpoint('a', 'drain')).toBeNull();
+    expect(session.ledgerSeq).toBe(1);
+    expect(session.aggregatesOf('a').xpGained).toBe(5);
+  });
+
+  it('não mexe na janela de DPS/HPS, que é apresentação contínua', () => {
+    const session = sessionWith(['a']);
+    session.creditDamage('a', 120);
+    session.creditHealing('a', 60);
+    session.advanceBy(10_000);
+    partial(session.checkpoint('a', 'drain'));
+    expect(session.dpsOf('a', session.nowMs)).toBeCloseTo(120 / 60, 10);
+    expect(session.hpsOf('a', session.nowMs)).toBeCloseTo(60 / 60, 10);
+    expect(session.aggregatesOf('a').damageDealt).toBe(0);
+  });
+
+  it('o snapshot não muda de formato, e restaurado depois do checkpoint o extrato leva só o resto', () => {
+    const plain = sessionWith(['a']);
+    const keysBefore = Object.keys(plain.snapshot()).sort();
+
+    const session = sessionWith(['a']);
+    session.record('velho');
+    session.credit('a', 'xpGained', 50);
+    session.advanceBy(1_000);
+    partial(session.checkpoint('a', 'drain'));
+    session.advanceBy(1_000);
+    session.record('novo');
+    session.credit('a', 'xpGained', 8);
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as ReturnType<Session['snapshot']>;
+    expect(Object.keys(snapshot).sort()).toEqual(keysBefore);
+    expect(snapshot.formatVersion).toBe(SNAPSHOT_FORMAT_VERSION);
+    // O marco vive no campo que já existia.
+    expect(snapshot.joinedAtMs).toEqual({ a: 1_000 });
+
+    const restored = Session.fromSnapshot(snapshot, worldRuleset(), new Rng(snapshot.rng));
+    const receipt = restored.leave('a', 'manual-exit')?.receipt;
+    expect(receipt?.aggregates.xpGained).toBe(8);
+    expect(receipt?.notableEvents.map((e) => e.type)).toEqual(['novo']);
+  });
+
+  describe('o resultado da simulação não depende dos checkpoints (invariantes 2 e 3)', () => {
+    const SUMMED = ['xpGained', 'goldGained', 'kills', 'durationMs'] as const;
+
+    const runWithCheckpoints = (hz: number, everyMs: number | null) => {
+      const session = new Session({
+        id: 's1', contentVersion: 'v1', ruleset: testRuleset(),
+        rng: Rng.fromSeed('checkpointed'), createdAtMs: 0,
+      });
+      session.enter(character());
+      const receipts: Receipt[] = [];
+      const stepMs = 1000 / hz;
+      for (let t = stepMs; t <= 60_000; t += stepMs) {
+        session.advanceBy(stepMs);
+        if (everyMs !== null && t % everyMs === 0) {
+          receipts.push(partial(session.checkpoint('p1', 'drain')));
+        }
+      }
+      receipts.push(...session.end('manual-exit'));
+      return { receipts, rng: session.getRngState(), total: { ...session.aggregates } };
+    };
+
+    it('a 1 Hz e a 10 Hz os extratos parciais são os mesmos', () => {
+      expect(runWithCheckpoints(1, 10_000)).toEqual(runWithCheckpoints(10, 10_000));
+    });
+
+    it('a soma dos parciais e do final é o extrato único de quem nunca tirou checkpoint', () => {
+      const whole = runWithCheckpoints(10, null);
+      const parts = runWithCheckpoints(10, 10_000);
+      expect(whole.receipts).toHaveLength(1);
+      expect(parts.receipts).toHaveLength(7);
+      for (const key of SUMMED) {
+        expect(parts.receipts.reduce((sum, r) => sum + r.aggregates[key], 0))
+          .toBe(whole.receipts[0]?.aggregates[key]);
+      }
+      expect(whole.receipts[0]?.aggregates.xpGained).toBeGreaterThan(0);
+      // Checkpoint não sorteia: o gerador termina onde terminaria sem ele.
+      expect(parts.rng).toEqual(whole.rng);
+      // E os seqs são únicos e crescentes — o que o ledger exige.
+      expect(parts.receipts.map((r) => r.seq)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    });
+  });
+});
+
+describe('tetos por sessão (OW-03, ADR 0060 d.5)', () => {
+  const idleRuleset = (): Ruleset => ({
+    type: 'hunt',
+    hz: () => 10,
+    onEnter: () => {},
+    onCreatureDied: () => {},
+    onEnd: () => {},
+    onEvent: () => {},
+  });
+
+  const sessionWith = (limits: SessionLimits = {}, ids: readonly string[] = ['a']): Session => {
+    const session = new Session({
+      id: 'limits', contentVersion: 'v1', ruleset: idleRuleset(),
+      rng: Rng.fromSeed('limits'), createdAtMs: 0, ...limits,
+    });
+    for (const id of ids) session.enter(character(id));
+    return session;
+  };
+
+  const moved = (n: number): DomainEvent => ({
+    kind: 'creature-moved', creatureId: n,
+    from: { x: n, y: 0, z: 7 }, to: { x: n + 1, y: 0, z: 7 }, durationMs: 100,
+  });
+
+  const creatureIds = (events: readonly DomainEvent[]): number[] =>
+    events.map((event) => (event as { creatureId: number }).creatureId);
+
+  describe('eventos de domínio pendentes', () => {
+    it('o default é o teto de hoje: descarta a metade mais antiga ao passar de 512', () => {
+      const session = sessionWith();
+      for (let n = 1; n <= 600; n++) session.emit(moved(n));
+      const drained = session.drainEvents();
+      // O 513º estoura e a fila cai para 257; do 514º ao 600º são mais 87.
+      expect(drained).toHaveLength(600 - (MAX_PENDING_DOMAIN_EVENTS >> 1));
+      expect(creatureIds(drained)[drained.length - 1]).toBe(600);
+      // Explicitar o default não muda nada.
+      const explicit = sessionWith({ maxPendingDomainEvents: MAX_PENDING_DOMAIN_EVENTS });
+      for (let n = 1; n <= 600; n++) explicit.emit(moved(n));
+      expect(explicit.drainEvents()).toEqual(drained);
+    });
+
+    it('um teto menor vale só para a sessão que o pediu, e guarda os mais recentes', () => {
+      const small = sessionWith({ maxPendingDomainEvents: 4 });
+      for (let n = 1; n <= 7; n++) small.emit(moved(n));
+      const kept = creatureIds(small.drainEvents());
+      expect(kept.length).toBeLessThanOrEqual(4);
+      expect(kept[kept.length - 1]).toBe(7);
+      // Outra sessão, sem opção, segue no default.
+      const other = sessionWith();
+      for (let n = 1; n <= 7; n++) other.emit(moved(n));
+      expect(other.drainEvents()).toHaveLength(7);
+    });
+
+    it('o teto de 1 ainda descarta (a metade de 1 é zero, e zero não descartaria nada)', () => {
+      const session = sessionWith({ maxPendingDomainEvents: 1 });
+      for (let n = 1; n <= 5; n++) session.emit(moved(n));
+      expect(creatureIds(session.drainEvents())).toEqual([5]);
+    });
+  });
+
+  describe('eventos por avanço', () => {
+    const burstRuleset = (seen: number[]): Ruleset => ({
+      ...idleRuleset(),
+      onEnter: (session) => {
+        for (let i = 1; i <= 10; i++) session.scheduleIn('burst', i * 10);
+      },
+      onEvent: (session) => { seen.push(session.nowMs); },
+    });
+
+    const burst = (limits: SessionLimits): { seen: number[]; truncated: boolean } => {
+      const seen: number[] = [];
+      const session = new Session({
+        id: 'burst', contentVersion: 'v1', ruleset: burstRuleset(seen),
+        rng: Rng.fromSeed('burst'), createdAtMs: 0, ...limits,
+      });
+      session.enter(character());
+      session.advanceBy(1_000);
+      return { seen, truncated: session.notableEvents.some((e) => e.type === 'advance-truncated') };
+    };
+
+    it('o default é o teto de hoje, que uma rajada de dez não alcança', () => {
+      expect(MAX_EVENTS_PER_ADVANCE).toBe(4_096);
+      const { seen, truncated } = burst({});
+      expect(seen).toHaveLength(10);
+      expect(truncated).toBe(false);
+      expect(burst({ maxEventsPerAdvance: MAX_EVENTS_PER_ADVANCE })).toEqual({ seen, truncated });
+    });
+
+    it('um teto menor trunca o avanço, e a sessão registra por quê', () => {
+      const { seen, truncated } = burst({ maxEventsPerAdvance: 3 });
+      expect(seen).toEqual([10, 20, 30]);
+      expect(truncated).toBe(true);
+    });
+  });
+
+  describe('eventos notáveis', () => {
+    it('sem teto a lista cresce sem limite, como sempre cresceu', () => {
+      const session = sessionWith();
+      for (let n = 0; n < 2_000; n++) session.record('evento', String(n));
+      expect(session.notableEvents).toHaveLength(2_000);
+      expect(session.notableEventsDropped).toBe(0);
+    });
+
+    it('o teto é por personagem presente: descarta os mais antigos, e conta o que descartou', () => {
+      const session = sessionWith({ maxNotableEventsPerCharacter: 3 }, ['a', 'b']);
+      for (let n = 1; n <= 10; n++) session.record('evento', String(n));
+      // Dois presentes, três cada.
+      expect(session.notableEvents.map((e) => e.detail)).toEqual(['5', '6', '7', '8', '9', '10']);
+      expect(session.notableEventsDropped).toBe(4);
+      // Sem ninguém presente o piso é de um personagem, e não de zero.
+      const empty = sessionWith({ maxNotableEventsPerCharacter: 3 }, []);
+      for (let n = 1; n <= 5; n++) empty.record('evento', String(n));
+      expect(empty.notableEvents.map((e) => e.detail)).toEqual(['3', '4', '5']);
+    });
+
+    it('o descarte não desloca o extrato do checkpoint: a posição é absoluta', () => {
+      // Sem a conta do `notableEventsDropped`, o cursor (posição 2) apontaria para o índice 2 da
+      // lista já aparada e o 'e3' seria perdido — ou o 'e2' repetido.
+      const session = sessionWith({ maxNotableEventsPerCharacter: 2 });
+      session.record('e1');
+      session.record('e2');
+      session.checkpoint('a', 'drain');
+      session.record('e3'); // aparada: ['e2', 'e3'], um descartado
+      expect(session.checkpoint('a', 'drain')?.notableEvents.map((e) => e.type)).toEqual(['e3']);
+      session.record('e4');
+      session.record('e5');
+      session.record('e6'); // o teto leva até o que o extrato ainda não entregou
+      expect(session.checkpoint('a', 'drain')?.notableEvents.map((e) => e.type)).toEqual(['e5', 'e6']);
+    });
+  });
+
+  it('teto que não é inteiro positivo é bug de quem configura, e a sessão recusa', () => {
+    for (const bad of [0, -1, 1.5, Number.NaN]) {
+      expect(() => sessionWith({ maxPendingDomainEvents: bad })).toThrow(RangeError);
+      expect(() => sessionWith({ maxEventsPerAdvance: bad })).toThrow(RangeError);
+      expect(() => sessionWith({ maxNotableEventsPerCharacter: bad })).toThrow(RangeError);
+    }
+  });
+
+  it('a sessão retomada de um snapshot recebe os tetos de quem a restaura', () => {
+    const session = sessionWith();
+    const restored = Session.fromSnapshot(
+      session.snapshot(), idleRuleset(), Rng.fromSeed('x'), { maxPendingDomainEvents: 2 },
+    );
+    for (let n = 1; n <= 5; n++) restored.emit(moved(n));
+    expect(restored.drainEvents().length).toBeLessThanOrEqual(2);
   });
 });

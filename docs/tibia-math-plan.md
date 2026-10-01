@@ -119,7 +119,7 @@ Legenda: ✅ pronto (M = `main`, P = só `tibia-parity`) · 🔷 issue existente
 
 | Item | Motivo |
 |---|---|
-| Rope/shovel/pick exigidos para usar escada, buraco e corda | O Draconya abstrai ferramenta como abstrai suprimento; o bot não carrega ferramenta. Reavaliar se o mundo aberto (fase 6 do plano do mapa) existir. |
+| Rope/shovel/pick exigidos para usar escada, buraco e corda | O Draconya abstrai ferramenta como abstrai suprimento; o bot não carrega ferramenta. Reavaliar no mundo aberto: desde 2026-09-30 ele é a direção do produto (ADR 0060), e o plano do mundo (`docs/open-world-plan.md`) decide ferramenta em escada, buraco e corda. |
 | Vocação Monk e suas magias | Já fora pelo plano de paridade; agora há arte no pacote 15.33 (ADR 0008, emenda de 2026-09-26), então é decisão de produto, não impedimento técnico. |
 | Grupos de cooldown `crippling`/`burstsofnature` | Só Monk e Roda os usam (#610). |
 | Cooldown próprio da Paralyze Rune (6 s além do grupo) | Vai como comentário na #592, que já é dela. |

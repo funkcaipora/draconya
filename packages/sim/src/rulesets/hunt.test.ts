@@ -20,7 +20,9 @@ import { distance } from '../monster/step.js';
 import type { GridPoint } from '../monster/step.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
-import { MAX_PENDING_DOMAIN_EVENTS, SNAPSHOT_FORMAT_VERSION, Session } from '../session.js';
+import {
+  MAX_PENDING_DOMAIN_EVENTS, SNAPSHOT_FORMAT_VERSION, Session, progressOf,
+} from '../session.js';
 import type { DomainEvent, SessionSnapshot } from '../session.js';
 import {
   HuntRuleset, PartyFullError, changeDifficulty, compileExitRules, createHuntRuleset, createHuntSession,
@@ -435,6 +437,13 @@ describe('entrada', () => {
     expect(session.participants).toHaveLength(2);
     expect(other.position).not.toEqual(hero.position);
     expect(Math.max(Math.abs(other.position.x - hero.position.x), Math.abs(other.position.y - hero.position.y))).toBeLessThanOrEqual(3);
+  });
+
+  it('a hunt não declara `progress`: ausente, ela credita no fim, como sempre (OW-03)', () => {
+    // A instância é byte a byte a de antes: declarar o campo aqui mudaria o que o hospedeiro lê.
+    const { session } = start();
+    expect('progress' in session.ruleset).toBe(false);
+    expect(progressOf(session.ruleset)).toBe('at-end');
   });
 
   it('aceita QUALQUER string de dificuldade, e ignora — o conteúdo não define mais nenhuma (#583)', () => {
