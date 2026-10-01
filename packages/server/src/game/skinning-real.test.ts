@@ -71,10 +71,23 @@ describe('a tabela de esfola gerada do skinning.lua do Canary (#626)', () => {
     expect(real().skinning.get('minotaur-archer')?.stages.map((stage) => stage.canaryItemId)).toEqual([5982, 4052]);
   });
 
-  it('o coelho só se esfola nos 10 s do primeiro estágio, e rende o pé de coelho', () => {
+  it('o coelho sorteia só nos 10 s do primeiro estágio, e rende o pé de coelho', () => {
     expect(real().skinning.get('rabbit')).toMatchObject({
       materialId: 'rabbits-foot', stages: [{ canaryItemId: 6017, durationMs: 10_000, afterTtlMs: 360_000 }],
     });
+  });
+
+  it('o coelho e o killer rabbit rendem o pé SEM sorteio no 2º estágio (4301, de 10 s a 310 s): o ramo garantido da faca', () => {
+    // `elseif target.itemid == 4301` do `skinning.lua`, conferido antes da tabela: sem quest, sem
+    // consumir o cadáver. Nenhum outro monstro do catálogo tem o campo.
+    const guaranteed = { canaryItemId: 4301, startMs: 10_000, durationMs: 300_000, materialId: 'rabbits-foot', quantity: 1 };
+    for (const id of ['rabbit', 'killer-rabbit']) {
+      expect(real().skinning.get(id)?.guaranteed, id).toEqual([guaranteed]);
+      // O estágio cabe na vida do cadáver (670 s) e não sobrepõe a janela do sorteio.
+      expect(real().monsters.get(id)?.corpseTtlMs, id).toBeGreaterThanOrEqual(310_000);
+    }
+    const withIt = [...real().skinning.values()].filter((entry) => entry.guaranteed !== undefined).map((entry) => entry.id);
+    expect(withIt.sort()).toEqual(['killer-rabbit', 'rabbit']);
   });
 
   it('nenhum monstro esfolável escapa da janela dentro da vida do cadáver dele', () => {

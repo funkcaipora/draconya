@@ -704,6 +704,24 @@ export function buildContent(raw: RawContent): Content {
     if (!itemDefinitions.has(entry.materialId)) {
       problems.push(`${where}: o material "${entry.materialId}" não existe`);
     }
+    // O ramo garantido (o pé de coelho no 2º estágio do cadáver) tem as mesmas obrigações da
+    // janela: o material existe, o estágio cabe na vida do cadáver e NÃO sobrepõe a janela do
+    // sorteio — o Canary confere o id do item, e um id só cai num dos dois ramos.
+    for (const given of entry.guaranteed ?? []) {
+      const tag = `${where}/${String(given.canaryItemId)}`;
+      if (!itemDefinitions.has(given.materialId)) {
+        problems.push(`${tag}: o material garantido "${given.materialId}" não existe`);
+      }
+      if (monster?.corpseTtlMs !== undefined && given.startMs + given.durationMs > monster.corpseTtlMs) {
+        problems.push(
+          `${tag}: o estágio garantido termina em ${String(given.startMs + given.durationMs)} ms, `
+            + `depois da vida do cadáver (corpseTtlMs ${String(monster.corpseTtlMs)})`,
+        );
+      }
+      if (given.startMs < window) {
+        problems.push(`${tag}: o estágio garantido sobrepõe a janela do sorteio (${String(window)} ms)`);
+      }
+    }
   }
 
   // A skill de defesa (CMB-04) precisa existir E subir por bloqueio. Uma referência a skill

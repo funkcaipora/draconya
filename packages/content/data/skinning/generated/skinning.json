@@ -622,6 +622,15 @@
         "afterTtlMs": 360000
       }
     ],
+    "guaranteed": [
+      {
+        "canaryItemId": 4301,
+        "startMs": 10000,
+        "durationMs": 300000,
+        "materialId": "rabbits-foot",
+        "quantity": 1
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1121,6 +1130,15 @@
         "canaryItemId": 6017,
         "durationMs": 10000,
         "afterTtlMs": 360000
+      }
+    ],
+    "guaranteed": [
+      {
+        "canaryItemId": 4301,
+        "startMs": 10000,
+        "durationMs": 300000,
+        "materialId": "rabbits-foot",
+        "quantity": 1
       }
     ],
     "source": {

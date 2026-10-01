@@ -3121,4 +3121,38 @@ describe('a esfola de cadáver no catálogo (#626, ADR 0048 d.5/d.6)', () => {
   it('a esfola entra na versão do conteúdo: mudar a chance muda a versão (invariante 7)', () => {
     expect(buildContent(withSkinning()).version).not.toBe(buildContent(withSkinning({ chance: 50_000 })).version);
   });
+
+  describe('o ramo garantido da faca (`Skinning.guaranteed`, o `target.itemid == 4301` do Lua)', () => {
+    // O coelho: o `6017` (10 s) é o único estágio do sorteio, e o `4301` (300 s) rende sem sorteio.
+    const given = { canaryItemId: 4301, startMs: 10_000, durationMs: 300_000, materialId: 'leather', quantity: 1 };
+    const rabbitShape = { stages: [{ canaryItemId: 6017, durationMs: 10_000, afterTtlMs: 360_000 }] };
+    const withGuaranteed = (over: Record<string, unknown> = {}, monsters: readonly object[] = [skinnableRat]) =>
+      withSkinning({ ...rabbitShape, guaranteed: [{ ...given, ...over }] }, monsters);
+
+    it('monta o estágio garantido junto da entrada, e a ausência dele é a regra', () => {
+      expect(buildContent(withGuaranteed()).skinning.get('rat')?.guaranteed).toEqual([given]);
+      expect(buildContent(withSkinning()).skinning.get('rat')?.guaranteed).toBeUndefined();
+    });
+
+    it('recusa material inexistente, estágio que passa da vida do cadáver e janela que se sobrepõe', () => {
+      expect(() => buildContent(withGuaranteed({ materialId: 'ouro' }))).toThrow(/skinning\/rat\/4301: o material garantido "ouro" não existe/);
+      // 10 s + 300 s = 310 s: um cadáver de 200 s já sumiu antes de o estágio acabar.
+      expect(() => buildContent(withGuaranteed({}, [{ ...rat, corpseTtlMs: 200_000 }])))
+        .toThrow(/o estágio garantido termina em 310000 ms, depois da vida do cadáver/);
+      // Começando dentro da janela do sorteio (10 s): o id do item cairia nos dois ramos.
+      expect(() => buildContent(withGuaranteed({ startMs: 5_000 }))).toThrow(/sobrepõe a janela do sorteio \(10000 ms\)/);
+      expect(() => buildContent(withGuaranteed({ startMs: 10_000 }))).not.toThrow();
+    });
+
+    it('o schema é estrito: duração positiva, início não negativo, quantidade e id positivos', () => {
+      for (const bad of [{ durationMs: 0 }, { startMs: -1 }, { quantity: 0 }, { canaryItemId: 0 }, { appearanceId: 5 }]) {
+        expect(() => buildContent(withGuaranteed(bad)), JSON.stringify(bad)).toThrow(ContentError);
+      }
+    });
+
+    it('entra na versão do conteúdo (invariante 7)', () => {
+      expect(buildContent(withGuaranteed()).version)
+        .not.toBe(buildContent(withSkinning(rabbitShape)).version);
+    });
+  });
 });

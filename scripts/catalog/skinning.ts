@@ -27,6 +27,15 @@
 // guarda essa soma por estágio (`afterTtlMs`, de `corpseTtlMsFromChain`), porque o `after` é da
 // entrada de cada id.
 //
+// **O ramo garantido da faca vem ANTES da tabela.** `if item.itemid == 5908 then … elseif
+// target.itemid == 4301 then` rende o item `12172` ao jogador sem sorteio, sem conferir quest e
+// sem transformar o cadáver — o segundo estágio do coelho (`6017` 10 s → `4301` 300 s) dá um pé de
+// coelho a cada uso, até decair. `readGuaranteedBranches` lê esses ramos como DADO e só aceita o
+// que o Lua faz sem condição: um `elseif target.itemid == N then` cujo corpo é só falar, dar um
+// item e `return true`. Os outros ramos do mesmo `if` (quest com armazenamento, `transform`, sorteio
+// inline) não são caça e ficam fora. O estágio vira `Skinning.guaranteed` (`startMs`, `durationMs`,
+// material), tirado da cadeia `decayTo` do monstro.
+//
 // **"87 mapeamentos" é a contagem da palavra `newItem` no arquivo.** A issue conta as 87
 // ocorrências, que incluem o código da função e os prêmios de quest. O que a tabela declara de
 // fato são chaves simples (`[id] = { value, newItem, after }`), duas LISTAS de prêmio (o boss da
@@ -225,6 +234,86 @@ export function monsterCorpseId(source: string): number | undefined {
   return raw === undefined ? undefined : Number(raw);
 }
 
+/**
+ * Um ramo do `if item.itemid == <ferramenta> then` que rende um item SEM condição: `elseif
+ * target.itemid == <alvo> then`, `player:addItem(<material>, <n>)`, `return true`.
+ */
+export interface GuaranteedBranch {
+  /** A ferramenta do `if` externo (o `item.itemid` que o ramo confere). */
+  readonly toolItemId: number;
+  /** O id do item em que o cadáver está (`target.itemid`). */
+  readonly targetItemId: number;
+  /** O `addItem` do ramo. */
+  readonly newItem: number;
+  readonly quantity: number;
+}
+
+/** Uma linha de corpo que o ramo garantido aceita: comentário, fala, `return true` ou o `addItem`. */
+const GUARANTEED_BODY_LINE = /^(?:--.*|player:say\(.*\)|return\s+true|player:addItem\(\s*(\d+)\s*(?:,\s*(\d+)\s*)?\))?$/;
+
+/**
+ * Os ramos `elseif target.itemid == N then` do `skinning.lua` que rendem um item sem condição, com
+ * a ferramenta do `if item.itemid == F then` que os envolve. Só entra o ramo cujo CORPO é feito
+ * exclusivamente de fala, comentário, `return true` e UM `player:addItem` — qualquer outra linha
+ * (um `getStorageValue`, um sorteio, um `target:transform`/`remove`, um `if` aninhado) o tira, e a
+ * condição com `and` nem chega a casar com o padrão. É o contrário de adivinhar: o que o Lua
+ * condiciona fica fora, e o que ele dá a qualquer um entra com o número que ele escreve.
+ */
+export function readGuaranteedBranches(source: string): readonly GuaranteedBranch[] {
+  const tools = [...source.matchAll(/\bif\s+item\.itemid\s*==\s*(\d+)\s+then\b/g)]
+    .map((match) => ({ at: match.index, toolItemId: Number(match[1]) }));
+  const branches: GuaranteedBranch[] = [];
+  for (const match of source.matchAll(/\b(?:elseif|if)\s+target\.itemid\s*==\s*(\d+)\s+then\b/g)) {
+    const rest = source.slice(match.index + match[0].length);
+    const end = /^[ \t]*(?:elseif|else|end)\b/m.exec(rest)?.index ?? rest.length;
+    let given: { newItem: number; quantity: number } | undefined;
+    let clean = true;
+    for (const raw of rest.slice(0, end).split('\n')) {
+      const line = GUARANTEED_BODY_LINE.exec(raw.trim());
+      if (line === null) { clean = false; break; }
+      if (line[1] !== undefined) {
+        if (given !== undefined) { clean = false; break; }
+        given = { newItem: Number(line[1]), quantity: line[2] === undefined ? 1 : Number(line[2]) };
+      }
+    }
+    const tool = tools.filter((candidate) => candidate.at < match.index).at(-1);
+    if (!clean || given === undefined || tool === undefined) continue;
+    branches.push({ toolItemId: tool.toolItemId, targetItemId: Number(match[1]), ...given });
+  }
+  return branches;
+}
+
+/** Um estágio da cadeia do monstro que um ramo garantido confere. */
+export interface GuaranteedStage {
+  readonly branch: GuaranteedBranch;
+  /** A idade em que o estágio abre: a soma das durações dos estágios anteriores da cadeia. */
+  readonly startMs: number;
+  readonly durationMs: number;
+}
+
+/**
+ * Os estágios da cadeia do cadáver que algum ramo garantido confere, com a idade em que abrem.
+ * `problem` quando um deles não decai (sem `duration` no `items.xml`): a janela não fecharia, e
+ * isto vira `skipped` em vez de um número adivinhado.
+ */
+export function resolveGuaranteedStages(
+  stages: readonly CorpseStage[], branches: readonly GuaranteedBranch[],
+): readonly GuaranteedStage[] | { readonly problem: string } {
+  const found: GuaranteedStage[] = [];
+  let startMs = 0;
+  for (const stage of stages) {
+    for (const branch of branches.filter((candidate) => candidate.targetItemId === stage.itemId)) {
+      if (stage.durationMs === undefined) {
+        return { problem: `o estágio ${String(stage.itemId)} tem ramo garantido mas não tem duration no items.xml (não decai — a janela não fecha)` };
+      }
+      found.push({ branch, startMs, durationMs: stage.durationMs });
+    }
+    if (stage.durationMs === undefined) break;
+    startMs += stage.durationMs;
+  }
+  return found;
+}
+
 export interface SkinningCatalog extends CatalogImportResult {
   /** Quantos monstros do Canary têm cadáver esfolável (antes do corte pelo catálogo do Draconya). */
   readonly skinnableInCanary: number;
@@ -233,6 +322,7 @@ export interface SkinningCatalog extends CatalogImportResult {
 export function readSkinningCatalog(ctx: CatalogImportContext, deps: SkinningReaderDeps): SkinningCatalog {
   const source = readFileSync(join(ctx.canaryDir, CANARY_SKINNING_LUA), 'utf8');
   const { tools, nonCreatureKeys, chanceScale, newItemMentions } = readSkinningTable(source);
+  const branches = readGuaranteedBranches(source);
   const chains = readCorpseDecayChains(join(ctx.canaryDir, CANARY_ITEMS_XML));
   const itemNames = readItemNames(join(ctx.canaryDir, CANARY_ITEMS_XML));
   const skinSource: CatalogSource = { engine: 'canary', commit: ctx.canaryCommit, path: CANARY_SKINNING_LUA };
@@ -245,6 +335,8 @@ export function readSkinningCatalog(ctx: CatalogImportContext, deps: SkinningRea
   const skipped: SkippedEntity[] = [];
   const seen = new Set<string>();
   const matchedKeys = new Set<number>();
+  /** Os monstros do catálogo que ganharam estágio garantido. */
+  const guaranteedMonsters: string[] = [];
   let skinnableInCanary = 0;
 
   for (const path of listMonsterFiles(ctx.canaryDir)) {
@@ -254,15 +346,22 @@ export function readSkinningCatalog(ctx: CatalogImportContext, deps: SkinningRea
     if (typeName === undefined || corpseId === undefined) continue;
     const stages = corpseChain(corpseId, chains);
     const resolved = resolveSkinnableCorpse(stages, tools);
-    if (resolved === undefined) continue;
-
+    const guaranteed = resolveGuaranteedStages(stages, branches);
     const id = slugify(typeName);
     const monsterSource: CatalogSource = { engine: 'canary', commit: ctx.canaryCommit, path };
     const skip = (reason: string): void => {
       skipped.push({ id, name: typeName, reason, source: monsterSource });
     };
+    if (resolved === undefined) {
+      // Um ramo garantido num cadáver sem estágio de tabela não cabe no schema (`stages` não é
+      // vazio): fica em `skipped` em vez de sumir sem rastro.
+      if ('problem' in guaranteed) skip(guaranteed.problem);
+      else if (guaranteed.length > 0) skip('o cadáver só tem estágio de ramo garantido, sem estágio da tabela (o schema exige ao menos um)');
+      continue;
+    }
     skinnableInCanary += 1;
     if ('problem' in resolved) { skip(resolved.problem); continue; }
+    if ('problem' in guaranteed) { skip(guaranteed.problem); continue; }
     for (const stage of resolved.stages) matchedKeys.add(stage.canaryItemId);
 
     if (seen.has(id)) { skip('id duplicado (o primeiro arquivo vence, como no importador de monstros)'); continue; }
@@ -294,8 +393,31 @@ export function readSkinningCatalog(ctx: CatalogImportContext, deps: SkinningRea
       skip(`o \`after\` ${String(openAfter)} não tem duration no items.xml (o cadáver esfolado não decairia)`);
       continue;
     }
+    // Os estágios garantidos (o `elseif target.itemid == N` da faca): a ferramenta do `if` externo
+    // tem que ser a da tabela deste cadáver, e o material, um item do catálogo.
+    const given: { canaryItemId: number; startMs: number; durationMs: number; materialId: string; quantity: number }[] = [];
+    let givenProblem: string | undefined;
+    for (const stage of guaranteed) {
+      const { branch } = stage;
+      const givenId = slugOfItem(branch.newItem);
+      if (branch.toolItemId !== resolved.toolItemId) {
+        givenProblem = `o ramo garantido do estágio ${String(branch.targetItemId)} é da ferramenta ${String(branch.toolItemId)}, e a tabela deste cadáver é da ${String(resolved.toolItemId)}`;
+        break;
+      }
+      if (givenId === undefined || !deps.itemIds.has(givenId)) {
+        givenProblem = `material garantido ${String(branch.newItem)} (${givenId ?? 'sem nome no items.xml'}) fora do catálogo de itens`;
+        break;
+      }
+      given.push({
+        canaryItemId: branch.targetItemId, startMs: stage.startMs, durationMs: stage.durationMs,
+        materialId: givenId, quantity: branch.quantity,
+      });
+    }
+    if (givenProblem !== undefined) { skip(givenProblem); continue; }
+    if (given.length > 0) guaranteedMonsters.push(id);
     entities.push({
-      id, toolId, materialId, chance: resolved.entry.value, stages: windows, source: skinSource,
+      id, toolId, materialId, chance: resolved.entry.value, stages: windows,
+      ...(given.length > 0 ? { guaranteed: given } : {}), source: skinSource,
     });
   }
 
@@ -323,13 +445,15 @@ export function readSkinningCatalog(ctx: CatalogImportContext, deps: SkinningRea
     `Entradas que são LISTA de prêmios, não um material só (${String(lists.length)}): ${lists.join(', ') || 'nenhuma'} — `
     + 'o boss da abóbora (armazenamento de quest de 4 h) e o mármore (escultura de item de mapa) não são caça.',
   );
-  if (/target\.itemid\s*==\s*4301/.test(source)) {
-    notes.push(
-      'O ramo `target.itemid == 4301` da faca (quest Rottin Wood and the Married Men: o segundo estágio do cadáver do '
-      + 'coelho rende o item 12172 sem sorteio e sem consumir o cadáver, sem conferir a quest) fica fora — é objetivo de '
-      + 'quest, não caça, e o `sim` não tem quest. A esfola de coelho aqui é só a da tabela (a janela de 10 s do `6017`).',
-    );
-  }
+  const branchText = branches.map((branch) => `${String(branch.targetItemId)} → ${String(branch.newItem)} ×${String(branch.quantity)} `
+    + `(${slugOfItem(branch.newItem) ?? '?'}, ferramenta ${String(branch.toolItemId)})`);
+  notes.push(
+    `Ramos garantidos da ferramenta (\`elseif target.itemid == N then\` que rende um item sem sorteio, sem conferir quest `
+    + `e sem consumir o cadáver — o Canary os confere ANTES da tabela) (${String(branches.length)}): `
+    + `${branchText.join(', ') || 'nenhum'}. Viram \`Skinning.guaranteed\` nos monstros do catálogo cuja cadeia de decaimento `
+    + `passa pelo id (${String(guaranteedMonsters.length)}: ${guaranteedMonsters.join(', ') || 'nenhum'}). Os outros ramos `
+    + `\`target.itemid ==\` do mesmo \`if\` (quest com armazenamento, transform, sorteio inline) não são caça e ficam fora.`,
+  );
 
   return {
     slices: new Map<string, CatalogEntity[]>([['skinning', entities]]),

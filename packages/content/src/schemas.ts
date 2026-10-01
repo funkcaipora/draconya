@@ -3908,6 +3908,28 @@ export const skinningStageSchema = z.strictObject({
 export type SkinningStage = z.infer<typeof skinningStageSchema>;
 
 /**
+ * Um estágio de ramo GARANTIDO do cadáver (#626): o `if item.itemid == 5908 then … elseif
+ * target.itemid == 4301 then` do `skinning.lua`, que roda ANTES da tabela. A faca no segundo estágio
+ * do cadáver do coelho (`6017` 10 s → `4301` 300 s) rende o pé de coelho (`12172`) sem sorteio, sem
+ * conferir quest e SEM transformar o cadáver: ele não fica `skinned`, o decaimento não reinicia, e
+ * a ferramenta rende de novo a cada uso (a exaustão de 1 s de todo `use-item`) enquanto o estágio
+ * durar.
+ *
+ * `startMs` é a idade em que o estágio abre — a soma das durações dos estágios anteriores da cadeia
+ * `decayTo` — e `durationMs` quanto ele dura; `canaryItemId` é a proveniência (o id do item que o
+ * ramo confere), nunca arte (invariante 6). A ferramenta é a do `toolId` da entrada: o importador
+ * só anexa o ramo quando a faca do `if` externo é a mesma da tabela.
+ */
+export const skinningGuaranteedStageSchema = z.strictObject({
+  canaryItemId: z.number().int().positive(),
+  startMs: z.number().int().nonnegative(),
+  durationMs: z.number().int().positive(),
+  materialId: z.string().min(1),
+  quantity: z.number().int().positive(),
+});
+export type SkinningGuaranteedStage = z.infer<typeof skinningGuaranteedStageSchema>;
+
+/**
  * Como o cadáver de UM monstro é esfolado (#626, ADR 0048 d.5/d.6, ADR 0053 d.5):
  * `content/data/skinning/generated/skinning.json` (`scripts/catalog/skinning.ts`), lido do
  * `skinning.lua` do Canary e cruzado com o `monster.corpse` e a cadeia de decaimento de cada
@@ -3928,6 +3950,12 @@ export const skinningSchema = z.strictObject({
    * enquanto o item dele é um destes. A soma das durações é o fim da janela.
    */
   stages: z.array(skinningStageSchema).min(1),
+  /**
+   * Os estágios do cadáver em que a MESMA ferramenta rende um material sem sorteio e sem gastar o
+   * cadáver (`skinningGuaranteedStageSchema`) — só o coelho, hoje. Ausente na maioria das entradas;
+   * a janela é a própria idade do estágio (`startMs`..`startMs + durationMs`), fora das de `stages`.
+   */
+  guaranteed: z.array(skinningGuaranteedStageSchema).optional(),
   /** Proveniência (ADR 0038 d.2) — toda entidade GERADA carrega este bloco. */
   source: catalogSourceSchema.optional(),
   _open: z.string().optional(),

@@ -13,7 +13,7 @@ Fonte: `canary` em `47dfd51f45280a59a1d3e50ba7edd573d7234446`.
 - `chanceRange` do Lua: 100000 (confere com `SKINNING_CHANCE_SCALE`).
 - Chaves do `config` que nenhum monstro do Canary tem como estágio de cadáver (5): 4173 (dead rabbit, obsidian-knife), 7441 (ice cube, obsidian-knife), 7442 (ice cube, obsidian-knife), 7444 (ice cube, obsidian-knife), 7445 (ice cube, obsidian-knife). São ids de item de mapa que nenhum `monster.corpse` nem estágio da cadeia dele alcança (o cadáver decorativo, os cubos de gelo da escultura) — ficam de fora, sem monstro.
 - Entradas que são LISTA de prêmios, não um material só (2): 10426 (piece of marble rock), 12816 (unknown item) — o boss da abóbora (armazenamento de quest de 4 h) e o mármore (escultura de item de mapa) não são caça.
-- O ramo `target.itemid == 4301` da faca (quest Rottin Wood and the Married Men: o segundo estágio do cadáver do coelho rende o item 12172 sem sorteio e sem consumir o cadáver, sem conferir a quest) fica fora — é objetivo de quest, não caça, e o `sim` não tem quest. A esfola de coelho aqui é só a da tabela (a janela de 10 s do `6017`).
+- Ramos garantidos da ferramenta (`elseif target.itemid == N then` que rende um item sem sorteio, sem conferir quest e sem consumir o cadáver — o Canary os confere ANTES da tabela) (1): 4301 → 12172 ×1 (rabbits-foot, ferramenta 5908). Viram `Skinning.guaranteed` nos monstros do catálogo cuja cadeia de decaimento passa pelo id (2: killer-rabbit, rabbit). Os outros ramos `target.itemid ==` do mesmo `if` (quest com armazenamento, transform, sorteio inline) não são caça e ficam fora.
 
 ## Fora do corte (22)
 

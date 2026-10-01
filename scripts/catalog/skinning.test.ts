@@ -9,7 +9,7 @@ import type { DecayStage } from './monsters.js';
 import type { CatalogImportContext } from './registry.js';
 import {
   CANARY_SKINNING_CHANCE_SCALE, CANARY_SKINNING_LUA, corpseChain, loadSkinningDeps, monsterCorpseId,
-  readSkinningCatalog, readSkinningTable, resolveSkinnableCorpse,
+  readGuaranteedBranches, readSkinningCatalog, readSkinningTable, resolveGuaranteedStages, resolveSkinnableCorpse,
 } from './skinning.js';
 import type { SkinningReaderDeps } from './skinning.js';
 
@@ -32,6 +32,12 @@ local config = {
 		[250] = { value = CREATURE_SKINNING_CHANCE, newItem = 30 },
 		-- o after não decai (sem duration no items.xml): o cadáver esfolado não sumiria
 		[260] = { value = CREATURE_SKINNING_CHANCE, newItem = 30, after = 999 },
+		-- test mismatch: a tabela é da faca, mas o ramo garantido do 2º estágio é da estaca
+		[210] = { value = CREATURE_SKINNING_CHANCE, newItem = 30, after = 202 },
+		-- test gifted: o ramo garantido do 2º estágio rende um item fora do catálogo
+		[220] = { value = CREATURE_SKINNING_CHANCE, newItem = 30, after = 202 },
+		-- test nodur: o 2º estágio tem ramo garantido e não decai (sem duration no items.xml)
+		[230] = { value = CREATURE_SKINNING_CHANCE, newItem = 30, after = 202 },
 		-- cadáver de mapa: nenhum monstro tem
 		[300] = { value = CREATURE_SKINNING_CHANCE, newItem = 30, after = 301 },
 		-- um monstro que o catálogo não tem
@@ -54,8 +60,60 @@ local config = {
 local skinning = Action()
 function skinning.onUse(player, item, fromPosition, target, toPosition, isHotkey)
 	local charmMType, chanceRange = player:getCharmMonsterType(CHARM_SCAVENGE), 100000
-	if target.itemid == 4301 then
-		return true
+	if item.itemid == 10 then
+		-- sorteio inline: não é garantido
+		if target.itemid == 33778 then
+			local chance = math.random(1, 10000)
+			if chance <= 8640 then
+				player:addItem(33779, 1)
+			else
+				player:addItem(33780, 1)
+			end
+			return true
+			-- transforma o alvo: não rende item
+		elseif target.itemid == 11339 then
+			target:transform(11331)
+			player:say("You carve a solid bowl of the chunk of wood.", TALKTYPE_MONSTER_SAY)
+			return true
+		-- condição de quest: a condição com \`and\` nem casa com o padrão
+		elseif target.itemid == 10735 and player:getStorageValue(1) == 1 then
+			player:addItem(31, 1)
+			return true
+		-- armazenamento no corpo: o jogador só o recebe uma vez
+		elseif target.itemid == 8181 then
+			player:addItem(31, 1)
+			player:setStorageValue(789100, 1)
+			return true
+		-- dois itens no corpo: não é um ramo simples
+		elseif target.itemid == 8182 then
+			player:addItem(31, 1)
+			player:addItem(32, 1)
+			return true
+		-- o ramo garantido do 2º estágio do coelho de teste: fala, um item, return true
+		elseif target.itemid == 201 then
+			player:say("ok", TALKTYPE_MONSTER_SAY)
+			player:addItem(31, 1)
+			return true
+		-- um item fora do catálogo no 2º estágio do gifted
+		elseif target.itemid == 221 then
+			player:addItem(99, 1)
+			return true
+		-- um 2º estágio que não decai
+		elseif target.itemid == 231 then
+			player:addItem(31, 1)
+			return true
+		-- um cadáver sem estágio da tabela, e com mais de um item de quantidade
+		elseif target.itemid == 241 then
+			player:addItem(31, 2)
+			return true
+		end
+	end
+
+	if item.itemid == 20 then
+		if target.itemid == 211 then
+			player:addItem(32, 1)
+			return true
+		end
 	end
 end
 `;
@@ -77,6 +135,13 @@ const ITEMS_XML = `<?xml version="1.0"?>
 	<item id="203" name="dead test rabbit"><attribute key="duration" value="60"/><attribute key="decayTo" value="0"/></item>
 	<item id="200" name="dead test rabbit"><attribute key="duration" value="10"/><attribute key="decayTo" value="201"/></item>
 	<item id="201" name="dead test rabbit"><attribute key="duration" value="300"/><attribute key="decayTo" value="0"/></item>
+	<item id="210" name="dead test mismatch"><attribute key="duration" value="10"/><attribute key="decayTo" value="211"/></item>
+	<item id="211" name="dead test mismatch"><attribute key="duration" value="60"/><attribute key="decayTo" value="0"/></item>
+	<item id="220" name="dead test gifted"><attribute key="duration" value="10"/><attribute key="decayTo" value="221"/></item>
+	<item id="221" name="dead test gifted"><attribute key="duration" value="60"/><attribute key="decayTo" value="0"/></item>
+	<item id="230" name="dead test nodur"><attribute key="duration" value="10"/><attribute key="decayTo" value="231"/></item>
+	<item id="240" name="dead test lonely"><attribute key="duration" value="10"/><attribute key="decayTo" value="241"/></item>
+	<item id="241" name="dead test lonely"><attribute key="duration" value="30"/><attribute key="decayTo" value="0"/></item>
 	<item id="250" name="dead test noafter"><attribute key="duration" value="10"/><attribute key="decayTo" value="0"/></item>
 	<item id="260" name="dead test open"><attribute key="duration" value="10"/><attribute key="decayTo" value="0"/></item>
 	<item id="400" name="dead outsider"><attribute key="duration" value="10"/><attribute key="decayTo" value="0"/></item>
@@ -120,7 +185,7 @@ function fixture(files: Readonly<Record<string, string>>): CatalogImportContext 
 const DEPS: SkinningReaderDeps = {
   monsterIds: new Set([
     'test-drake', 'test-rabbit', 'test-demon', 'test-vampire', 'test-gap', 'test-shared',
-    'test-noafter', 'test-open',
+    'test-noafter', 'test-open', 'test-mismatch', 'test-gifted', 'test-nodur', 'test-lonely',
   ]),
   itemIds: new Set(['test-knife', 'test-stake', 'test-leather', 'test-foot', 'test-dust', 'test-other-dust']),
 };
@@ -199,6 +264,52 @@ describe('corpseChain e resolveSkinnableCorpse', () => {
   });
 });
 
+describe('readGuaranteedBranches e resolveGuaranteedStages', () => {
+  it('lê só o ramo que rende item sem condição, com a ferramenta do `if` que o envolve', () => {
+    expect(readGuaranteedBranches(SKINNING_LUA)).toEqual([
+      { toolItemId: 10, targetItemId: 201, newItem: 31, quantity: 1 },
+      { toolItemId: 10, targetItemId: 221, newItem: 99, quantity: 1 },
+      { toolItemId: 10, targetItemId: 231, newItem: 31, quantity: 1 },
+      { toolItemId: 10, targetItemId: 241, newItem: 31, quantity: 2 },
+      { toolItemId: 20, targetItemId: 211, newItem: 32, quantity: 1 },
+    ]);
+  });
+
+  it('o que o Lua condiciona, sorteia, transforma ou duplica NÃO é garantido', () => {
+    // 33778 sorteia, 11339 transforma, 10735 tem `and` na condição, 8181 grava armazenamento e 8182 dá dois itens.
+    const ids = readGuaranteedBranches(SKINNING_LUA).map((branch) => branch.targetItemId);
+    for (const rejected of [33778, 11339, 10735, 8181, 8182]) expect(ids).not.toContain(rejected);
+  });
+
+  it('um ramo fora de qualquer `if item.itemid == F` não tem ferramenta e fica de fora', () => {
+    expect(readGuaranteedBranches('if target.itemid == 9 then\n\tplayer:addItem(5, 1)\n\treturn true\nend\n')).toEqual([]);
+  });
+
+  it('a quantidade omitida é 1, e corpo numa linha só não é reconhecido', () => {
+    const lua = 'if item.itemid == 1 then\n\tif target.itemid == 2 then\n\t\tplayer:addItem(7)\n\t\treturn true\n\tend\nend\n';
+    expect(readGuaranteedBranches(lua)).toEqual([{ toolItemId: 1, targetItemId: 2, newItem: 7, quantity: 1 }]);
+    expect(readGuaranteedBranches('if item.itemid == 1 then\n\tif target.itemid == 2 then player:addItem(7) return true end\nend\n'))
+      .toEqual([]);
+  });
+
+  const branch = { toolItemId: 10, targetItemId: 201, newItem: 31, quantity: 1 };
+
+  it('o estágio abre na soma das durações anteriores e dura o `duration` dele', () => {
+    const chain = [
+      { itemId: 200, durationMs: 10_000 }, { itemId: 201, durationMs: 300_000 }, { itemId: 202, durationMs: 60_000 },
+    ];
+    expect(resolveGuaranteedStages(chain, [branch])).toEqual([{ branch, startMs: 10_000, durationMs: 300_000 }]);
+    // Sem ramo para nenhum estágio da cadeia, não há janela garantida.
+    expect(resolveGuaranteedStages(chain, [{ ...branch, targetItemId: 999 }])).toEqual([]);
+    expect(resolveGuaranteedStages(chain, [])).toEqual([]);
+  });
+
+  it('um estágio com ramo que não decai (sem duration) vira problema em vez de uma janela adivinhada', () => {
+    const open = [{ itemId: 200, durationMs: 10_000 }, { itemId: 201, durationMs: undefined }];
+    expect(resolveGuaranteedStages(open, [branch])).toMatchObject({ problem: expect.stringContaining('duration') as unknown });
+  });
+});
+
 describe('monsterCorpseId', () => {
   it('lê a atribuição de topo, nunca um comentário nem outro campo', () => {
     expect(monsterCorpseId('monster.corpse = 5973\n')).toBe(5973);
@@ -232,6 +343,12 @@ describe('readSkinningCatalog (fixture sintética)', () => {
     // Sem `after`, e com um `after` que não decai: o cadáver esfolado não teria vida a guardar.
     'mammals/test_noafter.lua': monster('Test Noafter', 250),
     'mammals/test_open.lua': monster('Test Open', 260),
+    // O ramo garantido da estaca num cadáver cuja tabela é da faca; e um item garantido que o
+    // catálogo não tem; e um estágio garantido que não decai; e um cadáver SÓ com estágio garantido.
+    'mammals/test_mismatch.lua': monster('Test Mismatch', 210),
+    'mammals/test_gifted.lua': monster('Test Gifted', 220),
+    'mammals/test_nodur.lua': monster('Test Nodur', 230),
+    'mammals/test_lonely.lua': monster('Test Lonely', 240),
     // Pasta que o catálogo pula.
     'familiars/test_familiar.lua': monster('Test Familiar', 100),
   });
@@ -250,15 +367,19 @@ describe('readSkinningCatalog (fixture sintética)', () => {
       ],
       source: { engine: 'canary', commit: COMMIT, path: CANARY_SKINNING_LUA },
     });
-    // O coelho só é esfolável no primeiro estágio.
+    // O coelho só tem sorteio no primeiro estágio; o segundo (`201`, 300 s) rende o pé SEM sorteio —
+    // o ramo garantido da faca, que abre aos 10 s (a soma do estágio anterior).
     expect(entities.find((entity) => entity.id === 'test-rabbit')).toMatchObject({
       materialId: 'test-foot', stages: [{ canaryItemId: 200, durationMs: 10_000, afterTtlMs: 360_000 }],
+      guaranteed: [{ canaryItemId: 201, startMs: 10_000, durationMs: 300_000, materialId: 'test-foot', quantity: 1 }],
     });
+    // Quem não tem estágio garantido não leva o campo.
+    expect(drake).not.toHaveProperty('guaranteed');
     // O monstro que compartilha o cadáver leva os MESMOS estágios (é o que o Scavenge compara).
     expect(entities.find((entity) => entity.id === 'test-shared')).toMatchObject({ stages: drake?.['stages'] });
     // Toda entidade gerada valida contra o schema real de `@draconya/content`.
     for (const entity of entities) expect(() => skinningSchema.parse(entity)).not.toThrow();
-    expect(catalog.skinnableInCanary).toBe(9);
+    expect(catalog.skinnableInCanary).toBe(12);
   });
 
   it('o que fica fora entra em `skipped` com o motivo, nunca em silêncio', () => {
@@ -270,6 +391,12 @@ describe('readSkinningCatalog (fixture sintética)', () => {
     expect(reasonOf('test-gap')).toBe('');
     expect(reasonOf('test-noafter')).toContain('não declara `after`');
     expect(reasonOf('test-open')).toContain('o `after` 999 não tem duration');
+    // O ramo garantido da estaca num cadáver da faca, o item fora do catálogo, o estágio que não
+    // decai e o cadáver sem estágio da tabela: cada um com o seu motivo.
+    expect(reasonOf('test-mismatch')).toContain('é da ferramenta 20, e a tabela deste cadáver é da 10');
+    expect(reasonOf('test-gifted')).toContain('material garantido 99');
+    expect(reasonOf('test-nodur')).toContain('não tem duration');
+    expect(reasonOf('test-lonely')).toContain('só tem estágio de ramo garantido');
     // O `test-drake` duplicado não vira uma segunda entidade.
     expect(skipped.filter((entry) => entry.id === 'test-drake')).toHaveLength(1);
     expect(reasonOf('test-drake')).toContain('duplicado');
@@ -284,7 +411,12 @@ describe('readSkinningCatalog (fixture sintética)', () => {
     expect(notes).toContain('300 (?, test-knife)');
     expect(notes).toContain('600 (?, test-knife)');
     expect(notes).toContain('500 (?)');
-    expect(notes).toContain('target.itemid == 4301');
+    // O ramo garantido sai nas notas com o estágio, o item, a quantidade e a ferramenta — e o
+    // monstro que o recebeu.
+    expect(notes).toContain('Ramos garantidos da ferramenta');
+    expect(notes).toContain('201 → 31 ×1 (test-foot, ferramenta 10)');
+    expect(notes).toContain('241 → 31 ×2');
+    expect(notes).toContain('(1: test-rabbit)');
   });
 
   it('é determinístico: a mesma fonte dá o mesmo resultado, na mesma ordem', () => {
@@ -323,6 +455,11 @@ describe.skipIf(!HAS_REAL_CANARY)('o leitor contra o Canary real (CANARY_DIR)', 
     expect(table.newItemMentions).toBe(87);
   });
 
+  it('o `skinning.lua` real tem UM ramo garantido: a faca no `4301`, 12172, sem condição', () => {
+    const lua = readFileSync(join(ctx().canaryDir, CANARY_SKINNING_LUA), 'utf8');
+    expect(readGuaranteedBranches(lua)).toEqual([{ toolItemId: 5908, targetItemId: 4301, newItem: 12172, quantity: 1 }]);
+  });
+
   it('o Dragon, o Demon e o Rabbit reais batem com as cadeias do items.xml', () => {
     const catalog = readSkinningCatalog(ctx(), loadSkinningDeps(repoRoot));
     const byId = new Map((catalog.slices.get('skinning') ?? []).map((entity) => [entity.id, entity]));
@@ -335,9 +472,17 @@ describe.skipIf(!HAS_REAL_CANARY)('o leitor contra o Canary real (CANARY_DIR)', 
       ],
     });
     expect(byId.get('demon')).toMatchObject({ toolId: 'blessed-wooden-stake', materialId: 'demon-dust' });
-    expect(byId.get('rabbit')).toMatchObject({
-      materialId: 'rabbits-foot', stages: [{ canaryItemId: 6017, durationMs: 10_000, afterTtlMs: 360_000 }],
-    });
+    // O coelho: o sorteio é só do `6017` (10 s), e a faca no `4301` (300 s, a partir dos 10 s) rende o
+    // pé de coelho SEM sorteio — o `elseif target.itemid == 4301` do Lua, que roda antes da tabela.
+    for (const id of ['rabbit', 'killer-rabbit']) {
+      expect(byId.get(id), id).toMatchObject({
+        materialId: 'rabbits-foot', stages: [{ canaryItemId: 6017, durationMs: 10_000, afterTtlMs: 360_000 }],
+        guaranteed: [{ canaryItemId: 4301, startMs: 10_000, durationMs: 300_000, materialId: 'rabbits-foot', quantity: 1 }],
+      });
+    }
+    // E só os coelhos: nenhum outro monstro passa pelo `4301`.
+    expect([...byId.values()].filter((entity) => 'guaranteed' in entity).map((entity) => entity.id).sort())
+      .toEqual(['killer-rabbit', 'rabbit']);
     for (const entity of byId.values()) expect(() => skinningSchema.parse(entity)).not.toThrow();
     // Nenhum problema de tabela × cadeia entre os monstros reais: o único motivo de corte é o catálogo.
     expect(catalog.skipped.every((entry) => entry.reason === 'monstro fora do catálogo do Draconya')).toBe(true);
