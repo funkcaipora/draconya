@@ -967,7 +967,7 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   campo `masterKind` à parte.** `HuntRuleset#chooseMonsterTarget` bifurca por isso: invocação de
   personagem NUNCA roda `chooseTarget` própria — herda o alvo do mestre (`attackTargetOf`) a
   cada passo/ataque/ability; invocação de monstro continua igual ao #546. **O dano dela credita
-  o MESTRE, nunca o `subject` dela** (`#applyMonsterHitOnSummon`, achado da implementação: sem o
+  o MESTRE, nunca o `subject` dela** (`#applyMonsterHitOnMonster`, ex-`...OnSummon`, achado da implementação: sem o
   redirecionamento, `xpByDamage` não reconhece um `m:<id>` como participante e o abate renderia
   ZERO XP para quem invocou). **`#hostileMonsters()` é o outro lado da mesma moeda — proteção
   contra FOGO AMIGO.** Estender a lista de presas de um monstro hostil (`#playerSummonPrey`) para
@@ -981,6 +981,47 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   subject certo, como cinto e suspensório contra o cliente pedindo por fora do auto-target. Ver
   "Invocação do PERSONAGEM" em `docs/product/combat.md` para o resto do contrato (teto de 2,
   mana do MONSTRO via `manaCostOverride`, `combat-v4`).
+- **Facções de monstro (#619, M44-01) são o `Faction_t` do Canary, e a regra é ANTES de tudo "sem
+  facção na hunt, nada muda".** `monster/faction.ts` (puro) tem os valores (`FACTION_PLAYER` = 1, o
+  peso `× 100` na distância e `× 100 000` na vida/dano) e a tabela; o `HuntRuleset` guarda
+  `#factions`/`#hasFactions` e TODO caminho novo sai por `#hasFactions` falso, devolvendo a MESMA
+  lista de antes — sem alocar e sem sortear. Cinco armadilhas. (1) **A tabela é do ALCANÇÁVEL, não do
+  conteúdo**: `options.monsters` traz o catálogo inteiro em toda hunt, então "existe algum monstro
+  com facção?" seria sempre sim; `reachableMonsterIds` segue os pontos de spawn e, transitivamente,
+  as invocações. (2) **Oponente não é alvo** (`isOpponent` × `isTarget`): `#opponentOthersOf` (mais
+  `session.participants`) é a `targetList` — o que segura a volta ao spawn e impede o ocioso —, e
+  `#targetPreyOf` é o que `chooseTarget` recebe. A Lion tem o herói na lista e não o mira. Trocar
+  uma pela outra some com a Lion ou faz ela caçar o herói. (3) **`Prey.faction` ausente vale PLAYER**
+  (personagem e invocação de personagem não dizem nada) — o desempate `d + faction × 100` é
+  constante para uma lista só deles, e é isso que preserva toda hunt sem facção; o jogador (1) ganha
+  de qualquer monstro inimigo (2+) na aquisição, por mais longe que esteja. Em "mais dano" o
+  Canary inverte (a facção MAIOR ganha) e `rankTarget` reproduz. (4) **`#mayAttack` vale para o alvo
+  principal e para cada criatura da área**, e a área de um monstro de facção soma os inimigos com
+  `#withFactionEnemies` — a lista de área de um monstro comum continua só personagens e
+  invocações de personagem. A invocação de monstro herda facção e inimigas do mestre
+  (`#factionProfileOf` recursivo); a de PERSONAGEM não usa a tabela (`null`). (5) **A morte por
+  monstro é decidida pelo `credit`, não pelo golpe final** (`#onMonsterDied`): `lastHitBy` que é
+  um `m:<id>` sem participante entre os que bateram = sem XP, sem abate (a invocação de monstro
+  também), cadáver sem dono e sem loot; com dano de participante a XP é `floor(dano ÷ total × XP)`
+  (`#experiencePool`, o dano de monstro entra no total) e, havendo dano de monstro no mapa, o dono do
+  cadáver é o maior causador ENTRE OS QUE AINDA EXISTEM (`#corpseOwnerOf`), participante ou monstro
+  vivo — mesmo quando o herói deu o último golpe —, o dano de campo não entra. **O dano de quem saiu
+  NUNCA se apaga do mapa de outro monstro** (o Canary só zera o `damageMap` inteiro, em
+  `onIdleStatus`): `#forgetInMonsters` o funde no balde `DEPARTED_ACTOR` (`m:departed`,
+  `Contribution.fold`), que conta no total, mantém o prefixo `m:` e nunca é dono nem `mostDamageBy`;
+  trocar a fusão por `forget` paga ao jogador a XP que o Deepling morto já tirou. O tique de condição
+  de um dono monstro que já saiu não é atribuído a ninguém. **A invocação de monstro de facção
+  persegue o alvo do MESTRE** (`#followMasterTarget`, `updateSummonTarget`), nunca `chooseTarget`
+  — a lista de alvos dela inclui o jogador por causa do offset de facção, e é isso que ela NÃO usa.
+  **O laço de alvos de `#executeMonsterAbility` pula o monstro que saiu dos índices** no meio dele
+  (a morte do mestre cascateia em `#removeSummon`, que não zera `alive`) — o mesmo guarda de
+  `#applyHits`/`#carnage`; sem ele a invocação leva um golpe fantasma e morre duas vezes. **A "atividade sem jogador" do `updateIdleStatus` do `47dfd51` só
+  alcança a INVOCAÇÃO de um monstro de facção** (`master->totalPlayersOnScreen == 0`, sob um `else if
+  (master)`): `#isFactionSummonIdle` lê a posição dos participantes — estado da sessão, nunca de quem
+  olha — e o monstro de facção comum com inimigo à vista brigando sem jogador NÃO fica ocioso. Testes
+  de facção precisam posicionar o herói ANTES do primeiro `advanceBy`: o monstro retém o alvo que
+  escolheu, e corrigir a posição depois testa a escolha de um herói na rota (`arena` em
+  `rulesets/factions.test.ts`). Ver "Facções de monstro" em `docs/product/combat.md`.
 - **O familiar de vocação (#599, M38-02, ADR 0057 d.3 e a emenda de 2026-09-29) é uma invocação de
   PERSONAGEM com três coisas a mais, e cada uma tem uma armadilha.** (1) **Os dois carimbos
   (`CharacterRuntime.familiar`) são de relógio de PAREDE, e o "agora" é `session.createdAtMs +

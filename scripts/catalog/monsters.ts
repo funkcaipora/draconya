@@ -152,8 +152,24 @@ export const COIN_VALUES: ReadonlyMap<string, number> = new Map([
 ]);
 
 /**
- * O resolvedor de identificador para um `.lua` de monstro. `COMBAT_*` e `BESTY_RACE_*` saem
- * como texto (tabelas acima); qualquer outro identificador em MAIÚSCULAS (`CONST_ME_*`,
+ * `FACTION_*` (`Faction_t`, `src/game/game_definitions.hpp:44-53`) → o nome da facção no
+ * `MONSTER_FACTIONS` do conteúdo (#619). Resolvida para TEXTO direto no avaliador, como
+ * `BESTY_RACE_*`: o número do enum só importa dentro do `sim` (o desempate do alvo), e lá ele é o
+ * índice de `MONSTER_FACTIONS`. `FACTION_LAST` é sentinela do C++ e nenhum Lua a usa.
+ */
+export const FACTION_CONSTANTS: Readonly<Record<string, string>> = {
+  FACTION_DEFAULT: 'default', FACTION_PLAYER: 'player', FACTION_LION: 'lion',
+  FACTION_LIONUSURPERS: 'lion-usurpers', FACTION_MARID: 'marid', FACTION_EFREET: 'efreet',
+  FACTION_DEEPLING: 'deepling', FACTION_DEATHLING: 'deathling', FACTION_ANUMA: 'anuma',
+  FACTION_FAFNAR: 'fafnar',
+};
+
+/** Os nomes de facção que o conteúdo conhece — o que `FACTION_CONSTANTS` resolve. */
+const KNOWN_FACTIONS: ReadonlySet<string> = new Set(Object.values(FACTION_CONSTANTS));
+
+/**
+ * O resolvedor de identificador para um `.lua` de monstro. `COMBAT_*`, `BESTY_RACE_*` e
+ * `FACTION_*` saem como texto (tabelas acima); qualquer outro identificador em MAIÚSCULAS (`CONST_ME_*`,
  * `CONST_ANI_*`, `CONDITION_*`) resolve para o próprio nome — é só a parte de ataque, que este
  * leitor não interpreta (M35-02), e travar o arquivo inteiro por um efeito visual seria perder o
  * monstro por nada.
@@ -164,6 +180,8 @@ function monsterConstants(): ConstantResolver {
       if (name.startsWith('COMBAT_')) return COMBAT_TYPE_CONSTANTS[name];
       const race = BESTIARY_RACE_CONSTANTS[name];
       if (race !== undefined) return race;
+      const faction = FACTION_CONSTANTS[name];
+      if (faction !== undefined) return faction;
       const rarity = BOSSTIARY_RARITY_CONSTANTS[name];
       if (rarity !== undefined) return rarity;
       return /^[A-Z][A-Z0-9_]*$/.test(name) ? name : undefined;
@@ -543,6 +561,8 @@ export interface MonsterNotes {
   readonly meleeVia: readonly MeleePowerVia[];
   /** Os monstros que este invoca — o catálogo confere que cada um foi gerado. */
   readonly summonedIds: readonly string[];
+  /** O que a leitura da apresentação (#620) observou e não coube no schema. */
+  readonly look: LookNotes;
 }
 
 export interface ConvertedMonster {
@@ -560,13 +580,15 @@ const READ_FIELDS: ReadonlySet<string> = new Set([
   'name', 'description', 'experience', 'outfit', 'raceId', 'Bestiary', 'bosstiary', 'health', 'maxHealth',
   'race', 'speed', 'manaCost', 'changeTarget', 'strategiesTarget', 'flags', 'loot', 'attacks', 'defenses',
   'elements', 'immunities', 'summon', 'maxSummons', 'summons', 'critChance', 'corpse',
+  // A apresentação (#620): cores/addons do outfit, falas periódicas e luz.
+  'voices', 'light',
+  'faction', 'enemyFactions',
 ]);
 
 /** Campos que não entram NUNCA nesta issue, com o dono de cada um. */
 const IGNORED_FIELD_OWNERS: Readonly<Record<string, string>> = {
-  events: 'M44', voices: 'M44', light: 'M44',
-  heals: '#683', reflects: '#683', faction: 'sem facção',
-  enemyFactions: 'sem facção',
+  events: 'M44',
+  heals: '#683', reflects: '#683',
 };
 
 /** A velocidade na escala do TFS (ADR 0037 d.4): o TFS quando tem o mesmo monstro, senão Canary × 2. */
@@ -787,6 +809,127 @@ function readElements(elements: readonly LuaValue[], immunitiesRaw: readonly Lua
   };
 }
 
+// ---------------------------------------------------------------------------------------------
+// A apresentação do monstro (#620): cores e addons do outfit, falas, luz e raça.
+
+/** As raças do Canary (`MonsterType:race`, `monster_type_functions.cpp`) — o vocabulário de `MONSTER_RACES`. */
+const CANARY_RACES: ReadonlySet<string> = new Set([
+  'venom', 'blood', 'undead', 'fire', 'energy', 'ink', 'chocolate', 'candy',
+]);
+
+/** A raça que o Canary assume sem `monster.race` (`RACE_BLOOD`, `monsters.hpp`) — o default do schema. */
+const DEFAULT_RACE = 'blood';
+
+/** O maior índice da paleta de 133 cores do outfit e a maior máscara de addons. */
+const MAX_PALETTE_INDEX = 132;
+const MAX_ADDONS = 3;
+/** O maior índice da paleta de 216 cores da luz. */
+const MAX_LIGHT_COLOR = 215;
+
+/** O que a leitura da apresentação observou e não coube — vira nota no relatório. */
+export interface LookNotes {
+  /** `lookMount` diferente de 0: montaria, que este catálogo não desenha (ver o relatório). */
+  readonly mount: number | undefined;
+  /** Algum índice de cor, addon ou luz fora da faixa do schema, recortado nela. */
+  readonly clamped: boolean;
+  /** `monster.race` que o Canary não conhece — ele avisa e fica em `blood`. */
+  readonly unknownRace: string | undefined;
+  /** Um bloco de falas que nunca dispara no Canary (intervalo 0, chance 0 ou sem linha) e não foi gerado. */
+  readonly silentVoices: boolean;
+}
+
+export interface MonsterLook {
+  readonly outfit?: Record<string, number>;
+  readonly voices?: {
+    readonly intervalMs: number;
+    readonly chance: number;
+    readonly lines: ReadonlyArray<{ readonly text: string; readonly yell: boolean }>;
+  };
+  readonly light?: { readonly level: number; readonly color: number };
+  readonly race?: string;
+  readonly notes: LookNotes;
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  return Math.min(Math.max(Math.trunc(value), min), max);
+}
+
+/**
+ * A apresentação de UM monstro: `monster.outfit.look*` (cores e addons, só quando algum é diferente
+ * de zero — o schema assume o neutro), `monster.voices`, `monster.light` e `monster.race`. Nada
+ * daqui é arte (invariante 6) nem entra em combate; `lookType` é `outfitId` e segue para a tabela de
+ * aparências pelo caminho de sempre. As leituras seguem o registro do Canary
+ * (`register_monster_type.lua`): o intervalo e a chance das falas vêm do bloco, uma vez só, e
+ * `light` só vale com `level` declarado.
+ */
+export function readMonsterLook(raw: Readonly<Record<string, LuaValue>>): MonsterLook {
+  let clamped = false;
+  const bounded = (value: number, max: number): number => {
+    const result = clampInteger(value, 0, max);
+    if (result !== Math.trunc(value)) clamped = true;
+    return result;
+  };
+
+  const outfit = isRecord(raw['outfit']) ? raw['outfit'] : {};
+  const colors = {
+    head: bounded(num(outfit['lookHead']) ?? 0, MAX_PALETTE_INDEX),
+    body: bounded(num(outfit['lookBody']) ?? 0, MAX_PALETTE_INDEX),
+    legs: bounded(num(outfit['lookLegs']) ?? 0, MAX_PALETTE_INDEX),
+    feet: bounded(num(outfit['lookFeet']) ?? 0, MAX_PALETTE_INDEX),
+    addons: bounded(num(outfit['lookAddons']) ?? 0, MAX_ADDONS),
+  };
+  const mount = num(outfit['lookMount']) ?? 0;
+  const hasLook = Object.values(colors).some((value) => value !== 0);
+
+  // As falas: `interval` e `chance` valem para o bloco todo, e cada tabela posicional é uma linha.
+  // O Canary só fala com intervalo E chance positivos e ao menos uma linha (`onThinkYell`).
+  let voices: MonsterLook['voices'];
+  let silentVoices = false;
+  const voicesRaw = raw['voices'];
+  if (isRecord(voicesRaw) || Array.isArray(voicesRaw)) {
+    const named = isRecord(voicesRaw) ? voicesRaw : {};
+    const intervalMs = Math.trunc(num(named['interval']) ?? 0);
+    const chance = Math.trunc(num(named['chance']) ?? 0);
+    const lines: Array<{ text: string; yell: boolean }> = [];
+    for (const entry of positionalOf(voicesRaw)) {
+      if (!isRecord(entry)) continue;
+      const text = str(entry['text']);
+      if (text === undefined || text.length === 0) continue;
+      lines.push({ text, yell: bool(entry['yell']) === true });
+    }
+    if (intervalMs > 0 && chance > 0 && lines.length > 0) {
+      voices = { intervalMs, chance: Math.min(chance, 100), lines };
+    } else {
+      silentVoices = true;
+    }
+  }
+
+  // A luz: só com `level` declarado e maior que zero (`registerMonsterType.light`).
+  let light: MonsterLook['light'];
+  const lightRaw = raw['light'];
+  if (isRecord(lightRaw)) {
+    const level = num(lightRaw['level']) ?? 0;
+    if (level > 0) {
+      const boundedLevel = clampInteger(level, 1, 255);
+      const color = bounded(num(lightRaw['color']) ?? 0, MAX_LIGHT_COLOR);
+      if (boundedLevel !== Math.trunc(level)) clamped = true;
+      light = { level: boundedLevel, color };
+    }
+  }
+
+  const raceRaw = str(raw['race']);
+  const unknownRace = raceRaw !== undefined && !CANARY_RACES.has(raceRaw) ? raceRaw : undefined;
+  const race = raceRaw !== undefined && CANARY_RACES.has(raceRaw) && raceRaw !== DEFAULT_RACE ? raceRaw : undefined;
+
+  return {
+    ...(hasLook ? { outfit: colors } : {}),
+    ...(voices === undefined ? {} : { voices }),
+    ...(light === undefined ? {} : { light }),
+    ...(race === undefined ? {} : { race }),
+    notes: { mount: mount > 0 ? mount : undefined, clamped, unknownRace, silentVoices },
+  };
+}
+
 function readBestiary(raw: LuaValue | undefined, raceId: number | undefined): BestiaryDraft | string | undefined {
   if (!isRecord(raw)) return undefined;
   const className = str(raw['class']);
@@ -854,6 +997,7 @@ export function convertMonster(
     droppedCoinLines: [], clampedWeaknesses: [], elementImmunities: [], unmappedElements: [],
     speedSource: 'canary-x2', mitigationClamped: false, ignoredFields: [],
     unmappedSpells: [], droppedSpells: [], spellNotes: [], presentation: [], meleeVia: [], summonedIds: [],
+    look: { mount: undefined, clamped: false, unknownRace: undefined, silentVoices: false },
   };
   if (typeName === undefined) {
     return {
@@ -1004,6 +1148,22 @@ export function convertMonster(
   if (runHealth > 0) entity['runOnHealth'] = runHealth;
   const staticChance = num(flags['staticAttackChance']);
   if (staticChance !== undefined) entity['staticAttack'] = Math.min(Math.max(staticChance, 0), 100) / 100;
+  // A facção (#619): `monster.faction` e `monster.enemyFactions`, os nomes de `MONSTER_FACTIONS`.
+  // `default` (o valor de quem não declara) fica AUSENTE, e uma constante que o Canary não
+  // conhece hoje (`FACTION_*` novo) é motivo para NÃO gerar — silenciar viraria um monstro que
+  // ataca quem não devia.
+  const faction = str(raw['faction']);
+  if (faction !== undefined) {
+    if (!KNOWN_FACTIONS.has(faction)) blockers.push(`facção desconhecida: ${faction}`);
+    else if (faction !== 'default') entity['faction'] = faction;
+  }
+  const enemyFactions = [...new Set(positionalOf(raw['enemyFactions']).filter(
+    (value): value is string => typeof value === 'string',
+  ))];
+  for (const enemy of enemyFactions) {
+    if (!KNOWN_FACTIONS.has(enemy)) blockers.push(`facção inimiga desconhecida: ${enemy}`);
+  }
+  if (enemyFactions.length > 0) entity['enemyFactions'] = enemyFactions;
   if (melee === undefined && spells.abilities.length === 0 && spells.unmapped.length === 0) {
     entity['_open'] = 'Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.';
   }
@@ -1012,6 +1172,12 @@ export function convertMonster(
   // estágio nenhum no `items.xml` (monstro fica sem cadáver, o default seguro).
   const corpseTtlMs = corpseTtlMsFromChain(num(raw['corpse']), deps.corpseChains);
   if (corpseTtlMs !== undefined) entity['corpseTtlMs'] = corpseTtlMs;
+  // A apresentação (#620): cores e addons, falas, luz e raça — só o que difere do default do schema.
+  const look = readMonsterLook(raw);
+  if (look.outfit !== undefined) entity['outfit'] = look.outfit;
+  if (look.voices !== undefined) entity['voices'] = look.voices;
+  if (look.light !== undefined) entity['light'] = look.light;
+  if (look.race !== undefined) entity['race'] = look.race;
   // As janelas de Animate Dead (#600): as MESMAS etapas da cadeia acima, com a flag `movable` de
   // cada uma vinda de `appearances.dat`. Ausente é "nunca" — sem `.dat`, ou cadeia sem estágio
   // movível.
@@ -1059,6 +1225,7 @@ export function convertMonster(
       presentation: spells.presentation,
       meleeVia: spells.meleeVia,
       summonedIds: summons.summonedIds,
+      look: look.notes,
     },
   };
 }
@@ -1164,9 +1331,30 @@ export function readMonsterCatalog(ctx: CatalogImportContext, deps: MonsterReade
   if (mitigation.length > 0) notes.push(`\`defenses.mitigation\` acima de 30 recortada: ${mitigation.join(', ')}.`);
   notes.push(`Campos lidos e ignorados nesta issue (arquivos gerados): ${countBy(generated.flatMap((m) => m.notes.ignoredFields)) || 'nenhum'}.`);
   notes.push(`Pastas fora do catálogo: ${[...SKIPPED_FOLDERS].sort().map((folder) => `\`${folder}/\``).join(', ')}.`);
+  notes.push(lookNote(converted, generated));
   notes.push(...spellNotes(converted, generated, summonBlocked, deps));
 
   return { slices, skipped, notes, converted };
+}
+
+/**
+ * A apresentação (#620), sobre os monstros GERADOS: quantos trazem cores/addons, falas, luz e uma raça
+ * diferente de `blood`, e o que foi lido e NÃO coube — a montaria (`lookMount`, que o catálogo não
+ * desenha), os blocos de fala que nunca disparam no Canary e a raça que ele não conhece.
+ */
+function lookNote(converted: readonly ConvertedMonster[], generated: readonly ConvertedMonster[]): string {
+  const count = (field: string): number => generated.filter((monster) => monster.entity[field] !== undefined).length;
+  const races = generated.flatMap((monster) => (typeof monster.entity['race'] === 'string' ? [monster.entity['race']] : []));
+  const mounted = converted.filter((monster) => monster.notes.look.mount !== undefined);
+  const generatedIds = new Set(generated.map((monster) => monster.id));
+  const silent = converted.filter((monster) => monster.notes.look.silentVoices).length;
+  const unknown = converted.flatMap((monster) => (monster.notes.look.unknownRace === undefined ? [] : [monster.notes.look.unknownRace]));
+  const clamped = converted.filter((monster) => monster.notes.look.clamped).length;
+  return `Apresentação (#620), ${generated.length} gerado(s): ${count('outfit')} com cores/addons de outfit, ${count('voices')} com falas, `
+    + `${count('light')} com luz, ${races.length} com raça diferente de \`blood\` (${countBy(races) || 'nenhuma'}; ausente é \`blood\`, o default do Canary). `
+    + `Montaria (\`lookMount\`, lida e NÃO desenhada): ${mounted.length === 0 ? 'nenhum monstro lido' : mounted.map((monster) => `\`${monster.id}\` (outfit ${monster.notes.look.mount ?? 0}, ${generatedIds.has(monster.id) ? 'gerado' : 'não gerado'})`).join(', ')}. `
+    + `Bloco de falas sem efeito no Canary (intervalo 0, chance 0 ou sem nenhuma linha — a maioria declara só \`interval\` e \`chance\`), monstros lidos: ${silent}. `
+    + `Raça desconhecida (o Canary avisa e fica em \`blood\`): ${countBy(unknown) || 'nenhuma'}. Índice recortado na faixa do schema: ${clamped}.`;
 }
 
 /** A meta de cobertura do M35-02: fração dos monstros de caça importáveis que sai gerada. */

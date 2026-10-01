@@ -3631,7 +3631,17 @@
     }
   },
   "hits": {
-    "melee": 1
+    "melee": 1,
+    "byRace": {
+      "blood": 1,
+      "venom": 17,
+      "undead": 10,
+      "fire": 1,
+      "energy": 12,
+      "ink": 10,
+      "chocolate": 270,
+      "candy": 269
+    }
   },
   "abilities": {
     "fire": {

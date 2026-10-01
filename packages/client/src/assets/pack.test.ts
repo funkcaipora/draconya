@@ -79,6 +79,12 @@ const DAT = encodeAppearances({
         }),
       ],
     }),
+    // Um outfit de duas camadas SEM linhas de addon (`patternHeight` 1): o monstro que declara
+    // addon num desenho que o pacote não tem (#620).
+    appearance({
+      id: 129,
+      frameGroups: [frameGroup({ patternWidth: 4, layers: 2, spriteIds: ids(240, 8) })],
+    }),
   ],
   // Um efeito de três fases com durações DIFERENTES, e mínimo diferente do máximo: é o que
   // separa "leu o mínimo de cada fase" de "leu o máximo" e de "leu a primeira três vezes".
@@ -341,6 +347,81 @@ describe('AssetPack (FUN-23)', () => {
     expect(idOf(await pack.outfit(128, 'south', 0, false, COLORS))).toBe(100 + 4);
     expect(idOf(await pack.outfit(128, 'north', 1, true, COLORS))).toBe(150 + perFrame);
     expect(idOf(await pack.outfit(128, 'west', 1, true, COLORS))).toBe(150 + perFrame + 6);
+  });
+
+  describe('os addons do outfit do monstro (#620)', () => {
+    // O outfit 128 do pacote real: linha 0 é o desenho, linhas 1 e 2 são o primeiro e o segundo
+    // addon. No índice plano, com `patternWidth` 4 e duas camadas, a linha `y` da coluna `x` da
+    // fase 0 começa em `100 + (y × 4 + x) × 2`: base em 108 e 116, template em 109 e 117.
+    // Os templates dos addons ficam SEM máscara, para o pixel sair exatamente o do base do addon.
+    const GREEN: Rgba = [0, 200, 0, 255];
+    const BLUE: Rgba = [0, 0, 200, 255];
+    const CLEAR: Rgba = [0, 0, 0, 0];
+    const fills = (over: Readonly<Record<number, Rgba>> = {}) => ({
+      100: [128, 128, 128, 255] as Rgba, 101: [255, 0, 0, 255] as Rgba,
+      108: GREEN, 109: CLEAR, 116: BLUE, 117: CLEAR, ...over,
+    });
+
+    it('cada bit da máscara é uma linha do padrão, por cima do base pintado', async () => {
+      // Mutação que mata: trocar os bits (1 desenhar a linha 2), ignorar a máscara, ou desenhar o
+      // addon por baixo do base — com `addons = 3` o azul (linha 2) tem que cobrir o verde.
+      const { pack } = await build({ decode: async () => sheetWith(fills()) });
+      expect(firstPixel(await pack.outfit(128, 'north', 0, false, COLORS, 0))).toEqual([128, 0, 0, 255]);
+      expect(firstPixel(await pack.outfit(128, 'north', 0, false, COLORS, 1))).toEqual(GREEN);
+      expect(firstPixel(await pack.outfit(128, 'north', 0, false, COLORS, 2))).toEqual(BLUE);
+      expect(firstPixel(await pack.outfit(128, 'north', 0, false, COLORS, 3))).toEqual(BLUE);
+    });
+
+    it('os dois addons juntos: o segundo só cobre o que o primeiro deixa à mostra', async () => {
+      // Com a linha 2 transparente, `addons = 3` é o primeiro addon — e não o segundo nem o base.
+      const { pack } = await build({ decode: async () => sheetWith(fills({ 116: CLEAR })) });
+      expect(firstPixel(await pack.outfit(128, 'north', 0, false, COLORS, 3))).toEqual(GREEN);
+      expect(firstPixel(await pack.outfit(128, 'north', 0, false, COLORS, 2))).toEqual([128, 0, 0, 255]);
+    });
+
+    it('o addon é PINTADO com as cores do monstro, como o base', async () => {
+      // Template vermelho (máscara de CORPO) no addon: o corpo 94 é vermelho puro e zera G e B.
+      const { pack } = await build({
+        decode: async () => sheetWith(fills({ 108: [100, 100, 100, 255], 109: [255, 0, 0, 255] })),
+      });
+      expect(firstPixel(await pack.outfit(128, 'north', 0, false, COLORS, 1))).toEqual([100, 0, 0, 255]);
+    });
+
+    it('direção e fase escolhem o quadro do addon, e não só o do base', async () => {
+      // Leste é a coluna 1 (+2 ids); andando, o grupo 1 começa em 150 e a fase 1 soma 48. Quatro
+      // pontos diferentes entre si, para um `0` no lugar de direção ou fase não passar.
+      const decode = async () => sheetWith({
+        110: [0, 0, 11, 255], 111: CLEAR,                 // parado, leste, addon 1
+        158: [0, 0, 22, 255], 159: CLEAR,                 // andando fase 0, norte, addon 1
+        206: [0, 0, 33, 255], 207: CLEAR,                 // andando fase 1, norte, addon 1
+      });
+      const { pack } = await build({ decode });
+      expect(firstPixel(await pack.outfit(128, 'east', 0, false, COLORS, 1))[2]).toBe(11);
+      expect(firstPixel(await pack.outfit(128, 'north', 0, true, COLORS, 1))[2]).toBe(22);
+      expect(firstPixel(await pack.outfit(128, 'north', 1, true, COLORS, 1))[2]).toBe(33);
+    });
+
+    it('o outfit sem a linha do addon (`patternHeight` 1) ignora a máscara: é o MESMO bitmap', async () => {
+      // O monstro que declara addon num desenho que o pacote não tem aparece sem ele, e sem
+      // pedir um quadro que não existe — nem compor de novo.
+      const { pack } = await build();
+      const sem = await pack.outfit(129, 'north', 0, false, COLORS, 0);
+      expect(sem).not.toBeNull();
+      expect(await pack.outfit(129, 'north', 0, false, COLORS, 3)).toBe(sem);
+    });
+
+    it('o outfit de uma camada só ignora a máscara: sai o quadro cru, sem template para pintar', async () => {
+      const { pack } = await build();
+      const cru = await pack.outfit(21, 'north', 0);
+      expect(await pack.outfit(21, 'north', 0, false, COLORS, 3)).toBe(cru);
+    });
+
+    it('máscara diferente é bitmap diferente; a mesma é o MESMO bitmap', async () => {
+      const { pack } = await build({ decode: async () => sheetWith(fills()) });
+      const um = await pack.outfit(128, 'north', 0, false, COLORS, 1);
+      expect(await pack.outfit(128, 'north', 0, false, COLORS, 1)).toBe(um);
+      expect(await pack.outfit(128, 'north', 0, false, COLORS, 2)).not.toBe(um);
+    });
   });
 
   it('a composição é guardada pelo quadro RESOLVIDO, não pela fase crua', async () => {

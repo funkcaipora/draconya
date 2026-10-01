@@ -8,7 +8,10 @@
 // mundo. `creature-*` é sempre mundo — e é por isso que dezenas de deltas por segundo não
 // tocam o React.
 
-import type { OutfitColors, S2CMessage, SkillProgress as ProtocolSkillProgress } from '@draconya/protocol';
+import type {
+  CreatureLight, CreatureVoices, MonsterRace, OutfitColors, S2CMessage,
+  SkillProgress as ProtocolSkillProgress,
+} from '@draconya/protocol';
 import { appendCapped, hud, slotKey, type PlayerSkills, type SkillProgress, type SlotState } from './hud.js';
 import { aimTracker } from './aim.js';
 import { targetTracker } from './target.js';
@@ -86,6 +89,27 @@ function colorsOf(
   creature: { readonly colors?: OutfitColors | undefined },
 ): Pick<Creature, 'colors'> {
   return creature.colors === undefined ? {} : { colors: creature.colors };
+}
+
+/**
+ * A apresentação do monstro (#620) — addons, raça, luz e falas —, SÓ o que o servidor mandou.
+ *
+ * O mesmo motivo de `colorsOf`: o tipo do protocolo admite `undefined` e o do store não
+ * (`exactOptionalPropertyTypes`), e "o servidor não disse" tem que chegar ao desenho como a
+ * FALTA do campo — é o viewport quem aplica o neutro (sem addon, `blood`, sem luz, mudo).
+ */
+function presentationOf(creature: {
+  readonly addons?: number | undefined;
+  readonly race?: MonsterRace | undefined;
+  readonly light?: CreatureLight | undefined;
+  readonly voices?: CreatureVoices | undefined;
+}): Pick<Creature, 'addons' | 'race' | 'light' | 'voices'> {
+  return {
+    ...(creature.addons === undefined ? {} : { addons: creature.addons }),
+    ...(creature.race === undefined ? {} : { race: creature.race }),
+    ...(creature.light === undefined ? {} : { light: creature.light }),
+    ...(creature.voices === undefined ? {} : { voices: creature.voices }),
+  };
 }
 
 export function applyMessage(message: S2CMessage, nowMs: number): void {
@@ -171,6 +195,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         id: message.id,
         appearanceId: message.appearanceId,
         ...colorsOf(message),
+        ...presentationOf(message),
         name: message.name,
         health: message.health,
         maxHealth: message.maxHealth,
@@ -540,6 +565,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           id: creature.id,
           appearanceId: creature.appearanceId,
           ...colorsOf(creature),
+          ...presentationOf(creature),
           name: creature.name,
           health: creature.health,
           maxHealth: creature.maxHealth,

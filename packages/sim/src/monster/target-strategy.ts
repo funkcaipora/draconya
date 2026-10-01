@@ -17,6 +17,7 @@
 
 import type { MonsterTargetStrategy } from '@draconya/content';
 import type { Rng } from '../rng.js';
+import { FACTION_PLAYER, NEAREST_FACTION_WEIGHT, RANK_FACTION_WEIGHT } from './faction.js';
 
 /**
  * O que `rankTarget` precisa saber de cada candidato — métricas já resolvidas pelo chamador
@@ -35,6 +36,13 @@ export interface TargetRankCandidate {
    * Canary, sem precisar de um booleano à parte.
    */
   readonly damage: number;
+  /**
+   * O valor de `Faction_t` do candidato (#619): entra no critério — `distance + faction × 100`,
+   * `health + faction × 100 000` e `damage + faction × 100 000`, como
+   * `MonsterTargetRanker::rank` (`monster_targeting.cpp`). Ausente vale `FACTION_PLAYER`, o
+   * mesmo default de `Prey.faction`, e é uniforme para toda a lista de sempre.
+   */
+  readonly faction?: number;
 }
 
 /**
@@ -82,17 +90,31 @@ export function rankTarget(
 
   let threshold = strategy.nearest;
   if (roll <= threshold) {
-    return pickExtreme(candidates, (c) => c.distance, (best, value) => value < best);
+    return pickExtreme(
+      candidates,
+      (c) => c.distance + (c.faction ?? FACTION_PLAYER) * NEAREST_FACTION_WEIGHT,
+      (best, value) => value < best,
+    );
   }
 
   threshold += strategy.health;
   if (roll <= threshold) {
-    return pickExtreme(candidates, (c) => c.health, (best, value) => value < best);
+    return pickExtreme(
+      candidates,
+      (c) => c.health + (c.faction ?? FACTION_PLAYER) * RANK_FACTION_WEIGHT,
+      (best, value) => value < best,
+    );
   }
 
   threshold += strategy.damage;
   if (roll <= threshold) {
-    return pickExtreme(candidates, (c) => c.damage, (best, value) => value > best);
+    // Quem nunca bateu não tem `hasDamage` no Canary e só ganha se ninguém tiver: `-Infinity`
+    // faz o mesmo, e a comparação continua estrita — o primeiro da lista fica.
+    return pickExtreme(
+      candidates,
+      (c) => (c.damage > 0 ? c.damage + (c.faction ?? FACTION_PLAYER) * RANK_FACTION_WEIGHT : Number.NEGATIVE_INFINITY),
+      (best, value) => value > best,
+    );
   }
 
   // `random` (TFS `TARGETSEARCH_RANDOM`): o segundo sorteio, só neste ramo.

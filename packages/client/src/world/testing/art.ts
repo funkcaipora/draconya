@@ -89,8 +89,13 @@ export class SyntheticArt implements WorldArt {
 
   outfit(
     outfitId: number, direction: Direction, phase: number, moving = false, _colors?: OutfitColors,
+    addons = 0,
   ): Promise<Bitmap | null> {
-    return this.#frame('outfit', outfitId, `outfit:${outfitId}:${direction}:${moving ? 'w' : 's'}:${phase}`);
+    // Os addons (#620) mudam o bitmap: a chave só os carrega quando há, como a do pacote real.
+    return this.#frame(
+      'outfit', outfitId,
+      `outfit:${outfitId}:${direction}:${moving ? 'w' : 's'}:${phase}${addons > 0 ? `:a${addons}` : ''}`,
+    );
   }
 
   framesOf(outfitId: number, moving: boolean): number {

@@ -333,6 +333,28 @@ Dodge, Parry (só o segundo ponto), Adrenaline Burst, Numb (idem imune), a ORDEM
 `charms-combat.test.ts`, as tabelas REAIS de Dragon, Dragon Lord, Rotworm e Cave Rat com o flag
 `creatureProduct` de cada creature product do Canary conferido contra o conteúdo carregado).
 
+### Estágio #619 (M44-01, facções de monstro): `additive`
+
+O monstro de facção vira alvo e agressor do de facção inimiga (`faction`/`enemyFactions`, ver
+"Facções de monstro" em `docs/product/combat.md`). **`additive`**: nenhum cenário sem facção muda de
+resultado ou de ordem de sorteio. O `HuntRuleset` só monta a tabela de facções dos monstros que a hunt
+PODE gerar (`reachableMonsterIds`), e com ela vazia (`#hasFactions` falso) as entradas novas —
+`#opponentOthersOf`, `#targetPreyOf`, `#mayAttack`, `#isFactionSummonIdle` — devolvem a mesma
+referência de antes ou `false`, sem alocar e sem sortear; o desempate por facção soma uma constante a
+uma lista só de personagens, e os cortes da morte por monstro (XP, loot, dono do cadáver e abate) só
+disparam com um `m:<id>` no mapa de dano, que só existe com facção — a única exceção é a invocação de
+PERSONAGEM (#598) morta por um monstro hostil, que deixa de contar abate (o Canary só tem `killers`
+entre os jogadores do `damageMap`); nenhum monstro do catálogo é `summonable`, então nenhuma hunt real a
+vê. A suíte de regressão inteira (que roda sob conteúdo sem facção)
+segue batendo os mesmos números, como no estágio do #598. **Uma versão de conteúdo COM facção é
+outro conteúdo (invariante 7)**: a sessão fixada na anterior não tem os campos e não muda.
+
+Duas completudes do golpe de monstro em monstro entram junto, e mexem no #598 (invocação de jogador) —
+`additive` também porque nenhum monstro do catálogo é `summonable`: a **condição** da ability passa a
+entrar no monstro-alvo (com a imunidade de condição do alvo) e a **cura por elemento** (#683) roda
+depois do golpe. O teste de conformance é `rulesets/factions.test.ts`; o de desempate,
+`monster/faction.test.ts`.
+
 ### Estágio #626 (M44-08, esfola de cadáver e Scavenge — ADR 0048 d.5/d.6, ADR 0053 d.5): `breaking`
 
 O segundo estágio que muda a ordem de sorteio, no mesmo perfil `combat-v4` (`hasSkinningStage`,
