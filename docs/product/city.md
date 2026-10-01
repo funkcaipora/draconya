@@ -95,6 +95,37 @@ um campo para as duas perguntas. O ADR 0060 torna a Cidade o primeiro mundo — 
   sempre cresceu). É o que permite ao mundo aparar a lista de eventos notáveis sem que a hunt
   perceba.
 
+### O mundo no protocolo (OW-11, ADR 0060 d.2b, d.7 e d.8)
+
+O protocolo ganha os contratos de que o mundo precisa. **Nenhum servidor os emite ainda** — quem
+os produz são o `canLogout` e a saída no `sim` (OW-10, OW-14), a entrada pelo repouso (OW-21), o
+portão no-pvp (OW-27) e o cliente que os mostra (OW-23). Os quatro contratos são opcionais ou
+novos, para o deploy em ondas: um nó `game` anterior continua falando com um cliente novo, e o
+inverso também.
+
+| Mensagem | Opcode | O que diz |
+|---|---|---|
+| `logout-refused { reason }` (S2C) | 46 | O `logout` passou por `canLogout` e a resposta é não. `reason`: `'no-logout-tile'` (`RETURNVALUE_YOUCANNOTLOGOUTHERE`) ou `'in-fight'` (`RETURNVALUE_YOUMAYNOTLOGOUTDURINGAFIGHT`, só fora da PZ) — `canary/src/server/network/protocol/protocolgame.cpp:1151-1162`. O pedido (`logout`, C2S 8) não mudou. |
+| `world-full { position, retryAfterMs, huntAvailable }` (S2C) | 47 | A entrada vinda do repouso bateu no teto do mundo. `position` é o lugar na fila, de 1 em diante; `retryAfterMs`, uma DURAÇÃO medida no instante do envio (o Canary manda segundos num byte, 5 a 120 s, `waitlist.cpp:53-67`); `huntAvailable` diz se a hunt idle está ao alcance (d.6b). Quem volta de uma instância nunca a recebe. |
+| `player-stats.zone` e `player-stats.inFight` | — | A zona do tile (`'normal' \| 'protection' \| 'no-pvp' \| 'pvp' \| 'no-logout'`, o `ZoneType_t` do Canary) e o `CONDITION_INFIGHT`, para os ícones de PZ e de luta do HUD. |
+| `target-cancel.reason` | — | `'player-protected'` (`RETURNVALUE_YOUMAYNOTATTACKTHISPLAYER`, `combat.cpp:551-556`) ou `'protection-zone'` (`RETURNVALUE_ACTIONNOTPERMITTEDINPROTECTIONZONE`, `combat.cpp:326-345`). |
+
+Três escolhas que o texto do Canary não dá pronto:
+
+- **`zone` e `inFight` são opcionais e SEM `default`**, ao contrário dos campos vizinhos de
+  `player-stats`. Ausente quer dizer "este nó não informa" — uma hunt, ou um nó anterior —, e um
+  `default` mandaria o HUD apagar um ícone que talvez devesse estar aceso. É também por isso que
+  toda hunt continua mandando o `player-stats` de hoje, byte a byte.
+- **`zone` não diz se dá para deslogar.** O `NOLOGOUT` soma às outras flags
+  (`canary/src/io/iomap.cpp:165-177`) e a precedência o esconde atrás de PZ e no-pvp
+  (`canary/src/items/tile.hpp:188-199`): um tile de PZ com no-logout reporta `'protection'`. Quem
+  responde "posso sair aqui?" é o `logout-refused`. E `'pvp'` está no vocabulário por ser parte do
+  `ZoneType_t`, mas o servidor não o emite no primeiro corte (o tile de arena é `'no-pvp'`, ADR 0060
+  d.8).
+- **A morte no mundo não ganhou mensagem.** Reaproveita `session-ended` com `reason: 'death'`, e o
+  `session-state.sessionType` já é uma string livre, então `'world'` passa — os dois contratos
+  seguem como estão, e os testes do protocolo o prendem.
+
 ### Desconectar não tira ninguém da praça na hora
 
 A carência de repouso (FUN-52) vale por **personagem**, não pela sessão: cinco minutos sem ninguém
