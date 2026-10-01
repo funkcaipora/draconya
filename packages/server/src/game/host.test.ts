@@ -9,7 +9,7 @@ import {
   itemSchema, migrateBotConfigV1, placeholderAppearances, skillSchema,
 } from '@draconya/content';
 import type {
-  Ammunition, Appearances, BotConfig, Charm, Progression, RawContent, Skill, Spell, Vocation,
+  Ammunition, Appearances, BotConfig, Charm, Hazard, Progression, RawContent, Skill, Spell, Vocation,
 } from '@draconya/content';
 import { C2S_SCHEMAS } from '@draconya/protocol';
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
@@ -84,6 +84,7 @@ function buildHost(
     ammunitionCatalog?: NonNullable<SessionHostOptions['ammunitionCatalog']>;
     charmCatalog?: NonNullable<SessionHostOptions['charmCatalog']>;
     charmBestiaryEntries?: NonNullable<SessionHostOptions['charmBestiaryEntries']>;
+    hazard?: NonNullable<SessionHostOptions['hazard']>;
     vocations?: NonNullable<SessionHostOptions['vocations']>;
     vocationLevel?: number;
     progression?: NonNullable<SessionHostOptions['progression']>;
@@ -731,12 +732,13 @@ describe('session host', () => {
 
     host.handle(viewer, { type: 'session-attach' });
     expect(socket.frames).toHaveLength(0);
-    // Nove: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
+    // Dez: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
     // e stamina só viajam na segunda —, o alvo (`target-changed`, #470), as condições ativas
     // (`active-conditions`, #341), o Bestiário (`bestiary`, FUN-113), as bênçãos (`blessings`,
     // #570, ADR 0052), a economia de Charms (`charms`, M39-02, #602), o Bosstiary (`bosstiary`,
-    // #629) e as magias aprendidas (`learned-spells`, #624, ADR 0058). Os nove na FILA, nenhum no fio.
-    expect(viewer.queued).toBe(9);
+    // #629), as magias aprendidas (`learned-spells`, #624, ADR 0058) e o Hazard (`hazard`, M44-14,
+    // #632). Os dez na FILA, nenhum no fio.
+    expect(viewer.queued).toBe(10);
 
     host.flush();
     const state = socket.received().find((m) => m.type === 'session-state');
@@ -5552,6 +5554,302 @@ describe('aprender magia pelo socket (#624, ADR 0058, ADR 0052)', () => {
     await host.transition('p1', { to: 'city' });
     const receipt = saved.find((r) => r.aggregates.goldSpent === 2_500);
     expect(receipt).toMatchObject({ learnedSpells: { spellIds: ['berserk'], version: 1 } });
+  });
+});
+
+describe('o nível de Hazard pelo socket (M44-14, #632, ADR 0052 d.1/d.5)', () => {
+  // A zona do Canary (`hazard_primal.lua`): níveis de 1 a 12. Os multiplicadores não entram aqui —
+  // o host só confere a zona e a faixa; quem rola é o `sim`.
+  const ZONE: Hazard['zones'][string] = {
+    name: 'Gnomprona Gardens', minLevel: 1, maxLevel: 12,
+    crit: true, dodge: true, damageBoost: true, defenseBoost: true,
+  };
+  const hazard: Hazard = {
+    id: 'baseline', criticalIntervalMs: 2000, criticalChance: 750, criticalMultiplier: 25,
+    damageMultiplier: 200, defenseMultiplier: 0, dodgeMultiplier: 85, expBonusMultiplier: 2,
+    lootBonusMultiplier: 2, podDropMultiplier: 87, plunderSpawnMultiplier: 25,
+    zones: { gardens: ZONE },
+  };
+  const shard: Ruleset = {
+    type: 'city', shared: true, hz: () => 0,
+    onEnter: () => {}, onEvent: () => {}, onCreatureDied: () => {}, onEnd: () => {},
+  };
+  const warnings = (socket: FakeSocket) =>
+    socket.received().filter((m): m is S2CMessage & { type: 'system-message' } => m.type === 'system-message');
+  const hazardMessages = (socket: FakeSocket) =>
+    socket.received().filter((m): m is S2CMessage & { type: 'hazard' } => m.type === 'hazard');
+
+  /** Um personagem na praça, com o teto do Hazard já subido até `max` (o que o chefe da zona faz). */
+  async function inCity(max = 1, receipts?: ReceiptStore) {
+    const { host, sessions } = buildHost(shard, { hazard, ...(receipts === undefined ? {} : { receipts }) });
+    // O extrato durável precisa da conta do personagem (`prepare`), como nos testes de postura.
+    if (receipts !== undefined) await host.prepare('p1', undefined, 'a1');
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    // `levelUp` só sobe o teto quando o nível ESCOLHIDO é o teto: escolhe o de cima, sobe, repete.
+    for (let level = 1; level < max; level += 1) {
+      hero.hazard.select('gardens', ZONE, level);
+      hero.hazard.levelUp('gardens', ZONE);
+    }
+    if (max > 1) hero.hazard.select('gardens', ZONE, 1);
+    host.flush();
+    socket.frames.length = 0;
+    return { host, viewer, socket, hero };
+  }
+
+  it('quem entra vê o registro no attach: sem nada escolhido, o conteúdo manda o minLevel', () => {
+    const { host, sessions } = buildHost(shard, { hazard });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    expect(hazardMessages(socket).at(-1)).toMatchObject({ maxLevel: {}, currentLevel: {} });
+    expect(sessions[0]?.participants[0]?.hazard.isEmpty).toBe(true);
+  });
+
+  it('escolhe o nível até o teto desbloqueado, e a resposta é o registro novo em `hazard`', async () => {
+    const { host, viewer, socket, hero } = await inCity(5);
+
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 4 });
+    host.flush();
+
+    expect(hero.hazard.currentLevelOf('gardens', ZONE)).toBe(4);
+    expect(warnings(socket)).toHaveLength(0);
+    expect(hazardMessages(socket).at(-1)).toMatchObject({
+      maxLevel: { gardens: 5 }, currentLevel: { gardens: 4 },
+    });
+  });
+
+  it('recusa acima do teto desbloqueado, e o nível escolhido não muda', async () => {
+    const { host, viewer, socket, hero } = await inCity(3);
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 4 });
+    host.flush();
+    expect(hero.hazard.currentLevelOf('gardens', ZONE)).toBe(1);
+    expect(warnings(socket).at(-1)?.text).toContain('desbloqueou');
+    expect(hazardMessages(socket)).toHaveLength(0);
+  });
+
+  it('recusa zona que não existe', async () => {
+    const { host, viewer, socket, hero } = await inCity();
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'nowhere', level: 1 });
+    host.flush();
+    expect(hero.hazard.isEmpty).toBe(true);
+    expect(warnings(socket).at(-1)?.text).toContain('zona');
+  });
+
+  it.each(['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf'])(
+    'recusa `%s`: o nome que um objeto comum herda NÃO é zona (invariante 4)', async (zoneId) => {
+      const saved: Array<Record<string, unknown>> = [];
+      const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+      const { host, viewer, socket, hero } = await inCity(1, receipts);
+
+      host.handle(viewer, { type: 'set-hazard-level', zoneId, level: 999 });
+      host.flush();
+      await new Promise((resolve) => { setTimeout(resolve, 0); });
+
+      // Nada entrou no registro, nada foi para o cliente, e nenhum extrato levaria a chave torta.
+      expect(hero.hazard.isEmpty).toBe(true);
+      expect(hero.hazard.getState()).toEqual({ maxLevel: {}, currentLevel: {}, version: 1 });
+      expect(warnings(socket).at(-1)?.text).toContain('zona');
+      expect(hazardMessages(socket)).toHaveLength(0);
+      expect(saved).toHaveLength(0);
+    });
+
+  it('o protocolo barra o nível zero, negativo, fracionário e a zona vazia antes do host', () => {
+    const schema = C2S_SCHEMAS['set-hazard-level'];
+    expect(schema.safeParse({ zoneId: 'gardens', level: 1 }).success).toBe(true);
+    for (const level of [0, -1, 1.5, Number.NaN]) {
+      expect(schema.safeParse({ zoneId: 'gardens', level }).success).toBe(false);
+    }
+    expect(schema.safeParse({ zoneId: '', level: 1 }).success).toBe(false);
+  });
+
+  it('só na Cidade: numa hunt em curso o nível é FIXO e a escolha é recusada', () => {
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, { hazard });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 1 });
+    host.flush();
+
+    expect(hero.hazard.isEmpty).toBe(true);
+    expect(warnings(socket).at(-1)?.text).toContain('Cidade');
+    expect(hazardMessages(socket)).toHaveLength(0);
+  });
+
+  it('a subida de nível que a hunt faz sozinha chega a quem olha, sem reconectar', () => {
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, { hazard });
+    const socket = new FakeSocket();
+    host.attach(socket, 'p1');
+    host.flush();
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    socket.frames.length = 0;
+
+    hero.hazard.levelUp('gardens', ZONE); // o que `#hazardOnMonsterDeath` faz quando o chefe morre
+    host.cycle(Date.now() + 10_000);
+    host.flush();
+
+    expect(hazardMessages(socket).at(-1)).toMatchObject({ maxLevel: { gardens: 2 } });
+    // E só UMA vez: sem mudança nova, o ciclo seguinte não repete.
+    const count = hazardMessages(socket).length;
+    host.cycle(Date.now() + 20_000);
+    host.flush();
+    expect(hazardMessages(socket)).toHaveLength(count);
+  });
+
+  it('na Cidade: escolher grava na hora um extrato SÓ de hazard, num fluxo próprio, e o logout não o repete', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const { host, viewer, hero } = await inCity(3, receipts);
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 2 });
+    host.flush();
+    // DURÁVEL na hora (o ticket de party lê a linha do banco), sem esperar o `release`.
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({
+      hazard: { maxLevel: { gardens: 3 }, currentLevel: { gardens: 2 }, version: 1 },
+      // Só o hazard: agregados zerados, nada de estado de Cidade (que o logout leva).
+      aggregates: { goldGained: 0, goldSpent: 0, xpGained: 0 }, notableEvents: [],
+    });
+    // O fluxo próprio (`HAZARD_RECEIPT_STREAM`): a chave `(sessionId, characterId)` do extrato do
+    // personagem na Cidade nunca é a mesma, e por isso este não a sobrescreve.
+    expect(saved[0]?.['sessionId']).toMatch(/:hazard$/);
+    for (const field of ['equipment', 'layout', 'overlays', 'blessings', 'fightMode', 'charms', 'training',
+      'removedInstances', 'acquired', 'supplyStock', 'soul']) {
+      expect(saved[0], field).not.toHaveProperty(field);
+    }
+    // E o logout não repete: o que mudou já saiu, e nada mais ficou sujo.
+    await host.release('p1', 1000, 'logout');
+    expect(saved).toHaveLength(1);
+    expect(hero.hazard.currentLevelOf('gardens', ZONE)).toBe(2);
+  });
+
+  it('escolher o nível em que já estava não grava nada', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const { host, viewer, socket } = await inCity(3, receipts);
+
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 2 });
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 2 });
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 2 });
+    host.flush();
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+
+    // UM extrato para a mudança, e nenhum para as duas repetições. O registro continua indo ao
+    // cliente (a resposta da escolha), mas a gravação não depende de quantas vezes ele clica.
+    expect(saved).toHaveLength(1);
+    expect(hazardMessages(socket).length).toBeGreaterThanOrEqual(1);
+    await host.release('p1', 1000, 'logout');
+    expect(saved).toHaveLength(1);
+  });
+
+  it('o extrato de hazard NÃO leva nem liquida o gold e as instâncias vendidas: o logout leva (invariante 10)', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const { host, viewer, hero } = await inCity(3, receipts);
+    // Uma compra (uma bênção, 2 500 de gold) e uma venda (+800, uma instância apagada) feitas na praça,
+    // ainda não liquidadas: é o que o `#saveDurableReceipt` do logout vai levar.
+    hero.goldDelta = -2_500 + 800;
+    hero.removedInstances.push('inst-sold');
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'defense' }); // suja o personagem, como a compra faz
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 2 });
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 3 });
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 1 });
+    host.flush();
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+
+    // Três escolhas, três extratos de hazard — e nenhum tocou no valor pendente.
+    expect(saved).toHaveLength(3);
+    for (const receipt of saved) {
+      expect(receipt).toMatchObject({ aggregates: { goldGained: 0, goldSpent: 0 } });
+      expect(receipt).not.toHaveProperty('removedInstances');
+    }
+    expect(hero.goldDelta).toBe(-1_700);
+    expect(hero.removedInstances).toEqual(['inst-sold']);
+    // Os `seq` são únicos (o `(session_id, seq)` do ledger) e crescentes, e o último registro é o último escolhido.
+    const seqs = saved.map((receipt) => receipt['seq'] as number);
+    expect(new Set(seqs).size).toBe(3);
+    expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+    expect(saved.at(-1)).toMatchObject({ hazard: { currentLevel: { gardens: 1 } } });
+
+    // O logout leva o delta e a instância, UMA vez, na chave do personagem (sem `:hazard`).
+    await host.release('p1', 1000, 'logout');
+    expect(saved).toHaveLength(4);
+    const final = saved[3] as Record<string, unknown>;
+    expect(final['sessionId']).not.toMatch(/:hazard$/);
+    expect(final).toMatchObject({
+      aggregates: { goldGained: 0, goldSpent: 1_700 }, removedInstances: ['inst-sold'],
+      hazard: { currentLevel: { gardens: 1 } },
+    });
+    expect(seqs.includes(final['seq'] as number)).toBe(false);
+  });
+
+  it('se o Redis falha, o registro fica sujo e o extrato do logout o leva', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    let failing = true;
+    const receipts = {
+      save: async (r: Record<string, unknown>) => {
+        if (failing) throw new Error('redis down');
+        saved.push(r);
+      },
+    } as unknown as ReceiptStore;
+    const { host, viewer } = await inCity(3, receipts);
+
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 2 });
+    host.flush();
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+    expect(saved).toHaveLength(0);
+
+    failing = false;
+    await host.release('p1', 1000, 'logout');
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ hazard: { currentLevel: { gardens: 2 } } });
+  });
+
+  it('na Cidade: quem nunca mexeu no hazard não gera extrato só por causa dele', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const { host } = await inCity(1, receipts);
+    await host.release('p1', 1000, 'logout');
+    expect(saved).toHaveLength(0);
+  });
+
+  it('o extrato de hunt leva o registro do dono quando ele não está vazio', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, { directory, receipts, hazard });
+    await host.prepare('p1', undefined, 'a1');
+    host.attach(new FakeSocket(), 'p1');
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    hero.hazard.levelUp('gardens', ZONE);
+    await host.drainAll('drain');
+    expect(saved[0]).toMatchObject({ hazard: { maxLevel: { gardens: 2 } } });
+  });
+
+  it('o catálogo traz as zonas e a hunt que pertence a uma delas', () => {
+    const base = rawTestContent();
+    const content = buildContent({
+      ...base,
+      hunts: base.hunts.map((hunt) => ({ ...(hunt as object), hazardZoneId: 'gardens' })),
+      hazard: [hazard],
+    });
+    const catalogue = buildCatalogue(content);
+    expect(catalogue.hazardZones).toEqual([
+      { id: 'gardens', name: 'Gnomprona Gardens', minLevel: 1, maxLevel: 12 },
+    ]);
+    expect(catalogue.hunts.every((hunt) => hunt.hazardZoneId === 'gardens')).toBe(true);
+    // E o conteúdo sem hazard não manda zona nenhuma nem marca hunt nenhuma.
+    const plain = buildCatalogue(buildContent(rawTestContent()));
+    expect(plain.hazardZones).toEqual([]);
+    expect(plain.hunts.some((hunt) => hunt.hazardZoneId !== undefined)).toBe(false);
   });
 });
 

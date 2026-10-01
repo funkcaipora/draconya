@@ -530,6 +530,17 @@ export class Inventory {
     return null;
   }
 
+  /**
+   * O `itemId` da instância que o personagem CARREGA — containers OU corpo —, ou `null` (#621, a
+   * Chameleon Rune aponta um item do inventário inteiro, vestido inclusive: `chameleon.lua` lê o
+   * container OU o slot). Só leitura; nunca remove nem move.
+   */
+  itemIdOf(instanceId: string): string | null {
+    for (const item of this.items()) if (item.instanceId === instanceId) return item.itemId;
+    for (const item of this.#equipped.values()) if (item.instanceId === instanceId) return item.itemId;
+    return null;
+  }
+
   /** A instância nos containers (mochila/bolsa), sem remover — não olha o equipado. */
   #findCarried(instanceId: string): CarriedItem | null {
     for (const item of this.items()) if (item.instanceId === instanceId) return item;

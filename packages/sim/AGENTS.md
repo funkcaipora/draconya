@@ -1228,3 +1228,52 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   registro (`exerciseExhaustedUntilMs`), comparado com o `nowMs` que o servidor passa. `buyItem` (`purchase.ts`) é a compra mínima do `buy-item`: confere
   TUDO antes de mexer em `goldDelta` ou na mochila. `holdStamina` (`stamina.ts`) avança o marco sem
   recuperar — o que o Treino faz ao sair (ADR 0060 d.14c).
+- **O Hazard (#632, M44-14, ADR 0052 d.5/d.7) vive em `hazard.ts` (o registro `HazardProgress`, do
+  personagem), `combat/hazard.ts` (puro) e nos métodos `#hazard*` do `HuntRuleset`, e SÓ roda no
+  `combat-v4` (`hasHazardStage`) numa hunt com `hazardZoneId`.** Seis armadilhas custam caro. (1)
+  **Todo golpe de monstro no jogador passa por `#hazardOnMonsterHit` ANTES dos charms defensivos, e
+  todo golpe do jogador num monstro por `#hazardOnPlayerHit` ANTES de a vida mudar** — são oito
+  pontos (habilidade, tique de condição de monstro VIVO e reflexo do lado do monstro; `#land`,
+  `#applyHits`, dano de charm, reflexo e tique de condição de personagem do lado do jogador): um
+  caminho novo em que um dos dois acerta o outro precisa chamar o seu. (2) **O golpe reforçado é
+  `extension`, e `extension` pula `#rollDefensiveCharms`** — não "arrume": é o
+  `!damage.extension` do `Game::combatChangeHealth`. (3) **O nível é o MENOR entre os participantes**
+  (`#hazardPoints`) lido a cada golpe, e é fixo porque a escolha é recusada dentro da hunt, não por
+  cópia; na morte o nível é o menor entre os FERIDORES. (4) **A rolagem é sempre consumida**: a
+  normal de `1..10000` do crítico/esquiva e a `0..100` do loot saem mesmo sem efeito, e a
+  `normal_random` é truncada — as probabilidades reais (~2,3 % o crítico, ~0,2 %–3,4 % a esquiva)
+  são o comportamento do Canary, não um defeito deste motor. Invocação (`masterId !== null`) NÃO é
+  monstro de hazard (`isHazardMonster`). O carimbo `hazardCriticalAtMs` é do relógio LÓGICO da
+  sessão: viaja no snapshot e `Session.enter` o zera (`resetSessionClockState`). `HazardProgress.revision` é só para o host
+  comparar um inteiro por ciclo; não é persistido. (5) **O mana shield absorve o golpe de ANTES do
+  reforço**: `Game::combatChangeHealth` soma `healthChange` antes de `handleHazardSystemAttack` e não
+  o recalcula, então o crítico e o reforço caem INTEIROS na vida. O estágio carrega o dano de antes
+  em `DamageOutcome.preHazardDamage` e `applyDamageOutcome` o usa como teto da absorção (a mesma
+  leitura vale para o Energy Ring); um caminho novo que aplique o outcome de um golpe de hazard num
+  personagem precisa passar por `applyDamageOutcome`, e não por conta própria. (6) **O chefe de
+  recompensa (`MonsterDefinition.rewardBoss`, o `flags.rewardBoss` do Canary) não rola casulo nem
+  Plunder** — o próprio Plunder Patriarch é um —, mas a subida de nível não confere a flag (é outro
+  script).
+- **A aparência emprestada é a condição `outfit` (#621, M44-03, ADR 0041 d.1), e o `sim` só diz
+  QUEM vestiu o quê.** `ConditionState.look` (`{ monsterId } | { itemId } | { objectKey }`) nunca
+  é arte; o evento `creature-look-changed { creatureId, look | null }` (`presence.ts`) sai em TODA
+  aplicação que vence (`#applyConditionTo`, inclusive a que substitui) e na volta (`null`) por
+  vencimento (`#onConditionExpire`), dispel ou morte do personagem (a saída para outra sessão, #812, deixa a condição com ele) — a apresentação nunca guarda a
+  aparência (`HuntRuleset#lookOf(session, id)` a lê da condição, para `creature-appear`/
+  `session-state`; invariante 3). **A fusão é a do Canary, por PRAZO**: `strengthOf` devolve
+  `expiresAtMs` para a condição com `look`, e `merge: 'strongest'` só mantém a anterior quando ela
+  acaba ESTRITAMENTE depois — a recusa não emite nada. **O ataque `outfit` de monstro não é golpe**
+  (`#executeOutfitAbility`, desvio no topo de `#executeMonsterAbility`): é condição NÃO agressiva,
+  então sem área vai no alvo e COM área pega todos os personagens E monstros na forma, o lançador
+  inclusive (`CombatFunc` só o exclui quando `aggressive`); nenhum `resolveDamage`, e o único
+  sorteio além do `chance` do vencimento é o do **Cleanse** (#603): `CombatConditionFunc` o rola
+  para toda condição de monstro num jogador — `#executeOutfitAbility` chama
+  `#cleanseBeforeCondition` por personagem atingido no `combat-v4` e NÃO veste a aparência se ele
+  limpou algo. A imunidade (`conditionImmunityOf` → `outfit`) só vale com
+  `fromCombat` e `caster != target`: o monstro imune ainda se disfarça (defesa) e a Creature
+  Illusion/Chameleon do jogador nunca é barrada. **Creature Illusion** recebe o `monsterId` do slot
+  (como a invocação), o ruleset confere `illusionable` e passa `illusionLook` a `castSpell`, que
+  recusa `not-illusionable` ANTES da mana; **Chameleon** recebe `UseSlotTarget { kind: 'item',
+  instanceId }`, resolvido por `Inventory.itemIdOf` (mochila, bolsa e corpo). `not-illusionable` é
+  o `RETURNVALUE_NOTPOSSIBLE` dos dois scripts. Toda condição `outfit` aplicada fora dessas portas
+  (um teste que faz `conditions.apply` direto) não emite o evento — use a magia ou a ability.

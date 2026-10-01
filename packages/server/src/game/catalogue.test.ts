@@ -612,6 +612,8 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       class: 'mammal',
       health: 20,
       experience: 5,
+      // O Creature Illusion confere `illusionable` (#621, Canary `flags.illusionable`): o rato o é.
+      illusionable: true,
       bestiary: {
         stars: 1, occurrence: 0, firstUnlock: 10, secondUnlock: 100, toKill: 250, charmsPoints: 5,
       },
@@ -622,6 +624,25 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     const withoutClass = buildCatalogue(content).monsters[0];
     expect(withoutClass).toBeDefined();
     expect('class' in (withoutClass ?? {})).toBe(false);
+  });
+
+  it('a Chameleon Rune pede a mira num ITEM e a Creature Illusion leva o prazo; os monstros ilusionáveis vêm marcados (#621)', () => {
+    const real = loadContent(DATA);
+    const catalogue = buildCatalogue(real);
+    // `targets: 'item'`: o clique no slot arma a mira de ITEM, não a de criatura (aliado).
+    const rune = catalogue.bot.supplies.find((supply) => supply.id === 'chameleon-rune');
+    expect(rune).toMatchObject({ effect: 'chameleon', targets: 'item', price: 210 });
+    expect(catalogue.bot.supplies.filter((supply) => supply.targets === 'item').map((supply) => supply.id))
+      .toEqual(['chameleon-rune']);
+    // A magia leva o PRAZO no detalhe de exibição, e o efeito é o que o modal usa para o seletor.
+    const illusion = catalogue.bot.spells.find((spell) => spell.id === 'creature-illusion-druid');
+    expect(illusion).toMatchObject({ effect: 'illusion', detail: { durationMs: 180_000 } });
+    // O seletor só oferece quem o servidor marcou; o resto da lista não carrega a chave.
+    const marked = catalogue.monsters.filter((monster) => monster.illusionable === true).map((monster) => monster.id);
+    expect(marked).toContain('dragon');
+    expect(marked).not.toContain('rotworm');
+    expect(catalogue.monsters.find((monster) => monster.id === 'rotworm')).not.toHaveProperty('illusionable');
+    expect(marked.length).toBe([...real.monsters.values()].filter((monster) => monster.illusionable).length);
   });
 
   it('leva a ficha do Canary por monstro quando content.bestiary.entries a tem, e omite quando não (#601, ADR 0053 d.1)', () => {
@@ -684,16 +705,23 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect('description' in (huntWithoutDescription ?? {})).toBe(false);
   });
 
-  it('o catálogo lista as nove hunts em ordem de level, e a Rotworm Caves traz monstro e loot (#511, #520, #586, #587)', () => {
+  it('o catálogo lista as dez hunts em ordem de level, e a Rotworm Caves traz monstro e loot (#511, #520, #586, #587, #632)', () => {
     const realContent = loadContent(DATA);
     const { hunts } = buildCatalogue(realContent);
     // Ordem por recommendedLevel crescente, empate por id (huntListings, packages/sim/src/hunt/
     // catalogue.ts): rat-cellars=1, dwarf-mines=rotworm-caves=8 (empate, "dwarf-mines" <
     // "rotworm-caves"), cyclopolis=34, darashia-dragon-lair=40, minotaur-camp=60, bone-crypt=100,
-    // hydra-mountain=150, hellhound-den=250 — o primeiro lote de hunts reais por faixa (#587).
+    // hydra-mountain=150, hellhound-den=250 — o primeiro lote de hunts reais por faixa (#587) —,
+    // gnomprona-gardens=400, a zona de hazard (#632).
     expect(hunts.map((h) => h.id)).toEqual([
       'rat-cellars', 'dwarf-mines', 'rotworm-caves', 'cyclopolis', 'darashia-dragon-lair',
-      'minotaur-camp', 'bone-crypt', 'hydra-mountain', 'hellhound-den',
+      'minotaur-camp', 'bone-crypt', 'hydra-mountain', 'hellhound-den', 'gnomprona-gardens',
+    ]);
+    // Só a Gnomprona Gardens é zona de hazard, e a faixa dela vem do conteúdo (#632).
+    expect(hunts.filter((h) => h.hazardZoneId !== undefined).map((h) => h.id))
+      .toEqual(['gnomprona-gardens']);
+    expect(buildCatalogue(realContent).hazardZones).toEqual([
+      { id: 'gnomprona-gardens', name: 'Gnomprona Gardens', minLevel: 1, maxLevel: 12 },
     ]);
     const rotworm = hunts.find((h) => h.id === 'rotworm-caves');
     // Composição real do Canary (#586): rotworm E terramite, não mais só rotworm.

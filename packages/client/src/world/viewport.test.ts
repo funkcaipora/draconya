@@ -18,7 +18,7 @@ vi.mock('pixi.js', () => import('./testing/pixi-fake.js'));
 import { Container, drawOrder, Graphics, Sprite, Texture, type GraphicsOp } from './testing/pixi-fake.js';
 import { SyntheticArt, type SyntheticCatalog } from './testing/art.js';
 import { mountTestViewport, resetWorld, sceneOf, testClock } from './testing/harness.js';
-import { applyTileUpdate } from '../state/world.js';
+import { applyTileUpdate, world } from '../state/world.js';
 import { prefetchTiles, renderTiles, TILE, toScreen, visibleTiles, viewFor, zoomFor } from './camera.js';
 import { CREATURE_SLOT, sceneZIndex } from './depth.js';
 import { veilTint } from './floors.js';
@@ -37,6 +37,8 @@ const SHIFTED = 23;
 const BIG_SHIFTED = 24;
 /** O outfit 64×64 SEM `shift`: a moldura não pode herdar a largura do quadro (#428). */
 const BIG = 25;
+/** Um OBJETO (`lookTypeEx`): o que uma criatura sob a condição `outfit` de objeto veste (#621). */
+const FALLEN_TREE = 107;
 
 const CATALOG: SyntheticCatalog = {
   [GRASS]: { kind: 'object' },
@@ -49,6 +51,7 @@ const CATALOG: SyntheticCatalog = {
   [SHIFTED]: { kind: 'outfit', displacement: { x: 8, y: 8 } },
   [BIG_SHIFTED]: { kind: 'outfit', displacement: { x: 8, y: 8 }, size: { width: 2, height: 2 } },
   [BIG]: { kind: 'outfit', size: { width: 2, height: 2 } },
+  [FALLEN_TREE]: { kind: 'object' },
 };
 
 beforeEach(resetWorld);
@@ -113,6 +116,32 @@ describe('viewport (issue #381, adaptado a #385)', () => {
     expect(sprite).toBeDefined();
     expect(sprite?.parent).toBe(viewport.floorLayers(7).scene);
     expect(sprite?.texture.source.resource).toBe(art.bitmapOf('outfit:21:south:s:0'));
+  });
+
+  it('(2b) a criatura que virou um OBJETO (#621) é desenhada com o quadro do objeto, e aquece a folha dele', async () => {
+    // A condição `outfit` de `lookTypeEx` (a Chameleon Rune, o `outfitItem` do monstro): o servidor
+    // manda `creature-update { object: true }`, e o viewport troca o quadro de outfit pelo de
+    // objeto. Mutação que mata: ignorar `creature.object` — o objeto 107 seria pedido como OUTFIT.
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const scene = sceneOf({ width: 20, height: 20, floors: [7], fill: { 7: { ground: GRASS, items: [] } } });
+    const viewport = await mountTestViewport({ scene, art, clock });
+    const creature = viewport.spawnSelf(1, { x: 10, y: 10, z: 7 }, RAT);
+    world.creatures.set(1, { ...creature, appearanceId: FALLEN_TREE, object: true });
+
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    expect(viewport.creatureSprite(1)?.texture.source.resource).toBe(art.bitmapOf('object:107:0:0'));
+    expect(art.requests.some((request) => request.key.startsWith('outfit:107'))).toBe(false);
+    expect(art.warmedObjects.some((ids) => ids.includes(FALLEN_TREE))).toBe(true);
+    expect(art.warmedOutfits).not.toContain(FALLEN_TREE);
+
+    // Acabou a ilusão: o servidor manda o outfit PRÓPRIO, sem `object`, e a criatura volta a ser o rato.
+    world.creatures.set(1, { ...creature, appearanceId: RAT });
+    await viewport.tick(32); // o pedido do quadro do outfit sai neste quadro…
+    await viewport.tick(48); // …e chega no seguinte
+    expect(viewport.creatureSprite(1)?.texture.source.resource).toBe(art.bitmapOf('outfit:21:south:s:0'));
   });
 
   it('(3) parede vira `scene`, arco vira `top` — nenhum arco no `scene`', async () => {

@@ -1,0 +1,11 @@
+{
+  "id": "gnomprona-gardens",
+  "name": "Gnomprona Gardens",
+  "recommendedLevel": 400,
+  "mapId": "gnomprona-gardens",
+  "routeId": "gnomprona-gardens",
+  "ambience": "cavern",
+  "hazardZoneId": "gnomprona-gardens",
+  "description": "Os jardins selvagens sob Gnomprona, onde o Primal Ordeal soltou as feras primordiais. Quem os enfrenta escolhe o nível de hazard: quanto mais alto, mais perigosa a fera — e mais generosa a recompensa.",
+  "_open": "#632 (M44-14). Recorte real do Canary: `pnpm map:import --id gnomprona-gardens --x 33540..33690 --y 32850..32990 --z 14 --entry 33606,32929,14` sobre `otservbr.otbm` (151×141, 8979 tiles andáveis, 0 aparências desconhecidas, sem `--keep-from`). A caixa cobre a componente andável CENTRAL do jardim (6741 tiles) e pedaços de outras duas que o bot não alcança: a mata é uma teia de cristas de árvore, e só uma das três grandes componentes tem a entrada. Rota traçada por vizinho-mais-próximo sobre os 45 pontos de Hulking Prehemoth da componente (1828 tiles, nenhum sobre os 3 teleportes do mapa). `pnpm catalog:spawns`: 135 pontos escritos (62 Hulking Prehemoth, 11 Stalking Stalk e 62 Gore Horn, que entrou com as condições de controle do #622) de 334 do Canary na região — os outros 199 são de 12 espécies que o catálogo ainda NÃO tem (Gorerilla, Emerald Tortoise, Sabretooth, Sulphur Spouter, Undertaker, Nighthunter, Sulphider, Mantosaurus, Mercurial Menace, Noxious Ripptor, Headpecker, Shrieking Cry-Stal), relatados e fora da rota: dependem do mapeador das magias de nome próprio (#579). Rodar `pnpm catalog:spawns --map gnomprona-gardens` quando elas entrarem os acrescenta. `recommendedLevel: 400` é ESTIMATIVA, não fonte: o Canary não declara nível para a zona, e o Hulking Prehemoth (12.690 de XP, 20.700 de vida) está acima de toda faixa das outras hunts; sem Gate nem wiki conferido, 400 é só o conselho — o servidor não recusa por level. Geometria gerada com o pacote 1332 (o 1533 não estava nesta máquina): o `--check` com o pacote 1533 compara a mesma região, e a de Hydra Mountain saiu idêntica nos dois."
+}

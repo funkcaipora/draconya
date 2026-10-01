@@ -72,12 +72,19 @@ export function buildCatalogue(content: Content): Catalogue {
       // `string` — quem define quais dificuldades existem é o conteúdo, não o protocolo.
       difficulties: [...hunt.difficulties],
       ...(hunt.description === undefined ? {} : { description: hunt.description }),
+      // A zona de Hazard (#632): o seletor de nível só aparece nas hunts que a têm.
+      ...(hunt.hazardZoneId === undefined ? {} : { hazardZoneId: hunt.hazardZoneId }),
       difficultyDetails: difficultyDetailsOf(content, hunt.id),
       outfitIds: monsterOutfitsOf(content, hunt.id),
       lootDrops: lootDropsOf(content, hunt.id),
       monsters: monstersOf(content, hunt.id),
       loot: lootOf(content, hunt.id),
     })),
+    // As zonas de Hazard (#632): nome e faixa, para o seletor da Cidade. O que o personagem já
+    // desbloqueou chega na mensagem `hazard`, por personagem.
+    hazardZones: Object.entries(content.hazard?.zones ?? {})
+      .map(([id, zone]) => ({ id, name: zone.name, minLevel: zone.minLevel, maxLevel: zone.maxLevel }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
     bot: {
       vocabularyVersion: content.bot.vocabularyVersion,
       setCount: BOT_SET_COUNT,
@@ -130,6 +137,9 @@ export function buildCatalogue(content: Content): Catalogue {
         price: supply.price,
         effect: supply.effect.kind,
         group: supply.group,
+        // A Chameleon Rune (#621) mira um ITEM do inventário: o clique no slot arma a mira, e o
+        // clique seguinte num item da mochila completa o `use-slot`/`use-item-on`.
+        ...(supply.effect.kind === 'chameleon' ? { targets: 'item' as const } : {}),
         requires: {
           ...(supply.requires.level === undefined ? {} : { level: supply.requires.level }),
           ...(supply.requires.magicLevel === undefined
@@ -287,6 +297,8 @@ export function buildCatalogue(content: Content): Catalogue {
           ...(monster.class !== undefined ? { class: monster.class } : {}),
           health: monster.health,
           experience: monster.experience,
+          // Só quem o Creature Illusion pode imitar (#621): ausente é `false`.
+          ...(monster.illusionable ? { illusionable: true } : {}),
           // A ficha do Canary (#601, ADR 0053 d.1): estágio e pontos são DERIVADOS no cliente a
           // partir destes limiares e do contador de `bestiary.counts` — não calculados aqui.
           ...(bestiaryEntry === undefined

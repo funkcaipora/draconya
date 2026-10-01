@@ -249,6 +249,9 @@
     },
     "rope-spot-386": {
       "default": 386
+    },
+    "teleport-34111": {
+      "default": 34111
     }
   }
 }

@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -131,6 +132,17 @@ describe('ContainerWindow', () => {
       }));
       const html = await render('backpack');
       expect(html).toContain('unknown-supply');
+    });
+  });
+
+  describe('a mira de item da Chameleon Rune (#621)', () => {
+    it('o clique num item da mochila tenta COMPLETAR a mira de item ANTES de vestir', async () => {
+      // O gesto é o "usar com" do Tibia sobre um item: com a mira armada o item vira o alvo do
+      // `use-slot`, e nada é vestido. Mutação que mata: tirar a chamada, ou pô-la depois do
+      // `return` de "não é vestível" — um item que não veste nunca seria apontável.
+      const source = await readFile(new URL('./ContainerWindow.tsx', import.meta.url), 'utf8');
+      expect(source).toContain('aimTracker.resolveItemAim(item.instanceId, sendIntent)');
+      expect(source.indexOf('aimTracker.resolveItemAim')).toBeLessThan(source.indexOf('if (!wearable) return;'));
     });
   });
 });

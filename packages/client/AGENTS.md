@@ -456,6 +456,24 @@ pnpm tsx scripts/make-sheet-fixture.ts
   volta, e falha de qualquer tipo cai no default (todas as dez visíveis), nunca num painel
   vazio. A RC-06 (#319) substituiu o painel fixo pelo `CharacterModal` tabulado, aberto por
   `open.character` — o antigo `CharacterPanel.tsx` saiu do repositório no mesmo commit.
+- **A aparência emprestada (#621, M44-03) é SUBSTITUIÇÃO, não mutação.** `creature-update` troca
+  `appearanceId`/`colors`/`object`/`addons` de uma criatura que o store já tem — todos `readonly`,
+  então o case cria um objeto novo a partir do antigo (posição e passo em curso ficam), apaga os
+  quatro e só devolve os que a mensagem traz: as cores e os addons (#620) são parte do outfit que a
+  condição troca, e mantê-los sobre a aparência nova pintaria o outfit do outro com o addon do dono.
+  Raça, luz e falas (#620) são da CRIATURA e atravessam a troca. Criatura desconhecida é ignorada
+  (interesse, ou ainda não anunciada), como `creature-health`. `object`
+  (`true`) é a criatura que virou um OBJETO (`lookTypeEx`): o viewport a desenha com
+  `objectTexture(id, OBJECT_LOOK_CELL)` — o quadro do tile, parado — e aquece a folha com
+  `warmObjects`, num conjunto PRÓPRIO (`warmedObjectLooks`: o outfit 1 e o objeto 1 são coisas
+  diferentes); sem `displacement`, que é do registro de outfit. O servidor manda a aparência
+  PRÓPRIA quando a condição acaba — o cliente nunca guarda "a original". **A Chameleon Rune mira
+  um ITEM do inventário**: o catálogo marca `targets: 'item'`, o clique no slot arma
+  `aimTracker.startItemAim` (`SlotView.aimsAtItem`), e o clique seguinte num item da mochila
+  (`ContainerWindow`, ANTES do "vestir") manda `use-slot` com `target: { instanceId }`; o mundo e a
+  Batalha NÃO consomem a mira de item (`resolveAim` devolve `false`), e Esc a cancela como as outras.
+  O `ActionConfigModal` mostra o seletor de monstro (`illusionMonsters`, `catalogue.monsters[]
+  .illusionable`) só para a magia de efeito `illusion`, e bloqueia o Salvar sem `monsterId`.
 
 ## O Treino (#631, ADR 0059)
 
@@ -814,4 +832,15 @@ mostraria a barra inteira como "não aprendida". `slotView` recebe o registro e 
 `unlearned` — só para MAGIA; poção e runa não exigem aprendizado —, e a `ActionBar` põe a classe
 `action-slot-unlearned` (apagado, borda tracejada) e "não aprendida" no tooltip. O slot continua na
 barra e continua disparável: quem recusa é o servidor (`not-learned` no `slot-result`).
+
+## O seletor de Hazard (#632, M44-14)
+
+O modal "Escolha uma caçada" mostra, sob a lista, o seletor "Hazard · <zona>" só quando a hunt
+selecionada tem `hazardZoneId` (`hazardChoiceOf`, função pura e testada, em `HuntsModal.tsx`). Ele
+oferece os níveis de `zone.minLevel` ao TETO que o `hazard` (S2C, registro cru em `hud.hazard`)
+diz que o personagem desbloqueou, e manda `set-hazard-level { zoneId, level }` — o servidor confere
+o teto e recusa fora da Cidade, então com uma caçada em curso o seletor aparece desabilitado.
+**O cliente não calcula nenhum efeito do hazard** (invariante 4): XP, dano e loot são do servidor, e
+a frase "mais perigo, mais XP e mais loot" é só rótulo. `catalogue.hazardZones` é opcional no
+protocolo (nó anterior a esta issue não manda), e `apply.ts` só o copia quando presente.
 

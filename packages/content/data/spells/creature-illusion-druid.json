@@ -1,0 +1,17 @@
+{
+  "id": "creature-illusion-druid",
+  "name": "Creature Illusion",
+  "description": "Veste o aspecto de outro monstro por 180 segundos.",
+  "vocationId": "druid",
+  "minLevel": 23,
+  "learnPrice": 1000,
+  "manaCost": 100,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "illusion",
+    "durationMs": 180000
+  },
+  "_open": "Canary `data/scripts/spells/support/creature_illusion.lua` (47dfd51): `words(\"utevo res ina\")`, `id(38)`, `level(23)`, `mana(100)`, `cooldown(2*1000)`/`groupCooldown(2*1000)`, `hasParams(true)`, `isAggressive(false)`, `Condition(CONDITION_OUTFIT)` com `setTicks(180000)`, `vocation(\"druid;true\", \"elder druid;true\", \"sorcerer;true\", \"master sorcerer;true\")` — arquivo duplicado por vocação (`creature-illusion-sorcerer.json`), como `invisibility-druid`. O PARÂMETRO (o monstro a imitar) é o `monsterId` da ação do slot, conferido contra `Monster.illusionable` (`MonsterType::isIllusionable`); sem `monsterId`, monstro inexistente ou não-ilusionável recusa (`creature_illusion.lua`: `RETURNVALUE_CREATUREDOESNOTEXIST`/`RETURNVALUE_NOTPOSSIBLE`, sem gastar mana). `PlayerFlag_CanIllusionAll` (o GM) não existe aqui. Efeito visual: `CONST_ME_MAGIC_RED` no lançador (`utils_definitions.hpp:74`, valor 14) — `appearances.spells` tem `effect: 14` para as duas Creature Illusion, o id do enum (diferente do 13 das outras magias de suporte), ainda sem conferência contra PNG (biblioteca parcial, ver `docs/combat-presentation-audit.md`). `learnPrice` (1000 gold nos NPCs) é do #624."
+}

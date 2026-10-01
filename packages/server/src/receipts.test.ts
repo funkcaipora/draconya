@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type {
-  BosstiaryState, CharmsState, FamiliarState, LearnedSpellsState, OfflineTrainingState,
+  BosstiaryState, CharmsState, FamiliarState, HazardState, LearnedSpellsState, OfflineTrainingState,
 } from '@draconya/sim';
 import { ReceiptStore, type SessionReceipt } from './receipts.js';
 import { connectTestRedis } from './testing/redis.js';
@@ -251,6 +251,25 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('training');
     // O torto some — o ledger não toca na coluna —, e o extrato em si continua valendo.
     expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('training');
+  });
+
+  it('carries the Hazard registry through Redis and back, and drops a malformed one (#632)', async () => {
+    // O mesmo caminho dos Charms: campo que não entra em `parseReceipt` some no caminho de volta sem
+    // erro, e o registro torto (nível não inteiro, zona sem nome) é descartado em vez de gravado.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const hazard: HazardState = { maxLevel: { gardens: 3 }, currentLevel: { gardens: 2 }, version: 1 };
+    await store.save(receiptOf(randomUUID(), characterId, { hazard }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+    await store.save(receiptOf(randomUUID(), characterId, {
+      seq: 3, hazard: { maxLevel: { gardens: 1.5 }, currentLevel: {}, version: 1 },
+    }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.hazard).toEqual(hazard);
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('hazard');
+    expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('hazard');
   });
 
   it('carries the ammo selection through Redis and back, and a receipt without one stays without (#152)', async () => {

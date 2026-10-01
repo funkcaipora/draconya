@@ -162,6 +162,13 @@ const CreatureState = z.object({
   /** As falas periódicas (#620), sorteadas no cliente. Ausente é mudo. */
   voices: CreatureVoices.optional(),
   /**
+   * `true` quando `appearanceId` é de um OBJETO e não de um outfit (#621, M44-03): a criatura está
+   * sob a condição `outfit` de um `lookTypeEx` — a Chameleon Rune, o `outfitItem` de um monstro —
+   * e o cliente a desenha como o objeto que ela virou. **Opcional**, pela mesma razão de `colors`:
+   * um nó `game` anterior manda sem, e ausente é o outfit de sempre.
+   */
+  object: z.boolean().optional(),
+  /**
    * O `characterId` do MESTRE, só para a invocação do JOGADOR (#598, M38-01, ADR 0057 decisão
    * 4). **Opcional**, pela mesma razão de `colors`: um nó `game` anterior manda a criatura sem
    * isto, e um cliente que exigisse recusaria a mensagem inteira em silêncio. Ausente é "não é
@@ -242,6 +249,13 @@ const manualTargetSchema = z.union([
       x: z.number().int(), y: z.number().int(), z: z.number().int().optional(),
     }),
   }),
+  /**
+   * Um item que o PERSONAGEM carrega (#621, M44-03, Chameleon Rune): o "usar com" sobre um item
+   * da mochila, da bolsa ou do corpo. INTENÇÃO (invariante 4): só a instância; se ela existe, se
+   * é do personagem e qual aparência ela dá são do servidor. Só a runa `chameleon` o lê — para
+   * qualquer outra ação é ruído, ignorado como um `creatureId` numa magia de área.
+   */
+  z.object({ instanceId: z.string().min(1) }),
 ]);
 
 /**
@@ -542,6 +556,16 @@ export const C2S_SCHEMAS = {
    * `purchasable`, preço, saldo e capacidade são do servidor (invariante 4).
    */
   'buy-item': z.object({ itemId: z.string().min(1) }),
+  /**
+   * Escolher o nível de Hazard de uma zona (M44-14, #632). INTENÇÃO: só a zona e o nível; se o
+   * nível cabe no teto que o personagem desbloqueou é do servidor (invariante 4), e só a Cidade
+   * aceita (o nível de uma hunt em curso é fixo, ADR 0052 d.5). `level` é inteiro positivo: zero
+   * e negativo não são níveis.
+   */
+  'set-hazard-level': z.object({
+    zoneId: z.string().min(1).max(64),
+    level: z.number().int().positive().max(1_000),
+  }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */
@@ -1035,6 +1059,11 @@ export const S2C_SCHEMAS = {
        */
       description: z.string().min(1).optional(),
       /**
+       * A zona de Hazard desta hunt (M44-14, #632): a chave de `catalogue.hazard.zones[].id`. Ausente
+       * é uma hunt sem nível de perigo — a tela não oferece o seletor.
+       */
+      hazardZoneId: z.string().min(1).optional(),
+      /**
        * A contagem de monstros por dificuldade (SV-19, #355) — "Ousado · 4" do Huntera.
        * Mesma ordem de `difficulties`. `default([])`: nó game anterior manda sem.
        */
@@ -1083,6 +1112,13 @@ export const S2C_SCHEMAS = {
       class: z.string().optional(),
       health: z.number().int().positive().optional(),
       experience: z.number().int().nonnegative().optional(),
+      /**
+       * O Creature Illusion pode imitar este monstro (#621, `flags.illusionable` do Canary)? A
+       * tela de configurar a ação só oferece quem o servidor marcou — a recusa de verdade é
+       * sempre dele (invariante 4). Opcional SEM `default`, como `class`: ausente é `false`, e um
+       * nó `game` anterior manda sem.
+       */
+      illusionable: z.boolean().optional(),
       /**
        * A ficha de Bestiário do Canary por monstro (#601, ADR 0053 d.1): estágio, estrelas,
        * ocorrência e pontos de Charm são DERIVADOS no cliente a partir dela e do contador de
@@ -1145,6 +1181,17 @@ export const S2C_SCHEMAS = {
       points: z.tuple([z.number().int().positive(), z.number().int().positive(), z.number().int().positive()]),
     })).default([]),
     /**
+     * As zonas de Hazard (M44-14, #632): o que a tela precisa para oferecer o seletor de nível —
+     * nome e faixa de cada zona. O que o personagem já desbloqueou é o `hazard` (S2C), por
+     * personagem; aqui é o conteúdo, fixado na sessão. Ausente: nó anterior a esta issue.
+     */
+    hazardZones: z.array(z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+      minLevel: z.number().int().positive(),
+      maxLevel: z.number().int().positive(),
+    })).optional(),
+    /**
      * O que a UI do bot pode oferecer (AB-09, ADR 0032 d.1/d.9).
      *
      * **A tela NÃO tem lista de opções em código.** O que existe é o que este pacote diz que
@@ -1184,10 +1231,11 @@ export const S2C_SCHEMAS = {
         /** O grupo do Tibia (#155): `attack`, `healing`, `support`. `default`: nó anterior manda sem. */
         group: z.string().min(1).default('attack'),
         /**
-         * Pode mirar um amigo (#392, #393)? Opcional SEM `default`: um nó `game` anterior manda
-         * sem, e o cliente novo não pode recusar a mensagem — quem não veio é `self`.
+         * Pode mirar um amigo (#392, #393) ou um ITEM do inventário (#621, a Chameleon Rune)?
+         * Opcional SEM `default`: um nó `game` anterior manda sem, e o cliente novo não pode
+         * recusar a mensagem — quem não veio é `self`.
          */
-        targets: z.enum(['self', 'friend']).optional(),
+        targets: z.enum(['self', 'friend', 'item']).optional(),
         /**
          * A magia pede MIRA do jogador no disparo manual (#623: Find Person — o "nome" do Canary é
          * o personagem clicado), sem ser uma ação de aliado. Campo SEPARADO de `targets` de
@@ -1234,7 +1282,7 @@ export const S2C_SCHEMAS = {
          */
         vocationId: z.union([z.string().min(1), z.array(z.string().min(1)).min(2)]).nullable().optional(),
 /** Pode mirar um amigo (#392, #393)? Opcional SEM `default`, como em `spells[]`. */
-        targets: z.enum(['self', 'friend']).optional(),
+        targets: z.enum(['self', 'friend', 'item']).optional(),
         /** Os números de EXIBIÇÃO (#436, ADR 0033), como em `spells[]`. Opcionais SEM `default`. */
         groupCooldownMs: z.number().int().positive().optional(),
         description: z.string().min(1).optional(),
@@ -1800,6 +1848,37 @@ export const S2C_SCHEMAS = {
     position: z.number().int().min(1),
     retryAfterMs: z.number().int().nonnegative(),
     huntAvailable: z.boolean(),
+  }),
+  /**
+   * A criatura `id` passou a ser desenhada com a aparência `appearanceId` (#621, M44-03 — ver o
+   * comentário do opcode). O servidor resolve a arte pela tabela de aparências: o `sim` só diz
+   * QUEM vestiu o quê (monstro, item ou chave de objeto), nunca um id (invariante 6).
+   *
+   * `object` separa os dois registros do pacote: ausente (ou `false`) é um OUTFIT — a folha de
+   * criatura, como em `creature-appear` (`lookType` do Canary) —; `true` é um OBJETO — a criatura
+   * virou uma coisa (`lookTypeEx`, a Chameleon Rune e o `outfitItem` de monstro), e o cliente a
+   * desenha como o objeto que é. `colors` e `addons` são as cores e os addons do outfit, como em
+   * `creature-appear` (#620): fazem parte do que a condição troca, então quem volta a vestir o
+   * próprio outfit os recebe de novo, e quem veste o de um monstro leva os do monstro. Ausentes, o
+   * cliente apaga os que tinha — nunca os mantém sobre a aparência nova.
+   */
+  'creature-update': z.object({
+    id: z.number().int(),
+    appearanceId: z.number().int().positive(),
+    object: z.boolean().optional(),
+    colors: OutfitColors.optional(),
+    addons: z.number().int().min(0).max(3).optional(),
+  }),
+  /**
+   * O Hazard do PRÓPRIO personagem (M44-14, #632, ADR 0052 d.1): o registro CRU — o teto
+   * desbloqueado e o nível escolhido de cada zona —, como `charms`. Zona ausente é o `minLevel`
+   * dela (`catalogue.hazard.zones`). Só para o dono, como `blessings`.
+   */
+  hazard: z.object({
+    /** `zoneId` → o maior nível que o personagem pode escolher. */
+    maxLevel: z.record(z.string().min(1), z.number().int().positive()),
+    /** `zoneId` → o nível que vale na próxima entrada. */
+    currentLevel: z.record(z.string().min(1), z.number().int().positive()),
   }),
 } as const satisfies Record<S2CName, z.ZodType>;
 

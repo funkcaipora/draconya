@@ -112,6 +112,14 @@ function presentationOf(creature: {
   };
 }
 
+/**
+ * `object` do protocolo vira a chave do store só quando é `true` (#621): ausente e `false` são o
+ * mesmo outfit de sempre, e o store nunca guarda `undefined` (`exactOptionalPropertyTypes`).
+ */
+function objectOf(creature: { readonly object?: boolean | undefined }): Pick<Creature, 'object'> {
+  return creature.object === true ? { object: true } : {};
+}
+
 export function applyMessage(message: S2CMessage, nowMs: number): void {
   switch (message.type) {
     // --- mundo: nada aqui notifica ninguém ------------------------------------------------
@@ -195,6 +203,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         id: message.id,
         appearanceId: message.appearanceId,
         ...colorsOf(message),
+        ...objectOf(message),
         ...presentationOf(message),
         name: message.name,
         health: message.health,
@@ -226,6 +235,28 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       if (creature === undefined) return;
       creature.health = message.health;
       creature.maxHealth = message.maxHealth;
+      return;
+    }
+
+    // A criatura trocou de APARÊNCIA (#621, a condição `outfit`): a ilusão começou, foi renovada
+    // ou acabou — o servidor já resolveu a arte, inclusive a PRÓPRIA quando acaba. O objeto é
+    // SUBSTITUÍDO, não mutado: `appearanceId`/`colors`/`object` são `readonly` do store, e quem
+    // desenha lê `world.creatures` a cada quadro. Criatura desconhecida é normal (filtrada pelo
+    // interesse, ou ainda não anunciada) — ignorar, como `creature-health`.
+    case 'creature-update': {
+      const creature = world.creatures.get(message.id);
+      if (creature === undefined) return;
+      // Cores, objeto e addons são parte do que a condição troca (`Outfit_t`): saem junto da
+      // aparência velha, e só os que a mensagem traz voltam. Raça, luz e falas (#620) são da
+      // criatura, não do outfit, e ficam.
+      const { colors: _colors, object: _object, addons: _addons, ...rest } = creature;
+      world.creatures.set(message.id, {
+        ...rest,
+        appearanceId: message.appearanceId,
+        ...colorsOf(message),
+        ...objectOf(message),
+        ...(message.addons === undefined ? {} : { addons: message.addons }),
+      });
       return;
     }
 
@@ -380,6 +411,8 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           // training, fixados na sessão — a tela de Treino lê daqui. Ausente quando o servidor não
           // tem Treino (o pill "Treino" não existe).
           ...(message.training === undefined ? {} : { training: message.training }),
+          // As zonas de Hazard (M44-14, #632): nome e faixa, para o seletor de nível.
+          ...(message.hazardZones === undefined ? {} : { hazardZones: message.hazardZones }),
         },
       }));
       return;
@@ -434,6 +467,16 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           tiers: message.tiers,
           assignments: message.assignments,
         },
+      }));
+      return;
+
+    case 'hazard':
+      // SUBSTITUI, como os Charms: o registro INTEIRO (teto e nível escolhido de cada zona), não um
+      // delta — o servidor manda no attach, a cada escolha na Cidade e a cada subida de nível
+      // (M44-14, #632, ADR 0052 d.1).
+      hud.set((state) => ({
+        ...state,
+        hazard: { maxLevel: message.maxLevel, currentLevel: message.currentLevel },
       }));
       return;
 
@@ -553,6 +596,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           id: creature.id,
           appearanceId: creature.appearanceId,
           ...colorsOf(creature),
+          ...objectOf(creature),
           ...presentationOf(creature),
           name: creature.name,
           health: creature.health,
