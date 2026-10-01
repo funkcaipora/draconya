@@ -795,3 +795,22 @@ Issue: FUN-8.
   verdade (consumível com efeito `food`) e que não repita. `light.color` é o índice da paleta de 216
   cores do Tibia (215 é branco). Ultimate Light é nível 8 no Canary e 9 no TFS: vale o Canary
   (ADR 0037 d.4).
+
+## O Hazard (#632, M44-14)
+
+`data/hazard/baseline.json` é um documento só (`hazardSchema`), como `boosted`/`bestiary`: os dez
+multiplicadores do `config.lua.dist` do Canary e as zonas por id (`zones`, `hazardZoneSchema`
+estrito). A hunt aponta a zona por `hazardZoneId` (opcional); `buildContent` recusa a zona
+inexistente, `minLevel > maxLevel` e `plunderMonsterId` fora do catálogo. **O `levelUpMonsterId`
+NÃO é conferido contra o catálogo**: The Primal Menace é chefe de quest ainda sem entrada, e o id
+fica declarado para o dia em que ele existir. Os valores são transcrição do Canary — nenhum é
+decisão nossa, então não há `_open`; mudar um é mudar a versão de conteúdo (invariante 7). A hunt
+`gnomprona-gardens` é o recorte real (`pnpm map:import` + `route:trace` + `catalog:spawns`, comandos
+no `_open` dela): geometria gerada com o pacote 1332 e idêntica à do 1533 na região medida; o
+`catalog:spawns --check` dela está no `pnpm check` e acusa quando o catálogo ganhar uma espécie.
+**`monster.rewardBoss` é o `flags.rewardBoss` do Canary** (`MonsterType::isRewardBoss`): o importador
+o escreve como está (só quando `true`), e hoje uma regra o lê — a morte de um monstro de zona de
+Hazard não rola casulo nem Plunder Patriarch quando o morto é chefe de recompensa (o próprio
+Patriarch é um). O baú de recompensa no lugar do cadáver, que o Canary também liga a essa flag, não
+existe aqui.
+

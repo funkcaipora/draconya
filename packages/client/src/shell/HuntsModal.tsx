@@ -22,12 +22,13 @@ import { useState } from 'react';
 import type { C2SMessage } from '@draconya/protocol';
 import { sendIntent } from '../net/current.js';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
-import type { HuntListing } from '../state/hud.js';
+import type { HazardRegister, HazardZoneDefinition, HuntListing } from '../state/hud.js';
 import { party, partyActions } from '../party/store.js';
 import { startWithTeam } from './party-start.js';
 import { OutfitSprite } from './OutfitSprite.js';
 import { Modal } from './ui/Modal.js';
 import { Button } from './ui/Button.js';
+import { Select } from './ui/Select.js';
 import { Input } from './ui/Input.js';
 import { Kicker } from './ui/Kicker.js';
 
@@ -87,6 +88,70 @@ export function findPartyDecision(selected: HuntListing | null): { enabled: bool
     : { enabled: true, huntId: selected.id };
 }
 
+/**
+ * O seletor de Hazard de uma hunt (M44-14, #632): a zona dela, o nível escolhido e o teto que o
+ * personagem já desbloqueou. PURO e exportado, pelo mesmo motivo de `resolveSelection`.
+ *
+ * O servidor é quem confere (invariante 4): o teto vem do `hazard` que ele mandou, e uma escolha
+ * acima dele é recusada lá — aqui só se oferece o que cabe. Zona ausente do registro vale o
+ * `minLevel` (o personagem que nunca escolheu nem subiu nível). Hunt sem zona: `null`, e a tela
+ * não desenha seletor.
+ */
+export interface HazardChoice {
+  readonly zone: HazardZoneDefinition;
+  /** O nível que vale na próxima entrada (sempre dentro de `[zone.minLevel, max]`). */
+  readonly current: number;
+  /** O teto desbloqueado (nunca acima de `zone.maxLevel`). */
+  readonly max: number;
+  /** Os níveis oferecidos, do mínimo ao teto desbloqueado. */
+  readonly levels: readonly number[];
+}
+
+export function hazardChoiceOf(
+  hunt: HuntListing | null, zones: readonly HazardZoneDefinition[] | undefined,
+  register: HazardRegister | null,
+): HazardChoice | null {
+  if (hunt === null || hunt.hazardZoneId === undefined) return null;
+  const zone = zones?.find((candidate) => candidate.id === hunt.hazardZoneId);
+  if (zone === undefined) return null;
+  const clamp = (value: number | undefined, low: number, high: number): number =>
+    Math.min(Math.max(value ?? low, low), high);
+  const max = clamp(register?.maxLevel[zone.id], zone.minLevel, zone.maxLevel);
+  const current = clamp(register?.currentLevel[zone.id], zone.minLevel, max);
+  const levels: number[] = [];
+  for (let level = zone.minLevel; level <= max; level += 1) levels.push(level);
+  return { zone, current, max, levels };
+}
+
+/** A intenção `set-hazard-level` (M44-14, #632): só a zona e o nível — o servidor confere. */
+export function hazardLevelMessage(zoneId: string, level: number): C2SMessage {
+  return { type: 'set-hazard-level', zoneId, level };
+}
+
+function HazardSelector({ choice, hunting }: { choice: HazardChoice; hunting: boolean }) {
+  return (
+    <div className="hunts-modal-hazard">
+      <Select
+        label={`Hazard · ${choice.zone.name}`}
+        ariaLabel="Nível de hazard"
+        size="sm"
+        inline
+        // Fixo durante a caçada (ADR 0052 d.5): o servidor só aceita a escolha na Cidade, então o
+        // seletor nem a oferece com uma instância em curso.
+        disabled={hunting}
+        value={String(choice.current)}
+        options={choice.levels.map((level) => ({ value: String(level), label: `Nível ${String(level)}` }))}
+        onChange={(value) => { sendIntent(hazardLevelMessage(choice.zone.id, Number(value))); }}
+      />
+      <span className="hunts-modal-footer-note">
+        {hunting
+          ? 'O nível é fixo enquanto a caçada dura'
+          : `Mais perigo, mais XP e mais loot · desbloqueados até o nível ${String(choice.max)} de ${String(choice.zone.maxLevel)}`}
+      </span>
+    </div>
+  );
+}
+
 function HuntRow({ hunt, level, selected, onSelect }: {
   hunt: HuntListing; level: number; selected: boolean; onSelect: () => void;
 }) {
@@ -105,6 +170,7 @@ function HuntRow({ hunt, level, selected, onSelect }: {
         <span className="hunts-modal-row-text">
           <strong>{hunt.name}</strong>
           <span className={below ? 'hunt-warn' : 'entry-meta'}>{`level ${String(hunt.recommendedLevel)}+`}</span>
+          {hunt.hazardZoneId !== undefined && <span className="entry-meta">Zona de hazard</span>}
           <span className="entry-meta">
             {hunt.monsters.length === 0
               ? `${String(hunt.lootDrops)} drops de loot`
@@ -123,6 +189,7 @@ export function HuntsModal({ hunting, onClose, onFindParty }: {
   onFindParty?: (huntId: string) => void;
 }) {
   const catalogue = useHudSlice((state) => state.catalogue);
+  const hazardRegister = useHudSlice((state) => state.hazard);
   const level = useHudSlice((state) => state.level);
   const me = useHudSlice((state) => state.characterId);
   const formation = useStoreSlice(party, (state) => state.party);
@@ -134,6 +201,7 @@ export function HuntsModal({ hunting, onClose, onFindParty }: {
   const hunts = catalogue?.hunts ?? [];
   const visibleHunts = filterHunts(hunts, query);
   const { hunt: selected } = resolveSelection(hunts, selectedId);
+  const hazardChoice = hazardChoiceOf(selected, catalogue?.hazardZones, hazardRegister);
 
   const enter = (): void => {
     const message = enterHuntMessage(selected);
@@ -202,6 +270,7 @@ export function HuntsModal({ hunting, onClose, onFindParty }: {
                       onSelect={() => { setSelectedId(hunt.id); }} />
                   ))}
                 </ul>
+                {hazardChoice !== null && <HazardSelector choice={hazardChoice} hunting={hunting} />}
               </div>
             </div>
           )}

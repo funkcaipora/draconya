@@ -254,6 +254,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 23
   },
   {
@@ -444,6 +445,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/armenius.lua"
     },
+    "rewardBoss": true,
     "outfitId": 68
   },
   {
@@ -1099,6 +1101,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 35,
     "objectLooks": {
       "strange-symbol": 3058,
@@ -1342,6 +1345,7 @@
       "rarity": "archfoe",
       "raceId": 900
     },
+    "rewardBoss": true,
     "outfitId": 2
   },
   {
@@ -1461,6 +1465,7 @@
       "rarity": "nemesis",
       "raceId": 432
     },
+    "rewardBoss": true,
     "outfitId": 281
   },
   {
@@ -1689,6 +1694,7 @@
       "rarity": "bane",
       "raceId": 46
     },
+    "rewardBoss": true,
     "outfitId": 131
   },
   {
@@ -2096,6 +2102,7 @@
       "rarity": "archfoe",
       "raceId": 2366
     },
+    "rewardBoss": true,
     "outfitId": 1666
   },
   {
@@ -2218,6 +2225,7 @@
       "rarity": "nemesis",
       "raceId": 647
     },
+    "rewardBoss": true,
     "outfitId": 361
   },
   {
@@ -2407,6 +2415,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/clubarc_the_plunderer.lua"
     },
+    "rewardBoss": true,
     "outfitId": 342
   },
   {
@@ -2670,6 +2679,7 @@
       "rarity": "nemesis",
       "raceId": 203
     },
+    "rewardBoss": true,
     "outfitId": 203
   },
   {
@@ -2868,6 +2878,7 @@
       "rarity": "nemesis",
       "raceId": 477
     },
+    "rewardBoss": true,
     "outfitId": 287
   },
   {
@@ -3096,6 +3107,7 @@
       "rarity": "bane",
       "raceId": 485
     },
+    "rewardBoss": true,
     "outfitId": 299
   },
   {
@@ -3323,6 +3335,7 @@
       "rarity": "bane",
       "raceId": 486
     },
+    "rewardBoss": true,
     "outfitId": 299
   },
   {
@@ -3551,6 +3564,7 @@
       "rarity": "bane",
       "raceId": 484
     },
+    "rewardBoss": true,
     "outfitId": 299
   },
   {
@@ -3781,6 +3795,7 @@
       "rarity": "archfoe",
       "raceId": 1140
     },
+    "rewardBoss": true,
     "outfitId": 54
   },
   {
@@ -3950,6 +3965,7 @@
       "rarity": "bane",
       "raceId": 858
     },
+    "rewardBoss": true,
     "outfitId": 457
   },
   {
@@ -4201,6 +4217,7 @@
       "rarity": "nemesis",
       "raceId": 207
     },
+    "rewardBoss": true,
     "outfitId": 611
   },
   {
@@ -4334,6 +4351,7 @@
       "rarity": "bane",
       "raceId": 670
     },
+    "rewardBoss": true,
     "outfitId": 34
   },
   {
@@ -4567,6 +4585,7 @@
       "rarity": "nemesis",
       "raceId": 431
     },
+    "rewardBoss": true,
     "outfitId": 193
   },
   {
@@ -4713,6 +4732,7 @@
       "rarity": "nemesis",
       "raceId": 736
     },
+    "rewardBoss": true,
     "outfitId": 413
   },
   {
@@ -5008,6 +5028,7 @@
       "rarity": "bane",
       "raceId": 1791
     },
+    "rewardBoss": true,
     "outfitId": 1217
   },
   {
@@ -5127,6 +5148,7 @@
       "rarity": "nemesis",
       "raceId": 425
     },
+    "rewardBoss": true,
     "outfitId": 116
   },
   {
@@ -5894,6 +5916,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/izcandar_champion_of_summer.lua"
     },
+    "rewardBoss": true,
     "outfitId": 1137
   },
   {
@@ -6308,6 +6331,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/izcandar_champion_of_winter.lua"
     },
+    "rewardBoss": true,
     "outfitId": 1137
   },
   {
@@ -6548,6 +6572,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/kraknaknork's_demon.lua"
     },
+    "rewardBoss": true,
     "outfitId": 12
   },
   {
@@ -6899,6 +6924,7 @@
       "rarity": "bane",
       "raceId": 703
     },
+    "rewardBoss": true,
     "outfitId": 394
   },
   {
@@ -7076,6 +7102,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/mad_technomancer.lua"
     },
+    "rewardBoss": true,
     "outfitId": 66
   },
   {
@@ -7245,6 +7272,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 131
   },
   {
@@ -7931,6 +7959,7 @@
       "rarity": "nemesis",
       "raceId": 2118
     },
+    "rewardBoss": true,
     "outfitId": 1468,
     "objectLooks": {
       "strange-symbol": 3058,
@@ -8046,6 +8075,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 56
   },
   {
@@ -8346,6 +8376,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/visco.lua"
     },
+    "rewardBoss": true,
     "outfitId": 554
   },
   {
@@ -8576,6 +8607,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 231
   },
   {
@@ -8729,6 +8761,7 @@
       "rarity": "nemesis",
       "raceId": 1624
     },
+    "rewardBoss": true,
     "outfitId": 980
   },
   {
@@ -8900,6 +8933,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/renegade_orc.lua"
     },
+    "rewardBoss": true,
     "outfitId": 59
   },
   {
@@ -9237,6 +9271,7 @@
       "rarity": "nemesis",
       "raceId": 435
     },
+    "rewardBoss": true,
     "outfitId": 152
   },
   {
@@ -9402,6 +9437,7 @@
       "rarity": "nemesis",
       "raceId": 436
     },
+    "rewardBoss": true,
     "outfitId": 134
   },
   {
@@ -9665,6 +9701,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/splasher.lua"
     },
+    "rewardBoss": true,
     "outfitId": 47
   },
   {
@@ -9941,6 +9978,7 @@
       "rarity": "bane",
       "raceId": 2562
     },
+    "rewardBoss": true,
     "outfitId": 1764
   },
   {
@@ -10150,6 +10188,7 @@
       "rarity": "bane",
       "raceId": 2580
     },
+    "rewardBoss": true,
     "outfitId": 1764
   },
   {
@@ -10256,6 +10295,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/teleskor.lua"
     },
+    "rewardBoss": true,
     "outfitId": 298
   },
   {
@@ -10611,6 +10651,7 @@
       "rarity": "nemesis",
       "raceId": 373
     },
+    "rewardBoss": true,
     "outfitId": 1393
   },
   {
@@ -10719,6 +10760,7 @@
       "rarity": "nemesis",
       "raceId": 638
     },
+    "rewardBoss": true,
     "outfitId": 348
   },
   {
@@ -11179,6 +11221,7 @@
       "rarity": "archfoe",
       "raceId": 2055
     },
+    "rewardBoss": true,
     "outfitId": 1412
   },
   {
@@ -11328,6 +11371,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/the_collector.lua"
     },
+    "rewardBoss": true,
     "outfitId": 261
   },
   {
@@ -11673,6 +11717,7 @@
       "rarity": "nemesis",
       "raceId": 210
     },
+    "rewardBoss": true,
     "outfitId": 210
   },
   {
@@ -11902,6 +11947,7 @@
       "rarity": "nemesis",
       "raceId": 1368
     },
+    "rewardBoss": true,
     "outfitId": 947
   },
   {
@@ -11994,6 +12040,7 @@
       "rarity": "nemesis",
       "raceId": 420
     },
+    "rewardBoss": true,
     "outfitId": 224
   },
   {
@@ -12221,6 +12268,7 @@
       "rarity": "archfoe",
       "raceId": 2528
     },
+    "rewardBoss": true,
     "outfitId": 1765
   },
   {
@@ -12576,6 +12624,7 @@
       "rarity": "archfoe",
       "raceId": 2365
     },
+    "rewardBoss": true,
     "outfitId": 1668
   },
   {
@@ -12737,6 +12786,7 @@
       "rarity": "nemesis",
       "raceId": 419
     },
+    "rewardBoss": true,
     "outfitId": 2
   },
   {
@@ -12819,6 +12869,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/weakened_demon.lua"
     },
+    "rewardBoss": true,
     "outfitId": 12
   },
   {
@@ -12936,6 +12987,7 @@
       "rarity": "nemesis",
       "raceId": 955
     },
+    "rewardBoss": true,
     "outfitId": 44
   },
   {
@@ -13153,6 +13205,7 @@
       "rarity": "nemesis",
       "raceId": 475
     },
+    "rewardBoss": true,
     "outfitId": 287
   },
   {
@@ -13502,6 +13555,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 12
   },
   {
@@ -13910,6 +13964,7 @@
       "rarity": "nemesis",
       "raceId": 969
     },
+    "rewardBoss": true,
     "outfitId": 149,
     "objectLooks": {
       "snowman": 7172

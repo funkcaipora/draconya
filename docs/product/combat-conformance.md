@@ -379,6 +379,54 @@ vez de somar à chance, e como o charm é 60/90/120 o intervalo CRESCE com o tie
 tier 2 = 27,8 %, tier 3 = 20,8 %, abaixo dos 25 % sem charm (`skinningChanceRange`, testado por
 frequência com 200 mil sorteios por caso). A PR do #626 lista essa decisão para o dono rever; é uma
 função de uma linha em `sim/skinning.ts`.
+### Estágio #632 (M44-14, Hazard — ADR 0052 d.5/d.7): `breaking`
+
+O nível de perigo de uma hunt de zona de hazard (`hunt.hazardZoneId`) entra no perfil. **Só o
+`combat-v4` o roda** (`hasHazardStage`, `combat/profile.ts`): o registro `hazard` do personagem
+existe e não faz nada numa sessão fixada em `combat-v3` (invariante 7). Uma hunt SEM zona não muda
+em nada — nenhum sorteio novo, nenhuma alocação; a suíte de regressão inteira continua batendo. A
+matemática mora em `combat/hazard.ts` (transcrição do `player.cpp`/`game.cpp`/
+`ondroploot_hazard.lua`, `47dfd51`); o encaixe em `HuntRuleset#hazard*`. A ordem, na do Canary:
+
+| # | Onde | Quando | Rolagem |
+|---|---|---|---|
+| 1 | `Player::parseAttackRecvHazardSystem`, em `Game::combatChangeHealth` | golpe de monstro de hazard no personagem — habilidade, tique de condição de monstro VIVO e reflexo —, DEPOIS do `blockHit` e do reflexo, ANTES dos charms defensivos e do mana shield | UMA `normal_random(1, 10000)` por golpe elegível (sempre consumida); crítico se `crit` na zona, `lastCritical + 2000 <= agora` e a rolagem `<= 750`; depois o reforço `nível × 200`, SOBRE o valor do crítico. **O mana shield absorve `min(mana, dano de ANTES do estágio)`** (o `healthChange` do Canary é somado antes e nunca recalculado): o excedente cai na vida (`DamageOutcome.preHazardDamage`) |
+| 2 | `Player::parseAttackDealtHazardSystem` | golpe do personagem no monstro de hazard — arma, magia, runa, dano de charm, reflexo e tique de condição dele —, DEPOIS do `blockHit`, ANTES de a vida mudar | UMA `normal_random(1, 10000)` se `dodge` na zona: esquiva se `<= nível × 85`, e o golpe inteiro some; depois a defesa (`defenseMultiplier` 0 = inerte) |
+| 3 | `Player::addExperience` | XP de cada abate | sem sorteio: `floor(xp + xp × 1,75 × nível × 2 / 100)`, DEPOIS do rate e do bônus de level/Bestiário |
+| 4 | `ondroploot_hazard.lua` (`generateLootRoll`, `factor 1.0`, `gut = false`) | loot de cada abate, DEPOIS do roll extra da boosted | UMA `math.random(0, 100)` (sempre consumida) decide o arredondamento de `rolls = 2 × nível × 2 / 100`; cada rolagem é uma tabela inteira |
+| 5 | `hazard_primal.lua` (`PrimalHazardDeath`) e `creaturescripts_the_primal_menace_killed.lua` | morte de monstro de hazard, no fim de `#onMonsterDied`, DEPOIS do Carnage | `random(1, 10000) <= nível × 87` (casulo, encerra) e `random(1, 100000) <= nível × 25` (Plunder Patriarch) — **nenhuma das duas se o morto é chefe de recompensa** (`rewardBoss`, o próprio Patriarch); a subida de nível não sorteia nem confere a flag |
+
+**O `nível` é o MENOR entre os membros da party** (`#hazardPoints`), e na morte o menor entre os
+FERIDORES do monstro. O carimbo do último crítico é por jogador, no relógio lógico
+(`CharacterRuntime.hazardCriticalAtMs`): viaja no snapshot e `Session.enter` o zera.
+
+**A invocação NÃO é monstro de hazard.** O `HazardMonster.onSpawn` roda no spawner e em
+`Game.createMonster`, não em `Monster::createMonster`: golpe de invocação (de monstro ou de
+personagem) não leva crítico nem reforço, e o golpe do jogador numa invocação não é esquivado
+(`isHazardMonster`, `masterId === null`).
+
+**O golpe reforçado é extensão e os charms defensivos não rolam contra ele** (ver `hazard.md`):
+`HazardMonsterHit.extension` impede `#rollDefensiveCharms`. É o comportamento do Canary, e o
+teste `o golpe do monstro de hazard é EXTENSÃO` o prende com o Dodge a 100 %.
+
+**As probabilidades reais não são as nominais** (a normal truncada de `normal_random`): o crítico
+de 750 acontece em ~2,3 % dos golpes, a esquiva do nível 1 em ~0,2 % e a do nível 12 em ~3,4 %;
+`combat/hazard.test.ts` mede as três.
+
+**Fora deste estágio:** o casulo (Hazard Pods — sem item no chão, ADR 0048 d.8): a rolagem dele
+é consumida e impede o Plunder, mas o casulo em si não existe; o baú de recompensa que o Canary liga
+à mesma flag `rewardBoss` (o loot do Patriarch vai para o cadáver); o texto "(Hazard)" nas mensagens
+de dano. O portão `isRewardBoss` do Plunder está DENTRO do estágio (o Plunder Patriarch é um chefe de
+recompensa, e a morte dele não rola nada).
+
+**Conformance de RNG com e sem hazard** (`rulesets/hazard.test.ts`, "o Hazard não depende de haver
+alguém olhando"): 1 Hz == 10 Hz == 20 Hz com crítico e esquiva rolando de verdade, e a retomada
+de um snapshot no meio da luta rende o mesmo que a sessão que nunca caiu. Os vetores por estágio:
+reforço por nível (1, 2, 5, 12) contra o `blockHit` real, crítico com o intervalo de 5 s, esquiva,
+XP (1,035 / 1,07 / 1,42), loot (rolagens extras, 10 ou 20 de ouro no nível 12), party (o menor
+nível), subida de nível, Plunder, e o gate por perfil e por `hazardZoneId`.
+`packages/server/src/game/gnomprona-gardens.test.ts` prova o mesmo contra a zona REAL (a XP do
+nível 12 / a do 1 = 1,42 / 1,035 e o golpe médio recebido sobe).
 
 ## Benchmark: o cenário misto
 

@@ -243,6 +243,16 @@ export const CLIENT_TO_SERVER = {
    * 39: o 38 é do `set-offline-training-skill`.
    */
   'buy-item': 39,
+  /**
+   * Escolher o nível de Hazard de uma zona (M44-14, #632; ADR 0052 d.2/d.5). INTENÇÃO: o cliente
+   * diz QUAL zona e QUAL nível; quem decide se o nível cabe no teto desbloqueado é o servidor
+   * (invariante 4), na sessão dona (invariante 9). Só na Cidade — uma hunt em curso tem o nível
+   * FIXO desde a entrada, como a versão de conteúdo (invariante 7). Sucesso é `hazard`
+   * reenviado; recusa é `system-message`.
+   *
+   * 40: o 39 é do `buy-item` (#631), o 36 do `learn-spell` (#624) e o 35 do `set-fight-mode`.
+   */
+  'set-hazard-level': 40,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -557,6 +567,17 @@ export const SERVER_TO_CLIENT = {
    * `world-full` (#832).
    */
   'creature-update': 51,
+  /**
+   * O Hazard do personagem (M44-14, #632, ADR 0052 d.1): o nível máximo desbloqueado e o
+   * escolhido de cada zona — o registro cru, como `charms`. Quais zonas existem, os níveis
+   * mínimo e máximo de cada uma e que hunt pertence a qual vêm do `catalogue` (fixado na sessão,
+   * invariante 7). Sai no attach e sempre que uma escolha ou uma subida de nível muda o registro.
+   *
+   * 52: o 51 é do `creature-update` (#621), o 50 do `world-full` (#832), o 49 do `logout-refused`
+   * (#832), o 48 do `training-state` (#631), o 47 do `learned-spells` (#624), o 46 do `bosstiary`
+   * (#629) e o 45 do `exit-pending`.
+   */
+  hazard: 52,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

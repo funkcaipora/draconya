@@ -183,7 +183,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 440
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "battlemaster-zunzu",
@@ -341,7 +342,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 635
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "brutus-bloodbeard",
@@ -485,7 +487,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/brutus_bloodbeard.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "captain-jones",
@@ -706,7 +709,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 430
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "chayenne",
@@ -862,7 +866,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/chayenne.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "deadeye-devious",
@@ -1036,7 +1041,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/deadeye_devious.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "draptor",
@@ -1491,7 +1497,8 @@
           "count": 3
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "fleabringer",
@@ -1570,7 +1577,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 640
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "foreman-kneebiter",
@@ -1935,7 +1943,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/glooth_bomb.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "grorlam",
@@ -2084,7 +2093,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 205
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "lethal-lissy",
@@ -2198,7 +2208,8 @@
           "count": 4
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "man-in-the-cave",
@@ -2387,7 +2398,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 338
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "mawhawk",
@@ -2573,7 +2585,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1028
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "necropharus",
@@ -2823,7 +2836,8 @@
           "count": 2
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "ocyakao",
@@ -2986,7 +3000,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 970
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "orc-armor",
@@ -4204,7 +4219,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 201
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "ron-the-ripper",
@@ -4356,7 +4372,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/ron_the_ripper.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "rottie-the-rotworm",
@@ -4454,7 +4471,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/rottie_the_rotworm.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "rotworm-queen",
@@ -4532,7 +4550,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 459
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "sir-valorcrest",
@@ -4719,7 +4738,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 476
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-horned-fox",
@@ -5186,7 +5206,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 972
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "xenia",
@@ -5352,7 +5373,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 428
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "zomba",
@@ -5441,7 +5463,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 956
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "zulazza-the-corruptor",
@@ -5713,6 +5736,7 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 628
-    }
+    },
+    "rewardBoss": true
   }
 ]

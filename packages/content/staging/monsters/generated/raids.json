@@ -196,6 +196,7 @@
       "rarity": "nemesis",
       "raceId": 440
     },
+    "rewardBoss": true,
     "outfitId": 264
   },
   {
@@ -361,6 +362,7 @@
       "rarity": "nemesis",
       "raceId": 635
     },
+    "rewardBoss": true,
     "outfitId": 343
   },
   {
@@ -516,6 +518,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/brutus_bloodbeard.lua"
     },
+    "rewardBoss": true,
     "outfitId": 98
   },
   {
@@ -738,6 +741,7 @@
       "rarity": "nemesis",
       "raceId": 430
     },
+    "rewardBoss": true,
     "outfitId": 196
   },
   {
@@ -914,6 +918,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/chayenne.lua"
     },
+    "rewardBoss": true,
     "outfitId": 155
   },
   {
@@ -1099,6 +1104,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/deadeye_devious.lua"
     },
+    "rewardBoss": true,
     "outfitId": 151
   },
   {
@@ -1603,6 +1609,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 206
   },
   {
@@ -1683,6 +1690,7 @@
       "rarity": "nemesis",
       "raceId": 640
     },
+    "rewardBoss": true,
     "outfitId": 341
   },
   {
@@ -2095,6 +2103,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/glooth_bomb.lua"
     },
+    "rewardBoss": true,
     "outfitId": 680
   },
   {
@@ -2251,6 +2260,7 @@
       "rarity": "nemesis",
       "raceId": 205
     },
+    "rewardBoss": true,
     "outfitId": 205
   },
   {
@@ -2384,6 +2394,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 155
   },
   {
@@ -2584,6 +2595,7 @@
       "rarity": "nemesis",
       "raceId": 338
     },
+    "rewardBoss": true,
     "outfitId": 128
   },
   {
@@ -2811,6 +2823,7 @@
       "rarity": "archfoe",
       "raceId": 1028
     },
+    "rewardBoss": true,
     "outfitId": 595
   },
   {
@@ -3078,6 +3091,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 209
   },
   {
@@ -3268,6 +3282,7 @@
       "rarity": "nemesis",
       "raceId": 970
     },
+    "rewardBoss": true,
     "outfitId": 259
   },
   {
@@ -4631,6 +4646,7 @@
       "rarity": "nemesis",
       "raceId": 201
     },
+    "rewardBoss": true,
     "outfitId": 201
   },
   {
@@ -4798,6 +4814,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/ron_the_ripper.lua"
     },
+    "rewardBoss": true,
     "outfitId": 151
   },
   {
@@ -4897,6 +4914,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/rottie_the_rotworm.lua"
     },
+    "rewardBoss": true,
     "outfitId": 26
   },
   {
@@ -4976,6 +4994,7 @@
       "rarity": "nemesis",
       "raceId": 459
     },
+    "rewardBoss": true,
     "outfitId": 295
   },
   {
@@ -5172,6 +5191,7 @@
       "rarity": "nemesis",
       "raceId": 476
     },
+    "rewardBoss": true,
     "outfitId": 287
   },
   {
@@ -5713,6 +5733,7 @@
       "rarity": "nemesis",
       "raceId": 972
     },
+    "rewardBoss": true,
     "outfitId": 557
   },
   {
@@ -5886,6 +5907,7 @@
       "rarity": "nemesis",
       "raceId": 428
     },
+    "rewardBoss": true,
     "outfitId": 137
   },
   {
@@ -5982,6 +6004,7 @@
       "rarity": "nemesis",
       "raceId": 956
     },
+    "rewardBoss": true,
     "outfitId": 570
   },
   {
@@ -6295,6 +6318,7 @@
       "rarity": "nemesis",
       "raceId": 628
     },
+    "rewardBoss": true,
     "outfitId": 334
   }
 ]

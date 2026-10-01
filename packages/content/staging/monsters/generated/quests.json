@@ -572,6 +572,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_order_of_lion/bosses/ancient_lion_knight.lua"
     },
+    "rewardBoss": true,
     "outfitId": 1071
   },
   {
@@ -918,6 +919,7 @@
       "rarity": "archfoe",
       "raceId": 1551
     },
+    "rewardBoss": true,
     "outfitId": 1055
   },
   {
@@ -5025,6 +5027,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/biting_cold.lua"
     },
+    "rewardBoss": true,
     "outfitId": 53
   },
   {
@@ -5336,6 +5339,7 @@
       "rarity": "archfoe",
       "raceId": 1559
     },
+    "rewardBoss": true,
     "outfitId": 1038
   },
   {
@@ -5832,6 +5836,7 @@
       "rarity": "archfoe",
       "raceId": 1560
     },
+    "rewardBoss": true,
     "outfitId": 1039
   },
   {
@@ -6386,6 +6391,7 @@
       "rarity": "bane",
       "raceId": 567
     },
+    "rewardBoss": true,
     "outfitId": 300
   },
   {
@@ -7063,6 +7069,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/bretzecutioner.lua"
     },
+    "rewardBoss": true,
     "outfitId": 236
   },
   {
@@ -7374,6 +7381,7 @@
       "rarity": "archfoe",
       "raceId": 1645
     },
+    "rewardBoss": true,
     "outfitId": 1076
   },
   {
@@ -7491,6 +7499,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/brother_chill.lua"
     },
+    "rewardBoss": true,
     "outfitId": 261
   },
   {
@@ -7609,6 +7618,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/brother_freeze.lua"
     },
+    "rewardBoss": true,
     "outfitId": 261
   },
   {
@@ -7762,6 +7772,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/feaster_of_souls/brother_worm.lua"
     },
+    "rewardBoss": true,
     "outfitId": 295
   },
   {
@@ -8097,6 +8108,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 38
   },
   {
@@ -8573,6 +8585,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/concentrated_death.lua"
     },
+    "rewardBoss": true,
     "outfitId": 315
   },
   {
@@ -9056,6 +9069,7 @@
       "rarity": "archfoe",
       "raceId": 1753
     },
+    "rewardBoss": true,
     "outfitId": 1221
   },
   {
@@ -10192,6 +10206,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/dark_knowledge.lua"
     },
+    "rewardBoss": true,
     "outfitId": 1061
   },
   {
@@ -10794,6 +10809,7 @@
       "rarity": "bane",
       "raceId": 1578
     },
+    "rewardBoss": true,
     "outfitId": 573
   },
   {
@@ -10999,6 +11015,7 @@
       "rarity": "bane",
       "raceId": 1047
     },
+    "rewardBoss": true,
     "outfitId": 278
   },
   {
@@ -11204,6 +11221,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/deathbine.lua"
     },
+    "rewardBoss": true,
     "outfitId": 120
   },
   {
@@ -11639,6 +11657,7 @@
       "rarity": "archfoe",
       "raceId": 892
     },
+    "rewardBoss": true,
     "outfitId": 500
   },
   {
@@ -11817,6 +11836,7 @@
       "rarity": "bane",
       "raceId": 1087
     },
+    "rewardBoss": true,
     "outfitId": 676
   },
   {
@@ -12144,6 +12164,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 204
   },
   {
@@ -13708,6 +13729,7 @@
       "rarity": "nemesis",
       "raceId": 302
     },
+    "rewardBoss": true,
     "outfitId": 231
   },
   {
@@ -14484,6 +14506,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/forgotten_knowledge/bosses/dragonking_zyrtarch.lua"
     },
+    "rewardBoss": true,
     "outfitId": 938
   },
   {
@@ -15299,6 +15322,7 @@
       "rarity": "archfoe",
       "raceId": 1758
     },
+    "rewardBoss": true,
     "outfitId": 1221
   },
   {
@@ -15481,6 +15505,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_elemental_spheres/earth_overlord.lua"
     },
+    "rewardBoss": true,
     "outfitId": 285
   },
   {
@@ -16478,6 +16503,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_elemental_spheres/energy_overlord.lua"
     },
+    "rewardBoss": true,
     "outfitId": 290
   },
   {
@@ -17059,6 +17085,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/esmeralda.lua"
     },
+    "rewardBoss": true,
     "outfitId": 305
   },
   {
@@ -17324,6 +17351,7 @@
       "rarity": "bane",
       "raceId": 569
     },
+    "rewardBoss": true,
     "outfitId": 256
   },
   {
@@ -17687,6 +17715,7 @@
       "rarity": "archfoe",
       "raceId": 1727
     },
+    "rewardBoss": true,
     "outfitId": 1119
   },
   {
@@ -18042,6 +18071,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/fazzrah.lua"
     },
+    "rewardBoss": true,
     "outfitId": 343
   },
   {
@@ -18494,6 +18524,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_elemental_spheres/fire_overlord.lua"
     },
+    "rewardBoss": true,
     "outfitId": 243
   },
   {
@@ -19247,6 +19278,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 351
   },
   {
@@ -19562,6 +19594,7 @@
       "rarity": "archfoe",
       "raceId": 1379
     },
+    "rewardBoss": true,
     "outfitId": 947
   },
   {
@@ -19908,6 +19941,7 @@
       "rarity": "archfoe",
       "raceId": 1608
     },
+    "rewardBoss": true,
     "outfitId": 1062
   },
   {
@@ -20461,6 +20495,7 @@
       "rarity": "archfoe",
       "raceId": 893
     },
+    "rewardBoss": true,
     "outfitId": 504
   },
   {
@@ -21470,6 +21505,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/gorgo.lua"
     },
+    "rewardBoss": true,
     "outfitId": 330
   },
   {
@@ -21805,6 +21841,7 @@
       "rarity": "archfoe",
       "raceId": 1591
     },
+    "rewardBoss": true,
     "outfitId": 1062
   },
   {
@@ -22102,6 +22139,7 @@
       "rarity": "archfoe",
       "raceId": 1901
     },
+    "rewardBoss": true,
     "outfitId": 1306
   },
   {
@@ -22374,6 +22412,7 @@
       "rarity": "bane",
       "raceId": 1584
     },
+    "rewardBoss": true,
     "outfitId": 1071
   },
   {
@@ -22687,6 +22726,7 @@
       "rarity": "bane",
       "raceId": 1579
     },
+    "rewardBoss": true,
     "outfitId": 1071
   },
   {
@@ -22918,6 +22958,7 @@
       "rarity": "bane",
       "raceId": 1582
     },
+    "rewardBoss": true,
     "outfitId": 1071
   },
   {
@@ -23168,6 +23209,7 @@
       "rarity": "archfoe",
       "raceId": 1576
     },
+    "rewardBoss": true,
     "outfitId": 1072
   },
   {
@@ -24326,6 +24368,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/hide.lua"
     },
+    "rewardBoss": true,
     "outfitId": 219
   },
   {
@@ -25104,6 +25147,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_elemental_spheres/ice_overlord.lua"
     },
+    "rewardBoss": true,
     "outfitId": 11
   },
   {
@@ -25705,6 +25749,7 @@
       "rarity": "archfoe",
       "raceId": 1890
     },
+    "rewardBoss": true,
     "outfitId": 1268
   },
   {
@@ -26116,6 +26161,7 @@
       "rarity": "nemesis",
       "raceId": 1699
     },
+    "rewardBoss": true,
     "outfitId": 1137
   },
   {
@@ -26418,6 +26464,7 @@
       "rarity": "bane",
       "raceId": 1577
     },
+    "rewardBoss": true,
     "outfitId": 298
   },
   {
@@ -26794,6 +26841,7 @@
       "rarity": "bane",
       "raceId": 773
     },
+    "rewardBoss": true,
     "outfitId": 444
   },
   {
@@ -27422,6 +27470,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/kerberos.lua"
     },
+    "rewardBoss": true,
     "outfitId": 240
   },
   {
@@ -27764,6 +27813,7 @@
       "rarity": "archfoe",
       "raceId": 1784
     },
+    "rewardBoss": true,
     "outfitId": 1224
   },
   {
@@ -27980,6 +28030,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/cults_of_tibia/bosses/last_planegazer.lua"
     },
+    "rewardBoss": true,
     "outfitId": 1044
   },
   {
@@ -29068,6 +29119,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/leviathan.lua"
     },
+    "rewardBoss": true,
     "outfitId": 275
   },
   {
@@ -31703,6 +31755,7 @@
       "rarity": "nemesis",
       "raceId": 1696
     },
+    "rewardBoss": true,
     "outfitId": 1120
   },
   {
@@ -31924,6 +31977,7 @@
       "rarity": "nemesis",
       "raceId": 305
     },
+    "rewardBoss": true,
     "outfitId": 244
   },
   {
@@ -32471,6 +32525,7 @@
       "rarity": "bane",
       "raceId": 566
     },
+    "rewardBoss": true,
     "outfitId": 237
   },
   {
@@ -33521,6 +33576,7 @@
       "rarity": "bane",
       "raceId": 568
     },
+    "rewardBoss": true,
     "outfitId": 244
   },
   {
@@ -34007,6 +34063,7 @@
       "rarity": "bane",
       "raceId": 1829
     },
+    "rewardBoss": true,
     "outfitId": 240
   },
   {
@@ -34103,6 +34160,7 @@
       "rarity": "nemesis",
       "raceId": 303
     },
+    "rewardBoss": true,
     "outfitId": 234
   },
   {
@@ -34314,6 +34372,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/wrath_of_the_emperor/mutated_zalamon.lua"
     },
+    "rewardBoss": true,
     "outfitId": 357
   },
   {
@@ -34466,6 +34525,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/grave_danger/nargol_the_impaler.lua"
     },
+    "rewardBoss": true,
     "outfitId": 1222
   },
   {
@@ -35575,6 +35635,7 @@
       "rarity": "bane",
       "raceId": 774
     },
+    "rewardBoss": true,
     "outfitId": 445
   },
   {
@@ -37907,6 +37968,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/primal_ordeal_quest/plunder_patriarch.lua"
     },
+    "rewardBoss": true,
     "outfitId": 1567
   },
   {
@@ -38425,6 +38487,7 @@
       "rarity": "bane",
       "raceId": 1583
     },
+    "rewardBoss": true,
     "outfitId": 1078
   },
   {
@@ -38697,6 +38760,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/roshamuul/prince_drazzak.lua"
     },
+    "rewardBoss": true,
     "outfitId": 12
   },
   {
@@ -39523,6 +39587,7 @@
       "rarity": "archfoe",
       "raceId": 2006
     },
+    "rewardBoss": true,
     "outfitId": 1377
   },
   {
@@ -40310,6 +40375,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/mysterious_ornate_chest/reflection_of_obujos.lua"
     },
+    "rewardBoss": true,
     "outfitId": 445
   },
   {
@@ -42707,6 +42773,7 @@
       "rarity": "archfoe",
       "raceId": 1804
     },
+    "rewardBoss": true,
     "outfitId": 1201
   },
   {
@@ -43140,6 +43207,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 351
   },
   {
@@ -43576,6 +43644,7 @@
       "rarity": "archfoe",
       "raceId": 1561
     },
+    "rewardBoss": true,
     "outfitId": 1040
   },
   {
@@ -43678,6 +43747,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_new_frontier/shard_of_corruption.lua"
     },
+    "rewardBoss": true,
     "outfitId": 67
   },
   {
@@ -44007,6 +44077,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/shardhead.lua"
     },
+    "rewardBoss": true,
     "outfitId": 261
   },
   {
@@ -44300,6 +44371,7 @@
       "rarity": "archfoe",
       "raceId": 1755
     },
+    "rewardBoss": true,
     "outfitId": 1222
   },
   {
@@ -44883,6 +44955,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/wrath_of_the_emperor/snake_god_essence.lua"
     },
+    "rewardBoss": true,
     "outfitId": 356
   },
   {
@@ -46012,6 +46085,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_elemental_spheres/spirit_overlord.lua"
     },
+    "rewardBoss": true,
     "outfitId": 1840
   },
   {
@@ -46195,6 +46269,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 351
   },
   {
@@ -47249,6 +47324,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/stonecracker.lua"
     },
+    "rewardBoss": true,
     "outfitId": 55
   },
   {
@@ -47629,6 +47705,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/sulphur_scuttler.lua"
     },
+    "rewardBoss": true,
     "outfitId": 352
   },
   {
@@ -47676,6 +47753,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/supercharged_mazzinor.lua"
     },
+    "rewardBoss": true,
     "outfitId": 979
   },
   {
@@ -48256,6 +48334,7 @@
       "rarity": "bane",
       "raceId": 775
     },
+    "rewardBoss": true,
     "outfitId": 446
   },
   {
@@ -48668,6 +48747,7 @@
       "rarity": "archfoe",
       "raceId": 1188
     },
+    "rewardBoss": true,
     "outfitId": 842
   },
   {
@@ -48912,6 +48992,7 @@
       "rarity": "archfoe",
       "raceId": 1390
     },
+    "rewardBoss": true,
     "outfitId": 947
   },
   {
@@ -49054,6 +49135,7 @@
       "rarity": "archfoe",
       "raceId": 1406
     },
+    "rewardBoss": true,
     "outfitId": 987
   },
   {
@@ -49586,6 +49668,7 @@
       "rarity": "bane",
       "raceId": 1518
     },
+    "rewardBoss": true,
     "outfitId": 1045
   },
   {
@@ -49721,6 +49804,7 @@
       "rarity": "archfoe",
       "raceId": 1600
     },
+    "rewardBoss": true,
     "outfitId": 1068
   },
   {
@@ -50044,6 +50128,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/the_bloodweb.lua"
     },
+    "rewardBoss": true,
     "outfitId": 263
   },
   {
@@ -50638,6 +50723,7 @@
       "rarity": "bane",
       "raceId": 1519
     },
+    "rewardBoss": true,
     "outfitId": 1046
   },
   {
@@ -50982,6 +51068,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/the_devourer_of_secrets.lua"
     },
+    "rewardBoss": true,
     "outfitId": 309
   },
   {
@@ -51114,6 +51201,7 @@
       "rarity": "archfoe",
       "raceId": 1598
     },
+    "rewardBoss": true,
     "outfitId": 1068
   },
   {
@@ -51543,6 +51631,7 @@
       "rarity": "bane",
       "raceId": 1520
     },
+    "rewardBoss": true,
     "outfitId": 1047
   },
   {
@@ -52108,6 +52197,7 @@
       "rarity": "archfoe",
       "raceId": 1297
     },
+    "rewardBoss": true,
     "outfitId": 512
   },
   {
@@ -52395,6 +52485,7 @@
       "rarity": "archfoe",
       "raceId": 1409
     },
+    "rewardBoss": true,
     "outfitId": 984
   },
   {
@@ -52779,6 +52870,7 @@
       "rarity": "archfoe",
       "raceId": 1873
     },
+    "rewardBoss": true,
     "outfitId": 1276
   },
   {
@@ -53503,6 +53595,7 @@
       "rarity": "nemesis",
       "raceId": 301
     },
+    "rewardBoss": true,
     "outfitId": 230
   },
   {
@@ -53899,6 +53992,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/wrath_of_the_emperor/the_keeper.lua"
     },
+    "rewardBoss": true,
     "outfitId": 220,
     "objectLooks": {
       "fallen-tree": 3976
@@ -54034,6 +54128,7 @@
       "rarity": "archfoe",
       "raceId": 1602
     },
+    "rewardBoss": true,
     "outfitId": 1068
   },
   {
@@ -54283,6 +54378,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/the_many.lua"
     },
+    "rewardBoss": true,
     "outfitId": 121
   },
   {
@@ -55152,6 +55248,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 208
   },
   {
@@ -55569,6 +55666,7 @@
       "rarity": "archfoe",
       "raceId": 1881
     },
+    "rewardBoss": true,
     "outfitId": 1272
   },
   {
@@ -56141,6 +56239,7 @@
       "rarity": "archfoe",
       "raceId": 1444
     },
+    "rewardBoss": true,
     "outfitId": 1013
   },
   {
@@ -56401,6 +56500,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/the_scion_of_havoc.lua"
     },
+    "rewardBoss": true,
     "outfitId": 875
   },
   {
@@ -56979,6 +57079,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/the_snapper.lua"
     },
+    "rewardBoss": true,
     "outfitId": 119
   },
   {
@@ -57104,6 +57205,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/the_spellstealer.lua"
     },
+    "rewardBoss": true,
     "outfitId": 12
   },
   {
@@ -57385,6 +57487,7 @@
       "rarity": "archfoe",
       "raceId": 1406
     },
+    "rewardBoss": true,
     "outfitId": 987
   },
   {
@@ -57786,6 +57889,7 @@
       "rarity": "archfoe",
       "raceId": 1868
     },
+    "rewardBoss": true,
     "outfitId": 1277
   },
   {
@@ -57937,6 +58041,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_inquisition/the_weakened_count.lua"
     },
+    "rewardBoss": true,
     "outfitId": 68
   },
   {
@@ -58176,6 +58281,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/forgotten_knowledge/bosses/thorn_steed.lua"
     },
+    "rewardBoss": true,
     "outfitId": 626
   },
   {
@@ -58517,6 +58623,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/tormentor.lua"
     },
+    "rewardBoss": true,
     "outfitId": 245
   },
   {
@@ -59268,6 +59375,7 @@
       "rarity": "archfoe",
       "raceId": 1891
     },
+    "rewardBoss": true,
     "outfitId": 1268
   },
   {
@@ -61340,6 +61448,7 @@
       "rarity": "archfoe",
       "raceId": 1892
     },
+    "rewardBoss": true,
     "outfitId": 1268
   },
   {
@@ -62483,6 +62592,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 351
   },
   {
@@ -62709,6 +62819,7 @@
       "rarity": "bane",
       "raceId": 1827
     },
+    "rewardBoss": true,
     "outfitId": 842
   },
   {
@@ -63305,6 +63416,7 @@
       "rarity": "archfoe",
       "raceId": 1982
     },
+    "rewardBoss": true,
     "outfitId": 1196
   },
   {

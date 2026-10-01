@@ -305,6 +305,9 @@ export function characterFromTicket(
       // O registro do Treino (#631, ADR 0059 d.3): validado na emissão e no consumo; ausente, a
       // sessão parte de banco zero e nenhuma skill escolhida — o mesmo personagem novo.
       ...(initialCharacter.training === undefined ? {} : { training: initialCharacter.training }),
+      // O Hazard (M44-14, #632, ADR 0052 d.5): o nível escolhido e o teto, validados na emissão e no
+      // consumo (`isHazardState`); ausente, toda zona vale o `minLevel`.
+      ...(initialCharacter.hazard === undefined ? {} : { hazard: initialCharacter.hazard }),
       // Os storages (#731, ADR 0050 d.6 T2): validados como o Bestiário; ausente, a sessão
       // parte sem storage nenhum setado — a mesma degradação de sempre.
       ...(initialCharacter.storages === undefined ? {} : { storages: initialCharacter.storages }),

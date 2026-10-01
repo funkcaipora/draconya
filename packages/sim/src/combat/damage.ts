@@ -281,6 +281,14 @@ export interface DamageOutcome {
    * cura é o ruleset, depois do dano e do reflexo.
    */
   readonly elementHealing?: number;
+  /**
+   * O dano do golpe ANTES do reforço do Hazard (#632) — só presente num golpe de monstro de hazard
+   * que o estágio reforçou. É o `healthChange` do `Game::combatChangeHealth` do Canary, somado ANTES
+   * de `handleHazardSystemAttack` e nunca recalculado: o mana shield absorve `min(mana,
+   * healthChange)` desse valor velho, e o excedente do Hazard (o crítico e o reforço) cai INTEIRO na
+   * vida. `applyDamageOutcome` o lê como teto da absorção. Ausente é o dano resolvido de sempre.
+   */
+  readonly preHazardDamage?: number;
 }
 
 /** Chance de esquiva que de fato vale, dado onde a luta acontece. */
