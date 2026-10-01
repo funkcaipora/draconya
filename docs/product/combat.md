@@ -2088,7 +2088,17 @@ por `spell.manaCost`.
   não leva o do tile velho. A invocação NÃO atravessa nada sozinha: monstro hostil continua bloqueado
   por ela. Sem isto, o Skeleton animado (ou o convencido) em cima do próximo tile da rota travava o
   passo do herói pelo resto da hunt — a invocação nunca morre pela mão do mestre e o bot não a
-  ataca.
+  ataca. **O planejador concorda com o passo** (#599): o Canary decide a travessia numa só função,
+  `Tile::queryAdd` (`tile.cpp:788`), que o passo e a busca de caminho (`getPathfindingTile`,
+  `map.cpp:138`, com `FLAG_PATHFINDING`) consultam. Aqui os predicados de quem planeja —
+  `#moverBlocked` (o passo guloso do follow) e `#occupiedForPlayer` (o BFS do follow e do `walk-to`) —
+  perguntam a mesma coisa que `#step`, por `#playerSummonAt`. Antes só o commit atravessava: o
+  `walk-to` para depois da invocação num corredor de um tile era `unreachable`, e o seguidor empacava
+  atrás da invocação do líder. **Não coberto:** a invocação parada no tile de CHEGADA de uma escada. A
+  troca (`swapPlaces`) é com o tile PEDIDO — o degrau, onde monstro nenhum pisa —, e a chegada ocupada
+  continua `tile-occupied`; o Canary teleporta com `FLAG_NOLIMIT` e divide o tile. Vale igual para o
+  familiar desde o #599, e só acontece com a invocação deixada do outro lado (ela segue o mestre, que
+  está do lado de cá); fica registrado, sem regra divergente escrita.
 - **O dano da invocação credita o MESTRE, nunca ela mesma** (ADR 0057 decisão 2,
   `Creature::getGainedExperience`/`attackerMaster` do Canary): quando o ATACANTE de um golpe
   monstro-contra-monstro tem `masterId` string, `#applyMonsterHitOnSummon` redireciona o
@@ -2202,12 +2212,19 @@ tê-la recebe `spell-not-learned`.
   `creature-appeared` do mesmo subject (com id numérico novo no cliente), nunca um `creature-moved`
   de duração zero — o protocolo exige duração positiva e o hospedeiro descartaria o evento, deixando
   o familiar desenhado no tile (e no andar) antigos.
-- **O jogador atravessa o familiar** (`Player::canWalkthrough`: `monster->isFamiliar()`, qualquer
-  familiar de qualquer dono): o tile ocupado só por ele não bloqueia o caminho do personagem
-  (`#moverBlocked` no passo guloso, `#occupiedForPlayer` nas buscas de caminho do follow e do `walk-to`), e o passo TROCA os dois de lugar (`#step`: o familiar ocupa o tile que o
-  jogador acabou de deixar, com um `creature-moved` para ele). Sem isto, um familiar parado num
-  corredor tranca a party — achado pela regressão de coesão do #527 com o preset novo. O monstro
-  hostil continua sem atravessá-lo.
+- **O jogador atravessa o familiar** (`Player::canWalkthrough`, `player.cpp:1424-1444`: `monster->
+  isFamiliar() || noPvpThroughAtSummon` — o familiar de qualquer dono, e toda invocação cujo mestre é
+  jogador no mundo no-pvp do ADR 0060, que é o caso da invocação comum, descrita no #600 acima): o tile
+  ocupado só por ele não bloqueia o caminho do personagem (`#moverBlocked` no passo guloso,
+  `#occupiedForPlayer` nas buscas de caminho do follow e do `walk-to` — as MESMAS duas que valem para a
+  invocação comum, por `#playerSummonAt`), e o passo TROCA os dois de lugar (`#step`: o familiar libera o
+  tile um instante, o passo acontece, e ele ocupa o tile que o jogador acabou de deixar, com um
+  `creature-moved` para ele). Sem isto, um familiar parado num corredor tranca a party — achado pela
+  regressão de coesão do #527 com o preset novo. O monstro hostil continua sem atravessá-lo. **Duas
+  trocas, uma regra**: o familiar passa pela troca que libera o tile ANTES do `move` (a do #599, com o
+  fallback de recolocação quando o tile deixado fecha), a invocação comum pela de
+  `swapPlaces` DEPOIS do `move` recusado (#600); o que decide quem atravessa é o mesmo — `masterId` de
+  jogador.
 - **A ability do familiar bate nos monstros HOSTIS, nunca na party.** `#executeMonsterAbility`
   troca as presas de uma invocação de PERSONAGEM por `#hostileMonsters()` (o Canary passa a área
   pelo `canDoCombat`, que protege jogador e invocação de jogador). O #598 só tinha exercitado o golpe
