@@ -428,7 +428,9 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
     })).json();
     const characterId = String(created.id);
     await (database as TestDatabase).database.db.update(characters)
-      .set({ gold: 5_000 }).where(eq(characters.id, characterId));
+      // Aprendeu a magia da cena (#624): o bot dele a lança, e o portão do aprendizado recusaria.
+      .set({ gold: 5_000, learnedSpells: { spellIds: ['heal'], version: 1 } })
+      .where(eq(characters.id, characterId));
 
     let inbox = await connect(cookie, characterId);
 
@@ -600,7 +602,10 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
     const characterId = String(created.id);
     const db = (database as TestDatabase).database.db;
     await db.update(characters)
-      .set({ gold: 20_000, level: 20, xp: totalXpForLevel(20, content.progression) })
+      .set({
+        gold: 20_000, level: 20, xp: totalXpForLevel(20, content.progression),
+        learnedSpells: { spellIds: ['heal'], version: 1 },
+      })
       .where(eq(characters.id, characterId));
     await db.insert(itemInstances).values([
       {

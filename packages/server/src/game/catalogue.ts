@@ -21,7 +21,7 @@
 // coisas mudam a cada golpe.
 
 import type { S2CProps } from '@draconya/protocol';
-import type { Content, Spell, Supply } from '@draconya/content';
+import type { Content, Spell, Supply, Training } from '@draconya/content';
 import {
   BOT_AUTOMATION_CATALOGUE, BOT_HOTKEYS, BOT_SET_COUNT, BOT_SET_NAMES, BOT_SLOTS_PER_SET,
   manaCostDisplayOf,
@@ -100,6 +100,9 @@ export function buildCatalogue(content: Content): Catalogue {
         // 7) e mostra o `base`, como o grimório do Tibia sempre mostrou.
         manaCost: manaCostDisplayOf(spell.manaCost),
         minLevel: spell.minLevel,
+        // O preço de aprender (#624, ADR 0058 d.3): ausente é "ninguém a ensina" — a tela não
+        // oferece a compra. `0` é de graça, e por isso a checagem é `undefined`, nunca truthy.
+        ...(spell.learnPrice === undefined ? {} : { learnPrice: spell.learnPrice }),
         // `null` e não ausente: a tela precisa distinguir "qualquer um lança" de "o servidor
         // não disse", e campo opcional colapsa os dois no mesmo `undefined`.
         vocationId: spell.vocationId ?? null,
@@ -108,8 +111,17 @@ export function buildCatalogue(content: Content): Catalogue {
         effect: spell.effect.kind,
         // O grupo (#155): a tela mostra ao lado do nome.
         group: spell.group ?? 'attack',
-        // Os números de EXIBIÇÃO (ADR 0033): cooldown, grupo, descrição e o detalhe do efeito.
-        cooldownMs: spell.cooldownMs,
+        // Find Person (#623) precisa de MIRA: o "nome" do Canary é o personagem clicado, e o
+        // servidor não tem como adivinhar quem. É o campo `aim`, e NÃO `targets: 'friend'`: este
+        // também abre o seletor de alvo do editor de slot do bot (`acceptsFriend`), e a validação
+        // do bot recusa salvar alvo que não seja de cura/mana. Só a barra de ação lê `aim`, para
+        // armar a mira do `use-slot` (ADR 0049 d.2). Só ela declara.
+        ...(spell.effect.kind === 'find' && spell.effect.target === 'person'
+          ? { aim: 'character' as const } : {}),
+        // Os números de EXIBIÇÃO (ADR 0033): cooldown, grupo, descrição e o detalhe do efeito. O
+        // familiar (#599) anuncia o cooldown de VERDADE — os 30 min do efeito —, e não os 2 s da
+        // magia (o `groupCooldown` do script): é o número que o jogador espera ver na tela.
+        cooldownMs: spell.effect.kind === 'familiar' ? spell.effect.cooldownMs : spell.cooldownMs,
         ...(spell.groupCooldownMs === undefined ? {} : { groupCooldownMs: spell.groupCooldownMs }),
         ...(spell.description === undefined ? {} : { description: spell.description }),
         detail: detailOf(spell.effect),
@@ -173,6 +185,13 @@ export function buildCatalogue(content: Content): Catalogue {
       kind: item.kind,
       // O rótulo curto da barra/Mochila (AB-13), só quando o conteúdo o declara.
       ...(item.shortLabel === undefined ? {} : { shortLabel: item.shortLabel }),
+      // A exercise weapon (#631, ADR 0059): a skill que treina e o TOTAL de cargas — as restantes
+      // são da instância e viajam em `training-state`. `buildContent` garante `charges` com `exercise`.
+      ...(item.exercise === undefined || item.charges === undefined
+        ? {}
+        : { exercise: { skillId: item.exercise.skillId, charges: item.charges } }),
+      // O preço do `buy-item` mínimo (#631, ADR 0059 d.2): só quem é `purchasable`.
+      ...(item.purchasable === true && item.buyPrice !== undefined ? { buyPrice: item.buyPrice } : {}),
       // Como a arma bate (#152): tipo, alcance e família — para o tooltip. Mana por golpe e
       // faixa de dano ficam de fora: balanceamento (invariante 4).
       ...(item.weapon === undefined
@@ -259,6 +278,9 @@ export function buildCatalogue(content: Content): Catalogue {
           pricing: content.progression.blessingPricing,
         },
       }),
+    // O Treino (#631, ADR 0059): o que UMA carga rende e o livro do offline training, para a tela
+    // de Treino mostrar o que vale antes de o jogador agir. Ausente sem `training/` no conteúdo.
+    ...(content.training === undefined ? {} : { training: trainingCatalogueOf(content, content.training) }),
     // Os monstros que existem, para a tela do Bestiário ter nome onde o contador tem id
     // (FUN-113). Vida e XP para o detalhe (SV-02, #338). Em ordem de id para a mensagem ser a
     // mesma a cada boot: a arte chega pelo `creature-appear`, e o resto é balanceamento que o
@@ -286,6 +308,11 @@ export function buildCatalogue(content: Content): Catalogue {
                 charmsPoints: bestiaryEntry.charmsPoints,
               },
             }),
+          // O boss no Bosstiary (#629): a raridade escolhe a linha da tabela de níveis abaixo, e o
+          // `raceId` é a chave do contador de abates — nível e pontos são DERIVADOS no cliente.
+          ...(monster.bosstiary === undefined
+            ? {}
+            : { bosstiary: { rarity: monster.bosstiary.rarity, raceId: monster.bosstiary.raceId } }),
         };
       })
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
@@ -299,6 +326,21 @@ export function buildCatalogue(content: Content): Catalogue {
         bestiary: {
           milestones: [...content.bestiary.milestones],
           xpBonusPercentPerMilestone: content.bestiary.xpBonusPercentPerMilestone,
+        },
+      }),
+    // Os níveis do Bosstiary por raridade (#629), do conteúdo fixado na sessão (invariante 7). A
+    // chave só existe quando o conteúdo tem a tabela: ausente, a tela mostra só a contagem de
+    // abates — o conteúdo de teste, que não fala de progressão permanente. Só `levels`: `id`,
+    // `source` e `_open` são assunto do carregador.
+    ...(content.bosstiary === undefined
+      ? {}
+      : {
+        bosstiary: {
+          levels: {
+            bane: content.bosstiary.levels.bane.map((level) => ({ ...level })),
+            archfoe: content.bosstiary.levels.archfoe.map((level) => ({ ...level })),
+            nemesis: content.bosstiary.levels.nemesis.map((level) => ({ ...level })),
+          },
         },
       }),
     // Os 25 Charms do Canary (M39-02, #602, ADR 0053 d.3), do conteúdo fixado na sessão
@@ -317,6 +359,52 @@ export function buildCatalogue(content: Content): Catalogue {
       }))
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
   };
+}
+
+/**
+ * O Treino no catálogo (#631, ADR 0059): o que UMA carga rende (`triesPerCharge × rate / 100`,
+ * truncado como o `uint64_t` do Canary — a mesma conta do golpe do ruleset) e o livro do offline
+ * training, com o nome de cada skill do CONTEÚDO (o cliente não tem a lista em código). Uma skill
+ * do livro que saiu de `skills/` cai fora — `buildContent` já a reprova, e o filtro é a rede de
+ * segurança de quem monta o catálogo de um conteúdo de teste.
+ */
+function trainingCatalogueOf(content: Content, training: Training): NonNullable<Catalogue['training']> {
+  const { strike, dummy, offline } = training;
+  return {
+    perCharge: {
+      tries: Math.floor((strike.triesPerCharge * dummy.rate) / 100),
+      manaSpent: Math.floor((strike.manaSpentPerCharge * dummy.rate) / 100),
+    },
+    bankCapMs: offline.bankCapMs,
+    graceMs: offline.graceMs,
+    spendCapMs: { free: offline.spendCapMs.free, premium: offline.spendCapMs.premium },
+    offlineSkills: offline.skills.flatMap((entry) => {
+      const skill = content.skills.get(entry.skillId);
+      return skill === undefined ? [] : [{ skillId: entry.skillId, name: skill.name, kind: entry.kind }];
+    }),
+    skills: trainedSkillsOf(content, training),
+  };
+}
+
+/**
+ * Toda skill que o Treino toca, com nome e tipo de ganho: as do livro, na ordem dele, e depois as
+ * que só uma exercise weapon treina (o `shielding` do exercise shield), em ordem de id. O tipo é o
+ * do GOLPE — `mana` quando a skill sobe por mana gasta (`gain.on === 'spell-cast'`, o que o
+ * ruleset do Treino lê), `attacks` quando sobe por tries —, não o do livro: o livro pode deixar de
+ * oferecer o magic level sem que a wand e a rod deixem de render mana.
+ */
+function trainedSkillsOf(content: Content, training: Training): NonNullable<Catalogue['training']>['skills'] {
+  const ids: string[] = training.offline.skills.map((entry) => entry.skillId);
+  const fromWeapons = new Set<string>();
+  for (const item of content.items.values()) {
+    if (item.exercise !== undefined && !ids.includes(item.exercise.skillId)) fromWeapons.add(item.exercise.skillId);
+  }
+  ids.push(...[...fromWeapons].sort());
+  return ids.flatMap((skillId) => {
+    const skill = content.skills.get(skillId);
+    return skill === undefined
+      ? [] : [{ skillId, name: skill.name, kind: skill.gain.on === 'spell-cast' ? 'mana' as const : 'attacks' as const }];
+  });
 }
 
 /**

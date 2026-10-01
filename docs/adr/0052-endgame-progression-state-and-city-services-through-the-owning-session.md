@@ -149,6 +149,42 @@ conteúdo real (`baseline.json`) passa a declarar `combat-v4`. O detalhe dos est
 `docs/product/combat-conformance.md` ("Estágio #603") e a decisão sobre os charms na emenda de
 2026-09-29 do [ADR 0053](0053-bestiary-xp-line-kept-and-charms-added.md).
 
+## Emenda — 2026-09-29: o registro `bosstiary` (#629)
+
+A decisão 1 lista `bosstiary` entre os registros e o plano (`docs/endgame-plan.md` §3) o descrevia
+como `{ kills: {monsterId → n}, points }`. O #629 o materializou com duas escolhas que a decisão 1
+não fixava:
+
+1. **A chave de `kills` é o `raceId` do Canary (`monster.bosstiary.bossRaceId`), em texto, não o id
+   de conteúdo.** O Canary guarda o abate de boss no mesmo storage do Bestiário, chaveado pelo
+   `raceid` (`STORAGEVALUE_BESTIARYKILLCOUNT + raceid`), e quatro `raceId` são compartilhados por
+   variantes do mesmo boss (as cinco formas de Urmahlullu, as duas Goshnar's Megalomania, os dois
+   Voidborn, Rupture e Eradicator2): abater qualquer uma soma no MESMO contador. Chavear por id de
+   conteúdo dividiria o contador — e o nível — do mesmo boss. O registro é
+   `{ kills: { "<raceId>": n }, points, version }`.
+2. **O ledger funde por MÁXIMO, não por última-escrita-vence.** A decisão 1 diz "última escrita
+   vence", que serve aos registros de ESTADO (Charms, Roda, Prey), onde o valor final da sessão
+   dona é o único que importa e pode descer. O Bosstiary é contador monotônico — abate e ponto de
+   boss só sobem (`addBossPoints` do Canary só soma) —, a mesma natureza do Bestiário, e recebe a
+   mesma fusão (`Bosstiary.merge`): um extrato antigo processado fora de ordem não rebaixa nada,
+   sem guarda de instante. Continua escrito só pela transação do ledger, a partir do extrato.
+
+Também registra o que o #629 fixa sem exigir decisão nova: o boss conta no Bosstiary e NÃO no
+Bestiário (`Player::addBestiaryKill` devolve cedo para `isBoss()`, e `Player::addBosstiaryKill`
+para o contrário) e no MESMO evento de abate, mas **pelos `killers` do Canary, não pela
+elegibilidade da XP**: `Creature::onDeath` põe em `killers` todo jogador com dano no monstro e,
+com a XP compartilhada ativa, o roster inteiro da party, e `Player::onKilledMonster` chama
+`addBosstiaryKill` de cada um sem portão de stamina nem de vida (só `Player::gainExperience` tem o
+de stamina). Em solo, ou numa party sem XP compartilhada, quem não bateu no boss não conta; com
+stamina zero o boss conta (a hunt continua, só a XP e o loot param). É a regra idêntica do ADR
+0037 d.6, e é a razão de o Bosstiary NÃO herdar o portão de `#grantPartyXp` que o Bestiário
+ainda tem — e que diverge do Canary e do ADR 0043 d.1 / ADR 0053 d.1, uma divergência anterior
+ao #629 que fica para decisão de produto à parte. O `boss: true` do #691 passa a ser escrito pelo
+importador junto com o bloco `bosstiary` (o `isBoss` do Canary É "tem bloco bosstiary"); e não há
+intenção C2S — o Bosstiary é só leitura, com a mensagem S2C `bosstiary` no attach e a cada abate.
+Boss Slot, boss boosted e o Podium of Vigour ficam fora, por dependerem do sistema de bosses
+(`docs/product/bosses.md`).
+
 ## Emenda — 2026-09-30: onde o nível de hazard é escolhido e o que o registro guarda (#632)
 
 A decisão 5 diz que o "nível de hazard escolhido na entrada" viaja no ticket e fica fixado na

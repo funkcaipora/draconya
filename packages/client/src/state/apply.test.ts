@@ -117,6 +117,29 @@ describe('world deltas', () => {
     expect(world.ambience).toBe('cavern');
   });
 
+  it('active-conditions com luz (#623) põe a luz do jogador no mundo; sem ela, tira; a troca de instância a apaga', () => {
+    // O pintor lê `world.selfLight` sem assinatura: o servidor manda raio, cor e prazo, e o
+    // decaimento é conta local (`world/light.ts`). Mutação que mata: guardar `remainingMs` sem o
+    // instante de chegada — o nível não decairia.
+    applyMessage({
+      type: 'active-conditions',
+      conditions: [{ kind: 'light', remainingMs: 300_000, light: { level: 6, color: 215, durationMs: 370_000 } }],
+    }, 1_000);
+    expect(world.selfLight).toEqual({
+      level: 6, color: 215, durationMs: 370_000, remainingMs: 300_000, receivedAtMs: 1_000,
+    });
+
+    applyMessage({ type: 'active-conditions', conditions: [{ kind: 'haste', remainingMs: 10_000 }] }, 2_000);
+    expect(world.selfLight).toBeNull();
+
+    applyMessage({
+      type: 'active-conditions',
+      conditions: [{ kind: 'light', remainingMs: 300_000, light: { level: 6, color: 215, durationMs: 370_000 } }],
+    }, 3_000);
+    applyMessage({ type: 'instance-enter', instanceId: 'i9', map: 'rat-cellars', ambience: 'cavern' }, 3_500);
+    expect(world.selfLight).toBeNull();
+  });
+
   it('ground items: appear, disappear, and the session-state replaces them (FUN-123)', () => {
     // O cadáver é um item do chão com id próprio; some pelo id, e o estado completo o
     // substitui como substitui as criaturas — o que apodreceu sem ninguém olhar não fica.
@@ -575,6 +598,79 @@ describe('HUD deltas', () => {
       distance: { level: 14, percent: 75 },
       magic: { level: 4, percent: 20 },
     });
+  });
+
+  it('applies the Loyalty bonus and each skill\'s effective level from player-stats (#628)', () => {
+    applyMessage(
+      {
+        type: 'player-stats',
+        health: 150, maxHealth: 185, mana: 30, maxMana: 35,
+        level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+        ammo: { arrow: null, bolt: null },
+        vocationId: null,
+        promoted: false, fightMode: 'attack',
+        speed: 125,
+        skills: {
+          fist: { level: 11, percentToNext: 60 },
+          club: { level: 9, percentToNext: 10 },
+          sword: { level: 100, percentToNext: 40, loyaltyLevel: 104 },
+          axe: { level: 13, percentToNext: 5 },
+          distance: { level: 14, percentToNext: 75 },
+          magic: { level: 20, percentToNext: 20, loyaltyLevel: 22 },
+        },
+        magicLevel: { level: 20, percentToNext: 20, loyaltyLevel: 22 },
+        loyaltyBonusPercent: 50,
+        soul: 0,
+        soulMax: 0,
+      },
+      0,
+    );
+
+    expect(hud.get().loyaltyBonusPercent).toBe(50);
+    // O nível efetivo só existe onde o servidor o mandou; o resto fica sem a chave.
+    expect(hud.get().skills.sword).toEqual({ level: 100, percent: 40, loyaltyLevel: 104 });
+    expect(hud.get().skills.magic).toEqual({ level: 20, percent: 20, loyaltyLevel: 22 });
+    expect(hud.get().skills.fist).toEqual({ level: 11, percent: 60 });
+
+    // Um `player-stats` sem o bônus (conta sem degrau, ou nó anterior) volta a zero — e o nível
+    // efetivo some junto, em vez de ficar preso ao valor anterior.
+    applyMessage(
+      {
+        type: 'player-stats',
+        health: 150, maxHealth: 185, mana: 30, maxMana: 35,
+        level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+        ammo: { arrow: null, bolt: null },
+        vocationId: null,
+        promoted: false, fightMode: 'attack',
+        speed: 125,
+        skills: { sword: { level: 100, percentToNext: 40 }, magic: { level: 20, percentToNext: 20 } },
+        magicLevel: { level: 20, percentToNext: 20 },
+        soul: 0,
+        soulMax: 0,
+      },
+      0,
+    );
+    expect(hud.get().loyaltyBonusPercent).toBe(0);
+    expect(hud.get().skills.sword).toEqual({ level: 100, percent: 40 });
+  });
+
+  it('applies the Loyalty bonus from session-state.self too, for whoever reattaches (#628)', () => {
+    applyMessage({
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0,
+        skills: { sword: { level: 100, percentToNext: 0, loyaltyLevel: 104 } },
+        magicLevel: { level: 0, percentToNext: 0 },
+        loyaltyBonusPercent: 50,
+        soul: 0, soulMax: 0,
+      },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    } as S2CMessage, 0);
+    expect(hud.get().loyaltyBonusPercent).toBe(50);
+    expect(hud.get().skills.sword).toEqual({ level: 100, percent: 0, loyaltyLevel: 104 });
   });
 
   it('keeps the skills a node older than SV-04 does not send, but takes its speed', () => {
@@ -1268,6 +1364,50 @@ describe('o catálogo (FUN-79, FUN-89)', () => {
   });
 });
 
+describe('o Bosstiary (#629, ADR 0052 d.1)', () => {
+  const vocabulary = { vocabularyVersion: 1, slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } };
+  it('ausente e vazio são coisas DIFERENTES, como no Bestiário', () => {
+    expect(hud.get().bosstiary).toBeNull();
+    applyMessage({ type: 'bosstiary', kills: {}, points: 0 }, 0);
+    expect(hud.get().bosstiary).toEqual({ kills: {}, points: 0 });
+  });
+
+  it('guarda o registro como veio, e SUBSTITUI em vez de somar', () => {
+    applyMessage({ type: 'bosstiary', kills: { '639': 3 }, points: 40 }, 0);
+    expect(hud.get().bosstiary).toEqual({ kills: { '639': 3 }, points: 40 });
+
+    applyMessage({ type: 'bosstiary', kills: { '639': 5, '100': 1 }, points: 110 }, 1_000);
+    expect(hud.get().bosstiary).toEqual({ kills: { '639': 5, '100': 1 }, points: 110 });
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state.inventory, notified);
+    subscribeSlice(hud, (state) => state.bestiary, notified);
+
+    applyMessage({ type: 'bosstiary', kills: { '639': 1 }, points: 10 }, 0);
+
+    expect(notified).not.toHaveBeenCalled();
+  });
+
+  it('o catálogo leva a tabela de níveis e a raridade de cada boss, e sem tabela a chave fica AUSENTE', () => {
+    const bosstiary = { levels: {
+      bane: [{ kills: 25, points: 5 }], archfoe: [{ kills: 5, points: 10 }], nemesis: [{ kills: 1, points: 10 }],
+    } };
+    const monsters = [{ id: 'dreadmaw', name: 'Dreadmaw', bosstiary: { rarity: 'nemesis', raceId: 639 } }];
+    applyMessage({
+      type: 'catalogue', hunts: [], monsters, bosstiary, bot: vocabulary, items: [],
+    } as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue?.bosstiary).toEqual(bosstiary);
+    expect(hud.get().catalogue?.monsters).toEqual(monsters);
+
+    applyMessage({
+      type: 'catalogue', hunts: [], monsters: [], bot: vocabulary, items: [],
+    } as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue).not.toHaveProperty('bosstiary');
+  });
+});
+
 describe('o Hazard (M44-14, #632, ADR 0052 d.1)', () => {
   it('ausente e vazio são coisas DIFERENTES: `null` é "ainda não chegou"', () => {
     expect(hud.get().hazard).toBeNull();
@@ -1332,6 +1472,131 @@ describe('o bestiário (FUN-113, §18)', () => {
     applyMessage({ type: 'bestiary', counts: { rat: 1 } }, 0);
 
     expect(notified).not.toHaveBeenCalled();
+  });
+});
+
+describe('as magias aprendidas (#624, ADR 0058)', () => {
+  it('ausente e vazio são coisas DIFERENTES: `null` é "o servidor ainda não disse"', () => {
+    // Um nó anterior à #624 nunca manda, e o primeiro segundo de toda conexão também não mandou.
+    // Tratar "não sei" como "não aprendeu nada" marcaria TODO slot da barra antes da hora.
+    expect(hud.get().learnedSpells).toBeNull();
+    applyMessage({ type: 'learned-spells', spellIds: [] }, 0);
+    expect(hud.get().learnedSpells).toEqual([]);
+  });
+
+  it('SUBSTITUI o registro inteiro, em vez de somar — a reconexão reenvia o mesmo total', () => {
+    applyMessage({ type: 'learned-spells', spellIds: ['wound-cleansing'] }, 0);
+    applyMessage({ type: 'learned-spells', spellIds: ['wound-cleansing', 'berserk'] }, 1_000);
+    expect(hud.get().learnedSpells).toEqual(['wound-cleansing', 'berserk']);
+    applyMessage({ type: 'learned-spells', spellIds: ['wound-cleansing', 'berserk'] }, 2_000);
+    expect(hud.get().learnedSpells).toEqual(['wound-cleansing', 'berserk']);
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state.inventory, notified);
+    subscribeSlice(hud, (state) => state.health, notified);
+
+    applyMessage({ type: 'learned-spells', spellIds: ['berserk'] }, 0);
+
+    expect(notified).not.toHaveBeenCalled();
+  });
+});
+
+describe('o Treino (#631, ADR 0059)', () => {
+  const state: S2CMessage = {
+    type: 'training-state', offlineBankMs: 3_600_000, offlineSkill: 'sword',
+    weapons: [{ instanceId: 'w1', itemId: 'exercise-sword', charges: 431 }], activeInstanceId: 'w1',
+  };
+
+  it('o catálogo leva as regras do Treino e as exercise weapons — e sem elas o pill "Treino" não existe', () => {
+    // Mutação que mata: `apply` copia o catálogo CAMPO A CAMPO, e um campo novo que não entra ali some
+    // no caminho sem erro nenhum (foi o que o QA no navegador pegou: o `training` chegava e sumia).
+    const base = {
+      type: 'catalogue', hunts: [], monsters: [], charms: [], vocations: [], vocationLevel: 8,
+      bot: { vocabularyVersion: 2, spells: [], supplies: [], automations: [] },
+      items: [{
+        id: 'exercise-sword', name: 'exercise sword', appearanceId: 1, weight: 10, slot: null, twoHanded: false,
+        exercise: { skillId: 'sword', charges: 500 }, buyPrice: 347_222,
+      }],
+      ammunition: [],
+    };
+    const training = {
+      perCharge: { tries: 7, manaSpent: 600 }, bankCapMs: 43_200_000, graceMs: 600_000,
+      spendCapMs: { free: 21_600_000, premium: 43_200_000 },
+      offlineSkills: [{ skillId: 'sword', name: 'Espada', kind: 'attacks' }],
+      skills: [
+        { skillId: 'sword', name: 'Espada', kind: 'attacks' },
+        { skillId: 'shielding', name: 'Escudo', kind: 'attacks' },
+      ],
+    };
+    applyMessage({ ...base, training } as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue?.training).toEqual(training);
+    expect(hud.get().catalogue?.items[0]).toMatchObject({ exercise: { skillId: 'sword', charges: 500 }, buyPrice: 347_222 });
+
+    applyMessage(base as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue).not.toHaveProperty('training');
+  });
+
+  it('ausente e vazio são coisas DIFERENTES: `null` até o servidor dizer', () => {
+    // Um nó `game` sem Treino nunca manda — e o primeiro segundo de toda conexão também não mandou.
+    expect(hud.get().training).toBeNull();
+    applyMessage({
+      type: 'training-state', offlineBankMs: 0, offlineSkill: null, weapons: [], activeInstanceId: null,
+    }, 0);
+    expect(hud.get().training).toEqual({ offlineBankMs: 0, offlineSkill: null, weapons: [], activeInstanceId: null });
+  });
+
+  it('SUBSTITUI o estado inteiro a cada mensagem — cada golpe do Treino reenvia as cargas', () => {
+    applyMessage(state, 0);
+    expect(hud.get().training?.weapons).toEqual([{ instanceId: 'w1', itemId: 'exercise-sword', charges: 431 }]);
+    applyMessage({ ...state, weapons: [{ instanceId: 'w1', itemId: 'exercise-sword', charges: 430 }] } as S2CMessage, 2_000);
+    expect(hud.get().training?.weapons).toEqual([{ instanceId: 'w1', itemId: 'exercise-sword', charges: 430 }]);
+    // A arma acabou: some da lista, e a instância ativa some junto.
+    applyMessage({ ...state, weapons: [], activeInstanceId: null } as S2CMessage, 4_000);
+    expect(hud.get().training).toMatchObject({ weapons: [], activeInstanceId: null, offlineBankMs: 3_600_000 });
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    // Chega a cada golpe (a cada ~2 s): não pode redesenhar o inventário nem as barras.
+    const notified = vi.fn();
+    subscribeSlice(hud, (current) => current.inventory, notified);
+    subscribeSlice(hud, (current) => current.health, notified);
+    applyMessage(state, 0);
+    expect(notified).not.toHaveBeenCalled();
+  });
+
+  it('o extrato do Treino diz o porquê e o tempo — não XP, gold nem abate, que ele não rende', () => {
+    applyMessage({
+      type: 'session-state', sessionType: 'training', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'me', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0,
+        vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        soul: 0, soulMax: 0,
+      },
+      world: { mapId: 'city', creatures: [], groundItems: [], tileUpdates: [], fields: [] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    } as unknown as S2CMessage, 0);
+    applyMessage({
+      type: 'session-ended', reason: 'completed',
+      aggregates: { durationMs: 960_000, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+    const line = hud.get().systemMessages.at(-1);
+    // A arma acabou: não é "Concluído" (a frase da hunt), é o que de fato aconteceu.
+    expect(line?.text).toBe('Treino: A exercise weapon acabou · 16 min');
+    expect(line?.text).not.toContain('XP');
+
+    // E parar o treino na Cidade não é "sair da hunt": o jogador está lendo isto em pé na praça.
+    applyMessage({
+      type: 'session-ended', reason: 'manual-exit',
+      aggregates: { durationMs: 180_000, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+    const manual = hud.get().systemMessages.at(-1);
+    expect(manual?.text).toBe('Treino: Você saiu do treino · 3 min');
+    expect(manual?.text).not.toContain('hunt');
   });
 });
 

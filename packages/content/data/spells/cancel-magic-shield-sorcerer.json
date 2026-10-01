@@ -4,6 +4,7 @@
   "description": "Remove o seu próprio Magic Shield imediatamente.",
   "vocationId": "sorcerer",
   "minLevel": 14,
+  "learnPrice": 450,
   "manaCost": 50,
   "group": "support",
   "groupCooldownMs": 2000,

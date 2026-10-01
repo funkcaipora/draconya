@@ -8,9 +8,9 @@
 
 import { randomUUID } from 'node:crypto';
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { Bestiary, levelForXp, readItemOverlay } from '@draconya/sim';
+import { Bestiary, Bosstiary, LearnedSpells, levelForXp, readItemOverlay } from '@draconya/sim';
 import type {
-  BestiaryState, CharacterStorageMap, ItemInstanceOverlay,
+  BestiaryState, BosstiaryState, CharacterStorageMap, ItemInstanceOverlay,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { Database } from '../db/client.js';
@@ -19,6 +19,7 @@ import {
 } from '../db/schema.js';
 import type { Logger } from '../log.js';
 import type { ItemPlace, ReceiptStore, SessionReceipt } from '../receipts.js';
+import { isLearnedSpellsState } from '../tickets.js';
 
 export interface LedgerSweepOptions {
   readonly database: Database;
@@ -161,6 +162,8 @@ async function applyProgression(
       gold: characters.gold,
       skillsUpdatedAt: characters.skillsUpdatedAt,
       bestiary: characters.bestiary,
+      bosstiary: characters.bosstiary,
+      learnedSpells: characters.learnedSpells,
       ammo: characters.ammo,
       staminaUpdatedAt: characters.staminaUpdatedAt,
     })
@@ -225,6 +228,18 @@ async function applyProgression(
       ),
     };
 
+  // O Bosstiary funde pelo MAIOR de cada boss e dos pontos (#629, ADR 0052 d.1), pela mesma razão
+  // do Bestiário: abate nunca desce, e os pontos de boss só somam. A coluna é nulável — `null` é
+  // quem nunca abateu um boss — e o extrato SEM o campo (Cidade, nó antigo em deploy) não toca
+  // nela.
+  const bosstiary = receipt.bosstiary === undefined
+    ? {}
+    : {
+      bosstiary: Bosstiary.merge(
+        (current.bosstiary as BosstiaryState | null) ?? undefined, receipt.bosstiary,
+      ),
+    };
+
   // A munição escolhida (#152): preferência, última escrita vence. Extrato SEM o campo não toca
   // na coluna — é a Cidade, ou um nó antigo, e a escolha continua a de antes.
   const ammo = receipt.ammo === undefined ? {} : { ammo: receipt.ammo };
@@ -250,6 +265,32 @@ async function applyProgression(
   // externo monotônico a fundir, é o estado final da sessão dona. Extrato SEM o campo (Cidade
   // ou nó antigo em deploy) não toca na coluna.
   const charms = receipt.charms === undefined ? {} : { charms: receipt.charms };
+  // As magias aprendidas (#624, ADR 0058 d.1): fundidas pela UNIÃO, como o Bestiário é fundido
+  // pelo maior — e NÃO última-escrita-vence, como `charms`. O registro só CRESCE (não existe
+  // esquecer magia, só a Wheel, que está fora do jogo), então a união é a fusão certa, e ela
+  // fecha duas janelas que a última-escrita deixava abertas: extratos pendentes se aplicam em
+  // ordem qualquer (o `SCAN` do Redis não ordena), e o mais antigo chegando depois do mais novo
+  // derrubaria uma magia já paga (o gold é delta e ficaria debitado); e um extrato que parte de
+  // uma base desconhecida (sessão retomada de um snapshot sem registro) carrega só as compras
+  // dela, e escreveria por cima da concessão da migração 0024 (ADR 0014). A coluna é nulável —
+  // `null` é quem nunca aprendeu nada nem foi migrado — e uma linha torta vira ausente, pela
+  // mesma régua do ticket. Extrato SEM o campo não toca na coluna.
+  const learnedSpells = receipt.learnedSpells === undefined
+    ? {}
+    : {
+      learnedSpells: LearnedSpells.merge(
+        isLearnedSpellsState(current.learnedSpells) ? current.learnedSpells : undefined,
+        receipt.learnedSpells,
+      ),
+    };
+  // O familiar (M38-02, #599, ADR 0057 d.3): ABSOLUTO e última-escrita-vence, como `charms` — e
+  // NUNCA fundido pelo maior, porque o `summonUntilMs` desce quando o familiar morre. Extrato SEM o
+  // campo (Cidade ou nó antigo em deploy) não toca na coluna.
+  const familiar = receipt.familiar === undefined ? {} : { familiar: receipt.familiar };
+  // O registro do Treino (#631, ADR 0059 d.3): ABSOLUTO e última-escrita-vence, como `charms` — o
+  // banco de offline training sobe por tempo de sessão e DESCE quando a `api` o gasta, então
+  // fundir pelo maior ressuscitaria tempo já gasto. Extrato SEM o campo não toca na coluna.
+  const training = receipt.training === undefined ? {} : { training: receipt.training };
   // O Hazard (M44-14, #632, ADR 0052 d.1): ABSOLUTO e última-escrita-vence, como `charms` — a
   // escolha de nível desce e sobe, e o teto só sobe por `levelUp` dentro da sessão dona. Extrato
   // SEM o campo (quem nunca tocou no hazard, ou nó antigo em deploy) não toca na coluna.
@@ -334,12 +375,16 @@ async function applyProgression(
       gold,
       ...skills,
       ...bestiary,
+      ...bosstiary,
       ...ammo,
       ...soul,
       ...supplyStock,
       ...ammunitionStock,
       ...fedMs,
       ...charms,
+      ...learnedSpells,
+      ...familiar,
+      ...training,
       ...hazard,
       ...blessings,
       ...fightMode,

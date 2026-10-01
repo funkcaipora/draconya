@@ -79,7 +79,7 @@ fixture.
 
 ## Persistência (ADR 0052 d.1 e d.5)
 
-Registro `jsonb` `characters.hazard` (migração `0023_632-hazard.sql`):
+Registro `jsonb` `characters.hazard` (migração `0027_632-hazard.sql`):
 `{ maxLevel: { zoneId: n }, currentLevel: { zoneId: n }, version: 1 }`. Lido INTEIRO no ticket,
 escrito INTEIRO pelo ledger a partir do extrato — **última escrita vence** (a escolha desce e
 sobe), nunca fusão por máximo. A escolha na Cidade grava o extrato de estado NA HORA (e não só no

@@ -90,6 +90,16 @@ export function describeEvent(event: NotableEvent, names: EventNames = {}): stri
       const who = parts.length > 2 ? `${parts[0] ?? ''} · ` : '';
       return `${who}Hazard: ${zone} · nível ${level} liberado`;
     }
+    case 'bosstiary-level': {
+      // `monsterId/n` (#629): o nível fecha três vezes por boss na vida inteira do personagem, e é a
+      // outra linha do extrato que fala de progressão permanente (`monsterId` é o do boss ABATIDO).
+      // Em party o `sim` manda `characterId/monsterId/n` — o cliente só mostra o boss e o nível.
+      const parts = detail.split('/');
+      const level = parts[parts.length - 1] ?? '';
+      const monsterId = parts[parts.length - 2] ?? '';
+      const monster = names.monsters?.get(monsterId) ?? monsterId;
+      return `Bosstiary: ${monster} · nível ${level}`;
+    }
     case 'item-lost-on-death': {
       // `itemId/quantidade/instanceId/dono` (#571): o cliente mostra o item e a quantidade; o
       // `instanceId` e o dono são da trilha de auditoria do ledger, não da tela.
@@ -106,6 +116,9 @@ export function describeEvent(event: NotableEvent, names: EventNames = {}): stri
     case 'death': return 'Morreu';
     case 'stamina-exhausted': return 'Stamina esgotada';
     case 'backpack-full': return 'Mochila cheia';
+    // A Food (#623) sem lugar na mochila: o Canary a largaria no chão, e este modelo não tem item
+    // no chão fora do cadáver — o que não coube se perde, e o extrato diz QUAL comida.
+    case 'food-not-carried': return `Comida perdida, sem espaço · ${names.items?.get(detail) ?? detail}`;
     case 'supply-unaffordable': return `Gold acabou para ${names.supplies?.get(detail) ?? detail}`;
     case 'exit-rule': return `Saiu por regra · ${detail}`;
     case 'ring-equipped': return 'Equipou o anel';

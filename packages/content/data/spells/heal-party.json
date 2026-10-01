@@ -4,6 +4,7 @@
   "description": "Regenera vida de cada membro da party no alcance, por 2 minutos.",
   "vocationId": "druid",
   "minLevel": 32,
+  "learnPrice": 4000,
   "manaCost": {
     "kind": "party-scaled",
     "base": 120,

@@ -4,6 +4,7 @@
   "description": "Causa dano mágico no seu alvo atual.",
   "vocationId": "paladin",
   "minLevel": 1,
+  "learnPrice": 0,
   "manaCost": 6,
   "group": "attack",
   "groupCooldownMs": 2000,

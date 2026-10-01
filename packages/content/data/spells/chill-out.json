@@ -4,6 +4,7 @@
   "description": "Lança uma onda de gelo à sua frente.",
   "vocationId": "druid",
   "minLevel": 1,
+  "learnPrice": 0,
   "manaCost": 8,
   "group": "attack",
   "groupCooldownMs": 2000,

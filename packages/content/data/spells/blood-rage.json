@@ -4,6 +4,7 @@
   "description": "Aumenta o dano corpo a corpo causado em 25% e o dano recebido em 15%, por 10 segundos.",
   "vocationId": "knight",
   "minLevel": 60,
+  "learnPrice": 8000,
   "manaCost": 290,
   "group": "support",
   "groupCooldownMs": 2000,

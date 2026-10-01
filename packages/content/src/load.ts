@@ -27,11 +27,19 @@ export function loadContent(dir: string): Content {
     progression: readJsonDir(join(dir, 'progression')),
     combat: readJsonDir(join(dir, 'combat')),
     stamina: readJsonDir(join(dir, 'stamina')),
+    // O Treino do Tibia (#631, ADR 0059): o boneco, o golpe e o offline training.
+    training: readJsonDir(join(dir, 'training')),
     party: readJsonDir(join(dir, 'party')),
     bestiary: readJsonDir(join(dir, 'bestiary')),
+    // Os níveis do Bosstiary (#629) — `bosstiary/baseline.json`, a tabela do `io_bosstiary`.
+    bosstiary: readJsonDir(join(dir, 'bosstiary')),
     // Os 25 Charms do Canary (M39-02, #602) — uma entidade por arquivo/fatia, como `spells`.
     charms: readJsonDir(join(dir, 'charms')),
+    // A esfola de cadáver (#626): `skinning/generated/skinning.json`, gerado por `pnpm catalog:import
+    // skinning` — um monstro por linha.
+    skinning: readJsonDir(join(dir, 'skinning')),
     boosted: readJsonDir(join(dir, 'boosted')),
+    loyalty: readJsonDir(join(dir, 'loyalty')),
     // O Hazard (M44-14, #632): os multiplicadores do Canary e a zona `gnomprona-gardens`.
     hazard: readJsonDir(join(dir, 'hazard')),
     bot: readJsonDir(join(dir, 'bot')),

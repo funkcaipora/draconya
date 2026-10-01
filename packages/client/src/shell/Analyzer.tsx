@@ -239,7 +239,8 @@ export function Analyzer({ open = false, onToggle }: { open?: boolean; onToggle?
 
   // Sem sessão, na Cidade, ou fechada: nada para desenhar. A ordem importa — testar `isOpen`
   // ANTES do `aggregates` trocaria "sem sessão" por "fechada" no teste de HTML vazio.
-  if (aggregates === null || analyzer.sessionType === 'city' || !isOpen) return null;
+  // O Treino (#631) não caça: o analisador de caçada não tem o que mostrar nele.
+  if (aggregates === null || analyzer.sessionType === 'city' || analyzer.sessionType === 'training' || !isOpen) return null;
 
   return (
     <FloatingWindow

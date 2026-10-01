@@ -1,0 +1,16 @@
+{
+  "id": "find-person",
+  "name": "Find Person",
+  "description": "Diz em que direção e a que distância está um personagem da sua party.",
+  "minLevel": 8,
+  "learnPrice": 80,
+  "manaCost": 20,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "find",
+    "target": "person"
+  },
+  "_open": "Canary `data/scripts/spells/support/find_person.lua` (47dfd51): words \"exiva\" + nome do jogador, id 20, level 8, mana 20, cooldown/groupCooldown 2000 (grupo support), `hasParams(true)`, `hasPlayerNameParam(true)`, `isAggressive(false)`. O parâmetro de NOME do Canary é o alvo manual do `use-slot` (o personagem clicado), porque a barra de ações é do Draconya (ADR 0037 d.2); a hunt hospeda só os personagens da própria sessão, então só um membro da party é encontrável — quem não está na sessão devolve \"A player with this name is not online\" como no Canary. Vocação: TODAS, por isso sem `vocationId`. Efeito CONST_ME_MAGIC_BLUE (13)."
+}

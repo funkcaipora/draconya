@@ -1,0 +1,20 @@
+{
+  "id": "animate-dead-rune",
+  "name": "Animate Dead Rune",
+  "description": "Consome o cadáver do tile mirado e ergue um Skeleton ao seu lado.",
+  "price": 375,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "actionExhaustMs": 1000,
+  "requires": {
+    "level": 27,
+    "magicLevel": 4
+  },
+  "effect": {
+    "kind": "animate-dead",
+    "monsterId": "skeleton",
+    "range": 8
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6; #600, M38-03, ADR 0057 d.6). Canary `data/scripts/runes/animate_dead_rune.lua` (47dfd51): `runeId(3203)`, `charges(1)`, `level(27)`, `magicLevel(4)`, `cooldown(2*1000)` AO LADO de `groupCooldown(2*1000)`, `group(\"support\")`, `allowFarUse(true)`; sem `rune:vocation` (qualquer vocação usa) e SEM `needTarget` — a mira é um TILE. O script pega `Tile(position):getTopDownItem()` e exige `itemType:isCorpse() and itemType:isMovable()` — propriedade do estágio de decaimento em que o cadáver está (`monster.corpseAnimatable`); com menos de 2 invocações cria `Game.createMonster(\"Skeleton\", position, true, true)` (`monsterId`, `skeleton` no Canary), REMOVE o cadáver (`corpse:remove()`, e o loot que ainda estava nele vai junto — ADR 0048 d.5) e o `setSummon` o põe sob o lançador. NÃO debita mana (o script nunca chama `addMana`); só o gold da runa. `range` 8: convenção de alcance deste catálogo (o Lua não declara `rune:range`). `price` 375: menor `buy` de `data-otservbr-global/npc/*.lua` para o clientId 3203 (`pnpm catalog:npc-prices`). Efeito: `CONST_ME_MAGIC_BLUE` no tile do cadáver (13)."
+}

@@ -4,6 +4,7 @@
   "description": "Aumenta a sua velocidade de movimento em 70% por 22 segundos.",
   "vocationId": "druid",
   "minLevel": 20,
+  "learnPrice": 1300,
   "manaCost": 100,
   "group": "support",
   "groupCooldownMs": 2000,

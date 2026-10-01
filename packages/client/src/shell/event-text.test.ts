@@ -26,6 +26,7 @@ describe('describeEvent (FUN-110)', () => {
       ['bestiary-milestone', 'rat/1', 'Bestiário: Rato · marco 1 (+1 % XP)'],
       ['hazard-level-up', 'gardens/4', 'Hazard: Gnomprona Gardens · nível 4 liberado'],
       ['hazard-level-up', 'ally/gardens/4', 'ally · Hazard: Gnomprona Gardens · nível 4 liberado'],
+      ['bosstiary-level', 'rat/2', 'Bosstiary: Rato · nível 2'],
       ['death', 'c1', 'Morreu'],
       ['stamina-exhausted', 'c1', 'Stamina esgotada'],
       ['backpack-full', 'c1', 'Mochila cheia'],
@@ -40,6 +41,16 @@ describe('describeEvent (FUN-110)', () => {
     for (const [type, detail, expected] of lines) {
       expect(describeEvent({ atMs: 0, type, detail }, names), type).toBe(expected);
     }
+  });
+
+  it('a comida da Food que não coube na mochila diz qual foi perdida, e não sai crua (#623)', () => {
+    // O `sim` grava `food-not-carried` com o itemId; sem caso, o jogador lia `food-not-carried ·
+    // bread`. Mutação que mata: apagar o `case`.
+    const itemNames = { items: new Map([['bread', 'Bread']]) };
+    expect(describeEvent({ atMs: 0, type: 'food-not-carried', detail: 'bread' }, itemNames))
+      .toBe('Comida perdida, sem espaço · Bread');
+    expect(describeEvent({ atMs: 0, type: 'food-not-carried', detail: 'bread' }))
+      .toBe('Comida perdida, sem espaço · bread');
   });
 
   it('sem catálogo, o id fica no lugar do nome — estável, e não vazio', () => {
@@ -58,6 +69,15 @@ describe('describeEvent (FUN-110)', () => {
       { atMs: 0, type: 'bestiary-milestone', detail: 'rat/3' },
       { percentPerMilestone: 0.5 },
     )).toBe('Bestiário: rat · marco 3 (+0,5 % XP)');
+  });
+
+  it('o nível do Bosstiary diz o boss e o nível, em solo e em party, e sem catálogo fica o id (#629)', () => {
+    // Em party o `sim` manda `characterId/monsterId/n`: o cliente lê os dois últimos campos.
+    expect(describeEvent({ atMs: 0, type: 'bosstiary-level', detail: 'dreadmaw/3' }))
+      .toBe('Bosstiary: dreadmaw · nível 3');
+    expect(describeEvent({ atMs: 0, type: 'bosstiary-level', detail: 'hero/dreadmaw/1' }, {
+      monsters: new Map([['dreadmaw', 'Dreadmaw']]),
+    })).toBe('Bosstiary: Dreadmaw · nível 1');
   });
 
   it('tipo que este cliente não conhece sai como veio: pior que frase feia é sumir com o evento', () => {

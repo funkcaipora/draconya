@@ -30,6 +30,17 @@ export function hasCharmStage(compatibilityProfile: string | undefined): boolean
 }
 
 /**
+ * O perfil executa o estágio de ESFOLA de cadáver (#626, ADR 0048 d.5/d.6) — só o `combat-v4`,
+ * como o de Charms. É o que declara a ORDEM do sorteio: o abate rola o loot e, logo depois, o da
+ * esfola, e este só corre com a ferramenta na mochila e um monstro esfolável (sem ferramenta o
+ * `session.rng` não é tocado, então a hunt de quem nunca teve uma consome exatamente o que
+ * consumia). Numa sessão ainda fixada em `combat-v3` nenhuma ferramenta esfola nada (invariante 7).
+ */
+export function hasSkinningStage(compatibilityProfile: string | undefined): boolean {
+  return compatibilityProfile === 'combat-v4';
+}
+
+/**
  * O perfil executa o estágio de Hazard (#632, ADR 0052 d.7): o crítico e o reforço do monstro, a
  * esquiva do monstro, a XP e as rolagens extras de loot de uma hunt com `hazardZoneId`. Só o
  * `combat-v4` — como os Charms, o estágio muda resultado e ordem de sorteio, e uma sessão fixada
