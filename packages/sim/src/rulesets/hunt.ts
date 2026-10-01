@@ -6212,10 +6212,7 @@ const slots = bot.groups.get(group);
    * no magic level como somam no dano da runa e na cura da poção.
    */
   #runeScaling(character: CharacterRuntime): SpellScaling {
-    const magic = this.#options.skills.get('magic');
-    const magicLevel = (magic === undefined ? 0 : character.skills.levelOf(magic))
-      + character.inventory.skillBonus(this.#options.items, 'magic')
-      + character.conditions.skillBonus('magic');
+    const magicLevel = this.#magicLevelOf(character);
     return {
       skillLevel: magicLevel, powerScale: 1, magicLevel,
       // O ML especializado por elemento (#680): a fórmula da runa soma o do elemento DELA.
@@ -6240,17 +6237,14 @@ const slots = bot.groups.get(group);
     const skillId = spellSkill === SPELL_SKILL_WEAPON
       ? this.#equippedWeaponSkillId(character) : spellSkill;
     const skill = this.#options.skills.get(skillId);
-    const magic = this.#options.skills.get('magic');
     return {
-      skillLevel: (skill === undefined ? 0 : character.skills.levelOf(skill))
+      skillLevel: (skill === undefined ? 0 : this.#loyaltyLevelOf(character, skill))
         + character.inventory.skillBonus(this.#options.items, skillId)
         + character.conditions.skillBonus(skillId),
       // A skill de magia escala o poder FIXO, como a de arma escala o golpe (FUN-75).
       powerScale: this.#scaledPower(character, 'spell-cast', 1),
       // A fórmula canônica de CURA (#475) escala pelo magic level, em toda vocação.
-      magicLevel: (magic === undefined ? 0 : character.skills.levelOf(magic))
-        + character.inventory.skillBonus(this.#options.items, 'magic')
-        + character.conditions.skillBonus('magic'),
+      magicLevel: this.#magicLevelOf(character),
       // O termo de arma da fórmula baseada em `attack` (#523: Groundshaker, Berserk, Fierce
       // Berserk, Front Sweep, Whirlwind Throw). `0` desarmado — a mesma resposta honesta de
       // `weaponAttack`, nunca um número inventado.
@@ -7217,8 +7211,7 @@ const slots = bot.groups.get(group);
       if (supply.requires.level !== undefined && character.level < supply.requires.level) {
         return blocked('not-in-catalog');
       }
-      const magic = this.#options.skills.get('magic');
-      const magicLevel = magic === undefined ? 0 : character.skills.levelOf(magic);
+      const magicLevel = this.#magicLevelOf(character);
       if (supply.requires.magicLevel !== undefined && magicLevel < supply.requires.magicLevel) {
         // Motivo PRÓPRIO (RF-02): o `#perform` devolve `magic-level-too-low`, e o espelho do
         // `slotStates` tem de coincidir com ele (DT-08) — genérico aqui é o cliente sem a
@@ -9539,7 +9532,7 @@ const slots = bot.groups.get(group);
     // O bônus de equipamento da mesma skill (#524) entra aqui — no dano E na chance de acerto à
     // distância (#522), como a skill do Tibia já inclui o `skillDist` do item — MAIS o de
     // condição (#576: Berserk Potion soma 5 em `melee`, Bullseye Potion soma 5 em `distance`).
-    return (skill === undefined ? 0 : character.skills.levelOf(skill))
+    return (skill === undefined ? 0 : this.#loyaltyLevelOf(character, skill))
       + (family === undefined ? 0 : character.inventory.skillBonus(this.#options.items, family.skillId))
       + (family === undefined ? 0 : character.conditions.skillBonus(family.skillId));
   }
@@ -9894,7 +9887,7 @@ const slots = bot.groups.get(group);
     for (let i = 0; i < definitions.length; i += 1) {
       const definition = definitions[i] as Skill;
       if (definition.damagePerLevel === 0) continue;
-      power *= powerMultiplier(definition, character.skills.levelOf(definition));
+      power *= powerMultiplier(definition, this.#loyaltyLevelOf(character, definition));
     }
     // A postura (#155) escala o golpe e o tiro aqui; a magia é escalada dentro de `castSpell`,
     // por alvo — aplicar nos dois lugares contaria a mesma postura duas vezes.
@@ -11152,6 +11145,38 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * O nível desta skill COM o bônus de Loyalty (#628, ADR 0052 d.5) — o `Player::getLoyaltySkill`
+   * que `getSkillLevel` do Canary usa no lugar do nível base, e o `getLoyaltyMagicLevel` que
+   * `getMagicLevel` usa para o magic level. É o nível que ESCALA o golpe, a magia, a defesa e a
+   * cura e que confere requisito de runa; as leituras que não são "uso da skill" — ganhar tries,
+   * o estágio de rate (`getBaseMagicLevel`), a penalidade de morte — continuam no nível BASE
+   * (`skills.levelOf`), como no Canary.
+   *
+   * Sem bônus (o normal: menos de 360 dias de conta), é o nível base direto — sem achar a
+   * vocação nem calcular fator nenhum.
+   */
+  #loyaltyLevelOf(character: CharacterRuntime, definition: Skill): number {
+    if (character.loyaltyBonusPercent === 0) return character.skills.levelOf(definition);
+    return character.loyaltyLevelOf(
+      definition, skillFactorFor(definition, this.#vocationOf(character), this.#options.progression),
+    );
+  }
+
+  /**
+   * O magic level EFETIVO (`Player::getMagicLevel` do Canary): o do Loyalty (#628) mais o bônus
+   * de equipamento (#524) e o de condição (#576) — as três fontes somam, como somam no dano da
+   * runa e na cura da poção. É o número que a fórmula de magia lê e o que o requisito de
+   * `magicLevel` de uma runa confere; `#runeScaling`, `#spellScaling` e o espelho de
+   * `slotStates` leem DESTE ponto só, para o "bloqueada" da tela nunca discordar do disparo.
+   */
+  #magicLevelOf(character: CharacterRuntime): number {
+    const magic = this.#options.skills.get('magic');
+    return (magic === undefined ? 0 : this.#loyaltyLevelOf(character, magic))
+      + character.inventory.skillBonus(this.#options.items, 'magic')
+      + character.conditions.skillBonus('magic');
+  }
+
+  /**
    * A regeneração passiva DESTE personagem (#521, ADR 0037): a da vocação escolhida, ou a da
    * tabela base (sem vocação — Canary `vocations.xml`, id 0 "None") para quem ainda não tem
    * uma. Cada vocação regenera num ritmo diferente no Tibia; antes da #521 era um número só
@@ -11255,7 +11280,7 @@ const slots = bot.groups.get(group);
     // skill, sem exceção para `SKILL_SHIELD` (`player.cpp:7480`) — a mesma leitura que
     // `#skillLevelOf` já faz para a skill de arma/punho. Nenhum item do catálogo declara hoje
     // um bônus de `shielding` (#549), mas a fórmula fica correta para o dia em que um declarar.
-    return character.skills.levelOf(skill)
+    return this.#loyaltyLevelOf(character, skill)
       + character.inventory.skillBonus(this.#options.items, skillId);
   }
 
@@ -11411,7 +11436,7 @@ const slots = bot.groups.get(group);
     // O malus de condição (#576: Berserk/Bullseye tiram 10 de `shielding`) entra na MESMA skill
     // que escala a defesa — `powerMultiplier` já pisa em `Math.max(0, …)`, então o malus nunca
     // deixa o nível efetivo negativo, só encosta no piso de `startingLevel`.
-    const level = character.skills.levelOf(skill) + character.conditions.skillBonus(skillId);
+    const level = this.#loyaltyLevelOf(character, skill) + character.conditions.skillBonus(skillId);
     return {
       kind: source.kind,
       defense: Math.round(source.defense * powerMultiplier(skill, level)),

@@ -3950,6 +3950,56 @@ export const boostedSchema = z.object({
 export type Boosted = z.infer<typeof boostedSchema>;
 
 /**
+ * O Loyalty (M44, #628, ADR 0052 decisão 5): o bônus percentual que a idade da CONTA dá a toda
+ * skill e ao magic level. Os números são do Canary — `config.lua.dist:239-244`
+ * (`loyaltyEnabled`, `loyaltyPointsPerCreationDay`, `loyaltyBonusPercentageMultiplier`) e a tabela
+ * `loyaltySystem.bonus` de `data/libs/functions/player.lua:762-790` (`initializeLoyaltySystem`).
+ *
+ * `pointsPerCreationDay` × dias de conta = pontos de Loyalty (`iologindata_load_player.cpp:114`);
+ * o bônus é o `percent` do MAIOR degrau cujo `minPoints` os pontos alcançam, multiplicado por
+ * `bonusPercentageMultiplier` e TRUNCADO para inteiro (`setLoyaltyBonus(uint16_t)`). Os dois
+ * parâmetros de Premium do Canary (`loyaltyPointsPerPremiumDay*`) valem 0 no `config.lua.dist` e
+ * o Draconya não rastreia dias de Premium comprados, então ficam de fora — o resultado é o mesmo.
+ *
+ * Quem calcula é a `api`, na emissão do ticket (`packages/server/src/loyalty.ts`); o valor
+ * viaja no ticket e fica FIXO no personagem pela sessão (invariante 7) — o `sim` nunca lê conta
+ * nem relógio (invariante 1). Opcional no conteúdo: o de teste não fala de Loyalty, e sem ele
+ * nenhum ticket carrega bônus.
+ */
+export const loyaltyTierSchema = z.object({
+  /** Pontos de Loyalty mínimos para este degrau (`minPoints` do Canary). */
+  minPoints: z.number().int().nonnegative(),
+  /** O bônus em percentual inteiro sobre os tries/mana totais (`percentage` do Canary). */
+  percent: z.number().int().positive(),
+});
+export type LoyaltyTier = z.infer<typeof loyaltyTierSchema>;
+
+export const loyaltySchema = z.object({
+  id: z.literal('baseline'),
+  /** `loyaltyEnabled` do Canary. Desligado, nenhum ticket carrega bônus. */
+  enabled: z.boolean(),
+  /** `loyaltyPointsPerCreationDay` do Canary (padrão 1). */
+  pointsPerCreationDay: z.number().int().nonnegative(),
+  /** `loyaltyBonusPercentageMultiplier` do Canary (padrão 1.0). */
+  bonusPercentageMultiplier: z.number().nonnegative(),
+  /** Os degraus em ordem CRESCENTE de `minPoints` — o laço do Canary fica com o último que cabe. */
+  tiers: z.array(loyaltyTierSchema).min(1),
+  _open: z.string().optional(),
+}).superRefine((value, context) => {
+  for (let i = 1; i < value.tiers.length; i += 1) {
+    const previous = value.tiers[i - 1];
+    const tier = value.tiers[i];
+    if (previous !== undefined && tier !== undefined && tier.minPoints <= previous.minPoints) {
+      context.addIssue({
+        code: 'custom', path: ['tiers', i, 'minPoints'],
+        message: 'os degraus de Loyalty precisam vir em ordem crescente de minPoints',
+      });
+    }
+  }
+});
+export type Loyalty = z.infer<typeof loyaltySchema>;
+
+/**
  * Os níveis do Bosstiary por raridade (#629): quantos abates levam a cada um dos três níveis e
  * quantos pontos de boss o nível rende — a tabela `IOBosstiary::levelInfos` do Canary
  * (`src/io/io_bosstiary.hpp`, 47dfd51: Bane 25/100/300 abates → 5/15/30 pontos, Archfoe 5/20/60 →

@@ -1,7 +1,7 @@
 // Estado quente do personagem. A sessão dona é o único objeto que escreve aqui
 // (invariante 9) — é também o que dispensa lock sobre o gold.
 
-import type { AmmoFamily, Ammunition, Item, Vocation } from '@draconya/content';
+import type { AmmoFamily, Ammunition, Item, Skill, Vocation } from '@draconya/content';
 import type { Direction } from './area.js';
 import { FULL_BLOCK_CHARGE, isFullBlockCharge } from './combat/block-charge.js';
 import type { BlockChargeState } from './combat/block-charge.js';
@@ -23,6 +23,7 @@ import { Contribution } from './death.js';
 import type { ContributionState } from './death.js';
 import { Inventory } from './inventory.js';
 import type { CarriedItem, ContainerRules, InventoryState } from './inventory.js';
+import { LoyaltyLevels } from './loyalty.js';
 import { Skills } from './skills.js';
 import type { SkillsState } from './skills.js';
 import { UNSET_STORAGE_VALUE, readCharacterStorage } from './character-storage.js';
@@ -73,6 +74,16 @@ export interface CharacterState {
    * personagem aplica o bônus.
    */
   readonly boostedMonsterId?: string;
+  /**
+   * O bônus de Loyalty (M44, #628, ADR 0052 decisão 5), em percentual inteiro: a `api` o calcula
+   * da idade da conta na emissão do ticket, e ele fica FIXADO aqui como a versão de conteúdo
+   * (invariante 7) — a sessão nunca relê conta nem relógio, e o bônus sobrevive a toda transição
+   * Cidade↔hunt e a toda retomada de snapshot. É o `loyaltyBonusPercent` de `Player` no Canary,
+   * calculado no login e nunca atualizado durante ele. Ausente é zero: ticket sem o dado
+   * (conteúdo sem `loyalty/`, conta sem degrau, `api` antigo em deploy em rolagem), o normal de
+   * quem tem menos de 360 dias de conta. Opcional, então o `SNAPSHOT_FORMAT_VERSION` não subiu.
+   */
+  readonly loyaltyBonusPercent?: number;
   /**
    * Stamina que sobrava em `staminaUpdatedAtMs`, em milissegundos (§10). NÃO é decrementada
    * por ninguém fora da hunt: o valor de agora é calculado na leitura (ver `stamina.ts`).
@@ -398,10 +409,14 @@ export class CharacterRuntime {
   vocationId: string | null;
   /** Ver `CharacterState.boostedMonsterId`. Nunca escrito depois da construção — fixado. */
   readonly boostedMonsterId?: string;
+  /** Ver `CharacterState.loyaltyBonusPercent`. Nunca escrito depois da construção — fixado. */
+  readonly loyaltyBonusPercent: number;
   staminaMs: number | null;
   staminaUpdatedAtMs: number;
   /** Saldo-base privado; só `settleGoldDelta` pode incorporá-lo ao extrato já aceito. */
   #gold: number;
+  /** Cache dos tries acumulados por skill — derivado, nunca vai ao snapshot. Ver `LoyaltyLevels`. */
+  readonly #loyaltyLevels = new LoyaltyLevels();
   goldDelta: number;
   alive: boolean;
   speed: number;
@@ -499,6 +514,10 @@ export class CharacterRuntime {
     this.soul = state.soul ?? 0;
     this.vocationId = state.vocationId ?? null;
     if (state.boostedMonsterId !== undefined) this.boostedMonsterId = state.boostedMonsterId;
+    // Inteiro não negativo: o Canary guarda em `uint16_t` (`setLoyaltyBonus`), e um valor torto
+    // (snapshot à mão) vale zero em vez de virar `NaN` dentro da conta de tries.
+    this.loyaltyBonusPercent = Number.isFinite(state.loyaltyBonusPercent)
+      ? Math.max(0, Math.floor(state.loyaltyBonusPercent as number)) : 0;
     this.staminaMs = state.staminaMs ?? null;
     this.staminaUpdatedAtMs = state.staminaUpdatedAtMs ?? 0;
     this.#gold = state.gold ?? 0;
@@ -721,6 +740,22 @@ export class CharacterRuntime {
     return true;
   }
 
+  /**
+   * O nível desta skill COM o bônus de Loyalty (#628) — `Player::getLoyaltySkill` para as skills
+   * de uso e `getLoyaltyMagicLevel` para o magic level. É o nível que dano, chance, requisito de
+   * runa e cura leem; o BASE (`skills.levelOf`) continua sendo o que ganha tries, paga a penalidade
+   * de morte e escolhe o estágio de rate. `factor` é o da vocação (`skillFactorFor`); sem bônus a
+   * resposta é o nível base, sem conta nenhuma — o caminho de todo personagem com menos de 360
+   * dias de conta.
+   */
+  loyaltyLevelOf(definition: Skill, factor: number = definition.curve.factor): number {
+    const level = this.skills.levelOf(definition);
+    if (this.loyaltyBonusPercent === 0) return level;
+    return this.#loyaltyLevels.levelOf(
+      definition, level, this.skills.pointsOf(definition), this.loyaltyBonusPercent, factor,
+    );
+  }
+
   getState(): CharacterState {
     return {
       id: this.id,
@@ -734,6 +769,7 @@ export class CharacterRuntime {
       soul: this.soul,
       vocationId: this.vocationId,
       ...(this.boostedMonsterId === undefined ? {} : { boostedMonsterId: this.boostedMonsterId }),
+      ...(this.loyaltyBonusPercent === 0 ? {} : { loyaltyBonusPercent: this.loyaltyBonusPercent }),
       staminaMs: this.staminaMs,
       staminaUpdatedAtMs: this.staminaUpdatedAtMs,
       speed: this.speed,
