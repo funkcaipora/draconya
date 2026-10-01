@@ -158,3 +158,7 @@ Nenhum NPC importado ensina estas magias (no Canary elas vêm de outro caminho �
 | `great-death-beam` | sorcerer | AUSENTE |
 | `levitate-down` | — | 500 |
 | `levitate-up` | — | 500 |
+
+## Mudanças nesta importação
+
+Nenhuma — o dado commitado já confere com o Canary.
