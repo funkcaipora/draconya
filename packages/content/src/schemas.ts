@@ -1697,8 +1697,8 @@ export const INVISIBLE_CONDITION_KEY = 'invisible' as const;
 /**
  * As chaves RESERVADAS das três condições de CONTROLE (M44-04, #622): `CONDITION_ROOTED`,
  * `CONDITION_FEARED` e `CONDITION_PACIFIED` do Canary (`creatures_definitions.hpp:140-144`). Sem
- * campo próprio no estado — a semântica inteira mora no `sim` (`Conditions.hasRooted`/
- * `hasFeared`/`hasPacified`, reconhecidas pela chave, como `hasDrunk`) —, e por isso a chave é
+ * campo próprio no estado — a semântica inteira mora no `sim` (`Conditions.isActive`, que lê o prazo
+ * da chave reservada, como `hasDrunk` lê a do drunk) —, e por isso a chave é
  * reservada: um `buff` copiado com `key: 'rooted'` por engano prenderia quem o carrega. `rooted`
  * proíbe QUALQUER passo (`Game::internalMoveCreature`), `feared` força a fuga (`ConditionFeared`) e
  * `pacified` proíbe o golpe e a magia agressiva (`Player::doAttacking`/`Spell::playerSpellCheck`).
@@ -1850,7 +1850,7 @@ export const conditionEffectSchema = z.discriminatedUnion('kind', [
    * - `rooted`: nenhum passo sai (`Game::internalMoveCreature` recusa, `game.cpp:1965`);
    * - `feared`: o personagem foge do LANÇADOR — o `sim` guarda de onde no estado da condição
    *   (`ConditionState.flee`) e conduz a caminhada forçada (`ConditionFeared`,
-   *   `condition.cpp:2163-2380`); não pode lançar magia nem usar runa (`spells.cpp:104,503`);
+   *   `condition.cpp:2163-2455`); não pode lançar magia nem usar runa (`spells.cpp:104,503`);
    * - `pacified`: sem golpe e sem magia AGRESSIVA (`Player::doAttacking`, `player.cpp:3982`;
    *   `Spell::playerSpellCheck`, `spells.cpp:517`).
    */
