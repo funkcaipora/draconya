@@ -440,15 +440,21 @@ describe('a stamina não anda no Treino, em NENHUMA saída (ADR 0060 d.14c)', ()
     expect(receipt.staminaUpdatedAtMs).toBe(f.now());
   });
 
-  it('só o Treino segura o marco: o extrato da Cidade não leva stamina nenhuma', async () => {
-    // Trava a condição `type === 'training'` contra generalizar o `holdStamina` para toda sessão.
+  it('só o Treino segura o marco: o extrato da Cidade leva a stamina que a runtime tem, com o marco da ENTRADA', async () => {
+    // Trava a condição `type === 'training'` contra generalizar o `holdStamina` para toda sessão. O
+    // extrato de estado da Cidade leva a stamina (#823: todo extrato é o estado absoluto inteiro,
+    // para o mais velho poder ser descartado sem perda), mas NÃO a segura: o marco continua o da
+    // entrada, e a hora que passou na Cidade segue sendo recuperação no login seguinte. Generalizar
+    // o `holdStamina` o levaria a `f.now()`.
     const f = fixture({ gold: 1_000, staminaMs: 5 * HOUR });
     const { viewer } = await attach(f);
     f.advanceClock(HOUR);
     buySword(f, viewer as NonNullable<typeof viewer>);
     await f.host.release('hero', 1000, 'logout');
     const receipt = f.saved.at(-1) as SessionReceipt;
-    expect(receipt.staminaUpdatedAtMs).toBeUndefined();
+    expect(receipt.staminaMs).toBe(5 * HOUR);
+    expect(receipt.staminaUpdatedAtMs).toBe(0);
+    expect(receipt.staminaUpdatedAtMs).toBeLessThan(f.now());
   });
 });
 
