@@ -86,11 +86,10 @@ export async function writePendingReceipts(
  *
  * O `SCAN` não tem ordem e `pending()` corta em 200: com fila grande (um `jobs` que ficou fora do
  * ar, uma drenagem em massa) o extrato MAIS NOVO de um personagem pode vir sem o mais velho, e
- * liquidá-lo assim faria o mais velho — que traz absolutos que o novo não carrega (a hunt leva
- * skills, stamina, comida e storages; o extrato de estado da Cidade, não) — chegar depois com a
- * guarda de versão fechada, e esses campos se perderiam para sempre. A fonte da ordem de cada
- * personagem é o índice por versão (`pendingFor`), que já é a do ticket: o `SCAN` só diz QUAIS
- * personagens têm pendência.
+ * liquidá-lo assim faria o mais velho chegar depois com a guarda de versão fechada — perdendo o
+ * que só ele carrega (o item, que é delta, e tudo o que um extrato de um nó anterior ou parcial
+ * deixou de levar). A fonte da ordem de cada personagem é o índice por versão (`pendingFor`), que
+ * já é a do ticket: o `SCAN` só diz QUAIS personagens têm pendência.
  *
  * Do `SCAN` sobra só o que o índice não conhece: extrato SEM entrada de índice (de um nó anterior
  * ao #194) e versionado que o índice não lista. Quando o índice está CHEIO (`GROUP_LIMIT`), o
@@ -213,13 +212,15 @@ async function writeReceipts(
         );
 
         // **O que falhou SEGURA os seguintes do mesmo personagem** (#823): a guarda de versão só
-        // protege o que o extrato mais NOVO carrega. O de estado da Cidade não leva skills, stamina,
-        // comida nem storages, e se ele liquidasse antes do extrato de hunt que falhou, o da hunt
-        // chegaria depois com a guarda fechada e esses campos se perderiam para sempre — o `jobs`
-        // seguia adiante, como aqui antes, e o ticket recusado (`progress-not-settled`) convidava
-        // o retry que os perdia. Parar é seguro: um extrato que falha já trancava o ticket do
-        // personagem (`failed > 0` → 503), então segurar os seguintes não tranca nada que já não
-        // estivesse trancado.
+        // protege o que o extrato mais NOVO carrega. Antes do #823 o `jobs` seguia adiante depois
+        // de uma falha, e o extrato de estado da Cidade — que não levava skills, stamina, comida
+        // nem storages — liquidava na frente do de hunt que falhou: o da hunt chegava depois com a
+        // guarda fechada e esses campos se perdiam para sempre, e o ticket recusado
+        // (`progress-not-settled`) convidava o retry que os perdia. Hoje todo extrato é o estado
+        // inteiro, mas a ordem continua sendo o que protege o item (`acquired`/`removedInstances`
+        // são deltas) e o que um extrato de nó anterior deixou de levar. Parar é seguro: um
+        // extrato que falha já trancava o ticket do personagem (`failed > 0` → 503), então segurar
+        // os seguintes não tranca nada que já não estivesse trancado.
         //
         // A exceção é o extrato que não liquida NUNCA (dado torto): depois de `STUCK_RECEIPT_AFTER`
         // varreduras seguidas ele deixa de segurar os seguintes, para o personagem não ficar
