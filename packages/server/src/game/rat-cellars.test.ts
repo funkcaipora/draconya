@@ -169,6 +169,32 @@ describe('Convince Creature e Animate Dead com o conteúdo REAL da Rat Cellars (
     expect(session.aggregates.goldSpent).toBeGreaterThanOrEqual(375 * skeletons.length);
     expect(hero.mana).toBe(5_000);
   });
+
+  // A invocação nunca morre pela mão do mestre e o bot não a ataca: parada em cima do próximo tile da
+  // rota, ela travava o passo do herói para sempre (o herói de level 30 dava 14 abates em 900 s contra
+  // 102 sem a runa). No Canary o jogador ATRAVESSA a invocação de jogador no mundo no-pvp
+  // (`Player::canWalkthrough`), então o laço continua girando com o convencido ou o Skeleton no caminho.
+  it.each(['convince-creature-rune', 'animate-dead-rune'])(
+    'o herói continua andando a rota com a invocação (%s) no caminho — não trava',
+    (supplyId) => {
+      const content = real();
+      const { session, ruleset, hero } = enterWithRune(content, runeConfig(supplyId, true));
+      run(session, 240_000, 100);
+      expect(ruleset.monsters.some((m) => m.alive && m.masterId === 'hero')).toBe(true);
+
+      // Dali em diante, a posição do herói muda ao longo dos 300 s seguintes (travado, quase nunca mudaria: 0 e 80 sem a travessia, 256 e 248 com ela).
+      let changes = 0;
+      let last = `${hero.position.x},${hero.position.y}`;
+      for (let second = 0; second < 300; second += 1) {
+        run(session, 1_000, 100);
+        const now = `${hero.position.x},${hero.position.y}`;
+        if (now !== last) changes += 1;
+        last = now;
+      }
+      expect(changes).toBeGreaterThan(150);
+      expect(hero.alive).toBe(true);
+    },
+  );
 });
 
 describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)', () => {

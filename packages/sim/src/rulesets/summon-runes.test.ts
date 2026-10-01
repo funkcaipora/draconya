@@ -34,8 +34,8 @@ const routeTiles = ring([
   [7, 3], [6, 3], [5, 3], [4, 3], [3, 3], [2, 3], [1, 3], [1, 2],
 ]);
 const hunt = { id: 'field', name: 'Field', recommendedLevel: 1, mapId: 'field', routeId: 'field' };
-const routeWith = (spawnPoints: readonly object[]) => (
-  { id: 'field', mapId: 'field', tiles: routeTiles, spawnPoints }
+const routeWith = (spawnPoints: readonly object[], tiles: readonly object[] = routeTiles) => (
+  { id: 'field', mapId: 'field', tiles, spawnPoints }
 );
 /** Um ponto de spawn no tile `routeIndex` da rota: o monstro nasce ali (o centro vem primeiro na busca). */
 const spawnAt = (routeIndex: number, monsterId: string, respawnDelayMs = 30_000) =>
@@ -92,6 +92,10 @@ const convincible = {
 const stubborn = { ...convincible, id: 'stubborn', name: 'Stubborn', convinceable: false };
 /** `convinceable` sem `manaCost`: o script debita `getManaCost()` zerado — de graça. */
 const freebie = { ...convincible, id: 'freebie', name: 'Freebie', manaCost: undefined };
+/** O alvo hostil das áreas: parado, inofensivo e com vida de sobra — só o dano que ele leva importa. */
+const tough = {
+  ...base, id: 'tough', name: 'Tough', health: 1_000_000, experience: 0, loot: { items: [] },
+};
 /** O que a Animate Dead ergue. */
 const skeleton = {
   ...base, id: 'skeleton', name: 'Skeleton', health: 50, experience: 0, loot: { items: [] }, manaCost: 300,
@@ -122,7 +126,7 @@ const animateRune = {
 
 const raw = (over: Partial<RawContent> = {}): RawContent => {
   const baseContent: RawContent = {
-    monsters: [convincible, stubborn, freebie, skeleton, victim, heavy, richVictim], hunts: [hunt],
+    monsters: [convincible, stubborn, freebie, skeleton, victim, heavy, richVictim, tough], hunts: [hunt],
     vocations: [], progression: [progression], combat: [combat], stamina: [stamina], party: [party],
     spells: [], skills, weaponFamilies, items: [anvil], ammunition: [],
     supplies: [convinceRune, animateRune],
@@ -170,6 +174,9 @@ interface StartOptions {
   readonly gold?: number;
   readonly capacity?: number;
   readonly supplies?: readonly object[];
+  readonly spells?: readonly object[];
+  /** Outro mapa e outra rota (o corredor de um tile): o padrão é a sala de 7 × 3 em anel. */
+  readonly layout?: { readonly map: typeof map; readonly tiles: readonly object[] };
   readonly attackPower?: number;
   readonly seed?: string;
 }
@@ -178,8 +185,10 @@ function start(options: StartOptions = {}) {
   const config = options.config ?? botConfig([]);
   const heroIds = options.heroes ?? ['hero'];
   const loaded = buildContent(raw({
-    routes: [routeWith(options.spawnPoints ?? [])],
+    routes: [routeWith(options.spawnPoints ?? [], options.layout?.tiles)],
+    ...(options.layout === undefined ? {} : { maps: [options.layout.map] }),
     ...(options.supplies === undefined ? {} : { supplies: options.supplies }),
+    ...(options.spells === undefined ? {} : { spells: options.spells }),
     combat: [{ ...combat, player: { ...combat.player, attackPower: options.attackPower ?? 0 } }],
   }));
   const botConfigs = Object.fromEntries(heroIds.map((id) => [id, config]));
@@ -659,5 +668,252 @@ describe('Animate Dead (`animate_dead_rune.lua`, ADR 0057 d.6)', () => {
     expect(fast.gold).toBe(-750);
     expect(fast.corpses).toBe(0);
     expect(outcome(1_000)).toEqual(fast);
+  });
+});
+
+// --- a invocação de jogador no CAMINHO e na ÁREA do mestre (revisão do #600) ---------------------
+//
+// As duas regras do mundo no-pvp (ADR 0060) que o #598 não precisava, porque o catálogo real ainda não
+// tinha nenhuma invocação de jogador: o jogador ATRAVESSA a invocação (`Player::canWalkthrough`) e a área
+// dele nunca a atinge (`Combat::canTargetCreature`).
+
+/** Um corredor de UM tile de largura: nada contorna quem está no caminho, só passar por cima. */
+const corridorMap = { id: 'field', z: MAP_Z, grid: ['#########', '#.......#', '#########'] };
+const corridorRoute = ring([
+  [1, 1], [2, 1], [3, 1], [4, 1], [5, 1], [6, 1], [7, 1], [6, 1], [5, 1], [4, 1], [3, 1], [2, 1],
+]);
+const corridor = { map: corridorMap, tiles: corridorRoute };
+
+const heroMoves = (events: readonly DomainEvent[]) =>
+  events.filter((e) => e.kind === 'creature-moved' && e.creatureId === 'hero');
+
+describe('o jogador atravessa a invocação de jogador (`Player::canWalkthrough`, mundo no-pvp)', () => {
+  it('o passo do herói para o tile da invocação troca os dois de lugar, e a ocupação não muda', () => {
+    const { session, hero, ruleset, heroes } = start({
+      spawnPoints: [spawnAt(1, 'convincible')], config: manualRune('convince-test'),
+    });
+    session.advanceBy(100);
+    const pet = onlyMonster(ruleset, 'convincible');
+    expect(ruleset.useSlot(session, 'hero', 0, 0, aimAt(pet))).toEqual({ ok: true });
+    expect(heroes).toHaveLength(1);
+    // A sala é de 7 × 3 e a invocação fica parada onde estava: o herói vem do tile vizinho dela.
+    const from = { ...hero.position };
+    const there = { ...pet.position };
+    expect(Math.max(Math.abs(from.x - there.x), Math.abs(from.y - there.y))).toBe(1);
+    session.drainEvents();
+
+    expect(ruleset.requestMove(session, 'hero', { x: there.x, y: there.y }))
+      .toMatchObject({ ok: true, from: { x: from.x, y: from.y }, to: { x: there.x, y: there.y } });
+
+    expect({ x: hero.position.x, y: hero.position.y }).toEqual({ x: there.x, y: there.y });
+    expect({ x: pet.position.x, y: pet.position.y }).toEqual({ x: from.x, y: from.y });
+    expect(pet.alive).toBe(true);
+    expect(pet.masterId).toBe('hero');
+    // A apresentação vê as DUAS criaturas se mexerem, a do herói primeiro.
+    const moved = session.drainEvents().filter((e) => e.kind === 'creature-moved');
+    expect(moved.map((e) => e.kind === 'creature-moved' && e.creatureId)).toEqual(['hero', pet.subject]);
+    // Os dois tiles continuam ocupados: um monstro hostil não entra em nenhum deles.
+    const next = ruleset.requestMove(session, 'hero', { x: from.x, y: from.y });
+    expect(next).toMatchObject({ ok: true });
+    expect({ x: pet.position.x, y: pet.position.y }).toEqual({ x: there.x, y: there.y });
+  });
+
+  it('atravessa também a invocação de um companheiro de party, e só a de jogador: o monstro comum bloqueia', () => {
+    const { session, ruleset, heroes } = start({
+      spawnPoints: [spawnAt(1, 'convincible'), spawnAt(2, 'tough')], heroes: ['a', 'b'],
+      config: manualRune('convince-test'),
+    });
+    session.advanceBy(100);
+    const pet = onlyMonster(ruleset, 'convincible');
+    const wall = onlyMonster(ruleset, 'tough');
+    expect(ruleset.useSlot(session, 'a', 0, 0, aimAt(pet))).toEqual({ ok: true });
+    const b = heroes[1];
+    if (b === undefined) throw new Error('sem segundo herói');
+    const apart = (target: MonsterRuntime) => Math.max(
+      Math.abs(b.position.x - target.position.x), Math.abs(b.position.y - target.position.y),
+    );
+    // `b` entra ao lado da invocação de `a` (a sala é pequena e a partida da rota é a mesma).
+    expect(apart(pet)).toBe(1);
+    const beside = { x: b.position.x, y: b.position.y };
+    const petAt = { x: pet.position.x, y: pet.position.y };
+
+    expect(ruleset.requestMove(session, 'b', { x: petAt.x, y: petAt.y })).toMatchObject({ ok: true });
+    expect({ x: b.position.x, y: b.position.y }).toEqual(petAt);
+    expect({ x: pet.position.x, y: pet.position.y }).toEqual(beside);
+    expect(pet.masterId).toBe('a');
+
+    // Agora `b` está ao lado do monstro HOSTIL: esse não se atravessa.
+    expect(apart(wall)).toBe(1);
+    expect(ruleset.requestMove(session, 'b', { x: wall.position.x, y: wall.position.y }))
+      .toEqual({ ok: false, reason: 'tile-occupied' });
+  });
+
+  /**
+   * O corredor de UM tile, com a invocação parada na rota: a mesma hunt, sem a invocação, dá a volta no
+   * corredor inteiro. A invocação (o convencido, ou o Skeleton erguido do cadáver) fica no caminho.
+   */
+  const lap = (stepMs: number, how: 'convince' | 'animate') => {
+    const { session, hero, ruleset } = start({
+      layout: corridor,
+      // O ponto da vítima não renasce na janela do teste (uma hora): o herói é pacifista, e o monstro
+      // hostil novo no meio do corredor o pararia por um motivo que não é o do teste.
+      spawnPoints: [spawnAt(3, how === 'convince' ? 'convincible' : 'victim', 3_600_000)],
+      config: manualRune(how === 'convince' ? 'convince-test' : 'animate-test'),
+      seed: `lap-${how}`,
+    });
+    session.advanceBy(100);
+    if (how === 'convince') {
+      expect(ruleset.useSlot(session, 'hero', 0, 0, aimAt(onlyMonster(ruleset, 'convincible'))))
+        .toEqual({ ok: true });
+    } else {
+      const dead = onlyMonster(ruleset, 'victim');
+      const at = { x: dead.position.x, y: dead.position.y };
+      kill(session, dead);
+      // Um múltiplo dos DOIS passos (100 ms e 1 s): a runa sai no mesmo instante lógico nas duas taxas.
+      run(session, UNMOVABLE_MS + 1_000, stepMs);
+      expect(ruleset.useSlot(session, 'hero', 0, 0, aimAtTile(at.x, at.y))).toEqual({ ok: true });
+    }
+    const pet = ownedBy(ruleset, 'hero')[0];
+    if (pet === undefined) throw new Error('sem invocação');
+    const events = run(session, 90_000, stepMs);
+    const moves = heroMoves(events);
+    return {
+      moves: moves.length,
+      farthest: Math.max(...moves.map((e) => (e.kind === 'creature-moved' ? e.to.x : 0))),
+      hero: { x: hero.position.x, y: hero.position.y },
+      pet: { x: pet.position.x, y: pet.position.y, alive: pet.alive, master: pet.masterId },
+    };
+  };
+
+  it.each(['convince', 'animate'] as const)(
+    'o herói NÃO trava na invocação (%s) em cima da rota de um corredor de um tile — 10 Hz e 1 Hz iguais',
+    (how) => {
+      const fast = lap(100, how);
+      // Sem a travessia o herói parava no tile antes da invocação para sempre (2 ou 3 passos no
+      // total): aqui ele dá a volta inteira, ida ao fim do corredor (x = 7) e volta, várias vezes.
+      expect(fast.farthest).toBe(7);
+      expect(fast.moves).toBeGreaterThan(60);
+      expect(fast.pet).toMatchObject({ alive: true, master: 'hero' });
+      expect(lap(1_000, how)).toEqual(fast);
+    },
+  );
+});
+
+describe('a área do mestre nunca atinge a invocação de jogador (`Combat::canTargetCreature`, mundo no-pvp)', () => {
+  const fireRune = {
+    id: 'fire-rune', name: 'Fire Rune', price: 10, group: 'attack', groupCooldownMs: 1_000,
+    effect: {
+      kind: 'damage', basePower: 400, range: 8, damageType: 'fire',
+      area: { shape: 'circle', radius: 3, centered: 'target' },
+    },
+  };
+  const singleRune = {
+    id: 'single-rune', name: 'Single Rune', price: 10, group: 'attack', groupCooldownMs: 1_000,
+    effect: { kind: 'damage', basePower: 400, range: 8, damageType: 'fire' },
+  };
+  const nova = {
+    id: 'nova', name: 'Nova', manaCost: 10, cooldownMs: 1_000,
+    effect: { kind: 'damage', basePower: 400, area: { shape: 'circle', radius: 3, centered: 'caster' }, damageType: 'fire' },
+  };
+  const config = botConfig([
+    { do: { kind: 'supply', supplyId: 'convince-test' }, auto: false },
+    { do: { kind: 'supply', supplyId: 'fire-rune' }, auto: false },
+    { do: { kind: 'spell', spellId: 'nova' }, auto: false },
+    { do: { kind: 'supply', supplyId: 'single-rune' }, auto: false },
+  ]);
+
+  /** O convencido (3, 1) ao lado do alvo hostil (4, 1), e o herói ainda na partida da rota. */
+  const scene = () => {
+    const started = start({
+      spawnPoints: [spawnAt(2, 'convincible'), spawnAt(3, 'tough')], config, heroes: ['hero', 'friend'],
+      supplies: [convinceRune, animateRune, fireRune, singleRune], spells: [nova],
+    });
+    started.session.advanceBy(100);
+    const pet = onlyMonster(started.ruleset, 'convincible');
+    const target = onlyMonster(started.ruleset, 'tough');
+    expect(started.ruleset.useSlot(started.session, 'hero', 0, 0, aimAt(pet))).toEqual({ ok: true });
+    expect(pet.masterId).toBe('hero');
+    return { ...started, pet, target };
+  };
+
+  it('a runa em área centrada no alvo acerta o alvo e poupa a invocação ao lado dele', () => {
+    const { session, ruleset, pet, target } = scene();
+    const health = pet.health;
+    expect(ruleset.useSlot(session, 'hero', 0, 1, aimAt(target))).toEqual({ ok: true });
+    expect(target.health).toBeLessThan(1_000_000);
+    expect(pet.health).toBe(health);
+    expect(pet.alive).toBe(true);
+  });
+
+  it('a magia em área centrada no lançador também poupa a invocação', () => {
+    const { session, ruleset, pet, target } = scene();
+    const health = pet.health;
+    expect(ruleset.useSlot(session, 'hero', 0, 2)).toEqual({ ok: true });
+    expect(target.health).toBeLessThan(1_000_000);
+    expect(pet.health).toBe(health);
+    expect(pet.alive).toBe(true);
+  });
+
+  it('a invocação de um COMPANHEIRO também fica de fora da área, e a mira de dano nela é `no-target`', () => {
+    const { session, ruleset, pet, target } = scene();
+    const health = pet.health;
+    // `friend` é outro personagem da party: a invocação é de `hero`, e a área dele não a acerta.
+    expect(ruleset.useSlot(session, 'friend', 0, 1, aimAt(target))).toEqual({ ok: true });
+    expect(target.health).toBeLessThan(1_000_000);
+    expect(pet.health).toBe(health);
+
+    session.advanceBy(1_100);
+    // Clicar na invocação alheia com um efeito de dano: a mira é inválida, como no Canary.
+    expect(ruleset.useSlot(session, 'friend', 0, 3, aimAt(pet)))
+      .toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+    expect(pet.health).toBe(health);
+    // E a do próprio mestre (o gate que já existia desde o #598).
+    expect(ruleset.useSlot(session, 'hero', 0, 3, aimAt(pet)))
+      .toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+    expect(pet.health).toBe(health);
+  });
+});
+
+describe('Animate Dead num tile SÓLIDO (`rune:isBlocking(true)` → `RETURNVALUE_NOTENOUGHROOM`)', () => {
+  const magicWall = {
+    id: 'wall-rune', name: 'Magic Wall Rune', price: 45, group: 'attack', groupCooldownMs: 1_000,
+    effect: {
+      kind: 'field', range: 8,
+      field: { id: 'wall-test', durationMs: 20_000, shape: { shape: 'point' }, blocksMovement: true },
+    },
+  };
+  const config = botConfig([
+    { do: { kind: 'supply', supplyId: 'animate-test' }, auto: false },
+    { do: { kind: 'supply', supplyId: 'wall-rune' }, auto: false },
+  ]);
+
+  it('com um campo bloqueante em cima do cadáver a runa recusa, e nada é gasto — o cadáver fica', () => {
+    const started = start({
+      spawnPoints: [spawnAt(4, 'victim')], config, supplies: [convinceRune, animateRune, magicWall],
+    });
+    const { session, hero, ruleset } = started;
+    session.advanceBy(100);
+    const dead = onlyMonster(ruleset, 'victim');
+    const at = { x: dead.position.x, y: dead.position.y };
+    kill(session, dead);
+    run(session, UNMOVABLE_MS + 500);
+    expect(ruleset.useSlot(session, 'hero', 0, 1, aimAtTile(at.x, at.y))).toEqual({ ok: true });
+    expect(ruleset.fields).toHaveLength(1);
+    session.advanceBy(1_100);
+    const gold = hero.goldDelta;
+
+    expect(ruleset.useSlot(session, 'hero', 0, 0, aimAtTile(at.x, at.y)))
+      .toEqual({ ok: false, reason: 'not-possible', retryInMs: 0 });
+    expect(ruleset.groundItems).toHaveLength(1);
+    expect(ownedBy(ruleset, 'hero')).toHaveLength(0);
+    expect(hero.goldDelta).toBe(gold);
+    expect(hero.cooldowns.remainingMs('group:support', session.nowMs)).toBe(0);
+
+    // O campo some (20 s): o tile volta a admitir, e a MESMA runa ergue o Skeleton NO tile do cadáver.
+    run(session, 20_000);
+    expect(ruleset.fields).toHaveLength(0);
+    expect(ruleset.useSlot(session, 'hero', 0, 0, aimAtTile(at.x, at.y))).toEqual({ ok: true });
+    const [summon] = ownedBy(ruleset, 'hero');
+    expect({ x: summon?.position.x, y: summon?.position.y }).toEqual(at);
   });
 });
