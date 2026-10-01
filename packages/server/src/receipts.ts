@@ -425,9 +425,11 @@ export class ReceiptStore {
   }
 
   /**
-   * Toda a fila, em ordem de `SCAN` — o `jobs` (`writeReceipts`) agrupa por personagem e ordena
-   * por versão antes de liquidar. Acha as três formas de chave, e é por isso que a varredura
-   * continua sendo o que apanha o extrato de um nó anterior que não tinha índice.
+   * Toda a fila, em ordem de `SCAN` e cortada em `limit` — o `jobs` só a usa para saber QUAIS
+   * personagens têm pendência: cada um é completado e ordenado pelo índice (`pendingFor`, em
+   * `completeGroups` do ledger), porque o corte pode entregar o extrato mais novo de um personagem
+   * sem o mais velho (#823). Acha as três formas de chave, e é por isso que a varredura continua
+   * sendo o que apanha o extrato de um nó anterior que não tinha índice.
    */
   async pending(limit = 200): Promise<SessionReceipt[]> {
     const receipts: SessionReceipt[] = [];

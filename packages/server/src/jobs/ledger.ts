@@ -31,6 +31,15 @@ export interface LedgerSweepOptions {
    * montado sem conteúdo em teste.
    */
   readonly progression?: Progression;
+  /**
+   * Quantas varreduras SEGUIDAS cada extrato já falhou, por identidade (`characterId|sessionId|seq`)
+   * (#823). É o que deixa o `jobs` desistir de esperar por um extrato que não liquida: depois de
+   * `STUCK_RECEIPT_AFTER` falhas ele deixa de segurar os seguintes do mesmo personagem (ver
+   * `writeReceipts`). O mapa vive no ciclo do `jobs`, entre uma varredura e outra, e é podado a
+   * cada uma — só ficam os que falharam agora. Ausente (a liquidação do ticket, os testes): o
+   * primeiro que falha segura os seguintes SEMPRE, e o ticket é recusado de qualquer jeito.
+   */
+  readonly failures?: Map<string, number>;
 }
 
 export interface LedgerSweepResult {
@@ -49,10 +58,69 @@ export function creditOf(receipt: SessionReceipt): number {
   return receipt.aggregates.goldGained - receipt.aggregates.goldSpent;
 }
 
+/**
+ * Quantas varreduras seguidas um extrato pode falhar antes de deixar de segurar os seguintes do
+ * mesmo personagem (#823). Cinco ciclos são ~50 s: o `jobs` tolera uma queda de conexão ou um
+ * deadlock sem desordenar nada, mas um extrato com dado torto — que falharia para sempre — não
+ * pode trancar o personagem até o TTL do Redis. Passado o prazo os seguintes liquidam sem ele, e
+ * quando (se) ele liquidar entram só os deltas dele: a guarda de versão já subiu.
+ */
+export const STUCK_RECEIPT_AFTER = 5;
+
+/** A identidade de um extrato: a mesma da chave do Redis e do `UNIQUE (session_id, seq)` do ledger. */
+const identityOf = (receipt: SessionReceipt): string =>
+  `${receipt.characterId}|${receipt.sessionId}|${receipt.seq}`;
+
+/** Quantos extratos de um personagem a varredura completa pelo índice — o teto do `pendingFor`. */
+const GROUP_LIMIT = 50;
+
 export async function writePendingReceipts(
   options: LedgerSweepOptions,
 ): Promise<LedgerSweepResult> {
-  return writeReceipts(await options.receipts.pending(), options);
+  const scanned = await options.receipts.pending();
+  return writeReceipts(await completeGroups(scanned, options.receipts), options);
+}
+
+/**
+ * Completa, personagem por personagem, o que o `SCAN` achou (#823, OW-02).
+ *
+ * O `SCAN` não tem ordem e `pending()` corta em 200: com fila grande (um `jobs` que ficou fora do
+ * ar, uma drenagem em massa) o extrato MAIS NOVO de um personagem pode vir sem o mais velho, e
+ * liquidá-lo assim faria o mais velho — que traz absolutos que o novo não carrega (a hunt leva
+ * skills, stamina, comida e storages; o extrato de estado da Cidade, não) — chegar depois com a
+ * guarda de versão fechada, e esses campos se perderiam para sempre. A fonte da ordem de cada
+ * personagem é o índice por versão (`pendingFor`), que já é a do ticket: o `SCAN` só diz QUAIS
+ * personagens têm pendência.
+ *
+ * Do `SCAN` sobra só o que o índice não conhece: extrato SEM entrada de índice (de um nó anterior
+ * ao #194) e versionado que o índice não lista. Quando o índice está CHEIO (`GROUP_LIMIT`), o
+ * versionado que ele não trouxe fica para o ciclo seguinte — liquidá-lo agora deixaria um buraco
+ * entre as versões, que é exatamente o que isto existe para não ter.
+ */
+async function completeGroups(
+  scanned: readonly SessionReceipt[],
+  store: ReceiptStore,
+): Promise<SessionReceipt[]> {
+  const found = new Map<string, SessionReceipt[]>();
+  for (const receipt of scanned) {
+    const group = found.get(receipt.characterId);
+    if (group === undefined) found.set(receipt.characterId, [receipt]);
+    else group.push(receipt);
+  }
+  const complete: SessionReceipt[] = [];
+  for (const [characterId, scannedOfCharacter] of found) {
+    const indexed = await store.pendingFor(characterId, GROUP_LIMIT);
+    const known = new Set(indexed.map(identityOf));
+    // Um `Map` pela identidade: o `SCAN` pode devolver a mesma chave mais de uma vez.
+    const orphans = new Map<string, SessionReceipt>();
+    if (indexed.length < GROUP_LIMIT) {
+      for (const receipt of scannedOfCharacter) {
+        if (!known.has(identityOf(receipt))) orphans.set(identityOf(receipt), receipt);
+      }
+    }
+    complete.push(...indexed, ...orphans.values());
+  }
+  return complete;
 }
 
 /**
@@ -86,6 +154,7 @@ async function writeReceipts(
 ): Promise<LedgerSweepResult> {
   let written = 0;
   let failed = 0;
+  const failedNow = new Set<string>();
 
   // POR PERSONAGEM, em ordem de versão (#823, OW-02): o que o Redis devolve não tem ordem (o
   // `SCAN` é por hash; o índice do ticket só a tem dentro de um personagem), e um personagem
@@ -93,7 +162,8 @@ async function writeReceipts(
   // antigo ao mais novo. Personagens diferentes não disputam nada, então a ordem entre eles é a
   // de chegada.
   for (const receipts of groupByCharacter(pending)) {
-    for (const receipt of receipts) {
+    for (const [position, receipt] of receipts.entries()) {
+      const identity = identityOf(receipt);
       try {
         // Uma transação: ou a linha de ledger e a progressão entram juntas, ou nenhuma das
         // duas. Separadas, uma queda no meio deixaria o gold creditado no ledger sem estar na
@@ -133,19 +203,52 @@ async function writeReceipts(
       } catch (error) {
         // O extrato FICA no Redis. Perder o crédito em silêncio é o defeito que este arquivo
         // existe para não ter; tentar de novo no próximo ciclo não custa nada.
-        //
-        // Os seguintes do MESMO personagem seguem: a guarda de versão (`applyProgression`) é o
-        // que faz liquidar o mais novo antes do que falhou ser seguro — o que falhou volta no
-        // próximo ciclo, entra os deltas dele e não desfaz nenhum absoluto. Parar no primeiro
-        // que falha teria o defeito oposto: um extrato que nunca liquida (dado torto) travaria
-        // todos os seguintes do personagem. A guarda não cobre item (`acquired` é delta): ver
-        // "Ordem e versão durável" no `AGENTS.md` do pacote.
         failed += 1;
+        failedNow.add(identity);
+        const attempts = (options.failures?.get(identity) ?? 0) + 1;
+        options.failures?.set(identity, attempts);
         options.logger.error(
-          { error, sessionId: receipt.sessionId, characterId: receipt.characterId },
+          { error, sessionId: receipt.sessionId, characterId: receipt.characterId, attempts },
           'Failed to write a session receipt to the ledger; keeping it for the next cycle',
         );
+
+        // **O que falhou SEGURA os seguintes do mesmo personagem** (#823): a guarda de versão só
+        // protege o que o extrato mais NOVO carrega. O de estado da Cidade não leva skills, stamina,
+        // comida nem storages, e se ele liquidasse antes do extrato de hunt que falhou, o da hunt
+        // chegaria depois com a guarda fechada e esses campos se perderiam para sempre — o `jobs`
+        // seguia adiante, como aqui antes, e o ticket recusado (`progress-not-settled`) convidava
+        // o retry que os perdia. Parar é seguro: um extrato que falha já trancava o ticket do
+        // personagem (`failed > 0` → 503), então segurar os seguintes não tranca nada que já não
+        // estivesse trancado.
+        //
+        // A exceção é o extrato que não liquida NUNCA (dado torto): depois de `STUCK_RECEIPT_AFTER`
+        // varreduras seguidas ele deixa de segurar os seguintes, para o personagem não ficar
+        // preso até o TTL do Redis. Os absolutos dele se perdem — é a degradação explícita, e
+        // vai ao log. Sem `failures` (o ticket) não há desistência.
+        const behind = receipts.length - position - 1;
+        if (behind === 0) continue;
+        if (options.failures !== undefined && attempts >= STUCK_RECEIPT_AFTER) {
+          options.logger.error(
+            { sessionId: receipt.sessionId, characterId: receipt.characterId, seq: receipt.seq, attempts, behind },
+            'A session receipt is stuck; the later receipts of the character settle without it, '
+              + 'and its absolute state will be dropped by the version guard',
+          );
+          continue;
+        }
+        options.logger.warn(
+          { sessionId: receipt.sessionId, characterId: receipt.characterId, behind },
+          'Holding the later receipts of the character behind the one that failed',
+        );
+        break;
       }
+    }
+  }
+
+  // Só ficam contados os que falharam AGORA: o que liquidou, ou sumiu (TTL), não pode deixar um
+  // contador para trás.
+  if (options.failures !== undefined) {
+    for (const identity of [...options.failures.keys()]) {
+      if (!failedNow.has(identity)) options.failures.delete(identity);
     }
   }
 
@@ -243,6 +346,15 @@ async function applyProgression(
   // "a última" precisa ser a de MAIOR versão, não a que o `SCAN` ou o `SMEMBERS` entregou por
   // último: só se escreve quando o extrato é mais novo que o que a coluna já viu, e a coluna sobe
   // na mesma transação. Extrato atrasado entra só com os deltas.
+  //
+  // **A guarda decide por EXTRATO, não por campo, e só é correta por duas razões** que este código
+  // não enxerga: (1) todo extrato versionado é o estado absoluto INTEIRO do personagem naquele
+  // instante — `#persistReceipt` (hunt) e `#saveDurableReceipt` (Cidade) levam o mesmo conjunto de
+  // campos, inclusive o estoque vazio —, então o mais novo substitui o mais velho por completo e
+  // descartar o velho não perde nada; (2) um personagem liquida COMPLETO e em ordem, e o primeiro
+  // extrato que falha segura os seguintes (`writeReceipts`), então o velho só chega depois do novo
+  // pela desistência explícita de `STUCK_RECEIPT_AFTER`. Quebrar qualquer uma das duas devolve o
+  // defeito de um extrato parcial mais novo apagando o que só o mais velho carregava.
   //
   // Extrato SEM versão (nó `game` anterior, ou liquidado por fora dele) segue a regra de antes —
   // escreve os absolutos — e NÃO mexe na coluna. É degradação de deploy em rolagem, não modo de
