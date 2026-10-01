@@ -626,7 +626,6 @@ describe('entrada em curso: reversão e joinedAtMs (#397, ADR 0035 decisão 6)',
     const SESSION_CLOCK_POLICY: Readonly<Record<keyof CharacterState, ClockPolicy>> = {
       lastAttackAtMs: 'stamp',
       lastCombatActionAtMs: 'stamp',
-      attackLockedUntil: 'stamp',
       // O contador do Canary sobe uma carga por segundo até duas: qualquer passagem pela Cidade
       // dura mais que isso, então a entrada devolve o banco CHEIO.
       blockCharge: 'stamp',
@@ -635,6 +634,10 @@ describe('entrada em curso: reversão e joinedAtMs (#397, ADR 0035 decisão 6)',
       cleanseImmunity: 'duration',
       cooldowns: 'duration',
       conditions: 'duration',
+      // SÓ LEITURA, de snapshot antigo (#554 → #622): a trava de stairhop é a condição `pacified`
+      // (`conditions`, prazo), e o construtor converte o campo velho nela. O restore de snapshot é o
+      // único caminho que o lê, no MESMO relógio que o gravou — nada a traduzir nem a zerar.
+      attackLockedUntil: 'none',
       // Identidade e progressão: atravessam a sessão, é para isso que existem.
       id: 'none', position: 'none', health: 'none', maxHealth: 'none', mana: 'none', maxMana: 'none',
       level: 'none', xp: 'none', soul: 'none', vocationId: 'none', boostedMonsterId: 'none', speed: 'none',
@@ -664,10 +667,6 @@ describe('entrada em curso: reversão e joinedAtMs (#397, ADR 0035 decisão 6)',
       lastCombatActionAtMs: {
         stale: (hero) => { hero.lastCombatActionAtMs = 57_700; },
         cleared: (hero) => hero.lastCombatActionAtMs === null,
-      },
-      attackLockedUntil: {
-        stale: (hero) => { hero.attackLockedUntil = 59_700; },
-        cleared: (hero) => hero.attackLockedUntil === 0,
       },
       blockCharge: {
         stale: (hero) => { hero.blockCharge = { charges: 0, anchorMs: 57_700 }; },
@@ -948,19 +947,15 @@ describe('entrada em curso: reversão e joinedAtMs (#397, ADR 0035 decisão 6)',
       // Gravados na segunda, no relógio dela.
       second.advanceBy(2_000);
       hero.lastCombatActionAtMs = second.nowMs;
-      hero.attackLockedUntil = second.nowMs + 500;
       second.advanceBy(1_000);
       expect(hero.lastCombatActionAtMs).toBe(2_000);
-      expect(hero.attackLockedUntil).toBe(2_500);
       const restored = Session.fromSnapshot(second.snapshot(), joinedRuleset(), Rng.fromSeed('r'));
       expect(restored.participants[0]?.lastCombatActionAtMs).toBe(2_000);
-      expect(restored.participants[0]?.attackLockedUntil).toBe(2_500);
 
       // E a PRÓXIMA entrada zera de novo o que a segunda gravou.
       const third = newSession('third');
       third.enter(hero);
       expect(hero.lastCombatActionAtMs).toBeNull();
-      expect(hero.attackLockedUntil).toBe(0);
     });
   });
 

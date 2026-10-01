@@ -14,7 +14,9 @@
 // `AGENTS.md` deste pacote é explícito sobre não pagar a atribuição duas vezes. Este arquivo
 // cuida do LANÇADOR: portão, custo e cooldown.
 
-import { matchesVocationRequirement, SPECIALIZED_MAGIC_ELEMENTS } from '@draconya/content';
+import {
+  FEARED_CONDITION_KEY, PACIFIED_CONDITION_KEY, matchesVocationRequirement, SPECIALIZED_MAGIC_ELEMENTS,
+} from '@draconya/content';
 import type {
   Combat, CompiledMitigation, DamageModifiers, DamageType, FieldSpec, SpecializedMagicElement,
   Spell, SpellFormula, Supply,
@@ -29,7 +31,6 @@ import { MAGIC_BLOCK_FLAGS } from './combat/blockhit.js';
 import { rollCombatValue } from './combat/combat-value.js';
 import { ActionCritical } from './combat/charms.js';
 import type { CharmAttackBonus } from './combat/charms.js';
-import { isV3OrLater } from './combat/profile.js';
 import { conditionFromSpec } from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import type { WorldPoint } from './movement.js';
@@ -77,11 +78,23 @@ export type CastRefusal =
   | 'not-summonable'
   /**
    * Stairhop (#554, M30-07, ADR 0040 decisão 1): o lançador trocou de andar ou foi
-   * redirecionado por teleporte há pouco, e a magia é AGRESSIVA (`damage`/`damage-over-time` —
-   * `Spell::getAggressive` do Canary é `true` por padrão). Carrega prazo, como `on-cooldown`: o
-   * bot volta sozinho no instante do destravamento, sem reagendar no vazio (FUN-84).
+   * redirecionado por teleporte há pouco, e a magia é AGRESSIVA (`damage`/`damage-over-time`/
+   * `summon` — `Spell::getAggressive` do Canary é `true` por padrão, e só os scripts que o
+   * desligam com `isAggressive(false)` passam). Carrega prazo, como `on-cooldown`: o bot volta
+   * sozinho no instante do destravamento, sem reagendar no vazio (FUN-84).
+   *
+   * Desde o M44-04 (#622) é a recusa da condição `pacified` em GERAL — a trava de escada é só uma
+   * das fontes dela: `Spell::playerSpellCheck` recusa toda magia/runa agressiva sob
+   * `CONDITION_PACIFIED` com o mesmo `RETURNVALUE_YOUAREEXHAUSTED` (`spells.cpp:517`).
    */
-  | 'attack-locked';
+  | 'attack-locked'
+  /**
+   * O lançador está sob a condição `feared` (M44-04, #622): `Spell::playerSpellCheck` recusa
+   * QUALQUER magia e QUALQUER runa — cura inclusive — com "You are feared" (`spells.cpp:503`);
+   * poção não passa por esse checklist e continua liberada. Carrega o prazo do medo, como
+   * `attack-locked`: o bot volta no instante em que a condição deixa de valer.
+   */
+  | 'feared';
 
 export interface CastSuccess {
   readonly ok: true;
@@ -122,6 +135,12 @@ export interface CastSuccess {
    * ele quem agenda o vencimento — a mesma divisão do dano resolvido.
    */
   readonly condition?: ConditionState;
+  /**
+   * Condições EXTRAS que o mesmo lançamento aplica ao mesmo alvo de `condition` (M44-04, #622): o
+   * Swift Foot acelera E pacifica (`swift_foot.lua`: `CONDITION_HASTE` + `CONDITION_PACIFIED`).
+   * Devolvidas, não aplicadas, pela mesma divisão de `condition`.
+   */
+  readonly alsoConditions?: readonly ConditionState[];
   /**
    * As CHAVES de condição que este efeito remove do recipiente (#590: Cure Poison e afins, puras
    * ou combinadas com cura — Fair Wound Cleansing). Devolvida, não removida: só o ruleset tem a
@@ -457,6 +476,27 @@ export const NOT_SUMMONABLE: CastRefused = {
 };
 
 /**
+ * A runa é AGRESSIVA (`Spell::aggressive`, `true` por padrão no Canary)? Todas, exceto as que o
+ * script marca `isAggressive(false)`: as de cura, o antídoto, o Destroy Field e o Chameleon. Aqui:
+ * dano, campo e a condição contra INIMIGO (a Paralyze Rune).
+ */
+function isAggressiveSupply(supply: Supply): boolean {
+  const effect = supply.effect;
+  return effect.kind === 'damage' || effect.kind === 'field'
+    || (effect.kind === 'condition' && effect.target === 'enemy');
+}
+
+/**
+ * Quanto falta para a condição de controle `key` (`feared`/`pacified`) do personagem deixar de
+ * valer em `nowMs` — zero quando ela não vale. O prazo é absoluto e o vencimento exclusivo
+ * (`Conditions.isActive`), então `retryInMs` cai exatamente no instante em que a checagem passa.
+ */
+export function controlRemainingMs(caster: CharacterRuntime, key: string, nowMs: number): number {
+  if (!caster.conditions.isActive(key, nowMs)) return 0;
+  return (caster.conditions.get(key)?.expiresAtMs ?? nowMs) - nowMs;
+}
+
+/**
  * Lança a magia, se puder.
  *
  * A ordem das recusas é deliberada: level, cooldown, alvo, alcance e só então mana. **A mana
@@ -519,6 +559,10 @@ export function castSpell(
    */
   manaCostOverride?: number,
 ): CastResult {
+  // O medo (M44-04, #622): recusa QUALQUER magia, e vem antes de tudo — é a primeira coisa que
+  // `Spell::playerSpellCheck` confere depois das flags de grupo (`spells.cpp:503`).
+  const fearedFor = controlRemainingMs(caster, FEARED_CONDITION_KEY, nowMs);
+  if (fearedFor > 0) return { ok: false, reason: 'feared', retryInMs: fearedFor };
   if (caster.level < spell.minLevel) {
     return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
   }
@@ -550,18 +594,17 @@ export function castSpell(
   }
 
   const effect = spell.effect;
-  // Stairhop (#554, M30-07, ADR 0040 decisão 1): magia AGRESSIVA recusa enquanto a trava do
-  // lançador não vencer — cura, condição e o resto do vocabulário continuam liberados, como o
-  // Canary libera tudo que não é `aggressive` sob `CONDITION_PACIFIED` (`spells.cpp:517`). Antes
-  // do alcance/mana, pela mesma posição relativa do checklist do Canary (`playerSpellCheck`,
-  // antes de `CastSpell`). Só o `combat-v3` lê — `caster.attackLockedUntil` é sempre `0` fora
-  // dele, e a checagem nunca dispara.
-  if (
-    (effect.kind === 'damage' || effect.kind === 'damage-over-time')
-    && isV3OrLater(combat.compatibilityProfile)
-    && caster.attackLockedUntil > nowMs
-  ) {
-    return { ok: false, reason: 'attack-locked', retryInMs: caster.attackLockedUntil - nowMs };
+  // `pacified` (M44-04, #622 — a trava de escada de 2 s do #554 e qualquer outra fonte): magia
+  // AGRESSIVA recusa enquanto a condição valer — dano, dano ao longo do tempo e a invocação
+  // (`Spell::aggressive` é `true` por padrão, e o `summon_creature.lua` não o desliga), como o
+  // Canary recusa sob `CONDITION_PACIFIED` (`spells.cpp:517`). Cura, condição própria, haste,
+  // postura e o resto do vocabulário continuam liberados: são os scripts que marcam
+  // `isAggressive(false)`. Antes do alcance/mana, pela mesma posição relativa do checklist do
+  // Canary (`playerSpellCheck`, antes de `CastSpell`). A condição só existe onde alguém a aplicou
+  // (o stairhop só no `combat-v3`), então nenhuma sessão v1/v2 a enxerga por acidente.
+  if (effect.kind === 'damage' || effect.kind === 'damage-over-time' || effect.kind === 'summon') {
+    const pacifiedFor = controlRemainingMs(caster, PACIFIED_CONDITION_KEY, nowMs);
+    if (pacifiedFor > 0) return { ok: false, reason: 'attack-locked', retryInMs: pacifiedFor };
   }
   // Dano precisa de alvo ao alcance — ANTES da mana, que sai por último. Forma que sai do
   // lançador (onda, feixe, explosão em volta) não tem alcance: `aim.distance` vem zero da mira,
@@ -694,12 +737,23 @@ export function castSpell(
         key: 'heal-over-time', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
         tick: { amount: effect.amount, intervalMs: effect.intervalMs },
       });
-    case 'haste':
-      return cast({
+    case 'haste': {
+      const hasted = cast({
         key: 'haste', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
         speedPercent: effect.speedPercent,
         ...(effect.damageDealtPercent === undefined ? {} : { damageDealtPercent: effect.damageDealtPercent }),
       });
+      // Swift Foot (M44-04, #622): a haste vem com `pacified` pelo MESMO prazo — `merge: 'longest'`,
+      // como toda pacificação (`Condition::updateCondition`).
+      if (effect.pacifies !== true) return hasted;
+      return {
+        ...hasted,
+        alsoConditions: [{
+          key: PACIFIED_CONDITION_KEY, spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
+          merge: 'longest',
+        }],
+      };
+    }
     case 'buff':
       return cast({
         key: 'buff', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
@@ -835,6 +889,20 @@ export function useSupply(
    */
   modifiers?: DamageModifiers,
 ): CastResult {
+  // O medo e a pacificação alcançam a RUNA, não a poção (M44-04, #622): `Spell::playerSpellCheck`
+  // é o checklist de magia e de runa (`RuneSpell` chama `playerRuneSpellCheck`, que começa nele),
+  // e a poção é uma ação de item que não passa por ele. `feared` recusa toda runa; `pacified` só
+  // as agressivas — as que o Canary não marca com `isAggressive(false)`: dano, campo (a Magic Wall
+  // e a Wild Growth inclusive) e a Paralyze Rune. Cura, antídoto e destruir campo passam. Sem
+  // `nowMs` (fixture) o relógio lógico não existe e a checagem é pulada, como a do cooldown.
+  if (nowMs !== undefined && supply.group !== 'potion') {
+    const fearedFor = controlRemainingMs(user, FEARED_CONDITION_KEY, nowMs);
+    if (fearedFor > 0) return { ok: false, reason: 'feared', retryInMs: fearedFor };
+    if (isAggressiveSupply(supply)) {
+      const pacifiedFor = controlRemainingMs(user, PACIFIED_CONDITION_KEY, nowMs);
+      if (pacifiedFor > 0) return { ok: false, reason: 'attack-locked', retryInMs: pacifiedFor };
+    }
+  }
   // O cooldown PRÓPRIO do supply (#592, Paralyze Rune: 6 s ao lado do grupo de 2 s) — ANTES de
   // qualquer outra recusa, como o `spellCooldownKey` de `castSpell`: sem `nowMs` (fixture) o
   // relógio lógico não existe, e a checagem é pulada — a mesma degradação de `startSupplyCooldown`.

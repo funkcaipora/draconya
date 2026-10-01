@@ -202,8 +202,8 @@ e na PR do #603): o Parry rolado duas vezes (o primeiro ponto do Canary cura o
 monstro por um erro de sinal); o teto de level dos elementais que o Canary reatribui globalmente
 depois da primeira morte por Carnage; o Gut, que no Canary confere um tipo de item que nenhum item
 declara (aqui vale para os creature products do importador); o `getCharmChanceModifier()` das
-Concoctions (M42), sempre zero enquanto a fonte não existir; `rooted`/`feared` no Cleanse
-(M44-04).
+Concoctions (M42), sempre zero enquanto a fonte não existir. (`rooted`/`feared` no Cleanse
+entraram com o M44-04, #622 — ver "Condições de controle" em `docs/product/combat.md`.)
 
 ## Regras
 

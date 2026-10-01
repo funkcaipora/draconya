@@ -18,8 +18,8 @@
 //   Sem ele, a onda sai na forma `wave` antiga, que NÃO é a do Canary — TODO(#679).
 
 import {
-  damageOverTimeTotalMs, DRUNK_CONDITION_KEY, monsterAbilitySchema, SPEED_CONDITION_KEY,
-  spellAreaSchema, type DamageOverTimeEffect,
+  damageOverTimeTotalMs, DRUNK_CONDITION_KEY, FEARED_CONDITION_KEY, monsterAbilitySchema,
+  ROOTED_CONDITION_KEY, SPEED_CONDITION_KEY, spellAreaSchema, type DamageOverTimeEffect,
 } from '../../packages/content/src/schemas.js';
 import { MIXED_TABLE_ITEMS_KEY, type LuaValue } from './lua-table.js';
 import { meleePower, type MeleePowerVia } from './monster-melee.js';
@@ -471,6 +471,41 @@ function mapDrunk(raw: LuaRecord, ctx: SpellContext): SpellMapping {
 }
 
 /**
+ * A duração das condições de controle do Canary: `fear.lua` e `root.lua` (`data-otservbr-global/
+ * scripts/spells/monster/`) fixam `CONDITION_PARAM_TICKS` em 3000. Não é o `duration` da linha do
+ * monstro: `Monsters::deserializeSpell` acha o feitiço registrado pelo NOME
+ * (`g_spells().getSpellByName`) e devolve antes de ler `duration`/`radius`/`length` — a linha só
+ * contribui com `interval`, `chance`, `range` e o alvo (sempre o atacado).
+ */
+const CONTROL_CONDITION_DURATION_MS = 3000;
+
+/**
+ * `fear` e `root` (M44-04, #622): os feitiços Lua de nome próprio que o Canary registra com um
+ * `Combat` de UMA condição — `CONDITION_FEARED`/`CONDITION_ROOTED` por 3 s, sem dano, alvo único
+ * (`spell:needTarget(true)`). São ataque contra o alvo, nunca defesa (o Canary só os usa em
+ * `monster.attacks`). Sem área: a linha do monstro não a parametriza (ver acima), então só o
+ * `range` entra, e ausente é "até onde o monstro vê", como `Monster::canUseSpell` faz com `0`.
+ */
+function mapControl(kind: 'rooted' | 'feared', raw: LuaRecord, ctx: SpellContext): SpellMapping {
+  const name = kind === 'feared' ? 'fear' : 'root';
+  if (ctx.list === 'defenses') return unmapped(name, `${name} em defenses`);
+  const declared = Math.min(num(raw['range']) ?? 0, CANARY_VIEW_RADIUS * 2);
+  return {
+    kind: 'ability',
+    notes: [],
+    ability: ability({
+      id: name, cadenceMs: cadence(raw), chance: chanceOf(raw),
+      target: { range: declared > 0 ? declared : CANARY_VIEW_RADIUS },
+      power: 0, damageType: 'physical',
+      condition: {
+        key: kind === 'feared' ? FEARED_CONDITION_KEY : ROOTED_CONDITION_KEY, merge: 'longest',
+        durationMs: CONTROL_CONDITION_DURATION_MS, effect: { kind },
+      },
+    }),
+  };
+}
+
+/**
  * `invisible`: o monstro fica invisível sozinho (#559/#592, ADR 0041 d.2 — Killer Rabbit,
  * `{ name = "invisible", interval = 2000, chance = 30, effect = CONST_ME_MAGIC_BLUE }`). Sempre
  * self-buff, como `speed`/`drunk` do lado do ATACANTE são sempre contra o alvo: o Canary só usa
@@ -596,11 +631,14 @@ const PRESENTATION_ONLY: Readonly<Record<string, string>> = {
 /** O motivo da `condition` de total sorteado — o relatório o usa para rever a meta. */
 export const RANDOM_TOTAL_REASON = 'condition com total sorteado (min ≠ max): o schema só tem total fixo';
 
-/** Nomes com mecanismo que o Draconya ainda não tem — e a issue dona. */
+/**
+ * Nomes com mecanismo que o Draconya ainda não tem — e a issue dona, ou o motivo. O `fear` e o
+ * `root` saíram daqui com o M44-04 (#622); o `soulwars fear` fica, porque o Lua o EXECUTA com
+ * atraso de 2 s (`addEvent(executeCombat, 2000, …)` em `soulwars_fear.lua`, com um efeito visual no
+ * lançamento) e a `ability` do Draconya não tem atraso entre o lançamento e o efeito.
+ */
 export const UNMAPPED_OWNERS: Readonly<Record<string, string>> = {
-  fear: '#622',
-  'soulwars fear': '#622',
-  root: '#622',
+  'soulwars fear': 'atraso de 2 s por script',
 };
 
 /** Mapeia UMA entrada de `monster.attacks` ou `monster.defenses`. */
@@ -620,6 +658,8 @@ export function mapSpell(raw: LuaValue, ctx: SpellContext): SpellMapping {
     case 'drunk': return mapDrunk(raw, ctx);
     case 'firefield': case 'poisonfield': case 'energyfield': return mapField(name, raw, ctx);
     case 'invisible': return mapInvisible(raw, ctx);
+    case 'fear': return mapControl('feared', raw, ctx);
+    case 'root': return mapControl('rooted', raw, ctx);
     default: {
       const dropped = PRESENTATION_ONLY[name];
       if (dropped !== undefined) return { kind: 'dropped', reason: `${name}: ${dropped}` };

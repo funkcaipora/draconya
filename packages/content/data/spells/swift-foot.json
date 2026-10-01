@@ -1,7 +1,7 @@
 {
   "id": "swift-foot",
   "name": "Swift Foot",
-  "description": "Aumenta a sua velocidade de movimento em 80% por 10 segundos, reduzindo o dano que você causa em 30%.",
+  "description": "Aumenta a sua velocidade de movimento em 80% por 10 segundos, mas você não consegue atacar enquanto a magia durar.",
   "vocationId": "paladin",
   "minLevel": 55,
   "learnPrice": 6000,
@@ -17,11 +17,7 @@
     "kind": "haste",
     "speedPercent": 80,
     "durationMs": 10000,
-    "damageDealtPercent": {
-      "melee": -30,
-      "distance": -30,
-      "spell": -30
-    }
+    "pacifies": true
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Cooldown do Canary (`data/scripts/spells/support/swift_foot.lua`, main, 2026-09-24): cooldown próprio e do grupo secundário `focus` 4s/2s→10s/10s (o mesmo prazo da postura)."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Cooldown do Canary (`data/scripts/spells/support/swift_foot.lua`, main, 2026-09-24): cooldown próprio e do grupo secundário `focus` 4s/2s→10s/10s (o mesmo prazo da postura). Efeito do Canary `main` (`swift_foot.lua`, ramo sem Roda): `CONDITION_HASTE` + `CONDITION_PACIFIED` (e `CONDITION_SPELLGROUPCOOLDOWN` do grupo attack, que a pacificação já cobre) pelos mesmos 10 s — o jogador não ataca (golpe nem magia agressiva) enquanto corre; a redução de dano de 30 % (TibiaWiki, anterior) some (#622)."
 }

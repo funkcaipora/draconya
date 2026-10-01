@@ -620,16 +620,17 @@ export class Session implements SessionClock {
       throw error;
     }
     // Os CARIMBOS (o último golpe de arma, `lastAttackAtMs`, #550; o último ataque dado ou
-    // recebido, `lastCombatActionAtMs`, #625; a trava de stairhop, `attackLockedUntil`, #554; e os
-    // que `resetSessionClockState` lista) não são prazo e não se traduzem: um carimbo de 57 700 ms da
-    // hunt anterior ficaria no FUTURO da nova — `isInFight` o leria como "em combate" e travaria a
-    // saída por até um minuto que ninguém lutou, a trava de stairhop seguraria o golpe, e
-    // `attackedRecently` erraria assim que o relógio novo alcançasse o valor velho. O resultado do
-    // combate dependeria de por onde o `CharacterRuntime` passou, e não do estado e da semente
-    // (invariante 3). Aqui, e não no `onEnter` de cada ruleset, para nenhuma sessão futura (quest,
-    // boss) esquecer; DEPOIS do `onEnter`, para a entrada recusada (party cheia) não apagar o estado
-    // de quem continua na sessão de origem. O restore de snapshot NÃO passa por `enter` — o relógio
-    // é o mesmo, e a janela quente atravessa.
+    // recebido, `lastCombatActionAtMs`, #625; e os que `resetSessionClockState` lista) não são prazo e
+    // não se traduzem: um carimbo de 57 700 ms da hunt anterior ficaria no FUTURO da nova — `isInFight`
+    // o leria como "em combate" e travaria a saída por até um minuto que ninguém lutou, e
+    // `attackedRecently` erraria assim que o relógio novo alcançasse o valor velho. (A trava de
+    // stairhop, #554, não é mais carimbo: desde o #622 é a condição `pacified`, que é prazo e a
+    // transição traduz como as outras.) O resultado do combate dependeria de por onde o
+    // `CharacterRuntime` passou, e não do estado e da semente (invariante 3). Aqui, e não no
+    // `onEnter` de cada ruleset, para nenhuma sessão futura (quest, boss) esquecer; DEPOIS do
+    // `onEnter`, para a entrada recusada (party cheia) não apagar o estado de quem continua na
+    // sessão de origem. O restore de snapshot NÃO passa por `enter` — o relógio é o mesmo, e a
+    // janela quente atravessa.
     character.resetSessionClockState();
   }
 

@@ -137,11 +137,12 @@ destino diferente na entrada:
 
 - **Carimbo** ("quando foi a última vez que…") **é zerado.** `Session.enter` chama
   `CharacterRuntime.resetSessionClockState` depois de o `onEnter` aceitar: `lastAttackAtMs` (#550),
-  `lastCombatActionAtMs` (#625), `attackLockedUntil` (#554), o banco de cargas de bloqueio (volta
-  cheio: o contador do Canary sobe uma carga por segundo até duas, e qualquer passagem pela Cidade dura
-  mais que isso) e a ação manual adiada (o evento dela morava na fila da sessão anterior). A janela de
-  um carimbo é curta (2 s a 60 s) e a saída normal da hunt só conclui fora de combate (`isInFight`), então
-  não há restante a preservar.
+  `lastCombatActionAtMs` (#625), o banco de cargas de bloqueio (volta cheio: o contador do Canary sobe
+  uma carga por segundo até duas, e qualquer passagem pela Cidade dura mais que isso) e a ação manual
+  adiada (o evento dela morava na fila da sessão anterior). A janela de um carimbo é curta (2 s a 60 s)
+  e a saída normal da hunt só conclui fora de combate (`isInFight`), então não há restante a preservar.
+  A trava de stairhop (`attackLockedUntil`, #554) estava nesta lista até o #622 a transformar na
+  condição `pacified`: desde então ela é PRAZO, e atravessa traduzida como as demais condições.
 - **Prazo** ("quanto ainda falta") **é traduzido, nunca zerado.** O cooldown de magia e de poção, as
   condições (haste, Utamo Vita, veneno, paralisia, a regeneração de alma) e a imunidade do Cleanse
   atravessam com o que faltava: `restante = instante − agora_da_origem`, e no destino

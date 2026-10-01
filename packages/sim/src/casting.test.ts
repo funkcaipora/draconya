@@ -130,12 +130,16 @@ describe('castSpell — o portão, na ordem em que ele custa a descobrir', () =>
       .toEqual({ ok: false, reason: 'not-enough-mana', retryInMs: 0 });
   });
 
-  describe('stairhop (#554, M30-07, ADR 0040 decisão 1): trava de ataque ao trocar de andar', () => {
+  describe('pacified (#554/#622, ADR 0040 decisão 1 e ADR 0041): trava de ataque', () => {
     const combatV3: Combat = { ...combat, compatibilityProfile: 'combat-v3' };
+    /** A condição `pacified` até `expiresAtMs` — o mesmo estado que a trava de escada aplica. */
+    const pacify = (caster: CharacterRuntime, expiresAtMs: number): void => {
+      caster.conditions.apply({ key: 'pacified', expiresAtMs, merge: 'longest' });
+    };
 
     it('magia AGRESSIVA recusa com `attack-locked` e o prazo exato — antes do alvo, e sem gastar mana', () => {
       const caster = hero();
-      caster.attackLockedUntil = 2_000;
+      pacify(caster, 2_000);
       // Sem mira nenhuma (`null`): se a checagem de alcance/alvo viesse primeiro, a recusa
       // seria `no-target`, não `attack-locked` — a ordem é a mesma do `playerSpellCheck` do
       // Canary, que confere `CONDITION_PACIFIED` antes do alvo.
@@ -144,22 +148,64 @@ describe('castSpell — o portão, na ordem em que ele custa a descobrir', () =>
       expect(caster.mana).toBe(100);
     });
 
-    it('vencida a trava, a magia agressiva sai normalmente', () => {
+    it('vencida a condição, a magia agressiva sai normalmente — no instante EXATO do vencimento', () => {
       const caster = hero();
-      caster.attackLockedUntil = 2_000;
+      pacify(caster, 2_000);
+      expect(castSpell(caster, strike, near(), 1_999, combatV3, rng()).ok).toBe(false);
       expect(castSpell(caster, strike, near(), 2_000, combatV3, rng()).ok).toBe(true);
     });
 
-    it('cura NÃO é bloqueada pela MESMA trava — só `damage`/`damage-over-time` são agressivas', () => {
+    it('cura NÃO é bloqueada pela MESMA condição — só `damage`/`damage-over-time` são agressivas', () => {
       const caster = hero({ health: 10 });
-      caster.attackLockedUntil = 2_000;
+      pacify(caster, 2_000);
       expect(castSpell(caster, heal, null, 0, combatV3, rng()).ok).toBe(true);
     });
 
-    it('só o `combat-v3` lê: sob `combat-v1`/`v2` a mesma trava não bloqueia a magia agressiva', () => {
+    it('Summon Creature é AGRESSIVA por padrão no Canary: recusa com `attack-locked`, sem gastar mana (#622)', () => {
+      // `summon_creature.lua` não chama `isAggressive(false)` — toda cura, condição própria e
+      // conjuração chama —, e `Spell::playerSpellCheck` recusa a magia agressiva sob
+      // `CONDITION_PACIFIED` (`spells.cpp:517`) ANTES do script que cria a invocação.
+      const summon: Spell = {
+        id: 'summon-creature', name: 'Summon Creature', manaCost: 0, cooldownMs: 2_000, minLevel: 1,
+        effect: { kind: 'summon' },
+      };
       const caster = hero();
-      caster.attackLockedUntil = 2_000;
-      expect(castSpell(caster, strike, near(), 0, combat, rng()).ok).toBe(true);
+      pacify(caster, 2_000);
+      const cast = (nowMs: number) => castSpell(
+        caster, summon, null, nowMs, combatV3, rng(), undefined, undefined, undefined, undefined,
+        undefined, 30,
+      );
+      expect(cast(500)).toEqual({ ok: false, reason: 'attack-locked', retryInMs: 1_500 });
+      expect(caster.mana).toBe(100);
+      expect(cast(2_000)).toMatchObject({ ok: true, summon: true });
+      expect(caster.mana).toBe(70);
+    });
+
+    it('a condição é o portão, em QUALQUER perfil: a trava de escada só a aplica no combat-v3, mas o conteúdo pode aplicá-la', () => {
+      const caster = hero();
+      pacify(caster, 2_000);
+      expect(castSpell(caster, strike, near(), 0, combat, rng()))
+        .toEqual({ ok: false, reason: 'attack-locked', retryInMs: 2_000 });
+    });
+  });
+
+  describe('feared (#622, ADR 0041): nenhuma magia nem runa sai', () => {
+    const fear = (caster: CharacterRuntime, expiresAtMs: number): void => {
+      caster.conditions.apply({ key: 'feared', expiresAtMs, merge: 'longest' });
+    };
+
+    it('recusa QUALQUER magia — cura inclusive — com `feared` e o prazo do medo, antes de tudo', () => {
+      const caster = hero({ health: 10, level: 1 });
+      fear(caster, 3_000);
+      // Antes do level (`heal` do fixture exige level 1, `strike` mais) e antes do alvo: a
+      // primeira coisa que `playerSpellCheck` confere, depois das flags de grupo, é o medo.
+      expect(castSpell(caster, heal, null, 1_000, combat, rng()))
+        .toEqual({ ok: false, reason: 'feared', retryInMs: 2_000 });
+      expect(castSpell(caster, strike, null, 1_000, combat, rng()))
+        .toEqual({ ok: false, reason: 'feared', retryInMs: 2_000 });
+      expect(caster.mana).toBe(100);
+      // Vencido o medo, a mesma cura sai.
+      expect(castSpell(caster, heal, null, 3_000, combat, rng()).ok).toBe(true);
     });
   });
 
@@ -178,6 +224,81 @@ describe('castSpell — o portão, na ordem em que ele custa a descobrir', () =>
     const costly: Spell = { ...heal, soulCost: 3 };
     expect(castSpell(caster, costly, null, 0, combat, rng()).ok).toBe(true);
     expect(caster.soul).toBe(2);
+  });
+});
+
+describe('useSupply — medo e pacificação alcançam a RUNA, não a poção (#622)', () => {
+  const attackRune: Supply = {
+    id: 'sudden-death-rune', name: 'Sudden Death', price: 20, group: 'attack', groupCooldownMs: 2_000,
+    requires: {}, effect: { kind: 'damage', basePower: 45, range: 4, damageType: 'death' },
+  };
+  const healingRune: Supply = {
+    id: 'uh-rune', name: 'Ultimate Healing Rune', price: 20, group: 'healing', groupCooldownMs: 1_000,
+    requires: {}, effect: { kind: 'heal', amount: 60 },
+  };
+  const fieldRune: Supply = {
+    id: 'fire-field-rune', name: 'Fire Field', price: 10, group: 'attack', groupCooldownMs: 2_000,
+    requires: {}, effect: {
+      kind: 'field', range: 4,
+      field: { id: 'fire-field', durationMs: 5_000, shape: { shape: 'point' } },
+    },
+  };
+  const antidote: Supply = {
+    id: 'antidote-rune', name: 'Antidote', price: 15, group: 'healing', groupCooldownMs: 1_000,
+    requires: {}, effect: { kind: 'dispel', types: ['poison'] },
+  };
+  const aim = { distance: 2, targets: [{ armor: 0, dodgeChance: 0 }] };
+  const scaling = { skillLevel: 10, powerScale: 1 };
+  const condition = (key: string, expiresAtMs: number) => ({ key, expiresAtMs, merge: 'longest' as const });
+
+  it('feared recusa TODA runa (cura inclusive) e não gasta nada — mas a poção sai', () => {
+    const user = hero({ gold: 200, health: 10 });
+    user.conditions.apply(condition('feared', 3_000));
+    expect(useSupply(user, attackRune, aim, combat, rng(), scaling, undefined, undefined, 1_000))
+      .toEqual({ ok: false, reason: 'feared', retryInMs: 2_000 });
+    expect(useSupply(user, healingRune, null, combat, rng(), scaling, undefined, undefined, 1_000))
+      .toEqual({ ok: false, reason: 'feared', retryInMs: 2_000 });
+    expect(useSupply(user, antidote, null, combat, rng(), scaling, undefined, undefined, 1_000))
+      .toEqual({ ok: false, reason: 'feared', retryInMs: 2_000 });
+    expect(user.goldDelta).toBe(0);
+    // A poção não passa por `Spell::playerSpellCheck` — continua liberada.
+    expect(useSupply(user, potion, null, combat, rng(), scaling, undefined, undefined, 1_000).ok).toBe(true);
+  });
+
+  it('pacified recusa só a runa AGRESSIVA (dano e campo) com `attack-locked`; cura e antídoto passam', () => {
+    const user = hero({ gold: 200, health: 10 });
+    user.conditions.apply(condition('pacified', 2_000));
+    expect(useSupply(user, attackRune, aim, combat, rng(), scaling, undefined, undefined, 500))
+      .toEqual({ ok: false, reason: 'attack-locked', retryInMs: 1_500 });
+    expect(useSupply(user, fieldRune, aim, combat, rng(), scaling, undefined, undefined, 500))
+      .toEqual({ ok: false, reason: 'attack-locked', retryInMs: 1_500 });
+    expect(useSupply(user, healingRune, null, combat, rng(), scaling, undefined, undefined, 500).ok).toBe(true);
+    expect(useSupply(user, antidote, null, combat, rng(), scaling, undefined, undefined, 500).ok).toBe(true);
+    // Vencida a condição, a runa de ataque sai.
+    expect(useSupply(user, attackRune, aim, combat, rng(), scaling, undefined, undefined, 2_000).ok).toBe(true);
+  });
+});
+
+describe('castSpell — Swift Foot: a haste que pacifica (#622, `swift_foot.lua`)', () => {
+  const swiftFoot: Spell = {
+    id: 'swift-foot', name: 'Swift Foot', manaCost: 20, cooldownMs: 10_000, minLevel: 1,
+    effect: { kind: 'haste', speedPercent: 80, durationMs: 10_000, pacifies: true },
+  };
+  const plainHaste: Spell = {
+    ...swiftFoot, id: 'haste', effect: { kind: 'haste', speedPercent: 30, durationMs: 10_000 },
+  };
+
+  it('devolve a haste E a pacificação, pelo MESMO prazo e com `merge: longest`', () => {
+    const result = castSpell(hero(), swiftFoot, null, 1_000, combat, rng());
+    expect(result.ok && result.condition).toMatchObject({ key: 'haste', speedPercent: 80, expiresAtMs: 11_000 });
+    expect(result.ok && result.alsoConditions).toEqual([{
+      key: 'pacified', spellId: 'swift-foot', expiresAtMs: 11_000, merge: 'longest',
+    }]);
+  });
+
+  it('a haste comum não pacifica — `alsoConditions` nem existe', () => {
+    const result = castSpell(hero(), plainHaste, null, 0, combat, rng());
+    expect(result.ok && result.alsoConditions).toBeUndefined();
   });
 });
 

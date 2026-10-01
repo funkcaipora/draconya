@@ -1645,50 +1645,76 @@ Enquanto a condição vale, `Player::doAttacking` recusa o golpe corpo a corpo/d
 precisam de alvo hostil (cura, condição própria) o desligam. Vale **só para jogador**: o monstro
 não conhece a condição.
 
-**O Draconya reproduz o MECANISMO, não a condição.** A `pacified` de verdade (M44-04) ainda não
-existe — `Conditions` (`packages/sim/src/conditions.ts`) é o vocabulário de haste/postura/magic
-shield/cura contínua, e nenhum deles é "recusa golpe". Migrar para lá é aditivo quando a
-condição existir; até então, `CharacterRuntime.attackLockedUntil` (opcional no `CharacterState`,
-`0` ausente, sem bump de `SNAPSHOT_FORMAT_VERSION`) é um instante ABSOLUTO do relógio lógico —
-como o cooldown de magia — escrito só por `HuntRuleset#step`, o ÚNICO lugar que escreve posição
-de criatura (FUN-69): pisar numa escada ou num teleporte (#734) redireciona o passo para um tile
-que não é o adjacente pedido — `z` diferente, ou a distância pedida — e é ESSE sinal (não um
-booleano "é escada?" separado) que dispara `attackLockedUntil = session.nowMs +
-stairhopDelayMs`. Um passo comum, adjacente e no mesmo andar, nunca grava nada.
+**Desde o #622 (M44-04) a trava É a condição `pacified`** — a mesma de qualquer outra fonte (o
+Swift Foot, abaixo), lida por `Conditions.isActive('pacified', nowMs)`. Antes ela era um instante
+solto no personagem (`CharacterRuntime.attackLockedUntil`); esse campo deixou de existir no
+runtime, e um snapshot antigo que o traga é lido pelo construtor como um `pacified` que vence no
+mesmo instante (ADR 0014, sem bump de `SNAPSHOT_FORMAT_VERSION`). `HuntRuleset#step`, o ÚNICO lugar
+que escreve posição de criatura (FUN-69), aplica a condição por `#applyConditionTo`: pisar numa
+escada ou num teleporte (#734) redireciona o passo para um tile que não é o adjacente pedido — `z`
+diferente, ou a distância pedida — e é ESSE sinal (não um booleano "é escada?" separado) que dispara
+`pacified` por `stairhopDelayMs`. Um passo comum, adjacente e no mesmo andar, nunca aplica nada. A
+fusão é a de `Condition::updateCondition` (`merge: 'longest'`, ver "Condições de controle"): um
+`pacified` de 10 s que já corre não é encurtado por uma troca de andar de 2 s.
 
-**`combat.stairhopDelayMs` é conteúdo, opcional, e só o `combat-v3` lê** (`HuntRuleset#isV3`,
-`packages/content/src/schemas.ts`) — a mesma disciplina aditiva do ADR 0031/0040: ausente é
-IDENTIDADE, e todo conteúdo `combat-v1`/`v2`, ou um `combat-v3` que não declare o campo, segue
-bit a bit sem trava nenhuma. A baseline real declara `2000` (o `stairJumpExhaustion` do Canary).
+**`combat.stairhopDelayMs` é conteúdo, opcional, e só o `combat-v3` aplica a trava de escada**
+(`HuntRuleset#isV3`, `packages/content/src/schemas.ts`) — a mesma disciplina aditiva do ADR
+0031/0040: ausente é IDENTIDADE, e todo conteúdo `combat-v1`/`v2`, ou um `combat-v3` que não declare
+o campo, segue bit a bit sem trava de escada nenhuma. A baseline real declara `2000` (o
+`stairJumpExhaustion` do Canary). O que o portão lê, porém, é a CONDIÇÃO, em qualquer perfil: um
+`pacified` que o conteúdo aplica por outro caminho vale numa sessão v1/v2.
 
-**Dois portões conferem a trava, e os dois carregam o prazo exato de volta — como o
+**Dois portões conferem a condição, e os dois carregam o prazo exato de volta — como o
 cooldown:**
 
-1. **O golpe básico** (`#onPlayerAttack`): com `attackLockedUntil > nowMs`, o golpe engatilhado
-   NÃO sai — reagenda para o instante EXATO do destravamento (`attackLockedUntil - nowMs`), não
-   para o intervalo normal de ataque nem para o próximo vencimento do mundo. É a mesma
-   invariante de "engatilhado OU agendado, nunca os dois" que já vale para o cooldown de ataque:
-   a trava não some do relógio, ela move o vencimento.
-2. **A magia AGRESSIVA** (`castSpell`, `packages/sim/src/casting.ts`): `effect.kind === 'damage'`
-   ou `'damage-over-time'` recusam com a razão tipada `attack-locked` e `retryInMs` — ANTES da
-   conferência de alvo/alcance, na mesma posição relativa do `playerSpellCheck` do Canary. Cura,
-   cura contínua, haste, postura e magic shield **não conferem a trava**: são o vocabulário que
-   não precisa de alvo hostil, a mesma exceção que `Spell::aggressive` já declara.
+1. **O golpe básico** (`#onPlayerAttack`): com `pacified` vigente, o golpe NÃO sai — e o Canary
+   também não o re-arma quando a condição acaba: `Player::doAttacking` volta ANTES de criar a tarefa
+   do golpe seguinte (`player.cpp:3982`), a cadeia de golpes morre ali, e o golpe só volta no primeiro
+   GATILHO depois do prazo (`Player::onEndCondition` não faz nada). Os gatilhos do Canary são o
+   pensamento do personagem — `Game::checkCreatures` chama `onAttacking` uma vez por 1000 ms, numa
+   fase própria (`game.cpp:7726`) — e o passo do próprio personagem ou do alvo dele
+   (`Creature::onCreatureMove` com `hasExtraSwing`, `creature.cpp:569`); o `sim` reproduz os dois. O
+   golpe fica ESTACIONADO (`Runner.attackParked`: engatilhado, nenhum `PLAYER_ATTACK` na fila): o
+   `ATTACK_THINK` é agendado UMA vez, no primeiro instante da grade de pensamento do personagem
+   (`Runner.thinkPhaseMs`, sorteada uma vez com o `Rng` da sessão e persistida no snapshot) a partir
+   do vencimento — o golpe sai ATÉ 1000 ms DEPOIS do prazo, não no instante exato dele —, e um passo
+   aceito do personagem ou do alvo (`HuntRuleset#step` → `#releaseParkedAttacks`) depois do
+   vencimento o antecipa. Os gatilhos genéricos do motor (o combate-stop do `PLAYER_STEP`, o passo
+   de qualquer monstro) NÃO o soltam enquanto estacionado: um personagem parado não reacende a
+   cadeia. O portão lê o PRAZO (`Conditions.isActive`, vencimento exclusivo), e não o evento
+   `condition-expire` — que vence depois do ataque do mesmo instante (`Housekeeping`).
+2. **A magia e a runa AGRESSIVAS** (`castSpell`/`useSupply`, `packages/sim/src/casting.ts`):
+   `effect.kind === 'damage'`, `'damage-over-time'` ou `'summon'` (magia) e as runas de dano, de
+   campo e a Paralyze Rune recusam com a razão tipada `attack-locked` e `retryInMs` — ANTES da
+   conferência de alvo/alcance, na mesma posição relativa do `playerSpellCheck` do Canary. A
+   invocação é agressiva porque `Spell::aggressive` é `true` por padrão e o
+   `data/scripts/spells/support/summon_creature.lua` NÃO chama `isAggressive(false)` — ao contrário
+   de toda cura, condição própria e conjuração (`grep -L 'isAggressive(false)'` nos scripts de
+   `data/scripts/spells/` lista só as magias de ataque, `summon_creature`, `sap_strength`,
+   `expose_weakness`, `blank_rune`, `lightest_magic_missile_rune` e as que curam monstro — e das do
+   catálogo do Draconya só a invocação não é de ataque). Cura, cura
+   contínua, haste, postura, magic shield, Challenge, Cancel Invisibility, a conjuração, a runa de
+   cura, o antídoto e o Destroy Field **não conferem a condição**: são o que os scripts do Canary
+   marcam `isAggressive(false)`.
 
 `attack-locked` entra em `SlotRefusal` (`packages/sim/src/rulesets/hunt.ts`, disparo manual de
 slot) e em `host.ts` (`'Você está exausto.'`, a mesma frase do `RETURNVALUE_YOUAREEXHAUSTED`).
 
-**A trava não atravessa a troca de sessão (#812).** `attackLockedUntil` é instante do relógio lógico
-da sessão que o gravou, e o `CharacterRuntime` é o MESMO objeto na transição enquanto o relógio da
-sessão nova nasce em zero: uma trava de 59 700 ms herdada seguraria o golpe e a magia agressiva da
-hunt seguinte por quase um minuto, sem escada nenhuma. `Session.enter` zera o campo (depois de o
-`onEnter` aceitar; o restore de snapshot não passa por `enter` e mantém a trava quente) — o mesmo
-ponto e a mesma razão do carimbo de `lastAttackAtMs` (#550), agrupados em
-`CharacterRuntime.resetSessionClockState`.
+**A trava atravessa a troca de sessão como PRAZO, não como instante (#812, #622).** O
+`CharacterRuntime` é o MESMO objeto na transição enquanto o relógio lógico da sessão nova nasce em
+zero, e um instante gravado no relógio da anterior (59 700 ms) lido cru seguraria o golpe e a magia
+agressiva da hunt seguinte por quase um minuto, sem escada nenhuma. Quando a trava era
+`attackLockedUntil` ela era um CARIMBO e `Session.enter` o zerava; agora que é a condição `pacified`
+ela é PRAZO como toda condição: `Session.enter` a traduz para o relógio novo
+(`CharacterRuntime.moveToClock` → `Conditions.rebase`), o que faltava continua faltando, e a hunt que
+entra reagenda o vencimento (`#armConditions`) — como o Canary, em que a condição é persistente. Com
+os 2 s reais da baseline isso é, no máximo, o resto de uma janela de 2 s; nunca o instante cru. O
+restore de snapshot não traduz nada (o relógio é o mesmo) e lê um `attackLockedUntil` antigo como
+`pacified` no instante em que ele estava.
 
-**Fora do escopo**: migrar para a condição `pacified` de verdade (M44-04); o `skull`/PvP do
-Canary que também gate a magia agressiva (o Draconya não tem PvP nem sistema de skull ainda);
-qualquer travamento fora de hunt/quest/boss/guild war — a Cidade não simula combate.
+**Fora do escopo**: o `skull`/PvP do Canary que também gate a magia agressiva (o Draconya não tem
+PvP nem sistema de skull ainda); qualquer travamento fora de hunt/quest/boss/guild war — a Cidade
+não simula combate.
 
 ## Manter distância: o atirador recua quando o alvo chega perto (#542, `targetDistance`)
 
@@ -2476,6 +2502,171 @@ concentrados em bosses de quest fora do recorte atual). `conditions.test.ts` pre
 `hunt.test.ts` prova a integração — o desvio passa pelo `#step` de verdade, para personagem e para
 monstro, sem consumir sorteio de quem não tem a condição.
 
+## Condições de controle: rooted, feared e pacified (#622, M44-04, ADR 0041)
+
+As três últimas do vocabulário de condição do ADR 0041 decisão 1. Vivem no MESMO
+`conditionEffectSchema`/`Conditions` do drunk e do speed — chave RESERVADA (`ROOTED_CONDITION_KEY`,
+`FEARED_CONDITION_KEY`, `PACIFIED_CONDITION_KEY`, `packages/content/src/schemas.ts`), efeito sem
+campo próprio (`{ kind: 'rooted' | 'feared' | 'pacified' }`) e as duas implicações conferidas por
+`conditionSpecSchema` (a chave reservada só com o efeito dela, e vice-versa). Cada uma exige
+**`merge: 'longest'`**, o quarto valor de `conditionMergeSchema` (`Condition::updateCondition` do
+Canary, que as três — `ConditionGeneric` e `ConditionFeared` — usam): relançar com um prazo que
+termina ANTES do que já corre não muda nada, e com um que termina no mesmo instante ou depois
+substitui. Não é `refresh` (o novo sempre vence) nem `strongest` (compara magnitude, e estas não
+têm). O prazo é absoluto dos dois lados (`Conditions.apply`).
+
+**A vigência é lida do PRAZO**, não do evento que limpa a lista: `Conditions.isActive(key, nowMs)`
+(`expiresAtMs > nowMs`, vencimento exclusivo) — o `condition-expire` vence depois do movimento e do
+ataque do mesmo instante, e o Canary consulta `hasCondition` contra o `endTime`
+(`Creature::hasCondition`, `creature.cpp:1585`), nunca contra a limpeza.
+
+### `rooted` — ninguém dá passo
+
+`Game::internalMoveCreature` recusa o passo de QUALQUER criatura enraizada (`game.cpp:1965`), e
+`Creature::startAutoWalk` recusa a caminhada que ela decidir (`creature.cpp:329`). O `sim` tem UM
+ponto de escrita de posição, `HuntRuleset#step`, e é lá que a recusa mora — o `walk` do socket, a
+rota do bot, o passo guloso do monstro e o empurrão (`#pushAside`, que passa `forced`) caem todos
+nela, com a razão nova `'rooted'` em `MoveRejection` (`movement.ts`). A recusa da caminhada PRÓPRIA
+(`startAutoWalk`) vem antes de qualquer sorteio; só o passo forçado (a fuga do medo, o passo de um
+`walk-to` já guardado) rola o drunk (`onWalk`) e depois esbarra no `rooted` de
+`internalMoveCreature`. O `walk-to` distante de `requestMove` é recusado antes de guardar caminho
+nenhum (`Runner.manualWalkTo`), e o que JÁ estava guardado quando a raiz chega CAI no primeiro passo
+que ela recusa: `Creature::onCreatureMove` zera a lista de passos de quem está enraizado
+(`resetMovementState`, `creature.cpp:503`) e `onCreatureWalk` já tira um passo da lista por
+tentativa recusada — o caminho não resiste à condição, e nada anda sozinho quando ela acaba (o
+bot retoma pelo tile mais próximo). Vale para monstro também — um monstro enraizado não persegue
+—, e o empurrão que não consegue mover um monstro enraizado o esmaga, como o Canary
+(`Monster::pushCreature` recusa igual).
+
+### `pacified` — sem golpe e sem magia agressiva
+
+É a trava de escada (seção anterior) e o Swift Foot. **Swift Foot** (`swift_foot.lua`, ramo sem a
+Roda — a Roda está fora do recorte): acelera (`haste`) E aplica `CONDITION_PACIFIED` pelos mesmos
+10 s. O `haste` do `spellEffectSchema` ganhou `pacifies: true`; `castSpell` devolve a pacificação em
+`CastSuccess.alsoConditions` e o ruleset a aplica no mesmo alvo. O conteúdo deixou de carregar a
+redução de 30 % de dano (TibiaWiki, anterior ao Canary `main`) — divergência que existia desde o
+#523 e some aqui. O grupo de cooldown `attack` de 10 s que o script também aplica
+(`CONDITION_SPELLGROUPCOOLDOWN`) não tem efeito próprio: toda magia desse grupo é agressiva, e a
+pacificação já as recusa.
+
+### `feared` — a caminhada forçada
+
+**Não é "um passo sorteado como o drunk"**, ao contrário do que o plano do endgame supunha: é a
+`ConditionFeared` do Canary (`condition.cpp:2163-2455`), e o RNG da sessão só entra num caso (o
+tile do próprio lançador, abaixo). O mecanismo, na ordem em que acontece:
+
+1. **A aplicação.** `Combat::CombatConditionFunc` recusa o medo (`checkFearConditionAffected`,
+   `combat.cpp:1003`) quando o personagem está na imunidade de 10 s do medo anterior (11 s depois de
+   um Cleanse — `Player::isImmuneFear`, o mesmo mapa `cleanseImmunity`, chave `feared`), quando já
+   está com medo, e quando a party dele já tem gente demais com medo: `(membros + 5) / 5` de cada
+   vez, em inteiro, contando os membros SEM o líder (o `memberList` do Canary não o inclui) e
+   descontando os membros com medo agora — o líder com medo não desconta. Só o combate consulta
+   (`fromCombat`); sozinho não há party. Só o PERSONAGEM entra nesse caminho: `forcePlayerAutoWalk`
+   ignora qualquer criatura que não seja `Player`, então em monstro a condição é só o estado
+   (nenhum conteúdo do Canary aplica medo a monstro) e o `condition-expire` a encerra.
+2. **A direção de fuga** (`startCondition` → `getFleeDirection`, `fear.ts#initialFleeIndex`): cinco
+   regiões pela posição do personagem relativa ao LANÇADOR (`fleeingFromPos`, gravado no estado da
+   condição em `ConditionState.flee`), cada uma com o índice inicial do `m_directionsVector`. No
+   MESMO tile do lançador sorteia com o `Rng` da sessão entre os vizinhos que aceitam o passo — e o
+   Canary grava o VALOR do enum `Direction` como se fosse um índice do vetor (esquisitice preservada).
+3. **O pensamento** (`FEAR_THINK`, `hunt.ts`). O Canary roda `executeCondition` uma vez por 1000 ms
+   por criatura (`Game::checkCreatures`), numa fase sorteada ao entrar no jogo; aqui o pensamento é
+   AGENDADO quando o medo começa, no próximo instante da grade de pensamento do personagem
+   (`Runner.thinkPhaseMs`, a fase sorteada UMA vez com o `Rng` da sessão — a mesma grade que retoma o
+   golpe depois de `pacified`) e se re-arma a cada 1000 ms (invariante 2: nada é relógio por
+   criatura). Com MENOS de dois passos por dar (`getWalkSize() < 2` — a lista de passos do jogador é
+   a MESMA da fuga, então um `walk-to` distante que já estava guardado conta: com dois passos ou
+   mais ele continua e a fuga espera), escolhe a direção (se ainda não escolheu) e busca o caminho
+   (`getFleePath`, `fear.ts#fleePath`): as distâncias `{15, 9, 3, 1}` na direção do índice, o
+   primeiro caminho não vazio vale, e sem nenhum o índice avança um para o próximo pensamento. O
+   ponto sintético mantém as esquisitices da fonte (o `SOUTH` cai do lado do `NORTH`, e os dois
+   diagonais do norte miram o mesmo ponto: `fear.test.ts` fixa o resultado de cada índice num campo
+   aberto).
+4. **A caminhada** (`Runner.fearWalk`, `#advanceFearWalk`). A lista de passos SUBSTITUI a caminhada
+   do próprio jogador (`forcePlayerAutoWalk` → `startAutoWalk` limpa `listWalkDir`, e o `walk-to`
+   distante em curso cai) e é consumida um passo por vencimento de `PLAYER_STEP`, com PRIORIDADE
+   acima de tudo (rota, combate-stop, follow); o personagem continua batendo em quem estiver ao
+   alcance. Um passo recusado (parede, campo de dano, criatura) é DESCARTADO e o seguinte sai da
+   posição em que ele ficou, sem replanejar. A lista vazia é o `Player::onWalkComplete`: se o medo
+   ainda vale, reavalia a fuga na hora. `feared` recusa o INÍCIO do passo do PRÓPRIO jogador
+   (`startAutoWalk`: o `walk` do socket e a rota do bot recebem `'feared'`), mas não a fuga nem a
+   lista de passos que já corria (`forced`). Um passo de lista num campo que causa dano e não
+   bloqueia é recusado em DOIS lugares, nesta ordem: `Player::onWalk` olha o campo do tile PEDIDO
+   antes de tudo (`player.cpp:2942-2955`) — sem sorteio de drunk e sem desvio —, e
+   `internalMoveCreature` olha o do tile DESVIADO depois dele (`game.cpp:1975-1980`); a fuga desvia
+   do campo, nunca o atravessa.
+5. **O fim** (o primeiro pensamento DEPOIS do prazo, `expiresAtMs < nowMs`). A ordem é a do Canary:
+   a fuga é calculada, a condição fecha (a caminhada em curso para, `stopEventWalk`, e o personagem
+   ganha 10 s de imunidade) e a lista que a fuga acabou de enfileirar roda DEPOIS — o jogador foge
+   uma última lista inteira com o medo já encerrado. Não há `condition-expire` para o medo do
+   personagem: o pensamento é quem o fecha, e por isso a condição continua no estado (com
+   `isActive` falso) até esse pensamento. Consequência que é do Canary e não bug: uma oferta do
+   mesmo medo nesse intervalo (a condição existe, `hasCondition` já é falso, a imunidade ainda não
+   começou) o renova. **Troca de sessão (#812):** as três condições de controle atravessam como
+   qualquer condição — prazo traduzido para o relógio da sessão nova, pausado na Cidade — e a hunt
+   que entra as rearma: `rooted` e `pacified` com o `condition-expire` de sempre, o medo de
+   personagem com um `FEAR_THINK` no próximo instante da grade de pensamento da sessão nova (e a
+   fuga recalculada, porque a caminhada forçada é do runner e não atravessa).
+6. **O que ele proíbe.** Nenhuma magia nem runa (`spells.cpp:104,503`, "You are feared" — razão
+   `feared` em `CastRefusal`/`SlotRefusal`, retry no prazo do medo); a poção não passa por esse
+   checklist e continua liberada. O equipar do Canary (`game.cpp:4191`) não tem equivalente numa
+   hunt.
+
+**A busca de caminho é original, e o que NÃO é reproduzível.** O Canary é GPL v2 (ADR 0019): a
+versão anterior de `fear.ts` era uma transcrição do A* de `Map::getPathMatchingCond` — a lista de
+vizinhos por direção do pai, o laço do melhor nó, a heurística — e foi retirada por violar o limite
+de licença (revisão do #622). `fear.ts` entrega o que a busca do Canary ENTREGA: a caixa de sete
+tiles em volta do personagem, andada em oito direções com custo 10 (cardinal) e 35 (diagonal) — a
+diagonal sai mais cara que dois cardinais, e por isso o caminho é quase sempre em L e passa por
+quina —, e o destino é o tile alcançável MAIS DISTANTE (Chebyshev) do ponto sintético, com visão
+livre até ele e a até 30 tiles por eixo (`maxTargetDist`), o que faz a busca FUGIR do ponto; o tile
+de partida entra na disputa (nenhum alcançável mais longe → lista vazia). É uma varredura de custo
+mínimo seguida da escolha do destino, a mesma separação que `line-of-sight.ts` faz com o
+`checkSightLine` do TFS.
+
+O que o Canary não fixa é o DESEMPATE — a ordem em que o A* visita os nós, com o empate de total
+decidido por uma versão do `getBestNode` que muda com o conjunto de instruções (AVX2/SSE) — e aqui
+ele é uma escolha declarada: entre destinos à mesma distância do ponto vale o de menor
+`custo + 8 × (|dx| + |dy|)`, e sobrando empate (e entre caminhos do mesmo custo) o de passos
+"menores" na ordem oeste, leste, norte, sul e depois as diagonais (`STEP_ORDER`). Medido contra a
+transcrição que saiu, em ~20 000 casos de campo com parede e visão aleatórias: o custo e o tamanho do
+caminho coincidem em TODOS, o destino em ~98 % e o caminho inteiro em ~70 % (o resto são caminhos de
+mesmo custo com a curva em outro passo); em campo aberto os oito índices coincidem sempre, e é isso
+que `fear.test.ts` fixa. O primeiro passo forçado cai no próximo `PLAYER_STEP` (no máximo um passo
+depois do pensamento), em vez do `getEventStepTicks` do Canary — o cadenciador do passo do `sim` é o
+próprio `PLAYER_STEP`, e um relógio de passo à parte dobraria o estado persistido. Nenhuma das duas
+coisas muda QUANDO o medo dispara ou acaba — o gatilho é o do Canary.
+
+### Imunidade por monstro e Cleanse
+
+`monster.conditionImmunities` (`CONDITION_IMMUNITIES`) ganhou `rooted`, `feared` e `pacified` — o
+vocabulário sobe de onze para catorze nomes. É vocabulário AUTORAL: `Monster::isImmune` é um bitset
+sobre todo `ConditionType_t`, mas a ponte do Lua só nomeia os que já existiam, e nenhum monstro do
+bestiário declara imunidade a estes três (`conditionImmunityOf`, `conditions.ts`, mapeia a chave
+reservada para o nome). Vale pelo mesmo portão de sempre (`#applyConditionTo`, só quando o
+chamador é um COMBATE).
+
+O Cleanse (#603, `combat-v4`) limpa `rooted` e `feared` (`Creature::getCleansableConditions`,
+`creature.cpp:1527-1549` — `pacified` não), com a mesma imunidade de 11 s por tipo; limpar o medo passa
+por `#endFear`, que para a caminhada e nunca deixa a imunidade menor que a do Cleanse (o Canary
+grava 10 s no `endCondition` e 11 s logo depois).
+
+### O que vem do Canary (importador)
+
+`fear` e `root` são feitiços Lua de nome próprio (`data-otservbr-global/scripts/spells/monster/
+fear.lua`/`root.lua`) que o Canary acha por nome em `deserializeSpell` e usa SEM ler a linha do
+monstro além de `interval`, `chance`, `range` e o alvo: alvo único, 3000 ms fixos, sem dano. O
+importador (`scripts/catalog/monster-abilities.ts#mapControl`) os mapeia para a ability `fear`/`root`
+com `power: 0` (o mesmo desenho do drunk) e `merge: 'longest'`; entraram no catálogo o Fungosaurus,
+o Gore Horn e o Branchy Crawler (os três só eram bloqueados por isto). O `soulwars fear` continua
+sem mapeador — o Lua o executa com atraso de 2 s por `addEvent`, e a ability não tem atraso.
+Continuam de fora, por outras magias, o Doctor Marrow e o Mitmah Vanguard.
+
+**Parâmetros e onde moram.** A duração (3000 ms) e o `merge` são conteúdo de cada ability/runa; o
+pensamento (`CREATURE_THINK_INTERVAL_MS`, 1000) e a imunidade natural (`FEAR_IMMUNITY_MS`, 10 000)
+são constantes do Canary em `hunt.ts`; a busca (`{15, 9, 3, 1}`, 7, 30, custos) e o vetor de direções
+moram em `packages/sim/src/fear.ts`.
+
 ## Cura de condição (dispel, #590)
 
 Cure Poison, Cure Burning, Cure Electrification, Cure Bleeding e Cure Curse (Canary
@@ -2951,7 +3142,7 @@ também tinham mana acima da real.
 | 40 | Divine Missile | 20 | attack (2 s) | 2 s | dano · alvo, alcance 4 | 60 |
 | 50 | Divine Caldera | 160 | attack (2 s) | 4 s | dano · círculo raio 3 no lançador | 150 |
 | 50 | Recovery | 75 | healing (1 s) | 60 s | cura 20 a cada 3 s por 60 s | — |
-| 55 | Swift Foot | 400 | support (2 s) + focus (10 s) | 10 s | haste +80 % / 10 s | — |
+| 55 | Swift Foot | 400 | support (2 s) + focus (10 s) | 10 s | haste +80 % / 10 s **e `pacified` (10 s)** (#622) | — |
 | 60 | Salvation | 210 | healing (1 s) | 1 s | cura | 500 |
 | 60 | Sharpshooter | 450 | support (2 s) + focus (10 s) | 10 s | postura 10 s | — |
 | 70 | Holy Flash (`utori san`, novo #596) | 30 | attack (2 s) | 40 s | dano ao longo do tempo · alvo, alcance 3 · 20 a cada 3 s por ~27 s (tique aleatório 7-11, aproximado pela média) | — |
