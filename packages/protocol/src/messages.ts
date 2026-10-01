@@ -202,6 +202,16 @@ export const CLIENT_TO_SERVER = {
    * 35: o 33 é do `charm-remove`, e o 34 é do `cancel-exit` (#802).
    */
   'set-fight-mode': 35,
+  /**
+   * Escolher o nível de Hazard de uma zona (M44-14, #632; ADR 0052 d.2/d.5). INTENÇÃO: o cliente
+   * diz QUAL zona e QUAL nível; quem decide se o nível cabe no teto desbloqueado é o servidor
+   * (invariante 4), na sessão dona (invariante 9). Só na Cidade — uma hunt em curso tem o nível
+   * FIXO desde a entrada, como a versão de conteúdo (invariante 7). Sucesso é `hazard`
+   * reenviado; recusa é `system-message`.
+   *
+   * 36: o 35 é do `set-fight-mode`.
+   */
+  'set-hazard-level': 36,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -449,6 +459,15 @@ export const SERVER_TO_CLIENT = {
    * 45: o 44 é do `charms`.
    */
   'exit-pending': 45,
+  /**
+   * O Hazard do personagem (M44-14, #632, ADR 0052 d.1): o nível máximo desbloqueado e o
+   * escolhido de cada zona — o registro cru, como `charms`. Quais zonas existem, os níveis
+   * mínimo e máximo de cada uma e que hunt pertence a qual vêm do `catalogue` (fixado na sessão,
+   * invariante 7). Sai no attach e sempre que uma escolha ou uma subida de nível muda o registro.
+   *
+   * 46: o 45 é do `exit-pending`.
+   */
+  hazard: 46,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */
