@@ -23,8 +23,8 @@
 // conteúdo (magia, ability, campo), com política de fusão por tipo e leitura de stats. Aqui não
 // há conteúdo nenhum para configurar — a janela é uma constante do MOTOR, como o `pzLocked` do
 // Canary —, e o valor é só um carimbo de instante em `CharacterRuntime.lastCombatActionAtMs`,
-// no molde de `CharacterRuntime.attackLockedUntil` (stairhop, #554) e de
-// `Runner.lastCombatActionAtMs` (`rulesets/hunt.ts` — ver a nota de distinção lá).
+// no molde de `CharacterRuntime.cleanseImmunity` (#603) e de `Runner.lastCombatActionAtMs`
+// (`rulesets/hunt.ts` — ver a nota de distinção lá).
 
 /** `pzLocked` do Canary: 60 s, contados do último ataque, dado ou recebido. */
 export const IN_FIGHT_WINDOW_MS = 60_000;

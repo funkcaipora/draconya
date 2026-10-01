@@ -19,6 +19,7 @@
 import type { WorldPoint } from './movement.js';
 import type { CarriedItem } from './inventory.js';
 import type { Departure } from './session.js';
+import type { FindRelation } from './utility-spells.js';
 import type { DamageType } from '@draconya/content';
 
 /**
@@ -266,3 +267,24 @@ export type PartyEvent =
   | FollowState
   | PartyEndVote
   | ManualActionResult;
+
+/**
+ * O resultado de um Find Person/Find Fiend (#623): a magia SAIU e tem UMA coisa a dizer a quem a
+ * lançou — em que direção e a que distância está o alvo. POR PERSONAGEM, como `follow-state`:
+ * quem lançou é o único que precisa ler, e a mensagem de um Find não é da party inteira.
+ *
+ * É DADO, sem frase: o `sim` só sabe a relação (`FindRelation`, `utility-spells.ts`) e QUEM foi
+ * achado; o texto em português é da apresentação, no host. `subjectId` é o personagem achado
+ * (Find Person) — o host resolve o nome, que o `sim` não guarda; ausente no Fiend, que acha
+ * monstro. Vale só para quem lançou (`characterId`): o alvo não fica sabendo que foi procurado.
+ */
+export interface FindResult {
+  readonly kind: 'find-result';
+  readonly characterId: string;
+  readonly target: 'person' | 'fiend';
+  readonly subjectId?: string;
+  readonly relation: FindRelation;
+}
+
+/** Avisos a UM personagem, sem efeito de jogo (#623) — o que a apresentação diz e mais nada. */
+export type CharacterNotice = FindResult;

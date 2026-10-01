@@ -4,6 +4,7 @@
   "description": "Lança um raio de gelo no seu alvo atual.",
   "vocationId": "sorcerer",
   "minLevel": 15,
+  "learnPrice": 800,
   "manaCost": 20,
   "group": "attack",
   "groupCooldownMs": 2000,

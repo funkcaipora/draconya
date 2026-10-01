@@ -2,12 +2,13 @@
 
 Fonte: `canary` em `47dfd51f45280a59a1d3e50ba7edd573d7234446`.
 
-1965 entidade(s) geradas em 10 fatia(s):
+1986 entidade(s) geradas em 11 fatia(s):
 
 - `amulets.json`: 87
 - `armors.json`: 164
 - `boots.json`: 61
 - `creature-products.json`: 631
+- `exercise-weapons.json`: 21
 - `helmets.json`: 131
 - `legs.json`: 66
 - `rings.json`: 44
@@ -17,13 +18,14 @@ Fonte: `canary` em `47dfd51f45280a59a1d3e50ba7edd573d7234446`.
 
 ## Notas
 
-- 7420 `<item>` lidos das categorias de caça; 5455 fora do corte, 75 por slug duplicado (nome repetido — desambiguação de id fica para quando o primeiro conflito real aparecer).
+- 7420 `<item>` lidos das categorias de caça; 5434 fora do corte, 75 por slug duplicado (nome repetido — desambiguação de id fica para quando o primeiro conflito real aparecer).
 - Reconciliação (ADR 0014): 42 item(ns) autoral(is) com override gravado em `packages/content/data/items/overrides/` — o id nunca muda, só a correção.
 - Preço (`value`, M34-03/#574): o maior `sell` de `data-otservbr-global/npc/*.lua` por `id` do Canary (exceto o Nah'Bob, ver `npc-prices.ts`); `0` quando nenhum NPC vende, ou quando o importador rodou sem `prices`.
+- Exercise weapons (#631, ADR 0059): a fatia `exercise-weapons` traz `charges` (500/1800/14400), `exercise.skillId` (da `exerciseWeaponsTable` de `exercise_training_weapons.lua`) e, quando algum NPC as vende, `purchasable` + `buyPrice` (o MENOR `buy`, ADR 0038 d.6). As exercise wraps (fist) são do Monk e ficam fora; o `training weapon` de 50 cargas é da Daily Reward.
 - `stackable` nunca declarado (sempre o default `false`): a pilha é um flag de `items.otb`, binário, que este leitor não abre — só `items.xml`.
-- Campos lidos e ignorados (sem campo no schema desta base ou fora do escopo): showCount (115), showAttributes (91), shootType (79), augments (75), showduration (73), decayTo (64), loottype (47), mantra (38), transformdeequipto (28), stopduration (27), showattributes (24), showCharges (22), transformequipto (18), lifeleechchance (16), manaleechchance (16), maxhitchance (11), transformDeEquipTo (11), transformEquipTo (10), maxtextlen (6), writeable (6), decayto (2), fluidsource (2), fieldabsorbpercentfire (1), invisible (1), manashield (1), perfectShotDamage (1), wrapableto (1).
+- Campos lidos e ignorados (sem campo no schema desta base ou fora do escopo): showCount (115), showAttributes (91), shootType (79), augments (75), showduration (73), decayTo (64), loottype (47), showCharges (46), mantra (38), transformdeequipto (28), stopduration (27), showattributes (24), transformequipto (18), lifeleechchance (16), manaleechchance (16), maxhitchance (11), transformDeEquipTo (11), transformEquipTo (10), maxtextlen (6), writeable (6), decayto (2), fluidsource (2), fieldabsorbpercentfire (1), invisible (1), manashield (1), perfectShotDamage (1), wrapableto (1).
 
-## Fora do corte (5455)
+## Fora do corte (5434)
 
 O pacote de arte 13.32 não desenha, ou o `sim` ainda não executa a mecânica (ADR 0038 decisão 5).
 Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
@@ -1370,14 +1372,7 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | dry-solstice-tree | dry solstice tree | sem categoria de caça (primarytype "remains") | `data/items/items.xml` |
 | dryad-soul-core | dryad soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
 | dung-ball | dung ball | id duplicado (outro item já gerou este slug) | `data/items/items.xml` |
-| durable-exercise-axe | durable exercise axe | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| durable-exercise-bow | durable exercise bow | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| durable-exercise-club | durable exercise club | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| durable-exercise-rod | durable exercise rod | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| durable-exercise-shield | durable exercise shield | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| durable-exercise-sword | durable exercise sword | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| durable-exercise-wand | durable exercise wand | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| durable-exercise-wraps | durable exercise wraps | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
+| durable-exercise-wraps | durable exercise wraps | exercise weapon de "SKILL_FIST": fist é do Monk (pós-13.32, ADR 0038 d.5) — fora do corte | `data/items/items.xml` |
 | dusk-catcher | dusk catcher | sem categoria de caça (primarytype "plants") | `data/items/items.xml` |
 | duskbringer-soul-core | duskbringer soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
 | dustbin | dustbin | sem categoria de caça (primarytype "utilities") | `data/items/items.xml` |
@@ -1559,16 +1554,9 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | evora | Evora | sem categoria de caça (primarytype "fansite items") | `data/items/items.xml` |
 | exaltation-chest | exaltation chest | sem categoria de caça (primarytype "containers") | `data/items/items.xml` |
 | execowtioner-soul-core | execowtioner soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
-| exercise-axe | exercise axe | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| exercise-bow | exercise bow | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| exercise-club | exercise club | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
 | exercise-dummy | exercise dummy | sem categoria de caça (primarytype "statues") | `data/items/items.xml` |
 | exercise-dummy | exercise dummy | sem categoria de caça (primarytype "statues") | `data/items/items.xml` |
-| exercise-rod | exercise rod | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| exercise-shield | exercise shield | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| exercise-sword | exercise sword | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| exercise-wand | exercise wand | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| exercise-wraps | exercise wraps | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
+| exercise-wraps | exercise wraps | exercise weapon de "SKILL_FIST": fist é do Monk (pós-13.32, ADR 0038 d.5) — fora do corte | `data/items/items.xml` |
 | exotic-bat-soul-core | exotic bat soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
 | exotic-cave-spider-soul-core | exotic cave spider soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
 | exotic-flowers | exotic flowers | sem categoria de caça (primarytype "plants and herbs") | `data/items/items.xml` |
@@ -2708,14 +2696,7 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | larva-soul-core | larva soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
 | larvae | larvae | sem categoria de caça (primarytype "food") | `data/items/items.xml` |
 | last-planegazer | Last Planegazer | sem categoria de caça (primarytype "undead humanoids") | `data/items/items.xml` |
-| lasting-exercise-axe | lasting exercise axe | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| lasting-exercise-bow | lasting exercise bow | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| lasting-exercise-club | lasting exercise club | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| lasting-exercise-rod | lasting exercise rod | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| lasting-exercise-shield | lasting exercise shield | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| lasting-exercise-sword | lasting exercise sword | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| lasting-exercise-wand | lasting exercise wand | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
-| lasting-exercise-wraps | lasting exercise wraps | sem categoria de caça (primarytype "exercise weapons") | `data/items/items.xml` |
+| lasting-exercise-wraps | lasting exercise wraps | exercise weapon de "SKILL_FIST": fist é do Monk (pós-13.32, ADR 0038 d.5) — fora do corte | `data/items/items.xml` |
 | lava | lava | sem categoria de caça (primarytype "natural tiles") | `data/items/items.xml` |
 | lava | lava | sem categoria de caça (primarytype "natural tiles") | `data/items/items.xml` |
 | lava | lava | sem categoria de caça (primarytype "natural tiles") | `data/items/items.xml` |
@@ -4960,14 +4941,14 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | toy-spider | toy spider | sem categoria de caça (primarytype "dolls and bears") | `data/items/items.xml` |
 | traditional-sai | traditional sai | família "fist" não é declarável (fallback do motor, DT-01) | `data/items/items.xml` |
 | trained-fire-bug | trained fire bug | sem categoria de caça (primarytype "quest items") | `data/items/items.xml` |
-| training-axe | training axe | sem categoria de caça (primarytype "training weapons") | `data/items/items.xml` |
-| training-bow | training bow | sem categoria de caça (primarytype "training weapons") | `data/items/items.xml` |
-| training-club | training club | sem categoria de caça (primarytype "training weapons") | `data/items/items.xml` |
-| training-rod | training rod | sem categoria de caça (primarytype "training weapons") | `data/items/items.xml` |
-| training-shield | training shield | sem categoria de caça (primarytype "training weapons") | `data/items/items.xml` |
-| training-sword | training sword | sem categoria de caça (primarytype "training weapons") | `data/items/items.xml` |
-| training-wand | training wand | sem categoria de caça (primarytype "training weapons") | `data/items/items.xml` |
-| training-wraps | training wraps | sem categoria de caça (primarytype "training weapons") | `data/items/items.xml` |
+| training-axe | training axe | training weapon de 50 cargas: recompensa da Daily Reward, sem NPC vendedor e sem sistema de Daily Reward no Draconya (#631) | `data/items/items.xml` |
+| training-bow | training bow | training weapon de 50 cargas: recompensa da Daily Reward, sem NPC vendedor e sem sistema de Daily Reward no Draconya (#631) | `data/items/items.xml` |
+| training-club | training club | training weapon de 50 cargas: recompensa da Daily Reward, sem NPC vendedor e sem sistema de Daily Reward no Draconya (#631) | `data/items/items.xml` |
+| training-rod | training rod | training weapon de 50 cargas: recompensa da Daily Reward, sem NPC vendedor e sem sistema de Daily Reward no Draconya (#631) | `data/items/items.xml` |
+| training-shield | training shield | training weapon de 50 cargas: recompensa da Daily Reward, sem NPC vendedor e sem sistema de Daily Reward no Draconya (#631) | `data/items/items.xml` |
+| training-sword | training sword | training weapon de 50 cargas: recompensa da Daily Reward, sem NPC vendedor e sem sistema de Daily Reward no Draconya (#631) | `data/items/items.xml` |
+| training-wand | training wand | training weapon de 50 cargas: recompensa da Daily Reward, sem NPC vendedor e sem sistema de Daily Reward no Draconya (#631) | `data/items/items.xml` |
+| training-wraps | training wraps | training weapon de 50 cargas: recompensa da Daily Reward, sem NPC vendedor e sem sistema de Daily Reward no Draconya (#631) | `data/items/items.xml` |
 | transcendence-potion | transcendence potion | sem categoria de caça (primarytype "liquids") | `data/items/items.xml` |
 | transcendence-potion | transcendence potion | sem categoria de caça (primarytype "liquids") | `data/items/items.xml` |
 | transcendent-bo | transcendent bo | família "fist" não é declarável (fallback do motor, DT-01) | `data/items/items.xml` |

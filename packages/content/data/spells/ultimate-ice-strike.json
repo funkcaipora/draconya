@@ -4,6 +4,7 @@
   "description": "Lança um bloco de gelo devastador no seu alvo atual.",
   "vocationId": "druid",
   "minLevel": 100,
+  "learnPrice": 15000,
   "manaCost": 100,
   "group": "attack",
   "groupCooldownMs": 2000,

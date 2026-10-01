@@ -56,6 +56,14 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -125,6 +133,24 @@
     "runOnHealth": 3,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Flap! Flap!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -212,6 +238,22 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grrrr",
+          "yell": false
+        },
+        {
+          "text": "Groar",
+          "yell": false
+        }
+      ]
+    },
+    "convinceable": true,
+    "manaCost": 300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -285,6 +327,24 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Maeh",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -359,6 +419,28 @@
     "runOnHealth": 30,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grunt! Grunt!",
+          "yell": false
+        },
+        {
+          "text": "Grunt",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 465,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -418,6 +500,24 @@
     "runOnHealth": 75,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Weeeeheeeeeee",
+          "yell": false
+        },
+        {
+          "text": "*snort*",
+          "yell": false
+        },
+        {
+          "text": "*Weeeeheeeeaaa*",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -480,6 +580,32 @@
     "runOnHealth": 8,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Mew!",
+          "yell": false
+        },
+        {
+          "text": "Meow!",
+          "yell": false
+        },
+        {
+          "text": "Meow meow!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 220,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -564,6 +690,28 @@
     "runOnHealth": 3,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Meep!",
+          "yell": false
+        },
+        {
+          "text": "Meeeeep!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -699,6 +847,30 @@
     "runOnHealth": 300,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Snort!",
+          "yell": false
+        },
+        {
+          "text": "Grunt!",
+          "yell": false
+        },
+        {
+          "text": "Snarl!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -778,6 +950,14 @@
     "runOnHealth": 25,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 260,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -878,6 +1058,34 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "*bell*",
+          "yell": false
+        },
+        {
+          "text": "ROOOAAARR!!",
+          "yell": true
+        },
+        {
+          "text": "*sniff*",
+          "yell": false
+        },
+        {
+          "text": "*wheeze*",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -927,6 +1135,24 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Wuff wuff",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 310000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 220,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -995,6 +1221,22 @@
     "runOnHealth": 25,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grunt!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1121,6 +1363,22 @@
     "runOnHealth": 25,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I bet it was you who killed my mom!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1226,6 +1484,26 @@
     "runOnHealth": 45,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Snort",
+          "yell": false
+        },
+        {
+          "text": "Grunt!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1314,6 +1592,32 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hooooot-Toooooot!",
+          "yell": false
+        },
+        {
+          "text": "Tooooot!",
+          "yell": false
+        },
+        {
+          "text": "Trooooot!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1380,6 +1684,24 @@
     "runOnHealth": 2,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Chchch",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 220,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1458,6 +1780,34 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "*wheeze*",
+          "yell": false
+        },
+        {
+          "text": "ROOOAAARR!!",
+          "yell": false
+        },
+        {
+          "text": "*sniff*",
+          "yell": false
+        },
+        {
+          "text": "*bell*",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1556,6 +1906,22 @@
     "runOnHealth": 20,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grrrr",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1642,6 +2008,30 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You can COUNT on us!",
+          "yell": false
+        },
+        {
+          "text": "Maeh!",
+          "yell": false
+        },
+        {
+          "text": "I feel you're getting sleepy! Maeh!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1824,6 +2214,14 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 910000,
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 910000
+      }
+    ],
+    "manaCost": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1901,6 +2299,26 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Yip! Yip!",
+          "yell": false
+        },
+        {
+          "text": "Grrrrrrr",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1976,6 +2394,12 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2049,6 +2473,13 @@
     },
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "outfit": {
+      "head": 85,
+      "body": 1,
+      "legs": 85,
+      "feet": 105,
+      "addons": 3
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2134,6 +2565,12 @@
     "runOnHealth": 8,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2217,6 +2654,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Gnarllll!",
+          "yell": false
+        },
+        {
+          "text": "Grrrrrr!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 465,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2234,6 +2693,239 @@
       "occurrence": 0
     },
     "outfitId": 341
+  },
+  {
+    "id": "gore-horn",
+    "name": "Gore Horn",
+    "class": "mammal",
+    "health": 20620,
+    "experience": 12595,
+    "attack": {
+      "min": 0,
+      "max": 1000
+    },
+    "armor": 78,
+    "defense": 78,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.1,
+        "energy": 0.3,
+        "earth": 0.5,
+        "fire": -0.1,
+        "ice": -0.1
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 2.28,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 382,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.3005,
+        "min": 10000,
+        "max": 10000
+      },
+      "items": [
+        {
+          "itemId": "gore-horn",
+          "chance": 0.3604
+        },
+        {
+          "itemId": "big-bone",
+          "chance": 0.0527
+        },
+        {
+          "itemId": "dwarven-ring",
+          "chance": 0.0359
+        },
+        {
+          "itemId": "metal-spats",
+          "chance": 0.031
+        },
+        {
+          "itemId": "knight-legs",
+          "chance": 0.0233
+        },
+        {
+          "itemId": "diamond-sceptre",
+          "chance": 0.0206
+        },
+        {
+          "itemId": "doublet",
+          "chance": 0.0139
+        },
+        {
+          "itemId": "hammer-of-wrath",
+          "chance": 0.0107
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 1000
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "energybeam",
+        "cadenceMs": 3500,
+        "chance": 0.2,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 450,
+          "max": 750
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "energyarea"
+        }
+      },
+      {
+        "id": "physicalburst",
+        "cadenceMs": 4100,
+        "chance": 0.15,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 7,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 500,
+          "max": 900
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "explosionarea"
+        }
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 2700,
+        "chance": 0.35,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 500,
+          "max": 850
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "energy"
+        }
+      },
+      {
+        "id": "root",
+        "cadenceMs": 2000,
+        "chance": 0.01,
+        "target": {
+          "range": 11
+        },
+        "power": 0,
+        "damageType": "physical",
+        "condition": {
+          "key": "rooted",
+          "merge": "longest",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "rooted"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 85,
+      "body": 1,
+      "legs": 85,
+      "feet": 105,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Rraaaaa!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/gore_horn.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 2266,
+      "toKill": 5000,
+      "firstUnlock": 200,
+      "secondUnlock": 2000,
+      "charmsPoints": 100,
+      "stars": 5,
+      "occurrence": 0
+    },
+    "outfitId": 1548
   },
   {
     "id": "grey-horse",
@@ -2276,6 +2968,24 @@
     "runOnHealth": 75,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Weeeeheeeeeee",
+          "yell": false
+        },
+        {
+          "text": "*snort*",
+          "yell": false
+        },
+        {
+          "text": "*Weeeeheeeeaaa*",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2335,6 +3045,24 @@
     "runOnHealth": 75,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Weeeeheeeeeee",
+          "yell": false
+        },
+        {
+          "text": "*snort*",
+          "yell": false
+        },
+        {
+          "text": "*Weeeeheeeeaaa*",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2394,6 +3122,32 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Yoooohuuuu!",
+          "yell": false
+        },
+        {
+          "text": "Grrrrrrr",
+          "yell": false
+        },
+        {
+          "text": "Ruff, ruff!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 420,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2469,6 +3223,28 @@
     "runOnHealth": 30,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grrrrrr",
+          "yell": false
+        },
+        {
+          "text": "Hou hou hou!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 275,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2596,6 +3372,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Who is lunch NOW?",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2735,6 +3521,30 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ungh! Ungh!",
+          "yell": false
+        },
+        {
+          "text": "Hugah!",
+          "yell": false
+        },
+        {
+          "text": "Huaauaauaauaa!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2819,6 +3629,24 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Groarrr!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 320,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2923,6 +3751,32 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 370000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Troooooot!",
+          "yell": false
+        },
+        {
+          "text": "Hooooot-Toooooot!",
+          "yell": false
+        },
+        {
+          "text": "Tooooot.",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 370000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3157,6 +4011,30 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ugh! Ugh! Ugh!",
+          "yell": false
+        },
+        {
+          "text": "Holy banana!",
+          "yell": false
+        },
+        {
+          "text": "Chakka! Chakka!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3230,6 +4108,22 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Gnarllll!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3307,6 +4201,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3375,6 +4275,30 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Sniff",
+          "yell": false
+        },
+        {
+          "text": "Oink",
+          "yell": false
+        },
+        {
+          "text": "Oink oink",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3559,6 +4483,26 @@
     "runOnHealth": 100,
     "staticAttack": 0.9,
     "corpseTtlMs": 910000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "GRAAARRRRRR",
+          "yell": true
+        },
+        {
+          "text": "CHHHHHHHHHHH",
+          "yell": true
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 910000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3668,6 +4612,22 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Groarrrr! Rwarrrr",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3751,6 +4711,28 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Groar",
+          "yell": false
+        },
+        {
+          "text": "Grrrr",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3918,6 +4900,33 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 85,
+      "body": 1,
+      "legs": 85,
+      "feet": 105,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grrroaaar!",
+          "yell": false
+        },
+        {
+          "text": "FCHHH!",
+          "yell": true
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3989,6 +4998,28 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Oink oink",
+          "yell": false
+        },
+        {
+          "text": "Oink",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 255,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4073,6 +5104,24 @@
     "runOnHealth": 5,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "GROARRR!",
+          "yell": true
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 315,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4132,6 +5181,23 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Wuff wuff",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 310000,
+        "untilMs": 670000
+      }
+    ],
+    "manaCost": 220,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4194,6 +5260,8 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "convinceable": true,
+    "manaCost": 220,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4271,6 +5339,24 @@
     "runOnHealth": 5,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Meep!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4387,6 +5473,26 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Groarrrr! Rwarrrr!",
+          "yell": false
+        },
+        {
+          "text": "Growl!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4462,6 +5568,24 @@
     "runOnHealth": 20,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Maeh",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4625,6 +5749,30 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Eeeeek! Eeeeek!",
+          "yell": false
+        },
+        {
+          "text": "Huh! Huh! Huh!",
+          "yell": false
+        },
+        {
+          "text": "Ahhuuaaa!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4700,6 +5848,14 @@
     "staticAttack": 0.7,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 220,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4800,6 +5956,14 @@
     "runOnHealth": 8,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4873,6 +6037,24 @@
     "staticAttack": 0.95,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Chchch",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 220,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4958,6 +6140,30 @@
     "runOnHealth": 8,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Gaarrrrrr",
+          "yell": false
+        },
+        {
+          "text": "Gnoorrr",
+          "yell": false
+        },
+        {
+          "text": "Yoooohhuuuu!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5060,6 +6266,22 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 1260000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "SNIFF!",
+          "yell": true
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 600000,
+        "untilMs": 1260000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5146,6 +6368,24 @@
     "staticAttack": 0.95,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Chchch",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 220,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5380,6 +6620,35 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hfffff!",
+          "yell": false
+        },
+        {
+          "text": "Rrrrrr!",
+          "yell": false
+        },
+        {
+          "text": "Graaawwwr!",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 5,
+      "color": 206
+    },
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5475,6 +6744,14 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 420,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5600,6 +6877,26 @@
     "runOnHealth": 30,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Oink",
+          "yell": false
+        },
+        {
+          "text": "Oink oink",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5681,6 +6978,28 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Yoooohhuuuu!",
+          "yell": false
+        },
+        {
+          "text": "Grrrrrrr",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 420,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5762,6 +7081,34 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Gnarrr!",
+          "yell": false
+        },
+        {
+          "text": "Gnoorr!",
+          "yell": false
+        },
+        {
+          "text": "Mrrr!",
+          "yell": false
+        },
+        {
+          "text": "<snort>",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5821,6 +7168,28 @@
     "runOnHealth": 195,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "*bell*",
+          "yell": false
+        },
+        {
+          "text": "ROOOAAARR!!",
+          "yell": true
+        },
+        {
+          "text": "*sniff*",
+          "yell": false
+        },
+        {
+          "text": "*wheeze*",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6030,6 +7399,12 @@
     "runOnHealth": 5,
     "staticAttack": 0.9,
     "corpseTtlMs": 2100000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 2100000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6124,6 +7499,8 @@
       "random": 0
     },
     "staticAttack": 0.7,
+    "convinceable": true,
+    "manaCost": 420,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6187,6 +7564,29 @@
     "runOnHealth": 20,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 20,
+      "body": 30,
+      "legs": 40,
+      "feet": 50,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Wuff wuff",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 310000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6235,6 +7635,24 @@
     "runOnHealth": 75,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Weeeeheeeeeee",
+          "yell": false
+        },
+        {
+          "text": "*snort*",
+          "yell": false
+        },
+        {
+          "text": "*Weeeeheeeeaaa*",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6313,6 +7731,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Yoooohhuuuu!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 260,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6390,6 +7826,28 @@
     "runOnHealth": 8,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Yoooohhuuuu!",
+          "yell": false
+        },
+        {
+          "text": "Grrrrrrr",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 255,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6543,6 +8001,26 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Yooodelaaahooohooo",
+          "yell": false
+        },
+        {
+          "text": "Yooodelaaaheehee",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

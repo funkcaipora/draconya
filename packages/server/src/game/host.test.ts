@@ -1,13 +1,16 @@
 import {
-  CharacterRuntime, HuntRuleset, PartyFullError, Rng, Session, createHuntSession, statsForLevel, totalXpForLevel,
-  type CharmBestiaryEntry, type EndReason, type Ruleset, type SessionSnapshot,
+  CharacterRuntime, HuntRuleset, PartyFullError, Rng, Session, createHuntSession, learnedSpellsStateOf,
+  pointsForLevel, statsForLevel, totalXpForLevel,
+  type CharmBestiaryEntry, type EndReason, type Ruleset, type SessionSnapshot, type SkillsState,
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigSchema, buildContent, compileItem,
-  itemSchema, migrateBotConfigV1, placeholderAppearances,
+  itemSchema, migrateBotConfigV1, placeholderAppearances, skillSchema,
 } from '@draconya/content';
-import type { Ammunition, Appearances, BotConfig, Charm, Progression, RawContent, Vocation } from '@draconya/content';
+import type {
+  Ammunition, Appearances, BotConfig, Charm, Progression, RawContent, Skill, Spell, Vocation,
+} from '@draconya/content';
 import { C2S_SCHEMAS } from '@draconya/protocol';
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import { createLogger } from '../log.js';
@@ -187,6 +190,34 @@ describe('session host', () => {
     expect(saved[0]?.bestiary).toEqual({ rat: 2, bat: 1 });
   });
 
+  it('the receipt carries the Bosstiary of the owner, absolute (#629)', async () => {
+    // O abate de boss que não chega ao extrato some no próximo logout, e o nível 3 nunca
+    // fecharia. Absoluto como o Bestiário: o ledger funde pelo maior. Mutação que mata: apagar a
+    // linha do `bosstiary` em `#persistReceipt` (a lista de permissão do `parseReceipt` está
+    // coberta em `receipts.test.ts`; esta é a outra ponta).
+    const saved: Array<{ bosstiary?: { kills: Record<string, number>; points: number; version: number } }> = [];
+    const receipts = {
+      save: async (r: { bosstiary?: { kills: Record<string, number>; points: number; version: number } }) => {
+        saved.push(r);
+      },
+    } as unknown as ReceiptStore;
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, { directory, receipts });
+    await host.prepare('p1', undefined, 'a1');
+    const owner = sessions[0]?.participants[0];
+    if (owner === undefined) throw new Error('sem personagem');
+    const table = { levels: {
+      bane: [{ kills: 25, points: 5 }], archfoe: [{ kills: 5, points: 10 }], nemesis: [{ kills: 1, points: 10 }],
+    } };
+    owner.bosstiary.record(639, 'nemesis', table);
+    owner.bosstiary.record(639, 'nemesis', table);
+
+    await host.drainAll('drain');
+
+    expect(saved[0]?.bosstiary).toEqual({ kills: { '639': 2 }, points: 10, version: 1 });
+  });
+
   it('saves the receipt before telling the player', async () => {
     // A ordem é a diferença entre as duas metades ruins. Gravado e não avisado: o jogador
     // perdeu a mensagem, mas o crédito está no Redis esperando o `jobs`. Avisado e não
@@ -335,6 +366,40 @@ describe('session host', () => {
     expect(host.sessionFor('p1')?.id).toBe('s-retomada');
     // A fábrica NÃO foi chamada: um personagem novo teria apagado a sessão retomada.
     expect(sessions).toHaveLength(0);
+  });
+
+  it('re-anchors the wall clock of the resumed session by the discarded gap (#599, ADR 0018, ADR 0052 d.6)', async () => {
+    // `createdAtMs + nowMs` é o relógio de PAREDE que o `sim` compara com os carimbos do familiar. A
+    // retomada descarta o intervalo (o relógio lógico continua de onde parou), então sem recolocar
+    // o anchor a soma ficaria atrasada pela queda inteira e o cooldown de 30 min nasceria já curto.
+    const gapMs = 20 * 60_000;
+    const before = Date.now();
+    const snapshots = {
+      load: async () => ({
+        characterId: 'p1', accountId: 'a1', nodeId: 'n0', savedAtMs: before - gapMs,
+        snapshot: { id: 's', type: 'city', createdAtMs: 1_790_000_000_000, logicalNowMs: 5_000 } as unknown as SessionSnapshot,
+      }),
+      save: async () => {},
+      remove: async () => {},
+    } as unknown as SnapshotStore;
+    const restored = new Session({
+      id: 's-retomada', contentVersion: 'v-test',
+      ruleset: countingRuleset().ruleset, rng: Rng.fromSeed('x'), createdAtMs: 0,
+    });
+    let received: SessionSnapshot | undefined;
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, {
+      directory, snapshots, restoreSession: (snapshot) => { received = snapshot; return restored; },
+    });
+    await host.prepare('p1', undefined, 'a1');
+
+    // O intervalo medido na retomada (pelo menos 20 min, e só a folga de execução do teste a mais).
+    const delta = (received?.createdAtMs ?? 0) - 1_790_000_000_000;
+    expect(delta).toBeGreaterThanOrEqual(gapMs);
+    expect(delta).toBeLessThan(gapMs + 5_000);
+    // O relógio lógico NÃO anda: o intervalo é descartado, não simulado.
+    expect((received as { logicalNowMs?: number } | undefined)?.logicalNowMs).toBe(5_000);
   });
 
   it('tells the player that the session was resumed, and how much was lost', async () => {
@@ -666,12 +731,12 @@ describe('session host', () => {
 
     host.handle(viewer, { type: 'session-attach' });
     expect(socket.frames).toHaveLength(0);
-    // Sete: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
+    // Nove: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
     // e stamina só viajam na segunda —, o alvo (`target-changed`, #470), as condições ativas
     // (`active-conditions`, #341), o Bestiário (`bestiary`, FUN-113), as bênçãos (`blessings`,
-    // #570, ADR 0052) e a economia de Charms (`charms`, M39-02, #602). Os sete na FILA, nenhum
-    // no fio.
-    expect(viewer.queued).toBe(7);
+    // #570, ADR 0052), a economia de Charms (`charms`, M39-02, #602), o Bosstiary (`bosstiary`,
+    // #629) e as magias aprendidas (`learned-spells`, #624, ADR 0058). Os nove na FILA, nenhum no fio.
+    expect(viewer.queued).toBe(9);
 
     host.flush();
     const state = socket.received().find((m) => m.type === 'session-state');
@@ -2830,6 +2895,8 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     wide: boolean;
     /** O rato deixa cadáver (FUN-123): aparência 7 na tabela, meio segundo no chão. */
     corpses: boolean;
+    /** O rato é um BOSS Nemesis (raceId 9001, #629) e o conteúdo tem a tabela de níveis do Canary. */
+    boss: boolean;
   }> = {}) {
     const raw = rawTestContent();
     const withCorpses = (base: RawContent): RawContent => ({
@@ -2838,7 +2905,23 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
       monsters: (base.monsters as Array<Record<string, unknown>>).map((m) => ({ ...m, corpseTtlMs: 500 })),
       appearances: (base.appearances as Array<Record<string, unknown>>).map((a) => ({ ...a, corpses: { rat: 7 } })),
     });
-    const content = over.corpses === true
+    const content = over.boss === true
+      ? buildContent({
+        ...raw,
+        monsters: (raw.monsters as Array<Record<string, unknown>>).map((m) =>
+          m['id'] === 'rat'
+            ? {
+              ...m, ...(over.tanky === true ? { health: 100_000 } : {}),
+              boss: true, bosstiary: { rarity: 'nemesis', raceId: 9001 },
+            }
+            : m),
+        bosstiary: [{ id: 'baseline', levels: {
+          bane: [{ kills: 25, points: 5 }, { kills: 100, points: 15 }, { kills: 300, points: 30 }],
+          archfoe: [{ kills: 5, points: 10 }, { kills: 20, points: 30 }, { kills: 60, points: 60 }],
+          nemesis: [{ kills: 1, points: 10 }, { kills: 3, points: 30 }, { kills: 5, points: 60 }],
+        } }],
+      })
+      : over.corpses === true
       ? buildContent(withCorpses(raw))
       : over.wide === true
         ? buildContent(wideArena())
@@ -2953,6 +3036,38 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     expect((appears[0] as { appearanceId: number }).appearanceId).toBeGreaterThan(0);
     // E o andar vem junto: o cliente desenha por `z`.
     expect((appears[0] as { position: { z: number } }).position.z).toBe(7);
+  });
+
+  it('o monstro RECOLOCADO (o teleporte do familiar, #599) some e reaparece no tile novo, com id novo', () => {
+    // O `sim` não emite `creature-moved` de duração zero para o teleporte do familiar: o protocolo
+    // exige duração positiva, e o `#presentMoves` descarta o resto — o cliente nunca o veria
+    // chegar. O par `creature-vanished` + `creature-appeared` do MESMO subject é a relocação: o
+    // cliente o tira de onde estava e o desenha onde ficou (o id numérico não se reaproveita).
+    const { host, runFor, received } = hunt({ tanky: true });
+    runFor(300);
+    const session = host.sessionFor('hero');
+    if (session === undefined) throw new Error('sem sessão');
+    const rat = (session.ruleset as HuntRuleset).monsters[0];
+    if (rat === undefined) throw new Error('sem monstro');
+    const firstId = (received().filter((m) => m.type === 'creature-appear') as unknown as Array<{ id: number }>)[0]?.id;
+    expect(firstId).toBeDefined();
+    const before = received().length;
+
+    session.emit({ kind: 'creature-vanished', creatureId: rat.subject });
+    session.emit({
+      kind: 'creature-appeared', creatureId: rat.subject, monsterId: 'rat',
+      position: { x: 5, y: 5, z: 7 }, health: 20, maxHealth: 20, masterId: 'hero',
+    });
+    runFor(100);
+
+    const after = received().slice(before);
+    const gone = after.filter((m) => m.type === 'creature-disappear');
+    const appeared = after.filter((m) => m.type === 'creature-appear') as unknown as Array<{ id: number; position: unknown; masterId?: string }>;
+    expect(gone).toHaveLength(1);
+    expect((gone[0] as unknown as { id: number }).id).toBe(firstId);
+    expect(appeared).toHaveLength(1);
+    expect(appeared[0]).toMatchObject({ position: { x: 5, y: 5, z: 7 }, masterId: 'hero' });
+    expect(appeared[0]?.id).not.toBe(firstId);
   });
 
   it('NENHUM passo chega com id que não foi anunciado', () => {
@@ -3134,6 +3249,61 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
 
     expect(host.sessionFor('hero')?.aggregates.kills).toBe(0);
     expect(received().filter((m) => m.type === 'bestiary')).toHaveLength(before);
+  });
+
+  it('o Bosstiary chega no session-attach, DEPOIS do Bestiário, mesmo sem abate nenhum (#629)', () => {
+    // Pela mesma razão do Bestiário: progressão que só viaja em mensagem própria, e a Cidade não
+    // tem ciclo para mandar depois. Mutação que mata: apagar o `viewer.send` do Bosstiary em
+    // `#sendState`.
+    const { socket, viewer, stateOf, received } = hunt({ boss: true });
+    stateOf(socket, viewer);
+
+    const types = received().map((m) => m.type);
+    const bosstiary = received().filter((m) => m.type === 'bosstiary');
+    expect(bosstiary).toHaveLength(1);
+    expect(bosstiary[0]).toEqual({ type: 'bosstiary', kills: {}, points: 0 });
+    expect(types.indexOf('bosstiary')).toBeGreaterThan(types.indexOf('bestiary'));
+  });
+
+  it('o abate de boss sobe o Bosstiary ao vivo, e o Bestiário fica de fora dele (#629)', () => {
+    // O contador sobe no `sim` com ou sem visualizador (invariante 3); a mensagem é apresentação,
+    // e sai quando a SOMA dos abates mudou. Mutação que mata: apagar a chamada de
+    // `#presentBosstiary` no ciclo (nenhuma mensagem além do attach), ou apagar a comparação com
+    // `sentBosstiary` (uma por ciclo, e a lista teria repetição).
+    const { host, socket, viewer, stateOf, runFor, received } = hunt({ boss: true });
+    stateOf(socket, viewer);
+    runFor(60_000);
+    const hero = host.sessionFor('hero')?.participants[0];
+    const kills = hero?.bosstiary.killsOf(9001) ?? 0;
+    expect(kills).toBeGreaterThan(1);
+    // Nemesis: nível 1 no abate 1 (10 pontos) — e o boss NÃO conta no Bestiário.
+    expect(hero?.bosstiary.points).toBeGreaterThanOrEqual(10);
+    expect(hero?.bestiary.getState()).toEqual({});
+
+    const updates = received().filter((m) => m.type === 'bosstiary') as unknown as
+      Array<{ kills: Record<string, number>; points: number }>;
+    // A do attach (vazia) e pelo menos uma por abate contado depois dela.
+    expect(updates.length).toBeGreaterThan(1);
+    expect(updates.at(-1)?.kills).toEqual({ '9001': kills });
+    expect(updates.at(-1)?.points).toBe(hero?.bosstiary.points);
+    const totals = updates.map((u) => u.kills['9001'] ?? 0);
+    expect(new Set(totals).size).toBe(totals.length);
+    // O Bestiário não recebe nada do boss.
+    const bestiary = received().filter((m) => m.type === 'bestiary') as unknown as Array<{ counts: object }>;
+    expect(bestiary.every((message) => Object.keys(message.counts).length === 0)).toBe(true);
+    expect(kills).toBe(host.sessionFor('hero')?.aggregates.kills);
+  });
+
+  it('sem abate de boss não sai Bosstiary nenhum — o tempo não é gatilho (#629)', () => {
+    const { host, socket, viewer, stateOf, runFor, received } = hunt({ boss: true, tanky: true });
+    stateOf(socket, viewer);
+    const before = received().filter((m) => m.type === 'bosstiary').length;
+    expect(before).toBe(1);
+
+    runFor(2_000);
+
+    expect(host.sessionFor('hero')?.aggregates.kills).toBe(0);
+    expect(received().filter((m) => m.type === 'bosstiary')).toHaveLength(before);
   });
 
   it('a vida do monstro desce por creature-health, e a morte vira creature-disappear', () => {
@@ -3447,10 +3617,11 @@ describe('as cores do outfit chegam ao cliente (FUN-104)', () => {
     expect(appears[0]).not.toHaveProperty('colors');
   });
 
-  it('o monstro NUNCA traz cores, mesmo ao lado de um herói pintado', async () => {
-    // O rato é uma camada só: o campo é de personagem, e a tabela é indexada por
-    // `characterId`. Mandar `colors` num monstro faria o cliente tentar pintar o que não
-    // tem máscara — e o herói pintado ao lado prova que a tabela estava povoada.
+  it('o monstro traz as cores do CONTEÚDO, e nunca as do herói pintado ao lado', async () => {
+    // O campo `colors` era só de personagem: a tabela do host é indexada por `characterId`. Desde
+    // o #620 o monstro também o traz — mas das cores do CONTEÚDO (`monster.outfit`, o neutro
+    // 0/0/0/0 do rato), e jamais as do ticket do jogador: o herói pintado ao lado prova que a
+    // tabela de personagens estava povoada, e o rato não a herda.
     // Um rato que AGUENTA, como no fixture da FUN-109: o herói de teste mata o comum num
     // golpe, e o `session-state` só lista monstro vivo — com o rato comum a lista vinha
     // vazia e o laço abaixo não afirmava nada (a mutação que sobreviveu na revisão).
@@ -3483,15 +3654,16 @@ describe('as cores do outfit chegam ao cliente (FUN-104)', () => {
     for (let t = 0; t < 300; t += 100) { now += 100; host.cycle(); }
     host.flush();
 
+    const NEUTRAL = { head: 0, body: 0, legs: 0, feet: 0 };
     const ratos = appearsOn(socket).filter((c) => c.name === 'Rat');
     expect(ratos.length).toBeGreaterThan(0);
-    for (const rato of ratos) expect(rato).not.toHaveProperty('colors');
+    for (const rato of ratos) expect(rato.colors).toEqual(NEUTRAL);
 
     const visto = stateOf(host, socket, viewer);
     expect(visto?.world.creatures.find((c) => c.name === 'hero')?.colors).toEqual(COLORS);
     const vivos = visto?.world.creatures.filter((c) => c.name === 'Rat') ?? [];
     expect(vivos.length).toBeGreaterThan(0);
-    for (const rato of vivos) expect(rato).not.toHaveProperty('colors');
+    for (const rato of vivos) expect(rato.colors).toEqual(NEUTRAL);
   });
 
   it('quem já está hospedado continua com as cores com que entrou, mesmo com ticket novo', async () => {
@@ -3637,6 +3809,13 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     weapon: 'bow' | 'wand';
     /** Skills do conteúdo de teste (#340, SV-04). */
     skills: readonly unknown[];
+    /** O `hits` da tabela de aparências, trocado por cima do de teste (#620: o efeito por raça). */
+    hits: Record<string, unknown>;
+    /** Magias a mais no conteúdo, além de `strike` e `blast` (#620: o golpe FÍSICO de magia). */
+    spells: readonly unknown[];
+    /** As skills com que o herói nasce e o bônus de Loyalty que o ticket lhe deu (#628). */
+    heroSkills: SkillsState;
+    loyaltyBonusPercent: number;
   }> = {}) {
     const raw = rawTestContent();
     // As armas precisam de linha na tabela de aparência (FUN-94); a munição abstrata, só do
@@ -3670,7 +3849,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
       }),
       ...armory,
       appearances: [placeholderAppearances({ ...raw, ...armory })],
-      spells: [...(raw.spells ?? []), STRIKE, BLAST],
+      spells: [...(raw.spells ?? []), STRIKE, BLAST, ...(over.spells ?? [])],
       progression: [{
         ...TEST_PROGRESSION, startingMana: 200,
         ...(over.regen === false ? { regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } } : {}),
@@ -3699,7 +3878,10 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
         }
         : {}),
     });
-    const appearances = { ...(content.appearances as Appearances), ...TABLE };
+    const appearances = {
+      ...(content.appearances as Appearances), ...TABLE,
+      ...(over.hits === undefined ? {} : { hits: over.hits as Appearances['hits'] }),
+    };
     const stats = statsForLevel(1, null, content.progression);
     let now = 0;
     const host = new SessionHost({
@@ -3721,7 +3903,11 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
           mana: over.mana ?? stats.maxMana, maxMana: stats.maxMana,
           level: 1, xp: 0, gold: over.gold ?? 0, goldDelta: 0, alive: true, cooldowns: {},
           staminaMs: over.stamina ?? FULL_STAMINA_MS, staminaUpdatedAtMs: 0,
+          // Sabe toda magia do conteúdo (#624): o portão do aprendizado tem bloco próprio.
+          learnedSpells: learnedSpellsStateOf(content.spells.keys()),
           ...armed,
+          ...(over.heroSkills === undefined ? {} : { skills: over.heroSkills }),
+          ...(over.loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent: over.loyaltyBonusPercent }),
         }));
         return session;
       },
@@ -3966,6 +4152,92 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     // Próximo ciclo sem mudanças: nenhum player-stats adicional
     runFor(100);
     expect(ofType(received(), 'player-stats').length).toBe(2);
+  });
+
+  it('o HUD recebe o bônus de Loyalty e o nível efetivo de cada skill; sem bônus, a forma é a de sempre (#628)', () => {
+    // O Canary manda ao cliente o nível COM Loyalty ao lado do base. Aqui: `loyaltyLevel` só
+    // viaja quando o bônus muda o nível, e `loyaltyBonusPercent` só quando é > 0 — o
+    // `player-stats` da conta sem degrau não ganha campo nenhum. O percentual continua o do
+    // nível BASE, e o dado persistido (`level`) também.
+    //
+    // Mutações que matam: tirar `loyaltyLevel` de `skillProgressOf` (a skill vai sem o nível
+    // efetivo), ou `loyaltyBonusPercent` de `playerStatsOf`/do `session-state.self`.
+    const loyal = hunt({
+      regen: false, stamina: MID_MINUTE_STAMINA_MS, monsters: false, skills: [TEST_MELEE_SKILL],
+      heroSkills: { melee: { level: 100, points: 0 } }, loyaltyBonusPercent: 50,
+    });
+    const stats = ofType(loyal.received(), 'player-stats')[0];
+    expect(stats?.loyaltyBonusPercent).toBe(50);
+    // Tries até o 100 (fator 1,1): 2.655.971; 50 % fecham quatro níveis (ver `loyalty.test.ts`).
+    expect(stats?.skills.melee).toEqual({ level: 100, percentToNext: 0, loyaltyLevel: 104 });
+    const attach = ofType(loyal.socket.received(), 'session-state').at(-1);
+    expect(attach?.self.loyaltyBonusPercent).toBe(50);
+    expect(attach?.self.skills.melee).toEqual({ level: 100, percentToNext: 0, loyaltyLevel: 104 });
+    // O persistido não sabe do bônus.
+    expect(loyal.hero().skills.getState()['melee']).toEqual({ level: 100, points: 0 });
+
+    const plain = hunt({
+      regen: false, stamina: MID_MINUTE_STAMINA_MS, monsters: false, skills: [TEST_MELEE_SKILL],
+      heroSkills: { melee: { level: 100, points: 0 } },
+    });
+    const plainStats = ofType(plain.received(), 'player-stats')[0];
+    expect(plainStats).not.toHaveProperty('loyaltyBonusPercent');
+    expect(plainStats?.skills.melee).toEqual({ level: 100, percentToNext: 0 });
+    const plainAttach = ofType(plain.socket.received(), 'session-state').at(-1);
+    expect(plainAttach?.self).not.toHaveProperty('loyaltyBonusPercent');
+  });
+
+  it('uma mudança SÓ do nível efetivo (Loyalty) gera player-stats — a comparação olha loyaltyLevel (#628)', () => {
+    // O nível efetivo sobe em passos que não coincidem com o nível/percentual BASE: existe um
+    // try que fecha o nível efetivo sem mexer em nenhum dos dois. Este teste o ENCONTRA (bisseção
+    // sobre os tries de um nível de custo alto, onde um try é uma fração de percentual ínfima) e
+    // ganha exatamente esse try — o HUD tem de receber o novo `loyaltyLevel` mesmo assim.
+    //
+    // Mutação que mata: tirar `a.loyaltyLevel === b.loyaltyLevel` de `sameSkillProgress`.
+    const melee: Skill = skillSchema.parse(TEST_MELEE_SKILL);
+    const at = (level: number, points: number) => new CharacterRuntime({
+      id: 'probe', position: { x: 0, y: 0, z: 7 }, health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+      level: 1, xp: 0, goldDelta: 0, alive: true, cooldowns: {}, skills: { melee: { level, points } },
+      loyaltyBonusPercent: 50,
+    });
+    let boundary: { level: number; points: number } | null = null;
+    for (let level = 40; level < 120 && boundary === null; level += 1) {
+      const cost = pointsForLevel(melee, level, 1.1);
+      const effective = (points: number) => at(level, points).loyaltyLevelOf(melee, 1.1);
+      if (effective(cost - 1) === effective(0)) continue;
+      let low = 0;
+      let high = cost - 1; // efetivo(low) < efetivo(high)
+      while (high - low > 1) {
+        const mid = Math.floor((low + high) / 2);
+        if (effective(mid) === effective(0)) low = mid; else high = mid;
+      }
+      const percent = (points: number) => at(level, points).skills.progressOf(melee, 1.1).percentToNext;
+      // Só serve se o try do meio NÃO mexe no percentual base (senão o teste não isola nada).
+      if (percent(low) === percent(high)) boundary = { level, points: low };
+    }
+    if (boundary === null) throw new Error('nenhum nível de custo alto tem um try de fronteira isolado');
+
+    const { runFor, received, hero } = hunt({
+      regen: false, stamina: MID_MINUTE_STAMINA_MS, monsters: false, skills: [TEST_MELEE_SKILL],
+      heroSkills: { melee: boundary }, loyaltyBonusPercent: 50,
+    });
+    const before = ofType(received(), 'player-stats');
+    expect(before).toHaveLength(1);
+    const beforeMelee = before[0]?.skills.melee;
+
+    hero().skills.gain(melee, 1);
+    runFor(100);
+
+    const stats = ofType(received(), 'player-stats');
+    expect(stats).toHaveLength(2);
+    const afterMelee = stats[1]?.skills.melee;
+    // Nível e percentual BASE iguais; só o efetivo andou um nível.
+    expect(afterMelee?.level).toBe(beforeMelee?.level);
+    expect(afterMelee?.percentToNext).toBe(beforeMelee?.percentToNext);
+    expect(afterMelee?.loyaltyLevel).toBe((beforeMelee?.loyaltyLevel ?? 0) + 1);
+    // Ciclo seguinte sem mudança: nenhum pacote a mais.
+    runFor(100);
+    expect(ofType(received(), 'player-stats')).toHaveLength(2);
   });
 
   it('a magia com tabela vira missile do conjurador ao alvo e effect NO alvo, com os ids da tabela', () => {
@@ -4310,6 +4582,130 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(golpes.length).toBeGreaterThan(0);
     expect(effects).toHaveLength(golpes.length);
     for (const effect of effects) expect(effect.effectId).toBe(1);
+  });
+
+  it('o golpe físico sangra com o efeito da RAÇA de quem o levou: veneno no rato venenoso, sangue no herói (#620)', () => {
+    // O `combatGetTypeInfo` do Canary: o efeito do golpe físico depende da raça do alvo. O rato
+    // desta hunt é `venom` (efeito 17) e o herói é `blood` (efeito 1, o default). Cada `effect`
+    // vem logo depois do `creature-hit` que o causou, e é o alvo daquele golpe que escolhe o id.
+    //
+    // Mutação que mata: ler a raça do ATACANTE, ou esquecer o `byRace` e mandar sempre `melee` —
+    // o golpe no rato sai com 1, e não 17.
+    const { runFor, received, heroId } = hunt({
+      rat: { race: 'venom' }, hits: { melee: 1, byRace: { blood: 1, venom: 17 } },
+    });
+    runFor(10_000);
+
+    const all = received();
+    let onRat = 0;
+    let onHero = 0;
+    all.forEach((message, index) => {
+      if (message.type !== 'creature-hit' || message.kind !== 'melee' || message.amount <= 0) return;
+      const effect = all[index + 1];
+      expect(effect?.type).toBe('effect');
+      const expected = message.id === heroId ? 1 : 17;
+      expect((effect as { effectId: number }).effectId).toBe(expected);
+      if (message.id === heroId) onHero += 1;
+      else onRat += 1;
+    });
+    // Os dois lados aconteceram: sem isso o teste só provaria um deles.
+    expect(onRat).toBeGreaterThan(0);
+    expect(onHero).toBeGreaterThan(0);
+  });
+
+  it('o golpe físico de MAGIA também segue a raça — o gatilho é o elemento, e não a origem (#620)', () => {
+    // `Game::sendEffects` roda em todo dano com valor, de corpo a corpo ou de magia, e só o tipo
+    // `COMBAT_PHYSICALDAMAGE` cai no `switch` da raça. A magia física (Explosion, Inflict Wound…)
+    // num rato venenoso solta a gota de veneno (17) logo depois do `creature-hit`; a de
+    // elemento — o `strike` de teste é `arcane` — não solta efeito de raça nenhum.
+    //
+    // Mutação que mata: voltar a guarda para `event.source === 'melee'` — o golpe `spell`
+    // físico fica sem o efeito 17; ou tirar a guarda do elemento — o `strike` arcano passa a
+    // soltar 17 também.
+    const physical = {
+      id: 'wound', name: 'Ferida', manaCost: 15, cooldownMs: 2_000,
+      effect: { kind: 'damage', power: 40, range: 3, damageType: 'physical' },
+    };
+    const run = (spellId: string) => {
+      const { runFor, received, heroId } = hunt({
+        rat: { race: 'venom', health: 200 }, hits: { melee: 1, byRace: { venom: 17 } },
+        spells: [physical],
+        bot: rules({ attack: [{
+          when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId },
+        }] }),
+      });
+      runFor(5_000);
+      const all = received();
+      return all
+        .map((message, index) => ({ message, next: all[index + 1] }))
+        .filter(({ message }) => message.type === 'creature-hit' && message.kind === 'spell'
+          && message.id !== heroId && message.amount > 0);
+    };
+
+    const physicalHits = run('wound');
+    expect(physicalHits.length).toBeGreaterThan(0);
+    for (const { message, next } of physicalHits) {
+      expect(message).toMatchObject({ damageType: 'physical' });
+      expect(next).toMatchObject({ type: 'effect', effectId: 17 });
+    }
+    const arcaneHits = run('strike');
+    expect(arcaneHits.length).toBeGreaterThan(0);
+    for (const { message, next } of arcaneHits) {
+      expect(message).toMatchObject({ damageType: 'arcane' });
+      expect(next?.type === 'effect' && next.effectId === 17).toBe(false);
+    }
+  });
+
+  it('sem `byRace` na tabela, todo golpe físico sangra com hits.melee como antes (#620)', () => {
+    // A tabela de antes desta issue continua valendo: raça é apresentação, e a ausência dela
+    // nunca apaga o efeito. O rato é `venom`, e mesmo assim o efeito é o 1 do `melee`.
+    const { runFor, received } = hunt({ rat: { race: 'venom' } });
+    runFor(10_000);
+    const effects = ofType(received(), 'effect');
+    expect(effects.length).toBeGreaterThan(0);
+    for (const effect of effects) expect(effect.effectId).toBe(1);
+  });
+
+  it('o monstro nasce com a apresentação do conteúdo: cores, addons, raça, luz e falas (#620)', () => {
+    // O `sim` não conhece nada disto: o host lê da definição do catálogo, e o cliente desenha.
+    // Mutação que mata: espalhar `monsterLookOf` só no `creature-appear` e não no `session-state`
+    // (o segundo caso abaixo), ou o inverso.
+    const look = {
+      outfit: { head: 113, body: 120, legs: 95, feet: 115, addons: 3 },
+      light: { level: 4, color: 208 },
+      race: 'fire',
+      voices: { intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!', yell: false }, { text: 'GRR', yell: true }] },
+    };
+    const { runFor, received, host, viewer, heroId } = hunt({ rat: look, tanky: true });
+    runFor(500);
+
+    const appears = ofType(received(), 'creature-appear').filter((m) => m.id !== heroId);
+    expect(appears.length).toBeGreaterThan(0);
+    const expected = {
+      colors: { head: 113, body: 120, legs: 95, feet: 115 }, addons: 3, race: 'fire',
+      light: { level: 4, color: 208 },
+      voices: { intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!' }, { text: 'GRR', yell: true }] },
+    };
+    expect(appears[0]).toMatchObject(expected);
+
+    // Quem reanexa no meio vê o mesmo monstro, pintado igual.
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = ofType(received(), 'session-state').at(-1);
+    const rats = (state?.world.creatures ?? []).filter((c) => c.id !== heroId);
+    expect(rats.length).toBeGreaterThan(0);
+    expect(rats[0]).toMatchObject(expected);
+  });
+
+  it('o monstro comum manda cores neutras e nada mais: sem addon, sem raça, sem luz e sem falas (#620)', () => {
+    const { runFor, received, heroId } = hunt();
+    runFor(500);
+    const rat = ofType(received(), 'creature-appear').find((m) => m.id !== heroId);
+    expect(rat?.colors).toEqual({ head: 0, body: 0, legs: 0, feet: 0 });
+    for (const key of ['addons', 'race', 'light', 'voices'] as const) expect(key in (rat ?? {})).toBe(false);
+    // O herói é outra coisa: não ganha a apresentação de monstro.
+    const hero = ofType(received(), 'session-state').at(-1)?.world.creatures.find((c) => c.id === heroId);
+    expect(hero?.colors).toBeUndefined();
   });
 
   it('a cura vira creature-hit com kind heal, e o efeito dela sai no tile do conjurador', () => {
@@ -4800,6 +5196,32 @@ describe('a postura de luta pelo socket (M30-03, #550, ADR 0040)', () => {
     // `attack` no extrato — omitir a chave deixaria uma postura antiga do Postgres voltar.
     expect(saved[0]).toHaveProperty('fightMode', 'attack');
   });
+
+  it('o extrato de hunt leva os carimbos do familiar do dono, e quem nunca invocou não leva a chave (#599)', async () => {
+    // Sem os carimbos no extrato, o cooldown de 30 min NÃO atravessaria a saída da hunt: o ticket
+    // seguinte leria o personagem como quem nunca invocou. Quem nunca invocou fica sem a chave — o
+    // ledger não toca na coluna (o `receipts.ts` distingue "não veio" de "veio vazio").
+    const run = async (stamp: boolean) => {
+      const saved: Array<Record<string, unknown>> = [];
+      const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+      const directory = { register: async () => true } as unknown as SessionDirectory;
+      const { ruleset } = countingRuleset();
+      const { host, sessions } = buildHost(ruleset, { directory, receipts });
+      await host.prepare('p1', undefined, 'a1');
+      host.attach(new FakeSocket(), 'p1');
+      const hero = sessions[0]?.participants[0] as CharacterRuntime;
+      if (stamp) {
+        hero.familiar = { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 };
+      }
+      await host.drainAll('drain');
+      return saved[0];
+    };
+
+    expect(await run(true)).toMatchObject({
+      familiar: { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 },
+    });
+    expect(await run(false)).not.toHaveProperty('familiar');
+  });
 });
 
 describe('a economia de Charms pelo socket (M39-02, #602, ADR 0052/0053)', () => {
@@ -4911,6 +5333,225 @@ describe('a economia de Charms pelo socket (M39-02, #602, ADR 0052/0053)', () =>
     expect(hero.charms.assignmentOf('wound')).toBe('rat');
     const warning = warnings(socket)[0];
     expect(warning?.type === 'system-message' && warning.text).toContain('gold');
+  });
+});
+
+describe('aprender magia pelo socket (#624, ADR 0058, ADR 0052)', () => {
+  const heal = { kind: 'heal' as const, amount: 10, target: 'self' as const };
+  const berserk: Spell = {
+    id: 'berserk', name: 'Berserk', manaCost: 115, cooldownMs: 4_000, minLevel: 35, vocationId: 'knight',
+    learnPrice: 2_500, effect: heal,
+  };
+  const woundCleansing: Spell = {
+    id: 'wound-cleansing', name: 'Wound Cleansing', manaCost: 40, cooldownMs: 6_000, minLevel: 8,
+    vocationId: 'knight', learnPrice: 0, effect: heal,
+  };
+  const haste: Spell = {
+    id: 'haste-druid', name: 'Haste', manaCost: 60, cooldownMs: 2_000, minLevel: 14, vocationId: 'druid',
+    learnPrice: 600, effect: heal,
+  };
+  const unpriced: Spell = {
+    id: 'great-death-beam', name: 'Great Death Beam', manaCost: 140, cooldownMs: 10_000, minLevel: 30,
+    vocationId: 'knight', effect: heal,
+  };
+  const spellCatalog = new Map([berserk, woundCleansing, haste, unpriced].map((spell) => [spell.id, spell]));
+
+  const warnings = (socket: FakeSocket): string[] =>
+    socket.received().flatMap((m) => (m.type === 'system-message' && m.level === 'warning' ? [m.text] : []));
+  const learnedMessages = (socket: FakeSocket) =>
+    socket.received().filter((m): m is S2CMessage & { type: 'learned-spells' } => m.type === 'learned-spells');
+
+  /** Uma Cidade de verdade, com um knight nível `level` e `gold`, e o extrato de estado durável capturado. */
+  async function inCity(over: { level?: number; gold?: number; learned?: readonly string[] } = {}) {
+    const content = testContent();
+    const shard = new CityShard(content, () => 0);
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const directory = { register: async () => true, succeed: async () => true } as unknown as SessionDirectory;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger, receipts, directory, spellCatalog,
+      createSession: createCitySessionFactory(content, () => 0, shard),
+      buildSession: createSessionBuilder(content, () => 0, shard),
+      now: () => 0,
+    });
+    await host.prepare('p1', {
+      level: over.level ?? 40, xp: 0, gold: over.gold ?? 10_000, vocation: 'knight',
+      ...(over.learned === undefined ? {} : { learnedSpells: { spellIds: [...over.learned], version: 1 } }),
+    }, 'a1');
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    socket.frames.length = 0;
+    const hero = host.sessionFor('p1')?.participants[0] as CharacterRuntime;
+    return { host, viewer, socket, hero, saved };
+  }
+
+  it('compra na Cidade: debita o preço, marca a magia e manda `learned-spells` e o saldo novo', async () => {
+    const { host, viewer, socket, hero } = await inCity();
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
+    host.flush();
+
+    expect(hero.learnedSpells.has('berserk')).toBe(true);
+    expect(hero.gold + hero.goldDelta).toBe(7_500);
+    expect(warnings(socket)).toEqual([]);
+    expect(learnedMessages(socket).at(-1)?.spellIds).toEqual(['berserk']);
+    // O saldo novo chega ao HUD: a compra é a única coisa que mexeu no gold.
+    const stats = socket.received().filter((m) => m.type === 'player-stats').at(-1);
+    expect(stats?.type === 'player-stats' && stats.gold).toBe(7_500);
+  });
+
+  it('é IDEMPOTENTE: pedir de novo é recusado e NÃO cobra outra vez (invariante 10)', async () => {
+    const { host, viewer, socket, hero, saved } = await inCity();
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
+    host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
+    host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
+    host.flush();
+
+    expect(hero.gold + hero.goldDelta).toBe(7_500);
+    expect(warnings(socket)).toEqual([
+      'Você já aprendeu essa magia.', 'Você já aprendeu essa magia.',
+    ]);
+    // E o extrato liquida UMA cobrança, no mesmo registro que a magia (nunca uma sem a outra).
+    await host.release('p1', 1000, 'logout');
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({
+      aggregates: { goldSpent: 2_500, goldGained: 0 },
+      learnedSpells: { spellIds: ['berserk'], version: 1 },
+    });
+  });
+
+  it('a magia grátis (`learnPrice: 0`) fica aprendida sem gold nenhum', async () => {
+    const { host, viewer, hero } = await inCity({ gold: 0 });
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'wound-cleansing' });
+    host.flush();
+
+    expect(hero.learnedSpells.has('wound-cleansing')).toBe(true);
+    expect(hero.goldDelta).toBe(0);
+  });
+
+  it('cada recusa diz o motivo e não muda NADA: nem registro, nem gold, nem extrato', async () => {
+    const cases: Array<{ spellId: string; over?: { level?: number; gold?: number }; text: string }> = [
+      { spellId: 'no-such-spell', text: 'Essa magia não existe.' },
+      { spellId: 'great-death-beam', text: 'Ninguém ensina essa magia.' },
+      { spellId: 'haste-druid', over: { level: 40 }, text: 'Essa magia não é da sua vocação.' },
+      { spellId: 'berserk', over: { level: 34 }, text: 'Você ainda não tem o level dessa magia.' },
+      { spellId: 'berserk', over: { gold: 2_499 }, text: 'Você não tem gold suficiente para aprender essa magia.' },
+    ];
+    for (const { spellId, over, text } of cases) {
+      const { host, viewer, socket, hero, saved } = await inCity(over);
+      host.handle(viewer, { type: 'learn-spell', spellId });
+      host.flush();
+      expect(warnings(socket), spellId).toEqual([text]);
+      expect(hero.learnedSpells.size, spellId).toBe(0);
+      expect(hero.goldDelta, spellId).toBe(0);
+      expect(learnedMessages(socket), spellId).toEqual([]);
+      // Nada mudou, então a Cidade nem gera extrato de estado durável no logout.
+      await host.release('p1', 1000, 'logout');
+      expect(saved, spellId).toHaveLength(0);
+    }
+  });
+
+  it('sem catálogo de magias no host a compra é recusada com honestidade — nunca aceita às cegas', async () => {
+    const content = testContent();
+    const shard = new CityShard(content, () => 0);
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger,
+      createSession: createCitySessionFactory(content, () => 0, shard),
+      now: () => 0,
+    });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
+    host.flush();
+
+    expect(warnings(socket)).toEqual(['Essa magia não existe.']);
+  });
+
+  it('quem reconecta recebe o que já aprendeu — a barra não fica toda marcada até a próxima compra', async () => {
+    const { host, viewer, socket } = await inCity({ learned: ['wound-cleansing'] });
+
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+
+    expect(learnedMessages(socket).at(-1)?.spellIds).toEqual(['wound-cleansing']);
+  });
+
+  it('sessão que chegou SEM o registro não o reescreve vazio: o extrato omite o campo e o Postgres fica como está (ADR 0014)', async () => {
+    // Um ticket de um `api` anterior à issue (ou um snapshot antigo) não diz o que o personagem
+    // aprendeu. Gravar `{ spellIds: [] }` no logout apagaria a concessão da migração 0024.
+    const { host, viewer, saved } = await inCity();
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'defense' });
+    host.flush();
+    await host.release('p1', 1000, 'logout');
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ fightMode: 'defense' });
+    expect(saved[0]).not.toHaveProperty('learnedSpells');
+
+    // Já com o registro do ticket (vazio inclusive), ele é a verdade e vai no extrato.
+    const known = await inCity({ learned: [] });
+    known.host.handle(known.viewer, { type: 'set-fight-mode', mode: 'defense' });
+    known.host.flush();
+    await known.host.release('p1', 1000, 'logout');
+    expect(known.saved[0]).toMatchObject({ learnedSpells: { spellIds: [], version: 1 } });
+  });
+
+  it('o registro do ticket entra na sessão: quem comprou ontem entra hoje sabendo a magia', async () => {
+    const { hero } = await inCity({ learned: ['berserk', 'wound-cleansing'] });
+    expect(hero.learnedSpells.getState().spellIds).toEqual(['berserk', 'wound-cleansing']);
+  });
+
+  it('é aceito NA HUNT, sem rolagem: debita por `goldDelta` E pelo agregado `goldSpent` da sessão', async () => {
+    const content = testContent();
+    const shard = new CityShard(content, () => 0);
+    const saved: Array<Record<string, unknown> & { aggregates: { goldSpent: number } }> = [];
+    const receipts = {
+      save: async (r: Record<string, unknown> & { aggregates: { goldSpent: number } }) => { saved.push(r); },
+    } as unknown as ReceiptStore;
+    const directory = { register: async () => true, succeed: async () => true } as unknown as SessionDirectory;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger, receipts, directory, spellCatalog,
+      createSession: createCitySessionFactory(content, () => 0, shard),
+      buildSession: createSessionBuilder(content, () => 0, shard),
+      now: () => 0,
+    });
+    await host.prepare('p1', { level: 40, xp: 0, gold: 10_000, vocation: 'knight' }, 'a1');
+    await host.transition('p1', { to: 'hunt', huntId: 'arena', difficulty: 'cautious' });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    socket.frames.length = 0;
+    const hunt = host.sessionFor('p1');
+    const hero = hunt?.participants[0] as CharacterRuntime;
+    expect(hunt?.ruleset.type).toBe('hunt');
+    // O bot que vinha PULANDO a magia (recusa sem prazo) precisa acordar na compra — só nela.
+    const rearm = vi.spyOn(hunt?.ruleset as HuntRuleset, 'rearmBot');
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'unknown-spell' });
+    host.flush();
+    expect(rearm).not.toHaveBeenCalled();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
+    host.flush();
+
+    expect(rearm).toHaveBeenCalledTimes(1);
+    expect(rearm).toHaveBeenCalledWith(hunt, 'p1');
+    expect(warnings(socket)).toEqual([]);
+    expect(hero.learnedSpells.has('berserk')).toBe(true);
+    expect(hero.gold + hero.goldDelta).toBe(7_500);
+    expect(hunt?.aggregates.goldSpent).toBe(2_500);
+    expect(learnedMessages(socket).at(-1)?.spellIds).toEqual(['berserk']);
+
+    // O extrato da hunt leva a magia e a cobrança JUNTAS.
+    await host.transition('p1', { to: 'city' });
+    const receipt = saved.find((r) => r.aggregates.goldSpent === 2_500);
+    expect(receipt).toMatchObject({ learnedSpells: { spellIds: ['berserk'], version: 1 } });
   });
 });
 
@@ -6763,6 +7404,56 @@ describe('targetId, active conditions and hunt identity (#341, SV-05)', () => {
     expect(ofType(received(), 'active-conditions')).toHaveLength(3);
   });
 
+  it('a luz (#623) vai em `active-conditions` com o raio, a cor e o prazo; muda o nível → reenvia', () => {
+    const { hero, runFor, received } = createHuntFixture({ monsters: false, regen: false });
+
+    hero().conditions.apply({
+      key: 'light', spellId: 'light', expiresAtMs: 370_000,
+      light: { level: 6, color: 215, durationMs: 370_000 },
+    });
+    runFor(100);
+    const first = ofType(received(), 'active-conditions').at(-1);
+    expect(first?.conditions).toEqual([{
+      kind: 'light', remainingMs: expect.any(Number), light: { level: 6, color: 215, durationMs: 370_000 },
+    }]);
+
+    // Mesmo instante de fim, OUTRO nível (uma luz que sobrescreveu a outra): a assinatura não pode
+    // ser só o fim — o cliente desenharia o raio errado até a próxima mudança.
+    const count = ofType(received(), 'active-conditions').length;
+    hero().conditions.apply({
+      key: 'light', spellId: 'great-light', expiresAtMs: 370_000,
+      light: { level: 8, color: 215, durationMs: 370_000 },
+    });
+    runFor(100);
+    const after = ofType(received(), 'active-conditions');
+    expect(after).toHaveLength(count + 1);
+    expect(after.at(-1)?.conditions[0]?.light?.level).toBe(8);
+
+    // Sem os dados de luz (um snapshot que não os carrega) NÃO vira badge: a luz sem o que
+    // desenhar é ruído.
+    hero().conditions.remove('light');
+    hero().conditions.apply({ key: 'light', spellId: 'light', expiresAtMs: 370_000 });
+    runFor(100);
+    expect(ofType(received(), 'active-conditions').at(-1)?.conditions).toEqual([]);
+  });
+
+  it('um Find Person (#623) vira `system-message` só para quem lançou, com a frase em português', () => {
+    const { host, runFor, received } = createHuntFixture({ monsters: false, regen: false });
+    const before = ofType(received(), 'system-message').length;
+    host.sessionFor('hero')?.emit({
+      kind: 'find-result', characterId: 'hero', target: 'person', subjectId: 'hero',
+      relation: { distance: 'close', level: 'lower', direction: 'north-east' },
+    });
+    runFor(100);
+
+    const messages = ofType(received(), 'system-message');
+    expect(messages).toHaveLength(before + 1);
+    // O nome de quem foi achado vem do host (`#nameByCharacter`); sem ele, "Alguém".
+    expect(messages.at(-1)).toMatchObject({
+      level: 'info', text: expect.stringMatching(/está em um andar inferior, a nordeste\.$/),
+    });
+  });
+
   it('instance-enter and session-state carry huntId and difficulty when in a hunt, but not in City', () => {
     // 1. In hunt:
     const { received: huntReceived } = createHuntFixture();
@@ -7130,6 +7821,7 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
           id: characterId, position: { x: 1, y: 1, z: 7 },
           health: 1_200, maxHealth: 1_200, mana: 50, maxMana: 50,
           level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+          learnedSpells: learnedSpellsStateOf(content.spells.keys()),
         }));
         sessions.push(session);
         return session;

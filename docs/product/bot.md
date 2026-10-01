@@ -22,7 +22,9 @@ esquerda para a direita, depois a fileira 2) e a **cadência é o grupo de coold
 (`attack`/`healing`/`support` para magia, mais `potion` para poção e `attack` para runa). A cada
 grupo pronto, os slots ligados são tentados em ordem; o primeiro que consegue executar tranca o
 grupo pelo cooldown dele, e quem não consegue agora é **pulado no mesmo ciclo** — sem mana, sem
-gold, sem alvo, ou em cooldown individual.
+gold, sem alvo, em cooldown individual, ou com a **magia ainda não aprendida** (#624, ADR 0058: o
+cast exige `learnedSpells`; a recusa não tem prazo, o slot fica marcado na barra, e a hunt nunca
+encerra por isso — aprender no meio dela acorda o bot na hora).
 
 Poção e runa ainda dividem um terceiro relógio, a **exaustão de ação** de 1000 ms (#690, o
 `nextPotionAction` do Canary, `actionExhaustMs` no supply): uma poção logo depois de uma runa de
@@ -64,6 +66,10 @@ hunt sem gold para pagar o próximo supply e pode morrer.
   comportamento de antes deste ADR) e `autoSell` (vende ao coletar, cortado pelo limite do
   PRÓPRIO Premium — 5 tipos Free, 20 Premium, o mesmo `party.autoSellItemTypes`). Campo novo com
   default, como `follow`: config salva antes deste ADR volta pegando tudo, sem venda automática.
+- **O bot esfola sozinho, sem configuração nenhuma** (#626, ADR 0048 d.5): quem tem a faca ou a
+  estaca na mochila esfola o cadáver no mesmo evento em que coleta o loot, e o material segue o
+  filtro de Quick Loot acima. Não há regra a ligar — é a automação que o Tibia deixa à mão do
+  jogador, legítima pelo invariante 11. Ver "Esfola de cadáver" em `docs/product/items.md`.
 - Usar um supply debita o `price` do gold na hora (`useSupply`); o saldo nunca fica negativo, e a
   garantia é a ordem — o débito é recusado antes, não corrigido depois.
 - Personagem sem configuração não agenda nada.
@@ -74,6 +80,19 @@ hunt sem gold para pagar o próximo supply e pode morrer.
   bêbado que se afasta da rota sozinho, ou perde um passo contra uma parede, não é bug do motor
   de bot: é a mesma condição que afetaria o jogador jogando manualmente (invariante 11 — não há
   exceção de automação). Ver "Drunk: desvio de passo" em `docs/product/combat.md`.
+- **`rooted`, `feared` e `pacified` (#622, M44-04) valem para o bot como para o jogador manual.**
+  Sob `rooted` ou `feared` o passo do bot (rota, follow, `walk-to`) é recusado em `HuntRuleset#step`
+  — o bot só manda intenção e não tem como escapar da recusa (invariante 11) —, e sob `feared` a
+  fuga forçada (`Runner.fearWalk`) assume o movimento: enquanto ela dura o bot não anda, e ao acabar
+  ele volta à rota pelo caminho de sempre (`not-adjacent` → resincroniza). Sob `feared` nenhuma
+  magia nem runa sai (`feared`, com o prazo do medo no `retryInMs`, para o bot re-armar quando o
+  medo acabar); a poção sai. Sob `pacified` (a trava de escada de 2 s e o Swift Foot) nem o golpe
+  básico nem a magia/runa agressiva (dano, DOT, a invocação, as runas de dano/campo, a Paralyze
+  Rune e as de invocação, Convince Creature e Animate Dead) saem, e o golpe volta no PENSAMENTO seguinte ao vencimento — até 1 s depois dele, ou antes
+  se o personagem ou o alvo der um passo —, porque o Canary não re-arma o ataque quando a condição
+  acaba; cura, poção e o resto seguem. Um `walk-to` que o jogador deixou guardado cai quando a raiz
+  o prende. Nada disso é falha do motor de bot. Ver "Condições de controle" em
+  `docs/product/combat.md`.
 
 ## O vocabulário, por inteiro (AB-03, ADR 0032 d.1)
 
@@ -97,6 +116,7 @@ errado em vez de dizer "nenhuma variante casou".
 | `targets` | `op`, `count` (≥ 0) | Quantos alvos estão dentro do alcance do grupo (#152, #216, #444): o da arma, ou o da ação de dano à distância do grupo (uma runa de alcance 8 conta a 8) |
 | `target-hp` | `op`, `percent` (0–100) | Vida do alvo atual. Sem alvo, a condição é falsa — nunca erro |
 | `condition` | `conditionId`, `present` (padrão `true`) | Efeito ativo/ausente no personagem, por chave semântica (`haste`, `mana-shield`, `buff`) — "castar haste só sem haste" |
+| `summons` | `op`, `count` (≥ 0) | Quantas invocações VIVAS o personagem tem (#598) — "sem invocação viva → invocar" é `summons <= 0` |
 
 **Operadores:** `<`, `<=`, `>`, `>=`. **Sem `==`** — comparar percentual exato quase nunca
 dispara, e é a armadilha que faz o jogador achar que configurou cura e não ter cura nenhuma.
@@ -105,8 +125,14 @@ dispara, e é a armadilha que faz o jogador achar que configurou cura e não ter
 
 | `kind` | Campo | Catálogo |
 |---|---|---|
-| `spell` | `spellId` | `packages/content/data/spells/*.json` (FUN-74) |
+| `spell` | `spellId`, `monsterId?` | `packages/content/data/spells/*.json` (FUN-74). `monsterId` só existe para a Summon Creature (#598): QUAL `summonable` nascer |
 | `supply` | `supplyId` | `packages/content/data/supplies/*.json` (FUN-77) — poção e runa |
+
+**O familiar de vocação (#599)** é uma ação `spell` comum (`summon-<vocação>-familiar`, level 200), sem
+`monsterId`. Regra de preset: `spell` do familiar com `summons <= 0`. O cooldown de 30 min NÃO precisa
+de condição própria: a recusa por cooldown de parede engatilha sem agendar o grupo, então o bot a
+reavalia a cada evento e lança no instante em que a magia volta — e a barra mostra o cooldown real.
+Ver `combat.md`, "O familiar de vocação".
 
 O token `item` da v1 saiu com o AB-03 (ADR 0032 d.6): poção e runa voltaram a ser **suprimento
 abstrato**, com `price`, `effect`, `requires` e `group` em `data/supplies/`, e o gold é debitado
@@ -301,6 +327,8 @@ O que ele faz, por tipo de ação:
 | `spell` com efeito `damage` | resolve o dano por `resolveDamage` com `kind: 'magic'`, aplica no alvo e **atribui** (`recordDamage`) | level, vocação, cooldown, sem alvo, fora de alcance, mana |
 | `supply` `heal`/`mana` | repõe HP ou mana (faixa fixa sorteada, `amountRange`, ou `alsoMana` junto — #524, kit level 200) e **debita `price` do gold** no ato | level, vocação (#524 — a poção do Tibia pede as duas, como a magia), sem gold |
 | `supply` `damage` (runa) | mira como a magia em área, escala pelo magic level, aplica pelo mesmo `#applyHits` e **debita `price` do gold** | level, vocação, magic level, sem alvo, fora de alcance, sem gold |
+| `supply` `convince` (Convince Creature, #600) | mira o alvo do bot como a runa de dano, confere `convinceable`/sem mestre/teto de 2/mana do monstro e **passa a posse** dele ao personagem; debita `price` e a `manaCost` do monstro | level, vocação, magic level, sem alvo, fora de alcance, alvo não `convinceable` ou com mestre (`not-possible`), teto (`too-many-summons`), mana, sem gold |
+| `supply` `animate-dead` (Animate Dead, #600) | sem mira manual, o bot escolhe o **cadáver animável mais próximo** ao alcance e à vista; consome o cadáver (e o loot que sobrou) e ergue o Skeleton; debita só `price` | level, vocação, magic level, sem cadáver movível ao alcance (`no-target`/`not-possible`), teto, sem gold |
 | `item` com efeito `blessing` | nada — quem o executa é a TP-03 (M22) | sempre |
 
 Três coisas que não podem mudar sem pensar duas vezes:
@@ -651,7 +679,8 @@ mana e inicia cooldown é o servidor.
 | `select-ammo` | C2S | `{ ammoId }` — escolhe a munição da família; o servidor valida `requires.level` e responde em `player-stats.ammo` |
 | `target-changed` | S2C | o alvo autoritativo: `creatureId` positivo ou `null` (cancelamento confirmado), com o `seq` de volta quando veio de um `select-target` (#470) |
 | `target-cancel` | S2C | a recusa do `select-target` (criatura desconhecida ou morta); nada mudou (#470) |
-| `slot-state` | S2C | o estado dos 24 slots do conjunto ativo: `ready`/`cooldown`/`blocked`/`empty`, `remainingMs` e o motivo em palavras |
+| `slot-state` | S2C | o estado dos 24 slots do conjunto ativo: `ready`/`cooldown`/`blocked`/`empty`, `remainingMs` e o motivo em palavras (`not-learned` — "Você ainda não aprendeu essa magia." — para a magia comprada de menos, #624) |
+| `learn-spell` | C2S | `{ spellId }` — aprende a magia por gold, na Cidade ou na hunt (#624, ADR 0058); resposta `learned-spells` (S2C) com o registro inteiro |
 | `slot-result` | S2C | a resposta ao `use-slot`: `ok` e, quando falso, o motivo para o tooltip |
 
 **Manual é manual.** `use-slot` ignora as condições (`when`) e a chave automática (`auto`), mas

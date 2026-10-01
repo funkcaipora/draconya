@@ -80,8 +80,10 @@ function combatPresentationReferences(appearances: Appearances): CombatPresentat
   for (const [id, weapon] of Object.entries(appearances.weapons)) {
     push(`weapon:${id}`, { missile: weapon.missile });
   }
-  for (const [id, effect] of Object.entries(appearances.hits)) {
-    push(`hit:${id}`, { effect });
+  push('hit:melee', { effect: appearances.hits.melee });
+  // O efeito do golpe físico por raça (#620): cada linha é um id de efeito como os outros.
+  for (const [race, effect] of Object.entries(appearances.hits.byRace ?? {})) {
+    push(`hit:byRace.${race}`, { effect });
   }
   for (const [id, ability] of Object.entries(appearances.abilities)) {
     push(`ability:${id}`, { effect: ability.effect, missile: ability.missile });

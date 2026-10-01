@@ -55,11 +55,55 @@ describe('loadContent', () => {
     expect(content.bestiary?.xpBonusPercentPerMilestone).toBe(1);
   });
 
+  it('carrega o Bosstiary real: a tabela do Canary por raridade, e os bosses importados (#629)', () => {
+    // Opcional no `buildContent` (fixture), obrigatório no conteúdo de verdade. Mutação que
+    // mata: apagar `bosstiary/` de `load.ts`, ou trocar um número da tabela do `io_bosstiary`.
+    const content = loadContent(DATA);
+    expect(content.bosstiary?.levels).toEqual({
+      bane: [{ kills: 25, points: 5 }, { kills: 100, points: 15 }, { kills: 300, points: 30 }],
+      archfoe: [{ kills: 5, points: 10 }, { kills: 20, points: 30 }, { kills: 60, points: 60 }],
+      nemesis: [{ kills: 1, points: 10 }, { kills: 3, points: 30 }, { kills: 5, points: 60 }],
+    });
+    // O `isBoss` do Canary é "tem bloco bosstiary": as duas flags andam juntas no catálogo.
+    const bosses = [...content.monsters.values()].filter((monster) => monster.bosstiary !== undefined);
+    expect(bosses.length).toBeGreaterThan(100);
+    for (const monster of bosses) expect(monster.boss, monster.id).toBe(true);
+    for (const monster of content.monsters.values()) {
+      if (monster.boss) expect(monster.bosstiary, monster.id).toBeDefined();
+    }
+    // As três raridades existem no catálogo, e a contagem por raridade confere com o Canary.
+    const byRarity = (rarity: string) => bosses.filter((monster) => monster.bosstiary?.rarity === rarity).length;
+    expect(byRarity('bane')).toBeGreaterThan(0);
+    expect(byRarity('archfoe')).toBeGreaterThan(0);
+    expect(byRarity('nemesis')).toBeGreaterThan(0);
+    // Dreadmaw: Nemesis, raceId 639 (`reptiles/dreadmaw.lua`).
+    expect(content.monsters.get('dreadmaw')?.bosstiary).toEqual({ rarity: 'nemesis', raceId: 639 });
+    // Os dois Voidborn compartilham o raceId 1406 — um contador só (`io_bosstiary`, storage por raceid).
+    expect(content.monsters.get('the-armored-voidborn')?.bosstiary?.raceId).toBe(1406);
+    expect(content.monsters.get('the-unarmored-voidborn')?.bosstiary?.raceId).toBe(1406);
+    // Monstro de caça comum não é boss.
+    expect(content.monsters.get('rat')?.bosstiary).toBeUndefined();
+    expect(content.monsters.get('rat')?.boss).toBe(false);
+  });
+
   it('carrega a Boosted Creature real: vira à meia-noite UTC (#615)', () => {
     // Opcional no `buildContent` (fixture): sem ele o `jobs` não sorteia nada. Mutação que
     // mata: apagar `boosted/` de `load.ts`.
     const content = loadContent(DATA);
     expect(content.boosted?.rolloverHourUtc).toBe(0);
+  });
+
+  it('carrega o Loyalty real: dez degraus de 360 em 360 pontos, de 5 % a 50 % (#628)', () => {
+    // Opcional no `buildContent` (fixture): sem ele nenhum ticket carrega bônus. Os números são
+    // os de `data/libs/functions/player.lua:762-790` e `config.lua.dist:239-244` do Canary.
+    // Mutação que mata: apagar `loyalty/` de `load.ts`, ou trocar um degrau.
+    const content = loadContent(DATA);
+    expect(content.loyalty).toMatchObject({
+      enabled: true, pointsPerCreationDay: 1, bonusPercentageMultiplier: 1,
+    });
+    expect(content.loyalty?.tiers).toEqual(
+      [5, 10, 15, 20, 25, 30, 35, 40, 45, 50].map((percent, index) => ({ minPoints: 360 * (index + 1), percent })),
+    );
   });
 
   it('carrega a party real, e todo item do repositório tem preço de venda (#188)', () => {
@@ -399,6 +443,68 @@ describe('loadContent', () => {
   });
 });
 
+describe('o Treino do Tibia (#631, ADR 0059)', () => {
+  const content = loadContent(DATA);
+
+  it('o boneco, o golpe e o offline training são os números do Canary', () => {
+    const training = content.training;
+    expect(training).toBeDefined();
+    // `exercise_training_weapons.lua`: 7 tries e 600 de mana gasta por carga, no rate 100 do boneco.
+    expect(training?.dummy.rate).toBe(100);
+    expect(training?.strike).toEqual({ triesPerCharge: 7, manaSpentPerCharge: 600 });
+    // `exhaustionTime = 10` do mesmo script: o `training-exhaustion` entre dois inícios.
+    expect(training?.startCooldownMs).toBe(10_000);
+    // `player.cpp` (banco 12 h) e `offline_training.lua` (carência 600 s, 21 dias, escudo /4).
+    expect(training?.offline).toMatchObject({
+      bankCapMs: 12 * 3_600_000, graceMs: 600_000, maxAwayMs: 21 * 86_400_000, shieldingDivisor: 4,
+      // ADR 0059 d.4 — a forma do PRD, não do Canary.
+      spendCapMs: { free: 6 * 3_600_000, premium: 12 * 3_600_000 },
+    });
+    expect(training?.offline.skills.map((entry) => entry.skillId).sort())
+      .toEqual(['axe', 'club', 'distance', 'magic', 'sword']);
+  });
+
+  it('o personagem treina num tile andável da Cidade, ao lado do boneco', () => {
+    const { stand, dummy } = content.training!.place;
+    expect(content.city).toBeDefined();
+    expect(isBlocked(content.city!, stand.x, stand.y, stand.z)).toBe(false);
+    // O boneco é uma estátua: bloqueia, como no OTBM (`exercise dummy`, item 28565).
+    expect(isBlocked(content.city!, dummy.x, dummy.y, dummy.z)).toBe(true);
+  });
+
+  it('as exercise weapons têm 500/1 800/14 400 cargas, skill de treino e preço de NPC', () => {
+    const weapons = [...content.items.values()].filter((item) => item.exercise !== undefined);
+    // 7 tipos (sword, axe, club, bow, rod, wand, shield) × 3 níveis; as exercise wraps de fist
+    // (Monk, pós-13.32) e o training weapon de 50 cargas (Daily Reward) ficam de fora.
+    expect(weapons).toHaveLength(21);
+    expect(new Set(weapons.map((item) => item.charges))).toEqual(new Set([500, 1_800, 14_400]));
+    expect(new Set(weapons.map((item) => item.exercise?.skillId)))
+      .toEqual(new Set(['sword', 'axe', 'club', 'distance', 'magic', 'shielding']));
+    // Preço do Canary (`npc/*.lua`): 347 222 / 1 250 000 / 10 000 000 por nível de carga.
+    const priceOf = (charges: number): Set<number | undefined> =>
+      new Set(weapons.filter((item) => item.charges === charges).map((item) => item.buyPrice));
+    expect(priceOf(500)).toEqual(new Set([347_222]));
+    expect(priceOf(1_800)).toEqual(new Set([1_250_000]));
+    expect(priceOf(14_400)).toEqual(new Set([10_000_000]));
+    for (const item of weapons) {
+      expect(item.purchasable).toBe(true);
+      // Nunca se veste, nunca é arma, e ninguém a compra de volta.
+      expect(item.slot).toBeUndefined();
+      expect(item.weapon).toBeUndefined();
+      expect(item.value).toBe(0);
+      expect(content.appearances?.items[item.id]).toBeGreaterThan(0);
+    }
+    expect(content.items.get('exercise-sword')).toMatchObject({
+      charges: 500, exercise: { skillId: 'sword' }, buyPrice: 347_222,
+    });
+  });
+
+  it('nenhum item comum é `purchasable` — a loja geral (E5) ainda não existe', () => {
+    const buyable = [...content.items.values()].filter((item) => item.purchasable === true);
+    expect(buyable.every((item) => item.exercise !== undefined)).toBe(true);
+  });
+});
+
 describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
   it('carrega a tabela real e resolve as entidades do repositório com ela', () => {
     const content = loadContent(DATA);
@@ -542,9 +648,11 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     const consumables = [...content.items.values()].filter((item) => item.kind === 'consumable');
     // `blessing-charge` foi REMOVIDO pelo #570: bênção é serviço de Cidade (ADR 0052), nunca
     // item de mochila. Sobra só a comida (#726, ADR 0049 d.5) — cheese, ham, meat, dragon-ham,
-    // green-mushroom —, todas EMPILHÁVEIS.
+    // green-mushroom, e as quatro que a magia Food cria (#623: grapes, red-apple, bread, roll) —,
+    // todas EMPILHÁVEIS.
     expect(consumables.map((item) => item.id).sort()).toEqual(
-      ['cheese', 'dragon-ham', 'green-mushroom', 'ham', 'meat'].sort(),
+      ['bread', 'cheese', 'dragon-ham', 'grapes', 'green-mushroom', 'ham', 'meat', 'red-apple', 'roll']
+        .sort(),
     );
     expect(content.items.has('blessing-charge')).toBe(false);
     const cheese = content.items.get('cheese');
@@ -820,7 +928,8 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
 
 /** As excluídas por nome (ADR 0026 decisão 5) — em kebab-case, como um id seria. */
 const EXCLUDED_SPELLS = [
-  'light', 'great-light', 'ultimate-light', 'find-person', 'find-fiend', 'magic-rope', 'levitate',
+  // Light, Great Light, Ultimate Light, Levitate, Magic Rope, Find Person, Find Fiend e Food
+  // entraram no #623 (M44-05) — saem desta lista; ver o teste dedicado mais abaixo.
   'creature-illusion',
   // agora existe (CMB-07 generalizou a `Condition`). `curse` (#596) é diferente: um DOT
   // multi-estágio (17 valores decrescentes, `Condition:addDamage` chamado 17 vezes) — forma que
@@ -840,7 +949,7 @@ const EXCLUDED_SPELLS = [
   // 'conjure-arrow' saiu daqui na #594 (ADR 0044): a conjuração de munição do Paladin existe
   // agora (`packages/content/data/spells/conjure-arrow.json`), no modelo de estoque abstrato.
   'arrow-call', 'conjure-explosive-arrow', 'enchant-spear', 'conjure-wand-of-darkness',
-  'food', 'summon-creature', 'master-of-decay', 'master-of-flames', 'master-of-thunder',
+  'summon-creature', 'master-of-decay', 'master-of-flames', 'master-of-thunder',
   'light-healing-sorcerer', 'intense-healing-sorcerer',
 ];
 
@@ -872,7 +981,7 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     });
   }
 
-  it('has exactly the catalogue: 21 + 20 + 37 + 40 vocation spells, plus one generic (Cure Poison)', () => {
+  it('has exactly the catalogue: 21 + 20 + 38 + 42 vocation spells, plus eight generic (Cure Poison and the utilities)', () => {
     // #523 acrescentou uma magia por vocação que faltava (Fierce Berserk, Strong Ethereal
     // Spear, Ultimate Energy Strike) — Druid já tinha as 24 (Heal Friend só ganhou fórmula).
     // #590 (cura de condição) acrescentou: Cure Bleeding no Knight (+1) e no Druid (+1), Cure
@@ -897,15 +1006,130 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     // metade Sorcerer de Explosion e de Heavy Magic Missile, 31→36), Druid +6 (Avalanche,
     // Intense/Ultimate Healing, Stone Shower, a metade Druid de Explosion e de Heavy Magic
     // Missile, 33→39); Knight não ganhou conjuração nenhuma nesta issue.
+    // #599 (M38-02) acrescentou o familiar de cada vocação (level 200): +1 em cada uma.
+    // #623 (utilitárias) acrescentou: Ultimate Light no Sorcerer (+1) e no Druid (+1) e a Food só no
+    // Druid (+1), e as SETE genéricas novas (Light, Great Light, Levitate up/down, Magic Rope, Find
+    // Person, Find Fiend) ao lado da Cure Poison: 1→8. Os números abaixo já contam as duas.
     const byVocation = new Map<string | undefined, number>();
     for (const spell of content.spells.values()) {
       byVocation.set(spell.vocationId, (byVocation.get(spell.vocationId) ?? 0) + 1);
     }
-    expect(byVocation.get('knight')).toBe(21);
-    expect(byVocation.get('paladin')).toBe(20);
-    expect(byVocation.get('sorcerer')).toBe(37);
-    expect(byVocation.get('druid')).toBe(40);
-    expect(byVocation.get(undefined)).toBe(1);
+    expect(byVocation.get('knight')).toBe(22);
+    expect(byVocation.get('paladin')).toBe(21);
+    expect(byVocation.get('sorcerer')).toBe(39);
+    expect(byVocation.get('druid')).toBe(43);
+    expect(byVocation.get(undefined)).toBe(8);
+  });
+
+  it('as magias utilitárias carregam os números do Canary (#623)', () => {
+    // `data/scripts/spells/support/{light,great_light,ultimate_light,levitate,magic_rope,
+    // find_person,find_fiend,food}.lua` (47dfd51): level, mana, cooldown/groupCooldown de 2000 ms
+    // e grupo `support` em TODAS; a duração da luz é `(m*60+s)*1000`. Mutação que mata: trocar o
+    // `durationMs` de uma luz, o `level` de Ultimate Light (8 no Canary, 9 no TFS) ou o `soulCost`
+    // da Food.
+    const rows: Record<string, {
+      level: number; mana: number; vocationId?: string; soulCost?: number; effect: object;
+    }> = {
+      light: { level: 8, mana: 20, effect: { kind: 'light', level: 6, color: 215, durationMs: 370_000 } },
+      'great-light': {
+        level: 13, mana: 60, effect: { kind: 'light', level: 8, color: 215, durationMs: 695_000 },
+      },
+      'ultimate-light-druid': {
+        level: 26, mana: 140, vocationId: 'druid',
+        effect: { kind: 'light', level: 8, color: 215, durationMs: 1_990_000 },
+      },
+      'ultimate-light-sorcerer': {
+        level: 26, mana: 140, vocationId: 'sorcerer',
+        effect: { kind: 'light', level: 8, color: 215, durationMs: 1_990_000 },
+      },
+      'levitate-up': { level: 12, mana: 50, effect: { kind: 'levitate', direction: 'up' } },
+      'levitate-down': { level: 12, mana: 50, effect: { kind: 'levitate', direction: 'down' } },
+      'magic-rope': { level: 9, mana: 20, effect: { kind: 'magic-rope' } },
+      'find-person': { level: 8, mana: 20, effect: { kind: 'find', target: 'person' } },
+      'find-fiend': { level: 25, mana: 20, effect: { kind: 'find', target: 'fiend' } },
+      food: {
+        level: 14, mana: 120, vocationId: 'druid', soulCost: 1,
+        effect: {
+          kind: 'food', items: ['meat', 'ham', 'grapes', 'red-apple', 'bread', 'roll', 'cheese'],
+        },
+      },
+    };
+    for (const [id, row] of Object.entries(rows)) {
+      const spell = content.spells.get(id);
+      expect(spell, id).toBeDefined();
+      if (spell === undefined) continue;
+      expect(spell.minLevel, id).toBe(row.level);
+      expect(spell.manaCost, id).toBe(row.mana);
+      expect(spell.vocationId, id).toBe(row.vocationId);
+      expect(spell.soulCost, id).toBe(row.soulCost);
+      expect(spell.group, id).toBe('support');
+      expect(spell.groupCooldownMs, id).toBe(2000);
+      expect(spell.cooldownMs, id).toBe(2000);
+      expect(spell.effect, id).toEqual(row.effect);
+      expect(content.appearances?.spells[id]?.effect, id).toBeGreaterThan(0);
+    }
+    // A comida que a Food cria existe no catálogo, com o `value × 12 s` do `foods.lua`.
+    const foodValue: Record<string, number> = {
+      meat: 15, ham: 30, grapes: 9, 'red-apple': 6, bread: 10, roll: 3, cheese: 9,
+    };
+    for (const [id, value] of Object.entries(foodValue)) {
+      expect(content.items.get(id)?.effect, id).toEqual({ kind: 'food', durationMs: value * 12_000 });
+    }
+  });
+
+  it('a Food recusa no boot um item que não é comida, um id que não existe e um id repetido (#623)', () => {
+    // Sem esta conferência a magia subiria muda e criaria na mochila algo que `use-item` recusa.
+    const dir = mkdtempSync(join(tmpdir(), 'content-food-'));
+    try {
+      cpSync(DATA, dir, { recursive: true });
+      const path = join(dir, 'spells', 'food.json');
+      const food = JSON.parse(readFileSync(path, 'utf8')) as { effect: { items: string[] } };
+      food.effect.items = ['meat', 'backpack', 'no-such-food', 'meat'];
+      writeFileSync(path, JSON.stringify(food));
+      let message = '';
+      try { loadContent(dir); } catch (error) { message = (error as Error).message; }
+      expect(message).toMatch(/food\.items "backpack" não é comida/);
+      expect(message).toMatch(/food\.items "no-such-food" não existe/);
+      expect(message).toMatch(/repete um item/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('os quatro familiares de vocação (#599, M38-02): level 200, mana e monstro do Canary, 15 min e 30 min', () => {
+    // `data/scripts/spells/familiar/*.lua` (level 200, mana 3000/1000/2000/3000) e
+    // `data-otservbr-global/monster/familiars/*.lua` (vida, manaCost, `familiar = true`), conferidos
+    // no `47dfd51`; a velocidade é a do TFS (309, ADR 0037 d.4) e o outfit, o do `FAMILIAR_ID`.
+    const expected = {
+      knight: { mana: 1_000, health: 10_000, outfitId: 991, targetDistance: 4 },
+      paladin: { mana: 2_000, health: 15_000, outfitId: 992, targetDistance: 2 },
+      sorcerer: { mana: 3_000, health: 20_000, outfitId: 994, targetDistance: 1 },
+      druid: { mana: 3_000, health: 20_000, outfitId: 993, targetDistance: 1 },
+    } as const;
+    for (const [vocationId, row] of Object.entries(expected)) {
+      const spell = content.spells.get(`summon-${vocationId}-familiar`);
+      expect(spell, vocationId).toMatchObject({
+        vocationId, minLevel: 200, manaCost: row.mana, group: 'support', groupCooldownMs: 2_000,
+        // `spell:cooldown(0)`: o cooldown real (30 min) mora no efeito.
+        cooldownMs: 2_000,
+        effect: { kind: 'familiar', monsterId: `${vocationId}-familiar`, durationMs: 900_000, cooldownMs: 1_800_000 },
+      });
+      const familiar = content.monsters.get(`${vocationId}-familiar`);
+      expect(familiar, vocationId).toMatchObject({
+        familiar: true, manaCost: row.mana, health: row.health, speed: 309, outfitId: row.outfitId,
+        targetDistance: row.targetDistance, blockable: false, experience: 0, staticAttack: 0.9,
+        conditionImmunities: ['invisible', 'paralyze'],
+      });
+      // O Canary declara `summonable = false`: a Summon Creature não invoca familiar.
+      expect(familiar?.summonable).toBe(false);
+      expect(familiar?.loot.items).toEqual([]);
+    }
+    // A provocação de 8 s (`summon challenge`) é dos dois familiares de magia; o do Monk não entra.
+    const challenges = (id: string) => content.monsters.get(id)?.abilities.find((a) => a.id === 'summon-challenge');
+    expect(challenges('druid-familiar')?.challenge).toEqual({ durationMs: 8_000 });
+    expect(challenges('sorcerer-familiar')?.challenge).toEqual({ durationMs: 8_000 });
+    expect(challenges('knight-familiar')).toBeUndefined();
+    expect(content.monsters.has('monk-familiar')).toBe(false);
   });
 
   it('Cancel Invisibility usa o `AREA_CIRCLE3X3` do Canary — o círculo de RAIO 3, o mesmo do Mass Healing (#559)', () => {
@@ -1389,6 +1613,59 @@ describe('wave and beam areas transcribed from the Canary AREA_* (#679)', () => 
     }
   });
 
+  it('as duas runas de invocação do Canary e o Skeleton que a Animate Dead ergue (#600)', () => {
+    // `convince_creature.lua`: level 16, ML 5, cooldown 2 s + grupo 2 s, sem `rune:vocation`;
+    // `animate_dead_rune.lua`: level 27, ML 4, idem — e o preço é o menor `buy` dos NPCs (80 e 375).
+    for (const [id, price, requires] of [
+      ['convince-creature-rune', 80, { level: 16, magicLevel: 5 }],
+      ['animate-dead-rune', 375, { level: 27, magicLevel: 4 }],
+    ] as const) {
+      const rune = content.supplies.get(id);
+      expect(rune, id).toMatchObject({ price, group: 'support', cooldownMs: 2_000, groupCooldownMs: 2_000, requires });
+      expect(rune?.requires.vocationId, id).toBeUndefined();
+    }
+    expect(content.supplies.get('convince-creature-rune')?.effect).toEqual({ kind: 'convince', range: 8 });
+    expect(content.supplies.get('animate-dead-rune')?.effect)
+      .toEqual({ kind: 'animate-dead', monsterId: 'skeleton', range: 8 });
+    // `skeleton.lua`: `manaCost = 300`, `convinceable`; o cadáver (5972, 10 s `unmove`) só vira
+    // movível no primeiro decaimento (4024) e a cadeia inteira dura 670 s.
+    expect(content.monsters.get('skeleton')).toMatchObject({
+      convinceable: true, manaCost: 300, corpseTtlMs: 670_000,
+      corpseAnimatable: [{ fromMs: 10_000, untilMs: 670_000 }],
+    });
+    // O Dragon não é convencível, e o cadáver dele também só é animável depois do estágio `unmove`.
+    expect(content.monsters.get('dragon')?.convinceable).toBe(false);
+    expect(content.monsters.get('dragon')?.corpseAnimatable).toEqual([{ fromMs: 10_000, untilMs: 670_000 }]);
+    // Rat e Rotworm (as hunts reais) são convencíveis no Canary, com a mana do `rat.lua`/`rotworm.lua`.
+    expect(content.monsters.get('rat')).toMatchObject({ convinceable: true, manaCost: 200 });
+    expect(content.monsters.get('rotworm')).toMatchObject({ convinceable: true, manaCost: 305 });
+    // 128 convencíveis no recorte gerado (139 no Canary inteiro, menos os que o pacote não desenha).
+    const convincible = [...content.monsters.values()].filter((monster) => monster.convinceable);
+    expect(convincible.length).toBeGreaterThan(100);
+    expect(convincible.every((monster) => monster.summonable === false)).toBe(true);
+  });
+
+  it('os cinco monstros preservados à mão carregam os campos do #600 do importador, por override (#600)', () => {
+    // `preserveHandAuthored` nunca reescreve rat/rotworm/dragon/dragon-lord/dragon-lord-hatchling; o que o
+    // importador gera de novo para eles entra por `data/monsters/overrides/`. Este teste prende cada
+    // override contra o `staging/` (a transcrição pura do Canary) — se o importador mudar, os dois
+    // divergem aqui em vez de em silêncio.
+    const staging = join(DATA, '..', 'staging', 'monsters', 'generated');
+    const staged = new Map<string, Record<string, unknown>>();
+    for (const file of readdirSync(staging)) {
+      for (const entity of JSON.parse(readFileSync(join(staging, file), 'utf8')) as Record<string, unknown>[]) {
+        staged.set(String(entity['id']), entity);
+      }
+    }
+    for (const id of ['rat', 'rotworm', 'dragon', 'dragon-lord', 'dragon-lord-hatchling']) {
+      const monster = content.monsters.get(id);
+      const source = staged.get(id);
+      expect(monster?.corpseAnimatable, id).toEqual(source?.['corpseAnimatable']);
+      expect(monster?.convinceable, id).toBe(source?.['convinceable'] === true);
+      expect(monster?.manaCost, id).toBe(source?.['manaCost'] as number | undefined);
+    }
+  });
+
   it('dragon and dragon lord corpses last 670000 ms, the Canary items.xml decay chain (#585)', () => {
     for (const id of ['dragon', 'dragon-lord']) {
       expect(content.monsters.get(id)?.corpseTtlMs, id).toBe(670000);
@@ -1470,6 +1747,61 @@ describe('a perda de item na morte do conteúdo real (#571, ADR 0042 decisão 4)
   });
 });
 
+describe('a apresentação do monstro no conteúdo real (#620, M44-02)', () => {
+  // Números do Canary (`data-otservbr-global/monster/*`, conferidos em 2026-09-30): os campos
+  // `monster.outfit.look*`, `monster.voices`, `monster.light` e `monster.race` são apresentação —
+  // nenhum deles entra em combate, e nenhum é arte.
+  const content = loadContent(DATA);
+  const { monsters } = content;
+  const { appearances } = content;
+  if (appearances === undefined) throw new Error('o conteúdo real não carregou a tabela de aparências');
+
+  it('o Rat fala, e o Dragon grita — `voices` do Canary, com intervalo 5000 ms e chance 10', () => {
+    expect(monsters.get('rat')?.voices).toEqual({
+      intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!', yell: false }],
+    });
+    const dragon = monsters.get('dragon')?.voices;
+    expect(dragon?.lines.map((line) => line.text)).toEqual(['FCHHHHH', 'GROOAAARRR']);
+    expect(dragon?.lines.every((line) => line.yell)).toBe(true);
+    // O Rotworm não declara fala com linha: mudo.
+    expect(monsters.get('rotworm')?.voices).toBeUndefined();
+  });
+
+  it('o Fire Elemental brilha (nível 4, cor 208) e queima; o Dark Magician traz as cores e o addon do Canary', () => {
+    expect(monsters.get('fire-elemental')).toMatchObject({ light: { level: 4, color: 208 }, race: 'fire' });
+    expect(monsters.get('dark-magician')?.outfit).toEqual({ head: 58, body: 95, legs: 51, feet: 131, addons: 2 });
+    // O `lookType` é o `outfitId` da tabela de aparências, nunca um campo do monstro (invariante 6).
+    expect(monsters.get('dark-magician')?.outfitId).toBe(appearances.monsters['dark-magician']);
+  });
+
+  it('o monstro comum não paga nada: sem `outfit`, `light`, `race` — o default do Canary é `blood` e cor 0', () => {
+    const rotworm = monsters.get('rotworm');
+    for (const field of ['outfit', 'light', 'race'] as const) expect(rotworm?.[field], field).toBeUndefined();
+  });
+
+  it('as contagens do catálogo: 238 com cores/addons, 567 com falas, 59 com luz e 412 com raça que não é `blood`', () => {
+    // Uma reimportação que mude isto sem querer (um leitor que passou a ler outra coisa) reprova
+    // aqui — `pnpm catalog:import monsters` é o único que as muda, e o relatório as conta.
+    const all = [...monsters.values()];
+    expect(all.filter((monster) => monster.outfit !== undefined)).toHaveLength(238);
+    expect(all.filter((monster) => monster.voices !== undefined)).toHaveLength(567);
+    expect(all.filter((monster) => monster.light !== undefined)).toHaveLength(59);
+    const races = new Map<string, number>();
+    for (const monster of all) if (monster.race !== undefined) races.set(monster.race, (races.get(monster.race) ?? 0) + 1);
+    expect(Object.fromEntries(races)).toEqual({ undead: 232, venom: 127, fire: 42, ink: 9, candy: 1, chocolate: 1 });
+  });
+
+  it('o efeito do golpe físico tem uma linha por raça, com os ids do Canary (`CONST_ME_*`)', () => {
+    // `Game::combatGetTypeInfo`: sangue 1, veneno 17, hit area 10 (morto-vivo e tinta), energia 12,
+    // cacau 270 e xarope 269; fogo reusa o sangue. Mutação que mata: uma raça sem linha — o golpe
+    // nela cairia em `hits.melee` sem ninguém notar.
+    expect(appearances.hits.byRace).toEqual({
+      blood: 1, venom: 17, undead: 10, fire: 1, energy: 12, ink: 10, chocolate: 270, candy: 269,
+    });
+    expect(appearances.hits.melee).toBe(1);
+  });
+});
+
 describe('alma da vocação promovida (#566 + #593)', () => {
   it('as quatro vocações promovidas carregam o teto e a cadência de alma do Canary (200 / 15 s)', () => {
     const content = loadContent(DATA);
@@ -1502,5 +1834,33 @@ describe('regeneração de item do catálogo em milissegundos do Canary (#804)',
       return ticks >= 60_000 ? [`${item.id}: ${String(ticks)} ms`] : [];
     });
     expect(slow).toEqual([]);
+  });
+});
+
+describe('o preço de aprender magia do conteúdo real (#624, ADR 0058 d.3)', () => {
+  const content = loadContent(DATA);
+
+  // Só a magia que o Canary concede FORA do NPC fica sem preço: a Great Death Beam é da Wheel of
+  // Destiny (`player_wheel.cpp`), que o dono deixou fora em 2026-09-29. Qualquer outra magia sem
+  // `learnPrice` seria uma magia que ninguém nunca consegue lançar — o teste a barra.
+  const NOT_TAUGHT = ['great-death-beam'];
+
+  it('toda magia do catálogo é vendida, exceto as que só a Wheel concede', () => {
+    const unpriced = [...content.spells.values()]
+      .filter((spell) => spell.learnPrice === undefined)
+      .map((spell) => spell.id);
+    expect(unpriced).toEqual(NOT_TAUGHT);
+  });
+
+  it('os preços vêm do menor valor dos NPCs do Canary (`pnpm catalog:spell-prices`)', () => {
+    const price = (id: string): number | undefined => content.spells.get(id)?.learnPrice;
+    // `graham.lua`, `azalea.lua`, `zoltan.lua`: o mesmo nome em vários NPCs, o menor vence.
+    expect(price('berserk')).toBe(2500);
+    expect(price('ultimate-healing-druid')).toBe(1000);
+    expect(price('ultimate-flame-strike')).toBe(15_000);
+    expect(price('chivalrous-challenge')).toBe(250_000);
+    // As básicas de cada vocação são de graça no Canary (`price = 0`), e `0` não é "sem preço".
+    expect(price('wound-cleansing')).toBe(0);
+    expect(price('apprentices-strike-druid')).toBe(0);
   });
 });

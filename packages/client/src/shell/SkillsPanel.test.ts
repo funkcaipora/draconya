@@ -134,6 +134,52 @@ describe('SkillsPanel', () => {
     expect(html).not.toContain('--stat-tone');
   });
 
+  it('shows the effective (Loyalty) level, the base one in the tooltip, and the bonus in the header (#628)', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn((key: string) => key === STORAGE_KEY ? '["sword","magic","fist"]' : null),
+      setItem: vi.fn(),
+    });
+    hud.set(() => ({
+      ...INITIAL_HUD,
+      loyaltyBonusPercent: 50,
+      skills: {
+        ...INITIAL_HUD.skills,
+        // O nível efetivo é o que a linha mostra; a barra continua a do nível BASE.
+        sword: { level: 100, percent: 40, loyaltyLevel: 104 },
+        magic: { level: 20, percent: 20, loyaltyLevel: 22 },
+        // Sem `loyaltyLevel`: o bônus não mudou o nível desta skill.
+        fist: { level: 22, percent: 10 },
+      },
+    }));
+
+    const html = await render();
+    expect(html).toContain('Loyalty +50%');
+    expect(html).toContain('>104<');
+    expect(html).toContain('>22<');
+    expect(html).not.toContain('>100<');
+    expect(html).toContain('title="Base 100 + 4 de Loyalty"');
+    expect(html).toContain('title="Base 20 + 2 de Loyalty"');
+    // A skill que o bônus não mudou não ganha dica.
+    expect(html.match(/title="Base /g)).toHaveLength(2);
+    expect(html).toMatch(/width:\s*40%/);
+  });
+
+  it('draws no Loyalty header nor tooltip for an account without a tier', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn((key: string) => key === STORAGE_KEY ? '["sword"]' : null),
+      setItem: vi.fn(),
+    });
+    hud.set(() => ({
+      ...INITIAL_HUD,
+      skills: { ...INITIAL_HUD.skills, sword: { level: 25, percent: 50 } },
+    }));
+
+    const html = await render();
+    expect(html).not.toContain('Loyalty');
+    expect(html).not.toContain('title="Base');
+    expect(html).toContain('>25<');
+  });
+
   it('honors a persisted subset and never invents classic Tibia skills', async () => {
     vi.stubGlobal('localStorage', {
       getItem: vi.fn((key: string) => key === STORAGE_KEY ? '["hp","stamina"]' : null),
