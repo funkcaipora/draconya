@@ -466,6 +466,12 @@ export class CharacterRuntime {
   goldDelta: number;
   alive: boolean;
   speed: number;
+  /**
+   * O personagem dissolve a parede de personagem ao pisar (OW-05, #826) — ver
+   * `Movable.dissolvesSafeWalls`. Sempre `true`, e é o que a distingue do monstro, que não tem
+   * o campo.
+   */
+  readonly dissolvesSafeWalls = true;
   /** Mutadas no lugar a cada uso — ver `Skills.gain`. */
   readonly skills: Skills;
   /** Mutado no lugar a cada abate recompensado — ver `Bestiary.record`. */
