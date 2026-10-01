@@ -650,6 +650,8 @@ describe('entrada em curso: reversão e joinedAtMs (#397, ADR 0035 decisão 6)',
       // Os dois carimbos do familiar (#599) também são de relógio de PAREDE (epoch em ms, comparados
       // com `createdAtMs + nowMs`), nunca do relógio lógico da sessão: atravessam a transição.
       familiar: 'none',
+      // O banco de offline training (#631) é um saldo em ms de tempo treinado, não um instante.
+      training: 'none',
       // DURAÇÃO restante sem âncora num relógio: a comida que sobra, os contadores de prática
       // (golpes que ainda treinam, sem instante nenhum).
       fedMs: 'none', attackPractice: 'none',
