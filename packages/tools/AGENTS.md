@@ -116,5 +116,20 @@ pnpm vitest run packages/tools
   personagem entra VESTIDO (arma de uma mão + escudo) e com vida enorme — sem a vida enorme ele
   morre, a sessão encerra, e o laço medido passa a rodar sessões mortas: o µs/tick despenca para
   zero e o número vira mentira. Ver `docs/product/combat-conformance.md`.
+- **`pnpm bench:city` mede o LEQUE de saída da praça, e o relógio é parte do cenário** (OW-07,
+  #828). Ele roda `SessionHost` + `CityShard` + `Viewer` de verdade e o codec real, e o socket só
+  conta os bytes do frame. A armadilha que o deixou sem medir o que dizia: com `now: () => 0` o
+  hospedeiro recusa o `walk` adiantado (FUN-122) e todo passo depois do primeiro vira recusa, com a
+  tabela ainda saindo — o FUN-120 deixou de ser reproduzível sem que ninguém visse. Agora o relógio é
+  SIMULADO e anda no ritmo de produção (passo da Cidade de 150 ms, ciclo do hospedeiro de 100 ms,
+  tick no máximo divisor comum), e `passos/s` na tabela é o que prova que o cenário anda. A
+  medição vive em `city-scenario.ts`, a conta em `city-metrics.ts`, a tabela em `city-report.ts` e
+  `city-broadcast.ts` é só a borda; `city-scenario.test.ts` roda tudo em modo curto no CI.
+- **CPU do bench de praça é `process.cpuUsage()`, mas continua sendo de máquina.** Numa máquina
+  com outros processos (a de desenvolvimento roda agentes em paralelo) o p99 mede a máquina: o
+  relatório imprime a carga, e `REPEAT=3` publica a melhor rodada por linha. Antes/depois é sempre
+  na mesma máquina, sob carga parecida. `CYCLE_MS` (100) é espelho do `host.ts`, e um teste confere.
+- **`MAP=square` é a praça sintética do FUN-33; o padrão é a Thais real.** A sintética existe para
+  rodar sem o mapa e para comparar com a medição antiga.
 
-Issues: FUN-45 (cliente de carga), FUN-46 (cenário frio).
+Issues: FUN-45 (cliente de carga), FUN-46 (cenário frio), OW-07/#828 (bench da praça).
