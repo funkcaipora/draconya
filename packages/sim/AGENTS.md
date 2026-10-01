@@ -1228,3 +1228,21 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   registro (`exerciseExhaustedUntilMs`), comparado com o `nowMs` que o servidor passa. `buyItem` (`purchase.ts`) é a compra mínima do `buy-item`: confere
   TUDO antes de mexer em `goldDelta` ou na mochila. `holdStamina` (`stamina.ts`) avança o marco sem
   recuperar — o que o Treino faz ao sair (ADR 0060 d.14c).
+- **Zona por tile e `canLogout` são `zones.ts` (OW-10, #831, ADR 0060 d.6 e d.7) — funções puras que
+  só LÊEM, e hoje ninguém as chama.** `zoneAt(map, point)` devolve o tipo com a precedência de
+  `Tile::getZoneType` (PZ, no-pvp, arena, no-logout, normal), `hasZoneFlag` lê um bit, e
+  `canLogout(character, map, nowMs)` devolve `{ ok: true }` ou `{ ok: false, reason: 'no-logout-tile'
+  | 'in-fight' }`. Quatro armadilhas. (1) **Decidir saída pelo TIPO reabre o logout num tile `P`
+  (PZ + no-logout):** `zoneAt` diz `'protection'` e esconde o no-logout, mas o Canary testa o no-logout
+  ANTES da PZ (`player.cpp:6972-6978`) e a PZ só isenta da LUTA, nunca do tile. `canLogout` lê os
+  bits (`zoneFlagsAt`); quem escrever outra consulta de saída (o x-log, a entrada em hunt idle)
+  chama `canLogout`, não reimplementa. (2) **A recusa por tile vence a por luta:** num tile
+  no-logout, em luta, o motivo é `'no-logout-tile'`. (3) **Luta é só `isInFight`** (`combat/in-fight.ts`,
+  #625) — o pz-lock do Canary vem de agredir jogador, que o mundo `no-pvp` não tem, e uma segunda
+  fórmula de "em combate" é a divergência que aquele arquivo existe para evitar. (4) **A coordenada é
+  a LOCAL do mapa**, a de `isBlocked` e do `CharacterRuntime.position` — a absoluta do Tibia
+  (`characters.world_x/y/z`) passa por `absoluteToLocal` antes. **Sem dado, sem restrição:** mapa sem
+  a camada `zones` no andar (todo recorte de hunt de hoje), andar ausente e ponto fora da grade são
+  tile NORMAL, e a Cidade segue protect zone por construção (ADR 0004), sem consultar nada daqui.
+  `'pvp'` (arena) sai como o Canary o chama; tratá-la como no-pvp é do portão de combate (OW-27, ADR
+  0060 d.8), não desta consulta.

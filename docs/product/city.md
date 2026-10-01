@@ -146,7 +146,8 @@ entrada e as escadas:
 `thais.json` carrega, por andar, a camada `zones`: o que é protect zone, no-pvp, no-logout e
 arena em cada tile, lido de `TILE_FLAGS` do OTBM — a base de `canLogout`, do portão de combate e
 dos serviços em PZ do mundo (OW-10, OW-27). **É só dado**: nada na Cidade de hoje a consulta, e a
-Cidade continua sendo protect zone por construção (ADR 0004) até o mundo existir.
+Cidade continua sendo protect zone por construção (ADR 0004) até o mundo existir. A regra que lê a
+camada — `zoneAt` e `canLogout`, do `sim` — está em [Mundo aberto](open-world.md).
 
 O que o recorte tem (z4–z7, medido sobre o OTBM por `pnpm map:import --id thais --zones-only`):
 
