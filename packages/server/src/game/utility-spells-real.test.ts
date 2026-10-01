@@ -106,6 +106,13 @@ describe('as utilitárias do #623 no conteúdo real', () => {
   it('Find Person e Find Fiend sem alvo recusam; Food cria comida REAL e o `use-item` a come', () => {
     const run = enter(real(), 'darashia-dragon-lair');
     expect(cast(run, 'find-person')).toEqual({ ok: false, reason: 'person-not-found', retryInMs: 0 });
+    // O nome sem jogador é a recusa de `InstantSpell::playerCastInstant`: inicia o cooldown da magia
+    // e o do grupo `support` (2 s), sem mana nem alma — o Find Fiend logo em seguida está exausto.
+    expect(run.hero.mana).toBe(10_000);
+    expect(run.hero.soul).toBe(100);
+    expect(cast(run, 'find-fiend')).toEqual({ ok: false, reason: 'on-cooldown', retryInMs: 2_000 });
+    run.session.advanceBy(2_000);
+    // Já o Find Fiend sem fiendish é recusa de SCRIPT: sem custo e sem cooldown — a Food sai logo.
     expect(cast(run, 'find-fiend')).toEqual({ ok: false, reason: 'no-creatures-around', retryInMs: 0 });
 
     expect(cast(run, 'food')).toEqual({ ok: true });
