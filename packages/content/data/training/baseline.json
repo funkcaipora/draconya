@@ -2,6 +2,7 @@
   "id": "baseline",
   "dummy": { "id": "exercise-dummy", "rate": 100 },
   "strike": { "triesPerCharge": 7, "manaSpentPerCharge": 600 },
+  "startCooldownMs": 10000,
   "place": {
     "stand": { "x": 73, "y": 87, "z": 7 },
     "dummy": { "x": 72, "y": 87, "z": 7 }
@@ -20,5 +21,5 @@
       { "skillId": "magic", "kind": "mana" }
     ]
   },
-  "_open": "#631 (M44-13, ADR 0059). Números do Canary (commit 47dfd51): o boneco livre é o `exercise dummy` (`items.xml` ids 28558/28565, `type=\"dummy\"`, `rate` 100 — os bonecos de casa valem 110 e ficam fora); `strike` é `exercise_training_weapons.lua` (`addSkillTries(skill, 7 * rate)`, `addManaSpent(600 * rate)`); o banco é `Player::addOfflineTrainingTime` (`min(12 * 3600 * 1000, …)`, `player.cpp`), a carência é `offlineTime < 600` (segundos), o teto de `os.time() - lastLogout` é `86400 * 21`, e as fórmulas de tries são as de `offline_training.lua` (melee `segundos / ataqueBase / 2`, distância `/ 4`, magic level `segundos × manaGain / manaTicks`, escudo `segundos / 4`). Sem `fist`: a estátua e as exercise wraps de fist são do Monk (pós-13.32, ADR 0038 d.5). `spendCapMs` (Free 6 h / Premium 12 h) NÃO é do Canary: é a forma do PRD §11.3, decisão do ADR 0059 d.4 (no Tibia offline training é só Premium). `place` é o boneco da Thais no próprio mapa da Cidade (`things/maps/otservbr.otbm`, item 28565 em (32347, 32240, 7) = (72, 87, 7) no recorte `thais`) — o ADR 0059 d.1 previa um recorte mínimo à parte, e o recorte da Cidade já o contém."
+  "_open": "#631 (M44-13, ADR 0059). Números do Canary (commit 47dfd51): o boneco livre é o `exercise dummy` (`items.xml` ids 28558/28565, `type=\"dummy\"`, `rate` 100 — os bonecos de casa valem 110 e ficam fora); `strike` é `exercise_training_weapons.lua` (`addSkillTries(skill, 7 * rate)`, `addManaSpent(600 * rate)`); `startCooldownMs` é o `exhaustionTime = 10` do mesmo arquivo (`setExhaustion(\"training-exhaustion\", 10)` ao começar, `hasExhaustion` recusa um novo início); o banco é `Player::addOfflineTrainingTime` (`min(12 * 3600 * 1000, …)`, `player.cpp`), a carência é `offlineTime < 600` (segundos), o teto de `os.time() - lastLogout` é `86400 * 21`, e as fórmulas de tries são as de `offline_training.lua` (melee `segundos / ataqueBase / 2`, distância `/ 4`, magic level `segundos × manaGain / manaTicks`, escudo `segundos / 4`). Sem `fist`: a estátua e as exercise wraps de fist são do Monk (pós-13.32, ADR 0038 d.5). `spendCapMs` (Free 6 h / Premium 12 h) NÃO é do Canary: é a forma do PRD §11.3, decisão do ADR 0059 d.4 (no Tibia offline training é só Premium). `place` é o boneco da Thais no próprio mapa da Cidade (`things/maps/otservbr.otbm`, item 28565 em (32347, 32240, 7) = (72, 87, 7) no recorte `thais`) — o ADR 0059 d.1 previa um recorte mínimo à parte, e o recorte da Cidade já o contém."
 }

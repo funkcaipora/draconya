@@ -408,6 +408,8 @@ describe('o Treino do Tibia (#631, ADR 0059)', () => {
     // `exercise_training_weapons.lua`: 7 tries e 600 de mana gasta por carga, no rate 100 do boneco.
     expect(training?.dummy.rate).toBe(100);
     expect(training?.strike).toEqual({ triesPerCharge: 7, manaSpentPerCharge: 600 });
+    // `exhaustionTime = 10` do mesmo script: o `training-exhaustion` entre dois inícios.
+    expect(training?.startCooldownMs).toBe(10_000);
     // `player.cpp` (banco 12 h) e `offline_training.lua` (carência 600 s, 21 dias, escudo /4).
     expect(training?.offline).toMatchObject({
       bankCapMs: 12 * 3_600_000, graceMs: 600_000, maxAwayMs: 21 * 86_400_000, shieldingDivisor: 4,

@@ -3704,6 +3704,14 @@ export const trainingSchema = z.strictObject({
     manaSpentPerCharge: z.number().int().positive(),
   }),
   /**
+   * A espera entre dois inícios de Treino (`exhaustionTime = 10` de `exercise_training_weapons.lua`):
+   * ao começar, o Canary faz `player:setExhaustion("training-exhaustion", 10)`, e recusa um novo
+   * início enquanto ela vale ("This exercise dummy can only be used after a 10 seconds cooldown.").
+   * Em ms. É cooldown de PAREDE (ADR 0052 d.6): um carimbo do instante de início no registro do
+   * personagem, comparado com o relógio que o servidor passa — não tempo de sessão.
+   */
+  startCooldownMs: z.number().int().nonnegative(),
+  /**
    * Onde o boneco está NO MAPA DA CIDADE (ADR 0059 d.1 fala de "um mapa mínimo"; o boneco livre da
    * Thais é um `exercise dummy` do próprio recorte OTBM da Cidade — `things/maps/otservbr.otbm`,
    * item 28565 em (32347, 32240, 7) —, então a sessão de Treino reaproveita o mapa da Cidade em

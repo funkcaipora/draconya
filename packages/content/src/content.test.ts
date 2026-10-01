@@ -2992,6 +2992,7 @@ describe('o Treino do Tibia (#631, ADR 0059)', () => {
     id: 'baseline',
     dummy: { id: 'exercise-dummy', rate: 100 },
     strike: { triesPerCharge: 7, manaSpentPerCharge: 600 },
+    startCooldownMs: 10_000,
     place: { stand: { x: 3, y: 2, z: 7 }, dummy: { x: 2, y: 2, z: 7 } },
     offline: {
       bankCapMs: 43_200_000, graceMs: 600_000, maxAwayMs: 1_814_400_000,
