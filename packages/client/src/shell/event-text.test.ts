@@ -39,6 +39,16 @@ describe('describeEvent (FUN-110)', () => {
     }
   });
 
+  it('a comida da Food que não coube na mochila diz qual foi perdida, e não sai crua (#623)', () => {
+    // O `sim` grava `food-not-carried` com o itemId; sem caso, o jogador lia `food-not-carried ·
+    // bread`. Mutação que mata: apagar o `case`.
+    const itemNames = { items: new Map([['bread', 'Bread']]) };
+    expect(describeEvent({ atMs: 0, type: 'food-not-carried', detail: 'bread' }, itemNames))
+      .toBe('Comida perdida, sem espaço · Bread');
+    expect(describeEvent({ atMs: 0, type: 'food-not-carried', detail: 'bread' }))
+      .toBe('Comida perdida, sem espaço · bread');
+  });
+
   it('sem catálogo, o id fica no lugar do nome — estável, e não vazio', () => {
     expect(describeEvent({ atMs: 0, type: 'entered-hunt', detail: 'rat-cellars/cautious' }))
       .toBe('Entrou em rat-cellars');
