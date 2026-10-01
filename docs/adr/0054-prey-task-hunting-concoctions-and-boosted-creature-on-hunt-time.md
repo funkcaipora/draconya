@@ -1,6 +1,7 @@
 # 0054 — Prey, Task Hunting, Concoctions e Boosted Creature: o tempo "online" é tempo de hunt, e o dia é do `jobs`
 
 **Status:** proposto — decorre do [ADR 0045](0045-tibia-bestiary-charms-prey-and-training.md)
+**Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30) — d.1:** a Prey corre junto com a stamina no mundo.
 decisão 3 (Prey/Task Hunting/Concoctions pelo Canary) e persiste/cobra pelo
 [ADR 0052](0052-endgame-progression-state-and-city-services-through-the-owning-session.md)
 **Data:** 2026-09-27

@@ -65,9 +65,9 @@ especificar essas issues vira ADR na hora, como qualquer outra.
 
 | Item | Motivo |
 |---|---|
-| PvP: skulls, frags, unjust kill, PZ lock por agressão a jogador, Twist of Fate, bênção PvP, redução de morte por justiça | As hunts são PvE e instanciadas (invariante 8). O ADR 0031 exige perfil e ADR próprios para PvP; a Guild War é modo à parte (`docs/product/guild-war.md`), fora da mecânica de caça. |
+| PvP: skulls, frags, unjust kill, PZ lock por agressão a jogador, Twist of Fate, bênção PvP, redução de morte por justiça | O mundo aberto é do tipo `no-pvp` do Canary (ADR 0060) e as hunts são PvE e instanciadas (invariante 8). O ADR 0031 exige perfil e ADR próprios para PvP; a Guild War é modo à parte (`docs/product/guild-war.md`), fora da mecânica de caça. |
 | Casas, móveis, decoração, camas, portas e as magias de casa | O Draconya não tem mundo persistente com moradia, e nada disso cai de monstro nem é equipado. |
-| Raids como evento global de mundo | Pressupõem mundo aberto compartilhado; as hunts são sessões instanciadas. Os monstros das raids entram no catálogo como qualquer outro. |
+| Raids como evento global de mundo | Pressupõem mundo aberto compartilhado. Desde 2026-09-30 o mundo aberto existe como direção ([ADR 0060](adr/0060-tibia-open-world-without-pvp.md)), e as raids voltam a ser escopo do plano do mundo (`docs/open-world-plan.md`), não deste. Os monstros das raids entram no catálogo como qualquer outro. |
 | Chase mode, secure mode, seleção de alvo do jogador e hotkeys | Caem nas exceções do ADR 0037 decisão 2 (barra de ações e automação do bot). |
 | Store, Tibia Coins, XP boost de loja, VIP, Daily Reward, Soul War taint | Monetização e engajamento sem efeito no mecanismo de caça (`docs/product/monetization.md`); boosts de quest dependem de um motor de quest inexistente. |
 | Vocação Monk e as magias dela, Enlighten Party, Transcendence Potion | O Monk veio depois do pacote de arte 13.32, referência de release (ADR 0031) e de aparência (invariante 6); não há outfit nem sprite. Reavaliar se o pacote trocar. |

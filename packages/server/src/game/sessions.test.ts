@@ -325,6 +325,67 @@ describe('o gold de entrada vem do TICKET, nunca do cliente (FUN-77)', () => {
   });
 });
 
+describe('o bônus de Loyalty vem do TICKET e fica fixado no personagem (#628, ADR 0052 d.5)', () => {
+  const content = testContent();
+
+  it('o percentual da emissão chega ao personagem; ticket sem ele entra com zero', () => {
+    const loyal = createCitySessionFactory(content)('p1', { level: 1, xp: 0, loyaltyBonusPercent: 25 });
+    expect(loyal.participants[0]?.loyaltyBonusPercent).toBe(25);
+    // O ticket de uma conta sem degrau (ou de um `api` antigo, em deploy em rolagem) não traz o
+    // campo: o personagem vale o nível base, o lado seguro.
+    const plain = createCitySessionFactory(content)('p1', { level: 1, xp: 0 });
+    expect(plain.participants[0]?.loyaltyBonusPercent).toBe(0);
+  });
+
+  it('cada membro da party carrega o bônus da PRÓPRIA conta', () => {
+    const session = createCitySessionFactory(content)('p1', { level: 1, xp: 0 }, {
+      sessionId: 's-party', leaderId: 'p1', shareCosts: true, splitLoot: true,
+      huntId: TEST_HUNT.id, difficulty: 'cautious',
+      members: [
+        { characterId: 'p1', accountId: 'a1', initialCharacter: { level: 1, xp: 0, loyaltyBonusPercent: 30 } },
+        { characterId: 'p2', accountId: 'a2', initialCharacter: { level: 1, xp: 0 } },
+        { characterId: 'p3', accountId: 'a3', initialCharacter: { level: 1, xp: 0, loyaltyBonusPercent: 5 } },
+      ],
+    });
+    expect(session.participants.map((p) => [p.id, p.loyaltyBonusPercent])).toEqual([
+      ['p1', 30], ['p2', 0], ['p3', 5],
+    ]);
+  });
+
+  it('atravessa a transição Cidade→hunt e volta: é o MESMO personagem, com o mesmo bônus', () => {
+    // Fixado como a versão de conteúdo (invariante 7): nenhuma transição relê a conta.
+    const build = createSessionBuilder(content);
+    const city = createCitySessionFactory(content)('p1', { level: 1, xp: 0, loyaltyBonusPercent: 25 });
+    const hunt = build({ to: 'hunt', huntId: 'arena', difficulty: 'cautious' }, city, 'p1');
+    expect(hunt?.participants[0]?.loyaltyBonusPercent).toBe(25);
+    if (hunt === null) throw new Error('a hunt não foi construída');
+    hunt.end('manual-exit');
+    const back = build({ to: 'city' }, hunt, 'p1');
+    expect(back?.participants[0]?.loyaltyBonusPercent).toBe(25);
+  });
+});
+
+describe('o Bosstiary de entrada vem do TICKET, nunca do cliente (#629)', () => {
+  const content = testContent();
+
+  it('os abates e os pontos persistidos chegam ao personagem da sessão', () => {
+    // O nível de um boss depende do abate anterior: um personagem que entrasse vazio recomeçaria
+    // a contagem do boss a cada hunt. E vem do ticket pela mesma razão do gold (invariante 4).
+    const bosstiary = { kills: { '639': 4 }, points: 40, version: 1 };
+    const session = createCitySessionFactory(content)('p1', { level: 1, xp: 0, bosstiary });
+
+    expect(session.participants[0]?.bosstiary.killsOf(639)).toBe(4);
+    expect(session.participants[0]?.bosstiary.points).toBe(40);
+    expect(session.participants[0]?.bosstiary.getState()).toEqual(bosstiary);
+  });
+
+  it('ticket sem Bosstiary entra com nada contado', () => {
+    // É o personagem anterior à issue, ou o ticket de um `api` antigo em deploy em rolagem.
+    const session = createCitySessionFactory(content)('p1', { level: 1, xp: 0 });
+    expect(session.participants[0]?.bosstiary.getState()).toEqual({ kills: {}, points: 0, version: 1 });
+  });
+});
+
 describe('o Bestiário de entrada vem do TICKET, nunca do cliente (FUN-113)', () => {
   const content = testContent();
 

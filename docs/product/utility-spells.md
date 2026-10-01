@@ -68,8 +68,8 @@ o cooldown, e o `HuntRuleset#castSpell` aplica o efeito —, do bot ou do dispar
 
 **O salto (Levitate e Magic Rope)** é o `HuntRuleset#relocateCharacter` — o outro único ponto, ao
 lado de `#step`, que escreve posição (`movement.ts#relocate`): libera a origem, ocupa o destino,
-emite `creature-moved`, aplica campo e placa de pressão, e tranca o ataque por `stairhopDelayMs` sob
-o `combat-v3` (o `Player::onCreatureMove` do Canary trata `teleport || oldPos.z != newPos.z` do
+emite `creature-moved`, aplica campo e placa de pressão, e aplica a condição `pacified` (a trava de ataque
+do stairhop, #622) por `stairhopDelayMs` sob o `combat-v3` (o `Player::onCreatureMove` do Canary trata `teleport || oldPos.z != newPos.z` do
 mesmo jeito para escada, magia e teleporte). NÃO vira o personagem: o Canary não passa direção. O
 salto também CANCELA a caminhada manual em curso (`walk-to`, #763) e a janela de espera dela — o
 `stopEventWalk()` que o `Creature::onCreatureMove` chama nesses mesmos casos —; sem isso o

@@ -45,3 +45,33 @@ describe('event-triggered action', () => {
     expect(cd.isReady('heal', 0)).toBe(true);
   });
 });
+
+describe('rebase between session clocks (#812)', () => {
+  it('keeps what remains on the new clock and drops what had already expired', () => {
+    const cd = new Cooldowns();
+    // A 57.7 s session: a 10-minute spell cast at its 50 s mark, a potion that ended at 55 s.
+    cd.start('wound', 50_000, 600_000);
+    cd.start('potion', 53_000, 2_000);
+    cd.rebase(57_700, 1_000);
+    // 592.3 s of the spell are still to go, now measured from 1 s on the new clock.
+    expect(cd.remainingMs('wound', 1_000)).toBe(592_300);
+    expect(cd.isReady('potion', 1_000)).toBe(true);
+    expect(Object.keys(cd.getState().until)).toEqual(['wound']);
+  });
+
+  it('a cooldown that ends exactly when the session ends is ready — it does not cross', () => {
+    const cd = new Cooldowns();
+    cd.start('heal', 1_000, 2_000);
+    cd.rebase(3_000, 0);
+    expect(Object.keys(cd.getState().until)).toEqual([]);
+  });
+
+  it('is reversible for everything that crossed (a refused entry undoes it)', () => {
+    const cd = new Cooldowns();
+    cd.start('wound', 50_000, 600_000);
+    const before = cd.getState();
+    cd.rebase(57_700, 5_000);
+    cd.rebase(5_000, 57_700);
+    expect(cd.getState()).toEqual(before);
+  });
+});

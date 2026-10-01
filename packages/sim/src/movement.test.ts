@@ -3,6 +3,7 @@ import type { TilemapInteractable } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import {
   TileOccupancy, canOccupy, move, movementDuration, place, placeNear, placeReachable, relocate,
+  swapPlaces,
   tilesAround,
 } from './movement.js';
 import type { Movable, MoveRejection } from './movement.js';
@@ -740,5 +741,93 @@ describe('TileOccupancy.fields — campo bloqueante (#560, Magic Wall/Wild Growt
     const w = new TileOccupancy(map);
     expect(w.blockedAt(2, 2, 7)).toBe(true); // a parede do meio da sala
     expect(w.blockedAt(3, 1, 7)).toBe(false);
+  });
+});
+
+describe('troca de lugar com quem se atravessa (#600)', () => {
+  // O Canary deixa o jogador pisar no tile da invocação de jogador (`Player::canWalkthrough`); a
+  // ocupação é exclusiva, então vira TROCA — e a troca não pode mexer na ocupação de nenhum dos dois.
+  it('os dois trocam de posição e os dois tiles continuam ocupados', () => {
+    const hero = at(1, 1);
+    const pet = at(2, 1);
+    const w = world(hero, pet);
+
+    const result = swapPlaces(w, hero, pet);
+    expect(result).toMatchObject({
+      ok: true,
+      mover: { ok: true, from: { x: 1, y: 1, z: 7 }, to: { x: 2, y: 1, z: 7 }, durationMs: 500 },
+      other: { ok: true, from: { x: 2, y: 1, z: 7 }, to: { x: 1, y: 1, z: 7 }, durationMs: 500 },
+    });
+    expect(hero.position).toEqual({ x: 2, y: 1, z: 7 });
+    expect(pet.position).toEqual({ x: 1, y: 1, z: 7 });
+    expect(w.occupied(1, 1)).toBe(true);
+    expect(w.occupied(2, 1)).toBe(true);
+  });
+
+  it('cada um paga o PRÓPRIO passo: a duração é a velocidade de quem se mexe', () => {
+    const hero = at(1, 1);
+    const slow = { alive: true, position: { x: 2, y: 1, z: 7 }, speed: 150 };
+    const w = world(hero, slow);
+    const result = swapPlaces(w, hero, slow);
+    expect(result).toMatchObject({ ok: true, mover: { durationMs: 500 }, other: { durationMs: 1_000 } });
+  });
+
+  it('a diagonal é legal, e quem não carrega `z` continua sem ele depois da troca', () => {
+    const walker = at(1, 2);
+    const pet: Movable<{ x: number; y: number }> & { alive: boolean } = {
+      alive: true, position: { x: 2, y: 3 }, speed: 300,
+    };
+    const w = new TileOccupancy(map);
+    w.reset([walker, pet]);
+    expect(swapPlaces(w, walker, pet)).toMatchObject({ ok: true });
+    expect(walker.position).toEqual({ x: 2, y: 3, z: 7 });
+    expect(pet.position).toEqual({ x: 1, y: 2 });
+    expect(Object.keys(pet.position)).toEqual(['x', 'y']);
+  });
+
+  it('não troca com quem não está no tile vizinho, e não mexe em nada', () => {
+    const hero = at(1, 1);
+    const far = at(4, 3);
+    const w = world(hero, far);
+    expect(swapPlaces(w, hero, far)).toEqual({ ok: false, reason: 'not-adjacent' });
+    expect(hero.position).toEqual({ x: 1, y: 1, z: 7 });
+    expect(far.position).toEqual({ x: 4, y: 3, z: 7 });
+  });
+
+  it('recusa o tile bloqueado — um campo bloqueante em cima de quem se atravessaria', () => {
+    const fields = new Fields();
+    fields.apply({
+      id: 'wall', tiles: [{ x: 2, y: 1, z: 7 }], expiresAtMs: 20_000, blocksMovement: true,
+    });
+    const w = new TileOccupancy(map, { fields });
+    const hero = at(1, 1);
+    const pet = at(2, 1);
+    w.reset([hero, pet]);
+    expect(swapPlaces(w, hero, pet)).toEqual({ ok: false, reason: 'tile-blocked' });
+    expect(hero.position).toEqual({ x: 1, y: 1, z: 7 });
+  });
+
+  it('recusa quando o tile do outro não está ocupado: aí é um passo comum, e quem chama pisa', () => {
+    const hero = at(1, 1);
+    const w = world(hero);
+    expect(swapPlaces(w, hero, at(2, 1))).toEqual({ ok: false, reason: 'tile-occupied' });
+  });
+
+  it('recusa trocar num tile de escada: o passo redirecionaria quem pisa', () => {
+    const house = buildTilemap({
+      id: 'casa', z: 7,
+      floors: {
+        '7': { grid: ['######', '#....#', '#....#', '######'] },
+        '6': { grid: ['######', '#....#', '#....#', '######'] },
+      },
+      floorChanges: [{ from: { x: 2, y: 1, z: 7 }, to: { x: 3, y: 1, z: 6 } }],
+    });
+    const w = new TileOccupancy(house);
+    const hero = at(1, 1);
+    const pet = at(2, 1);
+    w.reset([hero, pet]);
+    expect(swapPlaces(w, hero, pet)).toEqual({ ok: false, reason: 'tile-occupied' });
+    expect(hero.position).toEqual({ x: 1, y: 1, z: 7 });
+    expect(pet.position).toEqual({ x: 2, y: 1, z: 7 });
   });
 });

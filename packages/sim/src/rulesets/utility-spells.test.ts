@@ -420,15 +420,17 @@ describe('Levitate — sobe e desce um andar pelas regras de tile (#623)', () =>
 
   it('o salto tranca o ataque por `stairhopDelayMs` sob o combat-v3 (`teleport || oldPos.z != newPos.z`)', () => {
     const run = start(contentOf(world, { combat: [combatV3] }), { facing: 'east' });
-    expect(run.hero.attackLockedUntil).toBe(0);
+    expect(run.hero.conditions.get('pacified')).toBeNull();
     cast(run, 'levitate-up');
-    expect(run.hero.attackLockedUntil).toBe(2_000);
+    // A trava é a condição `pacified` de verdade (M44-04, #622), com o prazo de `stairhopDelayMs`.
+    expect(run.hero.conditions.get('pacified'))
+      .toMatchObject({ key: 'pacified', expiresAtMs: 2_000, merge: 'longest' });
   });
 
   it('sob combat-v1/v2 o salto não trava nada (ausente é identidade)', () => {
     const run = start(contentOf(world), { facing: 'east' });
     cast(run, 'levitate-up');
-    expect(run.hero.attackLockedUntil).toBe(0);
+    expect(run.hero.conditions.get('pacified')).toBeNull();
   });
 });
 
@@ -491,7 +493,8 @@ describe('Magic Rope — sobe pelo rope spot (#623)', () => {
   it('o salto tranca o ataque sob o combat-v3, como o Levitate', () => {
     const run = start(contentOf(world(UP), { combat: [combatV3] }));
     cast(run, 'magic-rope');
-    expect(run.hero.attackLockedUntil).toBe(2_000);
+    expect(run.hero.conditions.get('pacified'))
+      .toMatchObject({ key: 'pacified', expiresAtMs: 2_000, merge: 'longest' });
   });
 
   /** O herói no rope spot (2,2,9) e `other` na posição dada do andar de cima — ocupação consistente. */
@@ -888,7 +891,7 @@ describe('snapshot e retomada (invariante 3)', () => {
       const run = start(contentOf(world), { facing: 'east' });
       cast(run, 'levitate-up');
       for (let t = 0; t < 10_000; t += stepMs) run.session.advanceBy(stepMs);
-      return { position: run.hero.position, mana: run.hero.mana, lock: run.hero.attackLockedUntil };
+      return { position: run.hero.position, mana: run.hero.mana, lock: run.hero.conditions.get('pacified')?.expiresAtMs ?? null };
     };
     expect(at(100)).toEqual(at(1_000));
   });

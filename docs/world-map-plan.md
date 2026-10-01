@@ -118,6 +118,8 @@ spawn que o ADR 0025 citou; andares subterrâneos ficam escuros com as tochas ac
 
 ### Fase 6 (opcional, com ADR) — O mundo vira o chão do jogo
 
+> **Decidida em 2026-09-30 ([ADR 0060](adr/0060-tibia-open-world-without-pvp.md)).** A fase deixou de ser opcional: o dono escolheu o mundo aberto do Tibia sem PvP, com o otservbr inteiro como destino e as áreas sem conteúdo fechadas por região até ficarem prontas. O plano da execução é `docs/open-world-plan.md` (M47–M51); o texto abaixo é o de antes da decisão.
+
 Só depois das fases 0–5, e só se o dono pedir:
 
 - recortes de hunt e Cidade passam a ser **referências a regiões do mundo** em vez de importações
@@ -133,7 +135,7 @@ Só depois das fases 0–5, e só se o dono pedir:
 | Qual pacote de arte cobre o mundo inteiro? O 1332 tem lacunas (as bordas da Dragon Lair precisaram de `--allow-unknown`). | Medir na Fase 0; se a lacuna for pequena, desenhar retângulo no lugar, como o cliente já faz. |
 | O explorador fica aberto a qualquer jogador ou só para desenvolvimento? | Só desenvolvimento nas fases 1–3; decidir na Fase 4 se vira funcionalidade (ex.: mapa-múndi no HUD). |
 | Mapa do Canary v3.6.1 (o fixado) ou o da `main` atual? | Continuar no v3.6.1: é o que o ADR 0025 fixou por SHA, e os recortes existentes vieram dele. |
-| Fase 6 entra no plano agora? | Não. Decidir depois de ver o explorador funcionando. |
+| Fase 6 entra no plano agora? | Sim, desde 2026-09-30: o ADR 0060 decidiu o mundo aberto (`docs/open-world-plan.md`). Antes: "Não. Decidir depois de ver o explorador funcionando." |
 
 ## 5. Pré-requisitos nesta máquina
 

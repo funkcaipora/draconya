@@ -85,3 +85,54 @@ está olhando, como ela entra no snapshot, e se o bot pode ressumonar sozinho.
 
 Nenhum. O **3** é a decisão 1; o **11** é a decisão 4; o **2** é a razão de duração e cooldown
 serem eventos da fila.
+
+## Emenda — 2026-09-30: o respawn ao convencer e o cadáver animável (#600)
+
+A implementação do #600 conferiu as decisões 5 e 6 contra as fontes locais (Canary `47dfd51`, TFS
+`70793fd`) e corrige duas afirmações — a regra do dono é a mecânica de caça idêntica à do Canary,
+inclusive QUANDO ela dispara (ADR 0037 d.6):
+
+- **Decisão 5 — o ponto de spawn não começa o respawn ao convencer.** O texto dizia "imediatamente,
+  como se ele tivesse morrido (`spawn->removeMonster` no Canary)". Não é isso que o Canary faz:
+  `convince_creature.lua` chama `Creature:setSummon`, que chama `Creature::setMaster(master, true)` —
+  e `setMaster` não toca o spawn. O monstro continua em `SpawnMonster::spawnedMonsterMap`, e o
+  `SpawnMonster::cleanup` só o retira quando `monster->isRemoved()`. `SpawnMonster::removeMonster`
+  não tem chamador nenhum no Canary; no TFS o único é o ramo `monsterOverspawn` de `Monster::onThink`
+  (monstro fora do raio de despawn, config desligada por padrão), que nada tem a ver com convencer.
+  Logo: **o lugar continua ocupado enquanto o convencido vive, e o respawn do ponto corre quando ele
+  morre ou some** (com o mestre, ao sair da hunt), contado daquele instante — o mesmo caminho de
+  qualquer monstro do Spawner (`#releaseSpawnSlot`). O resto da decisão vale: custa `manaCost`,
+  transfere a posse, não dá XP nem loot ao morrer — e agora também não deixa cadáver
+  (`Creature::dropCorpse`, `!lootDrop`), regra que vale para TODA invocação.
+- **Decisão 6 — "cadáver vivo no tile-alvo" é "o item do topo é um cadáver MOVÍVEL agora".** O script
+  exige `itemType:isCorpse() and itemType:isMovable()` sobre `Tile:getTopDownItem()`, e as duas flags
+  são do estágio da cadeia `decayTo` em que o cadáver está (`appearances.dat`: `corpse`, sem `unmove`).
+  O primeiro estágio de quase todo monstro é `unmove`: o cadáver recém-abatido não pode ser animado;
+  vira movível no primeiro decaimento (10 s no caso comum). `monster.corpseAnimatable` (janelas em ms
+  desde a morte, gerado pelo importador) leva isso ao `sim`, que mede o tempo desde a morte pelo evento
+  `CORPSE` da fila. O topo da pilha é o cadáver mais recente do tile. O Animate Dead não custa mana (o
+  script não chama `addMana`).
+- **Decisão 6, acréscimo — o tile sólido recusa antes do script.** `animate_dead_rune.lua` registra
+  `rune:isBlocking(true)` (`blockingSolid`), e `Spell::playerRuneSpellCheck` recusa o tile com
+  `TILESTATE_BLOCKSOLID` e sem criatura visível (`RETURNVALUE_NOTENOUGHROOM`) ANTES de o script rodar:
+  um campo bloqueante (Magic Wall, Wild Growth) sobre o cadáver o protege, e nem o cadáver, nem o gold,
+  nem o cooldown são tocados. O motor recusa `not-possible` (não tem recusa própria para "sem espaço";
+  o texto é apresentação). O vizinho livre só vale quando o tile do cadáver está ocupado por alguém.
+- **Decisão 1, acréscimo — o jogador atravessa a invocação de jogador, e a área dele não a atinge.**
+  Duas regras do mundo no-pvp (ADR 0060) que o #598 não precisava porque o catálogo real ainda não tinha
+  nenhuma invocação de jogador: (a) `Player::canWalkthrough` libera o tile de uma invocação de jogador,
+  e como a ocupação aqui é exclusiva (invariante 8) o passo do personagem vira TROCA de lugar com ela
+  (`swapPlaces`), no `HuntRuleset#step` — sem isso a invocação em cima do próximo tile da rota, que o
+  mestre nunca mata, travava o passo do herói pelo resto da hunt; (b) `Combat::canTargetCreature` recusa
+  o ataque do jogador a `target->isSummon() && targetMasterPlayer`, então a colheita de toda área (as
+  duas formas de `#aimFor` e o golpe de varredura) pula a invocação de qualquer jogador, a do
+  companheiro de party inclusive, e a mira explícita de dano nela é `no-target`.
+- **Nota de fonte — `getManaCost` não existe como método Lua.** `convince_creature.lua` escreve
+  `target:getType():getManaCost()` e `summon_creature.lua` escreve `monsterType:getManaCost()`, mas nem
+  o Canary (`monster_type_functions.cpp`) nem o TFS (`luascript.cpp`) registram esse nome: o binding é
+  `monsterType:manaCost()`, e só o C++ `Monster::getManaCost()` existe, lendo `info.manaCost`. Os
+  scripts, como escritos, falhariam com "attempt to call method" nos motores de referência. O catálogo
+  implementa a INTENÇÃO evidente deles — o custo é o `manaCost` do monstro (ausente = 0) — e não o
+  comportamento literal (erro de script). O respawn do convencido que some com o mestre, por sua vez,
+  parte de `Monster::onRemoveCreature` (ramo da própria remoção → `startSpawnMonsterCheck`), não de
+  `onCreatureLeave`, que é o tratador de OUTRA criatura saindo.

@@ -597,6 +597,19 @@ suba o `pnpm dev` e olhe cada cenário na tela do mundo:
   sem nada acontecer. Sem marcos no
   catálogo, "—" e não "0/0" — a regra do "—" de sempre. O `bestiary-milestone` do extrato só
   escreve o "+n %" quando o catálogo trouxe o percentual (`EventNames.percentPerMilestone`).
+- **O Bosstiary é a aba ao lado do Bestiary no Cyclopedia, e o cliente NÃO conta abate nem soma
+  ponto** (`shell/CyclopediaModal.tsx` + `shell/bosstiary-progress.ts`, #629). O registro chega
+  INTEIRO em `bosstiary` (`{ kills, points }`, `kills` chaveado pelo `raceId` do boss em TEXTO) —
+  no attach e a cada abate de boss — e SUBSTITUI (`hud.bosstiary`, `null` até chegar, pela regra do
+  Bestiário: zero afirmaria "nunca abateu um boss"); a tabela de níveis por raridade e a raridade e
+  o `raceId` de cada boss vêm no `catalogue` (`bosstiary`, `monsters[].bosstiary`). O que a tela
+  calcula é apresentação: nível (`>=`, como o `getBossCurrentLevel`) e "quanto falta"; os PONTOS vêm
+  do servidor. **A lista tem UM boss por `raceId`** (`bossesOf`): variantes do mesmo boss
+  compartilham o contador, e listá-las todas mostraria o mesmo número em várias linhas. **Boss não
+  aparece na aba Bestiary nem como alvo de Charm** — o cliente filtra `monsters[].bosstiary`, como o
+  Canary tira boss do Bestiário. Sem boss no catálogo a aba diz "Este servidor não tem Bosstiary."
+  O nível fechado chega como o evento notável `bosstiary-level` (`shell/event-text.ts`, detalhe
+  `monsterId/n` em solo e `personagem/monsterId/n` em party — a linha lê os dois últimos campos).
 - **A entrada (`account/`) é HTTP puro, e vem ANTES do socket** (FUN-97). Escolher personagem
   acontece quando ainda não existe sessão de jogo; o socket só abre depois, com o ticket que a
   escolha rende. `credentials: 'include'` em toda chamada — a sessão é cookie httpOnly (ADR 0012),

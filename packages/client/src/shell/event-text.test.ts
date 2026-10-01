@@ -23,6 +23,7 @@ describe('describeEvent (FUN-110)', () => {
       ['skill-up', 'melee/11', 'Corpo a corpo subiu para 11'],
       ['skill-up', 'distance/11', 'Distância subiu para 11'],
       ['bestiary-milestone', 'rat/1', 'Bestiário: Rato · marco 1 (+1 % XP)'],
+      ['bosstiary-level', 'rat/2', 'Bosstiary: Rato · nível 2'],
       ['death', 'c1', 'Morreu'],
       ['stamina-exhausted', 'c1', 'Stamina esgotada'],
       ['backpack-full', 'c1', 'Mochila cheia'],
@@ -65,6 +66,15 @@ describe('describeEvent (FUN-110)', () => {
       { atMs: 0, type: 'bestiary-milestone', detail: 'rat/3' },
       { percentPerMilestone: 0.5 },
     )).toBe('Bestiário: rat · marco 3 (+0,5 % XP)');
+  });
+
+  it('o nível do Bosstiary diz o boss e o nível, em solo e em party, e sem catálogo fica o id (#629)', () => {
+    // Em party o `sim` manda `characterId/monsterId/n`: o cliente lê os dois últimos campos.
+    expect(describeEvent({ atMs: 0, type: 'bosstiary-level', detail: 'dreadmaw/3' }))
+      .toBe('Bosstiary: dreadmaw · nível 3');
+    expect(describeEvent({ atMs: 0, type: 'bosstiary-level', detail: 'hero/dreadmaw/1' }, {
+      monsters: new Map([['dreadmaw', 'Dreadmaw']]),
+    })).toBe('Bosstiary: Dreadmaw · nível 1');
   });
 
   it('tipo que este cliente não conhece sai como veio: pior que frase feia é sumir com o evento', () => {

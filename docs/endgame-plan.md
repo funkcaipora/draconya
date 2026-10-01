@@ -147,8 +147,10 @@ produto. "Registro" é sempre no sentido do ADR 0052 d.1; "intenção de Cidade"
   cooldown restante vira carimbo no runtime e volta no ticket; familiar exige zero invocações vivas
   e ocupa um lugar do teto. Preset do #526 liga "familiar pronto → invocar". ADR 0057 d.3–d.4.
 - **#600 — Convince e Animate Dead.** Convince: `convinceable` importado; custa `manaCost`;
-  transfere posse; o ponto de spawn inicia o respawn; convencido não dá XP nem loot. Animate Dead:
-  exige cadáver vivo no tile-alvo (ADR 0048 d.6); consome o cadáver e destrói o loot restante
+  transfere posse; **o ponto de spawn NÃO inicia o respawn — o lugar continua ocupado até o
+  convencido morrer ou sair (a emenda de 2026-09-30 do ADR 0057 corrige este texto)**; convencido não
+  dá XP nem loot. Animate Dead: exige cadáver MOVÍVEL no topo do tile-alvo (ADR 0048 d.6, emenda do
+  0057); consome o cadáver e destrói o loot restante
   (d.5); cria Skeleton dentro do teto; `ground-item-disappear` + `creature-appear`. Runas como
   suprimento abstrato (ADR 0044). ADR 0057 d.5–d.6.
 
@@ -302,7 +304,8 @@ produto. "Registro" é sempre no sentido do ADR 0052 d.1; "intenção de Cidade"
   fixo na sessão (ADR 0052 d.5); `sim` converte tries totais em níveis extras por skill e ML
   (`getLoyaltySkill`/`getLoyaltyMagicLevel`) como nível efetivo; tela mostra o bônus.
 - **#629 — Bosstiary.** `bosstiary.rarity` importado (Bane/Archfoe/Nemesis); registro
-  `bosstiary { kills: {monsterId → n}, points }` escrito no evento de abate (mesmo do Bestiário);
+  `bosstiary { kills: {raceId → n}, points, version }` escrito no evento de abate (mesmo do
+  Bestiário; a chave é o `raceId` do Canary e não o `monsterId` — emenda de 2026-09-29 do ADR 0052);
   pontos por tabela do `io_bosstiary`; Cyclopedia mostra. Boss Slot/boosted boss ficam para o
   sistema de bosses (`bosses.md`).
 - **#631 — Treino.** Ruleset `training` (estado ATIVO, eventos na fila no intervalo de ataque da

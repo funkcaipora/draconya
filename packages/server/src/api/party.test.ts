@@ -26,7 +26,7 @@ const character = (id: string, accountId: string, over: Partial<CharacterRecord>
   id, accountId, name: `Hero ${id}`, vocation: null, promoted: false, level: 10, xp: 0, soul: 0, gold: 50,
   capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
-  ammo: null, supplyStock: null, ammunitionStock: null, charms: null, fedMs: 0, blessings: 0, fightMode: 'attack',
+  ammo: null, supplyStock: null, ammunitionStock: null, charms: null, bosstiary: null, fedMs: 0, blessings: 0, fightMode: 'attack',
   createdAt: new Date(),
   ...over,
 });
@@ -38,6 +38,8 @@ function build(over: {
   locate?: (characterId: string) => { type: string } | null;
   /** O relógio do `PartyStore` (#527, carência do disband) — real por padrão. */
   now?: () => number;
+  /** O bônus de Loyalty de cada CONTA (#628). Ausente é a `api` sem conteúdo de Loyalty. */
+  loyaltyBonusPercentOf?: (accountId: string) => Promise<number | undefined>;
 } = {}) {
   const app = Fastify();
   const characters = new Map<string, CharacterRecord>([
@@ -77,6 +79,7 @@ function build(over: {
       return found !== undefined && found.accountId === accountId ? found : null;
     },
     getCharacterById: async (characterId) => characters.get(characterId) ?? null,
+    ...(over.loyaltyBonusPercentOf === undefined ? {} : { loyaltyBonusPercentOf: over.loyaltyBonusPercentOf }),
     settleProgress: async () => ({ written: 0, failed: 0 }),
     locateSession: async (characterId) => over.locate?.(characterId) ?? locations.get(characterId) ?? null,
     directory: {
@@ -393,8 +396,10 @@ describe.runIf(available)('a party em curso, a sala pública e a busca (#402, #5
   async function startedParty(over: {
     minLevel?: number;
     vocationTargets?: Record<string, number>;
+    loyaltyBonusPercentOf?: (accountId: string) => Promise<number | undefined>;
   } = {}) {
-    const context = build();
+    const context = build(over.loyaltyBonusPercentOf === undefined
+      ? {} : { loyaltyBonusPercentOf: over.loyaltyBonusPercentOf });
     const { as } = context;
     const id = ((await as('p1').post('/api/party')).json() as { id: string }).id;
     await as('p1').post(`/api/party/${id}/configure`, {
@@ -477,6 +482,27 @@ describe.runIf(available)('a party em curso, a sala pública e a busca (#402, #5
     const withoutSlot = await as('p4').post(`/api/party/${id}/join`);
     expect(withoutSlot.statusCode).toBe(409);
     expect((withoutSlot.json() as { error: string }).error).toBe('no-vocation-slot');
+  });
+
+  it('carries the Loyalty bonus of EACH member\'s own account in the start and join tickets (#628)', async () => {
+    // O bônus é da idade da CONTA de cada um, e a party não o nivela: p1 (conta velha) e p2
+    // (conta sem degrau) entram na MESMA hunt, cada um com o dele; quem entra em curso carrega o
+    // dele, não o do líder. O `game` fixa cada valor no `CharacterRuntime` do membro.
+    const byAccount: Record<string, number | undefined> = { a1: 30, a2: undefined, a3: 5 };
+    const { as, issued, id } = await startedParty({
+      loyaltyBonusPercentOf: async (accountId) => byAccount[accountId],
+    });
+    const started = issued[0]?.party;
+    expect(started?.members.map((m) => [m.characterId, m.initialCharacter.loyaltyBonusPercent])).toEqual([
+      ['p1', 30], ['p2', undefined],
+    ]);
+    // Ausente, e não `0`: o ticket de quem não tem degrau é o de antes desta issue.
+    expect(started?.members[1]?.initialCharacter).not.toHaveProperty('loyaltyBonusPercent');
+
+    expect((await as('p3').post(`/api/party/${id}/join`)).statusCode).toBe(200);
+    const joined = issued[issued.length - 1]?.party;
+    expect(joined?.members).toHaveLength(1);
+    expect(joined?.members[0]?.initialCharacter.loyaltyBonusPercent).toBe(5);
   });
 
   it('refuses a public-room join outside the configured minimum level (RF-04, RF-05)', async () => {
