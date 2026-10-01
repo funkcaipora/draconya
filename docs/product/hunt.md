@@ -658,10 +658,12 @@ defesa e ataque de monstro e de boss também moram lá — ver [`progression.md`
 
 **O monstro que morre nas mãos de outro monstro (#619, facções) não paga o jogador.** O Canary paga
 pelo mapa de dano, não pelo golpe final: só quem está nele como jogador recebe
-`floor(dano ÷ dano total × XP)` e conta o abate — o dano do monstro entra no total. Uma morte só de
-monstro não dá XP, não conta abate e deixa um cadáver sem dono, e sem loot (ADR 0048: cadáver sem dono
-não guarda loot); com dano do herói antes do golpe final ele leva a fatia dele, e o cadáver é de quem
-causou MAIS dano, se for um participante. Ver `combat.md`, "Facções de monstro".
+`floor(dano ÷ dano total × XP)` e conta o abate — o dano do monstro, mesmo o do que já morreu, entra no
+total. Uma morte só de monstro não dá XP, não conta abate (a invocação de monstro também não) e deixa um
+cadáver sem dono, e sem loot (ADR 0048: cadáver sem dono não guarda loot); com dano do herói antes do
+golpe final ele leva a fatia dele, e o cadáver é de quem causou MAIS dano entre os que ainda existem —
+se for um participante, mesmo que o último golpe tenha sido de um monstro; se um monstro vivo bateu
+mais, o herói que deu o último golpe leva a XP mas não o loot. Ver `combat.md`, "Facções de monstro".
 
 ### Abate comum não é evento notável
 
