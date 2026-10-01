@@ -85,3 +85,100 @@ está olhando, como ela entra no snapshot, e se o bot pode ressumonar sozinho.
 
 Nenhum. O **3** é a decisão 1; o **11** é a decisão 4; o **2** é a razão de duração e cooldown
 serem eventos da fila.
+
+## Emenda — 2026-09-29: o familiar implementado (#599)
+
+A decisão 3 fixou o familiar de forma resumida; a implementação (M38-02) leu a fonte inteira
+(`Player:CreateFamiliarSpell`, `familiarOnLogin`/`FamiliarDeath`, `Creature::checkSummonMove`,
+`Tile::queryAdd`, `Combat::canDoCombat`) e fecha o que faltava. O texto completo, com números e
+divergências, está em `docs/product/combat.md` ("O familiar de vocação").
+
+1. **O familiar não é `summonable`.** O Canary declara `summonable = false` nos quatro — é o que
+   impede a Summon Creature de invocá-los. A decisão 5 e o texto do ADR ("importar como
+   `summonable`") valem só para Convince Creature; o familiar é marcado por `monsterSchema.familiar`
+   (o `flags.familiar` do Canary) e por uma magia com o efeito `familiar { monsterId, durationMs,
+   cooldownMs }`.
+2. **Os dois carimbos são de relógio de PAREDE, e a recriação ao entrar é regra.** O Canary guarda
+   `familiar-summon-time = os.time() + duração` (recriado no login com o tempo que sobra, zerado
+   pela morte do familiar) além da `CONDITION_SPELLCOOLDOWN` de `2 × duração` contada do
+   lançamento. O `CharacterRuntime` carrega os dois (`familiar: { version, summonUntilMs,
+   cooldownUntilMs }`), o registro `jsonb` `character.familiar` (ADR 0052 d.1) os persiste por
+   última escrita vence — nunca por máximo, porque o `summonUntilMs` desce na morte —, e a
+   recriação acontece ao ENTRAR NA HUNT, o login do personagem (a Cidade não tem invocação, d.3).
+   O `sim` não lê relógio: o "agora" é `Session.createdAtMs + Session.nowMs`, que o servidor já dá —
+   e que ele mantém verdadeiro: na retomada de um snapshot o intervalo descartado (ADR 0018) é
+   somado ao `createdAtMs` (`SessionHost#resume`), e os carimbos que o `sim` grava são sempre inteiros
+   (teto no lançamento, piso na morte), porque o relógio lógico do hospedeiro é fracionário e todo
+   consumidor valida inteiro seguro.
+3. **Divergência aceita, herdada do ADR 0052 d.6:** o cooldown corre também na Cidade e offline. No
+   Canary a condição só anda com o jogador online. Dentro da hunt são idênticos; fora, a decisão
+   deste ADR (d.3, "cooldown de parede") vale.
+4. **A recusa por cooldown de parede não carrega prazo para o bot.** Um `retryInMs` de 30 min faria
+   o grupo `support` dormir 30 min, e a haste vive no mesmo grupo. A regra engatilha — o bot a
+   reavalia a cada evento — e a barra mostra o prazo real.
+5. **A invocação de personagem passa a herdar o alvo SELECIONADO do mestre**, não o que a arma dele
+   alcança, e a ability em ÁREA de uma invocação de personagem atinge só monstros hostis (nunca a
+   party): as duas eram lacunas do primitivo do #598 que o familiar, cuja ability é quase toda em
+   área, expôs.
+6. **A invocação de personagem sem alvo SEGUE O MESTRE** (o `Monster::updateSummonTarget` do
+   Canary: `master != followCreature` → `setFollowCreature(master)`), o que o #598 deixara como
+   divergência aceita e a regra da caça idêntica ao Canary (ADR 0037 d.6) não admite. Só segue quem
+   enxerga o mestre (mesmo andar, visão de 11), pela busca de menor custo do A* do Canary
+   (cardinal 10, diagonal 35, `cheapestPath`), até um tile a EXATAMENTE 2 do mestre com linha de
+   visão livre (`getPathSearchParams`: `minTargetDist = 1`, `maxTargetDist = 2`; um tile a 1 é só o
+   "melhor até agora" de `FrozenPathingConditionCall`, a que ela recorre se nenhum a 2 for
+   alcançável); a de outro monstro (#546) continua parada. Sem mestre à vista ou sem caminho, a
+   invocação vagueia (`getNextStep` cai no `doRandomStep`); a Summon Creature comum não segue o
+   mestre invisível que ela não enxerga (`canFollowMaster`), e o familiar segue sempre. Vale para a
+   Summon Creature e para o familiar.
+
+## Emenda — 2026-09-30: o respawn ao convencer e o cadáver animável (#600)
+
+A implementação do #600 conferiu as decisões 5 e 6 contra as fontes locais (Canary `47dfd51`, TFS
+`70793fd`) e corrige duas afirmações — a regra do dono é a mecânica de caça idêntica à do Canary,
+inclusive QUANDO ela dispara (ADR 0037 d.6):
+
+- **Decisão 5 — o ponto de spawn não começa o respawn ao convencer.** O texto dizia "imediatamente,
+  como se ele tivesse morrido (`spawn->removeMonster` no Canary)". Não é isso que o Canary faz:
+  `convince_creature.lua` chama `Creature:setSummon`, que chama `Creature::setMaster(master, true)` —
+  e `setMaster` não toca o spawn. O monstro continua em `SpawnMonster::spawnedMonsterMap`, e o
+  `SpawnMonster::cleanup` só o retira quando `monster->isRemoved()`. `SpawnMonster::removeMonster`
+  não tem chamador nenhum no Canary; no TFS o único é o ramo `monsterOverspawn` de `Monster::onThink`
+  (monstro fora do raio de despawn, config desligada por padrão), que nada tem a ver com convencer.
+  Logo: **o lugar continua ocupado enquanto o convencido vive, e o respawn do ponto corre quando ele
+  morre ou some** (com o mestre, ao sair da hunt), contado daquele instante — o mesmo caminho de
+  qualquer monstro do Spawner (`#releaseSpawnSlot`). O resto da decisão vale: custa `manaCost`,
+  transfere a posse, não dá XP nem loot ao morrer — e agora também não deixa cadáver
+  (`Creature::dropCorpse`, `!lootDrop`), regra que vale para TODA invocação.
+- **Decisão 6 — "cadáver vivo no tile-alvo" é "o item do topo é um cadáver MOVÍVEL agora".** O script
+  exige `itemType:isCorpse() and itemType:isMovable()` sobre `Tile:getTopDownItem()`, e as duas flags
+  são do estágio da cadeia `decayTo` em que o cadáver está (`appearances.dat`: `corpse`, sem `unmove`).
+  O primeiro estágio de quase todo monstro é `unmove`: o cadáver recém-abatido não pode ser animado;
+  vira movível no primeiro decaimento (10 s no caso comum). `monster.corpseAnimatable` (janelas em ms
+  desde a morte, gerado pelo importador) leva isso ao `sim`, que mede o tempo desde a morte pelo evento
+  `CORPSE` da fila. O topo da pilha é o cadáver mais recente do tile. O Animate Dead não custa mana (o
+  script não chama `addMana`).
+- **Decisão 6, acréscimo — o tile sólido recusa antes do script.** `animate_dead_rune.lua` registra
+  `rune:isBlocking(true)` (`blockingSolid`), e `Spell::playerRuneSpellCheck` recusa o tile com
+  `TILESTATE_BLOCKSOLID` e sem criatura visível (`RETURNVALUE_NOTENOUGHROOM`) ANTES de o script rodar:
+  um campo bloqueante (Magic Wall, Wild Growth) sobre o cadáver o protege, e nem o cadáver, nem o gold,
+  nem o cooldown são tocados. O motor recusa `not-possible` (não tem recusa própria para "sem espaço";
+  o texto é apresentação). O vizinho livre só vale quando o tile do cadáver está ocupado por alguém.
+- **Decisão 1, acréscimo — o jogador atravessa a invocação de jogador, e a área dele não a atinge.**
+  Duas regras do mundo no-pvp (ADR 0060) que o #598 não precisava porque o catálogo real ainda não tinha
+  nenhuma invocação de jogador: (a) `Player::canWalkthrough` libera o tile de uma invocação de jogador,
+  e como a ocupação aqui é exclusiva (invariante 8) o passo do personagem vira TROCA de lugar com ela
+  (`swapPlaces`), no `HuntRuleset#step` — sem isso a invocação em cima do próximo tile da rota, que o
+  mestre nunca mata, travava o passo do herói pelo resto da hunt; (b) `Combat::canTargetCreature` recusa
+  o ataque do jogador a `target->isSummon() && targetMasterPlayer`, então a colheita de toda área (as
+  duas formas de `#aimFor` e o golpe de varredura) pula a invocação de qualquer jogador, a do
+  companheiro de party inclusive, e a mira explícita de dano nela é `no-target`.
+- **Nota de fonte — `getManaCost` não existe como método Lua.** `convince_creature.lua` escreve
+  `target:getType():getManaCost()` e `summon_creature.lua` escreve `monsterType:getManaCost()`, mas nem
+  o Canary (`monster_type_functions.cpp`) nem o TFS (`luascript.cpp`) registram esse nome: o binding é
+  `monsterType:manaCost()`, e só o C++ `Monster::getManaCost()` existe, lendo `info.manaCost`. Os
+  scripts, como escritos, falhariam com "attempt to call method" nos motores de referência. O catálogo
+  implementa a INTENÇÃO evidente deles — o custo é o `manaCost` do monstro (ausente = 0) — e não o
+  comportamento literal (erro de script). O respawn do convencido que some com o mestre, por sua vez,
+  parte de `Monster::onRemoveCreature` (ramo da própria remoção → `startSpawnMonsterCheck`), não de
+  `onCreatureLeave`, que é o tratador de OUTRA criatura saindo.

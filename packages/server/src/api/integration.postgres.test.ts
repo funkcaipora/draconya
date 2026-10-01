@@ -108,17 +108,58 @@ async function createCharacter(cookie: string, name = `Hero ${randomUUID().repla
   return response.json();
 }
 
+/**
+ * Os quadros que já chegaram a um socket e ninguém pediu ainda.
+ *
+ * O `receive` antigo registrava um ouvinte `once` por chamada. Quando o `welcome` (`sendNow`) e
+ * o lote do attach chegam na MESMA leitura do socket, o cliente despacha os dois `message`
+ * seguidos, sem drenar microtarefa entre eles: o segundo evento cai antes de o `await` do
+ * primeiro registrar o próximo ouvinte, e o quadro se perde — o teste espera 3 s por uma
+ * mensagem que já passou (falhou assim no CI da #624, sem relação com o que ela muda). Com a
+ * caixa de entrada, cada quadro fica guardado até o `receive` que o pede.
+ */
+interface Inbox {
+  readonly frames: Uint8Array[];
+  failure?: Error;
+  wake: (() => boolean) | undefined;
+}
+
+const inboxes = new WeakMap<WebSocket, Inbox>();
+
+function inboxOf(socket: WebSocket): Inbox {
+  const existing = inboxes.get(socket);
+  if (existing !== undefined) return existing;
+  const inbox: Inbox = { frames: [], wake: undefined };
+  inboxes.set(socket, inbox);
+  socket.addEventListener('message', (event) => {
+    inbox.frames.push(new Uint8Array(event.data as ArrayBuffer));
+    inbox.wake?.();
+  });
+  socket.addEventListener('error', () => {
+    inbox.failure = new Error('WebSocket handshake rejected');
+    inbox.wake?.();
+  });
+  return inbox;
+}
+
+/** O próximo quadro do socket, na ordem de chegada — mesmo o que veio antes do pedido. */
 function receive(socket: WebSocket): Promise<Uint8Array> {
+  const inbox = inboxOf(socket);
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('WebSocket message timeout')), 3000);
-    socket.addEventListener('message', (event) => {
+    const timer = setTimeout(() => {
+      inbox.wake = undefined;
+      reject(new Error('WebSocket message timeout'));
+    }, 3000);
+    const settle = (): boolean => {
+      const frame = inbox.frames.shift();
+      if (frame === undefined && inbox.failure === undefined) return false;
       clearTimeout(timer);
-      resolve(new Uint8Array(event.data as ArrayBuffer));
-    }, { once: true });
-    socket.addEventListener('error', () => {
-      clearTimeout(timer);
-      reject(new Error('WebSocket handshake rejected'));
-    }, { once: true });
+      inbox.wake = undefined;
+      if (frame !== undefined) resolve(frame);
+      else reject(inbox.failure);
+      return true;
+    };
+    if (!settle()) inbox.wake = settle;
   });
 }
 

@@ -4,6 +4,7 @@
   "description": "Remove a invisibilidade dos monstros num círculo de raio 3 ao seu redor.",
   "vocationId": "paladin",
   "minLevel": 26,
+  "learnPrice": 1600,
   "manaCost": 200,
   "group": "support",
   "groupCooldownMs": 2000,

@@ -25,7 +25,7 @@ Quando a stamina chega a zero, a hunt não é interrompida: o personagem continu
   lido, o fazem ao gravar o extrato (`#persistReceipt`, `game/host.ts`, com o relógio de parede
   `wallNow`), e o snapshot irrestaurável de Treino o faz ao ser liquidado
   (`settleSnapshotAsReceipt`, `nowMs`). Antes desta emenda o PRD e o ADR 0059 d.1 diziam o contrário.
-- Em stamina zero, dentro da hunt: personagem continua se movendo, atacando, consumindo supplies/gold e pode morrer; não recebe XP; não recebe loot; abates não contam para a Bestiário.
+- Em stamina zero, dentro da hunt: personagem continua se movendo, atacando, consumindo supplies/gold e pode morrer; não recebe XP; não recebe loot; abates não contam para a Bestiário. **O abate de boss conta no Bosstiary mesmo assim** (#629): no Canary só `Player::gainExperience` tem o portão de stamina, e `addBosstiaryKill` não — ver [`bosses.md`](./bosses.md), "O Bosstiary".
 - Stamina zero, por si só, nunca encerra a hunt automaticamente.
 
 ## Não é um recurso "ticado", e isso é o desenho inteiro

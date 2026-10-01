@@ -1,17 +1,20 @@
-// Cyclopedia — modal com as abas Itens e Bestiary (#321, #344, RC-08, ADR 0030 decisão 3).
-// Bosstiary não aparece antes do respectivo sistema; busca, grade/lista e ordenação são
-// apresentação local sobre `catalogue` e `bestiary`, sem mensagem ao servidor.
+// Cyclopedia — modal com as abas Itens, Bestiary, Bosstiary e Charms (#321, #344, RC-08, ADR 0030
+// decisão 3, #602, #629). Busca, grade/lista e ordenação são apresentação local sobre `catalogue`,
+// `bestiary` e `bosstiary`, sem mensagem ao servidor — só os Charms mandam intenção.
 
 import { useMemo, useState } from 'react';
 import { sendIntent } from '../net/current.js';
 import type {
-  BestiaryConfig, BestiaryCounts, CharmDefinition, CharmsRegister, ItemDefinition, MonsterListing,
+  BestiaryConfig, BestiaryCounts, BosstiaryConfig, BosstiaryRegister, CharmDefinition, CharmsRegister,
+  ItemDefinition, MonsterListing,
 } from '../state/hud.js';
 import { useHudSlice } from '../state/useSlice.js';
 import {
   bestiaryStageOf, bonusPercent, charmPointsEarned, progressOf,
 } from './bestiary-progress.js';
 import type { BestiaryCharmThresholds, BestiaryProgress, BestiaryStage } from './bestiary-progress.js';
+import { bossesKilled, bossesOf, bossProgressOf, killsOfBoss } from './bosstiary-progress.js';
+import type { BossListing, BossProgress, BossRarity } from './bosstiary-progress.js';
 import { charmPointsAvailable, echoesAvailable, nextTierCost } from './charms-progress.js';
 import { SLOT_TEXT } from './EquipmentPanel.js';
 import { ItemSprite } from './ItemSprite.js';
@@ -32,7 +35,7 @@ const collator = new Intl.Collator('pt-BR');
 const count = (value: number): string => integer.format(value);
 const bonusText = (value: number): string => `+${percentFmt.format(value)} %`;
 
-export type CyclopediaTab = 'Itens' | 'Bestiary' | 'Charms';
+export type CyclopediaTab = 'Itens' | 'Bestiary' | 'Bosstiary' | 'Charms';
 export type BestiarySort = 'progress' | 'name' | 'kills';
 
 const SORT_OPTIONS: ReadonlyArray<{ value: BestiarySort; label: string }> = [
@@ -261,6 +264,128 @@ function BestiaryTab({ monsters, counts, config, query }: {
   );
 }
 
+// O Bosstiary (#629, ADR 0052 d.1): o registro paralelo de bosses. Só leitura — o servidor conta o
+// abate e fecha o nível (`sim/bosstiary.ts`); a tela deriva nível e "quanto falta" do registro cru e
+// da tabela do catálogo (`bosstiary-progress.ts`). Boss Slot e boss boosted ficam para o sistema de
+// bosses (`docs/product/bosses.md`), por isso não há intenção nenhuma aqui.
+
+export type BosstiarySort = 'kills' | 'name' | 'rarity';
+
+const BOSSTIARY_SORT_OPTIONS: ReadonlyArray<{ value: BosstiarySort; label: string }> = [
+  { value: 'kills', label: 'Abates' },
+  { value: 'name', label: 'Nome (A – Z)' },
+  { value: 'rarity', label: 'Raridade' },
+];
+
+/** Os nomes de exibição das três raridades — Nemesis é a mais rara. */
+const RARITY_TEXT: Record<BossRarity, string> = { bane: 'Bane', archfoe: 'Archfoe', nemesis: 'Nemesis' };
+const RARITY_ORDER: Record<BossRarity, number> = { bane: 0, archfoe: 1, nemesis: 2 };
+
+export interface BossEntry {
+  readonly boss: BossListing;
+  readonly progress: BossProgress;
+}
+
+/** Prepara a linha de um boss: os abates do registro cru e o nível derivado da tabela. */
+export function bossEntryOf(
+  boss: BossListing, kills: Readonly<Record<string, number>>, config: BosstiaryConfig | null,
+): BossEntry {
+  return { boss, progress: bossProgressOf(killsOfBoss(kills, boss), boss.rarity, config) };
+}
+
+/** Busca por nome — a MESMA regra de `filterEntries`, agora sobre os bosses. */
+export function filterBosses(entries: readonly BossEntry[], query: string): BossEntry[] {
+  const needle = query.trim().toLowerCase();
+  if (needle === '') return [...entries];
+  return entries.filter((entry) => entry.boss.name.toLowerCase().includes(needle));
+}
+
+/** Abates descem (com o nome desempatando); por raridade, a mais rara primeiro. */
+export function sortBosses(entries: readonly BossEntry[], sort: BosstiarySort): BossEntry[] {
+  const sorted = [...entries];
+  const byName = (a: BossEntry, b: BossEntry) => collator.compare(a.boss.name, b.boss.name);
+  if (sort === 'name') return sorted.sort(byName);
+  if (sort === 'rarity') {
+    return sorted.sort((a, b) => RARITY_ORDER[b.boss.rarity] - RARITY_ORDER[a.boss.rarity] || byName(a, b));
+  }
+  return sorted.sort((a, b) => b.progress.kills - a.progress.kills || byName(a, b));
+}
+
+function BossRow({ entry }: { entry: BossEntry }) {
+  const { boss, progress } = entry;
+  const done = progress.level === 3;
+  return (
+    <div className="cyclopedia-modal-row cyclopedia-modal-boss-row">
+      <EntrySprite className="cyclopedia-modal-row-sprite" />
+      <b>{boss.name}</b>
+      <span className="cyclopedia-modal-row-bestiary">
+        <Badge tone={boss.rarity === 'bane' ? 'muted' : 'gold'} dot={false}>{RARITY_TEXT[boss.rarity]}</Badge>
+        <span className="cyclopedia-modal-card-stage">{`Nível ${String(progress.level)}/3`}</span>
+      </span>
+      <i className="cyclopedia-modal-row-track">
+        <i className={`cyclopedia-modal-row-fill${done ? ' cyclopedia-modal-fill-done' : ''}`}
+          style={{ width: `${String(progress.percent)}%` }} />
+      </i>
+      <span className={done ? 'cyclopedia-modal-count-done' : ''}>
+        {progress.nextKills === null ? `✓ ${count(progress.kills)}` : `${count(progress.kills)} / ${count(progress.nextKills)}`}
+      </span>
+    </div>
+  );
+}
+
+function BosstiaryTab({ bosses, register, config, query }: {
+  bosses: readonly BossListing[]; register: BosstiaryRegister | null; config: BosstiaryConfig | null;
+  /** Busca do modal (SV-08): a mesma das outras abas, vinda de cima. */
+  query: string;
+}) {
+  const [sort, setSort] = useState<BosstiarySort>('kills');
+  const kills = register?.kills ?? {};
+  const entries = useMemo(
+    () => bosses.map((boss) => bossEntryOf(boss, kills, config)),
+    [bosses, kills, config],
+  );
+  const visible = useMemo(() => sortBosses(filterBosses(entries, query), sort), [entries, query, sort]);
+  const mastered = entries.filter((entry) => entry.progress.level === 3).length;
+
+  return (
+    <div className="cyclopedia-modal-body">
+      <div className="cyclopedia-modal-sidebar">
+        <section className="cyclopedia-modal-progress">
+          <Kicker tone="muted">Progresso no Bosstiary</Kicker>
+          <span className="cyclopedia-modal-progress-note">
+            {'Pontos de boss: '}<b>{count(register?.points ?? 0)}</b>
+          </span>
+          <span className="cyclopedia-modal-progress-note">
+            {'Bosses abatidos: '}<b>{`${count(bossesKilled(bosses, kills))} / ${count(bosses.length)}`}</b>
+          </span>
+          {config !== null && (
+            <span className="cyclopedia-modal-progress-note">
+              {'Nível máximo: '}<b>{count(mastered)}</b>
+            </span>
+          )}
+        </section>
+      </div>
+      <div className="cyclopedia-modal-main">
+        <div className="cyclopedia-modal-toolbar">
+          <Kicker className="cyclopedia-modal-toolbar-title">Todos os bosses do Bosstiary</Kicker>
+          <span className="cyclopedia-modal-toolbar-label">Ordenar por:</span>
+          <span className="cyclopedia-modal-sort">
+            <Select options={BOSSTIARY_SORT_OPTIONS} value={sort} size="sm"
+              onChange={(value) => { setSort(value as BosstiarySort); }} />
+          </span>
+        </div>
+        {visible.length === 0
+          ? <p className="cyclopedia-modal-empty">Nenhum boss encontrado.</p>
+          : (
+            <div className="cyclopedia-modal-grid cyclopedia-modal-grid-list cyclopedia-modal-boss-list">
+              {visible.map((entry) => <BossRow key={entry.boss.raceId} entry={entry} />)}
+            </div>
+          )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Categoria de exibição — pelo `slot` (DT-04): reaproveita o mesmo rótulo do painel do set
  * (`SLOT_TEXT`) em vez de inventar um segundo texto para o mesmo slot. Sem slot (comida, moeda
@@ -443,10 +568,16 @@ export function CyclopediaModal({ onClose, initialTab }: { onClose: () => void; 
   const catalogue = useHudSlice((state) => state.catalogue);
   const counts = useHudSlice((state) => state.bestiary);
   const charmsRegister = useHudSlice((state) => state.charms);
+  const bosstiaryRegister = useHudSlice((state) => state.bosstiary);
   const [tab, setTab] = useState<CyclopediaTab>(initialTab ?? 'Bestiary');
   const [query, setQuery] = useState('');
 
-  const monsters = catalogue?.monsters ?? [];
+  const allMonsters = catalogue?.monsters ?? [];
+  // Boss não conta no Bestiário (`Player::addBestiaryKill` devolve cedo para `isBoss()`): ele é do
+  // Bosstiary (#629). A lista do Bestiário e os alvos de Charm são só os monstros comuns.
+  const monsters = useMemo(() => allMonsters.filter((monster) => monster.bosstiary === undefined), [allMonsters]);
+  const bosses = useMemo(() => bossesOf(allMonsters), [allMonsters]);
+  const bosstiaryConfig = catalogue?.bosstiary ?? null;
   const items = catalogue?.items ?? [];
   const charms = catalogue?.charms ?? [];
   const config = catalogue?.bestiary ?? null;
@@ -468,13 +599,18 @@ export function CyclopediaModal({ onClose, initialTab }: { onClose: () => void; 
   const charmsFooterNote = charms.length === 0
     ? 'Este servidor não tem Charms.'
     : `${count(charms.length)} Charms no catálogo`;
+  const bosstiaryFooterNote = bosses.length === 0
+    ? 'Este servidor não tem Bosstiary.'
+    : `${count(bosses.length)} ${bosses.length === 1 ? 'boss' : 'bosses'} no Bosstiary`;
   const footerNote = catalogue === null
     ? 'Carregando…'
     : tab === 'Itens'
       ? itemsFooterNote(items, query)
       : tab === 'Charms'
         ? charmsFooterNote
-        : bestiaryFooterNote;
+        : tab === 'Bosstiary'
+          ? bosstiaryFooterNote
+          : bestiaryFooterNote;
 
   return (
     <Modal
@@ -495,7 +631,7 @@ export function CyclopediaModal({ onClose, initialTab }: { onClose: () => void; 
         ? <p className="cyclopedia-modal-empty">Carregando…</p>
         : (
           <>
-            {/* Busca única do modal (SV-08), acima das abas: filtra a aba ativa, Itens ou Bestiary. */}
+            {/* Busca única do modal (SV-08), acima das abas: filtra a aba ativa (Itens, Bestiary ou Bosstiary). */}
             <Input
               size="sm"
               placeholder="Digite para buscar…"
@@ -504,7 +640,7 @@ export function CyclopediaModal({ onClose, initialTab }: { onClose: () => void; 
               onChange={(event) => { setQuery(event.target.value); }}
             />
             <Tabs
-              items={['Itens', 'Bestiary', 'Charms']}
+              items={['Itens', 'Bestiary', 'Bosstiary', 'Charms']}
               value={tab}
               className="cyclopedia-modal-tabs"
               onChange={(value) => { setTab(value as CyclopediaTab); }}
@@ -513,6 +649,13 @@ export function CyclopediaModal({ onClose, initialTab }: { onClose: () => void; 
             {tab === 'Bestiary' && (monsters.length === 0
               ? <p className="cyclopedia-modal-empty">Este servidor não tem Bestiário.</p>
               : <BestiaryTab monsters={monsters} counts={known} config={config} query={query} />)}
+            {tab === 'Bosstiary' && (bosses.length === 0
+              ? <p className="cyclopedia-modal-empty">Este servidor não tem Bosstiary.</p>
+              : (
+                <BosstiaryTab
+                  bosses={bosses} register={bosstiaryRegister} config={bosstiaryConfig} query={query}
+                />
+              ))}
             {tab === 'Charms' && (
               <CharmsTab
                 charms={charms}

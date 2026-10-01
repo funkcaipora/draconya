@@ -8,11 +8,11 @@
 // primeira hunt AFK — que é o modo padrão do jogo.
 
 import { CharacterRuntime } from './character.js';
-import type { CharacterState } from './character.js';
+import type { CharacterState, SessionClock } from './character.js';
 import { resolveDeath } from './death.js';
 import type { KillCredit, Victim } from './death.js';
 import type { Rng, RngState } from './rng.js';
-import type { CombatEvent, PartyEvent } from './combat-events.js';
+import type { CharacterNotice, CombatEvent, PartyEvent } from './combat-events.js';
 import type { CreatureMoved, MoveResult } from './movement.js';
 import type { PresenceEvent } from './presence.js';
 import type { EquipmentChanged } from './inventory.js';
@@ -29,7 +29,7 @@ import type { ScheduleState, ScheduledEvent } from './schedule.js';
  * desanexada: o evento nasce dos dois lados, e só num deles alguém o serializa.
  */
 export type DomainEvent =
-  | CreatureMoved | PresenceEvent | CombatEvent | PartyEvent | EquipmentChanged;
+  | CreatureMoved | PresenceEvent | CombatEvent | PartyEvent | EquipmentChanged | CharacterNotice;
 
 /**
  * Teto de eventos de domínio guardados à espera de quem os leia.
@@ -38,6 +38,9 @@ export type DomainEvent =
  * existe para a sessão que ninguém drena — um nó sem visualizador nenhum não pode acumular
  * memória por horas de hunt. Estourar DESCARTA os mais antigos, e é a escolha certa: isto é
  * apresentação, e apresentação é perdível. Gameplay não passa por aqui.
+ *
+ * É o DEFAULT: desde a OW-03 (ADR 0060 d.5) cada sessão pode ter o seu (`SessionLimits`), porque
+ * um mundo com duzentos personagens não cabe no teto de uma hunt solo.
  */
 export const MAX_PENDING_DOMAIN_EVENTS = 512;
 
@@ -67,6 +70,8 @@ export const SNAPSHOT_FORMAT_VERSION = 3;
  * O número é folgado de propósito: uma hunt cheia carrega ~100 eventos com cadência de
  * centenas de milissegundos, então isto só é alcançado por volta de quinze segundos de
  * intervalo num único avanço. O ciclo do nó é de 100 ms.
+ *
+ * Também é o DEFAULT de `SessionLimits.maxEventsPerAdvance` (OW-03).
  */
 export const MAX_EVENTS_PER_ADVANCE = 4096;
 
@@ -188,7 +193,9 @@ interface PerformanceSample {
  * Uma sessão com N donos produz N extratos, cada um com os agregados DAQUELE personagem e um
  * `seq` próprio: o ledger é `UNIQUE (session_id, seq)` (invariante 10), e quatro extratos da
  * mesma sessão precisam de quatro chaves. O `seq` é alocado no instante em que o extrato é
- * emitido — no `end`, na ordem de entrada; no `leave`, na hora da saída.
+ * emitido — no `end`, na ordem de entrada; no `leave`, na hora da saída; no `checkpoint`, a
+ * qualquer momento, e então o extrato é PARCIAL: leva só o que rendeu desde o anterior do mesmo
+ * personagem (ADR 0060 d.10b).
  */
 export interface Receipt {
   readonly sessionId: string;
@@ -210,6 +217,25 @@ export interface Receipt {
 export interface Departure {
   readonly character: CharacterRuntime;
   readonly receipt: Receipt;
+}
+
+/** O que um ruleset declara em `Ruleset.progress`. Ver lá. */
+export type RulesetProgress = 'none' | 'checkpointed';
+
+/**
+ * `progress` já resolvido, sem ausência: `'at-end'` é a sessão privada que credita uma vez, no
+ * `end`, que é o que a ausência do campo sempre quis dizer.
+ */
+export type ResolvedProgress = RulesetProgress | 'at-end';
+
+/**
+ * Lê `Ruleset.progress` com o sentido de hoje para a ausência (ADR 0060 d.10b): a sessão privada
+ * credita no fim, a compartilhada não credita. É a leitura que o hospedeiro faz no lugar de
+ * `ruleset.shared === true` toda vez que a pergunta é "esta sessão credita?".
+ */
+export function progressOf(ruleset: Pick<Ruleset, 'progress' | 'shared'>): ResolvedProgress {
+  if (ruleset.progress !== undefined) return ruleset.progress;
+  return ruleset.shared === true ? 'none' : 'at-end';
 }
 
 const NO_RECEIPTS: readonly Receipt[] = [];
@@ -244,8 +270,27 @@ export interface Ruleset {
    *
    * Marcar `true` muda o que "sair" significa. Numa sessão privada, sair é encerrar; num
    * shard, sair é `leave`, e quem fica não perde nada. Ver o ADR 0023.
+   *
+   * **Só isto.** `shared` NÃO diz se a sessão credita o que os donos rendem: isso é `progress`
+   * (ADR 0060 d.10b). Os dois andavam juntos enquanto a Cidade era o único shard, e o mundo é um
+   * shard que credita.
    */
   readonly shared?: boolean;
+
+  /**
+   * O que a sessão faz com o PROGRESSO dos donos — XP, gold, abates, itens (ADR 0060 d.10b).
+   *
+   * - `'none'`: não credita. O que os donos rendem não vira linha de ledger (a Cidade).
+   * - `'checkpointed'`: credita em extratos PARCIAIS. A sessão vive muito além de qualquer dono,
+   *   e o hospedeiro chama `Session.checkpoint` de tempos em tempos, e na saída, com semântica de
+   *   delta: cada extrato leva só o que rendeu desde o anterior (o mundo).
+   * - ausente: o sentido de sempre, que `progressOf` resolve — a sessão privada credita no fim
+   *   (`end`), a compartilhada não credita.
+   *
+   * Declarar o campo não muda nada no `sim`: quem decide o que gravar é o hospedeiro, e ele lê o
+   * valor resolvido por `progressOf`. Cidade e hunt não declaram, de propósito (byte a byte).
+   */
+  readonly progress?: RulesetProgress;
 
   /**
    * O mapa desta sessão, pelo id do conteúdo (FUN-120). É o que `instance-enter` e
@@ -331,7 +376,28 @@ export interface Ruleset {
   onResume?(session: Session): void;
 }
 
-export interface SessionOptions {
+/**
+ * Os tetos de UMA sessão (OW-03, ADR 0060 d.5). Todos opcionais: sem eles valem os defaults de
+ * hoje, e a hunt não muda um byte.
+ */
+export interface SessionLimits {
+  /** Eventos de domínio à espera de quem os leia. Default `MAX_PENDING_DOMAIN_EVENTS`. */
+  readonly maxPendingDomainEvents?: number;
+  /** Eventos despachados por `advanceBy`. Default `MAX_EVENTS_PER_ADVANCE`. */
+  readonly maxEventsPerAdvance?: number;
+  /**
+   * Eventos notáveis guardados, POR PERSONAGEM presente. Sem default: sem ele a lista cresce sem
+   * limite, como sempre cresceu — e é o que a hunt quer, porque o extrato dela leva a sessão
+   * inteira. Num mundo que dura dias isso é vazamento, e o teto é a saída.
+   *
+   * O evento notável não tem dono (`NotableEvent` é `{ atMs, type, detail? }`, e o `detail` ora é
+   * um personagem, ora um item), então o teto é da LISTA: `maxNotableEventsPerCharacter × max(1,
+   * participantes)`. Estourar descarta os mais antigos — apresentação, como os eventos de domínio.
+   */
+  readonly maxNotableEventsPerCharacter?: number;
+}
+
+export interface SessionOptions extends SessionLimits {
   readonly id: string;
   readonly contentVersion: string;
   readonly ruleset: Ruleset;
@@ -339,9 +405,18 @@ export interface SessionOptions {
   readonly createdAtMs: number;
 }
 
+/** Valida um teto opcional: inteiro positivo, ou ausente. Zero e negativo são bug de quem configura. */
+function limitOf(name: string, value: number | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isInteger(value) || value < 1) {
+    throw new RangeError(`${name} must be a positive integer: ${String(value)}`);
+  }
+  return value;
+}
+
 const EMPTY_EVENTS: readonly DomainEvent[] = [];
 
-export class Session {
+export class Session implements SessionClock {
   readonly id: string;
   /** Congelada na criação (invariante 7): a sessão termina na versão em que começou. */
   readonly contentVersion: string;
@@ -375,8 +450,35 @@ export class Session {
    * estrutural da sessão, como `#aggregatesByCharacter` — só o `Session` escreve.
    */
   readonly #joinedAtMs = new Map<string, number>();
+  /**
+   * Onde o extrato de cada personagem que já fez `checkpoint` recomeça na lista de eventos
+   * notáveis: uma posição ABSOLUTA, contada desde a criação da sessão e somada de
+   * `#notableEventsDropped`, para o teto não deslocar o que já foi entregue.
+   *
+   * Existe ao lado de `#joinedAtMs` porque o tempo sozinho não decide: no instante do checkpoint
+   * há eventos já entregues e, se uma intenção chegar no mesmo instante lógico, eventos que ainda
+   * não foram — `atMs >= marco` repetiria os primeiros e `atMs > marco` perderia os segundos.
+   * Não entra no snapshot (a sessão `checkpointed` não tem, ADR 0060 d.10a): restaurada sem ele,
+   * o extrato cai no filtro por tempo, que no pior caso repete eventos do instante do marco —
+   * apresentação, nunca valor.
+   *
+   * Nasce sob demanda: toda hunt é uma `Session`, e nenhuma delas faz checkpoint.
+   */
+  #notableCursor: Map<string, number> | null = null;
   /** Os extratos do `end`, memoizados: `end` duas vezes devolve os mesmos, sem `seq` novo. */
   #receipts: readonly Receipt[] | null = null;
+
+  readonly #maxPendingDomainEvents: number;
+  /** Quantos eventos de domínio o estouro descarta de uma vez: a metade mais antiga. */
+  readonly #domainEventsTrim: number;
+  readonly #maxEventsPerAdvance: number;
+  readonly #maxNotableEventsPerCharacter: number | undefined;
+  /**
+   * Quantos eventos notáveis o teto já descartou desde que ESTA instância existe (não entra no
+   * snapshot). Quem indexa `notableEvents` por posição — o analisador do hospedeiro guarda "já
+   * mandei até aqui" — soma isto para a posição continuar valendo depois de um descarte.
+   */
+  #notableEventsDropped = 0;
 
   /** Sequência para idempotência econômica: `UNIQUE (session_id, seq)` (invariante 10). */
   ledgerSeq = 0;
@@ -395,7 +497,12 @@ export class Session {
    * nó. Uma sessão retomada nasce desanexada, que é o estado correto — quem estava olhando
    * vai reanexar por conta própria.
    */
-  static fromSnapshot(snapshot: SessionSnapshot, ruleset: Ruleset, rng: Rng): Session {
+  static fromSnapshot(
+    snapshot: SessionSnapshot,
+    ruleset: Ruleset,
+    rng: Rng,
+    limits: SessionLimits = {},
+  ): Session {
     if (snapshot.formatVersion !== SNAPSHOT_FORMAT_VERSION) {
       throw new Error(
         `snapshot format version ${snapshot.formatVersion}; this server reads ` +
@@ -412,6 +519,7 @@ export class Session {
       ruleset,
       rng,
       createdAtMs: snapshot.createdAtMs,
+      ...limits,
     });
     session.#logicalNowMs = snapshot.logicalNowMs;
     session.#schedule = Schedule.fromState(snapshot.schedule);
@@ -420,7 +528,11 @@ export class Session {
     Object.assign(session.aggregates, snapshot.aggregates);
     session.notableEvents.push(...snapshot.notableEvents);
     for (const state of snapshot.participants) {
-      session.participants.push(new CharacterRuntime(state));
+      const character = new CharacterRuntime(state);
+      // Os instantes dele são do relógio DESTA sessão (o snapshot gravou os dois juntos): liga sem
+      // traduzir, para a transição seguinte saber de onde ele vem (#812).
+      character.bindClock(session);
+      session.participants.push(character);
     }
     if (snapshot.aggregatesByCharacter !== undefined) {
       for (const [id, own] of Object.entries(snapshot.aggregatesByCharacter)) {
@@ -450,6 +562,15 @@ export class Session {
     // Instante do HOSPEDEIRO, guardado para quem investiga — não é o relógio da simulação, e
     // desde a FUN-68 nada aqui dentro o consulta. A simulação começa em zero.
     this.createdAtMs = options.createdAtMs;
+    this.#maxPendingDomainEvents = limitOf('maxPendingDomainEvents', options.maxPendingDomainEvents)
+      ?? MAX_PENDING_DOMAIN_EVENTS;
+    // `>> 1` de 1 é 0, e um descarte de zero não descartaria nada: o teto mínimo tira ao menos um.
+    this.#domainEventsTrim = Math.max(1, this.#maxPendingDomainEvents >> 1);
+    this.#maxEventsPerAdvance = limitOf('maxEventsPerAdvance', options.maxEventsPerAdvance)
+      ?? MAX_EVENTS_PER_ADVANCE;
+    this.#maxNotableEventsPerCharacter = limitOf(
+      'maxNotableEventsPerCharacter', options.maxNotableEventsPerCharacter,
+    );
   }
 
   get attached(): boolean {
@@ -478,6 +599,13 @@ export class Session {
     if (this.#endedReason) throw new Error(`session ${this.id} has already ended`);
     this.participants.push(character);
     this.#joinedAtMs.set(character.id, this.#logicalNowMs);
+    // O personagem atravessa a transição como o MESMO objeto (`createSessionBuilder`), mas o
+    // relógio LÓGICO de cada sessão nasce em zero. O que ele guarda como DURAÇÃO (cooldown de
+    // magia, condição, imunidade do Cleanse) está no relógio da sessão que o gravou e é traduzido
+    // para este ANTES do `onEnter` (o prazo que faltava continua faltando — #812, ADR 0020), para o
+    // ruleset que entra enxergar os instantes já no relógio dele e reagendar o que a fila da origem
+    // levava consigo. O `undoClock` desfaz a tradução se a entrada for recusada.
+    const undoClock = character.moveToClock(this);
     try {
       this.ruleset.onEnter(this, character);
     } catch (error) {
@@ -488,18 +616,22 @@ export class Session {
       const index = this.participants.indexOf(character);
       if (index >= 0) this.participants.splice(index, 1);
       this.#joinedAtMs.delete(character.id);
+      undoClock();
       throw error;
     }
-    // O carimbo do último golpe de arma (`lastAttackAtMs`, #550) está no relógio LÓGICO da sessão
-    // que o gravou — e este relógio nasce em zero. O personagem que atravessa uma transição é o
-    // MESMO objeto (`createSessionBuilder`), então sem este zero um carimbo de 57 700 ms da hunt
-    // anterior ficaria no FUTURO da nova, e `attackedRecently` o leria como "bateu há pouco" por
-    // quase um minuto: o resultado do combate dependeria de por onde o `CharacterRuntime` passou,
-    // e não do estado e da semente (invariante 3). Aqui, e não no `onEnter` de cada ruleset, para
-    // nenhuma sessão futura (quest, boss) esquecer; DEPOIS do `onEnter`, para a entrada recusada
-    // (party cheia) não apagar a janela de quem continua na sessão de origem. O restore de
-    // snapshot NÃO passa por `enter` — o relógio é o mesmo, e a janela quente atravessa.
-    character.lastAttackAtMs = null;
+    // Os CARIMBOS (o último golpe de arma, `lastAttackAtMs`, #550; o último ataque dado ou
+    // recebido, `lastCombatActionAtMs`, #625; e os que `resetSessionClockState` lista) não são prazo e
+    // não se traduzem: um carimbo de 57 700 ms da hunt anterior ficaria no FUTURO da nova — `isInFight`
+    // o leria como "em combate" e travaria a saída por até um minuto que ninguém lutou, e
+    // `attackedRecently` erraria assim que o relógio novo alcançasse o valor velho. (A trava de
+    // stairhop, #554, não é mais carimbo: desde o #622 é a condição `pacified`, que é prazo e a
+    // transição traduz como as outras.) O resultado do combate dependeria de por onde o
+    // `CharacterRuntime` passou, e não do estado e da semente (invariante 3). Aqui, e não no
+    // `onEnter` de cada ruleset, para nenhuma sessão futura (quest, boss) esquecer; DEPOIS do
+    // `onEnter`, para a entrada recusada (party cheia) não apagar o estado de quem continua na
+    // sessão de origem. O restore de snapshot NÃO passa por `enter` — o relógio é o mesmo, e a
+    // janela quente atravessa.
+    character.resetSessionClockState();
   }
 
   /**
@@ -519,6 +651,9 @@ export class Session {
     if (index < 0) return null;
     const [character] = this.participants.splice(index, 1);
     if (character === undefined) return null;
+    // O instante EXATO da saída, antes de qualquer outra coisa: é dele que o próximo `enter`
+    // traduz os prazos do personagem (`CharacterRuntime.markDeparture`).
+    character.markDeparture(this);
     this.ruleset.onLeave?.(this, character);
     // O extrato sai DEPOIS do `onLeave`: o settlement da bolsa da party escreve o gold de quem
     // sai, e ele precisa estar no extrato dele. Numa sessão privada, o hospedeiro não chama
@@ -527,7 +662,48 @@ export class Session {
     const receipt = this.#receiptFor(character, reason);
     this.#aggregatesByCharacter.delete(characterId);
     this.#performanceSamples.delete(characterId);
+    this.#notableCursor?.delete(characterId);
     return { character, receipt };
+  }
+
+  /**
+   * Emite o extrato PARCIAL de um personagem que CONTINUA na sessão, e recomeça a contar dele do
+   * zero (ADR 0060 d.10b). É o que faz o mundo creditar sem acabar nunca: o hospedeiro chama
+   * isto de tempos em tempos e em toda saída, e cada extrato leva só o DELTA desde o anterior.
+   *
+   * Tem a semântica de delta de `leave`, sem tirar ninguém:
+   * 1. emite o extrato (`#receiptFor`), com `seq` novo — `UNIQUE (session_id, seq)` (invariante
+   *    10) exige unicidade, não continuidade;
+   * 2. zera os agregados DAQUELE personagem — inclusive `durationMs`, que volta a correr no
+   *    próximo `advanceBy` — e entrega o que a sessão guardava de instâncias removidas;
+   * 3. move o marco de `joinedAtMs` para agora, e a posição da lista de eventos notáveis para o
+   *    fim, para o próximo extrato não repetir os eventos deste (ver `#notableCursor`).
+   *
+   * **O que NÃO zera:**
+   * - a SOMA `aggregates` da sessão, que continua o acumulado de tudo que ela produziu, como
+   *   depois de um `leave`;
+   * - a janela de DPS/HPS (`dpsOf`/`hpsOf`): é apresentação contínua, não parte do extrato;
+   * - o outro participante, que não sabe que alguém tirou um extrato.
+   *
+   * Devolve `null` para quem não é participante e para a sessão que já acabou: o `end` já emitiu
+   * os extratos finais, e os agregados dele continuam lá (o analisador os lê) — um extrato novo
+   * os creditaria DE NOVO.
+   *
+   * Não consome sorteio nem agenda evento: o resultado da simulação é o mesmo com ou sem
+   * checkpoint, a 1 Hz ou a 10 Hz (invariantes 2 e 3). Quem decide SE uma sessão credita em
+   * extratos parciais é `Ruleset.progress`; este método é só o mecanismo.
+   */
+  checkpoint(characterId: string, reason: EndReason): Receipt | null {
+    if (this.#endedReason !== null) return null;
+    const character = this.participants.find((participant) => participant.id === characterId);
+    if (character === undefined) return null;
+    const receipt = this.#receiptFor(character, reason);
+    this.#aggregatesByCharacter.set(characterId, zeroAggregates());
+    this.#joinedAtMs.set(characterId, this.#logicalNowMs);
+    (this.#notableCursor ??= new Map()).set(
+      characterId, this.#notableEventsDropped + this.notableEvents.length,
+    );
+    return receipt;
   }
 
   /**
@@ -535,6 +711,8 @@ export class Session {
    * não é participante — e para um snapshot anterior ao #397, que não gravou o campo. É a leitura
    * que o hospedeiro faz para montar `party-state.members[].joinedAtMs` (D12): sem ela, o
    * `joinedAtMs` ficaria preso no snapshot e nunca chegaria ao fio.
+   *
+   * É o marco de onde o extrato começa: um `checkpoint` o move para o instante em que rodou.
    */
   joinedAtMsOf(characterId: string): number | undefined {
     return this.#joinedAtMs.get(characterId);
@@ -659,13 +837,18 @@ export class Session {
     // próprio primeiro participante de uma sessão nova, cujo `joinedAtMs` é o instante zero da
     // sessão — os dois casos devem levar TODOS os eventos, que é o comportamento de hoje.
     const joinedAtMs = this.#joinedAtMs.get(character.id) ?? 0;
+    // Quem já fez `checkpoint` recomeça na posição que ele guardou, não no tempo (ver
+    // `#notableCursor`); o descarte do teto pode ter levado o que vinha antes dela.
+    const cursor = this.#notableCursor?.get(character.id);
+    const since = cursor === undefined ? 0 : Math.max(0, cursor - this.#notableEventsDropped);
     return {
       sessionId: this.id,
       characterId: character.id,
       reason,
       seq: ++this.ledgerSeq,
       aggregates: { ...this.aggregatesOf(character.id) },
-      notableEvents: this.notableEvents.filter((event) => event.atMs >= joinedAtMs),
+      notableEvents: (since === 0 ? this.notableEvents : this.notableEvents.slice(since))
+        .filter((event) => event.atMs >= joinedAtMs),
       removedInstances: character.drainRemovedInstances(),
     };
   }
@@ -698,9 +881,9 @@ export class Session {
     for (;;) {
       const next = this.#schedule.peek();
       if (next === undefined || next.dueAtMs > targetMs) break;
-      if (processed >= MAX_EVENTS_PER_ADVANCE) {
+      if (processed >= this.#maxEventsPerAdvance) {
         // Engasgada: o que venceu vai para o alvo e o atraso morre aqui. Ver
-        // `MAX_EVENTS_PER_ADVANCE` e o ADR 0018 — intervalo pulado é descartado, não devido.
+        // `maxEventsPerAdvance` e o ADR 0018 — intervalo pulado é descartado, não devido.
         this.#schedule.deferOverdue(targetMs);
         this.record('advance-truncated', String(dtMs));
         break;
@@ -768,8 +951,8 @@ export class Session {
     // Estourou: descarta a metade mais antiga de UMA vez, e não um por push. `shift()` num
     // vetor cheio é O(n) a cada passo, e numa sessão que ninguém drena isso é o coletor
     // rodando o tempo todo — medido no `pnpm bench:hunts`: 18,8 → 25,5 µs por tick.
-    if (this.#domainEvents.length > MAX_PENDING_DOMAIN_EVENTS) {
-      this.#domainEvents.splice(0, MAX_PENDING_DOMAIN_EVENTS >> 1);
+    if (this.#domainEvents.length > this.#maxPendingDomainEvents) {
+      this.#domainEvents.splice(0, this.#domainEventsTrim);
     }
   }
 
@@ -805,11 +988,32 @@ export class Session {
         ? { atMs: this.#logicalNowMs, type }
         : { atMs: this.#logicalNowMs, type, detail },
     );
+    const perCharacter = this.#maxNotableEventsPerCharacter;
+    if (perCharacter === undefined) return;
+    const excess = this.notableEvents.length - perCharacter * Math.max(1, this.participants.length);
+    if (excess > 0) {
+      this.notableEvents.splice(0, excess);
+      this.#notableEventsDropped += excess;
+    }
+  }
+
+  /**
+   * Quantos eventos notáveis o teto (`maxNotableEventsPerCharacter`) já descartou nesta instância
+   * da sessão. Sempre zero sem teto. A posição ABSOLUTA de `notableEvents[i]` é este número + i —
+   * é o que o analisador do hospedeiro precisa para o "já mandei até aqui" não apontar para o
+   * lugar errado depois de um descarte.
+   */
+  get notableEventsDropped(): number {
+    return this.#notableEventsDropped;
   }
 
   end(reason: EndReason): readonly Receipt[] {
     if (!this.#endedReason) {
       this.#endedReason = reason;
+      // O instante EXATO do fim, de cada um que está dentro: o `advanceBy` que encerrou no meio de
+      // um evento ainda empurra o relógio até o alvo depois, e é do fim — não do alvo — que o
+      // próximo `enter` traduz os prazos (`CharacterRuntime.markDeparture`).
+      for (const participant of this.participants) participant.markDeparture(this);
       this.ruleset.onEnd(this, reason);
       this.record('ended', reason);
       // Um por participante presente, na ordem de entrada — e emitidos AGORA, depois do

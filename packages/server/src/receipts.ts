@@ -17,10 +17,10 @@
 // índice troca isso por um `SMEMBERS` que quase sempre volta vazio.
 
 import type { ChainableCommander, Redis } from 'ioredis';
-import { isFightMode, readOfflineTrainingState } from '@draconya/sim';
+import { isFamiliarState, isFightMode, readOfflineTrainingState } from '@draconya/sim';
 import type {
-  Aggregates, BestiaryState, CharacterStorageMap, CharmsState, EndReason, FightMode,
-  ItemInstanceOverlay, NotableEvent, OfflineTrainingState, SkillsState,
+  Aggregates, BestiaryState, BosstiaryState, CharacterStorageMap, CharmsState, EndReason, FamiliarState,
+  FightMode, ItemInstanceOverlay, LearnedSpellsState, NotableEvent, OfflineTrainingState, SkillsState,
 } from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
 
@@ -66,12 +66,39 @@ export interface SessionReceipt {
    */
   readonly bestiary?: BestiaryState;
   /**
+   * O Bosstiary (#629, ADR 0052 d.1): abates por boss (chave = `raceId`), pontos de boss e a
+   * versão. Valor ABSOLUTO, como o Bestiário, e pela mesma razão: abate e ponto só sobem, então o
+   * ledger funde pelo MAIOR de cada boss e dos pontos — um extrato antigo processado fora de
+   * ordem não tem como rebaixar nada, sem guarda de instante.
+   */
+  readonly bosstiary?: BosstiaryState;
+  /**
    * A economia de Charms (M39-02, #602, ADR 0052 d.1): pontos/echoes gastos, tier de cada
    * charm e as atribuições. ABSOLUTA e ÚLTIMA-ESCRITA-VENCE, como `ammo`/`equipment` — NÃO
    * fundida pelo maior como o Bestiário: não há aqui um contador externo monotônico, é o
    * estado final da sessão dona.
    */
   readonly charms?: CharmsState;
+  /**
+   * As magias aprendidas (#624, ADR 0058 d.1, ADR 0052 d.1): os ids de `content.spells` que o
+   * personagem comprou. Ao contrário de `charms`/`ammo`, NÃO é última-escrita-vence: o ledger
+   * FUNDE pela UNIÃO dos ids (`LearnedSpells.merge`), como o Bestiário funde pelo maior. O
+   * registro só CRESCE, e dois extratos pendentes se aplicam em ordem qualquer (o `SCAN` de
+   * `pending()` não ordena) — o mais antigo chegando depois do mais novo não pode derrubar uma
+   * magia já paga —, e um extrato de base desconhecida (sessão retomada sem registro) carrega só
+   * as compras dela e não pode apagar a concessão da migração (ADR 0014). Extrato SEM o campo (nó
+   * antigo em deploy) não toca na coluna.
+   */
+  readonly learnedSpells?: LearnedSpellsState;
+  /**
+   * O familiar de vocação (M38-02, #599, ADR 0057 d.3, ADR 0052 d.1): os carimbos de relógio de
+   * PAREDE — até quando a invocação vale e até quando a magia volta. ABSOLUTO e ÚLTIMA-ESCRITA-
+   * VENCE, como `charms` — e NUNCA fundido pelo maior: o `summonUntilMs` DESCE quando o familiar
+   * morre (`FamiliarDeath` zera a recriação), e "ficar com o maior" ressuscitaria o familiar se um
+   * extrato antigo, fora de ordem, chegasse depois de um mais novo já aplicado. Ausente é sessão
+   * sem o registro (Cidade ou nó antigo em deploy): não toca na coluna.
+   */
+  readonly familiar?: FamiliarState;
   /**
    * O registro do Treino (#631, ADR 0059 d.3, ADR 0052 d.1): o banco de offline training e a skill
    * escolhida no livro. ABSOLUTO e ÚLTIMA-ESCRITA-VENCE, como `charms` — o banco SOBE por tempo de
@@ -381,10 +408,21 @@ function parseReceipt(raw: string): SessionReceipt | null {
     ...(typeof value['bestiary'] === 'object' && value['bestiary'] !== null
       ? { bestiary: value['bestiary'] as BestiaryState }
       : {}),
+    // O Bosstiary (#629): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['bosstiary'] === 'object' && value['bosstiary'] !== null
+      ? { bosstiary: value['bosstiary'] as BosstiaryState }
+      : {}),
     // A economia de Charms (M39-02, #602): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['charms'] === 'object' && value['charms'] !== null
       ? { charms: value['charms'] as CharmsState }
       : {}),
+    // As magias aprendidas (#624): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['learnedSpells'] === 'object' && value['learnedSpells'] !== null
+      ? { learnedSpells: value['learnedSpells'] as LearnedSpellsState }
+      : {}),
+    // O familiar (M38-02, #599): lista de PERMISSÃO, pela razão das skills — e validado por forma,
+    // porque a coluna é `jsonb` sem CHECK e um registro torto nunca deve chegar ao banco.
+    ...(isFamiliarState(value['familiar']) ? { familiar: value['familiar'] } : {}),
     // O registro do Treino (#631): lista de PERMISSÃO, pela razão das skills — e conferido pela
     // MESMA leitura defensiva do `sim` que o ticket usa: o ledger o grava direto na coluna `jsonb`,
     // e um banco negativo ou uma skill torta não pode chegar lá. Torto vira ausente.

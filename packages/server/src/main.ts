@@ -32,6 +32,7 @@ import { SnapshotStore } from './snapshots.js';
 import { ReceiptStore } from './receipts.js';
 import { PartyStore } from './party-store.js';
 import { readCachedBoostedMonsterId, WorldDailyStore } from './world-daily.js';
+import { createLoyaltyBonusResolver } from './loyalty.js';
 import type { Role } from './role.js';
 import { createDatabase } from './db/client.js';
 import { DrizzleGameRepository } from './db/repository.js';
@@ -167,6 +168,16 @@ async function main(): Promise<void> {
               // quest, pela mesma razão e o mesmo caminho de `listItemInstances`.
               listCharacterStorages: (characterId: string) =>
                 repository.listCharacterStorages(characterId),
+              // O bônus de Loyalty da conta (#628, ADR 0052 decisão 5): calculado na EMISSÃO do
+              // ticket, de `account.created_at`, e fixado no personagem pela sessão inteira.
+              // Conteúdo sem `loyalty/` não passa nada — nenhum ticket carrega bônus.
+              ...(content.loyalty === undefined
+                ? {}
+                : {
+                    loyaltyBonusPercentOf: createLoyaltyBonusResolver({
+                      repository, config: content.loyalty, now: nowMs,
+                    }),
+                  }),
               // A party antes da hunt (#195): formulário em Redis, limites do conteúdo.
               party: new PartyStore(redis),
               matchmakingLevelRange: content.party.matchmakingLevelRange,
@@ -241,6 +252,9 @@ async function main(): Promise<void> {
       // As sete bênçãos PvE (#570, ADR 0052): o `buy-blessing` compra daqui, com o preço por
       // level em `progression.blessingPricing`.
       blessingCatalog: content.blessings,
+      // O catálogo de magias (#624, ADR 0058): o `learn-spell` confere vocação, level e preço
+      // (`learnPrice`) daqui — o host recebe o mapa, não o `Content` inteiro.
+      spellCatalog: content.spells,
       vocations: content.vocations,
       vocationLevel: content.progression.vocationLevel,
       progression: content.progression,

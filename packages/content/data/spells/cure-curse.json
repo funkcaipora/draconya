@@ -3,6 +3,7 @@
   "name": "Cure Curse",
   "description": "Remove a maldição.",
   "vocationId": "paladin",
+  "learnPrice": 6000,
   "manaCost": 40,
   "cooldownMs": 6000,
   "group": "healing",

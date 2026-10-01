@@ -3,6 +3,7 @@
   "name": "Cure Electrification",
   "description": "Remove a eletrificação.",
   "vocationId": "druid",
+  "learnPrice": 1000,
   "manaCost": 30,
   "cooldownMs": 6000,
   "group": "healing",

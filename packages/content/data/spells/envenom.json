@@ -4,6 +4,7 @@
   "description": "Envenena o seu alvo, causando dano de terra ao longo do tempo.",
   "vocationId": "druid",
   "minLevel": 50,
+  "learnPrice": 6000,
   "manaCost": 30,
   "group": "attack",
   "groupCooldownMs": 2000,

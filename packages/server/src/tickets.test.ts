@@ -112,6 +112,134 @@ describe.runIf(available)('session ticket', () => {
     }
   });
 
+  it('carries the Bosstiary, and drops a record it cannot trust (#629)', async () => {
+    // Entra na sessão pelo ticket porque o nível de um boss depende do abate anterior — um
+    // personagem que entrasse vazio recomeçaria a contagem do boss a cada hunt. E um valor torto
+    // vira AUSENTE, nunca ticket recusado: a linha é `jsonb` sem CHECK.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+
+    const bosstiary = { kills: { '639': 3, '1811': 20 }, points: 70, version: 1 };
+    const bom = await tickets.issue('a1', 'p1', { level: 1, xp: 0, bosstiary });
+    if (!bom.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(bom.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+      initialCharacter: { level: 1, xp: 0, bosstiary },
+    });
+
+    // O registro VAZIO é válido: é o personagem que nunca abateu um boss, e atravessa igual.
+    const empty = { kills: {}, points: 0, version: 1 };
+    const vazio = await tickets.issue('a1', 'p1', { level: 1, xp: 0, bosstiary: empty });
+    if (!vazio.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(vazio.value.ticket, 'n1')).toMatchObject({
+      initialCharacter: { level: 1, xp: 0, bosstiary: empty },
+    });
+
+    for (const ruim of [
+      { kills: { '639': -1 }, points: 0, version: 1 },
+      { kills: { '639': 1.5 }, points: 0, version: 1 },
+      { kills: { '': 1 }, points: 0, version: 1 },
+      { kills: [3], points: 0, version: 1 },
+      { kills: {}, points: -5, version: 1 },
+      { kills: {}, points: 1.5, version: 1 },
+      { kills: {}, points: 0 },
+      { points: 0, version: 1 },
+      { '639': 3 },
+      [10],
+      'muitos',
+      null,
+    ]) {
+      const issued = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, bosstiary: ruim } as unknown as InitialCharacter,
+      );
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1'), JSON.stringify(ruim)).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0 },
+      });
+    }
+  });
+
+  it('carries the learned spells, and drops a record it cannot trust (#624)', async () => {
+    // As magias entram na sessão pelo ticket porque o CAST as confere: um personagem que entrasse
+    // sem elas não lançaria nada, apesar de ter pago. Torto vira AUSENTE, nunca ticket recusado
+    // (a linha é `jsonb` sem CHECK). Mutação que mata: aceitar qualquer objeto — a lista com
+    // repetido, o id vazio e a lista que não é lista passariam.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+
+    const learnedSpells = { spellIds: ['berserk', 'wound-cleansing'], version: 1 };
+    const good = await tickets.issue('a1', 'p1', { level: 1, xp: 0, learnedSpells });
+    if (!good.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(good.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+      initialCharacter: { level: 1, xp: 0, learnedSpells },
+    });
+
+    // A lista VAZIA é válida: é o personagem novo, e distinguir "não veio" de "veio vazio" é do tipo.
+    const empty = await tickets.issue('a1', 'p1', { level: 1, xp: 0, learnedSpells: { spellIds: [], version: 1 } });
+    if (!empty.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(empty.value.ticket, 'n1')).toMatchObject({
+      initialCharacter: { level: 1, xp: 0, learnedSpells: { spellIds: [], version: 1 } },
+    });
+
+    for (const bad of [
+      { spellIds: ['berserk', 'berserk'], version: 1 },
+      { spellIds: [''], version: 1 },
+      { spellIds: [7], version: 1 },
+      { spellIds: 'berserk', version: 1 },
+      { spellIds: ['berserk'] },
+      { spellIds: ['berserk'], version: '1' },
+      ['berserk'],
+      'berserk',
+      null,
+    ]) {
+      const issued = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, learnedSpells: bad } as unknown as InitialCharacter,
+      );
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1'), JSON.stringify(bad)).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0 },
+      });
+    }
+  });
+
+  it('carries the familiar stamps, and drops a record it cannot trust (#599)', async () => {
+    // Os dois carimbos de relógio de PAREDE do familiar entram na sessão pelo ticket: é ELA quem os
+    // compara com o relógio, e o cooldown de 30 min tem de atravessar a saída da hunt. Um registro
+    // torto vira AUSENTE, nunca ticket recusado — a linha é `jsonb` sem CHECK. Mutação que mata:
+    // aceitar qualquer objeto (o `-1` e o texto passariam), ou recusar o registro vazio.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+
+    const familiar = { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 };
+    const bom = await tickets.issue('a1', 'p1', { level: 1, xp: 0, familiar });
+    if (!bom.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(bom.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+      initialCharacter: { level: 1, xp: 0, familiar },
+    });
+
+    for (const ruim of [
+      { version: 1, summonUntilMs: -1, cooldownUntilMs: 0 },
+      { version: 1, summonUntilMs: 0, cooldownUntilMs: 1.5 },
+      { version: 1, summonUntilMs: '0', cooldownUntilMs: 0 },
+      { version: 1, summonUntilMs: 0 },
+      { summonUntilMs: 0, cooldownUntilMs: 0 },
+      [1, 2], 'nunca', null,
+    ]) {
+      const issued = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, familiar: ruim } as unknown as InitialCharacter,
+      );
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1'), JSON.stringify(ruim)).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0 },
+      });
+    }
+  });
+
   it('carries the bestiary, and drops a map it cannot trust (FUN-113)', async () => {
     // Os abates entram na sessão pelo ticket porque o bônus dos marcos escala a XP DURANTE a
     // hunt (DT-01) — um personagem que entrasse em `{}` perderia o marco que já cruzou. E um
@@ -354,6 +482,35 @@ describe.runIf(available)('session ticket', () => {
       accountId: 'a1', characterId: 'p1', nodeId: 'n1',
       initialCharacter: { level: 1, xp: 0 },
     });
+  });
+
+  it('carries the Loyalty bonus of the account, and drops a value it cannot trust (#628)', async () => {
+    // O bônus é da IDADE DA CONTA, calculado pela `api` na emissão e fixado na sessão (ADR 0052
+    // d.5): sem ele no ticket, o `game` — que não fala com o Postgres — valeria o nível base a
+    // hunt inteira. Um valor torto (fracionário, zero, negativo, texto, acima do `uint16_t` do
+    // Canary) vira AUSENTE, nunca ticket recusado, a mesma régua do Premium.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+    for (const loyaltyBonusPercent of [5, 50]) {
+      const issued = await tickets.issue('a1', 'p1', { level: 1, xp: 0, loyaltyBonusPercent });
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1')).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0, loyaltyBonusPercent },
+      });
+      await tickets.revoke(issued.value.ticket, 'a1', 'p1');
+    }
+    for (const torto of [0, -5, 7.5, 65_536, '5', null]) {
+      const issued = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, loyaltyBonusPercent: torto } as unknown as InitialCharacter,
+      );
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1')).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0 },
+      });
+      await tickets.revoke(issued.value.ticket, 'a1', 'p1');
+    }
   });
 
   it('carries the offline training record, and drops one it cannot trust (#631, ADR 0059 d.3)', async () => {

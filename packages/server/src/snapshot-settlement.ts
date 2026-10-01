@@ -127,10 +127,20 @@ export async function settleSnapshotAsReceipt(
     // aqui a progressão da sessão inteira sumia: XP creditada, mas o abate 9 999 voltava a 5 000.
     ...(owner?.skills === undefined ? {} : { skills: owner.skills }),
     ...(owner?.bestiary === undefined ? {} : { bestiary: owner.bestiary }),
+    // O Bosstiary (#629): ABSOLUTO e monotônico como o Bestiário — sem ele aqui, o abate de boss
+    // de uma sessão irrestaurável sumia, e o nível fechado nela voltava ao de antes da queda.
+    ...(owner?.bosstiary === undefined ? {} : { bosstiary: owner.bosstiary }),
     ...(owner?.ammo === undefined ? {} : { ammo: owner.ammo }),
     // A economia de Charms (M39-02, #602, ADR 0052 d.1): ABSOLUTA como `ammo` — sem ela aqui,
     // um `charm-unlock` aceito antes da queda sumiria junto com o snapshot irrestaurável.
     ...(owner?.charms === undefined ? {} : { charms: owner.charms }),
+    // As magias aprendidas (#624, ADR 0058 d.1): ABSOLUTAS como `charms` — sem isto aqui, um
+    // `learn-spell` aceito antes da queda sumiria com o snapshot irrestaurável, com o gold já
+    // debitado no `goldDelta` do mesmo snapshot.
+    ...(owner?.learnedSpells === undefined ? {} : { learnedSpells: owner.learnedSpells }),
+    // O familiar (M38-02, #599, ADR 0057 d.3): ABSOLUTO como `charms` — sem ele aqui, um familiar
+    // lançado antes da queda perderia o cooldown de 30 min junto com o snapshot irrestaurável.
+    ...(owner?.familiar === undefined ? {} : { familiar: owner.familiar }),
     // O registro do Treino (#631, ADR 0059 d.3): ABSOLUTO como `charms` — sem ele aqui, o banco de
     // offline training que a sessão caída tinha acumulado sumiria junto com o snapshot.
     ...(owner?.training === undefined ? {} : { training: owner.training }),

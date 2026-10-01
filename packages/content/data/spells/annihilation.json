@@ -4,6 +4,7 @@
   "description": "Causa dano físico devastador no seu alvo atual, pela força do golpe.",
   "vocationId": "knight",
   "minLevel": 110,
+  "learnPrice": 20000,
   "manaCost": 300,
   "group": "attack",
   "groupCooldownMs": 2000,
