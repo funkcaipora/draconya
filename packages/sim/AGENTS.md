@@ -853,8 +853,9 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   do alvo (`#releaseParkedAttacks`, o `onCreatureMove` do Canary) — NUNCA no instante exato do
   vencimento nem no intervalo normal de ataque. E `castSpell`/`useSupply` (`casting.ts`) recusam a
   magia e a runa AGRESSIVAS com `attack-locked` — dano, DOT, a invocação (`summon_creature.lua` não
-  chama `isAggressive(false)`), as runas de dano/campo e a Paralyze Rune; cura e o resto do
-  vocabulário continuam liberados, a mesma exceção do `Spell::aggressive` do Canary.
+  chama `isAggressive(false)`), as runas de dano/campo, a Paralyze Rune e as duas de invocação
+  (Convince Creature e Animate Dead, #600: `isAggressiveSupply` em `casting.ts` — os scripts
+  também não o desligam); cura e o resto do vocabulário continuam liberados, a mesma exceção do `Spell::aggressive` do Canary.
   **Enquanto o golpe está estacionado (`Runner.attackParked`), `#armPlayerAttack` o ignora**: um
   personagem parado não reacende a cadeia por conta própria, e liberar no passo de combate-stop
   traria o golpe antes do pensamento. `attackLockedUntil` deixou de

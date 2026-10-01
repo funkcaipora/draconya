@@ -1685,7 +1685,9 @@ cooldown:**
    `condition-expire` — que vence depois do ataque do mesmo instante (`Housekeeping`).
 2. **A magia e a runa AGRESSIVAS** (`castSpell`/`useSupply`, `packages/sim/src/casting.ts`):
    `effect.kind === 'damage'`, `'damage-over-time'` ou `'summon'` (magia) e as runas de dano, de
-   campo e a Paralyze Rune recusam com a razão tipada `attack-locked` e `retryInMs` — ANTES da
+   campo, a Paralyze Rune e as duas runas de invocação (Convince Creature e Animate Dead, #600 —
+   `convince_creature.lua` e `animate_dead_rune.lua` também não chamam `isAggressive(false)`, apesar
+   do grupo `support`) recusam com a razão tipada `attack-locked` e `retryInMs` — ANTES da
    conferência de alvo/alcance, na mesma posição relativa do `playerSpellCheck` do Canary. A
    invocação é agressiva porque `Spell::aggressive` é `true` por padrão e o
    `data/scripts/spells/support/summon_creature.lua` NÃO chama `isAggressive(false)` — ao contrário

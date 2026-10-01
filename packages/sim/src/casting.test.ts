@@ -261,6 +261,47 @@ describe('useSupply — medo e pacificação alcançam a RUNA, não a poção (#
     // Vencida a condição, a runa de ataque sai.
     expect(useSupply(user, attackRune, aim, combat, rng(), scaling, undefined, undefined, 2_000).ok).toBe(true);
   });
+
+  // As duas runas de invocação (#600) são do grupo `support`, mas `convince_creature.lua` e
+  // `animate_dead_rune.lua` NÃO chamam `isAggressive(false)` — `Spell::aggressive` fica `true`, e
+  // `Spell::playerSpellCheck` recusa as duas sob `CONDITION_PACIFIED` como recusa a runa de dano.
+  describe('as runas de invocação (Convince Creature e Animate Dead)', () => {
+    const convinceRune: Supply = {
+      id: 'convince-creature-rune', name: 'Convince Creature Rune', price: 80, group: 'support',
+      groupCooldownMs: 2_000, requires: {}, effect: { kind: 'convince', range: 8 },
+    };
+    const animateRune: Supply = {
+      id: 'animate-dead-rune', name: 'Animate Dead Rune', price: 375, group: 'support',
+      groupCooldownMs: 2_000, requires: {}, effect: { kind: 'animate-dead', monsterId: 'skeleton', range: 8 },
+    };
+    const monsterAim = { distance: 2, targets: [{ armor: 0, dodgeChance: 0 }] };
+    const tileAim = { distance: 2, targets: [], point: { x: 3, y: 3, z: 7 } };
+
+    it('pacified recusa as duas com `attack-locked` e o prazo, sem gastar gold nem cooldown', () => {
+      const user = hero({ gold: 1_000 });
+      user.conditions.apply(condition('pacified', 2_000));
+      expect(useSupply(user, convinceRune, monsterAim, combat, rng(), scaling, undefined, undefined, 500))
+        .toEqual({ ok: false, reason: 'attack-locked', retryInMs: 1_500 });
+      expect(useSupply(user, animateRune, tileAim, combat, rng(), scaling, undefined, undefined, 500))
+        .toEqual({ ok: false, reason: 'attack-locked', retryInMs: 1_500 });
+      expect(user.goldDelta).toBe(0);
+      // Vencida a condição, as duas chegam ao resto do checklist e saem.
+      expect(useSupply(user, convinceRune, monsterAim, combat, rng(), scaling, undefined, undefined, 2_000))
+        .toMatchObject({ ok: true, convince: true });
+      expect(useSupply(user, animateRune, tileAim, combat, rng(), scaling, undefined, undefined, 5_000))
+        .toMatchObject({ ok: true, animateDead: { monsterId: 'skeleton' } });
+    });
+
+    it('feared recusa as duas com `feared`, como toda runa', () => {
+      const user = hero({ gold: 1_000 });
+      user.conditions.apply(condition('feared', 3_000));
+      expect(useSupply(user, convinceRune, monsterAim, combat, rng(), scaling, undefined, undefined, 1_000))
+        .toEqual({ ok: false, reason: 'feared', retryInMs: 2_000 });
+      expect(useSupply(user, animateRune, tileAim, combat, rng(), scaling, undefined, undefined, 1_000))
+        .toEqual({ ok: false, reason: 'feared', retryInMs: 2_000 });
+      expect(user.goldDelta).toBe(0);
+    });
+  });
 });
 
 describe('castSpell — Swift Foot: a haste que pacifica (#622, `swift_foot.lua`)', () => {

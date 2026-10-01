@@ -506,11 +506,16 @@ export const TOO_MANY_SUMMONS: CastRefused = {
 /**
  * A runa é AGRESSIVA (`Spell::aggressive`, `true` por padrão no Canary)? Todas, exceto as que o
  * script marca `isAggressive(false)`: as de cura, o antídoto, o Destroy Field e o Chameleon. Aqui:
- * dano, campo e a condição contra INIMIGO (a Paralyze Rune).
+ * dano, campo, a condição contra INIMIGO (a Paralyze Rune) e as duas runas de invocação — a
+ * Convince Creature e a Animate Dead (#600) são do grupo `support`, mas nem `convince_creature.lua`
+ * nem `animate_dead_rune.lua` chamam `isAggressive(false)`, então sob `pacified` o Canary as recusa
+ * como a qualquer runa de dano (`Spell::playerSpellCheck`, `spells.cpp:517`) — o mesmo critério que
+ * `castSpell` já aplica à `summon` (`summon_creature.lua` também não o desliga).
  */
 function isAggressiveSupply(supply: Supply): boolean {
   const effect = supply.effect;
   return effect.kind === 'damage' || effect.kind === 'field'
+    || effect.kind === 'convince' || effect.kind === 'animate-dead'
     || (effect.kind === 'condition' && effect.target === 'enemy');
 }
 
