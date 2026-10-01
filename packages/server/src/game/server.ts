@@ -43,12 +43,27 @@ export interface GameDependencies {
   readonly now?: () => number;
   /** Aceita ou recusa uma configuração de bot (FUN-81). Ver `SessionHostOptions`. */
   readonly acceptBotConfig?: SessionHostOptions['acceptBotConfig'];
+  /**
+   * Carrega uma configuração de bot JÁ PERSISTIDA (ADR 0014) — slot com referência morta
+   * esvazia em vez de recusar a configuração inteira. Ver `SessionHostOptions`.
+   */
+  readonly loadBotConfig?: SessionHostOptions['loadBotConfig'];
   /** Registra a configuração aceita no Redis; jobs/api escrevem no Postgres (ADR 0028). */
   readonly saveBotConfig?: SessionHostOptions['saveBotConfig'];
   /** O catálogo de itens, para as regras de equipar (FUN-82). */
   readonly itemCatalog?: SessionHostOptions['itemCatalog'];
   /** O catálogo de munição abstrata, para `select-ammo` (#152). */
   readonly ammunitionCatalog?: SessionHostOptions['ammunitionCatalog'];
+  /** O Treino (#631, ADR 0059): as regras do livro do offline training, para as intenções de Treino. */
+  readonly training?: SessionHostOptions['training'];
+  /** O catálogo dos 25 Charms, para `charm-unlock`/`charm-assign` (M39-02, #602). */
+  readonly charmCatalog?: SessionHostOptions['charmCatalog'];
+  /** A ficha de Bestiário de cada monstro, para a economia de Charms derivar pontos e completude. */
+  readonly charmBestiaryEntries?: SessionHostOptions['charmBestiaryEntries'];
+  /** As sete bênçãos PvE, para `buy-blessing` (#570, ADR 0052). */
+  readonly blessingCatalog?: SessionHostOptions['blessingCatalog'];
+  /** O catálogo de magias, para `learn-spell` (#624, ADR 0058). */
+  readonly spellCatalog?: SessionHostOptions['spellCatalog'];
   /** As vocações e o level da escolha (#154). */
   readonly vocations?: SessionHostOptions['vocations'];
   readonly vocationLevel?: SessionHostOptions['vocationLevel'];
@@ -60,8 +75,6 @@ export interface GameDependencies {
   readonly playerOutfitId?: SessionHostOptions['playerOutfitId'];
   /** A tabela de aparências, para o que o combate desenha (FUN-109). */
   readonly appearances?: SessionHostOptions['appearances'];
-  /** Onde a Caixa de Loot da Sessão é guardada (FUN-88). */
-  readonly lootBoxes?: SessionHostOptions['lootBoxes'];
   /** O catálogo do que existe: hunts e vocabulário do bot (FUN-79, FUN-89). */
   readonly catalogue?: SessionHostOptions['catalogue'];
   /** O catálogo de skills (#340, SV-04). */
@@ -134,6 +147,9 @@ export function createGame(
       ...(dependencies.acceptBotConfig === undefined
         ? {}
         : { acceptBotConfig: dependencies.acceptBotConfig }),
+      ...(dependencies.loadBotConfig === undefined
+        ? {}
+        : { loadBotConfig: dependencies.loadBotConfig }),
       ...(dependencies.saveBotConfig === undefined
         ? {}
         : { saveBotConfig: dependencies.saveBotConfig }),
@@ -143,6 +159,19 @@ export function createGame(
       ...(dependencies.ammunitionCatalog === undefined
         ? {}
         : { ammunitionCatalog: dependencies.ammunitionCatalog }),
+      ...(dependencies.training === undefined ? {} : { training: dependencies.training }),
+      ...(dependencies.charmCatalog === undefined
+        ? {}
+        : { charmCatalog: dependencies.charmCatalog }),
+      ...(dependencies.charmBestiaryEntries === undefined
+        ? {}
+        : { charmBestiaryEntries: dependencies.charmBestiaryEntries }),
+      ...(dependencies.blessingCatalog === undefined
+        ? {}
+        : { blessingCatalog: dependencies.blessingCatalog }),
+      ...(dependencies.spellCatalog === undefined
+        ? {}
+        : { spellCatalog: dependencies.spellCatalog }),
       ...(dependencies.vocations === undefined ? {} : { vocations: dependencies.vocations }),
       ...(dependencies.vocationLevel === undefined ? {} : { vocationLevel: dependencies.vocationLevel }),
       ...(dependencies.progression === undefined ? {} : { progression: dependencies.progression }),
@@ -158,9 +187,6 @@ export function createGame(
       ...(dependencies.catalogue === undefined
         ? {}
         : { catalogue: dependencies.catalogue }),
-      ...(dependencies.lootBoxes === undefined
-        ? {}
-        : { lootBoxes: dependencies.lootBoxes }),
       ...(dependencies.skillCatalog === undefined
         ? {}
         : { skillCatalog: dependencies.skillCatalog }),

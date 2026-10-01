@@ -4,6 +4,7 @@
   "description": "Aumenta o dano à distância causado em 32%, por 10 segundos.",
   "vocationId": "paladin",
   "minLevel": 60,
+  "learnPrice": 8000,
   "manaCost": 450,
   "group": "support",
   "groupCooldownMs": 2000,

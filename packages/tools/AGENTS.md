@@ -8,6 +8,55 @@ Ferramentas de desenvolvimento e operação: o cliente sintético de carga, benc
 `build-asset-library.ts`), porque importam `packages/client/src/assets` por caminho relativo
 sob o `tsconfig.tooling.json` — ver `docs/asset-library.md`.
 
+**Fixture de tools que lança magia precisa do registro de aprendidas (#624):** o cast confere
+`CharacterRuntime.learnedSpells`. `dragon-party-movement.test.ts` monta os quatro level 200 com
+`learnedSpells: learnedSpellsStateOf(content.spells.keys())` (sem isso a rotação de magia REAL do
+`botConfigFor` nunca lança nada, e a semente 18 estourou o limite do líder parado), e
+`dragon-party-seed.ts` grava `characters.learned_spells` com as magias da vocação até o level 200 —
+a mesma regra da migração 0024 —, ou a party semeada para a QA ao vivo entraria sem lançar nada.
+
+O importador do CATÁLOGO do Tibia (item, monstro, magia — ADR 0038) mora em `scripts/catalog/`,
+pelo mesmo motivo e ao lado do importador de mapa, e não aqui: `pnpm catalog:import <tipo>
+[--check]` lê `things/sources/canary` (`CANARY_DIR`) e escreve `packages/content/data/<tipo>/
+generated/*.json`, nunca `packages/tools`. `scripts/catalog/xml.ts` (XML → árvore própria,
+`fast-xml-parser` por baixo), `lua-table.ts` (tabela Lua → JS, `luaparse` por baixo — os dois
+MIT, JS puro, sem binário nativo, ADR 0013) e `enums.ts` (enum C++ → `Map<string, number>`, para
+resolver `COMBAT_*`/`BESTY_RACE_*`/`CONST_ME_*`) são as três peças que um importador de `<tipo>`
+novo usa; `registry.ts` é onde ele se registra (`registerCatalogType`) para o comando aceitar o
+nome. O primeiro `<tipo>` registrado é `monsters` (#578, `scripts/catalog/monsters.ts`): lê
+`data-otservbr-global/monster/**/*.lua` (sem `familiars/`, `trainers/`, `traps/`) e escreve em
+`packages/content/staging/monsters/generated/` — **não** em `data/monsters/generated/`, porque o
+monstro gerado ainda não passa no boot (loot por slug de item sem o catálogo do #573, e sem linha na
+tabela de aparências); a primeira importação para `data/` é o #580. Ataque, defesa e invocação
+passam pelos mapeadores por NOME de `scripts/catalog/monster-abilities.ts` (#579): `melee`,
+`combat` (dano com forma, e cura própria em `defenses`), `speed`, `condition` (total fixo),
+`drunk`, `firefield`/`poisonfield`/`energyfield` e `monster.summon`; `outfit`, `effect` e
+`strength` são descartados porque o Canary não faz nada mecânico com eles. Um nome sem mapeador
+(as magias com nome próprio em script Lua, `invisible` em `attacks` — o Canary só o usa em
+`defenses`, exceto num chefe de quest —, a `condition` de total sorteado) tira o monstro do
+catálogo, e quem invoca um monstro que não foi gerado sai junto. O `immunities[].condition = true`
+do Lua vira `monster.conditionImmunities` pela tabela de `luaMonsterTypeConditionImmunities` do
+Canary (`bleed`/`fire`/`ice`… → a imunidade à DOT correspondente, #559); `outfit` é reportado por
+nome em `ignoredFields` até o M44-03. `monster.faction`/`enemyFactions` viram `faction`/
+`enemyFactions` (#619) pela tabela `FACTION_CONSTANTS` (o `Faction_t`, `FACTION_DEFAULT` omitido) — uma
+constante que a tabela não conhece bloqueia o monstro, e o teste confere a tabela contra o enum do
+checkout real (`CANARY_DIR`) na ordem, que é o valor numérico. Dois
+campos saem CONDICIONADOS ao schema da base: `kind` (#682) e a onda de monstro em `rows` (#679,
+sem ele a onda sai na `wave` antiga — TODO). O que ficou fora vai para
+`docs/reference/catalog/monsters-report.md` com o motivo; o que foi lido e não coube (moeda
+extra, fraqueza abaixo de −100 %, campo ignorado, nome sem mapeador com a contagem de monstros,
+cobertura e a meta revista, chaves de apresentação com o id do Canary) vai para a seção "Notas"
+do mesmo relatório.
+A velocidade é a do TFS quando `FORGOTTENSERVER_DIR` tem o mesmo monstro, senão Canary × 2 (ADR
+0037 d.4) — sem o checkout do TFS, todo monstro cai no × 2, e a nota do relatório diz isso. Limite de licença sem
+exceção (ADR 0019/0038): o que sai do Canary é NÚMERO e FATO, nunca uma linha de Lua ou C++
+reproduzida — `lua-table.ts` só AVALIA expressão literal, nunca executa Lua de verdade.
+
+`generated/<fatia>.json` é SEMPRE a transcrição pura do Canary — quem aplica `overrides/*.json`
+por cima não é este comando, é `@draconya/content` (`load.ts`), toda vez que o conteúdo é
+CARREGADO, não só quando é importado. É o que faz uma correção sobreviver a uma reimportação sem
+precisar ser reaplicada à mão: ver "O catálogo importado" em `packages/content/AGENTS.md`.
+
 ## Fronteiras
 
 **Pode importar:** todos os pacotes. É o topo da pilha e não tem restrição.
@@ -77,5 +126,20 @@ pnpm vitest run packages/tools
   personagem entra VESTIDO (arma de uma mão + escudo) e com vida enorme — sem a vida enorme ele
   morre, a sessão encerra, e o laço medido passa a rodar sessões mortas: o µs/tick despenca para
   zero e o número vira mentira. Ver `docs/product/combat-conformance.md`.
+- **`pnpm bench:city` mede o LEQUE de saída da praça, e o relógio é parte do cenário** (OW-07,
+  #828). Ele roda `SessionHost` + `CityShard` + `Viewer` de verdade e o codec real, e o socket só
+  conta os bytes do frame. A armadilha que o deixou sem medir o que dizia: com `now: () => 0` o
+  hospedeiro recusa o `walk` adiantado (FUN-122) e todo passo depois do primeiro vira recusa, com a
+  tabela ainda saindo — o FUN-120 deixou de ser reproduzível sem que ninguém visse. Agora o relógio é
+  SIMULADO e anda no ritmo de produção (passo da Cidade de 150 ms, ciclo do hospedeiro de 100 ms,
+  tick no máximo divisor comum), e `passos/s` na tabela é o que prova que o cenário anda. A
+  medição vive em `city-scenario.ts`, a conta em `city-metrics.ts`, a tabela em `city-report.ts` e
+  `city-broadcast.ts` é só a borda; `city-scenario.test.ts` roda tudo em modo curto no CI.
+- **CPU do bench de praça é `process.cpuUsage()`, mas continua sendo de máquina.** Numa máquina
+  com outros processos (a de desenvolvimento roda agentes em paralelo) o p99 mede a máquina: o
+  relatório imprime a carga, e `REPEAT=3` publica a melhor rodada por linha. Antes/depois é sempre
+  na mesma máquina, sob carga parecida. `CYCLE_MS` (100) é espelho do `host.ts`, e um teste confere.
+- **`MAP=square` é a praça sintética do FUN-33; o padrão é a Thais real.** A sintética existe para
+  rodar sem o mapa e para comparar com a medição antiga.
 
-Issues: FUN-45 (cliente de carga), FUN-46 (cenário frio).
+Issues: FUN-45 (cliente de carga), FUN-46 (cenário frio), OW-07/#828 (bench da praça).

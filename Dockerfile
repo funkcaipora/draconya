@@ -50,7 +50,7 @@ RUN test -f packages/server/dist/main.js || (echo 'ERRO: tsc -b não emitiu dist
 # redistribuir): o cliente só leva o CAMINHO, e o nginx serve o que estiver montado nele.
 FROM build AS client-build
 ARG VITE_API_URL=
-ARG VITE_THINGS_URL=/things/1332
+ARG VITE_THINGS_URL=/things/1533
 RUN pnpm --filter @draconya/client build
 
 # --- dependências de produção -------------------------------------------------------------

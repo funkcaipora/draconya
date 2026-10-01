@@ -15,7 +15,7 @@
 // cadências é o invariante 2; a independência de observador é o 3; a versão fixada na sessão é
 // o 7.
 
-import { buildContent, compileMitigation, placeholderAppearances } from '@draconya/content';
+import { NEUTRAL_RATES, buildContent, compileMitigation, placeholderAppearances } from '@draconya/content';
 import type { Combat, DamageModifiers, RawContent, Spell, Supply } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
@@ -55,7 +55,7 @@ import type {
 
 const COMBAT: Combat = {
   id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
-  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0 },
   minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0, damageType: 'physical' },
   spellPower: { levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 },
@@ -349,17 +349,20 @@ const ARENA_GRID = [
 const ARENA_ROUTE = {
   id: 'arena-loop', mapId: 'arena',
   tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
-  spawnPoints: [{ routeIndex: 0, radius: 1 }],
+  spawnPoints: [{ routeIndex: 0, radius: 1, monsterId: 'flamer', respawnDelayMs: 30_000 }],
 };
 
 const PROGRESSION: Progression = {
   id: 'baseline', startingHealth: 5_000, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
   startingSpeed: 300, speedPerLevel: 0,
-  regen: { healthPerSecond: 0, manaPerSecond: 0 },
+  regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
+  regeneration: { requiresFood: false },
   xp: { kind: 'power', base: 20, exponent: 2 },
-  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessingReduction: 0.56, promotionReduction: 0.3 },
   startingKit: [], satchelInitialSlots: 10, containerRow: 5, skillMultipliers: {},
+  mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
+  rates: NEUTRAL_RATES,
   experienceBonusByLevel: [],
 };
 
@@ -374,14 +377,20 @@ const HUNT_MONSTER = {
     power: 100, damageType: 'fire',
     condition: {
       key: 'burn', merge: 'refresh', durationMs: 4_000,
-      effect: { kind: 'damage-over-time', amount: 10, intervalMs: 1_000, damageType: 'fire' },
+      effect: {
+        kind: 'damage-over-time', form: 'rounds',
+        rounds: [{ count: 4, intervalMs: 1_000, damage: 10 }], damageType: 'fire',
+      },
     },
     field: {
       id: 'fire', durationMs: 3_000,
       shape: { shape: 'circle', radius: 1, centered: 'target' },
       condition: {
         key: 'fire', merge: 'refresh', durationMs: 3_000,
-        effect: { kind: 'damage-over-time', amount: 10, intervalMs: 1_000, damageType: 'fire' },
+        effect: {
+          kind: 'damage-over-time', form: 'rounds',
+          rounds: [{ count: 3, intervalMs: 1_000, damage: 10 }], damageType: 'fire',
+        },
       },
     },
   }],
@@ -392,9 +401,6 @@ function engineContent(): ReturnType<typeof buildContent> {
     monsters: [HUNT_MONSTER],
     hunts: [{
       id: 'arena', name: 'Arena', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
-      difficulties: {
-        cautious: { monsterCount: 1, composition: [{ monsterId: 'flamer', weight: 1 }], respawnDelayMs: 30_000 },
-      },
     }],
     vocations: [], progression: [PROGRESSION],
     combat: [{ ...COMBAT, player: { ...COMBAT.player, attackPower: 25, attackIntervalMs: 2_000 } }],
@@ -516,7 +522,7 @@ describe('famílias de arma: o poder sai do perfil, sem RNG quando spread é zer
 
 const combatModifiers: Combat = {
   id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
-  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0 },
   minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0, damageType: 'physical' },
   spellPower: { levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 },
@@ -638,6 +644,8 @@ describe('oráculos de área e magia (M24-01, #469)', () => {
     id: 'hero', position: { x: 0, y: 0, z: 7 },
     health: 100, maxHealth: 100, mana, maxMana: 1_000,
     level: 30, xp: 0, gold, goldDelta: 0, alive: true, cooldowns: {},
+    // Sabe a magia da cena (#624): o assunto aqui é a rolagem por alvo, não o aprendizado.
+    learnedSpells: { spellIds: [areaSpell.id], version: 1 },
   });
   const targets = [
     { armor: 0, dodgeChance: 0 }, { armor: 0, dodgeChance: 0 }, { armor: 0, dodgeChance: 0 },

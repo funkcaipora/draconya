@@ -6,8 +6,9 @@
 
 import { buildContent, placeholderAppearances } from '@draconya/content';
 import type { Content, Progression, RawContent } from '@draconya/content';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CharacterRuntime } from '../character.js';
+import { INITIAL_ATTACK_PRACTICE, afterAttackBlock } from '../combat/attack-practice.js';
 import type { InventoryState } from '../inventory.js';
 import { statsForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
@@ -28,7 +29,7 @@ const map = {
 const route = {
   id: 'corridor', mapId: 'corridor',
   tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
-  spawnPoints: [{ routeIndex: 0, radius: 1 }],
+  spawnPoints: [{ routeIndex: 0, radius: 1, monsterId: 'rat', respawnDelayMs: 60_000 }],
 };
 // O rato é LENTO de propósito (`speed: 1` é um passo a cada 150 s pela fórmula do Tibia): depois
 // do primeiro golpe ele quer vir atrás do herói, e com essa velocidade não sai do lugar em que o
@@ -42,22 +43,19 @@ const rat = {
 };
 const hunt = {
   id: 'range', name: 'Range', recommendedLevel: 1, mapId: 'corridor', routeId: 'corridor',
-  difficulties: {
-    cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 60_000 },
-  },
 };
 const progression = {
   id: 'baseline', startingHealth: 1_000, startingMana: 10, startingCapacity: 1_000,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
   startingSpeed: 300, speedPerLevel: 0,
-  regen: { healthPerSecond: 0, manaPerSecond: 1 },
+  regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 1 } },
   xp: { kind: 'power', base: 20, exponent: 2 },
-  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessingReduction: 0.56, promotionReduction: 0.3 },
   skillMultipliers: {},
 };
 const combat = {
   id: 'baseline', dodgeMultiplier: 0.5,
-  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 }, minimumDamageFraction: 0.1,
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0 }, minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 1000, attackRange: 1, armor: 0, dodgeChance: 0 },
 };
 const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
@@ -405,7 +403,7 @@ describe('equivalência entre taxas com munição e arma na mão (#152, ADR 0020
 
 const combatV2 = {
   ...combat, compatibilityProfile: 'combat-v2',
-  weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+  weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09 },
   distanceHitChance: {
     defaultMaxHitChance: 90,
     buckets: [
@@ -534,5 +532,150 @@ describe('combat-v2: chance de acerto à distância (#522)', () => {
     run(slow.session, 20_000, 1_000);
     expect(fast.ruleset.monsters[0]?.health).toBe(slow.ruleset.monsters[0]?.health);
     expect(fast.hero.goldDelta).toBe(slow.hero.goldDelta);
+  });
+});
+
+// --- combat-v3: quantos tries cada tiro rende (#686) ------------------------------------------
+//
+// O balde default (90) sem nenhuma distância declarada: todo tiro da `arrow` ERRA (a distância
+// fora de `tiers` é 0 %). A `sure-arrow` declara `hitChance` 100 direto e acerta sempre. A curva
+// da skill de distância é enorme para o nível nunca mudar: os pontos contam os tries, um a um.
+
+const sureArrow = { id: 'sure-arrow', name: 'Sure Arrow', family: 'arrow', attack: 20, price: 1, hitChance: 100 };
+const flatDistanceSkill = skills.map((skill) => (skill.id === 'distance'
+  ? { ...skill, curve: { base: 1_000_000, factor: 1 } }
+  : skill));
+
+function startProfile(
+  profile: 'combat-v2' | 'combat-v3', options: Parameters<typeof start>[0] = {},
+) {
+  const combatProfile = {
+    ...combatV2, compatibilityProfile: profile,
+    distanceHitChance: { defaultMaxHitChance: 90, buckets: [{ maxHitChance: 90, tiers: [] }] },
+  };
+  const loaded = buildContent(raw({
+    combat: [combatProfile], ammunition: [...ammunition, sureArrow], skills: flatDistanceSkill,
+  }));
+  const session = createHuntSession({
+    id: 'session-1', content: loaded, huntId: 'range', difficulty: 'cautious', createdAtMs: 0,
+  });
+  const stats = statsForLevel(1, null, progression as Progression);
+  const hero = new CharacterRuntime({
+    id: 'hero', position: { x: 0, y: 0, z: 7 },
+    health: stats.maxHealth, maxHealth: stats.maxHealth,
+    mana: stats.maxMana, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
+    staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+    gold: options.gold ?? 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+    ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
+    ...(options.ammo === undefined ? {} : { ammo: options.ammo }),
+  });
+  session.enter(hero);
+  return { session, hero, ruleset: session.ruleset as HuntRuleset };
+}
+
+/** Os tries de distância acumulados e os tiros pagos (1 gold cada). */
+function distanceTally(started: ReturnType<typeof startProfile>) {
+  started.session.advanceBy(50);
+  ratAt(started.ruleset, 3);
+  run(started.session, 10_000, 100);
+  return {
+    tries: started.hero.skills.getState()['distance']?.points ?? 0,
+    shots: -started.hero.goldDelta,
+  };
+}
+
+describe('combat-v3: tries de distância pelo tipo de bloqueio (#686)', () => {
+  it('acerto limpo rende 2 tries por tiro — o dobro do v2', () => {
+    const v3 = distanceTally(startProfile('combat-v3', {
+      inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'sure-arrow' },
+    }));
+    expect(v3.shots).toBeGreaterThan(5);
+    expect(v3.tries).toBe(2 * v3.shots);
+
+    const v2 = distanceTally(startProfile('combat-v2', {
+      inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'sure-arrow' },
+    }));
+    expect(v2.tries).toBe(v2.shots);
+  });
+
+  it('tiro errado desde o primeiro: 0 tries — tudo nasce zerado', () => {
+    const v3 = distanceTally(startProfile('combat-v3', {
+      inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'arrow' },
+    }));
+    expect(v3.shots).toBeGreaterThan(5);
+    expect(v3.tries).toBe(0);
+  });
+
+  it('tiro errado depois de um acerto limpo: vale o estado anterior, 2 tries', () => {
+    const started = startProfile('combat-v3', {
+      inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'arrow' },
+    });
+    started.hero.attackPractice = afterAttackBlock(INITIAL_ATTACK_PRACTICE, 'none');
+    const v3 = distanceTally(started);
+    expect(v3.shots).toBeGreaterThan(5);
+    expect(v3.tries).toBe(2 * v3.shots);
+  });
+});
+
+// --- #555: o destino do tiro errado é só do combat-v3 (ADR 0031/0040) -------------------------
+//
+// `missShotTile` consome UM sorteio A MAIS do `session.rng` — e um perfil já publicado
+// (`combat-v1`/`v2`) não pode ganhar rolagem nova sem deixar de ser bit a bit. Os dois testes
+// abaixo MEDEM a sequência de RNG (via `Rng.prototype.next`, que `chance`/`fraction`/`integer`
+// atravessam sempre), em vez de só inspecionar o resultado: é o mesmo padrão do resto do
+// arquivo — "meça, não raciocine" (skill `/spec`, Passo 2).
+
+describe('#555: destino do tiro errado — nunca em combat-v1/v2, só em combat-v3', () => {
+  it('combat-v2: `to` do tiro errado continua fixo no alvo, e NENHUMA rolagem extra é consumida', () => {
+    const nextSpy = vi.spyOn(Rng.prototype, 'next');
+    const started = startProfile('combat-v2', {
+      inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'arrow' },
+    });
+    started.session.advanceBy(50);
+    // A 3 tiles (> 1): é o caso que arriscaria redirecionar, se o v2 ganhasse o sorteio.
+    const rat = ratAt(started.ruleset, 3);
+    const target = { x: rat.position.x, y: rat.position.y, z: rat.position.z ?? 7 };
+    // O rato nasce AO LADO do herói (comentário do topo do arquivo) e o primeiro golpe já sai em
+    // t = 0 — antes de `ratAt` reposicioná-lo no bolsão. Esse tiro fica pendente no buffer da
+    // sessão até o primeiro `drainEvents`; descartá-lo aqui evita contar um tiro fantasma, de
+    // ANTES do reposicionamento, como parte da amostra medida.
+    started.session.drainEvents();
+    nextSpy.mockClear();
+    const events = run(started.session, 20_000, 100);
+    const shots = events.filter((e) => e.kind === 'shot');
+    expect(shots.length).toBeGreaterThan(5);
+    // `arrow` neste conteúdo (balde 90 sem `tiers`) sempre erra — every tiro é um erro — e o
+    // destino continua sendo o do alvo: nunca redirecionado, como antes do #555.
+    expect(shots.every((e) => (
+      e.kind === 'shot' && e.to.x === target.x && e.to.y === target.y && e.to.z === target.z
+    ))).toBe(true);
+    // UMA rolagem de acerto por tiro — a de sempre (#522) — e NENHUMA a mais. Se `missShotTile`
+    // fosse chamado aqui, a sequência de `session.rng` para tudo o que vem depois deste tiro
+    // (dano, loot, IA de monstro) se deslocaria, e o perfil já publicado deixaria de ser bit a
+    // bit (ADR 0031/0040).
+    expect(nextSpy.mock.calls.length).toBe(shots.length);
+  });
+
+  it('combat-v3: o MESMO cenário consome uma rolagem A MAIS por tiro errado, e o destino varia', () => {
+    const nextSpy = vi.spyOn(Rng.prototype, 'next');
+    const started = startProfile('combat-v3', {
+      inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'arrow' },
+    });
+    started.session.advanceBy(50);
+    const rat = ratAt(started.ruleset, 3);
+    const target = { x: rat.position.x, y: rat.position.y, z: rat.position.z ?? 7 };
+    // Ver o comentário equivalente no teste v2 acima: descarta o tiro pendente de ANTES do
+    // reposicionamento, para não contar um tiro fantasma na amostra.
+    started.session.drainEvents();
+    nextSpy.mockClear();
+    const events = run(started.session, 20_000, 100);
+    const shots = events.filter((e) => e.kind === 'shot');
+    expect(shots.length).toBeGreaterThan(5);
+    // Duas rolagens por tiro errado: o acerto (sempre existiu) e o tile do erro (novo, só v3).
+    expect(nextSpy.mock.calls.length).toBe(2 * shots.length);
+    // Ao menos um tiro caiu num tile DIFERENTE do alvo — a apresentação nova aparece de fato.
+    expect(shots.some((e) => (
+      e.kind === 'shot' && (e.to.x !== target.x || e.to.y !== target.y)
+    ))).toBe(true);
   });
 });

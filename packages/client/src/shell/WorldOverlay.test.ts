@@ -33,7 +33,7 @@ const mockCatalogue: Catalogue = {
   items: [],
   ammunition: [],
   vocations: [],
-  vocationLevel: 8,
+  charms: [], vocationLevel: 8,
 };
 
 async function render(element: ReactElement): Promise<string> {
@@ -75,6 +75,15 @@ describe('WorldOverlay (#327, #348, RC-14, SV-12)', () => {
     expect(html).toContain('Cidade · zona protegida');
     expect(html).toContain('a praça não credita nada');
     expect(html).not.toContain('Bênção');
+  });
+
+  it('says Training instead of the city text while training — the plaza credits nothing, the training does (#631)', async () => {
+    const html = await render(createElement(WorldOverlay, { hunting: false, training: true }));
+
+    expect(html).toContain('Treino · zona protegida');
+    expect(html).toContain('cada golpe gasta uma carga');
+    expect(html).not.toContain('a praça não credita nada');
+    expect(html).not.toContain('criaturas no alcance');
   });
 
   it('shows the count derived from world.creatures during a hunt', async () => {
@@ -148,12 +157,14 @@ describe('WorldOverlay (#327, #348, RC-14, SV-12)', () => {
     expect(html).not.toContain('Bênção');
   });
 
-  it('shows the hunt name and difficulty when present in hud and catalogue (#348, SV-12)', async () => {
+  it('shows the hunt name, without a difficulty, when present in hud and catalogue (#348, SV-12, #584)', async () => {
     hud.set((state) => ({ ...state, huntId: 'rat-cellars', difficulty: 'cautious', catalogue: mockCatalogue }));
 
     const html = await render(createElement(WorldOverlay, { hunting: true }));
 
-    expect(html).toContain('Rat Cellars · Cauteloso');
+    // #584 (ADR 0039, fim do pull por dificuldade): a área mostra só o nome da hunt.
+    expect(html).toContain('Rat Cellars');
+    expect(html).not.toContain('Cauteloso');
     expect(html).toContain('world-overlay-area');
     expect(html).toContain('0 criaturas no alcance');
   });

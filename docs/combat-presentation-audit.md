@@ -98,8 +98,10 @@ dele está na biblioteca parcial. **Nenhum tem PNG.**
 | effect | 9 | 159908 | ausente | recovery-knight, recovery-paladin |
 | effect | 10 | 159916 | ausente | lesser-front-sweep, brutal-strike, whirlwind-throw, berserk, front-sweep, physical-strike |
 | effect | 12 | 159935 | ausente | strike, buzz, energy-strike (sorcerer/druid), lightning, strong-energy-strike |
+| effect | 13 | 159951 | ausente | heal, bruise-bane, wound-cleansing, protector, intense-wound-cleansing, light/intense/divine healing, salvation, magic-patch, magic-shield, ultimate-healing, mass-healing, mana-potion, **heal-party** |
+| effect | 14 | 159973 | ausente | haste (4 vocações), blood-rage, charge, sharpshooter, swift-foot, health-potion, **protect-party, enchant-party, train-party** |
 | effect | 13 | 159951 | ausente | heal, bruise-bane, wound-cleansing, protector, intense-wound-cleansing, light/intense/divine healing, salvation, magic-patch, magic-shield, ultimate-healing, mass-healing, mana-potion |
-| effect | 14 | 159973 | ausente | haste (4 vocações), blood-rage, charge, sharpshooter, swift-foot, health-potion |
+| effect | 14 | 159973 | ausente | haste (4 vocações), blood-rage, charge, sharpshooter, swift-foot, health-potion, **summon-creature (sorcerer/druid, #598 — placeholder: o Canary usa `CONST_ME_MAGIC_BLUE`, não conferido contra este id)** |
 | effect | 16 | 160913 | ausente | apprentices-strike, flame-strike, strong-flame-strike (#219: chama) |
 | effect | 17 | 160017 | ausente | terra-strike, mud-attack, strong-terra-strike, death-strike, great-death-beam (#219: respingo verde) |
 | effect | 34 | 160932 | ausente | groundshaker |
@@ -152,6 +154,17 @@ efeito de gelo em área, coerente com a runa de gelo. Como o `sim` desenha um ef
 forma (`circle` raio 3), a QA é **por tile**, não de um efeito só: a pergunta é se 160962 repete
 por tile sem artefato. Sem PNG não dá para responder, e o id fica **mantido** com o bloqueio
 registrado em [`product/combat.md`](product/combat.md) e no `_open` da runa.
+
+### Magias utilitárias (#623) — ids das constantes do Canary, sem PNG para conferir
+
+Light, Great Light, Ultimate Light, Find Person e Find Fiend usam o **effect 13**
+(`CONST_ME_MAGIC_BLUE`, o mesmo de `light-healing`); Levitate e Magic Rope o **effect 11**
+(`CONST_ME_TELEPORT`); Food o **effect 15** (`CONST_ME_MAGIC_GREEN`). São os ids das constantes que
+o script de cada magia manda (`data/scripts/spells/support/*.lua`), na numeração de
+`MagicEffectClasses` que o resto da tabela já usa — não foram conferidos contra um PNG (a biblioteca
+é parcial, sem a folha de efeito), e ficam **mantidos** com a incerteza registrada, como os
+divinos. O efeito de POFF que o Canary manda na recusa (`CONST_ME_POFF`) e o do início do Magic Rope
+não têm desenho aqui: recusa não emite `spell-cast`.
 
 ### Abilities de monstro (CMB-06) — nenhuma chave usada nesta versão
 

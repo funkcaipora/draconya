@@ -11,7 +11,7 @@
 import {
   clearTransients, world, type Creature, type Point,
 } from '../../state/world.js';
-import { mountViewport, type ViewportHandle } from '../viewport.js';
+import { mountViewport, type ViewportHandle, type ViewportOptions } from '../viewport.js';
 import type { Scene, TileStack } from '../scene.js';
 import {
   lastApplication, type Application, type Container, type Graphics, type GraphicsOp, type Sprite,
@@ -67,6 +67,8 @@ export interface MountOptions {
   readonly height?: number;
   /** O relógio; um `testClock()` novo se ausente. Passe o MESMO à `SyntheticArt`. */
   readonly clock?: TestClock;
+  /** Opções a mais do viewport — câmera, fonte de criaturas, animação (#661, #665, #666). */
+  readonly viewport?: Pick<ViewportOptions, 'camera' | 'creatures' | 'animateObjects' | 'random'>;
 }
 
 /** A raiz dos andares e os dois containers globais de HOJE, na ordem de `stage.children` (ADR 0034). */
@@ -133,7 +135,7 @@ export async function mountTestViewport(options: MountOptions = {}): Promise<Tes
     clientWidth: width, clientHeight: height, appendChild(): void {},
   } as unknown as HTMLElement;
 
-  const handle = await mountViewport(parent, { pack: art, now: clock.now });
+  const handle = await mountViewport(parent, { pack: art, now: clock.now, ...options.viewport });
   const app = lastApplication();
   if (app === null) {
     throw new Error(
@@ -289,5 +291,6 @@ export function resetWorld(): void {
   world.instanceId = null;
   world.mapId = null;
   world.ambience = 'surface';
+  world.selfLight = null;
   clearTransients();
 }

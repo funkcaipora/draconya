@@ -151,6 +151,23 @@ export class Schedule {
     return before - kept.length;
   }
 
+  /**
+   * Quando vence o evento `kind`/`subject` ainda na fila, ou `null` se não há nenhum (nunca foi
+   * agendado, já venceu ou foi cancelado). Havendo mais de um, o que vence primeiro.
+   *
+   * Varredura linear do heap: roda só em evento raro (o desequip de um anel com prazo, #689),
+   * nunca por tick. É o que deixa a fila como verdade única do prazo — a instância não guarda
+   * `dueAtMs` nenhum.
+   */
+  dueAtOf(kind: string, subject: string): number | null {
+    let dueAt: number | null = null;
+    for (const event of this.#heap) {
+      if (event.kind !== kind || event.subject !== subject) continue;
+      if (dueAt === null || event.dueAtMs < dueAt) dueAt = event.dueAtMs;
+    }
+    return dueAt;
+  }
+
   /** Remove tudo de um subject, seja qual for o `kind`. */
   cancelSubject(subject: string): number {
     const before = this.#heap.length;

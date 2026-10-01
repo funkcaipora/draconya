@@ -105,7 +105,7 @@ cada uma das 42 mil aparências. O leitor dirigido pula a submensagem lendo um v
 `avoid`, `no_movement_animation`, `take`, `hang`, `dont_hide`, `hook`, `shift`, `height`,
 `lying_object`, `animate_always`, `fullbank` — booleanos e três números por aparência, com os
 números de campo
-conferidos contra o pacote 1332 real (`appearances.pack.test.ts`). Pulados: o resto das flags
+conferidos contra o pacote 1533 real (`appearances.pack.test.ts`). Pulados: o resto das flags
 (mercado, NPC, cyclopedia, vocação, luz, minimapa), `name`, `description`,
 `bounding_box_per_direction`, `is_opaque` — e todo campo que uma versão futura trouxer, **pelo
 wire type**. É isso, e não a lista de campos conhecidos, que mantém o leitor válido quando o
@@ -252,10 +252,19 @@ pnpm tsx scripts/make-sheet-fixture.ts
   protocolo carrega em `creature-appear` e em cada criatura do `session-state`; o store guarda
   o campo só quando ele veio, tipado pelo PROTOCOLO e não por `assets/outfit.ts` — o store não
   depende da camada de arte. `DEFAULT_OUTFIT_COLORS` (`world/outfit-colors.ts`) é a RESERVA
-  para quem chegou sem: um nó `game` anterior num deploy em rolagem, um personagem que nunca
-  escolheu, ou monstro, que nunca traz. Reserva e não "sem pintar" porque um template que sobra
-  sem multiplicar é um boneco de cores primárias na tela; e para monstro passar cores é
-  inofensivo, o pacote devolve a base como está. O que era de antes continua: câmera do tamanho
+  para quem chegou sem: um nó `game` anterior num deploy em rolagem, ou um personagem que nunca
+  escolheu — o monstro traz as dele desde o #620. Reserva e não "sem pintar" porque um template
+  que sobra sem multiplicar é um boneco de cores primárias na tela; e para um monstro de uma
+  camada passar cores é inofensivo, o pacote devolve a base como está. **A apresentação do
+  monstro (#620)** — `Creature.addons`/`race`/`light`/`voices`, todos opcionais e todos só
+  desenho: os **addons** são linhas do padrão do outfit compostas por cima do base no
+  `OutfitComposer` (`compositeOver`, `AssetPack.outfit(…, addons)`); a **luz** é um clarão aditivo
+  (`world/creature-light.ts`, no `effects`); a **fala** é sorteada AQUI, por um relógio por monstro
+  (`world/speech.ts`), com o `random` do cliente e nunca o `Rng` da sessão — e que só anda com o
+  monstro ACORDADO (o herói no quadrado de 11 tiles dele) e só aparece a quem a fala CHEGA (`say` a
+  8 × 6 no mesmo andar, `yell` a 18 × 14), os dois portões do Canary; a **raça** é
+  fotografada no número flutuante quando o golpe chega e escolhe a cor do físico
+  (`floatingTextColor`). O que era de antes continua: câmera do tamanho
   do canvas, camadas, ordem de desenho por `y`, pool e interpolação, e três janelas de câmera em
   `camera.ts` — visível (0), render (`RENDER_OVERSCAN_TILES` = 3, o que o viewport pinta) e
   prefetch (`PREFETCH_TILES` = 5, o que o viewport aquece) — porque a textura de uma coluna
@@ -359,6 +368,22 @@ pnpm tsx scripts/make-sheet-fixture.ts
   256 px em seis níveis (`world/minimap.ts` é o contrato e a conta de coordenadas; `pnpm
   map:minimap` pinta a partir da cor de automapa, `AppearanceFlags.automapColor`, campo 30). O
   índice diz quais blocos existem, e bloco que não existe nunca é pedido.
+  **Lugares (#664)**: `shell/WorldPlacesLayer.tsx` desenha casas, zonas e marcadores de escada num
+  canvas 2D POR CIMA do Pixi, no andar da câmera, com a projeção de `world/camera.ts`. Lê
+  `WorldScene.metaAt` (flags e casa do setor que o pintor já trouxe — nunca pede setor) e o índice
+  de `world/world-places.ts` (`links.json` e `places.json`). Clique sem arrasto numa ligação leva
+  ao destino. **Não confundir com `shell/WorldOverlay.tsx`**, que é o overlay de área do HUD do jogo.
+  **Criaturas (#665)**: `ViewportOptions.creatures` troca a fonte das criaturas desenhadas — o
+  explorador entrega os NPCs e spawns do Canary perto da câmera (`world/world-creatures.ts`,
+  blocos de 256 tiles buscados sob demanda), parados e com vida cheia, e **nunca escreve no
+  `world` do jogo** (ADR 0007). Sem a opção, o viewport lê `world.creatures`, como sempre.
+  **Luz e animação (#666)**: a luz é outra camada 2D (`shell/WorldLightLayer.tsx`) — escurece o
+  andar (`darknessFor`: subsolo sempre, superfície pela hora do dia) e abre um círculo com a cor de
+  cada fonte (`world/world-lights.ts`, blocos de `pnpm map:lights`). **A animação de objeto é do
+  viewport e é opcional**: `ViewportOptions.animateObjects` faz o pintor pedir a fase do relógio
+  global (`loopPhaseAt`, `AssetPack.objectPhases`) e põe o compasso (`OBJECT_ANIMATION_TICK_MS`)
+  na chave de repintura. O jogo não liga a opção — pagar a repintura a 10 Hz é decisão de quem
+  anima, e a fase 0 guarda a chave de textura de antes.
 - **A criatura pertence ao WALKING TILE, não ao tile arredondado** (`world/walking-tile.ts`,
   puro; #386). Durante o passo, a ordem dela na `spatialScene` é a do tile que contém o canto
   inferior direito do corpo de 32×32, deslocado pelo `shift` do outfit
@@ -431,6 +456,21 @@ pnpm tsx scripts/make-sheet-fixture.ts
   volta, e falha de qualquer tipo cai no default (todas as dez visíveis), nunca num painel
   vazio. A RC-06 (#319) substituiu o painel fixo pelo `CharacterModal` tabulado, aberto por
   `open.character` — o antigo `CharacterPanel.tsx` saiu do repositório no mesmo commit.
+
+## O Treino (#631, ADR 0059)
+
+O pill "Treino" (ao lado de "Escolher caçada", só na Cidade e só com `catalogue.training`) abre o
+`TrainingModal`: o banco de offline training, o livro (um select com as skills do CONTEÚDO), as
+exercise weapons carregadas com as cargas RESTANTES e a loja mínima. **Tudo é intenção**
+(`training-view.ts`: `enterTrainingMessage`/`buyItemMessage`/`offlineSkillMessage` dizem só QUAL id),
+e o que se mostra vem do `training-state` (o overlay da instância não viaja em `inventory`, então as
+cargas só chegam por ali) e do catálogo fixado na sessão — nenhum nome de skill nem preço em código
+(invariante 6/7). `hud.training` é `null` até o servidor dizer, e SUBSTITUI a cada mensagem: cada
+golpe do Treino reenvia as cargas. **`isHunting('training')` é `false`**: o Treino é uma sessão
+privada que não caça, então não tem analisador, "Sair da caçada" nem party — a casca mostra
+`TrainingStatus` (a arma, a skill, as cargas e "Parar treino", o `leave-hunt` de sempre) no lugar das
+pills de caçada. Um novo tipo de sessão que também não caça entra na mesma função, e não num `!==`
+espalhado.
 
 ## Como testar
 
@@ -581,6 +621,19 @@ suba o `pnpm dev` e olhe cada cenário na tela do mundo:
   sem nada acontecer. Sem marcos no
   catálogo, "—" e não "0/0" — a regra do "—" de sempre. O `bestiary-milestone` do extrato só
   escreve o "+n %" quando o catálogo trouxe o percentual (`EventNames.percentPerMilestone`).
+- **O Bosstiary é a aba ao lado do Bestiary no Cyclopedia, e o cliente NÃO conta abate nem soma
+  ponto** (`shell/CyclopediaModal.tsx` + `shell/bosstiary-progress.ts`, #629). O registro chega
+  INTEIRO em `bosstiary` (`{ kills, points }`, `kills` chaveado pelo `raceId` do boss em TEXTO) —
+  no attach e a cada abate de boss — e SUBSTITUI (`hud.bosstiary`, `null` até chegar, pela regra do
+  Bestiário: zero afirmaria "nunca abateu um boss"); a tabela de níveis por raridade e a raridade e
+  o `raceId` de cada boss vêm no `catalogue` (`bosstiary`, `monsters[].bosstiary`). O que a tela
+  calcula é apresentação: nível (`>=`, como o `getBossCurrentLevel`) e "quanto falta"; os PONTOS vêm
+  do servidor. **A lista tem UM boss por `raceId`** (`bossesOf`): variantes do mesmo boss
+  compartilham o contador, e listá-las todas mostraria o mesmo número em várias linhas. **Boss não
+  aparece na aba Bestiary nem como alvo de Charm** — o cliente filtra `monsters[].bosstiary`, como o
+  Canary tira boss do Bestiário. Sem boss no catálogo a aba diz "Este servidor não tem Bosstiary."
+  O nível fechado chega como o evento notável `bosstiary-level` (`shell/event-text.ts`, detalhe
+  `monsterId/n` em solo e `personagem/monsterId/n` em party — a linha lê os dois últimos campos).
 - **A entrada (`account/`) é HTTP puro, e vem ANTES do socket** (FUN-97). Escolher personagem
   acontece quando ainda não existe sessão de jogo; o socket só abre depois, com o ticket que a
   escolha rende. `credentials: 'include'` em toda chamada — a sessão é cookie httpOnly (ADR 0012),
@@ -737,4 +790,28 @@ suba o `pnpm dev` e olhe cada cenário na tela do mundo:
   stamina, magic level, corpo a corpo, distância) seguem a preferência de `localStorage` acima;
   `magic`, `melee` e `distance` exibem a barra de progresso sob o valor, `magic` ganha o tom
   `vital-mp`, e `speed` não tem barra.
+- **A luz do jogador (#623) mora em `world.selfLight`, sem assinatura, e o pintor a lê a cada
+  quadro** (`world/light.ts`, `viewport.ts#paintTerrain`). O servidor manda raio, cor e prazo total
+  no `active-conditions`; o decaimento (`ceil(level × restante / total)`, o `ConditionLight` do
+  Canary) é conta LOCAL contra `receivedAtMs` — nada é mandado por tique. Só clareia o `cavern`; na
+  superfície não muda nada. É apresentação: o cliente não decide que há luz (invariante 4), e
+  `enterInstance` a zera porque o `active-conditions` a repõe logo depois em toda reanexação.
+
+## Aprender magia é tela de serviço, e a barra marca o que falta aprender (#624, ADR 0058)
+
+A seção **Magias** do `CharacterModal` lista as magias da vocação (`catalogue.bot.spells`, filtradas
+por `vocationId`) com preço (`learnPrice`), level e o estado de cada uma; o botão manda
+`learn-spell { spellId }` — só a INTENÇÃO (invariante 4). A regra que decide o estado de cada linha
+mora em `shell/spell-shop.ts` (PURO): é o ESPELHO de `LearnedSpells#check` do `sim`, refeito aqui
+porque o cliente não importa `sim`, e existe só para a tela não oferecer o que o servidor vai
+recusar — se as duas divergirem, a compra é recusada com o motivo, nunca o contrário (a mesma razão
+de `blessing-cost.ts`). `learnPrice` ausente é "Indisponível"; `0` é "Grátis".
+
+`hud.learnedSpells` é `readonly string[] | null` (`learned-spells`, S2C 47, SUBSTITUI o registro
+inteiro). **`null` é "o servidor ainda não disse", e NUNCA marca slot nenhum**: `isSpellLearned`
+devolve `true` sem o registro, senão o primeiro segundo de toda conexão (ou um nó anterior à #624)
+mostraria a barra inteira como "não aprendida". `slotView` recebe o registro e devolve
+`unlearned` — só para MAGIA; poção e runa não exigem aprendizado —, e a `ActionBar` põe a classe
+`action-slot-unlearned` (apagado, borda tracejada) e "não aprendida" no tooltip. O slot continua na
+barra e continua disparável: quem recusa é o servidor (`not-learned` no `slot-result`).
 

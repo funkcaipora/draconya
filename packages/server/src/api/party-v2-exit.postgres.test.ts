@@ -32,7 +32,7 @@ import { decodeS2C, encodeC2S } from '@draconya/protocol';
 import type { S2CMessage } from '@draconya/protocol';
 import { buildContent, placeholderAppearances } from '@draconya/content';
 import type { RawContent } from '@draconya/content';
-import { totalXpForLevel } from '@draconya/sim';
+import { DEFAULT_DIFFICULTY_NAME, totalXpForLevel } from '@draconya/sim';
 import { and, eq } from 'drizzle-orm';
 import { AuthService } from '../auth/service.js';
 import { RedisAuthSessionStore } from '../auth/sessions.js';
@@ -101,7 +101,12 @@ const LOOP = {
     for (let y = hiY - 1; y > lo; y--) tiles.push({ x: lo, y, z: 7 });
     return tiles;
   })(),
-  spawnPoints: [{ routeIndex: 8, radius: 2 }, { routeIndex: 24, radius: 2 }],
+  // Fim do pull por dificuldade (#583, ADR 0039): cada ponto declara o próprio monstro e o
+  // próprio `respawnDelayMs` — não há mais dificuldade nenhuma para cair como fallback.
+  spawnPoints: [
+    { routeIndex: 8, radius: 2, monsterId: 'rat', respawnDelayMs: 1_000 },
+    { routeIndex: 24, radius: 2, monsterId: 'rat', respawnDelayMs: 1_000 },
+  ],
 };
 const raw: RawContent = {
   ...base,
@@ -342,10 +347,7 @@ beforeAll(async () => {
       maxMembers: content.party.maxMembers,
       contentVersion: content.version,
       vocations: [...content.vocations.keys()],
-      difficultiesOf: (huntId) => {
-        const hunt = content.hunts.get(huntId);
-        return hunt === undefined ? null : Object.keys(hunt.difficulties);
-      },
+      difficultiesOf: (huntId) => (content.hunts.has(huntId) ? [DEFAULT_DIFFICULTY_NAME] : null),
     },
   });
   baseUrl = await api.listen({ port: 0, host: '127.0.0.1' });
@@ -403,6 +405,9 @@ describe.runIf(ready)('critério de saída do M20 (§5, ADR 0035)', () => {
       const premium = i === 0; // será o líder
       await db.update(characters).set({
         level: 20, xp: totalXpForLevel(20, content.progression), vocation, gold: 100,
+        // Aprendeu a única magia do conteúdo (#624, ADR 0058): a cura da party é o assunto, e o
+        // portão do aprendizado recusaria o cast do bot de quem não a comprou.
+        learnedSpells: { spellIds: ['heal'], version: 1 },
         ...(premium ? { premiumUntil: new Date(Date.now() + 86_400_000) } : {}),
       }).where(eq(characters.id, characterId));
       members.push({ cookie, accountId, characterId, vocation, name, premium });
@@ -416,7 +421,7 @@ describe.runIf(ready)('critério de saída do M20 (§5, ADR 0035)', () => {
     // oito caem no teto de `maxMembers` (8) do conteúdo (ADR 0035 D12).
     const created = await (await post(leader, '/api/party')).json() as { id: string };
     expect((await post(leader, `/api/party/${created.id}/configure`, {
-      huntId: 'arena', difficulty: 'cautious', minLevel: 10,
+      huntId: 'arena', difficulty: DEFAULT_DIFFICULTY_NAME, minLevel: 10,
       vocationTargets: { knight: 2, druid: 2, sorcerer: 2, paladin: 2 },
       shareCosts: true, splitLoot: true,
     })).status).toBe(200);
@@ -562,6 +567,14 @@ describe.runIf(ready)('critério de saída do M20 (§5, ADR 0035)', () => {
     }
 
     // --- 10. o líder (Premium) sai; o mais antigo (Free) assume e o limite cai (D2, D8) ---
+    // A hunt do teste luta sem parar, e o `leave-hunt` em combate espera 60 s sem golpe (#802,
+    // `CONDITION_INFIGHT` do Canary): o assunto deste teste é o extrato, não a trava — ela tem
+    // teste próprio em `game/leave-hunt.test.ts`. Sem golpe recente a saída conclui na hora.
+    const [gameNode] = [...games];
+    const leaving = gameNode?.host?.sessionFor(leader.characterId)?.participants
+      .find((participant) => participant.id === leader.characterId);
+    expect(leaving).toBeDefined();
+    if (leaving !== undefined) leaving.lastCombatActionAtMs = null;
     inbox.send({ type: 'leave-hunt' });
     const ended = await inbox.waitForNext('session-ended');
     expect(ended.reason).toBe('manual-exit');

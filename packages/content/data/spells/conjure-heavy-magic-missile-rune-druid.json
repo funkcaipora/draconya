@@ -1,0 +1,20 @@
+{
+  "id": "conjure-heavy-magic-missile-rune-druid",
+  "name": "Heavy Magic Missile Rune",
+  "description": "Conjura cargas da Heavy Magic Missile Rune, consumindo uma runa em branco.",
+  "vocationId": "druid",
+  "minLevel": 25,
+  "learnPrice": 1500,
+  "manaCost": 350,
+  "soulCost": 2,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "conjure",
+    "supplyId": "heavy-magic-missile-rune",
+    "charges": 10,
+    "blankPrice": 10
+  },
+  "_open": "Números do Canary (#594, ADR 0044): `data/scripts/spells/conjuring/heavy_magic_missile_rune.lua` — `creature:conjureItem(3147, 3198, 10)`, `spell:level(25)`, `spell:mana(350)`, `spell:soul(2)`. Duas vocações no Canary (`druid`/`sorcerer`, cada uma com a promovida) — `conjure-heavy-magic-missile-rune-sorcerer.json` é a outra metade, mesmo split de `conjure-explosion-rune-*`. `blankPrice` 10, como em toda runa."
+}

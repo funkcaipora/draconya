@@ -607,6 +607,11 @@ body {
 .action-slot-auto {
   animation: action-slot-auto-pulse 2s ease-in-out infinite;
 }
+/* Magia ainda NÃO aprendida (#624, ADR 0058 d.5): o slot fica na barra — nada é escondido (ADR
+   0032 d.5) —, apagado e com a borda tracejada; o servidor recusa o disparo de qualquer jeito. */
+.action-slot-unlearned {
+  opacity: .5; border-style: dashed; filter: grayscale(.6);
+}
 
 /* ---- O modal de configuração de slot (#437, AB-11, régua da imagem #435, ADR 0033) ---------- */
 .action-config-top {
@@ -719,6 +724,29 @@ body {
 }
 .automation-row-off .automation-row-text { color: var(--text-faint); text-decoration: line-through; }
 
+/* ---- Bloco Loot do painel AUTOMAÇÕES: busca + marcados no topo (#722, ADR 0048 d.2/d.4; #764).
+   Antes, o bloco não tinha CSS nenhum — uma `<ul>` de checkbox nativo, que é o que o QA da #764
+   achou ilegível. Segue o mesmo grid de `.cyclopedia-modal-item-row`, inclusive os 34px do
+   sprite — encolher o wrapper abaixo do `ITEM_SPRITE_SIZE` (32px) recortaria o quadro. */
+.automation-loot { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; border-top: 1px solid var(--ash-5); padding-top: 6px; }
+.automation-loot-search { margin: 0; }
+.automation-loot-items {
+  list-style: none; margin: 0; padding: 0; display: grid; gap: 4px;
+  max-height: 220px; overflow: auto; scrollbar-width: thin;
+}
+.automation-loot-row {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr) auto auto; gap: 6px;
+  align-items: center; padding: 5px 6px; border: 1px solid var(--ash-5); border-radius: 3px;
+  background: var(--surface-slot);
+}
+.automation-loot-row-sprite { position: relative; width: 34px; height: 34px; }
+.automation-loot-row-name {
+  min-width: 0; font: 8px var(--font-mono); color: var(--parchment-1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.automation-loot-empty { margin: 2px 0; }
+.automation-loot-hint { font: 7px var(--font-mono); color: var(--text-faint); margin: 0; }
+
 /* ---- O catálogo de modelos (#427, AB-12, régua kit/35) ------------------------------------- */
 .automation-catalogue { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .automation-option {
@@ -781,6 +809,11 @@ body {
   background: linear-gradient(180deg, #3d1315, #24090b);
   color: var(--blood-7);
 }
+/* A saída PENDENTE (#802) ocupa o lugar da pill de saída — mesmo botão partido, mesmo canto —,
+   então reusa `.hunt-pill-danger`. Na saída manual é um botão (o clique cancela); na de uma regra
+   do bot é só um aviso, sem cursor de clique. */
+.hunt-pill-pending { white-space: nowrap; }
+div.hunt-pill-pending { cursor: default; }
 /* A pill "ⓘ Detalhes da caçada" reusa `.hunt-pill`; só o selo circular "i" é novo
    (Hud.jsx:140, o span antes do texto). */
 .hunt-pill-icon {
@@ -831,14 +864,13 @@ body {
 }
 
 /* ---- O modal "Escolha uma caçada" (#259, DS-16) ------------------------------------------ */
-/* Duas colunas desde a #503: a formação embutida saiu (PartyPanel aposentado) — a party tem
-   superfície própria em PartyModal.tsx, e daqui saem só as duas pontes ("Encontrar Party" e
-   "Iniciar com o time"). */
-.hunts-modal-body {
-  display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 12px; height: 430px;
-}
-/* Busca, contador e lista compartilham a coluna de 230 px; a lista ocupa só o espaço restante. */
-.hunts-modal-list-col { display: flex; flex-direction: column; min-height: 0; }
+/* UMA coluna desde o #584 (fim do pull por dificuldade): a coluna de detalhe (tamanhos de
+   pull) saiu — a composição de monstros já está na linha da lista e em HuntDetailsModal.tsx,
+   aberto à parte. A formação embutida já tinha saído antes (#503, PartyPanel aposentado): a
+   party tem superfície própria em PartyModal.tsx, e daqui saem só as duas pontes
+   ("Encontrar Party" e "Iniciar com o time"). */
+.hunts-modal-body { display: flex; flex-direction: column; height: 430px; }
+.hunts-modal-list-col { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
 /* `Input` traz 18 px por padrão; nesta lista densa a distância do kit é 6 px. */
 .hunts-modal-search { margin-bottom: 6px; }
 .hunts-modal-list { list-style: none; margin: 0; display: flex; flex-direction: column; gap: 5px;
@@ -851,18 +883,43 @@ body {
 .hunts-modal-row-selected button { border-color: var(--gold-4); background: var(--surface-selected); }
 .hunts-modal-row-text strong { display: block; font: 600 10px var(--font-display); color: var(--parchment-1); }
 .hunts-modal-row-selected .hunts-modal-row-text strong { color: var(--gold-5); }
-/* Os dois metadados da linha ("level N+" e "M tamanhos de pull · K drops de loot") são spans
+/* Os dois metadados da linha ("level N+" e "criaturas · K drops de loot") são spans
    inline no JSX e saíam colados (#290): cada um vira bloco, abaixo do nome. */
 .hunts-modal-row-text > span { display: block; }
 /* `.item-sprite` (herdada de `ItemSprite`/`OutfitSprite`) é `position: absolute; inset: 1px`
    sobre um ancestral quadrado — o mesmo contrato que `.ui-slot` cumpre para o inventário; este
    span é esse ancestral aqui, do lado da lista de hunts (42 px, a largura da coluna do grid). */
 .hunts-modal-sprite { position: relative; width: 42px; height: 42px; }
-.hunts-modal-detail { min-width: 0; overflow: auto; }
-.hunts-modal-detail h2 { margin: 0 0 8px; font: 600 15px var(--font-display); color: var(--gold-5); }
-.hunts-modal-pulls { display: flex; gap: 6px; flex-wrap: wrap; }
 .hunts-modal-empty { color: var(--text-faint); margin: 8px 0; font: 11px var(--font-mono); }
 .hunts-modal-footer-note { font: 7px var(--font-mono); color: var(--text-faint); }
+
+/* ---- O Treino (#631, M44-13, ADR 0059) --------------------------------------------------- */
+/* O pill "Treino" na Cidade e o estado do Treino em curso reusam `.hunt-pill`; só o botão de
+   parar (`.hunt-pill-danger` é a METADE ESQUERDA de um botão partido) fecha os 4 cantos aqui, sem
+   o chevron de regras ao lado, e o estado não é clicável. */
+.training-stop { border-radius: 3px; }
+.training-status { cursor: default; white-space: nowrap; }
+/* O modal: três seções empilhadas (livro, armas carregadas, loja) numa coluna que rola. */
+.training-modal-body { display: flex; flex-direction: column; gap: 14px; height: 430px; overflow: auto;
+  padding: 0 2px 0 0; }
+.training-section { display: flex; flex-direction: column; gap: 6px; }
+.training-note { margin: 0; font: 8px var(--font-mono); color: var(--text-muted); line-height: 1.6; }
+.training-note-faint { color: var(--text-faint); }
+.training-bank-bar { height: 6px; border: 1px solid var(--ash-5); border-radius: 3px;
+  background: var(--ash-1); overflow: hidden; }
+.training-bank-fill { display: block; height: 100%; background: var(--gold-4); }
+.training-book { display: flex; align-items: center; gap: 8px; font: 700 8px var(--font-display);
+  letter-spacing: .1em; text-transform: uppercase; color: var(--parchment-2); }
+.training-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.training-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 8px;
+  align-items: center; padding: 6px; border: 1px solid var(--ash-5); border-radius: 3px;
+  background: var(--ash-1); }
+.training-row-text strong { display: block; font: 600 10px var(--font-display); color: var(--parchment-1); }
+.training-row-text > span { display: block; }
+.training-row-text .entry-meta { font: 8px var(--font-mono); color: var(--text-muted); }
+/* `.item-sprite` é `position: absolute; inset: 1px` sobre um ancestral quadrado (a mesma nota de
+   `.hunts-modal-sprite`): este span é esse ancestral, do lado da lista de armas. */
+.training-sprite { position: relative; width: 42px; height: 42px; }
 
 /* ---- A pill permanente "Party" (#503, DT-03 de #499) ------------------------------------- */
 /* Irmã de `.hunt-actions` (D6): sobre o mundo, sempre visível na Cidade e na hunt — mas à
@@ -918,17 +975,19 @@ body {
   letter-spacing: .04em; text-transform: uppercase;
 }
 .character-modal-vitals { display: flex; flex-direction: column; gap: 6px; }
+/* Promoção (#566, ADR 0042 decisão 1): mesmo botão gold primário do `.entry-create-submit`. */
+.character-modal-promote {
+  margin-top: 6px;
+  background: var(--gold-4); border: none; border-radius: 3px; padding: 8px 16px;
+  font: 600 11px var(--font-display); letter-spacing: 0.08em; color: var(--ash-0); cursor: pointer;
+}
+.character-modal-promote:disabled { opacity: 0.5; cursor: default; }
 
 /* ---- HuntDetailsModal: monstros, loot e descrição (#349, SV-13) ------------------------- */
 .hunt-details-modal-grid { display: grid; grid-template-columns: 250px 1fr; gap: 14px; }
 .hunt-details-col-left { min-width: 0; }
 .hunt-details-col-right { min-width: 0; }
 .hunt-details-kicker { display: block; margin: 10px 0 4px; }
-.hunt-details-pulls {
-  display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 10px;
-  font: 8px var(--font-mono); color: var(--text-muted);
-}
-.hunt-details-pull { white-space: nowrap; }
 .hunt-details-monsters { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; }
 .hunt-details-monster {
   display: flex; flex-direction: column; align-items: center; width: 60px; gap: 2px;
@@ -1017,6 +1076,15 @@ body {
 }
 .cyclopedia-modal-card-count { font: 500 8px var(--font-mono); color: var(--parchment-2); }
 .cyclopedia-modal-count-done { color: var(--ok); }
+/* A ficha do Canary (#601): estágio, estrelas de dificuldade e ocorrência — à parte do marco de
+   XP acima (ADR 0053 d.2, os dois vocabulários de progresso coexistem). */
+.cyclopedia-modal-card-bestiary, .cyclopedia-modal-row-bestiary {
+  display: flex; align-items: center; gap: 4px; font: 500 7px var(--font-mono);
+  color: var(--parchment-2);
+}
+.cyclopedia-modal-card-difficulty { color: var(--gold-4); letter-spacing: -1px; }
+.cyclopedia-modal-card-stage { color: var(--text-faint); }
+.cyclopedia-modal-card-occurrence { color: var(--text-faint); }
 .cyclopedia-modal-card-track {
   display: block; width: 100%; height: 4px; background: var(--ash-3);
   border-radius: 1px; overflow: hidden;
@@ -1026,7 +1094,7 @@ body {
 }
 .cyclopedia-modal-fill-done { background: var(--ok); }
 .cyclopedia-modal-row {
-  display: grid; grid-template-columns: 22px minmax(0, 1fr) 120px 90px; align-items: center;
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) 100px 120px 90px; align-items: center;
   gap: 10px; height: 30px; padding: 0 8px; border: 1px solid var(--ash-5); border-radius: 3px;
   background: var(--ash-1); font: 8.5px var(--font-mono); color: var(--parchment-1);
 }
@@ -1059,6 +1127,27 @@ body {
 .cyclopedia-modal-item-category { font: 7.5px var(--font-mono); color: var(--gold-4); }
 .cyclopedia-modal-item-stats { display: flex; gap: 6px; align-items: center; font: 8px var(--font-mono); }
 .cyclopedia-modal-item-weight { color: var(--text-muted); min-width: 54px; text-align: right; }
+
+/* ---- Cyclopedia: aba Bosstiary (#629, ADR 0052) -------------------------------------------
+   A mesma linha da lista do Bestiário, com a raridade e o nível no lugar da ficha do Canary — a
+   coluna do meio precisa de mais espaço (raridade + "Nível 3/3" lado a lado). */
+.cyclopedia-modal-boss-row { grid-template-columns: 22px minmax(0, 1fr) 150px 90px 80px; }
+.cyclopedia-modal-boss-list { max-height: 424px; }
+
+/* ---- Cyclopedia: aba Charms (M39-02, #602, ADR 0052/0053) --------------------------------- */
+.cyclopedia-modal-charm-list {
+  display: flex; flex-direction: column; gap: 6px; overflow: auto; min-height: 0;
+  max-height: 424px; scrollbar-width: thin;
+}
+.cyclopedia-modal-charm-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 7px 10px;
+  border: 1px solid var(--ash-5); border-radius: 4px; background: var(--ash-1);
+  font: 8.5px var(--font-mono); color: var(--parchment-1);
+}
+.cyclopedia-modal-charm-name { display: flex; align-items: center; gap: 6px; min-width: 160px; }
+.cyclopedia-modal-charm-tier { color: var(--text-muted); min-width: 48px; }
+.cyclopedia-modal-charm-target { color: var(--parchment-2); flex: 1 1 auto; min-width: 120px; }
+.cyclopedia-modal-charm-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
 /* O painel do bot (FUN-89; fixo à esquerda desde #162, casca do design system desde #255). */
 .bot-category-head { display: flex; align-items: baseline; gap: 6px; }
@@ -1331,6 +1420,24 @@ body {
   list-style: none; margin: 6px 0 0; padding: 0;
   display: grid; grid-template-columns: repeat(6, 26px); gap: 3px; justify-content: center;
 }
+/* A seção Suprimentos (#726, ADR 0049 decisão 4): o estoque abstrato — poção/runa/munição do
+   loot — sob a mochila. Sem sprite próprio hoje: `catalogue.bot.supplies` não carrega
+   `appearanceId` (só item de verdade tem, FUN-94), então a linha é nome + contagem, como uma
+   linha do analisador (`.ui-stat-row`), não um `Slot`. */
+.supply-section { margin-top: 8px; border-top: 1px solid var(--ash-5); padding-top: 6px; }
+.supply-section-title {
+  margin: 0 0 4px; font: 9px var(--font-mono); letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-faint);
+}
+.supply-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.supply-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding: 4px 6px; border-radius: 2px; cursor: pointer; background: var(--ash-2);
+  font: 10px var(--font-body); color: var(--text-primary);
+}
+.supply-row:hover { background: var(--ash-3); }
+.supply-row-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.supply-row-count { color: var(--gold-4); font: 10px var(--font-mono); }
 /* O seletor de munição (#152, ADR 0026 d.3): flutua sob a coluna direita, sobre o mundo, como
    o resto das janelas do HUD. A lista é a família do bow, com sprite, attack e preço por tiro. */
 .ammo-picker {
@@ -1704,6 +1811,43 @@ body {
   text-transform: uppercase;
 }
 
+/* As sete bênçãos PvE (#570, ADR 0052), dentro do CharacterModal — a mesma forma de lista da
+   munição, sem o sprite (bênção não tem arte, invariante 6). */
+.blessing-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.blessing-entry {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 4px 6px; background: var(--ash-2); border: 1px solid var(--ash-5); border-radius: 3px;
+  font: 8px var(--font-mono); color: var(--parchment-2);
+}
+.blessing-name { flex: 1 1 auto; }
+.blessing-owned { color: var(--gold-5); }
+.blessing-buy {
+  background: var(--ash-3); border: 1px solid var(--gold-4); border-radius: 3px;
+  color: var(--gold-5); font: 8px var(--font-mono); padding: 2px 6px; cursor: pointer;
+}
+.blessing-buy:disabled { opacity: 0.45; cursor: default; }
+
+/* As magias da vocação, dentro do CharacterModal (#624, ADR 0058 d.2): a mesma forma de lista das
+   bênçãos, rolável — são dezenas por vocação. Sem arte (invariante 6). */
+.spell-shop-list {
+  list-style: none; margin: 0; padding: 0 4px 0 0; display: grid; gap: 4px;
+  max-height: 220px; overflow-y: auto;
+}
+.spell-shop-entry {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 4px 6px; background: var(--ash-2); border: 1px solid var(--ash-5); border-radius: 3px;
+  font: 8px var(--font-mono); color: var(--parchment-2);
+}
+.spell-shop-name { flex: 1 1 auto; }
+.spell-shop-meta { color: var(--text-faint); white-space: nowrap; }
+.spell-shop-state { color: var(--text-muted); white-space: nowrap; }
+.spell-shop-entry[data-status="learned"] .spell-shop-state { color: var(--gold-5); }
+.spell-shop-buy {
+  background: var(--ash-3); border: 1px solid var(--gold-4); border-radius: 3px;
+  color: var(--gold-5); font: 8px var(--font-mono); padding: 2px 6px; cursor: pointer;
+}
+.spell-shop-buy:disabled { opacity: 0.45; cursor: default; }
+
 /* ---- Explorador do mundo (#661) ---------------------------------------------------------- */
 /* O mapa inteiro com câmera livre, em /world. O mundo ocupa a tela; o painel flutua no canto. */
 .world-explorer { position: fixed; inset: 0; background: var(--bg-world, #000); }
@@ -1731,3 +1875,9 @@ body {
   background: var(--surface-panel-solid); border: 1px solid var(--border-default); border-radius: var(--radius-md);
   font-family: var(--font-mono); font-size: var(--text-body-sm); color: var(--ash-8);
 }
+.world-places-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.world-explorer__layers { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+.world-explorer__layers label { display: flex; gap: var(--space-1); align-items: center; }
+.world-explorer__hover { margin: 0; min-height: 2.6em; font-family: var(--font-mono); color: var(--ash-7); overflow-wrap: anywhere; }
+.world-explorer__daylight { display: flex; gap: var(--space-2); align-items: center; }
+.world-explorer__daylight input { flex: 1; }

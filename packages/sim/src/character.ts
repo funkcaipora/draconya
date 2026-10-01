@@ -1,20 +1,40 @@
 // Estado quente do personagem. A sessão dona é o único objeto que escreve aqui
 // (invariante 9) — é também o que dispensa lock sobre o gold.
 
-import type { AmmoFamily, Ammunition, Item, Vocation } from '@draconya/content';
+import { PACIFIED_CONDITION_KEY } from '@draconya/content';
+import type { AmmoFamily, Ammunition, Item, Skill, Spell, Vocation } from '@draconya/content';
 import type { Direction } from './area.js';
+import { FULL_BLOCK_CHARGE, isFullBlockCharge } from './combat/block-charge.js';
+import type { BlockChargeState } from './combat/block-charge.js';
+import { INITIAL_ATTACK_PRACTICE, isInitialAttackPractice } from './combat/attack-practice.js';
+import type { AttackPracticeState } from './combat/attack-practice.js';
+import { DEFAULT_FIGHT_MODE, isFightMode } from './combat/fight-mode.js';
+import type { FightMode } from './combat/fight-mode.js';
 import { Bestiary } from './bestiary.js';
 import type { BestiaryState } from './bestiary.js';
+import { Bosstiary } from './bosstiary.js';
+import type { BosstiaryState } from './bosstiary.js';
+import { Charms } from './charms.js';
+import type { CharmsState } from './charms.js';
+import { OfflineTraining } from './offline-training.js';
+import type { OfflineTrainingState } from './offline-training.js';
 import { Conditions } from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import { Cooldowns } from './cooldown.js';
 import type { CooldownState } from './cooldown.js';
 import { Contribution } from './death.js';
 import type { ContributionState } from './death.js';
+import { EMPTY_FAMILIAR_STATE, isEmptyFamiliarState, isFamiliarState } from './familiar.js';
+import type { FamiliarState } from './familiar.js';
 import { Inventory } from './inventory.js';
 import type { CarriedItem, ContainerRules, InventoryState } from './inventory.js';
+import { LearnedSpells } from './learned-spells.js';
+import type { LearnedSpellsState, LearnSpellResult } from './learned-spells.js';
+import { LoyaltyLevels } from './loyalty.js';
 import { Skills } from './skills.js';
 import type { SkillsState } from './skills.js';
+import { UNSET_STORAGE_VALUE, readCharacterStorage } from './character-storage.js';
+import type { CharacterStorageMap } from './character-storage.js';
 
 export interface Point {
   readonly x: number;
@@ -33,6 +53,17 @@ export interface CharacterState {
   /** XP ACUMULADA, não o progresso dentro do level. Ver `progression.ts` (FUN-37). */
   readonly xp: number;
   /**
+   * Pontos de alma (#593), o `spell:soul(n)` do Canary — hoje só a plumbing: nenhuma magia do
+   * catálogo real ainda declara `soulCost` (a conjuração é a #594). PODE DESCER — é gasto, não
+   * progressão monotônica como skill/Bestiário — e por isso o extrato o leva como valor
+   * ABSOLUTO, última-escrita-vence, nunca fundido por máximo no ledger (ver `receipts.ts`).
+   *
+   * Opcional: personagem e snapshot anteriores a esta issue não têm a chave, e `0` é onde todo
+   * personagem sem vocação está — o Tibia sempre tem vocação e por isso sempre tem alma; aqui
+   * o personagem nasce sem uma (§7.4), e `chooseVocation` é quem a enche pela primeira vez.
+   */
+  readonly soul?: number;
+  /**
    * A vocação escolhida, ou ausente enquanto não há uma — o personagem nasce sem e escolhe no
    * level 8 (§7.4).
    *
@@ -41,6 +72,25 @@ export interface CharacterState {
    * formato antigo continua legível e o `SNAPSHOT_FORMAT_VERSION` não precisou subir.
    */
   readonly vocationId?: string | null;
+  /**
+   * A Boosted Creature do dia em que este personagem entrou no jogo (M42, #615, ADR 0052
+   * decisão 5): vem do ticket, FIXADA aqui como a versão de conteúdo (invariante 7) — e não
+   * relida do mundo a cada transição Cidade↔hunt, para a hunt que atravessa a virada continuar
+   * com a boosted com que nasceu (ADR 0054 decisão 7). Ausente é ticket sem o dado (conteúdo
+   * sem `boosted/baseline.json`, ou `api` antigo em deploy em rolagem): nenhuma hunt deste
+   * personagem aplica o bônus.
+   */
+  readonly boostedMonsterId?: string;
+  /**
+   * O bônus de Loyalty (M44, #628, ADR 0052 decisão 5), em percentual inteiro: a `api` o calcula
+   * da idade da conta na emissão do ticket, e ele fica FIXADO aqui como a versão de conteúdo
+   * (invariante 7) — a sessão nunca relê conta nem relógio, e o bônus sobrevive a toda transição
+   * Cidade↔hunt e a toda retomada de snapshot. É o `loyaltyBonusPercent` de `Player` no Canary,
+   * calculado no login e nunca atualizado durante ele. Ausente é zero: ticket sem o dado
+   * (conteúdo sem `loyalty/`, conta sem degrau, `api` antigo em deploy em rolagem), o normal de
+   * quem tem menos de 360 dias de conta. Opcional, então o `SNAPSHOT_FORMAT_VERSION` não subiu.
+   */
+  readonly loyaltyBonusPercent?: number;
   /**
    * Stamina que sobrava em `staminaUpdatedAtMs`, em milissegundos (§10). NÃO é decrementada
    * por ninguém fora da hunt: o valor de agora é calculado na leitura (ver `stamina.ts`).
@@ -88,6 +138,32 @@ export interface CharacterState {
    */
   readonly bestiary?: BestiaryState;
   /**
+   * O Bosstiary (#629, ADR 0052 d.1): abates por boss, pontos de boss e a versão do registro.
+   * Ausente é snapshot ou personagem anterior a esta issue, ou que nunca abateu um boss — a
+   * mesma degradação de `bestiary`. Opcional, então o `SNAPSHOT_FORMAT_VERSION` não subiu.
+   */
+  readonly bosstiary?: BosstiaryState;
+  /**
+   * A economia de Charms (M39-02, #602, ADR 0052 d.1): pontos/echoes gastos, tier de cada
+   * charm e as atribuições por monstro. Ausente é personagem anterior a esta issue, ou que
+   * nunca gastou um ponto de Charm — a mesma degradação de `bestiary`.
+   */
+  readonly charms?: CharmsState;
+  /**
+   * As magias que o personagem APRENDEU (#624, ADR 0058 d.1, ADR 0052 d.1) — o cast confere
+   * (`casting.ts`). Ausente é personagem que nunca comprou magia nenhuma, ou snapshot anterior a
+   * esta issue — e aí ele não lança nada, que é o que o Tibia faz com quem não aprendeu. Quem
+   * já existia antes da #624 ganha o registro pela migração de dado do servidor (ADR 0014), não
+   * por este default.
+   */
+  readonly learnedSpells?: LearnedSpellsState;
+  /**
+   * O banco de offline training e a skill escolhida no livro (#631, ADR 0059 d.3, ADR 0052 d.1).
+   * Ausente é personagem anterior a esta issue, ou que nunca caçou: banco zerado e nenhuma skill
+   * escolhida — a mesma degradação de `charms`.
+   */
+  readonly training?: OfflineTrainingState;
+  /**
    * Quanto ele aguenta carregar (§21.5). Vem da tabela de progressão, como `maxHealth`.
    *
    * Opcional: personagem e snapshot anteriores ao inventário não têm a chave, e zero seria
@@ -101,13 +177,12 @@ export interface CharacterState {
    */
   readonly inventory?: InventoryState;
   /**
-   * O que caiu e NÃO coube na mochila (§21.6, FUN-88).
-   *
-   * Fica aqui, e não fora da sessão, porque o `sim` não faz I/O (invariante 1): a caixa de
-   * verdade é escrita quando a sessão encerra. Entra no snapshot para uma queda de nó não
-   * apagar o que o jogador ganhou — e o custo é uma lista quase sempre vazia.
+   * As instâncias que `sell-items`/`discard-item` destruíram nesta sessão, ainda não drenadas
+   * para um extrato (#724, ADR 0048 d.8). Ausente é nenhuma — o normal —, sem bump de
+   * `SNAPSHOT_FORMAT_VERSION`. Drenada por `drainRemovedInstances`, como `goldDelta` drena para
+   * `aggregates.goldGained`/`goldSpent`.
    */
-  readonly lootBox?: readonly CarriedItem[];
+  readonly removedInstances?: readonly string[];
   /**
    * Quantos itens esta sessão já criou. Vira parte do id da instância.
    *
@@ -145,6 +220,14 @@ export interface CharacterState {
    * `character.ammunition_stock` (jsonb).
    */
   readonly ammunitionStock?: Readonly<Record<string, number>>;
+  /**
+   * Storages por personagem (#731, ADR 0050 d.6 T2): `storageKey → value` — a semente do motor
+   * de quest, a mesma pergunta do Canary (`player:getStorageValue`). Ausente é NENHUM storage
+   * setado, sem bump de `SNAPSHOT_FORMAT_VERSION` — a mesma degradação de `bestiary`/`ammo`.
+   * Persistido em `character_storage` (uma linha por chave, não uma coluna `jsonb`): ver
+   * `packages/server/src/db/schema.ts`.
+   */
+  readonly storages?: CharacterStorageMap;
   readonly cooldowns: Partial<CooldownState>;
   /**
    * Para onde o personagem olha (#155): é de onde saem onda, cleave e feixe. Gravada pelo passo
@@ -155,9 +238,143 @@ export interface CharacterState {
   /**
    * Haste, postura, magic shield e cura ao longo do tempo (#155), com vencimento LÓGICO. O
    * evento que as faz vencer está na fila da sessão, que também vai no snapshot. Ausente é
-   * nenhuma — sem bump de `SNAPSHOT_FORMAT_VERSION`.
+   * nenhuma — sem bump de `SNAPSHOT_FORMAT_VERSION`. O `expiresAtMs` é do relógio da sessão que o
+   * gravou: na transição `Session.enter` o traduz para o da nova (`moveToClock`, #812) mantendo o
+   * prazo que faltava, e o ruleset que entra reagenda o vencimento; o restore de snapshot não
+   * traduz nada.
    */
   readonly conditions?: readonly ConditionState[];
+  /**
+   * As cargas de bloqueio do `combat-v3` (#548, ADR 0040): `block-charge.ts`. Ausente é
+   * `FULL_BLOCK_CHARGE` — o personagem que nunca bloqueou ainda, ou snapshot anterior a esta
+   * issue. Sem bump de `SNAPSHOT_FORMAT_VERSION`, como `conditions`.
+   */
+  readonly blockCharge?: BlockChargeState;
+  /**
+   * A prática de ataque e de escudo do `combat-v3` (#686): `combat/attack-practice.ts`. Ausente é
+   * `INITIAL_ATTACK_PRACTICE` — nasce a cada sessão, como no Canary, e só viaja no snapshot
+   * QUENTE para a hunt retomada não perder o contador. Sem bump de `SNAPSHOT_FORMAT_VERSION`.
+   */
+  readonly attackPractice?: AttackPracticeState;
+  /**
+   * Quanto tempo de regeneração a comida ainda tem (#726, ADR 0049 decisão 5): a
+   * `CONDITION_REGENERATION` do Tibia, em milissegundos, drenada por `drainFedMs`
+   * (`packages/sim/src/food.ts`) pelo tempo LÓGICO de hunt decorrido — nunca por tick
+   * (invariante 2), como a stamina. Ausente é `0` — sem comida, o personagem de sempre; sem
+   * bump de `SNAPSHOT_FORMAT_VERSION`, como `blockCharge`/`attackPractice`. Só é CONSULTADA
+   * quando `progression.regeneration.requiresFood` está ligada — comer sempre soma o contador,
+   * ligado ou não, mas só a flag decide quem lê.
+   */
+  readonly fedMs?: number;
+  /**
+   * As sete bênçãos PvE compradas na Cidade (#570, ADR 0052 — substitui o executor de
+   * `blessing-charge` do #726, removido): um BITMASK, um bit por `order` do catálogo
+   * (`content.blessings`, `packages/sim/src/blessings.ts`), nunca uma contagem — a identidade
+   * importa porque comprar de novo a mesma bênção é recusado, e só `blessingCount(mask)` entra
+   * na redução da penalidade de morte (`applyDeathPenalty`, `progression.ts`).
+   *
+   * **DESCE**: `HuntRuleset#onCharacterDied` zera o campo inteiro na morte (o Tibia consome
+   * TODAS de uma vez, nunca uma de cada vez) — é por isso que o extrato manda o valor absoluto
+   * e o ledger NUNCA funde por máximo (ao contrário do Bestiário/skills, que só sobem): fundir
+   * por máximo ressuscitaria bênção que acabou de ser consumida se um extrato antigo chegasse
+   * depois. Ausente é `0`, sem bump de `SNAPSHOT_FORMAT_VERSION`, como `fedMs`.
+   */
+  readonly blessings?: number;
+  /**
+   * O familiar de vocação (#599, M38-02, ADR 0057 d.3, ADR 0052 d.1): os dois instantes de
+   * relógio de PAREDE que o personagem carrega entre hunts — até quando a invocação vale e até
+   * quando a magia volta (ver `familiar.ts`). Registro `jsonb` por sistema, lido inteiro no
+   * ticket e escrito inteiro pelo extrato (última escrita vence, como `charms`). Ausente é o
+   * personagem que nunca invocou, sem bump de `SNAPSHOT_FORMAT_VERSION`, como `fedMs`.
+   */
+  readonly familiar?: FamiliarState;
+  /**
+   * Um `use-item`/`use-item-on` ACEITO mas ADIADO pela exaustão de ação compartilhada (#726,
+   * ADR 0049 decisão 6 — o `setNextActionTask` do Canary): agendado para o vencimento do livro
+   * `exhaust:action`, como um evento `pending-manual-action` da fila (invariante 2). Um segundo
+   * disparo antes do vencimento SUBSTITUI este campo e reagenda — nunca empilha dois. `ref`/
+   * `target` usam a MESMA forma numérico-livre de `UseSlotTarget`/o `ref` de `use-item`
+   * (`packages/sim/src/rulesets/hunt.ts`) — dado puro, sem instância de classe, por isso cabe
+   * aqui sem `rulesets/hunt.ts` importar `character.ts` ao contrário. Ausente é nenhuma ação
+   * pendente; sem bump de `SNAPSHOT_FORMAT_VERSION`, como `blockCharge`/`attackPractice`.
+   */
+  readonly pendingManualAction?: PendingManualActionState;
+  /**
+   * SÓ LEITURA, de snapshot antigo (#554 → #622). A trava de ataque ao trocar de andar era um
+   * instante ABSOLUTO solto no personagem (`Player::onChangeZone`/`player.cpp:12417-12423`,
+   * `stairJumpExhaustion`); desde o M44-04 ela é a condição `pacified` de verdade
+   * (`Conditions`, chave `pacified`), e este campo nunca mais é ESCRITO. O construtor de
+   * `CharacterRuntime` o converte: um snapshot com `attackLockedUntil` no futuro volta como um
+   * `pacified` que vence no mesmo instante, para uma hunt retomada no meio dos 2 s não perder a
+   * trava (ADR 0014 — nunca descartar dado só por trocar de forma). Sem bump de
+   * `SNAPSHOT_FORMAT_VERSION`. O instante é do relógio da sessão que gravou o snapshot, e só o
+   * restore (o MESMO relógio) o lê assim; a condição em que ele se converte é PRAZO como as outras
+   * (`conditions`): a transição entre sessões a traduz, e o que faltava continua faltando
+   * (`moveToClock`, #812) — a trava não é mais um carimbo que `Session.enter` zera.
+   */
+  readonly attackLockedUntil?: number;
+  /**
+   * O último instante (relógio lógico da sessão) em que o personagem deu OU recebeu um ataque
+   * — a definição ÚNICA de "em combate" do endgame (#625), lida por `isInFight`
+   * (`combat/in-fight.ts`): `pzLocked` do Canary, 60 000 ms desde este carimbo. Escrito pelo
+   * ruleset da hunt em `#land`/`#applyHits` (dado) e `#applyMonsterHit` (recebido) — a mesma
+   * régua de `Runner.lastCombatActionAtMs` (`rulesets/hunt.ts`), mas NÃO o mesmo campo: aquele
+   * é só DADO, sem self-heal, e alimenta só a elegibilidade de XP compartilhada (#525); este
+   * soma o recebido e não exclui nada, porque apanhar também deveria travar a saída no Tibia.
+   * Ausente é "nunca lutou nesta sessão" — o relógio é da sessão, e `Session.enter` zera o
+   * carimbo na transição (#812, `resetSessionClockState`); o restore de snapshot o preserva. Sem
+   * bump de `SNAPSHOT_FORMAT_VERSION`, como `attackLockedUntil`.
+   */
+  readonly lastCombatActionAtMs?: number;
+  /**
+   * A imunidade temporária que o charm Cleanse dá ao tipo de condição que acabou de remover (#603,
+   * `Player::setImmuneCleanse` do Canary — 11 s): `tipo → instante ABSOLUTO (relógio lógico) em que
+   * vence`. Só o ruleset da hunt escreve (invariante 9), e só sob `combat-v4`. Ausente é "nenhuma
+   * imunidade" — sem bump de `SNAPSHOT_FORMAT_VERSION`, como `attackLockedUntil`. Precisa viajar no
+   * snapshot: uma hunt retomada no meio dos 11 s que voltasse sem ela deixaria uma condição que a
+   * sessão original recusaria entrar. Prazo, como `conditions`: a transição o traduz (#812).
+   */
+  readonly cleanseImmunity?: Readonly<Record<string, number>>;
+  /**
+   * Promovido (#566, ADR 0042 decisão 1): estado que SÓ SOBE — não existe des-promoção no
+   * Tibia. Ausente/`false` é "não promovido", o normal de todo personagem novo. Sem bump de
+   * `SNAPSHOT_FORMAT_VERSION`, como `vocationId`/`blessings`.
+   */
+  readonly promoted?: boolean;
+  /**
+   * A postura de luta (M30-03, #550): o `fightMode` do Canary — ofensiva, balanceada ou
+   * defensiva —, escolhida pelo jogador com `set-fight-mode` e persistida em
+   * `character.fight_mode`. Escala o dano de arma (`attackFactor`), a defesa e a mitigação do
+   * `combat-v3` (`combat/fight-mode.ts`). Ausente é `'attack'`, o `FIGHTMODE_ATTACK` que o
+   * Canary usa quando ninguém escolheu (`player.hpp:1857`) — sem bump de
+   * `SNAPSHOT_FORMAT_VERSION`, como `promoted`.
+   */
+  readonly fightMode?: FightMode;
+  /**
+   * O instante (relógio lógico da sessão) do último golpe de ARMA do personagem — o `lastAttack`
+   * do Canary (`Player::updateLastAttack`, escrito só por `doAttacking` quando `useWeapon`/
+   * `useFist` devolve `true`), de onde sai o fator de defesa DINÂMICO da postura ofensiva e
+   * balanceada (`attackedRecently`, `combat/fight-mode.ts`). Só o ruleset da hunt escreve, no
+   * evento do golpe (invariante 9). Ausente é "nunca bateu nesta sessão" (fator 1,0) — o
+   * relógio é da sessão, então não sobrevive à troca de sessão nem vai para o Postgres, só no
+   * snapshot QUENTE, para a hunt retomada não perder a janela. Na transição o personagem é o
+   * MESMO objeto e o relógio da sessão nova nasce em zero: por isso `Session.enter` zera o
+   * carimbo (o restore de snapshot não passa por `enter`, e a janela quente atravessa). Sem bump
+   * de `SNAPSHOT_FORMAT_VERSION`, como `lastCombatActionAtMs`.
+   */
+  readonly lastAttackAtMs?: number;
+}
+
+/** Ver `CharacterState.pendingManualAction`. */
+export interface PendingManualActionState {
+  readonly kind: 'item' | 'item-on';
+  readonly ref: { readonly instanceId: string } | { readonly supplyId: string };
+  readonly target?:
+    | { readonly kind: 'monster'; readonly subject: string }
+    | { readonly kind: 'character'; readonly characterId: string }
+    | { readonly kind: 'position'; readonly position: { readonly x: number; readonly y: number; readonly z?: number } }
+    | { readonly kind: 'invalid' };
+  readonly seq: number;
 }
 
 /** Por que a munição não foi escolhida. Tipada: o jogador merece saber qual foi. */
@@ -167,12 +384,18 @@ export type AmmoResult = { readonly ok: true } | { readonly ok: false; readonly 
 /** Por que a vocação não foi escolhida (#154). Tipada: o jogador merece saber qual foi. */
 export type VocationRefusal = 'level-too-low' | 'already-chosen';
 
+/** Por que a promoção não aconteceu (#566, ADR 0042 decisão 1). Tipada, como o resto. */
+export type PromoteRefusal =
+  | 'no-vocation' | 'already-promoted' | 'level-too-low' | 'insufficient-gold' | 'not-promotable';
+export type PromoteResult = { readonly ok: true } | { readonly ok: false; readonly reason: PromoteRefusal };
+
 /**
  * Como uma peça do kit inicial acabou (#496). `equipped` vestiu; `in-backpack` coube no
- * inventário mas não vestiu — o escudo do Paladin, impedido pelo bow de duas mãos; `in-loot-box`
- * não coube nem em peso.
+ * inventário mas não vestiu — o escudo do Paladin, impedido pelo bow de duas mãos. Peso nunca
+ * recusa (ADR 0048 decisão 7, `Inventory.forceAdd`): a escolha de vocação não é punida pela
+ * mochila.
  */
-export type VocationPieceStatus = 'equipped' | 'in-backpack' | 'in-loot-box';
+export type VocationPieceStatus = 'equipped' | 'in-backpack';
 
 export interface VocationPieceResult {
   readonly itemId: string;
@@ -182,7 +405,7 @@ export interface VocationPieceResult {
 export type VocationResult =
   | {
       readonly ok: true;
-      readonly weapon: 'equipped' | 'in-backpack' | 'in-loot-box' | 'none';
+      readonly weapon: 'equipped' | 'in-backpack' | 'none';
       /**
        * O destino de cada peça do kit, na ordem do conteúdo (#496). Ausente é a arma legada da
        * #154 — o caminho de `weapon`; o kit completo não o usa.
@@ -210,6 +433,15 @@ export interface VocationChoiceOptions {
   readonly kitItems?: ReadonlyArray<{ readonly item: Item }>;
 }
 
+/**
+ * O relógio de uma sessão como o personagem o enxerga (#812): só o instante lógico de agora.
+ * `Session` o implementa — a interface existe para `character.ts` não importar `session.ts`, que
+ * já o importa.
+ */
+export interface SessionClock {
+  readonly nowMs: number;
+}
+
 export class CharacterRuntime {
   readonly id: string;
   position: Point;
@@ -219,24 +451,49 @@ export class CharacterRuntime {
   maxMana: number;
   level: number;
   xp: number;
+  soul: number;
   vocationId: string | null;
+  /** Ver `CharacterState.boostedMonsterId`. Nunca escrito depois da construção — fixado. */
+  readonly boostedMonsterId?: string;
+  /** Ver `CharacterState.loyaltyBonusPercent`. Nunca escrito depois da construção — fixado. */
+  readonly loyaltyBonusPercent: number;
   staminaMs: number | null;
   staminaUpdatedAtMs: number;
   /** Saldo-base privado; só `settleGoldDelta` pode incorporá-lo ao extrato já aceito. */
   #gold: number;
+  /** Cache dos tries acumulados por skill — derivado, nunca vai ao snapshot. Ver `LoyaltyLevels`. */
+  readonly #loyaltyLevels = new LoyaltyLevels();
   goldDelta: number;
   alive: boolean;
   speed: number;
+  /**
+   * O personagem dissolve a parede de personagem ao pisar (OW-05, #826) — ver
+   * `Movable.dissolvesSafeWalls`. Sempre `true`, e é o que a distingue do monstro, que não tem
+   * o campo.
+   */
+  readonly dissolvesSafeWalls = true;
   /** Mutadas no lugar a cada uso — ver `Skills.gain`. */
   readonly skills: Skills;
   /** Mutado no lugar a cada abate recompensado — ver `Bestiary.record`. */
   readonly bestiary: Bestiary;
+  /** Mutado no lugar a cada abate de boss recompensado — ver `Bosstiary.record`. */
+  readonly bosstiary: Bosstiary;
+  /** Mutado no lugar a cada intenção de Charm aceita — ver `Charms.unlock`/`assign`/`remove`. */
+  readonly charms: Charms;
+  /** Mutado no lugar a cada `learn-spell` aceito — ver `learnSpell`. O cast confere `has`. */
+  readonly learnedSpells: LearnedSpells;
+  /**
+   * O banco de offline training e a escolha do livro (#631). Só a sessão dona escreve (invariante
+   * 9): o ruleset soma o tempo de hunt/treino no fim da participação, e o host aplica a intenção
+   * `set-offline-training-skill` — ver `OfflineTraining`.
+   */
+  readonly training: OfflineTraining;
   capacity: number;
   /** Mutado ao equipar e ao receber item. Só a sessão dona escreve (invariante 9). */
   readonly inventory: Inventory;
-  /** O que caiu e não coube. Ver `CharacterState.lootBox`. */
-  lootBox: CarriedItem[];
   lootSeq: number;
+  /** As instâncias destruídas por vender/descartar, ainda não drenadas. Ver `CharacterState.removedInstances`. */
+  removedInstances: string[];
   /** Mutada no lugar a cada golpe — ver `recordDamage`. */
   readonly contribution: Contribution;
   /**
@@ -248,11 +505,71 @@ export class CharacterRuntime {
   readonly supplyStock: Map<string, number>;
   /** O estoque de munição do loot (#520). Ver `CharacterState.ammunitionStock`. */
   readonly ammunitionStock: Map<string, number>;
+  /**
+   * Storages por personagem (#731). Só a sessão dona escreve (`setStorageValue`) — a mesma
+   * régua de `ammo`/`supplyStock`. Ver `CharacterState.storages`.
+   */
+  readonly storages: Map<string, number>;
   readonly cooldowns: Cooldowns;
   /** Para onde olha. Só o passo escreve. */
   direction: Direction;
   /** Mutadas pelo ruleset ao lançar e ao vencer — ver `Conditions`. */
   readonly conditions: Conditions;
+  /**
+   * As cargas de bloqueio do `combat-v3` (#548). Só `applyDamageOutcome` escreve (CMB-08,
+   * invariante 9) — ver `CharacterState.blockCharge`.
+   */
+  blockCharge: BlockChargeState;
+  /**
+   * A prática de ataque e de escudo do `combat-v3` (#686). Só o ruleset da hunt escreve, no
+   * evento do golpe (invariante 9) — ver `CharacterState.attackPractice`.
+   */
+  attackPractice: AttackPracticeState;
+  /** Comida ativa (#726). Só `drainFedMs`/`feed` (`food.ts`) escrevem — invariante 9. */
+  fedMs: number;
+  /** Bitmask de bênçãos (#570). Só o ruleset de Cidade (compra) e a morte (consumo) escrevem. */
+  blessings: number;
+  /**
+   * O familiar (#599): instantes de relógio de PAREDE, ver `familiar.ts`. Só o ruleset da hunt
+   * escreve (invariante 9) — no lançamento e na morte do familiar. Trocado por objeto novo, nunca
+   * mutado no lugar: o extrato e o snapshot leem a referência.
+   */
+  familiar: FamiliarState;
+  /** A ação manual adiada (#726). `null` é nenhuma. Só o ruleset escreve. */
+  pendingManualAction: PendingManualActionState | null;
+  /**
+   * Ver `CharacterState.lastCombatActionAtMs`. Só o ruleset da hunt escreve (invariante 9) e
+   * `Session.enter` zera; `null` é "nunca lutou".
+   */
+  lastCombatActionAtMs: number | null;
+  /**
+   * A imunidade de Cleanse por tipo de condição (#603) — ver `CharacterState.cleanseImmunity`.
+   * Só o ruleset da hunt escreve. Vazio é o caso de todo personagem sem o charm.
+   */
+  readonly cleanseImmunity = new Map<string, number>();
+  /**
+   * Promovido (#566, ADR 0042 decisão 1). Só `promote()` escreve — nunca desce. Consumido pelo
+   * regen (`#regenOf`) e pela penalidade de morte (`applyDeathPenalty`), os dois em `hunt.ts`.
+   */
+  promoted: boolean;
+  /**
+   * A postura de luta (M30-03, #550). Só `setFightMode` escreve, e só a sessão dona a chama
+   * (invariante 9) — pela intenção `set-fight-mode`, na Cidade e na hunt. Ver
+   * `CharacterState.fightMode`.
+   */
+  fightMode: FightMode;
+  /**
+   * Ver `CharacterState.lastAttackAtMs`. Só o ruleset da hunt escreve (invariante 9) e
+   * `Session.enter` zera; `null` é "nunca bateu nesta sessão".
+   */
+  lastAttackAtMs: number | null;
+  /**
+   * De QUAL relógio de sessão os instantes deste personagem (`until`, `expiresAtMs`, …) são (#812) —
+   * e, quando a sessão já o tirou, o instante exato da saída. TRANSIENTE: não vai no snapshot nem
+   * em `getState`, porque descreve por onde o objeto andou e não o que ele é; uma sessão restaurada
+   * o religa por `bindClock`. `null` é o personagem que nunca entrou numa sessão (o do ticket).
+   */
+  #clockLink: { readonly clock: SessionClock; departedAtMs: number | null } | null = null;
 
   constructor(state: CharacterState) {
     this.id = state.id;
@@ -263,7 +580,13 @@ export class CharacterRuntime {
     this.maxMana = state.maxMana;
     this.level = state.level;
     this.xp = state.xp;
+    this.soul = state.soul ?? 0;
     this.vocationId = state.vocationId ?? null;
+    if (state.boostedMonsterId !== undefined) this.boostedMonsterId = state.boostedMonsterId;
+    // Inteiro não negativo: o Canary guarda em `uint16_t` (`setLoyaltyBonus`), e um valor torto
+    // (snapshot à mão) vale zero em vez de virar `NaN` dentro da conta de tries.
+    this.loyaltyBonusPercent = Number.isFinite(state.loyaltyBonusPercent)
+      ? Math.max(0, Math.floor(state.loyaltyBonusPercent as number)) : 0;
     this.staminaMs = state.staminaMs ?? null;
     this.staminaUpdatedAtMs = state.staminaUpdatedAtMs ?? 0;
     this.#gold = state.gold ?? 0;
@@ -274,22 +597,64 @@ export class CharacterRuntime {
     this.speed = state.speed ?? 0;
     this.skills = Skills.fromState(state.skills);
     this.bestiary = Bestiary.fromState(state.bestiary);
+    this.bosstiary = Bosstiary.fromState(state.bosstiary);
+    this.charms = Charms.fromState(state.charms);
+    this.learnedSpells = LearnedSpells.fromState(state.learnedSpells);
+    this.training = OfflineTraining.fromState(state.training);
     this.capacity = state.capacity ?? 0;
     this.inventory = Inventory.fromState(state.inventory);
-    this.lootBox = [...(state.lootBox ?? [])];
     this.lootSeq = state.lootSeq ?? 0;
+    this.removedInstances = [...(state.removedInstances ?? [])];
     this.contribution = Contribution.fromState(state.contribution);
     this.ammo = new Map(Object.entries(state.ammo ?? {}) as [AmmoFamily, string][]);
     this.supplyStock = new Map(Object.entries(state.supplyStock ?? {}));
     this.ammunitionStock = new Map(Object.entries(state.ammunitionStock ?? {}));
+    // Defensivo, como `readItemOverlay`: uma chave torta (valor não inteiro, ou o `-1` de
+    // ausência gravado por engano) some da leitura em vez de travar a sessão inteira.
+    this.storages = new Map(Object.entries(readCharacterStorage(state.storages) ?? {}));
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
     this.direction = state.direction ?? 'south';
     this.conditions = Conditions.fromState(state.conditions);
+    // A trava de stairhop de um snapshot anterior ao #622 (ver `CharacterState.attackLockedUntil`):
+    // vira a condição `pacified`, e uma que JÁ existe (o snapshot novo) manda mais.
+    if (state.attackLockedUntil !== undefined && state.attackLockedUntil > 0
+      && this.conditions.get(PACIFIED_CONDITION_KEY) === null) {
+      this.conditions.replace({
+        key: PACIFIED_CONDITION_KEY, targetId: this.id, sourceId: this.id,
+        expiresAtMs: state.attackLockedUntil, merge: 'longest',
+      });
+    }
+    this.blockCharge = state.blockCharge ?? FULL_BLOCK_CHARGE;
+    this.attackPractice = state.attackPractice ?? INITIAL_ATTACK_PRACTICE;
+    this.fedMs = state.fedMs ?? 0;
+    this.blessings = state.blessings ?? 0;
+    // Defensivo, como `readCharacterStorage`: um registro torto (ticket de outro formato) vira
+    // "nunca invocou" em vez de travar a sessão.
+    this.familiar = isFamiliarState(state.familiar) ? state.familiar : EMPTY_FAMILIAR_STATE;
+    this.pendingManualAction = state.pendingManualAction ?? null;
+    this.lastCombatActionAtMs = state.lastCombatActionAtMs ?? null;
+    for (const [type, untilMs] of Object.entries(state.cleanseImmunity ?? {})) {
+      this.cleanseImmunity.set(type, untilMs);
+    }
+    this.promoted = state.promoted ?? false;
+    // Defensivo, como `readCharacterStorage`: um valor que não é um dos três modos (snapshot
+    // gravado à mão, ticket torto) vira o default do Canary em vez de travar a sessão.
+    this.fightMode = isFightMode(state.fightMode) ? state.fightMode : DEFAULT_FIGHT_MODE;
+    this.lastAttackAtMs = state.lastAttackAtMs ?? null;
   }
 
   /** Haste (#155): o multiplicador que `movementDuration` lê. `speed` continua sendo a base da tabela. */
   get speedScale(): number {
     return this.conditions.speedScale();
+  }
+
+  /**
+   * Invisível (#592) — o que `Prey.invisible` (`monster/monster.ts`) lê em `chooseTarget`: um
+   * monstro sem `seesInvisible` não seleciona nem retém este personagem como alvo enquanto isto
+   * for `true`. Reconhecida pela chave reservada da condição, como `speedScale`/`hasManaShield`.
+   */
+  get invisible(): boolean {
+    return this.conditions.hasInvisible();
   }
 
   /** Saldo de entrada visível ao motor. A sessão só movimenta `goldDelta`. */
@@ -309,6 +674,119 @@ export class CharacterRuntime {
   }
 
   /**
+   * Liga o personagem ao relógio da sessão restaurada de um snapshot (#812), SEM traduzir nada: o
+   * relógio é o mesmo que gravou os instantes, e o restore não passa por `enter`. Só
+   * `Session.fromSnapshot` chama. Sem isto, a transição seguinte não saberia de onde o personagem
+   * vem e levaria os instantes crus para o relógio novo.
+   */
+  bindClock(clock: SessionClock): void {
+    this.#clockLink = { clock, departedAtMs: null };
+  }
+
+  /**
+   * A sessão tirou o personagem (`Session.leave`/`end`): guarda o instante EXATO da saída (#812).
+   * Só vale se a sessão ainda for a dona do relógio dele — a transição do servidor constrói o
+   * destino ANTES de encerrar a origem (`#runTransition`), então quando a origem sai o personagem
+   * já está no relógio da nova, e a saída da antiga não pode mexer nisso.
+   *
+   * O instante tem de ser gravado AQUI, e não lido depois: a sessão que o tirou pode continuar
+   * andando (a party) ou, ao acabar no meio de um evento, ainda empurra o relógio até o alvo do
+   * `advanceBy` — e o servidor só constrói o destino no ciclo seguinte. Ler o relógio de origem
+   * então devolveria um restante que depende da frequência do hospedeiro (invariante 2).
+   */
+  markDeparture(clock: SessionClock): void {
+    const link = this.#clockLink;
+    if (link !== null && link.clock === clock) link.departedAtMs = clock.nowMs;
+  }
+
+  /**
+   * Põe o personagem no relógio da sessão que ele ENTRA e devolve como desfazer (#812). Só
+   * `Session.enter` chama, ANTES do `onEnter` — o ruleset precisa enxergar os instantes já no
+   * relógio dele (a hunt reagenda o vencimento das condições que o personagem traz).
+   *
+   * O relógio lógico de cada sessão nasce em zero (ADR 0020), mas o `CharacterRuntime` atravessa
+   * Cidade → hunt, hunt → Cidade e a saída da party como o MESMO objeto. O que ele guarda como
+   * DURAÇÃO — o cooldown de magia, as condições, a imunidade do Cleanse — está no relógio da sessão
+   * anterior e é traduzido para este por `restante = instante − origem`: o prazo que faltava
+   * continua faltando. Não é zerado nem renovado — um Intense Wound Cleansing de 10 minutos não
+   * volta pronto por uma ida à Cidade, e um veneno não some —, como o Canary, que guarda a condição
+   * de cooldown (`CONDITIONID_DEFAULT`) com os ticks que faltavam, e como o anel de duração desta
+   * base (`#parkEquipment`, #689). A Cidade não simula (ADR 0023): o prazo fica PAUSADO nela.
+   *
+   * A origem é o instante em que a sessão anterior o tirou (`markDeparture`) ou, se a saída dela
+   * ainda não aconteceu (o servidor constrói o destino primeiro), o `nowMs` dela agora — que é o
+   * mesmo instante, porque nada avança uma sessão entre as duas chamadas. Sem sessão anterior (o
+   * personagem do ticket), os valores ficam como estão.
+   */
+  moveToClock(clock: SessionClock): () => void {
+    const previous = this.#clockLink;
+    const toMs = clock.nowMs;
+    const fromMs = previous === null ? toMs : (previous.departedAtMs ?? previous.clock.nowMs);
+    if (previous !== null) this.#rebaseClock(fromMs, toMs);
+    this.#clockLink = { clock, departedAtMs: null };
+    return () => {
+      if (previous !== null) this.#rebaseClock(toMs, fromMs);
+      this.#clockLink = previous;
+    };
+  }
+
+  #rebaseClock(fromMs: number, toMs: number): void {
+    this.cooldowns.rebase(fromMs, toMs);
+    this.conditions.rebase(fromMs, toMs);
+    const deltaMs = toMs - fromMs;
+    for (const [type, untilMs] of this.cleanseImmunity) {
+      if (untilMs <= fromMs) this.cleanseImmunity.delete(type);
+      else this.cleanseImmunity.set(type, untilMs + deltaMs);
+    }
+  }
+
+  /**
+   * Esquece o que o personagem guarda como CARIMBO do relógio lógico da sessão anterior (#812).
+   * Só `Session.enter` chama, depois de o `onEnter` do ruleset aceitar a entrada.
+   *
+   * Carimbo é "quando foi a última vez que…": uma janela de combate, de golpe, de trava. Diferente da
+   * duração (`moveToClock`), a janela dele é curta (de 2 s a 60 s) e já venceu na saída normal — a
+   * saída da hunt só conclui fora de combate (`isInFight`, #625) —, então o que sobraria para
+   * traduzir é nada. Lido no relógio novo sem zerar, um carimbo de 57 700 ms fica no FUTURO de uma
+   * sessão que está em 1 000 ms: `isInFight` o lê como "em combate" e trava a saída por até um minuto
+   * que ninguém lutou, a trava de stairhop segura o golpe sem escada nenhuma e `attackedRecently`
+   * erra assim que o relógio novo alcança o valor velho — e o resultado do combate passa a depender
+   * de por onde o objeto andou, e não do estado e da semente (invariante 3). O restore de snapshot
+   * NÃO passa por aqui: o relógio é o mesmo, e a janela quente atravessa.
+   *
+   * **Toda grandeza nova guardada como instante do relógio da sessão entra aqui (se for carimbo) ou
+   * em `#rebaseClock` (se for prazo)**, e o que força isso é a tabela `SESSION_CLOCK_POLICY` de
+   * `session.test.ts`, um `Record<keyof CharacterState, …>`: o campo novo do estado não compila
+   * até ser classificado. O que é duração restante sem âncora num relógio (`fedMs`, o
+   * `durationRemainingMs` do overlay de item) atravessa como sempre.
+   *
+   * O que sai: o último golpe de arma (`lastAttackAtMs`, #550), o último ataque dado ou recebido
+   * (`lastCombatActionAtMs`, #625), o banco de cargas de bloqueio (`blockCharge`, volta CHEIO — o
+   * contador do Canary sobe uma carga por segundo até duas, e qualquer passagem pela Cidade dura
+   * mais que isso) e a ação manual adiada (`pendingManualAction`, cujo evento morava na fila da
+   * sessão anterior). A trava de stairhop (#554) NÃO está na lista: desde o M44-04 (#622) ela é a
+   * condição `pacified`, que é prazo (`conditions`) e atravessa traduzida como qualquer outra.
+   */
+  resetSessionClockState(): void {
+    this.lastAttackAtMs = null;
+    this.lastCombatActionAtMs = null;
+    this.blockCharge = FULL_BLOCK_CHARGE;
+    this.pendingManualAction = null;
+  }
+
+  /**
+   * Devolve as instâncias destruídas por `sell-items`/`discard-item` e esvazia a lista
+   * (#724, ADR 0048 d.8) — chamado só quando o extrato que as carrega foi aceito, a mesma
+   * disciplina de `settleGoldDelta` (invariante 10): perder a chamada por uma falha de
+   * persistência não é problema, porque o `DELETE` que o `jobs` roda é idempotente por id.
+   */
+  drainRemovedInstances(): string[] {
+    const drained = this.removedInstances;
+    this.removedInstances = [];
+    return drained;
+  }
+
+  /**
    * Escolhe a munição da família dela (#152). Só o level é conferido: a família é da munição,
    * e a arma na mão não precisa existir ainda — o seletor só aparece com o bow, mas a escolha
    * é guardada sempre. Sem gold para ela, o tiro não sai (o ruleset decide isso a cada tiro,
@@ -323,13 +801,33 @@ export class CharacterRuntime {
   }
 
   /**
+   * O valor deste storage, ou `-1` (convenção do Tibia) para quem nunca setou (#731). Nunca
+   * lança: uma quest que ainda não existe consultando uma chave nova só lê "nunca setado".
+   */
+  getStorageValue(key: string): number {
+    return this.storages.get(key) ?? UNSET_STORAGE_VALUE;
+  }
+
+  /**
+   * Seta o storage (#731). `-1` APAGA a chave — é o valor de ausência, guardá-lo seria
+   * indistinguível de "nunca setado" e só infla o extrato e a tabela à toa. Só a sessão dona
+   * chama isto (invariante 9); a `-1` não vencer para pelo teto/piso de `value` cabe a quem
+   * chama (conteúdo de quest), não a este método.
+   */
+  setStorageValue(key: string, value: number): void {
+    if (value === UNSET_STORAGE_VALUE) this.storages.delete(key);
+    else this.storages.set(key, value);
+  }
+
+  /**
    * Escolhe a vocação (#154, ADR 0026 decisão 1) — uma vez, no level da escolha ou depois.
    *
-   * Os itens entram pelos caminhos que já existem: `add` (peso) e `equip` (vocação, level, duas
-   * mãos). A escolha vale MESMO que um item não vista: sem capacidade ele vai para a Caixa de
-   * Loot, com escudo vestido e bow ele fica na mochila — perder a vocação por causa de peso
-   * seria punir a decisão pela mochila. `retarget` NÃO é chamado: a tabela da vocação vale do
-   * próximo level em diante (`progression.ts`), e o ruleset já lê `vocationId` a cada level up.
+   * Os itens entram pelos caminhos que já existem: `forceAdd` (ignora peso — ADR 0048 decisão
+   * 7) e `equip` (vocação, level, duas mãos). A escolha vale MESMO que um item não vista: com
+   * escudo vestido e bow ele fica na mochila — perder a vocação por causa de peso seria punir
+   * a decisão pela mochila, e é por isso que o peso nunca recusa aqui. `retarget` NÃO é
+   * chamado: a tabela da vocação vale do próximo level em diante (`progression.ts`), e o
+   * ruleset já lê `vocationId` a cada level up.
    *
    * Com `kitItems` (#496) é o kit completo que entra: cada peça ganha identidade própria
    * (`${instanceId}:${itemId}` — numa cópia da Cidade o id da sessão é compartilhado, e o id do
@@ -344,6 +842,10 @@ export class CharacterRuntime {
     // A vocação PRIMEIRO: `equip` confere `requires.vocationId` contra `this.vocationId`, e a
     // arma exige exatamente a que está sendo escolhida.
     this.vocationId = vocation.id;
+    // A alma nasce CHEIA (#593): o Tibia sempre tem vocação e por isso sempre tem alma; aqui
+    // ela só existe a partir de agora, e o personagem que acabou de escolher não pode começar
+    // devendo — é a mesma decisão de "vestir o kit completo", não "vestir aos poucos".
+    this.soul = vocation.soulMax;
     if (options.kitItems !== undefined && options.kitItems.length > 0) {
       const kit: VocationPieceResult[] = [];
       for (const { item } of options.kitItems) {
@@ -359,19 +861,19 @@ export class CharacterRuntime {
       quantity: 1,
       origin: 'vocation-choice',
     };
-    if (!this.inventory.add(carried, options.catalog, this, options.rules).ok) {
-      this.lootBox.push(carried);
-      return { ok: true, weapon: 'in-loot-box' };
-    }
+    // `forceAdd` ignora peso (ADR 0048 decisão 7): sem capacidade nunca é motivo para recusar
+    // a arma da vocação. Só falta catálogo ou pilha grande demais — nenhum dos dois acontece
+    // aqui, porque quem monta `weapon` já leu do mesmo catálogo.
+    this.inventory.forceAdd(carried, options.catalog, options.rules);
     // `equip` troca com o que está na mão: a machete volta para a mochila sozinha.
     const equipped = this.inventory.equip(carried.instanceId, this, options.catalog);
     return { ok: true, weapon: equipped.ok ? 'equipped' : 'in-backpack' };
   }
 
   /**
-   * Uma peça do kit (#496): entra pelo peso (`add`), veste pelo slot do item (`equip`), e o que
-   * não veste fica em segurança onde já está. O lugar da mochila NUNCA recusa kit — só o peso
-   * recusa, e a Caixa segura.
+   * Uma peça do kit (#496): entra pelo peso ignorado (`forceAdd`, ADR 0048 decisão 7), veste
+   * pelo slot do item (`equip`), e o que não veste fica em segurança onde já está. Nem o lugar
+   * nem o peso recusam kit — só o slot (duas mãos) decide entre vestir e ficar na mochila.
    */
   #grantKitPiece(item: Item, options: VocationChoiceOptions): VocationPieceStatus {
     const carried: CarriedItem = {
@@ -380,14 +882,82 @@ export class CharacterRuntime {
       quantity: 1,
       origin: 'vocation-choice',
     };
-    if (!this.inventory.add(carried, options.catalog, this, options.rules).ok) {
-      this.lootBox.push(carried);
-      return 'in-loot-box';
-    }
+    this.inventory.forceAdd(carried, options.catalog, options.rules);
     // `equip` troca com o que está no slot: a machete volta para a mochila sozinha. A peça
     // impedida pelas duas mãos (o escudo com o bow vestido) fica na mochila, onde já está.
     const equipped = this.inventory.equip(carried.instanceId, this, options.catalog);
     return equipped.ok ? 'equipped' : 'in-backpack';
+  }
+
+  /**
+   * Promove a vocação escolhida (#566, ADR 0042 decisão 1). `vocation` é a do PRÓPRIO
+   * personagem (`this.vocationId`) — quem resolve isso é o chamador (`host.ts`, como em
+   * `chooseVocation`). `vocation.promotion` ausente é `not-promotable` (conteúdo de teste sem
+   * o bloco). `nowGold` é o saldo DISPONÍVEL — `gold + goldDelta` —, porque um gasto anterior
+   * na mesma sessão de Cidade já baixou o que sobra para promover.
+   *
+   * O preço sai por `goldDelta`, liquidado pelo MESMO canal que já debita venda de item
+   * (`#saveDurableReceipt`/`applyProgression` do `server`) — nenhum ledger novo (invariante 10).
+   */
+  promote(vocation: Vocation, nowGold: number): PromoteResult {
+    if (this.vocationId === null) return { ok: false, reason: 'no-vocation' };
+    if (this.promoted) return { ok: false, reason: 'already-promoted' };
+    const promotion = vocation.promotion;
+    if (promotion === undefined) return { ok: false, reason: 'not-promotable' };
+    if (this.level < promotion.minLevel) return { ok: false, reason: 'level-too-low' };
+    if (nowGold < promotion.price) return { ok: false, reason: 'insufficient-gold' };
+    this.promoted = true;
+    this.goldDelta -= promotion.price;
+    return { ok: true };
+  }
+
+  /**
+   * Aprende uma magia por gold (#624, ADR 0058 d.2) — o `StdModule.learnSpell` do Canary: confere
+   * vocação, level e saldo, cobra `learnPrice` e marca a magia aprendida numa transação só. O
+   * saldo é `gold + goldDelta` (um gasto anterior na mesma sessão já baixou o que sobra), e o
+   * preço sai por `goldDelta`, liquidado pelo MESMO canal que já debita venda e promoção
+   * (invariante 10) — nenhum ledger novo. **Idempotente**: aprender de novo é recusado
+   * (`already-learned`) antes de qualquer débito, então repetir a intenção — retry do cliente,
+   * clique duplo — nunca cobra duas vezes.
+   *
+   * `spell` é a magia do CATÁLOGO (o chamador a resolve, `sim` não conhece o mapa); `undefined` é
+   * `unknown-spell`. Quem decide se a intenção chega aqui — Cidade ou hunt, invariante 9 — é o
+   * host: aprender não rola nada, então as duas sessões a aceitam (ADR 0052 d.4).
+   */
+  learnSpell(spell: Spell | undefined): LearnSpellResult {
+    const result = this.learnedSpells.learn(spell, {
+      level: this.level, vocationId: this.vocationId, gold: this.gold + this.goldDelta,
+    });
+    if (result.ok) this.goldDelta -= result.price;
+    return result;
+  }
+
+  /**
+   * Escolhe a postura de luta (M30-03, #550) — o `Player::setFightMode` do Canary, sem o
+   * `sendStats`/`sendSkills` (apresentação, do host). Devolve se o modo MUDOU: quem chama só
+   * marca o personagem como sujo e reenvia os stats quando mudou, e escolher o modo em que já
+   * está é um pedido válido que não escreve nada.
+   */
+  setFightMode(mode: FightMode): boolean {
+    if (this.fightMode === mode) return false;
+    this.fightMode = mode;
+    return true;
+  }
+
+  /**
+   * O nível desta skill COM o bônus de Loyalty (#628) — `Player::getLoyaltySkill` para as skills
+   * de uso e `getLoyaltyMagicLevel` para o magic level. É o nível que dano, chance, requisito de
+   * runa e cura leem; o BASE (`skills.levelOf`) continua sendo o que ganha tries, paga a penalidade
+   * de morte e escolhe o estágio de rate. `factor` é o da vocação (`skillFactorFor`); sem bônus a
+   * resposta é o nível base, sem conta nenhuma — o caminho de todo personagem com menos de 360
+   * dias de conta.
+   */
+  loyaltyLevelOf(definition: Skill, factor: number = definition.curve.factor): number {
+    const level = this.skills.levelOf(definition);
+    if (this.loyaltyBonusPercent === 0) return level;
+    return this.#loyaltyLevels.levelOf(
+      definition, level, this.skills.pointsOf(definition), this.loyaltyBonusPercent, factor,
+    );
   }
 
   getState(): CharacterState {
@@ -400,7 +970,10 @@ export class CharacterRuntime {
       maxMana: this.maxMana,
       level: this.level,
       xp: this.xp,
+      soul: this.soul,
       vocationId: this.vocationId,
+      ...(this.boostedMonsterId === undefined ? {} : { boostedMonsterId: this.boostedMonsterId }),
+      ...(this.loyaltyBonusPercent === 0 ? {} : { loyaltyBonusPercent: this.loyaltyBonusPercent }),
       staminaMs: this.staminaMs,
       staminaUpdatedAtMs: this.staminaUpdatedAtMs,
       speed: this.speed,
@@ -409,10 +982,16 @@ export class CharacterRuntime {
       alive: this.alive,
       skills: this.skills.getState(),
       bestiary: this.bestiary.getState(),
+      bosstiary: this.bosstiary.getState(),
+      charms: this.charms.getState(),
+      // Só quando o registro é a verdade do personagem (`recorded`): um snapshot restaurado de antes
+      // da #624 não tem a chave, e reescrevê-la vazia apagaria a concessão da migração 0024.
+      ...(this.learnedSpells.recorded ? { learnedSpells: this.learnedSpells.getState() } : {}),
+      training: this.training.getState(),
       capacity: this.capacity,
       inventory: this.inventory.getState(),
-      lootBox: this.lootBox,
       lootSeq: this.lootSeq,
+      ...(this.removedInstances.length === 0 ? {} : { removedInstances: this.removedInstances }),
       contribution: this.contribution.getState(),
       ...(this.ammo.size === 0 ? {} : { ammo: Object.fromEntries(this.ammo) }),
       // supplyStock/ammunitionStock NÃO seguem o mesmo `size === 0` do ammo: ammo só cresce
@@ -424,9 +1003,33 @@ export class CharacterRuntime {
       // deixar quem grava o extrato decidir se um objeto vazio é "drenado" ou "nunca tocado".
       supplyStock: Object.fromEntries(this.supplyStock),
       ammunitionStock: Object.fromEntries(this.ammunitionStock),
+      // Como `supplyStock`: NÃO gatear por `size === 0`. Um storage setado e depois apagado
+      // NESTA sessão (`setStorageValue(key, -1)`) é um resultado real — "voltou a não estar
+      // setado" —, e omitir a chave faria o extrato não tocar a linha e o valor antigo
+      // ressuscitar no próximo login (a mesma lição da revisão do #536).
+      storages: Object.fromEntries(this.storages),
       cooldowns: this.cooldowns.getState(),
       direction: this.direction,
       ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),
+      // Como `conditions`: omitido quando ainda vale `FULL_BLOCK_CHARGE` (nunca bloqueou), para
+      // não inflar todo snapshot existente com dois zeros que o construtor já repõe sozinho.
+      ...(isFullBlockCharge(this.blockCharge) ? {} : { blockCharge: this.blockCharge }),
+      // O mesmo padrão: omitido enquanto ainda é o inicial (v1/v2 nunca o tocam).
+      ...(isInitialAttackPractice(this.attackPractice)
+        ? {} : { attackPractice: this.attackPractice }),
+      // Mesmo padrão: omitido em zero, o de quem nunca comeu/nunca consumiu carga (#726).
+      ...(this.fedMs === 0 ? {} : { fedMs: this.fedMs }),
+      ...(this.blessings === 0 ? {} : { blessings: this.blessings }),
+      ...(isEmptyFamiliarState(this.familiar) ? {} : { familiar: this.familiar }),
+      ...(this.pendingManualAction === null ? {} : { pendingManualAction: this.pendingManualAction }),
+      ...(this.lastCombatActionAtMs === null
+        ? {} : { lastCombatActionAtMs: this.lastCombatActionAtMs }),
+      ...(this.cleanseImmunity.size === 0
+        ? {} : { cleanseImmunity: Object.fromEntries(this.cleanseImmunity) }),
+      ...(this.promoted ? { promoted: true } : {}),
+      // Omitidos no default (ofensiva, nunca bateu): o construtor os repõe sozinho.
+      ...(this.fightMode === DEFAULT_FIGHT_MODE ? {} : { fightMode: this.fightMode }),
+      ...(this.lastAttackAtMs === null ? {} : { lastAttackAtMs: this.lastAttackAtMs }),
     };
   }
 
@@ -453,6 +1056,17 @@ export class CharacterRuntime {
   heal(amount: number): number {
     const applied = Math.min(amount, this.maxHealth - this.health);
     this.health += applied;
+    return applied;
+  }
+
+  /**
+   * Ganha alma (#593), capada no `soulMax` da vocação. Devolve o quanto de fato entrou — como
+   * `heal` devolve o quanto de fato curou —, para quem chama saber se vale a pena continuar
+   * tiquetando (o Canary não cancela a condição ao encher, mas o chamador pode).
+   */
+  gainSoul(amount: number, max: number): number {
+    const applied = Math.min(amount, Math.max(0, max - this.soul));
+    this.soul += applied;
     return applied;
   }
 }

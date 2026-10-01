@@ -21,9 +21,14 @@ import type { Rng } from '../rng.js';
 /**
  * De ONDE vem a defesa do defensor (DT-01). A escolha é do `Inventory`, que já conhece slots e
  * compatibilidades — `shield` precede `weapon`, e `none` é quem não tem peça elegível.
+ *
+ * `'monster'` (#548, `combat-v3`) é a defesa INATA do monstro (`Monster.defense`, ADR 0040) —
+ * sem peça nenhuma envolvida, e por isso sem a escolha de `Inventory` que os outros dois kinds
+ * carregam. O número é o mesmo `defense` que o `combat-v3` consome em `blockhit.ts`; o `kind`
+ * aqui é só para auditoria (`DefenseOutcome.source`).
  */
 export interface DefenseSource {
-  readonly kind: 'shield' | 'weapon' | 'none';
+  readonly kind: 'shield' | 'weapon' | 'monster' | 'none';
   readonly defense: number;
 }
 

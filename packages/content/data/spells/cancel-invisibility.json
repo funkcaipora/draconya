@@ -1,0 +1,22 @@
+{
+  "id": "cancel-invisibility",
+  "name": "Cancel Invisibility",
+  "description": "Remove a invisibilidade dos monstros num círculo de raio 3 ao seu redor.",
+  "vocationId": "paladin",
+  "minLevel": 26,
+  "learnPrice": 1600,
+  "manaCost": 200,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "dispel",
+    "types": ["invisible"],
+    "area": {
+      "shape": "circle",
+      "radius": 3,
+      "centered": "caster"
+    }
+  },
+  "_open": "Canary `data/scripts/spells/support/cancel_invisibility.lua` (main, 2026-09-27): `words(\"exana ina\")`, `id(90)`, `level(26)`, `mana(200)`, `cooldown(2*1000)`/`groupCooldown(2*1000)`, `isSelfTarget(true)`, `isAggressive(false)`, `isPremium(true)` (Premium fica fora do recorte — Draconya não tem conta free/premium ainda), `vocation(\"paladin;true\", \"royal paladin;true\")`, `combat:setArea(createCombatArea(AREA_CIRCLE3X3))` com `COMBAT_PARAM_DISPEL, CONDITION_INVISIBLE`. `AREA_CIRCLE3X3` (`data/scripts/lib/register_spells.lua:372-380`) é o círculo de RAIO 3, 37 tiles, em linhas 3/5/7/7/7/5/3 — o mesmo que `mass-healing.json` usa e que `docs/product/combat.md` (Magia em área) descreve; o nome \"3X3\" é o raio, não o lado. Remove a chave `invisible` dos MONSTROS colhidos na forma (#592) e SÓ deles (#559): o `combat` do script nunca chama `COMBAT_PARAM_AGGRESSIVE` (o `isAggressive(false)` é o `Spell::aggressive` do portão de proteção, outro campo), então vale o default `CombatParams::aggressive = true` e `Combat::CombatFunc` (`combat.cpp:1562`/`1610`) exclui o lançador (`caster != creature`) — a invisibilidade do próprio Paladin sobrevive a um Cancel Invisibility — e só inclui outro jogador pelas regras de PvP, que a hunt não tem. Monstros do recorte que ficam invisíveis sozinhos (a defesa `invisible` do Killer Rabbit e de ~107 outros, #559) são o que ela dispensa; o mecanismo está testado em `sim/rulesets/hunt.test.ts`. Efeito (magic blue), auditado em 2026-09-27 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver `docs/combat-presentation-audit.md`)."
+}

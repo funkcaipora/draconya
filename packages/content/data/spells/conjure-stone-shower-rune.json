@@ -1,0 +1,20 @@
+{
+  "id": "conjure-stone-shower-rune",
+  "name": "Stone Shower Rune",
+  "description": "Conjura cargas da Stone Shower Rune, consumindo uma runa em branco.",
+  "vocationId": "druid",
+  "minLevel": 28,
+  "learnPrice": 1100,
+  "manaCost": 430,
+  "soulCost": 3,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "conjure",
+    "supplyId": "stone-shower-rune",
+    "charges": 4,
+    "blankPrice": 10
+  },
+  "_open": "Números do Canary (#594, ADR 0044): `data/scripts/spells/conjuring/stone_shower_rune.lua` — `creature:conjureItem(3147, 3175, 4)`, `spell:level(28)`, `spell:mana(430)`, `spell:soul(3)`, vocação `druid;true`/`elder druid;true` (sem promoção, ADR 0044 §Em aberto). O Canary também declara `spell:isPremium(true)` — Draconya não modela Premium por conjuração ainda (fora do recorte desta issue). `blankPrice` 10, como em toda runa."
+}

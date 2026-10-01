@@ -1,0 +1,20 @@
+{
+  "id": "conjure-explosion-rune-sorcerer",
+  "name": "Explosion Rune",
+  "description": "Conjura cargas da Explosion Rune, consumindo uma runa em branco.",
+  "vocationId": "sorcerer",
+  "minLevel": 31,
+  "learnPrice": 1800,
+  "manaCost": 570,
+  "soulCost": 4,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "conjure",
+    "supplyId": "explosion-rune",
+    "charges": 6,
+    "blankPrice": 10
+  },
+  "_open": "A metade Sorcerer de `conjure-explosion-rune-druid.json` — ver o `_open` de lá para os números e o motivo do split por vocação."
+}

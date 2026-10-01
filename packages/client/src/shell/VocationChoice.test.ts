@@ -30,7 +30,7 @@ const catalogue: Catalogue = {
     { id: 'sorcerer', name: 'Sorcerer', healthPerLevel: 5, manaPerLevel: 30, capacityPerLevel: 10, startingWeaponItemId: 'wand-of-vortex' },
     { id: 'druid', name: 'Druid', healthPerLevel: 5, manaPerLevel: 30, capacityPerLevel: 10, startingWeaponItemId: 'snakebite-rod' },
   ],
-  vocationLevel: 8,
+  charms: [], vocationLevel: 8,
 };
 
 beforeEach(() => {

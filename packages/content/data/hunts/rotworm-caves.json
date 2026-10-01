@@ -6,39 +6,5 @@
   "routeId": "rotworm-caves",
   "ambience": "cavern",
   "description": "Cavernas úmidas dominadas por rotworms — vermes lentos que aguentam apanhar bastante antes de cair.",
-  "corpseTtlMs": 30000,
-  "spawnClearRadius": 3,
-  "difficulties": {
-    "cautious": {
-      "monsterCount": 13,
-      "composition": [
-        {
-          "monsterId": "rotworm",
-          "weight": 1
-        }
-      ],
-      "respawnDelayMs": 30000
-    },
-    "bold": {
-      "monsterCount": 26,
-      "composition": [
-        {
-          "monsterId": "rotworm",
-          "weight": 1
-        }
-      ],
-      "respawnDelayMs": 30000
-    },
-    "reckless": {
-      "monsterCount": 52,
-      "composition": [
-        {
-          "monsterId": "rotworm",
-          "weight": 1
-        }
-      ],
-      "respawnDelayMs": 30000
-    }
-  },
-  "_open": "recommendedLevel 8: o Huntera não mostra recomendação (§31); usado o gate padrão de vocação (progression.vocationLevel). respawnDelayMs 30000: 30 s de respawn após morte em todas as dificuldades. monsterCount (13 no cautious, 26 no bold, 52 no reckless): densidade proporcional aos 13 spawnPoints da rota (1 bicho por ponto no fácil, 2 no médio e 4 no hard). corpseTtlMs: RESOLVIDO em 30000 ms (Huntera Parte VI §36, #515). spawnClearRadius: ainda o provisório da Rat Cellars (3 tiles, #236), sem captura própria da Rotworm Caves no Huntera."
+  "_open": "Fim do pull por dificuldade (#583, ADR 0039) e conversão para os spawns reais do Canary (#586, M36-05): não há mais `difficulties`/`monsterCount`/`composition`/`spawnClearRadius` nesta hunt — os 42 pontos de `data/routes/rotworm-caves.json`, lidos de `otservbr-monster.xml` pelo recorte real de Rotworm Caves (`pnpm catalog:spawns --map rotworm-caves`), nascem TODOS ao mesmo tempo. A composição real do recorte NÃO é só rotworm: 35 `rotworm` e 7 `terramite` — a caverna do Canary tem as duas espécies lado a lado, não uma hunt monotemática. `respawnDelayMs` também vem do Canary por ponto: 90000 ms (90 s, `spawntime=\"90\"`) em todos os 42 — não mais os 2000 ms fixos que a Rat Cellars adotava por comparação (histórico, #510/PR #512). recommendedLevel 8: o Huntera não mostra recomendação (§31); usado o gate padrão de vocação (progression.vocationLevel), decisão preservada desta issue. O override que dava ao `rotworm` `blockable: true` (comportamento observado do Huntera, não do Canary) foi APAGADO por esta issue — `rotworm` cai no `blockable: false` real do Canary (`rotworm.lua`, `isBlockable: false`), a MESMA proporção que já valia para 1.640 dos 1.656 monstros do bestiário (o rotworm só divergia dela por causa do override): o respawn pós-morte nasce sempre, com o telegraph de 4200 ms, nunca esperando a vista limpar. A população INICIAL já nascia cheia sem checar a vista de qualquer forma (#583). `corpseTtlMs` mora no monstro desde o #585: `rotworm`/`terramite` declaram o próprio valor, 670000 ms hoje (a soma real da cadeia `duration`/`decayTo` do Canary `items.xml`) — não mais os 30000 ms fixos que o Huntera observava (histórico, Parte VI §36/#515, o prazo do PRIMEIRO estágio de decaimento, não o total). Densidade: o Huntera limitava a pull a 2/5/8 rotworms vivos por vez (histórico); o Canary real não escolhe tamanho — os 42 pontos nascem sempre, divergência deliberada do ADR 0039 decisão 3."
 }

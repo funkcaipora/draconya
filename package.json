@@ -18,7 +18,7 @@
     "lint": "eslint .",
     "docs-check": "tsx scripts/docs-check.ts",
     "source-policy": "tsx scripts/source-policy.ts",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs-check && pnpm source-policy && pnpm assets:inventory --check && pnpm map:import --check && pnpm map:world --check && pnpm map:minimap --check",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs-check && pnpm source-policy && pnpm assets:inventory --check && pnpm map:import --check && pnpm map:world --check && pnpm map:minimap --check && pnpm map:links --check && pnpm map:places --check && pnpm map:creatures --check && pnpm map:lights --check && pnpm catalog:import --check && pnpm catalog:npc-prices --check && pnpm catalog:spell-prices --check && pnpm catalog:promote-items --check && pnpm catalog:promote-monsters --check && pnpm catalog:spawns --map darashia-dragon-lair --check && pnpm catalog:spawns --map rat-cellars --check && pnpm catalog:spawns --map rotworm-caves --check && pnpm catalog:spawns --map dwarf-mines --check && pnpm catalog:spawns --map cyclopolis --check && pnpm catalog:spawns --map minotaur-camp --check && pnpm catalog:spawns --map bone-crypt --check && pnpm catalog:spawns --map hydra-mountain --check && pnpm catalog:spawns --map hellhound-den --check",
     "dev": "tsx watch --env-file=.env packages/server/src/main.ts",
     "content:check": "tsc -b && pnpm --filter @draconya/tools content:check",
     "assets:library": "tsx scripts/build-asset-library.ts",
@@ -29,7 +29,17 @@
     "map:census": "tsx scripts/map-census.ts",
     "map:world": "tsx scripts/world-map.ts",
     "map:minimap": "tsx --env-file-if-exists=.env scripts/world-minimap.ts",
+    "map:links": "tsx --env-file-if-exists=.env scripts/world-links.ts",
+    "map:places": "tsx --env-file-if-exists=.env scripts/world-places.ts",
+    "map:creatures": "tsx --env-file-if-exists=.env scripts/world-creatures.ts",
+    "map:lights": "tsx --env-file-if-exists=.env scripts/world-lights.ts",
     "route:trace": "tsx scripts/trace-route.ts",
+    "catalog:import": "tsx scripts/catalog/import.ts",
+    "catalog:npc-prices": "tsx scripts/catalog/npc-prices.ts",
+    "catalog:spell-prices": "tsx scripts/catalog/spell-prices.ts",
+    "catalog:promote-items": "tsx scripts/catalog/promote-items.ts",
+    "catalog:promote-monsters": "tsx scripts/catalog/promote-monsters.ts",
+    "catalog:spawns": "tsx scripts/catalog/spawns.ts",
     "bench:monster": "tsc -b && pnpm --filter @draconya/tools bench:monster",
     "bench:hunts": "tsc -b && pnpm --filter @draconya/tools bench:hunts",
     "bench:combat": "tsc -b && pnpm --filter @draconya/tools bench:combat",
@@ -39,6 +49,7 @@
     "setup:caiporinha": "tsx --env-file-if-exists=.env scripts/setup-character-caiporinha.ts"
   },
   "devDependencies": {
+    "@types/luaparse": "^0.2.13",
     "@types/node": "^24.13.6",
     "@typescript-eslint/parser": "^8.70.1",
     "drizzle-kit": "^0.31.11",
@@ -51,7 +62,9 @@
     "vitest": "^5.0.2"
   },
   "dependencies": {
+    "fast-xml-parser": "^5.11.1",
     "fflate": "^0.8.3",
+    "luaparse": "^0.3.1",
     "zod": "^4.6.5"
   }
 }

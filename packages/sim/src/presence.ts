@@ -20,6 +20,12 @@ export interface CreatureAppeared {
   readonly position: WorldPoint;
   readonly health: number;
   readonly maxHealth: number;
+  /**
+   * O `characterId` do MESTRE, só para a invocação do JOGADOR (#598, M38-01, ADR 0057 decisão
+   * 4). Ausente é "não é invocação de personagem" — o de sempre, inclusive para toda invocação
+   * de MONSTRO (#546), que a apresentação não precisa marcar.
+   */
+  readonly masterId?: string;
 }
 
 export interface CreatureVanished {
@@ -63,6 +69,41 @@ export interface GroundItemVanished {
   readonly itemId: number;
 }
 
+/**
+ * Um campo de tile apareceu, ou reiniciou (#561, M31-06). O `id` é o do CONTEÚDO
+ * (`FieldSpec.id`, ex.: "dragon-lord-firefield"), não um id sequencial — relançar o MESMO id
+ * REINICIA (`Fields.apply`, `packages/sim/src/fields.ts`), e é por isso que não há um segundo
+ * id como o de `GroundItemAppeared`. `tiles` cobre a forma inteira: um campo nasce de uma
+ * área, nunca de um tile só. Só a apresentação; a arte é resolvida no hospedeiro (invariante 6).
+ */
+export interface FieldAppeared {
+  readonly kind: 'field-appeared';
+  readonly fieldId: string;
+  readonly tiles: readonly WorldPoint[];
+}
+
+/** O campo sumiu — o prazo (`expiresAtMs`) venceu. */
+export interface FieldVanished {
+  readonly kind: 'field-vanished';
+  readonly fieldId: string;
+}
+
+/**
+ * O campo trocou de estágio (#560, `decayTo` do Canary): o fire field enfraquece antes de
+ * sumir de vez. `stageIndex` é o estágio NOVO (1, 2, …) — o hospedeiro resolve a arte por
+ * índice em `appearances.fieldStages[fieldId]` (invariante 6); campo sem entrada troca de
+ * estágio MUDO, a mesma regra de `FieldAppeared`. `tiles` viaja de novo porque a troca é
+ * emitida sem depender de quem viu o `field-appear` original — a mesma redundância que
+ * `CreatureHealthChanged` aceita para não obrigar reconstrução no cliente.
+ */
+export interface FieldStageChanged {
+  readonly kind: 'field-stage-changed';
+  readonly fieldId: string;
+  readonly stageIndex: number;
+  readonly tiles: readonly WorldPoint[];
+}
+
 export type PresenceEvent =
   | CreatureAppeared | CreatureVanished | CreatureHealthChanged
-  | GroundItemAppeared | GroundItemVanished;
+  | GroundItemAppeared | GroundItemVanished
+  | FieldAppeared | FieldVanished | FieldStageChanged;

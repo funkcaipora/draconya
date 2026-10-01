@@ -1,5 +1,74 @@
 import { describe, expect, it } from 'vitest';
-import { appearancesSchema, botConditionSchema, botConfigV2Schema, botSetSchema, botTargetPolicySchema, huntSchema, itemSchema, spellFormulaSchema } from './schemas.js';
+import { MonsterRace as ProtocolMonsterRace } from '@draconya/protocol';
+import {
+  ammunitionSchema, appearancesSchema, botConditionSchema, botConfigV2Schema, botSetSchema,
+  botTargetPolicySchema, DEFAULT_MONSTER_RACE, huntSchema, itemSchema, loyaltySchema, MONSTER_RACES,
+  monsterSchema, NEUTRAL_MONSTER_OUTFIT, routeSchema, spellAreaSchema, spellFormulaSchema, tilemapSchema,
+  worldSchema, WORLD_TYPES,
+} from './schemas.js';
+
+describe('routeSchema.spawnPoints — `monsters` com peso na mesma posição (#582)', () => {
+  const route = (spawnPoints: unknown): unknown => ({
+    id: 'r', mapId: 'm', tiles: [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }], spawnPoints,
+  });
+
+  it('aceita `monsters` com dois ou mais candidatos e peso default 1', () => {
+    const parsed = routeSchema.parse(route([
+      { routeIndex: 0, respawnDelayMs: 1000, monsters: [{ monsterId: 'dragon' }, { monsterId: 'dragon-lord', weight: 3 }] },
+    ]));
+    expect(parsed.spawnPoints[0]?.monsters).toEqual([
+      { monsterId: 'dragon', weight: 1 }, { monsterId: 'dragon-lord', weight: 3 },
+    ]);
+  });
+
+  it('recusa `monsterId` e `monsters` juntos no mesmo ponto', () => {
+    expect(() => routeSchema.parse(route([
+      { routeIndex: 0, respawnDelayMs: 1000, monsterId: 'dragon', monsters: [{ monsterId: 'dragon' }, { monsterId: 'wyvern' }] },
+    ]))).toThrow(/exclusivos/);
+  });
+
+  it('recusa `monsters` com um candidato só — isso é `monsterId`', () => {
+    expect(() => routeSchema.parse(route([
+      { routeIndex: 0, respawnDelayMs: 1000, monsters: [{ monsterId: 'dragon' }] },
+    ]))).toThrow();
+  });
+});
+
+describe('routeSchema.spawnPoints — obrigatório declarar monstro e respawnDelayMs (#583)', () => {
+  const route = (spawnPoints: unknown): unknown => ({
+    id: 'r', mapId: 'm', tiles: [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }], spawnPoints,
+  });
+
+  it('recusa ponto sem `monsterId` nem `monsters` — não há mais composição de dificuldade como fallback', () => {
+    expect(() => routeSchema.parse(route([{ routeIndex: 0, respawnDelayMs: 1000 }])))
+      .toThrow(/monsterId.*OU.*monsters/);
+  });
+
+  it('recusa ponto sem `respawnDelayMs`', () => {
+    expect(() => routeSchema.parse(route([{ routeIndex: 0, monsterId: 'rat' }])))
+      .toThrow();
+  });
+
+  it('aceita ponto completo', () => {
+    const parsed = routeSchema.parse(route([{ routeIndex: 0, monsterId: 'rat', respawnDelayMs: 2000 }]));
+    expect(parsed.spawnPoints[0]).toMatchObject({ monsterId: 'rat', respawnDelayMs: 2000 });
+  });
+});
+
+describe('spellAreaSchema — rows (#679)', () => {
+  it('accepts odd widths, one per row', () => {
+    expect(spellAreaSchema.parse({ shape: 'rows', widths: [1, 1, 3, 3, 3] }))
+      .toEqual({ shape: 'rows', widths: [1, 1, 3, 3, 3] });
+  });
+
+  it('rejects an empty list, an even width and a zero width', () => {
+    // Largura par não tem centro na linha da frente: o tile sairia deslocado para um lado.
+    expect(() => spellAreaSchema.parse({ shape: 'rows', widths: [] })).toThrow();
+    expect(() => spellAreaSchema.parse({ shape: 'rows', widths: [2] })).toThrow();
+    expect(() => spellAreaSchema.parse({ shape: 'rows', widths: [0] })).toThrow();
+    expect(() => spellAreaSchema.parse({ shape: 'rows', widths: [1, 4, 5] })).toThrow();
+  });
+});
 
 describe('spellFormulaSchema — a fórmula canônica do #474', () => {
   it('aplica o default do levelFactor (1/5) e os bases 0', () => {
@@ -43,13 +112,6 @@ describe('huntSchema (#360)', () => {
     recommendedLevel: 1,
     mapId: 'rat-cellars',
     routeId: 'rat-cellars',
-    difficulties: {
-      cautious: {
-        monsterCount: 2,
-        composition: [{ monsterId: 'rat', weight: 1 }],
-        respawnDelayMs: 30_000,
-      },
-    },
   };
 
   it('valida hunt válida sem exitDelayMs (opcional)', () => {
@@ -72,18 +134,35 @@ describe('huntSchema (#360)', () => {
   });
 });
 
-describe('itemSchema — o consumível é só a blessing-charge (ADR 0026 d.3)', () => {
+describe('itemSchema — ML especializado por elemento (#680)', () => {
+  const wand = { id: 'eldritch-wand', name: 'Eldritch Wand', kind: 'weapon', slot: 'hand', weight: 20, value: 0 };
+
+  it('aceita pontos por elemento das oito chaves do Canary', () => {
+    const parsed = itemSchema.parse({ ...wand, bonuses: { specializedMagicLevel: { fire: 1, energy: 1 } } });
+    expect(parsed.bonuses?.specializedMagicLevel).toEqual({ fire: 1, energy: 1 });
+  });
+
+  it('recusa elemento sem `<elemento>magiclevelpoints` no Canary, e ponto não positivo', () => {
+    expect(() => itemSchema.parse({ ...wand, bonuses: { specializedMagicLevel: { arcane: 1 } } })).toThrow();
+    expect(() => itemSchema.parse({ ...wand, bonuses: { specializedMagicLevel: { fire: 0 } } })).toThrow();
+  });
+});
+
+describe('itemSchema — o consumível é a comida (ADR 0026 d.3, emenda #570)', () => {
+  // A carga de bênção (`kind: 'blessing'`) foi REMOVIDA pelo #570: bênção virou serviço de
+  // Cidade (ADR 0052), nunca item de mochila. A comida é o consumível real que sobrou, e o
+  // catálogo passa a ter EMPILHÁVEL como o comum, não a exceção.
   const consumable = {
-    id: 'blessing-charge', name: 'Carga de Bênção', kind: 'consumable',
-    stackable: false, weight: 1, value: 0, effect: { kind: 'blessing' },
+    id: 'cheese', name: 'Queijo', kind: 'consumable',
+    stackable: true, weight: 1, value: 0, effect: { kind: 'food', durationMs: 12_000 },
   };
 
-  it('aceita o consumível sem group, sem restock, sem price e sem empilhar', () => {
-    // O suprimento virou abstrato: só a bênção (M22) permanece como item consumível, e ela
-    // não tem preço, grupo nem reposição. Mutação que mata: exigir `stackable`/`group`.
+  it('aceita o consumível sem group, sem restock e sem price', () => {
+    // O suprimento virou abstrato: só comida permanece como item consumível, e ela não tem
+    // preço, grupo nem reposição. Mutação que mata: exigir `group`.
     const parsed = itemSchema.parse(consumable);
     expect(parsed.kind).toBe('consumable');
-    expect(parsed.stackable).toBe(false);
+    expect(parsed.stackable).toBe(true);
     expect(itemSchema.parse(parsed)).toEqual(parsed);
   });
 
@@ -109,6 +188,238 @@ describe('itemSchema — o consumível é só a blessing-charge (ADR 0026 d.3)',
     expect(() => itemSchema.parse({ ...ring, price: 10 })).toThrow();
     expect(() => itemSchema.parse({ ...ring, group: 'potion' })).toThrow();
     expect(() => itemSchema.parse({ ...ring, restock: { batch: 1, min: 0 } })).toThrow();
+  });
+});
+
+describe('itemSchema — `use.keyId` só em `use.tool: "key"` (#732, ADR 0050 d.6 T2)', () => {
+  const key = {
+    id: 'brass-key', name: 'Brass Key', kind: 'other' as const, weight: 1, value: 0,
+    use: { tool: 'key' as const, keyId: 42 },
+  };
+
+  it('aceita a chave com `keyId`', () => {
+    const parsed = itemSchema.parse(key);
+    expect(parsed.use).toEqual({ tool: 'key', keyId: 42 });
+  });
+
+  it('aceita `use.tool: "key"` sem `keyId` (chave que não se pode ligar a uma porta específica)', () => {
+    const { use: _use, ...rest } = key;
+    const parsed = itemSchema.parse({ ...rest, use: { tool: 'key' } });
+    expect(parsed.use).toEqual({ tool: 'key' });
+  });
+
+  it('recusa `keyId` numa ferramenta que não é chave — machete não precisa de id nenhum', () => {
+    const { use: _use, ...rest } = key;
+    expect(() => itemSchema.parse({ ...rest, use: { tool: 'machete', keyId: 1 } })).toThrow(/keyId/);
+  });
+});
+
+describe('tilemapSchema.interactables — `reward` só em `kind: "chest"` (#733, ADR 0050 d.6 T2)', () => {
+  const mapOf = (interactable: Record<string, unknown>): Record<string, unknown> => ({
+    id: 'm', z: 0, grid: ['...'], interactables: [{
+      at: { x: 0, y: 0, z: 0 }, initialState: 'default', appearanceKey: 'chest-1', ...interactable,
+    }],
+  });
+
+  it('aceita `reward` num baú', () => {
+    const parsed = tilemapSchema.parse(mapOf({ kind: 'chest', uid: 1, reward: { itemId: 'sword' } }));
+    // `quantity` tem default 1 — um baú sem quantidade declarada dá exatamente uma unidade.
+    expect(parsed.interactables[0]?.reward).toEqual({ itemId: 'sword', quantity: 1 });
+  });
+
+  it('aceita quantidade explícita', () => {
+    const parsed = tilemapSchema.parse(
+      mapOf({ kind: 'chest', uid: 1, reward: { itemId: 'sword', quantity: 3 } }),
+    );
+    expect(parsed.interactables[0]?.reward).toEqual({ itemId: 'sword', quantity: 3 });
+  });
+
+  it('recusa `reward` fora de `chest` — uma porta não entrega item', () => {
+    expect(() => tilemapSchema.parse(
+      mapOf({ kind: 'quest-door', initialState: 'closed', reward: { itemId: 'sword' } }),
+    )).toThrow(/reward/);
+  });
+
+  it('baú sem `reward` é válido — nem todo baú deste recorte já tem prêmio configurado', () => {
+    const parsed = tilemapSchema.parse(mapOf({ kind: 'chest', uid: 1 }));
+    expect(parsed.interactables[0]?.reward).toBeUndefined();
+  });
+});
+
+// A proveniência de uma entidade GERADA pelo importador de catálogo (ADR 0038 decisão 2, #572):
+// `itemSchema`/`monsterSchema`/`ammunitionSchema` são `z.strictObject` — sem um `source` EXPLÍCITO,
+// a primeira entidade que #573 (itens) ou M35 (monstros) gerar derrubaria o boot inteiro.
+describe('o campo "source" da entidade GERADA (ADR 0038 decisão 2)', () => {
+  const source = { engine: 'canary' as const, commit: 'a'.repeat(40), path: 'items.xml' };
+
+  it('itemSchema aceita `source` — a forma que scripts/catalog/generated-writer.ts escreve', () => {
+    const item = {
+      id: 'imported-a', name: 'Imported A', kind: 'other', weight: 1, value: 1, source,
+    };
+    expect(itemSchema.parse(item).source).toEqual(source);
+  });
+
+  it('monsterSchema aceita `source`', () => {
+    const monster = {
+      id: 'imported-rat', name: 'Imported Rat', recommendedLevel: 1, health: 20, experience: 5,
+      attack: 5, armor: 0, attackIntervalMs: 2000, speed: 172, aggroRadius: 11,
+      source: { ...source, path: 'monster/rodents/rat.lua' },
+    };
+    expect(monsterSchema.parse(monster).source).toEqual({ ...source, path: 'monster/rodents/rat.lua' });
+  });
+
+  it('ammunitionSchema aceita `source`', () => {
+    const ammo = {
+      id: 'imported-arrow', name: 'Imported Arrow', family: 'arrow', attack: 5, price: 1, source,
+    };
+    expect(ammunitionSchema.parse(ammo).source).toEqual(source);
+  });
+
+  it('`source` continua opcional — item autoral (sem importador) não precisa dele', () => {
+    const item = { id: 'backpack', name: 'Backpack', kind: 'container', weight: 1, value: 0 };
+    expect(itemSchema.parse(item).source).toBeUndefined();
+  });
+
+  it('`source` incompleto (sem "commit") é recusado — proveniência não é "o que der"', () => {
+    const item = {
+      id: 'imported-a', name: 'Imported A', kind: 'other', weight: 1, value: 1,
+      source: { engine: 'canary', path: 'items.xml' },
+    };
+    expect(() => itemSchema.parse(item)).toThrow();
+  });
+});
+
+// `pushable`/`canPushCreatures`/`canPushItems` (M29-08, #544): empurrar criatura, monstro
+// empurrável e esmagamento. Os defaults são os do Canary (`monsters.hpp:137-139`), e um monstro
+// sem os três campos precisa continuar bit a bit idêntico ao de antes desta issue.
+describe('monsterSchema — pushable/canPushCreatures/canPushItems (M29-08, #544)', () => {
+  const base = {
+    id: 'rat', name: 'Rat', health: 20, experience: 5,
+    attack: 5, armor: 0, attackIntervalMs: 2000, speed: 172, aggroRadius: 11,
+  };
+
+  it('ausentes: `pushable` é `true`, `canPushCreatures`/`canPushItems` são `false` — os defaults do Canary', () => {
+    const parsed = monsterSchema.parse(base);
+    expect(parsed.pushable).toBe(true);
+    expect(parsed.canPushCreatures).toBe(false);
+    expect(parsed.canPushItems).toBe(false);
+  });
+
+  it('declarados explicitamente, os três valores sobrevivem à validação', () => {
+    const parsed = monsterSchema.parse({
+      ...base, pushable: false, canPushCreatures: true, canPushItems: true,
+    });
+    expect(parsed.pushable).toBe(false);
+    expect(parsed.canPushCreatures).toBe(true);
+    expect(parsed.canPushItems).toBe(true);
+  });
+});
+
+// A apresentação do monstro (#620): cores e addons do outfit, falas, luz e raça. Tudo opcional, com o
+// neutro do Canary como default — o monstro sem os campos continua bit a bit o de antes.
+describe('monsterSchema — apresentação: outfit, voices, light, race (#620)', () => {
+  const base = {
+    id: 'rat', name: 'Rat', health: 20, experience: 5,
+    attack: 5, armor: 0, attackIntervalMs: 2000, speed: 172, aggroRadius: 11,
+  };
+
+  it('ausentes, os quatro ficam ausentes: quem lê aplica o neutro do Canary (tudo 0, sem falas nem luz, `blood`)', () => {
+    // Sem `.default()`: o campo obrigatório no tipo `Monster` obrigaria todo literal de teste a repeti-lo.
+    const parsed = monsterSchema.parse(base);
+    expect(parsed.outfit).toBeUndefined();
+    expect(parsed.voices).toBeUndefined();
+    expect(parsed.light).toBeUndefined();
+    expect(parsed.race).toBeUndefined();
+    expect(NEUTRAL_MONSTER_OUTFIT).toEqual({ head: 0, body: 0, legs: 0, feet: 0, addons: 0 });
+    expect(DEFAULT_MONSTER_RACE).toBe('blood');
+  });
+
+  it('declarados, os quatro campos sobrevivem à validação', () => {
+    const parsed = monsterSchema.parse({
+      ...base,
+      outfit: { head: 113, body: 120, legs: 95, feet: 115, addons: 3 },
+      voices: { intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!' }, { text: 'GRR', yell: true }] },
+      light: { level: 4, color: 208 },
+      race: 'fire',
+    });
+    expect(parsed.outfit).toEqual({ head: 113, body: 120, legs: 95, feet: 115, addons: 3 });
+    // `yell` ausente é fala, não grito.
+    expect(parsed.voices?.lines).toEqual([{ text: 'Meep!', yell: false }, { text: 'GRR', yell: true }]);
+    expect(parsed.light).toEqual({ level: 4, color: 208 });
+    expect(parsed.race).toBe('fire');
+  });
+
+  it('`addons` ausente num outfit declarado é 0', () => {
+    expect(monsterSchema.parse({ ...base, outfit: { head: 1, body: 2, legs: 3, feet: 4 } }).outfit?.addons).toBe(0);
+  });
+
+  it.each([
+    ['cor acima de 132', { outfit: { head: 133, body: 0, legs: 0, feet: 0 } }],
+    ['cor negativa', { outfit: { head: 0, body: -1, legs: 0, feet: 0 } }],
+    ['cor fracionária', { outfit: { head: 0, body: 0, legs: 1.5, feet: 0 } }],
+    ['addons acima de 3', { outfit: { head: 0, body: 0, legs: 0, feet: 0, addons: 4 } }],
+    ['outfit sem uma das quatro cores', { outfit: { head: 0, body: 0, legs: 0 } }],
+    ['outfit com campo de arte', { outfit: { head: 0, body: 0, legs: 0, feet: 0, lookType: 21 } }],
+    ['falas sem linha', { voices: { intervalMs: 5000, chance: 10, lines: [] } }],
+    ['falas com chance 0', { voices: { intervalMs: 5000, chance: 0, lines: [{ text: 'a' }] } }],
+    ['falas com chance acima de 100', { voices: { intervalMs: 5000, chance: 101, lines: [{ text: 'a' }] } }],
+    ['falas com intervalo 0', { voices: { intervalMs: 0, chance: 10, lines: [{ text: 'a' }] } }],
+    ['fala de texto vazio', { voices: { intervalMs: 5000, chance: 10, lines: [{ text: '' }] } }],
+    ['luz de nível 0', { light: { level: 0, color: 10 } }],
+    ['luz de cor fora da paleta de 216', { light: { level: 3, color: 216 } }],
+    ['raça desconhecida', { race: 'plasma' }],
+  ])('recusa %s', (_name, patch) => {
+    expect(() => monsterSchema.parse({ ...base, ...patch })).toThrow();
+  });
+
+  it('as raças do conteúdo são as MESMAS do protocolo — uma lista fora de sincronia faria o cliente recusar a mensagem inteira', () => {
+    // O protocolo é a base da pilha e repete a lista (não importa `content`); este teste é o que
+    // prende as duas juntas. Mutação que mata: acrescentar uma raça só de um lado.
+    expect([...MONSTER_RACES].sort()).toEqual([...ProtocolMonsterRace.options].sort());
+  });
+});
+
+describe('appearancesSchema — o efeito do golpe físico por raça (#620)', () => {
+  const base = {
+    id: 'baseline', pack: 'tibia-1533', monsters: {}, items: {}, spells: {}, supplies: {}, abilities: {},
+  };
+
+  it('`hits.byRace` é opcional: a tabela de antes continua válida', () => {
+    expect(appearancesSchema.parse({ ...base, hits: { melee: 1 } }).hits.byRace).toBeUndefined();
+  });
+
+  it('aceita um id por raça, e recusa raça desconhecida', () => {
+    expect(appearancesSchema.parse({ ...base, hits: { melee: 1, byRace: { venom: 17, undead: 10 } } }).hits.byRace)
+      .toEqual({ venom: 17, undead: 10 });
+    expect(() => appearancesSchema.parse({ ...base, hits: { byRace: { plasma: 17 } } })).toThrow();
+  });
+});
+
+describe('loyaltySchema — a tabela de idade da conta (#628, ADR 0052 d.5)', () => {
+  const base = {
+    id: 'baseline', enabled: true, pointsPerCreationDay: 1, bonusPercentageMultiplier: 1,
+    tiers: [{ minPoints: 360, percent: 5 }, { minPoints: 720, percent: 10 }],
+  };
+
+  it('aceita degraus em ordem crescente de minPoints', () => {
+    expect(loyaltySchema.safeParse(base).success).toBe(true);
+  });
+
+  it('recusa degraus fora de ordem ou repetidos — o laço do Canary fica com o ÚLTIMO que cabe', () => {
+    // Fora de ordem daria o percentual do degrau ERRADO em silêncio: 720 pontos cairiam no de 5 %.
+    expect(loyaltySchema.safeParse({
+      ...base, tiers: [{ minPoints: 720, percent: 10 }, { minPoints: 360, percent: 5 }],
+    }).success).toBe(false);
+    expect(loyaltySchema.safeParse({
+      ...base, tiers: [{ minPoints: 360, percent: 5 }, { minPoints: 360, percent: 10 }],
+    }).success).toBe(false);
+  });
+
+  it('recusa tabela vazia, percentual não inteiro ou zero, e multiplicador negativo', () => {
+    expect(loyaltySchema.safeParse({ ...base, tiers: [] }).success).toBe(false);
+    expect(loyaltySchema.safeParse({ ...base, tiers: [{ minPoints: 360, percent: 5.5 }] }).success).toBe(false);
+    expect(loyaltySchema.safeParse({ ...base, tiers: [{ minPoints: 360, percent: 0 }] }).success).toBe(false);
+    expect(loyaltySchema.safeParse({ ...base, bonusPercentageMultiplier: -1 }).success).toBe(false);
   });
 });
 
@@ -163,5 +474,63 @@ describe('a política de alvo `follow` (AB-09, ADR 0032 d.5)', () => {
     expect(botTargetPolicySchema.parse('follow')).toBe('follow');
     expect(botTargetPolicySchema.safeParse('nearest').success).toBe(true);
     expect(botTargetPolicySchema.safeParse('mais-forte').success).toBe(false);
+  });
+});
+
+describe('worldSchema (#829, OW-08, ADR 0060)', () => {
+  const world = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    id: 'main', name: 'Draconya', worldType: 'no-pvp', map: 'thais',
+    towns: [{ id: 'thais', name: 'Thais', temple: { x: 32369, y: 32241, z: 7 } }],
+    capacity: 200, ...over,
+  });
+
+  it('o vocabulário de tipos é só o `no-pvp`: o motor não tem dano entre jogadores', () => {
+    expect(WORLD_TYPES).toEqual(['no-pvp']);
+  });
+
+  it('aceita a forma { id, name, worldType, map, towns, capacity }', () => {
+    expect(worldSchema.parse(world())).toEqual(world());
+  });
+
+  it('recusa um worldType desconhecido', () => {
+    for (const worldType of ['retro-pvp', 'pvp', 'NO-PVP', 'no_pvp', '', 7, undefined]) {
+      expect(worldSchema.safeParse(world({ worldType })).success, String(worldType)).toBe(false);
+    }
+  });
+
+  it('recusa o teto que não é inteiro positivo', () => {
+    for (const capacity of [0, -1, 1.5, '200', undefined]) {
+      expect(worldSchema.safeParse(world({ capacity })).success, String(capacity)).toBe(false);
+    }
+  });
+
+  it('recusa um mundo sem cidade: sem templo ninguém nasce nem volta ao morrer', () => {
+    expect(worldSchema.safeParse(world({ towns: [] })).success).toBe(false);
+  });
+
+  it('recusa cidade sem nome, sem id ou sem templo', () => {
+    const temple = { x: 32369, y: 32241, z: 7 };
+    for (const town of [
+      { id: 'thais', name: '', temple }, { id: '', name: 'Thais', temple }, { id: 'thais', name: 'Thais' },
+    ]) {
+      expect(worldSchema.safeParse(world({ towns: [town] })).success, JSON.stringify(town)).toBe(false);
+    }
+  });
+
+  it('o templo é coordenada do Tibia: inteira, sem negativo, e andar de 0 a 15', () => {
+    for (const temple of [
+      { x: -1, y: 32241, z: 7 }, { x: 32369, y: -1, z: 7 }, { x: 32369.5, y: 32241, z: 7 },
+      { x: 32369, y: 32241, z: 16 }, { x: 32369, y: 32241, z: -1 }, { x: 32369, y: 32241 },
+    ]) {
+      const town = { id: 'thais', name: 'Thais', temple };
+      expect(worldSchema.safeParse(world({ towns: [town] })).success, JSON.stringify(temple)).toBe(false);
+    }
+  });
+
+  it('é só dado, sem arte (invariante 6): chave que ninguém lê é recusada', () => {
+    expect(worldSchema.safeParse(world({ appearanceId: 1 })).success).toBe(false);
+    expect(worldSchema.safeParse(world({ outfitId: 1 })).success).toBe(false);
+    const town = { id: 'thais', name: 'Thais', temple: { x: 32369, y: 32241, z: 7 }, sprite: 'temple.png' };
+    expect(worldSchema.safeParse(world({ towns: [town] })).success).toBe(false);
   });
 });

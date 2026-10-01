@@ -1,0 +1,288 @@
+[
+  {
+    "id": "avalanche-rune",
+    "name": "avalanche rune",
+    "magicLevel": 4,
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 1.2,
+        "skillMax": 2.8,
+        "baseMin": 7,
+        "baseMax": 17
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/runes/avalanche.lua"
+    }
+  },
+  {
+    "id": "fireball-rune",
+    "name": "fireball rune",
+    "magicLevel": 4,
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 1.81,
+        "skillMax": 3,
+        "baseMin": 10,
+        "baseMax": 18
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/runes/fireball.lua"
+    }
+  },
+  {
+    "id": "great-fireball-rune",
+    "name": "great fireball rune",
+    "magicLevel": 4,
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 1.2,
+        "skillMax": 2.8,
+        "baseMin": 7,
+        "baseMax": 17
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/runes/great_fireball.lua"
+    }
+  },
+  {
+    "id": "heavy-magic-missile-rune",
+    "name": "heavy magic missile rune",
+    "magicLevel": 3,
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 0.4,
+        "skillMax": 1.59,
+        "baseMin": 2,
+        "baseMax": 10
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/runes/heavy_magic_missile.lua"
+    }
+  },
+  {
+    "id": "icicle-rune",
+    "name": "icicle rune",
+    "magicLevel": 4,
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 1.81,
+        "skillMax": 3,
+        "baseMin": 10,
+        "baseMax": 18
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/runes/icicle.lua"
+    }
+  },
+  {
+    "id": "intense-healing-rune",
+    "name": "intense healing rune",
+    "magicLevel": 1,
+    "group": "healing",
+    "groupCooldownMs": 1000,
+    "effect": {
+      "kind": "heal",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 3.2,
+        "skillMax": 5.4,
+        "baseMin": 20,
+        "baseMax": 40
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/runes/intense_healing_rune.lua"
+    }
+  },
+  {
+    "id": "light-magic-missile-rune",
+    "name": "light magic missile rune",
+    "magicLevel": 0,
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 0.4,
+        "skillMax": 0.81,
+        "baseMin": 2,
+        "baseMax": 4
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/runes/light_magic_missile.lua"
+    }
+  },
+  {
+    "id": "light-stone-shower-rune",
+    "name": "light stone shower rune",
+    "magicLevel": 0,
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 0.3,
+        "skillMax": 0.45,
+        "baseMin": 2,
+        "baseMax": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/runes/light_stone_shower.lua"
+    }
+  },
+  {
+    "id": "stalagmite-rune",
+    "name": "stalagmite rune",
+    "magicLevel": 3,
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 0.4,
+        "skillMax": 1.59,
+        "baseMin": 2,
+        "baseMax": 10
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/runes/stalagmite.lua"
+    }
+  },
+  {
+    "id": "stone-shower-rune",
+    "name": "stone shower rune",
+    "magicLevel": 4,
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 1,
+        "skillMax": 2.6,
+        "baseMin": 6,
+        "baseMax": 16
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/runes/stone_shower.lua"
+    }
+  },
+  {
+    "id": "sudden-death-rune",
+    "name": "sudden death rune",
+    "magicLevel": 15,
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 4.605,
+        "skillMax": 7.395,
+        "baseMin": 28,
+        "baseMax": 46
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/runes/sudden_death.lua"
+    }
+  },
+  {
+    "id": "thunderstorm-rune",
+    "name": "thunderstorm rune",
+    "magicLevel": 4,
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 1,
+        "skillMax": 2.6,
+        "baseMin": 6,
+        "baseMax": 16
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/runes/thunderstorm.lua"
+    }
+  },
+  {
+    "id": "ultimate-healing-rune",
+    "name": "ultimate healing rune",
+    "magicLevel": 4,
+    "group": "healing",
+    "groupCooldownMs": 1000,
+    "effect": {
+      "kind": "heal",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 7.3,
+        "skillMax": 12.4,
+        "baseMin": 42,
+        "baseMax": 90
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/runes/ultimate_healing_rune.lua"
+    }
+  }
+]

@@ -4,6 +4,7 @@
   "description": "Lança um raio sagrado no seu alvo atual.",
   "vocationId": "paladin",
   "minLevel": 40,
+  "learnPrice": 1800,
   "manaCost": 20,
   "group": "attack",
   "groupCooldownMs": 2000,
@@ -17,8 +18,9 @@
       "skillMin": 1.79,
       "skillMax": 3,
       "baseMin": 11,
-      "baseMax": 18
+      "baseMax": 18,
+      "scaling": "magic"
     }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. alcance 5 (TibiaWiki). Alcance do Canary (`data/scripts/spells/attack/divine_missile.lua`, main, 2026-09-24): range 5→4; fórmula já batia."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. alcance 5 (TibiaWiki). Alcance do Canary (`data/scripts/spells/attack/divine_missile.lua`, main, 2026-09-24): range 5→4; fórmula já batia. Skill da fórmula (#677): o Canary registra `CALLBACK_PARAM_LEVELMAGICVALUE` em `data/scripts/spells/attack/divine_missile.lua` (main, 2026-09-26), então o termo é o MAGIC LEVEL (`scaling: magic`), não a distance do `spellSkill` do Paladin."
 }

@@ -1,0 +1,17 @@
+{
+  "id": "cancel-magic-shield-druid",
+  "name": "Cancel Magic Shield",
+  "description": "Remove o seu próprio Magic Shield imediatamente.",
+  "vocationId": "druid",
+  "minLevel": 14,
+  "learnPrice": 450,
+  "manaCost": 50,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "remove-condition",
+    "key": "mana-shield"
+  },
+  "_open": "A mesma Cancel Magic Shield de `cancel-magic-shield-sorcerer.json` — arquivo por vocação porque `vocationId` é um só (DT-02). Ver a nota completa lá; o Canary declara as duas vocações no MESMO `spell:vocation(...)`, `data/scripts/spells/support/cancel_magic_shield.lua` (`druid;true`, `sorcerer;true`, `elder druid;true`, `master sorcerer;true`). Draconya não tem Magic Shield de Knight/Paladin — os dois não ganham este arquivo."
+}

@@ -1,0 +1,10 @@
+{
+  "id": "hydra-mountain",
+  "name": "Hydra Mountain",
+  "recommendedLevel": 150,
+  "mapId": "hydra-mountain",
+  "routeId": "hydra-mountain",
+  "ambience": "cavern",
+  "description": "A montanha oca onde Hydras e suas crias, os Serpent Spawn, se enroscam entre as estalagmites. Cada cabeça cospe um elemento diferente — ninguém que já enfrentou uma esquece qual.",
+  "_open": "#587 (M36-06). Recorte real do Canary: `pnpm map:import --id hydra-mountain --x 32775..32820 --y 32533..32575 --z 11` sobre `otservbr.otbm` (46×43, 1300 tiles andáveis, sem `--keep-from` — caixa reta, bate com `--check` por construção; esta caixa não tinha sobra nenhuma mesmo com `--keep-from`, a mais limpa das seis). `pnpm catalog:spawns`: 21 pontos reais (Hydra e Serpent Spawn — a fauna inteira da zona), todos os 21 alcançáveis a pé a partir da entrada, 0 desconhecidos. `recommendedLevel: 150`: sourced de TibiaWiki — 'Oramond Hydras... recommended level is 150' (busca web, 2026-09-28); é o número mais bem confirmado das seis hunts — cobre a faixa 150–250 do #587."
+}

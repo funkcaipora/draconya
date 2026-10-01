@@ -70,6 +70,7 @@ const ATTRIBUTE_SIZE: Readonly<Record<number, number | 'string'>> = {
 const ATTR_TILE_FLAGS = 0x03;
 const ATTR_ACTION_ID = 0x04;
 const ATTR_UNIQUE_ID = 0x05;
+const ATTR_TEXT = 0x06;
 const ATTR_TELEPORT = 0x08;
 const ATTR_ITEM = 0x09;
 const ATTR_HOUSE_DOOR = 0x0e;
@@ -101,12 +102,16 @@ export interface OtbmItem {
   readonly id: number;
   /** Só quando o item é empilhável e o arquivo gravou a contagem. */
   readonly count?: number;
-  /** Só em teleporte: para onde ele leva. */
+  /** Só em teleporte (`ATTR_TELE_DEST`, #727): para onde ele leva, em coordenadas do MAPA REAL. */
   readonly teleportTo?: OtbmPosition;
   /** Só em porta de casa. */
   readonly houseDoorId?: number;
+  /** `ATTR_ACTION_ID` (#727, ADR 0050 d.1) — o `aid` de porta, alavanca e gatilho de script. */
   readonly actionId?: number;
+  /** `ATTR_UNIQUE_ID` (#727) — o `uid` de baú e item com storage por personagem. */
   readonly uniqueId?: number;
+  /** `ATTR_TEXT` (#727) — o texto de uma placa ou livro, lido no Look. */
+  readonly text?: string;
 }
 
 export interface OtbmTown {
@@ -149,10 +154,10 @@ export class OtbmError extends Error {
 /** Um cursor sobre bytes já DESESCAPADOS de um payload. */
 class Payload {
   #at = 0;
-  constructor(private readonly bytes: Uint8Array, private readonly offset: number) {}
-  get done(): boolean { return this.#at >= this.bytes.length; }
+  constructor(private readonly data: Uint8Array, private readonly offset: number) {}
+  get done(): boolean { return this.#at >= this.data.length; }
   u8(): number {
-    const value = this.bytes[this.#at];
+    const value = this.data[this.#at];
     if (value === undefined) throw new OtbmError('payload truncado', this.offset);
     this.#at += 1;
     return value;
@@ -162,13 +167,13 @@ class Payload {
   string(): string { return new TextDecoder('latin1').decode(this.take(this.u16())); }
   position(): OtbmPosition { return { x: this.u16(), y: this.u16(), z: this.u8() }; }
   take(count: number): Uint8Array {
-    if (this.#at + count > this.bytes.length) throw new OtbmError('payload truncado', this.offset);
-    const slice = this.bytes.subarray(this.#at, this.#at + count);
+    if (this.#at + count > this.data.length) throw new OtbmError('payload truncado', this.offset);
+    const slice = this.data.subarray(this.#at, this.#at + count);
     this.#at += count;
     return slice;
   }
   skip(count: number): void {
-    if (this.#at + count > this.bytes.length) throw new OtbmError('payload truncado', this.offset);
+    if (this.#at + count > this.data.length) throw new OtbmError('payload truncado', this.offset);
     this.#at += count;
   }
 }
@@ -204,6 +209,7 @@ interface Attributes {
   houseDoorId?: number;
   actionId?: number;
   uniqueId?: number;
+  text?: string;
 }
 
 /** Consome os atributos de um tile ou item; devolve o que interessa e para no fim do payload. */
@@ -215,6 +221,7 @@ function readAttributes(payload: Payload, offset: number): Attributes {
     if (size === undefined) {
       throw new OtbmError(`atributo desconhecido 0x${type.toString(16)} em tile/item — sem tamanho, não dá para pular`, offset);
     }
+    if (type === ATTR_TEXT) { out.text = payload.string(); continue; }
     if (size === 'string') { payload.skip(payload.u16()); continue; }
     if (type === ATTR_TILE_FLAGS) { out.flags = payload.u32(); continue; }
     if (type === ATTR_ITEM) { out.ground = payload.u16(); continue; }
@@ -236,6 +243,7 @@ function itemFrom(id: number, attributes: Attributes): OtbmItem {
   if (attributes.houseDoorId !== undefined) item.houseDoorId = attributes.houseDoorId;
   if (attributes.actionId !== undefined) item.actionId = attributes.actionId;
   if (attributes.uniqueId !== undefined) item.uniqueId = attributes.uniqueId;
+  if (attributes.text !== undefined) item.text = attributes.text;
   return item;
 }
 

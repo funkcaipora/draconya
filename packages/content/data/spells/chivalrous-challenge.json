@@ -1,0 +1,18 @@
+{
+  "id": "chivalrous-challenge",
+  "name": "Chivalrous Challenge",
+  "description": "Força os monstros na área ao seu redor a mirarem você e suspende a fuga deles, por 12 segundos.",
+  "vocationId": "knight",
+  "minLevel": 150,
+  "learnPrice": 250000,
+  "manaCost": 80,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "challenge",
+    "durationMs": 12000,
+    "area": { "shape": "circle", "radius": 3, "centered": "caster" }
+  },
+  "_open": "Canary (things/sources/canary, 47dfd51, `data/scripts/spells/support/chivalrous_challenge.lua`, conferido 2026-09-27): level 150, mana 80, cooldown 2 s, `doChallengeCreature(player, target, 12000)`. DIVERGE do Canary de propósito (DT-03): o original encadeia até 5 monstros À DISTÂNCIA (targetDistance > 1, sem reward boss, sem invocação) via `CALLBACK_PARAM_CHAINPICKER`/`CHAINVALUE`, sem forma geométrica nenhuma — puro filtro de spectators. O Draconya não tem chain-picker nem Wheel of Destiny (que dá o bônus de alvos extra); a área `circle raio 3 centrada no lançador` é a aproximação geométrica mais simples que o vocabulário `SpellArea` já tem, e atinge QUALQUER monstro no raio (corpo a corpo incluído), não só os à distância. Também NÃO aplica `changeTargetDistance(1, ...)` (força melee temporário no atirador) — ver docs/product/combat.md e a seção 12 da issue #589. Efeito visual CONST_ME_CHIVALRIOUS_CHALLENGE (219) sem conferência de PNG."
+}

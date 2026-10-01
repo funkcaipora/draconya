@@ -156,6 +156,8 @@ describe('positional inventory (#160)', () => {
       satchel: [null, { instanceId: 'i2', itemId: 'cheese', quantity: 7 }],
       equipped: {},
       capacity: { used: 10, total: 400 },
+      supplies: [] as { id: string; quantity: number }[],
+      ammunition: [] as { id: string; quantity: number }[],
     };
     expect(decodeS2C(encodeS2C(message))).toEqual([message]);
     const move = { type: 'move-item' as const, from: { container: 'backpack' as const, index: 0 }, to: { slot: 'hand' } };
@@ -170,6 +172,7 @@ describe('catalogue item stats (#337)', () => {
       type: 'catalogue',
       hunts: [],
       monsters: [],
+      charms: [],
       vocations: [],
       vocationLevel: 0,
       bot: {

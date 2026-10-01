@@ -2,13 +2,26 @@
 // Ele só lê dados que já chegam ao HUD; a aba Outfit espera a intenção de cor do épico E7.
 
 import type { ReactNode } from 'react';
+import type { C2SMessage } from '@draconya/protocol';
 import { account } from '../account/store.js';
+import { sendIntent } from '../net/current.js';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
+import { blessingCost, hasBlessing } from './blessing-cost.js';
 import { bonusPercent } from './bestiary-progress.js';
+import { spellShopLabel, spellShopRows } from './spell-shop.js';
 import { Kicker } from './ui/Kicker.js';
 import { Modal } from './ui/Modal.js';
 import { Tabs } from './ui/Tabs.js';
 import { VitalBar } from './ui/VitalBar.js';
+
+/**
+ * Promover a vocação (#566, ADR 0042 decisão 1). Sem payload — o servidor confere level, gold
+ * e "ainda não promovido"; a única razão de exportar como função pura é a mesma de
+ * `leaveHunt` em `HuntActions.tsx`: testável sem simular clique de DOM.
+ */
+export function promoteVocation(send: (message: C2SMessage) => boolean): boolean {
+  return send({ type: 'promote-vocation' });
+}
 
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 const percentFormat = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
@@ -63,14 +76,29 @@ export function CharacterModal({ onClose }: { onClose: () => void }) {
   const capacity = useHudSlice((state) => state.capacity);
   const staminaMs = useHudSlice((state) => state.staminaMs);
   const vocationId = useHudSlice((state) => state.vocationId);
-  const vocationName = useHudSlice((state) =>
-    state.catalogue?.vocations.find((vocation) => vocation.id === state.vocationId)?.name ?? null);
+  const promoted = useHudSlice((state) => state.promoted);
+  const gold = useHudSlice((state) => state.gold);
+  const vocation = useHudSlice((state) =>
+    state.catalogue?.vocations.find((v) => v.id === state.vocationId) ?? null);
+  // Promovido (#566, ADR 0042 decisão 1): troca pelo `promotion.name` — "Elite Knight" em vez
+  // de "Knight" — quando o servidor confirmou.
+  const vocationName = promoted ? vocation?.promotion?.name ?? vocation?.name ?? null : vocation?.name ?? null;
   // null significa que este servidor não configurou Bestiário, não que o bônus seja zero.
   const bestiaryConfig = useHudSlice((state) => state.catalogue?.bestiary ?? null);
   const bestiaryCounts = useHudSlice((state) => state.bestiary);
+  const blessingsConfig = useHudSlice((state) => state.catalogue?.blessings ?? null);
+  const blessingsMask = useHudSlice((state) => state.blessings);
+  // A tela de aprendizado de magia (#624, ADR 0058 d.2): o catálogo diz o que existe e quanto
+  // custa; `learnedSpells` diz o que ele já sabe.
+  const spellCatalogue = useHudSlice((state) => state.catalogue?.bot.spells ?? null);
+  const learnedSpells = useHudSlice((state) => state.learnedSpells);
   const characters = useStoreSlice(account, (state) => state.characters);
   const name = characters.find((character) => character.id === characterId)?.name
     ?? characterId ?? '—';
+  // Sem vocação escolhida ou sem catálogo, a lista é vazia e a caixa nem aparece (#624).
+  const spellRows = spellCatalogue === null || vocationId === null
+    ? []
+    : spellShopRows(spellCatalogue, { vocationId, level, gold, learned: learnedSpells });
 
   // Mesma fórmula de Bestiary.tsx: a tela só apresenta o valor que o servidor já sustenta.
   const bestiaryBonus = bestiaryConfig === null
@@ -116,6 +144,91 @@ export function CharacterModal({ onClose }: { onClose: () => void }) {
         <Box title="Progressão e bônus">
           {/* O dado real é um bônus global único; separar entrada/maestria inventaria estrutura. */}
           <Line label="Bestiário · Bônus de XP PvE" value={bonusText(bestiaryBonus)} />
+        </Box>
+      )}
+      {/*
+       * Promoção (#566, ADR 0042 decisão 1): tela de serviço, não NPC dialogável (ADR 0042
+       * questão 2, já decidida). O clique só manda a INTENÇÃO — level, gold e "já promovido"
+       * são conferidos pelo servidor (invariante 4); o `system-message` de recusa cobre o
+       * resto. Some quando a vocação não promove, ou depois de já promovido.
+       */}
+      {!promoted && vocation?.promotion !== undefined && (
+        <Box title="Promoção">
+          <Line label="Vocação promovida" value={vocation.promotion.name} />
+          <Line label="Requisito" value={'Level ' + count(vocation.promotion.minLevel)} />
+          <Line label="Custo" value={count(vocation.promotion.price) + ' gold'} />
+          <button
+            type="button"
+            className="character-modal-promote"
+            disabled={level < vocation.promotion.minLevel || gold < vocation.promotion.price}
+            onClick={() => { promoteVocation(sendIntent); }}
+          >
+            Promover
+          </button>
+        </Box>
+      )}
+      {/* Serviço de Cidade (#570, ADR 0052): a compra manda a INTENÇÃO (invariante 4) — preço,
+          saldo e "já tem esta bênção" são conferidos pelo servidor; o botão só se desabilita
+          aqui para não oferecer o que ele vai recusar de qualquer jeito. */}
+      {blessingsConfig !== null && (
+        <Box title="Bênçãos">
+          <ul className="blessing-list">
+            {blessingsConfig.list.map((blessing) => {
+              const owned = hasBlessing(blessingsMask, blessing.order);
+              const cost = blessingCost(level, blessing.enhanced, blessingsConfig.pricing);
+              return (
+                <li key={blessing.id} className="blessing-entry">
+                  <span className="blessing-name">
+                    {blessing.name}{blessing.enhanced ? ' ✦' : ''}
+                  </span>
+                  {owned
+                    ? <span className="blessing-owned">Abençoado</span>
+                    : (
+                      <button
+                        type="button"
+                        className="blessing-buy"
+                        disabled={gold < cost}
+                        onClick={() => { sendIntent({ type: 'buy-blessing', blessingId: blessing.id }); }}
+                      >
+                        {cost === 0 ? 'Grátis' : count(cost) + ' gold'}
+                      </button>
+                    )}
+                </li>
+              );
+            })}
+          </ul>
+        </Box>
+      )}
+      {/*
+       * Aprender magia (#624, ADR 0058 d.2): tela de serviço, sem diálogo de NPC (ADR 0042). O
+       * clique manda só a INTENÇÃO (invariante 4) — vocação, level, "já aprendida", preço e saldo
+       * são conferidos pelo servidor; o botão só se desabilita aqui para não oferecer o que ele
+       * vai recusar. Só aparece com vocação escolhida e com o catálogo na mão.
+       */}
+      {spellRows.length > 0 && (
+        <Box title="Magias">
+          <ul className="spell-shop-list">
+            {spellRows.map((row) => (
+              <li key={row.id} className="spell-shop-entry" data-status={row.status}>
+                <span className="spell-shop-name">{row.name}</span>
+                <span className="spell-shop-meta">
+                  {'LV ' + String(row.minLevel) + ' · ' + String(row.manaCost) + ' mana'}
+                </span>
+                {row.status === 'buyable' || row.status === 'no-gold'
+                  ? (
+                    <button
+                      type="button"
+                      className="spell-shop-buy"
+                      disabled={row.status === 'no-gold'}
+                      onClick={() => { sendIntent({ type: 'learn-spell', spellId: row.id }); }}
+                    >
+                      {spellShopLabel(row)}
+                    </button>
+                  )
+                  : <span className="spell-shop-state">{spellShopLabel(row)}</span>}
+              </li>
+            ))}
+          </ul>
         </Box>
       )}
     </Modal>

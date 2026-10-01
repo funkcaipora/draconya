@@ -1,0 +1,20 @@
+{
+  "id": "conjure-ultimate-healing-rune",
+  "name": "Ultimate Healing Rune",
+  "description": "Conjura uma carga da Ultimate Healing Rune, consumindo uma runa em branco.",
+  "vocationId": "druid",
+  "minLevel": 24,
+  "learnPrice": 1500,
+  "manaCost": 400,
+  "soulCost": 3,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "conjure",
+    "supplyId": "ultimate-healing-rune",
+    "charges": 1,
+    "blankPrice": 10
+  },
+  "_open": "Números do Canary (#594, ADR 0044): `data/scripts/spells/conjuring/ultimate_healing_rune.lua` — `creature:conjureItem(3147, 3160, 1)`, `spell:level(24)`, `spell:mana(400)`, `spell:soul(3)`, vocação `druid;true`/`elder druid;true` (sem promoção, ADR 0044 §Em aberto). `blankPrice` 10, como em toda runa."
+}

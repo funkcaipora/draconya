@@ -97,6 +97,28 @@ describe('cancelamento', () => {
   });
 });
 
+describe('dueAtOf (#689)', () => {
+  it('acha o vencimento do evento pelo kind e subject, e devolve null depois do cancel', () => {
+    const schedule = new Schedule();
+    schedule.schedule('step', 100, { subject: 'c:ring' });
+    schedule.schedule('equip-expire', 600_000, { subject: 'c:ring' });
+    schedule.schedule('equip-expire', 50, { subject: 'c:amulet' });
+    expect(schedule.dueAtOf('equip-expire', 'c:ring')).toBe(600_000);
+    expect(schedule.dueAtOf('equip-expire', 'c:boots')).toBeNull();
+    schedule.cancel('equip-expire', 'c:ring');
+    // Mutação que mata: ler um evento cancelado ressuscitaria o prazo de um anel que saiu.
+    expect(schedule.dueAtOf('equip-expire', 'c:ring')).toBeNull();
+    expect(schedule.dueAtOf('equip-expire', 'c:amulet')).toBe(50);
+  });
+
+  it('depois de vencer (pop), o evento não está mais lá', () => {
+    const schedule = new Schedule();
+    schedule.schedule('equip-expire', 10, { subject: 'c:ring' });
+    schedule.pop();
+    expect(schedule.dueAtOf('equip-expire', 'c:ring')).toBeNull();
+  });
+});
+
 describe('estado', () => {
   it('vai e volta pelo JSON preservando a ordem de despacho', () => {
     const schedule = new Schedule();

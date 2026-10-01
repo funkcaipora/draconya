@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import type {
+  BosstiaryState, CharmsState, FamiliarState, LearnedSpellsState, OfflineTrainingState,
+} from '@draconya/sim';
 import { ReceiptStore, type SessionReceipt } from './receipts.js';
 import { connectTestRedis } from './testing/redis.js';
 
@@ -66,6 +69,28 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(await redis.smembers(`receipts:char:${characterId}`)).toEqual([]);
   });
 
+  it('round-trips promoted (#566, ADR 0042 decisão 1) through parseReceipt', async () => {
+    // `parseReceipt` é lista de PERMISSÃO: campo que não entra nela some no caminho de volta
+    // sem erro nenhum — é exatamente o defeito que este teste reprova para `promoted`.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, { promoted: true }));
+
+    const [found] = await store.pendingFor(characterId);
+
+    expect(found?.promoted).toBe(true);
+  });
+
+  it('never carries `false` for promoted: the field is always absent when not promoting', async () => {
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId));
+
+    const [found] = await store.pendingFor(characterId);
+
+    expect(found?.promoted).toBeUndefined();
+  });
+
   it('drops an index entry whose receipt is gone, instead of returning a phantom', async () => {
     // Acontece de dois jeitos: o extrato expirou pelo TTL, ou um `remove` morreu entre
     // apagar o extrato e limpar o índice. Sem a limpeza na leitura, o conjunto de um
@@ -128,6 +153,106 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('bestiary');
   });
 
+  it('carries the Bosstiary through Redis and back, and a receipt without one stays without (#629)', async () => {
+    // A mesma lista de PERMISSÃO do Bestiário e dos Charms: campo que não entra em `parseReceipt`
+    // some no caminho de volta sem erro nenhum, e o ledger nunca veria um abate de boss.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const bosstiary: BosstiaryState = { kills: { '639': 3, '1811': 20 }, points: 70, version: 1 };
+    await store.save(receiptOf(randomUUID(), characterId, { bosstiary }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.bosstiary).toEqual(bosstiary);
+    // Sem o campo, sem a chave: o ledger distingue "não veio" (não toca na coluna) de "veio vazio".
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('bosstiary');
+  });
+
+  it('carries the Charms economy through Redis and back, and a receipt without one stays without (#602)', async () => {
+    // A mesma lista de PERMISSÃO do Bestiário logo acima. Diferente dele, este registro é
+    // ABSOLUTO (última escrita vence, ADR 0052 d.1) — mas a ida e volta pelo Redis é a MESMA
+    // conferência: campo que não entra em `parseReceipt` some no caminho de volta sem erro.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const charms: CharmsState = {
+      pointsSpent: 240, echoesSpent: 50, tiers: { wound: 1 }, assignments: { wound: 'rat' }, version: 1,
+    };
+    await store.save(receiptOf(randomUUID(), characterId, { charms }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.charms).toEqual(charms);
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('charms');
+  });
+
+  it('carries the learned spells through Redis and back, and a receipt without one stays without (#624)', async () => {
+    // A mesma lista de PERMISSÃO do Bestiário e dos Charms: campo que não entra em
+    // `parseReceipt` some no caminho de volta sem erro — e o personagem perderia a magia que
+    // pagou no próximo logout.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const learnedSpells: LearnedSpellsState = { spellIds: ['berserk', 'wound-cleansing'], version: 1 };
+    await store.save(receiptOf(randomUUID(), characterId, { learnedSpells }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.learnedSpells).toEqual(learnedSpells);
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('learnedSpells');
+  });
+
+  it('carries the familiar stamps through Redis and back, and drops a malformed record (#599)', async () => {
+    // Os carimbos de relógio de PAREDE do familiar: ABSOLUTOS e última-escrita-vence (ADR 0052 d.1).
+    // A ida e volta pelo Redis é a mesma conferência de `charms`: campo que não entra em
+    // `parseReceipt` some no caminho de volta sem erro — e aqui um registro torto também some.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const familiar: FamiliarState = { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 };
+    await store.save(receiptOf(randomUUID(), characterId, { familiar }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+    await store.save(receiptOf(randomUUID(), characterId, {
+      seq: 3, familiar: { version: 1, summonUntilMs: -5, cooldownUntilMs: 'x' } as unknown as FamiliarState,
+    }));
+    // Instante fracionário: a forma é INTEIRO SEGURO, e é o `sim` quem arredonda ao gravar o carimbo
+    // (`#wallStampMs`) — o relógio lógico do hospedeiro é `performance.now()`, nunca inteiro. Este é o
+    // lado que recusa: um carimbo fracionário que chegasse aqui some em silêncio, e o cooldown junto.
+    await store.save(receiptOf(randomUUID(), characterId, {
+      seq: 4, familiar: { version: 1, summonUntilMs: 1_790_000_900_000.4, cooldownUntilMs: 1_790_001_800_000 },
+    }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.familiar).toEqual(familiar);
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('familiar');
+    expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('familiar');
+    expect(found.find((receipt) => receipt.seq === 4)).not.toHaveProperty('familiar');
+  });
+
+  it('carries the offline training record through Redis and back, and a receipt without one stays without (#631)', async () => {
+    // A mesma lista de PERMISSÃO dos registros logo acima — e este é ABSOLUTO (ADR 0052 d.1): o banco
+    // sobe por tempo de sessão e desce quando a `api` o gasta, então nada de fusão por máximo. Além
+    // da ida e volta, a leitura é a defensiva do `sim`: o ledger grava o registro direto numa coluna
+    // `jsonb`, e um banco negativo ou uma skill torta não pode chegar lá.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const training: OfflineTrainingState = { offlineBankMs: 7_200_000, offlineSkill: 'sword', version: 1 };
+    await store.save(receiptOf(randomUUID(), characterId, { training }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+    await store.save(receiptOf(
+      randomUUID(), characterId,
+      { seq: 3, training: { offlineBankMs: -5, offlineSkill: 7, version: 1 } as unknown as OfflineTrainingState },
+    ));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.training).toEqual(training);
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('training');
+    // O torto some — o ledger não toca na coluna —, e o extrato em si continua valendo.
+    expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('training');
+  });
+
   it('carries the ammo selection through Redis and back, and a receipt without one stays without (#152)', async () => {
     // A mesma lista de PERMISSÃO, o mesmo defeito a pegar: a escolha gravada tem de voltar
     // inteira, e o extrato sem ela não pode ganhar a chave — o ledger não toca na coluna.
@@ -140,6 +265,79 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
 
     expect(found.find((receipt) => receipt.seq === 1)?.ammo).toEqual({ arrow: 'sniper-arrow' });
     expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('ammo');
+  });
+
+  it('carries removedInstances through Redis and back, and a receipt without one stays without (#724, ADR 0048 d.8)', async () => {
+    // A mesma lista de PERMISSÃO, o mesmo defeito real: `parseReceipt` reconstrói campo a
+    // campo, e um campo novo em `SessionReceipt` que não entra ali some no caminho de volta
+    // sem erro nenhum — foi exatamente o que aconteceu aqui na primeira versão desta feature:
+    // `jobs/ledger.ts` recebia sempre `removedInstances: undefined` de volta do Redis, mesmo
+    // com `sell-items`/`discard-item` gravando a lista corretamente na escrita, e o
+    // `item_instance` vendido/descartado nunca era apagado.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, { removedInstances: ['s1:0', 's1:1'] }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.removedInstances).toEqual(['s1:0', 's1:1']);
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('removedInstances');
+  });
+
+  it('carries the soul points through Redis and back, and a receipt without one stays without (#593)', async () => {
+    // A mesma lista de PERMISSÃO, o mesmo defeito a pegar: alma gravada tem de voltar inteira,
+    // e o extrato sem ela não pode ganhar a chave — diferente do Bestiário, o ledger NÃO funde
+    // por máximo aqui (alma pode descer), então "a chave sumiu" e "a chave voltou zero" são
+    // coisas diferentes que este teste também distingue.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, { soul: 42 }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.soul).toBe(42);
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('soul');
+  });
+
+  it('carries the blessings bitmask through Redis and back, and a receipt without one stays without (#570)', async () => {
+    // A mesma lista de PERMISSÃO. E a mesma disciplina da alma: bênção DESCE na morte, então o
+    // ledger nunca funde por máximo (ver jobs/ledger.ts) — "a chave sumiu" (extrato de sessão
+    // sem o campo, nunca tocou a linha) e "a chave voltou zero" (a morte zerou de verdade) são
+    // coisas diferentes, e este teste distingue as duas indo e voltando pelo Redis de verdade.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, { blessings: 0b1010101 }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2, blessings: 0 }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 3 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.blessings).toBe(0b1010101);
+    expect(found.find((receipt) => receipt.seq === 2)?.blessings).toBe(0);
+    expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('blessings');
+  });
+
+  it('carries the fight mode through Redis and back, and a receipt without one stays without (#550)', async () => {
+    // A mesma lista de PERMISSÃO. Os três modos voltam inteiros, o extrato sem o campo não ganha
+    // a chave (o ledger não toca a coluna), e um valor torto na volta some em vez de virar um
+    // modo que o `sim` não conhece.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, { fightMode: 'defense' }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2, fightMode: 'attack' }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 3 }));
+    await store.save(receiptOf(randomUUID(), characterId, {
+      seq: 4, fightMode: 'aggressive' as unknown as 'attack',
+    }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.fightMode).toBe('defense');
+    expect(found.find((receipt) => receipt.seq === 2)?.fightMode).toBe('attack');
+    expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('fightMode');
+    expect(found.find((receipt) => receipt.seq === 4)).not.toHaveProperty('fightMode');
   });
 
   it('keeps the index out of the sweep, which scans by key prefix', async () => {

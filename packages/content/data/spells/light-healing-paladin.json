@@ -4,6 +4,7 @@
   "description": "Cura você.",
   "vocationId": "paladin",
   "minLevel": 8,
+  "learnPrice": 0,
   "manaCost": 20,
   "group": "healing",
   "groupCooldownMs": 1000,
@@ -17,7 +18,12 @@
       "skillMax": 1.795,
       "baseMin": 8,
       "baseMax": 11
+    },
+    "dispel": {
+      "types": [
+        "paralyze"
+      ]
     }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. a mesma Light Healing do Druid (DT-02). Fórmula do Canary (`data/scripts/spells/healing/light_healing.lua`, main, 2026-09-24): skillMax 2,0→1,795."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. a mesma Light Healing do Druid (DT-02). Fórmula do Canary (`data/scripts/spells/healing/light_healing.lua`, main, 2026-09-24): skillMax 2,0→1,795. #592: dispel CONDITION_PARALYZE ao lado da cura, conferido no script do Canary (COMBAT_PARAM_DISPEL)."
 }

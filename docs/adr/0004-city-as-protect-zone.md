@@ -1,6 +1,6 @@
 # 0004 — Cidade como protect zone
 
-**Status:** aceito
+**Status:** substituído pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30) — a Cidade deixa de ser a zona de proteção à parte e vira a região inicial do mundo aberto, com PZ por tile
 **Data:** 2026-09-07
 **Contexto técnico:** `server` (processo `game`, sessão de Cidade), interest management / sharding
 

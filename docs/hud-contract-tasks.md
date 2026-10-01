@@ -199,6 +199,12 @@ Milestone [M21 · Postura, moedas, loot e skills](https://github.com/funkcaipora
 começar a qualquer momento; o resto parte da AB-09.
 
 ### CO-01 · Postura
+
+> **Entregue pela #550 (M30-03) com outra forma** (emenda de 2026-09-29 do ADR 0032 e do ADR 0040):
+> `set-fight-mode` em vez de `set-stance`, `character.fight_mode` em vez da config do bot, fatores do
+> Canary (ataque 1,0/0,75/0,5, defesa dinâmica, mitigação 0,8/1,0/1,2) no `combat-v3`, default
+> ofensiva. Os critérios abaixo são o desenho original.
+
 **Objetivo:** Defensiva / Balanceada / Atacante como fight mode real, com os fatores do TFS, no
 perfil `combat-v2`, por intenção `set-stance`, e o controle do set ligado.
 **Critério de aceite:**

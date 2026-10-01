@@ -1,0 +1,18 @@
+{
+  "id": "strong-haste-sorcerer",
+  "name": "Strong Haste",
+  "description": "Aumenta a sua velocidade de movimento em 70% por 22 segundos.",
+  "vocationId": "sorcerer",
+  "minLevel": 20,
+  "learnPrice": 1300,
+  "manaCost": 100,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "haste",
+    "speedPercent": 70,
+    "durationMs": 22000
+  },
+  "_open": "Magia que faltava no catálogo (#596; ADR 0037): a Haste forte (level 20), `utani gran hur` no Canary — falta ao lado de `haste-sorcerer.json` (`utani hur`, level 14, +30%/30s). Fonte `data/scripts/spells/support/strong_haste.lua` (Canary local, 47dfd51): `spell:id(39)`, level 20, mana 100, cooldown 2s, grupo `support` 2s, `isSelfTarget`, `isPremium`. `duration Ms` é o `CONDITION_PARAM_TICKS = 22000` DIRETO do Canary (fonte primária). O percentual (70%) é do TibiaWiki (`tibia.fandom.com/wiki/Strong_Haste`, consultado 2026-09-28) — o Canary usa `condition:setFormula(1.7, 40, 1.7, 40)`, uma faixa que escala pela velocidade BASE do personagem (`newSpeed = baseSpeed×1.7 + 40`), não um percentual fixo; `spellEffectSchema.haste` só modela `speedPercent` fixo, a MESMA simplificação já usada por `haste-knight.json`/`swift-foot.json` (nenhuma Haste do catálogo usa a fórmula base-speed-dependente). Fora do escopo: a Strong Haste também cura paralisia (TibiaWiki) — sem mecanismo de paralisia por condição externa modelado hoje, não implementado. Aparência: efeito 14, reaproveitado de `haste-sorcerer`/`swift-foot` (mesmo tema de velocidade) — biblioteca parcial (47/4171 folhas, `docs/combat-presentation-audit.md`), conferência visual pendente."
+}

@@ -1,0 +1,31 @@
+{
+  "id": "ultimate-ice-strike",
+  "name": "Ultimate Ice Strike",
+  "description": "Lança um bloco de gelo devastador no seu alvo atual.",
+  "vocationId": "druid",
+  "minLevel": 100,
+  "learnPrice": 15000,
+  "manaCost": 100,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 30000,
+  "secondaryGroup": {
+    "name": "ultimatestrikes",
+    "cooldownMs": 30000
+  },
+  "effect": {
+    "kind": "damage",
+    "basePower": 180,
+    "range": 3,
+    "damageType": "ice",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 4.5,
+      "skillMax": 7.3,
+      "baseMin": 35,
+      "baseMax": 55,
+      "scaling": "magic"
+    }
+  },
+  "_open": "Magia que faltava no catálogo (#596; ADR 0037): o topo da linha `X Strike` do Druid (level 100), `exori max frigo` no Canary — falta entre `ice-strike-druid.json` (`exori frigo`) e `strong-ice-strike.json` (`exori gran frigo`), a mesma lacuna que `ultimate-energy-strike.json` (#523) fechou para o Sorcerer. Fonte `data/scripts/spells/attack/ultimate_ice_strike.lua` (Canary local, 47dfd51): `spell:id(156)`, level 100 (a mais alta das três Ultimate X Strike — Fire/Terra pedem 90), mana 100, cooldown 30s, grupo `attack` 2s + grupo secundário `ultimatestrikes` 30s, `range 3`, `COMBAT_ICEDAMAGE`, sem área. Fórmula IDÊNTICA à de `ultimate-flame-strike.json`/`ultimate-terra-strike.json`: `min = level/5 + ml×4.5 + 35`, `max = level/5 + ml×7.3 + 55`. `basePower` 180 reaproveita `ultimate-energy-strike.json` (mesma fórmula, ver a nota em `ultimate-flame-strike.json`). Aparência: efeito 43 e projétil 29, reaproveitados de `ice-strike-druid`/`strong-ice-strike` (mesmo elemento gelo) — biblioteca parcial (47/4171 folhas, `docs/combat-presentation-audit.md`), conferência visual pendente."
+}

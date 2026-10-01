@@ -107,14 +107,37 @@ describe('world deltas', () => {
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
       self: {
         creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
-        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
       },
-      world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
       notableEvents: [],
     }, 0);
     expect(world.mapId).toBe('rat-cellars');
     expect(world.ambience).toBe('cavern');
+  });
+
+  it('active-conditions com luz (#623) põe a luz do jogador no mundo; sem ela, tira; a troca de instância a apaga', () => {
+    // O pintor lê `world.selfLight` sem assinatura: o servidor manda raio, cor e prazo, e o
+    // decaimento é conta local (`world/light.ts`). Mutação que mata: guardar `remainingMs` sem o
+    // instante de chegada — o nível não decairia.
+    applyMessage({
+      type: 'active-conditions',
+      conditions: [{ kind: 'light', remainingMs: 300_000, light: { level: 6, color: 215, durationMs: 370_000 } }],
+    }, 1_000);
+    expect(world.selfLight).toEqual({
+      level: 6, color: 215, durationMs: 370_000, remainingMs: 300_000, receivedAtMs: 1_000,
+    });
+
+    applyMessage({ type: 'active-conditions', conditions: [{ kind: 'haste', remainingMs: 10_000 }] }, 2_000);
+    expect(world.selfLight).toBeNull();
+
+    applyMessage({
+      type: 'active-conditions',
+      conditions: [{ kind: 'light', remainingMs: 300_000, light: { level: 6, color: 215, durationMs: 370_000 } }],
+    }, 3_000);
+    applyMessage({ type: 'instance-enter', instanceId: 'i9', map: 'rat-cellars', ambience: 'cavern' }, 3_500);
+    expect(world.selfLight).toBeNull();
   });
 
   it('ground items: appear, disappear, and the session-state replaces them (FUN-123)', () => {
@@ -133,19 +156,138 @@ describe('world deltas', () => {
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
       self: {
         creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
-        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
       },
-      world: { mapId: 'rat-cellars', creatures: [], groundItems: [{ id: 9, position: { x: 3, y: 3, z: 8 }, appearanceId: 5964 }] },
+      world: {
+        mapId: 'rat-cellars', creatures: [], tileUpdates: [], fields: [],
+        groundItems: [{ id: 9, position: { x: 3, y: 3, z: 8 }, appearanceId: 5964 }],
+      },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
       notableEvents: [],
     }, 0);
     expect([...world.groundItems.keys()]).toEqual([9]);
   });
 
+  it('fields: appear, disappear, and the session-state replaces them (#561, M31-06)', () => {
+    // O campo é por id de CONTEÚDO (não numérico como o cadáver): relançar o MESMO id
+    // substitui a entrada, e o estado completo substitui os que sumiram sem ninguém olhar.
+    const before = world.fieldsVersion;
+    applyMessage({
+      type: 'field-appear', id: 'fire', tiles: [{ x: 1, y: 2, z: 8 }], appearanceId: 2118,
+    }, 0);
+    expect(world.fields.get('fire')).toEqual({ id: 'fire', tiles: [{ x: 1, y: 2, z: 8 }], appearanceId: 2118 });
+    expect(world.fieldsVersion).toBe(before + 1);
+    applyMessage({ type: 'field-disappear', id: 'fire' }, 0);
+    expect(world.fields.has('fire')).toBe(false);
+    applyMessage({ type: 'field-disappear', id: 'fire' }, 0);
+    expect(world.fieldsVersion).toBe(before + 2);
+    applyMessage({
+      type: 'field-appear', id: 'poison', tiles: [{ x: 1, y: 2, z: 8 }], appearanceId: 2121,
+    }, 0);
+    applyMessage({
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        soul: 0, soulMax: 0,
+      },
+      world: {
+        mapId: 'rat-cellars', creatures: [], tileUpdates: [], groundItems: [],
+        fields: [{ id: 'energy', tiles: [{ x: 3, y: 3, z: 8 }], appearanceId: 2122 }],
+      },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
+      notableEvents: [],
+    }, 0);
+    expect([...world.fields.keys()]).toEqual(['energy']);
+  });
+
+  it('field-stage-change (#560): substitui a appearanceId do campo já conhecido, mantendo id/tiles', () => {
+    applyMessage({
+      type: 'field-appear', id: 'fire', tiles: [{ x: 1, y: 2, z: 8 }], appearanceId: 2118,
+    }, 0);
+    const before = world.fieldsVersion;
+    applyMessage({ type: 'field-stage-change', id: 'fire', appearanceId: 2119 }, 0);
+    expect(world.fields.get('fire')).toEqual({ id: 'fire', tiles: [{ x: 1, y: 2, z: 8 }], appearanceId: 2119 });
+    expect(world.fieldsVersion).toBe(before + 1);
+  });
+
+  it('field-stage-change para um campo que a tela nunca viu é IGNORADO — nada para trocar ainda', () => {
+    const before = world.fieldsVersion;
+    applyMessage({ type: 'field-stage-change', id: 'unknown-field', appearanceId: 2120 }, 0);
+    expect(world.fields.has('unknown-field')).toBe(false);
+    expect(world.fieldsVersion).toBe(before);
+  });
+
   it('removes a creature that disappeared', () => {
     applyMessage(spawn(1), 0);
     applyMessage({ type: 'creature-disappear', id: 1 }, 0);
     expect(world.creatures.has(1)).toBe(false);
+  });
+});
+
+describe('cenário usável: tile-update, look-result e o overlay do session-state (#729, ADR 0050 d.7)', () => {
+  it('tile-update guarda o replace por tile e sobe a versão', () => {
+    const before = world.tileOverridesVersion;
+    applyMessage({
+      type: 'tile-update', position: { x: 4, y: 2, z: 7 }, replace: [{ from: 1638, to: 1639 }],
+    }, 0);
+    expect(world.tileOverrides.get('4,2,7')).toEqual([{ from: 1638, to: 1639 }]);
+    expect(world.tileOverridesVersion).toBe(before + 1);
+  });
+
+  it('um replace VAZIO apaga a entrada (a mesma regra de ground-item-disappear)', () => {
+    applyMessage({
+      type: 'tile-update', position: { x: 4, y: 2, z: 7 }, replace: [{ from: 1638, to: 1639 }],
+    }, 0);
+    applyMessage({ type: 'tile-update', position: { x: 4, y: 2, z: 7 }, replace: [] }, 0);
+    expect(world.tileOverrides.has('4,2,7')).toBe(false);
+  });
+
+  it('look-result entra no chat como system-message de nível info', () => {
+    applyMessage({ type: 'look-result', text: 'A wooden door.' }, 0);
+    const last = hud.get().systemMessages.at(-1);
+    expect(last).toMatchObject({ level: 'info', text: 'A wooden door.' });
+  });
+
+  it('session-state SUBSTITUI o overlay inteiro, como substitui groundItems', () => {
+    applyMessage({
+      type: 'tile-update', position: { x: 1, y: 1, z: 7 }, replace: [{ from: 1, to: 2 }],
+    }, 0);
+    applyMessage({
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        soul: 0, soulMax: 0,
+      },
+      world: {
+        mapId: 'rat-cellars', creatures: [], groundItems: [], fields: [],
+        tileUpdates: [{ position: { x: 4, y: 2, z: 7 }, replace: [{ from: 1638, to: 1639 }] }],
+      },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
+      notableEvents: [],
+    }, 0);
+    // A entrada de ANTES do session-state some (não é a mesclagem — é substituição inteira).
+    expect(world.tileOverrides.has('1,1,7')).toBe(false);
+    expect(world.tileOverrides.get('4,2,7')).toEqual([{ from: 1638, to: 1639 }]);
+  });
+
+  it('session-state sem tileUpdates (nó anterior a esta issue) esvazia o overlay sem lançar', () => {
+    applyMessage({
+      type: 'tile-update', position: { x: 1, y: 1, z: 7 }, replace: [{ from: 1, to: 2 }],
+    }, 0);
+    applyMessage({
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        soul: 0, soulMax: 0,
+      },
+      world: { mapId: 'rat-cellars', creatures: [], groundItems: [] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    } as unknown as S2CMessage, 0);
+    expect(world.tileOverrides.size).toBe(0);
   });
 });
 
@@ -185,9 +327,9 @@ describe('as cores de outfit (FUN-104)', () => {
       self: {
         creatureId: 1, characterId: 'char-1',
         health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
-        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
       },
-      world: { groundItems: [],
+      world: { groundItems: [], tileUpdates: [], fields: [],
         mapId: 'rat-cellars',
         creatures: [
           { id: 1, position: at(0, 0), appearanceId: 128, name: 'me', health: 1, maxHealth: 1, colors },
@@ -202,6 +344,93 @@ describe('as cores de outfit (FUN-104)', () => {
     expect(world.creatures.get(1)?.colors).toEqual(colors);
     expect(world.creatures.get(2)?.colors).toEqual(other);
     expect(world.creatures.get(3)?.colors).toBeUndefined();
+  });
+});
+
+describe('a apresentação do monstro: addons, raça, luz e falas (#620)', () => {
+  const look = {
+    addons: 3,
+    race: 'venom' as const,
+    light: { level: 4, color: 208 },
+    voices: { intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!' }, { text: 'GRR', yell: true }] },
+  };
+
+  it('uma criatura que aparece COM a apresentação a guarda inteira', () => {
+    // Mutação que mata: tirar `...presentationOf(message)` do `case 'creature-appear'` — o monstro
+    // perderia addon, luz e fala sem nada acusar, porque continuaria aparecendo.
+    applyMessage({ ...spawn(1), ...look } as S2CMessage, 0);
+    const creature = world.creatures.get(1);
+    expect(creature?.addons).toBe(3);
+    expect(creature?.race).toBe('venom');
+    expect(creature?.light).toEqual({ level: 4, color: 208 });
+    expect(creature?.voices).toEqual(look.voices);
+  });
+
+  it('SEM ela, os quatro campos ficam AUSENTES (não `undefined`): ausência é o neutro', () => {
+    // O viewport aplica o neutro — sem addon, `blood`, sem luz, mudo — e o store não o inventa.
+    // Mutação que mata: copiar `message.addons` etc. direto no literal.
+    applyMessage(spawn(1), 0);
+    const creature = world.creatures.get(1) ?? {};
+    for (const key of ['addons', 'race', 'light', 'voices']) expect(Object.hasOwn(creature, key), key).toBe(false);
+  });
+
+  it('o session-state a carrega por criatura, para quem reanexa ver o monstro pintado e falante', () => {
+    // Mutação que mata: tirar `...presentationOf(creature)` do laço do `session-state`.
+    applyMessage({
+      type: 'session-state',
+      sessionType: 'hunt',
+      elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'char-1',
+        health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
+        promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+      },
+      world: { groundItems: [], tileUpdates: [], fields: [],
+        mapId: 'rat-cellars',
+        creatures: [
+          { id: 1, position: at(0, 0), appearanceId: 128, name: 'me', health: 1, maxHealth: 1 },
+          { id: 2, position: at(1, 0), appearanceId: 21, name: 'elemental', health: 1, maxHealth: 1, ...look },
+        ],
+      },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+
+    expect(world.creatures.get(2)?.light).toEqual({ level: 4, color: 208 });
+    expect(world.creatures.get(2)?.voices).toEqual(look.voices);
+    expect(world.creatures.get(2)?.addons).toBe(3);
+    expect(world.creatures.get(2)?.race).toBe('venom');
+    expect(world.creatures.get(1)?.light).toBeUndefined();
+  });
+
+  it('o golpe fotografa a RAÇA do alvo — inclusive o que mata, que chega junto do `creature-disappear`', () => {
+    // A criatura já não existe quando o viewport desenha o número, então a cor tem que estar no
+    // texto. Mutação que mata: ler a raça no viewport, em vez de fotografá-la em `addFloatingText`.
+    applyMessage({ ...spawn(1, at(2, 2)), race: 'venom' } as S2CMessage, 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 40, kind: 'melee', damageType: 'physical' }, 100);
+    applyMessage({ type: 'creature-disappear', id: 1 }, 100);
+    const text = world.texts[0];
+    expect(text?.race).toBe('venom');
+    expect(floatingTextColor(text!.kind, text!.damageType, text!.race)).toBe(0x00ff00);
+  });
+
+  it('o monstro comum e o herói não trazem raça: o número é vermelho, como sempre', () => {
+    applyMessage(spawn(1, at(2, 2)), 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 40, kind: 'melee', damageType: 'physical' }, 100);
+    expect(Object.hasOwn(world.texts[0] ?? {}, 'race')).toBe(false);
+    expect(floatingTextColor('melee', 'physical', world.texts[0]?.race)).toBe(0xff0000);
+  });
+
+  it('raças diferentes no mesmo tile não se somam: o jogador leria veneno como sangue', () => {
+    applyMessage({ ...spawn(1, at(2, 2)), race: 'venom' } as S2CMessage, 0);
+    applyMessage({ ...spawn(2, at(2, 2)), race: 'undead' } as S2CMessage, 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 10, kind: 'melee', damageType: 'physical' }, 0);
+    applyMessage({ type: 'creature-hit', id: 2, amount: 20, kind: 'melee', damageType: 'physical' }, 10);
+    expect(world.texts).toHaveLength(2);
+    // E a mesma raça, no mesmo tile e na mesma janela, SOMA como sempre.
+    applyMessage({ type: 'creature-hit', id: 2, amount: 5, kind: 'melee', damageType: 'physical' }, 20);
+    expect(world.texts).toHaveLength(2);
+    expect(world.texts[1]?.amount).toBe(25);
   });
 });
 
@@ -357,9 +586,9 @@ describe('combat transients (FUN-106)', () => {
       self: {
         creatureId: 1, characterId: 'char-1',
         health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
-        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
       },
-      world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
       notableEvents: [],
     }, 0);
@@ -384,6 +613,24 @@ describe('combat transients (FUN-106)', () => {
 });
 
 describe('HUD deltas', () => {
+  it('the posture the server confirmed replaces the HUD one, and only player-stats carries it (M30-03, #550)', () => {
+    expect(hud.get().fightMode).toBe('attack');
+    const stats = (fightMode: 'attack' | 'balanced' | 'defense') => ({
+      type: 'player-stats' as const,
+      health: 150, maxHealth: 185, mana: 30, maxMana: 35,
+      level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+      ammo: { arrow: null, bolt: null }, vocationId: null, promoted: false, fightMode,
+      speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+    });
+
+    applyMessage(stats('defense'), 0);
+    expect(hud.get().fightMode).toBe('defense');
+    applyMessage(stats('balanced'), 0);
+    expect(hud.get().fightMode).toBe('balanced');
+    applyMessage(stats('attack'), 0);
+    expect(hud.get().fightMode).toBe('attack');
+  });
+
   it('applies stats and notifies once', () => {
     const notified = vi.fn();
     subscribeSlice(hud, (state) => state.health, notified);
@@ -395,7 +642,7 @@ describe('HUD deltas', () => {
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
         ammo: { arrow: null, bolt: null },
         vocationId: null,
-        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        promoted: false, fightMode: 'attack', speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
       },
       0,
     );
@@ -412,23 +659,105 @@ describe('HUD deltas', () => {
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
         ammo: { arrow: null, bolt: null },
         vocationId: null,
+        promoted: false, fightMode: 'attack',
         speed: 125,
         skills: {
-          melee: { level: 12, percentToNext: 40 },
+          fist: { level: 11, percentToNext: 60 },
+          club: { level: 9, percentToNext: 10 },
+          sword: { level: 12, percentToNext: 40 },
+          axe: { level: 13, percentToNext: 5 },
           distance: { level: 14, percentToNext: 75 },
           magic: { level: 4, percentToNext: 20 },
         },
         magicLevel: { level: 4, percentToNext: 20 },
+        soul: 0,
+        soulMax: 0,
       },
       0,
     );
 
     expect(hud.get().speed).toBe(125);
     expect(hud.get().skills).toEqual({
-      melee: { level: 12, percent: 40 },
+      fist: { level: 11, percent: 60 },
+      club: { level: 9, percent: 10 },
+      sword: { level: 12, percent: 40 },
+      axe: { level: 13, percent: 5 },
       distance: { level: 14, percent: 75 },
       magic: { level: 4, percent: 20 },
     });
+  });
+
+  it('applies the Loyalty bonus and each skill\'s effective level from player-stats (#628)', () => {
+    applyMessage(
+      {
+        type: 'player-stats',
+        health: 150, maxHealth: 185, mana: 30, maxMana: 35,
+        level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+        ammo: { arrow: null, bolt: null },
+        vocationId: null,
+        promoted: false, fightMode: 'attack',
+        speed: 125,
+        skills: {
+          fist: { level: 11, percentToNext: 60 },
+          club: { level: 9, percentToNext: 10 },
+          sword: { level: 100, percentToNext: 40, loyaltyLevel: 104 },
+          axe: { level: 13, percentToNext: 5 },
+          distance: { level: 14, percentToNext: 75 },
+          magic: { level: 20, percentToNext: 20, loyaltyLevel: 22 },
+        },
+        magicLevel: { level: 20, percentToNext: 20, loyaltyLevel: 22 },
+        loyaltyBonusPercent: 50,
+        soul: 0,
+        soulMax: 0,
+      },
+      0,
+    );
+
+    expect(hud.get().loyaltyBonusPercent).toBe(50);
+    // O nível efetivo só existe onde o servidor o mandou; o resto fica sem a chave.
+    expect(hud.get().skills.sword).toEqual({ level: 100, percent: 40, loyaltyLevel: 104 });
+    expect(hud.get().skills.magic).toEqual({ level: 20, percent: 20, loyaltyLevel: 22 });
+    expect(hud.get().skills.fist).toEqual({ level: 11, percent: 60 });
+
+    // Um `player-stats` sem o bônus (conta sem degrau, ou nó anterior) volta a zero — e o nível
+    // efetivo some junto, em vez de ficar preso ao valor anterior.
+    applyMessage(
+      {
+        type: 'player-stats',
+        health: 150, maxHealth: 185, mana: 30, maxMana: 35,
+        level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+        ammo: { arrow: null, bolt: null },
+        vocationId: null,
+        promoted: false, fightMode: 'attack',
+        speed: 125,
+        skills: { sword: { level: 100, percentToNext: 40 }, magic: { level: 20, percentToNext: 20 } },
+        magicLevel: { level: 20, percentToNext: 20 },
+        soul: 0,
+        soulMax: 0,
+      },
+      0,
+    );
+    expect(hud.get().loyaltyBonusPercent).toBe(0);
+    expect(hud.get().skills.sword).toEqual({ level: 100, percent: 40 });
+  });
+
+  it('applies the Loyalty bonus from session-state.self too, for whoever reattaches (#628)', () => {
+    applyMessage({
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0,
+        skills: { sword: { level: 100, percentToNext: 0, loyaltyLevel: 104 } },
+        magicLevel: { level: 0, percentToNext: 0 },
+        loyaltyBonusPercent: 50,
+        soul: 0, soulMax: 0,
+      },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    } as S2CMessage, 0);
+    expect(hud.get().loyaltyBonusPercent).toBe(50);
+    expect(hud.get().skills.sword).toEqual({ level: 100, percent: 0, loyaltyLevel: 104 });
   });
 
   it('keeps the skills a node older than SV-04 does not send, but takes its speed', () => {
@@ -436,7 +765,10 @@ describe('HUD deltas', () => {
       ...state,
       speed: 130,
       skills: {
-        melee: { level: 20, percent: 50 },
+        fist: { level: 22, percent: 10 },
+        club: { level: 19, percent: 90 },
+        sword: { level: 20, percent: 50 },
+        axe: { level: 21, percent: 70 },
         distance: { level: 18, percent: 40 },
         magic: { level: 8, percent: 30 },
       },
@@ -451,7 +783,7 @@ describe('HUD deltas', () => {
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
         ammo: { arrow: null, bolt: null },
         vocationId: null,
-        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        promoted: false, fightMode: 'attack', speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
       },
       0,
     );
@@ -459,7 +791,10 @@ describe('HUD deltas', () => {
     expect(hud.get().health).toBe(140);
     expect(hud.get().speed).toBe(0);
     expect(hud.get().skills).toEqual({
-      melee: { level: 20, percent: 50 },
+      fist: { level: 22, percent: 10 },
+      club: { level: 19, percent: 90 },
+      sword: { level: 20, percent: 50 },
+      axe: { level: 21, percent: 70 },
       distance: { level: 18, percent: 40 },
       magic: { level: 8, percent: 30 },
     });
@@ -538,9 +873,9 @@ describe('session-state', () => {
     self: {
       creatureId: 1, characterId: 'char-1',
       health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200, vocationId: null,
-      speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
     },
-    world: { groundItems: [],
+    world: { groundItems: [], tileUpdates: [], fields: [],
       mapId: 'rat-cellars',
       creatures: creatures.map((c) => ({
         id: c.id, position: at(c.x, c.y), appearanceId: 1,
@@ -645,9 +980,9 @@ describe('o analisador (FUN-83)', () => {
     self: {
       creatureId: 1, characterId: 'char-1',
       health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200, vocationId: null,
-      speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
     },
-    world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
+    world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'rat-cellars', creatures: [] },
     aggregates: {
       durationMs: 600_000, xpGained: 900, goldGained: 300, goldSpent: 120,
       kills: 12, deaths: 0, itemsLooted: 4, suppliesUsed: 7, bestBasicHit: 88,
@@ -734,9 +1069,9 @@ describe('o analisador ao vivo (FUN-110)', () => {
       type: 'session-state', sessionType: 'hunt', elapsedMs: 600_000,
       self: {
         creatureId: 1, characterId: 'char-1', health: 120, maxHealth: 185, mana: 20, maxMana: 35,
-        level: 8, xp: 4_200, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        level: 8, xp: 4_200, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
       },
-      world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 600_000, xpGained: 900, goldGained: 300, goldSpent: 120, kills: 12, deaths: 0 },
       notableEvents: [{ atMs: 1_000, type: 'level-up' }],
     }, 5_000);
@@ -795,9 +1130,9 @@ describe('a party v2 no estado (#405, ADR 0035)', () => {
     type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
     self: {
       creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
-      level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
     },
-    world: { groundItems: [], mapId: null, creatures: [] },
+    world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],
     ...over,
@@ -898,13 +1233,92 @@ describe('o follow-state do bot (#406, ADR 0035 d.9)', () => {
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
       self: {
         creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
-        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
       },
-      world: { groundItems: [], mapId: null, creatures: [] },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
       notableEvents: [],
     }, 1);
     expect(hud.get().followState).toBeNull();
+  });
+});
+
+describe('a saída pendente da hunt (#802)', () => {
+  const stateMessage = (): S2CMessage => ({
+    type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+    self: {
+      creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+      level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+    },
+    world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
+    aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+    notableEvents: [],
+  } as S2CMessage);
+
+  it('grava o motivo, a fase e o que falta, com o instante LOCAL em que chegou', () => {
+    // Mutação que mata: descartar o `exit-pending` — a tela nunca saberia que a saída espera.
+    expect(hud.get().exitPending).toBeNull();
+    applyMessage({
+      type: 'exit-pending', active: true, reason: 'manual-exit', phase: 'countdown', remainingMs: 5_000,
+    }, 1_234);
+    expect(hud.get().exitPending).toEqual({
+      reason: 'manual-exit', phase: 'countdown', remainingMs: 5_000, receivedAtMs: 1_234,
+    });
+  });
+
+  it('uma mensagem nova substitui a anterior — o golpe que empurrou o prazo', () => {
+    applyMessage({
+      type: 'exit-pending', active: true, reason: 'manual-exit', phase: 'in-combat', remainingMs: 30_000,
+    }, 10);
+    applyMessage({
+      type: 'exit-pending', active: true, reason: 'manual-exit', phase: 'in-combat', remainingMs: 58_000,
+    }, 20);
+    expect(hud.get().exitPending).toMatchObject({ remainingMs: 58_000, receivedAtMs: 20 });
+  });
+
+  it('`active: false` zera — a saída foi cancelada', () => {
+    applyMessage({
+      type: 'exit-pending', active: true, reason: 'manual-exit', phase: 'countdown', remainingMs: 5_000,
+    }, 0);
+    applyMessage({ type: 'exit-pending', active: false }, 1);
+    expect(hud.get().exitPending).toBeNull();
+  });
+
+  it('`active: true` sem os campos não fabrica uma espera que o servidor não descreveu', () => {
+    applyMessage({ type: 'exit-pending', active: true }, 0);
+    expect(hud.get().exitPending).toBeNull();
+  });
+
+  it('session-ended zera: a saída acabou de se cumprir', () => {
+    applyMessage({
+      type: 'exit-pending', active: true, reason: 'manual-exit', phase: 'countdown', remainingMs: 5_000,
+    }, 0);
+    applyMessage({
+      type: 'session-ended', reason: 'manual-exit',
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 1);
+    expect(hud.get().exitPending).toBeNull();
+  });
+
+  it('session-state zera: o servidor reenvia no attach, com o que falta AGORA', () => {
+    applyMessage({
+      type: 'exit-pending', active: true, reason: 'manual-exit', phase: 'countdown', remainingMs: 5_000,
+    }, 0);
+    applyMessage(stateMessage(), 1);
+    expect(hud.get().exitPending).toBeNull();
+  });
+});
+
+describe('as mensagens do mundo ainda sem tela (OW-11, #832)', () => {
+  it('logout-refused e world-full chegam sem derrubar o cliente nem mexer no HUD', () => {
+    // Nenhum servidor as emite ainda (OW-14, OW-21) e a tela é da OW-23. O que se prende é que o
+    // `switch` exaustivo as conhece — sem o caso, o `satisfies never` não compilaria — e que
+    // aplicá-las não fabrica estado: o HUD continua exatamente como estava.
+    const before = hud.get();
+    applyMessage({ type: 'logout-refused', reason: 'in-fight' }, 1);
+    applyMessage({ type: 'world-full', position: 3, retryAfterMs: 10_000, huntAvailable: true }, 2);
+    expect(hud.get()).toBe(before);
   });
 });
 
@@ -913,9 +1327,9 @@ describe('a configuração do bot no session-state (FUN-111)', () => {
     type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
     self: {
       creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
-      level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
     },
-    world: { groundItems: [], mapId: null, creatures: [] },
+    world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],
     ...over,
@@ -1049,6 +1463,50 @@ describe('o catálogo (FUN-79, FUN-89)', () => {
   });
 });
 
+describe('o Bosstiary (#629, ADR 0052 d.1)', () => {
+  const vocabulary = { vocabularyVersion: 1, slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } };
+  it('ausente e vazio são coisas DIFERENTES, como no Bestiário', () => {
+    expect(hud.get().bosstiary).toBeNull();
+    applyMessage({ type: 'bosstiary', kills: {}, points: 0 }, 0);
+    expect(hud.get().bosstiary).toEqual({ kills: {}, points: 0 });
+  });
+
+  it('guarda o registro como veio, e SUBSTITUI em vez de somar', () => {
+    applyMessage({ type: 'bosstiary', kills: { '639': 3 }, points: 40 }, 0);
+    expect(hud.get().bosstiary).toEqual({ kills: { '639': 3 }, points: 40 });
+
+    applyMessage({ type: 'bosstiary', kills: { '639': 5, '100': 1 }, points: 110 }, 1_000);
+    expect(hud.get().bosstiary).toEqual({ kills: { '639': 5, '100': 1 }, points: 110 });
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state.inventory, notified);
+    subscribeSlice(hud, (state) => state.bestiary, notified);
+
+    applyMessage({ type: 'bosstiary', kills: { '639': 1 }, points: 10 }, 0);
+
+    expect(notified).not.toHaveBeenCalled();
+  });
+
+  it('o catálogo leva a tabela de níveis e a raridade de cada boss, e sem tabela a chave fica AUSENTE', () => {
+    const bosstiary = { levels: {
+      bane: [{ kills: 25, points: 5 }], archfoe: [{ kills: 5, points: 10 }], nemesis: [{ kills: 1, points: 10 }],
+    } };
+    const monsters = [{ id: 'dreadmaw', name: 'Dreadmaw', bosstiary: { rarity: 'nemesis', raceId: 639 } }];
+    applyMessage({
+      type: 'catalogue', hunts: [], monsters, bosstiary, bot: vocabulary, items: [],
+    } as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue?.bosstiary).toEqual(bosstiary);
+    expect(hud.get().catalogue?.monsters).toEqual(monsters);
+
+    applyMessage({
+      type: 'catalogue', hunts: [], monsters: [], bot: vocabulary, items: [],
+    } as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue).not.toHaveProperty('bosstiary');
+  });
+});
+
 describe('o bestiário (FUN-113, §18)', () => {
   it('ausente e vazio são coisas DIFERENTES', () => {
     // `null` é "ainda não chegou": um nó anterior à FUN-113 nunca manda, e o primeiro
@@ -1078,6 +1536,131 @@ describe('o bestiário (FUN-113, §18)', () => {
     applyMessage({ type: 'bestiary', counts: { rat: 1 } }, 0);
 
     expect(notified).not.toHaveBeenCalled();
+  });
+});
+
+describe('as magias aprendidas (#624, ADR 0058)', () => {
+  it('ausente e vazio são coisas DIFERENTES: `null` é "o servidor ainda não disse"', () => {
+    // Um nó anterior à #624 nunca manda, e o primeiro segundo de toda conexão também não mandou.
+    // Tratar "não sei" como "não aprendeu nada" marcaria TODO slot da barra antes da hora.
+    expect(hud.get().learnedSpells).toBeNull();
+    applyMessage({ type: 'learned-spells', spellIds: [] }, 0);
+    expect(hud.get().learnedSpells).toEqual([]);
+  });
+
+  it('SUBSTITUI o registro inteiro, em vez de somar — a reconexão reenvia o mesmo total', () => {
+    applyMessage({ type: 'learned-spells', spellIds: ['wound-cleansing'] }, 0);
+    applyMessage({ type: 'learned-spells', spellIds: ['wound-cleansing', 'berserk'] }, 1_000);
+    expect(hud.get().learnedSpells).toEqual(['wound-cleansing', 'berserk']);
+    applyMessage({ type: 'learned-spells', spellIds: ['wound-cleansing', 'berserk'] }, 2_000);
+    expect(hud.get().learnedSpells).toEqual(['wound-cleansing', 'berserk']);
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state.inventory, notified);
+    subscribeSlice(hud, (state) => state.health, notified);
+
+    applyMessage({ type: 'learned-spells', spellIds: ['berserk'] }, 0);
+
+    expect(notified).not.toHaveBeenCalled();
+  });
+});
+
+describe('o Treino (#631, ADR 0059)', () => {
+  const state: S2CMessage = {
+    type: 'training-state', offlineBankMs: 3_600_000, offlineSkill: 'sword',
+    weapons: [{ instanceId: 'w1', itemId: 'exercise-sword', charges: 431 }], activeInstanceId: 'w1',
+  };
+
+  it('o catálogo leva as regras do Treino e as exercise weapons — e sem elas o pill "Treino" não existe', () => {
+    // Mutação que mata: `apply` copia o catálogo CAMPO A CAMPO, e um campo novo que não entra ali some
+    // no caminho sem erro nenhum (foi o que o QA no navegador pegou: o `training` chegava e sumia).
+    const base = {
+      type: 'catalogue', hunts: [], monsters: [], charms: [], vocations: [], vocationLevel: 8,
+      bot: { vocabularyVersion: 2, spells: [], supplies: [], automations: [] },
+      items: [{
+        id: 'exercise-sword', name: 'exercise sword', appearanceId: 1, weight: 10, slot: null, twoHanded: false,
+        exercise: { skillId: 'sword', charges: 500 }, buyPrice: 347_222,
+      }],
+      ammunition: [],
+    };
+    const training = {
+      perCharge: { tries: 7, manaSpent: 600 }, bankCapMs: 43_200_000, graceMs: 600_000,
+      spendCapMs: { free: 21_600_000, premium: 43_200_000 },
+      offlineSkills: [{ skillId: 'sword', name: 'Espada', kind: 'attacks' }],
+      skills: [
+        { skillId: 'sword', name: 'Espada', kind: 'attacks' },
+        { skillId: 'shielding', name: 'Escudo', kind: 'attacks' },
+      ],
+    };
+    applyMessage({ ...base, training } as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue?.training).toEqual(training);
+    expect(hud.get().catalogue?.items[0]).toMatchObject({ exercise: { skillId: 'sword', charges: 500 }, buyPrice: 347_222 });
+
+    applyMessage(base as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue).not.toHaveProperty('training');
+  });
+
+  it('ausente e vazio são coisas DIFERENTES: `null` até o servidor dizer', () => {
+    // Um nó `game` sem Treino nunca manda — e o primeiro segundo de toda conexão também não mandou.
+    expect(hud.get().training).toBeNull();
+    applyMessage({
+      type: 'training-state', offlineBankMs: 0, offlineSkill: null, weapons: [], activeInstanceId: null,
+    }, 0);
+    expect(hud.get().training).toEqual({ offlineBankMs: 0, offlineSkill: null, weapons: [], activeInstanceId: null });
+  });
+
+  it('SUBSTITUI o estado inteiro a cada mensagem — cada golpe do Treino reenvia as cargas', () => {
+    applyMessage(state, 0);
+    expect(hud.get().training?.weapons).toEqual([{ instanceId: 'w1', itemId: 'exercise-sword', charges: 431 }]);
+    applyMessage({ ...state, weapons: [{ instanceId: 'w1', itemId: 'exercise-sword', charges: 430 }] } as S2CMessage, 2_000);
+    expect(hud.get().training?.weapons).toEqual([{ instanceId: 'w1', itemId: 'exercise-sword', charges: 430 }]);
+    // A arma acabou: some da lista, e a instância ativa some junto.
+    applyMessage({ ...state, weapons: [], activeInstanceId: null } as S2CMessage, 4_000);
+    expect(hud.get().training).toMatchObject({ weapons: [], activeInstanceId: null, offlineBankMs: 3_600_000 });
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    // Chega a cada golpe (a cada ~2 s): não pode redesenhar o inventário nem as barras.
+    const notified = vi.fn();
+    subscribeSlice(hud, (current) => current.inventory, notified);
+    subscribeSlice(hud, (current) => current.health, notified);
+    applyMessage(state, 0);
+    expect(notified).not.toHaveBeenCalled();
+  });
+
+  it('o extrato do Treino diz o porquê e o tempo — não XP, gold nem abate, que ele não rende', () => {
+    applyMessage({
+      type: 'session-state', sessionType: 'training', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'me', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0,
+        vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        soul: 0, soulMax: 0,
+      },
+      world: { mapId: 'city', creatures: [], groundItems: [], tileUpdates: [], fields: [] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    } as unknown as S2CMessage, 0);
+    applyMessage({
+      type: 'session-ended', reason: 'completed',
+      aggregates: { durationMs: 960_000, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+    const line = hud.get().systemMessages.at(-1);
+    // A arma acabou: não é "Concluído" (a frase da hunt), é o que de fato aconteceu.
+    expect(line?.text).toBe('Treino: A exercise weapon acabou · 16 min');
+    expect(line?.text).not.toContain('XP');
+
+    // E parar o treino na Cidade não é "sair da hunt": o jogador está lendo isto em pé na praça.
+    applyMessage({
+      type: 'session-ended', reason: 'manual-exit',
+      aggregates: { durationMs: 180_000, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+    const manual = hud.get().systemMessages.at(-1);
+    expect(manual?.text).toBe('Treino: Você saiu do treino · 3 min');
+    expect(manual?.text).not.toContain('hunt');
   });
 });
 
@@ -1113,6 +1696,8 @@ describe('o inventário (FUN-90)', () => {
     // para a tela achar a definição.
     equipped: { chest: { instanceId: 'i2', itemId: 'plate', quantity: 1 } },
     capacity: { used: 130, total: 400 },
+    supplies: [],
+    ammunition: [],
     ...over,
   } as S2CMessage);
 
@@ -1153,9 +1738,9 @@ describe('jogadores online (SV-07/SV-15, #351)', () => {
     self: {
       creatureId: 1, characterId: 'char-1',
       health: 100, maxHealth: 100, mana: 50, maxMana: 50, level: 1, xp: 0, vocationId: null,
-      speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
     },
-    world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
+    world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'rat-cellars', creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],
     ...over,

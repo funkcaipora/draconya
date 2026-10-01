@@ -11,7 +11,7 @@
 //
 // Quem chama é `rulesets/hunt.ts`; este arquivo não sabe o que é sessão.
 
-import type { Item, PartyConfig } from '@draconya/content';
+import type { Item, PartyConfig, SpellManaCost } from '@draconya/content';
 import type { CarriedItem } from './inventory.js';
 
 export interface PartyMember {
@@ -115,6 +115,27 @@ export function shareCostsOf(options: CostLootMode): boolean {
 
 export function splitLootOf(options: CostLootMode): boolean {
   return options.splitLoot ?? options.mode === 'shared';
+}
+
+/**
+ * O custo de mana de uma magia de party (#588: Heal/Protect/Enchant/Train Party) — o número
+ * FIXO, direto, ou a fórmula do Canary escalada por `affectedCount` (quantos membros do roster,
+ * líder incluso, estão no alcance — nunca só os elegíveis de XP, e nunca a soma de vocações
+ * únicas, que é outra conta deste arquivo): `Party::onCastSpell`, `data/scripts/spells/party/
+ * *.lua`, `mana = ceil((decay^(n-1) × base) × n)`.
+ *
+ * `affectedCount <= 1` (o lançador sozinho no alcance) não tem custo definido — quem chama já
+ * recusou a mágica antes de chegar aqui (a mesma recusa "No party members in range" do Canary,
+ * `no-target` neste motor); esta função nunca é chamada com `affectedCount <= 1` em produção,
+ * mas devolve o `base` sem gastar `Math.ceil` num expoente negativo para não explodir se algum
+ * dia for.
+ *
+ * Pura: sem RNG, sem I/O — como o resto deste arquivo.
+ */
+export function partyScaledManaCost(manaCost: SpellManaCost, affectedCount: number): number {
+  if (typeof manaCost === 'number') return manaCost;
+  if (affectedCount <= 1) return manaCost.base;
+  return Math.ceil((manaCost.decay ** (affectedCount - 1)) * manaCost.base * affectedCount);
 }
 
 /**

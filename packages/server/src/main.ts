@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Redis } from 'ioredis';
 import { loadContent } from '@draconya/content/load';
+import { DEFAULT_DIFFICULTY_NAME, offlineTrainingRulesOf } from '@draconya/sim';
 import { servedPackProblem } from './served-pack.js';
 import { loadConfiguration, type RoleName } from './config.js';
 import { createLogger } from './log.js';
@@ -17,8 +18,8 @@ import { buildCatalogue } from './game/catalogue.js';
 import { createApi } from './api/server.js';
 import { createGame } from './game/server.js';
 import {
-  CityShard, createBotConfigValidator, createCitySessionFactory, createLateJoiner, createSessionBuilder,
-  createSessionRestorer,
+  CityShard, createBotConfigLoader, createBotConfigValidator, createCitySessionFactory,
+  createLateJoiner, createSessionBuilder, createSessionRestorer,
 } from './game/sessions.js';
 import { createJobs } from './jobs/scheduler.js';
 import { createSingletonLock } from './jobs/lock.js';
@@ -30,7 +31,8 @@ import { TicketService } from './tickets.js';
 import { SnapshotStore } from './snapshots.js';
 import { ReceiptStore } from './receipts.js';
 import { PartyStore } from './party-store.js';
-import { LootBoxStore } from './loot-box.js';
+import { readCachedBoostedMonsterId, WorldDailyStore } from './world-daily.js';
+import { createLoyaltyBonusResolver } from './loyalty.js';
 import type { Role } from './role.js';
 import { createDatabase } from './db/client.js';
 import { DrizzleGameRepository } from './db/repository.js';
@@ -106,8 +108,6 @@ async function main(): Promise<void> {
     'Content loaded',
   );
 
-  const lootBoxes = new LootBoxStore(redis);
-
   // A cópia da Cidade deste nó (FUN-71, ADR 0023). Uma por processo `game`, e é assim que
   // "Cidade 2" nasce: dois nós já são duas praças, sem nada a mais.
   const nowMs = (): number => Date.now();
@@ -115,12 +115,26 @@ async function main(): Promise<void> {
   // O catálogo do que existe (FUN-79, FUN-89), montado UMA vez: a versão de conteúdo é fixada
   // e não muda enquanto o processo vive.
   const catalogue = buildCatalogue(content);
+  // O que o gasto do offline training lê do conteúdo (#631), ou `null` sem `training/`.
+  const offlineTrainingRules = offlineTrainingRulesOf(content);
 
   const factories: Record<RoleName, () => Role> = {
     api: () => {
       const apiLogger = logger.child({ role: 'api' });
       return createApi(configuration, apiLogger, {
         tickets,
+        // A Boosted Creature do dia (#615): só Redis, nunca Postgres (ADR 0054 decisão 7) —
+        // é a cópia que o `jobs` publica para a `api` ler barato a cada ticket emitido.
+        currentBoostedMonsterId: () => readCachedBoostedMonsterId(redis),
+        // O gasto do banco de offline training na emissão do ticket (#631, ADR 0059 d.3): as
+        // regras do conteúdo fixado no boot e o carimbo de repouso do diretório — a `api` é quem
+        // sabe que horas são, e só escreve com o personagem sem sessão (ADR 0052 d.5).
+        ...(offlineTrainingRules === null ? {} : {
+          offlineTraining: {
+            rules: offlineTrainingRules,
+            restedSince: (characterId: string) => directory.restedSince(characterId),
+          },
+        }),
         // O bot com que o personagem nasce (FUN-114), do conteúdo fixado no boot.
         ...(content.bot.defaultConfig === undefined
           ? {}
@@ -150,6 +164,20 @@ async function main(): Promise<void> {
               // `game`, que não fala com o Postgres.
               listItemInstances: (characterId: string) =>
                 repository.listItemInstances(characterId),
+              // Os storages do personagem (#731, ADR 0050 d.6 T2): a semente do motor de
+              // quest, pela mesma razão e o mesmo caminho de `listItemInstances`.
+              listCharacterStorages: (characterId: string) =>
+                repository.listCharacterStorages(characterId),
+              // O bônus de Loyalty da conta (#628, ADR 0052 decisão 5): calculado na EMISSÃO do
+              // ticket, de `account.created_at`, e fixado no personagem pela sessão inteira.
+              // Conteúdo sem `loyalty/` não passa nada — nenhum ticket carrega bônus.
+              ...(content.loyalty === undefined
+                ? {}
+                : {
+                    loyaltyBonusPercentOf: createLoyaltyBonusResolver({
+                      repository, config: content.loyalty, now: nowMs,
+                    }),
+                  }),
               // A party antes da hunt (#195): formulário em Redis, limites do conteúdo.
               party: new PartyStore(redis),
               matchmakingLevelRange: content.party.matchmakingLevelRange,
@@ -159,10 +187,12 @@ async function main(): Promise<void> {
                 // As vocações do catálogo fixado no boot (#501): as chaves da composição da
                 // sala são validadas contra isto ∪ `none`. Do conteúdo, nunca uma lista à mão.
                 vocations: [...content.vocations.keys()],
-                difficultiesOf: (huntId: string) => {
-                  const hunt = content.hunts.get(huntId);
-                  return hunt === undefined ? null : Object.keys(hunt.difficulties);
-                },
+                // Fim do pull por dificuldade (#583, ADR 0039): o conteúdo não define mais
+                // nomes de dificuldade nenhum. `DEFAULT_DIFFICULTY_NAME` é o único válido, para
+                // a validação de party continuar funcionando enquanto o protocolo mandar o
+                // campo (#584 tira a escolha da tela por completo).
+                difficultiesOf: (huntId: string) =>
+                  content.hunts.has(huntId) ? [DEFAULT_DIFFICULTY_NAME] : null,
               },
               settleProgress: (characterId: string) =>
                 settleCharacterState(characterId, {
@@ -193,12 +223,38 @@ async function main(): Promise<void> {
       // O host não recebe o `Content` inteiro: recebe a função que julga uma configuração de
       // bot (FUN-81). Quem cuida de socket não precisa conhecer balanceamento.
       acceptBotConfig: createBotConfigValidator(content),
+      // A CARGA de uma config já persistida (ADR 0014) é função separada da EDIÇÃO acima —
+      // ver `createBotConfigLoader`: um slot com magia/supply removida (#596) esvazia, em vez
+      // de derrubar a configuração inteira do personagem que está entrando.
+      loadBotConfig: createBotConfigLoader(content),
       catalogue: () => catalogue,
       // O catálogo, para as regras de equipar. Não é o `Content` inteiro: o host não precisa
       // de balanceamento para decidir se uma espada cabe num slot.
       itemCatalog: content.items,
       // A munição abstrata (#152): o `select-ammo` escolhe daqui, com o level conferido.
       ammunitionCatalog: content.ammunition,
+      // O catálogo dos 25 Charms (M39-02, #602) e a ficha de Bestiário de cada monstro (só
+      // `toKill`/`charmsPoints`, ADR 0053 d.1) — o que `charm-unlock`/`charm-assign` precisam
+      // para derivar pontos ganhos e completude, sem o host conhecer o `Content` inteiro.
+      charmCatalog: content.charms,
+      // O Treino (#631, ADR 0059): as regras do livro do offline training — `set-offline-training-
+      // skill` só aceita skill que o conteúdo oferece, e `enter-training` só existe com ele.
+      ...(content.training === undefined ? {} : { training: content.training }),
+      ...(content.bestiary === undefined
+        ? {}
+        : {
+          charmBestiaryEntries: new Map(
+            Object.entries(content.bestiary.entries).map(([monsterId, entry]) => [
+              monsterId, { toKill: entry.toKill, charmsPoints: entry.charmsPoints },
+            ]),
+          ),
+        }),
+      // As sete bênçãos PvE (#570, ADR 0052): o `buy-blessing` compra daqui, com o preço por
+      // level em `progression.blessingPricing`.
+      blessingCatalog: content.blessings,
+      // O catálogo de magias (#624, ADR 0058): o `learn-spell` confere vocação, level e preço
+      // (`learnPrice`) daqui — o host recebe o mapa, não o `Content` inteiro.
+      spellCatalog: content.spells,
       vocations: content.vocations,
       vocationLevel: content.progression.vocationLevel,
       progression: content.progression,
@@ -213,21 +269,30 @@ async function main(): Promise<void> {
       // tabela inteira, e não os ids soltos, porque o host resolve por `spellId` e `supplyId`
       // na hora em que o `sim` emite — e a tabela é do conteúdo fixado no boot (invariante 7).
       ...(content.appearances === undefined ? {} : { appearances: content.appearances }),
-      // A Caixa de Loot da Sessão (FUN-88). Redis, e não Postgres, porque ela EXPIRA — e
-      // expirar precisa significar que o item nunca existiu.
-      lootBoxes,
       // Mesmo caminho no modo solo e separado; a escrita durável pertence a jobs/api.
       saveBotConfig: (characterId, config) => botConfigs.save(characterId, config),
     }),
     jobs: () => createJobs(configuration, logger.child({ role: 'jobs' }), {
       tickets, directory, snapshots, receipts, progression: content.progression,
-      lootBoxes, botConfigs,
+      botConfigs,
       metrics: new JobsMetrics(configuration.NODE_ID),
       // O dono do lock é único POR PROCESSO, não por máquina (FUN-91): dois containers `jobs`
       // no mesmo host compartilham o `NODE_ID`, renovariam o lock um do outro, e os dois se
       // achariam líderes — que é exatamente o que o lock existe para impedir.
       lock: createSingletonLock(redis, `${configuration.NODE_ID}:${randomUUID()}`),
       ...(database === null ? {} : { database: database.db }),
+      // A Boosted Creature do dia (#615): candidato é o Bestiário INTEIRO — todo monstro com
+      // ficha, nunca uma lista separada de conteúdo (ADR 0054 decisão 7). Ausente sem
+      // `boosted/baseline.json` ou sem Postgres: o ciclo roda igual, só não sorteia nada.
+      ...(database === null || content.boosted === undefined || content.bestiary === undefined
+        ? {}
+        : {
+            boosted: {
+              store: new WorldDailyStore(redis, database.db),
+              rolloverHourUtc: content.boosted.rolloverHourUtc,
+              monsterIds: Object.keys(content.bestiary.entries),
+            },
+          }),
     }),
   };
 

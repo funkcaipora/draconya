@@ -60,6 +60,11 @@ export interface BotView {
    * o próprio lançador: `compileCondition` lê daqui quando o alvo da regra não é `self`.
    */
   partyTarget: CharacterRuntime | null;
+  /**
+   * Quantas invocações VIVAS este personagem tem AGORA (#598, M38-01, ADR 0057 decisão 4) — a
+   * condição `summons`, mesmo desenho de `targetCount`: o NÚMERO, nunca a lista.
+   */
+  summonCount: number;
 }
 
 /** O que uma condição precisa saber do alvo. Nada além disto. */
@@ -184,6 +189,10 @@ export function compileCondition(
       // `mana-shield`, `buff`) — não o id da magia. "Castar haste só sem haste" é
       // `present: false`; com o efeito ativo o predicado é falso e o slot é pulado.
       return (view) => (view.self.conditions.get(conditionId) !== null) === present;
+    }
+    case 'summons': {
+      const { op, count } = condition;
+      return (view) => compare(view.summonCount, op, count);
     }
   }
 }

@@ -143,7 +143,7 @@ export class DragonPartyApi {
 
   async configure(
     session: DragonPartySession, partyId: string, characterId: string,
-    patch: { readonly huntId: string; readonly difficulty: string; readonly shareCosts: boolean; readonly splitLoot: boolean },
+    patch: { readonly huntId: string; readonly shareCosts: boolean; readonly splitLoot: boolean },
   ): Promise<{ readonly status: number; readonly body: unknown }> {
     return this.#request(
       'POST', `/api/party/${partyId}/configure`, { cookie: session.cookie, body: { characterId, ...patch } },

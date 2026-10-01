@@ -40,11 +40,19 @@ function loop(): Point[] {
 }
 
 const tiles = loop();
+// 40 pontos, um monstro cada (#583: cada ponto declara os próprios candidatos — não há mais
+// dificuldade para segurar `monsterCount`/`composition`). O sorteio 3:1 entre flamer/brute
+// continua existindo, só que por PONTO (`monsters`, #582) em vez de uma composição única da
+// dificuldade.
 const spawnPoints = tiles
   .map((_, index) => index)
-  .filter((index) => index % 8 === 0)
-  .slice(0, 10)
-  .map((routeIndex) => ({ routeIndex, radius: 3 }));
+  .filter((index) => index % 2 === 0)
+  .slice(0, 40)
+  .map((routeIndex) => ({
+    routeIndex, radius: 1,
+    monsters: [{ monsterId: 'flamer', weight: 3 }, { monsterId: 'brute', weight: 1 }],
+    respawnDelayMs: 30_000,
+  }));
 
 export const COMBAT_HUNT_ID = 'combat';
 export const COMBAT_DIFFICULTY = 'reckless';
@@ -74,14 +82,20 @@ function rawCombatContent(): RawContent {
             presentation: { missileKey: 'fire-missile', impactKey: 'fire-impact' },
             condition: {
               key: 'burn', merge: 'refresh', durationMs: 4_000,
-              effect: { kind: 'damage-over-time', amount: 4, intervalMs: 1_000, damageType: 'fire' },
+              effect: {
+                kind: 'damage-over-time', form: 'rounds',
+                rounds: [{ count: 4, intervalMs: 1_000, damage: 4 }], damageType: 'fire',
+              },
             },
             field: {
               id: 'fire-field', durationMs: 5_000,
               shape: { shape: 'circle', radius: 1, centered: 'target' },
               condition: {
                 key: 'fire-field', merge: 'refresh', durationMs: 5_000,
-                effect: { kind: 'damage-over-time', amount: 3, intervalMs: 1_000, damageType: 'fire' },
+                effect: {
+                  kind: 'damage-over-time', form: 'rounds',
+                  rounds: [{ count: 5, intervalMs: 1_000, damage: 3 }], damageType: 'fire',
+                },
               },
             },
           },
@@ -104,13 +118,6 @@ function rawCombatContent(): RawContent {
     hunts: [{
       id: COMBAT_HUNT_ID, name: 'Combat Cellars', recommendedLevel: 1,
       mapId: 'combat', routeId: 'combat-loop',
-      difficulties: {
-        reckless: {
-          monsterCount: 40,
-          composition: [{ monsterId: 'flamer', weight: 3 }, { monsterId: 'brute', weight: 1 }],
-          respawnDelayMs: 30_000,
-        },
-      },
     }],
     vocations: [],
     progression: [{
@@ -119,13 +126,13 @@ function rawCombatContent(): RawContent {
       // nada e fazem o µs/tick despencar para zero. O balanceamento não é o assunto aqui.
       id: 'baseline', startingHealth: 1_000_000, startingMana: 500, startingCapacity: 1_000,
       healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
-      startingSpeed: 300, speedPerLevel: 0, regen: { healthPerSecond: 1, manaPerSecond: 1 },
+      startingSpeed: 300, speedPerLevel: 0, regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
       xp: { kind: 'power', base: 20, exponent: 2 },
-      deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+      deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessingReduction: 0.56, promotionReduction: 0.3 },
     }],
     combat: [{
       id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
-      armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
+      armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0 },
       minimumDamageFraction: 0.1,
       player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 4, dodgeChance: 0.05, damageType: 'physical' },
       // CMB-04: o estágio de defesa do perfil, com a skill que sobe por bloqueio.

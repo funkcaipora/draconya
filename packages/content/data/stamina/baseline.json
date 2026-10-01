@@ -1,5 +1,6 @@
 {
   "id": "baseline",
-  "maxMs": 86400000,
-  "recoveryRatio": 1
+  "maxMs": 43200000,
+  "recoveryRatio": 1,
+  "_open": "M32-01 (#562, ADR 0043 emenda 2026-09-25 \"copie do Huntera\"): o teto mudou de 24 h (86.400.000 ms, número nosso sem fonte) para 12 h (43.200.000 ms) — o valor que o Huntera mostra cheio na Cidade (huntera-observed.md Parte II §15, linhas 361-362). `recoveryRatio` continua 1:1 como valor PROVISÓRIO: a razão real de recuperação passiva do Huntera nunca foi medida (captura pendente, docs/tibia-parity-plan.md §6), e a razão por faixa do Canary (1 min a cada 180 s até 2.340 min, depois a cada 360 s) foi calculada contra o teto de 42 h que caiu — reescalá-la contra 720 min sem fonte não é adotado. As faixas de XP (1,5× Premium acima de 2.340 min; 0,5× em 840 min ou menos) e o corte de loot em 840 min do Canary também ficam de fora pela mesma razão; ver docs/product/stamina.md."
 }

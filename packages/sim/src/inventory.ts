@@ -9,24 +9,49 @@
 // decisão 6, o modelo do Huntera) o item tem LUGAR — a mochila é um vetor posicional de 20
 // lugares (o item nas costas), a bolsa é um vetor fixo do personagem de 10, e os dois crescem
 // por linhas, sem limite, enquanto houver capacidade. O lugar nunca recusa loot — o bot não
-// pode parar de caçar por mochila cheia (invariante 11) —, só o peso recusa, e aí a Caixa de
-// Loot segura.
+// pode parar de caçar por mochila cheia (invariante 11) —, só o peso recusa. `add` recusa por
+// peso; `forceAdd` (ADR 0048 decisão 7, retirada da Caixa de Loot da Sessão) ignora — é o que
+// usam os dois casos que não têm cadáver de monstro para segurar o excedente: o grant de
+// vocação/kit e a liquidação da bolsa de party (ver `character.ts`/`rulesets/hunt.ts`).
 //
 // **`Inventory` não conhece conteúdo.** Os tamanhos iniciais e a linha chegam como números
 // (`ContainerRules`) de quem tem a tabela — o ruleset em `onEnter`, o host no `move` —, porque
 // `CharacterRuntime` constrói o inventário sem conteúdo nenhum.
 //
-// **Item no chão não existe** (§21.5). O que existe é o que está nos containers, o que está
-// equipado, e o que está na Caixa de Loot da Sessão. Sem `stackpos`, sem cadáver como
-// container, sem item largado — o §26 do documento de referência lista isso como rejeição
-// deliberada, e é o que dispensa metade do modelo de mundo de uma engine de MMO.
+// **Item no chão não existe, à parte do cadáver** (§21.5, emendado pelo ADR 0048). O que existe
+// é o que está nos containers, o que está equipado, e o que caiu de monstro e ainda não foi
+// coletado (`CorpseState.items`, `rulesets/hunt.ts`). Sem `stackpos`, sem item largado pelo
+// jogador — o §26 do documento de referência foi emendado pelo mesmo ADR.
 
 import { DAMAGE_TYPES, matchesVocationRequirement } from '@draconya/content';
 import type {
-  CompiledMitigation, DamageType, Item, ItemOrigin, ItemSlot, Progression, RingEffect,
+  CompiledMitigation, CompiledReflect, DamageModifiers, DamageType, Item, ItemOrigin, ItemSlot,
+  Progression, RingEffect, SpecializedMagicElement, SuppressibleCondition,
 } from '@draconya/content';
+import type { SpecializedMagicLevels } from './casting.js';
 import { NO_DEFENSE } from './combat/defense.js';
 import type { DefenseSource } from './combat/defense.js';
+import { hasItemOverlay, normalizeItemOverlay } from './item-overlay.js';
+import type { ItemInstanceOverlay } from './item-overlay.js';
+import type { DefenderAbsorb } from './combat/damage.js';
+
+/**
+ * A ordem em que o Canary varre os slots vestidos (`CONST_SLOT_FIRST..CONST_SLOT_LAST`, ids 1 a
+ * 10 de `creatures_definitions.hpp:375-384`: head, necklace, backpack, armor, RIGHT, LEFT, legs,
+ * feet, ring, ammo) — a de `Player::blockHit` (`player.cpp:3915`, #552). Importa porque a
+ * absorção percentual arredonda item a item: a ordem muda o número. É também a de
+ * `Blessings.DropLoot` (#571, `for i = CONST_SLOT_HEAD, CONST_SLOT_AMMO`, `blessing.lua:106`),
+ * onde cada item vestido consome UM sorteio na ordem — trocar a ordem muda quem perde o quê com
+ * a mesma semente.
+ *
+ * **`RIGHT` (5) vem antes de `LEFT` (6), e é o ESCUDO**: `Player::queryAdd` só aceita no `RIGHT`
+ * `WEAPON_SHIELD` ou aljava (`player.cpp:4643-4646`), e a arma vai no `LEFT` (`:4686-4702`) — a
+ * aljava é lida de `CONST_SLOT_RIGHT` (`weapons.cpp:715`). No Draconya `shield` é o slot da mão
+ * secundária (escudo, aljava, livro) e `hand` o da arma, então a ordem é `shield`, `hand`.
+ */
+export const CANARY_SLOT_ORDER: readonly ItemSlot[] = [
+  'head', 'neck', 'back', 'chest', 'shield', 'hand', 'legs', 'feet', 'finger', 'ammo',
+];
 
 /** Teto de empilhamento (§21.5). Item empilhável enche até aqui; espada não empilha. */
 export const MAX_STACK = 100;
@@ -50,6 +75,13 @@ export interface CarriedItem {
    * snapshot antigo precisa de bump. Só o colar usa hoje.
    */
   readonly charges?: number;
+  /**
+   * O estado por INSTÂNCIA (ADR 0046, #604): os imbuements e o prazo restante do anel (#689);
+   * o tier da Forja (#617) entra como mais um campo nomeado do mesmo objeto — ver `item-overlay.ts`.
+   * Ausente é "igual à definição", e é o caso de quase todo item. Opcional, então nenhum
+   * snapshot antigo precisa de bump. Item com overlay NÃO empilha (ADR 0046 d.3).
+   */
+  readonly overlay?: ItemInstanceOverlay;
 }
 
 /**
@@ -58,7 +90,12 @@ export interface CarriedItem {
  * mantém o vencimento FORA do tick (invariante 2, ADR 0020).
  */
 export interface EquipmentObserver {
-  onEquip(slot: ItemSlot, item: CarriedItem): void;
+  /**
+   * `previous` é o que o slot tinha antes da troca direta (já de volta no lugar de onde `item`
+   * saiu), ou `null`. A troca é uma transação só (ADR 0032 d.8), então o item que sai não recebe
+   * um `onUnequip` à parte: é por aqui que o observer guarda o prazo restante dele (#689).
+   */
+  onEquip(slot: ItemSlot, item: CarriedItem, previous: CarriedItem | null): void;
   onUnequip(slot: ItemSlot, item: CarriedItem): void;
 }
 
@@ -73,6 +110,17 @@ export interface EquipmentChanged {
 }
 
 export type ContainerName = 'backpack' | 'satchel';
+
+/**
+ * O que `loseEquipped` tirou do corpo (#571): a peça e o que estava DENTRO dela. Só a mochila
+ * (`back`) tem conteúdo — a aljava é container no cliente, mas a munição do Draconya é abstrata
+ * (ADR 0026 d.3), então não há o que ir junto.
+ */
+export interface LostEquipped {
+  readonly slot: ItemSlot;
+  readonly item: CarriedItem;
+  readonly contents: readonly CarriedItem[];
+}
 
 /** Um lugar do inventário: posição num container, ou um slot do corpo. */
 export type Place =
@@ -115,9 +163,24 @@ export type InventoryRefusal =
   /** Um lugar que não existe — índice fora do vetor (#160). */
   | 'no-such-place'
   /** Mover a partir de um lugar vazio (#160). */
-  | 'empty-place';
+  | 'empty-place'
+  /** `sell-items` contra um `value: 0` do catálogo (#724, ADR 0048 d.8): "ninguém compra isto". */
+  | 'not-for-sale';
 
 export type InventoryResult = { readonly ok: true } | {
+  readonly ok: false; readonly reason: InventoryRefusal;
+};
+
+/**
+ * O resultado de `sellItems` (#724, ADR 0048 d.8): as instâncias removidas e o gold que renderam,
+ * `value × quantity` somado. Recusa não muta nada — é transação, como `move`.
+ */
+export type SellResult = { readonly ok: true; readonly removed: readonly CarriedItem[]; readonly gold: number } | {
+  readonly ok: false; readonly reason: InventoryRefusal;
+};
+
+/** O resultado de `discardItem` (#724, ADR 0048 d.8): a instância destruída, sem gold. */
+export type DiscardResult = { readonly ok: true; readonly removed: CarriedItem } | {
   readonly ok: false; readonly reason: InventoryRefusal;
 };
 
@@ -133,6 +196,15 @@ export interface Wearer {
 
 /** O que `requires` de um item confere: level e vocação. É o que `weapon()` lê do portador. */
 export type Requirements = Pick<Wearer, 'level' | 'vocationId'>;
+
+/**
+ * A arma na mão e a porcentagem do golpe (#687): `100` no level, `50` abaixo dele com
+ * `wieldUnproperly`, `0` abaixo dele sem — o `damageModifier` do `playerWeaponCheck` do Canary.
+ */
+export interface HeldWeapon {
+  readonly item: Item;
+  readonly damagePercent: 100 | 50 | 0;
+}
 
 export class Inventory {
   #backpack: (CarriedItem | null)[] = [];
@@ -228,6 +300,27 @@ export class Inventory {
     return left;
   }
 
+  /**
+   * Gasta UMA unidade da PILHA do item equipado no slot (o arremessável, #575 — spear, throwing
+   * star: `stackable: true`, o item em si é o projétil) e devolve o que sobrou; `0` é a pilha
+   * inteira consumida — o slot esvazia, o mesmo desenho de `consumeCharge`. Diferente de
+   * `charges` (durabilidade da INSTÂNCIA, #421): `quantity` é a contagem real da pilha, o mesmo
+   * campo que `add`/`move` já mantêm — arremessável não usa `ammunitionStock` nem seleção por
+   * família (ADR 0026 d.3 não se aplica a ele, só à munição arrow/bolt).
+   */
+  consumeStack(slot: ItemSlot): number {
+    const equipped = this.#equipped.get(slot);
+    if (equipped === undefined) return 0;
+    const left = equipped.quantity - 1;
+    if (left <= 0) {
+      this.#equipped.delete(slot);
+      this.#observer?.onUnequip(slot, equipped);
+      return 0;
+    }
+    this.#equipped.set(slot, { ...equipped, quantity: left });
+    return left;
+  }
+
   /** Some com o item do slot sem passar por container (esgotou). Devolve o que saiu. */
   destroy(slot: ItemSlot): CarriedItem | null {
     const equipped = this.#equipped.get(slot);
@@ -235,6 +328,74 @@ export class Inventory {
     this.#equipped.delete(slot);
     this.#observer?.onUnequip(slot, equipped);
     return equipped;
+  }
+
+  /**
+   * Perde o item vestido no slot COM o que ele carrega (#571, `Blessings.DropLoot` do Canary:
+   * `item:moveTo(corpse)` leva a mochila e tudo dentro dela). Diferente de `destroy`, que só
+   * tira o item vestido e deixa a mochila cheia: aqui o vetor da mochila vai junto, e o tamanho
+   * inicial volta a zero — o container que sobra é o da PRÓXIMA mochila (`grantEquipped` +
+   * `ensureContainers`), não um vetor órfão de 20 lugares sem dono. A bolsa é do PERSONAGEM,
+   * não do item, e nunca vai junto.
+   *
+   * Devolve `null` se o slot está vazio. O observer é avisado como em `destroy` — é ele quem
+   * cancela o prazo do anel e reavalia a velocidade da bota.
+   */
+  loseEquipped(slot: ItemSlot): LostEquipped | null {
+    const equipped = this.#equipped.get(slot);
+    if (equipped === undefined) return null;
+    const contents: CarriedItem[] = [];
+    if (slot === 'back') {
+      for (const carried of this.#backpack) if (carried !== null) contents.push(carried);
+      this.#backpack = [];
+      this.#initial = { ...this.#initial, backpack: 0 };
+    }
+    this.#equipped.delete(slot);
+    this.#observer?.onUnequip(slot, equipped);
+    return { slot, item: equipped, contents };
+  }
+
+  /**
+   * Põe uma peça DIRETO num slot vazio, sem sair de lugar nenhum (#571): a mochila que a morte
+   * entrega (`player:addItem(ITEM_BAG, 1, false, CONST_SLOT_BACKPACK)`). Não confere level nem
+   * vocação — quem chama é o sistema, não o jogador — e recusa slot ocupado, porque trocar por
+   * cima destruiria em silêncio o que estava lá. O container só ganha os lugares da peça com um
+   * `ensureContainers` depois, com as `ContainerRules` de quem tem o catálogo.
+   */
+  grantEquipped(slot: ItemSlot, item: CarriedItem): boolean {
+    if (this.#equipped.has(slot)) return false;
+    this.#equipped.set(slot, item);
+    this.#observer?.onEquip(slot, item, null);
+    return true;
+  }
+
+  /**
+   * Regrava o overlay da instância ONDE ELA ESTIVER — container ou corpo —, sem mudar lugar,
+   * peso nem chamar o observer (ADR 0046 d.2). `undefined` (ou um overlay vazio) tira o
+   * overlay, e a peça volta a ser igual à definição. Devolve `false` se a instância não está
+   * com ele.
+   *
+   * É o único escritor do overlay dentro do `sim`: aplicar imbuement (#607), decair (#606), o
+   * prazo do anel (#689) e o tier (#617) passam por aqui, cada um mexendo no SEU campo —
+   * `{ ...item.overlay, campo }` —, e nunca apagando o dos outros.
+   */
+  setOverlay(instanceId: string, overlay: ItemInstanceOverlay | undefined): boolean {
+    const normalized = normalizeItemOverlay(overlay);
+    const apply = (item: CarriedItem): CarriedItem => {
+      const { overlay: _previous, ...rest } = item;
+      return normalized === undefined ? rest : { ...rest, overlay: normalized };
+    };
+    const place = this.#placeOf(instanceId);
+    if (place !== null) {
+      this.#set(place, apply(this.#at(place) as CarriedItem));
+      return true;
+    }
+    for (const [slot, item] of this.#equipped) {
+      if (item.instanceId !== instanceId) continue;
+      this.#equipped.set(slot, apply(item));
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -254,9 +415,9 @@ export class Inventory {
    * Põe num container, se o PESO couber: pilha → primeiro lugar livre → uma linha a mais.
    *
    * Sem mochila nas costas o loot vai para a bolsa (ADR 0026 d.6): a bolsa é do personagem.
-   * Recusa só por peso: o item que não cabe vai para a Caixa de Loot da Sessão (§21.5), e
-   * quem chama decide o que fazer com `over-capacity`. O lugar nunca recusa — o bot não pode
-   * parar de caçar por mochila cheia.
+   * Recusa só por peso — `over-capacity` —, e quem chama decide o que fazer (hoje: o item fica
+   * no cadáver do monstro, ADR 0048 decisão 7). O lugar nunca recusa — o bot não pode parar de
+   * caçar por mochila cheia.
    */
   add(
     item: CarriedItem, catalog: ReadonlyMap<string, Item>, wearer: Wearer, rules: ContainerRules,
@@ -269,13 +430,35 @@ export class Inventory {
     if (this.weight(catalog) + added > wearer.capacity) {
       return { ok: false, reason: 'over-capacity' };
     }
+    return this.#place(item, definition, rules);
+  }
 
+  /**
+   * Como `add`, mas ignora o peso (ADR 0048 decisão 7): usado só onde recusar destruiria o
+   * item e não sobra cadáver de monstro para segurar o excedente — o grant de vocação/kit
+   * (`chooseVocation`/`#grantKitPiece` em `character.ts`) e o que a bolsa de party não vendeu
+   * (`#settle` em `rulesets/hunt.ts`). Os dois já preferiam nunca recusar por peso antes da
+   * Caixa de Loot da Sessão sair; sem ela, ignorar é o que resta.
+   */
+  forceAdd(
+    item: CarriedItem, catalog: ReadonlyMap<string, Item>, rules: ContainerRules,
+  ): InventoryResult {
+    const definition = catalog.get(item.itemId);
+    if (definition === undefined) return { ok: false, reason: 'not-carried' };
+    if (item.quantity > MAX_STACK) return { ok: false, reason: 'stack-too-large' };
+    return this.#place(item, definition, rules);
+  }
+
+  /** Pilha → primeiro lugar livre → uma linha a mais. Peso já foi decidido por quem chamou. */
+  #place(item: CarriedItem, definition: Item, rules: ContainerRules): InventoryResult {
     const target = this.#equipped.has('back') ? this.#backpack : this.#satchel;
     // Empilhável junta na pilha existente, até o teto. Não empilhável vira lugar novo, sempre:
     // duas espadas são duas identidades, e é essa identidade que carrega a proveniência.
-    if (definition.stackable) {
+    // Item com overlay (ADR 0046 d.3) não é fungível: nem entra numa pilha, nem recebe uma.
+    if (definition.stackable && !hasItemOverlay(item)) {
       const index = target.findIndex(
         (carried) => carried !== null && carried.itemId === item.itemId
+          && !hasItemOverlay(carried)
           && carried.quantity + item.quantity <= MAX_STACK,
       );
       const existing = target[index];
@@ -310,6 +493,29 @@ export class Inventory {
     return null;
   }
 
+  /**
+   * Consome UMA unidade de uma pilha em mochila/bolsa — comida, carga de bênção (#726, ADR
+   * 0049 decisão 3). Decrementa NO LUGAR, sem reconferir peso (só pode diminuir) e remove a
+   * linha quando a pilha zera, aparando o fim como `remove` já faz. Devolve o item de ANTES do
+   * consumo (para o catálogo ler o efeito), ou `null` se a instância não está carregada —
+   * nunca olha o equipado: nada com `use.effect` hoje se veste.
+   */
+  consumeOne(instanceId: string): CarriedItem | null {
+    for (const [target, initial] of [[this.#backpack, this.#initial.backpack], [this.#satchel, this.#initial.satchel]] as const) {
+      const index = target.findIndex((carried) => carried?.instanceId === instanceId);
+      if (index < 0) continue;
+      const found = target[index] as CarriedItem;
+      if (found.quantity <= 1) {
+        target[index] = null;
+        this.#trim(target, initial);
+      } else {
+        target[index] = { ...found, quantity: found.quantity - 1 };
+      }
+      return found;
+    }
+    return null;
+  }
+
   /** Apara `null` do fim, linha a linha, até o tamanho inicial — nunca abaixo dele. */
   #trim(target: (CarriedItem | null)[], initial: number): void {
     while (target.length > initial && target[target.length - 1] === null) target.pop();
@@ -322,6 +528,58 @@ export class Inventory {
   findStack(itemId: string): CarriedItem | null {
     for (const item of this.items()) if (item.itemId === itemId) return item;
     return null;
+  }
+
+  /** A instância nos containers (mochila/bolsa), sem remover — não olha o equipado. */
+  #findCarried(instanceId: string): CarriedItem | null {
+    for (const item of this.items()) if (item.instanceId === instanceId) return item;
+    return null;
+  }
+
+  /**
+   * A instância onde quer que esteja — containers OU corpo — sem remover, ou `null`. É a leitura
+   * que o Treino faz da exercise weapon (#631): quem decide se a arma ainda está com o
+   * personagem é o `sim`, e a resposta não depende de ela estar na mochila ou vestida.
+   */
+  carried(instanceId: string): CarriedItem | null {
+    const inContainer = this.#findCarried(instanceId);
+    if (inContainer !== null) return inContainer;
+    for (const item of this.#equipped.values()) if (item.instanceId === instanceId) return item;
+    return null;
+  }
+
+  /**
+   * Vende N itens da mochila/bolsa ao `value` do catálogo (#724, ADR 0048 d.8 — a
+   * generalização do "Despachar loot" do ADR 0032 d.12). TRANSAÇÃO: confere TODAS as
+   * instâncias antes de remover qualquer uma — uma faltando, equipada, ou com `value: 0`
+   * ("ninguém compra isto") recusa o lote inteiro, sem mutar nada.
+   */
+  sellItems(instanceIds: readonly string[], catalog: ReadonlyMap<string, Item>): SellResult {
+    const found: CarriedItem[] = [];
+    for (const instanceId of instanceIds) {
+      const carried = this.#findCarried(instanceId);
+      if (carried === null) return { ok: false, reason: 'not-carried' };
+      const value = catalog.get(carried.itemId)?.value ?? 0;
+      if (value <= 0) return { ok: false, reason: 'not-for-sale' };
+      found.push(carried);
+    }
+    let gold = 0;
+    for (const carried of found) {
+      gold += (catalog.get(carried.itemId)?.value ?? 0) * carried.quantity;
+      this.remove(carried.instanceId);
+    }
+    return { ok: true, removed: found, gold };
+  }
+
+  /**
+   * Descarta um item da mochila/bolsa: destrói, sem gold (#724, ADR 0048 d.8). A confirmação
+   * é do cliente — o servidor não pergunta de novo.
+   */
+  discardItem(instanceId: string): DiscardResult {
+    const carried = this.#findCarried(instanceId);
+    if (carried === null) return { ok: false, reason: 'not-carried' };
+    this.remove(instanceId);
+    return { ok: true, removed: carried };
   }
 
   /**
@@ -360,12 +618,24 @@ export class Inventory {
     // As duas mãos (#152, ADR 0026): o bow ocupa também o escudo. Vestir um com o outro no
     // lugar é recusado, e não trocado — tirar o escudo por conta própria seria decidir pelo
     // jogador o que ele queria fora do corpo.
+    //
+    // A ÚNICA exceção (#575): a aljava (`quiver: true`) convive com um bow/crossbow — a peça
+    // não é "escudo" de verdade, é o carcás que segura munição na mão secundária (o mesmo
+    // `right-hand` do Canary, que não conta contra as duas mãos do lançador). Sem a exceção, o
+    // `perfectShot` da aljava (schemas.ts) nunca teria como ser equipado junto de uma arma de
+    // distância, e ficaria morto por construção.
     if (definition.twoHanded && this.#equipped.has('shield')) {
-      return { ok: false, reason: 'hands-full' };
+      const shieldItem = catalog.get(this.#equipped.get('shield')?.itemId ?? '');
+      const quiverWithDistance = definition.kind === 'weapon' && definition.weapon?.kind === 'distance'
+        && shieldItem?.kind === 'shield' && shieldItem.quiver;
+      if (!quiverWithDistance) return { ok: false, reason: 'hands-full' };
     }
     if (definition.slot === 'shield') {
       const inHand = this.#equipped.get('hand');
-      if (inHand !== undefined && catalog.get(inHand.itemId)?.twoHanded) {
+      const inHandItem = inHand === undefined ? undefined : catalog.get(inHand.itemId);
+      const quiverWithDistance = definition.kind === 'shield' && definition.quiver
+        && inHandItem?.kind === 'weapon' && inHandItem.weapon?.kind === 'distance';
+      if (inHandItem?.twoHanded && !quiverWithDistance) {
         return { ok: false, reason: 'hands-full' };
       }
     }
@@ -382,8 +652,9 @@ export class Inventory {
     this.#set(from, previous);
     if (previous === null) this.#trim(this.#containerOf(from.container), this.#initialOf(from.container));
     // Depois da transação concluída (ADR 0032 d.8): o observer cancela o prazo antigo do slot e
-    // agenda o do item que entrou. Um item que saiu para outro do mesmo slot perde o prazo.
-    this.#observer?.onEquip(definition.slot, carried);
+    // agenda o do item que entrou. O que saiu vai junto (`previous`) para o observer guardar o
+    // prazo restante dele na instância antes do cancelamento (#689).
+    this.#observer?.onEquip(definition.slot, carried, previous);
     return OK;
   }
 
@@ -428,7 +699,7 @@ export class Inventory {
       if (destination !== null) {
         // Só numa pilha compatível com espaço; senão o lugar está ocupado.
         const definition = catalog.get(equipped.itemId);
-        if (definition?.stackable !== true || destination.itemId !== equipped.itemId
+        if (!stacksWith(definition, equipped, destination)
           || destination.quantity + equipped.quantity > MAX_STACK) {
           return { ok: false, reason: 'no-such-place' };
         }
@@ -452,7 +723,7 @@ export class Inventory {
     if (destination === undefined) return { ok: false, reason: 'no-such-place' };
     if (from.container === to.container && from.index === to.index) return OK;
     const definition = catalog.get(source.itemId);
-    if (destination !== null && definition?.stackable === true && destination.itemId === source.itemId) {
+    if (destination !== null && stacksWith(definition, source, destination)) {
       // Empilha até o teto; o que não coube fica na origem. Peso total inalterado.
       const moved = Math.min(source.quantity, MAX_STACK - destination.quantity);
       if (moved > 0) {
@@ -519,6 +790,42 @@ export class Inventory {
    */
   weapon(catalog: ReadonlyMap<string, Item>, wearer: Requirements): Item | null {
     const carried = this.#equipped.get('hand');
+    if (carried === undefined) return null;
+    const definition = catalog.get(carried.itemId);
+    if (definition === undefined) return null;
+    if (!this.#meets(definition, wearer)) return null;
+    return definition;
+  }
+
+  /**
+   * A arma na mão com o quanto ela bate (#687, só o `combat-v3` lê) — o `playerWeaponCheck` do
+   * Canary. Irmã de `weapon()`, com UMA diferença: a arma vestida abaixo do level exigido não
+   * vira mão vazia. O level cai com a arma na mão (penalidade de morte), e aí ela bate metade
+   * com `wieldUnproperly` ou não bate (`0`: o chamador não emite golpe, nem de punho).
+   *
+   * Vocação errada continua mão vazia (`null`), como em `weapon()`: `equip` recusa, e o que
+   * chega por `fromState` sem passar por ela não pode virar golpe.
+   */
+  heldWeapon(catalog: ReadonlyMap<string, Item>, wearer: Requirements): HeldWeapon | null {
+    const carried = this.#equipped.get('hand');
+    if (carried === undefined) return null;
+    const item = catalog.get(carried.itemId);
+    if (item === undefined) return null;
+    if (!matchesVocationRequirement(item.requires.vocationId, wearer.vocationId)) return null;
+    if (item.requires.level !== undefined && wearer.level < item.requires.level) {
+      return { item, damagePercent: item.weapon?.wieldUnproperly === true ? 50 : 0 };
+    }
+    return { item, damagePercent: 100 };
+  }
+
+  /**
+   * A DEFINIÇÃO do que está no slot de escudo (mão secundária), ou `null` sem nada lá (#549,
+   * M30-02) — escudo, spellbook ou quiver, as três peças que só existem nesse slot. Irmã de
+   * `weapon()`: mesma checagem de requisito, mesma leitura de "não veste" para snapshot antigo
+   * ou instância fora de `equip`.
+   */
+  shield(catalog: ReadonlyMap<string, Item>, wearer: Requirements): Item | null {
+    const carried = this.#equipped.get('shield');
     if (carried === undefined) return null;
     const definition = catalog.get(carried.itemId);
     if (definition === undefined) return null;
@@ -596,7 +903,8 @@ export class Inventory {
     if (!contributing) return NEUTRAL_MITIGATION;
 
     const resistances: Record<DamageType, number> = {
-      physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0,
+      physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0,
+      drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
     };
     const immunities = new Set<DamageType>();
     for (const carried of this.#equipped.values()) {
@@ -620,18 +928,32 @@ export class Inventory {
   }
 
   /**
-   * O bônus de UMA skill do que está vestido, somado (#524): o Hat of the Mad soma na `magic`
-   * (que aqui É o magic level, FUN-92), a Paladin Armor na `distance`. Molde de `armor()`: uma
-   * varredura dos poucos slots equipados, não uma tabela por skill — o custo por leitura é
-   * limitado e não depende do catálogo.
+   * O bônus de UMA skill do que está vestido, somado (#524, #688): o Hat of the Mad soma na
+   * `magic` (que aqui É o magic level, FUN-92), a Paladin Armor na `distance`, e um item com
+   * várias skills soma em cada uma delas — o laço de `setVarSkill` do Canary. Molde de `armor()`:
+   * uma varredura dos poucos slots equipados, não uma tabela por skill — o custo por leitura é
+   * limitado e não depende do catálogo. O boot garante uma entrada por skill por item.
    */
   skillBonus(catalog: ReadonlyMap<string, Item>, skillId: string): number {
     let total = 0;
     for (const carried of this.#equipped.values()) {
-      const bonus = catalog.get(carried.itemId)?.bonuses?.skill;
-      if (bonus !== undefined && bonus.skillId === skillId) total += bonus.amount;
+      for (const bonus of catalog.get(carried.itemId)?.bonuses?.skills ?? []) {
+        if (bonus.skillId === skillId) total += bonus.amount;
+      }
     }
     return total;
+  }
+
+  /**
+   * Se algo vestido suprime `condition` (#688, `suppress*` do Canary): o Dwarven Ring suprime
+   * `drunk`. Como `Creature::addCondition`/`hasCondition` do Canary, quem consulta isto recusa a
+   * condição nova e ignora a que já estava ativa enquanto o item estiver vestido.
+   */
+  suppresses(catalog: ReadonlyMap<string, Item>, condition: SuppressibleCondition): boolean {
+    for (const carried of this.#equipped.values()) {
+      if (catalog.get(carried.itemId)?.bonuses?.suppress?.includes(condition) === true) return true;
+    }
+    return false;
   }
 
   /**
@@ -645,11 +967,176 @@ export class Inventory {
     }
     return total;
   }
+
+  /**
+   * O MAGIC LEVEL ESPECIALIZADO do que está vestido, somado POR ELEMENTO (#680). O Canary
+   * (`Player::getSpecializedMagicLevel`, `player.cpp:7606-7627`) varre os itens equipados na
+   * hora do cálculo — nada é aplicado no equip —, e é o que isto faz: molde de
+   * `combatModifiers()`. `undefined` quando NADA vestido declara o campo, o caso de todo o
+   * conteúdo hoje, e é o que mantém a fórmula bit a bit sem o chamador conferir por fora.
+   */
+  specializedMagicLevel(catalog: ReadonlyMap<string, Item>): SpecializedMagicLevels | undefined {
+    let total: Partial<Record<SpecializedMagicElement, number>> | undefined;
+    for (const carried of this.#equipped.values()) {
+      const points = catalog.get(carried.itemId)?.bonuses?.specializedMagicLevel;
+      if (points === undefined) continue;
+      total ??= {};
+      for (const [element, amount] of Object.entries(points) as [SpecializedMagicElement, number | undefined][]) {
+        if (amount !== undefined) total[element] = (total[element] ?? 0) + amount;
+      }
+    }
+    return total;
+  }
+
+  /**
+   * Os modificadores de crítico e leech do que está vestido, SOMADOS (M30-04, #551). Molde de
+   * `armor()`/`skillBonus()`/`speedBonus()` — uma varredura dos poucos slots equipados, cada
+   * campo ausente no item soma zero. Os quatro campos do item são pontos-base (×10000, a escala
+   * do Canary — `itemCombatModifiersSchema`); aqui já viram a FRAÇÃO que `DamageModifiers` usa.
+   *
+   * `undefined` quando NADA equipado declara `combatModifiers` — o item comum de sempre, o caso
+   * de todo o conteúdo hoje —, e é o que preserva bit a bit o v1/v2/v3 sem o chamador precisar
+   * confirmar "nada equipado" por fora. `critical` só existe quando a CHANCE somada é > 0: como
+   * `canApplyCritical = baseChance != 0 && ...` do Canary (`combat.cpp:2666`) curto-circuita —
+   * `criticalDamage` sozinho, sem chance nenhuma, nunca faz um golpe crítico nem consome sorteio.
+   */
+  combatModifiers(catalog: ReadonlyMap<string, Item>): DamageModifiers | undefined {
+    let criticalChance = 0;
+    let criticalDamage = 0;
+    let lifeLeech = 0;
+    let manaLeech = 0;
+    let increase: Partial<Record<DamageType, number>> | undefined;
+    for (const carried of this.#equipped.values()) {
+      const item = catalog.get(carried.itemId);
+      // O aumento por tipo (#552) é outro campo do item, mas o mesmo lado do golpe (o ATACANTE),
+      // e viaja no mesmo `DamageModifiers` para chegar a golpe, magia e runa sem outro parâmetro.
+      if (item?.increase !== undefined) {
+        increase ??= {};
+        for (const type of DAMAGE_TYPES) {
+          const value = item.increase[type];
+          if (value !== undefined) increase[type] = (increase[type] ?? 0) + value;
+        }
+      }
+      const modifiers = item?.combatModifiers;
+      if (modifiers === undefined) continue;
+      criticalChance += modifiers.criticalChance ?? 0;
+      criticalDamage += modifiers.criticalDamage ?? 0;
+      lifeLeech += modifiers.lifeLeech ?? 0;
+      manaLeech += modifiers.manaLeech ?? 0;
+    }
+    if (criticalChance === 0 && lifeLeech === 0 && manaLeech === 0 && increase === undefined) {
+      return undefined;
+    }
+    return {
+      ...(increase === undefined ? {} : { increase }),
+      ...(criticalChance === 0 ? {} : {
+        critical: { chance: criticalChance / 10_000, multiplier: 1 + criticalDamage / 10_000 },
+      }),
+      ...(lifeLeech === 0 ? {} : { lifeLeech: lifeLeech / 10_000 }),
+      ...(manaLeech === 0 ? {} : { manaLeech: manaLeech / 10_000 }),
+    };
+  }
 }
+
+/**
+ * `a` pode entrar na pilha `b`? Mesmo id, item empilhável, e NENHUM dos dois com overlay (ADR
+ * 0046 d.3) — somar duas instâncias com estado próprio apagaria o estado de uma delas.
+ */
+function stacksWith(definition: Item | undefined, a: CarriedItem, b: CarriedItem): boolean {
+  return definition?.stackable === true && a.itemId === b.itemId
+    && !hasItemOverlay(a) && !hasItemOverlay(b);
+}
+
+/**
+ * A absorção do EQUIPAMENTO para o `combat-v3` (#552), na forma de `DefenderAbsorb`: a
+ * percentual de CADA item na ordem de slot do Canary — `absorb.percent` e a fração de
+ * `mitigation.resistances` (o mesmo `absorbpercent*`, ×100) — e a flat somada. `undefined`
+ * quando nada vestido absorve, o caso comum, sem alocação.
+ */
+export function equipmentAbsorb(
+  inventory: Inventory, catalog: ReadonlyMap<string, Item>,
+): DefenderAbsorb | undefined {
+  let items: Partial<Record<DamageType, number>>[] | undefined;
+  let flat: Partial<Record<DamageType, number>> | undefined;
+  for (const slot of CANARY_SLOT_ORDER) {
+    const carried = inventory.equippedAt(slot);
+    if (carried === null) continue;
+    const item = catalog.get(carried.itemId);
+    if (item === undefined) continue;
+    let percents: Partial<Record<DamageType, number>> | undefined;
+    for (const type of DAMAGE_TYPES) {
+      // A fração legada vira percentual limpo: `0,07 × 100` é `7,000000000000001` em ponto
+      // flutuante, e o arredondamento por item herdaria o resto.
+      const resistance = Math.round(item.mitigation.resistances[type] * 10_000) / 100;
+      const percent = (item.absorb?.[type]?.percent ?? 0) + resistance;
+      if (percent !== 0) (percents ??= {})[type] = percent;
+      const absorbFlat = item.absorb?.[type]?.flat ?? 0;
+      if (absorbFlat !== 0) {
+        flat ??= {};
+        flat[type] = (flat[type] ?? 0) + absorbFlat;
+      }
+    }
+    if (percents !== undefined) (items ??= []).push(percents);
+  }
+  if (items === undefined && flat === undefined) return undefined;
+  return { items: items ?? [], flat: flat ?? {} };
+}
+
+/**
+ * O reflexo do EQUIPAMENTO (#552): as tabelas compiladas dos itens vestidos, somadas (o
+ * `Player::getReflectPercent`/`getReflectFlat` do Canary soma todos os equipados).
+ * `undefined` quando nada vestido reflete.
+ */
+export function equipmentReflect(
+  inventory: Inventory, catalog: ReadonlyMap<string, Item>,
+): CompiledReflect | undefined {
+  let total: { percent: Record<DamageType, number>; flat: Record<DamageType, number> } | undefined;
+  for (const slot of CANARY_SLOT_ORDER) {
+    const carried = inventory.equippedAt(slot);
+    const reflect = carried === null ? undefined : catalog.get(carried.itemId)?.reflect;
+    if (reflect === undefined) continue;
+    total ??= { percent: { ...ZERO_BY_TYPE }, flat: { ...ZERO_BY_TYPE } };
+    for (const type of DAMAGE_TYPES) {
+      total.percent[type] += reflect.percent[type];
+      total.flat[type] += reflect.flat[type];
+    }
+  }
+  return total;
+}
+
+/** O `cleavepercent` somado do que está vestido (#552, `Player::getCleavePercent`). Zero é nada. */
+export function equipmentCleavePercent(
+  inventory: Inventory, catalog: ReadonlyMap<string, Item>,
+): number {
+  let total = 0;
+  for (const slot of CANARY_SLOT_ORDER) {
+    const carried = inventory.equippedAt(slot);
+    if (carried !== null) total += catalog.get(carried.itemId)?.cleavePercent ?? 0;
+  }
+  return total;
+}
+
+/**
+ * A mitigação do equipamento SEM a resistência (#552): no `combat-v3` a resistência do item é
+ * absorção item a item (`equipmentAbsorb`), e só as imunidades continuam no estágio de
+ * `mitigation`. Sem imunidade nenhuma, o objeto neutro de sempre — nenhuma alocação.
+ */
+export function immunitiesOnly(mitigation: CompiledMitigation): CompiledMitigation {
+  if (mitigation.immunities.size === 0) return NEUTRAL_MITIGATION;
+  return { resistances: NEUTRAL_MITIGATION.resistances, immunities: mitigation.immunities };
+}
+
+const ZERO_BY_TYPE: Readonly<Record<DamageType, number>> = {
+  physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0,
+  drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
+};
 
 /** O defensor sem equipamento que mitigue: identidade, e um objeto só para toda a sessão. */
 const NEUTRAL_MITIGATION: CompiledMitigation = {
-  resistances: { physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
+  resistances: {
+    physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0,
+    drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
+  },
   immunities: new Set(),
 };
 

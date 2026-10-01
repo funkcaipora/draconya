@@ -1,0 +1,9 @@
+{
+  "id": "axe",
+  "name": "Machado",
+  "startingLevel": 10,
+  "curve": { "base": 50, "factor": 2.0 },
+  "gain": { "on": "melee-hit", "points": 1 },
+  "damagePerLevel": 0.02,
+  "_open": "Separada da skill `melee` no #567 (ver `fist.json` para o motivo). Base 50 é a `skillBase` do axe do Canary (`Vocation::skillBase`, #521/#567, ADR 0037), verificada em `opentibiabr/canary` `main` 2026-09-26. `factor` 2.0 é o FALLBACK sem vocação (`<skill id=\"3\">` da vocação `None`); cada vocação real sobe por `vocationSchema.skillMultipliers.axe`. `damagePerLevel` continua provisório, herdado da antiga `melee.json`."
+}

@@ -1,0 +1,2430 @@
+[
+  {
+    "id": "adamant-shield",
+    "name": "adamant shield",
+    "kind": "shield",
+    "weight": 91,
+    "value": 0,
+    "slot": "shield",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "alchemists-notepad",
+    "name": "alchemist's notepad",
+    "kind": "shield",
+    "weight": 13,
+    "value": 0,
+    "slot": "shield",
+    "defense": 20,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 250,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "death": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ],
+      "specializedMagicLevel": {
+        "energy": 2,
+        "fire": 2
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "alicorn-quiver",
+    "name": "alicorn quiver",
+    "kind": "shield",
+    "weight": 20,
+    "value": 0,
+    "slot": "shield",
+    "requires": {
+      "level": 400,
+      "vocationId": "paladin"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "quiver": true,
+    "perfectShot": {
+      "range": 3,
+      "damage": 20
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "amazon-shield",
+    "name": "amazon shield",
+    "kind": "shield",
+    "weight": 62,
+    "value": 0,
+    "slot": "shield",
+    "defense": 32,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ancient-shield",
+    "name": "ancient shield",
+    "kind": "shield",
+    "weight": 61,
+    "value": 900,
+    "slot": "shield",
+    "defense": 27,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "arboreal-tome",
+    "name": "arboreal tome",
+    "kind": "shield",
+    "weight": 23,
+    "value": 0,
+    "slot": "shield",
+    "defense": 22,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 400,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 6
+      },
+      "physical": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 5
+        }
+      ],
+      "specializedMagicLevel": {
+        "healing": 1,
+        "ice": 1
+      }
+    },
+    "spellbook": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "arcanomancer-folio",
+    "name": "arcanomancer folio",
+    "kind": "shield",
+    "weight": 26,
+    "value": 0,
+    "slot": "shield",
+    "defense": 22,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 400,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 8
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 5
+        }
+      ],
+      "specializedMagicLevel": {
+        "energy": 1,
+        "fire": 1
+      }
+    },
+    "spellbook": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "battle-shield",
+    "name": "battle shield",
+    "kind": "shield",
+    "weight": 62,
+    "value": 95,
+    "slot": "shield",
+    "defense": 23,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "biscuit-barrier",
+    "name": "biscuit barrier",
+    "kind": "shield",
+    "weight": 52,
+    "value": 0,
+    "slot": "shield",
+    "defense": 36,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 200,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 5
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "combatModifiers": {
+      "lifeLeech": 200
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "shielding",
+          "amount": 2
+        }
+      ],
+      "regeneration": {
+        "healthGain": 4,
+        "healthTicksMs": 5000,
+        "manaGain": 16,
+        "manaTicksMs": 5000
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "black-shield",
+    "name": "black shield",
+    "kind": "shield",
+    "weight": 42,
+    "value": 800,
+    "slot": "shield",
+    "defense": 18,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "blessed-shield",
+    "name": "blessed shield",
+    "kind": "shield",
+    "weight": 68,
+    "value": 650,
+    "slot": "shield",
+    "defense": 40,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "blue-quiver",
+    "name": "blue quiver",
+    "kind": "shield",
+    "weight": 17,
+    "value": 0,
+    "slot": "shield",
+    "requires": {
+      "vocationId": "paladin"
+    },
+    "quiver": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bone-shield",
+    "name": "bone shield",
+    "kind": "shield",
+    "weight": 55,
+    "value": 80,
+    "slot": "shield",
+    "defense": 20,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bonelord-shield",
+    "name": "bonelord shield",
+    "kind": "shield",
+    "weight": 47,
+    "value": 79,
+    "slot": "shield",
+    "defense": 28,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "book-of-lies",
+    "name": "book of lies",
+    "kind": "shield",
+    "weight": 24,
+    "value": 0,
+    "slot": "shield",
+    "defense": 18,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 150,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "brain-in-a-jar",
+    "name": "brain in a jar",
+    "kind": "shield",
+    "weight": 27,
+    "value": 0,
+    "slot": "shield",
+    "defense": 19,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 180,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "earth": {
+        "percent": 7
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "brass-shield",
+    "name": "brass shield",
+    "kind": "shield",
+    "weight": 60,
+    "value": 25,
+    "slot": "shield",
+    "defense": 16,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "broken-wooden-shield",
+    "name": "broken wooden shield",
+    "kind": "shield",
+    "weight": 40,
+    "value": 0,
+    "slot": "shield",
+    "defense": 11,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "candy-coated-quiver",
+    "name": "candy-coated quiver",
+    "kind": "shield",
+    "weight": 18,
+    "value": 0,
+    "slot": "shield",
+    "requires": {
+      "level": 200,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 2
+      }
+    },
+    "quiver": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "carapace-shield",
+    "name": "carapace shield",
+    "kind": "shield",
+    "weight": 55,
+    "value": 32000,
+    "slot": "shield",
+    "defense": 36,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "castle-shield",
+    "name": "castle shield",
+    "kind": "shield",
+    "weight": 49,
+    "value": 5000,
+    "slot": "shield",
+    "defense": 28,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cocoa-grimoire",
+    "name": "cocoa grimoire",
+    "kind": "shield",
+    "weight": 15,
+    "value": 0,
+    "slot": "shield",
+    "defense": 19,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 200,
+      "vocationId": "sorcerer"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "fire": 1
+      },
+      "magicShieldCapacity": {
+        "flat": 150,
+        "percent": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "copper-shield",
+    "name": "copper shield",
+    "kind": "shield",
+    "weight": 63,
+    "value": 50,
+    "slot": "shield",
+    "defense": 19,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "creamy-grimoire",
+    "name": "creamy grimoire",
+    "kind": "shield",
+    "weight": 17,
+    "value": 0,
+    "slot": "shield",
+    "defense": 19,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 200,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 5
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "healing": 1
+      },
+      "magicShieldCapacity": {
+        "flat": 150,
+        "percent": 3
+      }
+    },
+    "spellbook": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "crown-shield",
+    "name": "crown shield",
+    "kind": "shield",
+    "weight": 62,
+    "value": 109,
+    "slot": "shield",
+    "defense": 32,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "crude-umbral-spellbook",
+    "name": "crude umbral spellbook",
+    "kind": "shield",
+    "weight": 40,
+    "value": 0,
+    "slot": "shield",
+    "defense": 14,
+    "requires": {
+      "level": 75,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": 2
+      },
+      "fire": {
+        "percent": 2
+      },
+      "ice": {
+        "percent": 2
+      },
+      "earth": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "spellbook": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dark-shield",
+    "name": "dark shield",
+    "kind": "shield",
+    "weight": 52,
+    "value": 400,
+    "slot": "shield",
+    "defense": 25,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "death-gaze",
+    "name": "death gaze",
+    "kind": "shield",
+    "weight": 79,
+    "value": 0,
+    "slot": "shield",
+    "defense": 38,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 200
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "demon-shield",
+    "name": "demon shield",
+    "kind": "shield",
+    "weight": 26,
+    "value": 30000,
+    "slot": "shield",
+    "defense": 35,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "depth-scutum",
+    "name": "depth scutum",
+    "kind": "shield",
+    "weight": 30,
+    "value": 36000,
+    "slot": "shield",
+    "defense": 25,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 120,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dwarven-shield",
+    "name": "dwarven shield",
+    "kind": "shield",
+    "weight": 55,
+    "value": 100,
+    "slot": "shield",
+    "defense": 26,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "eagle-shield",
+    "name": "eagle shield",
+    "kind": "shield",
+    "weight": 62,
+    "value": 0,
+    "slot": "shield",
+    "defense": 32,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ectoplasmic-shield",
+    "name": "ectoplasmic shield",
+    "kind": "shield",
+    "weight": 58,
+    "value": 0,
+    "slot": "shield",
+    "defense": 37,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 180,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "fire": {
+        "percent": -3
+      },
+      "ice": {
+        "percent": 7
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "club",
+          "amount": 3
+        },
+        {
+          "skillId": "axe",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "eerie-song-book",
+    "name": "eerie song book",
+    "kind": "shield",
+    "weight": 13,
+    "value": 0,
+    "slot": "shield",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "eldritch-folio",
+    "name": "eldritch folio",
+    "kind": "shield",
+    "weight": 28,
+    "value": 0,
+    "slot": "shield",
+    "defense": 21,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 6
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 4
+        }
+      ],
+      "specializedMagicLevel": {
+        "death": 1
+      },
+      "magicShieldCapacity": {
+        "flat": 80,
+        "percent": 8
+      }
+    },
+    "spellbook": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "eldritch-quiver",
+    "name": "eldritch quiver",
+    "kind": "shield",
+    "weight": 22,
+    "value": 0,
+    "slot": "shield",
+    "requires": {
+      "level": 250,
+      "vocationId": "paladin"
+    },
+    "quiver": true,
+    "perfectShot": {
+      "range": 4,
+      "damage": 20
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "eldritch-shield",
+    "name": "eldritch shield",
+    "kind": "shield",
+    "weight": 69,
+    "value": 0,
+    "slot": "shield",
+    "defense": 39,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 270,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 4
+      }
+    },
+    "reflect": {
+      "physical": {
+        "flat": 42
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "eldritch-tome",
+    "name": "eldritch tome",
+    "kind": "shield",
+    "weight": 26,
+    "value": 0,
+    "slot": "shield",
+    "defense": 21,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 6
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 4
+        }
+      ],
+      "specializedMagicLevel": {
+        "earth": 1
+      },
+      "magicShieldCapacity": {
+        "flat": 80,
+        "percent": 8
+      }
+    },
+    "spellbook": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "falcon-escutcheon",
+    "name": "falcon escutcheon",
+    "kind": "shield",
+    "weight": 60,
+    "value": 0,
+    "slot": "shield",
+    "defense": 40,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": 15
+      },
+      "physical": {
+        "percent": 7
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "falcon-shield",
+    "name": "falcon shield",
+    "kind": "shield",
+    "weight": 57,
+    "value": 0,
+    "slot": "shield",
+    "defense": 39,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": 10
+      },
+      "physical": {
+        "percent": 6
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "fiery-rainbow-shield",
+    "name": "fiery rainbow shield",
+    "kind": "shield",
+    "weight": 69,
+    "value": 0,
+    "slot": "shield",
+    "defense": 36,
+    "durationMs": 1200000,
+    "requires": {
+      "level": 100,
+      "vocationId": "knight"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "shielding",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "gnome-shield",
+    "name": "gnome shield",
+    "kind": "shield",
+    "weight": 60,
+    "value": 0,
+    "slot": "shield",
+    "defense": 38,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 200,
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": 8
+      },
+      "ice": {
+        "percent": -2
+      },
+      "physical": {
+        "percent": 6
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "shielding",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "golden-blessed-shield",
+    "name": "golden blessed shield",
+    "kind": "shield",
+    "weight": 68,
+    "value": 0,
+    "slot": "shield",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "gourd",
+    "name": "gourd",
+    "kind": "shield",
+    "weight": 3.9,
+    "value": 0,
+    "slot": "shield",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "great-shield",
+    "name": "great shield",
+    "kind": "shield",
+    "weight": 84,
+    "value": 480,
+    "slot": "shield",
+    "defense": 38,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "griffin-shield",
+    "name": "griffin shield",
+    "kind": "shield",
+    "weight": 50,
+    "value": 3000,
+    "slot": "shield",
+    "defense": 29,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "guardian-shield",
+    "name": "guardian shield",
+    "kind": "shield",
+    "weight": 55,
+    "value": 180,
+    "slot": "shield",
+    "defense": 30,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "haunted-mirror-piece",
+    "name": "haunted mirror piece",
+    "kind": "shield",
+    "weight": 28,
+    "value": 0,
+    "slot": "shield",
+    "defense": 34,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "icy-rainbow-shield",
+    "name": "icy rainbow shield",
+    "kind": "shield",
+    "weight": 69,
+    "value": 0,
+    "slot": "shield",
+    "defense": 39,
+    "durationMs": 1200000,
+    "requires": {
+      "level": 100,
+      "vocationId": "knight"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "journal-shield",
+    "name": "journal shield",
+    "kind": "shield",
+    "weight": 27,
+    "value": 0,
+    "slot": "shield",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "jungle-quiver",
+    "name": "jungle quiver",
+    "kind": "shield",
+    "weight": 18,
+    "value": 0,
+    "slot": "shield",
+    "requires": {
+      "level": 150,
+      "vocationId": "paladin"
+    },
+    "quiver": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lion-shield",
+    "name": "lion shield",
+    "kind": "shield",
+    "weight": 65,
+    "value": 0,
+    "slot": "shield",
+    "defense": 39,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 250,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 7
+      },
+      "earth": {
+        "percent": 10
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lion-spellbook",
+    "name": "lion spellbook",
+    "kind": "shield",
+    "weight": 25,
+    "value": 0,
+    "slot": "shield",
+    "defense": 20,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 220,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "ice": {
+        "percent": 7
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 4
+        }
+      ]
+    },
+    "spellbook": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mathmaster-shield",
+    "name": "mathmaster shield",
+    "kind": "shield",
+    "weight": 3.14,
+    "value": 0,
+    "slot": "shield",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "meat-shield",
+    "name": "meat shield",
+    "kind": "shield",
+    "weight": 5,
+    "value": 0,
+    "slot": "shield",
+    "defense": 10,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "medusa-shield",
+    "name": "medusa shield",
+    "kind": "shield",
+    "weight": 58,
+    "value": 9000,
+    "slot": "shield",
+    "defense": 33,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mino-shield",
+    "name": "mino shield",
+    "kind": "shield",
+    "weight": 65,
+    "value": 3000,
+    "slot": "shield",
+    "defense": 31,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "naga-quiver",
+    "name": "naga quiver",
+    "kind": "shield",
+    "weight": 19,
+    "value": 0,
+    "slot": "shield",
+    "requires": {
+      "level": 250,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 2
+      }
+    },
+    "quiver": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "necromancer-shield",
+    "name": "necromancer shield",
+    "kind": "shield",
+    "weight": 32,
+    "value": 0,
+    "slot": "shield",
+    "defense": 37,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "nightmare-shield",
+    "name": "nightmare shield",
+    "kind": "shield",
+    "weight": 32,
+    "value": 0,
+    "slot": "shield",
+    "defense": 37,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "norse-shield",
+    "name": "norse shield",
+    "kind": "shield",
+    "weight": 41,
+    "value": 1500,
+    "slot": "shield",
+    "defense": 28,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ornamented-shield",
+    "name": "ornamented shield",
+    "kind": "shield",
+    "weight": 67,
+    "value": 1500,
+    "slot": "shield",
+    "defense": 22,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ornate-shield",
+    "name": "ornate shield",
+    "kind": "shield",
+    "weight": 71,
+    "value": 42000,
+    "slot": "shield",
+    "defense": 36,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 130,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "painted-gourd-rattle",
+    "name": "painted gourd rattle",
+    "kind": "shield",
+    "weight": 3.9,
+    "value": 0,
+    "slot": "shield",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "phoenix-shield",
+    "name": "phoenix shield",
+    "kind": "shield",
+    "weight": 35,
+    "value": 0,
+    "slot": "shield",
+    "defense": 34,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "plate-shield",
+    "name": "plate shield",
+    "kind": "shield",
+    "weight": 65,
+    "value": 45,
+    "slot": "shield",
+    "defense": 17,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "prismatic-shield",
+    "name": "prismatic shield",
+    "kind": "shield",
+    "weight": 72,
+    "value": 0,
+    "slot": "shield",
+    "defense": 37,
+    "requires": {
+      "level": 150,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "shielding",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "quiver",
+    "name": "quiver",
+    "kind": "shield",
+    "weight": 17,
+    "value": 0,
+    "slot": "shield",
+    "requires": {
+      "vocationId": "paladin"
+    },
+    "quiver": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rainbow-shield",
+    "name": "rainbow shield",
+    "kind": "shield",
+    "weight": 69,
+    "value": 0,
+    "slot": "shield",
+    "defense": 30,
+    "requires": {
+      "level": 100,
+      "vocationId": "knight"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rattling-gourd",
+    "name": "rattling gourd",
+    "kind": "shield",
+    "weight": 20,
+    "value": 0,
+    "slot": "shield",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "red-quiver",
+    "name": "red quiver",
+    "kind": "shield",
+    "weight": 17,
+    "value": 0,
+    "slot": "shield",
+    "requires": {
+      "vocationId": "paladin"
+    },
+    "quiver": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rift-shield",
+    "name": "rift shield",
+    "kind": "shield",
+    "weight": 65,
+    "value": 50000,
+    "slot": "shield",
+    "defense": 37,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rose-shield",
+    "name": "rose shield",
+    "kind": "shield",
+    "weight": 52,
+    "value": 49,
+    "slot": "shield",
+    "defense": 27,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "runic-ice-shield",
+    "name": "runic ice shield",
+    "kind": "shield",
+    "weight": 49,
+    "value": 0,
+    "slot": "shield",
+    "defense": 31,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "salamander-shield",
+    "name": "salamander shield",
+    "kind": "shield",
+    "weight": 59,
+    "value": 0,
+    "slot": "shield",
+    "defense": 26,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "scarab-shield",
+    "name": "scarab shield",
+    "kind": "shield",
+    "weight": 47,
+    "value": 2000,
+    "slot": "shield",
+    "defense": 25,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sentinel-shield",
+    "name": "sentinel shield",
+    "kind": "shield",
+    "weight": 49,
+    "value": 0,
+    "slot": "shield",
+    "defense": 22,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "shield-nevermourn",
+    "name": "shield Nevermourn",
+    "kind": "shield",
+    "weight": 52,
+    "value": 0,
+    "slot": "shield",
+    "defense": 25,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "shield-of-care",
+    "name": "shield of care",
+    "kind": "shield",
+    "weight": 17,
+    "value": 0,
+    "slot": "shield",
+    "defense": 8,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "shield-of-corruption",
+    "name": "shield of corruption",
+    "kind": "shield",
+    "weight": 49,
+    "value": 0,
+    "slot": "shield",
+    "defense": 36,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 80,
+      "vocationId": "knight"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "sword",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "shield-of-honour",
+    "name": "shield of honour",
+    "kind": "shield",
+    "weight": 54,
+    "value": 520,
+    "slot": "shield",
+    "defense": 33,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "shield-of-the-white-knight",
+    "name": "shield of the white knight",
+    "kind": "shield",
+    "weight": 5,
+    "value": 0,
+    "slot": "shield",
+    "defense": 8,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "shoulder-plate",
+    "name": "shoulder plate",
+    "kind": "shield",
+    "weight": 35,
+    "value": 0,
+    "slot": "shield",
+    "defense": 26,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 180,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "physical": {
+        "percent": 2
+      },
+      "earth": {
+        "percent": 6
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ]
+    },
+    "spellbook": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "silver-chimes",
+    "name": "silver chimes",
+    "kind": "shield",
+    "weight": 2.8,
+    "value": 0,
+    "slot": "shield",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "snake-gods-wristguard",
+    "name": "snake god's wristguard",
+    "kind": "shield",
+    "weight": 28,
+    "value": 0,
+    "slot": "shield",
+    "defense": 14,
+    "requires": {
+      "level": 100,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "soulbastion",
+    "name": "soulbastion",
+    "kind": "shield",
+    "weight": 58,
+    "value": 0,
+    "slot": "shield",
+    "defense": 42,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 400,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "death": {
+        "percent": 10
+      },
+      "physical": {
+        "percent": 10
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sparking-rainbow-shield",
+    "name": "sparking rainbow shield",
+    "kind": "shield",
+    "weight": 69,
+    "value": 0,
+    "slot": "shield",
+    "defense": 36,
+    "durationMs": 1200000,
+    "requires": {
+      "level": 100,
+      "vocationId": "knight"
+    },
+    "bonuses": {
+      "speed": 10
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spellbook",
+    "name": "spellbook",
+    "kind": "shield",
+    "weight": 18,
+    "value": 0,
+    "slot": "shield",
+    "defense": 14,
+    "imbuementSlots": 1,
+    "requires": {
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "spellbook": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spellbook-of-ancient-arcana",
+    "name": "spellbook of ancient arcana",
+    "kind": "shield",
+    "weight": 25,
+    "value": 0,
+    "slot": "shield",
+    "defense": 19,
+    "requires": {
+      "level": 150,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "death": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spellbook-of-dark-mysteries",
+    "name": "spellbook of dark mysteries",
+    "kind": "shield",
+    "weight": 28.5,
+    "value": 0,
+    "slot": "shield",
+    "defense": 16,
+    "requires": {
+      "level": 80,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spellbook-of-enlightenment",
+    "name": "spellbook of enlightenment",
+    "kind": "shield",
+    "weight": 19.5,
+    "value": 4000,
+    "slot": "shield",
+    "defense": 18,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 30,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spellbook-of-lost-souls",
+    "name": "spellbook of lost souls",
+    "kind": "shield",
+    "weight": 25.6,
+    "value": 19000,
+    "slot": "shield",
+    "defense": 20,
+    "requires": {
+      "level": 60,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spellbook-of-the-novice",
+    "name": "spellbook of the novice",
+    "kind": "shield",
+    "weight": 14,
+    "value": 0,
+    "slot": "shield",
+    "defense": 8,
+    "requires": {
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spellbook-of-vigilance",
+    "name": "spellbook of vigilance",
+    "kind": "shield",
+    "weight": 27,
+    "value": 0,
+    "slot": "shield",
+    "defense": 20,
+    "requires": {
+      "level": 130,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": -3
+      },
+      "earth": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spellbook-of-warding",
+    "name": "spellbook of warding",
+    "kind": "shield",
+    "weight": 21,
+    "value": 8000,
+    "slot": "shield",
+    "defense": 22,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 40,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spellscroll-of-prophecies",
+    "name": "spellscroll of prophecies",
+    "kind": "shield",
+    "weight": 26.5,
+    "value": 0,
+    "slot": "shield",
+    "defense": 12,
+    "requires": {
+      "level": 70,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spike-shield",
+    "name": "spike shield",
+    "kind": "shield",
+    "weight": 59,
+    "value": 250,
+    "slot": "shield",
+    "defense": 28,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spirit-guide",
+    "name": "spirit guide",
+    "kind": "shield",
+    "weight": 18,
+    "value": 0,
+    "slot": "shield",
+    "defense": 17,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 180,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": 6
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 4
+        }
+      ]
+    },
+    "spellbook": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "strange-good-night-songs",
+    "name": "strange good night songs",
+    "kind": "shield",
+    "weight": 13,
+    "value": 0,
+    "slot": "shield",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "studded-shield",
+    "name": "studded shield",
+    "kind": "shield",
+    "weight": 58,
+    "value": 16,
+    "slot": "shield",
+    "defense": 15,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "tempest-shield",
+    "name": "tempest shield",
+    "kind": "shield",
+    "weight": 51,
+    "value": 35000,
+    "slot": "shield",
+    "defense": 36,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "terran-rainbow-shield",
+    "name": "terran rainbow shield",
+    "kind": "shield",
+    "weight": 69,
+    "value": 0,
+    "slot": "shield",
+    "defense": 37,
+    "durationMs": 1200000,
+    "requires": {
+      "level": 100,
+      "vocationId": "knight"
+    },
+    "bonuses": {
+      "regeneration": {
+        "healthGain": 1,
+        "healthTicksMs": 3000,
+        "manaGain": 4,
+        "manaTicksMs": 3000
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "tortoise-shield",
+    "name": "tortoise shield",
+    "kind": "shield",
+    "weight": 52,
+    "value": 150,
+    "slot": "shield",
+    "defense": 26,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "traditional-stein",
+    "name": "traditional stein",
+    "kind": "shield",
+    "weight": 3.5,
+    "value": 0,
+    "slot": "shield",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "tusk-shield",
+    "name": "tusk shield",
+    "kind": "shield",
+    "weight": 69,
+    "value": 850,
+    "slot": "shield",
+    "defense": 27,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "umbral-master-spellbook",
+    "name": "umbral master spellbook",
+    "kind": "shield",
+    "weight": 30,
+    "value": 0,
+    "slot": "shield",
+    "defense": 20,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 250,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": 5
+      },
+      "fire": {
+        "percent": 5
+      },
+      "ice": {
+        "percent": 5
+      },
+      "earth": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 4
+        }
+      ]
+    },
+    "spellbook": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "umbral-spellbook",
+    "name": "umbral spellbook",
+    "kind": "shield",
+    "weight": 35,
+    "value": 0,
+    "slot": "shield",
+    "defense": 16,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 150,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": 3
+      },
+      "fire": {
+        "percent": 3
+      },
+      "ice": {
+        "percent": 3
+      },
+      "earth": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "spellbook": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "vampire-shield",
+    "name": "vampire shield",
+    "kind": "shield",
+    "weight": 38,
+    "value": 15000,
+    "slot": "shield",
+    "defense": 34,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "viking-shield",
+    "name": "viking shield",
+    "kind": "shield",
+    "weight": 66,
+    "value": 85,
+    "slot": "shield",
+    "defense": 22,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "warriors-shield",
+    "name": "warrior's shield",
+    "kind": "shield",
+    "weight": 75,
+    "value": 9000,
+    "slot": "shield",
+    "defense": 33,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "wooden-spellbook",
+    "name": "wooden spellbook",
+    "kind": "shield",
+    "weight": 12,
+    "value": 12000,
+    "slot": "shield",
+    "defense": 16,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 80,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "earth": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "spellbook": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  }
+]

@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
-import { accounts, characters, friends, itemInstances } from './schema.js';
+import {
+  accounts, characterStorages, characters, friends, itemInstances,
+} from './schema.js';
 
 export interface AccountRecord {
   readonly id: string;
@@ -15,8 +17,12 @@ export interface CharacterRecord {
   readonly accountId: string;
   readonly name: string;
   readonly vocation: string | null;
+  /** Promoção de vocação (#566, ADR 0042 decisão 1). Sempre `boolean` — a coluna não é nulável. */
+  readonly promoted: boolean;
   readonly level: number;
   readonly xp: number;
+  /** Pontos de alma (#593). ÚLTIMA ESCRITA VENCE no ledger, nunca fundido por máximo — pode DESCER. */
+  readonly soul: number;
   readonly gold: number;
   readonly capacity: number;
   readonly premiumUntil: Date | null;
@@ -52,6 +58,51 @@ export interface CharacterRecord {
   readonly supplyStock: unknown;
   /** O estoque de munição do loot (#520), pela mesma razão do `supplyStock`. */
   readonly ammunitionStock: unknown;
+  /**
+   * A economia de Charms (M39-02, #602), como veio do banco. `unknown` pela mesma razão de
+   * `bestiary`: a forma (`CharmsState`) é do `sim`, e quem a confere é quem monta o ticket.
+   * `null` é personagem que nunca gastou um ponto de Charm. Sem método de escrita: quem
+   * escreve é o ledger, na transação do extrato (ADR 0052 d.1).
+   */
+  readonly charms: unknown;
+  /**
+   * O Bosstiary (#629), como veio do banco. `unknown` pela mesma razão de `bestiary`: a forma
+   * (`BosstiaryState`) é do `sim`, e quem a confere é quem monta o ticket. `null` é personagem
+   * que nunca abateu um boss. Sem método de escrita: quem escreve é o ledger (ADR 0052 d.1).
+   */
+  readonly bosstiary: unknown;
+  /**
+   * As magias aprendidas (#624, ADR 0058), como vieram do banco. `unknown` pela mesma razão de
+   * `charms`: a forma (`LearnedSpellsState`) é do `sim`, e quem a confere é quem monta o ticket.
+   * `null` é personagem novo, que não aprendeu nada. Sem método de escrita: quem escreve é o
+   * ledger, na transação do extrato (ADR 0052 d.1).
+   */
+  readonly learnedSpells: unknown;
+  /**
+   * O familiar de vocação (M38-02, #599, ADR 0057 d.3), como veio do banco: `unknown` pela mesma
+   * razão de `charms` — a forma (`FamiliarState`) é do `sim`, e quem a confere é quem monta o
+   * ticket. `null` é personagem que nunca invocou. Sem método de escrita: quem escreve é o ledger.
+   */
+  readonly familiar: unknown;
+  /**
+   * O registro do Treino (#631, ADR 0059 d.3): banco de offline training e skill do livro, como
+   * veio do banco. `unknown` pela mesma razão de `charms` — a forma (`OfflineTrainingState`) é do
+   * `sim`, e quem a confere é quem monta o ticket. `null` é quem nunca caçou nem treinou. Escrito
+   * pelo ledger (extrato da sessão dona) e, com o personagem em repouso, por
+   * `CharacterWriter.applyOfflineTraining` na emissão do ticket (ADR 0052 d.5).
+   */
+  readonly training: unknown;
+  /** Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, em milissegundos. `0` é ninguém comeu. */
+  readonly fedMs: number;
+  /** As sete bênçãos PvE (#570, ADR 0052): BITMASK de `CharacterRuntime.blessings`. `0` é nenhuma. */
+  readonly blessings: number;
+  /**
+   * A postura de luta (#550, M30-03), como veio do banco: `attack`/`balanced`/`defense`. `string`
+   * de propósito, pela razão de `botConfig`: o vocabulário é do `sim` (`isFightMode`), e quem o
+   * confere é quem monta o ticket (`initialCharacterOf`) — o repositório não conhece regra de
+   * jogo. A coluna tem CHECK, então na prática é sempre um dos três.
+   */
+  readonly fightMode: string;
   readonly createdAt: Date;
 }
 
@@ -78,6 +129,17 @@ export interface ItemInstanceRecord {
   /** Onde está dentro dos containers (#160); nulos é linha sem posição gravada. */
   readonly container: string | null;
   readonly slotIndex: number | null;
+  /** O overlay por instância (#604, ADR 0046), cru da coluna `jsonb`; `null` é sem overlay. */
+  readonly overlay: unknown;
+  readonly createdAt: Date;
+}
+
+/** Uma linha de `character_storage` (#731, ADR 0050 d.6 T2). `value` nunca é `-1`: ver o schema. */
+export interface CharacterStorageRecord {
+  readonly id: string;
+  readonly characterId: string;
+  readonly storageKey: string;
+  readonly value: number;
   readonly createdAt: Date;
 }
 
@@ -108,8 +170,38 @@ export interface FriendView {
   readonly createdAt: Date;
 }
 
+/**
+ * O que a operação de `withOwnedCharacter` pode ESCREVER na linha que ela acabou de travar (#631).
+ *
+ * Existe porque a escrita precisa acontecer na MESMA transação da trava — um método do repositório
+ * abriria outra conexão e esperaria, sem fim, pela linha que esta transação segura. É estreita de
+ * propósito: a `api` só escreve na linha do personagem quando ele está em repouso (sem sessão
+ * hospedada, ADR 0052 d.1/d.5), e o único cálculo que se faz fora de sessão é o gasto do banco de
+ * offline training (ADR 0059 d.3).
+ */
+export interface CharacterWriter {
+  /**
+   * Grava o resultado do gasto do banco: o registro `training` — a escolha do livro CONSUMIDA e o
+   * banco descontado — e, quando o treino rendeu, as skills novas com o instante (a guarda de
+   * instante de `jobs/ledger.ts` compara o `endedAtMs` da próxima sessão contra `skills_updated_at`).
+   * Uma escrita só. `skills` ausente é "nada rendeu": a coluna e o instante ficam como estavam.
+   */
+  applyOfflineTraining(update: {
+    readonly training: unknown;
+    readonly skills?: unknown;
+    readonly at: Date;
+  }): Promise<void>;
+}
+
 export interface GameRepository {
   ensureAccount(identity: { externalAuthId: string; email: string }): Promise<AccountRecord>;
+  /**
+   * Quando a conta nasceu (`account.created_at`) — a idade que o Loyalty (#628, ADR 0052 d.5)
+   * conta na emissão do ticket. `null` para uma conta que não existe. Leitura só do carimbo, e
+   * não o `AccountRecord` inteiro: quem chama é a `api`, uma vez por ticket, e a linha da conta
+   * não tem mais nada de que o ticket precise.
+   */
+  getAccountCreatedAt(accountId: string): Promise<Date | null>;
   /**
    * Cria o personagem. `initial.botConfig` é a configuração de bot com que ele NASCE (FUN-114)
    * — a padrão do conteúdo, gravada aqui porque o personagem novo precisa entrar na primeira
@@ -148,7 +240,7 @@ export interface GameRepository {
   withOwnedCharacter<T>(
     accountId: string,
     characterId: string,
-    operation: (character: CharacterRecord) => Promise<T>,
+    operation: (character: CharacterRecord, writer: CharacterWriter) => Promise<T>,
   ): Promise<T | null>;
   softDeleteCharacter(
     accountId: string,
@@ -171,6 +263,12 @@ export interface GameRepository {
   }): Promise<ItemInstanceRecord>;
   /** O que este personagem tem. É a consulta que o índice por dono existe para servir. */
   listItemInstances(characterId: string): Promise<readonly ItemInstanceRecord[]>;
+  /**
+   * Os storages deste personagem (#731), para o ticket carregar — a mesma razão de
+   * `listItemInstances`: o `game` não fala com o Postgres, e roda uma vez por emissão de
+   * ticket, nunca no caminho de tick.
+   */
+  listCharacterStorages(characterId: string): Promise<readonly CharacterStorageRecord[]>;
   /**
    * Aplica o layout de equipamento que a sessão registrou (FUN-82).
    *
@@ -210,6 +308,15 @@ export class DrizzleGameRepository implements GameRepository {
       }
       throw error;
     }
+  }
+
+  async getAccountCreatedAt(accountId: string): Promise<Date | null> {
+    const rows = await this.#db
+      .select({ createdAt: accounts.createdAt })
+      .from(accounts)
+      .where(eq(accounts.id, accountId))
+      .limit(1);
+    return rows[0]?.createdAt ?? null;
   }
 
   async createCharacter(
@@ -347,7 +454,7 @@ export class DrizzleGameRepository implements GameRepository {
   async withOwnedCharacter<T>(
     accountId: string,
     characterId: string,
-    operation: (character: CharacterRecord) => Promise<T>,
+    operation: (character: CharacterRecord, writer: CharacterWriter) => Promise<T>,
   ): Promise<T | null> {
     return this.#db.transaction(async (tx) => {
       const rows = await tx
@@ -361,7 +468,22 @@ export class DrizzleGameRepository implements GameRepository {
         .limit(1)
         .for('update');
       const character = rows[0];
-      return character === undefined ? null : operation(toCharacter(character));
+      if (character === undefined) return null;
+      // A escrita usa a MESMA transação `tx` que segura a trava (#631): o `training` e as skills
+      // andam juntos, escopados por este personagem.
+      const writer: CharacterWriter = {
+        applyOfflineTraining: async (update) => {
+          await tx
+            .update(characters)
+            .set({
+              training: update.training,
+              ...(update.skills === undefined
+                ? {} : { skills: update.skills, skillsUpdatedAt: update.at }),
+            })
+            .where(eq(characters.id, characterId));
+        },
+      };
+      return operation(toCharacter(character), writer);
     });
   }
 
@@ -392,6 +514,15 @@ export class DrizzleGameRepository implements GameRepository {
       // Ordem estável: sem ela, duas aberturas do inventário desenham a mesma coisa em ordens
       // diferentes, e o jogador vê os itens dançando sem ter mexido em nada.
       .orderBy(asc(itemInstances.createdAt), asc(itemInstances.id));
+  }
+
+  async listCharacterStorages(characterId: string): Promise<readonly CharacterStorageRecord[]> {
+    return this.#db
+      .select()
+      .from(characterStorages)
+      .where(eq(characterStorages.characterId, characterId))
+      // Ordem estável, pela mesma razão de `listItemInstances`.
+      .orderBy(asc(characterStorages.createdAt), asc(characterStorages.id));
   }
 
   async applyEquipment(
@@ -512,7 +643,7 @@ function toAccount(row: typeof accounts.$inferSelect): AccountRecord {
 function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
   // O domínio usa number. Um bigint fora do intervalo seguro não pode virar progresso
   // arredondado silenciosamente ao atravessar a fronteira Postgres → TypeScript.
-  for (const value of [row.xp, row.gold, row.staminaMs]) {
+  for (const value of [row.xp, row.gold, row.staminaMs, row.fedMs, row.blessings]) {
     if (!Number.isSafeInteger(value)) throw new Error('character value exceeds safe integer range');
   }
   return {
@@ -520,8 +651,10 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     accountId: row.accountId,
     name: row.name,
     vocation: row.vocation,
+    promoted: row.promoted,
     level: row.level,
     xp: row.xp,
+    soul: row.soul,
     gold: row.gold,
     capacity: row.capacity,
     premiumUntil: row.premiumUntil,
@@ -536,6 +669,14 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     ammo: row.ammo,
     supplyStock: row.supplyStock,
     ammunitionStock: row.ammunitionStock,
+    charms: row.charms,
+    bosstiary: row.bosstiary,
+    learnedSpells: row.learnedSpells,
+    familiar: row.familiar,
+    training: row.training,
+    fedMs: row.fedMs,
+    blessings: row.blessings,
+    fightMode: row.fightMode,
     createdAt: row.createdAt,
   };
 }

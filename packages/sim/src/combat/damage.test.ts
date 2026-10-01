@@ -1,15 +1,18 @@
-import { compileMitigation } from '@draconya/content';
+import { compileMitigation, compileReflect } from '@draconya/content';
 import type { Combat, DamageType } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../rng.js';
 import { effectiveDodge, resolveDamage } from './damage.js';
 import type { DamageIntent } from './damage.js';
+import { availableBlockCharges, FULL_BLOCK_CHARGE } from './block-charge.js';
+import type { BlockChargeState } from './block-charge.js';
+import { MAGIC_BLOCK_FLAGS, MELEE_BLOCK_FLAGS } from './blockhit.js';
 
 const combat: Combat = {
   id: 'baseline',
   compatibilityProfile: 'combat-v1',
   dodgeMultiplier: 0.5,
-  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0 },
   minimumDamageFraction: 0.1,
   // O personagem desarmado não participa de nenhum caso deste arquivo: aqui o atacante e o
   // defensor são montados à mão, tijolo por tijolo. Está preenchido porque o tipo pede.
@@ -58,7 +61,7 @@ describe('resolveDamage', () => {
 
     const armouredAgainstMagic: Combat = {
       ...combat,
-      armorEffectiveness: { physical: 1, energy: 1, earth: 1, fire: 1, ice: 1, holy: 1, death: 1, arcane: 1 },
+      armorEffectiveness: { physical: 1, energy: 1, earth: 1, fire: 1, ice: 1, holy: 1, death: 1, drown: 1, lifedrain: 1, manadrain: 1, arcane: 1 },
     };
     expect(resolveDamage(spell, plate, 'pve', armouredAgainstMagic, rigged(false)).resolvedDamage)
       .toBe(80);
@@ -236,6 +239,30 @@ describe('mitigação por tipo: resistência, vulnerabilidade e imunidade (CMB-0
       swing, { armor: 20, dodgeChance: 0, mitigation: mitigation({}) }, 'pve', combat, rigged(false),
     );
     expect(empty).toEqual(plain);
+  });
+
+  it('#547 (M29-07): resistência a drown funciona como a de qualquer outro tipo', () => {
+    const result = resolveDamage(
+      hit(100, 'drown'), guard({ drown: 0.5 }), 'pve', combat, rigged(false),
+    );
+    expect(result.afterResistance).toBe(50);
+    expect(result.resolvedDamage).toBe(50);
+  });
+
+  it('#547 (M29-07): imunidade a lifedrain zera o dano', () => {
+    const result = resolveDamage(
+      hit(100, 'lifedrain'), guard({}, ['lifedrain']), 'pve', combat, rigged(false),
+    );
+    expect(result.immune).toBe(true);
+    expect(result.resolvedDamage).toBe(0);
+  });
+
+  it('#547 (M29-07): imunidade a manadrain também zera — mesma regra dos demais tipos', () => {
+    const result = resolveDamage(
+      hit(100, 'manadrain'), guard({}, ['manadrain']), 'pve', combat, rigged(false),
+    );
+    expect(result.immune).toBe(true);
+    expect(result.resolvedDamage).toBe(0);
   });
 });
 
@@ -450,6 +477,592 @@ describe('pipeline canônico elemental, físico e mitigações (#473)', () => {
       ));
     };
     expect(run()).toEqual(run());
+  });
+});
+
+describe('combat-v3 (#548, M30-01): o pipeline de recebimento do blockHit', () => {
+  const v3: Combat = { ...combat, compatibilityProfile: 'combat-v3' };
+  const dragonLike = {
+    armor: 25,
+    dodgeChance: 0,
+    defense: { kind: 'monster' as const, defense: 30 },
+    defenseMitigation: 0.99,
+  };
+
+  /**
+   * Como `rigged`, mas o `combat-v3` também sorteia `integer` (defesa/armadura) — delega esse
+   * para um `Rng` de verdade, e só força o `chance` (Dodge) para o valor combinado.
+   */
+  const riggedDodge = (dodges: boolean, seed = 'v3-dodge'): Rng => {
+    const real = Rng.fromSeed(seed);
+    return {
+      chance: () => dodges,
+      integer: (min: number, max: number) => real.integer(min, max),
+    } as unknown as Rng;
+  };
+
+  it('Dodge continua o primeiro sorteio, na mesma posição do v1/v2', () => {
+    const result = resolveDamage(swing, dragonLike, 'pve', v3, riggedDodge(true), 0);
+    expect(result.dodged).toBe(true);
+    // Metade do que sobrou dos outros estágios — nunca zero, a mesma regra do v1/v2.
+    expect(result.resolvedDamage).toBeGreaterThan(0);
+  });
+
+  /** Como `crit` do describe do CMB-08, redeclarado aqui porque aquele é local ao outro bloco. */
+  const crit = (chance: number, multiplier: number) => ({ critical: { chance, multiplier } });
+
+  /** `riggedDodge`, mas com DOIS `chance()` fixos: Dodge, depois crítico (M30-04). */
+  const riggedRolls = (chances: readonly boolean[], seed = 'v3-crit'): Rng => {
+    const real = Rng.fromSeed(seed);
+    let index = 0;
+    return {
+      chance: () => chances[index++] ?? false,
+      integer: (min: number, max: number) => real.integer(min, max),
+    } as unknown as Rng;
+  };
+
+  describe('crítico (CMB-08, M30-04, #551): rolado na geração, ANTES do blockHit', () => {
+    const noBlockDefender = { armor: 0, dodgeChance: 0, defense: { kind: 'monster' as const, defense: 0 } };
+
+    it('sem defesa/armadura/mitigação, o crítico dobra o resolvido — o caso isolado', () => {
+      const result = resolveDamage(
+        { ...swing, modifiers: crit(1, 2) }, noBlockDefender, 'pve', v3, riggedRolls([false, true]), 0,
+      );
+      expect(result.critical).toBe(true);
+      expect(result.resolvedDamage).toBe(200);
+    });
+
+    it('é o SEGUNDO sorteio: depois do Dodge, antes de qualquer `integer` do blockHit', () => {
+      const noCrit = resolveDamage(
+        { ...swing, modifiers: crit(1, 2) }, dragonLike, 'pve', v3, riggedRolls([false, false]), 5_000,
+      );
+      expect(noCrit.critical).toBe(false);
+      const critHit = resolveDamage(
+        { ...swing, modifiers: crit(1, 2) }, dragonLike, 'pve', v3, riggedRolls([false, true]), 5_000,
+      );
+      expect(critHit.critical).toBe(true);
+    });
+
+    it('o dano JÁ crítico é o que entra na defesa/armadura — não o resolvido dobrado no fim', () => {
+      // Defesa e armadura tiram um valor ABSOLUTO (`uniform_random`), independente do
+      // `rawDamage` que chega — dependem só de `defense`/`armor`. Com a MESMA semente (os
+      // mesmos sorteios de `integer`), a diferença entre `afterArmor` com e sem crítico tem que
+      // ser EXATAMENTE o delta do `rawDamage` (1000): se o crítico multiplicasse só o
+      // RESOLVIDO no fim (a ordem antiga), os dois `afterArmor` seriam IDÊNTICOS, porque a
+      // defesa/armadura teriam visto o mesmo bruto de 1000 nos dois casos.
+      const defender = { armor: 25, dodgeChance: 0, defense: { kind: 'monster' as const, defense: 30 } };
+      const seed = 'v3-crit-order';
+      const noCrit = resolveDamage(
+        { ...swing, rawDamage: 1_000, modifiers: crit(1, 1) }, defender, 'pve', v3,
+        riggedRolls([false, true], seed), 5_000,
+      );
+      const withCrit = resolveDamage(
+        { ...swing, rawDamage: 1_000, modifiers: crit(1, 2) }, defender, 'pve', v3,
+        riggedRolls([false, true], seed), 5_000,
+      );
+      expect(noCrit.critical).toBe(true);
+      expect(withCrit.critical).toBe(true);
+      expect(withCrit.afterArmor - noCrit.afterArmor).toBeCloseTo(1_000, 5);
+      expect(withCrit.resolvedDamage).toBeGreaterThan(noCrit.resolvedDamage);
+    });
+
+    it('o piso continua sobre o PODER BRUTO ORIGINAL, sem o bônus do crítico', () => {
+      // Um alvo pesadíssimo: sem o crítico "vazar" para o piso, o resolvido crítico não passa
+      // de `2 × piso` — nunca o piso dobrado de novo por cima.
+      const tank = { armor: 5_000, dodgeChance: 0, defense: { kind: 'monster' as const, defense: 0 } };
+      const result = resolveDamage(
+        { ...swing, modifiers: crit(1, 2) }, tank, 'pve', v3, riggedRolls([false, true]), 0,
+      );
+      // minimumDamageFraction 0,1 sobre rawDamage 100 → piso 10. O crítico dobra o QUE PASSA
+      // da armadura (aqui, zero — a armadura consome tudo), então o piso decide sozinho, e o
+      // relatório de `minimumDamage` não muda com o crítico.
+      expect(result.minimumDamage).toBe(10);
+      expect(result.resolvedDamage).toBe(10);
+    });
+
+    it('crítico é consumido mesmo com o alvo IMUNE — o Canary não sabe de imunidade ainda', () => {
+      const immune = {
+        armor: 0, dodgeChance: 0, defense: { kind: 'monster' as const, defense: 0 },
+        mitigation: compileMitigation({ resistances: {}, immunities: ['physical'] }),
+      };
+      const result = resolveDamage(
+        { ...swing, modifiers: crit(1, 2) }, immune, 'pve', v3, riggedRolls([false, true]), 0,
+      );
+      expect(result.immune).toBe(true);
+      expect(result.critical).toBe(true);
+      expect(result.resolvedDamage).toBe(0);
+    });
+
+    it('crítico declarado com chance 0 ainda consome a rolagem — igual ao v1/v2', () => {
+      const zero = Rng.fromSeed('v3-crit-zero');
+      const none = Rng.fromSeed('v3-crit-zero');
+      resolveDamage({ ...swing, modifiers: crit(0, 2) }, noBlockDefender, 'pve', v3, zero, 0);
+      resolveDamage(swing, noBlockDefender, 'pve', v3, none, 0);
+      expect(zero.getState()).not.toEqual(none.getState());
+    });
+  });
+
+  it('golpe elegível (melee) rola defesa+armadura+mitigação e escreve o blockCharge novo', () => {
+    const rng = Rng.fromSeed('v3-melee');
+    const before = FULL_BLOCK_CHARGE;
+    const result = resolveDamage(
+      { ...swing, rawDamage: 1_000 }, { ...dragonLike, blockCharge: before }, 'pve', v3, rng, 5_000,
+    );
+    expect(result.blockCharge).toBeDefined();
+    expect(result.blockCharge).not.toBe(before);
+    // A defesa (30) e a armadura (25) do "dragão" tiram um pedaço real do golpe de 1000.
+    expect(result.resolvedDamage).toBeLessThan(1_000);
+    expect(result.resolvedDamage).toBeGreaterThan(0);
+  });
+
+  it('magia (blockable ausente vira o default físico do chamador) ignora defesa/armadura quando declarada', () => {
+    const rng = Rng.fromSeed('v3-magic');
+    const before = FULL_BLOCK_CHARGE;
+    const spellIntent: DamageIntent = {
+      rawDamage: 100, source: 'spell', damageType: 'physical', blockable: MAGIC_BLOCK_FLAGS,
+    };
+    const result = resolveDamage(
+      spellIntent, { ...dragonLike, blockCharge: before }, 'pve', v3, rng, 5_000,
+    );
+    // Sem defesa/armadura, só a mitigação percentual (0,99 %) tira algo — o resultado fica
+    // muito perto do bruto, e nenhuma carga é consumida.
+    expect(result.resolvedDamage).toBeGreaterThanOrEqual(99);
+    expect(result.blockCharge).toBe(before);
+  });
+
+  it('imunidade zera e o piso NÃO revoga (imunidade explícita vence o piso)', () => {
+    const target = {
+      ...dragonLike,
+      mitigation: compileMitigation({ resistances: {}, immunities: ['fire'] }),
+    };
+    const result = resolveDamage(hit(1_000, 'fire'), target, 'pve', v3, rigged(false), 0);
+    expect(result.immune).toBe(true);
+    expect(result.resolvedDamage).toBe(0);
+  });
+
+  it('#547 (M29-07): lifedrain e manadrain pulam a mitigação percentual (mitigationExempt)', () => {
+    // Magia (sem defesa/armadura, dragonLike.defenseMitigation 0,99 %): sem a isenção o
+    // resultado ficaria perto de 99, como no teste de magia acima. Com ela, o bruto passa
+    // inteiro — a mesma exceção do `Creature::mitigateDamage` do Canary.
+    const magicIntentOf = (damageType: 'lifedrain' | 'manadrain'): DamageIntent => ({
+      rawDamage: 100, source: 'monster-attack', damageType, blockable: MAGIC_BLOCK_FLAGS,
+    });
+    const lifedrain = resolveDamage(
+      magicIntentOf('lifedrain'), { ...dragonLike, blockCharge: FULL_BLOCK_CHARGE },
+      'pve', v3, rigged(false), 5_000,
+    );
+    const manadrain = resolveDamage(
+      magicIntentOf('manadrain'), { ...dragonLike, blockCharge: FULL_BLOCK_CHARGE },
+      'pve', v3, rigged(false), 5_000,
+    );
+    expect(lifedrain.resolvedDamage).toBe(100);
+    expect(lifedrain.defenseMitigationRemoved).toBe(0);
+    expect(manadrain.resolvedDamage).toBe(100);
+    expect(manadrain.defenseMitigationRemoved).toBe(0);
+  });
+
+  it('#547 (M29-07): drown NÃO é isento — a mitigação percentual continua incidindo', () => {
+    const drownIntent: DamageIntent = {
+      rawDamage: 100, source: 'monster-attack', damageType: 'drown', blockable: MAGIC_BLOCK_FLAGS,
+    };
+    const result = resolveDamage(
+      drownIntent, { ...dragonLike, blockCharge: FULL_BLOCK_CHARGE }, 'pve', v3, rigged(false), 5_000,
+    );
+    // A mesma conta do teste de magia física acima (0,99 % de 100 de mitigação).
+    expect(result.resolvedDamage).toBeLessThan(100);
+    expect(result.resolvedDamage).toBeGreaterThanOrEqual(99);
+    expect(result.defenseMitigationRemoved).toBeGreaterThan(0);
+  });
+
+  it('#547 (M29-07, achado da revisão do PR #648): manadrain capa para a mana do alvo ANTES da resistência', () => {
+    // O exemplo da revisão, a partir do Canary (`combatChangeMana`, `game.cpp:9175-9176`):
+    // `manaLoss = min(mana atual, poder bruto)` roda ANTES de `blockHit` aplicar a
+    // resistência/absorção. Poder 100, mana 30, resistência 50 %: capar primeiro dá
+    // 30 × 0,5 = 15. Resistir primeiro (a ordem que este resolver tinha antes da correção) daria
+    // 100 × 0,5 = 50, e só `applyDamageOutcome` capava a mana no fim — a 30, o DOBRO do certo.
+    const target = {
+      armor: 0, dodgeChance: 0, mana: 30,
+      mitigation: compileMitigation({ resistances: { manadrain: 0.5 }, immunities: [] }),
+    };
+    const result = resolveDamage(
+      { rawDamage: 100, source: 'monster-attack', damageType: 'manadrain' },
+      target, 'pve', v3, riggedDodge(false), 0,
+    );
+    expect(result.afterResistance).toBe(15);
+    expect(result.resolvedDamage).toBe(15);
+  });
+
+  it('#547: sem `Defender.mana` (monstro, que não tem) a resistência ainda incide sobre o poder bruto — o cap final continua o de `applyDamageOutcome`', () => {
+    // Sem mana para capar aqui, o resolver segue exatamente como antes: resiste o bruto
+    // inteiro. O dreno do monstro (sempre zero) é zerado depois, em `applyDamageOutcome` — este
+    // teste isola que o campo NOVO não muda nada quando ausente.
+    const target = {
+      armor: 0, dodgeChance: 0,
+      mitigation: compileMitigation({ resistances: { manadrain: 0.5 }, immunities: [] }),
+    };
+    const result = resolveDamage(
+      { rawDamage: 100, source: 'monster-attack', damageType: 'manadrain' },
+      target, 'pve', v3, riggedDodge(false), 0,
+    );
+    expect(result.resolvedDamage).toBe(50);
+  });
+
+  it('#547 (M29-07, achado da revisão do PR #648): manadrain corpo a corpo NUNCA bloqueia por defesa nem por armadura', () => {
+    // O Canary chama `blockHit` para COMBAT_MANADRAIN com só 3 argumentos (`game.cpp:9176`), e
+    // `checkDefense`/`checkArmor` default a `false` (`creature.cpp:944`) — os dois estágios
+    // ficam de fora para TODO manadrain, mesmo quando a ability é corpo a corpo
+    // (`blockable: MELEE_BLOCK_FLAGS`, o caso que a suíte anterior nunca exercitava). A defesa
+    // (30) e a armadura (25) do "dragão" não tiram NADA, e nenhuma carga de bloqueio é gasta —
+    // o Canary só decrementa `blockCount` dentro de `checkDefense || checkArmor`.
+    const before = FULL_BLOCK_CHARGE;
+    const meleeManadrain: DamageIntent = {
+      rawDamage: 100, source: 'monster-attack', damageType: 'manadrain', blockable: MELEE_BLOCK_FLAGS,
+    };
+    const result = resolveDamage(
+      meleeManadrain, { ...dragonLike, blockCharge: before }, 'pve', v3, riggedDodge(false), 5_000,
+    );
+    expect(result.afterDefense).toBe(100);
+    expect(result.armorReduction).toBe(0);
+    expect(result.afterArmor).toBe(100);
+    expect(result.resolvedDamage).toBe(100);
+    expect(result.blockCharge).toBe(before);
+  });
+
+  it('o piso poupa um alvo pesado quando não é imune', () => {
+    const tank = { armor: 5_000, dodgeChance: 0, defense: { kind: 'monster' as const, defense: 0 } };
+    const result = resolveDamage(swing, tank, 'pve', v3, riggedDodge(false), 0);
+    // minimumDamageFraction 0.1 sobre 100 de rawDamage.
+    expect(result.resolvedDamage).toBe(10);
+  });
+
+  it('duas cargas de bloqueio, depois nenhuma: o terceiro golpe elegível no mesmo segundo não defende', () => {
+    // `defense: 0` isola só o efeito do `blockCharge` — sem magnitude nenhuma para ocultar a
+    // rolagem em si, o teste conta as vezes que `defenseBlocked` teria RNG consumido observando
+    // o estado do `blockCharge` que cada golpe devolve.
+    const attacker = { armor: 0, dodgeChance: 0, defense: { kind: 'monster' as const, defense: 0 } };
+    let blockCharge = FULL_BLOCK_CHARGE;
+    const rng = Rng.fromSeed('v3-charges');
+    const nowMs = 500;
+
+    const first = resolveDamage(swing, { ...attacker, blockCharge }, 'pve', v3, rng, nowMs);
+    blockCharge = first.blockCharge as typeof blockCharge;
+    const second = resolveDamage(swing, { ...attacker, blockCharge }, 'pve', v3, rng, nowMs);
+    blockCharge = second.blockCharge as typeof blockCharge;
+    // As duas cargas já foram gastas — o relógio compartilhado só credita a próxima 1000 ms
+    // DEPOIS do instante em que o banco começou a contar (ver `block-charge.ts`), e ainda estamos
+    // no mesmo instante do golpe.
+    expect(blockCharge.charges).toBe(0);
+    expect(availableBlockCharges(blockCharge, nowMs)).toBe(0);
+  });
+
+  it('achado da revisão do PR #642: o secundário herda a carga que o primário já gastou', () => {
+    // Sem a correção, o secundário rolava o estágio novo contra o `blockCharge` de ENTRADA (como
+    // se o primário nunca tivesse consumido nada), e o `blockCharge` de nível superior — o único
+    // que `applyDamageOutcome` grava de volta (invariante 9) — refletia só o consumo do
+    // primário, perdendo em silêncio o que o secundário gastou por cima.
+    const attacker = { armor: 0, dodgeChance: 0, defense: { kind: 'monster' as const, defense: 0 } };
+    const composite: DamageIntent = {
+      ...swing, rawDamage: 1_000,
+      secondary: { rawDamage: 500, damageType: 'fire' },
+    };
+    const rng = Rng.fromSeed('v3-composite-charge');
+    const nowMs = 5_000;
+    const result = resolveDamage(
+      composite, { ...attacker, blockCharge: FULL_BLOCK_CHARGE }, 'pve', v3, rng, nowMs,
+    );
+    // O primário sozinho gasta só UMA carga; o secundário, herdando o estado PÓS-primário, gasta
+    // a OUTRA. As duas precisam terminar refletidas no `blockCharge` de nível superior.
+    expect(result.secondaryOutcome?.blockCharge).toEqual(result.blockCharge);
+    expect(availableBlockCharges(result.blockCharge as BlockChargeState, nowMs)).toBe(0);
+  });
+
+  it('#687: o secundário com MAGIC_BLOCK_FLAGS passa pela armadura intacto; sem o campo, herda o do intent', () => {
+    // O elemento da arma (Fire Sword) é `blockHit(…, false, false)` no Canary: nem escudo nem
+    // armadura. O primário corpo a corpo continua bloqueável; o secundário declara as flags.
+    const armored = { armor: 20, dodgeChance: 0 };
+    const elemental: DamageIntent = {
+      ...swing, blockable: MELEE_BLOCK_FLAGS,
+      secondary: { rawDamage: 22, damageType: 'fire', blockable: MAGIC_BLOCK_FLAGS },
+    };
+    const result = resolveDamage(elemental, armored, 'pve', v3, riggedDodge(false, 'v3-element'), 0);
+    expect(result.secondaryOutcome?.afterArmor).toBe(22);
+    expect(result.secondaryOutcome?.armorReduction).toBe(0);
+    expect(result.secondaryOutcome?.resolvedDamage).toBe(22);
+
+    // Sem `blockable` no secundário, o comportamento do #473: herda o MELEE do intent.
+    const inherited: DamageIntent = {
+      ...elemental, secondary: { rawDamage: 22, damageType: 'fire' },
+    };
+    const before = resolveDamage(inherited, armored, 'pve', v3, riggedDodge(false, 'v3-element'), 0);
+    expect(before.secondaryOutcome?.afterArmor).toBeLessThan(22);
+  });
+
+  it('combat-v1/v2 continuam bit a bit — o combat-v3 não toca `resolveMitigation`', () => {
+    const v1Result = resolveDamage(swing, plate, 'pve', combat, rigged(false), 0);
+    expect(v1Result.resolvedDamage).toBe(80);
+    expect(v1Result.blockCharge).toBeUndefined();
+    const v2 = { ...combat, compatibilityProfile: 'combat-v2' };
+    const v2Result = resolveDamage(swing, plate, 'pve', v2, rigged(false), 0);
+    expect(v2Result.resolvedDamage).toBe(80);
+    expect(v2Result.blockCharge).toBeUndefined();
+  });
+});
+
+describe('combat-v3 (#552, M30-05): absorção, aumento e reflexo', () => {
+  const v3: Combat = { ...combat, compatibilityProfile: 'combat-v3' };
+  // Sem armadura, defesa nem mitigação: o que sobra é só o estágio que o teste mede.
+  const bare = { armor: 0, dodgeChance: 0 };
+  const iceHit: DamageIntent = { ...hit(100, 'ice'), blockable: MAGIC_BLOCK_FLAGS };
+  const noDodge = (): Rng => rigged(false);
+  const reflectTable = (type: DamageType, percent: number, flat: number) => {
+    const table = compileReflect({ [type]: { ...(percent > 0 ? { percent } : {}), ...(flat > 0 ? { flat } : {}) } });
+    if (table === undefined) throw new Error('reflexo vazio');
+    return table;
+  };
+
+  it('absorção de 20 % de ice num hit de 100 → 80', () => {
+    const defender = { ...bare, absorb: { items: [{ ice: 20 }], flat: {} } };
+    expect(resolveDamage(iceHit, defender, 'pve', v3, noDodge(), 0).resolvedDamage).toBe(80);
+  });
+
+  it('dois itens absorvem em SEQUÊNCIA, arredondando a cada um: 20 % + 20 % = 64, não 60', () => {
+    const defender = { ...bare, absorb: { items: [{ ice: 20 }, { ice: 20 }], flat: {} } };
+    expect(resolveDamage(iceHit, defender, 'pve', v3, noDodge(), 0).resolvedDamage).toBe(64);
+  });
+
+  it('absorção de item vem DEPOIS da armadura; a flat vem ANTES (Creature × Player::blockHit)', () => {
+    // Armadura 2 tira exatamente 1 (`armor <= 3` → `--damage`), sem sorteio. Com 50 % do item
+    // depois dela: (100 − 1) − round(99 × 0,5) = 49. A flat de 10 vem antes: 100 − 10 − 1 = 89.
+    const physical: DamageIntent = { ...hit(100), blockable: { armor: true, shield: false } };
+    const armored = { armor: 2, dodgeChance: 0 };
+    const afterArmor = { ...armored, absorb: { items: [{ physical: 50 }], flat: {} } };
+    expect(resolveDamage(physical, afterArmor, 'pve', v3, noDodge(), 0).resolvedDamage).toBe(49);
+    const flat = { ...armored, absorb: { items: [], flat: { physical: 10 } } };
+    expect(resolveDamage(physical, flat, 'pve', v3, noDodge(), 0).resolvedDamage).toBe(89);
+  });
+
+  it('o aumento do ATACANTE por tipo soma no estágio de absorção', () => {
+    const intent: DamageIntent = { ...iceHit, modifiers: { increase: { ice: 10 } } };
+    expect(resolveDamage(intent, bare, 'pve', v3, noDodge(), 0).resolvedDamage).toBe(110);
+    // Outro tipo não leva o aumento.
+    const fire: DamageIntent = { ...intent, damageType: 'fire' };
+    expect(resolveDamage(fire, bare, 'pve', v3, noDodge(), 0).resolvedDamage).toBe(100);
+  });
+
+  it('combat-v1 ignora absorção, aumento e reflexo', () => {
+    const defender = {
+      ...bare, absorb: { items: [{ ice: 20 }], flat: { ice: 5 } },
+      reflect: { reflector: 'player' as const, table: reflectTable('ice', 50, 0) },
+    };
+    const intent: DamageIntent = {
+      ...iceHit, modifiers: { increase: { ice: 10 } }, attacker: { maxHealth: 10_000, distance: 1 },
+    };
+    const result = resolveDamage(intent, defender, 'pve', combat, noDodge(), 0);
+    expect(result.resolvedDamage).toBe(100);
+    expect(result.reflected).toBeUndefined();
+  });
+
+  it('o reflexo nunca passa de 1 % da vida máxima do atacante', () => {
+    const defender = { ...bare, reflect: { reflector: 'player' as const, table: reflectTable('ice', 50, 0) } };
+    const weak = resolveDamage(
+      { ...iceHit, attacker: { maxHealth: 500, distance: 1 } }, defender, 'pve', v3, noDodge(), 0,
+    );
+    // 50 % de 100 seria 50; o teto é ceil(500 × 1 %) = 5.
+    expect(weak.reflected).toEqual({ amount: 5, damageType: 'ice', neutral: true });
+    const strong = resolveDamage(
+      { ...iceHit, attacker: { maxHealth: 100_000, distance: 1 } }, defender, 'pve', v3, noDodge(), 0,
+    );
+    expect(strong.reflected?.amount).toBe(50);
+  });
+
+  it('reflexo não gera reflexo: um intent de extensão não reflete', () => {
+    const defender = { ...bare, reflect: { reflector: 'monster' as const, table: reflectTable('ice', 50, 0) } };
+    const intent: DamageIntent = { ...iceHit, attacker: { maxHealth: 100_000, distance: 1 }, extension: true };
+    expect(resolveDamage(intent, defender, 'pve', v3, noDodge(), 0).reflected).toBeUndefined();
+  });
+
+  it('sem atacante criatura, não há contra quem refletir', () => {
+    const defender = { ...bare, reflect: { reflector: 'player' as const, table: reflectTable('ice', 50, 0) } };
+    expect(resolveDamage(iceHit, defender, 'pve', v3, noDodge(), 0).reflected).toBeUndefined();
+  });
+
+  it('o dano NEUTRO (reflexo de jogador) ignora imunidade, absorção e resistência', () => {
+    const defender = {
+      ...bare,
+      mitigation: compileMitigation({ resistances: { fire: 0.5 }, immunities: ['ice'] }),
+      absorb: { items: [{ ice: 50, fire: 50 }], flat: { ice: 10, fire: 10 } },
+    };
+    const neutral = (damageType: DamageType): DamageIntent => ({
+      rawDamage: 20, source: 'reflect', damageType, blockable: MAGIC_BLOCK_FLAGS,
+      extension: true, neutral: true,
+    });
+    expect(resolveDamage(neutral('ice'), defender, 'pve', v3, noDodge(), 0).resolvedDamage).toBe(20);
+    expect(resolveDamage(neutral('fire'), defender, 'pve', v3, noDodge(), 0).resolvedDamage).toBe(20);
+  });
+});
+
+describe('combat-v3 (#683, M30-G6): vulnerabilidade até -200 % e cura por elemento do monstro', () => {
+  const v3: Combat = { ...combat, compatibilityProfile: 'combat-v3' };
+  const bare = { armor: 0, dodgeChance: 0 };
+  const fireHit = (rawDamage: number): DamageIntent => ({ ...hit(rawDamage, 'fire'), blockable: MAGIC_BLOCK_FLAGS });
+  // Tabela completa por tipo, como `compileElementHealing` a entrega: zero onde não cura.
+  const healing = (fire: number): Record<DamageType, number> => ({
+    physical: 0, energy: 0, earth: 0, fire, ice: 0, holy: 0, death: 0,
+    drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
+  });
+  const rolls = (chances: readonly boolean[]): Rng => {
+    const real = Rng.fromSeed('v3-heal');
+    let index = 0;
+    return {
+      chance: () => chances[index++] ?? false,
+      integer: (min: number, max: number) => real.integer(min, max),
+    } as unknown as Rng;
+  };
+
+  it('resistência -2 triplica o dano: 100 de fogo → 300', () => {
+    const defender = { ...bare, mitigation: compileMitigation({ resistances: { fire: -2 }, immunities: [] }) };
+    expect(resolveDamage(fireHit(100), defender, 'pve', v3, rigged(false), 0).resolvedDamage).toBe(300);
+  });
+
+  it('cura 50 % do dano BRUTO: 101 → ceil(50,5) = 51, com ou sem imunidade', () => {
+    const plain = { ...bare, elementHealing: healing(50) };
+    const hitPlain = resolveDamage(fireHit(101), plain, 'pve', v3, rigged(false), 0);
+    expect(hitPlain.elementHealing).toBe(51);
+    expect(hitPlain.resolvedDamage).toBe(101);
+    const immune = { ...plain, mitigation: compileMitigation({ resistances: {}, immunities: ['fire'] }) };
+    const hitImmune = resolveDamage(fireHit(101), immune, 'pve', v3, rigged(false), 0);
+    expect(hitImmune.resolvedDamage).toBe(0);
+    expect(hitImmune.elementHealing).toBe(51);
+    // Resistência não reduz a cura: ela sai ANTES do bloqueio.
+    const resistant = { ...plain, mitigation: compileMitigation({ resistances: { fire: 0.9 }, immunities: [] }) };
+    expect(resolveDamage(fireHit(101), resistant, 'pve', v3, rigged(false), 0).elementHealing).toBe(51);
+  });
+
+  it('a cura usa o dano JÁ crítico: 101 × 1,5 = 151,5 → ceil(75,75) = 76', () => {
+    const defender = { ...bare, elementHealing: healing(50) };
+    const intent: DamageIntent = { ...fireHit(101), modifiers: { critical: { chance: 1, multiplier: 1.5 } } };
+    const result = resolveDamage(intent, defender, 'pve', v3, rolls([false, true]), 0);
+    expect(result.critical).toBe(true);
+    expect(result.elementHealing).toBe(76);
+  });
+
+  it('outro tipo não cura, e o outcome não ganha a chave', () => {
+    const defender = { ...bare, elementHealing: healing(50) };
+    const result = resolveDamage({ ...hit(100, 'ice'), blockable: MAGIC_BLOCK_FLAGS }, defender, 'pve', v3, rigged(false), 0);
+    expect('elementHealing' in result).toBe(false);
+  });
+
+  it('o secundário cura pelo próprio tipo, no outcome dele', () => {
+    const defender = { ...bare, elementHealing: healing(100) };
+    const intent: DamageIntent = {
+      ...hit(100, 'physical'), blockable: MAGIC_BLOCK_FLAGS,
+      secondary: { rawDamage: 40, damageType: 'fire' },
+    };
+    const result = resolveDamage(intent, defender, 'pve', v3, rigged(false), 0);
+    expect(result.elementHealing).toBeUndefined();
+    expect(result.secondaryOutcome?.elementHealing).toBe(40);
+  });
+
+  it('combat-v1 ignora a cura: o outcome não tem a chave', () => {
+    const defender = { ...bare, elementHealing: healing(50) };
+    const result = resolveDamage(fireHit(100), defender, 'pve', combat, rigged(false), 0);
+    expect('elementHealing' in result).toBe(false);
+  });
+
+  it('o dano NEUTRO (reflexo de jogador) não cura', () => {
+    const defender = { ...bare, elementHealing: healing(50) };
+    const neutral: DamageIntent = { ...fireHit(100), source: 'reflect', extension: true, neutral: true };
+    expect(resolveDamage(neutral, defender, 'pve', v3, rigged(false), 0).elementHealing).toBeUndefined();
+  });
+
+  it('o reflexo de MONSTRO volta com o tipo original, não neutro, com o teto de 1 %', () => {
+    const table = compileReflect({ physical: { percent: 50 } });
+    if (table === undefined) throw new Error('reflexo vazio');
+    const defender = { ...bare, reflect: { reflector: 'monster' as const, table } };
+    const result = resolveDamage(
+      { ...hit(100), blockable: MAGIC_BLOCK_FLAGS, attacker: { maxHealth: 500, distance: 5 } },
+      defender, 'pve', v3, rigged(false), 0,
+    );
+    expect(result.reflected).toEqual({ amount: 5, damageType: 'physical', neutral: false });
+  });
+});
+
+describe('combat-v4 (#603, M39-03): o mesmo resolver do combat-v3, sem o Dodge do PRD', () => {
+  const v3: Combat = { ...combat, compatibilityProfile: 'combat-v3' };
+  const v4: Combat = { ...combat, compatibilityProfile: 'combat-v4' };
+  const defender = { armor: 20, dodgeChance: 1 };
+
+  it('o `dodgeChance` do defensor é ignorado: nenhum golpe é esquivado, e a metade do dodge não existe', () => {
+    for (let seed = 0; seed < 20; seed += 1) {
+      const outcome = resolveDamage(swing, defender, 'pve', v4, Rng.fromSeed(`v4-${seed}`));
+      expect(outcome.dodged).toBe(false);
+    }
+    // O mesmo defensor no v3 esquiva sempre (chance 1): o corte pela metade é do perfil anterior.
+    expect(resolveDamage(swing, defender, 'pve', v3, Rng.fromSeed('v3')).dodged).toBe(true);
+  });
+
+  it('nem o SORTEIO do Dodge é consumido: a sequência do v4 é a do v3 sem essa rolagem', () => {
+    // v3 gasta o primeiro sorteio no Dodge, sempre; v4 não. Com o mesmo estado inicial, o v4 deixa o
+    // Rng UM `next` à frente do v3 nesse golpe simples (sem crítico, sem defesa com carga).
+    const a = Rng.fromSeed('sequence');
+    const b = Rng.fromSeed('sequence');
+    // Origem mágica: sem defesa nem armadura, o Dodge é o ÚNICO sorteio que o v3 consome.
+    const spell: DamageIntent = { ...swing, source: 'spell', blockable: MAGIC_BLOCK_FLAGS };
+    resolveDamage(spell, { armor: 20, dodgeChance: 0 }, 'pve', v4, a);
+    resolveDamage(spell, { armor: 20, dodgeChance: 0 }, 'pve', v3, b);
+    const ahead = Rng.fromSeed('sequence');
+    ahead.next(); // o sorteio do Dodge que o v3 gastou
+    expect(b.getState()).toEqual(ahead.getState());
+    expect(a.getState()).toEqual(Rng.fromSeed('sequence').getState());
+  });
+
+  it('o resto do pipeline é o do v3: armadura em faixa, piso e imunidade', () => {
+    const plain = { armor: 20, dodgeChance: 0 };
+    const four = resolveDamage(swing, plain, 'pve', v4, Rng.fromSeed('same'));
+    const three = resolveDamage(swing, plain, 'pve', v3, Rng.fromSeed('same'));
+    // As duas armaduras saem da faixa [10, 19]; o valor pode diferir porque o v4 não gasta o sorteio
+    // do Dodge — o que prende é que a resolução cai DENTRO da faixa do Canary.
+    for (const outcome of [four, three]) {
+      expect(outcome.resolvedDamage).toBeGreaterThanOrEqual(81);
+      expect(outcome.resolvedDamage).toBeLessThanOrEqual(90);
+    }
+    const immune = {
+      armor: 0, dodgeChance: 0, mitigation: compileMitigation({ resistances: {}, immunities: ['physical'] }),
+    };
+    expect(resolveDamage(swing, immune, 'pve', v4, Rng.fromSeed('same')).resolvedDamage).toBe(0);
+  });
+
+  it('a origem `charm` é uma extensão neutra: sem crítico, sem reflexo, pula resistência e imunidade', () => {
+    const resistant = {
+      armor: 0, dodgeChance: 0,
+      mitigation: compileMitigation({ resistances: { physical: 0.5 }, immunities: ['fire'] }),
+    };
+    const neutral = resolveDamage(
+      {
+        rawDamage: 60, source: 'charm', damageType: 'physical', blockable: MAGIC_BLOCK_FLAGS,
+        extension: true, neutral: true,
+      },
+      resistant, 'pve', v4, Rng.fromSeed('charm'),
+    );
+    expect(neutral.resolvedDamage).toBe(60);
+    expect(neutral.critical).toBe(false);
+    expect(neutral.reflected).toBeUndefined();
+    // O elemental respeita a resistência e a imunidade do alvo.
+    const elemental = resolveDamage(
+      {
+        rawDamage: 60, source: 'charm', damageType: 'physical', blockable: MAGIC_BLOCK_FLAGS,
+        extension: true,
+      },
+      resistant, 'pve', v4, Rng.fromSeed('charm'),
+    );
+    expect(elemental.resolvedDamage).toBe(30);
+    const fire = resolveDamage(
+      {
+        rawDamage: 60, source: 'charm', damageType: 'fire', blockable: MAGIC_BLOCK_FLAGS, extension: true,
+      },
+      resistant, 'pve', v4, Rng.fromSeed('charm'),
+    );
+    expect(fire.resolvedDamage).toBe(0);
   });
 });
 

@@ -1,0 +1,17 @@
+{
+  "id": "cure-curse",
+  "name": "Cure Curse",
+  "description": "Remove a maldição.",
+  "vocationId": "paladin",
+  "learnPrice": 6000,
+  "manaCost": 40,
+  "cooldownMs": 6000,
+  "group": "healing",
+  "groupCooldownMs": 1000,
+  "minLevel": 80,
+  "effect": {
+    "kind": "dispel",
+    "types": ["curse"]
+  },
+  "_open": "Canary `data/scripts/spells/healing/cure_curse.lua` (main, 2026-09-27): words \"exana mort\", id 147, level 80, mana 40, cooldown 6000/1000, vocação Paladin/Royal Paladin só. Só `COMBAT_PARAM_DISPEL` (CONDITION_CURSED) — sem cura."
+}

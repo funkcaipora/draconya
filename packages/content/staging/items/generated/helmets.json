@@ -1,0 +1,3004 @@
+[
+  {
+    "id": "alicorn-headguard",
+    "name": "alicorn headguard",
+    "kind": "armor",
+    "weight": 39,
+    "value": 0,
+    "slot": "head",
+    "armor": 11,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 400,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "death": {
+        "percent": 5
+      },
+      "energy": {
+        "percent": 5
+      },
+      "fire": {
+        "percent": 5
+      },
+      "holy": {
+        "percent": 5
+      },
+      "ice": {
+        "percent": 5
+      },
+      "physical": {
+        "percent": 5
+      },
+      "earth": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39149
+  },
+  {
+    "id": "amazon-helmet",
+    "name": "amazon helmet",
+    "kind": "armor",
+    "weight": 29.5,
+    "value": 0,
+    "slot": "head",
+    "armor": 7,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3393
+  },
+  {
+    "id": "ancient-tiara",
+    "name": "ancient tiara",
+    "kind": "armor",
+    "weight": 8.2,
+    "value": 0,
+    "slot": "head",
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3022
+  },
+  {
+    "id": "antler-horn-helmet",
+    "name": "antler-horn helmet",
+    "kind": "armor",
+    "weight": 22,
+    "value": 0,
+    "slot": "head",
+    "armor": 9,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 250,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 7
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "club",
+          "amount": 1
+        },
+        {
+          "skillId": "sword",
+          "amount": 1
+        },
+        {
+          "skillId": "axe",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 40588
+  },
+  {
+    "id": "arboreal-crown",
+    "name": "arboreal crown",
+    "kind": "armor",
+    "weight": 12,
+    "value": 0,
+    "slot": "head",
+    "armor": 9,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 400,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 9
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "healing": 1
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39153
+  },
+  {
+    "id": "arcanomancer-regalia",
+    "name": "arcanomancer regalia",
+    "kind": "armor",
+    "weight": 15,
+    "value": 0,
+    "slot": "head",
+    "armor": 9,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 400,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 3
+      },
+      "earth": {
+        "percent": 7
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "fire": 1
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39151
+  },
+  {
+    "id": "bandana",
+    "name": "bandana",
+    "kind": "armor",
+    "weight": 8.5,
+    "value": 150,
+    "slot": "head",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 5917
+  },
+  {
+    "id": "batwing-hat",
+    "name": "batwing hat",
+    "kind": "armor",
+    "weight": 6,
+    "value": 8000,
+    "slot": "head",
+    "armor": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 50,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 9103
+  },
+  {
+    "id": "blue-spectacles",
+    "name": "blue spectacles",
+    "kind": "armor",
+    "weight": 2.5,
+    "value": 0,
+    "slot": "head",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 27522
+  },
+  {
+    "id": "bonelord-helmet",
+    "name": "bonelord helmet",
+    "kind": "armor",
+    "weight": 46,
+    "value": 7500,
+    "slot": "head",
+    "armor": 7,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3408
+  },
+  {
+    "id": "brass-button",
+    "name": "brass button",
+    "kind": "armor",
+    "weight": 12.5,
+    "value": 0,
+    "slot": "head",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 37604
+  },
+  {
+    "id": "brass-helmet",
+    "name": "brass helmet",
+    "kind": "armor",
+    "weight": 27,
+    "value": 30,
+    "slot": "head",
+    "armor": 3,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3354
+  },
+  {
+    "id": "bridal-wreath",
+    "name": "bridal wreath",
+    "kind": "armor",
+    "weight": 1,
+    "value": 0,
+    "slot": "head",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 37336
+  },
+  {
+    "id": "broken-iks-headpiece",
+    "name": "broken Iks headpiece",
+    "kind": "armor",
+    "weight": 9,
+    "value": 560,
+    "slot": "head",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 40532
+  },
+  {
+    "id": "broken-visor",
+    "name": "broken visor",
+    "kind": "armor",
+    "weight": 14,
+    "value": 1900,
+    "slot": "head",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 20184
+  },
+  {
+    "id": "ceremonial-mask",
+    "name": "ceremonial mask",
+    "kind": "armor",
+    "weight": 40,
+    "value": 0,
+    "slot": "head",
+    "armor": 9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3395
+  },
+  {
+    "id": "chain-helmet",
+    "name": "chain helmet",
+    "kind": "armor",
+    "weight": 42,
+    "value": 17,
+    "slot": "head",
+    "armor": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3352
+  },
+  {
+    "id": "charmers-tiara",
+    "name": "charmer's tiara",
+    "kind": "armor",
+    "weight": 22,
+    "value": 900,
+    "slot": "head",
+    "armor": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3407
+  },
+  {
+    "id": "cobra-crown",
+    "name": "cobra crown",
+    "kind": "armor",
+    "weight": 8.5,
+    "value": 50000,
+    "slot": "head",
+    "armor": 3,
+    "requires": {
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": -5
+      },
+      "earth": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 11674
+  },
+  {
+    "id": "cobra-hood",
+    "name": "cobra hood",
+    "kind": "armor",
+    "weight": 27,
+    "value": 0,
+    "slot": "head",
+    "armor": 9,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 270,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "club",
+          "amount": 1
+        },
+        {
+          "skillId": "sword",
+          "amount": 1
+        },
+        {
+          "skillId": "axe",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 30397
+  },
+  {
+    "id": "coned-hat-of-enlightenment",
+    "name": "coned hat of enlightenment",
+    "kind": "armor",
+    "weight": 10,
+    "value": 700,
+    "slot": "head",
+    "armor": 4,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 70,
+      "vocationId": "monk"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50274
+  },
+  {
+    "id": "crest-of-the-deep-seas",
+    "name": "crest of the deep seas",
+    "kind": "armor",
+    "weight": 45,
+    "value": 10000,
+    "slot": "head",
+    "armor": 7,
+    "requires": {
+      "level": 80
+    },
+    "absorb": {
+      "ice": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "speed": 5
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 21892
+  },
+  {
+    "id": "crown",
+    "name": "crown",
+    "kind": "armor",
+    "weight": 19,
+    "value": 0,
+    "slot": "head",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3011
+  },
+  {
+    "id": "crown-helmet",
+    "name": "crown helmet",
+    "kind": "armor",
+    "weight": 29.5,
+    "value": 70,
+    "slot": "head",
+    "armor": 7,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3385
+  },
+  {
+    "id": "crusader-helmet",
+    "name": "crusader helmet",
+    "kind": "armor",
+    "weight": 52,
+    "value": 0,
+    "slot": "head",
+    "armor": 8,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3391
+  },
+  {
+    "id": "damaged-helmet",
+    "name": "damaged helmet",
+    "kind": "armor",
+    "weight": 18,
+    "value": 0,
+    "slot": "head",
+    "armor": 5,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3226
+  },
+  {
+    "id": "dark-helmet",
+    "name": "dark helmet",
+    "kind": "armor",
+    "weight": 46,
+    "value": 250,
+    "slot": "head",
+    "armor": 6,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3384
+  },
+  {
+    "id": "dark-vision-bandana",
+    "name": "dark vision bandana",
+    "kind": "armor",
+    "weight": 11,
+    "value": 0,
+    "slot": "head",
+    "armor": 5,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 180,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50190
+  },
+  {
+    "id": "dark-whispers",
+    "name": "dark whispers",
+    "kind": "armor",
+    "weight": 34,
+    "value": 0,
+    "slot": "head",
+    "armor": 7,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 180,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 29427
+  },
+  {
+    "id": "demon-helmet",
+    "name": "demon helmet",
+    "kind": "armor",
+    "weight": 29.5,
+    "value": 40000,
+    "slot": "head",
+    "armor": 10,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3387
+  },
+  {
+    "id": "demon-mengu",
+    "name": "demon mengu",
+    "kind": "armor",
+    "weight": 19,
+    "value": 0,
+    "slot": "head",
+    "armor": 6,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "death": {
+        "percent": 6
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 2
+        },
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50189
+  },
+  {
+    "id": "demonfang-mask",
+    "name": "demonfang mask",
+    "kind": "armor",
+    "weight": 15,
+    "value": 0,
+    "slot": "head",
+    "armor": 8,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "death": {
+        "percent": 5
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ],
+      "specializedMagicLevel": {
+        "healing": 1
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 49534
+  },
+  {
+    "id": "depth-galea",
+    "name": "depth galea",
+    "kind": "armor",
+    "weight": 46,
+    "value": 35000,
+    "slot": "head",
+    "armor": 8,
+    "requires": {
+      "level": 150
+    },
+    "absorb": {
+      "drown": {
+        "percent": 99
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 13995
+  },
+  {
+    "id": "devil-helmet",
+    "name": "devil helmet",
+    "kind": "armor",
+    "weight": 50,
+    "value": 1000,
+    "slot": "head",
+    "armor": 7,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3356
+  },
+  {
+    "id": "dragon-scale-helmet",
+    "name": "dragon scale helmet",
+    "kind": "armor",
+    "weight": 32.5,
+    "value": 0,
+    "slot": "head",
+    "armor": 9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3400
+  },
+  {
+    "id": "dreadfire-headpiece",
+    "name": "dreadfire headpiece",
+    "kind": "armor",
+    "weight": 16,
+    "value": 0,
+    "slot": "head",
+    "armor": 8,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "death": {
+        "percent": 6
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 49533
+  },
+  {
+    "id": "dwarven-helmet",
+    "name": "dwarven helmet",
+    "kind": "armor",
+    "weight": 42,
+    "value": 0,
+    "slot": "head",
+    "armor": 6,
+    "imbuementSlots": 2,
+    "absorb": {
+      "physical": {
+        "percent": 2
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3396
+  },
+  {
+    "id": "eldritch-cowl",
+    "name": "eldritch cowl",
+    "kind": "armor",
+    "weight": 26,
+    "value": 0,
+    "slot": "head",
+    "armor": 7,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 250,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 7
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 36670
+  },
+  {
+    "id": "eldritch-hood",
+    "name": "eldritch hood",
+    "kind": "armor",
+    "weight": 27,
+    "value": 0,
+    "slot": "head",
+    "armor": 7,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 250,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 7
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 36671
+  },
+  {
+    "id": "elite-draken-helmet",
+    "name": "elite draken helmet",
+    "kind": "armor",
+    "weight": 43,
+    "value": 0,
+    "slot": "head",
+    "armor": 9,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 100,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "death": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 11689
+  },
+  {
+    "id": "enchanted-werewolf-helmet",
+    "name": "enchanted werewolf helmet",
+    "kind": "armor",
+    "weight": 25,
+    "value": 0,
+    "slot": "head",
+    "armor": 9,
+    "durationMs": 3600000,
+    "requires": {
+      "level": 100,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "axe",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22127
+  },
+  {
+    "id": "ethereal-coned-hat",
+    "name": "ethereal coned hat",
+    "kind": "armor",
+    "weight": 12,
+    "value": 0,
+    "slot": "head",
+    "armor": 7,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 400,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 8
+      },
+      "physical": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 3
+        },
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50188
+  },
+  {
+    "id": "falcon-circlet",
+    "name": "falcon circlet",
+    "kind": "armor",
+    "weight": 13,
+    "value": 0,
+    "slot": "head",
+    "armor": 8,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": 9
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 28714
+  },
+  {
+    "id": "falcon-coif",
+    "name": "falcon coif",
+    "kind": "armor",
+    "weight": 28,
+    "value": 0,
+    "slot": "head",
+    "armor": 10,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": 10
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        },
+        {
+          "skillId": "shielding",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 28715
+  },
+  {
+    "id": "feather-headdress",
+    "name": "feather headdress",
+    "kind": "armor",
+    "weight": 21,
+    "value": 850,
+    "slot": "head",
+    "armor": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3406
+  },
+  {
+    "id": "ferumbras-candy-hat",
+    "name": "Ferumbras' Candy Hat",
+    "kind": "armor",
+    "weight": 8.5,
+    "value": 0,
+    "slot": "head",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 24397
+  },
+  {
+    "id": "ferumbras-hat",
+    "name": "Ferumbras' hat",
+    "kind": "armor",
+    "weight": 8.5,
+    "value": 0,
+    "slot": "head",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 5903
+  },
+  {
+    "id": "flower-wreath",
+    "name": "flower wreath",
+    "kind": "armor",
+    "weight": 5,
+    "value": 500,
+    "slot": "head",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 9013
+  },
+  {
+    "id": "full-helmet-of-the-ancients",
+    "name": "full helmet of the ancients",
+    "kind": "armor",
+    "weight": 27.6,
+    "value": 0,
+    "slot": "head",
+    "armor": 11,
+    "durationMs": 1800000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3230
+  },
+  {
+    "id": "fur-cap",
+    "name": "fur cap",
+    "kind": "armor",
+    "weight": 18,
+    "value": 0,
+    "slot": "head",
+    "armor": 3,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 7458
+  },
+  {
+    "id": "galea-mortis",
+    "name": "galea mortis",
+    "kind": "armor",
+    "weight": 23,
+    "value": 0,
+    "slot": "head",
+    "armor": 7,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 220,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "death": {
+        "percent": 6
+      },
+      "holy": {
+        "percent": -3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 31582
+  },
+  {
+    "id": "gill-gugel",
+    "name": "gill gugel",
+    "kind": "armor",
+    "weight": 9,
+    "value": 0,
+    "slot": "head",
+    "armor": 5,
+    "requires": {
+      "level": 150,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": -6
+      },
+      "earth": {
+        "percent": 6
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 16104
+  },
+  {
+    "id": "glacier-mask",
+    "name": "glacier mask",
+    "kind": "armor",
+    "weight": 10,
+    "value": 2500,
+    "slot": "head",
+    "armor": 5,
+    "requires": {
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": -5
+      },
+      "ice": {
+        "percent": 4
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 829
+  },
+  {
+    "id": "gnome-helmet",
+    "name": "gnome helmet",
+    "kind": "armor",
+    "weight": 24,
+    "value": 0,
+    "slot": "head",
+    "armor": 8,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 200,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": 8
+      },
+      "ice": {
+        "percent": -2
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 27647
+  },
+  {
+    "id": "golden-crown",
+    "name": "golden crown",
+    "kind": "armor",
+    "weight": 20,
+    "value": 0,
+    "slot": "head",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 32925
+  },
+  {
+    "id": "golden-helmet",
+    "name": "golden helmet",
+    "kind": "armor",
+    "weight": 32,
+    "value": 420,
+    "slot": "head",
+    "armor": 12,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3365
+  },
+  {
+    "id": "golden-horned-helmet",
+    "name": "golden horned helmet",
+    "kind": "armor",
+    "weight": 51,
+    "value": 0,
+    "slot": "head",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 37164
+  },
+  {
+    "id": "green-demon-helmet",
+    "name": "green demon helmet",
+    "kind": "armor",
+    "weight": 29.5,
+    "value": 0,
+    "slot": "head",
+    "armor": 10,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 37609
+  },
+  {
+    "id": "gryphon-mask",
+    "name": "gryphon mask",
+    "kind": "armor",
+    "weight": 20,
+    "value": 0,
+    "slot": "head",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 31369
+  },
+  {
+    "id": "hat-of-the-mad",
+    "name": "hat of the mad",
+    "kind": "armor",
+    "weight": 7,
+    "value": 0,
+    "slot": "head",
+    "armor": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3210
+  },
+  {
+    "id": "hellstalker-visor",
+    "name": "hellstalker visor",
+    "kind": "armor",
+    "weight": 36,
+    "value": 0,
+    "slot": "head",
+    "armor": 10,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "death": {
+        "percent": 6
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 49532
+  },
+  {
+    "id": "helmet-of-nature",
+    "name": "helmet of nature",
+    "kind": "armor",
+    "weight": 11,
+    "value": 0,
+    "slot": "head",
+    "armor": 3,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 9382
+  },
+  {
+    "id": "helmet-of-the-ancients",
+    "name": "helmet of the ancients",
+    "kind": "armor",
+    "weight": 27.6,
+    "value": 0,
+    "slot": "head",
+    "armor": 8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3229
+  },
+  {
+    "id": "helmet-of-the-deep",
+    "name": "helmet of the deep",
+    "kind": "armor",
+    "weight": 210,
+    "value": 5000,
+    "slot": "head",
+    "armor": 2,
+    "absorb": {
+      "drown": {
+        "percent": 99
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 5460
+  },
+  {
+    "id": "helmet-of-the-lost",
+    "name": "helmet of the lost",
+    "kind": "armor",
+    "weight": 35,
+    "value": 2000,
+    "slot": "head",
+    "armor": 7,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 17852
+  },
+  {
+    "id": "helmet-of-ultimate-terror",
+    "name": "helmet of ultimate terror",
+    "kind": "armor",
+    "weight": 12.5,
+    "value": 0,
+    "slot": "head",
+    "armor": 3,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 9381
+  },
+  {
+    "id": "horned-helmet",
+    "name": "horned helmet",
+    "kind": "armor",
+    "weight": 51,
+    "value": 155,
+    "slot": "head",
+    "armor": 11,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3390
+  },
+  {
+    "id": "horseman-helmet",
+    "name": "horseman helmet",
+    "kind": "armor",
+    "weight": 42,
+    "value": 280,
+    "slot": "head",
+    "armor": 6,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3405
+  },
+  {
+    "id": "incandescent-crown",
+    "name": "incandescent crown",
+    "kind": "armor",
+    "weight": 10,
+    "value": 0,
+    "slot": "head",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 26189
+  },
+  {
+    "id": "iron-crown",
+    "name": "iron crown",
+    "kind": "armor",
+    "weight": 10,
+    "value": 0,
+    "slot": "head",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 26188
+  },
+  {
+    "id": "iron-helmet",
+    "name": "iron helmet",
+    "kind": "armor",
+    "weight": 30,
+    "value": 150,
+    "slot": "head",
+    "armor": 5,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3353
+  },
+  {
+    "id": "jade-conical-hat",
+    "name": "jade conical hat",
+    "kind": "armor",
+    "weight": 21,
+    "value": 0,
+    "slot": "head",
+    "armor": 5,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 35,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50193
+  },
+  {
+    "id": "jade-hat",
+    "name": "jade hat",
+    "kind": "armor",
+    "weight": 9,
+    "value": 9000,
+    "slot": "head",
+    "armor": 4,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 60,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 10451
+  },
+  {
+    "id": "jester-hat",
+    "name": "jester hat",
+    "kind": "armor",
+    "weight": 10,
+    "value": 0,
+    "slot": "head",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 894
+  },
+  {
+    "id": "krimhorn-helmet",
+    "name": "krimhorn helmet",
+    "kind": "armor",
+    "weight": 51,
+    "value": 200,
+    "slot": "head",
+    "armor": 6,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 7461
+  },
+  {
+    "id": "laurel-wreath",
+    "name": "laurel wreath",
+    "kind": "armor",
+    "weight": 9,
+    "value": 0,
+    "slot": "head",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 9221
+  },
+  {
+    "id": "leaf-crown",
+    "name": "leaf crown",
+    "kind": "armor",
+    "weight": 5,
+    "value": 0,
+    "slot": "head",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 26187
+  },
+  {
+    "id": "leather-helmet",
+    "name": "leather helmet",
+    "kind": "armor",
+    "weight": 22,
+    "value": 4,
+    "slot": "head",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3355
+  },
+  {
+    "id": "legion-helmet",
+    "name": "legion helmet",
+    "kind": "armor",
+    "weight": 31,
+    "value": 22,
+    "slot": "head",
+    "armor": 4,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3374
+  },
+  {
+    "id": "light-bandana",
+    "name": "light bandana",
+    "kind": "armor",
+    "weight": 9,
+    "value": 0,
+    "slot": "head",
+    "armor": 3,
+    "requires": {
+      "vocationId": "monk"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50194
+  },
+  {
+    "id": "lightning-headband",
+    "name": "lightning headband",
+    "kind": "armor",
+    "weight": 10,
+    "value": 2500,
+    "slot": "head",
+    "armor": 5,
+    "requires": {
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": 4
+      },
+      "earth": {
+        "percent": -5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 828
+  },
+  {
+    "id": "lion-spangenhelm",
+    "name": "lion spangenhelm",
+    "kind": "armor",
+    "weight": 30,
+    "value": 0,
+    "slot": "head",
+    "armor": 7,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 230,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 3
+      },
+      "earth": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 34156
+  },
+  {
+    "id": "mage-hat",
+    "name": "mage hat",
+    "kind": "armor",
+    "weight": 9,
+    "value": 0,
+    "slot": "head",
+    "armor": 3,
+    "imbuementSlots": 2,
+    "requires": {
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 7992
+  },
+  {
+    "id": "mages-cap",
+    "name": "mage's cap",
+    "kind": "armor",
+    "weight": 10,
+    "value": 0,
+    "slot": "head",
+    "armor": 3,
+    "requires": {
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": 4
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 12599
+  },
+  {
+    "id": "magician-hat",
+    "name": "magician hat",
+    "kind": "armor",
+    "weight": 7.5,
+    "value": 0,
+    "slot": "head",
+    "armor": 1,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3573
+  },
+  {
+    "id": "magma-monocle",
+    "name": "magma monocle",
+    "kind": "armor",
+    "weight": 10,
+    "value": 2500,
+    "slot": "head",
+    "armor": 5,
+    "requires": {
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": 4
+      },
+      "ice": {
+        "percent": -5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 827
+  },
+  {
+    "id": "maliceforged-helmet",
+    "name": "maliceforged helmet",
+    "kind": "armor",
+    "weight": 24,
+    "value": 0,
+    "slot": "head",
+    "armor": 10,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "death": {
+        "percent": 6
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "club",
+          "amount": 2
+        },
+        {
+          "skillId": "sword",
+          "amount": 2
+        },
+        {
+          "skillId": "axe",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 49531
+  },
+  {
+    "id": "mighty-helm-of-green-sparks",
+    "name": "mighty helm of green sparks",
+    "kind": "armor",
+    "weight": 46,
+    "value": 0,
+    "slot": "head",
+    "armor": 6,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 9399
+  },
+  {
+    "id": "mining-helmet",
+    "name": "mining helmet",
+    "kind": "armor",
+    "weight": 7,
+    "value": 0,
+    "slot": "head",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 139
+  },
+  {
+    "id": "mystic-turban",
+    "name": "mystic turban",
+    "kind": "armor",
+    "weight": 8.5,
+    "value": 150,
+    "slot": "head",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3574
+  },
+  {
+    "id": "norcferatu-bonehood",
+    "name": "norcferatu bonehood",
+    "kind": "armor",
+    "weight": 14,
+    "value": 0,
+    "slot": "head",
+    "armor": 5,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 230,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 5
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 51261
+  },
+  {
+    "id": "norcferatu-skullguard",
+    "name": "norcferatu skullguard",
+    "kind": "armor",
+    "weight": 32,
+    "value": 0,
+    "slot": "head",
+    "armor": 9,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 270,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 6
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 51260
+  },
+  {
+    "id": "odd-hat",
+    "name": "odd hat",
+    "kind": "armor",
+    "weight": 7,
+    "value": 0,
+    "slot": "head",
+    "armor": 5,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 9374
+  },
+  {
+    "id": "pair-of-earmuffs",
+    "name": "pair of earmuffs",
+    "kind": "armor",
+    "weight": 5,
+    "value": 0,
+    "slot": "head",
+    "absorb": {
+      "ice": {
+        "percent": 2
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 7459
+  },
+  {
+    "id": "party-hat",
+    "name": "party hat",
+    "kind": "armor",
+    "weight": 7.5,
+    "value": 0,
+    "slot": "head",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 6578
+  },
+  {
+    "id": "pirate-hat",
+    "name": "pirate hat",
+    "kind": "armor",
+    "weight": 12.5,
+    "value": 1000,
+    "slot": "head",
+    "armor": 3,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 6096
+  },
+  {
+    "id": "porcelain-mask",
+    "name": "porcelain mask",
+    "kind": "armor",
+    "weight": 4.5,
+    "value": 2000,
+    "slot": "head",
+    "armor": 1,
+    "absorb": {
+      "manadrain": {
+        "percent": 10
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 25088
+  },
+  {
+    "id": "post-officers-hat",
+    "name": "post officer's hat",
+    "kind": "armor",
+    "weight": 7,
+    "value": 0,
+    "slot": "head",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3576
+  },
+  {
+    "id": "prismatic-helmet",
+    "name": "prismatic helmet",
+    "kind": "armor",
+    "weight": 56,
+    "value": 0,
+    "slot": "head",
+    "armor": 9,
+    "requires": {
+      "level": 150,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "shielding",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 16109
+  },
+  {
+    "id": "ragnir-helmet",
+    "name": "ragnir helmet",
+    "kind": "armor",
+    "weight": 31,
+    "value": 400,
+    "slot": "head",
+    "armor": 6,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 7462
+  },
+  {
+    "id": "reflecting-crown",
+    "name": "reflecting crown",
+    "kind": "armor",
+    "weight": 5,
+    "value": 0,
+    "slot": "head",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 26190
+  },
+  {
+    "id": "royal-helmet",
+    "name": "royal helmet",
+    "kind": "armor",
+    "weight": 48,
+    "value": 0,
+    "slot": "head",
+    "armor": 9,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3392
+  },
+  {
+    "id": "rubber-cap",
+    "name": "rubber cap",
+    "kind": "armor",
+    "weight": 8,
+    "value": 11000,
+    "slot": "head",
+    "armor": 5,
+    "requires": {
+      "level": 70,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": -3
+      },
+      "earth": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 21165
+  },
+  {
+    "id": "rusty-winged-helmet",
+    "name": "rusty winged helmet",
+    "kind": "armor",
+    "weight": 12,
+    "value": 0,
+    "slot": "head",
+    "armor": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 24405
+  },
+  {
+    "id": "santa-hat",
+    "name": "santa hat",
+    "kind": "armor",
+    "weight": 7.5,
+    "value": 0,
+    "slot": "head",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 6531
+  },
+  {
+    "id": "sedge-hat",
+    "name": "sedge hat",
+    "kind": "armor",
+    "weight": 18,
+    "value": 0,
+    "slot": "head",
+    "armor": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 11700
+  },
+  {
+    "id": "shamanic-mask",
+    "name": "shamanic mask",
+    "kind": "armor",
+    "weight": 31,
+    "value": 2000,
+    "slot": "head",
+    "armor": 4,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22192
+  },
+  {
+    "id": "shroud-of-despair",
+    "name": "shroud of despair",
+    "kind": "armor",
+    "weight": 34,
+    "value": 0,
+    "slot": "head",
+    "armor": 7,
+    "requires": {
+      "level": 150
+    },
+    "absorb": {
+      "death": {
+        "percent": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22757
+  },
+  {
+    "id": "silver-mask",
+    "name": "silver mask",
+    "kind": "armor",
+    "weight": 32,
+    "value": 0,
+    "slot": "head",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 31370
+  },
+  {
+    "id": "skull-helmet",
+    "name": "skull helmet",
+    "kind": "armor",
+    "weight": 42,
+    "value": 40000,
+    "slot": "head",
+    "armor": 9,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 5741
+  },
+  {
+    "id": "soldier-helmet",
+    "name": "soldier helmet",
+    "kind": "armor",
+    "weight": 32,
+    "value": 16,
+    "slot": "head",
+    "armor": 5,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3375
+  },
+  {
+    "id": "spiritthorn-helmet",
+    "name": "spiritthorn helmet",
+    "kind": "armor",
+    "weight": 44,
+    "value": 0,
+    "slot": "head",
+    "armor": 12,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 400,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 10
+      },
+      "physical": {
+        "percent": 6
+      }
+    },
+    "reflect": {
+      "physical": {
+        "flat": 13
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "club",
+          "amount": 3
+        },
+        {
+          "skillId": "sword",
+          "amount": 3
+        },
+        {
+          "skillId": "axe",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39148
+  },
+  {
+    "id": "spooky-hood",
+    "name": "spooky hood",
+    "kind": "armor",
+    "weight": 12.5,
+    "value": 0,
+    "slot": "head",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 32630
+  },
+  {
+    "id": "steel-helmet",
+    "name": "steel helmet",
+    "kind": "armor",
+    "weight": 46,
+    "value": 293,
+    "slot": "head",
+    "armor": 6,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3351
+  },
+  {
+    "id": "stoic-iks-casque",
+    "name": "stoic iks casque",
+    "kind": "armor",
+    "weight": 35,
+    "value": 0,
+    "slot": "head",
+    "armor": 8,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 250,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 6
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 44636
+  },
+  {
+    "id": "stoic-iks-headpiece",
+    "name": "stoic iks headpiece",
+    "kind": "armor",
+    "weight": 21,
+    "value": 0,
+    "slot": "head",
+    "armor": 8,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 250,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "death": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 44637
+  },
+  {
+    "id": "strange-helmet",
+    "name": "strange helmet",
+    "kind": "armor",
+    "weight": 46,
+    "value": 500,
+    "slot": "head",
+    "armor": 6,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3373
+  },
+  {
+    "id": "studded-helmet",
+    "name": "studded helmet",
+    "kind": "armor",
+    "weight": 24.5,
+    "value": 20,
+    "slot": "head",
+    "armor": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3376
+  },
+  {
+    "id": "terra-helmet",
+    "name": "terra helmet",
+    "kind": "armor",
+    "weight": 31,
+    "value": 0,
+    "slot": "head",
+    "armor": 9,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 230,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 5
+      },
+      "earth": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "club",
+          "amount": 2
+        },
+        {
+          "skillId": "sword",
+          "amount": 2
+        },
+        {
+          "skillId": "axe",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 31577
+  },
+  {
+    "id": "terra-hood",
+    "name": "terra hood",
+    "kind": "armor",
+    "weight": 10,
+    "value": 2500,
+    "slot": "head",
+    "armor": 5,
+    "requires": {
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": -5
+      },
+      "earth": {
+        "percent": 4
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 830
+  },
+  {
+    "id": "tiara-of-power",
+    "name": "tiara of power",
+    "kind": "armor",
+    "weight": 11.5,
+    "value": 0,
+    "slot": "head",
+    "armor": 7,
+    "durationMs": 3600000,
+    "requires": {
+      "level": 100,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "speed": 20,
+      "regeneration": {
+        "healthGain": 2,
+        "healthTicksMs": 6000,
+        "manaGain": 8,
+        "manaTicksMs": 6000
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 23475
+  },
+  {
+    "id": "tribal-mask",
+    "name": "tribal mask",
+    "kind": "armor",
+    "weight": 25,
+    "value": 100,
+    "slot": "head",
+    "armor": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3403
+  },
+  {
+    "id": "viking-helmet",
+    "name": "viking helmet",
+    "kind": "armor",
+    "weight": 39,
+    "value": 66,
+    "slot": "head",
+    "armor": 4,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3367
+  },
+  {
+    "id": "visage-of-the-end-days",
+    "name": "visage of the end days",
+    "kind": "armor",
+    "weight": 38,
+    "value": 0,
+    "slot": "head",
+    "armor": 10,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22754
+  },
+  {
+    "id": "warrior-helmet",
+    "name": "warrior helmet",
+    "kind": "armor",
+    "weight": 68,
+    "value": 5000,
+    "slot": "head",
+    "armor": 8,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3369
+  },
+  {
+    "id": "werewolf-helmet",
+    "name": "werewolf helmet",
+    "kind": "armor",
+    "weight": 25,
+    "value": 0,
+    "slot": "head",
+    "armor": 9,
+    "requires": {
+      "level": 100
+    },
+    "bonuses": {
+      "speed": 15
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22062
+  },
+  {
+    "id": "winged-helmet",
+    "name": "winged helmet",
+    "kind": "armor",
+    "weight": 12,
+    "value": 320,
+    "slot": "head",
+    "armor": 10,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3368
+  },
+  {
+    "id": "witch-hat",
+    "name": "witch hat",
+    "kind": "armor",
+    "weight": 7.8,
+    "value": 5000,
+    "slot": "head",
+    "armor": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "manadrain": {
+        "percent": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 9653
+  },
+  {
+    "id": "wood-cape",
+    "name": "wood cape",
+    "kind": "armor",
+    "weight": 11,
+    "value": 5000,
+    "slot": "head",
+    "armor": 3,
+    "requires": {
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3575
+  },
+  {
+    "id": "yalahari-mask",
+    "name": "yalahari mask",
+    "kind": "armor",
+    "weight": 35,
+    "value": 0,
+    "slot": "head",
+    "armor": 5,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 80,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8864
+  },
+  {
+    "id": "zaoan-helmet",
+    "name": "Zaoan helmet",
+    "kind": "armor",
+    "weight": 66,
+    "value": 0,
+    "slot": "head",
+    "armor": 9,
+    "imbuementSlots": 1,
+    "requires": {
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "absorb": {
+      "physical": {
+        "percent": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 10385
+  }
+]

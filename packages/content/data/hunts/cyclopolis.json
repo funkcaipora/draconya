@@ -1,0 +1,10 @@
+{
+  "id": "cyclopolis",
+  "name": "Cyclopolis",
+  "recommendedLevel": 34,
+  "mapId": "cyclopolis",
+  "routeId": "cyclopolis",
+  "ambience": "cavern",
+  "description": "A cidade que os Cyclops escavaram nas montanhas ao norte de Edron, andar sobre andar abaixo da superfície. Os Cyclops martelam pedra e carne com o mesmo golpe.",
+  "_open": "#587 (M36-06). Recorte real do Canary: `pnpm map:import --id cyclopolis --x 32449..32475 --y 32041..32061 --z 7` sobre `otservbr.otbm` (27×21, 296 tiles andáveis). O recorte inicial (busca de componente andável com `--keep-from` sobre uma caixa maior) achava uma bolha maior e instável — Cyclopolis é descrita pela própria TibiaWiki como uma masmorra grande, de vários andares, e a busca por vizinhos-4 encontrava pedaço extra a cada aumento de caixa, nunca convergindo a zero 'sobra' contra `pnpm map:import --check` (que relê o OTBM bruto da região salva, sem reaplicar `--keep-from`). A solução foi importar a caixa final SEM `--keep-from` — um recorte reto, sem filtro de componente —, que por construção bate com o que `--check` relê. `pnpm catalog:spawns --map cyclopolis`: 7 pontos reais (só Cyclops nesta fatia específica da cidade; o recorte é pequeno demais para pegar os Elf/Dwarf/Orc/Minotaur que a TibiaWiki cita na Cyclopolis inteira — ficam de fora do escopo desta hunt, não usados). `recommendedLevel: 34` é o menor requisito por vocação da Cyclopolis real (TibiaWiki: Knight 40/60, Paladin 34/60, Mage 45 — usei o menor, como a Darashia Dragon Lair usa o Gate) — cobre a faixa 30–60 do #587."
+}

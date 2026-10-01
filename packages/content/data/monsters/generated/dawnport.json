@@ -1,0 +1,2143 @@
+[
+  {
+    "id": "brittle-skeleton",
+    "name": "Brittle Skeleton",
+    "health": 50,
+    "experience": 35,
+    "attack": {
+      "min": 0,
+      "max": 18
+    },
+    "armor": 2,
+    "defense": 9,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0.23,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 146,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 5
+      },
+      "items": [
+        {
+          "itemId": "brass-shield",
+          "chance": 0.0292
+        },
+        {
+          "itemId": "hatchet",
+          "chance": 0.0477
+        },
+        {
+          "itemId": "mace",
+          "chance": 0.0477
+        },
+        {
+          "itemId": "pelvis-bone",
+          "chance": 0.0928
+        },
+        {
+          "itemId": "studded-armor",
+          "chance": 0.0292
+        },
+        {
+          "itemId": "sword",
+          "chance": 0.061
+        },
+        {
+          "itemId": "viking-helmet",
+          "chance": 0.0398
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 18
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.08,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 7,
+          "max": 13
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 300,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/brittle_skeleton.lua"
+    }
+  },
+  {
+    "id": "crazed-dwarf",
+    "name": "Crazed Dwarf",
+    "health": 105,
+    "experience": 50,
+    "attack": {
+      "min": 0,
+      "max": 26
+    },
+    "armor": 9,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 156,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 4
+      },
+      "items": [
+        {
+          "itemId": "axe",
+          "chance": 0.1286
+        },
+        {
+          "itemId": "hatchet",
+          "chance": 0.2571
+        },
+        {
+          "itemId": "leather-legs",
+          "chance": 0.0857
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.1714
+        },
+        {
+          "itemId": "studded-armor",
+          "chance": 0.0857
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 320,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/crazed_dwarf.lua"
+    }
+  },
+  {
+    "id": "dawn-bat",
+    "name": "Dawn Bat",
+    "health": 30,
+    "experience": 10,
+    "attack": {
+      "min": 0,
+      "max": 8
+    },
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.0512,
+        "min": 1,
+        "max": 3
+      },
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 3,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 250,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/dawn_bat.lua"
+    }
+  },
+  {
+    "id": "dawn-scorpion",
+    "name": "Dawn Scorpion",
+    "health": 65,
+    "experience": 45,
+    "attack": {
+      "min": 0,
+      "max": 30
+    },
+    "armor": 11,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.05,
+        "fire": 0.05
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 144,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 4
+      },
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 30
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 120000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 40,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 10,
+          "max": 20
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "poison",
+          "impactKey": "poisonarea"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 5,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "manaCost": 310,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/dawn_scorpion.lua"
+    }
+  },
+  {
+    "id": "dawnfly",
+    "name": "Dawnfly",
+    "health": 90,
+    "experience": 35,
+    "attack": {
+      "min": 0,
+      "max": 16
+    },
+    "armor": 3,
+    "defense": 2,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.25,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 12
+      },
+      "items": [
+        {
+          "itemId": "doublet",
+          "chance": 0.0414
+        },
+        {
+          "itemId": "damselfly-wing",
+          "chance": 0.1194
+        },
+        {
+          "itemId": "damselfly-eye",
+          "chance": 0.1013
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 16
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 32000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 8,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.09,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 4,
+          "max": 8
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "poisonarrow"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.11,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 238
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/dawnfly.lua"
+    }
+  },
+  {
+    "id": "juvenile-cyclops",
+    "name": "Juvenile Cyclops",
+    "health": 260,
+    "experience": 130,
+    "attack": {
+      "min": 0,
+      "max": 45
+    },
+    "armor": 11,
+    "defense": 22,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.1,
+        "fire": 0.1
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0.62,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 160,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 25
+      },
+      "items": [
+        {
+          "itemId": "chain-armor",
+          "chance": 0.1081
+        },
+        {
+          "itemId": "chain-helmet",
+          "chance": 0.1216
+        },
+        {
+          "itemId": "cyclops-toe",
+          "chance": 0.0405
+        },
+        {
+          "itemId": "hatchet",
+          "chance": 0.0946
+        },
+        {
+          "itemId": "mace",
+          "chance": 0.1892
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.3007
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.0135
+        },
+        {
+          "itemId": "studded-legs",
+          "chance": 0.0946
+        },
+        {
+          "itemId": "sword",
+          "chance": 0.2162
+        },
+        {
+          "itemId": "wolf-tooth-chain",
+          "chance": 0.0135
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 45
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 20
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "largerock"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.05
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 310000
+      }
+    ],
+    "manaCost": 490,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/juvenile_cyclops.lua"
+    }
+  },
+  {
+    "id": "lesser-fire-devil",
+    "name": "Lesser Fire Devil",
+    "health": 175,
+    "experience": 110,
+    "attack": {
+      "min": 0,
+      "max": 25
+    },
+    "armor": 9,
+    "defense": 9,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.1,
+        "fire": 0.35
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0.38,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 150,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 10
+      },
+      "items": [
+        {
+          "itemId": "small-pitchfork",
+          "chance": 0.2281
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 25
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 24,
+          "max": 36
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "firearea"
+        }
+      },
+      {
+        "id": "fireball-2",
+        "cadenceMs": 2000,
+        "chance": 0.35,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 2,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 4,
+          "max": 12
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "fireattack"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.05
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 530,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/lesser_fire_devil.lua"
+    }
+  },
+  {
+    "id": "meadow-strider",
+    "name": "Meadow Strider",
+    "health": 100,
+    "experience": 50,
+    "attack": {
+      "min": 0,
+      "max": 13
+    },
+    "armor": 1,
+    "defense": 2,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 136,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 10
+      },
+      "items": [
+        {
+          "itemId": "worm",
+          "chance": 0.1428,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.2525
+        },
+        {
+          "itemId": "marsh-stalker-beak",
+          "chance": 0.0606
+        },
+        {
+          "itemId": "seeds",
+          "chance": 0.0016
+        },
+        {
+          "itemId": "marsh-stalker-feather",
+          "chance": 0.0898
+        },
+        {
+          "itemId": "longsword",
+          "chance": 0.0764
+        },
+        {
+          "itemId": "mace",
+          "chance": 0.0831
+        },
+        {
+          "itemId": "hatchet",
+          "chance": 0.0666
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 13
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.11,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 10
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "smallstone",
+          "impactKey": "explosionarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.13,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 192
+          }
+        },
+        "presentation": {
+          "impactKey": "hitarea"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/meadow_strider.lua"
+    }
+  },
+  {
+    "id": "mountain-troll",
+    "name": "Mountain Troll",
+    "health": 30,
+    "experience": 12,
+    "attack": {
+      "min": 0,
+      "max": 9
+    },
+    "armor": 0,
+    "defense": 2,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.15,
+        "earth": -0.1,
+        "fire": 0.15,
+        "ice": 0.15,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.1,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 110,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 8
+      },
+      "items": [
+        {
+          "itemId": "hand-axe",
+          "chance": 0.0359
+        },
+        {
+          "itemId": "leather-armor",
+          "chance": 0.0406
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.2798
+        },
+        {
+          "itemId": "rapier",
+          "chance": 0.0347
+        },
+        {
+          "itemId": "spear",
+          "chance": 0.068
+        },
+        {
+          "itemId": "studded-club",
+          "chance": 0.0351
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/mountain_troll.lua"
+    }
+  },
+  {
+    "id": "muglex-clan-assassin",
+    "name": "Muglex Clan Assassin",
+    "health": 75,
+    "experience": 48,
+    "attack": {
+      "min": 0,
+      "max": 15
+    },
+    "armor": 3,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 140,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 18
+      },
+      "items": [
+        {
+          "itemId": "bone-club",
+          "chance": 0.0489
+        },
+        {
+          "itemId": "dagger",
+          "chance": 0.1809
+        },
+        {
+          "itemId": "leather-armor",
+          "chance": 0.0646
+        },
+        {
+          "itemId": "leather-helmet",
+          "chance": 0.0807
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.0978
+        },
+        {
+          "itemId": "studded-armor",
+          "chance": 0.0171
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 15
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 2000,
+        "chance": 0.11,
+        "target": {
+          "range": 11
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "poison",
+          "impactKey": "poisonarea"
+        },
+        "condition": {
+          "key": "drunk",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.09,
+        "target": {
+          "range": 6
+        },
+        "power": {
+          "min": 0,
+          "max": 30
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "throwingknife"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.11,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      },
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 4000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 145
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/muglex_clan_assassin.lua"
+    }
+  },
+  {
+    "id": "muglex-clan-footman",
+    "name": "Muglex Clan Footman",
+    "health": 50,
+    "experience": 25,
+    "attack": {
+      "min": 0,
+      "max": 10
+    },
+    "armor": 2,
+    "defense": 4,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 120,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 6
+      },
+      "items": [
+        {
+          "itemId": "bone-club",
+          "chance": 0.0944
+        },
+        {
+          "itemId": "dagger",
+          "chance": 0.1704
+        },
+        {
+          "itemId": "goblin-ear",
+          "chance": 0.0113
+        },
+        {
+          "itemId": "leather-armor",
+          "chance": 0.0606
+        },
+        {
+          "itemId": "leather-helmet",
+          "chance": 0.0268
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.0972
+        },
+        {
+          "itemId": "small-stone",
+          "chance": 0.1521
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 10
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.08,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 22
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "smallstone"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/muglex_clan_footman.lua"
+    }
+  },
+  {
+    "id": "muglex-clan-scavenger",
+    "name": "Muglex Clan Scavenger",
+    "health": 60,
+    "experience": 37,
+    "attack": {
+      "min": 0,
+      "max": 10
+    },
+    "armor": 2,
+    "defense": 4,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 132,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 12
+      },
+      "items": [
+        {
+          "itemId": "bone-club",
+          "chance": 0.1186
+        },
+        {
+          "itemId": "dagger",
+          "chance": 0.3041
+        },
+        {
+          "itemId": "leather-armor",
+          "chance": 0.0799
+        },
+        {
+          "itemId": "leather-helmet",
+          "chance": 0.0799
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.1186
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 10
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.13,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 22
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "spear"
+        }
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.03,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 20,
+          "max": 30
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "death",
+          "impactKey": "mortarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.01,
+        "heal": {
+          "min": 10,
+          "max": 20
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 4000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 140
+          }
+        },
+        "presentation": {
+          "impactKey": "energyhit"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/muglex_clan_scavenger.lua"
+    }
+  },
+  {
+    "id": "sacred-snake",
+    "name": "Sacred Snake",
+    "health": 10,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 8
+    },
+    "armor": 0,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": 0.4,
+        "fire": -0.1,
+        "ice": -0.1
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0.03,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 120,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 8
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 4000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 1,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/sacred_snake.lua"
+    }
+  },
+  {
+    "id": "scar-tribe-shaman",
+    "name": "Scar Tribe Shaman",
+    "health": 115,
+    "experience": 85,
+    "attack": {
+      "min": 0,
+      "max": 10
+    },
+    "armor": 6,
+    "defense": 11,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 156,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 17
+      },
+      "items": [
+        {
+          "itemId": "broken-shamanic-staff",
+          "chance": 0.037
+        },
+        {
+          "itemId": "orc-tooth",
+          "chance": 0.1111
+        },
+        {
+          "itemId": "shamanic-hood",
+          "chance": 0.037
+        },
+        {
+          "itemId": "spear",
+          "chance": 0.5556
+        },
+        {
+          "itemId": "studded-armor",
+          "chance": 0.037
+        },
+        {
+          "itemId": "studded-legs",
+          "chance": 0.1111
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 10
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 2000,
+        "chance": 0.13,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 10,
+          "max": 25
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "energy",
+          "impactKey": "energyhit"
+        }
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 2000,
+        "chance": 0.08,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 5,
+          "max": 30
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "firearea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "heal": {
+          "min": 25,
+          "max": 35
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.5
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/scar_tribe_shaman.lua"
+    },
+    "summons": {
+      "max": 4,
+      "entries": [
+        {
+          "monsterId": "snake",
+          "intervalMs": 2000,
+          "chance": 0.25,
+          "count": 3
+        }
+      ]
+    }
+  },
+  {
+    "id": "scar-tribe-warrior",
+    "name": "Scar Tribe Warrior",
+    "health": 125,
+    "experience": 85,
+    "attack": {
+      "min": 0,
+      "max": 25
+    },
+    "armor": 7,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0.33,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 160,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 8
+      },
+      "items": [
+        {
+          "itemId": "broken-helmet",
+          "chance": 0.0674
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.0562
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.1348
+        },
+        {
+          "itemId": "orc-leather",
+          "chance": 0.0562
+        },
+        {
+          "itemId": "skull-belt",
+          "chance": 0.0112
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/scar_tribe_warrior.lua"
+    }
+  },
+  {
+    "id": "spidris-elite-summon",
+    "name": "Spidris Elite",
+    "health": 5000,
+    "experience": 4000,
+    "attack": {
+      "min": 0,
+      "max": 349
+    },
+    "armor": 30,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "holy": -0.1
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 260,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.95,
+    "corpseTtlMs": 660000,
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/spidris_elitesumom.lua"
+    }
+  },
+  {
+    "id": "troll-marauder",
+    "name": "Troll Marauder",
+    "health": 70,
+    "experience": 40,
+    "attack": {
+      "min": 0,
+      "max": 25
+    },
+    "armor": 8,
+    "defense": 4,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.15,
+        "energy": 0.1,
+        "fire": 0.1,
+        "ice": 0.1,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 120,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 8
+      },
+      "items": [
+        {
+          "itemId": "leather-boots",
+          "chance": 0.0519
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.2468
+        },
+        {
+          "itemId": "silver-amulet",
+          "chance": 0.013
+        },
+        {
+          "itemId": "spear",
+          "chance": 0.2597
+        },
+        {
+          "itemId": "studded-club",
+          "chance": 0.1039
+        },
+        {
+          "itemId": "studded-armor",
+          "chance": 0.0909
+        },
+        {
+          "itemId": "trollroot",
+          "chance": 0.0519
+        },
+        {
+          "itemId": "wooden-shield",
+          "chance": 0.1169
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.95,
+    "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 350,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/troll_marauder.lua"
+    }
+  },
+  {
+    "id": "troll-trained-salamander",
+    "name": "Troll-Trained Salamander",
+    "health": 70,
+    "experience": 23,
+    "attack": {
+      "min": 0,
+      "max": 11
+    },
+    "armor": 1,
+    "defense": 0,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": 0.15
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0.15,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 112,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 11
+      },
+      "items": [
+        {
+          "itemId": "axe",
+          "chance": 0.0508
+        },
+        {
+          "itemId": "bone-club",
+          "chance": 0.0463
+        },
+        {
+          "itemId": "chain-helmet",
+          "chance": 0.063
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.0994
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.0447
+        },
+        {
+          "itemId": "studded-helmet",
+          "chance": 0.0407
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 11
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 5,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.11,
+        "target": {
+          "range": 5
+        },
+        "power": {
+          "min": 4,
+          "max": 6
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "smallearth",
+          "impactKey": "hitbypoison"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/troll-trained_salamander.lua"
+    }
+  }
+]

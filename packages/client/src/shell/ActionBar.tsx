@@ -12,6 +12,7 @@
 import { useState } from 'react';
 import { BOT_SLOTS_PER_SET } from '@draconya/content';
 import type { BotTargetPolicy } from '@draconya/content';
+import { sendIntent } from '../net/current.js';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
 import {
   bot, setActiveSet, setSlotAuto, setTargetingPolicy,
@@ -24,6 +25,7 @@ import { Select } from './ui/Select.js';
 import { LureTargetingModal } from './LureTargetingModal.js';
 import { ActionConfigModal } from './ActionConfigModal.js';
 import { useActionKeys } from './useActionKeys.js';
+import { aimTracker } from '../state/aim.js';
 import {
   TARGET_POLICY_OPTIONS, lureCaption, policyLabel, slotKey, slotTitle, slotView,
 } from './action-bar.js';
@@ -31,6 +33,8 @@ import {
 export function ActionBar() {
   const catalogue = useHudSlice((state) => state.catalogue);
   const slotStates = useHudSlice((state) => state.slotStates);
+  // O que o personagem aprendeu (#624): marca o slot cuja magia ainda não foi comprada.
+  const learnedSpells = useHudSlice((state) => state.learnedSpells);
   const slotResults = useHudSlice((state) => state.slotResults);
   const targetId = useHudSlice((state) => state.targetId);
   const save = useStoreSlice(bot, (state) => state.save);
@@ -70,7 +74,7 @@ export function ActionBar() {
             const key = slotKey(activeSet, index);
             const view = catalogue === null
               ? null
-              : slotView(slots[index] ?? null, catalogue, slotStates[key] ?? null);
+              : slotView(slots[index] ?? null, catalogue, slotStates[key] ?? null, learnedSpells);
             if (view === null) {
               return (
                 <Slot
@@ -79,8 +83,12 @@ export function ActionBar() {
                   empty
                   dashed
                   ariaLabel={`slot ${String(index + 1)} vazio`}
-                  // Slot vazio também abre o modal: é por onde o jogador configura o slot (RF-09).
+                  // Slot vazio não tem o que disparar: o clique (esquerdo ou direito) abre o
+                  // modal — é por onde o jogador configura o slot (RF-09). Sem ⚙ na barra, é a
+                  // única forma de chegar lá; o clique direito continua consistente com os
+                  // slots preenchidos (ADR 0049 decisão 1).
                   onClick={() => { setConfigSlot(index); }}
+                  onContextMenu={(event) => { event.preventDefault(); setConfigSlot(index); }}
                 />
               );
             }
@@ -88,6 +96,8 @@ export function ActionBar() {
             const classNames = [
               view.cooldownMs > 0 ? 'action-slot-cooldown' : null,
               view.auto ? 'action-slot-auto' : null,
+              // Magia ainda não aprendida (#624, ADR 0058 d.5): fica na barra, marcada.
+              view.unlearned ? 'action-slot-unlearned' : null,
             ].filter(Boolean).join(' ');
             const props: SlotProps = {
               size: 36,
@@ -100,12 +110,18 @@ export function ActionBar() {
               // a runa não rodou antes de o jogador tentar disparar.
               title: slotTitle(view, slotResults[key] ?? slotStates[key]?.reason ?? null),
               ariaLabel: `slot ${String(index + 1)}`,
-              // Shift+clique desliga o automático; o clique simples abre o `ActionConfigModal`
-              // (AB-11/#426).
+              // O clique esquerdo DISPARA (ADR 0049 decisão 1) — como no Tibia. Shift+clique
+              // continua desligando o automático, sem disparar (RF-03). Uma ação de ALIADO
+              // (`needsAim`) não tem como o servidor adivinhar quem: o clique arma a MIRA
+              // (`aim.ts`, reutilizável pela #726) em vez de mandar `use-slot` na hora — o
+              // próximo clique no mundo/Batalha completa a intenção.
               onClick: (event) => {
                 if (event.shiftKey) { setSlotAuto(index, false); return; }
-                setConfigSlot(index);
+                if (view.needsAim) { aimTracker.startAim(activeSet, index); return; }
+                sendIntent({ type: 'use-slot', set: activeSet, slot: index });
               },
+              // O clique direito CONFIGURA (ADR 0049 decisão 1) — onde o Tibia também põe.
+              onContextMenu: (event) => { event.preventDefault(); setConfigSlot(index); },
             };
             return <Slot key={index} {...props} />;
           })}

@@ -7,7 +7,7 @@
 // devolveria o problema que o ADR 0007 evita: o painel de inventário re-renderizando porque a
 // mana mexeu.
 
-import type { S2CProps } from '@draconya/protocol';
+import type { FightModeName, S2CProps } from '@draconya/protocol';
 
 export type ActiveCondition = S2CProps<'active-conditions'>['conditions'][number];
 
@@ -38,10 +38,19 @@ export interface SystemLine {
 export interface SkillProgress {
   level: number;
   percent: number;
+  /**
+   * O nível COM o bônus de Loyalty da conta (#628). Ausente é "igual ao base" — a conta sem
+   * degrau, ou um nó `game` anterior à issue. O `percent` é sempre o do nível BASE.
+   */
+  loyaltyLevel?: number;
 }
 
+/** #568: `melee` virou quatro skills na #567 — cada tipo de arma treina a sua. */
 export interface PlayerSkills {
-  melee: SkillProgress;
+  fist: SkillProgress;
+  club: SkillProgress;
+  sword: SkillProgress;
+  axe: SkillProgress;
   distance: SkillProgress;
   magic: SkillProgress;
 }
@@ -114,6 +123,37 @@ export type BestiaryConfig = NonNullable<Catalogue['bestiary']>;
  * contador que nunca desce —, então a tela não soma nada: cada mensagem substitui a anterior.
  */
 export type BestiaryCounts = Readonly<S2CProps<'bestiary'>['counts']>;
+/** Os níveis do Bosstiary por raridade (#629). Ausente do catálogo: o servidor não tem Bosstiary. */
+export type BosstiaryConfig = NonNullable<Catalogue['bosstiary']>;
+/**
+ * O Bosstiary do personagem (#629, ADR 0052 d.1): o registro CRU que o servidor manda — abates
+ * por boss (chave = `raceId`, em texto) e os pontos de boss. Derivado do protocolo, como o
+ * Bestiário: um contador que nunca desce, então a tela não soma nada — cada mensagem substitui a
+ * anterior. O nível de cada boss a tela deriva cruzando com `BosstiaryConfig` (`bosstiary-progress.ts`).
+ */
+export type BosstiaryRegister = Readonly<S2CProps<'bosstiary'>>;
+/** Um Charm do catálogo (M39-02, #602, ADR 0053 d.3): custo, chance e categoria por tier. */
+export type CharmDefinition = Catalogue['charms'][number];
+/**
+ * A economia de Charms do personagem (M39-02, #602, ADR 0052 d.1): o registro CRU que o
+ * servidor manda — pontos/echoes gastos, tier de cada charm e as atribuições por monstro. A
+ * tela deriva ganho/disponível cruzando com `CharmDefinition`/`BestiaryCounts`, do mesmo jeito
+ * que já deriva o bônus de XP do Bestiário (`bestiary-progress.ts`).
+ */
+export type CharmsRegister = Readonly<S2CProps<'charms'>>;
+/** Uma magia do catálogo (#624): o que a tela de aprendizado lista, com `learnPrice` e requisitos. */
+export type SpellDefinition = Catalogue['bot']['spells'][number];
+/**
+ * O Treino do personagem (#631, ADR 0059): o banco de offline training, a skill do livro, as
+ * exercise weapons que ele carrega com as cargas RESTANTES e a que o Treino em curso gasta. O que
+ * cada carga rende e o livro oferece é do catálogo (`TrainingRules`, fixado na sessão).
+ */
+export type TrainingRegister = Readonly<S2CProps<'training-state'>>;
+/** As regras do Treino do catálogo (#631). Ausente: este servidor não tem Treino. */
+export type TrainingRules = NonNullable<Catalogue['training']>;
+/** As sete bênçãos e o preço por level (#570). Ausente do catálogo: este servidor não as tem. */
+export type BlessingsConfig = NonNullable<Catalogue['blessings']>;
+export type BlessingDefinition = BlessingsConfig['list'][number];
 /** A party (#196): quem está nela, do `session-state` e do `party-state`. */
 export type PartyView = Readonly<S2CProps<'party-state'>>;
 export type PartyBagView = Readonly<S2CProps<'party-bag'>>;
@@ -136,6 +176,19 @@ export type PartyEndVoteView = Readonly<S2CProps<'party-end-vote'>>;
  * cliente não fabrica o que o servidor não mandou).
  */
 export type FollowStateView = Readonly<S2CProps<'follow-state'>>;
+/**
+ * A saída da hunt pendente do PRÓPRIO personagem (#802): o `exit-pending` com `active: true`,
+ * mais o instante LOCAL em que a mensagem chegou — é ele que faz a contagem andar entre duas
+ * mensagens, porque `remainingMs` é uma DURAÇÃO medida no servidor e o relógio de lá não é o
+ * daqui. `null` é "nada pendente": o servidor disse `active: false`, a sessão acabou ou o
+ * personagem reanexou (o servidor reenvia se ainda houver).
+ */
+export interface ExitPendingView {
+  readonly reason: 'manual-exit' | 'exit-rule';
+  readonly phase: 'countdown' | 'in-combat';
+  readonly remainingMs: number;
+  readonly receivedAtMs: number;
+}
 /**
  * A seção PARTY do analisador (§32, ADR 0035 d.11) — o mesmo bloco de `analyzer.party` e de
  * `session-state.partySummary`. Ausente é solo, ou nó `game` anterior ao #400: nunca "0
@@ -218,8 +271,33 @@ export interface HudState {
   readonly staminaMs: number;
   readonly speed: number;
   readonly skills: PlayerSkills;
+  /**
+   * O bônus de Loyalty da conta (#628, ADR 0052 decisão 5), em percentual inteiro; `0` é "sem
+   * degrau". Fixado no ticket, constante pela sessão. Chega em `player-stats` e em
+   * `session-state.self`, como `skills`.
+   */
+  readonly loyaltyBonusPercent: number;
+  /**
+   * Pontos de alma (#593): `soulMax` é da vocação — `0` é "sem vocação escolhida", o mesmo
+   * "sem teto para mostrar" que `vocationId: null` já significa. Chega em `player-stats` e em
+   * `session-state.self`, como `speed`/`skills`.
+   */
+  readonly soul: number;
+  readonly soulMax: number;
   /** A vocação (#154): `null` até a escolha. Chega em `player-stats` e em `session-state`. */
   readonly vocationId: string | null;
+  /**
+   * Promovido (#566, ADR 0042 decisão 1). A tela troca o nome exibido pelo `promotion.name` da
+   * vocação (`catalogue.vocations`) quando `true`. Chega em `player-stats`/`session-state`.
+   */
+  readonly promoted: boolean;
+  /**
+   * A postura de luta (M30-03, #550): a que o SERVIDOR confirmou em `player-stats`, nunca a que o
+   * clique pediu — o cliente não calcula nem antecipa o efeito (invariante 4), então o botão só
+   * marca o novo modo quando o `player-stats` volta. `attack` até chegar: é o `FIGHTMODE_ATTACK`
+   * do Canary, o que o servidor considera para quem nunca escolheu.
+   */
+  readonly fightMode: FightModeName;
 
   /** Ida e volta medida pelo `ping`/`pong`, ou `null` enquanto não houve nenhum. */
   readonly latencyMs: number | null;
@@ -279,6 +357,37 @@ export interface HudState {
    */
   readonly bestiary: BestiaryCounts | null;
   /**
+   * A economia de Charms (M39-02, #602). `null` até chegar — o primeiro segundo de toda
+   * conexão, ou um nó anterior a esta issue. SUBSTITUI: é o registro inteiro, não um delta.
+   */
+  readonly charms: CharmsRegister | null;
+  /**
+   * O Bosstiary (#629). `null` até chegar — o primeiro segundo de toda conexão, ou um nó anterior a
+   * esta issue —, pela mesma razão do Bestiário: um Bosstiary que abre em zero afirma "nunca
+   * abateu um boss", e o servidor ainda não disse isso. SUBSTITUI: é o registro inteiro.
+   */
+  readonly bosstiary: BosstiaryRegister | null;
+  /**
+   * O Treino (#631, ADR 0059). `null` até chegar — o primeiro segundo de toda conexão, ou um nó
+   * `game` sem Treino. SUBSTITUI: é o estado inteiro (banco, skill do livro, armas e cargas), não
+   * um delta — cada golpe do Treino reenvia as cargas.
+   */
+  readonly training: TrainingRegister | null;
+  /**
+   * As sete bênçãos PvE (#570, ADR 0052): o BITMASK — um bit por `order` do catálogo
+   * (`catalogue.blessings.list`), nunca uma lista de nomes (invariante 6: a tela resolve o
+   * nome pelo catálogo, o servidor só manda o número). `0` até o attach/enter responder — é
+   * também "nenhuma bênção", o estado real de quem nunca comprou.
+   */
+  readonly blessings: number;
+  /**
+   * As magias que o personagem APRENDEU (#624, ADR 0058): ids de `catalogue.bot.spells`. `null`
+   * até chegar — o primeiro segundo de toda conexão, ou um nó anterior a esta issue —, e é o que
+   * impede a barra de marcar TODO slot como "não aprendida" antes de o servidor dizer o que ele
+   * sabe. SUBSTITUI: é o registro inteiro, não um delta.
+   */
+  readonly learnedSpells: readonly string[] | null;
+  /**
    * A party desta sessão (#196). `null` é solo — e é o que todo `session-state` sem o bloco
    * diz. A bolsa só existe no modo compartilhado; o último settlement fica até o próximo
    * `session-state` limpar, para a tela dizer "vendeu N, você levou M" depois de alguém sair.
@@ -301,7 +410,19 @@ export interface HudState {
    * `follow-state`; a tela só mostra "Follow interrompido" quando `active === false`.
    */
   readonly followState: FollowStateView | null;
+  /**
+   * A saída pendente do PRÓPRIO personagem (#802): `null` sem nenhuma. A tela só a espelha — quem
+   * conclui a saída, e quando, é o servidor; o cliente manda `leave-hunt` e `cancel-exit`.
+   */
+  readonly exitPending: ExitPendingView | null;
 
+  /**
+   * A janela do cadáver ABERTA agora (#722, ADR 0048 d.4): o que o servidor mandou no último
+   * `corpse-contents` — `null` até o jogador abrir um, ou depois que ele fecha. É estado de
+   * TELA, não de jogo (DT-03 da spec da issue): não persiste entre sessões, e reanexar não a
+   * reabre sozinha — quem quiser ver o cadáver de novo clica nele outra vez.
+   */
+  readonly corpse: S2CProps<'corpse-contents'> | null;
   readonly targetId: number | null;
   readonly conditions: readonly ActiveCondition[];
   readonly conditionsReceivedAtMs: number;
@@ -323,11 +444,19 @@ export const INITIAL_HUD: HudState = {
   capacity: 0, gold: 0, staminaMs: 0,
   speed: 0,
   skills: {
-    melee: { level: 0, percent: 0 },
+    fist: { level: 0, percent: 0 },
+    club: { level: 0, percent: 0 },
+    sword: { level: 0, percent: 0 },
+    axe: { level: 0, percent: 0 },
     distance: { level: 0, percent: 0 },
     magic: { level: 0, percent: 0 },
   },
+  loyaltyBonusPercent: 0,
+  soul: 0,
+  soulMax: 0,
   vocationId: null,
+  promoted: false,
+  fightMode: 'attack',
   latencyMs: null,
   connection: 'idle',
   onlinePlayers: null,
@@ -339,12 +468,19 @@ export const INITIAL_HUD: HudState = {
   slotStates: {},
   slotResults: {},
   bestiary: null,
+  charms: null,
+  bosstiary: null,
+  training: null,
+  blessings: 0,
+  learnedSpells: null,
   party: null,
   partyBag: null,
   lastSettlement: null,
   partySpending: null,
   partyEndVote: null,
   followState: null,
+  exitPending: null,
+  corpse: null,
   targetId: null,
   conditions: [],
   conditionsReceivedAtMs: 0,

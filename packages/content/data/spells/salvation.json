@@ -4,6 +4,7 @@
   "description": "Cura você.",
   "vocationId": "paladin",
   "minLevel": 60,
+  "learnPrice": 8000,
   "manaCost": 210,
   "group": "healing",
   "groupCooldownMs": 1000,
@@ -17,7 +18,12 @@
       "skillMax": 20,
       "baseMin": 75,
       "baseMax": 125
+    },
+    "dispel": {
+      "types": [
+        "paralyze"
+      ]
     }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Fórmula do Canary (`data/scripts/spells/healing/salvation.lua`, main, 2026-09-24)."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Fórmula do Canary (`data/scripts/spells/healing/salvation.lua`, main, 2026-09-24). #592: dispel CONDITION_PARALYZE ao lado da cura, conferido no script do Canary (COMBAT_PARAM_DISPEL)."
 }

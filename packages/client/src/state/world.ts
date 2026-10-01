@@ -12,11 +12,14 @@
 //
 // Quem lê isto é o laço de render do canvas (FUN-23), a cada quadro, direto. Nunca por prop.
 
-import type { OutfitColors, S2CProps, DamageType } from '@draconya/protocol';
+import type {
+  CreatureLight, CreatureVoices, DamageType, MonsterRace, OutfitColors, S2CProps,
+} from '@draconya/protocol';
 import type { TileWindow } from '../world/camera.js';
 import {
   FLOATING_TEXT_MERGE_WINDOW_MS, mergeFloatingText,
 } from '../world/effects.js';
+import type { SelfLight } from '../world/light.js';
 
 /** Posição em tiles. Igual à do protocolo. */
 export interface Point {
@@ -47,6 +50,25 @@ export interface Creature {
    * chegarem iguais ao desenho.
    */
   readonly colors?: OutfitColors;
+  /**
+   * A apresentação do MONSTRO (#620), que o servidor manda no `creature-appear` e no
+   * `session-state` e que o cliente só DESENHA — nenhum deles entra em combate. Todos ausentes
+   * quando o servidor não os mandou (um nó `game` anterior, o jogador, o NPC do explorador), e a
+   * ausência é o neutro: sem addon, `blood`, sem luz e mudo. O store não inventa o default, pela
+   * mesma razão de `colors`.
+   *
+   * Os addons do outfit, a máscara do Tibia: 1 = primeiro, 2 = segundo, 3 = os dois.
+   */
+  readonly addons?: number;
+  /** A raça: a cor do número do golpe físico que a atinge (`world/effects.ts`). */
+  readonly race?: MonsterRace;
+  /** A luz que carrega — o viewport abre um clarão dessa cor em volta dela. */
+  readonly light?: CreatureLight;
+  /**
+   * As falas periódicas. **Quem sorteia é o cliente** (`world/speech.ts`), nunca o servidor nem o
+   * `Rng` da sessão: fala não muda resultado nenhum.
+   */
+  readonly voices?: CreatureVoices;
   name: string;
   health: number;
   maxHealth: number;
@@ -112,6 +134,13 @@ export interface FloatingText {
    * diferentes no mesmo tile NÃO se somam — o jogador não pode ler fogo como gelo.
    */
   readonly damageType?: DamageType;
+  /**
+   * A RAÇA de quem levou o golpe (#620), fotografada quando ele chegou — o golpe que mata chega
+   * no mesmo lote que o `creature-disappear`, e a criatura já não existe quando o viewport
+   * desenha. Só o golpe FÍSICO a usa (`floatingTextColor`): o Canary pinta esse número pela raça
+   * do alvo. Ausente é `blood`, e entra na chave do merge como `damageType`.
+   */
+  readonly race?: MonsterRace;
   readonly startedAtMs: number;
   /**
    * Onde o texto está ancorado: o ponto do IMPACTO, fotografado quando o golpe chegou (RF-04).
@@ -128,6 +157,12 @@ export interface World {
   /** O ambiente da cena (FUN-121): `cavern` escurece o mundo. Superfície até alguém dizer. */
   ambience: 'surface' | 'cavern';
   /**
+   * A luz do próprio jogador (#623: Light/Great/Ultimate Light), do `active-conditions`. `null` é
+   * sem luz. Só apresentação: o pintor a lê para clarear o `cavern` (`world/light.ts`); nenhuma
+   * regra a usa, e ela vem do servidor — o cliente não decide que há luz (invariante 4).
+   */
+  selfLight: SelfLight | null;
+  /**
    * Qual criatura é o próprio jogador. A câmera segue esta; sem ela, não há em quem centrar.
    *
    * Fica `null` até a FUN-32 (`session-state`) dizer quem é: o `welcome` traz o
@@ -143,6 +178,26 @@ export interface World {
    * precisa saber que um cadáver caiu sem varrer o mapa a cada quadro.
    */
   groundItemsVersion: number;
+  /**
+   * O overlay de cenário usável (#729, ADR 0050 d.7): por tile (`"x,y,z"`), a lista de
+   * substituições de id de aparência que este tile tem sobre a pilha ESTÁTICA de `things/` — a
+   * porta trocou o id fechado pelo aberto, o capim trocou o alto pelo cortado. Chega por
+   * `tile-update` (delta) e por `session-state.world.tileUpdates` (o overlay inteiro, que
+   * SUBSTITUI — como `groundItems`). O `world` não avisa ninguém (ADR 0007); quem lê é o
+   * viewport, no próprio pintor de pilha.
+   */
+  readonly tileOverrides: Map<string, ReadonlyArray<{ readonly from: number; readonly to: number }>>;
+  /** Sobe a cada mudança em `tileOverrides` — a MESMA razão de `groundItemsVersion`. */
+  tileOverridesVersion: number;
+  /**
+   * Os campos de tile ativos (#561, M31-06): fogo, veneno, energia, pelo id de CONTEÚDO
+   * (`FieldSpec.id`, não numérico como o de `groundItems` — relançar o MESMO reinicia).
+   * Desenhados na pilha de CADA tile que cobrem, como itens comuns — a MESMA regra dos
+   * cadáveres.
+   */
+  readonly fields: Map<string, FieldTile>;
+  /** Sobe a cada mudança em `fields` — a MESMA razão de `groundItemsVersion`. */
+  fieldsVersion: number;
   /** A janela de tiles visíveis na tela agora (FUN-23, #254). Atualizada pelo viewport. */
   visibleWindow: TileWindow | null;
   readonly effects: Effect[];
@@ -155,14 +210,28 @@ export interface GroundItem {
   readonly id: number;
   readonly position: Point;
   readonly appearanceId: number;
+  /** Tem loot pendente (#722, ADR 0048 d.4) — o destaque de loot no mundo. Ausente: sem loot. */
+  readonly lootable?: boolean;
+}
+
+/** Um campo de tile ativo (#561, M31-06): quais tiles, e com que arte. */
+export interface FieldTile {
+  readonly id: string;
+  readonly tiles: readonly Point[];
+  readonly appearanceId: number;
 }
 
 export const world: World = {
   instanceId: null,
   mapId: null,
   ambience: 'surface',
+  selfLight: null,
   groundItems: new Map(),
   groundItemsVersion: 0,
+  tileOverrides: new Map(),
+  tileOverridesVersion: 0,
+  fields: new Map(),
+  fieldsVersion: 0,
   selfId: null,
   visibleWindow: null,
   creatures: new Map(),
@@ -170,6 +239,39 @@ export const world: World = {
   missiles: [],
   texts: [],
 };
+
+/** A chave de `tileOverrides` — a mesma forma `"x,y,z"` usada em `world/tile-approach.ts`. */
+export function tileOverrideKey(position: Point): string {
+  return `${String(position.x)},${String(position.y)},${String(position.z)}`;
+}
+
+/**
+ * Um `tile-update` chegou (#729): substitui o overlay DESTE tile pelo `replace` novo — nunca
+ * acumula por cima do que já havia, porque o servidor já manda o par `{ from, to }` RESOLVIDO
+ * contra o estado atual, e um `replace` vazio (o servidor nunca manda isso hoje, mas o schema
+ * permite) apaga a entrada — o mesmo `delete` de `ground-item-disappear`.
+ */
+export function applyTileUpdate(
+  position: Point, replace: ReadonlyArray<{ readonly from: number; readonly to: number }>,
+): void {
+  const key = tileOverrideKey(position);
+  if (replace.length === 0) world.tileOverrides.delete(key);
+  else world.tileOverrides.set(key, replace);
+  world.tileOverridesVersion += 1;
+}
+
+/**
+ * O `session-state` chegou: o overlay inteiro SUBSTITUI (#729, a mesma regra de `groundItems`
+ * no `session-state` — mesclar deixaria uma porta que fechou enquanto ninguém olhava desenhada
+ * aberta para sempre).
+ */
+export function replaceTileOverrides(
+  updates: ReadonlyArray<{ readonly position: Point; readonly replace: ReadonlyArray<{ readonly from: number; readonly to: number }> }>,
+): void {
+  world.tileOverrides.clear();
+  for (const update of updates) world.tileOverrides.set(tileOverrideKey(update.position), update.replace);
+  world.tileOverridesVersion += 1;
+}
 
 /**
  * Teto de cada lista de transitórios.
@@ -224,7 +326,10 @@ export function addFloatingText(
   // ponto de IMPACTO ao qual o texto fica ancorado (RF-04): ele não segue a criatura depois.
   const creature = world.creatures.get(creatureId);
   const position = creature === undefined ? null : interpolate(creature, startedAtMs);
-  const merged = mergeTargetAt(position, kind, damageType, startedAtMs);
+  // A raça do alvo (#620): só a apresentação lê, e só o golpe físico a usa. Fotografada aqui
+  // pelo mesmo motivo da posição.
+  const race = creature?.race;
+  const merged = mergeTargetAt(position, kind, damageType, race, startedAtMs);
   if (merged !== null) {
     mergeFloatingText(merged, amount);
     return merged;
@@ -236,6 +341,7 @@ export function addFloatingText(
     amount,
     kind,
     ...(damageType === undefined ? {} : { damageType }),
+    ...(race === undefined ? {} : { race }),
     startedAtMs,
     position,
   };
@@ -248,15 +354,16 @@ export function addFloatingText(
  *
  * Sem posição não há merge: não existe "mesmo tile" de uma criatura que o cliente nunca viu. A
  * varredura é de trás para a frente porque o candidato é o mais RECENTE — e o `kind` e o
- * `damageType` entram na chave porque cores diferentes não podem virar uma soma só.
+ * `damageType` e a raça (#620) entram na chave porque cores diferentes não podem virar uma soma só.
  */
 function mergeTargetAt(
-  position: Point | null, kind: HitKind, damageType: DamageType | undefined, nowMs: number,
+  position: Point | null, kind: HitKind, damageType: DamageType | undefined,
+  race: MonsterRace | undefined, nowMs: number,
 ): FloatingText | null {
   if (position === null) return null;
   for (let i = world.texts.length - 1; i >= 0; i -= 1) {
     const text = world.texts[i] as FloatingText;
-    if (text.kind !== kind || text.damageType !== damageType) continue;
+    if (text.kind !== kind || text.damageType !== damageType || text.race !== race) continue;
     const anchor = text.position;
     if (anchor === null) continue;
     if (anchor.x !== position.x || anchor.y !== position.y || anchor.z !== position.z) continue;
@@ -283,8 +390,15 @@ export function enterInstance(
   world.instanceId = instanceId;
   world.mapId = mapId;
   world.ambience = ambience;
+  // A luz é do personagem, não da instância — mas o `active-conditions` chega logo depois do
+  // `instance-enter` de toda reanexação, e uma luz de antes da troca não deve acender a nova.
+  world.selfLight = null;
   world.groundItems.clear();
   world.groundItemsVersion += 1;
+  world.tileOverrides.clear();
+  world.tileOverridesVersion += 1;
+  world.fields.clear();
+  world.fieldsVersion += 1;
   world.selfId = null;
   world.creatures.clear();
   clearTransients();

@@ -1,0 +1,1504 @@
+[
+  {
+    "id": "amethyst-necklace",
+    "name": "amethyst necklace",
+    "kind": "amulet",
+    "weight": 4.3,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "amulet-of-loss",
+    "name": "amulet of loss",
+    "kind": "amulet",
+    "weight": 4.2,
+    "value": 45000,
+    "slot": "neck",
+    "charges": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ancient-amulet",
+    "name": "ancient amulet",
+    "kind": "amulet",
+    "weight": 8.4,
+    "value": 200,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "beetle-necklace",
+    "name": "beetle necklace",
+    "kind": "amulet",
+    "weight": 8.2,
+    "value": 1500,
+    "slot": "neck",
+    "bonuses": {
+      "speed": 2
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bonfire-amulet",
+    "name": "bonfire amulet",
+    "kind": "amulet",
+    "weight": 7,
+    "value": 0,
+    "slot": "neck",
+    "charges": 5,
+    "requires": {
+      "level": 80
+    },
+    "absorb": {
+      "fire": {
+        "percent": 40
+      },
+      "physical": {
+        "percent": 60
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "broken-amulet",
+    "name": "broken amulet",
+    "kind": "amulet",
+    "weight": 4.2,
+    "value": 50000,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bronze-amulet",
+    "name": "bronze amulet",
+    "kind": "amulet",
+    "weight": 5,
+    "value": 50,
+    "slot": "neck",
+    "charges": 200,
+    "absorb": {
+      "manadrain": {
+        "percent": 20
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bronze-medal",
+    "name": "bronze medal",
+    "kind": "amulet",
+    "weight": 12,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bronze-necklace",
+    "name": "bronze necklace",
+    "kind": "amulet",
+    "weight": 4.1,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "candy-necklace",
+    "name": "candy necklace",
+    "kind": "amulet",
+    "weight": 5.1,
+    "value": 0,
+    "slot": "neck",
+    "armor": 2,
+    "requires": {
+      "level": 220
+    },
+    "absorb": {
+      "earth": {
+        "percent": -5
+      },
+      "energy": {
+        "percent": 6
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cobra-amulet",
+    "name": "cobra amulet",
+    "kind": "amulet",
+    "weight": 5.3,
+    "value": 0,
+    "slot": "neck",
+    "armor": 4,
+    "requires": {
+      "level": 250
+    },
+    "absorb": {
+      "death": {
+        "percent": 9
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "collar-of-blue-plasma",
+    "name": "collar of blue plasma",
+    "kind": "amulet",
+    "weight": 5,
+    "value": 0,
+    "slot": "neck",
+    "durationMs": 1800000,
+    "requires": {
+      "level": 150,
+      "vocationId": "paladin"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 4
+        },
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "collar-of-green-plasma",
+    "name": "collar of green plasma",
+    "kind": "amulet",
+    "weight": 5,
+    "value": 0,
+    "slot": "neck",
+    "durationMs": 1800000,
+    "requires": {
+      "level": 150,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "regeneration": {
+        "healthGain": 2,
+        "healthTicksMs": 6000,
+        "manaGain": 8,
+        "manaTicksMs": 6000
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "collar-of-red-plasma",
+    "name": "collar of red plasma",
+    "kind": "amulet",
+    "weight": 5,
+    "value": 0,
+    "slot": "neck",
+    "durationMs": 1800000,
+    "requires": {
+      "level": 150,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "club",
+          "amount": 4
+        },
+        {
+          "skillId": "sword",
+          "amount": 4
+        },
+        {
+          "skillId": "axe",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "crystal-necklace",
+    "name": "crystal necklace",
+    "kind": "amulet",
+    "weight": 4.9,
+    "value": 400,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "demonbone-amulet",
+    "name": "demonbone amulet",
+    "kind": "amulet",
+    "weight": 6.9,
+    "value": 32000,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "diamond-necklace",
+    "name": "diamond necklace",
+    "kind": "amulet",
+    "weight": 5,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "elven-amulet",
+    "name": "elven amulet",
+    "kind": "amulet",
+    "weight": 2.7,
+    "value": 100,
+    "slot": "neck",
+    "charges": 50,
+    "absorb": {
+      "death": {
+        "percent": 5
+      },
+      "energy": {
+        "percent": 5
+      },
+      "fire": {
+        "percent": 5
+      },
+      "holy": {
+        "percent": 5
+      },
+      "ice": {
+        "percent": 5
+      },
+      "physical": {
+        "percent": 5
+      },
+      "earth": {
+        "percent": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "emerald-necklace",
+    "name": "emerald necklace",
+    "kind": "amulet",
+    "weight": 4.5,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "enchanted-pendulet",
+    "name": "enchanted pendulet",
+    "kind": "amulet",
+    "weight": 6.5,
+    "value": 0,
+    "slot": "neck",
+    "requires": {
+      "level": 180,
+      "vocationId": "paladin"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "enchanted-sleep-shawl",
+    "name": "enchanted sleep shawl",
+    "kind": "amulet",
+    "weight": 4.3,
+    "value": 0,
+    "slot": "neck",
+    "requires": {
+      "level": 180,
+      "vocationId": "paladin"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "enchanted-theurgic-amulet",
+    "name": "enchanted theurgic amulet",
+    "kind": "amulet",
+    "weight": 5,
+    "value": 0,
+    "slot": "neck",
+    "armor": 2,
+    "durationMs": 7200000,
+    "requires": {
+      "level": 220,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "physical": {
+        "percent": 3
+      },
+      "earth": {
+        "percent": 14
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "enchanted-turtle-amulet",
+    "name": "enchanted turtle amulet",
+    "kind": "amulet",
+    "weight": 4.8,
+    "value": 0,
+    "slot": "neck",
+    "requires": {
+      "level": 200,
+      "vocationId": "knight"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "enchanted-werewolf-amulet",
+    "name": "enchanted werewolf amulet",
+    "kind": "amulet",
+    "weight": 5.5,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "exotic-amulet",
+    "name": "exotic amulet",
+    "kind": "amulet",
+    "weight": 7.3,
+    "value": 0,
+    "slot": "neck",
+    "requires": {
+      "level": 180
+    },
+    "absorb": {
+      "physical": {
+        "percent": 4
+      },
+      "earth": {
+        "percent": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ferumbras-amulet",
+    "name": "Ferumbras' amulet",
+    "kind": "amulet",
+    "weight": 5,
+    "value": 0,
+    "slot": "neck",
+    "armor": 3,
+    "requires": {
+      "level": 100
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "foxtail-amulet",
+    "name": "foxtail amulet",
+    "kind": "amulet",
+    "weight": 5,
+    "value": 0,
+    "slot": "neck",
+    "armor": 2,
+    "requires": {
+      "level": 100
+    },
+    "absorb": {
+      "physical": {
+        "percent": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "friendship-amulet",
+    "name": "friendship amulet",
+    "kind": "amulet",
+    "weight": 5.2,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "garlic-necklace",
+    "name": "garlic necklace",
+    "kind": "amulet",
+    "weight": 3.8,
+    "value": 50,
+    "slot": "neck",
+    "charges": 150,
+    "absorb": {
+      "lifedrain": {
+        "percent": 20
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "garnet-necklace",
+    "name": "garnet necklace",
+    "kind": "amulet",
+    "weight": 5,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "gearwheel-chain",
+    "name": "gearwheel chain",
+    "kind": "amulet",
+    "weight": 10,
+    "value": 5000,
+    "slot": "neck",
+    "armor": 3,
+    "requires": {
+      "level": 75
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "gill-necklace",
+    "name": "gill necklace",
+    "kind": "amulet",
+    "weight": 4.1,
+    "value": 0,
+    "slot": "neck",
+    "charges": 750,
+    "requires": {
+      "level": 150
+    },
+    "absorb": {
+      "physical": {
+        "percent": 15
+      },
+      "earth": {
+        "percent": 10
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "glooth-amulet",
+    "name": "glooth amulet",
+    "kind": "amulet",
+    "weight": 2.2,
+    "value": 2000,
+    "slot": "neck",
+    "charges": 20,
+    "requires": {
+      "level": 75,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "death": {
+        "percent": 10
+      },
+      "energy": {
+        "percent": 10
+      },
+      "fire": {
+        "percent": 10
+      },
+      "holy": {
+        "percent": 10
+      },
+      "ice": {
+        "percent": 10
+      },
+      "physical": {
+        "percent": 10
+      },
+      "earth": {
+        "percent": 10
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "glowing-rubbish-amulet",
+    "name": "glowing rubbish amulet",
+    "kind": "amulet",
+    "weight": 5.09,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "gold-medal",
+    "name": "gold medal",
+    "kind": "amulet",
+    "weight": 12.4,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "golden-amulet",
+    "name": "golden amulet",
+    "kind": "amulet",
+    "weight": 8.3,
+    "value": 2000,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "golden-hyaena-pendant",
+    "name": "golden hyaena pendant",
+    "kind": "amulet",
+    "weight": 3.5,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "golden-scorpion-pendant",
+    "name": "golden scorpion pendant",
+    "kind": "amulet",
+    "weight": 3,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "jade-amulet",
+    "name": "jade amulet",
+    "kind": "amulet",
+    "weight": 4,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "kosheis-ancient-amulet",
+    "name": "Koshei's ancient amulet",
+    "kind": "amulet",
+    "weight": 5.5,
+    "value": 0,
+    "slot": "neck",
+    "absorb": {
+      "death": {
+        "percent": 8
+      },
+      "holy": {
+        "percent": -50
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "leviathans-amulet",
+    "name": "leviathan's amulet",
+    "kind": "amulet",
+    "weight": 7,
+    "value": 3000,
+    "slot": "neck",
+    "charges": 5,
+    "requires": {
+      "level": 80
+    },
+    "absorb": {
+      "ice": {
+        "percent": 40
+      },
+      "physical": {
+        "percent": 60
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lightning-pendant",
+    "name": "lightning pendant",
+    "kind": "amulet",
+    "weight": 5,
+    "value": 1500,
+    "slot": "neck",
+    "charges": 200,
+    "requires": {
+      "level": 60
+    },
+    "absorb": {
+      "energy": {
+        "percent": 20
+      },
+      "earth": {
+        "percent": -10
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lion-amulet",
+    "name": "lion amulet",
+    "kind": "amulet",
+    "weight": 5.2,
+    "value": 0,
+    "slot": "neck",
+    "armor": 3,
+    "requires": {
+      "level": 230
+    },
+    "absorb": {
+      "ice": {
+        "percent": 7
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lucky-clover-amulet",
+    "name": "lucky clover amulet",
+    "kind": "amulet",
+    "weight": 1.5,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "magma-amulet",
+    "name": "magma amulet",
+    "kind": "amulet",
+    "weight": 5,
+    "value": 1500,
+    "slot": "neck",
+    "charges": 200,
+    "requires": {
+      "level": 60
+    },
+    "absorb": {
+      "fire": {
+        "percent": 20
+      },
+      "ice": {
+        "percent": -10
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "necklace-of-the-deep",
+    "name": "necklace of the deep",
+    "kind": "amulet",
+    "weight": 5.09,
+    "value": 3000,
+    "slot": "neck",
+    "charges": 50,
+    "requires": {
+      "level": 120
+    },
+    "absorb": {
+      "lifedrain": {
+        "percent": 50
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "note-about-two-souls",
+    "name": "note about two souls",
+    "kind": "amulet",
+    "weight": 0.5,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "onyx-pendant",
+    "name": "onyx pendant",
+    "kind": "amulet",
+    "weight": 8.5,
+    "value": 3500,
+    "slot": "neck",
+    "armor": 2,
+    "requires": {
+      "level": 60
+    },
+    "absorb": {
+      "death": {
+        "percent": 2
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ornamented-brooch",
+    "name": "ornamented brooch",
+    "kind": "amulet",
+    "weight": 8.4,
+    "value": 0,
+    "slot": "neck",
+    "armor": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "paw-amulet",
+    "name": "paw amulet",
+    "kind": "amulet",
+    "weight": 4.2,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "pendulet",
+    "name": "pendulet",
+    "kind": "amulet",
+    "weight": 6.5,
+    "value": 0,
+    "slot": "neck",
+    "requires": {
+      "level": 180,
+      "vocationId": "paladin"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "platinum-amulet",
+    "name": "platinum amulet",
+    "kind": "amulet",
+    "weight": 6,
+    "value": 2500,
+    "slot": "neck",
+    "armor": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "prismatic-necklace",
+    "name": "prismatic necklace",
+    "kind": "amulet",
+    "weight": 6.5,
+    "value": 0,
+    "slot": "neck",
+    "charges": 750,
+    "requires": {
+      "level": 150
+    },
+    "absorb": {
+      "energy": {
+        "percent": 15
+      },
+      "physical": {
+        "percent": 10
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "protection-amulet",
+    "name": "protection amulet",
+    "kind": "amulet",
+    "weight": 5.5,
+    "value": 100,
+    "slot": "neck",
+    "charges": 250,
+    "absorb": {
+      "physical": {
+        "percent": 6
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rainbow-amulet",
+    "name": "rainbow amulet",
+    "kind": "amulet",
+    "weight": 5.7,
+    "value": 0,
+    "slot": "neck",
+    "armor": 3,
+    "requires": {
+      "level": 220
+    },
+    "absorb": {
+      "fire": {
+        "percent": 6
+      },
+      "ice": {
+        "percent": -10
+      },
+      "physical": {
+        "percent": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rainbow-necklace",
+    "name": "rainbow necklace",
+    "kind": "amulet",
+    "weight": 4.9,
+    "value": 0,
+    "slot": "neck",
+    "armor": 2,
+    "requires": {
+      "level": 220
+    },
+    "absorb": {
+      "fire": {
+        "percent": 6
+      },
+      "ice": {
+        "percent": -5
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rhodolith-necklace",
+    "name": "rhodolith necklace",
+    "kind": "amulet",
+    "weight": 5.5,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rubbish-amulet",
+    "name": "rubbish amulet",
+    "kind": "amulet",
+    "weight": 5.09,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ruby-necklace",
+    "name": "ruby necklace",
+    "kind": "amulet",
+    "weight": 5.7,
+    "value": 2000,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sacred-tree-amulet",
+    "name": "sacred tree amulet",
+    "kind": "amulet",
+    "weight": 7,
+    "value": 3000,
+    "slot": "neck",
+    "charges": 5,
+    "requires": {
+      "level": 80
+    },
+    "absorb": {
+      "physical": {
+        "percent": 60
+      },
+      "earth": {
+        "percent": 40
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sapphire-amulet",
+    "name": "sapphire amulet",
+    "kind": "amulet",
+    "weight": 6.8,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sapphire-necklace",
+    "name": "sapphire necklace",
+    "kind": "amulet",
+    "weight": 6,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "scarab-amulet",
+    "name": "scarab amulet",
+    "kind": "amulet",
+    "weight": 7.7,
+    "value": 200,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "scarf",
+    "name": "scarf",
+    "kind": "amulet",
+    "weight": 2,
+    "value": 0,
+    "slot": "neck",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "shockwave-amulet",
+    "name": "shockwave amulet",
+    "kind": "amulet",
+    "weight": 7,
+    "value": 3000,
+    "slot": "neck",
+    "charges": 5,
+    "requires": {
+      "level": 80
+    },
+    "absorb": {
+      "energy": {
+        "percent": 40
+      },
+      "physical": {
+        "percent": 60
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "shrunken-head-necklace",
+    "name": "shrunken head necklace",
+    "kind": "amulet",
+    "weight": 5.5,
+    "value": 0,
+    "slot": "neck",
+    "requires": {
+      "level": 150
+    },
+    "bonuses": {
+      "speed": 10
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "silver-amulet",
+    "name": "silver amulet",
+    "kind": "amulet",
+    "weight": 5,
+    "value": 50,
+    "slot": "neck",
+    "charges": 200,
+    "absorb": {
+      "earth": {
+        "percent": 10
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "silver-medal",
+    "name": "silver medal",
+    "kind": "amulet",
+    "weight": 12.2,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "silver-necklace",
+    "name": "silver necklace",
+    "kind": "amulet",
+    "weight": 4.8,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sleep-shawl",
+    "name": "sleep shawl",
+    "kind": "amulet",
+    "weight": 4.3,
+    "value": 0,
+    "slot": "neck",
+    "requires": {
+      "level": 180,
+      "vocationId": "paladin"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "star-amulet",
+    "name": "star amulet",
+    "kind": "amulet",
+    "weight": 6.1,
+    "value": 500,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "stone-skin-amulet",
+    "name": "stone skin amulet",
+    "kind": "amulet",
+    "weight": 7,
+    "value": 500,
+    "slot": "neck",
+    "charges": 5,
+    "absorb": {
+      "death": {
+        "percent": 80
+      },
+      "physical": {
+        "percent": 80
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "strange-amulet",
+    "name": "strange amulet",
+    "kind": "amulet",
+    "weight": 6,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "strange-talisman",
+    "name": "strange talisman",
+    "kind": "amulet",
+    "weight": 2.9,
+    "value": 30,
+    "slot": "neck",
+    "charges": 200,
+    "absorb": {
+      "energy": {
+        "percent": 10
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "suspicious-device",
+    "name": "suspicious device",
+    "kind": "amulet",
+    "weight": 10,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "terra-amulet",
+    "name": "terra amulet",
+    "kind": "amulet",
+    "weight": 5,
+    "value": 1500,
+    "slot": "neck",
+    "charges": 200,
+    "requires": {
+      "level": 60
+    },
+    "absorb": {
+      "fire": {
+        "percent": -10
+      },
+      "earth": {
+        "percent": 20
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "traditional-gamsbart-hat",
+    "name": "traditional gamsbart hat",
+    "kind": "amulet",
+    "weight": 2.5,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "traditional-neckerchief",
+    "name": "traditional neckerchief",
+    "kind": "amulet",
+    "weight": 1.5,
+    "value": 0,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "turtle-amulet",
+    "name": "turtle amulet",
+    "kind": "amulet",
+    "weight": 4.8,
+    "value": 0,
+    "slot": "neck",
+    "requires": {
+      "level": 200,
+      "vocationId": "knight"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "werewolf-amulet",
+    "name": "werewolf amulet",
+    "kind": "amulet",
+    "weight": 5.5,
+    "value": 3000,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "wolf-tooth-chain",
+    "name": "wolf tooth chain",
+    "kind": "amulet",
+    "weight": 3.3,
+    "value": 100,
+    "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  }
+]

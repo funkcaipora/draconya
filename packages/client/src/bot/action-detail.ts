@@ -96,7 +96,11 @@ const TYPE_LABEL: Readonly<Record<string, string>> = {
   heal: 'Cura', 'heal-over-time': 'Cura',
   mana: 'Mana',
   damage: 'Dano', 'damage-over-time': 'Dano',
-  haste: 'Suporte', buff: 'Suporte', 'mana-shield': 'Suporte',
+  haste: 'Suporte', buff: 'Suporte', 'mana-shield': 'Suporte', 'remove-condition': 'Suporte',
+  // As utilitárias (#623): luz, Levitate, Magic Rope, Find e Food.
+  light: 'Suporte', levitate: 'Suporte', 'magic-rope': 'Suporte', find: 'Suporte', food: 'Suporte',
+  // As duas runas de invocação (#600): Convince Creature e Animate Dead.
+  convince: 'Suporte', 'animate-dead': 'Suporte',
 };
 
 function typeOf(effect: string): string {
@@ -111,7 +115,10 @@ function valueLabel(effect: string): string {
 
 const DAMAGE_TYPE_LABEL: Readonly<Record<string, string>> = {
   physical: 'Físico', energy: 'Energia', earth: 'Terra', fire: 'Fogo',
-  ice: 'Gelo', holy: 'Sagrado', death: 'Morte', arcane: 'Arcano',
+  ice: 'Gelo', holy: 'Sagrado', death: 'Morte',
+  // #547, M29-07: drown/lifedrain/manadrain do Tibia.
+  drown: 'Afogamento', lifedrain: 'Dreno de vida', manadrain: 'Dreno de mana',
+  arcane: 'Arcano',
 };
 
 const GROUP_LABEL: Readonly<Record<string, string>> = {
@@ -126,9 +133,15 @@ function areaLabel(area: Area | undefined): string {
       return `${String(side)}x${String(side)}`;
     }
     case 'wave': return `Onda ${String(area.length)}`;
+    // #679: o número é o de fileiras, como a `wave` legada.
+    case 'rows': return `Onda ${String(area.widths.length)}`;
     case 'beam': return `Feixe ${String(area.length)}`;
     case 'cleave': return 'Frontal 3';
     case 'cross': return `Cruz ${String(area.radius)}`;
+    // #591: runa de campo (Fire/Poison/Energy Field, Destroy Field) mira um tile só.
+    case 'point': return 'Single';
+    // #591: Fire/Poison/Energy Wall — a fileira perpendicular ao alvo.
+    case 'wall': return `Parede ${String(area.width)}`;
   }
 }
 

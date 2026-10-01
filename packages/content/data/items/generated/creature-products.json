@@ -1,0 +1,8145 @@
+[
+  {
+    "id": "acorn",
+    "name": "acorn",
+    "kind": "other",
+    "weight": 0.5,
+    "value": 10,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "afflicted-strider-head",
+    "name": "afflicted strider head",
+    "kind": "other",
+    "weight": 1.7,
+    "value": 900,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "afflicted-strider-worms",
+    "name": "afflicted strider worms",
+    "kind": "other",
+    "weight": 1.7,
+    "value": 500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ancient-belt-buckle",
+    "name": "ancient belt buckle",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 260,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ancient-iks-ritual-chalice",
+    "name": "ancient iks ritual chalice",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ancient-liche-bone",
+    "name": "ancient liche bone",
+    "kind": "other",
+    "weight": 0.8,
+    "value": 28000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ancient-stone",
+    "name": "ancient stone",
+    "kind": "other",
+    "weight": 1.6,
+    "value": 200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ancient-watch",
+    "name": "ancient watch",
+    "kind": "other",
+    "weight": 6.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "antlers",
+    "name": "antlers",
+    "kind": "other",
+    "weight": 0.9,
+    "value": 50,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ape-fur",
+    "name": "ape fur",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 120,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "apron",
+    "name": "apron",
+    "kind": "other",
+    "weight": 0.6,
+    "value": 1300,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "astral-glyph",
+    "name": "astral glyph",
+    "kind": "other",
+    "weight": 6.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "astral-source",
+    "name": "astral source",
+    "kind": "other",
+    "weight": 6.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "badger-fur",
+    "name": "badger fur",
+    "kind": "other",
+    "weight": 0.65,
+    "value": 15,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bamboo-stick",
+    "name": "bamboo stick",
+    "kind": "other",
+    "weight": 1.12,
+    "value": 30,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "banana-sash",
+    "name": "banana sash",
+    "kind": "other",
+    "weight": 0.68,
+    "value": 55,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "basalt-fetish",
+    "name": "basalt fetish",
+    "kind": "other",
+    "weight": 2.1,
+    "value": 210,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "basalt-figurine",
+    "name": "basalt figurine",
+    "kind": "other",
+    "weight": 2.1,
+    "value": 160,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bashmu-fang",
+    "name": "bashmu fang",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 600,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bashmu-feather",
+    "name": "bashmu feather",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 350,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bashmu-tongue",
+    "name": "bashmu tongue",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 400,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bat-wing",
+    "name": "bat wing",
+    "kind": "other",
+    "weight": 1,
+    "value": 50,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "battle-stone",
+    "name": "battle stone",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 290,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bear-paw",
+    "name": "bear paw",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "beetle-carapace",
+    "name": "beetle carapace",
+    "kind": "other",
+    "weight": 35,
+    "value": 200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "behemoth-claw",
+    "name": "behemoth claw",
+    "kind": "other",
+    "weight": 12.5,
+    "value": 2000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "black-hood",
+    "name": "black hood",
+    "kind": "other",
+    "weight": 1.75,
+    "value": 190,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "black-wool",
+    "name": "black wool",
+    "kind": "other",
+    "weight": 1.18,
+    "value": 300,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "blazing-bone",
+    "name": "blazing bone",
+    "kind": "other",
+    "weight": 2.2,
+    "value": 610,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "blemished-spawn-abdomen",
+    "name": "blemished spawn abdomen",
+    "kind": "other",
+    "weight": 2.7,
+    "value": 550,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "blemished-spawn-head",
+    "name": "blemished spawn head",
+    "kind": "other",
+    "weight": 1.6,
+    "value": 800,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "blemished-spawn-tail",
+    "name": "blemished spawn tail",
+    "kind": "other",
+    "weight": 1.6,
+    "value": 1000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "blood-preservation",
+    "name": "blood preservation",
+    "kind": "other",
+    "weight": 0.8,
+    "value": 320,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bloodstained-scythe",
+    "name": "bloodstained scythe",
+    "kind": "other",
+    "weight": 8.1,
+    "value": 4200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bloody-dwarven-beard",
+    "name": "bloody dwarven beard",
+    "kind": "other",
+    "weight": 0.7,
+    "value": 110,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bloody-pincers",
+    "name": "bloody pincers",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bloody-tears",
+    "name": "bloody tears",
+    "kind": "other",
+    "weight": 0.2,
+    "value": 70000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "blue-goanna-scale",
+    "name": "blue goanna scale",
+    "kind": "other",
+    "weight": 0.9,
+    "value": 230,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "boar-man-hoof",
+    "name": "boar man hoof",
+    "kind": "other",
+    "weight": 2.1,
+    "value": 600,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "boggy-dreads",
+    "name": "boggy dreads",
+    "kind": "other",
+    "weight": 1.69,
+    "value": 200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bola",
+    "name": "bola",
+    "kind": "other",
+    "weight": 5,
+    "value": 35,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bone-fetish",
+    "name": "bone fetish",
+    "kind": "other",
+    "weight": 1.6,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bone-shoulderplate",
+    "name": "bone shoulderplate",
+    "kind": "other",
+    "weight": 2.2,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bone-toothpick",
+    "name": "bone toothpick",
+    "kind": "other",
+    "weight": 20,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bonecarving-knife",
+    "name": "bonecarving knife",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 190,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bonelord-eye",
+    "name": "bonelord eye",
+    "kind": "other",
+    "weight": 5,
+    "value": 80,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bony-tail",
+    "name": "bony tail",
+    "kind": "other",
+    "weight": 0.92,
+    "value": 210,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "book-page",
+    "name": "book page",
+    "kind": "other",
+    "weight": 1,
+    "value": 640,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bright-bell",
+    "name": "bright bell",
+    "kind": "other",
+    "weight": 2.2,
+    "value": 220,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "brimstone-fangs",
+    "name": "brimstone fangs",
+    "kind": "other",
+    "weight": 1.12,
+    "value": 380,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "brimstone-shell",
+    "name": "brimstone shell",
+    "kind": "other",
+    "weight": 1.12,
+    "value": 210,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "brinebrute-claw",
+    "name": "brinebrute claw",
+    "kind": "other",
+    "weight": 2.4,
+    "value": 2600,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "broken-crossbow",
+    "name": "broken crossbow",
+    "kind": "other",
+    "weight": 1.3,
+    "value": 30,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "broken-draken-mail",
+    "name": "broken draken mail",
+    "kind": "other",
+    "weight": 2,
+    "value": 340,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "broken-gladiator-shield",
+    "name": "broken gladiator shield",
+    "kind": "other",
+    "weight": 6.4,
+    "value": 190,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "broken-halberd",
+    "name": "broken halberd",
+    "kind": "other",
+    "weight": 2.1,
+    "value": 100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "broken-helmet",
+    "name": "broken helmet",
+    "kind": "other",
+    "weight": 1.56,
+    "value": 20,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "broken-key-ring",
+    "name": "broken key ring",
+    "kind": "other",
+    "weight": 0.5,
+    "value": 8000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "broken-longbow",
+    "name": "broken longbow",
+    "kind": "other",
+    "weight": 5,
+    "value": 130,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "broken-macuahuitl",
+    "name": "broken macuahuitl",
+    "kind": "other",
+    "weight": 24,
+    "value": 1000,
+    "slot": "hand",
+    "attack": 1,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "broken-mitmah-necklace",
+    "name": "broken mitmah necklace",
+    "kind": "other",
+    "weight": 1,
+    "value": 210,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "broken-shamanic-staff",
+    "name": "broken shamanic staff",
+    "kind": "other",
+    "weight": 1.28,
+    "value": 35,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "broken-slicer",
+    "name": "broken slicer",
+    "kind": "other",
+    "weight": 1.4,
+    "value": 120,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "broken-throwing-axe",
+    "name": "broken throwing axe",
+    "kind": "other",
+    "weight": 11,
+    "value": 230,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "broodrider-saddle",
+    "name": "broodrider saddle",
+    "kind": "other",
+    "weight": 3.9,
+    "value": 2800,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "capricious-heart",
+    "name": "capricious heart",
+    "kind": "other",
+    "weight": 0.75,
+    "value": 2100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "capricious-robe",
+    "name": "capricious robe",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 1200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "carniphila-seeds",
+    "name": "carniphila seeds",
+    "kind": "other",
+    "weight": 0.35,
+    "value": 50,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "carnisylvan-bark",
+    "name": "carnisylvan bark",
+    "kind": "other",
+    "weight": 1,
+    "value": 230,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "carnisylvan-finger",
+    "name": "carnisylvan finger",
+    "kind": "other",
+    "weight": 1,
+    "value": 250,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "carnivostrich-feather",
+    "name": "carnivostrich feather",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 630,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "carrion-worm-fang",
+    "name": "carrion worm fang",
+    "kind": "other",
+    "weight": 0.88,
+    "value": 35,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cave-chimera-head",
+    "name": "cave chimera head",
+    "kind": "other",
+    "weight": 1.9,
+    "value": 1200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cave-chimera-leg",
+    "name": "cave chimera leg",
+    "kind": "other",
+    "weight": 1.1,
+    "value": 650,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cave-devourer-eyes",
+    "name": "cave devourer eyes",
+    "kind": "other",
+    "weight": 0.8,
+    "value": 550,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cave-devourer-legs",
+    "name": "cave devourer legs",
+    "kind": "other",
+    "weight": 2.4,
+    "value": 350,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cave-devourer-maw",
+    "name": "cave devourer maw",
+    "kind": "other",
+    "weight": 1.9,
+    "value": 600,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cavebear-skull",
+    "name": "cavebear skull",
+    "kind": "other",
+    "weight": 1.3,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "centipede-leg",
+    "name": "centipede leg",
+    "kind": "other",
+    "weight": 0.69,
+    "value": 28,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ceremonial-brush",
+    "name": "ceremonial brush",
+    "kind": "other",
+    "weight": 1,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "chasm-spawn-abdomen",
+    "name": "chasm spawn abdomen",
+    "kind": "other",
+    "weight": 2.7,
+    "value": 240,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "chasm-spawn-head",
+    "name": "chasm spawn head",
+    "kind": "other",
+    "weight": 1.6,
+    "value": 850,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "chasm-spawn-tail",
+    "name": "chasm spawn tail",
+    "kind": "other",
+    "weight": 1.6,
+    "value": 120,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cheese-cutter",
+    "name": "cheese cutter",
+    "kind": "other",
+    "weight": 0.45,
+    "value": 50,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cheesy-figurine",
+    "name": "cheesy figurine",
+    "kind": "other",
+    "weight": 0.75,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cheesy-membership-card",
+    "name": "cheesy membership card",
+    "kind": "other",
+    "weight": 2.7,
+    "value": 120000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "chicken-feather",
+    "name": "chicken feather",
+    "kind": "other",
+    "weight": 0.1,
+    "value": 30,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cliff-strider-claw",
+    "name": "cliff strider claw",
+    "kind": "other",
+    "weight": 2.2,
+    "value": 800,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "coal",
+    "name": "coal",
+    "kind": "other",
+    "weight": 5,
+    "value": 20,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "coal-eyes",
+    "name": "coal eyes",
+    "kind": "other",
+    "weight": 6.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cobra-crest",
+    "name": "cobra crest",
+    "kind": "other",
+    "weight": 1.7,
+    "value": 650,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cobra-tongue",
+    "name": "cobra tongue",
+    "kind": "other",
+    "weight": 0.75,
+    "value": 15,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cockroach-leg",
+    "name": "cockroach leg",
+    "kind": "other",
+    "weight": 0.1,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "colourful-feather",
+    "name": "colourful feather",
+    "kind": "other",
+    "weight": 0.36,
+    "value": 110,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "colourful-feathers",
+    "name": "colourful feathers",
+    "kind": "other",
+    "weight": 4.5,
+    "value": 400,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "colourful-snail-shell",
+    "name": "colourful snail shell",
+    "kind": "other",
+    "weight": 1.7,
+    "value": 1000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "compass",
+    "name": "compass",
+    "kind": "other",
+    "weight": 0.8,
+    "value": 45,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "compound-eye",
+    "name": "compound eye",
+    "kind": "other",
+    "weight": 1.65,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "condensed-energy",
+    "name": "condensed energy",
+    "kind": "other",
+    "weight": 2,
+    "value": 260,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "coral-branch",
+    "name": "coral branch",
+    "kind": "other",
+    "weight": 1.1,
+    "value": 360,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "corrupt-naga-scales",
+    "name": "corrupt naga scales",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 570,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "corrupted-flag",
+    "name": "corrupted flag",
+    "kind": "other",
+    "weight": 1.12,
+    "value": 700,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cow-bell",
+    "name": "cow bell",
+    "kind": "other",
+    "weight": 7.2,
+    "value": 120,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cowbell",
+    "name": "cowbell",
+    "kind": "other",
+    "weight": 4,
+    "value": 210,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "crab-man-claws",
+    "name": "crab man claws",
+    "kind": "other",
+    "weight": 2.3,
+    "value": 550,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "crab-pincers",
+    "name": "crab pincers",
+    "kind": "other",
+    "weight": 1.75,
+    "value": 35,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cracked-alabaster-vase",
+    "name": "cracked alabaster vase",
+    "kind": "other",
+    "weight": 4.5,
+    "value": 180,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "crawler-head-plating",
+    "name": "crawler head plating",
+    "kind": "other",
+    "weight": 2.65,
+    "value": 210,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cry-stal",
+    "name": "cry-stal",
+    "kind": "other",
+    "weight": 9.7,
+    "value": 3200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "crystal-bone",
+    "name": "crystal bone",
+    "kind": "other",
+    "weight": 12,
+    "value": 250,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "crystal-of-the-mitmah",
+    "name": "crystal of the mitmah",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 280,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "crystalline-spikes",
+    "name": "crystalline spikes",
+    "kind": "other",
+    "weight": 3.4,
+    "value": 440,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "crystallized-anger",
+    "name": "crystallized anger",
+    "kind": "other",
+    "weight": 12,
+    "value": 400,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cultish-mask",
+    "name": "cultish mask",
+    "kind": "other",
+    "weight": 1.65,
+    "value": 280,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cultish-robe",
+    "name": "cultish robe",
+    "kind": "other",
+    "weight": 2,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cultish-symbol",
+    "name": "cultish symbol",
+    "kind": "other",
+    "weight": 0.82,
+    "value": 500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "curious-matter",
+    "name": "curious matter",
+    "kind": "other",
+    "weight": 4.5,
+    "value": 430,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cursed-bone",
+    "name": "cursed bone",
+    "kind": "other",
+    "weight": 6.5,
+    "value": 6000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cursed-shoulder-spikes",
+    "name": "cursed shoulder spikes",
+    "kind": "other",
+    "weight": 0.97,
+    "value": 320,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "cyclops-toe",
+    "name": "cyclops toe",
+    "kind": "other",
+    "weight": 1.11,
+    "value": 55,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "daedal-chisel",
+    "name": "daedal chisel",
+    "kind": "other",
+    "weight": 1,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "damaged-armor-plates",
+    "name": "damaged armor plates",
+    "kind": "other",
+    "weight": 2,
+    "value": 280,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "damaged-worm-head",
+    "name": "damaged worm head",
+    "kind": "other",
+    "weight": 1.6,
+    "value": 8000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "damselfly-eye",
+    "name": "damselfly eye",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 25,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "damselfly-wing",
+    "name": "damselfly wing",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 20,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dandelion-seeds",
+    "name": "dandelion seeds",
+    "kind": "other",
+    "weight": 1.3,
+    "value": 200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dangerous-proto-matter",
+    "name": "dangerous proto matter",
+    "kind": "other",
+    "weight": 6,
+    "value": 300,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dark-bell",
+    "name": "dark bell",
+    "kind": "other",
+    "weight": 2.2,
+    "value": 250,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dark-obsidian-splinter",
+    "name": "dark obsidian splinter",
+    "kind": "other",
+    "weight": 1,
+    "value": 4400,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dark-rosary",
+    "name": "dark rosary",
+    "kind": "other",
+    "weight": 0.9,
+    "value": 48,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "darklight-basalt-chunk",
+    "name": "darklight basalt chunk",
+    "kind": "other",
+    "weight": 1,
+    "value": 3800,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "darklight-core",
+    "name": "darklight core",
+    "kind": "other",
+    "weight": 1,
+    "value": 4100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "darklight-matter",
+    "name": "darklight matter",
+    "kind": "other",
+    "weight": 1,
+    "value": 5500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dead-weight",
+    "name": "dead weight",
+    "kind": "other",
+    "weight": 7.5,
+    "value": 450,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "deadeye-devious-eye-patch",
+    "name": "Deadeye Devious' eye patch",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "decayed-finger-bone",
+    "name": "decayed finger bone",
+    "kind": "other",
+    "weight": 1,
+    "value": 5100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "deepling-breaktime-snack",
+    "name": "deepling breaktime snack",
+    "kind": "other",
+    "weight": 2.4,
+    "value": 90,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "deepling-claw",
+    "name": "deepling claw",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 430,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "deepling-guard-belt-buckle",
+    "name": "deepling guard belt buckle",
+    "kind": "other",
+    "weight": 2.6,
+    "value": 230,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "deepling-ridge",
+    "name": "deepling ridge",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 360,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "deepling-scales",
+    "name": "deepling scales",
+    "kind": "other",
+    "weight": 4.8,
+    "value": 80,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "deepling-warts",
+    "name": "deepling warts",
+    "kind": "other",
+    "weight": 2.4,
+    "value": 180,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "deeptags",
+    "name": "deeptags",
+    "kind": "other",
+    "weight": 2.4,
+    "value": 290,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "deepworm-jaws",
+    "name": "deepworm jaws",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "deepworm-spike-roots",
+    "name": "deepworm spike roots",
+    "kind": "other",
+    "weight": 0.7,
+    "value": 650,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "deepworm-spikes",
+    "name": "deepworm spikes",
+    "kind": "other",
+    "weight": 1,
+    "value": 800,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "demon-dust",
+    "name": "demon dust",
+    "kind": "other",
+    "weight": 1,
+    "value": 300,
+    "durationMs": 300000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "demon-horn",
+    "name": "demon horn",
+    "kind": "other",
+    "weight": 10,
+    "value": 1000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "demonic-essence",
+    "name": "demonic essence",
+    "kind": "other",
+    "weight": 1,
+    "value": 1000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "demonic-finger",
+    "name": "demonic finger",
+    "kind": "other",
+    "weight": 3,
+    "value": 1000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "demonic-skeletal-hand",
+    "name": "demonic skeletal hand",
+    "kind": "other",
+    "weight": 1.32,
+    "value": 80,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "diremaw-brainpan",
+    "name": "diremaw brainpan",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 350,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "diremaw-legs",
+    "name": "diremaw legs",
+    "kind": "other",
+    "weight": 2.29,
+    "value": 270,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dirty-turban",
+    "name": "dirty turban",
+    "kind": "other",
+    "weight": 1.34,
+    "value": 120,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "distorted-heart",
+    "name": "distorted heart",
+    "kind": "other",
+    "weight": 0.75,
+    "value": 2100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "distorted-robe",
+    "name": "distorted robe",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 1200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "downy-feather",
+    "name": "downy feather",
+    "kind": "other",
+    "weight": 0.32,
+    "value": 20,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dowser",
+    "name": "dowser",
+    "kind": "other",
+    "weight": 3.6,
+    "value": 35,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dragolisk-eye",
+    "name": "dragolisk eye",
+    "kind": "other",
+    "weight": 2,
+    "value": 690,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dragolisk-poison-gland",
+    "name": "dragolisk poison gland",
+    "kind": "other",
+    "weight": 2,
+    "value": 475,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dragon-blood",
+    "name": "dragon blood",
+    "kind": "other",
+    "weight": 3.5,
+    "value": 700,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dragon-claw",
+    "name": "dragon claw",
+    "kind": "other",
+    "weight": 12.5,
+    "value": 8000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dragon-crown",
+    "name": "dragon crown",
+    "kind": "other",
+    "weight": 6.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dragon-tongue",
+    "name": "dragon tongue",
+    "kind": "other",
+    "weight": 5.5,
+    "value": 550,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "draken-sulphur",
+    "name": "draken sulphur",
+    "kind": "other",
+    "weight": 0.68,
+    "value": 550,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "draken-wristbands",
+    "name": "draken wristbands",
+    "kind": "other",
+    "weight": 0.78,
+    "value": 430,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "draptor-scales",
+    "name": "draptor scales",
+    "kind": "other",
+    "weight": 2,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dream-essence-egg",
+    "name": "dream essence egg",
+    "kind": "other",
+    "weight": 2.8,
+    "value": 205,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dream-matter",
+    "name": "dream matter",
+    "kind": "other",
+    "weight": 3.9,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dream-warden-claw",
+    "name": "dream warden claw",
+    "kind": "other",
+    "weight": 31,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dream-warden-mask",
+    "name": "dream warden mask",
+    "kind": "other",
+    "weight": 34,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dung-ball",
+    "name": "dung ball",
+    "kind": "other",
+    "weight": 1.9,
+    "value": 130,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dwarven-beard",
+    "name": "dwarven beard",
+    "kind": "other",
+    "weight": 0.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "earflap",
+    "name": "earflap",
+    "kind": "other",
+    "weight": 0.75,
+    "value": 40,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "elder-bonelord-tentacle",
+    "name": "elder bonelord tentacle",
+    "kind": "other",
+    "weight": 0.75,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "elemental-spikes",
+    "name": "elemental spikes",
+    "kind": "other",
+    "weight": 12,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "elven-astral-observer",
+    "name": "elven astral observer",
+    "kind": "other",
+    "weight": 1.12,
+    "value": 90,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "elven-hoof",
+    "name": "elven hoof",
+    "kind": "other",
+    "weight": 2.29,
+    "value": 115,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "elven-scouting-glass",
+    "name": "elven scouting glass",
+    "kind": "other",
+    "weight": 0.8,
+    "value": 50,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "elvish-talisman",
+    "name": "elvish talisman",
+    "kind": "other",
+    "weight": 1.1,
+    "value": 45,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "emerald-tortoise-shell",
+    "name": "emerald tortoise shell",
+    "kind": "other",
+    "weight": 6,
+    "value": 2150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "empty-honey-glass",
+    "name": "empty honey glass",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 270,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "enchanted-chicken-wing",
+    "name": "enchanted chicken wing",
+    "kind": "other",
+    "weight": 10,
+    "value": 20000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "energy-ball",
+    "name": "energy ball",
+    "kind": "other",
+    "weight": 3.5,
+    "value": 300,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "energy-soil",
+    "name": "energy soil",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 2000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "energy-vein",
+    "name": "energy vein",
+    "kind": "other",
+    "weight": 2,
+    "value": 270,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ensouled-essence",
+    "name": "ensouled essence",
+    "kind": "other",
+    "weight": 1.35,
+    "value": 820,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "eternal-flames",
+    "name": "eternal flames",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 5000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "execowtioner-mask",
+    "name": "execowtioner mask",
+    "kind": "other",
+    "weight": 3.2,
+    "value": 240,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "eye-patch",
+    "name": "eye patch",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "eyeless-devourer-legs",
+    "name": "eyeless devourer legs",
+    "kind": "other",
+    "weight": 2.4,
+    "value": 650,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "eyeless-devourer-maw",
+    "name": "eyeless devourer maw",
+    "kind": "other",
+    "weight": 1.9,
+    "value": 420,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "eyeless-devourer-tongue",
+    "name": "eyeless devourer tongue",
+    "kind": "other",
+    "weight": 0.6,
+    "value": 900,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "fafnar-symbol",
+    "name": "Fafnar symbol",
+    "kind": "other",
+    "weight": 1.7,
+    "value": 950,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "fairy-wings",
+    "name": "fairy wings",
+    "kind": "other",
+    "weight": 2,
+    "value": 200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "falcon-crest",
+    "name": "falcon crest",
+    "kind": "other",
+    "weight": 0.5,
+    "value": 650,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "fiery-heart",
+    "name": "fiery heart",
+    "kind": "other",
+    "weight": 1.14,
+    "value": 375,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "fig-leaf",
+    "name": "fig leaf",
+    "kind": "other",
+    "weight": 0.6,
+    "value": 200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "fir-cone",
+    "name": "fir cone",
+    "kind": "other",
+    "weight": 1.9,
+    "value": 25,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "fireworks-capsule",
+    "name": "fireworks capsule",
+    "kind": "other",
+    "weight": 20,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "fish-eye",
+    "name": "fish eye",
+    "kind": "other",
+    "weight": 1,
+    "value": 500000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "fish-fin",
+    "name": "fish fin",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "flawless-ice-crystal",
+    "name": "flawless ice crystal",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 5000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "flintstone",
+    "name": "flintstone",
+    "kind": "other",
+    "weight": 3.75,
+    "value": 800,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "flotsam",
+    "name": "flotsam",
+    "kind": "other",
+    "weight": 2.9,
+    "value": 330,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "foam-stalker-spume",
+    "name": "foam stalker spume",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "forbidden-tome",
+    "name": "forbidden tome",
+    "kind": "other",
+    "weight": 6.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "fox-paw",
+    "name": "fox paw",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "frazzle-skin",
+    "name": "frazzle skin",
+    "kind": "other",
+    "weight": 1.9,
+    "value": 400,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "frazzle-tongue",
+    "name": "frazzle tongue",
+    "kind": "other",
+    "weight": 6.8,
+    "value": 700,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "frost-giant-pelt",
+    "name": "frost giant pelt",
+    "kind": "other",
+    "weight": 2.48,
+    "value": 160,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "frosty-heart",
+    "name": "frosty heart",
+    "kind": "other",
+    "weight": 1.86,
+    "value": 280,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "frozen-chain",
+    "name": "frozen chain",
+    "kind": "other",
+    "weight": 2.25,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "frozen-claw",
+    "name": "frozen claw",
+    "kind": "other",
+    "weight": 4.55,
+    "value": 0,
+    "slot": "finger",
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "frozen-lightning",
+    "name": "frozen lightning",
+    "kind": "other",
+    "weight": 7,
+    "value": 270,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "frozen-time",
+    "name": "frozen time",
+    "kind": "other",
+    "weight": 6.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "fungal-blister",
+    "name": "fungal blister",
+    "kind": "other",
+    "weight": 2.4,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "fur-shred",
+    "name": "fur shred",
+    "kind": "other",
+    "weight": 5,
+    "value": 200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "gauze-bandage",
+    "name": "gauze bandage",
+    "kind": "other",
+    "weight": 0.97,
+    "value": 90,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "gear-crystal",
+    "name": "gear crystal",
+    "kind": "other",
+    "weight": 0.95,
+    "value": 200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "gear-wheel",
+    "name": "gear wheel",
+    "kind": "other",
+    "weight": 0.05,
+    "value": 500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ghastly-dragon-head",
+    "name": "ghastly dragon head",
+    "kind": "other",
+    "weight": 12,
+    "value": 700,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ghostly-tissue",
+    "name": "ghostly tissue",
+    "kind": "other",
+    "weight": 0.5,
+    "value": 90,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ghoul-snack",
+    "name": "ghoul snack",
+    "kind": "other",
+    "weight": 1.4,
+    "value": 60,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "giant-crab-pincer",
+    "name": "giant crab pincer",
+    "kind": "other",
+    "weight": 1.12,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "giant-eye",
+    "name": "giant eye",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 380,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "giant-pacifier",
+    "name": "giant pacifier",
+    "kind": "other",
+    "weight": 9,
+    "value": 170,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "giant-tentacle",
+    "name": "giant tentacle",
+    "kind": "other",
+    "weight": 2.1,
+    "value": 10000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "girlish-hair-decoration",
+    "name": "girlish hair decoration",
+    "kind": "other",
+    "weight": 0.5,
+    "value": 30,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "girtablilu-warrior-carapace",
+    "name": "girtablilu warrior carapace",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 520,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "gland",
+    "name": "gland",
+    "kind": "other",
+    "weight": 0.5,
+    "value": 500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "glimmering-soil",
+    "name": "glimmering soil",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 2000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "glistening-bone",
+    "name": "glistening bone",
+    "kind": "other",
+    "weight": 12,
+    "value": 250,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "gloom-wolf-fur",
+    "name": "gloom wolf fur",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 70,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "glooth-injection-tube",
+    "name": "glooth injection tube",
+    "kind": "other",
+    "weight": 14,
+    "value": 350,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "glowing-carrot",
+    "name": "glowing carrot",
+    "kind": "other",
+    "weight": 6.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "glowing-rune",
+    "name": "glowing rune",
+    "kind": "other",
+    "weight": 0.1,
+    "value": 350,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "goanna-claw",
+    "name": "goanna claw",
+    "kind": "other",
+    "weight": 0.9,
+    "value": 950,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "goanna-meat",
+    "name": "goanna meat",
+    "kind": "other",
+    "weight": 0.9,
+    "value": 190,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "goblin-ear",
+    "name": "goblin ear",
+    "kind": "other",
+    "weight": 0.75,
+    "value": 20,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "gold-brocaded-cloth",
+    "name": "gold-brocaded cloth",
+    "kind": "other",
+    "weight": 2.1,
+    "value": 175,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "golden-bell",
+    "name": "golden bell",
+    "kind": "other",
+    "weight": 1.55,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "golden-cotton-reel",
+    "name": "golden cotton reel",
+    "kind": "other",
+    "weight": 2.2,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "golden-lotus-brooch",
+    "name": "golden lotus brooch",
+    "kind": "other",
+    "weight": 1,
+    "value": 270,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "golden-sun-coin",
+    "name": "golden sun coin",
+    "kind": "other",
+    "weight": 2.8,
+    "value": 11000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "golden-talon",
+    "name": "golden talon",
+    "kind": "other",
+    "weight": 6.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "golden-tiger-coin",
+    "name": "golden tiger coin",
+    "kind": "other",
+    "weight": 2.8,
+    "value": 11000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "goosebump-leather",
+    "name": "goosebump leather",
+    "kind": "other",
+    "weight": 2.8,
+    "value": 650,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "gorerilla-mane",
+    "name": "gorerilla mane",
+    "kind": "other",
+    "weight": 2.4,
+    "value": 2750,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "gorerilla-tail",
+    "name": "gorerilla tail",
+    "kind": "other",
+    "weight": 2.8,
+    "value": 2650,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "gorger-antlers",
+    "name": "gorger antlers",
+    "kind": "other",
+    "weight": 6.3,
+    "value": 2250,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "grappling-hook",
+    "name": "grappling hook",
+    "kind": "other",
+    "weight": 6.2,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "greasy-wool",
+    "name": "greasy wool",
+    "kind": "other",
+    "weight": 1.18,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "green-bandage",
+    "name": "green bandage",
+    "kind": "other",
+    "weight": 0.6,
+    "value": 500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "grimace",
+    "name": "grimace",
+    "kind": "other",
+    "weight": 0.6,
+    "value": 120000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "guidebook",
+    "name": "guidebook",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "half-digested-stones",
+    "name": "half-digested stones",
+    "kind": "other",
+    "weight": 2,
+    "value": 40,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "half-eaten-brain",
+    "name": "half-eaten brain",
+    "kind": "other",
+    "weight": 0.64,
+    "value": 85,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "hand",
+    "name": "hand",
+    "kind": "other",
+    "weight": 0.9,
+    "value": 1450,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "hard-boiled-hydra-egg",
+    "name": "hard-boiled hydra egg",
+    "kind": "other",
+    "weight": 20,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "hardened-bone",
+    "name": "hardened bone",
+    "kind": "other",
+    "weight": 6,
+    "value": 70,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "harpy-feathers",
+    "name": "harpy feathers",
+    "kind": "other",
+    "weight": 3.9,
+    "value": 730,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "hatched-rorc-egg",
+    "name": "hatched rorc egg",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 30,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "hazardous-heart",
+    "name": "hazardous heart",
+    "kind": "other",
+    "weight": 0.75,
+    "value": 5000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "hazardous-robe",
+    "name": "hazardous robe",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 3000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "headpecker-beak",
+    "name": "headpecker beak",
+    "kind": "other",
+    "weight": 3.9,
+    "value": 2800,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "headpecker-feather",
+    "name": "headpecker feather",
+    "kind": "other",
+    "weight": 0.7,
+    "value": 1300,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "heaven-blossom",
+    "name": "heaven blossom",
+    "kind": "other",
+    "weight": 2.1,
+    "value": 50,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "hellhound-slobber",
+    "name": "hellhound slobber",
+    "kind": "other",
+    "weight": 0.75,
+    "value": 500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "hellhunter-eye",
+    "name": "hellhunter eye",
+    "kind": "other",
+    "weight": 1.9,
+    "value": 2950,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "hellspawn-tail",
+    "name": "hellspawn tail",
+    "kind": "other",
+    "weight": 1.25,
+    "value": 475,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "hemp-rope",
+    "name": "hemp rope",
+    "kind": "other",
+    "weight": 1.9,
+    "value": 350,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "hideous-chunk",
+    "name": "hideous chunk",
+    "kind": "other",
+    "weight": 1.6,
+    "value": 510,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "high-guard-flag",
+    "name": "high guard flag",
+    "kind": "other",
+    "weight": 1.12,
+    "value": 550,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "high-guard-shoulderplates",
+    "name": "high guard shoulderplates",
+    "kind": "other",
+    "weight": 1.03,
+    "value": 130,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "hollow-stampor-hoof",
+    "name": "hollow stampor hoof",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "holy-ash",
+    "name": "holy ash",
+    "kind": "other",
+    "weight": 1.9,
+    "value": 160,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "holy-orchid",
+    "name": "holy orchid",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 90,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "honeycomb",
+    "name": "honeycomb",
+    "kind": "other",
+    "weight": 0.8,
+    "value": 40,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "hook",
+    "name": "hook",
+    "kind": "other",
+    "weight": 5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "horoscope",
+    "name": "horoscope",
+    "kind": "other",
+    "weight": 2.8,
+    "value": 40,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "horseshoe",
+    "name": "horseshoe",
+    "kind": "other",
+    "weight": 10,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "huge-shell",
+    "name": "huge shell",
+    "kind": "other",
+    "weight": 3.2,
+    "value": 15000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "huge-spiky-snail-shell",
+    "name": "huge spiky snail shell",
+    "kind": "other",
+    "weight": 3.8,
+    "value": 8000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "human-teeth",
+    "name": "human teeth",
+    "kind": "other",
+    "weight": 1,
+    "value": 2000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "humongous-chunk",
+    "name": "humongous chunk",
+    "kind": "other",
+    "weight": 1.9,
+    "value": 540,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "hydra-egg",
+    "name": "hydra egg",
+    "kind": "other",
+    "weight": 20,
+    "value": 500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "hydra-head",
+    "name": "hydra head",
+    "kind": "other",
+    "weight": 13,
+    "value": 600,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "hydrophytes",
+    "name": "hydrophytes",
+    "kind": "other",
+    "weight": 0.45,
+    "value": 220,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "iced-soil",
+    "name": "iced soil",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 2000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "incantation-notes",
+    "name": "incantation notes",
+    "kind": "other",
+    "weight": 4.4,
+    "value": 90,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "infernal-heart",
+    "name": "infernal heart",
+    "kind": "other",
+    "weight": 0.75,
+    "value": 2100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "infernal-robe",
+    "name": "infernal robe",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 1200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "instable-proto-matter",
+    "name": "instable proto matter",
+    "kind": "other",
+    "weight": 6,
+    "value": 300,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "iron-ore",
+    "name": "iron ore",
+    "kind": "other",
+    "weight": 2,
+    "value": 500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ivory-carving",
+    "name": "ivory carving",
+    "kind": "other",
+    "weight": 1.4,
+    "value": 300,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "jagged-sickle",
+    "name": "jagged sickle",
+    "kind": "other",
+    "weight": 0.8,
+    "value": 150000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "jaws",
+    "name": "jaws",
+    "kind": "other",
+    "weight": 1.7,
+    "value": 3900,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "jewelled-belt",
+    "name": "jewelled belt",
+    "kind": "other",
+    "weight": 1.24,
+    "value": 180,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "jungle-moa-claw",
+    "name": "jungle moa claw",
+    "kind": "other",
+    "weight": 1.7,
+    "value": 160,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "jungle-moa-egg",
+    "name": "jungle moa egg",
+    "kind": "other",
+    "weight": 8.4,
+    "value": 250,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "jungle-moa-feather",
+    "name": "jungle moa feather",
+    "kind": "other",
+    "weight": 0.5,
+    "value": 140,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "katex-blood",
+    "name": "Katex' blood",
+    "kind": "other",
+    "weight": 0.7,
+    "value": 210,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "kollos-shell",
+    "name": "kollos shell",
+    "kind": "other",
+    "weight": 4.59,
+    "value": 420,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lamassu-hoof",
+    "name": "lamassu hoof",
+    "kind": "other",
+    "weight": 1.1,
+    "value": 330,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lamassu-horn",
+    "name": "lamassu horn",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 240,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lancer-beetle-shell",
+    "name": "lancer beetle shell",
+    "kind": "other",
+    "weight": 1.07,
+    "value": 80,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lancet",
+    "name": "lancet",
+    "kind": "other",
+    "weight": 4.9,
+    "value": 90,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lavafungus-head",
+    "name": "lavafungus head",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 900,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lavafungus-ring",
+    "name": "lavafungus ring",
+    "kind": "other",
+    "weight": 0.4,
+    "value": 390,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lavaworm-jaws",
+    "name": "lavaworm jaws",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 1100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lavaworm-spike-roots",
+    "name": "lavaworm spike roots",
+    "kind": "other",
+    "weight": 0.7,
+    "value": 600,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lavaworm-spikes",
+    "name": "lavaworm spikes",
+    "kind": "other",
+    "weight": 1,
+    "value": 750,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "legionnaire-flags",
+    "name": "legionnaire flags",
+    "kind": "other",
+    "weight": 1.1,
+    "value": 500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "liodile-fang",
+    "name": "liodile fang",
+    "kind": "other",
+    "weight": 1.7,
+    "value": 480,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lion-cloak-patch",
+    "name": "lion cloak patch",
+    "kind": "other",
+    "weight": 5,
+    "value": 190,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lion-crest",
+    "name": "lion crest",
+    "kind": "other",
+    "weight": 2,
+    "value": 270,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lion-seal",
+    "name": "lion seal",
+    "kind": "other",
+    "weight": 5,
+    "value": 210,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lizard-essence",
+    "name": "lizard essence",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 300,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lizard-heart",
+    "name": "lizard heart",
+    "kind": "other",
+    "weight": 3.5,
+    "value": 530,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lizard-leather",
+    "name": "lizard leather",
+    "kind": "other",
+    "weight": 0.5,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lizard-scale",
+    "name": "lizard scale",
+    "kind": "other",
+    "weight": 0.8,
+    "value": 120,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "longing-eyes",
+    "name": "longing eyes",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 8000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lost-bracers",
+    "name": "lost bracers",
+    "kind": "other",
+    "weight": 2.9,
+    "value": 140,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lucky-pig",
+    "name": "lucky pig",
+    "kind": "other",
+    "weight": 7,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "luminous-orb",
+    "name": "luminous orb",
+    "kind": "other",
+    "weight": 0.94,
+    "value": 1000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mad-froth",
+    "name": "mad froth",
+    "kind": "other",
+    "weight": 1.6,
+    "value": 80,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "magic-sulphur",
+    "name": "magic sulphur",
+    "kind": "other",
+    "weight": 1,
+    "value": 8000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "magma-clump",
+    "name": "magma clump",
+    "kind": "other",
+    "weight": 3.1,
+    "value": 570,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "makara-fin",
+    "name": "makara fin",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 350,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "makara-tongue",
+    "name": "makara tongue",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 320,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mammoth-tusk",
+    "name": "mammoth tusk",
+    "kind": "other",
+    "weight": 6,
+    "value": 100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mantassin-tail",
+    "name": "mantassin tail",
+    "kind": "other",
+    "weight": 1.14,
+    "value": 280,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "manticore-ear",
+    "name": "manticore ear",
+    "kind": "other",
+    "weight": 0.9,
+    "value": 310,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "manticore-tail",
+    "name": "manticore tail",
+    "kind": "other",
+    "weight": 7.5,
+    "value": 220,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mantosaurus-jaw",
+    "name": "mantosaurus jaw",
+    "kind": "other",
+    "weight": 4.2,
+    "value": 2800,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "marsh-stalker-beak",
+    "name": "marsh stalker beak",
+    "kind": "other",
+    "weight": 1.1,
+    "value": 65,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "marsh-stalker-feather",
+    "name": "marsh stalker feather",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 50,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "maxilla",
+    "name": "maxilla",
+    "kind": "other",
+    "weight": 2.1,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "maxxenius-head",
+    "name": "Maxxenius head",
+    "kind": "other",
+    "weight": 2.1,
+    "value": 500000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "meat-hammer",
+    "name": "meat hammer",
+    "kind": "other",
+    "weight": 3.7,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mega-dragon-heart",
+    "name": "mega dragon heart",
+    "kind": "other",
+    "weight": 2,
+    "value": 1100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mercurial-wing",
+    "name": "mercurial wing",
+    "kind": "other",
+    "weight": 0.1,
+    "value": 2500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "metal-jaw",
+    "name": "metal jaw",
+    "kind": "other",
+    "weight": 1.4,
+    "value": 260,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "metal-spike",
+    "name": "metal spike",
+    "kind": "other",
+    "weight": 0.5,
+    "value": 320,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "metal-toe",
+    "name": "metal toe",
+    "kind": "other",
+    "weight": 5,
+    "value": 430,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "milk-churn",
+    "name": "milk churn",
+    "kind": "other",
+    "weight": 20,
+    "value": 100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "minotaur-horn",
+    "name": "minotaur horn",
+    "kind": "other",
+    "weight": 1.11,
+    "value": 75,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "minotaur-leather",
+    "name": "minotaur leather",
+    "kind": "other",
+    "weight": 0.4,
+    "value": 80,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "miraculum",
+    "name": "miraculum",
+    "kind": "other",
+    "weight": 1.4,
+    "value": 60,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "molten-dragon-essence",
+    "name": "molten dragon essence",
+    "kind": "other",
+    "weight": 2,
+    "value": 840,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "moohtant-horn",
+    "name": "moohtant horn",
+    "kind": "other",
+    "weight": 3.5,
+    "value": 140,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "moon-pin",
+    "name": "moon pin",
+    "kind": "other",
+    "weight": 2.8,
+    "value": 18000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mother-soil",
+    "name": "mother soil",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 5000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mould-heart",
+    "name": "mould heart",
+    "kind": "other",
+    "weight": 0.75,
+    "value": 2100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mould-robe",
+    "name": "mould robe",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 1200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mouldy-powder",
+    "name": "mouldy powder",
+    "kind": "other",
+    "weight": 1.7,
+    "value": 200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mutated-bat-ear",
+    "name": "mutated bat ear",
+    "kind": "other",
+    "weight": 1.75,
+    "value": 420,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mutated-flesh",
+    "name": "mutated flesh",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 50,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mutated-rat-tail",
+    "name": "mutated rat tail",
+    "kind": "other",
+    "weight": 1.43,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mysterious-remains",
+    "name": "mysterious remains",
+    "kind": "other",
+    "weight": 120,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mystical-hourglass",
+    "name": "mystical hourglass",
+    "kind": "other",
+    "weight": 0.96,
+    "value": 700,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "naga-archer-scales",
+    "name": "naga archer scales",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 340,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "naga-armring",
+    "name": "naga armring",
+    "kind": "other",
+    "weight": 3.5,
+    "value": 390,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "naga-earring",
+    "name": "naga earring",
+    "kind": "other",
+    "weight": 2.8,
+    "value": 380,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "naga-warrior-scales",
+    "name": "naga warrior scales",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 340,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "natural-soil",
+    "name": "natural soil",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 2000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "necromantic-robe",
+    "name": "necromantic robe",
+    "kind": "other",
+    "weight": 2.2,
+    "value": 250,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "necromantic-rust",
+    "name": "necromantic rust",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 390,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "nettle-blossom",
+    "name": "nettle blossom",
+    "kind": "other",
+    "weight": 0.88,
+    "value": 75,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "nettle-spit",
+    "name": "nettle spit",
+    "kind": "other",
+    "weight": 0.9,
+    "value": 25,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "neutral-matter",
+    "name": "neutral matter",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 5000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "nighthunter-wing",
+    "name": "nighthunter wing",
+    "kind": "other",
+    "weight": 1.4,
+    "value": 2000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "nimmersatts-seal",
+    "name": "Nimmersatt's seal",
+    "kind": "other",
+    "weight": 2,
+    "value": 520,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "noble-amulet",
+    "name": "noble amulet",
+    "kind": "other",
+    "weight": 0.65,
+    "value": 430000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "noble-cape",
+    "name": "noble cape",
+    "kind": "other",
+    "weight": 1.3,
+    "value": 425000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "noble-turban",
+    "name": "noble turban",
+    "kind": "other",
+    "weight": 1.44,
+    "value": 430,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "nose-ring",
+    "name": "nose ring",
+    "kind": "other",
+    "weight": 5,
+    "value": 2000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "obujos-shell",
+    "name": "Obujos' Shell",
+    "kind": "other",
+    "weight": 2.8,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "odd-organ",
+    "name": "odd organ",
+    "kind": "other",
+    "weight": 4.5,
+    "value": 410,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ogre-ear-stud",
+    "name": "ogre ear stud",
+    "kind": "other",
+    "weight": 16,
+    "value": 180,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ogre-nose-ring",
+    "name": "ogre nose ring",
+    "kind": "other",
+    "weight": 21,
+    "value": 210,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "old-girtablilu-carapace",
+    "name": "old girtablilu carapace",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 570,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "old-royal-diary",
+    "name": "old royal diary",
+    "kind": "other",
+    "weight": 1.3,
+    "value": 220000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "orc-leather",
+    "name": "orc leather",
+    "kind": "other",
+    "weight": 0.5,
+    "value": 30,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "orc-tooth",
+    "name": "orc tooth",
+    "kind": "other",
+    "weight": 1,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "orc-tusk",
+    "name": "orc tusk",
+    "kind": "other",
+    "weight": 10,
+    "value": 700,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "orcish-gear",
+    "name": "orcish gear",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 85,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "panther-head",
+    "name": "panther head",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "panther-paw",
+    "name": "panther paw",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "parder-fur",
+    "name": "parder fur",
+    "kind": "other",
+    "weight": 2.9,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "parder-tooth",
+    "name": "parder tooth",
+    "kind": "other",
+    "weight": 0.7,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "peacock-feather-fan",
+    "name": "peacock feather fan",
+    "kind": "other",
+    "weight": 2,
+    "value": 350,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "peg-leg",
+    "name": "peg leg",
+    "kind": "other",
+    "weight": 5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "pelvis-bone",
+    "name": "pelvis bone",
+    "kind": "other",
+    "weight": 1.3,
+    "value": 30,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "percht-broom",
+    "name": "percht broom",
+    "kind": "other",
+    "weight": 8.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "percht-handkerchief",
+    "name": "percht handkerchief",
+    "kind": "other",
+    "weight": 5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "percht-horns",
+    "name": "percht horns",
+    "kind": "other",
+    "weight": 5.8,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "percht-skull",
+    "name": "percht skull",
+    "kind": "other",
+    "weight": 8.69,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "perfect-behemoth-fang",
+    "name": "perfect behemoth fang",
+    "kind": "other",
+    "weight": 5,
+    "value": 250,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "petrified-scream",
+    "name": "petrified scream",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 250,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "phantasmal-hair",
+    "name": "phantasmal hair",
+    "kind": "other",
+    "weight": 0.5,
+    "value": 500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "pig-foot",
+    "name": "pig foot",
+    "kind": "other",
+    "weight": 0.98,
+    "value": 10,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "pirate-coin",
+    "name": "pirate coin",
+    "kind": "other",
+    "weight": 0.4,
+    "value": 110,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "plagueroot-offshoot",
+    "name": "Plagueroot offshoot",
+    "kind": "other",
+    "weight": 0.7,
+    "value": 280000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "plasma-pearls",
+    "name": "plasma pearls",
+    "kind": "other",
+    "weight": 3.5,
+    "value": 250,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "plasmatic-lightning",
+    "name": "plasmatic lightning",
+    "kind": "other",
+    "weight": 7,
+    "value": 270,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "poison-gland",
+    "name": "poison gland",
+    "kind": "other",
+    "weight": 0.33,
+    "value": 210,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "poison-spider-shell",
+    "name": "poison spider shell",
+    "kind": "other",
+    "weight": 1.3,
+    "value": 10,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "poisoned-fang",
+    "name": "poisoned fang",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 130,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "poisonous-slime",
+    "name": "poisonous slime",
+    "kind": "other",
+    "weight": 0.8,
+    "value": 50,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "polar-bear-paw",
+    "name": "polar bear paw",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 30,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "prehemoth-claw",
+    "name": "prehemoth claw",
+    "kind": "other",
+    "weight": 8.5,
+    "value": 2300,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "prehemoth-horns",
+    "name": "prehemoth horns",
+    "kind": "other",
+    "weight": 11,
+    "value": 3000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "preserved-dark-seed",
+    "name": "preserved dark seed",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "preserved-light-blue-seed",
+    "name": "preserved light blue seed",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "preserved-pink-seed",
+    "name": "preserved pink seed",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "preserved-purple-seed",
+    "name": "preserved purple seed",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "preserved-red-seed",
+    "name": "preserved red seed",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "preserved-violet-seed",
+    "name": "preserved violet seed",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "preserved-yellow-seed",
+    "name": "preserved yellow seed",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "pristine-worm-head",
+    "name": "pristine worm head",
+    "kind": "other",
+    "weight": 1.9,
+    "value": 15000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "protective-charm",
+    "name": "protective charm",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 60,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "pulverized-ore",
+    "name": "pulverized ore",
+    "kind": "other",
+    "weight": 1.7,
+    "value": 400,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "purple-robe",
+    "name": "purple robe",
+    "kind": "other",
+    "weight": 2.29,
+    "value": 110,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "quara-bone",
+    "name": "quara bone",
+    "kind": "other",
+    "weight": 1.44,
+    "value": 500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "quara-eye",
+    "name": "quara eye",
+    "kind": "other",
+    "weight": 0.8,
+    "value": 350,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "quara-pincers",
+    "name": "quara pincers",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 410,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "quara-tentacle",
+    "name": "quara tentacle",
+    "kind": "other",
+    "weight": 1.07,
+    "value": 140,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "quill",
+    "name": "quill",
+    "kind": "other",
+    "weight": 0.9,
+    "value": 1100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rare-earth",
+    "name": "rare earth",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 80,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ravenous-circlet",
+    "name": "ravenous circlet",
+    "kind": "other",
+    "weight": 0.4,
+    "value": 220000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "raw-meat",
+    "name": "raw meat",
+    "kind": "other",
+    "weight": 28,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "reality-splinter",
+    "name": "reality splinter",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "red-goanna-scale",
+    "name": "red goanna scale",
+    "kind": "other",
+    "weight": 0.9,
+    "value": 270,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "red-hair-dye",
+    "name": "red hair dye",
+    "kind": "other",
+    "weight": 2.1,
+    "value": 40,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "red-lantern",
+    "name": "red lantern",
+    "kind": "other",
+    "weight": 3,
+    "value": 250,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rhindeer-antlers",
+    "name": "rhindeer antlers",
+    "kind": "other",
+    "weight": 5.7,
+    "value": 680,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rhino-hide",
+    "name": "rhino hide",
+    "kind": "other",
+    "weight": 8,
+    "value": 175,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rhino-horn",
+    "name": "rhino horn",
+    "kind": "other",
+    "weight": 6.5,
+    "value": 265,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rhino-horn-carving",
+    "name": "rhino horn carving",
+    "kind": "other",
+    "weight": 6,
+    "value": 300,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ripptor-claw",
+    "name": "ripptor claw",
+    "kind": "other",
+    "weight": 2.8,
+    "value": 2600,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ripptor-scales",
+    "name": "ripptor scales",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 1200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ritual-tooth",
+    "name": "ritual tooth",
+    "kind": "other",
+    "weight": 0.55,
+    "value": 135,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rogue-naga-scales",
+    "name": "rogue naga scales",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 570,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "roots",
+    "name": "roots",
+    "kind": "other",
+    "weight": 0.9,
+    "value": 1200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rope-belt",
+    "name": "rope belt",
+    "kind": "other",
+    "weight": 0.97,
+    "value": 66,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rorc-egg",
+    "name": "rorc egg",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 120,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rorc-feather",
+    "name": "rorc feather",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 70,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rotten-feather",
+    "name": "rotten feather",
+    "kind": "other",
+    "weight": 0.2,
+    "value": 120,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rotten-heart",
+    "name": "rotten heart",
+    "kind": "other",
+    "weight": 1.1,
+    "value": 74000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rotten-roots",
+    "name": "rotten roots",
+    "kind": "other",
+    "weight": 1,
+    "value": 3800,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rotten-vermin-ichor",
+    "name": "rotten vermin ichor",
+    "kind": "other",
+    "weight": 1,
+    "value": 4500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sabretooth",
+    "name": "sabretooth",
+    "kind": "other",
+    "weight": 1.28,
+    "value": 400,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sabretooth-fur",
+    "name": "sabretooth fur",
+    "kind": "other",
+    "weight": 1.35,
+    "value": 2500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "safety-pin",
+    "name": "safety pin",
+    "kind": "other",
+    "weight": 0.5,
+    "value": 120,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sandcrawler-shell",
+    "name": "sandcrawler shell",
+    "kind": "other",
+    "weight": 0.75,
+    "value": 20,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "scarab-pincers",
+    "name": "scarab pincers",
+    "kind": "other",
+    "weight": 2.3,
+    "value": 280,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "scorpion-charm",
+    "name": "scorpion charm",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 620,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "scorpion-tail",
+    "name": "scorpion tail",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 25,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "scythe-leg",
+    "name": "scythe leg",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 450,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sea-horse-figurine",
+    "name": "sea horse figurine",
+    "kind": "other",
+    "weight": 6.5,
+    "value": 42000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sea-serpent-scale",
+    "name": "sea serpent scale",
+    "kind": "other",
+    "weight": 1.46,
+    "value": 520,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "seacrest-hair",
+    "name": "seacrest hair",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 260,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "seacrest-pearl",
+    "name": "seacrest pearl",
+    "kind": "other",
+    "weight": 3.5,
+    "value": 400,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "seacrest-scale",
+    "name": "seacrest scale",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "seeds",
+    "name": "seeds",
+    "kind": "other",
+    "weight": 0.5,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "shadow-mask",
+    "name": "shadow mask",
+    "kind": "other",
+    "weight": 6.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "shadow-paint",
+    "name": "shadow paint",
+    "kind": "other",
+    "weight": 6.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "shaggy-tail",
+    "name": "shaggy tail",
+    "kind": "other",
+    "weight": 1.12,
+    "value": 25,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "shamanic-hood",
+    "name": "shamanic hood",
+    "kind": "other",
+    "weight": 0.9,
+    "value": 45,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "shamanic-talisman",
+    "name": "shamanic talisman",
+    "kind": "other",
+    "weight": 1.28,
+    "value": 200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "shard",
+    "name": "shard",
+    "kind": "other",
+    "weight": 19,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "shark-fins",
+    "name": "shark fins",
+    "kind": "other",
+    "weight": 6.2,
+    "value": 250,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "shimmering-beetles",
+    "name": "shimmering beetles",
+    "kind": "other",
+    "weight": 1.7,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "shiny-stone",
+    "name": "shiny stone",
+    "kind": "other",
+    "weight": 1.56,
+    "value": 500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "signet-ring",
+    "name": "signet ring",
+    "kind": "other",
+    "weight": 0.7,
+    "value": 480000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "silencer-claws",
+    "name": "silencer claws",
+    "kind": "other",
+    "weight": 4.2,
+    "value": 390,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "silencer-resonating-chamber",
+    "name": "silencer resonating chamber",
+    "kind": "other",
+    "weight": 3.5,
+    "value": 600,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "silken-bookmark",
+    "name": "silken bookmark",
+    "kind": "other",
+    "weight": 1,
+    "value": 1300,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "silky-fur",
+    "name": "silky fur",
+    "kind": "other",
+    "weight": 1.14,
+    "value": 35,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "silver-foxmouse-coin",
+    "name": "silver foxmouse coin",
+    "kind": "other",
+    "weight": 2.8,
+    "value": 11000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "silver-moon-coin",
+    "name": "silver moon coin",
+    "kind": "other",
+    "weight": 2.8,
+    "value": 11000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sineater-wing",
+    "name": "sineater wing",
+    "kind": "other",
+    "weight": 4.7,
+    "value": 2100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "single-human-eye",
+    "name": "single human eye",
+    "kind": "other",
+    "weight": 0.6,
+    "value": 1000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "skull-belt",
+    "name": "skull belt",
+    "kind": "other",
+    "weight": 1.15,
+    "value": 80,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "skull-fetish",
+    "name": "skull fetish",
+    "kind": "other",
+    "weight": 4.4,
+    "value": 250,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "skull-shatterer",
+    "name": "skull shatterer",
+    "kind": "other",
+    "weight": 3.8,
+    "value": 170,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "skunk-tail",
+    "name": "skunk tail",
+    "kind": "other",
+    "weight": 1.05,
+    "value": 50,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "slime-heart",
+    "name": "slime heart",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 160,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "slime-mould",
+    "name": "slime mould",
+    "kind": "other",
+    "weight": 3,
+    "value": 175,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "slimy-leaf-tentacle",
+    "name": "slimy leaf tentacle",
+    "kind": "other",
+    "weight": 3,
+    "value": 320,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "slimy-leg",
+    "name": "slimy leg",
+    "kind": "other",
+    "weight": 1.6,
+    "value": 4500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "small-energy-ball",
+    "name": "small energy ball",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 250,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "small-ladybug",
+    "name": "small ladybug",
+    "kind": "other",
+    "weight": 7,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "small-notebook",
+    "name": "small notebook",
+    "kind": "other",
+    "weight": 0.8,
+    "value": 480,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "small-oil-lamp",
+    "name": "small oil lamp",
+    "kind": "other",
+    "weight": 9,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "small-pitchfork",
+    "name": "small pitchfork",
+    "kind": "other",
+    "weight": 1.1,
+    "value": 70,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "small-treasure-chest",
+    "name": "small treasure chest",
+    "kind": "other",
+    "weight": 8,
+    "value": 500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "small-tropical-fish",
+    "name": "small tropical fish",
+    "kind": "other",
+    "weight": 2.2,
+    "value": 380,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "smoldering-eye",
+    "name": "smoldering eye",
+    "kind": "other",
+    "weight": 31.5,
+    "value": 470000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "snake-skin",
+    "name": "snake skin",
+    "kind": "other",
+    "weight": 1,
+    "value": 400,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sniper-gloves",
+    "name": "sniper gloves",
+    "kind": "other",
+    "weight": 4,
+    "value": 2000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "some-grimeleech-wings",
+    "name": "some grimeleech wings",
+    "kind": "other",
+    "weight": 8.5,
+    "value": 1200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "soul-stone",
+    "name": "soul stone",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 6000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spark-sphere",
+    "name": "spark sphere",
+    "kind": "other",
+    "weight": 5,
+    "value": 350,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sparkion-claw",
+    "name": "sparkion claw",
+    "kind": "other",
+    "weight": 8,
+    "value": 290,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sparkion-legs",
+    "name": "sparkion legs",
+    "kind": "other",
+    "weight": 7.5,
+    "value": 310,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sparkion-stings",
+    "name": "sparkion stings",
+    "kind": "other",
+    "weight": 3.5,
+    "value": 280,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sparkion-tail",
+    "name": "sparkion tail",
+    "kind": "other",
+    "weight": 7.5,
+    "value": 300,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spectral-gold-nugget",
+    "name": "spectral gold nugget",
+    "kind": "other",
+    "weight": 1.35,
+    "value": 500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spectral-silver-nugget",
+    "name": "spectral silver nugget",
+    "kind": "other",
+    "weight": 1.35,
+    "value": 250,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spellreaper-staff-totem",
+    "name": "spellreaper staff totem",
+    "kind": "other",
+    "weight": 6.5,
+    "value": 3100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sphinx-feather",
+    "name": "sphinx feather",
+    "kind": "other",
+    "weight": 0.1,
+    "value": 470,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sphinx-tiara",
+    "name": "sphinx tiara",
+    "kind": "other",
+    "weight": 3.5,
+    "value": 360,
+    "slot": "head",
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spider-fangs",
+    "name": "spider fangs",
+    "kind": "other",
+    "weight": 0.5,
+    "value": 10,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spider-silk",
+    "name": "spider silk",
+    "kind": "other",
+    "weight": 0.1,
+    "value": 100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spiderweb-clouds-shreds",
+    "name": "spiderweb clouds shreds",
+    "kind": "other",
+    "weight": 0.1,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spidris-mandible",
+    "name": "spidris mandible",
+    "kind": "other",
+    "weight": 2.38,
+    "value": 450,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spiked-iron-ball",
+    "name": "spiked iron ball",
+    "kind": "other",
+    "weight": 1.25,
+    "value": 100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spirited-soil",
+    "name": "spirited soil",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spitter-nose",
+    "name": "spitter nose",
+    "kind": "other",
+    "weight": 1.9,
+    "value": 340,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spooky-blue-eye",
+    "name": "spooky blue eye",
+    "kind": "other",
+    "weight": 0.86,
+    "value": 95,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "srezz-eye",
+    "name": "Srezz' eye",
+    "kind": "other",
+    "weight": 0.8,
+    "value": 300,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "stalking-seeds",
+    "name": "stalking seeds",
+    "kind": "other",
+    "weight": 0.4,
+    "value": 1800,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "stampor-horn",
+    "name": "stampor horn",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "stampor-talons",
+    "name": "stampor talons",
+    "kind": "other",
+    "weight": 1.7,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "star-herb",
+    "name": "star herb",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 15,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "stone-herb",
+    "name": "stone herb",
+    "kind": "other",
+    "weight": 0.2,
+    "value": 20,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "stone-nose",
+    "name": "stone nose",
+    "kind": "other",
+    "weight": 2.6,
+    "value": 590,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "stone-wing",
+    "name": "stone wing",
+    "kind": "other",
+    "weight": 1.53,
+    "value": 120,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "strange-proto-matter",
+    "name": "strange proto matter",
+    "kind": "other",
+    "weight": 6,
+    "value": 300,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "strange-symbol",
+    "name": "strange symbol",
+    "kind": "other",
+    "weight": 2,
+    "value": 200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "streaked-devourer-eyes",
+    "name": "streaked devourer eyes",
+    "kind": "other",
+    "weight": 0.8,
+    "value": 500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "streaked-devourer-legs",
+    "name": "streaked devourer legs",
+    "kind": "other",
+    "weight": 2.4,
+    "value": 600,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "streaked-devourer-maw",
+    "name": "streaked devourer maw",
+    "kind": "other",
+    "weight": 1.9,
+    "value": 400,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "striped-fur",
+    "name": "striped fur",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 50,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sulphider-shell",
+    "name": "sulphider shell",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 2200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sulphur-powder",
+    "name": "sulphur powder",
+    "kind": "other",
+    "weight": 1,
+    "value": 1900,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sulphurous-stone",
+    "name": "sulphurous stone",
+    "kind": "other",
+    "weight": 1.42,
+    "value": 100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sun-brooch",
+    "name": "sun brooch",
+    "kind": "other",
+    "weight": 2.8,
+    "value": 18000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "swamp-grass",
+    "name": "swamp grass",
+    "kind": "other",
+    "weight": 0.94,
+    "value": 20,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "swampling-moss",
+    "name": "swampling moss",
+    "kind": "other",
+    "weight": 2.7,
+    "value": 20,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "swarmer-antenna",
+    "name": "swarmer antenna",
+    "kind": "other",
+    "weight": 1,
+    "value": 130,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "tanjis-sight",
+    "name": "Tanjis' Sight",
+    "kind": "other",
+    "weight": 2.2,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "tarantula-egg",
+    "name": "tarantula egg",
+    "kind": "other",
+    "weight": 0.4,
+    "value": 80,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "tarnished-rhino-figurine",
+    "name": "tarnished rhino figurine",
+    "kind": "other",
+    "weight": 7.5,
+    "value": 320,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "technomancer-beard",
+    "name": "technomancer beard",
+    "kind": "other",
+    "weight": 0.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "telescope-eye",
+    "name": "telescope eye",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 1600,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "tentacle-piece",
+    "name": "tentacle piece",
+    "kind": "other",
+    "weight": 3,
+    "value": 5000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "terramite-legs",
+    "name": "terramite legs",
+    "kind": "other",
+    "weight": 1.14,
+    "value": 60,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "terramite-shell",
+    "name": "terramite shell",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 170,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "terrorbird-beak",
+    "name": "terrorbird beak",
+    "kind": "other",
+    "weight": 1.17,
+    "value": 95,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "thick-fur",
+    "name": "thick fur",
+    "kind": "other",
+    "weight": 1.25,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "thorn",
+    "name": "thorn",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "thorn-seed",
+    "name": "thorn seed",
+    "kind": "other",
+    "weight": 6.5,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "tooth-file",
+    "name": "tooth file",
+    "kind": "other",
+    "weight": 5.09,
+    "value": 60,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "torn-shirt",
+    "name": "torn shirt",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 250,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "trapped-bad-dream-monster",
+    "name": "trapped bad dream monster",
+    "kind": "other",
+    "weight": 12,
+    "value": 900,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "tremendous-tyrant-head",
+    "name": "tremendous tyrant head",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 930,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "tremendous-tyrant-shell",
+    "name": "tremendous tyrant shell",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 740,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "trollroot",
+    "name": "trollroot",
+    "kind": "other",
+    "weight": 1.4,
+    "value": 50,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "tunnel-tyrant-head",
+    "name": "tunnel tyrant head",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 500,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "tunnel-tyrant-shell",
+    "name": "tunnel tyrant shell",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 700,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "turtle-shell",
+    "name": "turtle shell",
+    "kind": "other",
+    "weight": 5,
+    "value": 90,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "tusk",
+    "name": "tusk",
+    "kind": "other",
+    "weight": 10,
+    "value": 100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "twig-arms",
+    "name": "twig arms",
+    "kind": "other",
+    "weight": 2.2,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "two-headed-turtle-heads",
+    "name": "two-headed turtle heads",
+    "kind": "other",
+    "weight": 7.6,
+    "value": 460,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ulcer-probe",
+    "name": "ulcer probe",
+    "kind": "other",
+    "weight": 0.1,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "undead-heart",
+    "name": "undead heart",
+    "kind": "other",
+    "weight": 0.8,
+    "value": 200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "undertaker-fangs",
+    "name": "undertaker fangs",
+    "kind": "other",
+    "weight": 0.75,
+    "value": 2700,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "unholy-bone",
+    "name": "unholy bone",
+    "kind": "other",
+    "weight": 1.25,
+    "value": 480,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "vampire-dust",
+    "name": "vampire dust",
+    "kind": "other",
+    "weight": 1,
+    "value": 100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "vampire-teeth",
+    "name": "vampire teeth",
+    "kind": "other",
+    "weight": 0.5,
+    "value": 275,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "varnished-diremaw-brainpan",
+    "name": "varnished diremaw brainpan",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 750,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "varnished-diremaw-legs",
+    "name": "varnished diremaw legs",
+    "kind": "other",
+    "weight": 2.29,
+    "value": 670,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "venison",
+    "name": "venison",
+    "kind": "other",
+    "weight": 3.8,
+    "value": 55,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "versicolour-fireworks-powder",
+    "name": "versicolour fireworks powder",
+    "kind": "other",
+    "weight": 1,
+    "value": 0,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "vexclaw-talon",
+    "name": "vexclaw talon",
+    "kind": "other",
+    "weight": 9,
+    "value": 1100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "vibrant-heart",
+    "name": "vibrant heart",
+    "kind": "other",
+    "weight": 0.75,
+    "value": 2100,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "vibrant-robe",
+    "name": "vibrant robe",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 1200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "volatile-proto-matter",
+    "name": "volatile proto matter",
+    "kind": "other",
+    "weight": 6,
+    "value": 300,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "war-crystal",
+    "name": "war crystal",
+    "kind": "other",
+    "weight": 1.45,
+    "value": 460,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "wardragon-claw",
+    "name": "wardragon claw",
+    "kind": "other",
+    "weight": 2,
+    "value": 550,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "wardragon-tooth",
+    "name": "wardragon tooth",
+    "kind": "other",
+    "weight": 2,
+    "value": 730,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "warwolf-fur",
+    "name": "warwolf fur",
+    "kind": "other",
+    "weight": 1.05,
+    "value": 30,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "waspoid-claw",
+    "name": "waspoid claw",
+    "kind": "other",
+    "weight": 2.15,
+    "value": 320,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "waspoid-wing",
+    "name": "waspoid wing",
+    "kind": "other",
+    "weight": 0.99,
+    "value": 190,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "werebadger-claws",
+    "name": "werebadger claws",
+    "kind": "other",
+    "weight": 1.1,
+    "value": 160,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "werebadger-skull",
+    "name": "werebadger skull",
+    "kind": "other",
+    "weight": 3,
+    "value": 185,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "werebear-fur",
+    "name": "werebear fur",
+    "kind": "other",
+    "weight": 5,
+    "value": 195,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "werebear-skull",
+    "name": "werebear skull",
+    "kind": "other",
+    "weight": 5,
+    "value": 195,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "wereboar-hooves",
+    "name": "wereboar hooves",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 175,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "wereboar-tusks",
+    "name": "wereboar tusks",
+    "kind": "other",
+    "weight": 1.9,
+    "value": 165,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "werecrocodile-tongue",
+    "name": "werecrocodile tongue",
+    "kind": "other",
+    "weight": 2.8,
+    "value": 570,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "werefox-tail",
+    "name": "werefox tail",
+    "kind": "other",
+    "weight": 1.4,
+    "value": 200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "werehyaena-nose",
+    "name": "werehyaena nose",
+    "kind": "other",
+    "weight": 1,
+    "value": 220,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "werehyaena-talisman",
+    "name": "werehyaena talisman",
+    "kind": "other",
+    "weight": 0.8,
+    "value": 350,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "werepanther-claw",
+    "name": "werepanther claw",
+    "kind": "other",
+    "weight": 2.8,
+    "value": 280,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "weretiger-tooth",
+    "name": "weretiger tooth",
+    "kind": "other",
+    "weight": 2.8,
+    "value": 490,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "werewolf-fangs",
+    "name": "werewolf fangs",
+    "kind": "other",
+    "weight": 1.6,
+    "value": 180,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "werewolf-fur",
+    "name": "werewolf fur",
+    "kind": "other",
+    "weight": 1.12,
+    "value": 380,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "white-deer-antlers",
+    "name": "white deer antlers",
+    "kind": "other",
+    "weight": 3,
+    "value": 400,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "white-deer-skin",
+    "name": "white deer skin",
+    "kind": "other",
+    "weight": 3,
+    "value": 245,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "wild-flowers",
+    "name": "wild flowers",
+    "kind": "other",
+    "weight": 1.5,
+    "value": 120,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "wimp-tooth-chain",
+    "name": "wimp tooth chain",
+    "kind": "other",
+    "weight": 2.4,
+    "value": 120,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "winged-tail",
+    "name": "winged tail",
+    "kind": "other",
+    "weight": 4.5,
+    "value": 800,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "winter-wolf-fur",
+    "name": "winter wolf fur",
+    "kind": "other",
+    "weight": 1.1,
+    "value": 20,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "witch-broom",
+    "name": "witch broom",
+    "kind": "other",
+    "weight": 3.33,
+    "value": 60,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "withered-pauldrons",
+    "name": "withered pauldrons",
+    "kind": "other",
+    "weight": 1.4,
+    "value": 850,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "withered-scalp",
+    "name": "withered scalp",
+    "kind": "other",
+    "weight": 1.7,
+    "value": 900,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "wolf-paw",
+    "name": "wolf paw",
+    "kind": "other",
+    "weight": 0.8,
+    "value": 70,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "wood",
+    "name": "wood",
+    "kind": "other",
+    "weight": 5,
+    "value": 5,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "wool",
+    "name": "wool",
+    "kind": "other",
+    "weight": 1.18,
+    "value": 15,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "worm-sponge",
+    "name": "worm sponge",
+    "kind": "other",
+    "weight": 1,
+    "value": 4200,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "writhing-brain",
+    "name": "writhing brain",
+    "kind": "other",
+    "weight": 0.6,
+    "value": 370000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "writhing-heart",
+    "name": "writhing heart",
+    "kind": "other",
+    "weight": 0.6,
+    "value": 185000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "wyrm-scale",
+    "name": "wyrm scale",
+    "kind": "other",
+    "weight": 1.8,
+    "value": 400,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "wyvern-talisman",
+    "name": "wyvern talisman",
+    "kind": "other",
+    "weight": 2.25,
+    "value": 265,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "yapunac-dagger",
+    "name": "yapunac dagger",
+    "kind": "other",
+    "weight": 2,
+    "value": 240,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "yielocks",
+    "name": "yielocks",
+    "kind": "other",
+    "weight": 2.95,
+    "value": 600,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "yielowax",
+    "name": "yielowax",
+    "kind": "other",
+    "weight": 4.75,
+    "value": 600,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "yirkas-egg",
+    "name": "Yirkas' egg",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 280,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "young-lich-worm",
+    "name": "young lich worm",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 25000,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "zaogun-flag",
+    "name": "zaogun flag",
+    "kind": "other",
+    "weight": 0.98,
+    "value": 600,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "zaogun-shoulderplates",
+    "name": "zaogun shoulderplates",
+    "kind": "other",
+    "weight": 1.03,
+    "value": 150,
+    "creatureProduct": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  }
+]

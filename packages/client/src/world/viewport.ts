@@ -25,17 +25,20 @@ import { buildTilemap, type Tilemap } from '@draconya/content';
 import { NO_FLAGS } from '../assets/appearances.js';
 import type { AssetPack } from '../assets/pack.js';
 import {
-  interpolate, world, type Creature, type Effect, type FloatingText, type Missile,
+  interpolate, tileOverrideKey, world,
+  type Creature, type Effect, type FloatingText, type GroundItem, type Missile,
 } from '../state/world.js';
 import {
   TILE, prefetchTiles, renderTiles, sameWindow, tileAtScreen, tilesEntering, toScreen, viewFor,
   visibleTiles, zoomFor, type TileWindow,
 } from './camera.js';
+import { lightRings, lightTint } from './creature-light.js';
 import { CREATURE_SLOT, sceneZIndex } from './depth.js';
 import {
-  FALLBACK_EFFECT_PHASES, effectPhaseAt, floatingTextColor, floatingTextOffset, missileProgress,
+  FALLBACK_EFFECT_PHASES, effectPhaseAt, floatingTextColor, floatingTextOffset, loopPhaseAt, missileProgress,
 } from './effects.js';
 import { facingOf, walkFrame } from './facing.js';
+import { ambientTint } from './light.js';
 import { createFpsMeter } from './fps.js';
 import { shade, veilTint } from './floors.js';
 import {
@@ -46,8 +49,11 @@ import {
   creatureKey, effectKey, effectKeysOf, missileKey, objectKey,
 } from './keys.js';
 import { paintOf } from './outfit-colors.js';
-import { pickCreature } from './pick.js';
+import { pickCreature, pickGroundItem } from './pick.js';
 import type { Scene, StackedItem, TileStack } from './scene.js';
+import {
+  SPEECH_COLOR, monsterAwake, rollSpeech, speechDurationMs, speechHeard, startSpeech, type SpeechState,
+} from './speech.js';
 import { TextureBook } from './textures.js';
 import { drawTile, type DrawLayer, type ObjectInfo } from './tile-stack.js';
 import {
@@ -63,7 +69,7 @@ export type { MapTiles } from './scene.js';
  * arte sintética e para o contrato do viewport ficar visível num lugar só. O pacote real a
  * satisfaz por estrutura — `shell/Viewport.tsx` não muda (issue #381).
  */
-export type WorldArt = Pick<AssetPack, 'object' | 'objectPattern' | 'objectFlags' | 'objectSize'
+export type WorldArt = Pick<AssetPack, 'object' | 'objectPattern' | 'objectFlags' | 'objectSize' | 'objectPhases'
   | 'outfit' | 'framesOf' | 'effect' | 'effectPhases' | 'missile' | 'warmObjects' | 'warmOutfit'
   | 'outfitDisplacement'>;
 
@@ -75,8 +81,6 @@ function sceneKeyOf(scene: Scene): string {
 const COLOR_FLOOR = 0x2b2b33;
 const COLOR_WALL = 0x14141a;
 const COLOR_GRID = 0x3a3a45;
-/** O tom do bueiro (`ambience: 'cavern'`): o mundo inteiro, sob uma luz fria. */
-const CAVERN_TINT = 0x8e8eb0;
 const COLOR_CREATURE = 0xc25b4a;
 const COLOR_SELF = 0x4ac26a;
 const COLOR_HEALTH_FRAME = 0x000000;
@@ -97,6 +101,8 @@ const FLOATING_TEXT_ABOVE = 12;
 const HEALTH_BAR_ABOVE = 8;
 /** O nome termina um pixel acima da barra. */
 const NAME_GAP = 1;
+/** A altura do nome (dez pixels de Verdana em negrito), sobre a qual a fala do monstro (#620) fica. */
+const NAME_HEIGHT = 12;
 /** Metade da barra, arredondada para baixo: ver o comentário em `paintOverlay`. */
 const HEALTH_BAR_HALF = Math.floor(HEALTH_BAR_WIDTH / 2);
 
@@ -114,6 +120,24 @@ interface CreatureOverlay {
   drawnMaxHealth: number;
   drawnName: string;
   drawnColor: number;
+}
+
+/**
+ * A fala periódica de UM monstro (#620): o relógio da rolagem, as falas que o relógio serve (para
+ * notar que o conteúdo trocou), o texto sobre a criatura — criado na primeira fala — e até
+ * quando ele fica.
+ */
+interface CreatureSpeech {
+  readonly voices: NonNullable<Creature['voices']>;
+  readonly clock: SpeechState;
+  label: Text | null;
+  shownUntilMs: number;
+}
+
+/** O clarão da luz de UM monstro (#620) e a chave do que está desenhado nele (`nível:cor`). */
+interface CreatureGlow {
+  readonly glow: Graphics;
+  drawn: string;
 }
 
 /**
@@ -171,7 +195,28 @@ export interface ViewportOptions {
    * câmera livre, sem sessão e sem `selfId`. Ausente, a câmera segue o personagem, como sempre.
    */
   readonly camera?: () => { readonly x: number; readonly y: number; readonly z: number };
+  /**
+   * De onde vêm as criaturas a desenhar, quando não é o `world` — o explorador (#665) desenha os
+   * NPCs e spawns do mapa parados, sem sessão e sem escrever no store do jogo (ADR 0007).
+   * Ausente, são as do `world`, como sempre.
+   */
+  readonly creatures?: () => Iterable<Creature>;
+  /**
+   * Anima os objetos que têm fases — água, fogo, fontes (#666). O terreno passa a repintar no
+   * compasso de `OBJECT_ANIMATION_TICK_MS`, então só liga quem quer pagar por isso: o explorador
+   * do mundo. Ausente, todo objeto fica na fase 0, como sempre.
+   */
+  readonly animateObjects?: boolean;
+  /**
+   * O sorteio da fala periódica do monstro (#620), `[0, 1)`. É o do CLIENTE — nunca o `Rng` da
+   * sessão: a fala é apresentação e não muda resultado (invariante 3). `Math.random` por padrão;
+   * o teste injeta um determinístico.
+   */
+  readonly random?: () => number;
 }
+
+/** De quanto em quanto tempo o terreno animado repinta. As fases do Tibia duram de 100 ms para cima. */
+export const OBJECT_ANIMATION_TICK_MS = 100;
 
 /**
  * A fotografia dos contadores de desenvolvimento do renderer (M23 §40, D8). Tudo é leitura:
@@ -219,6 +264,19 @@ export interface ViewportHandle {
    * clique: quem manda a intenção `select-target` é o `shell`, nunca este módulo (invariante 4).
    */
   creatureAt(clientX: number, clientY: number): number | null;
+  /**
+   * O item do chão sob um ponto do canvas (#722, ADR 0048 d.4) — o cadáver que o clique abre.
+   * `null` sem item ali. Quem manda `open-corpse`/`walk-to` é o `shell`, nunca este módulo
+   * (invariante 4).
+   */
+  groundItemAt(clientX: number, clientY: number): GroundItem | null;
+  /**
+   * O tile sob um ponto do canvas (px do cliente), no andar da câmera (#729, ADR 0050 d.7).
+   * Diferente de `creatureAt`/`groundItemAt`: não pergunta o que está NELE, só ONDE ele é — o
+   * servidor decide se há algo usável ali (`use-on-map`) ou o que descrever (`look`), nunca o
+   * cliente (invariante 4).
+   */
+  tileAt(clientX: number, clientY: number): { readonly x: number; readonly y: number; readonly z: number };
   /** O alvo do servidor; desenha a moldura vermelha sobre a criatura de `id`. */
   setTargetId(id: number | null): void;
   destroy(): void;
@@ -389,6 +447,11 @@ export async function mountViewport(
   const walkingTiles = new Map<number, number>();
   /** Barra e nome, pelo mesmo id. Nascem e morrem junto do sprite. */
   const overlays = new Map<number, CreatureOverlay>();
+  /** O sorteio das falas (#620): o do cliente, injetável. */
+  const random = options.random ?? Math.random;
+  /** A fala periódica e o clarão de luz (#620), pelo mesmo id: nascem e morrem junto do sprite. */
+  const speeches = new Map<number, CreatureSpeech>();
+  const glows = new Map<number, CreatureGlow>();
   /**
    * Os transitórios, pelo id local de cada lista. Um sprite nasce no primeiro quadro em que o
    * item é desenhado e morre quando ele expira — ou quando some da lista por baixo dele, que
@@ -409,6 +472,11 @@ export async function mountViewport(
   overlay.addChild(targetFrame);
   let drawnTarget: number | null = null;
   let drawnTargetRect = '';
+
+  /** As criaturas deste quadro: as do `world`, ou as da fonte injetada (`options.creatures`). */
+  function creatureList(): Iterable<Creature> {
+    return options.creatures === undefined ? world.creatures.values() : options.creatures();
+  }
 
   function target(): { x: number; y: number; z: number } {
     if (options.camera !== undefined) {
@@ -470,12 +538,24 @@ export async function mountViewport(
    * parecer azulejo. Qual célula é de `tile-stack.ts`: posição, contagem ou gancho.
    */
   function objectTexture(
-    appearanceId: number, cell: { readonly x: number; readonly y: number },
+    appearanceId: number, cell: { readonly x: number; readonly y: number }, nowMs: number,
   ): Texture | null | undefined {
     // Cópia local porque `pack` é `let` (`setPack`) e o narrowing não entra na closure.
     const art = pack;
     if (art === null) return null;
-    return book.get(objectKey(appearanceId, cell), () => art.object(appearanceId, cell.x, cell.y));
+    const phase = options.animateObjects === true ? loopPhaseAt(phasesOf(art, appearanceId), nowMs) : 0;
+    return book.get(objectKey(appearanceId, cell, phase), () => art.object(appearanceId, cell.x, cell.y, phase));
+  }
+
+  /** As fases de cada objeto, pelo pacote de agora — lidas uma vez por id, não por tile pintado. */
+  const objectPhaseCache = new Map<number, readonly number[]>();
+  function phasesOf(art: WorldArt, appearanceId: number): readonly number[] {
+    let phases = objectPhaseCache.get(appearanceId);
+    if (phases === undefined) {
+      phases = art.objectPhases(appearanceId);
+      objectPhaseCache.set(appearanceId, phases);
+    }
+    return phases;
   }
 
   /**
@@ -557,7 +637,7 @@ export async function mountViewport(
   function warmOutfitsNear(window: TileWindow): void {
     const art = pack;
     if (art === null) return;
-    for (const creature of world.creatures.values()) {
+    for (const creature of creatureList()) {
       const { appearanceId } = creature;
       if (appearanceId <= 0 || warmedOutfits.has(appearanceId)) continue;
       const at = creature.step?.to ?? creature.position;
@@ -570,6 +650,7 @@ export async function mountViewport(
   function paintTerrain(
     center: { x: number; y: number; z: number },
     visibility: { readonly floors: readonly number[]; readonly first: number; readonly last: number },
+    nowMs: number,
   ): void {
     // A janela de RENDER (M23): três tiles além de cada borda visível já estão pintados, e é
     // ao pintá-los que a textura deles é pedida ao livro — três tiles antes de entrarem na
@@ -585,7 +666,8 @@ export async function mountViewport(
     floorsRoot.y = Math.round(origin.y);
     // O ambiente é um tom sobre as camadas inteiras (FUN-121): o bueiro é escuro, a rua não. O
     // tint do container multiplica o dos filhos, então `ambiente × véu` sai igual ao de hoje.
-    floorsRoot.tint = world.ambience === 'cavern' ? CAVERN_TINT : 0xffffff;
+    // A luz do próprio jogador (#623) clareia o bueiro; na superfície não muda nada.
+    floorsRoot.tint = ambientTint(world.ambience, world.selfLight, nowMs);
 
     // A chave inclui a VERSÃO do livro de texturas: o primeiro quadro pinta retângulo, e o
     // quadro em que uma folha resolve — ou em que um despejo esquece uma célula — precisa
@@ -598,8 +680,13 @@ export async function mountViewport(
     const floor = Math.round(center.z);
     const floors = visibility.floors;
     const floorsKey = floors.join(',');
-    // E os itens do chão (FUN-123): um cadáver que cai repinta o tile dele.
-    const key = `${scene === null ? '-' : sceneKeyOf(scene)}:${floor}:${floorsKey}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}:${world.groundItemsVersion}`;
+    // E os itens do chão (FUN-123): um cadáver que cai repinta o tile dele. E o cenário usável
+    // (#729): a porta que abriu repinta o tile dela, sem esperar a janela andar.
+    // O compasso da animação (#666) entra na chave só para quem anima: sem ele, o terreno parado
+    // continua repintando só quando a janela, o livro, os itens do chão ou o cenário mudam.
+    const paintedAt = now();
+    const animation = options.animateObjects === true ? `:a${Math.floor(paintedAt / OBJECT_ANIMATION_TICK_MS)}` : '';
+    const key = `${scene === null ? '-' : sceneKeyOf(scene)}${animation}:${floor}:${floorsKey}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}:${world.groundItemsVersion}:${world.tileOverridesVersion}:${world.fieldsVersion}`;
     if (key === painted) return;
     painted = key;
     terrainRepaints += 1;
@@ -608,6 +695,18 @@ export async function mountViewport(
     // no mesmo lugar em que o tile é pintado.
     let paintedTiles = 0;
 
+    // Os campos por tile, ANTES dos itens do chão (#561, M31-06): a chama fica sob o cadáver
+    // que cair em cima dela, como o Tibia empilha. Um campo cobre vários tiles de uma vez, e a
+    // varredura é a mesma — só na repintura.
+    const fieldsAt = new Map<string, StackedItem[]>();
+    for (const field of world.fields.values()) {
+      for (const tile of field.tiles) {
+        const at = `${tile.x},${tile.y},${tile.z}`;
+        const list = fieldsAt.get(at) ?? [];
+        list.push({ id: field.appearanceId });
+        fieldsAt.set(at, list);
+      }
+    }
     // Os itens do chão por tile, para entrarem na pilha como itens comuns — o mais recente por
     // cima. São poucos (cadáveres com prazo), e a varredura é só na repintura.
     const groundItemsAt = new Map<string, StackedItem[]>();
@@ -619,9 +718,25 @@ export async function mountViewport(
     }
     const stackAt = (x: number, y: number, z: number): TileStack | null => {
       const base = scene?.tileAt(x, y, z) ?? null;
-      const extra = groundItemsAt.get(`${x},${y},${z}`);
-      if (extra === undefined) return base;
-      return base === null ? { ground: 0, items: extra } : { ground: base.ground, items: [...base.items, ...extra] };
+      const field = fieldsAt.get(`${x},${y},${z}`);
+      const ground = groundItemsAt.get(`${x},${y},${z}`);
+      const extra = field === undefined && ground === undefined
+        ? undefined
+        : [...(field ?? []), ...(ground ?? [])];
+      const withGround = extra === undefined
+        ? base
+        : (base === null ? { ground: 0, items: extra } : { ground: base.ground, items: [...base.items, ...extra] });
+      // O cenário usável (#729, ADR 0050 d.7): a porta que abriu, o capim que foi cortado —
+      // aplicado por CIMA da pilha estática/do cadáver, trocando o id antigo pelo novo em
+      // `ground` e em cada item. Um tile sem overlay ativo (a maioria) não paga nada aqui além
+      // da consulta ao `Map`.
+      const replace = world.tileOverrides.get(tileOverrideKey({ x, y, z }));
+      if (replace === undefined || withGround === null) return withGround;
+      const substitute = (id: number): number => replace.find((r) => r.from === id)?.to ?? id;
+      return {
+        ground: substitute(withGround.ground),
+        items: withGround.items.map((item) => ({ ...item, id: substitute(item.id) })),
+      };
     };
 
     // Re-anexa os andares desta repintura, do fundo ao topo: o `root` de cada andar carrega
@@ -692,7 +807,7 @@ export async function mountViewport(
         return drawn.creatureElevation;
       }
       for (const [index, object] of drawn.objects.entries()) {
-        const texture = objectTexture(object.appearanceId, object.cell);
+        const texture = objectTexture(object.appearanceId, object.cell, paintedAt);
         if (!(texture instanceof Texture)) {
           if (index === 0) placeholder(object.layer);
           if (object.layer === 'scene') sceneSlot++;
@@ -751,15 +866,17 @@ export async function mountViewport(
     const moving = creature.step !== null && walkFrame(creature, nowMs, 1).moving;
     const frames = art.framesOf(creature.appearanceId, moving);
     const { phase } = walkFrame(creature, nowMs, frames);
-    // As cores são as DA CRIATURA, que o protocolo carrega desde a FUN-104; a reserva é para
-    // quem chegou sem — um nó `game` anterior, ou monstro, que nunca traz (`paintOf`). Toda
-    // criatura é pedida COM cores mesmo assim: o pacote devolve a base como está para quem
-    // não tem template (monstro), então passar cores a ele é inofensivo, e a chave leva as
-    // cores para o quadro pintado nunca cair na entrada do quadro cru.
+    // As cores são as DA CRIATURA, que o protocolo carrega desde a FUN-104 — e o monstro, desde o
+    // #620 —; a reserva é para quem chegou sem — um nó `game` anterior (`paintOf`). Toda criatura
+    // é pedida COM cores mesmo assim: o pacote devolve a base como está para quem não tem
+    // template (um monstro de uma camada), então passar cores a ele é inofensivo, e a chave leva
+    // as cores para o quadro pintado nunca cair na entrada do quadro cru. Os addons (#620) são a
+    // máscara do servidor, e mudam o quadro: outro bitmap, outra chave.
     const colors = paintOf(creature);
-    const key = creatureKey(creature.appearanceId, direction, moving, phase, colors);
+    const addons = creature.addons ?? 0;
+    const key = creatureKey(creature.appearanceId, direction, moving, phase, colors, addons);
     return book.get(
-      key, () => art.outfit(creature.appearanceId, direction, phase, moving, colors),
+      key, () => art.outfit(creature.appearanceId, direction, phase, moving, colors, addons),
     );
   }
 
@@ -837,6 +954,119 @@ export async function mountViewport(
     entry.label.y = barTop - NAME_GAP;
   }
 
+  /**
+   * O clarão da luz que a criatura carrega (#620, `monster.light`): um disco aditivo da cor do
+   * Canary, com o alcance dele em tiles, centrado no tile dela. Redesenha só quando `nível:cor`
+   * muda; o resto do quadro é mover o `Graphics`. Mora no `effects` — absoluto, por cima dos
+   * andares — e anda junto da criatura, com o alfa do andar dela.
+   */
+  function paintLight(creature: Creature, screen: { x: number; y: number }, alpha: number): void {
+    const light = creature.light;
+    let entry = glows.get(creature.id);
+    if (light === undefined) {
+      if (entry !== undefined) entry.glow.visible = false;
+      return;
+    }
+    if (entry === undefined) {
+      const glow = new Graphics();
+      glow.blendMode = 'add';
+      effects.addChild(glow);
+      entry = { glow, drawn: '' };
+      glows.set(creature.id, entry);
+    }
+    const key = `${light.level}:${light.color}`;
+    if (entry.drawn !== key) {
+      entry.drawn = key;
+      entry.glow.clear();
+      const tint = lightTint(light.color);
+      for (const [radius, ringAlpha] of lightRings(light.level)) {
+        entry.glow.circle(0, 0, radius).fill({ color: tint, alpha: ringAlpha });
+      }
+    }
+    entry.glow.visible = true;
+    entry.glow.alpha = alpha;
+    entry.glow.x = screen.x + TILE / 2;
+    entry.glow.y = screen.y + TILE / 2;
+  }
+
+  /**
+   * O tile em que a criatura ESTÁ para as regras de alcance da fala (#620): o destino do passo em
+   * curso, que é onde o Canary já a põe — e não o ponto interpolado do desenho.
+   */
+  function logicalPosition(creature: Creature): { x: number; y: number; z: number } {
+    const to = creature.step?.to ?? creature.position;
+    return { x: to.x, y: to.y, z: to.z };
+  }
+
+  /**
+   * A fala periódica do monstro (#620, `monster.voices`): o relógio é do CLIENTE e o sorteio
+   * também (`random`) — o servidor só mandou as falas. Roda para TODA criatura da lista, desenhada
+   * ou não, porque o relógio do Canary não depende de quem olha: o que aparece na tela é só a
+   * última etapa.
+   *
+   * **Dois portões, como no Canary** (`world/speech.ts`): o relógio só anda com o monstro ACORDADO
+   * (o herói no quadrado de 11 tiles que ele enxerga — o `isIdle` que corta o `onThinkYell`), e a
+   * fala só aparece se CHEGOU ao herói (`say` a 8 × 6 no mesmo andar, `yell` a 18 × 14). Sem herói
+   * no mundo (antes do `session-state`) ninguém acorda o monstro e ninguém o ouve.
+   *
+   * O relógio nasce quando o monstro é visto pela primeira vez.
+   */
+  function rollCreatureSpeech(
+    creature: Creature, hero: { x: number; y: number; z: number } | null, nowMs: number,
+  ): void {
+    const voices = creature.voices;
+    if (voices === undefined) return;
+    let entry = speeches.get(creature.id);
+    if (entry === undefined || entry.voices !== voices) {
+      // As falas trocaram (ou é a primeira vez): relógio novo, e o texto que estava no ar fica.
+      entry = { voices, clock: startSpeech(nowMs), label: entry?.label ?? null, shownUntilMs: entry?.shownUntilMs ?? 0 };
+      speeches.set(creature.id, entry);
+    }
+    const at = logicalPosition(creature);
+    const said = rollSpeech(voices, entry.clock, nowMs, hero !== null && monsterAwake(at, hero), random);
+    if (said === null || hero === null || !speechHeard(at, hero, said.yell)) return;
+    if (entry.label === null) {
+      // Âncora embaixo, como o nome: a fala termina onde o nome começa.
+      entry.label = createLabel(said.text, SPEECH_COLOR, 1);
+      overlay.addChild(entry.label);
+    } else {
+      entry.label.text = said.text;
+    }
+    entry.shownUntilMs = nowMs + speechDurationMs(said.text);
+  }
+
+  /**
+   * Põe a fala no ar sobre o nome da criatura DESENHADA: o texto que `rollCreatureSpeech` deixou
+   * aparece até `shownUntilMs`, e some depois.
+   */
+  function paintSpeech(
+    creature: Creature, screen: { x: number; y: number }, alpha: number, nowMs: number,
+  ): void {
+    const entry = speeches.get(creature.id);
+    if (creature.voices === undefined) {
+      if (entry?.label != null) entry.label.visible = false;
+      return;
+    }
+    const label = entry?.label;
+    if (entry === undefined || label === null || label === undefined) return;
+    if (nowMs >= entry.shownUntilMs) {
+      label.visible = false;
+      return;
+    }
+    label.visible = true;
+    label.alpha = alpha;
+    label.x = screen.x + TILE / 2;
+    label.y = screen.y - HEALTH_BAR_ABOVE - NAME_GAP - NAME_HEIGHT;
+  }
+
+  /** Esconde o clarão e a fala de uma criatura que não é desenhada agora (#620). */
+  function hidePresentation(id: number): void {
+    const glow = glows.get(id);
+    if (glow !== undefined) glow.glow.visible = false;
+    const speech = speeches.get(id)?.label;
+    if (speech != null) speech.visible = false;
+  }
+
   function paintCreatures(
     center: { x: number; y: number; z: number },
     visibility: { readonly floors: readonly number[]; readonly first: number; readonly last: number },
@@ -851,8 +1081,13 @@ export async function mountViewport(
     /** O retângulo de tela do alvo neste quadro, se ele estiver desenhado (#428). */
     let targetRect: string | null = null;
 
-    for (const creature of world.creatures.values()) {
+    // O herói de quem olha: é ele quem acorda o monstro e quem ouve a fala (#620).
+    const self = world.selfId === null ? undefined : world.creatures.get(world.selfId);
+    const hero = self === undefined ? null : logicalPosition(self);
+
+    for (const creature of creatureList()) {
       seen.add(creature.id);
+      rollCreatureSpeech(creature, hero, nowMs);
       const position = interpolate(creature, nowMs);
       const offset = position.z - floor;
       let sprite = sprites.get(creature.id);
@@ -879,6 +1114,7 @@ export async function mountViewport(
         sprite.visible = false;
         head.bar.visible = false;
         head.label.visible = false;
+        hidePresentation(creature.id);
         continue;
       }
       sprite.visible = true;
@@ -896,6 +1132,7 @@ export async function mountViewport(
         sprite.visible = false;
         head.bar.visible = false;
         head.label.visible = false;
+        hidePresentation(creature.id);
         continue;
       }
 
@@ -932,6 +1169,8 @@ export async function mountViewport(
         targetRect = `${tileScreen.x - lift},${tileScreen.y - lift},${TILE},${TILE}`;
       }
       paintOverlay(head, creature, lifted);
+      paintLight(creature, lifted, creatureAlpha);
+      paintSpeech(creature, lifted, creatureAlpha, nowMs);
       // O sprite mora num container que ANDA com a janela: posição local = tela − raiz.
       const local = { x: lifted.x - floorsRoot.x, y: lifted.y - floorsRoot.y };
       const texture = creatureTexture(creature, nowMs);
@@ -966,6 +1205,16 @@ export async function mountViewport(
         gone.bar.destroy();
         gone.label.destroy();
         overlays.delete(id);
+      }
+      const glow = glows.get(id);
+      if (glow !== undefined) {
+        glow.glow.destroy();
+        glows.delete(id);
+      }
+      const speech = speeches.get(id);
+      if (speech !== undefined) {
+        speech.label?.destroy();
+        speeches.delete(id);
       }
     }
     // A moldura só é redesenhada quando o alvo ou o retângulo dele muda; criatura que sumiu
@@ -1150,7 +1399,7 @@ export async function mountViewport(
       let label = textLabels.get(text.id);
       if (label === undefined) {
         // Âncora no TOPO: o número nasce logo acima do tile e sobe dali — a subida é o `dy`.
-        label = createLabel(String(text.amount), floatingTextColor(text.kind, text.damageType), 0);
+        label = createLabel(String(text.amount), floatingTextColor(text.kind, text.damageType, text.race), 0);
         textLabels.set(text.id, label);
         overlay.addChild(label);
       } else {
@@ -1202,7 +1451,7 @@ export async function mountViewport(
       : visibleFloors(scene.floors, visibility.first, visibility.last);
     warmWindow(center, prefetchFloors);
     if (warmed !== null) warmOutfitsNear(warmed.window);
-    paintTerrain(center, visibility);
+    paintTerrain(center, visibility, nowMs);
     // Por quadro, DEPOIS da repintura: o alpha de cada andar do pool. A rampa anda mesmo sem
     // repintura — é o fade que faz o andar sumir/volar, não a lista de andares.
     for (const layers of floorLayers.values()) {
@@ -1242,6 +1491,7 @@ export async function mountViewport(
       // inteira no próximo quadro. `null` também zera — não fica nada pendente para o próximo.
       warmed = null;       // era `if (next !== null && scene !== null) warm(scene);`
       warmedOutfits.clear();
+      objectPhaseCache.clear();
       fadeKey = '';        // as flags vêm do pacote: `dontHide`, `unsight`, `bottom`
       // Os efeitos em voo nasceram com a linha do tempo de reserva; renascem no próximo
       // quadro com a do pacote, que é de onde as fases deles saem (`timelineOf`).
@@ -1281,10 +1531,32 @@ export async function mountViewport(
         center, view,
       );
       return pickCreature(
-        world.creatures.values(),
+        creatureList(),
         { x: at.x, y: at.y, z: Math.round(center.z) },
         performance.now(),
       );
+    },
+    groundItemAt(clientX, clientY) {
+      const bounds = app.canvas.getBoundingClientRect();
+      const center = target();
+      const at = tileAtScreen(
+        { x: (clientX - bounds.left) / zoom, y: (clientY - bounds.top) / zoom },
+        center, view,
+      );
+      return pickGroundItem(
+        world.groundItems.values(),
+        { x: at.x, y: at.y, z: Math.round(center.z) },
+      );
+    },
+    tileAt(clientX, clientY) {
+      // A MESMA conversão de `creatureAt`, sem escolher entre o que está no tile.
+      const bounds = app.canvas.getBoundingClientRect();
+      const center = target();
+      const at = tileAtScreen(
+        { x: (clientX - bounds.left) / zoom, y: (clientY - bounds.top) / zoom },
+        center, view,
+      );
+      return { x: at.x, y: at.y, z: Math.round(center.z) };
     },
     setTargetId(id) {
       targetId = id;
@@ -1298,6 +1570,10 @@ export async function mountViewport(
         top.label.destroy();
       }
       overlays.clear();
+      for (const { glow } of glows.values()) glow.destroy();
+      glows.clear();
+      for (const { label } of speeches.values()) label?.destroy();
+      speeches.clear();
       for (const entry of effectSprites.values()) entry.sprite.destroy();
       effectSprites.clear();
       for (const sprite of missileSprites.values()) sprite.destroy();

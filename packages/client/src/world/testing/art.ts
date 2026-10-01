@@ -23,7 +23,7 @@ export interface SyntheticAppearance {
   readonly size?: { readonly width: number; readonly height: number };
   /** Quadros do ciclo (outfit): um número para parado e andando, ou um por estado. 1 por padrão. */
   readonly frames?: number | { readonly idle: number; readonly walking: number };
-  /** Durações das fases (efeito), em ms; `[]` por padrão → o viewport usa `FALLBACK_EFFECT_PHASES`. */
+  /** Durações das fases (efeito ou objeto animado), em ms; `[]` por padrão → efeito usa `FALLBACK_EFFECT_PHASES`, objeto fica parado. */
   readonly phases?: readonly number[];
   /** O `shift` do outfit (#386), em px; ausente é `NO_DISPLACEMENT`. */
   readonly displacement?: Displacement;
@@ -61,8 +61,14 @@ export class SyntheticArt implements WorldArt {
 
   // ---- WorldArt ----
 
-  object(appearanceId: number, x = 0, y = 0): Promise<Bitmap | null> {
-    return this.#frame('object', appearanceId, `object:${appearanceId}:${x}:${y}`);
+  object(appearanceId: number, x = 0, y = 0, phase = 0): Promise<Bitmap | null> {
+    return this.#frame('object', appearanceId, phase === 0 ? `object:${appearanceId}:${x}:${y}` : `object:${appearanceId}:${x}:${y}:p${phase}`);
+  }
+
+  /** As fases do objeto (#666): as `phases` do catálogo sintético, vazio por padrão. */
+  objectPhases(appearanceId: number): readonly number[] {
+    const appearance = this.#catalog[appearanceId];
+    return appearance?.kind === 'object' ? appearance.phases ?? [] : [];
   }
 
   objectPattern(appearanceId: number): { width: number; height: number } {
@@ -83,8 +89,13 @@ export class SyntheticArt implements WorldArt {
 
   outfit(
     outfitId: number, direction: Direction, phase: number, moving = false, _colors?: OutfitColors,
+    addons = 0,
   ): Promise<Bitmap | null> {
-    return this.#frame('outfit', outfitId, `outfit:${outfitId}:${direction}:${moving ? 'w' : 's'}:${phase}`);
+    // Os addons (#620) mudam o bitmap: a chave só os carrega quando há, como a do pacote real.
+    return this.#frame(
+      'outfit', outfitId,
+      `outfit:${outfitId}:${direction}:${moving ? 'w' : 's'}:${phase}${addons > 0 ? `:a${addons}` : ''}`,
+    );
   }
 
   framesOf(outfitId: number, moving: boolean): number {

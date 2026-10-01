@@ -343,6 +343,39 @@
   color: var(--gold-5);
 }
 
+/* ── Stance — a postura de luta (M30-03, #550): três botões sob a capacidade do set ── */
+.ui-stance { display: flex; gap: 4px; margin: 0 6px 6px; }
+.ui-stance-option {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 2px;
+  border: 1px solid var(--ash-5);
+  border-radius: 3px;
+  background: var(--surface-slot);
+  color: var(--text-faint);
+  font: 6px var(--font-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.ui-stance-option:hover:not(:disabled) { border-color: var(--gold-3); color: var(--text-muted); }
+.ui-stance-option:active:not(:disabled) { transform: translateY(1px); }
+.ui-stance-option:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.ui-stance-option:disabled { opacity: .55; cursor: default; }
+.ui-stance-option-active {
+  border-color: var(--gold-3);
+  background: linear-gradient(180deg, #3a2c1a, #211a12);
+  color: var(--gold-5);
+}
+.ui-stance-icon { width: 12px; height: 12px; flex: none; }
+.ui-stance-label { max-width: 100%; overflow: hidden; white-space: nowrap; }
+
 /* ── Kicker ── */
 .ui-kicker {
   display: block;
@@ -583,3 +616,35 @@
   display: block; height: 100%;
   background: var(--stat-tone, var(--gold-3));
 }
+
+/* === ContextMenu (#724, ADR 0048 d.8) === */
+.ui-context-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 140px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--ash-5);
+  border-radius: 3px;
+  background: var(--grad-panel);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, .7), inset 0 0 0 1px #080505;
+  backdrop-filter: blur(var(--blur-panel));
+  animation: ui-appear .12s var(--ease-out) both;
+}
+.ui-context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 2px;
+  background: none;
+  color: var(--text-primary);
+  font: 11px var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+.ui-context-menu-item:hover:not(:disabled) { background: var(--ash-3); }
+.ui-context-menu-item:disabled { color: var(--text-faint); cursor: not-allowed; }
+.ui-context-menu-item--danger { color: var(--blood-7); }
+.ui-context-menu-item--danger:hover:not(:disabled) { background: linear-gradient(180deg, #301a18, #211211); }

@@ -1,0 +1,19 @@
+{
+  "id": "conjure-sniper-arrow",
+  "name": "Conjure Sniper Arrow",
+  "description": "Conjura flechas de precisão, sem gastar runa em branco.",
+  "vocationId": "paladin",
+  "minLevel": 24,
+  "learnPrice": 800,
+  "manaCost": 160,
+  "soulCost": 3,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "conjure",
+    "ammunitionId": "sniper-arrow",
+    "charges": 5
+  },
+  "_open": "Números do Canary (#594, ADR 0044): `data/scripts/spells/conjuring/conjure_sniper_arrow.lua` — `creature:conjureItem(0, 7364, 5, CONST_ME_MAGIC_BLUE)`, `spell:level(24)`, `spell:mana(160)`, `spell:soul(3)`, vocação `paladin;true`/`royal paladin;true` (sem promoção). O Canary também declara `spell:isPremium(true)`, fora do recorte desta issue. `blankId` 0: sem runa em branco (`blankPrice` ausente, default 0), como `conjure-arrow.json`. learnPrice (#624, ADR 0058 d.3): NENHUM NPC de `data-otservbr-global/npc` ensina Conjure Sniper Arrow (`docs/reference/catalog/spell-prices-report.md`); 800 é o valor de TibiaWiki, PROVISÓRIO — o site ficou inacessível ao gravar (2026-09-29) e o número saiu da memória do catálogo, sem conferência: [ABERTO — conferir]."
+}

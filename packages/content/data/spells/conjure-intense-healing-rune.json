@@ -1,0 +1,20 @@
+{
+  "id": "conjure-intense-healing-rune",
+  "name": "Intense Healing Rune",
+  "description": "Conjura uma carga da Intense Healing Rune, consumindo uma runa em branco.",
+  "vocationId": "druid",
+  "minLevel": 15,
+  "learnPrice": 600,
+  "manaCost": 120,
+  "soulCost": 2,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "conjure",
+    "supplyId": "intense-healing-rune",
+    "charges": 1,
+    "blankPrice": 10
+  },
+  "_open": "Números do Canary (#594, ADR 0044): `data/scripts/spells/conjuring/intense_healing_rune.lua` — `creature:conjureItem(3147, 3152, 1)`, `spell:level(15)`, `spell:mana(120)`, `spell:soul(2)`, vocação `druid;true`/`elder druid;true` (sem promoção, ADR 0044 §Em aberto). `blankPrice` 10, como em toda runa."
+}

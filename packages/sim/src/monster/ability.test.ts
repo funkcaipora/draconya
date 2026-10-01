@@ -14,7 +14,8 @@ import { Session } from '../session.js';
 import type { DomainEvent } from '../session.js';
 import { createHuntSession, HuntRuleset } from '../rulesets/hunt.js';
 import type { WorldPoint } from '../movement.js';
-import { abilityTargets, abilityTiles, isMeleeAbility } from './ability.js';
+import { abilityBlockFlags, abilityTargets, abilityTiles, isMeleeAbility } from './ability.js';
+import { DISTANCE_BLOCK_FLAGS, MAGIC_BLOCK_FLAGS, MELEE_BLOCK_FLAGS } from '../combat/blockhit.js';
 
 const map = { id: 'arena', z: 7, grid: ['######', '#....#', '#....#', '######'] };
 const route = {
@@ -23,7 +24,7 @@ const route = {
     { x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 3, y: 1, z: 7 }, { x: 4, y: 1, z: 7 },
     { x: 4, y: 2, z: 7 }, { x: 3, y: 2, z: 7 }, { x: 2, y: 2, z: 7 }, { x: 1, y: 2, z: 7 },
   ],
-  spawnPoints: [{ routeIndex: 4, radius: 1 }],
+  spawnPoints: [{ routeIndex: 4, radius: 1, monsterId: 'caster', respawnDelayMs: 30_000 }],
 };
 
 const caster = {
@@ -36,14 +37,14 @@ const progression = {
   id: 'baseline', startingHealth: 500_000, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
   startingSpeed: 300, speedPerLevel: 0,
-  regen: { healthPerSecond: 0, manaPerSecond: 0 },
+  regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
   xp: { kind: 'power', base: 20, exponent: 2 },
-  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessingReduction: 0.56, promotionReduction: 0.3 },
   skillMultipliers: {},
 };
 const combat = {
   id: 'baseline', dodgeMultiplier: 0.5,
-  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0 },
   minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0 },
 };
@@ -51,9 +52,6 @@ const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
 const party = { id: 'baseline', maxMembers: 4 };
 const hunt = {
   id: 'arena', name: 'Arena', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
-  difficulties: {
-    cautious: { monsterCount: 1, composition: [{ monsterId: 'caster', weight: 1 }], respawnDelayMs: 30_000 },
-  },
 };
 
 function raw(
@@ -243,6 +241,30 @@ describe('abilityTargets (puro)', () => {
         { x: 5, y: 6, z: 7 }, { x: 5, y: 7, z: 7 }, { x: 5, y: 8, z: 7 },
       ]);
     });
+  });
+});
+
+describe('abilityBlockFlags (#682, `Monsters::deserializeSpell` do Canary)', () => {
+  const physical = (over: Partial<MonsterAbility> = {}): MonsterAbility => ({
+    id: 'a', cadenceMs: 2_000, power: { min: 1, max: 1 }, damageType: 'physical',
+    target: { range: 1 }, ...over,
+  });
+  const circle = { shape: 'circle', radius: 1, centered: 'caster' } as const;
+
+  it.each([
+    ['a básica (sem kind, alcance 1, sem área)', physical(), MELEE_BLOCK_FLAGS],
+    ['`melee` declarado', physical({ kind: 'melee' }), MELEE_BLOCK_FLAGS],
+    ['`combat` físico de alcance 7', physical({ kind: 'combat', target: { range: 7 } }), DISTANCE_BLOCK_FLAGS],
+    ['`combat` físico de alcance 1 com área', physical({ kind: 'combat', target: { range: 1, area: circle } }), DISTANCE_BLOCK_FLAGS],
+    ['`combat` físico de alcance 1 sem área', physical({ kind: 'combat' }), DISTANCE_BLOCK_FLAGS],
+    ['`combat` de fogo', physical({ kind: 'combat', damageType: 'fire', target: { range: 7 } }), MAGIC_BLOCK_FLAGS],
+    ['sem kind: físico de alcance 7 (a forma não é corpo a corpo)', physical({ target: { range: 7 } }), DISTANCE_BLOCK_FLAGS],
+    ['sem kind: físico em área, alcance 1', physical({ target: { range: 1, area: circle } }), DISTANCE_BLOCK_FLAGS],
+    ['sem kind: fogo à distância', physical({ damageType: 'fire', target: { range: 7 } }), MAGIC_BLOCK_FLAGS],
+    ['sem kind: corpo a corpo elemental (a forma decide)', physical({ damageType: 'fire' }), MELEE_BLOCK_FLAGS],
+  ])('%s', (_name, ability, flags) => {
+    // `toBe`: as constantes compartilhadas, nenhuma alocação no caminho quente.
+    expect(abilityBlockFlags(ability)).toBe(flags);
   });
 });
 

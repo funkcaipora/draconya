@@ -6,6 +6,8 @@
   "capacityPerLevel": 20,
   "meleeDamageMultiplier": 1,
   "distDamageMultiplier": 1,
+  "soulMax": 100,
+  "soulGainTicksMs": 120000,
   "spellSkill": "distance",
   "startingKit": [
     {
@@ -18,13 +20,32 @@
     }
   ],
   "regen": {
-    "healthPerSecond": 0.125,
-    "manaPerSecond": 0.5
+    "health": { "ticksMs": 8000, "amount": 1 },
+    "mana": { "ticksMs": 4000, "amount": 2 }
   },
   "skillMultipliers": {
-    "melee": 1.2,
+    "fist": 1.2,
+    "club": 1.2,
+    "sword": 1.2,
+    "axe": 1.2,
     "distance": 1.1,
     "shielding": 1.1,
     "magic": 1.4
+  },
+  "mitigation": {
+    "multiplier": 1.28,
+    "primaryShield": 2.08,
+    "secondaryShield": 1.2
+  },
+  "promotion": {
+    "name": "Royal Paladin",
+    "regen": {
+      "health": { "ticksMs": 6000, "amount": 1 },
+      "mana": { "ticksMs": 3000, "amount": 2 }
+    },
+    "soulMax": 200,
+    "soulGainTicksMs": 15000,
+    "minLevel": 20,
+    "price": 20000
   }
 }

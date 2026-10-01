@@ -125,6 +125,23 @@ describe('areaTiles', () => {
     expect(areaTiles({ shape: 'cross', radius: 1 }, origin, 'north')[0]).toEqual(origin);
   });
 
+  it('point (#591): a single tile, at the target — never the caster', () => {
+    const target = { x: 12, y: 8, z: 7 };
+    expect(areaTiles({ shape: 'point' }, origin, 'north', target)).toEqual([target]);
+    // Sem alvo explícito, cai na origem (o mesmo fallback de `cross`/`circle` no alvo).
+    expect(areaTiles({ shape: 'point' }, origin, 'north')).toEqual([origin]);
+  });
+
+  it('wall (#591): a perpendicular row of `width` tiles, centered on the TARGET (distance 0)', () => {
+    const target = { x: 12, y: 8, z: 7 };
+    // Lançador→alvo para leste: a parede corre norte-sul (perpendicular), centrada no alvo.
+    expect(keys(areaTiles({ shape: 'wall', width: 3 }, origin, 'east', target)))
+      .toEqual(['12,7,7', '12,8,7', '12,9,7']);
+    // Para norte: a parede corre leste-oeste.
+    expect(keys(areaTiles({ shape: 'wall', width: 3 }, origin, 'north', target)))
+      .toEqual(['11,8,7', '12,8,7', '13,8,7']);
+  });
+
   it('knows which shapes leave the caster without a target', () => {
     expect(isSelfOrigin(undefined)).toBe(false);
     expect(isSelfOrigin({ shape: 'circle', radius: 1, centered: 'target' })).toBe(false);
@@ -133,6 +150,36 @@ describe('areaTiles', () => {
     expect(isSelfOrigin({ shape: 'wave', length: 3 })).toBe(true);
     expect(isSelfOrigin({ shape: 'cleave' })).toBe(true);
     expect(isSelfOrigin({ shape: 'beam', length: 5 })).toBe(true);
+    expect(isSelfOrigin({ shape: 'rows', widths: [1] })).toBe(true);
+    expect(isSelfOrigin({ shape: 'point' })).toBe(false);
+    expect(isSelfOrigin({ shape: 'wall', width: 3 })).toBe(false);
+  });
+});
+
+// #679: a onda do catálogo é `rows`, a contagem por fileira da `AREA_*` do Canary com a fileira
+// do `3` (ancorada um passo à frente, e atingida). Ancorar a fileira 0 no lançador reprova aqui.
+describe('areaTiles — rows (#679)', () => {
+  it('rows [1,3,3,5] to the north is 12 tiles, row 0 one step ahead', () => {
+    const tiles = areaTiles({ shape: 'rows', widths: [1, 3, 3, 5] }, origin, 'north');
+    expect(tiles).toHaveLength(12);
+    expect(keys(tiles.slice(0, 1))).toEqual(['10,9,7']);
+    expect(keys(tiles.slice(1, 4))).toEqual(['9,8,7', '10,8,7', '11,8,7']);
+    expect(keys(tiles.slice(4, 7))).toEqual(['9,7,7', '10,7,7', '11,7,7']);
+    expect(keys(tiles.slice(7, 12))).toEqual(['8,6,7', '9,6,7', '10,6,7', '11,6,7', '12,6,7']);
+  });
+
+  it('the monster firewave rows [1,1,3,3,3,5,5,5] to the east is 26 tiles opening along y', () => {
+    const tiles = areaTiles({ shape: 'rows', widths: [1, 1, 3, 3, 3, 5, 5, 5] }, origin, 'east');
+    expect(tiles).toHaveLength(26);
+    expect(keys(tiles.slice(0, 2))).toEqual(['11,10,7', '12,10,7']);
+    expect(keys(tiles.slice(2, 5))).toEqual(['13,9,7', '13,10,7', '13,11,7']);
+    expect(keys(tiles.slice(21, 26))).toEqual(['18,8,7', '18,9,7', '18,10,7', '18,11,7', '18,12,7']);
+    expect(tiles.every((t) => t.x > origin.x)).toBe(true);
+  });
+
+  it('matches the legacy wave where the widths coincide', () => {
+    expect(areaTiles({ shape: 'rows', widths: [1, 3, 3, 5, 5] }, origin, 'south'))
+      .toEqual(areaTiles({ shape: 'wave', length: 5 }, origin, 'south'));
   });
 });
 

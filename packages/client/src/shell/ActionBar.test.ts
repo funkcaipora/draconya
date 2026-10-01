@@ -20,7 +20,7 @@ const catalogue = (): Catalogue => ({
   ammunition: [],
   items: [],
   vocations: [],
-  vocationLevel: 0,
+  charms: [], vocationLevel: 0,
   bot: {
     vocabularyVersion: 2,
     setCount: 4,
@@ -72,6 +72,26 @@ describe('ActionBar — a fileira de 124 px (RF-01..RF-04)', () => {
     expect((html.match(/--slot-size:36px/g) ?? []).length).toBe(24);
     expect(html.indexOf('Cura')).toBeGreaterThan(-1);
     expect(html.indexOf('Cura')).toBeLessThan(html.indexOf('Poção de Vida'));
+  });
+
+  it('a magia NÃO aprendida fica na barra, marcada (#624, ADR 0058 d.5); a aprendida e o suprimento, não', async () => {
+    edit((draft) => ({
+      ...withSlots(0, [[0, spell('heal', '1')], [1, spell('strike')], [2, supply()]]), activeSet: draft.activeSet,
+    }));
+    // Aprendeu só a `strike`: `heal` fica marcada, e a poção não exige aprendizado.
+    hud.set(() => ({ ...INITIAL_HUD, catalogue: catalogue(), learnedSpells: ['strike'] }));
+    const html = await render();
+    expect((html.match(/action-slot-unlearned/g) ?? []).length).toBe(1);
+    // Nada é escondido: a magia marcada continua com rótulo e ganha o aviso no tooltip.
+    expect(html).toContain('Cura');
+    expect(html).toContain('não aprendida');
+  });
+
+  it('sem o registro (`null`), nenhum slot é marcado — "ainda não sei" não vira "não aprendeu"', async () => {
+    edit((draft) => ({ ...withSlots(0, [[0, spell('heal', '1')]]), activeSet: draft.activeSet }));
+    hud.set(() => ({ ...INITIAL_HUD, catalogue: catalogue(), learnedSpells: null }));
+    const html = await render();
+    expect(html).not.toContain('action-slot-unlearned');
   });
 
   it('slot sem dado é vazio e tracejado; nada de rótulo/contagem/elemento inventado', async () => {
@@ -180,5 +200,40 @@ describe('ActionBar — a fiação é presa por fonte (RF-05..RF-07)', () => {
     expect(source).toContain("type: 'use-slot'");
     expect(source).toContain('slotForHotkey');
     expect(source).toContain('sendIntent');
+  });
+});
+
+describe('ActionBar — clique dispara, clique direito configura, mira (ADR 0049 decisão 1/2, #725)', () => {
+  it('o clique esquerdo manda use-slot direto (sem Shift, sem mira)', async () => {
+    const source = await readFile(new URL('./ActionBar.tsx', import.meta.url), 'utf8');
+    expect(source).toContain("sendIntent({ type: 'use-slot', set: activeSet, slot: index })");
+  });
+
+  it('um slot `needsAim` arma a mira em vez de disparar sem alvo', async () => {
+    const source = await readFile(new URL('./ActionBar.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('view.needsAim');
+    expect(source).toContain('aimTracker.startAim(activeSet, index)');
+  });
+
+  it('o clique direito (qualquer slot) abre o ActionConfigModal e não deixa o menu nativo abrir', async () => {
+    const source = await readFile(new URL('./ActionBar.tsx', import.meta.url), 'utf8');
+    // Duas ocorrências: o slot vazio e o preenchido — os dois ganham `onContextMenu`.
+    const onContextMenuCount = (source.match(/onContextMenu/g) ?? []).length;
+    expect(onContextMenuCount).toBeGreaterThanOrEqual(2);
+    expect(source).toContain('event.preventDefault(); setConfigSlot(index);');
+  });
+
+  it('o hook de teclado lê event.shiftKey (32 teclas) e Esc cancela a mira', async () => {
+    const source = await readFile(new URL('./useActionKeys.ts', import.meta.url), 'utf8');
+    expect(source).toContain('event.shiftKey');
+    expect(source).toContain("event.code === 'Escape'");
+    expect(source).toContain('aimTracker.cancelAim()');
+  });
+
+  it('Viewport e BattlePanel resolvem a mira antes de selecionar alvo de ataque', async () => {
+    const viewport = await readFile(new URL('./Viewport.tsx', import.meta.url), 'utf8');
+    expect(viewport).toContain('aimTracker.resolveAim');
+    const battlePanel = await readFile(new URL('./BattlePanel.tsx', import.meta.url), 'utf8');
+    expect(battlePanel).toContain('aimTracker.resolveAim');
   });
 });

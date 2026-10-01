@@ -6,6 +6,8 @@
   "capacityPerLevel": 10,
   "meleeDamageMultiplier": 1,
   "distDamageMultiplier": 1,
+  "soulMax": 100,
+  "soulGainTicksMs": 120000,
   "startingKit": [
     {
       "itemId": "wand-of-vortex",
@@ -17,13 +19,32 @@
     }
   ],
   "regen": {
-    "healthPerSecond": 0.08333333333333333,
-    "manaPerSecond": 0.6666666666666666
+    "health": { "ticksMs": 12000, "amount": 1 },
+    "mana": { "ticksMs": 3000, "amount": 2 }
   },
   "skillMultipliers": {
-    "melee": 2.0,
+    "fist": 1.5,
+    "club": 2.0,
+    "sword": 2.0,
+    "axe": 2.0,
     "distance": 2.0,
     "shielding": 1.5,
     "magic": 1.1
+  },
+  "mitigation": {
+    "multiplier": 1.26,
+    "primaryShield": 2.0,
+    "secondaryShield": 1.2
+  },
+  "promotion": {
+    "name": "Master Sorcerer",
+    "regen": {
+      "health": { "ticksMs": 12000, "amount": 1 },
+      "mana": { "ticksMs": 2000, "amount": 2 }
+    },
+    "soulMax": 200,
+    "soulGainTicksMs": 15000,
+    "minLevel": 20,
+    "price": 20000
   }
 }

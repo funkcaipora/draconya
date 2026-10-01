@@ -1,0 +1,14 @@
+{
+  "id": "summon-creature-druid",
+  "name": "Summon Creature",
+  "description": "Invoca uma criatura aliada para lutar ao seu lado.",
+  "vocationId": "druid",
+  "minLevel": 25,
+  "learnPrice": 2000,
+  "manaCost": 0,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": { "kind": "summon" },
+  "_open": "Conferido linha a linha contra `things/sources/canary/data/scripts/spells/support/summon_creature.lua` em 2026-09-28 (ver a mesma nota em `summon-creature-sorcerer.json`) — mesma magia, duplicada por vocação (o padrão deste catálogo, ver `apprentices-strike-druid.json`/`-sorcerer.json`). `manaCost: 0` é PLACEHOLDER: o custo real sai do `manaCost` do monstro invocado, lido por `HuntRuleset#castSpell` (#598, M38-01). Efeito visual: `CONST_ME_MAGIC_BLUE` no lançador, `CONST_ME_TELEPORT` na invocação — `effect: 14` na tabela de aparências é placeholder, sem checagem contra PNG ainda (biblioteca parcial), como no arquivo do Sorcerer."
+}

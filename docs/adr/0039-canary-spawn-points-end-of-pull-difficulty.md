@@ -1,6 +1,8 @@
 # 0039 — Caçada idêntica ao Tibia em toda hunt: spawns do Canary por ponto e fim do pull por dificuldade
 
-**Status:** aceito — aplica ao catálogo inteiro de hunts a decisão 6 do
+**Status:** aceito; corroborado pelo Huntera em 2026-09-25 para o catálogo-alvo do M36-06 — o
+modelo de spawn por ponto NÃO muda (ver emenda) — aplica ao catálogo inteiro de hunts a decisão 6
+do
 [ADR 0037](0037-tfs-canary-fidelity-except-action-bar-and-automation.md) (*"as mecânicas de caça
 têm que ser idênticas"*, usuário em 2026-09-24), já usada pela Darashia Dragon Lair (emenda
 2026-09-25 do [ADR 0025](0025-real-map-from-otbm.md))
@@ -101,3 +103,73 @@ cada hunt reinventando o próprio conjunto de decisões.
 Nenhum muda. O invariante 1 (`sim` puro) continua valendo: o spawner lê `SpawnPoint` como dado de
 conteúdo, sem I/O. O invariante 7 é o motivo de o campo `difficulty` migrar em vez de ser
 descartado.
+
+## Emenda — 2026-09-25: decisões do dono ("copie do Huntera") — catálogo aberto, modelo de spawn intocado
+
+O dono respondeu, em 2026-09-25, as doze questões abertas do `docs/tibia-parity-plan.md` §5 com
+"copie do Huntera": onde o Huntera (o Tibia-idle observado em `docs/reference/huntera-observed.md`)
+foi observado fazendo algo, a decisão de produto segue o Huntera; onde não foi observado, a regra
+provisória permanece e a captura fica registrada (`docs/tibia-parity-plan.md` §6).
+
+Esta emenda responde à questão 2 do plano ("quantas e quais hunts, qual a meta total do M36-06?").
+O catálogo do Huntera **não é fixo**: cresceu de 55 hunts (Parte I §7, 2026-09-10) para 58 (Parte
+II §15, 2026-09-11) para 73 (Parte V §31, 2026-09-22) em doze dias. Rat Cellars é sempre a
+primeira; na leva de 73, a ordem até a posição 8 é Rat Cellars → Spider Nest → Troll Hills →
+Swamp Troll Cave → Orc Camp → Folda Icefields → Bone Crypt → Rotworm Caves → Dwarf Mines →
+Minotaur Maze → (lista elidida na captura, linhas 693-699).
+
+**Decisão da emenda:** o catálogo-alvo do M36-06 é o do Huntera — aberto e crescente, importado
+por lote a cada milestone, não um número fixo para bater de uma vez. Rat Cellars primeiro e
+Rotworm Caves na 8ª posição já batem com o que o Draconya tem hoje (`rat-cellars.json`,
+`rotworm-caves.json`) e continuam sem mudança.
+
+**Isto NÃO reabre a decisão 3 acima.** O modelo de pull por tamanho que o Huntera usa
+(Cauteloso/Ousado/Agressivo, `monsterCount` 2/5/8) continua removido — o Contexto deste ADR já
+identifica esse modelo como "uma característica observada do Huntera (FUN-123), não do Canary", e
+a resposta do dono decide qual catálogo de hunts importar, não como cada uma nasce: toda hunt
+continua nascendo do recorte OTBM mais os pontos de spawn reais do Canary (decisão 1), sem
+`monsterCount`/`composition`/`spawnClearRadius` (decisão 3), inclusive as futuras importadas do
+catálogo do Huntera.
+
+**Achado à parte, sem bloquear esta decisão:** a captura de 2026-09-22 (Parte VI §38, linhas
+806-817) faz um match de terreno (472 votos) para a Rotworm Caves numa caverna em Darashia z8
+(x33098–33185) diferente da usada pela emenda #511 deste ADR — o recorte atual (#511) é uma
+caverna maior e mais aberta, achada contra a caixa candidata da Parte V §34 (z9,
+x32097-32158), superada por este match de terreno mais preciso. Fica registrado para quando a
+issue M36-05 (recorte real de Rotworm Caves) chegar; recortar de novo não é decisão deste ADR.
+
+Confiança: baixa a média — alta para as contagens e as posições capturadas (Rat Cellars primeira,
+Rotworm Caves 8ª, os dois números reconfirmados só para essas duas hunts especificamente); baixa
+para "a lista completa e ordenada de 73 nomes" — só cerca de 14 de 73 nomes foram de fato citados
+nas capturas, e nenhum arquivo de captura bruto sobrevive em disco.
+
+**Captura pendente:** repetir o método de captura por WebSocket na tela de personagem e salvar o
+corpo decodificado COMPLETO da mensagem de catálogo de hunts, para o número de hunts que existir
+então.
+
+(Evidência: `docs/reference/huntera-observed.md` Parte I §7 linhas 121-126; Parte II §15 linhas
+311-317; Parte V §31 linhas 693-699; Parte VI §38 linhas 806-817.)
+
+## Emenda (#583): a janela de visibilidade do `findPlayer`, e a população inicial
+
+A questão que a seção "Consequências" deixou aberta — `Spectators::find`/±11 tiles do Canary, ou
+a viewport do cliente do Draconya — está decidida: **±11 tiles Chebyshev**, a aproximação
+quadrada do viewport retangular do Canary (`MAP_MAX_VIEW_PORT_X`/`_Y`), a mesma simplificação
+que o resto do `sim` já faz para distância (não há campo de visão retangular em lugar nenhum do
+motor). A viewport do CLIENTE nunca foi candidata séria: o `sim` é puro (invariante 1) e não
+conhece resolução de tela nem zoom — o servidor não tem como saber o que um cliente específico
+está desenhando, e não deveria precisar saber para decidir uma regra de jogo.
+
+**Achado durante a implementação, não previsto no ADR original: `SpawnMonster::startup(bool
+delayed)` do Canary bypassa `checkSpawnMonster` inteiramente.** A população INICIAL de uma hunt
+chama `scheduleSpawn` direto, com `interval = 0` — nunca passa pela gating de `blockable`/janela
+de visão que este ADR descreve. Essa gating (decisão 2) vale só para o RESPAWN pós-morte. Sem
+essa distinção, uma hunt cujo primeiro tile de entrada cai dentro do raio de visão de um ponto
+`blockable` nunca populava aquele ponto — a Rat Cellars, cujo herói entra a poucos tiles do
+primeiro rato `blockable`, é exatamente esse caso. O `sim` implementa os dois como eventos
+distintos (`SPAWN_INITIAL`/`SPAWN`), e é o que faz a hunt nascer cheia na entrada, como o Canary
+faz de verdade.
+
+O telegraph de 4200 ms (`NONBLOCKABLE_SPAWN_MONSTER_INTERVAL` × 3) para monstro não-`blockable`
+é apresentação — o efeito visual de teleporte que o Canary mostra nesse intervalo fica para o
+protocolo/cliente (#584/M36-03); o `sim` só aplica o atraso, sem efeito nenhum para desenhar.

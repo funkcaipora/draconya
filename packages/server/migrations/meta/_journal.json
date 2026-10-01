@@ -78,6 +78,118 @@
       "when": 1789900000000,
       "tag": "0010_520-supply-and-ammunition-stock",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790000000000,
+      "tag": "0011_562-huntera-stamina-cap",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790100000000,
+      "tag": "0012_604-item-instance-overlay",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790200000000,
+      "tag": "0013_568-melee-skill-persisted-migration",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790300000000,
+      "tag": "0014_731-character-storage",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790400000000,
+      "tag": "0015_726-fed-ms",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790500000000,
+      "tag": "0016_569-skills-updated-at",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790600000000,
+      "tag": "0017_593-soul",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790700000000,
+      "tag": "0018_615-boosted-creature-world-daily",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790800000000,
+      "tag": "0019_566-promoted",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790900000000,
+      "tag": "0020_570-blessings",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791000000000,
+      "tag": "0021_602-charms",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791100000000,
+      "tag": "0022_550-fight-mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791200000000,
+      "tag": "0023_629-bosstiary",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791300000000,
+      "tag": "0024_624-learned-spells",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791400000000,
+      "tag": "0025_599-familiar",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791500000000,
+      "tag": "0026_631-training",
+      "breakpoints": true
     }
   ]
 }

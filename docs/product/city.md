@@ -3,8 +3,8 @@
 **Status:** parcial — protect zone com mapa, ponto de entrada e movimento (FUN-60, FUN-69),
 **shard compartilhado** com entrada, saída e visibilidade entre jogadores (FUN-71),
 **interest management por célula com teto de 200 por cópia** (FUN-33) e **a Thais real, com
-andares e escadas, como mapa da Cidade** (FUN-120, ADR 0025); faltam loja, depósito e Market
-(E5, E13)
+andares e escadas, como mapa da Cidade** (FUN-120, ADR 0025); o custo do leque de saída está
+medido (OW-07, #828); faltam loja, depósito e Market (E5, E13)
 **PRD:** §6, §37
 **Épico:** E1 (sessão e visualizador)
 **Referência técnica:** [ADR 0004](../adr/0004-city-as-protect-zone.md) (Cidade como protect
@@ -74,6 +74,58 @@ Isso tem uma obrigação junto: ao voltar de uma hunt, o snapshot **da hunt** é
 deixado de reescrever. Sem isso, quem morre volta para a praça, o snapshot da hunt já creditada
 fica de pé no Redis, e a próxima conexão retoma uma hunt encerrada.
 
+### O que "não credita" quer dizer no `sim` (OW-03, ADR 0060 d.10b)
+
+Até aqui a Cidade não creditar era o mesmo que ser shard (`Ruleset.shared`), e o hospedeiro lia
+um campo para as duas perguntas. O ADR 0060 torna a Cidade o primeiro mundo — um shard que
+**credita** —, e o `sim` já separa as duas coisas, sem mudar o comportamento de ninguém:
+
+- **`Ruleset.shared`** diz só "sair é `leave`".
+- **`Ruleset.progress`** (`'none' | 'checkpointed'`) diz se a sessão credita. `progressOf(ruleset)`
+  devolve o valor resolvido, que o hospedeiro passa a ler na OW-04: ausente, a sessão privada é
+  `'at-end'` (credita no `end`) e a compartilhada é `'none'`. **A Cidade e a hunt não declaram o
+  campo**, então nada muda para elas enquanto `OPEN_WORLD` não existe.
+- **`Session.checkpoint(characterId, reason)`** emite o extrato de quem continua na sessão e
+  recomeça a contar dele, com a semântica de delta do `leave`: o segundo checkpoint leva só o que
+  rendeu desde o primeiro, o `seq` cresce, e o `leave`/`end` seguinte leva só o resto. Não zera a
+  soma da sessão, não toca a janela de DPS, não sorteia nem agenda — o resultado é o mesmo com ou
+  sem checkpoint, a 1 Hz ou a 10 Hz. Nenhum hospedeiro o chama ainda (OW-16).
+- **Tetos por sessão**: `maxPendingDomainEvents` e `maxEventsPerAdvance` (default, as constantes
+  de hoje) e `maxNotableEventsPerCharacter` (sem default — sem ele a lista cresce sem limite, como
+  sempre cresceu). É o que permite ao mundo aparar a lista de eventos notáveis sem que a hunt
+  perceba.
+
+### O mundo no protocolo (OW-11, ADR 0060 d.2b, d.7 e d.8)
+
+O protocolo ganha os contratos de que o mundo precisa. **Nenhum servidor os emite ainda** — quem
+os produz são o `canLogout` e a saída no `sim` (OW-10, OW-14), a entrada pelo repouso (OW-21), o
+portão no-pvp (OW-27) e o cliente que os mostra (OW-23). Os quatro contratos são opcionais ou
+novos, para o deploy em ondas: um nó `game` anterior continua falando com um cliente novo, e o
+inverso também.
+
+| Mensagem | Opcode | O que diz |
+|---|---|---|
+| `logout-refused { reason }` (S2C) | 49 | O `logout` passou por `canLogout` e a resposta é não. `reason`: `'no-logout-tile'` (`RETURNVALUE_YOUCANNOTLOGOUTHERE`) ou `'in-fight'` (`RETURNVALUE_YOUMAYNOTLOGOUTDURINGAFIGHT`, só fora da PZ) — `canary/src/server/network/protocol/protocolgame.cpp:1151-1162`. O pedido (`logout`, C2S 8) não mudou. |
+| `world-full { position, retryAfterMs, huntAvailable }` (S2C) | 50 | A entrada vinda do repouso bateu no teto do mundo. `position` é o lugar na fila, de 1 em diante; `retryAfterMs`, uma DURAÇÃO medida no instante do envio (o Canary manda segundos num byte, 5 a 120 s, `waitlist.cpp:53-67`); `huntAvailable` diz se a hunt idle está ao alcance (d.6b). Quem volta de uma instância nunca a recebe. |
+| `player-stats.zone` e `player-stats.inFight` | — | A zona do tile (`'normal' \| 'protection' \| 'no-pvp' \| 'pvp' \| 'no-logout'`, o `ZoneType_t` do Canary) e o `CONDITION_INFIGHT`, para os ícones de PZ e de luta do HUD. |
+| `target-cancel.reason` | — | `'player-protected'` (`RETURNVALUE_YOUMAYNOTATTACKTHISPLAYER`, `combat.cpp:551-556`) ou `'protection-zone'` (`RETURNVALUE_ACTIONNOTPERMITTEDINPROTECTIONZONE`, `combat.cpp:326-345`). |
+
+Três escolhas que o texto do Canary não dá pronto:
+
+- **`zone` e `inFight` são opcionais e SEM `default`**, ao contrário dos campos vizinhos de
+  `player-stats`. Ausente quer dizer "este nó não informa" — uma hunt, ou um nó anterior —, e um
+  `default` mandaria o HUD apagar um ícone que talvez devesse estar aceso. É também por isso que
+  toda hunt continua mandando o `player-stats` de hoje, byte a byte.
+- **`zone` não diz se dá para deslogar.** O `NOLOGOUT` soma às outras flags
+  (`canary/src/io/iomap.cpp:165-177`) e a precedência o esconde atrás de PZ e no-pvp
+  (`canary/src/items/tile.hpp:188-199`): um tile de PZ com no-logout reporta `'protection'`. Quem
+  responde "posso sair aqui?" é o `logout-refused`. E `'pvp'` está no vocabulário por ser parte do
+  `ZoneType_t`, mas o servidor não o emite no primeiro corte (o tile de arena é `'no-pvp'`, ADR 0060
+  d.8).
+- **A morte no mundo não ganhou mensagem.** Reaproveita `session-ended` com `reason: 'death'`, e o
+  `session-state.sessionType` já é uma string livre, então `'world'` passa — os dois contratos
+  seguem como estão, e os testes do protocolo o prendem.
+
 ### Desconectar não tira ninguém da praça na hora
 
 A carência de repouso (FUN-52) vale por **personagem**, não pela sessão: cinco minutos sem ninguém
@@ -120,6 +172,41 @@ entrada e as escadas:
 - **O templo não tem escada para cima**, e a do porão dele leva ao andar 8, que fica fora do
   recorte: pisar nela hoje é pisar num tile comum.
 
+### Zonas por tile (#830, OW-09, ADR 0060)
+
+`thais.json` carrega, por andar, a camada `zones`: o que é protect zone, no-pvp, no-logout e
+arena em cada tile, lido de `TILE_FLAGS` do OTBM — a base de `canLogout`, do portão de combate e
+dos serviços em PZ do mundo (OW-10, OW-27). **É só dado**: nada na Cidade de hoje a consulta, e a
+Cidade continua sendo protect zone por construção (ADR 0004) até o mundo existir.
+
+O que o recorte tem (z4–z7, medido sobre o OTBM por `pnpm map:import --id thais --zones-only`):
+
+| andar | PZ | PZ + no-logout | só no-logout |
+|---|---|---|---|
+| z4 | 230 | 0 | 0 |
+| z5 | 844 | 3 | 0 |
+| z6 | 3.328 | 10 | 0 |
+| z7 | 3.762 | 1 | 2 |
+
+Thais não tem no-pvp nem arena. O templo é PZ — o tile de entrada, `(94, 88, 7)`, e a coluna que
+desce dele até `(94, 96, 7)`; do `(94, 97, 7)` em diante é rua, normal. Os tiles de casa são PZ
+(`House::addTile`, `canary/src/map/house/house.cpp:26-28`), e já traziam a flag no arquivo.
+
+**A forma.** Um caractere por tile, na mesma forma de `speed` e `sight`, com a paleta fixa
+`ZONE_PALETTE` (`.` normal, `p` PZ, `n` no-pvp, `a` arena, `l` só no-logout, `P`/`N`/`A` a zona
+mais no-logout). Em memória, `Floor.zones` guarda a soma dos bits do OTBM (PZ 1, no-pvp 4,
+no-logout 8, arena 16), já normalizada como o Canary: PZ, no-pvp e arena são exclusivos, no-logout
+soma (`canary/src/io/iomap.cpp:165-177`). A precedência de quem consulta é a de
+`Tile::getZoneType` — PZ, no-pvp, arena, no-logout, normal (`canary/src/items/tile.hpp:188-199`) —
+e é do `sim`. Arena é tratada como no-pvp no primeiro corte: divergência registrada no ADR 0060 d.8.
+
+**O que não muda.** Os outros recortes (Rat Cellars, Rotworm Caves, Darashia Dragon Lair e os que
+vieram depois) não têm a camada: `Floor.zones` é `null`, tudo é normal, e as hunts ficam como
+estão. A geometria de Thais — bloqueio, velocidade, visão, escadas — também ficou byte a byte; o
+diff do arquivo é só acréscimo. A versão global de conteúdo mudou, como em toda mudança de
+conteúdo: a hunt em voo no deploy é creditada e descartada pelo caminho de sempre (ADR 0010,
+ADR 0018).
+
 O servidor **diz qual mapa desenhar**: `instance-enter { instanceId, map }` sai no
 `session-attach` e em toda transição, ANTES do `session-state`, e `session-state.world.mapId` é o
 mesmo id. Era um opcode definido, tratado pelo cliente e nunca enviado. Desenhar a Thais é o
@@ -152,7 +239,8 @@ duzentos é o canal global com outro nome.
 
 ### Medido
 
-`pnpm bench:city`, com as pessoas espalhadas pelo mapa:
+`MAP=square pnpm bench:city` (a praça sintética de antes da Thais), com as pessoas espalhadas pelo
+mapa:
 
 | jogadores | vizinhos por jogador | sem AOI | mensagens | sem AOI |
 |---|---|---|---|---|
@@ -163,7 +251,7 @@ duzentos é o canal global com outro nome.
 Quintuplicar a população não mexeu em quantos recebem cada passo — é a propriedade que a issue
 pede. Sem interest management, o total de mensagens cresce 25 vezes para 5 vezes mais gente.
 
-**Na Thais real** (`MAP=thais pnpm bench:city`, FUN-120), com todo mundo chegando no templo — a
+**Na Thais real** (`pnpm bench:city`, hoje o padrão; FUN-120), com todo mundo chegando no templo — a
 hora do login — e depois espalhados pelas ruas, cada um num alvo a pé a intervalos iguais da
 entrada:
 
@@ -193,6 +281,103 @@ nada, todo mundo fica no mesmo punhado de tiles, e quem está ao alcance da vist
 500 jogadores dão 374 vizinhos em vez de 499. A AOI não tem o que cortar enquanto ninguém se
 espalha — o corte aparece quando a Cidade tiver loja, depósito e ruas.
 
+**As duas tabelas de mensagens acima são anteriores ao FUN-122 e não se reproduzem mais.** O bench
+de então fixava o relógio do hospedeiro em zero; desde que o hospedeiro recusa o `walk` adiantado
+(um passo por vez, FUN-122) todo passo depois do primeiro era recusado, e a tabela continuava saindo
+— 100 pessoas no templo davam 7,5 mil mensagens em vez das 35 mil publicadas, e a dispersão parava
+na quarta rodada. O número que continua valendo é o de **vizinhos por jogador**, que a tabela nova
+repete; os totais de mensagens passam a ser os dela.
+
+### Custo do leque de saída (OW-07, #828)
+
+Até aqui o bench só contava mensagem. O ADR 0060 aposta que o que cede primeiro quando o mundo
+enche é o **leque de saída** — cada passo vira uma mensagem por vizinho, codificada uma vez por
+destinatário em `viewer.ts` — e não a CPU do `sim`. O OW-22 vai mexer nesse leque, e precisa de um
+antes para comparar: `pnpm bench:city` agora reporta, por cenário, a **CPU por ciclo** (p50 e p99),
+os **bytes por visualizador por segundo** e a **fila máxima por flush**.
+
+**Como se mede.**
+
+- `SessionHost`, `CityShard` e `Viewer` de verdade, com o codec real (`encodeS2C` + `packBatch`).
+  O socket só conta os bytes do frame; o uWS roda sem compressão (`server.ts` não configura
+  `compression`), então o frame é o fio, mais 2 a 10 bytes de cabeçalho do WebSocket por quadro.
+- Relógio simulado, no ritmo de produção: o passo da Cidade é de 150 ms (`city.json`) e o
+  hospedeiro fecha um ciclo a cada 100 ms (`CYCLE_MS` em `host.ts`), com um frame por visualizador.
+  Cada jogador pisa uma vez por período de passo, defasado dos outros. Um teste prende que o
+  `CYCLE_MS` do bench é o do hospedeiro.
+- CPU é `process.cpuUsage()` em volta dos `walk` do ciclo (enfileirar: movimento, AOI, montar a
+  mensagem de cada destinatário) e do `host.cycle` (esvaziar: codificar e escrever). `p99 / ciclo` é
+  o p99 de CPU como fração dos 100 ms.
+- 200 passos medidos por jogador (300 ciclos) depois de 30 de aquecimento; no cenário espalhado,
+  cada um caminha antes até o próprio alvo. Cada linha é a melhor de 2 rodadas (`REPEAT=2`, a de
+  menor p50 de CPU).
+
+**Máquina:** Apple M2, 8 núcleos (4 de desempenho e 4 de eficiência), `darwin arm64`, Node 24.14.1,
+8 GiB — a máquina de desenvolvimento, **com outros processos rodando** (carga de 10 a 22 durante a
+medição). O `cpuUsage` não conta o tempo em que o processo esteve preemptado, e a CPU do processo
+ficou em 78 a 107 % da parede; mesmo assim um núcleo disputado é um núcleo mais lento: numa
+execução anterior, com a carga de 17 a 25 e a CPU em 30 % da parede, as mesmas linhas deram de 1,5
+a 2,6 vezes estes valores. **Leia as colunas de CPU como teto**, e compare antes e depois sempre na
+mesma máquina, sob carga parecida. A medição no destino (ADR 0013) continua por fazer.
+
+Todo mundo no templo, como na hora do login:
+
+| jogadores | vizinhos | passos/s | CPU p50 µs | CPU p99 µs | flush p50 µs | p99 / ciclo | B/vis/s | msg/vis/s | fila máx | quedas |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 98,7 | 2,3 | 4.206 | 10.861 | 2.809 | 10,9 % | 21.735 | 228 | 32 | 0 |
+| 200 | 181,5 | 1,0 | 8.749 | 25.871 | 5.260 | 25,9 % | 16.822 | 175 | 50 | 0 |
+| 500 | 293,8 | 1,1 | 65.396 | 113.972 | 22.877 | 114,0 % | 26.547 | 275 | 77 | 0 |
+
+As pessoas espalhadas pelas ruas:
+
+| jogadores | vizinhos | passos/s | CPU p50 µs | CPU p99 µs | flush p50 µs | p99 / ciclo | B/vis/s | msg/vis/s | fila máx | quedas |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 7,8 | 6,4 | 1.016 | 4.170 | 666 | 4,2 % | 5.478 | 56 | 13 | 0 |
+| 200 | 16,0 | 6,4 | 4.416 | 13.217 | 2.463 | 13,2 % | 10.552 | 109 | 23 | 0 |
+| 500 | 37,9 | 6,3 | 53.179 | 98.825 | 17.703 | 98,8 % | 23.601 | 243 | 53 | 0 |
+
+**Como ler.** `passos/s` são os passos *aceitos* por jogador por segundo; o ideal é 6,7 (1000 ÷ 150).
+Espalhados chega perto. No templo fica em 1 a 2: tile é exclusivo, e quinhentas pessoas num salão só
+andam quando alguém sai da frente — a linha mede uma multidão quase parada, que é o login. `CPU µs`
+soma os `walk` do ciclo e o `host.cycle`; `flush` é só a parte que codifica e escreve. `fila máx` é a
+maior fila de um visualizador no instante do flush, contra o teto de 512 do `Viewer`. `quedas` conta
+os visualizadores derrubados por esse teto; diferente de zero, a linha não mede o jogo.
+
+**O que a linha de base mostra.**
+
+- **O ciclo de 500 pessoas está no limite dos 100 ms.** O p50 de CPU é de 53 ms (espalhados) e de
+  65 ms (templo), e o p99 chega a 99 e 114 ms: sem folga, num nó em que o `sim` ainda nem roda
+  monstro. Com 100 e 200 pessoas há folga larga — p99 de 4 a 26 ms.
+- **O que cresce é enfileirar, e não codificar.** Dividindo a CPU p50 pelas mensagens entregues por
+  ciclo (jogadores × msg/vis/s ÷ 10), o custo por mensagem entregue passa de 1,8–2,5 µs (100 e 200)
+  para 4,4–4,8 µs (500). O `flush` (codificar e escrever) quase não se mexe — de 1,1 a 1,7 µs por
+  mensagem —; o resto (CPU p50 menos `flush` p50, o `walk`) vai de 0,6 a 3,1 µs, quase na proporção
+  dos visualizadores. É a assinatura de `#sendToViewersOf`, que percorre todos os visualizadores
+  para achar os de cada destinatário: custo por passo de vizinhos × visualizadores. Um perfil
+  anterior (`node --cpu-prof`, 500 no templo, processo inteiro, carregamento do conteúdo incluído)
+  pôs no topo `buildFrame` do codec (11,7 %), a coleta de lixo (9,9 %), `#presentMoves` (9,1 %),
+  `#sendToViewersOf` (6,3 %) e o `TextEncoder` (6,1 %).
+- **Uma mensagem custa cerca de 96 bytes, em todas as linhas** (B/vis/s ÷ msg/vis/s dá de 95 a 98).
+  `creature-move` é `[opcode, {id, from, to, durationMs}]` em JSON, com 5 bytes de cabeçalho próprio
+  e 4 de prefixo no lote; e o lote nunca é comprimido — `packBatch` só marca `BATCH_FLAG`, e a
+  compressão do `buildFrame` só vale por mensagem de 8 KiB ou mais. Com 500 espalhados são 24 KB/s
+  por visualizador (cerca de 190 kbit/s) e 11,8 MB/s para a praça inteira; com 500 no templo, 13,3
+  MB/s.
+- **A fila não é o limite hoje.** O máximo foi de 77 mensagens (templo, 500) contra o teto de 512,
+  com zero quedas em todas as linhas. Ela cresce com vizinhos × passos por ciclo, e o templo de 500
+  anda a um sexto da velocidade: uma multidão que andasse inteira mediria bem mais.
+
+**O que esta medição não cobre.**
+
+- O passo é um zigue-zague de um tile (norte, leste, sul, oeste), então quase ninguém cruza a
+  célula da AOI e `creature-appear` / `creature-disappear` ficam sub-representados.
+- É só movimento de jogador na Thais pacífica: sem monstro, golpe, magia, chat nem os
+  `player-stats` e inventário dos ciclos reais.
+- Uma cópia só, com o teto alargado para caber todos; o teto de 200 por cópia do FUN-33 não vale
+  aqui. Só o andar 7.
+- `pnpm bench:city` com `AOI=both` roda também o grupo de controle (a sessão inteira); `MAP=square`
+  roda a praça sintética; `FORMAT=markdown` imprime a tabela pronta para esta página.
+
 ## Regras
 
 - Protect zone: nada causa dano, ninguém morre (ADR 0004, §37).
@@ -214,6 +399,50 @@ espalha — o corte aparece quando a Cidade tiver loja, depósito e ruas.
 - O campo é simétrico e tem dois limiares: entra a uma célula, sai passando de três.
 - Teto de 200 por cópia; encheu, abre a próxima. Ninguém é recusado.
 - `say` de canal `local` alcança o campo de visão.
+
+## Serviço de Cidade: aprender magia (#624, ADR 0058)
+
+O modal Personagem tem a seção **Magias**: lista as magias da vocação e vende cada uma por
+`learnPrice` (`learn-spell`, sem diálogo de NPC — tela de serviço, ADR 0042). É intenção C2S
+tratada pela sessão dona (ADR 0052 d.2), nunca endpoint `api`, e o gold sai pelo ledger. **Vale
+também na hunt** (não rola nada, ADR 0052 d.4). Ver `progression.md`, "Aprender magia".
+
+## Conjurar na Cidade (#792, ADR 0044 d.2)
+
+A conjuração é MAGIA, então exige o aprendizado como qualquer outra (`spell-not-learned` /
+`not-learned` no slot) — só a runa em si, o item, dispensa (#624).
+
+A Cidade tem `useSlot`: a barra de ações funciona ali, mas só para **conjuração**
+(`effect.kind === 'conjure'`) — o resto do vocabulário fica de fora, e por duas razões
+diferentes:
+
+- **Magia agressiva** (`damage`/`damage-over-time`) é recusada por POLÍTICA — a Cidade é
+  protect zone (ADR 0004, §37) — com a razão tipada `protection-zone`, nunca lançada.
+- **O resto do vocabulário não-agressivo** (cura, haste, buff, mana shield, dano ao longo do
+  tempo) devolve uma `ConditionState` que só o RULESET agenda — e a Cidade não tem fila de
+  eventos (`hz` 0, `onEvent` falha alto de propósito). Fica de fora por `not-in-catalog`, a
+  mesma degradação que `use-item`/`use-item-on` já dão a comida e poção (ADR 0049 decisão 8).
+  Reabre quando a Cidade ganhar relógio — o que o ADR 0004 diz que não terá.
+
+Conjuração é a única ação do vocabulário que não precisa de nada disso: `castSpell` credita as
+cargas no estoque abstrato do próprio lançador (`supplyStock`/`ammunitionStock`) e termina no
+mesmo instante, sem mira, sem alvo e sem sorteio (ADR 0044 decisão 1) — item e supply (poção,
+runa de ataque) continuam recusados, como já eram.
+
+**Regeneração de mana/alma na Cidade: nenhuma, e é o comportamento decidido, não uma lacuna.**
+Voltar à Cidade já cura mana por completo na entrada (§26.1 acima); depois disso ela NÃO
+regenera enquanto o personagem fica na praça — o ADR 0043 (emenda de 2026-09-25) decidiu, com
+evidência direta do Huntera, que a regeneração de vida/mana é condicionada só a "estar em hunt
+agora": zero na Cidade, sem condição de comida. Pontos de alma seguem a mesma lógica por outro
+caminho: só sobem por uma condição disparada quando a XP recebida é ≥ level (ADR 0044 decisão
+3), e a Cidade nunca concede XP — então também não há ganho de alma lá. Conjurar várias vezes
+seguidas na praça, então, esgota mana e alma sem repor nada até a próxima hunt ou a próxima
+entrada na Cidade (que os enche de novo).
+
+Estado durável: `#saveDurableReceipt` (`packages/server/src/game/host.ts`) grava
+`supplyStock`/`ammunitionStock` além do que já gravava (vocação, equipamento, alma, `goldDelta`
+pelo mesmo ledger que a venda na praça usa, #724/ADR 0048 d.8) — `useSlot` marca o personagem
+`dirty` no sucesso, a mesma marca de `equip`/`choose-vocation` (#154).
 
 ## Parâmetros de balanceamento
 
@@ -247,3 +476,9 @@ como fixture de teste (`packages/server/src/testing/content.ts`).
 **O passo na Cidade é fixo — 150 ms por tile, para todos** (decisão do usuário, 2026-09-11,
 cópia do Huntera). A fórmula do Tibia (`chão × 1000 / speed`) vale só na hunt; o regime do PvP
 se decide quando o PvP existir.
+
+**Comer e beber poção na Cidade são recusados — o Tibia deixa** (#726, ADR 0049 decisão 8):
+`use-item`/`use-item-on` respondem `not-in-hunt` para qualquer coisa que simule (comida,
+suprimento) porque a Cidade não tem relógio (`hz` 0, ADR 0004/0023) para exaustão, condição nem
+`fedMs` — não há fila de eventos para agendar o vencimento nem para drenar o contador. Reabre
+quando a Cidade tiver relógio, o que o ADR 0004 diz que não terá.

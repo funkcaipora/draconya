@@ -105,6 +105,8 @@ export function resolveOracleCase(case_: DamageElementOracleCase): number {
 export function resolveOracleOutcome(case_: DamageElementOracleCase): DamageOutcome {
   return resolveDamage(
     intent(case_.damageType, case_.rawDamage), defenderOf(case_), 'pve', TRACE_COMBAT, noDodge(),
+    // `TRACE_COMBAT` é sempre `combat-v1` — `nowMs` é ignorado fora do `combat-v3` (#548).
+    0,
   );
 }
 

@@ -192,18 +192,18 @@ describe('readPackInventory e checkInventories, contra um pacote em disco', () =
 const ROOT = join(import.meta.dirname, '..');
 const THINGS = resolve(ROOT, process.env.THINGS_DIR ?? 'things');
 const REAL_PACKS = join(ROOT, 'packages', 'content', 'data', 'packs');
-const hasRealPack = existsSync(join(THINGS, '1332', 'catalog-content.json'));
+const hasRealPack = existsSync(join(THINGS, '1533', 'catalog-content.json'));
 
-describe.skipIf(!hasRealPack)('o inventário versionado contra o pacote 1332 desta máquina', () => {
+describe.skipIf(!hasRealPack)('o inventário versionado contra o pacote 1533 desta máquina', () => {
   it('é exatamente o que o gerador produz do pacote — senão, rode pnpm assets:inventory', () => {
     const outcomes = checkInventories(REAL_PACKS, THINGS);
-    const own = outcomes.find((outcome) => outcome.file === 'tibia-1332.json');
-    expect(own, 'packs/tibia-1332.json existe').toBeDefined();
+    const own = outcomes.find((outcome) => outcome.file === 'tibia-1533.json');
+    expect(own, 'packs/tibia-1533.json existe').toBeDefined();
     expect(own?.status, own?.detail ?? '').toBe('fresh');
   });
 });
 
-describe.skipIf(hasRealPack)('sem o pacote 1332 nesta máquina', () => {
+describe.skipIf(hasRealPack)('sem o pacote 1533 nesta máquina', () => {
   it('o inventário versionado não é conferido contra o .dat — só contra a tabela, em load.test.ts', () => {
     expect(checkInventories(REAL_PACKS, THINGS).map((outcome) => outcome.status)).toEqual(['absent']);
   });

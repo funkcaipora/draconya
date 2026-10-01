@@ -8,16 +8,22 @@
 // mundo. `creature-*` é sempre mundo — e é por isso que dezenas de deltas por segundo não
 // tocam o React.
 
-import type { OutfitColors, S2CMessage, SkillProgress as ProtocolSkillProgress } from '@draconya/protocol';
+import type {
+  CreatureLight, CreatureVoices, MonsterRace, OutfitColors, S2CMessage,
+  SkillProgress as ProtocolSkillProgress,
+} from '@draconya/protocol';
 import { appendCapped, hud, slotKey, type PlayerSkills, type SkillProgress, type SlotState } from './hud.js';
+import { aimTracker } from './aim.js';
 import { targetTracker } from './target.js';
 import { botResult, loadConfig } from '../bot/store.js';
 import { partyEntered, partyExited } from '../party/store.js';
 
 /**
- * As três skills que o painel mostra (#340, SV-04), do `skills` de `player-stats`/`session-state`
- * — um registro por id de skill do conteúdo. Vazio é um nó `game` anterior à SV-04 (o `default`
- * do protocolo): mantém o que a tela já tinha em vez de zerar as barras.
+ * As skills que o painel mostra (#340, SV-04; #568 as separa por tipo de arma), do `skills` de
+ * `player-stats`/`session-state` — um registro por id de skill do conteúdo. Vazio é um nó `game`
+ * anterior à SV-04 (o `default` do protocolo): mantém o que a tela já tinha em vez de zerar as
+ * barras. Ausência de UMA chave (nó anterior ao #567, que ainda manda só `melee`) preserva o
+ * valor anterior daquela skill em vez de zerar — a mesma regra de campo opcional de sempre.
  */
 function skillsOf(
   skills: Readonly<Record<string, ProtocolSkillProgress>>, previous: PlayerSkills,
@@ -25,9 +31,17 @@ function skillsOf(
   if (Object.keys(skills).length === 0) return previous;
   const of = (id: keyof PlayerSkills): SkillProgress => {
     const progress = skills[id];
-    return progress === undefined ? previous[id] : { level: progress.level, percent: progress.percentToNext };
+    if (progress === undefined) return previous[id];
+    // O nível com Loyalty (#628) só vem quando o bônus muda o nível; a ausência é "igual ao base".
+    return {
+      level: progress.level, percent: progress.percentToNext,
+      ...(progress.loyaltyLevel === undefined ? {} : { loyaltyLevel: progress.loyaltyLevel }),
+    };
   };
-  return { melee: of('melee'), distance: of('distance'), magic: of('magic') };
+  return {
+    fist: of('fist'), club: of('club'), sword: of('sword'), axe: of('axe'),
+    distance: of('distance'), magic: of('magic'),
+  };
 }
 
 /** Por que a sessão acabou, em palavras que o jogador entende. */
@@ -43,9 +57,22 @@ const REASON = {
   // O encerramento coletivo (#432, ADR 0032 d.14): todos os presentes aprovaram.
   'party-vote': 'A party encerrou a caçada',
 } as const;
+
+/**
+ * Por que o TREINO acabou. As frases da hunt não servem: "Você saiu da hunt" a quem parou o treino
+ * na Cidade, ou "Concluído" para uma arma que acabou, não dizem o que aconteceu. `manual-exit` é o
+ * `leave-hunt` (o jogador parou) e `completed` é a arma esgotada ou perdida da mochila — as duas
+ * saídas que o ruleset do Treino produz; o resto (manutenção) é o de sempre.
+ */
+const TRAINING_REASON: Partial<Record<keyof typeof REASON, string>> = {
+  'manual-exit': 'Você saiu do treino',
+  completed: 'A exercise weapon acabou',
+  drain: REASON.drain,
+};
 import { missileDuration } from '../world/effects.js';
 import {
-  addEffect, addFloatingText, addMissile, clearTransients, enterInstance, world, type Creature,
+  addEffect, addFloatingText, addMissile, applyTileUpdate, clearTransients, enterInstance,
+  replaceTileOverrides, world, type Creature,
 } from './world.js';
 
 /**
@@ -64,6 +91,27 @@ function colorsOf(
   return creature.colors === undefined ? {} : { colors: creature.colors };
 }
 
+/**
+ * A apresentação do monstro (#620) — addons, raça, luz e falas —, SÓ o que o servidor mandou.
+ *
+ * O mesmo motivo de `colorsOf`: o tipo do protocolo admite `undefined` e o do store não
+ * (`exactOptionalPropertyTypes`), e "o servidor não disse" tem que chegar ao desenho como a
+ * FALTA do campo — é o viewport quem aplica o neutro (sem addon, `blood`, sem luz, mudo).
+ */
+function presentationOf(creature: {
+  readonly addons?: number | undefined;
+  readonly race?: MonsterRace | undefined;
+  readonly light?: CreatureLight | undefined;
+  readonly voices?: CreatureVoices | undefined;
+}): Pick<Creature, 'addons' | 'race' | 'light' | 'voices'> {
+  return {
+    ...(creature.addons === undefined ? {} : { addons: creature.addons }),
+    ...(creature.race === undefined ? {} : { race: creature.race }),
+    ...(creature.light === undefined ? {} : { light: creature.light }),
+    ...(creature.voices === undefined ? {} : { voices: creature.voices }),
+  };
+}
+
 export function applyMessage(message: S2CMessage, nowMs: number): void {
   switch (message.type) {
     // --- mundo: nada aqui notifica ninguém ------------------------------------------------
@@ -73,18 +121,73 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         ...state,
         huntId: message.huntId ?? null,
         difficulty: message.difficulty ?? null,
+        // Cadáver de uma cena que acabou de ficar para trás (#722) — nenhum cadáver da
+        // instância nova pode ter o mesmo id por acidente sem que a janela mostre a coisa certa.
+        corpse: null,
       }));
       return;
 
     case 'ground-item-appear':
       world.groundItems.set(message.id, {
         id: message.id, position: message.position, appearanceId: message.appearanceId,
+        // `exactOptionalPropertyTypes`: só entra quando o servidor mandou (#722, ADR 0048 d.4).
+        ...(message.lootable === undefined ? {} : { lootable: message.lootable }),
       });
       world.groundItemsVersion += 1;
       return;
 
     case 'ground-item-disappear':
       if (world.groundItems.delete(message.id)) world.groundItemsVersion += 1;
+      // O cadáver decaiu: se a janela aberta é a DELE, ela fecha — nada mais tem o que mostrar
+      // (#722, ADR 0048 d.4). Uma janela de outro cadáver não é afetada.
+      hud.set((state) => (
+        state.corpse !== null && state.corpse.groundItemId === message.id
+          ? { ...state, corpse: null }
+          : state
+      ));
+      return;
+
+    // O tile mudou de aparência (#729, ADR 0050 d.7): a porta abriu, o capim foi cortado. O
+    // viewport aplica o `replace` por cima da pilha estática no próprio pintor de tile — nada
+    // aqui redesenha nada (ADR 0007).
+    case 'tile-update':
+      applyTileUpdate(message.position, message.replace);
+      return;
+
+    // Um campo apareceu ou reiniciou (#561, M31-06): `set` pelo MESMO id substitui — relançar
+    // o mesmo campo não deixa uma cópia velha para trás, exatamente como `ground-item-appear`.
+    case 'field-appear':
+      world.fields.set(message.id, {
+        id: message.id, tiles: message.tiles, appearanceId: message.appearanceId,
+      });
+      world.fieldsVersion += 1;
+      return;
+
+    case 'field-disappear':
+      if (world.fields.delete(message.id)) world.fieldsVersion += 1;
+      return;
+
+    // O campo trocou de estágio (#560, `decayTo`): mesmo `id` e `tiles`, aparência NOVA já
+    // resolvida pelo servidor — o cliente só substitui a entrada, nunca redesenha por conta
+    // própria (invariante 6). Campo que a tela nunca viu (reconectou entre o `field-appear` e
+    // esta troca, e o `session-state` ainda não chegou) é ignorado: nada para trocar ainda.
+    case 'field-stage-change': {
+      const field = world.fields.get(message.id);
+      if (field === undefined) return;
+      world.fields.set(message.id, { ...field, appearanceId: message.appearanceId });
+      world.fieldsVersion += 1;
+      return;
+    }
+
+    // A resposta ao `look` (#729): o texto do "You see …" entra no mesmo canal do
+    // `system-message`, nível info — não é recusa, é o que a placa/o cenário dizem.
+    case 'look-result':
+      hud.set((state) => ({
+        ...state,
+        systemMessages: appendCapped(state.systemMessages, {
+          level: 'info', text: message.text, atMs: nowMs,
+        }),
+      }));
       return;
 
     case 'creature-appear':
@@ -92,6 +195,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         id: message.id,
         appearanceId: message.appearanceId,
         ...colorsOf(message),
+        ...presentationOf(message),
         name: message.name,
         health: message.health,
         maxHealth: message.maxHealth,
@@ -177,8 +281,16 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         // A munição escolhida por família (#152): `null` é "nenhuma", e a tela mostra o que veio.
         ammo: message.ammo,
         vocationId: message.vocationId,
+        // Promovido (#566, ADR 0042 decisão 1): a tela troca o nome exibido pelo
+        // `promotion.name` da vocação quando `true`.
+        promoted: message.promoted,
+        // A postura de luta (#550): a que o servidor confirmou — o botão marca ESTA, não a do clique.
+        fightMode: message.fightMode,
         speed: message.speed,
         skills: skillsOf(message.skills, state.skills),
+        loyaltyBonusPercent: message.loyaltyBonusPercent ?? 0,
+        soul: message.soul,
+        soulMax: message.soulMax,
       }));
       return;
 
@@ -258,6 +370,16 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           vocations: message.vocations,
           vocationLevel: message.vocationLevel,
           ...(message.bestiary === undefined ? {} : { bestiary: message.bestiary }),
+          // Os 25 Charms (M39-02, #602, ADR 0053 d.3): custo, chance e categoria de cada um,
+          // fixados na sessão — a tela do Cyclopedia lê daqui.
+          charms: message.charms,
+          // Os níveis do Bosstiary (#629): a tabela por raridade, fixada na sessão. Ausente quando o
+          // servidor não a mandou — a tela decide o que mostrar sem ela, não este `case`.
+          ...(message.bosstiary === undefined ? {} : { bosstiary: message.bosstiary }),
+          // O Treino (#631, ADR 0059): o que uma carga rende, os tetos e o livro do offline
+          // training, fixados na sessão — a tela de Treino lê daqui. Ausente quando o servidor não
+          // tem Treino (o pill "Treino" não existe).
+          ...(message.training === undefined ? {} : { training: message.training }),
         },
       }));
       return;
@@ -274,8 +396,17 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           satchel: message.satchel,
           equipped: message.equipped,
           capacity: message.capacity,
+          // O estoque abstrato visível (#726, ADR 0049 decisão 4): `default([])` no protocolo.
+          supplies: message.supplies,
+          ammunition: message.ammunition,
         },
       }));
+      return;
+
+    case 'corpse-contents':
+      // O que ainda está no cadáver, depois do Quick Loot automático do abate (#722, ADR 0048
+      // d.4) — SUBSTITUI, como `inventory`: é o estado inteiro do cadáver, não um delta.
+      hud.set((state) => ({ ...state, corpse: { ...message } }));
       return;
 
     case 'bestiary':
@@ -283,6 +414,55 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // servidor manda no attach e sempre que um contador muda (FUN-113), e somar aqui daria
       // um Bestiário que diverge do dele na primeira reconexão — que reenvia o mesmo total.
       hud.set((state) => ({ ...state, bestiary: message.counts }));
+      return;
+
+    case 'bosstiary':
+      // SUBSTITUI, como o Bestiário: são os contadores INTEIROS de cada boss e os pontos, não um
+      // delta — o servidor manda no attach e a cada abate de boss (#629, ADR 0052 d.1).
+      hud.set((state) => ({ ...state, bosstiary: { kills: message.kills, points: message.points } }));
+      return;
+
+    case 'charms':
+      // SUBSTITUI, como o Bestiário: é o registro INTEIRO (pontos/echoes gastos, tiers,
+      // atribuições), não um delta — o servidor manda no attach e a cada intenção aceita
+      // (M39-02, #602, ADR 0052 d.1).
+      hud.set((state) => ({
+        ...state,
+        charms: {
+          pointsSpent: message.pointsSpent,
+          echoesSpent: message.echoesSpent,
+          tiers: message.tiers,
+          assignments: message.assignments,
+        },
+      }));
+      return;
+
+    case 'learned-spells':
+      // SUBSTITUI, como as bênçãos: é o registro INTEIRO das magias aprendidas (#624, ADR 0058),
+      // não um delta — o servidor manda no attach e a cada `learn-spell` aceito. A tela resolve
+      // nome, preço e requisito pelo catálogo (invariante 6).
+      hud.set((state) => ({ ...state, learnedSpells: message.spellIds }));
+      return;
+
+    case 'training-state':
+      // SUBSTITUI, como `charms`: o estado INTEIRO do Treino (banco, skill do livro, exercise weapons
+      // com as cargas restantes, e a instância em uso) — o servidor manda no attach, a cada mudança
+      // da mochila e a cada golpe do Treino (#631, ADR 0059).
+      hud.set((state) => ({
+        ...state,
+        training: {
+          offlineBankMs: message.offlineBankMs,
+          offlineSkill: message.offlineSkill,
+          weapons: message.weapons,
+          activeInstanceId: message.activeInstanceId,
+        },
+      }));
+      return;
+
+    case 'blessings':
+      // O BITMASK inteiro (#570, ADR 0052) — nunca um delta. Compra e consumo na morte chegam
+      // pela mesma mensagem, e a tela resolve os nomes pelo catálogo (invariante 6).
+      hud.set((state) => ({ ...state, blessings: message.mask }));
       return;
 
     case 'bot-config-result':
@@ -319,11 +499,16 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         // A votação de encerrar não sobrevive ao fim da sessão (#432): a tela de retorno não
         // mostra o diálogo de uma proposta que já cumpriu o efeito.
         partyEndVote: null,
+        // Nem a saída pendente (#802): ela acabou de se cumprir.
+        exitPending: null,
         systemMessages: appendCapped(state.systemMessages, {
           level: 'warning',
-          text: `${REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
-            + ` · ${aggregates.xpGained} XP · ${aggregates.goldGained - aggregates.goldSpent} gold`
-            + ` · ${aggregates.kills} abate(s)`,
+          // O Treino não rende XP, gold nem abate: o extrato dele é o tempo e o porquê (#631).
+          text: state.analyzer.sessionType === 'training'
+            ? `Treino: ${TRAINING_REASON[message.reason] ?? REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
+            : `${REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
+              + ` · ${aggregates.xpGained} XP · ${aggregates.goldGained - aggregates.goldSpent} gold`
+              + ` · ${aggregates.kills} abate(s)`,
           atMs: nowMs,
         }),
       }));
@@ -340,8 +525,25 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // O chão também é substituído (FUN-123): o cadáver que apodreceu enquanto ninguém olhava
       // sumiria da mesma forma que o monstro que morreu.
       world.groundItems.clear();
-      for (const item of message.world.groundItems) world.groundItems.set(item.id, item);
+      for (const item of message.world.groundItems) {
+        world.groundItems.set(item.id, {
+          id: item.id, position: item.position, appearanceId: item.appearanceId,
+          ...(item.lootable === undefined ? {} : { lootable: item.lootable }),
+        });
+      }
       world.groundItemsVersion += 1;
+      // O overlay de cenário também é substituído (#729): o mesmo argumento do cadáver — uma
+      // porta que fechou enquanto ninguém olhava não pode continuar desenhada aberta.
+      // `?? []`: nó `game` anterior a esta issue manda sem o campo (default do protocolo).
+      replaceTileOverrides(message.world.tileUpdates ?? []);
+      // Os campos também são substituídos (#561, M31-06): quem reanexa vê os ATIVOS agora, e
+      // um que apagou enquanto ninguém olhava não pode continuar desenhado. `?? []`: nó `game`
+      // anterior a esta issue manda sem o campo (default do protocolo).
+      world.fields.clear();
+      for (const field of message.world.fields ?? []) {
+        world.fields.set(field.id, { id: field.id, tiles: field.tiles, appearanceId: field.appearanceId });
+      }
+      world.fieldsVersion += 1;
       // Os transitórios também: o que estava no ar pertence à cena que este estado substitui,
       // e um efeito do mapa anterior tocando sobre o novo é o mesmo defeito do monstro que
       // nunca some — por menos de um segundo, mas no primeiro quadro que o jogador vê.
@@ -351,6 +553,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           id: creature.id,
           appearanceId: creature.appearanceId,
           ...colorsOf(creature),
+          ...presentationOf(creature),
           name: creature.name,
           health: creature.health,
           maxHealth: creature.maxHealth,
@@ -366,14 +569,21 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // A reanexação zera a sequência do alvo: um `target-cancel` atrasado da sessão anterior
       // não pode fazer rollback para um alvo que já não existe (#471).
       targetTracker.reset();
+      // A mira da sessão anterior não pode sobreviver nem voltar (ADR 0049 decisão 2, #725):
+      // um `use-slot` armado antes da queda mandaria contra o alvo errado da hunt retomada.
+      aimTracker.reset();
       hud.set((state) => ({
         ...state,
         health: message.self.health, maxHealth: message.self.maxHealth,
         mana: message.self.mana, maxMana: message.self.maxMana,
         level: message.self.level, xp: message.self.xp,
         vocationId: message.self.vocationId,
+        promoted: message.self.promoted,
         speed: message.self.speed,
         skills: skillsOf(message.self.skills, state.skills),
+        loyaltyBonusPercent: message.self.loyaltyBonusPercent ?? 0,
+        soul: message.self.soul,
+        soulMax: message.self.soulMax,
         // O analisador (§16.1, FUN-83). `elapsedMs` da mensagem é o mesmo
         // `aggregates.durationMs`, então o que se guarda é o pacote de agregados e o INSTANTE
         // LOCAL em que ele chegou — é esse instante que faz o relógio da janela andar entre
@@ -398,6 +608,10 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         // O Follow (#406) volta a `null` na reanexação: o servidor o reenvia no attach, e até
         // ele chegar a tela NÃO deve mostrar o "interrompido" da sessão anterior (§7).
         followState: null,
+        // A saída pendente (#802) também volta a `null` na reanexação: o servidor a reenvia no
+        // attach se ainda houver uma, com o que falta AGORA — e a contagem de antes, contada
+        // no relógio local, estaria errada.
+        exitPending: null,
         onlinePlayers: message.onlinePlayers ?? null,
         // Alvo e condições NÃO viajam no `session-state`: o host manda `player-stats`,
         // `target-changed` (#470) e `active-conditions` logo depois dele, no mesmo attach
@@ -430,13 +644,20 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       hud.set((state) => ({ ...state, lastSettlement: message }));
       return;
 
-    case 'active-conditions':
+    case 'active-conditions': {
       hud.set((state) => ({
         ...state,
         conditions: message.conditions,
         conditionsReceivedAtMs: nowMs,
       }));
+      // A luz (#623) mora também no mundo, que o pintor lê sem assinatura: o servidor manda o
+      // raio, a cor e o prazo, e o pintor calcula o decaimento a cada quadro.
+      const light = message.conditions.find((condition) => condition.kind === 'light');
+      world.selfLight = light?.light === undefined
+        ? null
+        : { ...light.light, remainingMs: light.remainingMs, receivedAtMs: nowMs };
       return;
+    }
 
     case 'player-count':
       // Sem `sameX`/comparação (a #343 documenta por quê: republicado a cada 30 s sem checar
@@ -461,6 +682,22 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // uma intenção: mora no `hud` (como `party`/`active-conditions`), e a tela só o espelha —
       // nunca decide sozinha que o follow parou (DT-01).
       hud.set((state) => ({ ...state, followState: message }));
+      return;
+
+    case 'exit-pending':
+      // A saída da hunt pendente (#802) é um PUSH do servidor, como o Follow: a tela só a
+      // espelha. `active: false` — ou uma mensagem incompleta, que o protocolo permite mas o
+      // servidor não manda — zera; o cliente nunca fabrica o que o servidor não disse (D8).
+      hud.set((state) => ({
+        ...state,
+        exitPending: message.active && message.reason !== undefined
+          && message.phase !== undefined && message.remainingMs !== undefined
+          ? {
+            reason: message.reason, phase: message.phase,
+            remainingMs: message.remainingMs, receivedAtMs: nowMs,
+          }
+          : null,
+      }));
       return;
 
     // `slot-state` (AB-10): o estado do conjunto ATIVO por slot. SUBSTITUI o mapa — o servidor
@@ -494,6 +731,31 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       });
       return;
     }
+
+    // `use-result` (#726, ADR 0049 decisão 3/7): a resposta a `use-item`/`use-item-on`.
+    // `ok: true` não faz nada aqui — sucesso é o `inventory`/`player-stats`/`creature-hit` de
+    // sempre (decisão 7), inclusive quando a ação foi adiada pela exaustão (decisão 6) e só
+    // executou depois. `ok: false` vira o mesmo toast curto do `system-message`, sobre a
+    // mochila — o menu de contexto/seção Suprimentos que o dispara fica para uma entrega
+    // seguinte (ver desvios da spec desta issue); a MENSAGEM já chega tipada e traduzida hoje.
+    case 'use-result':
+      if (message.ok) return;
+      hud.set((state) => ({
+        ...state,
+        systemMessages: appendCapped(state.systemMessages, {
+          level: 'warning', text: message.reason ?? '', atMs: nowMs,
+        }),
+      }));
+      return;
+
+    // `logout-refused` e `world-full` (OW-11, #832, ADR 0060 d.7 e d.2b): contratos do MUNDO, que
+    // nenhum servidor emite ainda — quem os produz é a saída do `sim` e a entrada pelo repouso
+    // (OW-14, OW-21), e quem os mostra é a sessão `world` do cliente (OW-23). Ficam como NÃO
+    // aplicados, e de propósito: o `satisfies never` abaixo existe para que mensagem nova não seja
+    // ignorada por esquecimento, e aqui a omissão é a decisão, declarada.
+    case 'logout-refused':
+    case 'world-full':
+      return;
 
     default:
       // `never` de propósito: mensagem nova no protocolo quebra a COMPILAÇÃO aqui, em vez de

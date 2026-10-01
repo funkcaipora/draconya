@@ -1,8 +1,10 @@
 # Plano de paridade do catálogo — M29 a M44
 
-**Status:** proposto em 2026-09-25 — as decisões de arquitetura e produto que este plano exige
-estão nos [ADRs 0038 a 0046](adr/README.md); este documento é o inventário dos marcos, o que fica
-de fora e as questões que ainda esperam o dono.
+**Status:** proposto em 2026-09-25; as doze questões do §5 receberam decisão do dono no mesmo dia
+("copie do Huntera" — ver abaixo), registrada em cada ADR afetado (0038, 0039, 0040, 0042, 0043,
+0045) numa seção "Emenda — 2026-09-25" — as decisões de arquitetura e produto que este plano
+exige estão nos [ADRs 0038 a 0046](adr/README.md); este documento é o inventário dos marcos, o
+que fica de fora e as questões que ainda esperam captura (§6).
 **Diretriz do dono (2026-09-24):** *"copie tudo do The Forgotten Server e Open Tibia... copie
 todas as mecânicas, magias, monstros, itens"* — o [ADR 0037](adr/0037-tfs-canary-fidelity-except-action-bar-and-automation.md)
 registra a primeira metade do pedido (mecânica de caça); este plano é a segunda metade (o
@@ -52,6 +54,8 @@ e ao catálogo inteiro, na ordem da dependência real:
 | M43 | Forja da Exaltação e criaturas Influenced/Fiendish — spawn, tier de item e procs, fusão/transferência/conversão | [33](https://github.com/funkcaipora/draconya/milestone/33) | #616–#618 | [0046](adr/0046-item-instance-overlay-for-imbuements-and-forge-tier.md) (M43-02) |
 | M44 | Periféricos do Tibia — facções, apresentação de monstro, ilusões, condições de controle, magias utilitárias, aprender magia com NPC, trava de saída, skinning, atributos de item, Loyalty, Bosstiary, Weapon Proficiency, treino, Hazard, Animus Mastery | [34](https://github.com/funkcaipora/draconya/milestone/34) | #619–#633 | [0045](adr/0045-tibia-bestiary-charms-prey-and-training.md) (M44-13) |
 
+> **Emenda (2026-09-27):** as decisões de adaptação de M38–M44 estão em [`docs/endgame-plan.md`](endgame-plan.md) e nos ADRs 0052–0059, que superam o parágrafo abaixo no que ele diz sobre M38, M41 e M44 não terem ADR.
+
 M38, M41 e a maior parte de M44 não têm ADR dedicado nesta leva de nove: são extensão direta do
 mecanismo já registrado (magia e invocação seguem o modelo do ADR 0038/0044; Wheel e a maioria dos
 periféricos são conteúdo novo sem decisão de arquitetura própria). Uma decisão que surgir ao
@@ -61,10 +65,9 @@ especificar essas issues vira ADR na hora, como qualquer outra.
 
 | Item | Motivo |
 |---|---|
-| PvP: skulls, frags, unjust kill, PZ lock por agressão a jogador, Twist of Fate, bênção PvP, redução de morte por justiça | As hunts são PvE e instanciadas (invariante 8). O ADR 0031 exige perfil e ADR próprios para PvP; a Guild War é modo à parte (`docs/product/guild-war.md`), fora da mecânica de caça. |
+| PvP: skulls, frags, unjust kill, PZ lock por agressão a jogador, Twist of Fate, bênção PvP, redução de morte por justiça | O mundo aberto é do tipo `no-pvp` do Canary (ADR 0060) e as hunts são PvE e instanciadas (invariante 8). O ADR 0031 exige perfil e ADR próprios para PvP; a Guild War é modo à parte (`docs/product/guild-war.md`), fora da mecânica de caça. |
 | Casas, móveis, decoração, camas, portas e as magias de casa | O Draconya não tem mundo persistente com moradia, e nada disso cai de monstro nem é equipado. |
-| Raids como evento global de mundo | Pressupõem mundo aberto compartilhado; as hunts são sessões instanciadas. Os monstros das raids entram no catálogo como qualquer outro. |
-| Cadáver como container com dono e decadência em estágios de loot | Rejeitado pelo ADR 0037 (Alternativas). O loot vai para a caixa da sessão; a vida do cadáver é tratada no M36-04 sem precisar de dono. |
+| Raids como evento global de mundo | Pressupõem mundo aberto compartilhado. Desde 2026-09-30 o mundo aberto existe como direção ([ADR 0060](adr/0060-tibia-open-world-without-pvp.md)), e as raids voltam a ser escopo do plano do mundo (`docs/open-world-plan.md`), não deste. Os monstros das raids entram no catálogo como qualquer outro. |
 | Chase mode, secure mode, seleção de alvo do jogador e hotkeys | Caem nas exceções do ADR 0037 decisão 2 (barra de ações e automação do bot). |
 | Store, Tibia Coins, XP boost de loja, VIP, Daily Reward, Soul War taint | Monetização e engajamento sem efeito no mecanismo de caça (`docs/product/monetization.md`); boosts de quest dependem de um motor de quest inexistente. |
 | Vocação Monk e as magias dela, Enlighten Party, Transcendence Potion | O Monk veio depois do pacote de arte 13.32, referência de release (ADR 0031) e de aparência (invariante 6); não há outfit nem sprite. Reavaliar se o pacote trocar. |
@@ -74,6 +77,13 @@ especificar essas issues vira ADR na hora, como qualquer outra.
 | Monstros de familiars/, trainers/, traps/ e dos modos Dawnport, Nostalgia e Wild Magics | Familiares entram pelas magias (M38-02); trainers e traps não são criaturas caçadas; modos sazonais não se aplicam a um ruleset único, embora os monstros deles possam ser importados se o mapa for usado. |
 | Recuperar munição do chão | O Canary consome munição por tiro; sem item no chão no Draconya, o arremessável é tratado pela `breakChance` do M34-04. |
 | Practise spells (practise_fire_wave, practise_healing) | Magias de zero dano para os bonecos de treino de NPC, sem análogo no Draconya. |
+
+> **Emenda (ADR 0048, 2026-09-26):** a linha "cadáver como container com dono e decadência em
+> estágios de loot" que estava nesta tabela — rejeitada pelo ADR 0037 (Alternativas), com o loot
+> indo para a Caixa de Loot da Sessão — saiu de fora do escopo. O ADR 0048 reverteu a decisão: o
+> cadáver carrega o loot, com dono e filtro de Quick Loot por personagem, e a Caixa de Loot saiu
+> (era ela quem ninguém lia, resgatava ou mostrava). Ver
+> `docs/adr/0048-corpse-loot-and-per-character-quick-loot-filter.md`.
 
 ## 4. Correções feitas na verificação de 2026-09-25
 
@@ -109,17 +119,52 @@ As doze questões que o inventário levantou, na ordem em que aparecem no plano.
 um dos nove ADRs estão marcadas; as outras ficam registradas aqui até a issue que as toca ser
 especificada.
 
-| # | Questão | Onde é decidida |
+**Diretriz do dono (2026-09-25):** *"copie do Huntera"* — para produto (não mecanismo, que
+continua TFS/Canary pelo ADR 0037), onde o Huntera (o Tibia-idle observado em
+[`docs/reference/huntera-observed.md`](reference/huntera-observed.md)) foi de fato observado
+fazendo algo, a decisão segue o Huntera; onde não foi observado, a regra provisória atual
+permanece e a captura que falta entra na lista do §6. A coluna "Decisão (2026-09-25)" abaixo
+resume o resultado de uma varredura de evidência verificada contra o documento inteiro; o ADR de
+cada linha tem o detalhe completo, com citação de parte/linha, numa seção "Emenda — 2026-09-25".
+
+| # | Questão | Onde é decidida | Decisão (2026-09-25, "copie do Huntera") |
+|---|---|---|---|
+| 1 | Corte de versão: adotar "o que o pacote de arte 13.32 desenha" como corte do catálogo (o que o [ADR 0038](adr/0038-tibia-catalog-import-tooling.md) já faz), ou planejar a troca do pacote? | Resolvida na prática pelo ADR 0038 decisão 5; revisitar só se o pacote de arte trocar. | Corroborada: Huntera serve o pacote 13.32 (`/things/1332/`) e não mostra Monk/Soulpit/Weapon Proficiency/Animus Mastery em nenhuma captura. Sem mudança de decisão. |
+| 2 | Quantas e quais hunts: qual a meta total do M36-06 e quem aprova cada lote? | M36-06, sem ADR — decisão de conteúdo por lote. | Catálogo-alvo é o do Huntera: aberto e crescente (55 → 58 → 73 hunts em 12 dias), importado por lote, não um número fixo. Rat Cellars 1ª / Rotworm Caves 8ª já batem. O MODELO de spawn continua Canary por ponto (ADR 0039) — o pull por tamanho do Huntera não volta. |
+| 3 | Perda de item na morte: destruir e registrar no extrato, ou manter "nunca perde item"? | [ADR 0042](adr/0042-tibia-death-promotion-blessings-and-item-loss.md) | Sem evidência — nenhuma morte de jogador aparece no documento. Mantém "nunca perde item" ([`docs/product/death.md`](product/death.md) §3.8) até o dono decidir; a questão do ADR 0042 segue aberta. |
+| 4 | Stamina: a Cidade conta como offline para a recuperação 1:3/1:6 com 10 min de carência? O 1,5× fica só para Premium? O impacto no teto de sessões do ADR 0001 precisa ser medido antes do deploy? | [ADR 0043](adr/0043-tibia-stamina-and-food-only-regeneration.md) | Teto muda de 42 h para **12 h** (`staminaMs: 43.200.000`, Huntera). Recuperação por faixa (1:3/1:6) e as faixas de XP/loot do Canary NÃO são adotadas — nunca observadas no Huntera contra o teto novo; mantém recuperação 1:1 provisória, fórmula `[ABERTO]`. |
+| 5 | Comida como suprimento abstrato ou item físico no inventário? | [ADR 0043](adr/0043-tibia-stamina-and-food-only-regeneration.md) | REVERTIDA: sem comida. Regen de vida/mana liga só por "estar em hunt" (tela + socket do Huntera confirmam), decisão 3 do ADR 0043 revertida. Pergunta fica sem objeto. |
+| 6 | Tipo de dano `arcane`, magias genéricas (blast/strike/heal) e Divine Defiance sem fonte no Canary: remover ou manter como exceção documentada? | [ADR 0040](adr/0040-combat-v3-canary-block-hit-pipeline.md) | RESOLVIDA: remover. `damageInput` do Huntera é um enum fechado de seis canais sem `arcane`; o menu de magias de um paladino level 360 não tem Divine Defiance/Divine Barrage. Remove `arcane`, strike/blast/heal e Divine Defiance/divine-barrage/ethereal-barrage/forked-thorns, com migração de `botConfig`. |
+| 7 | Bestiário: confirmar a remoção do +1 % de XP por marco sem compensação? | [ADR 0045](adr/0045-tibia-bestiary-charms-prey-and-training.md) | CONTESTADA: o Huntera lista "Progresso no Bestiary" como fonte de bônus de XP total (ao lado de level/guild/Premium), não só Charms. "Copie do Huntera" pesa CONTRA remover sem compensação — conflito genuíno para o dono; M39-01 não remove até decisão. **Decidida em 2026-09-27 pelo [ADR 0053](adr/0053-bestiary-xp-line-kept-and-charms-added.md): a linha de XP fica como exceção de produto, ao lado dos estágios e Charms do Canary; a captura só fixa o número.** |
+| 8 | Aprender magia por gold com NPC (M44-06): personagens existentes ganham de graça as magias do level atual, ou todos pagam? | M44-06, sem ADR dedicado — decisão de produto quando a issue for especificada. | Sem evidência — "NPC" não aparece no documento. Mantém a regra atual (magia por level, sem compra) até uma captura; M44-06 segue bloqueado. **Decidida em 2026-09-27 pelo [ADR 0058](adr/0058-spells-learned-for-gold-with-migration-grant.md): magia por gold em tela de serviço; quem existe recebe as magias que já podia lançar (ADR 0014).** |
+| 9 | Dono do loot na party em modo split: maior dano (como o Tibia) ou sorteio (como hoje)? | Fora dos nove ADRs — desenho de party dos ADRs 0027/0035; decisão quando a issue for especificada. | Sem evidência — `party-update` não expõe dono de loot, só `damageTotal` por membro. Mantém o sorteio uniforme do ADR 0027. |
+| 10 | Respawn bloqueável "à vista": janela de `Spectators::find` do Canary ou viewport do cliente do Draconya? | [ADR 0039](adr/0039-canary-spawn-points-end-of-pull-difficulty.md), nota não bloqueante — decisão quando a issue chegar. | Não isolável — as hunts "solo" do Huntera são shards compartilhados com outros jogadores reais, o dataset é ruído por desenho próprio do documento. Mantém o `Spectators::find` do ADR 0039. |
+| 11 | Bônus de XP de level baixo (`lowLevelBonusExp = 50` até level 50): mecânica real do Tibia ou configuração de servidor OTS, fora do escopo? | [ADR 0043](adr/0043-tibia-stamina-and-food-only-regeneration.md) | RESOLVIDA: mecânica real, mas na FORMA do Huntera — `levelBonusPercent` decrescente e multiplicativo (L1 +200%, L2 +199%, L3 +197%, L7 +192%), não o `lowLevelBonusExp` aditivo fixo do TFS/Canary. Desbloqueia M32-02/#563; fórmula exata `[ABERTO]`. |
+| 12 | Promoção e bênçãos sem NPC dialogável: tela de serviço na Cidade, ou o produto quer NPCs com diálogo? | [ADR 0042](adr/0042-tibia-death-promotion-blessings-and-item-loss.md) | Parcial: promoção EXISTE no Huntera (nomes de vocação promovida na party), mas como é obtida nunca foi observado; bênçãos nunca aparecem. Corrobora a decisão 1 do ADR 0042 sem decidir o mecanismo — questão segue aberta. |
+
+## 6. Capturas pendentes no Huntera
+
+A varredura de evidência de 2026-09-25 fechou o que dava para fechar com o documento existente
+([`docs/reference/huntera-observed.md`](reference/huntera-observed.md)) e listou, para cada
+questão sem evidência aplicável ou com evidência parcial, exatamente o que uma captura nova
+precisaria mostrar. Nada aqui bloqueia trabalho já desbloqueado pelas decisões do §5 — é a lista
+do que, se capturado, ainda pode mudar um `[ABERTO]` em decisão.
+
+| Questão | O que observar | Tela / socket |
 |---|---|---|
-| 1 | Corte de versão: adotar "o que o pacote de arte 13.32 desenha" como corte do catálogo (o que o [ADR 0038](adr/0038-tibia-catalog-import-tooling.md) já faz), ou planejar a troca do pacote? | Resolvida na prática pelo ADR 0038 decisão 5; revisitar só se o pacote de arte trocar. |
-| 2 | Quantas e quais hunts: qual a meta total do M36-06 e quem aprova cada lote? | M36-06, sem ADR — decisão de conteúdo por lote. |
-| 3 | Perda de item na morte: destruir e registrar no extrato, ou manter "nunca perde item"? | [ADR 0042](adr/0042-tibia-death-promotion-blessings-and-item-loss.md) |
-| 4 | Stamina: a Cidade conta como offline para a recuperação 1:3/1:6 com 10 min de carência? O 1,5× fica só para Premium? O impacto no teto de sessões do ADR 0001 precisa ser medido antes do deploy? | [ADR 0043](adr/0043-tibia-stamina-and-food-only-regeneration.md) |
-| 5 | Comida como suprimento abstrato ou item físico no inventário? | [ADR 0043](adr/0043-tibia-stamina-and-food-only-regeneration.md) |
-| 6 | Tipo de dano `arcane`, magias genéricas (blast/strike/heal) e Divine Defiance sem fonte no Canary: remover ou manter como exceção documentada? | [ADR 0040](adr/0040-combat-v3-canary-block-hit-pipeline.md) |
-| 7 | Bestiário: confirmar a remoção do +1 % de XP por marco sem compensação? | [ADR 0045](adr/0045-tibia-bestiary-charms-prey-and-training.md) |
-| 8 | Aprender magia por gold com NPC (M44-06): personagens existentes ganham de graça as magias do level atual, ou todos pagam? | M44-06, sem ADR dedicado — decisão de produto quando a issue for especificada. |
-| 9 | Dono do loot na party em modo split: maior dano (como o Tibia) ou sorteio (como hoje)? | Fora dos nove ADRs — desenho de party dos ADRs 0027/0035; decisão quando a issue for especificada. |
-| 10 | Respawn bloqueável "à vista": janela de `Spectators::find` do Canary ou viewport do cliente do Draconya? | [ADR 0039](adr/0039-canary-spawn-points-end-of-pull-difficulty.md), nota não bloqueante — decisão quando a issue chegar. |
-| 11 | Bônus de XP de level baixo (`lowLevelBonusExp = 50` até level 50): mecânica real do Tibia ou configuração de servidor OTS, fora do escopo? | [ADR 0043](adr/0043-tibia-stamina-and-food-only-regeneration.md) |
-| 12 | Promoção e bênçãos sem NPC dialogável: tela de serviço na Cidade, ou o produto quer NPCs com diálogo? | [ADR 0042](adr/0042-tibia-death-promotion-blessings-and-item-loss.md) |
+| 1 — corte de versão | Uma quinta opção "Monk" na escolha de vocação na criação de personagem; um painel de Wheel of Destiny, menu de Bosstiary/Hazard ou slot de soul core na ficha de um personagem de level alto. | Tela de criação de personagem; ficha de personagem level alto. |
+| 2 — catálogo de hunts | O corpo decodificado COMPLETO da mensagem de catálogo de hunts, para todas as hunts que existirem na captura (73 ou mais). | WebSocket na tela de personagem/seleção de hunt (mesmo método do §12/§23 do documento). |
+| 3 — perda de item | Uma morte real de personagem: a tela (mensagem de perda de item? inventário faltando algo logo depois?) e o WebSocket no instante (mensagem S2C perto da vida chegando a zero, se carrega lista de item/equipamento); se havia status "abençoado" ativo. O mecanismo já está implementado e DESLIGADO (#571, `deathPenalty.itemLoss.enabled: false`): a captura, ou a decisão direta do dono, decide se liga. | Tela de morte; WebSocket no instante da morte. |
+| 4 — stamina | `staminaMs` de um personagem parado/desconectado na Cidade por uma janela medida (30-60 min), para calcular a razão de recuperação passiva; repetir numa conta Premium; a moeda de `staminaRefillCost`. | `player-stats` via WebSocket, medido contra relógio real. |
+| 7 — bestiário | O valor numérico real da linha "Progresso no Bestiary" numa conta com abates suficientes para cruzar pelo menos um marco, e se o total de bônus de XP muda quando o marco fecha; se o bônus é por monstro ou global. | Tela de personagem (bônus de XP) numa conta veterana ou farmada. |
+| 8 — aprender magia | Um personagem subindo pelos thresholds clássicos de magia do Tibia (levels 8, 9, 10, 12, 14, 18, 20): `player-stats` ganhando uma magia nova sem débito de gold, OU uma tela de compra "Aprender <magia> (<n> gold)" com débito correspondente. Grep do bundle do cliente por `learn`/`spell shop`/`aprender magia`. | WebSocket ao subir de level; bundle do cliente. |
+| 9 — dono do loot em party | Uma party de 3+ membros com dano assimétrico, capturada por várias mortes, correlacionando o dono de cada `loot-drop`/delta de inventário com o `damageTotal` de cada membro no `party-update` concorrente; um toggle de modo de loot na UI/configurações. | WebSocket durante hunt de party; UI de configurações de party. |
+| 10 — respawn à vista | Uma janela de baixa população, com o observador parado num tile de spawn identificável por vários minutos, logando `creature-appear`/`creature-disappear` naquele tile, confirmando que nenhum outro jogador real entrou na visão do tile. | WebSocket, sessão isolada de outros jogadores. |
+| 11 — bônus de level | `levelBonusPercent` em mais levels — sobretudo por volta de 20 e 50 — e onde ele chega a 0% ou a um piso. | `player-stats` via WebSocket, personagens de level médio/alto. |
+| 12 — promoção e bênção | Um personagem de level ≥20: toda tela da Cidade (painel de personagem, lojas, NPCs) por uma oferta de promoção e o custo em gold; uma tela de compra de bênção ou indicador "abençoado" antes de entrar numa hunt, com o socket decodificado no instante. | Telas da Cidade; WebSocket no instante da ação. |
+
+Duas questões (5 e 6) não entram nesta lista: a 5 (comida) foi revertida com confiança alta e não
+precisa de captura adicional para a decisão em si — só uma varredura residual de baixa prioridade
+do catálogo de itens por um consumível de regen não usado; a 6 (`arcane`/magias genéricas) foi
+resolvida com confiança alta, com uma captura residual específica (menu de action-bar do
+Sorcerer) já registrada na emenda do [ADR 0040](adr/0040-combat-v3-canary-block-hit-pipeline.md).

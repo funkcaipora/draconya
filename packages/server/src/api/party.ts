@@ -18,6 +18,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { DEFAULT_DIFFICULTY_NAME } from '@draconya/sim';
 import type { GameRepository } from '../db/repository.js';
 import type { IssueFailure, IssuedTicket, PartyTicket, TicketService } from '../tickets.js';
 import type { PartyRecord, PartyStore } from '../party-store.js';
@@ -36,6 +37,12 @@ export interface PartyRouteDependencies {
   /** Por chave primária (DT-07): o nome do convidador de um convite social. */
   readonly getCharacterById: GameRepository['getCharacterById'];
   readonly listItemInstances?: GameRepository['listItemInstances'];
+  /** Os storages de cada membro (#731), pela mesma razão de `listItemInstances`. */
+  readonly listCharacterStorages?: GameRepository['listCharacterStorages'];
+  /** A Boosted Creature do dia (#615). Ver `TicketRouteDependencies.currentBoostedMonsterId`. */
+  readonly currentBoostedMonsterId?: () => Promise<string | undefined>;
+  /** O bônus de Loyalty de cada CONTA (#628). Ver `TicketRouteDependencies.loyaltyBonusPercentOf`. */
+  readonly loyaltyBonusPercentOf?: (accountId: string) => Promise<number | undefined>;
   readonly settleProgress: (characterId: string) => Promise<SettlementResult>;
   /**
    * O snapshot de sessão de CADA personagem (#527, ADR 0010): um nó que reiniciou no meio de
@@ -295,7 +302,15 @@ async function joinRunningParty(
     huntId: party.huntId, difficulty: party.difficulty, join: true,
     members: [{
       characterId: me.characterId, accountId: me.accountId,
-      initialCharacter: initialCharacterOf(candidate, await deps.listItemInstances?.(me.characterId) ?? []),
+      initialCharacter: initialCharacterOf(
+        candidate,
+        await deps.listItemInstances?.(me.characterId) ?? [],
+        await deps.listCharacterStorages?.(me.characterId) ?? [],
+        await deps.currentBoostedMonsterId?.(),
+        // O Loyalty é da CONTA de quem entra (#628), e fica fixado no ticket dele — o membro que
+        // chega depois carrega o bônus dele, não o do líder.
+        await deps.loyaltyBonusPercentOf?.(me.accountId),
+      ),
     }],
   };
   const issued = await deps.tickets.issue(
@@ -510,17 +525,17 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
     const party = await deps.party.get((request.params as { id: string }).id);
     if (party === null) return reply.code(404).send({ error: 'party-not-found' });
     if (party.leaderId !== me.characterId) return reply.code(403).send({ error: 'not-leader' });
-    // A hunt e a dificuldade são validadas pelo CONTEÚDO, como no `enter-hunt`: uma hunt
-    // define as dificuldades que fazem sentido para ela. Cada eixo muda sozinho (RF-02).
+    // A hunt é validada pelo CONTEÚDO, como no `enter-hunt` (RF-02). A dificuldade NÃO é mais
+    // validada por valor (#584, ADR 0039 — fim do pull por dificuldade): o campo sobrevive só
+    // por compatibilidade (ADR 0014), aceito e ignorado. Quando `huntId` muda e o cliente não
+    // manda `difficulty`, a rota preenche `DEFAULT_DIFFICULTY_NAME` — nunca sobrescreve um
+    // valor que o cliente mandou, nem que seja um nome legado (`'bold'` etc.).
     if (patch.data.huntId !== undefined && deps.limits.difficultiesOf(patch.data.huntId) === null) {
       return reply.code(400).send({ error: 'unknown-hunt' });
     }
-    if (patch.data.difficulty !== undefined) {
-      const huntId = patch.data.huntId ?? party.huntId;
-      const difficulties = huntId === null ? null : deps.limits.difficultiesOf(huntId);
-      if (difficulties === null || !difficulties.includes(patch.data.difficulty)) {
-        return reply.code(400).send({ error: 'unknown-difficulty' });
-      }
+    const configurePatch = { ...patch.data };
+    if (patch.data.huntId !== undefined && patch.data.difficulty === undefined) {
+      configurePatch.difficulty = DEFAULT_DIFFICULTY_NAME;
     }
     if (patch.data.vocationTargets !== undefined) {
       // Chaves ∈ catálogo ∪ `none` (RF-02); a soma é contra `maxMembers` do conteúdo, nunca
@@ -533,7 +548,7 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
       const sum = Object.values(patch.data.vocationTargets).reduce((total, slots) => total + slots, 0);
       if (sum > deps.limits.maxMembers) return reply.code(400).send({ error: 'composition-too-large' });
     }
-    await deps.party.configure(party.id, patch.data);
+    await deps.party.configure(party.id, configurePatch);
     const updated = await deps.party.get(party.id);
     return reply.send(updated === null ? { ok: true } : await view(updated, deps));
   });
@@ -683,9 +698,10 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
     const party = await deps.party.get((request.params as { id: string }).id);
     if (party === null) return reply.code(404).send({ error: 'party-not-found' });
     if (party.leaderId !== me.characterId) return reply.code(403).send({ error: 'not-leader' });
-    const difficulties = deps.limits.difficultiesOf(proposal.data.huntId);
-    if (difficulties === null) return reply.code(400).send({ error: 'unknown-hunt' });
-    if (!difficulties.includes(proposal.data.difficulty)) return reply.code(400).send({ error: 'unknown-difficulty' });
+    // A dificuldade não é mais validada por valor (#584): só a hunt existir importa.
+    if (deps.limits.difficultiesOf(proposal.data.huntId) === null) {
+      return reply.code(400).send({ error: 'unknown-hunt' });
+    }
     // Os dois eixos são a verdade (D1); `mode` é derivado no que faltar. Um cliente anterior
     // ao #400 só manda `mode`, e ele migra pela mesma tabela do snapshot.
     const shareCosts = proposal.data.shareCosts ?? proposal.data.mode === 'shared';
@@ -774,10 +790,12 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
     const party = await deps.party.get((request.params as { id: string }).id);
     if (party === null) return reply.code(404).send({ error: 'party-not-found' });
     if (party.leaderId !== me.characterId) return reply.code(403).send({ error: 'not-leader' });
+    // `party.difficulty` nunca fica `null` quando `huntId` está setado desde o #584 — o
+    // `/configure` acima auto-preenche `DEFAULT_DIFFICULTY_NAME`. A checagem continua aqui
+    // para uma party antiga (Redis de antes deste deploy) que tenha `huntId` sem dificuldade.
     if (party.huntId === null || party.difficulty === null) return reply.code(409).send({ error: 'nothing-proposed' });
     if (party.members.length < 2) return reply.code(409).send({ error: 'not-enough-members' });
-    const difficulties = deps.limits.difficultiesOf(party.huntId);
-    if (difficulties === null || !difficulties.includes(party.difficulty)) {
+    if (deps.limits.difficultiesOf(party.huntId) === null) {
       return reply.code(409).send({ error: 'unknown-hunt' });
     }
 
@@ -818,6 +836,10 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
       }
     }
 
+    // A boosted do dia (#615) é UMA leitura para a party inteira — todo mundo que entra na
+    // MESMA hunt agora vê a MESMA boosted, e não uma por membro lido em instantes diferentes.
+    const boostedMonsterId = await deps.currentBoostedMonsterId?.();
+
     // As linhas, com a conta de cada um (registrada ao entrar na party).
     const members: PartyTicket['members'][number][] = [];
     for (const characterId of party.members) {
@@ -826,7 +848,14 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
       if (accountId === undefined || character === null) return reply.code(409).send({ error: 'member-gone', characterId });
       members.push({
         characterId, accountId,
-        initialCharacter: initialCharacterOf(character, await deps.listItemInstances?.(characterId) ?? []),
+        initialCharacter: initialCharacterOf(
+          character,
+          await deps.listItemInstances?.(characterId) ?? [],
+          await deps.listCharacterStorages?.(characterId) ?? [],
+          boostedMonsterId,
+          // Uma conta por membro (#628): cada um carrega o bônus da PRÓPRIA idade de conta.
+          await deps.loyaltyBonusPercentOf?.(accountId),
+        ),
       });
     }
 

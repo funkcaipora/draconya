@@ -1,6 +1,7 @@
 # 0025 — O mapa real vem de um OTBM: recorte por região, pilha de aparências por tile, andares
 
 **Status:** aceito
+**Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30) — d.9:** `TILE_FLAGS` passam a ser importados, e as `floorChanges` dos recortes passam a ser derivadas.
 **Data:** 2026-09-12
 **Contexto técnico:** `content` (schema de mapa), `sim` (movimento, andares), `server` (o que a
 sessão diz ao cliente), `client` (desenho do tile), `tools` (importador), `things/` (onde o
@@ -351,3 +352,79 @@ hospeda um personagem só hoje (§14, Fase 3 traz party), então os dois caminho
 NA PRÁTICA — mas "todo lugar que compara alvo confere o andar" só fica verdade com os dois
 corrigidos, e o dia em que a party entrar numa hunt multiandar sem ninguém reabrir esta auditoria
 é exatamente o dia em que o gap deixaria de ser dormant.
+
+## Emenda — 2026-09-26 (#663): as escadas passam a ser derivadas, no mundo inteiro
+
+O "possível trabalho futuro" da emenda #519 existe agora para o mundo em setores (ADR 0047):
+`pnpm map:links` lê o `floorchange` e o `type` por id do `items.xml` do Canary (`CANARY_DIR`, só
+dado — ADR 0038) e aplica a regra de `Tile::queryDestination` ao mapa inteiro, mais escada de mão e
+ponto de corda (`Position:moveUpstairs`) e o destino gravado dos teleportes. A derivação foi
+conferida contra tudo que foi autorado à mão: os **quatro conectores da Darashia Dragon Lair**
+desta emenda e **as 92 escadas de `thais.json`** saem idênticos. O resultado mora em
+`things/<versão>/world/links.json` e serve o explorador; os recortes versionados em `content/`
+continuam com as `floorChanges` autoradas — trocá-las pela derivação é decisão da fase 6 do plano
+do mundo, não desta emenda.
+
+## Emenda — 2026-09-27 (#727): o importador preserva `aid`/`uid`/`text`, e o bloqueio deriva das
+flags EXCETO no tile classificado como cenário usável
+
+A decisão 4 desta ADR ("bloqueio deriva das flags, no importador, uma vez") ganha a exceção que a
+ADR 0050 decisão 1 pede (`0050-session-tile-overrides-for-usable-scenery.md`, PR #719 — ainda não
+mesclada nesta branch; `git show origin/docs/adr-0048-0051-playable:docs/adr/0050-session-tile-overrides-for-usable-scenery.md`):
+um tile CLASSIFICADO
+como interativo (porta, capim, stone pile, rope spot, ladder, alavanca) nunca vira `#` na grade,
+mesmo que o item carregue `unpass`. `scripts/otbm.ts` passa a preservar `ATTR_ACTION_ID` (`aid`),
+`ATTR_UNIQUE_ID` (`uid`), `ATTR_TEXT` (`text`) e `ATTR_TELE_DEST` por item — antes descartados
+como qualquer atributo sem tratamento especial —, e `import-map.ts` os usa, mais as tabelas do
+Canary transcritas como dado (`data/scenery/canary-tables.json`, ADR 0019), para classificar cada
+tile em `tilemapSchema.interactables[]`.
+
+Isto NÃO é o mecanismo (ADR 0050 decisões 2–8, a `TileOverrides` da #728, que ainda não existe):
+é só o importador aprendendo a RECONHECER o que já estava no OTBM e descartava. O efeito
+observável imediato é que porta, capim, stone pile, rope spot, ladder e alavanca deixam de
+bloquear na grade estática — inclusive porta trancada, que não tinha como destrancar antes da
+#728 e ficaria impassável para sempre sob a regra antiga. `docs/product/scenery.md` traz os
+números medidos nos quatro mapas.
+
+## Emenda — 2026-09-30 (#830, OW-09): `TILE_FLAGS` viram a camada `zones` por andar
+
+A decisão 9 acima ("`TILE_FLAGS` (PZ, no-logout) são ignorados: a Cidade inteira já é PZ por
+construção") foi revertida pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) d.8: no mundo
+aberto a Cidade deixa de ser PZ por construção, e o servidor precisa saber, tile a tile, o que é
+PZ, no-pvp, no-logout e arena. É a base de `canLogout`, do portão de combate e dos serviços em PZ
+(OW-10, OW-27). Esta emenda registra o que a #830 entregou:
+
+- **A camada.** `floorSchema` ganha `zones`, opcional, na mesma forma de `speed` e `sight`: uma
+  string por linha da grade, um caractere por tile. A paleta é FIXA (`ZONE_PALETTE`,
+  `packages/content/src/map.ts`), não por mapa: `.` normal, `p` PZ, `n` no-pvp, `a` arena
+  (`PVPZONE`), `l` só no-logout, e `P`/`N`/`A` a zona mais no-logout. Em memória,
+  `Floor.zones: Uint8Array | null` guarda a soma dos bits do OTBM (`ZONE_FLAG`: PZ 1, no-pvp 4,
+  no-logout 8, arena 16 — `canary/src/io/io_definitions.hpp:73-76`). Ausente é `null`, tudo é
+  normal, e as hunts não mudam. `zoneFlagsAt(map, x, y, z)` é o acessor.
+- **A normalização é a do Canary, no importador.** PZ, no-pvp e arena são exclusivos entre si, e o
+  primeiro dessa ordem que o arquivo traz vence; no-logout soma por cima de qualquer um
+  (`canary/src/io/iomap.cpp:165-177`). A camada guarda os bits, não um tipo: a precedência de quem
+  CONSULTA — PZ, depois no-pvp, depois arena, depois no-logout, depois normal
+  (`canary/src/items/tile.hpp:188-199`) — é do `sim` (OW-10). O tile de casa é PZ mesmo sem a
+  flag no arquivo (`House::addTile`, `canary/src/map/house/house.cpp:26-28`); em Thais os 5.800
+  tiles de casa do recorte já trazem a flag, então isso não muda nada ali.
+- **Tile a tile, inclusive o bloqueado.** A parede e o degrau sem chão guardam a zona que o
+  arquivo trouxe, como o Canary: a camada de zona não é a de passo. O tile podado por
+  `--keep-from` também a guarda, e é irrelevante — está fora do mapa.
+- **Arena é no-pvp no primeiro corte** (ADR 0060 d.8, divergência registrada): o importador
+  guarda o bit real, `PVPZONE`, e quem decide tratá-lo como no-pvp é o portão de combate (OW-27).
+- **Só `thais.json` é regerado, e a geometria não muda.** O diff do arquivo é só acréscimo —
+  as linhas `zones` de quatro andares —, e `load.test.ts` prende a impressão digital da geometria
+  de antes (bloqueio, velocidade, visão, escadas, interativos). Os outros mapas continuam sem a
+  camada, e `pnpm map:import --check` só a confere onde o arquivo a tem.
+- **A camada independe do pacote de arte.** Ela vem só de `TILE_FLAGS` e de o tile existir, e isso
+  importa na prática: a geometria versionada de Thais foi gerada contra o pacote 15.33, e a
+  máquina que a regenera pode ter só o 13.32, que não tem o id de item 50227 (em
+  (32456, 32290, 7)): ele vira "desconhecido", andável, enquanto o arquivo versionado o tem como
+  parede. Regenerar tudo mudaria esse tile de bloqueio — por isso
+  `pnpm map:import --id thais --zones-only` acrescenta só a camada, direto do OTBM da `source`, sem
+  tocar em mais nada, e `--check` confere as zonas MESMO quando a geometria sai `absent` por falta
+  do pacote.
+- **Conteúdo muda, a versão global muda** (invariante 7). `thais.json` entra em `computeVersion`,
+  então toda hunt em voo no deploy é creditada e descartada pelo caminho de sempre (ADR 0010,
+  ADR 0018).

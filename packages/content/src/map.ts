@@ -1,9 +1,12 @@
 // Tilemap e rota em memória. PURO — a leitura de disco continua em `./load.ts`.
 //
 // Desde a FUN-119 (ADR 0025) o mapa tem ANDARES: cada um com o bitmap de bloqueio e, quando
-// importado, a velocidade de chão por tile; e `floorChanges` liga um tile a outro andar.
+// importado, a velocidade de chão por tile, o bloqueio de visão e as zonas (PZ, no-pvp, no-logout,
+// arena — #830); e `floorChanges` liga um tile a outro andar.
 
-import type { Point, RouteData, TilemapData, TilemapInput } from './schemas.js';
+import type {
+  Point, RouteData, TilemapData, TilemapInput, TilemapInteractable,
+} from './schemas.js';
 
 /**
  * Velocidade de chão de um tile sem velocidade declarada — o valor que o TFS usa quando o
@@ -11,6 +14,69 @@ import type { Point, RouteData, TilemapData, TilemapInput } from './schemas.js';
  * `speed`) e para o tile bloqueado, que ninguém pisa.
  */
 export const DEFAULT_GROUND_SPEED = 150;
+
+/**
+ * Os bits de zona de um tile (#830, OW-09, ADR 0060 d.8) — os MESMOS de `OTBM_ATTR_TILE_FLAGS`
+ * (`canary/src/io/io_definitions.hpp:73-76`), e `scripts/import-map.test.ts` prende a igualdade
+ * com `TILE_FLAG` do leitor de OTBM. O valor de um tile em `Floor.zones` é a soma destes bits, já
+ * NORMALIZADA como o Canary carrega o mapa (`canary/src/io/iomap.cpp:165-177`): `protection`,
+ * `noPvp` e `pvpZone` são exclusivos entre si — o primeiro que o arquivo traz vence, nesta
+ * ordem —, e `noLogout` soma por cima de qualquer um dos quatro estados (incluindo o normal).
+ *
+ * A PRECEDÊNCIA de quem consulta é outra coisa e é do `sim` (OW-10): `Tile::getZoneType`
+ * (`canary/src/items/tile.hpp:188-199`) lê PZ, depois no-pvp, depois arena, depois no-logout,
+ * depois normal. O arquivo guarda os bits; não escolhe um tipo.
+ */
+export const ZONE_FLAG = {
+  protection: 1 << 0,
+  noPvp: 1 << 2,
+  noLogout: 1 << 3,
+  pvpZone: 1 << 4,
+} as const;
+
+/**
+ * A paleta da camada `zones` — um caractere por valor possível depois da normalização de
+ * `ZONE_FLAG`. Letra minúscula é a zona sozinha, maiúscula é a zona MAIS `noLogout`:
+ *
+ * | char | valor | significado                                   |
+ * |------|-------|-----------------------------------------------|
+ * | `.`  | 0     | normal                                        |
+ * | `p`  | 1     | protect zone (PZ)                             |
+ * | `n`  | 4     | no-pvp                                        |
+ * | `a`  | 16    | arena (`PVPZONE`) — no-pvp no primeiro corte  |
+ * | `l`  | 8     | só no-logout                                  |
+ * | `P`  | 9     | PZ + no-logout                                |
+ * | `N`  | 12    | no-pvp + no-logout                            |
+ * | `A`  | 24    | arena + no-logout                             |
+ *
+ * `l` é a exceção da regra das maiúsculas: no-logout sozinho não tem zona para maiusculizar.
+ * Fixa e documentada aqui, nunca por mapa (como `speedPalette` é): o significado é o do Canary.
+ */
+export const ZONE_PALETTE: Readonly<Record<string, number>> = {
+  '.': 0,
+  p: ZONE_FLAG.protection,
+  n: ZONE_FLAG.noPvp,
+  a: ZONE_FLAG.pvpZone,
+  l: ZONE_FLAG.noLogout,
+  P: ZONE_FLAG.protection | ZONE_FLAG.noLogout,
+  N: ZONE_FLAG.noPvp | ZONE_FLAG.noLogout,
+  A: ZONE_FLAG.pvpZone | ZONE_FLAG.noLogout,
+};
+
+const ZONE_CHAR_BY_VALUE: ReadonlyMap<number, string> = new Map(
+  Object.entries(ZONE_PALETTE).map(([char, value]) => [value, char]),
+);
+
+/**
+ * O caractere da camada `zones` para um valor já normalizado. Lança em combinação que o Canary
+ * nunca produz (dois bits exclusivos juntos, bit desconhecido): quem escreve a camada passa por
+ * aqui, e um valor fora da paleta nunca chega ao arquivo.
+ */
+export function zoneChar(value: number): string {
+  const char = ZONE_CHAR_BY_VALUE.get(value);
+  if (char === undefined) throw new Error(`zona ${value} não está em ZONE_PALETTE`);
+  return char;
+}
 
 export interface Floor {
   readonly z: number;
@@ -24,6 +90,23 @@ export interface Floor {
   readonly blocked: Uint8Array;
   /** Velocidade de chão por tile, ou `null` quando o mapa não declara (todo tile é o padrão). */
   readonly speed: Uint16Array | null;
+  /**
+   * Bloqueio de LINHA DE VISÃO (#553): `1` bloqueia projétil/vista, `0` é livre. `null` quando
+   * o mapa não declara a camada `sight` deste andar — nenhum tile bloqueia visão, o mesmo
+   * "sem dado, sem restrição" que `speed` ausente já usa para velocidade de chão. É a camada
+   * que `isSightClear` (`packages/sim/src/line-of-sight.ts`) consulta; bloqueio de PASSO
+   * (`blocked`, acima) e bloqueio de VISTA são flags independentes do pacote de aparências
+   * (`unpass` vs. `unsight`), por isso duas grades separadas, nunca uma derivada da outra.
+   */
+  readonly blocksSight: Uint8Array | null;
+  /**
+   * Zonas do tile (#830, OW-09, ADR 0060 d.8): a soma de `ZONE_FLAG`, um byte por tile, indexado
+   * por `y * width + x` — os mesmos bits do OTBM. `null` quando o mapa não declara a camada
+   * `zones` deste andar: todo tile é normal, o mesmo "sem dado, sem restrição" de `speed` e
+   * `blocksSight` ausentes, e nenhuma hunt muda. Só dado: quem decide o que PZ, no-pvp e
+   * no-logout proíbem é o `sim` (OW-10, OW-27).
+   */
+  readonly zones: Uint8Array | null;
 }
 
 export interface Tilemap {
@@ -47,6 +130,12 @@ export interface Tilemap {
    */
   readonly floorChangesByFloor: ReadonlyMap<number, readonly FloorChange[]>;
   readonly source?: TilemapData['source'];
+  /**
+   * Cenário usável (#727, ADR 0050 d.1): o que o importador CLASSIFICOU, geometria e estado no
+   * instante da importação. O MECANISMO que muda de estado por sessão é `TileOverrides` (#728,
+   * `packages/sim/src/tile-overrides.ts`) — este campo é só o conteúdo fixo que o alimenta.
+   */
+  readonly interactables: readonly TilemapInteractable[];
 }
 
 /** Uma escada: `from` está no andar de origem, `to` pode estar em qualquer outro (FUN-119). */
@@ -61,8 +150,14 @@ export interface SpawnPoint {
   readonly at: Point;
   /** O monstro deste ponto (#519). Ausente é o sorteio de composição de sempre. */
   readonly monsterId?: string;
-  /** O `spawntime` deste ponto, em ms (#519). Ausente cai no `respawnDelayMs` da dificuldade. */
-  readonly respawnDelayMs?: number;
+  /** Vários monstros no MESMO ponto, com peso (#582). Exclusivo com `monsterId`. */
+  readonly monsters?: ReadonlyArray<{ readonly monsterId: string; readonly weight: number }>;
+  /**
+   * O `spawntime` deste ponto, em ms (#519) — o Canary é por posição, não por zona. Obrigatório
+   * desde o #583 (fim do pull por dificuldade, ADR 0039): não há mais dificuldade para cair
+   * como fallback quando o ponto não declara.
+   */
+  readonly respawnDelayMs: number;
 }
 
 export interface Route {
@@ -85,7 +180,10 @@ export const tileKey = (x: number, y: number, z: number): number =>
  * problema de boot.
  */
 export function buildTilemap(data: TilemapInput): Tilemap {
-  const floorData: Array<[number, { grid: readonly string[]; speed?: readonly string[] | undefined }]> = [];
+  const floorData: Array<[number, {
+    grid: readonly string[]; speed?: readonly string[] | undefined; sight?: readonly string[] | undefined;
+    zones?: readonly string[] | undefined;
+  }]> = [];
   if (data.grid !== undefined) floorData.push([data.z, { grid: data.grid }]);
   for (const [z, floor] of Object.entries(data.floors ?? {})) floorData.push([Number(z), floor]);
   if (floorData.length === 0) throw new Error(`mapa "${data.id}" não tem andar nenhum`);
@@ -123,7 +221,37 @@ export function buildTilemap(data: TilemapInput): Tilemap {
         }
       }
     }
-    floors.set(z, { z, blocked, speed });
+    let blocksSight: Uint8Array | null = null;
+    if (floor.sight !== undefined) {
+      blocksSight = new Uint8Array(width * height);
+      for (let y = 0; y < height; y++) {
+        const row = floor.sight[y] ?? '';
+        for (let x = 0; x < width; x++) {
+          if (row[x] === '#') blocksSight[y * width + x] = 1;
+        }
+      }
+    }
+    let zones: Uint8Array | null = null;
+    if (floor.zones !== undefined) {
+      zones = new Uint8Array(width * height);
+      for (let y = 0; y < height; y++) {
+        const row = floor.zones[y] ?? '';
+        for (let x = 0; x < width; x++) {
+          const char = row[x];
+          // Linha mais curta que a largura é normal no resto — o inverso de `grid`, que
+          // bloqueia —, porque zona é restrição OPCIONAL e fora do desenhado não há nada a dizer.
+          if (char === undefined) continue;
+          const value = ZONE_PALETTE[char];
+          if (value === undefined) {
+            throw new Error(
+              `mapa "${data.id}", andar ${z}: zona "${char}" em (${x},${y}) não está em ZONE_PALETTE`,
+            );
+          }
+          zones[y * width + x] = value;
+        }
+      }
+    }
+    floors.set(z, { z, blocked, speed, blocksSight, zones });
   }
 
   const base = floors.get(data.z);
@@ -143,11 +271,53 @@ export function buildTilemap(data: TilemapInput): Tilemap {
   return {
     id: data.id, width, height, z: data.z, blocked: base.blocked, floors, floorChanges,
     floorChangesByFloor,
+    // `reward.quantity` tem default no schema (#733) — `data` aqui é `TilemapInput` (o formato
+    // de ARQUIVO, antes do default aplicado), então um `reward` sem `quantity` precisa do MESMO
+    // 1 que `tilemapSchema.parse` aplicaria, ou o tipo de saída (`TilemapInteractable`, pós-
+    // default) diverge do que este objeto realmente carrega.
+    interactables: (data.interactables ?? []).map((interactable): TilemapInteractable => {
+      const { reward, ...rest } = interactable;
+      return {
+        ...rest,
+        ...(reward === undefined ? {} : { reward: { itemId: reward.itemId, quantity: reward.quantity ?? 1 } }),
+      };
+    }),
     ...(data.entryPoint === undefined
       ? {}
       : { entryPoint: { x: data.entryPoint.x, y: data.entryPoint.y, z: data.entryPoint.z ?? data.z } }),
     ...(data.source === undefined ? {} : { source: data.source }),
   };
+}
+
+/**
+ * Coordenada ABSOLUTA do Tibia (a do `otservbr.otbm`) → coordenada LOCAL do mapa importado, pelo
+ * `source.region` (#829, ADR 0060 d.3.b): `x` e `y` perdem a origem do recorte, e `z` não muda —
+ * os andares do mapa são chaveados pelo `z` absoluto (`scripts/import-map.ts`, `importRegion`).
+ * É o inverso do que o importador faz com o `entryPoint`.
+ *
+ * `undefined` quando o mapa não foi importado (sem `source`, portanto sem origem) ou quando a
+ * coordenada cai fora da região em qualquer dos três eixos: o chamador decide o que é isso, e
+ * não existe um ponto "mais perto" que se possa adivinhar.
+ */
+export function absoluteToLocal(map: Pick<Tilemap, 'source'>, at: Point): Point | undefined {
+  const region = map.source?.region;
+  if (region === undefined) return undefined;
+  if (at.x < region.x[0] || at.x > region.x[1]) return undefined;
+  if (at.y < region.y[0] || at.y > region.y[1]) return undefined;
+  if (at.z < region.z[0] || at.z > region.z[1]) return undefined;
+  return { x: at.x - region.x[0], y: at.y - region.y[0], z: at.z };
+}
+
+/**
+ * O inverso de `absoluteToLocal`: coordenada local do mapa importado → absoluta do Tibia. É o que
+ * se persiste (`characters.world_x/y/z`, ADR 0060 d.3.b) e o que o protocolo do mundo carrega.
+ * `undefined` sem `source`; não confere se o ponto cabe na grade — quem pergunta por um tile
+ * andável usa `isBlocked`.
+ */
+export function localToAbsolute(map: Pick<Tilemap, 'source'>, at: Point): Point | undefined {
+  const region = map.source?.region;
+  if (region === undefined) return undefined;
+  return { x: at.x + region.x[0], y: at.y + region.y[0], z: at.z };
 }
 
 /** Bloqueado, fora do mapa, ou num andar que o mapa não tem. `z` ausente é o andar padrão. */
@@ -164,6 +334,19 @@ export function groundSpeed(map: Tilemap, x: number, y: number, z: number = map.
   const floor = map.floors.get(z);
   if (floor === undefined || floor.speed === null) return DEFAULT_GROUND_SPEED;
   return floor.speed[y * map.width + x] ?? DEFAULT_GROUND_SPEED;
+}
+
+/**
+ * Os bits de zona do tile (`ZONE_FLAG`), ou `0` — normal — quando o mapa não declara a camada
+ * `zones` do andar, o andar não existe ou o tile está fora do mapa. `z` ausente é o andar padrão.
+ * Fora do mapa é normal e não bloqueado de propósito: bloqueio é de `isBlocked`, e zona é só o
+ * que o Canary guardou no tile.
+ */
+export function zoneFlagsAt(map: Tilemap, x: number, y: number, z: number = map.z): number {
+  if (x < 0 || y < 0 || x >= map.width || y >= map.height) return 0;
+  const zones = map.floors.get(z)?.zones;
+  if (zones === undefined || zones === null) return 0;
+  return zones[y * map.width + x] ?? 0;
 }
 
 /** Para onde pisar neste tile leva, ou `null` quando ele é um tile comum. */
@@ -223,8 +406,9 @@ export function buildRoute(data: RouteData, map: Tilemap): Route {
       // raramente cai em cima da rota; sem ela, o tile do `routeIndex` continua sendo a posição,
       // como sempre foi.
       at: s.at ?? (data.tiles[s.routeIndex] as Point),
+      respawnDelayMs: s.respawnDelayMs,
       ...(s.monsterId === undefined ? {} : { monsterId: s.monsterId }),
-      ...(s.respawnDelayMs === undefined ? {} : { respawnDelayMs: s.respawnDelayMs }),
+      ...(s.monsters === undefined ? {} : { monsters: s.monsters }),
     })),
   };
 }

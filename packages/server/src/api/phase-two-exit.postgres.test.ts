@@ -40,7 +40,7 @@ import { SessionDirectory } from '../directory.js';
 import { createGame, type GameRole } from '../game/server.js';
 import { buildCatalogue } from '../game/catalogue.js';
 import {
-  createBotConfigValidator, createCitySessionFactory, createSessionBuilder,
+  createBotConfigLoader, createBotConfigValidator, createCitySessionFactory, createSessionBuilder,
   createSessionRestorer,
 } from '../game/sessions.js';
 import { writePendingReceipts } from '../jobs/ledger.js';
@@ -86,11 +86,26 @@ const raw: RawContent = {
     id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 30, price: 5,
     requires: { level: 20 },
   }],
+  // Fim do pull por dificuldade (#583, ADR 0039): o ponto declara o próprio monstro — a hunt
+  // letal precisa da ROTA PRÓPRIA para isso, porque `arena-loop` (a de `rawTestContent`) já
+  // fixou o dela em `monsterId: 'rat'`, e reaproveitá-la faria o Ceifador nunca nascer.
+  routes: [
+    ...(base.routes ?? []),
+    {
+      id: 'lethal-loop', mapId: 'arena',
+      tiles: [
+        { x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 2, y: 2, z: 7 }, { x: 1, y: 2, z: 7 },
+      ],
+      spawnPoints: [{
+        routeIndex: 2, radius: 1, monsterId: 'reaper', respawnDelayMs: 1_000,
+      }],
+    },
+  ],
   hunts: [...(base.hunts ?? []), {
     // A hunt em que se morre. Existe porque a morte é metade do §44.3 e esperar por ela num
     // rato de 6 de dano levaria horas simuladas — o que este teste mede é o CAMINHO da morte
     // (encerrar, creditar, devolver à Cidade), não quanto tempo ela demora.
-    id: 'lethal', name: 'Arena Letal', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
+    id: 'lethal', name: 'Arena Letal', recommendedLevel: 1, mapId: 'arena', routeId: 'lethal-loop',
     difficulties: {
       cautious: {
         monsterCount: 1, composition: [{ monsterId: 'reaper', weight: 1 }],
@@ -178,8 +193,11 @@ async function startNode(nodeId: string): Promise<GameRole> {
     restoreSession: createSessionRestorer(content),
     // O nó de VERDADE tem os dois: sem o validador, `bot-config` é recusado com "este
     // servidor não aceita configuração", e o teste mediria um servidor que não é o de
-    // produção. O catálogo entra pela mesma razão.
+    // produção. O catálogo entra pela mesma razão. `loadBotConfig` (#596/ADR 0014): sem ele
+    // `#adoptTicketBotConfig` nunca adota a config persistida na admissão — a config do ticket
+    // ficaria sempre ausente do `session-state`, mesmo já salva no Postgres/Redis.
     acceptBotConfig: createBotConfigValidator(content),
+    loadBotConfig: createBotConfigLoader(content),
     itemCatalog: content.items,
     catalogue: () => buildCatalogue(content),
     now: () => clockMs,
@@ -410,7 +428,9 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
     })).json();
     const characterId = String(created.id);
     await (database as TestDatabase).database.db.update(characters)
-      .set({ gold: 5_000 }).where(eq(characters.id, characterId));
+      // Aprendeu a magia da cena (#624): o bot dele a lança, e o portão do aprendizado recusaria.
+      .set({ gold: 5_000, learnedSpells: { spellIds: ['heal'], version: 1 } })
+      .where(eq(characters.id, characterId));
 
     let inbox = await connect(cookie, characterId);
 
@@ -582,7 +602,10 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
     const characterId = String(created.id);
     const db = (database as TestDatabase).database.db;
     await db.update(characters)
-      .set({ gold: 20_000, level: 20, xp: totalXpForLevel(20, content.progression) })
+      .set({
+        gold: 20_000, level: 20, xp: totalXpForLevel(20, content.progression),
+        learnedSpells: { spellIds: ['heal'], version: 1 },
+      })
       .where(eq(characters.id, characterId));
     await db.insert(itemInstances).values([
       {
@@ -605,6 +628,10 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
     // A munição abstrata debita gold por tiro (ADR 0026 d.3), e o abate prova que a hunt rodou.
     expect(firstHunt.aggregates.kills).toBeGreaterThan(0);
 
+    // A hunt do teste luta sem parar, e o `leave-hunt` em combate espera 60 s sem golpe (#802,
+    // `CONDITION_INFIGHT` do Canary): o assunto deste teste é o extrato, não a trava — ela tem
+    // teste próprio em `game/leave-hunt.test.ts`. Sem golpe recente a saída conclui na hora.
+    if (cityHero !== undefined) cityHero.lastCombatActionAtMs = null;
     inbox.send({ type: 'leave-hunt' });
     await until(() => inbox.last('session-state')?.sessionType === 'city', 'the first return to City');
     inbox.close();

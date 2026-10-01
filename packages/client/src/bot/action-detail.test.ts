@@ -172,6 +172,23 @@ describe('actionDetail — a tabela da spec §6', () => {
     ]);
   });
 
+  it('drown/lifedrain/manadrain (#547, M29-07) têm rótulo próprio, não o id cru', () => {
+    const rowFor = (damageType: 'drown' | 'lifedrain' | 'manadrain'): string => {
+      const entry: ActionEntry = {
+        kind: 'spell',
+        spell: spell({
+          id: `spell-${damageType}`, name: 'Teste', effect: 'damage',
+          detail: { basePower: 10, damageType },
+        }),
+      };
+      const row = actionDetail(entry, context()).rows.find((r) => r.label === 'Tipo de dano');
+      return row?.value ?? '';
+    };
+    expect(rowFor('drown')).toBe('Afogamento');
+    expect(rowFor('lifedrain')).toBe('Dreno de vida');
+    expect(rowFor('manadrain')).toBe('Dreno de mana');
+  });
+
   it('área circle r=1 vira 3x3', () => {
     const entry: ActionEntry = {
       kind: 'spell',
@@ -215,6 +232,17 @@ describe('actionDetail — a tabela da spec §6', () => {
       }),
     };
     expect(actionDetail(entry, context()).rows).toContainEqual({ label: 'Área', value: 'Onda 5' });
+  });
+
+  it('área rows vira "Onda N", N = número de fileiras (#679)', () => {
+    const entry: ActionEntry = {
+      kind: 'spell',
+      spell: spell({
+        id: 'fire-wave', name: 'Fire Wave', effect: 'damage',
+        detail: { basePower: 10, area: { shape: 'rows', widths: [1, 3, 3, 5] } },
+      }),
+    };
+    expect(actionDetail(entry, context()).rows).toContainEqual({ label: 'Área', value: 'Onda 4' });
   });
 
   it('área beam vira "Feixe N"', () => {
@@ -429,7 +457,7 @@ describe('actionTab — as três abas (RF-03)', () => {
 
 describe('entriesOf — por level exigido e depois por nome', () => {
   const catalogue: Catalogue = {
-    hunts: [], monsters: [], ammunition: [], vocations: [], vocationLevel: 0, items: [],
+    hunts: [], monsters: [], ammunition: [], vocations: [], charms: [], vocationLevel: 0, items: [],
     bot: {
       vocabularyVersion: 2,
       spells: [

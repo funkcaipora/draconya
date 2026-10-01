@@ -7,13 +7,6 @@
 
 import type { NotableEvent } from '../state/hud.js';
 
-/** Os três tamanhos de pull (FUN-123, cópia do Huntera), em palavras. Os mesmos de `HuntsModal`. */
-const DIFFICULTY_TEXT: Record<string, string> = {
-  cautious: 'Cauteloso',
-  bold: 'Ousado',
-  reckless: 'Agressivo',
-};
-
 const REASON_TEXT: Record<string, string> = {
   'manual-exit': 'saiu da hunt',
   'exit-rule': 'regra de saída',
@@ -35,6 +28,8 @@ export interface EventNames {
   readonly hunts?: ReadonlyMap<string, string>;
   readonly supplies?: ReadonlyMap<string, string>;
   readonly monsters?: ReadonlyMap<string, string>;
+  /** `itemId` → nome (`catalogue.items`): a perda de item na morte (#571) diz QUAL item. */
+  readonly items?: ReadonlyMap<string, string>;
   /**
    * Quanto vale um marco do Bestiário, em pontos percentuais (`catalogue.bestiary`). Sem ele
    * a linha diz só o marco: escrever "+1 %" de cabeça seria afirmar um número que o servidor
@@ -51,10 +46,11 @@ export function describeEvent(event: NotableEvent, names: EventNames = {}): stri
   const detail = event.detail ?? '';
   switch (event.type) {
     case 'entered-hunt': {
-      const [huntId = '', difficulty = ''] = detail.split('/');
+      // O `detail` continua `huntId/difficulty` (o `sim` não mudou o formato do evento), mas a
+      // dificuldade não é mais mostrada desde o #584 (ADR 0039, fim do pull por dificuldade).
+      const [huntId = ''] = detail.split('/');
       const hunt = names.hunts?.get(huntId) ?? huntId;
-      const level = DIFFICULTY_TEXT[difficulty] ?? difficulty;
-      return level === '' ? `Entrou em ${hunt}` : `Entrou em ${hunt} · ${level}`;
+      return `Entrou em ${hunt}`;
     }
     case 'entered-city': return 'Voltou para a cidade';
     case 'level-up': {
@@ -83,9 +79,35 @@ export function describeEvent(event: NotableEvent, names: EventNames = {}): stri
         : ` (+${percent.format(names.percentPerMilestone)} % XP)`;
       return `Bestiário: ${monster} · marco ${milestone}${bonus}`;
     }
+    case 'bosstiary-level': {
+      // `monsterId/n` (#629): o nível fecha três vezes por boss na vida inteira do personagem, e é a
+      // outra linha do extrato que fala de progressão permanente (`monsterId` é o do boss ABATIDO).
+      // Em party o `sim` manda `characterId/monsterId/n` — o cliente só mostra o boss e o nível.
+      const parts = detail.split('/');
+      const level = parts[parts.length - 1] ?? '';
+      const monsterId = parts[parts.length - 2] ?? '';
+      const monster = names.monsters?.get(monsterId) ?? monsterId;
+      return `Bosstiary: ${monster} · nível ${level}`;
+    }
+    case 'item-lost-on-death': {
+      // `itemId/quantidade/instanceId/dono` (#571): o cliente mostra o item e a quantidade; o
+      // `instanceId` e o dono são da trilha de auditoria do ledger, não da tela.
+      const { name, quantity } = lostItemOf(detail, names);
+      return `Perdeu na morte · ${name}${quantity > 1 ? ` ×${String(quantity)}` : ''}`;
+    }
+    case 'item-loss-protected':
+      // `blessings` (a tabela deu 0%) ou o id do colar que protegeu.
+      return detail === 'blessings'
+        ? 'Nenhum item perdido · protegido pelas bênçãos'
+        : `Nenhum item perdido · ${names.items?.get(detail) ?? detail} protegeu`;
+    case 'loss-amulet-consumed': return `${names.items?.get(detail) ?? detail} consumido`;
+    case 'backpack-replaced': return `Ganhou ${names.items?.get(detail) ?? detail} nova, sem mochila`;
     case 'death': return 'Morreu';
     case 'stamina-exhausted': return 'Stamina esgotada';
     case 'backpack-full': return 'Mochila cheia';
+    // A Food (#623) sem lugar na mochila: o Canary a largaria no chão, e este modelo não tem item
+    // no chão fora do cadáver — o que não coube se perde, e o extrato diz QUAL comida.
+    case 'food-not-carried': return `Comida perdida, sem espaço · ${names.items?.get(detail) ?? detail}`;
     case 'supply-unaffordable': return `Gold acabou para ${names.supplies?.get(detail) ?? detail}`;
     case 'exit-rule': return `Saiu por regra · ${detail}`;
     case 'ring-equipped': return 'Equipou o anel';
@@ -95,4 +117,65 @@ export function describeEvent(event: NotableEvent, names: EventNames = {}): stri
     case 'ended': return `Sessão encerrada · ${REASON_TEXT[detail] ?? detail}`;
     default: return detail === '' ? event.type : `${event.type} · ${detail}`;
   }
+}
+
+/** O que a linha `item-lost-on-death` diz de UM item: o nome (ou o id) e a quantidade. */
+function lostItemOf(detail: string, names: EventNames): { name: string; quantity: number } {
+  const [itemId = '', quantity = '1'] = detail.split('/');
+  return { name: names.items?.get(itemId) ?? itemId, quantity: Number(quantity) || 1 };
+}
+
+/** Uma linha da lista de eventos, já em palavras. `type` e `atMs` são os do evento de origem. */
+export interface EventLine {
+  readonly atMs: number;
+  readonly type: string;
+  readonly text: string;
+}
+
+/** Quantos itens perdidos a linha agrupada nomeia antes de resumir o resto em "+N". */
+const LOST_ITEMS_NAMED = 5;
+
+/**
+ * A lista que a tela de retorno mostra (§16.2, #571): cada evento vira uma linha, EXCETO a perda
+ * de item na morte, que o `sim` grava UMA linha por instância (é a trilha de auditoria do ledger)
+ * e que aqui vira UMA linha só — uma mochila cheia perdida seriam vinte linhas, e a lista mostra
+ * só as mais recentes: o resto do extrato sumiria atrás da própria perda.
+ *
+ * `me` é o personagem de quem olha. Em party as linhas dos membros compartilham a lista de eventos
+ * da sessão, e o `detail` da perda leva o dono no fim: o item que OUTRO membro perdeu não entra na
+ * tela de quem ficou. Sem dono no `detail` (nó anterior) a linha é de quem olha, como sempre foi.
+ */
+export function describeEvents(
+  events: readonly NotableEvent[], names: EventNames = {}, me?: string,
+): EventLine[] {
+  const lines: EventLine[] = [];
+  const lost: string[] = [];
+  let anchor = -1;
+  for (const event of events) {
+    if (event.type !== 'item-lost-on-death') {
+      lines.push({ atMs: event.atMs, type: event.type, text: describeEvent(event, names) });
+      continue;
+    }
+    const detail = event.detail ?? '';
+    const owner = detail.split('/')[3];
+    if (me !== undefined && owner !== undefined && owner !== me) continue;
+    // A linha agrupada nasce onde a PRIMEIRA perda aconteceu: é a posição dela na história.
+    if (anchor < 0) {
+      anchor = lines.length;
+      lines.push({ atMs: event.atMs, type: 'item-lost-on-death', text: '' });
+    }
+    lost.push(detail);
+  }
+  if (anchor >= 0) {
+    const named = lost.map((detail) => lostItemOf(detail, names));
+    const shown = named.slice(0, LOST_ITEMS_NAMED)
+      .map(({ name, quantity }) => (quantity > 1 ? `${name} ×${String(quantity)}` : name));
+    const rest = named.length - shown.length;
+    lines[anchor] = {
+      atMs: lines[anchor]?.atMs ?? 0,
+      type: 'item-lost-on-death',
+      text: `Perdeu na morte · ${shown.join(', ')}${rest > 0 ? ` (+${String(rest)})` : ''}`,
+    };
+  }
+  return lines;
 }

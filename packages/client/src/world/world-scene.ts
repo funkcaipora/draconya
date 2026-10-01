@@ -10,7 +10,7 @@
 
 import type { Scene, TileStack } from './scene.js';
 import { decodeSector, isWorldIndex, SECTOR_SIZE, sectorOf, sectorPath, stacksOf } from './sector.js';
-import type { WorldIndex } from './sector.js';
+import type { Sector, WorldIndex } from './sector.js';
 
 /** Quantos setores ficam na memória. A tela usa poucas dezenas por andar; o resto é cache. */
 export const DEFAULT_SECTOR_BUDGET = 512;
@@ -27,6 +27,17 @@ export interface WorldScene extends Scene {
   pendingSectors(): number;
   /** O setor existe no mundo? Fora dele não há o que pedir. */
   hasSector(z: number, sx: number, sy: number): boolean;
+  /**
+   * As flags de zona e a casa do tile (#664), quando o setor já chegou — `null` sem nenhuma das
+   * duas. Não pede setor: quem desenha a camada lê o que o pintor já trouxe.
+   */
+  metaAt(x: number, y: number, z: number): TileMeta | null;
+}
+
+export interface TileMeta {
+  /** `TILE_FLAGS` do OTBM: PZ (1), no-pvp (4), no-logout (8), pvp (16). */
+  readonly flags: number;
+  readonly houseId?: number;
 }
 
 export interface WorldSceneOptions {
@@ -35,7 +46,16 @@ export interface WorldSceneOptions {
   readonly budget?: number;
 }
 
-type Slot = { state: 'loading' } | { state: 'ready'; stacks: Map<number, TileStack> } | { state: 'missing' };
+type Slot = { state: 'loading' } | { state: 'ready'; stacks: Map<number, TileStack>; meta: Map<number, TileMeta> } | { state: 'missing' };
+
+function metaOf(sector: Sector): Map<number, TileMeta> {
+  const meta = new Map<number, TileMeta>();
+  for (const tile of sector.tiles) {
+    if (tile.flags === 0 && tile.houseId === undefined) continue;
+    meta.set(tile.y * SECTOR_SIZE + tile.x, tile.houseId === undefined ? { flags: tile.flags } : { flags: tile.flags, houseId: tile.houseId });
+  }
+  return meta;
+}
 
 export function createWorldScene(index: WorldIndex, options: WorldSceneOptions): WorldScene {
   const budget = options.budget ?? DEFAULT_SECTOR_BUDGET;
@@ -79,7 +99,8 @@ export function createWorldScene(index: WorldIndex, options: WorldSceneOptions):
         let slot: Slot = { state: 'missing' };
         if (bytes !== null) {
           try {
-            slot = { state: 'ready', stacks: stacksOf(decodeSector(bytes)) };
+            const sector = decodeSector(bytes);
+            slot = { state: 'ready', stacks: stacksOf(sector), meta: metaOf(sector) };
           } catch {
             slot = { state: 'missing' };
           }
@@ -128,6 +149,13 @@ export function createWorldScene(index: WorldIndex, options: WorldSceneOptions):
     loadedSectors: () => ready,
     pendingSectors: () => [...slots.values()].filter((slot) => slot.state === 'loading').length,
     hasSector: (z, sx, sy) => known.has(sectorPath(z, sx, sy)),
+    metaAt(x, y, z) {
+      if (x < 0 || y < 0) return null;
+      const { sx, sy } = sectorOf(x, y);
+      const slot = slots.get(sectorPath(z, sx, sy));
+      if (slot === undefined || slot.state !== 'ready') return null;
+      return slot.meta.get((y % SECTOR_SIZE) * SECTOR_SIZE + (x % SECTOR_SIZE)) ?? null;
+    },
   };
 }
 

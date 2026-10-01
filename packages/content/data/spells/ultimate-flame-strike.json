@@ -1,0 +1,31 @@
+{
+  "id": "ultimate-flame-strike",
+  "name": "Ultimate Flame Strike",
+  "description": "Lança uma labareda de fogo devastadora no seu alvo atual.",
+  "vocationId": "sorcerer",
+  "minLevel": 90,
+  "learnPrice": 15000,
+  "manaCost": 100,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 30000,
+  "secondaryGroup": {
+    "name": "ultimatestrikes",
+    "cooldownMs": 30000
+  },
+  "effect": {
+    "kind": "damage",
+    "basePower": 180,
+    "range": 3,
+    "damageType": "fire",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 4.5,
+      "skillMax": 7.3,
+      "baseMin": 35,
+      "baseMax": 55,
+      "scaling": "magic"
+    }
+  },
+  "_open": "Magia que faltava no catálogo (#596; ADR 0037): o topo da linha `X Strike` do Sorcerer (level 90), `exori max flam` no Canary — falta entre `flame-strike-sorcerer.json` (`exori flam`) e `strong-flame-strike.json` (`exori gran flam`), a mesma lacuna que `ultimate-energy-strike.json` (#523) já fechou para energia. Fonte `data/scripts/spells/attack/ultimate_flame_strike.lua` (Canary local, 47dfd51): `spell:id(154)`, level 90, mana 100, cooldown 30s, grupo `attack` 2s + grupo secundário `ultimatestrikes` 30s, `range 3`, `COMBAT_FIREDAMAGE`, sem área (`needCasterTargetOrDirection`, mesma família de Ultimate Energy Strike). Fórmula IDÊNTICA à de `ultimate-energy-strike.json`: `min = level/5 + ml×4.5 + 35`, `max = level/5 + ml×7.3 + 55` — o Canary usa os mesmos coeficientes nas três Ultimate X Strike (fogo/gelo/terra), só o `damageType` muda. `basePower` 180 reaproveita o de `ultimate-energy-strike.json` (mesma fórmula) — o TibiaWiki não foi reconfirmado por elemento (as Strong X Strike TÊM basePower ligeiramente diferentes por elemento apesar da mesma fórmula, 125 fogo/energia vs 115 gelo/terra; aqui usei o mesmo número para as três Ultimate por não ter a fonte para diferenciar). `basePower` é só o número de exibição do catálogo (ADR 0033) — o dano real vem sempre de `formula`. Aparência: efeito 16 e projétil 4, reaproveitados de `flame-strike-sorcerer`/`strong-flame-strike` (mesmo elemento fogo) — biblioteca parcial (47/4171 folhas, `docs/combat-presentation-audit.md`), conferência visual pendente."
+}

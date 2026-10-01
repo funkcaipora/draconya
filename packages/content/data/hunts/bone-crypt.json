@@ -1,0 +1,10 @@
+{
+  "id": "bone-crypt",
+  "name": "Bone Crypt",
+  "recommendedLevel": 100,
+  "mapId": "bone-crypt",
+  "routeId": "bone-crypt",
+  "ambience": "cavern",
+  "description": "Uma cripta funerária onde Crypt Shambler, Mummy e Demon Skeleton guardam os corredores de pedra. O cheiro de mofo e decomposição é a única coisa mais velha que os ossos ali dentro.",
+  "_open": "#587 (M36-06). Recorte real do Canary: `pnpm map:import --id bone-crypt --x 33180..33220 --y 32800..32840 --z 14` sobre `otservbr.otbm` (41×41, 445 tiles andáveis, sem `--keep-from` — caixa reta, bate com `--check` por construção). `pnpm catalog:spawns`: 24 pontos reais (Crypt Shambler, Mummy, Scarab, Demon Skeleton — a fauna inteira da zona), todos os 24 alcançáveis a pé a partir da entrada; 2 (Scarab) ficam fora do catálogo local (relatado, não fatal, #582) e não entram como `spawnPoint` — 22 escritos. `recommendedLevel: 100`: não achei um Gate/TibiaWiki específico para ESTA cripta (buscas por 'Bone Crypt' voltaram criptas de nome parecido — Cemetery Quarter, Forsaken/Forgotten Crypt — com Recommended Level bem mais baixo, mas são fileiras diferentes do bestiário do Canary, não esta); usei o piso da faixa 100–150 que o #587 pede para esta hunt cobrir, estimativa por fallback ('senão a do monstro mais forte'), não fato de fonte."
+}

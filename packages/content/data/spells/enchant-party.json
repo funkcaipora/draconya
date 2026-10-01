@@ -1,0 +1,26 @@
+{
+  "id": "enchant-party",
+  "name": "Enchant Party",
+  "description": "Aumenta o magic level de cada membro da party no alcance, por 2 minutos.",
+  "vocationId": "sorcerer",
+  "minLevel": 32,
+  "learnPrice": 4000,
+  "manaCost": {
+    "kind": "party-scaled",
+    "base": 120,
+    "decay": 0.9
+  },
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "buff",
+    "durationMs": 120000,
+    "skillDeltas": {
+      "magic": 1
+    },
+    "target": "party",
+    "range": 36
+  },
+  "_open": "Canary (`data/scripts/spells/party/enchant_party.lua`, main, 2026-09-28): CONDITION_ATTRIBUTES, CONDITION_PARAM_STAT_MAGICPOINTS 1, CONDITION_PARAM_TICKS 2*60*1000 — magicpoints é o magic level (FUN-92), mapeado no delta da skill `magic`, como `schemas.ts` já documenta para Mastermind. mana base 120, custo real ceil((0.9^(n-1) * 120) * n) onde n é o roster (líder incluso) dentro de getDistance <= 36; recusa 'No party members in range' com n <= 1. words 'utori mas sio', level 32, isPremium true (não modelado)."
+}

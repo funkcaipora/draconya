@@ -1,0 +1,26 @@
+{
+  "id": "protect-party",
+  "name": "Protect Party",
+  "description": "Aumenta a skill de shielding de cada membro da party no alcance, por 2 minutos.",
+  "vocationId": "paladin",
+  "minLevel": 32,
+  "learnPrice": 4000,
+  "manaCost": {
+    "kind": "party-scaled",
+    "base": 90,
+    "decay": 0.9
+  },
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "buff",
+    "durationMs": 120000,
+    "skillDeltas": {
+      "shielding": 3
+    },
+    "target": "party",
+    "range": 36
+  },
+  "_open": "Canary (`data/scripts/spells/party/protect_party.lua`, main, 2026-09-28): CONDITION_ATTRIBUTES, CONDITION_PARAM_SKILL_SHIELD 3, CONDITION_PARAM_TICKS 2*60*1000; mana base 90, custo real ceil((0.9^(n-1) * 90) * n) onde n é o roster (líder incluso) dentro de getDistance <= 36; recusa 'No party members in range' com n <= 1. words 'utamo mas sio', level 32, isPremium true (não modelado)."
+}

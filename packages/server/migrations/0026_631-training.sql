@@ -1,0 +1,16 @@
+-- #631 (M44-13, ADR 0059 d.3): o registro do Treino — o banco de offline training e a skill
+-- escolhida no livro. `{ offlineBankMs, offlineSkill, version }`, uma coluna só, no padrão de
+-- `charms` (ADR 0052 d.1: um registro `jsonb` por sistema, lido INTEIRO no ticket e escrito
+-- INTEIRO pela transação do ledger a partir do extrato).
+--
+-- Aditiva por construção (ADR 0014): coluna nova, nulável, sem default. `null` é quem nunca caçou
+-- nem treinou — banco zerado e nenhuma skill escolhida, o mesmo personagem novo que `charms`
+-- ausente já descreve. Nenhuma linha é reescrita.
+--
+-- ABSOLUTO e última escrita vence, como `charms`: o banco SOBE por tempo de hunt/treino e DESCE
+-- quando a `api` o gasta (`settleOfflineTraining`), então fundir por máximo ressuscitaria tempo já
+-- gasto se um extrato antigo chegasse depois. Vem do extrato da sessão dona (`jobs/ledger.ts`) e —
+-- o único caminho fora dela — da `api`, na emissão do ticket, com o personagem em repouso (sem
+-- sessão hospedada; ADR 0052 d.5), sob a trava de linha do próprio ticket. Sem CHECK: os ids de
+-- skill são conteúdo (versionado à parte), e a leitura é defensiva (`readOfflineTrainingState`).
+ALTER TABLE character ADD COLUMN training jsonb;
