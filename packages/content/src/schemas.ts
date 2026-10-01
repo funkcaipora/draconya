@@ -57,6 +57,16 @@ export const SPECIALIZED_MAGIC_ELEMENTS = [
 export type SpecializedMagicElement = (typeof SPECIALIZED_MAGIC_ELEMENTS)[number];
 
 /**
+ * Os três valores que o `elementalbond` de `items.xml` aceita: `ItemParse::parseElementalBond`
+ * (`item_parse.cpp:764-778`, Canary 47dfd51) só reconhece `energy`, `earth` e `physical` — qualquer
+ * outro texto deixa o bond em `COMBAT_NONE`. O `fire`/`ice` que `Combat::monkEffectByElementalBond`
+ * (`combat.cpp:1105-1141`) também trata nunca sai do parser: são variantes de efeito de um bond que
+ * o XML não consegue declarar, e não entram aqui.
+ */
+export const ELEMENTAL_BOND_TYPES = ['physical', 'earth', 'energy'] as const;
+export type ElementalBondType = (typeof ELEMENTAL_BOND_TYPES)[number];
+
+/**
  * Proveniência de uma entidade GERADA pelo importador de catálogo (ADR 0038 decisão 2): de qual
  * engine, commit e arquivo do Canary/TFS o número saiu — o mesmo `CatalogSource` que
  * `scripts/catalog/generated-writer.ts` grava por entidade em `<tipo>/generated/*.json`, e o
@@ -1014,6 +1024,22 @@ export const itemSchema = z.strictObject({
     }).refine((r) => r.healthGain > 0 || r.manaGain > 0, 'regeneração sem ganho').optional(),
     /** Condições que o item suprime enquanto vestido (`suppress*` do Canary). */
     suppress: z.array(z.enum(SUPPRESSIBLE_CONDITIONS)).min(1).optional(),
+    /**
+     * A CAPACIDADE DE MAGIC SHIELD do item (#627, M44-09): o `magicshieldCapacityflat` e o
+     * `magicshieldCapacitypercent` do `items.xml` (4 itens — eldritch folio/tome, cocoa e creamy
+     * grimoire), os dois inteiros de `Abilities` (`items.hpp:50-51`), somados pelos equipados
+     * (`Player::getMagicShieldCapacityFlat`/`Percent`, `player.cpp:7633-7681`). É o número
+     * DECLARADO pelo Canary e nada mais: no checkout 47dfd51 ele só é LIDO pela descrição do item
+     * (`item.cpp:134-141`, `:2727-2735`) e pelo pacote de defesa da Cyclopedia
+     * (`protocolgame.cpp:5661-5663`) — `magic_shield.lua` e `ConditionManaShield` montam o
+     * escudo SEM consultá-lo, e nenhum script de `data/` chama o getter. Por isso o `sim` não o lê
+     * (ver `docs/product/items.md`, "Atributos raros"): aplicá-lo ao escudo seria
+     * comportamento que o Canary não tem.
+     */
+    magicShieldCapacity: z.strictObject({
+      flat: z.number().int(),
+      percent: z.number().int(),
+    }).refine((c) => c.flat !== 0 || c.percent !== 0, 'capacidade de magic shield sem valor').optional(),
   }).optional(),
   /**
    * Quantos imbuements a peça aceita (ADR 0046, #604) — o `imbuementslot` do Canary
@@ -1051,6 +1077,22 @@ export const itemSchema = z.strictObject({
    * própria de dano (`WeaponMelee::useWeapon`, `weapons.cpp:531-589`). Soma entre os equipados.
    */
   cleavePercent: z.number().int().positive().max(100).optional(),
+  /**
+   * O `elementalbond` do Canary (#627, M44-09; `ItemType::elementalBond`, `items.hpp:296`) — 32
+   * itens em `items.xml`, e TODOS são arma `weapontype="fist"` (sais, katars, bôs e nunchakus).
+   * 30 pedem Monk; `traditional sai` pede Knight (e para o Knight o bond é mudo); e
+   * `transcendent bo` (`items.xml:84976-84998`) não tem script nem vocação, então um Monk o
+   * equipa e o bond dele dispara. É o tipo de dano que TROCA o da magia do Monk quando a arma
+   * está na mão, e são DOIS pontos de leitura com portões diferentes: `Combat::getCombatDamage`
+   * (`combat.cpp:159-174`) só troca o tipo para `VOCATION_MONK_CIP`, magia INSTANTÂNEA e que não
+   * cure; `Combat::sendCombatEffect` (`combat.cpp:1143-1159`) recolore o efeito visual só com o
+   * Monk e uma arma de bond na mão — sem o portão de instantânea/cura. Para qualquer outra
+   * vocação o bond é um atributo mudo. O Monk está fora do corte (ADR 0038 d.5) e a família
+   * `fist` não é declarável (DT-01), então nenhum item do catálogo o carrega hoje e nenhuma
+   * vocação o lê: o campo existe para o importador não perder o dado e para o dia em que o corte
+   * mudar. Só em `kind: 'weapon'` (`buildContent`).
+   */
+  elementalBond: z.enum(ELEMENTAL_BOND_TYPES).optional(),
   /**
    * O item PROTEGE quem o veste da perda de item na morte (#571, ADR 0042 decisão 4) — o
    * Amulet of Loss (`ITEM_AMULETOFLOSS`, id 3057, `src/utils/utils_definitions.hpp:638` do

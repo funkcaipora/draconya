@@ -552,6 +552,87 @@ describe('absorção, aumento, reflexo e cleave de item (M30-05, #552)', () => {
   });
 });
 
+describe('atributos raros de item: elemental bond e capacidade de magic shield (#627, M44-09)', () => {
+  const clava = {
+    id: 'bonded-club', name: 'Bonded Club', kind: 'weapon', slot: 'hand', weight: 40, value: 0, attack: 30,
+    weapon: { kind: 'melee', family: 'club' },
+  };
+  const livro = {
+    id: 'ward-tome', name: 'Ward Tome', kind: 'shield', slot: 'shield', weight: 15, value: 0, defense: 18,
+    spellbook: true,
+  };
+
+  it('item sem os campos novos é o de sempre — nada aparece', () => {
+    const content = buildContent(base({ items: [clava, livro] }));
+    expect(content.items.get('bonded-club')?.elementalBond).toBeUndefined();
+    expect(content.items.get('ward-tome')?.bonuses?.magicShieldCapacity).toBeUndefined();
+  });
+
+  it('elementalBond aceita os três valores que o parser do Canary reconhece, e atravessa a compilação', () => {
+    for (const bond of ['physical', 'earth', 'energy']) {
+      const item = buildContent(base({ items: [{ ...clava, elementalBond: bond }] })).items.get('bonded-club');
+      expect(item?.elementalBond).toBe(bond);
+    }
+  });
+
+  it('elementalBond fora dos três (o fire/ice só existe no efeito do Monk, nunca no XML) derruba o boot', () => {
+    for (const bond of ['fire', 'ice', 'holy', 'death', 'none', '']) {
+      expect(() => buildContent(base({ items: [{ ...clava, elementalBond: bond }] })), bond)
+        .toThrow(ContentError);
+    }
+  });
+
+  it('elementalBond só vale em arma — é o da arma na mão (`getWeapon(true)`)', () => {
+    expect(() => buildContent(base({ items: [{ ...livro, elementalBond: 'earth' }] })))
+      .toThrow(/elementalBond só faz sentido em arma/);
+  });
+
+  it('magicShieldCapacity compila em bonuses: flat e percent inteiros, como o `Abilities` do Canary', () => {
+    const item = buildContent(base({
+      items: [{ ...livro, bonuses: { magicShieldCapacity: { flat: 80, percent: 8 } } }],
+    })).items.get('ward-tome');
+    expect(item?.bonuses?.magicShieldCapacity).toEqual({ flat: 80, percent: 8 });
+  });
+
+  it('magicShieldCapacity convive com os outros bônus do mesmo item', () => {
+    const item = buildContent(base({
+      items: [{
+        ...livro,
+        bonuses: {
+          skills: [{ skillId: 'magic', amount: 4 }],
+          specializedMagicLevel: { death: 1 },
+          magicShieldCapacity: { flat: 80, percent: 8 },
+        },
+      }],
+    })).items.get('ward-tome');
+    expect(item?.bonuses).toEqual({
+      skills: [{ skillId: 'magic', amount: 4 }],
+      specializedMagicLevel: { death: 1 },
+      magicShieldCapacity: { flat: 80, percent: 8 },
+    });
+  });
+
+  it('magicShieldCapacity sem valor, fracionária ou com chave desconhecida derruba o boot', () => {
+    for (const bad of [
+      { flat: 0, percent: 0 },
+      { flat: 80.5, percent: 8 },
+      { flat: 80, percent: 8.5 },
+      { flat: 80 },
+      { flat: 80, percent: 8, extra: 1 },
+    ]) {
+      expect(() => buildContent(base({ items: [{ ...livro, bonuses: { magicShieldCapacity: bad } }] })))
+        .toThrow(ContentError);
+    }
+  });
+
+  it('magicShieldCapacity só vale em item que se veste (sem slot ela nunca seria somada)', () => {
+    const solto = { id: 'loose-tome', name: 'Loose Tome', kind: 'other', weight: 15, value: 0 };
+    expect(() => buildContent(base({
+      items: [{ ...solto, bonuses: { magicShieldCapacity: { flat: 80, percent: 8 } } }],
+    }))).toThrow(/magicShieldCapacity só vale em item que se veste/);
+  });
+});
+
 describe('elemento no monstro: cura, reflexo e vulnerabilidade até -200 % (#683, M30-G6)', () => {
   const helmet = {
     id: 'plain-helmet', name: 'Plain Helmet', kind: 'armor', slot: 'head', weight: 1, value: 0,
