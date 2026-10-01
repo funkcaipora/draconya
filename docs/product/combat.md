@@ -2725,8 +2725,9 @@ interface FieldSpec {                     // declarado em content
   `appearances.fields`, como sempre) — campo sem entrada troca de estágio MUDO. Quem reanexa no
   MEIO da cadeia recebe, no `session-state`, a arte do estágio ATUAL, não sempre a do nascimento.
 - **Campo bloqueante (Magic Wall, Wild Growth, #560).** `blocksMovement` (default falso) faz o
-  campo agir como PAREDE — para QUALQUER criatura, jogador e monstro, diferente do desvio de
-  dano do M29-05 (`canMonsterEnterField`), que só o monstro respeita e só quando o campo tem
+  campo agir como PAREDE — para QUALQUER criatura, jogador e monstro (salvo a parede de
+  personagem, que cede a quem é personagem — ver "Campo com dono", abaixo), diferente do desvio
+  de dano do M29-05 (`canMonsterEnterField`), que só o monstro respeita e só quando o campo tem
   `damageType`. Mecanismo: `Fields.blockedAt`/`blocksProjectileAt` (novos métodos em
   `sim/fields.ts`) e `TileOccupancy.blockedAt` os combina com o mapa e com `TileOverrides`
   (#728) — a MESMA composição de três fontes, uma pergunta só para `canOccupy`/`move`, o passo
@@ -2771,6 +2772,44 @@ interface FieldSpec {                     // declarado em content
   fechando o TODO(#560) que só o Dragon Lord tinha cadeia real: fire field (2118→2119→2120,
   a mesma cadeia do Dragon Lord) agora sai assim para TODO monstro gerado; poison (105) e energy
   (2122) declaram `stages` de um elemento só (redundante com `fieldStagesOf`, mas explícito).
+
+- **Campo com dono: o campo de personagem não fere personagem (OW-05, #826, ADR 0060 d.8).** O
+  no-pvp do Canary aplicado ao campo, e uma correção de paridade que vale já para a hunt de
+  party: até aqui o fire field de um membro queimava a própria party. `TileFieldState.owner`
+  (`{ kind: 'character' | 'monster', id }`) é gravado por `applyField` — a runa de campo grava o
+  PERSONAGEM que a lançou, a ability de monstro grava o monstro (`subject` `m:<id>`) e a de uma
+  INVOCAÇÃO de personagem grava o MESTRE, porque o Canary trata a invocação como o jogador dela
+  (`caster->isSummon()`, `combat.cpp:1198-1204`). O campo sem `owner` é de MAPA e segue pegando
+  todo mundo; o snapshot de antes restaura assim, sem subir `SNAPSHOT_FORMAT_VERSION`.
+
+  | Campo de | Fere personagem | Fere invocação de personagem | Fere monstro |
+  |---|---|---|---|
+  | personagem (ou invocação de personagem) | **não**, nem o lançador (`combat.cpp:2616-2619`) | **não** | sim |
+  | monstro, ou de mapa (sem dono) | sim | sim | sim |
+
+  O portão é `HuntRuleset#fieldHarms`, conferido no tique do campo (`#onFieldTick`) e na entrada
+  no tile (`#enterField`), ANTES de montar a condição — quem o campo não fere não gasta sorteio
+  do `Rng`. É a versão do `canDoCombat` que o Canary faz dentro da condição
+  (`condition.cpp:2015-2020`): num mundo no-pvp ele recusa jogador e invocação de jogador contra
+  jogador e invocação de jogador (`combat.cpp:551-565`). O dono atravessa os estágios da cadeia
+  (`decayTo`) e o relançamento do mesmo id o troca.
+
+  **A parede de personagem é a variante SEGURA** (`ITEM_MAGICWALL_SAFE`/`ITEM_WILDGROWTH_SAFE`,
+  `combat.cpp:1207-1218`): segue barrando monstro, invocação e projétil, mas quem é personagem
+  a atravessa e ela some no passo (`Tile::queryAdd`, `tile.cpp:864-876`). Qualquer personagem a
+  dissolve, não só o lançador. Mecanismo: `Movable.dissolvesSafeWalls` (só `CharacterRuntime`)
+  faz `canOccupy`/`move` a admitirem — o bot, o `walk-to`, o BFS do follow e a busca da fuga do
+  medo a tratam como passável —, e `HuntRuleset#step` a remove depois do passo aceito, antes da entrada no campo
+  que estiver por baixo dela. A parede de MONSTRO ou de mapa barra o personagem como sempre.
+
+  **Divergências registradas.** (1) O crédito do dano do campo não vai ao dono: a condição segue
+  com `sourceId` = id do campo e o abate por campo de personagem não rende XP a ele (no Canary o
+  dono vai em `CONDITION_PARAM_OWNER`) — é o crédito do Canary, OW-28. (2) A parede de vários
+  tiles é uma entidade só e some inteira ao primeiro passo; o conteúdo de hoje só planta parede
+  de um tile (Magic Wall e Wild Growth são `point`, como os itens do Canary). (3) O campo de
+  dano de PvP dos jogadores do Canary (a metade do dano em `condition.cpp:2011-2013`) não
+  existe: aqui não há PvP. (4) Campo em zona `PVPZONE` e a recusa por PZ são o portão no-pvp
+  completo, OW-27.
 
 **Fora do escopo**, por decisão: novo pathfinding, dispel, invisibilidade, PvP e a UI detalhada
 de buff.
@@ -3501,6 +3540,124 @@ O contrato do ADR 0031 virou executável em dois lugares, e os dois são complem
 
 O método, a máquina da medição e a interpretação da linha de base estão em
 [`combat-conformance.md`](./combat-conformance.md).
+
+## Apresentação do monstro: cores e addons, falas, luz e raça (#620, M44-02)
+
+O Canary declara, por monstro, o que o veste e o que o acompanha além do desenho: as cores e os
+addons do outfit (`monster.outfit.lookHead/lookBody/lookLegs/lookFeet/lookAddons`), as falas
+periódicas (`monster.voices`), a luz (`monster.light`) e a raça (`monster.race`). **Nada disso
+entra em combate** — o `sim` não lê nenhum dos quatro, e nenhum deles muda dano, alvo ou loot. É
+só o que o cliente desenha, e por isso cabe inteiro na regra de sempre: **índices e ids, nunca arte**
+(invariante 6; o id do desenho, `lookType`, continua sendo o `outfitId` da tabela de aparências) e
+**o resultado da hunt não depende de haver alguém olhando** (invariante 3).
+
+### O que vem do Canary, e onde mora no conteúdo
+
+O importador de monstros (`scripts/catalog/monsters.ts`, `pnpm catalog:import monsters`) lê os
+quatro e os escreve no monstro, **só quando diferem do default** — o monstro comum não ganha linha
+nenhuma. `pnpm catalog:promote-monsters` os leva para `data/monsters/generated/<fatia>.json`;
+As cinco entradas hand-authored (`HAND_AUTHORED_MONSTER_IDS`: Rat, Rotworm, Dragon, Dragon Lord e
+Dragon Lord Hatchling) continuam hand-authored, mas a apresentação delas é renovada a cada promoção (`withPresentation`) — a regra do #581 protege os
+números de combate, não a fala do rato.
+
+| Campo de `monsterSchema` | Canary | Default (ausente) | Faixa |
+|---|---|---|---|
+| `outfit` `{ head, body, legs, feet, addons }` | `outfit.lookHead/Body/Legs/Feet/lookAddons` | tudo 0, sem addon (o `Outfit_t` zerado) | cor 0–132 (a paleta de 133 cores do outfit); addons é a máscara do Tibia, 0–3 |
+| `voices` `{ intervalMs, chance, lines[{ text, yell }] }` | `voices.interval/chance` + uma tabela posicional por linha (`register_monster_type.lua`, `registerMonsterType.voices`) | mudo | `chance` inteiro 1–100 (a escala do Lua) |
+| `light` `{ level, color }` | `light.level/color` (`registerMonsterType.light`) | sem luz | `level` 1–255 (alcance em tiles; os 59 monstros gerados vão de 1 a 6, e o Canary tem um de 10, o Lava Golem, fora do corte), `color` 0–215 (paleta de 216 cores) |
+| `race` | `monster.race` (`RaceType_t`) | `blood` (`RACE_BLOOD`, `monsters.hpp`) | `venom`, `blood`, `undead`, `fire`, `energy`, `ink`, `chocolate`, `candy` |
+
+No conteúdo de hoje (1040 monstros gerados): **239** com cores/addons de outfit (113 deles com
+addon), **568** com falas (todas com intervalo de 5000 ms e chance 10; 1618 linhas, 170 gritos),
+**59** com luz (níveis 1–6) e **412** com raça diferente de `blood` — `undead` 232, `venom` 127,
+`fire` 42, `ink` 9, `candy` 1, `chocolate` 1. O resto é `blood`, o default. As contagens por
+importação saem em `docs/reference/catalog/monsters-report.md`.
+
+**A montaria (`lookMount`) não entra.** Só UM monstro do Canary declara uma — `mounted-thorn-knight`,
+fora do corte de caça (não é gerado) —, então o schema não tem o campo `mount`: não haveria
+ninguém para usá-lo. O importador a lê e a conta no relatório; se um monstro montado entrar no
+corte, é este o lugar de acrescentá-la.
+
+### O caminho até a tela
+
+- **Protocolo.** `creature-appear` e a criatura do `session-state` (o MESMO schema) ganharam os
+  opcionais `addons`, `race`, `light` e `voices`, e `colors` passou a valer também para o monstro:
+  o servidor manda as cores do conteúdo — o neutro 0/0/0/0 incluído, senão o cliente pintaria o
+  monstro com as de personagem novo. Todos opcionais pela regra de sempre (um nó `game` anterior
+  manda sem eles), e a ausência é o neutro: sem addon, `blood`, sem luz, mudo.
+  `addons`, `race`, `light` e `voices` saem só quando diferem do default, para a mensagem do
+  monstro comum não crescer. O host os monta em `packages/server/src/game/monster-look.ts`, pela
+  definição do catálogo **fixado na sessão** (invariante 7) — é a mesma fonte do nome.
+- **Cores e addons.** O cliente já pintava o outfit de duas camadas por template (FUN-104); o
+  monstro agora chega com as cores dele. Os **addons** são as linhas 1 e 2 do padrão do outfit
+  (`patternHeight` 3): cada um é pintado com as MESMAS quatro cores e composto por cima do base,
+  em ordem, num bitmap só (`OutfitComposer`, `compositeOver`). O bit de uma linha que o outfit não
+  tem (`patternHeight` menor), ou um outfit de uma camada só, fica sem o addon — o desenho base
+  aparece, e o monstro não some.
+- **A cor do número e o efeito do golpe físico seguem a raça** (`Game::combatGetTypeInfo`,
+  `game.cpp`). O **efeito** (`creature-hit` FÍSICO → `effect`, de corpo a corpo ou de magia: o gatilho é o elemento do golpe, e não a origem, como o `Game::sendEffects`) sai da tabela
+  `appearances.hits.byRace`: sangue (1) para `blood` e `fire`, `CONST_ME_HITBYPOISON` (17) para
+  `venom`, `CONST_ME_HITAREA` (10) para `undead` e `ink`, `CONST_ME_ENERGYHIT` (12) para `energy`,
+  `CONST_ME_CACAO` (270) para `chocolate` e `CONST_ME_SIRUP` (269) para `candy`; a raça sem linha cai
+  em `hits.melee`, e sem nenhum dos dois o golpe não tem efeito (`CONST_ME_NONE`). O host guarda a
+  raça de cada monstro que não é `blood` até o `creature-disappear`, e não a consulta no `sim` na
+  hora do golpe: o abate TIRA o monstro do ruleset antes de o golpe que o matou ser apresentado.
+  A **cor do número** é `TextColor_t` do Canary na paleta de 216 cores: `blood` vermelho (180),
+  `venom` verde (30), `undead`/`ink`/`chocolate` cinza (129), `candy` vermelho-escuro (108), `fire`
+  laranja (198), `energy` roxo (154) — só para o golpe `physical`; o elemento tem a cor dele e a
+  cura continua verde. O cliente fotografa a raça do alvo quando o golpe chega (o golpe fatal chega
+  no mesmo lote do `creature-disappear`), e raças diferentes no mesmo tile não se somam.
+- **Luz.** O viewport da hunt não escurece o andar (só tinge a caverna, `ambience: 'cavern'`), então
+  a luz do monstro é um **clarão aditivo**: um disco suave da cor do Canary, com `level` tiles de
+  alcance (teto de 12), centrado no tile dele e que anda junto — `world/creature-light.ts`,
+  `paintLight` no viewport. É a mesma informação (quanto e de que cor) que o escurecimento do
+  explorador do mundo (#666) usa. Não há escurecimento de ambiente na hunt, e isto não o cria.
+- **Fala.** `Monster::onThinkYell` acumula um relógio por monstro (`yellTicks`) até `interval`,
+  zera, rola `chance >= uniform_random(1, 100)` e diz UMA linha sorteada por igual. O **cliente**
+  faz tudo isso (`world/speech.ts`, `rollCreatureSpeech` no viewport): o relógio nasce quando o
+  monstro é visto, a rolagem é uma por intervalo (um quadro atrasado rola uma vez, não uma por
+  intervalo perdido — o `yellTicks = 0` do Canary) e o sorteio é o `random` do cliente, **nunca o
+  `Rng` da sessão** nem o servidor. O relógio roda para toda criatura da lista, desenhada ou não —
+  o do Canary não depende de quem olha.
+  **Dois portões, como no Canary.** (1) **O relógio só anda com o monstro acordado:**
+  `Monster::onThink_async` devolve no topo quando `isIdle` (`monster.cpp:1709`) e o `onThinkYell`
+  só é alcançado depois (`monster.cpp:1747`) — o monstro parado no spawn, sem ninguém à vista, não
+  acumula `yellTicks` nem fala; acordar não zera o relógio, só o deixa andar de novo. Em hunt todo
+  monstro vai ao cliente (não há interesse gerenciado), então o "acordado" é calculado ali, com o
+  herói de quem olha: ele está no quadrado de **11 tiles** que o monstro enxerga
+  (`Creature::canSee`, `canSeePoint` no `sim`; `monsterAwake`), com as regras de andar do Canary.
+  (2) **A fala só chega a quem está perto:** `Game::internalCreatureSay` (`game.cpp:7634-7637`)
+  manda o `say` aos jogadores a até **8 colunas e 6 linhas** do monstro, no mesmo andar
+  (`MAP_MAX_CLIENT_VIEW_PORT_X`/`_Y`), e o `yell` a **18 × 14** (`(8+1)*2` × `(6+1)*2`), em vários
+  andares (`speechHeard`). Fora do alcance a rolagem acontece e gasta o sorteio, e ninguém vê o
+  texto — como o monstro que grita para ninguém. O texto aparece em laranja sobre o nome por
+  `2500 ms + 50 ms por caractere`: os dois números e a cor (o índice 198 da paleta de 216 cores)
+  são **escolha do cliente**, e não valor do Canary — o servidor manda só o tipo de fala
+  (`TALKTYPE_MONSTER_SAY` 36 / `_YELL` 37), a posição e o texto (`ProtocolGame::sendCreatureSay`),
+  e a cor sai do cliente do Tibia a partir do tipo. O grito se desenha como a fala; o que o
+  distingue é o alcance, acima.
+
+### Invariantes
+
+- O `sim` não importa nem lê nada disto: `monster-look.ts` vive no `server`, e o que o cliente
+  sorteia (a fala) não tem caminho de volta — não existe mensagem C2S que carregue fala, luz ou cor.
+- A hunt rende o mesmo com ou sem visualizador, a 1 Hz ou a 20 Hz: nenhum evento novo entrou na
+  fila, nenhum sorteio novo saiu do `Rng` da sessão, e os testes de frequência/retomada do `sim`
+  não mudaram.
+
+### Divergências do Tibia (todas de apresentação, nenhuma regra de caça)
+
+- Sem escurecimento de ambiente na hunt: a luz é um clarão aditivo (acima).
+- O splash de sangue no chão (`ITEM_SMALLSPLASH`, `FLUID_*`) que o Canary põe sob o alvo não é
+  modelado: é item de chão decorativo, e o efeito do golpe (acima) cobre o que o jogador lê.
+- **O monstro ocioso é aproximado no cliente** (a fala, acima): o protocolo não carrega o estado
+  `idle` do `sim`, e mandá-lo seria um evento novo só para uma fala. O monstro está "acordado"
+  quando o herói de quem olha está no quadrado de 11 tiles dele. O Canary diz outra coisa só em
+  dois casos: o monstro fora do spawn ou com condição ativa NÃO fica ocioso mesmo sem alvo (e
+  fala), e um alvo que seja outro membro da party o acorda para quem está longe. Como o `say` só
+  chega a 8 × 6 tiles, dentro dos 11, o que se perde é o grito de quem está entre 12 e 18 tiles
+  do herói nesses dois casos.
+- Sem montaria (acima).
 
 ## O que o jogador vê (FUN-106, FUN-109)
 

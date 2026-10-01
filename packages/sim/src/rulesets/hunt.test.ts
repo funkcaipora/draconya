@@ -31,6 +31,7 @@ import {
 } from './hunt.js';
 import type { HuntExitRule, HuntView, PartyOptionsInput } from './hunt.js';
 import { chestStorageKeyOf } from '../tile-overrides.js';
+import type { FieldOwner } from '../fields.js';
 import { createCityRuleset } from './city.js';
 
 // O resolver canônico é ENVOLVIDO, não substituído (CMB-02): o `vi.fn` delega para a
@@ -13683,17 +13684,21 @@ describe('runa de campo e parede do jogador (#591: Fire/Poison/Energy Field/Wall
     expect(new Set(tiles.map((t) => t.x))).toEqual(new Set([target.x - 1, target.x, target.x + 1]));
   });
 
-  it('Magic Wall bloqueia jogador E monstro, como parede — some ao vencer', () => {
-    const { session, hero, ruleset } = withSpells(cast('magic-wall-591'), {
+  it('Magic Wall: planta o campo bloqueante com o PERSONAGEM de dono, e some ao vencer', () => {
+    const { session, ruleset } = withSpells(cast('magic-wall-591'), {
       gold: 1_000, supplies: [...supplies, magicWallRune], monsters: false,
     });
-    const ahead = { x: hero.position.x + 1, y: hero.position.y, z: hero.position.z };
-    expect(ruleset.useSlot(session, 'hero', 0, 0, at(ahead.x, ahead.y))).toEqual({ ok: true });
-    expect(ruleset.requestMove(session, hero.id, ahead)).toEqual({ ok: false, reason: 'tile-blocked' });
+    // (3,2) é interior da sala e fora da rota de perímetro: o herói não a pisa enquanto o tempo
+    // corre, então quem a tira é o vencimento. Desde a OW-05 (#826) a parede do personagem cede ao
+    // passo dele — "bloqueia jogador E monstro" deixou de valer, e o que ela faz com cada um tem
+    // o describe próprio (`campo com dono`) mais abaixo.
+    expect(ruleset.useSlot(session, 'hero', 0, 0, at(3, 2))).toEqual({ ok: true });
+    expect(ruleset.fields[0]).toMatchObject({
+      blocksMovement: true, owner: { kind: 'character', id: 'hero' },
+    });
 
     session.advanceBy(21_000);
     expect(ruleset.fields).toHaveLength(0);
-    expect(ruleset.requestMove(session, hero.id, ahead)).toMatchObject({ ok: true, to: ahead });
   });
 
   it('Destroy Field remove campo destrutível; recusa `no-target` sem campo (sem gastar); recusa remover campo bloqueante', () => {
@@ -13724,6 +13729,307 @@ describe('runa de campo e parede do jogador (#591: Fire/Poison/Energy Field/Wall
     session.advanceBy(1_100);
     expect(ruleset.useSlot(session, 'hero', 0, 1, at(2, 2))).toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
     expect(ruleset.fields).toHaveLength(1);
+  });
+
+  // O dono do campo (OW-05, #826, ADR 0060 d.8): o no-pvp do Canary aplicado ao campo. O campo
+  // lançado por personagem — ou por invocação de personagem — não fere personagem nem invocação
+  // de personagem, e a parede dele cede a quem é personagem (a variante SEGURA, `combat.cpp:
+  // 1207-1218`, `2594-2640`, `tile.cpp:864-876`). Campo de mapa e de monstro seguem como sempre.
+  describe('campo com dono: o campo de personagem não fere personagem (OW-05, #826)', () => {
+    const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 }, minimumDamageFraction: 0 };
+    // Alvo parado, sem ataque e com vida de sobra: só o campo pode mexer na vida dele.
+    const dummyRat = { ...rat, health: 100_000, attack: 0, aggroRadius: 0 };
+    const FULL = 1_000_000;
+    const OWNER_HERO: FieldOwner = { kind: 'character', id: 'hero' };
+    const center = { x: 2, y: 2, z: 7 };
+    const fireCondition = {
+      key: 'fire', merge: 'refresh' as const, durationMs: 20_000,
+      effect: {
+        kind: 'damage-over-time' as const, form: 'rounds' as const,
+        rounds: [{ count: 40, intervalMs: 500, damage: 10 }], damageType: 'fire' as const,
+      },
+    };
+    // Raio 5 a partir de (2,2) cobre a sala inteira (x 1..4, y 1..3): quem anda pela rota está
+    // SEMPRE dentro do campo, e recebe o tique do campo E o de cada entrada (`#enterField`) — os
+    // dois caminhos que o portão precisa barrar.
+    const wideFire = (id = 'owned-fire'): FieldSpec => ({
+      id, durationMs: 20_000,
+      shape: { shape: 'circle', radius: 5, centered: 'caster' },
+      condition: fireCondition,
+    });
+    const wall = (id: string): FieldSpec => ({
+      id, durationMs: 20_000,
+      shape: { shape: 'circle', radius: 0, centered: 'caster' },
+      blocksMovement: true,
+    });
+
+    /** Uma party de dois (`hero` e `ally`) e um rato parado, tudo dentro da sala. */
+    const scene = () => {
+      const made = withSpells(botConfig(), { monstersRaw: [dummyRat], combat: [pacifist], health: FULL });
+      const ally = new CharacterRuntime({ ...made.hero.getState(), id: 'ally' });
+      made.session.enter(ally);
+      made.session.advanceBy(100); // o rato nasce
+      const wild = made.ruleset.monsters[0];
+      if (wild === undefined) throw new Error('sem monstro nesta cena');
+      return { ...made, ally, wild };
+    };
+
+    it('A lança fire field sob B: B não toma dano, o lançador também não, e o monstro no mesmo campo toma', () => {
+      const { session, hero, ally, ruleset, wild } = scene();
+      ruleset.applyField(session, wideFire(), center, 'spell', 'south', OWNER_HERO);
+      run(session, 3_000, 100);
+
+      expect(hero.health).toBe(FULL); // o lançador não se fere no próprio campo
+      expect(ally.health).toBe(FULL); // nem o companheiro de party
+      expect(wild.health).toBeLessThan(100_000); // o monstro continua levando
+    });
+
+    it('o campo SEM dono (de mapa) e o de MONSTRO seguem ferindo personagem — a hunt de sempre', () => {
+      for (const owner of [undefined, { kind: 'monster', id: 'm:99' } as const]) {
+        const { session, hero, ally, ruleset, wild } = scene();
+        ruleset.applyField(session, wideFire(), center, 'spell', 'south', owner);
+        run(session, 3_000, 100);
+
+        expect(hero.health).toBeLessThan(FULL);
+        expect(ally.health).toBeLessThan(FULL);
+        expect(wild.health).toBeLessThan(100_000);
+      }
+    });
+
+    it('relançar o MESMO id troca o dono: o campo relançado sem dono volta a ferir', () => {
+      const { session, hero, ruleset } = scene();
+      ruleset.applyField(session, wideFire(), center, 'spell', 'south', OWNER_HERO);
+      expect(ruleset.fields[0]?.owner).toEqual(OWNER_HERO);
+      ruleset.applyField(session, wideFire(), center);
+      expect(ruleset.fields[0]?.owner).toBeUndefined();
+      expect(ruleset.fields).toHaveLength(1);
+
+      run(session, 3_000, 100);
+      expect(hero.health).toBeLessThan(FULL);
+    });
+
+    it('a runa de campo grava o PERSONAGEM que a lançou como dono', () => {
+      const { session, ruleset } = withSpells(cast('fire-field-591'), {
+        gold: 1_000, supplies: [...supplies, fireFieldRune], monsters: false,
+      });
+      expect(ruleset.useSlot(session, 'hero', 0, 0, at(3, 3))).toEqual({ ok: true });
+      expect(ruleset.fields[0]?.owner).toEqual({ kind: 'character', id: 'hero' });
+    });
+
+    it('o dono atravessa os estágios: o campo de personagem decaído segue não ferindo personagem', () => {
+      const weaker = { ...fireCondition, effect: { ...fireCondition.effect, rounds: [{ count: 40, intervalMs: 500, damage: 5 }] } };
+      const chain: FieldSpec = {
+        id: 'owned-chain', durationMs: 1_000,
+        shape: { shape: 'circle', radius: 5, centered: 'caster' },
+        stages: [
+          { durationMs: 1_000, condition: fireCondition },
+          { durationMs: 5_000, condition: weaker },
+          { durationMs: 600 },
+        ],
+      };
+      const { session, hero, ruleset } = withSpells(botConfig(), { monsters: false, health: FULL });
+      ruleset.applyField(session, chain, center, 'spell', 'south', OWNER_HERO);
+      session.advanceBy(1_001);
+      expect(ruleset.fields[0]).toMatchObject({ stageIndex: 1, owner: OWNER_HERO });
+      session.advanceBy(5_000);
+      expect(ruleset.fields[0]).toMatchObject({ stageIndex: 2, owner: OWNER_HERO });
+      expect(hero.health).toBe(FULL);
+    });
+
+    it('a invocação do personagem conta como personagem: o campo dele não a fere, o de mapa fere', () => {
+      const tank = {
+        id: 'minion', name: 'Minion', recommendedLevel: 1,
+        health: 100_000, experience: 0, attack: 0, armor: 0,
+        attackIntervalMs: 2_000, speed: 300, aggroRadius: 0, attackRange: 1,
+        loot: { items: [] }, summonable: true, manaCost: 20,
+      };
+      const summonSpell = {
+        id: 'summon-test', name: 'Summon Creature (teste)', manaCost: 0, cooldownMs: 200,
+        effect: { kind: 'summon' as const },
+      };
+      const build = (owner: FieldOwner | undefined) => {
+        const made = withSpells(
+          botConfigV2([{ do: { kind: 'spell' as const, spellId: 'summon-test', monsterId: 'minion' } }]),
+          {
+            spells: [...spells, summonSpell], monstersRaw: [dummyRat, tank], mana: 200,
+            combat: [pacifist], health: FULL,
+          },
+        );
+        run(made.session, 150, 50); // o bot invoca e o rato nasce
+        made.ruleset.applyField(made.session, wideFire(), center, 'spell', 'south', owner);
+        run(made.session, 3_000, 100);
+        const summons = made.ruleset.monsters.filter((m) => m.masterId === 'hero');
+        const wild = made.ruleset.monsters.filter((m) => m.monsterId === 'rat');
+        return { summons, wild, hero: made.hero };
+      };
+
+      const owned = build(OWNER_HERO);
+      expect(owned.summons.length).toBeGreaterThan(0);
+      expect(owned.summons.every((m) => m.health === 100_000)).toBe(true);
+      expect(owned.hero.health).toBe(FULL);
+      expect(owned.wild.length).toBeGreaterThan(0);
+      expect(owned.wild.every((m) => m.health < 100_000)).toBe(true);
+
+      const mapField = build(undefined);
+      expect(mapField.summons.length).toBeGreaterThan(0);
+      expect(mapField.summons.every((m) => m.health < 100_000)).toBe(true);
+    });
+
+    it('o campo lançado pela INVOCAÇÃO do personagem é do PERSONAGEM (o mestre), não do monstro', () => {
+      const burner = {
+        id: 'burner', name: 'Burner', recommendedLevel: 1,
+        health: 100_000, experience: 0, attack: 0, armor: 0,
+        attackIntervalMs: 2_000, speed: 300, aggroRadius: 0, attackRange: 1,
+        loot: { items: [] }, summonable: true, manaCost: 20,
+        abilities: [{
+          id: 'burn', cadenceMs: 500, chance: 1, target: { range: 6 }, power: 0,
+          damageType: 'fire' as const,
+          field: {
+            id: 'burner-fire', durationMs: 20_000,
+            shape: { shape: 'circle' as const, radius: 1, centered: 'target' as const },
+            condition: fireCondition,
+          },
+        }],
+      };
+      const summonSpell = {
+        id: 'summon-test', name: 'Summon Creature (teste)', manaCost: 0, cooldownMs: 200,
+        effect: { kind: 'summon' as const },
+      };
+      const { session, ruleset } = withSpells(
+        botConfigV2([{ do: { kind: 'spell' as const, spellId: 'summon-test', monsterId: 'burner' } }]),
+        {
+          // O rato PERSEGUE (`aggroRadius` > 0, sem ataque): é ele chegando ao herói que lhe dá
+          // alvo, e a invocação herda o alvo do mestre — sem alvo a ability não dispara.
+          spells: [...spells, summonSpell], monstersRaw: [{ ...dummyRat, aggroRadius: 4 }, burner],
+          mana: 200, combat: [pacifist], health: FULL,
+        },
+      );
+      run(session, 5_000, 100);
+      const planted = ruleset.fields.find((f) => f.id === 'burner-fire');
+      expect(planted?.owner).toEqual({ kind: 'character', id: 'hero' });
+    });
+
+    it('a parede de personagem não barra o personagem: o passo segue, a parede some e a fila fica limpa', () => {
+      const { session, hero, ruleset } = withSpells(cast('magic-wall-591'), {
+        gold: 1_000, supplies: [...supplies, magicWallRune], monsters: false,
+      });
+      const ahead = { x: hero.position.x + 1, y: hero.position.y, z: hero.position.z };
+      expect(ruleset.useSlot(session, 'hero', 0, 0, at(ahead.x, ahead.y))).toEqual({ ok: true });
+      const fieldId = ruleset.fields[0]?.id ?? '';
+      session.drainEvents();
+
+      expect(ruleset.requestMove(session, hero.id, ahead)).toMatchObject({ ok: true, to: ahead });
+      expect(hero.position).toEqual(ahead);
+      // Dissolvida pelo passo: sai do índice, avisa a tela UMA vez e não deixa evento órfão.
+      expect(ruleset.fields).toHaveLength(0);
+      expect(ofKind(session.drainEvents(), 'field-vanished')).toEqual([{ kind: 'field-vanished', fieldId }]);
+      expect(session.snapshot().schedule.events.filter((e) => e.subject === `f:${fieldId}`)).toHaveLength(0);
+      session.advanceBy(21_000); // o vencimento que não existe mais não quebra nada
+      expect(ruleset.fields).toHaveLength(0);
+    });
+
+    it('o bot segue a rota por cima da parede de personagem (ela cede no passo) e para na de mapa', () => {
+      const walk = (owner: FieldOwner | undefined) => {
+        const { session, ruleset } = withSpells(botConfig(), { monsters: false, health: FULL });
+        // (2,1) é o 2º tile da rota de perímetro, a um passo do herói em (1,1).
+        ruleset.applyField(session, wall('route-wall'), { x: 2, y: 1, z: 7 }, 'spell', 'south', owner);
+        run(session, 1_500, 100);
+        return ruleset.fields.length;
+      };
+      expect(walk(OWNER_HERO)).toBe(0);
+      expect(walk(undefined)).toBe(1);
+    });
+
+    it('a parede de MONSTRO barra o personagem como a de mapa', () => {
+      const { session, hero, ruleset } = withSpells(botConfig(), { monsters: false });
+      const ahead = { x: hero.position.x + 1, y: hero.position.y, z: hero.position.z };
+      ruleset.applyField(session, wall('monster-wall'), ahead, 'spell', 'south', { kind: 'monster', id: 'm:1' });
+      expect(ruleset.requestMove(session, hero.id, ahead)).toEqual({ ok: false, reason: 'tile-blocked' });
+      expect(ruleset.fields).toHaveLength(1);
+    });
+
+    it('a parede de personagem segue barrando o MONSTRO — a variante segura só cede a quem é personagem', () => {
+      // A mesma cena do "campo bloqueante impede o passo do MONSTRO" (#560): rato preso em (4,1),
+      // a rota do herói tem só dois tiles e nunca chega a x=3, então quem atravessaria a parede
+      // seria o rato — e ele não atravessa.
+      const stuckRoute = {
+        id: 'wall-stuck-route', mapId: 'arena',
+        tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+        spawnPoints: [{ routeIndex: 0, monsterId: 'rat', respawnDelayMs: 30_000 }],
+      };
+      const stuckHunt = {
+        ...hunt, routeId: 'wall-stuck-route',
+        difficulties: {
+          cautious: {
+            monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000,
+          },
+        },
+      };
+      const loaded = content({ routes: [stuckRoute], hunts: [stuckHunt] });
+      const { session, ruleset } = start({ loaded });
+      session.advanceBy(100);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('sem monstro nesta cena');
+      monster.position = { x: 4, y: 1, z: 7 };
+      ruleset.applyField(session, {
+        id: 'owned-wild-growth', durationMs: 9_999_999,
+        shape: { shape: 'beam', length: 3 }, blocksMovement: true,
+      }, { x: 3, y: 0, z: 7 }, 'spell', 'south', OWNER_HERO);
+
+      run(session, 20_000, 100);
+      expect(monster.position.x).toBe(4); // nunca cruzou
+      expect(ruleset.fields).toHaveLength(1); // e a parede segue de pé
+    });
+
+    it('dissolver a parede revela o campo que estava embaixo, e o passo já o encontra', () => {
+      const { session, hero, ruleset } = withSpells(botConfig(), { monsters: false, health: FULL });
+      const ahead = { x: hero.position.x + 1, y: hero.position.y, z: hero.position.z };
+      const tile = { ...wideFire('under-fire'), shape: { shape: 'circle' as const, radius: 0, centered: 'caster' as const } };
+      ruleset.applyField(session, tile, ahead); // de mapa, por baixo
+      ruleset.applyField(session, wall('owned-wall'), ahead, 'spell', 'south', OWNER_HERO); // o mais recente: por cima
+
+      expect(ruleset.requestMove(session, hero.id, ahead)).toMatchObject({ ok: true, to: ahead });
+      expect(ruleset.fields.map((f) => f.id)).toEqual(['under-fire']);
+      expect(hero.health).toBeLessThan(FULL);
+    });
+
+    it('o dono vai e volta pelo snapshot; o snapshot de ANTES (sem dono) restaura como campo de mapa', () => {
+      const made = withSpells(botConfig(), { monsters: false, health: FULL });
+      made.ruleset.applyField(made.session, wideFire(), center, 'spell', 'south', OWNER_HERO);
+      run(made.session, 1_000, 100);
+      const snapshot = JSON.parse(JSON.stringify(made.session.snapshot())) as SessionSnapshot;
+      // O formato de antes da OW-05: nenhum campo tinha `owner`. Sem subir `SNAPSHOT_FORMAT_VERSION`.
+      const legacy = JSON.parse(
+        JSON.stringify(snapshot, (key, value: unknown) => (key === 'owner' ? undefined : value)),
+      ) as SessionSnapshot;
+
+      const resume = (from: SessionSnapshot) => {
+        const resumed = Session.fromSnapshot(
+          from, huntRulesetFromSnapshot(from, made.content) as HuntRuleset, Rng.fromSeed('spell-session'),
+        );
+        const resumedHero = resumed.participants[0] as CharacterRuntime;
+        const before = resumedHero.health;
+        run(resumed, 1_500, 100);
+        return { owner: (resumed.ruleset as HuntRuleset).fields[0]?.owner, lost: before - resumedHero.health };
+      };
+      expect(resume(snapshot)).toEqual({ owner: OWNER_HERO, lost: 0 });
+      const old = resume(legacy);
+      expect(old.owner).toBeUndefined();
+      expect(old.lost).toBeGreaterThan(0);
+    });
+
+    it('o campo de personagem rende o MESMO a 10 Hz e a 1 Hz (invariante 2)', () => {
+      const runAt = (hz: number) => {
+        const { session, hero, ally, ruleset, wild } = scene();
+        ruleset.applyField(session, wideFire(), center, 'spell', 'south', OWNER_HERO);
+        run(session, 30_000, 1000 / hz);
+        return { hero: hero.health, ally: ally.health, wild: wild.health, kills: session.aggregates.kills };
+      };
+      const slow = runAt(1);
+      expect(slow.hero).toBe(FULL);
+      expect(slow.wild).toBeLessThan(100_000);
+      expect(slow).toEqual(runAt(10));
+    });
   });
 });
 

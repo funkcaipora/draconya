@@ -59,6 +59,20 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grrrr",
+          "yell": false
+        },
+        {
+          "text": "Groar",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -279,6 +293,29 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Olho por Olho!",
+          "yell": false
+        },
+        {
+          "text": "Estou olhando para voce!",
+          "yell": false
+        },
+        {
+          "text": "Deixe-me dar uma olhada em voce!",
+          "yell": false
+        },
+        {
+          "text": "Voce tem o olhar!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -359,6 +396,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -585,6 +623,7 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -650,6 +689,20 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Oink oink",
+          "yell": false
+        },
+        {
+          "text": "Oink",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -718,6 +771,7 @@
     "runOnHealth": 6,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 310000,
@@ -809,6 +863,17 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Bssssss",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -877,6 +942,20 @@
     "runOnHealth": 8,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Yoooohhuuuu!",
+          "yell": false
+        },
+        {
+          "text": "Grrrrrrr",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,

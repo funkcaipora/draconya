@@ -949,7 +949,36 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   `damageType`. Um campo com `blocksMovement: true` e SEM condição (Magic Wall, Wild Growth)
   ainda passa pelo pipeline de tique normalmente — `#onFieldTick`/`#enterField` só saem cedo
   quando `field.condition === undefined`, o mesmo `undefined` que o estágio mudo de uma cadeia
-  também usa.
+  também usa. **Uma exceção desde a OW-05 (#826): a parede de PERSONAGEM cede a quem é
+  personagem — ver o item do campo com dono, logo abaixo.**
+- **O campo tem DONO, e quem o lançou decide em quem ele pega** (OW-05, #826, ADR 0060 d.8 — o
+  no-pvp do Canary aplicado ao campo, `combat.cpp:1207-1218`/`2594-2640`,
+  `condition.cpp:2015-2020`). `TileFieldState.owner?: { kind: 'character' | 'monster', id }`,
+  gravado por `applyField` (o sexto parâmetro, opcional). Quatro armadilhas. (1) **Sem `owner` é
+  campo de MAPA e pega todo mundo** — é o que todo snapshot anterior restaura, sem subir
+  `SNAPSHOT_FORMAT_VERSION`, e o que o teste que planta campo direto sempre foi; um call site
+  novo de `applyField` que esquecer o `owner` cria campo que fere a party inteira, em silêncio.
+  (2) **Invocação de personagem é PERSONAGEM, dos dois lados**: o campo lançado por ela grava o
+  MESTRE (`#fieldOwnerOf`, `kind: 'character'`), e ela mesma é protegida do campo de personagem
+  (`#fieldHarms` confere `typeof masterId === 'string'`, como o `canDoCombat` do Canary recusa
+  `target->isSummon() && targetMasterPlayer` num mundo no-pvp). Monstro que não é invocação de
+  personagem segue levando o campo de personagem — o que o teste da party confere. (3) **O
+  portão roda ANTES de montar a condição**, no tique (`#onFieldTick`) e na entrada (`#enterField`):
+  `conditionFromSpec` pode consumir `session.rng`, e quem o campo não fere não gasta sorteio
+  (a sequência dos outros alvos é a mesma de antes). (4) **A parede de personagem é a variante
+  SEGURA**: segue barrando monstro e invocação, mas `Movable.dissolvesSafeWalls` (só
+  `CharacterRuntime` declara) faz `canOccupy`/`move` a admitirem, e `HuntRuleset#step` a remove
+  depois do passo aceito (`#dissolveSafeWall` → `#removeField`, que cancela os três eventos do
+  campo) — ANTES de `#enterField`, porque `Fields.at` devolve só o campo mais recente e o que
+  estava embaixo da parede é o que o passo encontra. Qualquer PERSONAGEM a dissolve, não só o
+  lançador (o Canary confere `creature->getPlayer()`, nunca o dono). O BFS do follow passa o
+  quarto argumento de `blockedAt` pelo mesmo motivo; um predicado novo de caminho de PERSONAGEM
+  que chame `blockedAt` de três argumentos trata a parede dele como intransponível, em desacordo
+  com o passo. O dono também atravessa os estágios (`#onFieldStageAdvance` o repassa) e o
+  relançamento do mesmo id o troca. **NÃO muda o crédito do dano do campo**: a condição do
+  campo segue com `sourceId` = id do campo, e o abate por campo de personagem não credita XP ao
+  dono (no Canary o dono vai no `CONDITION_PARAM_OWNER`) — divergência registrada, pendente do
+  crédito do Canary (OW-28).
 - **`isSightClear`'s atalho "sem camada de sight, sempre livre" escondia um bug de LIMITE, e
   isso só apareceu ao tentar ligar o predicado de campo (#560).** Antes, mapa sem `sight`
   devolvia `true` ANTES de percorrer a linha — nunca chegava a conferir `x/y` contra

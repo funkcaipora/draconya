@@ -219,6 +219,23 @@
       "random": 10
     },
     "staticAttack": 0.8,
+    "outfit": {
+      "head": 18,
+      "body": 124,
+      "legs": 74,
+      "feet": 81,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grrr",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -452,6 +469,20 @@
     "runOnHealth": 275,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "SNUFFLE",
+          "yell": true
+        },
+        {
+          "text": "Sniff Sniff",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -663,6 +694,20 @@
     "runOnHealth": 275,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "GROOOWL",
+          "yell": true
+        },
+        {
+          "text": "GRRR",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -866,6 +911,16 @@
     "runOnHealth": 275,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "GRUNT",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1082,6 +1137,13 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 95,
+      "body": 117,
+      "legs": 4,
+      "feet": 116,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1277,6 +1339,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 910000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Yelp!",
+          "yell": false
+        },
+        {
+          "text": "Grrrrrr",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1495,6 +1571,13 @@
     "runOnHealth": 5,
     "staticAttack": 0.9,
     "corpseTtlMs": 2110000,
+    "outfit": {
+      "head": 0,
+      "body": 2,
+      "legs": 0,
+      "feet": 94,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1722,6 +1805,23 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 114,
+      "body": 114,
+      "legs": 67,
+      "feet": 122,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grrr",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,

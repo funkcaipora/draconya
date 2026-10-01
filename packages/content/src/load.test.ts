@@ -726,6 +726,26 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     }
   });
 
+  it('os 4 spellbooks do Canary com capacidade de magic shield a carregam no catálogo real (#627, M44-09)', () => {
+    // `magicshieldCapacityflat`/`percent` do items.xml (47dfd51) — o dado declarado, sem consumidor
+    // no `sim` (o Canary só o lê para descrição de item e Cyclopedia; ver `itemSchema`).
+    const { items } = loadContent(DATA);
+    const capacity = (id: string) => items.get(id)?.bonuses?.magicShieldCapacity;
+    expect(capacity('eldritch-folio')).toEqual({ flat: 80, percent: 8 });
+    expect(capacity('eldritch-tome')).toEqual({ flat: 80, percent: 8 });
+    expect(capacity('cocoa-grimoire')).toEqual({ flat: 150, percent: 3 });
+    expect(capacity('creamy-grimoire')).toEqual({ flat: 150, percent: 3 });
+    // E só esses quatro: mais um item com o campo seria um importador lendo o que não devia.
+    const withCapacity = [...items.values()].filter((item) => item.bonuses?.magicShieldCapacity !== undefined);
+    expect(withCapacity.map((item) => item.id).sort())
+      .toEqual(['cocoa-grimoire', 'creamy-grimoire', 'eldritch-folio', 'eldritch-tome']);
+  });
+
+  it('nenhum item do catálogo real carrega elementalBond: os 32 do Canary são arma fist, fora do corte (#627)', () => {
+    const { items } = loadContent(DATA);
+    expect([...items.values()].filter((item) => item.elementalBond !== undefined)).toEqual([]);
+  });
+
   it('data/supplies voltou a existir, e a poção não é mais item (ADR 0026 d.3)', () => {
     expect(existsSync(join(DATA, 'supplies'))).toBe(true);
     const content = loadContent(DATA);
@@ -1724,6 +1744,61 @@ describe('a perda de item na morte do conteúdo real (#571, ADR 0042 decisão 4)
     // E é o ÚNICO colar que protege: qualquer outro com a flag seria uma proteção não declarada.
     const protectors = [...items.values()].filter((item) => item.protectsOnDeath).map((item) => item.id);
     expect(protectors).toEqual(['amulet-of-loss']);
+  });
+});
+
+describe('a apresentação do monstro no conteúdo real (#620, M44-02)', () => {
+  // Números do Canary (`data-otservbr-global/monster/*`, conferidos em 2026-09-30): os campos
+  // `monster.outfit.look*`, `monster.voices`, `monster.light` e `monster.race` são apresentação —
+  // nenhum deles entra em combate, e nenhum é arte.
+  const content = loadContent(DATA);
+  const { monsters } = content;
+  const { appearances } = content;
+  if (appearances === undefined) throw new Error('o conteúdo real não carregou a tabela de aparências');
+
+  it('o Rat fala, e o Dragon grita — `voices` do Canary, com intervalo 5000 ms e chance 10', () => {
+    expect(monsters.get('rat')?.voices).toEqual({
+      intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!', yell: false }],
+    });
+    const dragon = monsters.get('dragon')?.voices;
+    expect(dragon?.lines.map((line) => line.text)).toEqual(['FCHHHHH', 'GROOAAARRR']);
+    expect(dragon?.lines.every((line) => line.yell)).toBe(true);
+    // O Rotworm não declara fala com linha: mudo.
+    expect(monsters.get('rotworm')?.voices).toBeUndefined();
+  });
+
+  it('o Fire Elemental brilha (nível 4, cor 208) e queima; o Dark Magician traz as cores e o addon do Canary', () => {
+    expect(monsters.get('fire-elemental')).toMatchObject({ light: { level: 4, color: 208 }, race: 'fire' });
+    expect(monsters.get('dark-magician')?.outfit).toEqual({ head: 58, body: 95, legs: 51, feet: 131, addons: 2 });
+    // O `lookType` é o `outfitId` da tabela de aparências, nunca um campo do monstro (invariante 6).
+    expect(monsters.get('dark-magician')?.outfitId).toBe(appearances.monsters['dark-magician']);
+  });
+
+  it('o monstro comum não paga nada: sem `outfit`, `light`, `race` — o default do Canary é `blood` e cor 0', () => {
+    const rotworm = monsters.get('rotworm');
+    for (const field of ['outfit', 'light', 'race'] as const) expect(rotworm?.[field], field).toBeUndefined();
+  });
+
+  it('as contagens do catálogo: 238 com cores/addons, 567 com falas, 59 com luz e 412 com raça que não é `blood`', () => {
+    // Uma reimportação que mude isto sem querer (um leitor que passou a ler outra coisa) reprova
+    // aqui — `pnpm catalog:import monsters` é o único que as muda, e o relatório as conta.
+    const all = [...monsters.values()];
+    expect(all.filter((monster) => monster.outfit !== undefined)).toHaveLength(238);
+    expect(all.filter((monster) => monster.voices !== undefined)).toHaveLength(567);
+    expect(all.filter((monster) => monster.light !== undefined)).toHaveLength(59);
+    const races = new Map<string, number>();
+    for (const monster of all) if (monster.race !== undefined) races.set(monster.race, (races.get(monster.race) ?? 0) + 1);
+    expect(Object.fromEntries(races)).toEqual({ undead: 232, venom: 127, fire: 42, ink: 9, candy: 1, chocolate: 1 });
+  });
+
+  it('o efeito do golpe físico tem uma linha por raça, com os ids do Canary (`CONST_ME_*`)', () => {
+    // `Game::combatGetTypeInfo`: sangue 1, veneno 17, hit area 10 (morto-vivo e tinta), energia 12,
+    // cacau 270 e xarope 269; fogo reusa o sangue. Mutação que mata: uma raça sem linha — o golpe
+    // nela cairia em `hits.melee` sem ninguém notar.
+    expect(appearances.hits.byRace).toEqual({
+      blood: 1, venom: 17, undead: 10, fire: 1, energy: 12, ink: 10, chocolate: 270, candy: 269,
+    });
+    expect(appearances.hits.melee).toBe(1);
   });
 });
 
