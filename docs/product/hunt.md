@@ -675,6 +675,36 @@ encerramento.
 Level up é notável justamente por contraste com o abate: é a única coisa que aconteceu numa hunt
 de oito horas que o jogador quer ver ao voltar.
 
+### A topologia da sessão: o que supõe "sessão = party" (OW-12, ADR 0060 d.4)
+
+O `HuntRuleset` nasceu para uma sessão que **é** uma party, e a hunt é a base econômica do jogo:
+tudo o que supõe isso mora agora num objeto, a `SessionTopology` de
+`packages/sim/src/rulesets/topology.ts`, que o ruleset recebe em `HuntRulesetOptions.topology`.
+Ausente, vale a `instanceTopology` — o
+código de antes da costura, **sem tocar numa condição**: a hunt, solo e party, sai byte a byte a
+de sempre (as sequências do FUN-63, 1 Hz = 10 Hz, a retomada de snapshot
+e o `pnpm bench:hunts` são o portão). A topologia não vai no snapshot e não muda o formato dele.
+
+Hoje só a instância existe. O mundo aberto (ADR 0060) usa o mesmo motor com outra topologia, e é a
+OW-13 que a escreve; esta costura só abre a porta.
+
+| Pergunta | Na instância (o de hoje) |
+|---|---|
+| quem leva a contagem do abate (`creditKill`) | todo presente |
+| quem pode receber a XP (`rewardEligible`) | solo: o matador; party: todo presente vivo e com stamina |
+| quem recebe o loot (`lootRecipient`) | solo: o matador, sem sorteio; party `split`: um elegível sorteado; `shared`: ninguém, vai para a bolsa |
+| o que acontece quando esvazia (`onEmpty`) | a sessão acaba |
+| quem lidera (`leaderOf`, `onLeaderGone`) | o líder da party, ou o mais antigo; quem fica assume |
+| o que a morte e a saída concluída fazem (`onCharacterDied`, `onExitFinished`) | solo encerra; party solta quem saiu com o extrato dele |
+| o que nasce com o primeiro corredor (`startsInstanceSchedules`) | o spawn inicial e as regras de saída |
+| onde quem entra é colocado (`placeOnEnter`) | o primeiro no tile inicial da rota, o segundo no livre mais próximo |
+| a rota, as regras de saída e a stamina por tempo (`runsRouteWalker`, `runsExitRules`, `burnsStaminaByTime`) | valem |
+| se o extrato nomeia o dono (`namesOwnerInEvents`) | só com mais de um presente |
+
+Cada uso de `session.participants` do ruleset foi classificado — o que é "criaturas presentes" e
+fica, o que é "roster da party" e foi para a topologia, e o que ainda é roster sem guarda e tem
+dono — em [`session-topology-audit.md`](../session-topology-audit.md).
+
 ## Como se entra numa hunt
 
 Pelo menu, e a entrada é uma **transição de estado do personagem** (§6), não uma criação de
