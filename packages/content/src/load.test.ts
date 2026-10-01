@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from './load.js';
-import { floorChangeAt, isBlocked } from './map.js';
+import { absoluteToLocal, floorChangeAt, isBlocked, localToAbsolute } from './map.js';
 import { BOT_CATEGORIES, manaCostDisplayOf, NEUTRAL_RATES } from './schemas.js';
 
 const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
@@ -726,6 +726,26 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     }
   });
 
+  it('os 4 spellbooks do Canary com capacidade de magic shield a carregam no catálogo real (#627, M44-09)', () => {
+    // `magicshieldCapacityflat`/`percent` do items.xml (47dfd51) — o dado declarado, sem consumidor
+    // no `sim` (o Canary só o lê para descrição de item e Cyclopedia; ver `itemSchema`).
+    const { items } = loadContent(DATA);
+    const capacity = (id: string) => items.get(id)?.bonuses?.magicShieldCapacity;
+    expect(capacity('eldritch-folio')).toEqual({ flat: 80, percent: 8 });
+    expect(capacity('eldritch-tome')).toEqual({ flat: 80, percent: 8 });
+    expect(capacity('cocoa-grimoire')).toEqual({ flat: 150, percent: 3 });
+    expect(capacity('creamy-grimoire')).toEqual({ flat: 150, percent: 3 });
+    // E só esses quatro: mais um item com o campo seria um importador lendo o que não devia.
+    const withCapacity = [...items.values()].filter((item) => item.bonuses?.magicShieldCapacity !== undefined);
+    expect(withCapacity.map((item) => item.id).sort())
+      .toEqual(['cocoa-grimoire', 'creamy-grimoire', 'eldritch-folio', 'eldritch-tome']);
+  });
+
+  it('nenhum item do catálogo real carrega elementalBond: os 32 do Canary são arma fist, fora do corte (#627)', () => {
+    const { items } = loadContent(DATA);
+    expect([...items.values()].filter((item) => item.elementalBond !== undefined)).toEqual([]);
+  });
+
   it('data/supplies voltou a existir, e a poção não é mais item (ADR 0026 d.3)', () => {
     expect(existsSync(join(DATA, 'supplies'))).toBe(true);
     const content = loadContent(DATA);
@@ -777,6 +797,83 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     // Se este teste reprovou: o id saiu do arquivo da entidade na FUN-94 e vive em
     // `data/appearances/baseline.json`, uma linha por id de conteúdo.
     expect(ofensores).toEqual([]);
+  });
+});
+
+describe('o mundo do conteúdo real (#829, OW-08, ADR 0060)', () => {
+  it('o `main` é Thais pacífica: no-pvp, mapa thais, uma cidade, templo no tile andável e teto 200', () => {
+    // Apagar `worlds/` de `load.ts` deixa o servidor sem mundo e sem aviso — esta é a mutação que
+    // o teste mata. O formato é o do issue: { id, name, worldType, map, towns, capacity }.
+    const content = loadContent(DATA);
+    const world = content.worlds.get('main');
+    if (world === undefined) throw new Error('o conteúdo real não tem o mundo "main"');
+    expect(world).toEqual({
+      id: 'main', name: 'Draconya', worldType: 'no-pvp', map: 'thais',
+      towns: [{ id: 'thais', name: 'Thais', temple: { x: 32369, y: 32241, z: 7 } }],
+      capacity: 200,
+    });
+    expect(content.worlds.size).toBe(1);
+  });
+
+  it('o templo de Thais cai num tile andável do recorte, traduzido pelo `source.region`', () => {
+    const content = loadContent(DATA);
+    const world = content.worlds.get('main');
+    const map = content.maps.get(world?.map ?? '');
+    const temple = world?.towns[0]?.temple;
+    if (map === undefined || temple === undefined) throw new Error('mundo sem mapa ou sem templo');
+    // x 32275 + 94 = 32369 e y 32153 + 88 = 32241: o templo é o `entryPoint` que a Cidade já usa.
+    const local = absoluteToLocal(map, temple);
+    expect(local).toEqual({ x: 94, y: 88, z: 7 });
+    expect(local).toEqual(map.entryPoint);
+    expect(isBlocked(map, 94, 88, 7)).toBe(false);
+    // O que o recorte diz de si é o que traduz: a origem é a de `source.region`, e a volta fecha.
+    expect(map.source?.region.x[0]).toBe(32275);
+    expect(map.source?.region.y[0]).toBe(32153);
+    expect(localToAbsolute(map, { x: 94, y: 88, z: 7 })).toEqual(temple);
+  });
+
+  it('o mundo roda sobre o mesmo mapa da Cidade, que hoje é o do primeiro mundo (ADR 0060 d.3.a)', () => {
+    const content = loadContent(DATA);
+    expect(content.worlds.get('main')?.map).toBe(content.city?.id);
+  });
+
+  it('o mundo não leva arte: só ids de conteúdo, e `worlds/` passa nas varreduras de arte', () => {
+    // As duas varreduras abaixo já percorrem `data/` inteiro, `worlds/` incluso; aqui se prende
+    // que o arquivo existe e só tem as chaves do schema, sem `appearanceId` nem caminho de imagem.
+    const text = readFileSync(join(DATA, 'worlds', 'main.json'), 'utf8');
+    expect(Object.keys(JSON.parse(text) as object).sort())
+      .toEqual(['capacity', 'id', 'map', 'name', 'towns', 'worldType']);
+    expect(text).not.toMatch(/appearanceId|outfitId|\.(png|jpe?g|gif|webp|bmp|spr|dat)\b/i);
+  });
+
+  it('um worldType desconhecido no arquivo derruba o boot', () => {
+    // `retro-pvp` é um valor real do Canary (`config.lua.dist:33`) que o motor não implementa.
+    const copy = mkdtempSync(join(tmpdir(), 'draconya-content-'));
+    try {
+      cpSync(DATA, copy, { recursive: true });
+      const file = join(copy, 'worlds', 'main.json');
+      const text = readFileSync(file, 'utf8');
+      expect(text).toMatch(/"worldType": "no-pvp"/);
+      writeFileSync(file, text.replace('"worldType": "no-pvp"', '"worldType": "retro-pvp"'));
+      expect(() => loadContent(copy)).toThrow(/world "main": worldType/);
+    } finally {
+      rmSync(copy, { recursive: true, force: true });
+    }
+  });
+
+  it('o templo em parede, no arquivo, derruba o boot: quebra no servidor e não no personagem', () => {
+    const copy = mkdtempSync(join(tmpdir(), 'draconya-content-'));
+    try {
+      cpSync(DATA, copy, { recursive: true });
+      const file = join(copy, 'worlds', 'main.json');
+      const text = readFileSync(file, 'utf8');
+      // (32283, 32153, 7) é o tile local (8,0) do andar 7 de Thais: parede, na borda de cima.
+      expect(text).toContain('"x": 32369, "y": 32241');
+      writeFileSync(file, text.replace('"x": 32369, "y": 32241', '"x": 32283, "y": 32153'));
+      expect(() => loadContent(copy)).toThrow(/templo \(32283,32153,7\), no tile \(8,0,7\) do mapa "thais"/);
+    } finally {
+      rmSync(copy, { recursive: true, force: true });
+    }
   });
 });
 

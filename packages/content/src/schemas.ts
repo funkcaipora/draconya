@@ -57,6 +57,16 @@ export const SPECIALIZED_MAGIC_ELEMENTS = [
 export type SpecializedMagicElement = (typeof SPECIALIZED_MAGIC_ELEMENTS)[number];
 
 /**
+ * Os três valores que o `elementalbond` de `items.xml` aceita: `ItemParse::parseElementalBond`
+ * (`item_parse.cpp:764-778`, Canary 47dfd51) só reconhece `energy`, `earth` e `physical` — qualquer
+ * outro texto deixa o bond em `COMBAT_NONE`. O `fire`/`ice` que `Combat::monkEffectByElementalBond`
+ * (`combat.cpp:1105-1141`) também trata nunca sai do parser: são variantes de efeito de um bond que
+ * o XML não consegue declarar, e não entram aqui.
+ */
+export const ELEMENTAL_BOND_TYPES = ['physical', 'earth', 'energy'] as const;
+export type ElementalBondType = (typeof ELEMENTAL_BOND_TYPES)[number];
+
+/**
  * Proveniência de uma entidade GERADA pelo importador de catálogo (ADR 0038 decisão 2): de qual
  * engine, commit e arquivo do Canary/TFS o número saiu — o mesmo `CatalogSource` que
  * `scripts/catalog/generated-writer.ts` grava por entidade em `<tipo>/generated/*.json`, e o
@@ -1014,6 +1024,22 @@ export const itemSchema = z.strictObject({
     }).refine((r) => r.healthGain > 0 || r.manaGain > 0, 'regeneração sem ganho').optional(),
     /** Condições que o item suprime enquanto vestido (`suppress*` do Canary). */
     suppress: z.array(z.enum(SUPPRESSIBLE_CONDITIONS)).min(1).optional(),
+    /**
+     * A CAPACIDADE DE MAGIC SHIELD do item (#627, M44-09): o `magicshieldCapacityflat` e o
+     * `magicshieldCapacitypercent` do `items.xml` (4 itens — eldritch folio/tome, cocoa e creamy
+     * grimoire), os dois inteiros de `Abilities` (`items.hpp:50-51`), somados pelos equipados
+     * (`Player::getMagicShieldCapacityFlat`/`Percent`, `player.cpp:7633-7681`). É o número
+     * DECLARADO pelo Canary e nada mais: no checkout 47dfd51 ele só é LIDO pela descrição do item
+     * (`item.cpp:134-141`, `:2727-2735`) e pelo pacote de defesa da Cyclopedia
+     * (`protocolgame.cpp:5661-5663`) — `magic_shield.lua` e `ConditionManaShield` montam o
+     * escudo SEM consultá-lo, e nenhum script de `data/` chama o getter. Por isso o `sim` não o lê
+     * (ver `docs/product/items.md`, "Atributos raros"): aplicá-lo ao escudo seria
+     * comportamento que o Canary não tem.
+     */
+    magicShieldCapacity: z.strictObject({
+      flat: z.number().int(),
+      percent: z.number().int(),
+    }).refine((c) => c.flat !== 0 || c.percent !== 0, 'capacidade de magic shield sem valor').optional(),
   }).optional(),
   /**
    * Quantos imbuements a peça aceita (ADR 0046, #604) — o `imbuementslot` do Canary
@@ -1051,6 +1077,22 @@ export const itemSchema = z.strictObject({
    * própria de dano (`WeaponMelee::useWeapon`, `weapons.cpp:531-589`). Soma entre os equipados.
    */
   cleavePercent: z.number().int().positive().max(100).optional(),
+  /**
+   * O `elementalbond` do Canary (#627, M44-09; `ItemType::elementalBond`, `items.hpp:296`) — 32
+   * itens em `items.xml`, e TODOS são arma `weapontype="fist"` (sais, katars, bôs e nunchakus).
+   * 30 pedem Monk; `traditional sai` pede Knight (e para o Knight o bond é mudo); e
+   * `transcendent bo` (`items.xml:84976-84998`) não tem script nem vocação, então um Monk o
+   * equipa e o bond dele dispara. É o tipo de dano que TROCA o da magia do Monk quando a arma
+   * está na mão, e são DOIS pontos de leitura com portões diferentes: `Combat::getCombatDamage`
+   * (`combat.cpp:159-174`) só troca o tipo para `VOCATION_MONK_CIP`, magia INSTANTÂNEA e que não
+   * cure; `Combat::sendCombatEffect` (`combat.cpp:1143-1159`) recolore o efeito visual só com o
+   * Monk e uma arma de bond na mão — sem o portão de instantânea/cura. Para qualquer outra
+   * vocação o bond é um atributo mudo. O Monk está fora do corte (ADR 0038 d.5) e a família
+   * `fist` não é declarável (DT-01), então nenhum item do catálogo o carrega hoje e nenhuma
+   * vocação o lê: o campo existe para o importador não perder o dado e para o dia em que o corte
+   * mudar. Só em `kind: 'weapon'` (`buildContent`).
+   */
+  elementalBond: z.enum(ELEMENTAL_BOND_TYPES).optional(),
   /**
    * O item PROTEGE quem o veste da perda de item na morte (#571, ADR 0042 decisão 4) — o
    * Amulet of Loss (`ITEM_AMULETOFLOSS`, id 3057, `src/utils/utils_definitions.hpp:638` do
@@ -5587,6 +5629,70 @@ export type LootTable = z.infer<typeof lootTableSchema>;
 export type LootRoll = NonNullable<LootTable['gold']>;
 export type Hunt = z.infer<typeof huntSchema>;
 export type Vocation = z.infer<typeof vocationSchema>;
+
+// --- mundo (#829, OW-08, ADR 0060) ---------------------------------------------------------
+
+/**
+ * Os tipos de mundo que o motor sabe ser. É o `worldType` do Canary, que aceita "expert-pvp",
+ * "retro-pvp", "pvp", "no-pvp" e "pvp-enforced" (`canary/config.lua.dist:28-33`) — mas o
+ * Draconya só implementa o `no-pvp` (ADR 0060 d.1): não existe dano entre jogadores no `sim`, e
+ * aceitar `retro-pvp` num arquivo de conteúdo seria um mundo que promete o que o motor não faz.
+ * Vocabulário FECHADO, como `COMBAT_PROFILES` (ADR 0031): um tipo novo entra por ADR e por esta
+ * lista, nunca por um valor que passou em silêncio.
+ */
+export const WORLD_TYPES = ['no-pvp'] as const;
+export type WorldType = (typeof WORLD_TYPES)[number];
+
+/**
+ * Uma coordenada ABSOLUTA do mapa do Tibia (a do `otservbr.otbm`), e não a local de um recorte.
+ * É a mesma que `characters.world_x/y/z` guardará (ADR 0060 d.3.b): o que liga as duas é
+ * `source.region` do mapa (`absoluteToLocal`, em `map.ts`). O andar `z` é de 0 (céu) a 15
+ * (subsolo mais fundo), o do protocolo do Tibia.
+ */
+const absolutePoint = z.strictObject({
+  x: z.number().int().nonnegative(),
+  y: z.number().int().nonnegative(),
+  z: z.number().int().min(0).max(15),
+});
+
+/**
+ * Uma cidade do mundo: id, nome e templo (`canary/src/map/town.hpp`, `Town`). O Canary a guarda
+ * com um id numérico; aqui o id é o slug, como todo id de conteúdo. O templo é para onde o
+ * personagem volta ao morrer e onde nasce sem posição salva (ADR 0060 d.4 e d.9).
+ */
+const worldTownSchema = z.strictObject({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  temple: absolutePoint,
+});
+
+/**
+ * Um mundo (`data/worlds/<id>.json`, ADR 0060 d.1 e d.2): o `Game` único do Canary, que no
+ * Draconya é uma sessão compartilhada num processo `game`. É o conteúdo de que a topologia (OW-13)
+ * e as colunas de `characters` (OW-15) precisam antes de existir. Os spawns entram à parte (OW-25).
+ *
+ * Só dado, sem arte (invariante 6): o `strictObject` recusa `appearanceId` e qualquer chave que
+ * ninguém lê. A coerência com o mapa — o templo cair num tile andável do recorte — não cabe a um
+ * schema, que só vê este arquivo: `buildContent` a confere.
+ */
+export const worldSchema = z.strictObject({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** O tipo do mundo, no conteúdo e não no código: `worldType` do Canary. Ver `WORLD_TYPES`. */
+  worldType: z.enum(WORLD_TYPES),
+  /** O mapa sobre o qual o mundo roda — um `data/maps/<id>.json` importado do OTBM. */
+  map: z.string().min(1),
+  /** Ao menos uma: sem cidade não há templo, e sem templo ninguém tem onde nascer nem morrer. */
+  towns: z.array(worldTownSchema).min(1),
+  /**
+   * O teto de gente no mundo (ADR 0060 d.2.b): vale só na entrada, vindo do repouso; quem volta
+   * de uma instância sempre entra. Começa em 200, o `CITY_SHARD_CAPACITY` de hoje.
+   */
+  capacity: z.number().int().positive(),
+});
+
+export type World = z.infer<typeof worldSchema>;
+export type WorldTown = World['towns'][number];
 
 // --- mapa e rota (FUN-9) -------------------------------------------------------------------
 

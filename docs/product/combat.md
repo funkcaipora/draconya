@@ -2725,8 +2725,9 @@ interface FieldSpec {                     // declarado em content
   `appearances.fields`, como sempre) — campo sem entrada troca de estágio MUDO. Quem reanexa no
   MEIO da cadeia recebe, no `session-state`, a arte do estágio ATUAL, não sempre a do nascimento.
 - **Campo bloqueante (Magic Wall, Wild Growth, #560).** `blocksMovement` (default falso) faz o
-  campo agir como PAREDE — para QUALQUER criatura, jogador e monstro, diferente do desvio de
-  dano do M29-05 (`canMonsterEnterField`), que só o monstro respeita e só quando o campo tem
+  campo agir como PAREDE — para QUALQUER criatura, jogador e monstro (salvo a parede de
+  personagem, que cede a quem é personagem — ver "Campo com dono", abaixo), diferente do desvio
+  de dano do M29-05 (`canMonsterEnterField`), que só o monstro respeita e só quando o campo tem
   `damageType`. Mecanismo: `Fields.blockedAt`/`blocksProjectileAt` (novos métodos em
   `sim/fields.ts`) e `TileOccupancy.blockedAt` os combina com o mapa e com `TileOverrides`
   (#728) — a MESMA composição de três fontes, uma pergunta só para `canOccupy`/`move`, o passo
@@ -2771,6 +2772,44 @@ interface FieldSpec {                     // declarado em content
   fechando o TODO(#560) que só o Dragon Lord tinha cadeia real: fire field (2118→2119→2120,
   a mesma cadeia do Dragon Lord) agora sai assim para TODO monstro gerado; poison (105) e energy
   (2122) declaram `stages` de um elemento só (redundante com `fieldStagesOf`, mas explícito).
+
+- **Campo com dono: o campo de personagem não fere personagem (OW-05, #826, ADR 0060 d.8).** O
+  no-pvp do Canary aplicado ao campo, e uma correção de paridade que vale já para a hunt de
+  party: até aqui o fire field de um membro queimava a própria party. `TileFieldState.owner`
+  (`{ kind: 'character' | 'monster', id }`) é gravado por `applyField` — a runa de campo grava o
+  PERSONAGEM que a lançou, a ability de monstro grava o monstro (`subject` `m:<id>`) e a de uma
+  INVOCAÇÃO de personagem grava o MESTRE, porque o Canary trata a invocação como o jogador dela
+  (`caster->isSummon()`, `combat.cpp:1198-1204`). O campo sem `owner` é de MAPA e segue pegando
+  todo mundo; o snapshot de antes restaura assim, sem subir `SNAPSHOT_FORMAT_VERSION`.
+
+  | Campo de | Fere personagem | Fere invocação de personagem | Fere monstro |
+  |---|---|---|---|
+  | personagem (ou invocação de personagem) | **não**, nem o lançador (`combat.cpp:2616-2619`) | **não** | sim |
+  | monstro, ou de mapa (sem dono) | sim | sim | sim |
+
+  O portão é `HuntRuleset#fieldHarms`, conferido no tique do campo (`#onFieldTick`) e na entrada
+  no tile (`#enterField`), ANTES de montar a condição — quem o campo não fere não gasta sorteio
+  do `Rng`. É a versão do `canDoCombat` que o Canary faz dentro da condição
+  (`condition.cpp:2015-2020`): num mundo no-pvp ele recusa jogador e invocação de jogador contra
+  jogador e invocação de jogador (`combat.cpp:551-565`). O dono atravessa os estágios da cadeia
+  (`decayTo`) e o relançamento do mesmo id o troca.
+
+  **A parede de personagem é a variante SEGURA** (`ITEM_MAGICWALL_SAFE`/`ITEM_WILDGROWTH_SAFE`,
+  `combat.cpp:1207-1218`): segue barrando monstro, invocação e projétil, mas quem é personagem
+  a atravessa e ela some no passo (`Tile::queryAdd`, `tile.cpp:864-876`). Qualquer personagem a
+  dissolve, não só o lançador. Mecanismo: `Movable.dissolvesSafeWalls` (só `CharacterRuntime`)
+  faz `canOccupy`/`move` a admitirem — o bot, o `walk-to`, o BFS do follow e a busca da fuga do
+  medo a tratam como passável —, e `HuntRuleset#step` a remove depois do passo aceito, antes da entrada no campo
+  que estiver por baixo dela. A parede de MONSTRO ou de mapa barra o personagem como sempre.
+
+  **Divergências registradas.** (1) O crédito do dano do campo não vai ao dono: a condição segue
+  com `sourceId` = id do campo e o abate por campo de personagem não rende XP a ele (no Canary o
+  dono vai em `CONDITION_PARAM_OWNER`) — é o crédito do Canary, OW-28. (2) A parede de vários
+  tiles é uma entidade só e some inteira ao primeiro passo; o conteúdo de hoje só planta parede
+  de um tile (Magic Wall e Wild Growth são `point`, como os itens do Canary). (3) O campo de
+  dano de PvP dos jogadores do Canary (a metade do dano em `condition.cpp:2011-2013`) não
+  existe: aqui não há PvP. (4) Campo em zona `PVPZONE` e a recusa por PZ são o portão no-pvp
+  completo, OW-27.
 
 **Fora do escopo**, por decisão: novo pathfinding, dispel, invisibilidade, PvP e a UI detalhada
 de buff.

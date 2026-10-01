@@ -245,6 +245,34 @@ Confira antes de subir o servidor:
 pnpm content:check
 ```
 
+## O mundo (#829, OW-08, ADR 0060)
+
+`data/worlds/<id>.json` — um arquivo por mundo — diz o que um mundo **é**: `{ id, name, worldType,
+map, towns: [{ id, name, temple }], capacity }`. `Content.worlds` é um mapa por id, vazio no
+conteúdo de teste sem mundo aberto; o conteúdo real tem o `main` (tipo `no-pvp`, mapa `thais`,
+teto 200), e `load.test.ts` prende. Quem lê é a topologia do `sim` (OW-13) e as colunas de mundo
+em `characters` (OW-15); os spawns entram à parte (OW-25).
+
+- **`worldType` é um vocabulário FECHADO** (`WORLD_TYPES`), como `COMBAT_PROFILES`: hoje só
+  `no-pvp`. O Canary aceita também `retro-pvp`/`pvp`/`expert-pvp`/`pvp-enforced`
+  (`canary/config.lua.dist:28-33`), mas o `sim` não tem dano entre jogadores — aceitar um deles
+  num arquivo seria subir um mundo que promete o que o motor não faz. Tipo novo entra por ADR.
+- **O templo é coordenada ABSOLUTA do Tibia**, a mesma de `characters.world_x/y/z` (ADR 0060
+  d.3.b), e o mapa do recorte é LOCAL. `absoluteToLocal`/`localToAbsolute` (`map.ts`) traduzem pela
+  origem de `source.region`: `x` e `y` perdem ou ganham a origem, `z` não muda (os andares do
+  recorte são chaveados pelo `z` absoluto). Só mapa IMPORTADO tem `source`, e por isso só ele
+  serve a um mundo. Não compare coordenada de mundo com `entryPoint` ou `floorChanges` sem
+  traduzir: em Thais o erro é de 32275 em x e 32153 em y, e não aparece em teste que usa só o mapa local.
+- **`buildContent` confere o que o schema não vê:** o `map` existe e tem `source`; o templo cai
+  dentro do recorte nos três eixos e num tile que não é parede (`isBlocked`, a regra do
+  `entryPoint` da Cidade); id de cidade e de mundo únicos. Quebra no boot, não no personagem que
+  nasce preso.
+- **Entra em `computeVersion`** como todo o `RawContent` (invariante 7): mudar o teto muda a
+  versão que a sessão congela.
+- **`capacity` só se guarda aqui.** O teto vale só na entrada vinda do repouso (ADR 0060 d.2.b) e
+  quem o aplica é a admissão (OW-18/OW-20); `CITY_SHARD_CAPACITY` continua sendo o da Cidade.
+- Sem arte (invariante 6): `worldSchema` é `strictObject`.
+
 ## Invariantes locais
 
 - **Nunca contém arte** (invariante 6), e o id de aparência **não mora na entidade** (FUN-94):
@@ -683,6 +711,15 @@ entre arquivos resolvem.
   o MESMO `absorbpercent*`: o schema recusa os dois no mesmo tipo. O reflexo compila no boot
   (`compileReflect`, tabela completa por tipo, ausente quando nada reflete) — é a forma que o
   reflexo de monstro (#683) reusa.
+- **`item.elementalBond` e `item.bonuses.magicShieldCapacity` são DADO sem consumidor no `sim`**
+  (#627, M44-09) — de propósito, e não por esquecimento. No Canary (47dfd51) o bond só troca o
+  tipo de dano da magia de `VOCATION_MONK_CIP` (`combat.cpp:159-174`) e os 32 itens são todos
+  arma `fist` (fora do corte: Monk e DT-01); a capacidade só aparece na descrição do item e na
+  Cyclopedia, e `magic_shield.lua` monta o balde sem consultá-la. Ligar qualquer um dos dois ao
+  combate seria comportamento que o Canary não tem (ADR 0037 d.6). O bond é só `kind: 'weapon'`
+  (`buildContent` recusa o resto) e a capacidade só em item com `slot`; o catálogo real tem zero
+  itens com bond e exatamente quatro com capacidade (`load.test.ts` prende as duas contagens).
+  Ver `docs/product/items.md`, "Atributos raros".
 - **O monstro tem schema de mitigação PRÓPRIO** (#683): `monsterMitigationSchema` aceita
   resistência em `[-2, 1)` (o `minElementalResistance` do Canary); o `mitigationSchema` do item
   continua `[-1, 1)`. Os dois são `mitigationSchemaWith(piso)` — alargar o compartilhado mudaria o
