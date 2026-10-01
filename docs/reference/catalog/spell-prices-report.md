@@ -115,6 +115,10 @@ O preço de `learnPrice` é o MENOR entre os NPCs que ensinam a magia à vocaç�
 | `strong-terra-strike` | druid | 6000 | `azalea.lua` | 8 | 6000 |
 | `summon-creature-druid` | druid | 2000 | `azalea.lua` | 22 | 2000 |
 | `summon-creature-sorcerer` | sorcerer | 2000 | `azalea.lua` | 18 | 2000 |
+| `summon-druid-familiar` | druid | 50000 | `azalea.lua` | 8 | 50000 |
+| `summon-knight-familiar` | knight | 50000 | `graham.lua` | 8 | 50000 |
+| `summon-paladin-familiar` | paladin | 50000 | `dario.lua` | 8 | 50000 |
+| `summon-sorcerer-familiar` | sorcerer | 50000 | `barnabas_dee.lua` | 8 | 50000 |
 | `swift-foot` | paladin | 6000 | `dario.lua` | 8 | 6000 |
 | `terra-strike-druid` | druid | 800 | `azalea.lua` | 15 | 800 |
 | `terra-strike-sorcerer` | sorcerer | 800 | `azalea.lua` | 15 | 800 |
@@ -140,7 +144,3 @@ Nenhum NPC importado ensina estas magias (no Canary elas vêm de outro caminho �
 | `conjure-power-bolt` | paladin | 2200 |
 | `conjure-sniper-arrow` | paladin | 800 |
 | `great-death-beam` | sorcerer | AUSENTE |
-
-## Mudanças nesta importação
-
-Nenhuma — o dado commitado já confere com o Canary.

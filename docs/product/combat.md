@@ -2143,6 +2143,9 @@ O familiar dura **15 minutos** (`60 × familiarTime / 2` s, `familiarTime = 30`)
 minutos depois do lançamento** (`2 ×` a duração) — os dois números moram no EFEITO da magia
 (`effect.durationMs`/`effect.cooldownMs`), e o `cooldownMs` da magia fica em 2 s (o `groupCooldown`
 do script; o `spell:cooldown(0)` do Canary diz que quem cobra é a `CreateFamiliarSpell`).
+Como toda magia instantânea, ela só é lançada DEPOIS de aprendida (#624, ADR 0058): o `learnPrice`
+das quatro é o do NPC do Canary (50 000, importado por `pnpm catalog:spell-prices`), e quem lança sem
+tê-la recebe `spell-not-learned`.
 
 - **Não é `summonable`.** O Canary declara `summonable = false` nos quatro: a Summon Creature não os
   invoca. O que os liga é o `flags.familiar` (`monsterSchema.familiar`), que `buildContent` exige

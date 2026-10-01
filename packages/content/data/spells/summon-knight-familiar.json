@@ -4,6 +4,7 @@
   "description": "Invoca o familiar do Knight: uma criatura aliada que luta ao seu lado por 15 minutos e só pode ser invocada de novo 30 minutos depois do lançamento. Exige não ter outra invocação viva.",
   "vocationId": "knight",
   "minLevel": 200,
+  "learnPrice": 50000,
   "manaCost": 1000,
   "group": "support",
   "groupCooldownMs": 2000,
