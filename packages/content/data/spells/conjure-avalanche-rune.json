@@ -4,6 +4,7 @@
   "description": "Conjura cargas da Avalanche Rune, consumindo uma runa em branco.",
   "vocationId": "druid",
   "minLevel": 30,
+  "learnPrice": 1200,
   "manaCost": 530,
   "soulCost": 3,
   "group": "support",

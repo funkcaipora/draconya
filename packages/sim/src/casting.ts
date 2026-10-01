@@ -56,6 +56,14 @@ export type CastRefusal =
   | 'not-enough-gold'
   /** A magia pede uma vocação que este personagem não tem (§9.2, FUN-92). */
   | 'wrong-vocation'
+  /**
+   * O personagem não APRENDEU a magia (#624, ADR 0058 d.1): no Canary o `toggleLearnSpells` vem
+   * ligado e `Spell::playerSpellCheck` recusa toda magia instantânea que `hasLearnedInstantSpell`
+   * não reconhece (`RETURNVALUE_YOUNEEDTOLEARNTHISSPELL`). Sem prazo, como `wrong-vocation`:
+   * esperar não a ensina — só `learn-spell`. O bot PULA o slot, como pula uma magia sem mana, e
+   * nunca encerra a hunt por isso.
+   */
+  | 'spell-not-learned'
   /** O grupo (ou o secundário) da magia ainda está trancado (#155). Carrega prazo, como `on-cooldown`. */
   | 'group-cooldown'
   /** A runa pede magic level que este personagem não tem (#165). */
@@ -604,6 +612,11 @@ export function castSpell(
   // redescobrir a mesma coisa.
   if (spell.vocationId !== undefined && caster.vocationId !== spell.vocationId) {
     return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
+  }
+  // O aprendizado (#624, ADR 0058 d.1), pela MESMA razão da vocação: nunca melhora esperando.
+  // Só a magia — a runa (`useSupply`) é item e exige level e magic level, como no Tibia.
+  if (!caster.learnedSpells.has(spell.id)) {
+    return { ok: false, reason: 'spell-not-learned', retryInMs: NOT_WAITING };
   }
 
   const key = spellCooldownKey(spell.id);

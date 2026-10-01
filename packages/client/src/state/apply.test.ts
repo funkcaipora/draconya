@@ -1417,6 +1417,34 @@ describe('o bestiário (FUN-113, §18)', () => {
   });
 });
 
+describe('as magias aprendidas (#624, ADR 0058)', () => {
+  it('ausente e vazio são coisas DIFERENTES: `null` é "o servidor ainda não disse"', () => {
+    // Um nó anterior à #624 nunca manda, e o primeiro segundo de toda conexão também não mandou.
+    // Tratar "não sei" como "não aprendeu nada" marcaria TODO slot da barra antes da hora.
+    expect(hud.get().learnedSpells).toBeNull();
+    applyMessage({ type: 'learned-spells', spellIds: [] }, 0);
+    expect(hud.get().learnedSpells).toEqual([]);
+  });
+
+  it('SUBSTITUI o registro inteiro, em vez de somar — a reconexão reenvia o mesmo total', () => {
+    applyMessage({ type: 'learned-spells', spellIds: ['wound-cleansing'] }, 0);
+    applyMessage({ type: 'learned-spells', spellIds: ['wound-cleansing', 'berserk'] }, 1_000);
+    expect(hud.get().learnedSpells).toEqual(['wound-cleansing', 'berserk']);
+    applyMessage({ type: 'learned-spells', spellIds: ['wound-cleansing', 'berserk'] }, 2_000);
+    expect(hud.get().learnedSpells).toEqual(['wound-cleansing', 'berserk']);
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state.inventory, notified);
+    subscribeSlice(hud, (state) => state.health, notified);
+
+    applyMessage({ type: 'learned-spells', spellIds: ['berserk'] }, 0);
+
+    expect(notified).not.toHaveBeenCalled();
+  });
+});
+
 describe('a resposta do bot (FUN-89)', () => {
   beforeEach(() => { bot.set(() => INITIAL_BOT); });
 

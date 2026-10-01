@@ -1761,6 +1761,52 @@ describe('blessings: buy-blessing, blessings (#570, ADR 0052)', () => {
   });
 });
 
+describe('learning spells: learn-spell, learned-spells, catalogue learnPrice (#624, ADR 0058)', () => {
+  it('the opcodes are C2S 36 and S2C 47, after set-fight-mode and bosstiary', () => {
+    expect(CLIENT_TO_SERVER['set-fight-mode']).toBe(35);
+    expect(CLIENT_TO_SERVER['learn-spell']).toBe(36);
+    expect(SERVER_TO_CLIENT['bosstiary']).toBe(46);
+    expect(SERVER_TO_CLIENT['learned-spells']).toBe(47);
+  });
+
+  it('round trips learn-spell C2S and learned-spells S2C through the codec', () => {
+    const learn: C2SMessage = { type: 'learn-spell', spellId: 'berserk' };
+    const learned: S2CMessage = { type: 'learned-spells', spellIds: ['berserk', 'wound-cleansing'] };
+    expect(decodeC2S(encodeC2S(learn))).toEqual([learn]);
+    expect(decodeS2C(encodeS2C(learned))).toEqual([learned]);
+  });
+
+  it('learn-spell is intention only: an id and nothing else, never empty', () => {
+    expect(C2S_SCHEMAS['learn-spell'].safeParse({ spellId: 'berserk' }).success).toBe(true);
+    expect(C2S_SCHEMAS['learn-spell'].safeParse({ spellId: '' }).success).toBe(false);
+    expect(C2S_SCHEMAS['learn-spell'].safeParse({}).success).toBe(false);
+    // O cliente não tem onde mandar preço nem resultado: o zod descarta o que não conhece.
+    expect(C2S_SCHEMAS['learn-spell'].parse({ spellId: 'berserk', price: 0 })).toEqual({ spellId: 'berserk' });
+  });
+
+  it('learned-spells accepts an empty list (a new character knows nothing) and refuses an empty id', () => {
+    expect(S2C_SCHEMAS['learned-spells'].safeParse({ spellIds: [] }).success).toBe(true);
+    expect(S2C_SCHEMAS['learned-spells'].safeParse({ spellIds: [''] }).success).toBe(false);
+  });
+
+  it('the catalogue spell carries learnPrice, optional so an older game node still parses', () => {
+    const minimal = {
+      hunts: [], items: [], ammunition: [],
+      bot: {
+        vocabularyVersion: 2, setCount: 4, slotsPerSet: 24, setNames: [], hotkeys: [], groups: [],
+        spells: [
+          { id: 'berserk', name: 'Berserk', manaCost: 115, minLevel: 35, vocationId: 'knight', effect: 'damage', learnPrice: 2500 },
+          { id: 'cure-poison', name: 'Cure Poison', manaCost: 30, minLevel: 10, vocationId: null, effect: 'heal', learnPrice: 0 },
+          { id: 'great-death-beam', name: 'Great Death Beam', manaCost: 140, minLevel: 300, vocationId: 'sorcerer', effect: 'damage' },
+        ],
+        automations: [], supplies: [],
+      },
+    };
+    const spells = S2C_SCHEMAS.catalogue.parse(minimal).bot.spells;
+    expect(spells.map((spell) => spell.learnPrice)).toEqual([2500, 0, undefined]);
+  });
+});
+
 describe('set-fight-mode and player-stats.fightMode (M30-03, #550)', () => {
   it('the opcode is 35 — the 34 is reserved to the cancel-exit of #802 (PR #806) —, and nothing is burned or reused', () => {
     // O 33 é do `charm-remove`. Mutação que mata: trocar por 33 (duplicado) ou apagar a linha
@@ -1848,7 +1894,7 @@ describe('saída pendente: cancel-exit, exit-pending (#802)', () => {
   it('exit-pending is S2C only, opcode 45, and round trips the countdown, in-combat and closed forms', () => {
     // Mutação que mata: apagar `exit-pending: 45` de SERVER_TO_CLIENT (`decodeS2C` devolve
     // `null`), ou tornar `remainingMs` obrigatório no estado fechado.
-    expect(SERVER_TO_CLIENT['exit-pending']).toBe(45);
+    expect(SERVER_TO_CLIENT['bosstiary']).toBe(46);
     expect('exit-pending' in C2S_SCHEMAS).toBe(false);
     const countdown: S2CMessage = {
       type: 'exit-pending', active: true, reason: 'manual-exit', phase: 'countdown', remainingMs: 5_000,

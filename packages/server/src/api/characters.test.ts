@@ -72,6 +72,7 @@ class MemoryRepository implements GameRepository {
       outfitColors: null, bestiary: null, ammo: null, supplyStock: null, ammunitionStock: null,
       charms: null,
       bosstiary: null,
+      learnedSpells: null,
       fedMs: 0,
       blessings: 0,
       fightMode: 'attack',

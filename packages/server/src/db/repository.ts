@@ -71,6 +71,13 @@ export interface CharacterRecord {
    * que nunca abateu um boss. Sem método de escrita: quem escreve é o ledger (ADR 0052 d.1).
    */
   readonly bosstiary: unknown;
+  /**
+   * As magias aprendidas (#624, ADR 0058), como vieram do banco. `unknown` pela mesma razão de
+   * `charms`: a forma (`LearnedSpellsState`) é do `sim`, e quem a confere é quem monta o ticket.
+   * `null` é personagem novo, que não aprendeu nada. Sem método de escrita: quem escreve é o
+   * ledger, na transação do extrato (ADR 0052 d.1).
+   */
+  readonly learnedSpells: unknown;
   /** Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, em milissegundos. `0` é ninguém comeu. */
   readonly fedMs: number;
   /** As sete bênçãos PvE (#570, ADR 0052): BITMASK de `CharacterRuntime.blessings`. `0` é nenhuma. */
@@ -612,6 +619,7 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     ammunitionStock: row.ammunitionStock,
     charms: row.charms,
     bosstiary: row.bosstiary,
+    learnedSpells: row.learnedSpells,
     fedMs: row.fedMs,
     blessings: row.blessings,
     fightMode: row.fightMode,

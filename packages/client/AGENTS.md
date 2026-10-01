@@ -767,3 +767,21 @@ suba o `pnpm dev` e olhe cada cenário na tela do mundo:
   `magic`, `melee` e `distance` exibem a barra de progresso sob o valor, `magic` ganha o tom
   `vital-mp`, e `speed` não tem barra.
 
+## Aprender magia é tela de serviço, e a barra marca o que falta aprender (#624, ADR 0058)
+
+A seção **Magias** do `CharacterModal` lista as magias da vocação (`catalogue.bot.spells`, filtradas
+por `vocationId`) com preço (`learnPrice`), level e o estado de cada uma; o botão manda
+`learn-spell { spellId }` — só a INTENÇÃO (invariante 4). A regra que decide o estado de cada linha
+mora em `shell/spell-shop.ts` (PURO): é o ESPELHO de `LearnedSpells#check` do `sim`, refeito aqui
+porque o cliente não importa `sim`, e existe só para a tela não oferecer o que o servidor vai
+recusar — se as duas divergirem, a compra é recusada com o motivo, nunca o contrário (a mesma razão
+de `blessing-cost.ts`). `learnPrice` ausente é "Indisponível"; `0` é "Grátis".
+
+`hud.learnedSpells` é `readonly string[] | null` (`learned-spells`, S2C 47, SUBSTITUI o registro
+inteiro). **`null` é "o servidor ainda não disse", e NUNCA marca slot nenhum**: `isSpellLearned`
+devolve `true` sem o registro, senão o primeiro segundo de toda conexão (ou um nó anterior à #624)
+mostraria a barra inteira como "não aprendida". `slotView` recebe o registro e devolve
+`unlearned` — só para MAGIA; poção e runa não exigem aprendizado —, e a `ActionBar` põe a classe
+`action-slot-unlearned` (apagado, borda tracejada) e "não aprendida" no tooltip. O slot continua na
+barra e continua disparável: quem recusa é o servidor (`not-learned` no `slot-result`).
+

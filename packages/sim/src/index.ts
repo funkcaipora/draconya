@@ -26,6 +26,7 @@ export * from './loyalty.js';
 export * from './bestiary.js';
 export * from './bosstiary.js';
 export * from './charms.js';
+export * from './learned-spells.js';
 export * from './party.js';
 export * from './inventory.js';
 export * from './item-overlay.js';

@@ -4,6 +4,7 @@
   "description": "Lança um raio de energia no seu alvo atual.",
   "vocationId": "sorcerer",
   "minLevel": 100,
+  "learnPrice": 15000,
   "manaCost": 100,
   "group": "attack",
   "groupCooldownMs": 2000,

@@ -3,6 +3,7 @@
   "name": "Cure Bleeding",
   "description": "Estanca o sangramento.",
   "vocationId": "knight",
+  "learnPrice": 2500,
   "manaCost": 30,
   "cooldownMs": 6000,
   "group": "healing",

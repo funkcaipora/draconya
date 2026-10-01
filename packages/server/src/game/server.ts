@@ -60,6 +60,8 @@ export interface GameDependencies {
   readonly charmBestiaryEntries?: SessionHostOptions['charmBestiaryEntries'];
   /** As sete bênçãos PvE, para `buy-blessing` (#570, ADR 0052). */
   readonly blessingCatalog?: SessionHostOptions['blessingCatalog'];
+  /** O catálogo de magias, para `learn-spell` (#624, ADR 0058). */
+  readonly spellCatalog?: SessionHostOptions['spellCatalog'];
   /** As vocações e o level da escolha (#154). */
   readonly vocations?: SessionHostOptions['vocations'];
   readonly vocationLevel?: SessionHostOptions['vocationLevel'];
@@ -164,6 +166,9 @@ export function createGame(
       ...(dependencies.blessingCatalog === undefined
         ? {}
         : { blessingCatalog: dependencies.blessingCatalog }),
+      ...(dependencies.spellCatalog === undefined
+        ? {}
+        : { spellCatalog: dependencies.spellCatalog }),
       ...(dependencies.vocations === undefined ? {} : { vocations: dependencies.vocations }),
       ...(dependencies.vocationLevel === undefined ? {} : { vocationLevel: dependencies.vocationLevel }),
       ...(dependencies.progression === undefined ? {} : { progression: dependencies.progression }),
