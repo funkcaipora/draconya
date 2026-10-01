@@ -4,6 +4,7 @@
   "description": "O dano recebido consome mana em vez de vida, por 180 segundos.",
   "vocationId": "druid",
   "minLevel": 14,
+  "learnPrice": 450,
   "manaCost": 50,
   "group": "support",
   "groupCooldownMs": 2000,

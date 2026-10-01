@@ -74,6 +74,26 @@ describe('ActionBar — a fileira de 124 px (RF-01..RF-04)', () => {
     expect(html.indexOf('Cura')).toBeLessThan(html.indexOf('Poção de Vida'));
   });
 
+  it('a magia NÃO aprendida fica na barra, marcada (#624, ADR 0058 d.5); a aprendida e o suprimento, não', async () => {
+    edit((draft) => ({
+      ...withSlots(0, [[0, spell('heal', '1')], [1, spell('strike')], [2, supply()]]), activeSet: draft.activeSet,
+    }));
+    // Aprendeu só a `strike`: `heal` fica marcada, e a poção não exige aprendizado.
+    hud.set(() => ({ ...INITIAL_HUD, catalogue: catalogue(), learnedSpells: ['strike'] }));
+    const html = await render();
+    expect((html.match(/action-slot-unlearned/g) ?? []).length).toBe(1);
+    // Nada é escondido: a magia marcada continua com rótulo e ganha o aviso no tooltip.
+    expect(html).toContain('Cura');
+    expect(html).toContain('não aprendida');
+  });
+
+  it('sem o registro (`null`), nenhum slot é marcado — "ainda não sei" não vira "não aprendeu"', async () => {
+    edit((draft) => ({ ...withSlots(0, [[0, spell('heal', '1')]]), activeSet: draft.activeSet }));
+    hud.set(() => ({ ...INITIAL_HUD, catalogue: catalogue(), learnedSpells: null }));
+    const html = await render();
+    expect(html).not.toContain('action-slot-unlearned');
+  });
+
   it('slot sem dado é vazio e tracejado; nada de rótulo/contagem/elemento inventado', async () => {
     const html = await render();
     expect(html).toContain('ui-slot--empty');

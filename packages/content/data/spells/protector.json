@@ -4,6 +4,7 @@
   "description": "Reduz o dano que você causa em 35% e o dano que recebe em 15%, por 13 segundos.",
   "vocationId": "knight",
   "minLevel": 55,
+  "learnPrice": 6000,
   "manaCost": 200,
   "group": "support",
   "groupCooldownMs": 2000,

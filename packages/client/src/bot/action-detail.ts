@@ -99,6 +99,10 @@ const TYPE_LABEL: Readonly<Record<string, string>> = {
   haste: 'Suporte', buff: 'Suporte', 'mana-shield': 'Suporte', 'remove-condition': 'Suporte',
   // A aparência emprestada (#621, M44-03): Creature Illusion e Chameleon Rune.
   illusion: 'Suporte', chameleon: 'Suporte',
+  // As utilitárias (#623): luz, Levitate, Magic Rope, Find e Food.
+  light: 'Suporte', levitate: 'Suporte', 'magic-rope': 'Suporte', find: 'Suporte', food: 'Suporte',
+  // As duas runas de invocação (#600): Convince Creature e Animate Dead.
+  convince: 'Suporte', 'animate-dead': 'Suporte',
 };
 
 function typeOf(effect: string): string {

@@ -157,6 +157,38 @@ describe('mapSpell — ataques', () => {
     expect(map({ name: 'ice chain', chance: 10 })).toEqual({ kind: 'unmapped', name: 'ice chain', reason: 'magia com nome próprio (script Lua)' });
   });
 
+  it('fear e root (M44-04, #622): alvo único, 3 s fixos dos scripts Lua, merge `longest`, sem dano', () => {
+    // `{ name = "fear", interval = 2000, chance = 3, target = true }` (Fungosaurus): o Canary acha o
+    // feitiço Lua pelo NOME e devolve antes de ler `duration`/`radius`/`length` — a linha só
+    // contribui com `interval`, `chance`, `range` e o alvo.
+    expect(abilityOf(map({ name: 'fear', interval: 2000, chance: 3, target: true }))).toEqual({
+      id: 'fear', cadenceMs: 2000, chance: 0.03, target: { range: 11 }, power: 0, damageType: 'physical',
+      condition: { key: 'feared', merge: 'longest', durationMs: 3000, effect: { kind: 'feared' } },
+    });
+    expect(abilityOf(map({ name: 'root', interval: 4000, chance: 10, range: 7, target: true }))).toEqual({
+      id: 'root', cadenceMs: 4000, chance: 0.1, target: { range: 7 }, power: 0, damageType: 'physical',
+      condition: { key: 'rooted', merge: 'longest', durationMs: 3000, effect: { kind: 'rooted' } },
+    });
+    // `duration`, `radius` e `length` da linha são ignorados: a linha não parametriza o feitiço Lua.
+    expect(abilityOf(map({ name: 'fear', chance: 5, duration: 9000, radius: 4, length: 5, target: true })))
+      .toMatchObject({ target: { range: 11 }, condition: { durationMs: 3000 } });
+  });
+
+  it('fear/root em defenses não mapeiam — o Canary só os usa em ataque, contra o alvo', () => {
+    expect(map({ name: 'fear', chance: 5 }, 'defenses')).toEqual({
+      kind: 'unmapped', name: 'fear', reason: 'fear em defenses',
+    });
+    expect(map({ name: 'root', chance: 5 }, 'defenses')).toEqual({
+      kind: 'unmapped', name: 'root', reason: 'root em defenses',
+    });
+  });
+
+  it('soulwars fear continua sem mapeador: o Lua o executa com atraso de 2 s (addEvent)', () => {
+    expect(map({ name: 'soulwars fear', interval: 2000, chance: 1, target: true })).toEqual({
+      kind: 'unmapped', name: 'soulwars fear', reason: 'sem mecanismo (atraso de 2 s por script)',
+    });
+  });
+
   it('invisible FORA de defenses não mapeia (#559/#592) — o Canary só o usa em defesa própria', () => {
     expect(map({ name: 'invisible', duration: 3000 })).toEqual({
       kind: 'unmapped', name: 'invisible', reason: 'invisible fora de defenses',

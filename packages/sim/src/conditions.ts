@@ -36,8 +36,9 @@ import type { DamageType } from '@draconya/content';
 // `conditionSpecSchema` também precisa delas para conferir `durationMs` contra o total da fila, e
 // duas implementações do mesmo cálculo é o defeito que a DT-03 já nomeia noutro lugar do content.
 import {
-  DAMAGE_OVER_TIME_CONDITION_IMMUNITY, DRUNK_CONDITION_KEY, OUTFIT_CONDITION_KEY, SPEED_CONDITION_KEY,
-  damageOverTimeTicks, generateDamageList,
+  DAMAGE_OVER_TIME_CONDITION_IMMUNITY, DRUNK_CONDITION_KEY, FEARED_CONDITION_KEY, OUTFIT_CONDITION_KEY,
+  PACIFIED_CONDITION_KEY, ROOTED_CONDITION_KEY, SPEED_CONDITION_KEY, damageOverTimeTicks,
+  generateDamageList,
 } from '@draconya/content';
 import type { Direction } from './area.js';
 import type { DamageSource } from './combat/damage.js';
@@ -45,7 +46,7 @@ import type { Rng } from './rng.js';
 
 export type ConditionKind =
   | 'speed' | 'buff' | 'mana-shield' | 'heal-over-time' | 'damage-over-time' | 'drunk' | 'invisible'
-  | 'outfit';
+  | 'rooted' | 'feared' | 'pacified' | 'light' | 'outfit';
 
 /**
  * A POLÍTICA de fusão de uma condição (CMB-07, DT-02). Declarada no conteúdo, nunca um campo
@@ -53,9 +54,12 @@ export type ConditionKind =
  *
  * - `refresh`: relançar reinicia o prazo (o comportamento de sempre do #155);
  * - `replace`: o novo estado substitui o antigo;
- * - `strongest`: o de maior magnitude vence; o mais fraco não derruba o que já está ativo.
+ * - `strongest`: o de maior magnitude vence; o mais fraco não derruba o que já está ativo;
+ * - `longest` (M44-04, #622): o de prazo mais LONGO vence — `Condition::updateCondition` do Canary
+ *   para `rooted`/`pacified`/`feared`: relançar com um prazo que termina antes do atual não muda
+ *   nada, e com um que termina no mesmo instante ou depois substitui.
  */
-export type ConditionMerge = 'replace' | 'refresh' | 'strongest';
+export type ConditionMerge = 'replace' | 'refresh' | 'strongest' | 'longest';
 
 /**
  * A FAMÍLIA de golpe que a condição escala (`damageDealtPercent`). É vocabulário de skill, não
@@ -104,6 +108,24 @@ export interface ConditionTick {
   readonly queue?: readonly QueuedTick[];
 }
 
+/**
+ * Para onde a condição `feared` foge (M44-04, #622) — o estado que `ConditionFeared` do Canary
+ * guarda no próprio objeto (`fleeingFromPos`, `fleeIndx`). Viaja no snapshot junto da condição,
+ * porque é a mesma vida útil dela: a hunt retomada no meio do medo continua fugindo do mesmo
+ * lugar, na mesma direção.
+ */
+export interface FleeState {
+  /** O tile do LANÇADOR quando a condição entrou (`CONDITION_PARAM_CASTER_POSITION`). */
+  readonly from: { readonly x: number; readonly y: number; readonly z: number };
+  /**
+   * O `fleeIndx` do Canary: índice `0..7` no vetor de direções de fuga (`FLEE_DIRECTIONS` em
+   * `fear.ts`), ou `NO_FLEE_INDEX` (`99`, o valor inicial do Canary) enquanto nenhuma
+   * direção foi escolhida — o que só acontece se o sorteio do tile do próprio lançador achou os
+   * oito vizinhos intransitáveis.
+   */
+  readonly index: number;
+}
+
 export interface ConditionState {
   /**
    * Uma por chave: relançar segue a política `merge`. O #155 usava só os quatro tipos fixos;
@@ -144,8 +166,26 @@ export interface ConditionState {
    * anterior não a tem, e nenhum `SNAPSHOT_FORMAT_VERSION` sobe por isso.
    */
   readonly look?: OutfitLook;
+  /**
+   * A luz do lançador (#623: Light, Great Light, Ultimate Light — o `CONDITION_LIGHT` do Canary).
+   * Só APRESENTAÇÃO: nenhuma regra de jogo a lê, o cliente é quem ajusta a escuridão. Viaja com a
+   * condição (e no snapshot, opcional: o formato anterior nunca a teve, sem bump) porque o cliente
+   * precisa de `level`/`color`/`durationMs` para desenhar o decaimento — `level` cai 1 a cada
+   * `durationMs / level`, o `lightChangeInterval` do `ConditionLight`, e a conta mora no cliente
+   * (`expiresAtMs` já é o instante do fim).
+   */
+  readonly light?: LightInfo;
   /** Tique periódico: `amount` a cada `intervalMs`, até `expiresAtMs`. */
   readonly tick?: ConditionTick;
+  /** Só a `feared` de PERSONAGEM (M44-04, #622): de onde e para onde foge. Ausente nas demais. */
+  readonly flee?: FleeState;
+}
+
+/** O que a condição de luz carrega (#623). `durationMs` é o prazo TOTAL da (re)aplicação. */
+export interface LightInfo {
+  readonly level: number;
+  readonly color: number;
+  readonly durationMs: number;
 }
 
 /** O tique normalizado: um snapshot antigo sem `kind` é cura. */
@@ -237,6 +277,11 @@ export function conditionImmunityOf(condition: ConditionState): ConditionImmunit
   // `outfit` (#621, M44-03): a ilusão de um ataque de monstro não entra em quem o conteúdo declara
   // imune (`CONDITION_OUTFIT` em `Monster::isImmune`, `monster.immunities[].condition`).
   if (condition.key === OUTFIT_CONDITION_KEY) return 'outfit';
+  // As três de controle (M44-04, #622): `Monster::isImmune` é um bitset sobre todo
+  // `ConditionType_t`, e a chave reservada é o que identifica cada uma.
+  if (condition.key === ROOTED_CONDITION_KEY) return 'rooted';
+  if (condition.key === FEARED_CONDITION_KEY) return 'feared';
+  if (condition.key === PACIFIED_CONDITION_KEY) return 'pacified';
   if (condition.tick?.kind === 'damage') {
     return DAMAGE_OVER_TIME_CONDITION_IMMUNITY[condition.tick.damageType ?? 'physical'] ?? null;
   }
@@ -406,6 +451,13 @@ export function conditionFromSpec(
       // A aparência emprestada (#621): o `look` viaja no estado, e a fusão é SEMPRE `strongest`
       // — o mecanismo de `ConditionOutfit`, que o schema já exige do conteúdo.
       return { ...base, merge: 'strongest', look: effect.look };
+    case 'rooted':
+    case 'feared':
+    case 'pacified':
+      // Sem campo próprio (M44-04, #622): a chave reservada é o que `Conditions.isActive` lê. O
+      // `feared` de personagem ganha o `flee` DEPOIS, na aplicação (`HuntRuleset#applyConditionTo`):
+      // de onde ele foge só se sabe quando o lançador é conhecido, e este módulo não conhece posição.
+      return { ...base };
     case 'heal-over-time':
       return { ...base, tick: { kind: 'heal', amount: effect.amount, intervalMs: effect.intervalMs } };
     case 'damage-over-time': {
@@ -475,11 +527,13 @@ export class Conditions {
    */
   apply(condition: ConditionState): ConditionState | null {
     const previous = this.#active.get(condition.key) ?? null;
-    if (
-      previous !== null
-      && (condition.merge ?? 'refresh') === 'strongest'
-      && strengthOf(previous) > strengthOf(condition)
-    ) {
+    const merge = condition.merge ?? 'refresh';
+    if (previous !== null && merge === 'strongest' && strengthOf(previous) > strengthOf(condition)) {
+      return previous;
+    }
+    // `longest`: `getEndTime() > now + novoTicks` mantém a antiga (`Condition::updateCondition`).
+    // O prazo aqui é absoluto nos dois lados, então é só comparar os vencimentos.
+    if (previous !== null && merge === 'longest' && previous.expiresAtMs > condition.expiresAtMs) {
       return previous;
     }
     this.#active.set(condition.key, condition);
@@ -501,6 +555,32 @@ export class Conditions {
     return this.#active.get(key) ?? null;
   }
 
+  /**
+   * Traduz TODAS as condições do relógio lógico de uma sessão para o de outra, preservando o que
+   * FALTA (#812) — a mesma conta de `Cooldowns.rebase`, aplicada a `expiresAtMs` e a
+   * `nextTickAtMs`, que são instantes do relógio que os gravou. Quem já venceu em `fromMs` sai; o
+   * resto mantém o restante do prazo e a fase do próximo tique, e é a sessão que ENTRA que reagenda
+   * os eventos (`HuntRuleset#armConditions`): o vencimento morava na fila da sessão anterior, e uma
+   * condição herdada sem evento novo nunca acabaria (a haste, o Mana Shield ficariam para sempre).
+   *
+   * Não cancela evento nenhum — quem chama não tem sessão onde cancelar; os eventos da origem
+   * morrem com ela ou são cancelados pelo `onLeave` do ruleset que os agendou.
+   */
+  rebase(fromMs: number, toMs: number): void {
+    const deltaMs = toMs - fromMs;
+    for (const [key, condition] of this.#active) {
+      if (condition.expiresAtMs <= fromMs) {
+        this.#active.delete(key);
+        continue;
+      }
+      this.#active.set(key, {
+        ...condition,
+        expiresAtMs: condition.expiresAtMs + deltaMs,
+        ...(condition.nextTickAtMs === undefined ? {} : { nextTickAtMs: condition.nextTickAtMs + deltaMs }),
+      });
+    }
+  }
+
   get size(): number {
     return this.#active.size;
   }
@@ -512,7 +592,7 @@ export class Conditions {
     return percent === 0 ? 1 : 1 + percent / 100;
   }
 
-  /** O multiplicador de dano CAUSADO por fonte: haste (Swift Foot) e postura somam. */
+  /** O multiplicador de dano CAUSADO por fonte: haste (campo `damageDealtPercent`) e postura somam. */
   damageDealtScale(source: DamageScaleSource): number {
     let percent = 0;
     for (const condition of this.#active.values()) {
@@ -530,6 +610,23 @@ export class Conditions {
 
   hasManaShield(): boolean {
     return this.#active.has('mana-shield');
+  }
+
+  /**
+   * A condição de `key` está VIGENTE em `nowMs`? Diferente de `get(key) !== null`: o vencimento é
+   * um evento da fila (`condition-expire`, `Housekeeping`), que vence DEPOIS do movimento e do
+   * ataque do mesmo instante — e o Canary consulta `hasCondition` contra o `endTime`, não contra o
+   * evento que limpa a lista (`Creature::hasCondition`, `creature.cpp:1585`). Ler o prazo daqui é
+   * o que faz um portão (o golpe, a magia, o passo) enxergar a janela fechada no instante EXATO em
+   * que a condição vence, sem depender da ordem dos eventos. O vencimento é exclusivo: em
+   * `expiresAtMs` a condição já não vale.
+   *
+   * É o portão de `rooted`, `feared` e `pacified` (M44-04, #622): `hasRooted`/`hasFeared`/
+   * `hasPacified` seriam três nomes para a mesma leitura pela chave reservada.
+   */
+  isActive(key: string, nowMs: number): boolean {
+    const condition = this.#active.get(key);
+    return condition !== undefined && condition.expiresAtMs > nowMs;
   }
 
   /** A condição `drunk` (M31-03, #558) está ativa? Reconhecida pela chave reservada, como

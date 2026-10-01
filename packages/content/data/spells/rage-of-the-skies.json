@@ -4,6 +4,7 @@
   "description": "Causa dano de energia numa área de 11x11 ao seu redor.",
   "vocationId": "sorcerer",
   "minLevel": 55,
+  "learnPrice": 6000,
   "manaCost": 600,
   "group": "attack",
   "groupCooldownMs": 4000,

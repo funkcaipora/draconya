@@ -4,6 +4,7 @@
   "description": "Lança um raio de fogo no seu alvo atual.",
   "vocationId": "druid",
   "minLevel": 14,
+  "learnPrice": 800,
   "manaCost": 20,
   "group": "attack",
   "groupCooldownMs": 2000,

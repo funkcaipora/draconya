@@ -10,6 +10,7 @@ import type { BotConfigV2, BotSlot, BotTargetPolicy, BotTargeting } from '@draco
 import type { Catalogue, SlotState } from '../state/hud.js';
 import { slotKey } from '../state/hud.js';
 import type { SlotProps } from './ui/Slot.js';
+import { isSpellLearned } from './spell-shop.js';
 
 /** A chave canônica `${set}:${slot}` — definida no estado e reexportada para a barra e o teste. */
 export { slotKey };
@@ -71,10 +72,18 @@ export interface SlotView {
   readonly auto?: boolean;
   /**
    * O clique deste slot precisa de MIRA (ADR 0049 decisão 2) — a ação é de aliado
-   * (`targets: 'friend'`, catálogo v2) e o servidor não tem como adivinhar QUEM. Toda outra
+   * (`targets: 'friend'`, catálogo v2) ou a magia nomeia um personagem (`aim: 'character'`, o
+   * Find Person), e o servidor não tem como adivinhar QUEM. Toda outra
    * ação dispara na hora, com o alvo default de sempre (fixado, senão o candidato do bot).
    */
   readonly needsAim: boolean;
+  /**
+   * A magia deste slot ainda NÃO foi aprendida (#624, ADR 0058 d.5): o slot continua na barra —
+   * nada é escondido (ADR 0032 d.5) —, marcado, e o disparo é recusado pelo servidor. Só magia:
+   * suprimento (poção, runa) não exige aprendizado. `false` também quando a tela ainda não sabe
+   * o que o personagem aprendeu (`learned-spells` não chegou).
+   */
+  readonly unlearned: boolean;
   /**
    * O clique deste slot precisa da mira num ITEM do inventário (#621, `targets: 'item'`): a
    * Chameleon Rune veste a aparência do item apontado. O clique arma a mira de item, e o clique
@@ -93,12 +102,17 @@ export function slotView(
   slot: BotSlot | null,
   catalogue: Catalogue,
   state: SlotState | null,
+  learnedSpells: readonly string[] | null = null,
 ): SlotView | null {
   if (slot === null) return null;
   const action = slot.do;
-  const catalogued = action.kind === 'spell'
-    ? catalogue.bot.spells.find((spell) => spell.id === action.spellId)
-    : catalogue.bot.supplies?.find((supply) => supply.id === action.supplyId);
+  const spell = action.kind === 'spell'
+    ? catalogue.bot.spells.find((entry) => entry.id === action.spellId)
+    : undefined;
+  const supply = action.kind === 'supply'
+    ? catalogue.bot.supplies?.find((entry) => entry.id === action.supplyId)
+    : undefined;
+  const catalogued = spell ?? supply;
   const label = catalogued?.name ?? (action.kind === 'spell' ? action.spellId : action.supplyId);
   return {
     label,
@@ -107,8 +121,11 @@ export function slotView(
     cooldownMs: state?.remainingMs ?? 0,
     blocked: state?.state === 'blocked',
     auto: slot.auto,
-    needsAim: catalogued?.targets === 'friend',
+    // Ação de aliado (`targets: 'friend'`) OU magia de mira manual (`aim: 'character'`, o Find
+    // Person, #623) — dois campos porque só o primeiro abre o seletor de alvo do editor do bot.
+    needsAim: catalogued?.targets === 'friend' || spell?.aim === 'character',
     aimsAtItem: catalogued?.targets === 'item',
+    unlearned: action.kind === 'spell' && !isSpellLearned(action.spellId, learnedSpells),
   };
 }
 
@@ -118,6 +135,7 @@ export function slotTitle(view: SlotView, reason: string | null): string {
   if (view.hotkey !== undefined) parts.push(view.hotkey);
   if (view.cooldownMs > 0) parts.push(`${String(Math.ceil(view.cooldownMs / 1000))}s`);
   if (view.blocked) parts.push('bloqueado');
+  if (view.unlearned) parts.push('não aprendida');
   if (reason !== null && reason !== '') parts.push(reason);
   return parts.join(' · ');
 }

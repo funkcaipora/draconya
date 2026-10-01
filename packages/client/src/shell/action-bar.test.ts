@@ -141,6 +141,20 @@ describe('slotView', () => {
     expect(slotView(spellSlot(), catalogue(), null)?.aimsAtItem).toBe(false);
   });
 
+  it('magia de mira MANUAL (`aim: \'character\'`, o Find Person, #623) precisa de MIRA sem ser de aliado', () => {
+    const aimCatalogue = catalogue({
+      bot: {
+        ...catalogue().bot,
+        spells: [{
+          id: 'find-person', name: 'Find Person', manaCost: 20, minLevel: 8, vocationId: null,
+          effect: 'find', group: 'support', aim: 'character',
+        }],
+      },
+    });
+    const view = slotView({ do: { kind: 'spell', spellId: 'find-person' }, when: [], auto: false }, aimCatalogue, null);
+    expect(view?.needsAim).toBe(true);
+  });
+
   it('suprimento: nome do catálogo, sem pilha nem contagem', () => {
     const view = slotView(supplySlot(), catalogue(), null);
     expect(view).toMatchObject({ label: 'Poção de Vida', cooldownMs: 0, blocked: false });
@@ -150,6 +164,29 @@ describe('slotView', () => {
   it('suprimento fora do catálogo cai no id cru, nunca num nome inventado', () => {
     const slot: BotSlot = { do: { kind: 'supply', supplyId: 'gone-potion' }, when: [], auto: true };
     expect(slotView(slot, catalogue(), null)?.label).toBe('gone-potion');
+  });
+
+  it('magia NÃO aprendida é marcada (#624, ADR 0058 d.5) — o slot continua na barra, nada é escondido', () => {
+    // `heal` não está no registro de aprendidas: marcado, mas a view existe e o rótulo é o de sempre.
+    const view = slotView(spellSlot(), catalogue(), null, ['berserk']);
+    expect(view).toMatchObject({ label: 'Cura', unlearned: true });
+    expect(slotTitle(view!, null)).toContain('não aprendida');
+  });
+
+  it('magia aprendida não é marcada', () => {
+    const view = slotView(spellSlot(), catalogue(), null, ['heal']);
+    expect(view?.unlearned).toBe(false);
+    expect(slotTitle(view!, null)).not.toContain('não aprendida');
+  });
+
+  it('"ainda não sei" nunca vira "não aprendeu": sem o registro, nenhum slot é marcado', () => {
+    // O primeiro segundo de toda conexão, ou um nó anterior à #624: `learned-spells` não chegou.
+    expect(slotView(spellSlot(), catalogue(), null, null)?.unlearned).toBe(false);
+    expect(slotView(spellSlot(), catalogue(), null)?.unlearned).toBe(false);
+  });
+
+  it('suprimento (poção, runa) nunca é marcado: só a MAGIA exige aprendizado', () => {
+    expect(slotView(supplySlot(), catalogue(), null, [])?.unlearned).toBe(false);
   });
 
   it('cooldown e bloqueio vêm do slot-state', () => {

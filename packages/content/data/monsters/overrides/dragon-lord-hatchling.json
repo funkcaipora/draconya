@@ -1,7 +1,13 @@
 {
   "id": "dragon-lord-hatchling",
-  "reason": "#621 (M44-03): o Canary declara `illusionable = true` (dragons/dragon_lord_hatchling.lua:56, `things/sources/canary/data-otservbr-global/monster/`), o que o Creature Illusion confere (`MonsterType::isIllusionable`). Esta entrada é das que o #581 regenerou uma única vez e que `pnpm catalog:promote-monsters` nunca reescreve (`HAND_AUTHORED_MONSTER_IDS`): o campo não existia quando ela foi gerada, e o importador (`flags.illusionable`) só o escreve na próxima regeneração deliberada — até lá, a correção é este override.",
+  "reason": "Campos do #600 (Convince Creature e Animate Dead) que o importador de monstros gera para o resto do catálogo (`pnpm catalog:import monsters`, Canary `47dfd51`, `staging/monsters/generated/`) e que `preserveHandAuthored` não propaga para os cinco monstros preservados (`HAND_AUTHORED_MONSTER_IDS`): corpseAnimatable [{\"fromMs\": 10000, \"untilMs\": 670000}] (janela do cadáver movível nas flags do arquivo de aparências do Canary). Um teste em `packages/content/src/load.test.ts` prende estes valores contra o staging. Em cima disso: #621 (M44-03): o Canary declara `illusionable = true` (dragons/dragon_lord_hatchling.lua:56, `things/sources/canary/data-otservbr-global/monster/`), o que o Creature Illusion confere (`MonsterType::isIllusionable`). Esta entrada é das que o #581 regenerou uma única vez e que `pnpm catalog:promote-monsters` nunca reescreve (`HAND_AUTHORED_MONSTER_IDS`): o campo não existia quando ela foi gerada, e o importador (`flags.illusionable`) só o escreve na próxima regeneração deliberada — até lá, a correção é este override.",
   "patch": {
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "illusionable": true
   }
 }

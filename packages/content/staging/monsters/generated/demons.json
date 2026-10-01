@@ -179,6 +179,12 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -373,6 +379,12 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -689,6 +701,12 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1156,6 +1174,12 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1381,6 +1405,12 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1602,6 +1632,12 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1777,6 +1813,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 530,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1991,6 +2035,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2276,6 +2326,12 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2448,6 +2504,13 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "manaCost": 800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2898,6 +2961,12 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3262,6 +3331,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3522,6 +3597,12 @@
     },
     "staticAttack": 0.6,
     "corpseTtlMs": 2110000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 2110000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3904,6 +3985,12 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4058,6 +4145,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4177,6 +4270,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4656,6 +4755,12 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5038,6 +5143,12 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5441,6 +5552,12 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

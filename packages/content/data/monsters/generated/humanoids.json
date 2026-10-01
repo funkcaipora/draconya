@@ -196,6 +196,12 @@
     },
     "staticAttack": 0.98,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -307,6 +313,14 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 305,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -381,6 +395,14 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 305,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -449,6 +471,12 @@
     "runOnHealth": 50,
     "staticAttack": 0.7,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -546,6 +574,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 490,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -675,6 +711,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 695,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -842,6 +886,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1053,6 +1103,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1141,6 +1197,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 320,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1277,6 +1341,12 @@
     "runOnHealth": 110,
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1381,6 +1451,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 650,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1434,6 +1512,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1509,6 +1593,14 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 420,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1629,6 +1721,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 360,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1756,6 +1856,12 @@
     "runOnHealth": 8,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2055,6 +2161,12 @@
     "runOnHealth": 15,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2177,6 +2289,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 320,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2249,6 +2369,10 @@
         {
           "itemId": "green-tunic",
           "chance": 0.07
+        },
+        {
+          "itemId": "bread",
+          "chance": 0.14
         },
         {
           "itemId": "holy-orchid",
@@ -2358,6 +2482,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2430,6 +2560,10 @@
         {
           "itemId": "green-tunic",
           "chance": 0.07
+        },
+        {
+          "itemId": "bread",
+          "chance": 0.14
         },
         {
           "itemId": "holy-orchid",
@@ -2539,6 +2673,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2594,6 +2734,10 @@
         {
           "itemId": "sandals",
           "chance": 0.0118
+        },
+        {
+          "itemId": "grapes",
+          "chance": 0.1775
         },
         {
           "itemId": "heaven-blossom",
@@ -2657,6 +2801,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 360,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2789,6 +2941,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2946,6 +3104,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3006,6 +3170,10 @@
         {
           "itemId": "bow",
           "chance": 0.04
+        },
+        {
+          "itemId": "grapes",
+          "chance": 0.2
         },
         {
           "itemId": "heaven-blossom",
@@ -3163,6 +3331,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3242,6 +3416,14 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3304,6 +3486,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3437,6 +3625,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3555,6 +3749,14 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 290,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3721,6 +3923,14 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 360,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3830,6 +4040,13 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "manaCost": 290,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3993,6 +4210,14 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 310,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4082,6 +4307,14 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 290,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4135,6 +4368,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 360000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 360000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4370,6 +4609,12 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4605,10 +4850,314 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/humanoids/lost_berserker.lua"
+    }
+  },
+  {
+    "id": "lost-exile",
+    "name": "Lost Exile",
+    "class": "humanoid",
+    "health": 1600,
+    "experience": 1800,
+    "attack": {
+      "min": 0,
+      "max": 120
+    },
+    "armor": 20,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.05,
+        "energy": 0.1,
+        "fire": 0.25,
+        "ice": 0.15,
+        "holy": -0.1,
+        "death": 0.2
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 250,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 200
+      },
+      "items": [
+        {
+          "itemId": "coal",
+          "chance": 0.131
+        },
+        {
+          "itemId": "holy-ash",
+          "chance": 0.131
+        },
+        {
+          "itemId": "small-topaz",
+          "chance": 0.1024
+        },
+        {
+          "itemId": "skull-shatterer",
+          "chance": 0.0762
+        },
+        {
+          "itemId": "wimp-tooth-chain",
+          "chance": 0.119
+        },
+        {
+          "itemId": "red-hair-dye",
+          "chance": 0.1262
+        },
+        {
+          "itemId": "basalt-fetish",
+          "chance": 0.081
+        },
+        {
+          "itemId": "bonecarving-knife",
+          "chance": 0.081
+        },
+        {
+          "itemId": "basalt-figurine",
+          "chance": 0.081
+        },
+        {
+          "itemId": "bone-fetish",
+          "chance": 0.08881
+        },
+        {
+          "itemId": "dwarven-ring",
+          "chance": 0.01043
+        },
+        {
+          "itemId": "guardian-shield",
+          "chance": 0.0143
+        },
+        {
+          "itemId": "buckle",
+          "chance": 0.019
+        },
+        {
+          "itemId": "knight-axe",
+          "chance": 0.0095
+        },
+        {
+          "itemId": "terra-boots",
+          "chance": 0.0024
+        },
+        {
+          "itemId": "suspicious-device",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "tower-shield",
+          "chance": 0.0024
+        },
+        {
+          "itemId": "terra-legs",
+          "chance": 0.0024
+        },
+        {
+          "itemId": "fire-axe",
+          "chance": 0.0071
+        },
+        {
+          "itemId": "skull-staff",
+          "chance": 0.0048
+        },
+        {
+          "itemId": "spiked-squelcher",
+          "chance": 0.0024
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 120
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "suddendeath",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 3
+        },
+        "power": {
+          "min": 150,
+          "max": 350
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "manadrainwave",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 3,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              3,
+              3,
+              3,
+              3,
+              3
+            ]
+          }
+        },
+        "power": {
+          "min": 150,
+          "max": 250
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "smoke"
+        }
+      },
+      {
+        "id": "lifedrainwave",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 3,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              3,
+              3,
+              3,
+              3,
+              3
+            ]
+          }
+        },
+        "power": {
+          "min": 150,
+          "max": 290
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "largerock",
+          "impactKey": "poisonarea"
+        }
+      },
+      {
+        "id": "suddendeath-2",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 70,
+          "max": 250
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "energy"
+        },
+        "condition": {
+          "key": "drunk",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "heal": {
+          "min": 0,
+          "max": 160
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/lost_exile.lua"
     }
   },
   {
@@ -4854,6 +5403,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5092,6 +5647,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5189,6 +5750,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 330,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5307,6 +5876,14 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 390,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5396,6 +5973,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 330,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5566,6 +6151,12 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5701,6 +6292,12 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5782,6 +6379,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 550,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5850,6 +6455,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6052,6 +6663,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6246,6 +6863,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6370,6 +6993,14 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 390,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6598,6 +7229,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6692,6 +7329,14 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6805,6 +7450,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 590,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6955,6 +7608,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 640,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7110,6 +7771,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 490,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7228,6 +7897,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 490,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7389,6 +8066,12 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7522,6 +8205,14 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 310,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7704,6 +8395,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7798,6 +8495,14 @@
     "runOnHealth": 11,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 360,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7948,6 +8653,12 @@
     "runOnHealth": 1,
     "staticAttack": 0.9,
     "corpseTtlMs": 910000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 910000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8109,6 +8820,12 @@
     "runOnHealth": 1,
     "staticAttack": 0.9,
     "corpseTtlMs": 910000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 910000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8173,6 +8890,12 @@
     "runOnHealth": 950,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8389,6 +9112,12 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8600,6 +9329,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 60000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 60000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8703,6 +9438,13 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "manaCost": 320,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8797,6 +9539,14 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 290,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8887,6 +9637,14 @@
     "runOnHealth": 15,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 350,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8958,6 +9716,12 @@
     "runOnHealth": 17,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -9080,6 +9844,12 @@
     "runOnHealth": 30,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -9301,6 +10071,12 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -9365,6 +10141,12 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

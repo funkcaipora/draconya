@@ -178,6 +178,25 @@ describe('computePromotion', () => {
     });
   });
 
+  it('leva `boss` e `bosstiary` para o monstro promovido, e o boss não ganha ficha de Bestiário (#629)', () => {
+    // `bosstiary` é campo do `monsterSchema` (ao contrário de `bestiary`/`outfitId`): vai para
+    // `data/monsters` como está. E um boss não tem `bestiary` no Canary, então nada é escrito em
+    // `bestiary/baseline.json` para ele.
+    workdir = mkdtempSync(join(tmpdir(), 'promote-monsters-'));
+    const { bestiary: _bestiary, class: _class, ...withoutSheet } = badger();
+    setupFixture(workdir, {
+      bosses: [{ ...withoutSheet, id: 'test-boss', boss: true, bosstiary: { rarity: 'nemesis', raceId: 639 } }],
+    });
+
+    const result = computePromotion(workdir);
+
+    expect(result.slices.get('bosses')?.[0]).toMatchObject({
+      id: 'test-boss', boss: true, bosstiary: { rarity: 'nemesis', raceId: 639 },
+    });
+    expect(result.bestiaryEntries.has('test-boss')).toBe(false);
+    expect(result.appearanceEntries.get('test-boss')).toBe(105);
+  });
+
   it('nunca promove rat/rotworm/dragon/dragon-lord — mesmo se o Canary os gerar (#581)', () => {
     workdir = mkdtempSync(join(tmpdir(), 'promote-monsters-'));
     setupFixture(workdir, {

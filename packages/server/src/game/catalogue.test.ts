@@ -224,6 +224,27 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       .toEqual({ milestones: [3, 5], xpBonusPercentPerMilestone: 20 });
   });
 
+  it('leva os níveis do Bosstiary e a raridade de cada boss quando o conteúdo os tem, e a chave some quando não (#629)', () => {
+    // Fixado na sessão (invariante 7): a tela deriva o nível de cada boss da tabela por raridade e
+    // do registro cru. O conteúdo de teste não tem Bosstiary — a chave fica AUSENTE, não `undefined`.
+    expect(buildCatalogue(content)).not.toHaveProperty('bosstiary');
+    expect('bosstiary' in (buildCatalogue(content).monsters[0] ?? {})).toBe(false);
+
+    const real = buildCatalogue(loadContent(DATA));
+    expect(real.bosstiary).toEqual({
+      levels: {
+        bane: [{ kills: 25, points: 5 }, { kills: 100, points: 15 }, { kills: 300, points: 30 }],
+        archfoe: [{ kills: 5, points: 10 }, { kills: 20, points: 30 }, { kills: 60, points: 60 }],
+        nemesis: [{ kills: 1, points: 10 }, { kills: 3, points: 30 }, { kills: 5, points: 60 }],
+      },
+    });
+    // Dreadmaw: Nemesis, raceId 639 — só a raridade e a chave do contador atravessam, o resto do
+    // bloco do conteúdo é assunto do carregador. E monstro comum não ganha a chave.
+    const dreadmaw = real.monsters.find((m) => m.id === 'dreadmaw');
+    expect(dreadmaw?.bosstiary).toEqual({ rarity: 'nemesis', raceId: 639 });
+    expect('bosstiary' in (real.monsters.find((m) => m.id === 'rat') ?? {})).toBe(false);
+  });
+
   it('leva o vocabulário do bot v2, e é ele que a tela oferece (AB-09, RF-10)', () => {
     // A UI do bot não pode ter lista de opções em código: se as duas divergirem, o jogador
     // configura o que o bot recusa — e descobre pelo extrato que não fecha. O v2 substitui o
@@ -639,6 +660,36 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect('bestiary' in (withoutEntry ?? {})).toBe(false);
   });
 
+  it('leva o preço de aprender de cada magia, `0` incluso, e omite a chave da magia que ninguém ensina (#624, ADR 0058 d.3)', () => {
+    const realContent = loadContent(DATA);
+    const { bot } = buildCatalogue(realContent);
+    const price = (id: string) => bot.spells.find((spell) => spell.id === id);
+    expect(price('berserk')?.learnPrice).toBe(2_500);
+    expect(price('ultimate-flame-strike')?.learnPrice).toBe(15_000);
+    // `0` é magia grátis, e NÃO "sem preço": a checagem no catálogo é `undefined`, nunca truthy.
+    expect(price('wound-cleansing')).toHaveProperty('learnPrice', 0);
+    // A Great Death Beam só a Wheel concede: a chave fica AUSENTE, e a tela não oferece a compra.
+    expect(price('great-death-beam')).toBeDefined();
+    expect('learnPrice' in (price('great-death-beam') ?? {})).toBe(false);
+    // Toda magia com preço no conteúdo chega com o MESMO preço ao cliente.
+    for (const spell of realContent.spells.values()) {
+      expect(price(spell.id)?.learnPrice, spell.id).toBe(spell.learnPrice);
+    }
+  });
+
+  it('o familiar anuncia o cooldown de VERDADE (30 min), e a magia comum o seu (#599)', () => {
+    // O `cooldownMs` da magia do familiar é o `groupCooldown` do script (2 s); os 30 min moram no
+    // efeito, e é o que o jogador espera ver na barra. Mutação que mata: anunciar `spell.cooldownMs`.
+    const { bot } = buildCatalogue(loadContent(DATA));
+    const familiar = bot.spells.find((spell) => spell.id === 'summon-knight-familiar');
+    expect(familiar).toMatchObject({
+      effect: 'familiar', minLevel: 200, manaCost: 1_000, cooldownMs: 1_800_000, groupCooldownMs: 2_000,
+      detail: { durationMs: 900_000 },
+    });
+    // A magia comum continua com o dela.
+    expect(bot.spells.find((spell) => spell.id === 'summon-creature-druid')).toMatchObject({ cooldownMs: 2_000 });
+  });
+
   it('leva description quando a hunt a define (como a rat-cellars do conteúdo real) e omite a chave quando ausente (SV-21, #357)', () => {
     const realContent = loadContent(DATA);
     const { hunts } = buildCatalogue(realContent);
@@ -678,6 +729,35 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       ].sort(),
     );
     expect(rotworm?.lootDrops).toBe(10); // 9 itens + gold (lootDropsOf, catalogue.ts:301-315)
+  });
+
+  it('as utilitárias (#623) chegam ao catálogo como Suporte; só o Find Person pede MIRA', () => {
+    // O cliente separa a categoria pelo `effect` e arma a mira do `use-slot` pelo `aim`
+    // (ADR 0049 d.2): o Find Person nomeia o personagem por clique, e nenhuma outra utilitária
+    // (nem o Levitate, nem a Food) declara `aim`. Mutação que mata: publicar `aim` em todo
+    // `find` — o Find Fiend armaria uma mira que não tem alvo nenhum.
+    const { bot } = buildCatalogue(loadContent(DATA));
+    const byId = new Map(bot.spells.map((spell) => [spell.id, spell]));
+    const kinds: Record<string, string> = {
+      light: 'light', 'great-light': 'light', 'ultimate-light-druid': 'light',
+      'ultimate-light-sorcerer': 'light', 'levitate-up': 'levitate', 'levitate-down': 'levitate',
+      'magic-rope': 'magic-rope', 'find-person': 'find', 'find-fiend': 'find', food: 'food',
+    };
+    for (const [id, kind] of Object.entries(kinds)) {
+      expect(byId.get(id)?.effect, id).toBe(kind);
+      expect(byId.get(id)?.group, id).toBe('support');
+    }
+    // A mira vai em `aim`, e NÃO em `targets: 'friend'`: este abriria o seletor de alvo do editor
+    // de slot do bot (`acceptsFriend`), e `validateBotConfigV2` recusa salvar esse alvo num efeito
+    // que não é cura/mana — o editor prometeria o que o servidor nega.
+    expect(byId.get('find-person')?.aim).toBe('character');
+    expect(byId.get('find-person')?.targets).toBeUndefined();
+    for (const id of Object.keys(kinds).filter((k) => k !== 'find-person')) {
+      expect(byId.get(id)?.aim, id).toBeUndefined();
+      expect(byId.get(id)?.targets, id).toBeUndefined();
+    }
+    // A duração da luz é `detail.durationMs` — o que o painel da magia mostra.
+    expect(byId.get('light')?.detail?.durationMs).toBe(370_000);
   });
 
   it('buildCatalogue includes progression matching content.progression (SV-25, #361)', () => {

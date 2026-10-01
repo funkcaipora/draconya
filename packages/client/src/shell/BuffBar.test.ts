@@ -53,6 +53,19 @@ describe('a barra de condições ativas BuffBar (#348, SV-12)', () => {
     expect(html).toContain('Cura contínua');
   });
 
+  it('a luz (#623) tem badge dourada "Luz" com o tempo restante', async () => {
+    hud.set((state) => ({
+      ...state,
+      conditions: [{
+        kind: 'light', remainingMs: 370_000, light: { level: 6, color: 215, durationMs: 370_000 },
+      }],
+      conditionsReceivedAtMs: performance.now(),
+    }));
+    const html = await render(createElement(BuffBar));
+    expect(html).toContain('ui-badge-gold');
+    expect(html).toContain('Luz 6:10');
+  });
+
   it('não renderiza condição expirada (remaining <= 0)', async () => {
     hud.set((state) => ({
       ...state,

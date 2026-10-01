@@ -721,3 +721,141 @@ describe('a condição `outfit` — a aparência emprestada (#621, M44-03, `Cond
     expect(conditionImmunityOf(outfitConditionOf(rat, 1_000, 'hero', 'hero', 0))).toBe('outfit');
   });
 });
+
+describe('as condições de controle: rooted, feared e pacified (M44-04, #622)', () => {
+  const control = (key: string, expiresAtMs: number): ConditionState => ({
+    key, expiresAtMs, merge: 'longest',
+  });
+
+  it('conditionFromSpec compila as três com prazo absoluto, chave reservada e sem campo próprio', () => {
+    for (const kind of ['rooted', 'feared', 'pacified'] as const) {
+      const state = conditionFromSpec(
+        { key: kind, merge: 'longest', durationMs: 3_000, effect: { kind } },
+        'hero', 'm:1', 1_000, 'monster-attack',
+      );
+      expect(state).toEqual({
+        key: kind, targetId: 'hero', sourceId: 'm:1', expiresAtMs: 4_000, merge: 'longest',
+      });
+    }
+  });
+
+  it('merge `longest`: relançar com prazo MENOR mantém a condição, MAIOR ou IGUAL a substitui', () => {
+    // `Condition::updateCondition` do Canary: `getEndTime() > now + novoTicks` mantém a antiga.
+    const conditions = new Conditions();
+    const first = control('pacified', 10_000);
+    expect(conditions.apply(first)).toBeNull();
+    // O stairhop (2 s) NÃO encurta o Swift Foot (10 s) que já corre.
+    const shorter = control('pacified', 2_000);
+    expect(conditions.apply(shorter)).toBe(first);
+    expect(conditions.get('pacified')).toBe(first);
+    // Um prazo que termina no MESMO instante atualiza (o `>` do Canary é estrito).
+    const same = { ...control('pacified', 10_000), sourceId: 'outra' };
+    expect(conditions.apply(same)).toBe(first);
+    expect(conditions.get('pacified')).toBe(same);
+    // Um que termina depois substitui.
+    const longer = control('pacified', 12_000);
+    conditions.apply(longer);
+    expect(conditions.get('pacified')).toBe(longer);
+  });
+
+  it('a mesma chave com `refresh` continua substituindo sempre — só `longest` compara prazos', () => {
+    const conditions = new Conditions();
+    conditions.apply({ key: 'drunk', expiresAtMs: 10_000 });
+    conditions.apply({ key: 'drunk', expiresAtMs: 2_000 });
+    expect(conditions.get('drunk')?.expiresAtMs).toBe(2_000);
+  });
+
+  it('isActive lê o PRAZO, não o evento que limpa a lista — exclusivo no vencimento', () => {
+    const conditions = new Conditions();
+    expect(conditions.isActive('rooted', 0)).toBe(false);
+    conditions.apply(control('rooted', 3_000));
+    expect(conditions.isActive('rooted', 0)).toBe(true);
+    expect(conditions.isActive('rooted', 2_999)).toBe(true);
+    // O `condition-expire` vence DEPOIS do movimento/ataque do mesmo instante (Housekeeping):
+    // ler o prazo é o que faz a condição soltar no instante exato, sem depender dessa ordem.
+    expect(conditions.isActive('rooted', 3_000)).toBe(false);
+    expect(conditions.isActive('feared', 0)).toBe(false);
+  });
+
+  it('conditionImmunityOf: cada uma casa com a imunidade do mesmo nome', () => {
+    expect(conditionImmunityOf(control('rooted', 1))).toBe('rooted');
+    expect(conditionImmunityOf(control('feared', 1))).toBe('feared');
+    expect(conditionImmunityOf(control('pacified', 1))).toBe('pacified');
+  });
+
+  it('o estado do medo viaja com `flee` no snapshot e volta igual', () => {
+    const conditions = Conditions.fromState([{
+      key: 'feared', expiresAtMs: 5_000, merge: 'longest',
+      flee: { from: { x: 4, y: 5, z: 7 }, index: 2 },
+    }]);
+    expect(conditions.getState()).toEqual([{
+      key: 'feared', expiresAtMs: 5_000, merge: 'longest',
+      flee: { from: { x: 4, y: 5, z: 7 }, index: 2 },
+    }]);
+  });
+});
+
+describe('a trava de escada de um snapshot antigo vira `pacified` (#622, ADR 0014)', () => {
+  const state = (over: Partial<CharacterState>): CharacterState => ({
+    id: 'hero', position: { x: 0, y: 0, z: 7 }, health: 10, maxHealth: 10, mana: 0, maxMana: 0,
+    level: 1, xp: 0, vocationId: null, staminaMs: null, staminaUpdatedAtMs: 0,
+    goldDelta: 0, alive: true, cooldowns: {}, ...over,
+  });
+
+  it('`attackLockedUntil` no futuro volta como um `pacified` que vence no MESMO instante', () => {
+    const hero = new CharacterRuntime(state({ attackLockedUntil: 1_500 }));
+    expect(hero.conditions.get('pacified'))
+      .toMatchObject({ key: 'pacified', expiresAtMs: 1_500, merge: 'longest' });
+    expect(hero.conditions.isActive('pacified', 1_499)).toBe(true);
+    expect(hero.conditions.isActive('pacified', 1_500)).toBe(false);
+  });
+
+  it('o campo antigo nunca mais é ESCRITO: o snapshot novo leva só a condição', () => {
+    const hero = new CharacterRuntime(state({ attackLockedUntil: 1_500 }));
+    const saved = hero.getState();
+    expect(saved).not.toHaveProperty('attackLockedUntil');
+    expect(saved.conditions?.map((condition) => condition.key)).toEqual(['pacified']);
+  });
+
+  it('sem o campo (ou zero), nenhuma condição nasce; e uma condição já gravada manda mais que o campo', () => {
+    expect(new CharacterRuntime(state({})).conditions.size).toBe(0);
+    expect(new CharacterRuntime(state({ attackLockedUntil: 0 })).conditions.size).toBe(0);
+    const both = new CharacterRuntime(state({
+      attackLockedUntil: 1_500,
+      conditions: [{ key: 'pacified', expiresAtMs: 9_000, merge: 'longest' }],
+    }));
+    expect(both.conditions.get('pacified')?.expiresAtMs).toBe(9_000);
+  });
+});
+
+describe('Conditions.rebase between session clocks (#812)', () => {
+  it('keeps the remaining expiry and the phase of the next tick, on the new clock', () => {
+    const conditions = new Conditions();
+    conditions.apply({
+      key: 'poison', expiresAtMs: 70_000, nextTickAtMs: 12_000,
+      tick: { kind: 'damage', amount: 5, intervalMs: 3_000 },
+    });
+    conditions.rebase(10_000, 500);
+    expect(conditions.get('poison')).toMatchObject({ expiresAtMs: 60_500, nextTickAtMs: 2_500 });
+  });
+
+  it('drops what had already expired and leaves a retired tick without a phantom', () => {
+    const conditions = new Conditions();
+    conditions.apply(haste({ expiresAtMs: 9_000 }));
+    conditions.apply({ key: 'regen', expiresAtMs: 40_000, tick: { kind: 'heal', amount: 1, intervalMs: 1_000 } });
+    conditions.rebase(10_000, 0);
+    expect(conditions.get('haste')).toBeNull();
+    const regen = conditions.get('regen');
+    expect(regen?.expiresAtMs).toBe(30_000);
+    expect(regen).not.toHaveProperty('nextTickAtMs');
+  });
+
+  it('is reversible for everything that crossed (a refused entry undoes it)', () => {
+    const conditions = new Conditions();
+    conditions.apply(haste({ expiresAtMs: 87_700 }));
+    const before = conditions.getState();
+    conditions.rebase(57_700, 3_000);
+    conditions.rebase(3_000, 57_700);
+    expect(conditions.getState()).toEqual(before);
+  });
+});

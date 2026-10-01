@@ -210,6 +210,12 @@
     "runOnHealth": 20,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -394,6 +400,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1009,6 +1021,12 @@
     "runOnHealth": 3000,
     "staticAttack": 0.95,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1238,10 +1256,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/bibby_bloodbath.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 900
     },
     "outfitId": 2
   },
@@ -1321,6 +1350,12 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1336,6 +1371,11 @@
           "count": 5
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 432
     },
     "outfitId": 281
   },
@@ -1516,10 +1556,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/black_knight.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 46
     },
     "outfitId": 131
   },
@@ -1587,6 +1638,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1882,10 +1939,21 @@
     },
     "staticAttack": 0.98,
     "corpseTtlMs": 180000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 180000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/chagorz.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 2366
     },
     "outfitId": 1666
   },
@@ -1989,6 +2057,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/chikhaton.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 647
     },
     "outfitId": 361
   },
@@ -2158,6 +2231,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2373,6 +2452,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2388,6 +2473,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 203
     },
     "outfitId": 203
   },
@@ -2537,6 +2627,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2552,6 +2648,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 477
     },
     "outfitId": 287
   },
@@ -2738,10 +2839,21 @@
     "runOnHealth": 1,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/diseased_bill.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 485
     },
     "outfitId": 299
   },
@@ -2927,10 +3039,21 @@
     "runOnHealth": 1,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/diseased_dan.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 486
     },
     "outfitId": 299
   },
@@ -3117,10 +3240,21 @@
     "runOnHealth": 1,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/diseased_fred.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 484
     },
     "outfitId": 299
   },
@@ -3336,10 +3470,21 @@
     "runOnHealth": 30,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/ekatrix.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1140
     },
     "outfitId": 54
   },
@@ -3404,10 +3549,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/elvira_hammerthrust.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 766
     },
     "outfitId": 70
   },
@@ -3457,10 +3613,21 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/fleshslicer.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 858
     },
     "outfitId": 457
   },
@@ -3658,6 +3825,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3679,6 +3852,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 207
     },
     "outfitId": 611
   },
@@ -3807,6 +3985,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/glitterscale.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 670
     },
     "outfitId": 34
   },
@@ -3986,6 +4169,12 @@
     },
     "staticAttack": 0.5,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4007,6 +4196,11 @@
           "count": 1
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 431
     },
     "outfitId": 193
   },
@@ -4120,10 +4314,21 @@
     "runOnHealth": 60,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/groam.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 736
     },
     "outfitId": 413
   },
@@ -4397,10 +4602,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/guard_captain_quaid.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1791
     },
     "outfitId": 1217
   },
@@ -4487,10 +4703,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/hairman_the_huge.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 425
     },
     "outfitId": 116
   },
@@ -4811,6 +5038,12 @@
     "runOnHealth": 100,
     "staticAttack": 0.9,
     "corpseTtlMs": 3610000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 3610000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5665,10 +5898,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/jesse_the_wicked.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 763
     },
     "outfitId": 134
   },
@@ -5766,6 +6010,12 @@
     },
     "staticAttack": 0.85,
     "corpseTtlMs": 370000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 370000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6073,6 +6323,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6088,6 +6344,11 @@
           "count": 1
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 703
     },
     "outfitId": 394
   },
@@ -6233,6 +6494,12 @@
     "runOnHealth": 150,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6356,6 +6623,12 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6475,10 +6748,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/mornenion.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 765
     },
     "outfitId": 64
   },
@@ -6991,10 +7275,21 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/morshabaal.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 2118
     },
     "outfitId": 1468,
     "objectLooks": {
@@ -7075,6 +7370,12 @@
     "runOnHealth": 10,
     "staticAttack": 0.8,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7366,6 +7667,12 @@
     "runOnHealth": 1500,
     "staticAttack": 0.8,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7690,10 +7997,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/raxias.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 1624
     },
     "outfitId": 980
   },
@@ -7845,6 +8163,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7907,10 +8231,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/robby_the_reckless.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 764
     },
     "outfitId": 129
   },
@@ -8098,10 +8433,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/rukor_zad.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 435
     },
     "outfitId": 152
   },
@@ -8208,6 +8554,12 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8223,6 +8575,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 436
     },
     "outfitId": 134
   },
@@ -8442,6 +8799,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8681,6 +9044,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/sugar_daddy.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 2562
+    },
     "outfitId": 1764
   },
   {
@@ -8868,6 +9236,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/sugar_mommy.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 2580
+    },
     "outfitId": 1764
   },
   {
@@ -8948,6 +9321,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -9233,10 +9612,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/the_abomination.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 373
     },
     "outfitId": 1393
   },
@@ -9329,10 +9719,21 @@
     "runOnHealth": 80,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/the_blightfather.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 638
     },
     "outfitId": 348
   },
@@ -9740,6 +10141,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -9755,6 +10162,11 @@
           "count": 1
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 2055
     },
     "outfitId": 1412
   },
@@ -10192,6 +10604,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -10213,6 +10631,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 210
     },
     "outfitId": 210
   },
@@ -10420,10 +10843,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 570000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 570000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/the_first_dragon.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 1368
     },
     "outfitId": 947
   },
@@ -10475,10 +10909,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/the_frog_prince.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 420
     },
     "outfitId": 224
   },
@@ -10700,6 +11145,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/the_rootkraken.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 2528
     },
     "outfitId": 1765
   },
@@ -11017,10 +11467,21 @@
     },
     "staticAttack": 0.98,
     "corpseTtlMs": 180000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 180000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/vemiath.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 2365
     },
     "outfitId": 1668
   },
@@ -11134,6 +11595,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -11149,6 +11616,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 419
     },
     "outfitId": 2
   },
@@ -11315,10 +11787,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/williwasp.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 955
     },
     "outfitId": 44
   },
@@ -11475,6 +11958,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -11490,6 +11979,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 475
     },
     "outfitId": 287
   },
@@ -11796,6 +12290,12 @@
     },
     "staticAttack": 0.98,
     "corpseTtlMs": 370000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 370000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -12167,10 +12667,21 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/zushuka.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 969
     },
     "outfitId": 149,
     "objectLooks": {
