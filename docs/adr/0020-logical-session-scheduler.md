@@ -124,3 +124,64 @@ vence. O texto no `AGENTS.md` foi atualizado no mesmo commit.
 Os outros dez seguem intocados. O invariante 3 — o resultado não depende de haver alguém
 assistindo — sai **mais forte**: era verdade para a recompensa e falso para o dano sofrido, e
 agora é verdade para os dois.
+
+## Emenda — 2026-09-29 (#812): o relógio é da sessão — o personagem chega com os prazos traduzidos e sem os carimbos
+
+Esta decisão faz cada sessão começar o próprio relógio em zero. O que ela não dizia é o que acontece
+com um instante gravado em `CharacterRuntime` — que atravessa Cidade → hunt, hunt → Cidade e a saída
+da party como o MESMO objeto — e lido pela sessão seguinte: um instante de 57 700 ms da hunt anterior
+é "no futuro" de uma sessão que está em 1 000 ms, e o resultado do combate passa a depender do
+caminho do objeto, e não do estado e da semente (invariante 3). O #550 achou o primeiro caso
+(`lastAttackAtMs`) e o #812 fechou a classe inteira. São duas espécies de grandeza, e cada uma tem um
+destino diferente na entrada:
+
+- **Carimbo** ("quando foi a última vez que…") **é zerado.** `Session.enter` chama
+  `CharacterRuntime.resetSessionClockState` depois de o `onEnter` aceitar: `lastAttackAtMs` (#550),
+  `lastCombatActionAtMs` (#625), `attackLockedUntil` (#554), o banco de cargas de bloqueio (volta
+  cheio: o contador do Canary sobe uma carga por segundo até duas, e qualquer passagem pela Cidade dura
+  mais que isso) e a ação manual adiada (o evento dela morava na fila da sessão anterior). A janela de
+  um carimbo é curta (2 s a 60 s) e a saída normal da hunt só conclui fora de combate (`isInFight`), então
+  não há restante a preservar.
+- **Prazo** ("quanto ainda falta") **é traduzido, nunca zerado.** O cooldown de magia e de poção, as
+  condições (haste, Utamo Vita, veneno, paralisia, a regeneração de alma) e a imunidade do Cleanse
+  atravessam com o que faltava: `restante = instante − agora_da_origem`, e no destino
+  `instante' = restante + agora_do_destino` (`CharacterRuntime.moveToClock`, `Cooldowns.rebase`,
+  `Conditions.rebase`). O que já venceu na saída não vai. A Cidade não simula (ADR 0023), então o prazo
+  fica PAUSADO nela — a mesma convenção do anel de duração (`HuntRuleset#parkEquipment`, #689: "sair e
+  voltar renovaria o anel de graça") e da comida (`fedMs`, #726). O ADR 0037 (decisão 6) exige o
+  mecanismo do Canary **inclusive quando ele dispara**, e lá a condição de cooldown de magia
+  (`CONDITION_SPELLCOOLDOWN`, criada com `CONDITIONID_DEFAULT`) é persistente
+  (`Condition::isPersistent`): sobrevive ao logout com os ticks que faltavam, e a morte não a remove
+  (`Condition::isRemovableOnDeath`). Zerar tudo na entrada — a primeira versão do #812 — deixava o
+  Intense Wound Cleansing (`cooldownMs: 600000`) castável um ou dois minutos depois de uma ida à
+  Cidade, e apagava o veneno, a paralisia e o Utamo Vita de graça.
+- **A tradução precisa saber onde o relógio antigo parou, e sabe.** A premissa da primeira versão desta
+  emenda — que o objeto não guarda isso — era falsa: a sessão que SAI conhece o próprio `nowMs`, e o
+  `HuntRuleset#parkEquipment` já o usa. O personagem guarda um vínculo TRANSIENTE com o relógio da
+  sessão em que está (não vai no snapshot nem em `getState`; a restauração o religa com `bindClock`, sem
+  traduzir) e `Session.leave`/`end` gravam nele o instante EXATO da saída (`markDeparture`) — o
+  `advanceBy` que encerra no meio de um evento ainda empurra o relógio até o alvo, e a party segue
+  andando para os outros, então ler o relógio da origem depois daria um restante que depende da
+  frequência do hospedeiro (invariante 2). O `#runTransition` do host constrói o destino ANTES de
+  encerrar a origem: nesse caso a saída ainda não aconteceu, e a origem de tradução é o `nowMs` vivo
+  dela — o mesmo instante, porque nada avança uma sessão entre as duas chamadas — e a saída da origem
+  depois não traduz de novo (o vínculo já é o da sessão nova).
+- **A hunt reagenda o que a fila anterior levava.** `Session.enter` traduz ANTES do `onEnter` para o
+  ruleset enxergar os instantes já no relógio dele; `HuntRuleset#armConditions` agenda
+  `CONDITION_EXPIRE` e o próximo `CONDITION_TICK` de cada condição trazida (sem isso uma haste
+  herdada nunca acabaria). `onLeave` tira os EVENTOS da fila e deixa a condição no personagem; a
+  morte (`#onCharacterDied`) continua removendo as condições, e o cooldown de magia segue.
+- **A entrada recusada não toca quem continua na origem** (party cheia: a tradução é desfeita, o
+  vínculo volta) e **o restore de snapshot não passa por `enter`**: o relógio é o mesmo, e a janela
+  quente atravessa. A frequência de avanço (invariante 2) e a restauração continuam invariantes.
+- **A regra é estrutural, não de memória**: `SESSION_CLOCK_POLICY` (`session.test.ts`) é um
+  `Record<keyof CharacterState, 'stamp' | 'duration' | 'none'>`, e um campo novo do estado do
+  personagem não compila até ser classificado — e quem o classifica como carimbo ou prazo precisa dar
+  a ele o teste de entrada.
+
+**Não coberto (acompanhamento, ADR 0014):** o prazo atravessa a Cidade **viva**, com o mesmo objeto em
+memória. Quando a sessão de repouso é recolhida (ADR 0024) ou o nó cai, o personagem volta do ticket, e
+o `characterFromTicket` não traz cooldown nem condição — o Canary os salva no logout. Persisti-los
+pede uma coluna em `characters`, o campo no ticket e no extrato, e a migração (ADR 0014). Fica em
+aberto como trabalho próprio — não é uma divergência decidida, é o que falta para a persistência no
+logout.

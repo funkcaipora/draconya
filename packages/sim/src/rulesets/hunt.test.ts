@@ -1,6 +1,7 @@
 import { buildContent, isBlocked, placeholderAppearances } from '@draconya/content';
 import type { Content, FieldSpec, Item, Progression, RawContent } from '@draconya/content';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { spellCooldownKey } from '../casting.js';
 import { CharacterRuntime } from '../character.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { DamageOutcome } from '../combat/damage.js';
@@ -29,6 +30,7 @@ import {
 } from './hunt.js';
 import type { HuntExitRule, HuntView, PartyOptionsInput } from './hunt.js';
 import { chestStorageKeyOf } from '../tile-overrides.js';
+import { createCityRuleset } from './city.js';
 
 // O resolver canônico é ENVOLVIDO, não substituído (CMB-02): o `vi.fn` delega para a
 // implementação real, então todo o resto do arquivo roda idêntico — e o bloco do pipeline no
@@ -4613,6 +4615,33 @@ describe('trava de combate na saída (#625)', () => {
     expect(session.ended).toBeNull();
     session.advanceBy(1);
     expect(session.ended).toBe('manual-exit');
+  });
+
+  it('o carimbo de combate de uma hunt NÃO atravessa para a seguinte: quem não lutou nela sai na hora (#812)', () => {
+    // O `CharacterRuntime` é o MESMO objeto na transição (`createSessionBuilder`) e o relógio da
+    // sessão nova nasce em zero. O carimbo da primeira ficava no futuro da segunda, e a saída —
+    // que só conclui fora de combate — esperava os 60 s "desde" um golpe que esta sessão nunca
+    // viu. Combate DE VERDADE na primeira (o herói mata o rato), não um carimbo à mão.
+    const first = start({ health: 50_000 });
+    run(first.session, 10_000, 100);
+    const stamp = first.hero.lastCombatActionAtMs;
+    expect(stamp).not.toBeNull();
+    expect(stamp).toBeGreaterThan(0);
+
+    // Transição: sai da primeira e entra numa sessão NOVA, sem monstro nenhum (o assunto aqui é
+    // a trava, não o combate), com o mesmo objeto.
+    first.session.leave('hero');
+    const second = createHuntSession({
+      id: 'session-2', content: content({ routes: [{ ...route, spawnPoints: [] }] }),
+      huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+    });
+    second.enter(first.hero);
+    expect(second.nowMs).toBe(0);
+    expect(first.hero.lastCombatActionAtMs).toBeNull();
+
+    (second.ruleset as HuntRuleset).requestExit(second, first.hero.id);
+    // Sem `exitDelayMs` e sem combate nesta sessão: a saída conclui no ato.
+    expect(second.ended).toBe('manual-exit');
   });
 
   it('um novo ataque durante a espera empurra a trava — a saída só conclui 60 s depois do ÚLTIMO', () => {
@@ -15682,6 +15711,38 @@ describe('stairhop: trava de ataque ao trocar de andar (#554, M30-07, ADR 0040 d
     expect(monster.health).toBeLessThan(rat.health);
   });
 
+  it('a trava de uma hunt NÃO atravessa para a seguinte: o mesmo herói, sessão nova, bate no ato (#812)', () => {
+    // O `CharacterRuntime` é o MESMO objeto na transição e o relógio da sessão nova nasce em
+    // zero: uma trava de 90 000 ms gravada na primeira segurava o golpe da segunda por um minuto e
+    // meio — um ataque bloqueado herdado de uma escada que esta sessão nunca viu. O atraso é
+    // exagerado (90 s, não os 2 s do conteúdo real) só para o teste não confundir a trava herdada
+    // com a janela de uma travessia legítima.
+    const first = start({
+      loaded: content({
+        maps: [stairsMap], routes: [stairsRoute], hunts: [stairsHunt],
+        combat: [{ ...combatV3, stairhopDelayMs: 90_000 }],
+      }),
+    });
+    first.session.advanceBy(1);
+    expect(first.hero.position).toEqual({ x: 3, y: 1, z: 6 });
+    expect(first.hero.attackLockedUntil).toBe(90_000);
+
+    // Transição: sai da primeira e entra numa sessão NOVA, sem escada, com o mesmo objeto.
+    first.session.leave('hero');
+    const second = createHuntSession({
+      id: 'session-2', content: content({ combat: [combatV3] }),
+      huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+    });
+    second.enter(first.hero);
+    expect(second.nowMs).toBe(0);
+    expect(first.hero.attackLockedUntil).toBe(0);
+
+    run(second, 5_000, 100);
+    // O golpe de arma saiu (`lastAttackAtMs` só é escrito quando ele sai) muito antes dos 90 s.
+    expect(first.hero.lastAttackAtMs).not.toBeNull();
+    expect(first.hero.attackLockedUntil).toBe(0);
+  });
+
   it('sob combat-v1/v2, a travessia não trava nada mesmo com `stairhopDelayMs` no conteúdo', () => {
     // Defensivo: só o `combat-v3` lê o campo. Um conteúdo v1/v2 que o declarasse por engano
     // continua bit a bit.
@@ -17630,5 +17691,171 @@ describe('volta ao spawn, ocioso e passo aleatório (#655, Canary `Monster::getN
     expect(monster.conditions.get(CHALLENGE_CONDITION_KEY)).not.toBeNull();
     session.drainEvents();
     expect(movesOf(session, monster.subject, 20_000, 1_000)).toHaveLength(0);
+  });
+});
+
+// A transição leva os PRAZOS do personagem (#812, emenda do ADR 0020). O `CharacterRuntime` é o
+// MESMO objeto na Cidade → hunt, na hunt → Cidade e na saída da party, e o relógio de cada sessão
+// nasce em zero: cooldown de magia, condição e imunidade são traduzidos para o relógio da sessão
+// que entra (o que faltava continua faltando), e a hunt reagenda o vencimento e o tique que a fila
+// da anterior levava consigo. Zerar tudo (a primeira versão do #812) deixava um Intense Wound
+// Cleansing de 10 minutos castável logo depois de uma ida à Cidade — o Canary guarda a condição de
+// cooldown no logout com os ticks que faltavam (`CONDITIONID_DEFAULT` é persistente).
+describe('a transição entre sessões leva os prazos do personagem (#812)', () => {
+  const haste = {
+    id: 'haste', name: 'Haste', manaCost: 60, cooldownMs: 2_000, group: 'support', groupCooldownMs: 2_000,
+    effect: { kind: 'haste', speedPercent: 30, durationMs: 30_000 },
+  };
+  const recovery = {
+    id: 'recovery', name: 'Recovery', manaCost: 75, cooldownMs: 60_000, group: 'healing', groupCooldownMs: 1_000,
+    effect: { kind: 'heal-over-time', amount: 20, intervalMs: 3_000, durationMs: 60_000 },
+  };
+  // O Intense Wound Cleansing (`cooldownMs: 600000` em `data/spells/`), reduzido ao que importa: um
+  // cooldown que um minuto de relógio novo não paga.
+  const wound = {
+    id: 'wound', name: 'Wound Cleansing', manaCost: 10, cooldownMs: 600_000, group: 'healing',
+    groupCooldownMs: 1_000, effect: { kind: 'heal', amount: 60 },
+  };
+  const always = { kind: 'hp' as const, op: '<=' as const, percent: 100 };
+  const cast = (spellId: string) => ({ when: always, do: { kind: 'spell' as const, spellId } });
+
+  /**
+   * Como a origem acaba em relação ao destino. `enter-first` é o `#runTransition` do host: constrói
+   * o destino ANTES de encerrar a origem. `end-first` é a morte e a regra de saída, que acabam
+   * dentro do `sim`. `leave-first` é o membro que sai de uma party que continua.
+   */
+  const ORDERS = [['enter-first'], ['end-first'], ['leave-first']] as const;
+  type Order = (typeof ORDERS)[number][0];
+
+  const transition = (
+    from: Session, hero: CharacterRuntime, loaded: Content, order: Order, botConfigOf?: BotConfigInput,
+  ): Session => {
+    const next = createHuntSession({
+      id: 'next', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      ...(botConfigOf === undefined ? {} : { botConfig: botConfigOf }),
+    });
+    if (order === 'enter-first') {
+      next.enter(hero);
+      from.end('manual-exit');
+    } else {
+      if (order === 'end-first') from.end('manual-exit');
+      else from.leave(hero.id);
+      next.enter(hero);
+    }
+    return next;
+  };
+
+  describe.each(ORDERS)('%s', (order) => {
+    it('a haste atravessa com o prazo que faltava e VENCE na sessão nova', () => {
+      const first = withSpells(botConfig({ support: [cast('haste')] }), {
+        mana: 60, spells: [...spells, haste], monsters: false,
+      });
+      run(first.session, 10_000, 100);
+      const active = first.hero.conditions.get('haste');
+      if (active === null) throw new Error('a haste não foi lançada');
+      const remaining = active.expiresAtMs - first.session.nowMs;
+      // Lançada no começo: faltam uns 20 s dos 30, e nunca os 30 cheios nem zero.
+      expect(remaining).toBeGreaterThan(15_000);
+      expect(remaining).toBeLessThan(30_000);
+
+      const second = transition(first.session, first.hero, first.content, order);
+      expect(second.nowMs).toBe(0);
+      // Ainda é o mesmo prazo, agora no relógio da sessão nova, com o vencimento NA FILA dela.
+      expect(first.hero.conditions.get('haste')?.expiresAtMs).toBe(remaining);
+      expect(second.dueAtOf('condition-expire', 'hero/haste')).toBe(remaining);
+      expect(first.hero.speedScale).toBeCloseTo(1.3);
+      // E o evento da origem não ficou órfão disputando com o da nova.
+      if (order === 'leave-first') expect(first.session.dueAtOf('condition-expire', 'hero/haste')).toBeNull();
+
+      second.advanceBy(remaining - 1);
+      expect(first.hero.conditions.get('haste')).not.toBeNull();
+      second.advanceBy(1);
+      expect(first.hero.conditions.get('haste')).toBeNull();
+      expect(first.hero.speedScale).toBe(1);
+    });
+
+    it('Recovery cura o MESMO total com ou sem a troca no meio — o tique continua de onde parou', () => {
+      // O bot da hunt nova é o MESMO: o cooldown de 60 s também atravessa, então ele relança a
+      // Recovery no mesmo instante em que o relógio sem troca a relançaria (aos 60 s, no mesmo
+      // instante do último tique) — e o total só bate se o cooldown e o tique atravessarem juntos.
+      const bot = botConfig({ heal: [cast('recovery')] });
+      const build = () => withSpells(bot, {
+        health: 1_000, mana: 200, spells: [...spells, recovery], monsters: false,
+      });
+      const straight = build();
+      run(straight.session, 61_000, 100);
+
+      const split = build();
+      run(split.session, 10_000, 100);
+      const second = transition(split.session, split.hero, split.content, order, bot);
+      run(second, 51_000, 100);
+
+      expect(split.hero.health).toBe(straight.hero.health);
+      // O número absoluto é o do bloco do catálogo (20 a cada 3 s por 60 s).
+      expect(split.hero.health).toBe(1_400);
+    });
+
+    it('um cooldown de 10 minutos NÃO volta pronto: a magia só sai de novo quando o que faltava acabar', () => {
+      const bot = botConfig({ heal: [cast('wound')] });
+      const first = withSpells(bot, {
+        health: 100, mana: 100, spells: [...spells, wound], monsters: false,
+      });
+      run(first.session, 20_000, 100);
+      // Lançou uma vez: 10 de mana, e o cooldown de 600 s já anda.
+      expect(first.hero.mana).toBe(90);
+      const remaining = first.hero.cooldowns.remainingMs(spellCooldownKey('wound'), first.session.nowMs);
+      expect(remaining).toBeGreaterThan(570_000);
+
+      // A bot da hunt nova tenta a mesma magia a cada vencimento: sem a tradução, o cooldown (zerado
+      // ou herdado cru) deixaria sair logo; com ela, só sai quando o restante acabar.
+      const second = transition(first.session, first.hero, first.content, order, bot);
+      expect(first.hero.cooldowns.remainingMs(spellCooldownKey('wound'), second.nowMs)).toBe(remaining);
+      run(second, remaining - 1_000, 100);
+      expect(first.hero.mana).toBe(90);
+      run(second, 2_000, 100);
+      expect(first.hero.mana).toBe(80);
+    });
+  });
+
+  it('hunt → Cidade → hunt, como o servidor faz: o prazo pausa na Cidade e a segunda hunt o gasta', () => {
+    const first = withSpells(botConfig({ support: [cast('haste')] }), {
+      mana: 60, spells: [...spells, haste], monsters: false,
+    });
+    run(first.session, 10_000, 100);
+    const active = first.hero.conditions.get('haste');
+    if (active === null) throw new Error('a haste não foi lançada');
+    const remaining = active.expiresAtMs - first.session.nowMs;
+
+    // A Cidade nasce em zero e NUNCA avança (hz 0): é onde o prazo fica pausado.
+    const city = new Session({
+      id: 'city', contentVersion: 'v1', ruleset: createCityRuleset({}),
+      rng: Rng.fromSeed('city'), createdAtMs: 0,
+    });
+    city.enter(first.hero);
+    first.session.end('manual-exit');
+    expect(city.nowMs).toBe(0);
+    expect(first.hero.conditions.get('haste')?.expiresAtMs).toBe(remaining);
+
+    const second = transition(city, first.hero, first.content, 'leave-first');
+    expect(first.hero.conditions.get('haste')?.expiresAtMs).toBe(remaining);
+    expect(second.dueAtOf('condition-expire', 'hero/haste')).toBe(remaining);
+    second.advanceBy(remaining);
+    expect(first.hero.conditions.get('haste')).toBeNull();
+  });
+
+  it('a morte continua removendo as condições — morto não tem condição, e o cooldown de magia segue', () => {
+    const first = withSpells(botConfig({ heal: [cast('wound')], support: [cast('haste')] }), {
+      health: 100, mana: 100, spells: [...spells, haste, wound], monsters: false,
+    });
+    run(first.session, 5_000, 100);
+    expect(first.hero.conditions.get('haste')).not.toBeNull();
+    const cooldownLeft = first.hero.cooldowns.remainingMs(spellCooldownKey('wound'), first.session.nowMs);
+    expect(cooldownLeft).toBeGreaterThan(0);
+
+    first.session.kill(first.hero);
+    expect(first.hero.conditions.get('haste')).toBeNull();
+    expect(first.session.dueAtOf('condition-expire', 'hero/haste')).toBeNull();
+    // O cooldown de magia não sai na morte (`Condition::isRemovableOnDeath` do Canary).
+    expect(first.hero.cooldowns.remainingMs(spellCooldownKey('wound'), first.session.nowMs)).toBe(cooldownLeft);
   });
 });

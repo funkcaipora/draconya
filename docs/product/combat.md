@@ -1678,6 +1678,14 @@ cooldown:**
 `attack-locked` entra em `SlotRefusal` (`packages/sim/src/rulesets/hunt.ts`, disparo manual de
 slot) e em `host.ts` (`'Você está exausto.'`, a mesma frase do `RETURNVALUE_YOUAREEXHAUSTED`).
 
+**A trava não atravessa a troca de sessão (#812).** `attackLockedUntil` é instante do relógio lógico
+da sessão que o gravou, e o `CharacterRuntime` é o MESMO objeto na transição enquanto o relógio da
+sessão nova nasce em zero: uma trava de 59 700 ms herdada seguraria o golpe e a magia agressiva da
+hunt seguinte por quase um minuto, sem escada nenhuma. `Session.enter` zera o campo (depois de o
+`onEnter` aceitar; o restore de snapshot não passa por `enter` e mantém a trava quente) — o mesmo
+ponto e a mesma razão do carimbo de `lastAttackAtMs` (#550), agrupados em
+`CharacterRuntime.resetSessionClockState`.
+
 **Fora do escopo**: migrar para a condição `pacified` de verdade (M44-04); o `skull`/PvP do
 Canary que também gate a magia agressiva (o Draconya não tem PvP nem sistema de skull ainda);
 qualquer travamento fora de hunt/quest/boss/guild war — a Cidade não simula combate.

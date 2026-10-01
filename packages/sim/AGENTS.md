@@ -105,6 +105,36 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **Loot sorteia com o `Rng` da sessão, gold antes de item, e `chance: 0` não consome
   sorteio.** Ordem e semente são contrato: mudar qualquer um dos dois muda o que toda hunt
   retomada rende. `Math.random` continua proibido, e `grep -rn "Math.random" src` é vazio.
+- **Instante do relógio da sessão NÃO atravessa a troca de sessão como está** (#812, #550). O
+  relógio de cada sessão nasce em zero (ADR 0020), mas o `CharacterRuntime` é o MESMO objeto na
+  transição (Cidade → hunt, hunt → Cidade, saída da party): um instante de 57 700 ms gravado pela
+  hunt anterior é "no futuro" da nova, e o combate passa a depender de por onde o objeto andou, não
+  do estado e da semente. São duas espécies, e cada campo novo que guarde um instante (`…AtMs`,
+  `…Until`, `until`, `expiresAtMs`, `anchorMs`) escolhe UMA:
+  - **Carimbo** ("quando foi a última vez que…": `lastAttackAtMs`, `lastCombatActionAtMs`,
+    `attackLockedUntil`, o banco de bloqueio, a ação manual adiada) **zera** em
+    `CharacterRuntime.resetSessionClockState`, que `Session.enter` chama DEPOIS de o `onEnter`
+    aceitar. A janela é curta e já venceu na saída normal.
+  - **Prazo** ("quanto ainda falta": cooldown de magia/poção, condição, imunidade do Cleanse)
+    **traduz**, nunca zera: `Session.enter` chama `moveToClock` ANTES do `onEnter` e o restante
+    atravessa (`Cooldowns.rebase`, `Conditions.rebase`) — o cooldown de 10 minutos não volta pronto
+    por uma ida à Cidade, como no Canary (condição `CONDITIONID_DEFAULT` persistente) e como o anel
+    de duração (`#parkEquipment`, #689). A Cidade não simula: o prazo fica pausado nela. Zerar um
+    prazo "por segurança" é renovar de graça e é divergência de regra de caça (ADR 0037 d.6). Uma
+    condição trazida não tem evento na fila nova: `HuntRuleset#armConditions` o agenda no `onEnter`,
+    e `onLeave` cancela os eventos sem remover a condição.
+  - A origem da tradução é o instante EXATO da saída: `Session.leave`/`end` o gravam no personagem
+    (`markDeparture`), e o `#runTransition` do host constrói o destino ANTES de encerrar a origem
+    (nesse caso vale o `nowMs` vivo dela). Nunca leia o relógio de uma origem que continuou andando —
+    o restante passaria a depender da frequência do hospedeiro (invariante 2). O vínculo com o relógio
+    é transiente (fora de `getState`) e o restore de snapshot o religa com `bindClock`, SEM traduzir:
+    o relógio é o mesmo, e a janela quente atravessa. A entrada recusada desfaz a tradução.
+  - O teste que força a escolha é a tabela `SESSION_CLOCK_POLICY` de `session.test.ts`, um
+    `Record<keyof CharacterState, 'stamp' | 'duration' | 'none'>`: o campo novo não compila até ser
+    classificado. Duração sem âncora num relógio (`fedMs`, `durationRemainingMs`) é `none` e atravessa.
+  - Um cinto de leitura nunca substitui isto. `attackedRecently` lê carimbo no futuro como "nunca
+    bateu" (`false`), mas só até o relógio novo alcançar o valor velho; `isInFight` lê o MESMO
+    carimbo como "em combate" por até 60 s. Cada um cobre só metade do defeito.
 - **A esfola de cadáver (#626, `skinning.ts`) é o ÚLTIMO sorteio do abate, e só existe com
   ferramenta.** `#onMonsterDied` rola loot, credita supply/munição e SÓ ENTÃO rola a esfola — um
   sorteio, no `combat-v4`, quando quem coleta tem a ferramenta do monstro. Sem ferramenta, sem
