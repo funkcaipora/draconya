@@ -97,6 +97,10 @@ const TYPE_LABEL: Readonly<Record<string, string>> = {
   mana: 'Mana',
   damage: 'Dano', 'damage-over-time': 'Dano',
   haste: 'Suporte', buff: 'Suporte', 'mana-shield': 'Suporte', 'remove-condition': 'Suporte',
+  // As utilitárias (#623): luz, Levitate, Magic Rope, Find e Food.
+  light: 'Suporte', levitate: 'Suporte', 'magic-rope': 'Suporte', find: 'Suporte', food: 'Suporte',
+  // As duas runas de invocação (#600): Convince Creature e Animate Dead.
+  convince: 'Suporte', 'animate-dead': 'Suporte',
 };
 
 function typeOf(effect: string): string {

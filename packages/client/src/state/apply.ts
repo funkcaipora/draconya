@@ -31,7 +31,12 @@ function skillsOf(
   if (Object.keys(skills).length === 0) return previous;
   const of = (id: keyof PlayerSkills): SkillProgress => {
     const progress = skills[id];
-    return progress === undefined ? previous[id] : { level: progress.level, percent: progress.percentToNext };
+    if (progress === undefined) return previous[id];
+    // O nível com Loyalty (#628) só vem quando o bônus muda o nível; a ausência é "igual ao base".
+    return {
+      level: progress.level, percent: progress.percentToNext,
+      ...(progress.loyaltyLevel === undefined ? {} : { loyaltyLevel: progress.loyaltyLevel }),
+    };
   };
   return {
     fist: of('fist'), club: of('club'), sword: of('sword'), axe: of('axe'),
@@ -52,6 +57,18 @@ const REASON = {
   // O encerramento coletivo (#432, ADR 0032 d.14): todos os presentes aprovaram.
   'party-vote': 'A party encerrou a caçada',
 } as const;
+
+/**
+ * Por que o TREINO acabou. As frases da hunt não servem: "Você saiu da hunt" a quem parou o treino
+ * na Cidade, ou "Concluído" para uma arma que acabou, não dizem o que aconteceu. `manual-exit` é o
+ * `leave-hunt` (o jogador parou) e `completed` é a arma esgotada ou perdida da mochila — as duas
+ * saídas que o ruleset do Treino produz; o resto (manutenção) é o de sempre.
+ */
+const TRAINING_REASON: Partial<Record<keyof typeof REASON, string>> = {
+  'manual-exit': 'Você saiu do treino',
+  completed: 'A exercise weapon acabou',
+  drain: REASON.drain,
+};
 import { missileDuration } from '../world/effects.js';
 import {
   addEffect, addFloatingText, addMissile, applyTileUpdate, clearTransients, enterInstance,
@@ -271,6 +288,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         fightMode: message.fightMode,
         speed: message.speed,
         skills: skillsOf(message.skills, state.skills),
+        loyaltyBonusPercent: message.loyaltyBonusPercent ?? 0,
         soul: message.soul,
         soulMax: message.soulMax,
       }));
@@ -355,6 +373,13 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           // Os 25 Charms (M39-02, #602, ADR 0053 d.3): custo, chance e categoria de cada um,
           // fixados na sessão — a tela do Cyclopedia lê daqui.
           charms: message.charms,
+          // Os níveis do Bosstiary (#629): a tabela por raridade, fixada na sessão. Ausente quando o
+          // servidor não a mandou — a tela decide o que mostrar sem ela, não este `case`.
+          ...(message.bosstiary === undefined ? {} : { bosstiary: message.bosstiary }),
+          // O Treino (#631, ADR 0059): o que uma carga rende, os tetos e o livro do offline
+          // training, fixados na sessão — a tela de Treino lê daqui. Ausente quando o servidor não
+          // tem Treino (o pill "Treino" não existe).
+          ...(message.training === undefined ? {} : { training: message.training }),
         },
       }));
       return;
@@ -391,6 +416,12 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       hud.set((state) => ({ ...state, bestiary: message.counts }));
       return;
 
+    case 'bosstiary':
+      // SUBSTITUI, como o Bestiário: são os contadores INTEIROS de cada boss e os pontos, não um
+      // delta — o servidor manda no attach e a cada abate de boss (#629, ADR 0052 d.1).
+      hud.set((state) => ({ ...state, bosstiary: { kills: message.kills, points: message.points } }));
+      return;
+
     case 'charms':
       // SUBSTITUI, como o Bestiário: é o registro INTEIRO (pontos/echoes gastos, tiers,
       // atribuições), não um delta — o servidor manda no attach e a cada intenção aceita
@@ -402,6 +433,28 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           echoesSpent: message.echoesSpent,
           tiers: message.tiers,
           assignments: message.assignments,
+        },
+      }));
+      return;
+
+    case 'learned-spells':
+      // SUBSTITUI, como as bênçãos: é o registro INTEIRO das magias aprendidas (#624, ADR 0058),
+      // não um delta — o servidor manda no attach e a cada `learn-spell` aceito. A tela resolve
+      // nome, preço e requisito pelo catálogo (invariante 6).
+      hud.set((state) => ({ ...state, learnedSpells: message.spellIds }));
+      return;
+
+    case 'training-state':
+      // SUBSTITUI, como `charms`: o estado INTEIRO do Treino (banco, skill do livro, exercise weapons
+      // com as cargas restantes, e a instância em uso) — o servidor manda no attach, a cada mudança
+      // da mochila e a cada golpe do Treino (#631, ADR 0059).
+      hud.set((state) => ({
+        ...state,
+        training: {
+          offlineBankMs: message.offlineBankMs,
+          offlineSkill: message.offlineSkill,
+          weapons: message.weapons,
+          activeInstanceId: message.activeInstanceId,
         },
       }));
       return;
@@ -450,9 +503,12 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         exitPending: null,
         systemMessages: appendCapped(state.systemMessages, {
           level: 'warning',
-          text: `${REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
-            + ` · ${aggregates.xpGained} XP · ${aggregates.goldGained - aggregates.goldSpent} gold`
-            + ` · ${aggregates.kills} abate(s)`,
+          // O Treino não rende XP, gold nem abate: o extrato dele é o tempo e o porquê (#631).
+          text: state.analyzer.sessionType === 'training'
+            ? `Treino: ${TRAINING_REASON[message.reason] ?? REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
+            : `${REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
+              + ` · ${aggregates.xpGained} XP · ${aggregates.goldGained - aggregates.goldSpent} gold`
+              + ` · ${aggregates.kills} abate(s)`,
           atMs: nowMs,
         }),
       }));
@@ -525,6 +581,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         promoted: message.self.promoted,
         speed: message.self.speed,
         skills: skillsOf(message.self.skills, state.skills),
+        loyaltyBonusPercent: message.self.loyaltyBonusPercent ?? 0,
         soul: message.self.soul,
         soulMax: message.self.soulMax,
         // O analisador (§16.1, FUN-83). `elapsedMs` da mensagem é o mesmo
@@ -587,13 +644,20 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       hud.set((state) => ({ ...state, lastSettlement: message }));
       return;
 
-    case 'active-conditions':
+    case 'active-conditions': {
       hud.set((state) => ({
         ...state,
         conditions: message.conditions,
         conditionsReceivedAtMs: nowMs,
       }));
+      // A luz (#623) mora também no mundo, que o pintor lê sem assinatura: o servidor manda o
+      // raio, a cor e o prazo, e o pintor calcula o decaimento a cada quadro.
+      const light = message.conditions.find((condition) => condition.kind === 'light');
+      world.selfLight = light?.light === undefined
+        ? null
+        : { ...light.light, remainingMs: light.remainingMs, receivedAtMs: nowMs };
       return;
+    }
 
     case 'player-count':
       // Sem `sameX`/comparação (a #343 documenta por quê: republicado a cada 30 s sem checar

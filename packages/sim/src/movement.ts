@@ -37,7 +37,20 @@ export type MoveRejection =
    * genuína, fora do raio, ou um interativo bloqueante que não é porta. NUNCA de `canOccupy`:
    * ele só compara tile ADJACENTE, e não sabe o que é "inalcançável" — só "não é vizinho".
    */
-  | 'unreachable';
+  | 'unreachable'
+  /**
+   * Só de `HuntRuleset#step` (M44-04, #622): quem anda está sob `rooted` — nenhum passo sai, de
+   * nenhuma origem (`Game::internalMoveCreature`, `game.cpp:1965`). Nunca de `canOccupy`: a
+   * condição é do criatura, não do tile.
+   */
+  | 'rooted'
+  /**
+   * Só de `HuntRuleset#step` (M44-04, #622): quem anda está sob `feared` e o passo NÃO é o da
+   * fuga forçada (`Creature::startAutoWalk` recusa o caminhar do próprio jogador, do bot e do
+   * `walk` do socket), OU a própria fuga pisaria num campo que causa dano
+   * (`Game::internalMoveCreature`, `game.cpp:1975-1980`).
+   */
+  | 'feared';
 
 /** Ponto de mundo, com o andar. O `z` vem do MAPA — é a única fonte de verdade sobre ele. */
 export interface WorldPoint {
@@ -263,6 +276,58 @@ export function move<P extends GridPoint>(
 }
 
 /**
+ * Os dois lados de uma troca de lugar: o que cada criatura percorreu, com a duração do PRÓPRIO passo
+ * dela (velocidade e chão dela — o cliente interpola cada uma pelo seu intervalo).
+ */
+export interface SwapResult {
+  readonly ok: true;
+  readonly mover: Extract<MoveResult, { ok: true }>;
+  readonly other: Extract<MoveResult, { ok: true }>;
+}
+
+/**
+ * O `mover` ATRAVESSA `other`, que está no tile vizinho (#600): o Canary deixa o jogador pisar no
+ * tile de uma invocação de jogador no mundo no-pvp (`Player::canWalkthrough`) e as duas criaturas
+ * passam a dividir o tile. A ocupação deste motor é EXCLUSIVA (invariante 8, `TileOccupancy`: um
+ * `Set` por tile), então o atravessar vira TROCA de lugar — quem atravessa ocupa o tile do outro, e o
+ * outro ocupa o dele. É o equivalente exato para quem joga: o passo acontece, e ninguém fica preso
+ * atrás de um aliado parado.
+ *
+ * Quem decide SE a travessia é permitida (quem é `other`, de quem é a invocação) é do chamador — esta
+ * função só cuida da geometria. Recusa com a MESMA razão de `move` o que `move` recusaria por outro
+ * motivo que não a ocupação (não adjacente, parede, fora do mapa), e com `tile-occupied` o que não é
+ * troca simples: o tile de `other` é uma escada ou um teleporte (o passo redirecionaria quem pisa, e
+ * `other` nunca fica num deles) ou `other` não está de fato no tile vizinho do `mover`.
+ *
+ * **A ocupação NÃO muda**: os dois tiles estavam ocupados e continuam — por isso não há `vacate`
+ * (que fecharia porta e soltaria placa de pressão debaixo de quem acabou de entrar) nem `occupy`.
+ */
+export function swapPlaces<A extends GridPoint, B extends GridPoint>(
+  world: MovementWorld, mover: Movable<A>, other: Movable<B>,
+): SwapResult | { readonly ok: false; readonly reason: MoveRejection } {
+  const rejection = canOccupy(world, mover, other.position);
+  // Só o `tile-occupied` interessa: qualquer outra recusa é a de um passo comum, e vale igual.
+  if (rejection !== null && rejection !== 'tile-occupied') return { ok: false, reason: rejection };
+  const fromZ = zOf(mover.position, world.map);
+  const toZ = zOf(other.position, world.map);
+  const target = { x: other.position.x, y: other.position.y, z: toZ };
+  const origin = { x: mover.position.x, y: mover.position.y, z: fromZ };
+  if (rejection === null // o tile de `other` não está ocupado: nada a trocar, quem chama deveria ter pisado.
+    || fromZ !== toZ
+    || world.floorChangeAt(target.x, target.y, toZ) !== null
+    || world.teleportAt(target.x, target.y, toZ) !== null) {
+    return { ok: false, reason: 'tile-occupied' };
+  }
+  mover.position = { ...mover.position, x: target.x, y: target.y } as A;
+  other.position = { ...other.position, x: origin.x, y: origin.y } as B;
+  return {
+    ok: true,
+    mover: { ok: true, from: origin, to: target, durationMs: movementDuration(world, mover, origin, target) },
+    other: { ok: true, from: target, to: origin, durationMs: movementDuration(world, other, target, origin) },
+  };
+}
+
+/**
  * Colocação inicial: o mesmo teste de legalidade, sem origem. Fecha a FUN-60.
  *
  * Nascer, entrar numa hunt, reentrar na rota. A distância não importa; o tile importa. Um
@@ -277,9 +342,9 @@ export function move<P extends GridPoint>(
  * entrando pela porta dos fundos.
  *
  * Quem já está NESTE mundo e precisa saltar — teleporte, reentrada na rota, respawn de Guild
- * War — precisa liberar a origem, e isso é outra função. Ela não existe porque ainda não há
- * chamador; escrevê-la agora seria adivinhar a assinatura sem o caso de uso. **Não faça `place`
- * virar as duas coisas com um parâmetro booleano:** foi o que este comentário custou.
+ * War — precisa liberar a origem, e isso é outra função: `relocate` (#623, o Levitate e o Magic
+ * Rope foram o primeiro chamador). **Não faça `place` virar as duas coisas com um parâmetro
+ * booleano:** foi o que este comentário custou.
  */
 export function place<P extends GridPoint>(
   world: MovementWorld, mover: Movable<P>, at: P,
@@ -290,6 +355,38 @@ export function place<P extends GridPoint>(
   mover.position = at;
   world.occupy(at.x, at.y, z);
   return null;
+}
+
+/**
+ * O SALTO de quem já está NESTE mundo (#623: Levitate e Magic Rope): leva o mover a um tile
+ * qualquer — de outro andar, sem exigir adjacência — liberando a origem no mesmo commit. É a
+ * função que o comentário de `place` anunciava e que esperava um chamador para ter assinatura.
+ *
+ * Difere de `move` em dois pontos, de propósito: NÃO segue escada nem teleporte do destino (o
+ * chamador já escolheu o tile onde pousar) e NÃO exige um passo adjacente. Difere de `place` em um:
+ * libera o tile que o mover ocupa AGORA — ele é deste mundo, e deixá-lo ocupado seria um fantasma.
+ * A validade do destino é a de sempre (`tileAdmits`: mapa, bloqueio, ocupação), e nunca aplica
+ * pela metade. Só quem carrega `z` salta de andar: o monstro de andar único não tem para onde.
+ */
+export function relocate<P extends GridPoint>(
+  world: MovementWorld, mover: Movable<P>, to: WorldPoint,
+): MoveResult {
+  const from = mover.position;
+  const fromZ = zOf(from, world.map);
+  if (!('z' in from) && to.z !== fromZ) return { ok: false, reason: 'tile-blocked' };
+  if (to.x === from.x && to.y === from.y && to.z === fromZ) return { ok: false, reason: 'same-tile' };
+  const rejection = tileAdmits(world, to);
+  if (rejection !== null) return { ok: false, reason: rejection };
+
+  world.vacate(from.x, from.y, fromZ);
+  mover.position = ('z' in from ? { ...from, x: to.x, y: to.y, z: to.z } : { ...from, x: to.x, y: to.y }) as P;
+  world.occupy(to.x, to.y, to.z);
+  return {
+    ok: true,
+    from: { x: from.x, y: from.y, z: fromZ },
+    to,
+    durationMs: movementDuration(world, mover, from, to),
+  };
 }
 
 /**

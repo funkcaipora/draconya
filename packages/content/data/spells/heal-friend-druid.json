@@ -3,6 +3,7 @@
   "name": "Heal Friend",
   "vocationId": "druid",
   "minLevel": 18,
+  "learnPrice": 800,
   "manaCost": 120,
   "group": "healing",
   "groupCooldownMs": 1000,

@@ -1645,42 +1645,78 @@ Enquanto a condição vale, `Player::doAttacking` recusa o golpe corpo a corpo/d
 precisam de alvo hostil (cura, condição própria) o desligam. Vale **só para jogador**: o monstro
 não conhece a condição.
 
-**O Draconya reproduz o MECANISMO, não a condição.** A `pacified` de verdade (M44-04) ainda não
-existe — `Conditions` (`packages/sim/src/conditions.ts`) é o vocabulário de haste/postura/magic
-shield/cura contínua, e nenhum deles é "recusa golpe". Migrar para lá é aditivo quando a
-condição existir; até então, `CharacterRuntime.attackLockedUntil` (opcional no `CharacterState`,
-`0` ausente, sem bump de `SNAPSHOT_FORMAT_VERSION`) é um instante ABSOLUTO do relógio lógico —
-como o cooldown de magia — escrito só por `HuntRuleset#step`, o ÚNICO lugar que escreve posição
-de criatura (FUN-69): pisar numa escada ou num teleporte (#734) redireciona o passo para um tile
-que não é o adjacente pedido — `z` diferente, ou a distância pedida — e é ESSE sinal (não um
-booleano "é escada?" separado) que dispara `attackLockedUntil = session.nowMs +
-stairhopDelayMs`. Um passo comum, adjacente e no mesmo andar, nunca grava nada.
+**Desde o #622 (M44-04) a trava É a condição `pacified`** — a mesma de qualquer outra fonte (o
+Swift Foot, abaixo), lida por `Conditions.isActive('pacified', nowMs)`. Antes ela era um instante
+solto no personagem (`CharacterRuntime.attackLockedUntil`); esse campo deixou de existir no
+runtime, e um snapshot antigo que o traga é lido pelo construtor como um `pacified` que vence no
+mesmo instante (ADR 0014, sem bump de `SNAPSHOT_FORMAT_VERSION`). `HuntRuleset#step`, o ÚNICO lugar
+que escreve posição de criatura (FUN-69), aplica a condição por `#applyConditionTo`: pisar numa
+escada ou num teleporte (#734) redireciona o passo para um tile que não é o adjacente pedido — `z`
+diferente, ou a distância pedida — e é ESSE sinal (não um booleano "é escada?" separado) que dispara
+`pacified` por `stairhopDelayMs`. Um passo comum, adjacente e no mesmo andar, nunca aplica nada. A
+fusão é a de `Condition::updateCondition` (`merge: 'longest'`, ver "Condições de controle"): um
+`pacified` de 10 s que já corre não é encurtado por uma troca de andar de 2 s.
 
-**`combat.stairhopDelayMs` é conteúdo, opcional, e só o `combat-v3` lê** (`HuntRuleset#isV3`,
-`packages/content/src/schemas.ts`) — a mesma disciplina aditiva do ADR 0031/0040: ausente é
-IDENTIDADE, e todo conteúdo `combat-v1`/`v2`, ou um `combat-v3` que não declare o campo, segue
-bit a bit sem trava nenhuma. A baseline real declara `2000` (o `stairJumpExhaustion` do Canary).
+**`combat.stairhopDelayMs` é conteúdo, opcional, e só o `combat-v3` aplica a trava de escada**
+(`HuntRuleset#isV3`, `packages/content/src/schemas.ts`) — a mesma disciplina aditiva do ADR
+0031/0040: ausente é IDENTIDADE, e todo conteúdo `combat-v1`/`v2`, ou um `combat-v3` que não declare
+o campo, segue bit a bit sem trava de escada nenhuma. A baseline real declara `2000` (o
+`stairJumpExhaustion` do Canary). O que o portão lê, porém, é a CONDIÇÃO, em qualquer perfil: um
+`pacified` que o conteúdo aplica por outro caminho vale numa sessão v1/v2.
 
-**Dois portões conferem a trava, e os dois carregam o prazo exato de volta — como o
+**Dois portões conferem a condição, e os dois carregam o prazo exato de volta — como o
 cooldown:**
 
-1. **O golpe básico** (`#onPlayerAttack`): com `attackLockedUntil > nowMs`, o golpe engatilhado
-   NÃO sai — reagenda para o instante EXATO do destravamento (`attackLockedUntil - nowMs`), não
-   para o intervalo normal de ataque nem para o próximo vencimento do mundo. É a mesma
-   invariante de "engatilhado OU agendado, nunca os dois" que já vale para o cooldown de ataque:
-   a trava não some do relógio, ela move o vencimento.
-2. **A magia AGRESSIVA** (`castSpell`, `packages/sim/src/casting.ts`): `effect.kind === 'damage'`
-   ou `'damage-over-time'` recusam com a razão tipada `attack-locked` e `retryInMs` — ANTES da
-   conferência de alvo/alcance, na mesma posição relativa do `playerSpellCheck` do Canary. Cura,
-   cura contínua, haste, postura e magic shield **não conferem a trava**: são o vocabulário que
-   não precisa de alvo hostil, a mesma exceção que `Spell::aggressive` já declara.
+1. **O golpe básico** (`#onPlayerAttack`): com `pacified` vigente, o golpe NÃO sai — e o Canary
+   também não o re-arma quando a condição acaba: `Player::doAttacking` volta ANTES de criar a tarefa
+   do golpe seguinte (`player.cpp:3982`), a cadeia de golpes morre ali, e o golpe só volta no primeiro
+   GATILHO depois do prazo (`Player::onEndCondition` não faz nada). Os gatilhos do Canary são o
+   pensamento do personagem — `Game::checkCreatures` chama `onAttacking` uma vez por 1000 ms, numa
+   fase própria (`game.cpp:7726`) — e o passo do próprio personagem ou do alvo dele
+   (`Creature::onCreatureMove` com `hasExtraSwing`, `creature.cpp:569`); o `sim` reproduz os dois. O
+   golpe fica ESTACIONADO (`Runner.attackParked`: engatilhado, nenhum `PLAYER_ATTACK` na fila): o
+   `ATTACK_THINK` é agendado UMA vez, no primeiro instante da grade de pensamento do personagem
+   (`Runner.thinkPhaseMs`, sorteada uma vez com o `Rng` da sessão e persistida no snapshot) a partir
+   do vencimento — o golpe sai ATÉ 1000 ms DEPOIS do prazo, não no instante exato dele —, e um passo
+   aceito do personagem ou do alvo (`HuntRuleset#step` → `#releaseParkedAttacks`) depois do
+   vencimento o antecipa. Os gatilhos genéricos do motor (o combate-stop do `PLAYER_STEP`, o passo
+   de qualquer monstro) NÃO o soltam enquanto estacionado: um personagem parado não reacende a
+   cadeia. O portão lê o PRAZO (`Conditions.isActive`, vencimento exclusivo), e não o evento
+   `condition-expire` — que vence depois do ataque do mesmo instante (`Housekeeping`).
+2. **A magia e a runa AGRESSIVAS** (`castSpell`/`useSupply`, `packages/sim/src/casting.ts`):
+   `effect.kind === 'damage'`, `'damage-over-time'` ou `'summon'` (magia) e as runas de dano, de
+   campo, a Paralyze Rune e as duas runas de invocação (Convince Creature e Animate Dead, #600 —
+   `convince_creature.lua` e `animate_dead_rune.lua` também não chamam `isAggressive(false)`, apesar
+   do grupo `support`) recusam com a razão tipada `attack-locked` e `retryInMs` — ANTES da
+   conferência de alvo/alcance, na mesma posição relativa do `playerSpellCheck` do Canary. A
+   invocação é agressiva porque `Spell::aggressive` é `true` por padrão e o
+   `data/scripts/spells/support/summon_creature.lua` NÃO chama `isAggressive(false)` — ao contrário
+   de toda cura, condição própria e conjuração (`grep -L 'isAggressive(false)'` nos scripts de
+   `data/scripts/spells/` lista só as magias de ataque, `summon_creature`, `sap_strength`,
+   `expose_weakness`, `blank_rune`, `lightest_magic_missile_rune` e as que curam monstro — e das do
+   catálogo do Draconya só a invocação não é de ataque). Cura, cura
+   contínua, haste, postura, magic shield, Challenge, Cancel Invisibility, a conjuração, a runa de
+   cura, o antídoto e o Destroy Field **não conferem a condição**: são o que os scripts do Canary
+   marcam `isAggressive(false)`.
 
 `attack-locked` entra em `SlotRefusal` (`packages/sim/src/rulesets/hunt.ts`, disparo manual de
 slot) e em `host.ts` (`'Você está exausto.'`, a mesma frase do `RETURNVALUE_YOUAREEXHAUSTED`).
 
-**Fora do escopo**: migrar para a condição `pacified` de verdade (M44-04); o `skull`/PvP do
-Canary que também gate a magia agressiva (o Draconya não tem PvP nem sistema de skull ainda);
-qualquer travamento fora de hunt/quest/boss/guild war — a Cidade não simula combate.
+**A trava atravessa a troca de sessão como PRAZO, não como instante (#812, #622).** O
+`CharacterRuntime` é o MESMO objeto na transição enquanto o relógio lógico da sessão nova nasce em
+zero, e um instante gravado no relógio da anterior (59 700 ms) lido cru seguraria o golpe e a magia
+agressiva da hunt seguinte por quase um minuto, sem escada nenhuma. Quando a trava era
+`attackLockedUntil` ela era um CARIMBO e `Session.enter` o zerava; agora que é a condição `pacified`
+ela é PRAZO como toda condição: `Session.enter` a traduz para o relógio novo
+(`CharacterRuntime.moveToClock` → `Conditions.rebase`), o que faltava continua faltando, e a hunt que
+entra reagenda o vencimento (`#armConditions`) — como o Canary, em que a condição é persistente. Com
+os 2 s reais da baseline isso é, no máximo, o resto de uma janela de 2 s; nunca o instante cru. O
+restore de snapshot não traduz nada (o relógio é o mesmo) e lê um `attackLockedUntil` antigo como
+`pacified` no instante em que ele estava.
+
+**Fora do escopo**: o `skull`/PvP do Canary que também gate a magia agressiva (o Draconya não tem
+PvP nem sistema de skull ainda); qualquer travamento fora de hunt/quest/boss/guild war — a Cidade
+não simula combate.
 
 ## Manter distância: o atirador recua quando o alvo chega perto (#542, `targetDistance`)
 
@@ -1806,9 +1842,10 @@ sem rolar nada, e a semente da sessão não é tocada. Sem esse corte, um Doom D
 daria haste sozinho (`doom_deer.lua`: defesa de velocidade, 30 % a cada 3 s, 8 s), a condição
 impediria o ocioso e ele passearia pelo spawn para sempre. O reverso vale igual: um monstro ferido
 que voltou e ficou ocioso NÃO se cura pela defesa enquanto ninguém o acorda. Invocação (`masterId`) nunca fica
-ociosa nem volta ao spawn (`spawnMonster.expired()` no Canary devolve "no spawn"); sem alvo ela
-continua parada — o Canary a manda seguir o mestre (`updateSummonTarget`), o que este motor não
-modela.
+ociosa nem volta ao spawn (`spawnMonster.expired()` no Canary devolve "no spawn"); sem alvo, a de
+PERSONAGEM segue o mestre (#599, `updateSummonTarget` — ver "O familiar de vocação"; sem mestre à vista
+ou sem caminho até ele ela vagueia pelo `doRandomStep`), e a invocação de outro MONSTRO (#546) continua
+parada — o que este motor não modela para ela.
 
 A retenção do alvo (`chooseTarget`) passou a exigir a mesma área de visão: o alvo que sai do
 `aggroRadius` é largado (`Creature::onCreatureMove` → `onCreatureDisappear`), mesmo com o
@@ -1871,7 +1908,8 @@ volta o zeram.
   seguinte e o monstro espera. Só vale para o `home` ocupado ou a região isolada — com caminho, a
   busca o acha.
 - **O teleporte de volta de `Monster::onThink`** para quem passa de `deSpawnRadius`.
-- **Seguir o mestre** (`Monster::updateSummonTarget`) — a invocação sem alvo continua parada.
+- **Seguir o mestre** (`Monster::updateSummonTarget`) — só a invocação de PERSONAGEM o faz (#599); a
+  invocação de outro monstro (#546) sem alvo continua parada.
 
 ### Efeito nas hunts
 
@@ -1989,13 +2027,33 @@ por `spell.manaCost`.
   contrário da invocação de MONSTRO (#546, que roda `chooseTarget` normal), a de PERSONAGEM tem o
   `targetId` PROPAGADO do alvo atual do mestre (`attackTargetOf`, a mesma resolução que já limpa
   alvo morto/fora de alcance) a cada passo/ataque/ability — e troca junto quando o mestre troca.
-  Sem mestre vivo ou mestre sem alvo, fica parada (`targetId: null`), sem sortear nada; não roda o
+  Sem mestre vivo ou mestre sem alvo, o `targetId` é `null` (sem sortear nada); não roda o
   timer de `targetChange` do próprio monstro (gated, mas continua reagendando — inofensivo, como
   o de `MONSTER_SUMMON` numa invocação que nunca arma a própria lista).
-  - **Divergência aceita:** sem alvo, a invocação NÃO persegue o mestre fisicamente (o
-    `follow` genérico de personagem só existe entre membros de party) — ela fica onde nasceu até
-    ter um alvo para seguir. Num mapa de rota fixa isso raramente importa (o combate normalmente
-    já está próximo quando a invocação nasce); registrado aqui, não escondido.
+  - **Sem alvo, ela SEGUE O MESTRE** (#599; antes era uma divergência aceita do #598): `Monster::
+    updateSummonTarget` manda `setFollowCreature(master)` quando o mestre não está atacando nada, e
+    `HuntRuleset#onMonsterStep` reproduz isso com `summonFollowStep` (`monster/monster.ts`): só
+    segue quem ENXERGA o mestre (mesmo andar, dentro da visão de 11 — a condição do
+    `setFollowCreature`), anda por uma BUSCA de caminho de menor custo (`cheapestPath`, cardinal 10 e
+    diagonal 35 como o A* do Canary, raio 12) até um tile a EXATAMENTE 2 do mestre COM linha de
+    visão livre até ele (`getPathSearchParams`: `minTargetDist = 1`, `maxTargetDist = 2`,
+    `clearSight`), e para lá. O objetivo é de DUAS camadas, como `FrozenPathingConditionCall`: só um
+    tile a 2 encerra a busca — um a 1 é só o "melhor até agora", e a invocação encostada no mestre se
+    afasta até a 2; sem nenhum tile a 2 alcançável (beco, mestre cercado) ela fica a 1. Vale para a
+    Summon Creature comum e para o familiar, que são a mesma invocação de personagem. Não é o passo
+    guloso: numa concavidade ele faria a invocação oscilar. A invocação de outro MONSTRO (#546) sem
+    alvo continua parada. Parada ou não, a invocação nunca trava a rota do personagem: ele a atravessa
+    (o bullet abaixo; o familiar pela troca do #599, a comum pela do #600).
+  - **O que a invocação faz quando NÃO consegue seguir** (`Creature::goToFollowCreature`,
+    `Monster::getNextStep`): **(a)** sem mestre à vista (outro andar ou além da visão de 11) o Canary
+    não tem `followCreature` (`setFollowCreature` recusa), e **sem caminho** até um tile bom
+    (`getPathTo` falso) `hasFollowPath` é falso — nos dois casos o `getNextStep` cai no
+    `doRandomStep`, e a invocação VAGUEIA (um passo aleatório por segundo, no máximo, como todo
+    monstro sem perseguição: `decideUnengagedMove`); **(b)** a Summon Creature COMUM não segue o
+    mestre INVISÍVEL que ela não enxerga (`canFollowMaster`: `canSeeInvisibility() ||
+    !master->isInvisible()`) e fica parada — o FAMILIAR segue sempre (`!isFamiliar()` faz parte da
+    condição). A parte do tile de proteção (`TILESTATE_PROTECTIONZONE`) da mesma checagem não se
+    aplica: a hunt não tem zona de proteção.
 - **Monstros HOSTIS a atacam** (`isOpponent` do Canary): a lista de presas de um monstro
   hostil (`masterId === null`, ou invocado por OUTRO monstro) é estendida pelas invocações de
   personagem VIVAS (`HuntRuleset#playerSummonPrey`/`#livePlayerSummons`) — devolve a MESMA
@@ -2003,7 +2061,7 @@ por `spell.manaCost`.
   invocando não aloca nada a mais e não sorteia nada a mais (garantia que os testes de RNG
   prendem). O golpe de um monstro contra uma invocação usa `#monsterDefender` (o "monstro como
   defensor" que já existia para o reflexo do #552) — nunca o caminho do jogador (sem mana shield,
-  sem carga de colar/anel, sem shielding): `#applyMonsterHitOnSummon` é a metade nova de um par
+  sem carga de colar/anel, sem shielding): `#applyMonsterHitOnMonster` (ex-`...OnSummon`, #619) é a metade nova de um par
   com `#applyMonsterHit`.
 - **O contrário também: `#hostileMonsters()` protege contra fogo amigo.** Achado da implementação
   — sem isto, o auto-target (#444), a mira de área e o clique do próprio jogador (`chooseTarget`,
@@ -2013,10 +2071,27 @@ por `spell.manaCost`.
   é `#monsters` menos as invocações de personagem vivas (mesma referência quando não há
   nenhuma); `chooseTarget`/`#resolveManualTarget` recusam explicitamente `monster.masterId ===
   character.id` mesmo com o subject certo — defesa em profundidade contra o cliente pedindo por
-  fora do auto-target.
+  fora do auto-target. **A colheita das ÁREAS também pula a invocação de jogador** (#600): as duas
+  formas de `#aimFor` (a centrada no lançador e a centrada no alvo) e o golpe de varredura
+  (`#cleave`) varrem `#monsters` direto, e sem o corte a primeira Great Fireball ou Exori Mas perto
+  do convencido (ou do Skeleton animado) o mataria — o jogador pagou a runa e perdia a invocação. É a
+  regra do mundo no-pvp (ADR 0060; Canary `Combat::canTargetCreature`: `target->isSummon() &&
+  targetMasterPlayer` recusa), e vale para a invocação de QUALQUER jogador, a do companheiro de party
+  inclusive; a mira explícita de um efeito de dano numa invocação alheia também é `no-target` (a
+  Convince Creature fica de fora: ela chega ao script, que recusa `not-possible`).
+- **O jogador ATRAVESSA a invocação de jogador** (#600, `Player::canWalkthrough`, mundo no-pvp): o
+  Canary deixa as duas criaturas dividirem o tile; este motor tem ocupação exclusiva (invariante 8),
+  então o passo do personagem para o tile de uma invocação vira TROCA de lugar (`swapPlaces`, em
+  `movement.ts`, chamada por `HuntRuleset#step` — o ponto único de todo passo: a rota do bot, o follow
+  e o `walk` à mão). Os dois tiles continuam ocupados, então porta não fecha e placa de pressão não
+  solta; o personagem leva o dano do campo do tile novo, e a invocação — que no Canary nem se mexeu —
+  não leva o do tile velho. A invocação NÃO atravessa nada sozinha: monstro hostil continua bloqueado
+  por ela. Sem isto, o Skeleton animado (ou o convencido) em cima do próximo tile da rota travava o
+  passo do herói pelo resto da hunt — a invocação nunca morre pela mão do mestre e o bot não a
+  ataca.
 - **O dano da invocação credita o MESTRE, nunca ela mesma** (ADR 0057 decisão 2,
   `Creature::getGainedExperience`/`attackerMaster` do Canary): quando o ATACANTE de um golpe
-  monstro-contra-monstro tem `masterId` string, `#applyMonsterHitOnSummon` redireciona o
+  monstro-contra-monstro tem `masterId` string, `#applyMonsterHitOnMonster` redireciona o
   `recordDamage`/`session.creditDamage` para o `characterId` do mestre, não para o `subject` da
   invocação — é o que faz a XP por razão de dano (#523) e o Bestiário renderem para o
   PERSONAGEM: `xpByDamage`/`session.participants` nunca reconheceriam um `m:<id>` como
@@ -2039,16 +2114,409 @@ por `spell.manaCost`.
 - **`combat-v4` (ADR 0052 decisão 7):** o veículo único do endgame — ver "O `combat-v4`" em
   `docs/product/combat-conformance.md` para o estágio que este sistema declara nele (additive:
   nenhum abate ou golpe que já existia muda de número quando ninguém invoca).
-- **Fora do escopo** (M38 continua em #599/#600): os quatro familiares (level 200, duração/
-  cooldown de parede), Convince Creature (rouba um monstro hostil) e Animate Dead (cadáver vira
-  Skeleton). O PRESET "sem invocação viva → invocar" para Druid/Sorcerer também fica de fora — o
-  vocabulário (`kind: 'summons'`, a ação `spell` com `monsterId`) já suporta configurá-lo à mão
-  pela barra, mas o mecanismo de PRESET em si (aplicar automaticamente ao escolher vocação) é o
-  #526, que ainda não existe neste repositório.
+- **Fora do escopo** (M38): o PRESET "sem invocação viva → invocar" para Druid/Sorcerer. O
+  vocabulário (`kind: 'summons'`, a ação `spell` com `monsterId`) já suporta configurá-lo à mão pela
+  barra, mas o mecanismo de PRESET em si (aplicar automaticamente ao escolher vocação) não existe; o
+  preset da party de dragões (#526) já leva a regra do FAMILIAR (seção abaixo). Os quatro familiares
+  chegaram no #599 (seção abaixo) e Convince Creature e Animate Dead no #600 (a seção "Convince
+  Creature e Animate Dead", depois dela).
+- **O alvo da invocação é o alvo SELECIONADO do mestre (#599).** `HuntRuleset#chooseMonsterTarget`
+  passou a herdar `#attackTargetOfRunner(owner) ?? #botCandidateOf(owner)` — a criatura que o
+  mestre escolheu atacar (`master->getAttackedCreature()` do Canary, `Monster::updateSummonTarget`)
+  — em vez do `attackTargetOf`, que só vale dentro do alcance da ARMA dele (o desarmado alcança 1).
+  Com o segundo, o Sorcerer e o Druid, que lutam a três ou sete tiles com magia e runa, deixavam a
+  invocação sem alvo enquanto a luta acontecia.
+
+## O familiar de vocação (#599, M38-02, ADR 0057 d.3–d.4; Canary `Player:CreateFamiliarSpell`)
+
+Fontes locais (Canary `47dfd51`): `data/scripts/spells/familiar/{knight,paladin,sorcerer,druid}_
+familiar.lua`, `data/libs/functions/player.lua` (`CreateFamiliarSpell`/`createFamiliar`),
+`data/libs/systems/familiar.lua` (`FAMILIAR_ID`, os outfits), `data/scripts/creaturescripts/
+familiar/{on_login,on_death}.lua`, `data-otservbr-global/monster/familiars/*.lua`,
+`data-otservbr-global/scripts/spells/monster/summonchallenge.lua` e `config.lua.dist` (`familiarTime`).
+
+**O que existe.** Quatro magias (`packages/content/data/spells/summon-<vocação>-familiar.json`),
+level 200, mana 1000 (Knight) / 2000 (Paladin) / 3000 (Sorcerer) / 3000 (Druid), grupo `support`, e
+quatro monstros importados de `familiars/` (`packages/content/data/monsters/generated/
+familiars.json`, pelo `pnpm catalog:import monsters` — o familiar do Monk fica de fora, ADR 0051).
+O familiar dura **15 minutos** (`60 × familiarTime / 2` s, `familiarTime = 30`) e a magia volta **30
+minutos depois do lançamento** (`2 ×` a duração) — os dois números moram no EFEITO da magia
+(`effect.durationMs`/`effect.cooldownMs`), e o `cooldownMs` da magia fica em 2 s (o `groupCooldown`
+do script; o `spell:cooldown(0)` do Canary diz que quem cobra é a `CreateFamiliarSpell`).
+Como toda magia instantânea, ela só é lançada DEPOIS de aprendida (#624, ADR 0058): o `learnPrice`
+das quatro é o do NPC do Canary (50 000, importado por `pnpm catalog:spell-prices`), e quem lança sem
+tê-la recebe `spell-not-learned`.
+
+- **Não é `summonable`.** O Canary declara `summonable = false` nos quatro: a Summon Creature não os
+  invoca. O que os liga é o `flags.familiar` (`monsterSchema.familiar`), que `buildContent` exige
+  do `monsterId` da magia.
+- **Lançar** (`HuntRuleset#castSpell`, ramo `familiar`): recusa com **zero invocações vivas**
+  (`has-summons` — o teto do familiar não é o 2 da Summon Creature; ele OCUPA um lugar do teto de 2,
+  então sobra uma Summon Creature) e recusa sem sala em volta (`not-enough-room`), **as duas antes
+  de gastar mana e de armar qualquer cooldown**: o `onCastSpell` do Canary devolve `false` e o
+  framework não cobra (`castSpell` ganhou o parâmetro `precondition`, chamado depois de level/
+  cooldown/mana e antes do custo). A mana sai pelo `spell.manaCost` e rende skill de magia como
+  qualquer magia (`addManaSpent`).
+- **Onde nasce:** `Game.createMonster(name, pos, extended = true, …)` — os doze tiles da
+  `extendedRelList` de `Map::placeCreature` (`familiar.ts`): os quatro do norte ({0,−2}, {−1,−1},
+  {0,−1}, {1,−1}) embaralhados entre si e só depois os outros oito, o primeiro que serve (parede,
+  ocupação, sem escada/teleporte, com linha de visão livre até o mestre). O embaralhamento usa o
+  `Rng` da sessão (o Canary usa `std::random_device`): 10 sorteios por tentativa, e zero quando
+  ninguém invoca.
+- **Velocidade:** a MAIOR entre a do mestre e a do monstro, **fixada no lançamento**
+  (`changeSpeed(math.max(self:getSpeed() - base, 0))`) — inclui a haste que o mestre tinha naquele
+  instante, e o Canary não a atualiza depois.
+- **Duração e cooldown são carimbos de relógio de PAREDE** no `CharacterRuntime.familiar`
+  (`{ version, summonUntilMs, cooldownUntilMs }`, epoch em ms — `packages/sim/src/familiar.ts`),
+  gravados no lançamento e persistidos na coluna `character.familiar` (`jsonb`, migração `0023`):
+  lidos inteiros no ticket, escritos inteiros pelo extrato, última escrita vence (NUNCA fundidos
+  pelo maior — o `summonUntilMs` desce quando o familiar morre). O `sim` não lê relógio nenhum
+  (invariante 1): o "agora" é `Session.createdAtMs + Session.nowMs`, dados pelo servidor — e é o
+  SERVIDOR quem mantém a soma verdadeira: na retomada de um snapshot o intervalo descartado (ADR
+  0018) é somado ao `createdAtMs` (`SessionHost#resume`), senão o relógio de parede do `sim` ficaria
+  atrasado pela queda inteira e o cooldown gravado numa sessão retomada nasceria já curto. **Os
+  carimbos são sempre INTEIROS**: o relógio lógico do hospedeiro é `performance.now()`, fracionário,
+  e todo consumidor (estado do personagem, extrato, ticket) valida inteiro seguro e troca o torto
+  pelo vazio em silêncio — o lançamento grava o teto (`Math.ceil`, nunca encurta o cooldown) e a morte
+  grava o piso (nunca recria o que acabou de morrer). **O fim da
+  vida é um evento da fila** (`familiar-expire`, subject `m:<id>`; invariante 2) — mesmo estado a 1
+  Hz e a 10 Hz, e o evento volta no snapshot. Um `Cooldowns` de sessão não serviria: ele guarda
+  instante LÓGICO, que nasce em zero a cada sessão.
+- **A recusa por cooldown NÃO carrega prazo para o bot** (`retryInMs: 0`, engatilha). Um prazo de 30
+  min faria o grupo `support` do bot dormir 30 min — inclusive a haste, que vive nele. A barra
+  mostra o cooldown REAL (`#cooldownWaitOf` inclui o carimbo: `slotStates`/`useSlot` recusam com o
+  prazo em relógio de parede) e o bot lança sozinho no instante em que a magia volta.
+- **Ao entrar na hunt o familiar volta com o tempo que sobra** (`familiarOnLogin`,
+  `HuntRuleset#restoreFamiliar`): `summonUntilMs − agora`, para quem tem a magia da vocação, o level
+  dela e nenhuma invocação viva — sem mana, sem tocar no cooldown, e sem nova tentativa se não
+  houver sala. **A morte do familiar zera a recriação** (`FamiliarDeath`: `familiar-summon-time =
+  os.time()`) e deixa o cooldown de pé. O mestre que sai da hunt leva o familiar junto (#598) e os
+  carimbos ficam; a Cidade não simula nem tem invocação (`City#useSlot` recusa o efeito).
+- **Segue o mestre** (`Monster::updateSummonTarget`): sem alvo, o familiar anda até um tile a 2 do
+  mestre (a 1 só se não houver tile a 2 alcançável), se o enxerga (visão de 11), por uma busca de
+  menor custo (cardinal 10, diagonal 35) — e para lá; com alvo, luta. Sem o mestre à vista ou sem
+  caminho até ele, vagueia como todo monstro sem perseguição, e o teleporte abaixo o traz de volta.
+- **Teleporte ao mestre** (`Creature::checkSummonMove`, a cada passo dele): outro andar OU mais de
+  15 tiles em x/y (`FAMILIAR_TELEPORT_DISTANCE`) — a invocação comum só some além de 30 tiles/2
+  andares, o familiar nunca. **Sai como RELOCAÇÃO para quem olha**: o par `creature-vanished` +
+  `creature-appeared` do mesmo subject (com id numérico novo no cliente), nunca um `creature-moved`
+  de duração zero — o protocolo exige duração positiva e o hospedeiro descartaria o evento, deixando
+  o familiar desenhado no tile (e no andar) antigos.
+- **O jogador atravessa o familiar** (`Player::canWalkthrough`: `monster->isFamiliar()`, qualquer
+  familiar de qualquer dono): o tile ocupado só por ele não bloqueia o caminho do personagem
+  (`#moverBlocked` no passo guloso, `#occupiedForPlayer` nas buscas de caminho do follow e do `walk-to`), e o passo TROCA os dois de lugar (`#step`: o familiar ocupa o tile que o
+  jogador acabou de deixar, com um `creature-moved` para ele). Sem isto, um familiar parado num
+  corredor tranca a party — achado pela regressão de coesão do #527 com o preset novo. O monstro
+  hostil continua sem atravessá-lo.
+- **A ability do familiar bate nos monstros HOSTIS, nunca na party.** `#executeMonsterAbility`
+  troca as presas de uma invocação de PERSONAGEM por `#hostileMonsters()` (o Canary passa a área
+  pelo `canDoCombat`, que protege jogador e invocação de jogador). O #598 só tinha exercitado o golpe
+  de alvo único: uma onda de familiar acertaria o próprio mestre. O crédito de dano, XP e Bestiário
+  é do mestre, como antes — e **o mestre recebe a XP INTEIRA** (`Creature::onGainExperience` só
+  divide por 2 a invocação que NÃO é familiar).
+- **`summon challenge`** (Druid e Sorcerer, 40 % a cada 2 s): a ability `challenge: { durationMs:
+  8000 }` — `doChallengeCreature(..., 8000)` sobre a `AREA_CIRCLE2X2` centrada no lançador (o círculo
+  de raio 4 da tabela de anéis de monstro, os mesmos 21 tiles): cada monstro hostil atingido passa a
+  mirar o familiar (`Monster::challengeCreature` recusa quem é invocação) e ganha a condição
+  `challenge`. Sem dano, sem sorteio de dano.
+- **Ice Strike e Sudden Death Rune** (Knight): o monstro lança a magia REGISTRADA pelo nome
+  (`Monsters::deserializeSpell` → `getSpellByName`) com o dano da PRÓPRIA entrada
+  (`Monster::getCombatValues`). O `spell:range(3)` do Ice Strike vale por cima do `range 5` do
+  monstro (`canThrowSpell`) — a ability sai com alcance 3.
+- **Preset (#526)**: `botConfigFor` (`packages/tools/src/dev/dragon-party-plan.ts`) leva, para cada
+  vocação, `summon-<vocação>-familiar` com a condição `summons <= 0` ("familiar pronto → invocar",
+  ADR 0057 d.4) no grupo `support`, ao lado da haste.
+
+**Divergências, com o motivo** (nenhuma é regra de caça; as que são, estão marcadas):
+
+1. **O cooldown também corre na Cidade e offline (relógio de parede).** No Canary é uma
+   `CONDITION_SPELLCOOLDOWN` persistente cujos `ticks` só andam com o jogador ONLINE. Dentro da hunt
+   os dois coincidem. É a decisão do ADR 0057 d.3 e do ADR 0052 d.6 ("cooldown de parede"), anterior a
+   esta issue; ver a emenda do ADR 0057.
+2. **Premium não é conferido** (`CreateFamiliarSpell`: "You need a premium account."). O catálogo
+   inteiro de magias ignora `isPremium` (`scripts/catalog/spells.ts`), e o Premium do personagem só
+   chega ao ruleset da party — uma hunt solo não o conhece.
+3. **O teleporte cai no tile livre mais perto do mestre, não NO tile dele** (`internalTeleport` com
+   `FLAG_NOLIMIT`): o tile do `sim` é exclusivo (`TileOccupancy`).
+4. **Atravessar o familiar é uma TROCA de tiles, não dividir o tile** (mesma razão): o Canary deixa
+   o jogador e o familiar no mesmo tile. Quando o tile que o jogador deixou não admite mais o familiar
+   (uma porta comum que fecha no `vacate`), o familiar é recolocado no tile livre mais perto do
+   jogador — como no teleporte, e com o mesmo par de eventos de relocação. O familiar sem alvo SEGUE o mestre (`summonFollowStep`,
+   acima), e o teleporte ao mestre cobre o que a visão de 11 não alcança (> 15 tiles/outro andar).
+5. **Sem as mensagens "Your summon will disappear in less than one minute / 10 seconds"** (texto
+   privado ao mestre, `MESSAGE_LOOT`): apresentação, sem canal no protocolo.
+6. **O familiar nasce fora de escada e de teleporte** — o Canary o aceita em tile de mudança de
+   andar, exceto com o mestre atacando (`Tile::queryAdd`).
+7. **A XP de uma invocação COMUM ainda é a inteira**, e o Canary a divide por 2 (`Creature::
+   onGainExperience`: `gainExp /= 2` para `!isFamiliar()`, exceto com XP compartilhada de party) —
+   achado ao ler a fonte do familiar, que é o caso certo; o #598 nunca modelou a metade.
+
+## Convince Creature e Animate Dead (#600, M38-03, ADR 0057 d.5–d.6; TFS/Canary `convince_creature.lua`, `animate_dead_rune.lua`)
+
+As duas runas de invocação que sobravam depois da Summon Creature (acima) e dos familiares (#599).
+Ambas são **supply abstrato** (gold no uso, ADR 0044 — a carga é o preço da runa, `charges(1)`), do
+grupo `support`, com o par `cooldown 2 s` + `groupCooldown 2 s` do Canary (`cooldownMs` e
+`groupCooldownMs`, os dois livros — o mesmo desenho da Paralyze Rune) e a exaustão de ação de 1 s de
+toda runa. **Nenhuma das duas declara `rune:vocation`**: qualquer vocação usa (a issue dizia "druid",
+que é o TibiaWiki — vale o Canary, ADR 0037 d.4). Vivem em `packages/content/data/supplies/
+convince-creature-rune.json` e `animate-dead-rune.json`, com os efeitos novos `convince` e
+`animate-dead` no `supplySchema`; o preço vem de `pnpm catalog:npc-prices` (80 e 375, o menor `buy`
+dos NPCs para os clientId 3177 e 3203).
+
+O que o script do Canary confere fica FORA de `casting.ts` (que não conhece monstro nem cadáver,
+invariante 1) e entra em `useSupply` como uma **precondição** que o ruleset passa
+(`HuntRuleset#summonRunePrecondition`): roda depois dos requisitos, da mira e do alcance e ANTES de
+gastar o gold — a carga só sai quando o script devolve `true`, então recusa nenhuma custa gold,
+mana ou cooldown. Recusas novas: `not-possible` (`RETURNVALUE_NOTPOSSIBLE`, "Isso não é possível.")
+e `too-many-summons` ("You cannot control more creatures."), ao lado de `not-enough-mana`,
+`no-target`, `out-of-range`, `level-too-low`/`magic-level-too-low` de sempre.
+
+### Convince Creature (level 16, magic level 5)
+
+- **Mira uma criatura** (`needTarget(true)`), alcance 8 (a convenção do catálogo para runa de alvo
+  único — o Lua não declara `rune:range`); monstro invisível recusa `no-target`, como as outras runas
+  de alvo único.
+- **A ordem do script**: o alvo é `convinceable` (`monster.convinceable`, `MonsterType::
+  isConvinceable`) e NÃO tem mestre nenhum — nem o de outro personagem (`target:getMaster()`) —, senão
+  `not-possible`; menos de 2 invocações vivas (`getSummons() >= 2`), senão `too-many-summons`; mana >=
+  `monster.manaCost`, senão `not-enough-mana`. `manaCost` ausente é zero: o `info.manaCost` do monstro
+  fica zerado, e o convencimento é de graça. **Nota de fonte:** o script escreve `target:getType():
+  getManaCost()` (e `summon_creature.lua`, `monsterType:getManaCost()`), mas nem o Canary nem o TFS
+  registram esse método — o binding Lua é `monsterType:manaCost()`, e só o C++ `Monster::getManaCost()`
+  existe, lendo `info.manaCost`. Como escritos, os dois scripts falhariam com "attempt to call method"
+  nos motores de referência; o catálogo implementa a INTENÇÃO evidente (o custo é o `manaCost` do
+  monstro), e isso fica registrado aqui e na emenda do ADR 0057.
+- **O custo é a mana DO MONSTRO** (`addMana(-manaCost)`), e o magic level sobe por ela
+  (`addManaSpent` → `#gainSkills(..., 'spell-cast', manaCost)`, a mesma conta da Summon Creature).
+  O gold da runa (`price`) sai por cima.
+- **`HuntRuleset#convertToSummon`** é o `Creature::setMaster(master, true)` + `setSummon`: o
+  monstro do Spawner passa a ter `masterId` = o `characterId` — a partir daí é exatamente a
+  invocação do #598: segue o alvo do mestre, o dano dela credita o mestre, monstro hostil a ataca,
+  some com o mestre (morte, saída, fim da sessão), **nunca paga XP, loot nem Bestiário** e **nunca
+  deixa cadáver** (`Creature::dropCorpse` do Canary devolve cedo com um POFF quando `!lootDrop`).
+  O que a conversão limpa: o alvo antigo (`targetId` — o personagem que o atacava), o estado de
+  "voltando ao spawn"/ocioso, a lista de invocação PRÓPRIA (`!isSummon()` em `onThinkDefense` — as
+  invocações que ele já tinha continuam dele, e morrem com ele) e o alvo de ATAQUE de todo
+  personagem que o tinha na mira, inclusive o do próprio mestre (`#inSightOf` passou a recusar
+  invocação de personagem, e cada personagem reavalia o alvo). A apresentação recebe o
+  `creature-appeared` de novo, agora com `masterId` — o mesmo evento de nascimento, aplicado pelo
+  cliente por cima da criatura que ele já conhece.
+- **O ponto de spawn NÃO começa o respawn ao convencer** — corrige o ADR 0057 d.5 (emenda de
+  2026-09-30). O Canary mantém o monstro no `SpawnMonster::spawnedMonsterMap`, que só é limpo quando
+  ele é REMOVIDO (`cleanup`: `monster->isRemoved()`): o lugar continua ocupado enquanto a invocação
+  vive, e o respawn corre quando ela morre ou some (com o mestre). O `spawn->removeMonster` que o ADR
+  citava só existe no ramo `monsterOverspawn` do `Monster::onThink` do TFS (config desligada por
+  padrão) e não tem relação com convencer. Aqui isso cai de graça: o lugar do Spawner segue com o
+  convencido, e `#onMonsterDied`/`#removeSummon` chamam o mesmo `#releaseSpawnSlot`, que agenda o
+  respawn do ponto (`respawnDelayMs`, mais a metade da Boosted Creature) a partir DAQUELE instante.
+
+### Animate Dead (level 27, magic level 4)
+
+- **Mira um TILE** (`allowFarUse`, sem `needTarget`): manual, pelo tile apontado; o BOT, que não
+  aponta nada, escolhe o cadáver animável MAIS PRÓXIMO ao alcance (mesmo andar, linha de visão livre,
+  o do topo da pilha; empate para o mais antigo) — a mira da automação é do Draconya (ADR 0037 d.2),
+  a regra que ela dispara é a do Canary.
+- **O item do topo do tile precisa ser um cadáver movível** (`itemType:isCorpse() and
+  itemType:isMovable()`), e isso é propriedade de CADA ESTÁGIO da cadeia `decayTo` — o dado do Canary
+  está em `appearances.dat` (flags `corpse` e `unmove`), não no `items.xml`. O primeiro estágio de
+  quase todo monstro é `unmove` (5972 → 4024 no esqueleto): **o cadáver recém-abatido NÃO pode ser
+  animado**; vira movível no primeiro decaimento (10 s depois, no caso comum). `monster.
+  corpseAnimatable` guarda as janelas `[fromMs, untilMs)` em ms desde a morte (o mesmo relógio de
+  `corpseTtlMs`), geradas pelo importador; o instante da morte sai do evento `CORPSE` que a fila já
+  guarda (vencimento menos `corpseTtlMs`), então a conta sobrevive ao snapshot e não depende de
+  alguém olhar (invariante 3). Monstro sem janela (cadeia sem estágio movível, ou sem cadáver) nunca
+  é animável. O "topo" é o cadáver mais RECENTE do tile (`Tile::getTopDownItem` devolve o último
+  item posto): um cadáver novo ainda `unmove` cobre o velho, que não conta.
+- **A ordem do script**: tile SÓLIDO sem criatura visível, `not-possible` (abaixo); sem cadáver
+  movível no topo, `not-possible`; com 2 invocações vivas, `too-many-summons`; e nasce o Skeleton.
+- **Tile sólido recusa antes do script** (`rune:isBlocking(true)` = `blockingSolid`, Canary
+  `Spell::playerRuneSpellCheck`: `tile->hasFlag(TILESTATE_BLOCKSOLID) && !topVisibleCreature` →
+  `RETURNVALUE_NOTENOUGHROOM`): com um campo bloqueante (Magic Wall, Wild Growth) em cima do tile do
+  cadáver e ninguém visível nele, a runa recusa SEM consumir o cadáver, o gold nem o cooldown —
+  `not-possible` no motor, que não tem recusa própria para "sem espaço" (o texto do Canary é outro; é
+  apresentação, não regra). Criatura visível no tile (personagem, ou monstro não invisível) dispensa a
+  recusa, como no Canary.
+- **Consome o cadáver e destrói o loot que ainda estava nele** (ADR 0048 d.5: o item no cadáver nunca
+  foi instância no banco, então não há linha de ledger a fechar nem `removedInstances`): o cadáver sai
+  de `#corpses`, o evento `CORPSE` é cancelado (nada de segundo `ground-item-disappear`), o cliente
+  recebe `ground-item-vanished` e depois `creature-appeared` (com `masterId`). Nada vai para o herói
+  nem para o Skeleton.
+- **O monstro nasce do CONTEÚDO** (`effect.monsterId`, `skeleton` — o `"Skeleton"` que o Lua escreve
+  no código; `buildContent` confere que existe), como invocação do lançador. **Não custa mana** (o
+  script nunca chama `addMana`): só o gold da runa.
+- **Onde nasce**: o Canary o coloca no tile do cadáver à força (`Game.createMonster(..., true,
+  true)`), empilhado com quem estiver ali; o tile é exclusivo neste motor (invariante 8), então nasce
+  no tile ou no primeiro vizinho livre da ordem fixa de `tilesAround` — e sem nenhum livre a runa
+  recusa `not-possible` antes de gastar a carga (no Canary a colocação forçada não falha). Divergência
+  de geometria, não de regra de caça: o vizinho só entra quando o tile do cadáver está OCUPADO por
+  alguém (a colocação à força do Canary o empilharia); o tile sólido é a recusa de cima, e nunca
+  desvia o Skeleton para o lado.
+
+### O que mudou fora das duas runas
+
+- **Invocação NUNCA deixa cadáver.** Antes desta issue o `#onMonsterDied` empilhava o cadáver de toda
+  invocação que morria; o Canary (`Creature::dropCorpse`, `!lootDrop`) não deixa nenhum. Sem esta
+  regra o Skeleton animado morreria e deixaria um cadáver animável — a cadeia infinita de Animate Dead
+  que o Canary não permite.
+- `HuntRuleset#releaseSpawnSlot` (extraído do `#onMonsterDied`) devolve o lugar de um monstro e agenda
+  o respawn; o `#removeSummon` o chama para o convencido que some com o mestre.
+- O importador (`pnpm catalog:import monsters`) lê `flags.convinceable`, `manaCost` (todo monstro que o
+  declara, `summonable` ou não) e as janelas `corpseAnimatable` de `appearances.dat`. **`summonable`
+  continua NÃO importado** — ligar a Summon Creature (#598) no catálogo real é decisão à parte.
+
+### Divergências e o que fica de fora
+
+- **Despawn por raio** (`Monster::isInSpawnRange`, `deSpawnRadius` 50): o Canary teletransporta de
+  volta ao ponto de spawn o monstro que passa de 50 tiles dele — inclusive o convencido, que ainda
+  tem `spawnMonster`. Este motor nunca modelou o teleporte (`isInSpawnRange` de `monster.ts` devolve
+  `true` para invocação), e nenhuma hunt do catálogo tem 50 tiles de raio útil a partir de um spawn.
+  Fora do escopo; nada divergente foi implementado.
+- **Campo no tile do cadáver**: o item do topo pode ser um campo mágico que caiu depois do cadáver
+  (`downItems` — o Animate Dead falharia). O motor não guarda a ordem entre campo e cadáver; a regra
+  só olha cadáveres.
+- **`PlayerFlag_CanConvinceAll`** (GM) e **caveira preta** (`SKULL_BLACK`, Animate Dead): PvP e flags
+  de GM não existem na hunt.
+- **A invocação sem alvo NÃO segue o mestre** (a divergência do #598): um convencido sem alvo fica
+  onde está. O seguir do mestre é do #599 (`Monster::updateSummonTarget`) e vale para toda invocação
+  de personagem quando pousar.
+
+## Facções de monstro: monstro contra monstro (#619, M44-01, Canary `monster.faction`/`enemyFactions`)
+
+No Canary um monstro só ataca jogador (e invocação de jogador) — EXCETO os de **facção**: as cidades
+dos deeplings (Deepling × Deathling), a guerra Lion × Usurpers, Efreet × Marid, Anuma × Fafnar. Eles
+se atacam entre si, pelo mesmo pipeline de dano de sempre. Fonte: `Faction_t`
+(`src/game/game_definitions.hpp:44-53`), `MonsterType::info.faction`/`enemyFactions`
+(`monsters.hpp:134-135`), `Monster::isOpponent` (`monster.cpp:836-869`), `isTarget` (`1434-1453`),
+`updateIdleStatus` (`1521-1560`), `searchTargetImmediate` (`906-1050`), `updateSummonTarget`
+(`1330-1342`) e `Combat::canDoCombat` (`combat.cpp:497-546`, a cláusula da facção `default` fica nas
+últimas linhas) — tudo conferido em 47dfd51, em 2026-09-30.
+
+### O conteúdo
+
+`monster.faction` e `monster.enemyFactions` (`packages/content/src/schemas.ts`), opcionais: ausente é
+o monstro **sem facção** (`default`), o bestiário quase inteiro, e nenhuma hunt sem facção muda de
+comportamento nem de sorteio. Os nomes são os dez do enum do Canary, **na ordem dele** —
+`MONSTER_FACTIONS`: `default`, `player`, `lion`, `lion-usurpers`, `marid`, `efreet`, `deepling`,
+`deathling`, `anuma`, `fafnar` — e o **índice é o valor numérico** (`factionValue`), porque o valor
+entra no desempate de alvo (abaixo). `player` (1) é a facção do personagem e de tudo que ele invoca;
+nenhum monstro a DECLARA, mas quase toda lista `enemyFactions` do Canary a cita — é o que faz o
+monstro de facção caçar o jogador. A exceção são as três da Lion (`lion-knight`/`-archer`/`-warlock`):
+só nomeiam `lion-usurpers` e **ignoram o jogador**.
+
+O importador (`scripts/catalog/monsters.ts`) lê os dois campos (`FACTION_*` → nome, com `default`
+omitido); uma constante `FACTION_*` que a tabela não conhece bloqueia o monstro em vez de ser lida em
+silêncio. **23 dos 39 monstros com facção do Canary (32 fora de `quests/`) entram no catálogo hoje**
+(deepling 7, deathling 2, lion 5, lion-usurpers 3, anuma 5, fafnar 1); o resto (Efreet, Marid, os dois
+Djinn, Usurper Knight/Warlock…) depende de magia com script próprio que o importador ainda não
+mapeia — está em `docs/reference/catalog/monsters-report.md`, com o motivo.
+
+### O que o Canary decide, e onde mora aqui
+
+`HuntRuleset` monta, no construtor, a tabela `monsterId → { faction, enemies }` dos monstros que PODEM
+nascer na hunt (`monster/faction.ts`: os pontos de spawn e, transitivamente, o que eles invocam — o
+conteúdo carrega o catálogo inteiro em toda hunt, então perguntar a ele "tem facção?" seria sempre
+sim). **Tabela vazia é o caminho rápido: as três entradas novas do ruleset devolvem a MESMA lista de
+antes e nada é sorteado a mais** — a suíte inteira do `sim`, que roda sob conteúdo sem facção, é a
+prova por ausência.
+
+| Pergunta do Canary | Aqui | Regra |
+|---|---|---|
+| `getFaction()` / `isEnemyFaction()` | `#factionProfileOf` | Sem mestre: a do tipo. **Invocação de monstro herda a do mestre, facção e inimigas** (a Green Djinn da Efreet é da facção dela). Invocação de PERSONAGEM é `player`, com regra própria (o alvo do mestre) |
+| `isOpponent()` — a `targetList` | `#opponentOthersOf` (+ `session.participants`) | O jogador e a invocação de jogador são oponentes de TODO monstro; um monstro de facção soma os monstros das facções inimigas. **À vista**: `canSeePoint` no `aggroRadius`, a mesma pergunta do #655 |
+| `isTarget()` — quem se pode mirar | `#targetPreyOf` | Monstro de facção só mira a facção inimiga: jogador e invocação de jogador SÓ SE `player` está em `enemyFactions` — a Lion tem o herói na `targetList` (não fica ociosa) sem jamais mirá-lo. **A invocação de monstro é a exceção** (`if (!isSummon())`): o `isTarget` dela não confere facção — mas ela nem escolhe alvo (linha seguinte) |
+| `updateSummonTarget()` (`1330-1342`) | `#followMasterTarget` | O `onThink_async` da invocação **não procura alvo**: a cada think ela chama `selectTarget` com o que o MESTRE ataca (e só sem alvo do mestre mantém o que já tinha). A Green Djinn briga com quem a Efreet briga, não com o jogador mais perto; o alvo ainda precisa valer para ela (vivo, visível, mesmo andar, no `aggroRadius` dela). Sem nenhum dos dois ela só seguiria o mestre — não modelado, ver abaixo. Só a invocação de monstro de FACÇÃO: a de monstro sem facção segue `chooseTarget` (#546) |
+| `Combat::canDoCombat()` | `#mayAttack` | Vale para o alvo principal E para cada criatura pega por uma área. Monstro de facção só acerta quem tem facção em `enemyFactions`; monstro sem facção nunca acerta outro monstro (só invocação de jogador). O golpe recusado é recusado ANTES de qualquer dano ou sorteio |
+| `searchTargetImmediate` / `MonsterTargetRanker::rank` | `chooseTarget`, `nearestPrey`, `rankTarget` | **`faction × 100` na distância, `faction × 100 000` na vida e no dano** — o valor de `Faction_t` do candidato, `player` = 1 quando `Prey.faction` está ausente. Com todos os candidatos na mesma facção o somando é constante e a escolha é a de antes |
+| `updateIdleStatus` (1548-1551) | `#isFactionSummonIdle` | A invocação de um monstro de facção fica **ociosa enquanto o mestre não vê jogador** (`master->totalPlayersOnScreen == 0`): não anda, não ataca, esquece alvos e dano |
+| `doWalkBack` (`totalPlayersOnScreen > 0`) | `decideUnengagedMove` | O monstro de facção (que não é invocação) com jogador vivo à vista **desliga a volta ao spawn** e não dá o passo — a Lion, que não caça o herói, fica passeando enquanto ele está por perto |
+
+**Duas consequências que parecem defeito e são o Canary.** (1) O desempate por facção faz o jogador
+(1) ser preferido a QUALQUER monstro inimigo (2+) na aquisição — `d + 100` contra `d' + 200` —, por
+mais longe que esteja: com o herói na vista, o Deepling o caça e ignora o Deathling ao lado; a briga
+de facções só acontece com o herói fora da vista. Em "menos vida" a facção MENOR ganha e em "mais
+dano" a MAIOR (a assimetria do `rank`). (2) A cláusula `totalPlayersOnScreen == 0 → ocioso` do
+`updateIdleStatus` do `47dfd51` está sob um `else if (master)`, então só se aplica à INVOCAÇÃO de um
+monstro de facção — o monstro de facção comum, com inimigo à vista, NÃO fica ocioso sem jogador: os
+dois lados brigam sozinhos (é a briga da issue). Reproduzido como está.
+
+**Estado da sessão, nunca do visualizador (invariante 3).** "Jogador à vista" é a posição dos
+`session.participants` (vivos, dentro do `canSeePoint` do monstro) — quem está DENTRO da hunt —, nunca
+quem tem o navegador aberto. Os testes movem o herói à mão e conferem a invocação acordando; a briga
+inteira é igual a 1 Hz e a 20 Hz e sobrevive a um snapshot no meio (`rulesets/factions.test.ts`).
+
+### O dano, a morte e quem recebe
+
+Monstro contra monstro passa pelo mesmo cano do golpe em invocação de personagem (#598):
+`resolveDamage` com `#monsterDefender` do alvo (armadura, mitigação, `defense`, cargas de bloqueio, cura e
+reflexo por elemento) e `#applyMonsterHitOnMonster` (o antigo `#applyMonsterHitOnSummon`, renomeado — ele
+já servia a qualquer monstro-alvo). Três coisas ficaram completas junto com a facção: a **condição da
+ability** (o veneno do Deepling) entra no monstro que ela acertou, com a MESMA imunidade de condição da
+magia do jogador; a **cura por elemento** do alvo (#683) roda depois do golpe; e o mapa de dano
+(`Contribution`) guarda o `m:<id>` do atacante.
+
+**O dano de quem saiu continua no total.** O Canary nunca apaga uma entrada do `damageMap` (só
+`onIdleStatus` zera o mapa inteiro): `Creature::getDamageRatio` soma todas, vivas ou mortas, então o
+Deepling que feriu o Deathling e morreu antes ainda leva a fatia dele, e o jogador só a dele.
+Esquecer o atacante morto (o que este motor fez no primeiro corte do #619) pagava ao herói a XP que o
+Deepling já tinha tirado do Deathling. Como cada respawn tem id novo e o mapa não pode crescer uma
+chave por inimigo numa hunt de oito horas, quando um monstro morre ou some (invocação cujo mestre
+morreu) o dano dele nos OUTROS monstros é **fundido num balde só**, `m:departed` (`DEPARTED_ACTOR`,
+`Contribution.fold`): o total não muda, o prefixo `m:` continua dizendo "foi monstro" (e o último golpe
+vira o balde, como o `lastHitCreatureId` do Canary sobrevive à morte), e o balde nunca é dono do
+cadáver nem `mostDamageBy` — o `getCreatureByID` do `onDeath` pula quem não existe mais. O tique de
+condição cujo dono (um monstro) já saiu continua tirando vida mas não é atribuído a ninguém
+(`Creature::drainHealth` só chama `addDamagePoints` `if (attacker)`), para não reabrir a chave
+fechada. Isto vale só para o mapa de OUTROS monstros e só com facção na hunt; o dos participantes
+continua podado por `forgetActor`.
+
+O Canary paga o abate pelo **`damageMap`**, não pelo golpe final (`Creature::onDeath`), e este motor
+faz igual. Duas perguntas separadas, ambas sobre o mapa: "houve dano de MONSTRO?" (chave `m:<id>` ou o
+balde `m:departed`) decide o dono do cadáver e o corte da XP; "o GOLPE FINAL foi de monstro e nenhum
+participante bateu?" decide se o abate conta.
+
+| Quem bateu no monstro | Abate no analisador | XP | Cadáver / loot |
+|---|---|---|---|
+| Só monstros (o golpe final também) | **não conta** — vale para a invocação de monstro também | **nenhuma** | existe, **sem dono e sem loot** (ADR 0048: sem dono, sem loot) |
+| O herói e um monstro, golpe final de qualquer um dos dois | conta | `floor(dano do herói ÷ dano total × XP)` — o dano do monstro, **vivo ou já morto**, entra no total | dono é quem causou **mais** dano entre os que AINDA existem (jogador ou monstro vivo), e não quem deu o golpe final; só se for um participante há loot |
+| Só participantes | conta | como sempre | como sempre |
+
+A invocação (de monstro ou de personagem) nunca paga XP, loot nem Bestiário; o abate dela só conta
+se um participante a feriu antes — a invocação de personagem morta por um monstro hostil deixou de
+contar abate no #619 (o Canary só tem `killers` entre os jogadores do `damageMap`).
+
+Em party a XP compartilhada é o pool `Σ floor(dano_i ÷ total × XP)` dividido como antes; sem
+compartilhar, `xpByDamage` já lia o total do mapa. Uma morte só de monstro não paga NENHUM membro — nem
+a XP igual da party, que antes do #619 não tinha como acontecer: o abate só existia com um participante no
+golpe final.
+
+### O que NÃO foi modelado
+
+- **A ordem da `targetList`** (`pushFront` ao entrar na vista, `push_back` no `updateTargetList`) — o
+  desempate dentro da mesma facção e da mesma distância é a ordem de nascimento
+  (jogadores → invocações de jogador → monstros de facção), estável e igual em todas as taxas.
+- **`isFriend`** (a lista de amigos que a cura de área de monstro usaria) — nenhum monstro do catálogo
+  cura o vizinho.
+- **A janela `inFightTicks` do `mostDamageCreature`** — o dono do cadáver é o maior causador de dano de
+  toda a luta, sem o corte de 60 s do Canary.
+- **A invocação de monstro de facção SEM alvo do mestre** só seguiria o mestre
+  (`setFollowCreature(master)`): como a de qualquer invocação (ver acima), ela fica parada — este
+  motor não tem `followCreature`.
+- **Dano de campo no total do `getDamageRatio`**: o Canary o exclui (`attackerId == 0`); `xpByDamage`
+  (party sem compartilhar) e este pool o incluem — divergência antiga, de antes do #619, que só aparece
+  com dano de campo E de monstro no mesmo abate.
+
+Testes: `monster/faction.test.ts` (a tabela, o alcance de cada hunt, o desempate e a volta ao spawn) e
+`rulesets/factions.test.ts` (o Deepling ataca o Deathling sem ninguém por perto; Lion × Usurpers; a área,
+inclusive o mestre e a invocação na mesma onda; a condição; a invocação ociosa e a que persegue o alvo
+do mestre; a morte por monstro, solo e em party — o dano de quem já saiu no total, o dono do cadáver
+quando o herói dá o último golpe e o abate da invocação; 1 Hz == 20 Hz e a retomada) e `death.test.ts`
+(`Contribution.fold`).
+Estágio `additive` do `combat-v4` — ver `combat-conformance.md`.
 
 ## Charms em combate (#603, M39-03, ADR 0053 d.5 — `combat-v4`)
 
-Os 24 Charms do Canary que agem em combate (todos menos o Scavenge, #626) rolam DENTRO do
+Os 24 Charms do Canary que agem em combate (todos menos o Scavenge, que age na esfola — #626, ver
+`docs/product/items.md`) rolam DENTRO do
 pipeline de dano, na ordem do `Game::combatChangeHealth`/`applyCharmRune`. O que cada um faz, o
 que rola e onde mora cada número está na tabela de estágios de `docs/product/combat-conformance.md`
 (seção "Estágio #603"); o catálogo (id, categoria, tipo, `percent`, `chance[3]`) é
@@ -2466,6 +2934,171 @@ concentrados em bosses de quest fora do recorte atual). `conditions.test.ts` pre
 (4/61 de desvio, 5/61 de fala, com seed fixa e 61 000 rolagens) e o mapeamento `r → direção`;
 `hunt.test.ts` prova a integração — o desvio passa pelo `#step` de verdade, para personagem e para
 monstro, sem consumir sorteio de quem não tem a condição.
+
+## Condições de controle: rooted, feared e pacified (#622, M44-04, ADR 0041)
+
+As três últimas do vocabulário de condição do ADR 0041 decisão 1. Vivem no MESMO
+`conditionEffectSchema`/`Conditions` do drunk e do speed — chave RESERVADA (`ROOTED_CONDITION_KEY`,
+`FEARED_CONDITION_KEY`, `PACIFIED_CONDITION_KEY`, `packages/content/src/schemas.ts`), efeito sem
+campo próprio (`{ kind: 'rooted' | 'feared' | 'pacified' }`) e as duas implicações conferidas por
+`conditionSpecSchema` (a chave reservada só com o efeito dela, e vice-versa). Cada uma exige
+**`merge: 'longest'`**, o quarto valor de `conditionMergeSchema` (`Condition::updateCondition` do
+Canary, que as três — `ConditionGeneric` e `ConditionFeared` — usam): relançar com um prazo que
+termina ANTES do que já corre não muda nada, e com um que termina no mesmo instante ou depois
+substitui. Não é `refresh` (o novo sempre vence) nem `strongest` (compara magnitude, e estas não
+têm). O prazo é absoluto dos dois lados (`Conditions.apply`).
+
+**A vigência é lida do PRAZO**, não do evento que limpa a lista: `Conditions.isActive(key, nowMs)`
+(`expiresAtMs > nowMs`, vencimento exclusivo) — o `condition-expire` vence depois do movimento e do
+ataque do mesmo instante, e o Canary consulta `hasCondition` contra o `endTime`
+(`Creature::hasCondition`, `creature.cpp:1585`), nunca contra a limpeza.
+
+### `rooted` — ninguém dá passo
+
+`Game::internalMoveCreature` recusa o passo de QUALQUER criatura enraizada (`game.cpp:1965`), e
+`Creature::startAutoWalk` recusa a caminhada que ela decidir (`creature.cpp:329`). O `sim` tem UM
+ponto de escrita de posição, `HuntRuleset#step`, e é lá que a recusa mora — o `walk` do socket, a
+rota do bot, o passo guloso do monstro e o empurrão (`#pushAside`, que passa `forced`) caem todos
+nela, com a razão nova `'rooted'` em `MoveRejection` (`movement.ts`). A recusa da caminhada PRÓPRIA
+(`startAutoWalk`) vem antes de qualquer sorteio; só o passo forçado (a fuga do medo, o passo de um
+`walk-to` já guardado) rola o drunk (`onWalk`) e depois esbarra no `rooted` de
+`internalMoveCreature`. O `walk-to` distante de `requestMove` é recusado antes de guardar caminho
+nenhum (`Runner.manualWalkTo`), e o que JÁ estava guardado quando a raiz chega CAI no primeiro passo
+que ela recusa: `Creature::onCreatureMove` zera a lista de passos de quem está enraizado
+(`resetMovementState`, `creature.cpp:503`) e `onCreatureWalk` já tira um passo da lista por
+tentativa recusada — o caminho não resiste à condição, e nada anda sozinho quando ela acaba (o
+bot retoma pelo tile mais próximo). Vale para monstro também — um monstro enraizado não persegue
+—, e o empurrão que não consegue mover um monstro enraizado o esmaga, como o Canary
+(`Monster::pushCreature` recusa igual).
+
+### `pacified` — sem golpe e sem magia agressiva
+
+É a trava de escada (seção anterior) e o Swift Foot. **Swift Foot** (`swift_foot.lua`, ramo sem a
+Roda — a Roda está fora do recorte): acelera (`haste`) E aplica `CONDITION_PACIFIED` pelos mesmos
+10 s. O `haste` do `spellEffectSchema` ganhou `pacifies: true`; `castSpell` devolve a pacificação em
+`CastSuccess.alsoConditions` e o ruleset a aplica no mesmo alvo. O conteúdo deixou de carregar a
+redução de 30 % de dano (TibiaWiki, anterior ao Canary `main`) — divergência que existia desde o
+#523 e some aqui. O grupo de cooldown `attack` de 10 s que o script também aplica
+(`CONDITION_SPELLGROUPCOOLDOWN`) não tem efeito próprio: toda magia desse grupo é agressiva, e a
+pacificação já as recusa.
+
+### `feared` — a caminhada forçada
+
+**Não é "um passo sorteado como o drunk"**, ao contrário do que o plano do endgame supunha: é a
+`ConditionFeared` do Canary (`condition.cpp:2163-2455`), e o RNG da sessão só entra num caso (o
+tile do próprio lançador, abaixo). O mecanismo, na ordem em que acontece:
+
+1. **A aplicação.** `Combat::CombatConditionFunc` recusa o medo (`checkFearConditionAffected`,
+   `combat.cpp:1003`) quando o personagem está na imunidade de 10 s do medo anterior (11 s depois de
+   um Cleanse — `Player::isImmuneFear`, o mesmo mapa `cleanseImmunity`, chave `feared`), quando já
+   está com medo, e quando a party dele já tem gente demais com medo: `(membros + 5) / 5` de cada
+   vez, em inteiro, contando os membros SEM o líder (o `memberList` do Canary não o inclui) e
+   descontando os membros com medo agora — o líder com medo não desconta. Só o combate consulta
+   (`fromCombat`); sozinho não há party. Só o PERSONAGEM entra nesse caminho: `forcePlayerAutoWalk`
+   ignora qualquer criatura que não seja `Player`, então em monstro a condição é só o estado
+   (nenhum conteúdo do Canary aplica medo a monstro) e o `condition-expire` a encerra.
+2. **A direção de fuga** (`startCondition` → `getFleeDirection`, `fear.ts#initialFleeIndex`): cinco
+   regiões pela posição do personagem relativa ao LANÇADOR (`fleeingFromPos`, gravado no estado da
+   condição em `ConditionState.flee`), cada uma com o índice inicial do `m_directionsVector`. No
+   MESMO tile do lançador sorteia com o `Rng` da sessão entre os vizinhos que aceitam o passo — e o
+   Canary grava o VALOR do enum `Direction` como se fosse um índice do vetor (esquisitice preservada).
+3. **O pensamento** (`FEAR_THINK`, `hunt.ts`). O Canary roda `executeCondition` uma vez por 1000 ms
+   por criatura (`Game::checkCreatures`), numa fase sorteada ao entrar no jogo; aqui o pensamento é
+   AGENDADO quando o medo começa, no próximo instante da grade de pensamento do personagem
+   (`Runner.thinkPhaseMs`, a fase sorteada UMA vez com o `Rng` da sessão — a mesma grade que retoma o
+   golpe depois de `pacified`) e se re-arma a cada 1000 ms (invariante 2: nada é relógio por
+   criatura). Com MENOS de dois passos por dar (`getWalkSize() < 2` — a lista de passos do jogador é
+   a MESMA da fuga, então um `walk-to` distante que já estava guardado conta: com dois passos ou
+   mais ele continua e a fuga espera), escolhe a direção (se ainda não escolheu) e busca o caminho
+   (`getFleePath`, `fear.ts#fleePath`): as distâncias `{15, 9, 3, 1}` na direção do índice, o
+   primeiro caminho não vazio vale, e sem nenhum o índice avança um para o próximo pensamento. O
+   ponto sintético mantém as esquisitices da fonte (o `SOUTH` cai do lado do `NORTH`, e os dois
+   diagonais do norte miram o mesmo ponto: `fear.test.ts` fixa o resultado de cada índice num campo
+   aberto).
+4. **A caminhada** (`Runner.fearWalk`, `#advanceFearWalk`). A lista de passos SUBSTITUI a caminhada
+   do próprio jogador (`forcePlayerAutoWalk` → `startAutoWalk` limpa `listWalkDir`, e o `walk-to`
+   distante em curso cai) e é consumida um passo por vencimento de `PLAYER_STEP`, com PRIORIDADE
+   acima de tudo (rota, combate-stop, follow); o personagem continua batendo em quem estiver ao
+   alcance. Um passo recusado (parede, campo de dano, criatura) é DESCARTADO e o seguinte sai da
+   posição em que ele ficou, sem replanejar. A lista vazia é o `Player::onWalkComplete`: se o medo
+   ainda vale, reavalia a fuga na hora. `feared` recusa o INÍCIO do passo do PRÓPRIO jogador
+   (`startAutoWalk`: o `walk` do socket e a rota do bot recebem `'feared'`), mas não a fuga nem a
+   lista de passos que já corria (`forced`). Um passo de lista num campo que causa dano e não
+   bloqueia é recusado em DOIS lugares, nesta ordem: `Player::onWalk` olha o campo do tile PEDIDO
+   antes de tudo (`player.cpp:2942-2955`) — sem sorteio de drunk e sem desvio —, e
+   `internalMoveCreature` olha o do tile DESVIADO depois dele (`game.cpp:1975-1980`); a fuga desvia
+   do campo, nunca o atravessa.
+5. **O fim** (o primeiro pensamento DEPOIS do prazo, `expiresAtMs < nowMs`). A ordem é a do Canary:
+   a fuga é calculada, a condição fecha (a caminhada em curso para, `stopEventWalk`, e o personagem
+   ganha 10 s de imunidade) e a lista que a fuga acabou de enfileirar roda DEPOIS — o jogador foge
+   uma última lista inteira com o medo já encerrado. Não há `condition-expire` para o medo do
+   personagem: o pensamento é quem o fecha, e por isso a condição continua no estado (com
+   `isActive` falso) até esse pensamento. Consequência que é do Canary e não bug: uma oferta do
+   mesmo medo nesse intervalo (a condição existe, `hasCondition` já é falso, a imunidade ainda não
+   começou) o renova. **Troca de sessão (#812):** as três condições de controle atravessam como
+   qualquer condição — prazo traduzido para o relógio da sessão nova, pausado na Cidade — e a hunt
+   que entra as rearma: `rooted` e `pacified` com o `condition-expire` de sempre, o medo de
+   personagem com um `FEAR_THINK` no próximo instante da grade de pensamento da sessão nova (e a
+   fuga recalculada, porque a caminhada forçada é do runner e não atravessa).
+6. **O que ele proíbe.** Nenhuma magia nem runa (`spells.cpp:104,503`, "You are feared" — razão
+   `feared` em `CastRefusal`/`SlotRefusal`, retry no prazo do medo); a poção não passa por esse
+   checklist e continua liberada. O equipar do Canary (`game.cpp:4191`) não tem equivalente numa
+   hunt.
+
+**A busca de caminho é original, e o que NÃO é reproduzível.** O Canary é GPL v2 (ADR 0019): a
+versão anterior de `fear.ts` era uma transcrição do A* de `Map::getPathMatchingCond` — a lista de
+vizinhos por direção do pai, o laço do melhor nó, a heurística — e foi retirada por violar o limite
+de licença (revisão do #622). `fear.ts` entrega o que a busca do Canary ENTREGA: a caixa de sete
+tiles em volta do personagem, andada em oito direções com custo 10 (cardinal) e 35 (diagonal) — a
+diagonal sai mais cara que dois cardinais, e por isso o caminho é quase sempre em L e passa por
+quina —, e o destino é o tile alcançável MAIS DISTANTE (Chebyshev) do ponto sintético, com visão
+livre até ele e a até 30 tiles por eixo (`maxTargetDist`), o que faz a busca FUGIR do ponto; o tile
+de partida entra na disputa (nenhum alcançável mais longe → lista vazia). É uma varredura de custo
+mínimo seguida da escolha do destino, a mesma separação que `line-of-sight.ts` faz com o
+`checkSightLine` do TFS.
+
+O que o Canary não fixa é o DESEMPATE — a ordem em que o A* visita os nós, com o empate de total
+decidido por uma versão do `getBestNode` que muda com o conjunto de instruções (AVX2/SSE) — e aqui
+ele é uma escolha declarada: entre destinos à mesma distância do ponto vale o de menor
+`custo + 8 × (|dx| + |dy|)`, e sobrando empate (e entre caminhos do mesmo custo) o de passos
+"menores" na ordem oeste, leste, norte, sul e depois as diagonais (`STEP_ORDER`). Medido contra a
+transcrição que saiu, em ~20 000 casos de campo com parede e visão aleatórias: o custo e o tamanho do
+caminho coincidem em TODOS, o destino em ~98 % e o caminho inteiro em ~70 % (o resto são caminhos de
+mesmo custo com a curva em outro passo); em campo aberto os oito índices coincidem sempre, e é isso
+que `fear.test.ts` fixa. O primeiro passo forçado cai no próximo `PLAYER_STEP` (no máximo um passo
+depois do pensamento), em vez do `getEventStepTicks` do Canary — o cadenciador do passo do `sim` é o
+próprio `PLAYER_STEP`, e um relógio de passo à parte dobraria o estado persistido. Nenhuma das duas
+coisas muda QUANDO o medo dispara ou acaba — o gatilho é o do Canary.
+
+### Imunidade por monstro e Cleanse
+
+`monster.conditionImmunities` (`CONDITION_IMMUNITIES`) ganhou `rooted`, `feared` e `pacified` — o
+vocabulário sobe de onze para catorze nomes. É vocabulário AUTORAL: `Monster::isImmune` é um bitset
+sobre todo `ConditionType_t`, mas a ponte do Lua só nomeia os que já existiam, e nenhum monstro do
+bestiário declara imunidade a estes três (`conditionImmunityOf`, `conditions.ts`, mapeia a chave
+reservada para o nome). Vale pelo mesmo portão de sempre (`#applyConditionTo`, só quando o
+chamador é um COMBATE).
+
+O Cleanse (#603, `combat-v4`) limpa `rooted` e `feared` (`Creature::getCleansableConditions`,
+`creature.cpp:1527-1549` — `pacified` não), com a mesma imunidade de 11 s por tipo; limpar o medo passa
+por `#endFear`, que para a caminhada e nunca deixa a imunidade menor que a do Cleanse (o Canary
+grava 10 s no `endCondition` e 11 s logo depois).
+
+### O que vem do Canary (importador)
+
+`fear` e `root` são feitiços Lua de nome próprio (`data-otservbr-global/scripts/spells/monster/
+fear.lua`/`root.lua`) que o Canary acha por nome em `deserializeSpell` e usa SEM ler a linha do
+monstro além de `interval`, `chance`, `range` e o alvo: alvo único, 3000 ms fixos, sem dano. O
+importador (`scripts/catalog/monster-abilities.ts#mapControl`) os mapeia para a ability `fear`/`root`
+com `power: 0` (o mesmo desenho do drunk) e `merge: 'longest'`; entraram no catálogo o Fungosaurus,
+o Gore Horn e o Branchy Crawler (os três só eram bloqueados por isto). O `soulwars fear` continua
+sem mapeador — o Lua o executa com atraso de 2 s por `addEvent`, e a ability não tem atraso.
+Continuam de fora, por outras magias, o Doctor Marrow e o Mitmah Vanguard.
+
+**Parâmetros e onde moram.** A duração (3000 ms) e o `merge` são conteúdo de cada ability/runa; o
+pensamento (`CREATURE_THINK_INTERVAL_MS`, 1000) e a imunidade natural (`FEAR_IMMUNITY_MS`, 10 000)
+são constantes do Canary em `hunt.ts`; a busca (`{15, 9, 3, 1}`, 7, 30, custos) e o vetor de direções
+moram em `packages/sim/src/fear.ts`.
 
 ## Cura de condição (dispel, #590)
 
@@ -3060,7 +3693,7 @@ também tinham mana acima da real.
 | 40 | Divine Missile | 20 | attack (2 s) | 2 s | dano · alvo, alcance 4 | 60 |
 | 50 | Divine Caldera | 160 | attack (2 s) | 4 s | dano · círculo raio 3 no lançador | 150 |
 | 50 | Recovery | 75 | healing (1 s) | 60 s | cura 20 a cada 3 s por 60 s | — |
-| 55 | Swift Foot | 400 | support (2 s) + focus (10 s) | 10 s | haste +80 % / 10 s | — |
+| 55 | Swift Foot | 400 | support (2 s) + focus (10 s) | 10 s | haste +80 % / 10 s **e `pacified` (10 s)** (#622) | — |
 | 60 | Salvation | 210 | healing (1 s) | 1 s | cura | 500 |
 | 60 | Sharpshooter | 450 | support (2 s) + focus (10 s) | 10 s | postura 10 s | — |
 | 70 | Holy Flash (`utori san`, novo #596) | 30 | attack (2 s) | 40 s | dano ao longo do tempo · alvo, alcance 3 · 20 a cada 3 s por ~27 s (tique aleatório 7-11, aproximado pela média) | — |

@@ -19,6 +19,7 @@ import type { TileWindow } from '../world/camera.js';
 import {
   FLOATING_TEXT_MERGE_WINDOW_MS, mergeFloatingText,
 } from '../world/effects.js';
+import type { SelfLight } from '../world/light.js';
 
 /** Posição em tiles. Igual à do protocolo. */
 export interface Point {
@@ -156,6 +157,12 @@ export interface World {
   /** O ambiente da cena (FUN-121): `cavern` escurece o mundo. Superfície até alguém dizer. */
   ambience: 'surface' | 'cavern';
   /**
+   * A luz do próprio jogador (#623: Light/Great/Ultimate Light), do `active-conditions`. `null` é
+   * sem luz. Só apresentação: o pintor a lê para clarear o `cavern` (`world/light.ts`); nenhuma
+   * regra a usa, e ela vem do servidor — o cliente não decide que há luz (invariante 4).
+   */
+  selfLight: SelfLight | null;
+  /**
    * Qual criatura é o próprio jogador. A câmera segue esta; sem ela, não há em quem centrar.
    *
    * Fica `null` até a FUN-32 (`session-state`) dizer quem é: o `welcome` traz o
@@ -218,6 +225,7 @@ export const world: World = {
   instanceId: null,
   mapId: null,
   ambience: 'surface',
+  selfLight: null,
   groundItems: new Map(),
   groundItemsVersion: 0,
   tileOverrides: new Map(),
@@ -382,6 +390,9 @@ export function enterInstance(
   world.instanceId = instanceId;
   world.mapId = mapId;
   world.ambience = ambience;
+  // A luz é do personagem, não da instância — mas o `active-conditions` chega logo depois do
+  // `instance-enter` de toda reanexação, e uma luz de antes da troca não deve acender a nova.
+  world.selfLight = null;
   world.groundItems.clear();
   world.groundItemsVersion += 1;
   world.tileOverrides.clear();

@@ -147,6 +147,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -363,6 +369,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -608,6 +620,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -678,6 +696,12 @@
       "feet": 80,
       "addons": 0
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -817,6 +841,14 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 390,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -876,6 +908,12 @@
       "feet": 82,
       "addons": 0
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -984,6 +1022,14 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 450,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1127,6 +1173,14 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 590,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1285,6 +1339,14 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 450,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1407,6 +1469,14 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 450,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1554,6 +1624,11 @@
       "random": 0
     },
     "staticAttack": 0.7,
+    "faction": "fafnar",
+    "enemyFactions": [
+      "player",
+      "anuma"
+    ],
     "corpseTtlMs": 670000,
     "outfit": {
       "head": 95,
@@ -1580,6 +1655,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1798,6 +1879,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1852,6 +1939,10 @@
         {
           "itemId": "meat",
           "chance": 0.095
+        },
+        {
+          "itemId": "roll",
+          "chance": 0.225
         },
         {
           "itemId": "heavily-rusted-armor",
@@ -1913,6 +2004,14 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2090,6 +2189,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2286,6 +2391,12 @@
       "addons": 2
     },
     "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 600000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2454,6 +2565,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2513,6 +2630,10 @@
         {
           "itemId": "sandals",
           "chance": 0.0089
+        },
+        {
+          "itemId": "bread",
+          "chance": 0.2055
         },
         {
           "itemId": "dark-rosary",
@@ -2622,6 +2743,14 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 480,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2873,6 +3002,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3048,6 +3183,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3151,6 +3292,14 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 450,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3296,6 +3445,14 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 470,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3476,6 +3633,12 @@
       "feet": 114,
       "addons": 0
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3652,6 +3815,12 @@
       "feet": 114,
       "addons": 0
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3778,6 +3947,11 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "faction": "lion-usurpers",
+    "enemyFactions": [
+      "player",
+      "lion"
+    ],
     "outfit": {
       "head": 57,
       "body": 38,
@@ -3893,6 +4067,10 @@
           "max": 3
         },
         {
+          "itemId": "grapes",
+          "chance": 0.1985
+        },
+        {
           "itemId": "small-notebook",
           "chance": 0.0093
         }
@@ -3978,6 +4156,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4171,6 +4355,12 @@
       "feet": 57,
       "addons": 0
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4229,6 +4419,12 @@
         {
           "itemId": "brass-armor",
           "chance": 0.0507
+        },
+        {
+          "itemId": "roll",
+          "chance": 0.1137,
+          "min": 1,
+          "max": 2
         },
         {
           "itemId": "sniper-gloves",
@@ -4310,6 +4506,14 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 530,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4532,6 +4736,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4899,6 +5109,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5038,6 +5254,10 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "faction": "lion",
+    "enemyFactions": [
+      "lion-usurpers"
+    ],
     "corpseTtlMs": 1810000,
     "outfit": {
       "head": 0,
@@ -5046,6 +5266,12 @@
       "feet": 57,
       "addons": 2
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 1810000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5160,6 +5386,10 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "faction": "lion",
+    "enemyFactions": [
+      "lion-usurpers"
+    ],
     "corpseTtlMs": 1810000,
     "outfit": {
       "head": 0,
@@ -5168,6 +5398,12 @@
       "feet": 57,
       "addons": 1
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 1810000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5299,6 +5535,10 @@
       "random": 0
     },
     "staticAttack": 0.7,
+    "faction": "lion",
+    "enemyFactions": [
+      "lion-usurpers"
+    ],
     "corpseTtlMs": 1810000,
     "outfit": {
       "head": 0,
@@ -5307,6 +5547,12 @@
       "feet": 76,
       "addons": 0
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 1810000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5505,6 +5751,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5568,6 +5820,10 @@
         {
           "itemId": "sandals",
           "chance": 0.0071
+        },
+        {
+          "itemId": "bread",
+          "chance": 0.2
         },
         {
           "itemId": "rope-belt",
@@ -5641,6 +5897,13 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "manaCost": 600,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5728,6 +5991,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5919,6 +6188,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6064,6 +6339,12 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6220,6 +6501,14 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 420,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6371,6 +6660,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6527,6 +6822,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6708,6 +7009,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6868,6 +7175,14 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 595,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7028,6 +7343,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7171,6 +7492,14 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 490,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7218,6 +7547,12 @@
         {
           "itemId": "leather-legs",
           "chance": 0.2674
+        },
+        {
+          "itemId": "roll",
+          "chance": 0.1111,
+          "min": 1,
+          "max": 2
         }
       ]
     },
@@ -7291,6 +7626,14 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 530,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7351,6 +7694,12 @@
         {
           "itemId": "black-shield",
           "chance": 0.0021
+        },
+        {
+          "itemId": "red-apple",
+          "chance": 0.075,
+          "min": 1,
+          "max": 2
         },
         {
           "itemId": "cultish-robe",
@@ -7457,6 +7806,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7520,6 +7875,10 @@
         "max": 30
       },
       "items": [
+        {
+          "itemId": "grapes",
+          "chance": 0.0121
+        },
         {
           "itemId": "meat",
           "chance": 0.0121,
@@ -7619,6 +7978,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7800,6 +8165,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7925,6 +8296,14 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 390,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8062,6 +8441,12 @@
       "feet": 95,
       "addons": 0
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8275,6 +8660,11 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "faction": "lion-usurpers",
+    "enemyFactions": [
+      "player",
+      "lion"
+    ],
     "corpseTtlMs": 1810000,
     "outfit": {
       "head": 76,
@@ -8283,6 +8673,12 @@
       "feet": 95,
       "addons": 2
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 1810000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8337,6 +8733,12 @@
         {
           "itemId": "chain-armor",
           "chance": 0.1
+        },
+        {
+          "itemId": "red-apple",
+          "chance": 0.075,
+          "min": 1,
+          "max": 2
         },
         {
           "itemId": "girlish-hair-decoration",
@@ -8446,6 +8848,14 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 450,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8499,6 +8909,10 @@
         "max": 30
       },
       "items": [
+        {
+          "itemId": "grapes",
+          "chance": 0.154
+        },
         {
           "itemId": "meat",
           "chance": 0.05
@@ -8628,6 +9042,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8757,6 +9177,14 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 420,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -9001,6 +9429,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

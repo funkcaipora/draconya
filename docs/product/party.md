@@ -195,7 +195,9 @@ de cada membro se aplica à **cota** dele, somando-se aos demais bônus numa mul
   (#563, `applyExperienceBonus`), e o abate conta no Bestiário de **todo** elegível (decisão 4),
   não só do matador.
 Level up e marco de Bestiário são eventos notáveis que dizem de quem (`id/level`,
-`id/monstro/marco`).
+`id/monstro/marco`). O abate de BOSS não passa por `eligible`: o Bosstiary (#629) conta para os
+`killers` do Canary — quem bateu no boss, mais o roster inteiro enquanto a XP compartilhada está
+ativa —, sem o portão de stamina e de vida da XP (ver [`bosses.md`](./bosses.md), "O Bosstiary").
 
 O desconto de −10 pontos é gatilhado pelo TAMANHO da party (`n` de personagens), não pela
 contagem de vocações únicas — o comentário do próprio Canary fala em "todas as vocações

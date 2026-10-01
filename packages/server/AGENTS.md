@@ -603,6 +603,83 @@ branch vai reivindicar o mesmo número até alguém mesclar — o merge é quem 
 Issues seguintes (Imbuements #605–#607, Wheel #608–#611, Prey #612–#615, Forja #616–#618, …):
 copie esta seção trocando `charms` pelo nome do sistema, e as seis regras continuam valendo.
 
+**A regra 1 tem uma exceção de fusão — o registro que só cresce —, e duas issues a usam: o #629
+(Bosstiary, por MÁXIMO, aqui) e o #624 (`learnedSpells`, por UNIÃO, na seção seguinte). Contador
+monotônico é fundido no ledger, não última-escrita-vence.** "Última escrita vence" serve ao registro
+de ESTADO (Charms, Roda, Prey), cujo valor final pode descer. O `bosstiary` (`{ kills, points,
+version }`, `kills` chaveado pelo `raceId` do boss em texto) só sobe — a natureza do Bestiário —, e
+recebe a mesma fusão: `Bosstiary.merge` em `jobs/ledger.ts`, que lê a coluna sob a trava de linha
+e funde com o extrato. Um registro novo que só cresce (contagem, pontos) copia o `bosstiary`; um que
+sobe e desce (alocação, gasto) copia os `charms`. Nos dois a lista de PERMISSÃO de `parseReceipt`,
+`snapshot-settlement.ts` e o extrato do `#persistReceipt` precisam do campo — `receipts.test.ts`,
+`snapshot-settlement.test.ts` e `host.test.ts` são quem pega a omissão. O extrato de Cidade
+(`#saveDurableReceipt`) NÃO leva o `bosstiary`: só a hunt abate boss, e omitir o campo é "não
+toca na coluna".
+
+**O `familiar` (#599, M38-02) é uma aplicação do padrão que mantém a regra 1 (última escrita vence), com duas particularidades.**
+`characters.familiar` (`jsonb`, migração `0025`) guarda `{ version, summonUntilMs, cooldownUntilMs }`
+— DOIS carimbos de relógio de PAREDE (epoch em ms), não conteúdo. (1) **Nunca funda por máximo:** o
+`summonUntilMs` desce quando o familiar morre (o `FamiliarDeath` do Canary zera a recriação), e um
+`GREATEST` no ledger ressuscitaria o familiar se um extrato antigo chegasse depois de um mais novo —
+`ledger.postgres.test.ts` prende a descida. (2) **O ticket é obrigatório para o cooldown:** o `sim`
+compara os carimbos com `Session.createdAtMs + Session.nowMs` (o `createdAtMs` que `sessions.ts` já
+passa), então o `api` os leva no ticket (`familiarOf`, `isFamiliarState`) e o `host` os leva no
+extrato — o da hunt e o de estado da Cidade. O extrato SEM o campo não toca a coluna (personagem que
+nunca invocou), e é por isso que o vazio (`isEmptyFamiliarState`) não é escrito.
+
+### O que o `learnedSpells` (#624) acrescentou ao padrão
+
+`learn-spell` (C2S 36) / `learned-spells` (S2C 47), coluna `characters.learned_spells`
+(migração 0024). Quatro coisas que os Charms não tinham e o próximo registro provavelmente terá:
+
+- **O registro que já tinha dado em produção antes da coluna existir precisa de CONCESSÃO na
+  própria migração** (ADR 0014). `0024_624-learned-spells.sql` faz `ADD COLUMN` e um `UPDATE` que
+  concede a cada personagem existente as magias da vocação dele até o level dele, a partir de um
+  RETRATO do catálogo escrito no SQL (id, vocação, `minLevel`) — a migração descreve o que era
+  verdade na hora, e o que o conteúdo criar depois é comprado. `NULL` é personagem NOVO. O teste é
+  `db/learned-spells-migration.postgres.test.ts` (aplica 0000–0023, semeia, roda só a 0024).
+- **O registro só vai no extrato quando é a verdade do personagem** (`LearnedSpells#recorded`, em
+  `#receiptFor` e `#saveDurableReceipt`). Um snapshot retomado de antes da issue, ou um ticket de
+  um `api` ainda antigo, chega SEM registro, e afirmar o vazio seria afirmar o que a sessão não
+  sabe. Registro que herda dado migrado de produção deve seguir a mesma regra — `charms` não
+  precisou porque nasceu vazio em todo lugar.
+- **Registro que só cresce o ledger FUNDE, não sobrescreve** (`LearnedSpells.merge`, a união dos
+  ids, lida na MESMA leitura `FOR UPDATE` de `applyProgression`). Última-escrita-vence é a regra
+  geral do ADR 0052 d.1 e vale para o que sobe E desce (`charms`, bênção, soul), mas aqui custava
+  duas perdas: extratos pendentes se aplicam em ordem qualquer (`ReceiptStore.pending()` é um
+  `SCAN`, sem ordem), e um extrato de base desconhecida (só as compras dele) apagava a concessão
+  da migração. Um registro novo com essa propriedade (nunca desce) segue a união, como o
+  Bestiário segue o máximo; revogar é migração de dado versionada, nunca efeito do extrato.
+- **A intenção é aceita em Cidade E hunt, e o gold segue a regra 3** (`goldDelta` mais
+  `credit('goldSpent')` só fora do shard). Idempotência é estrutural: `CharacterRuntime
+  .learnSpell` recusa `already-learned` ANTES do débito, então um retry nunca cobra duas vezes; o
+  ledger só recusa o mesmo `(session_id, seq)`. Na hunt o host ainda acorda o bot
+  (`HuntRuleset#rearmBot`).
+
+O catálogo de magias entra como mapa (`spellCatalog: content.spells`, regra 4).
+
+## Loyalty viaja no ticket e não é persistido (#628, ADR 0052 d.5)
+
+O bônus de Loyalty é da IDADE DA CONTA — dado de banco e de relógio de parede, que o `sim` nunca
+lê (invariante 1). A `api` o calcula na EMISSÃO do ticket, o ÚNICO momento em que a linha não tem
+dono quente, e o resto é o caminho da boosted (#615): `loyaltyBonusPercentOf(accountId)`
+(`loyalty.ts`, montado no `main.ts` a partir de `content.loyalty`) → `initialCharacterOf(...,
+loyaltyBonusPercent)` → `InitialCharacter.loyaltyBonusPercent` (`parseInitialCharacter` valida:
+inteiro de 1 a 65 535 ou AUSENTE, nunca ticket recusado) → `characterFromTicket` → `CharacterState.
+loyaltyBonusPercent`, fixado pela sessão. Duas armadilhas:
+
+- **É por CONTA, não por personagem, e a party não o nivela**: `/start` chama o resolver com o
+  `accountId` de CADA membro, e `/join` com o de quem entra. Um resolver por sessão (o do líder)
+  daria a todos o bônus dele.
+- **Não há coluna, migração, extrato nem ledger.** Deriva de `account.created_at`
+  (`GameRepository.getAccountCreatedAt`) a cada ticket. Persistir o percentual congelaria o
+  degrau de quem entrou véspera do dia 360; recalcular no `game` traria relógio e conta para
+  dentro do processo que não fala com o Postgres.
+
+`player-stats` e `session-state.self` levam `loyaltyBonusPercent` (ausente = zero) e cada skill
+leva `loyaltyLevel` (ausente = igual ao base); o `sameStats` do host compara os dois, senão o HUD
+não recebe o nível efetivo quando só ele muda.
+
 ## A munição é abstrata e escolhida por família (#152, #420)
 
 A munição é **abstrata** (ADR 0032 decisão 7): a escolha é por família, pelo opcode 14
@@ -859,6 +936,64 @@ quatro e cinco segundos cada, e o grupo do Postgres termina antes de o outro com
   diferença; para uma hunt que precisa lançar magia, o bot nunca tem com quê. O helper da
   FUN-109 nasce no level 1, com os máximos de `statsForLevel(1)` e uma progressão de teste com
   `startingMana` alto — e é ele que se copia para o próximo teste com magia.
+
+## O Treino: sessão de exercise weapon e banco de offline training (#631, ADR 0059)
+
+O Treino é o terceiro ruleset hospedado (`training`, depois de `hunt` e `city`): estado ATIVO,
+privado, de um dono só, orientado a evento a 2 Hz anexado / 1 Hz desanexado (o `hz` só diz com que
+frequência o host AVANÇA a fila — o resultado é o dos eventos). Contrato de protocolo: C2S
+`enter-training { itemInstanceId }` (36), `set-offline-training-skill { skillId | null }` (37),
+`buy-item { itemId }` (38); S2C `training-state` (46). Sair é o `leave-hunt` de sempre.
+
+- **`TransitionRequest.itemInstanceId`** vale só para `to: 'training'`. O host confere e responde em
+  palavras (`#requestEnterTraining`: sem Treino, fora da Cidade, instância que não carrega ou que
+  não é exercise weapon) e o construtor (`trainingFor`, `sessions.ts`) confere de novo e devolve
+  `null` — a segunda linha, porque é ele quem tem autoridade sobre o que a sessão pode ser. O
+  restaurador (`rulesetFor`) retoma um snapshot `training` por `trainingRulesetFromSnapshot`.
+- **Todo estado novo viaja pelo padrão do ADR 0052:** `characters.training` (`jsonb`, migração 0026)
+  → `InitialCharacter.training` (validado por `readOfflineTrainingState`, torto vira AUSENTE) →
+  `CharacterRuntime.training` → `SessionReceipt.training` (ABSOLUTO, última escrita vence — o banco
+  SOBE por tempo de sessão e DESCE quando a `api` o gasta, então nada de fusão por máximo) → ledger.
+  O extrato de hunt, o de estado durável da Cidade e a liquidação de snapshot irrestaurável o levam.
+- **O extrato durável da Cidade sai também na TRANSIÇÃO para uma sessão privada** (`#runTransition`,
+  como `#leaveForParty`): a exercise weapon comprada na praça é uma instância nova com o prefixo da
+  sessão DA PRAÇA, e o extrato do Treino só leva o `acquired` nascido nele — sem o flush a arma
+  nunca chegaria ao banco, e o gold gasto sumiria (o `goldDelta` da praça não entra nos agregados da
+  sessão de destino).
+- **`buy-item` cria a instância com id `${sessão}:${personagem}:buy:${UUID}`** — único por compra,
+  nunca derivado de `lootSeq` (recomeça em zero a cada login, e a mesma cópia da Cidade é reaberta em
+  outro dia: `ON CONFLICT DO NOTHING` engoliria a segunda compra).
+- **A `api` GASTA o banco na emissão do ticket, e só com o personagem em REPOUSO.** `TicketService.
+  resolveNode` devolve `resting: true` quando o diretório não tem sessão para ele — o único momento
+  em que a linha do Postgres não tem dono quente (invariante 9, ADR 0052 d.5). O "fora" é
+  `agora − SessionDirectory.restedSince(id)`: o carimbo `char:{id}:rest`, gravado no `release` (o
+  fim de uma sessão que TERMINOU, não o marco de stamina) e apagado no `register`. **Sem carimbo
+  não se gasta** (Redis reiniciado, queda sem `release`): o tempo fica no banco. A escrita usa o
+  `CharacterWriter` que `withOwnedCharacter` passa à operação — preso à `tx` da trava, porque um
+  método do repositório abriria outra conexão e esperaria pela linha travada — e só acontece com o
+  ticket EMITIDO (`active-limit` não gasta). Quem não escolheu skill no livro não tem a linha tocada.
+- **A stamina não anda no Treino, em NENHUMA saída:** `createSessionBuilder` chama `holdStamina` (não
+  `materializeStamina`) ao SAIR do Treino pela transição — o marco avança sem recuperar o tempo
+  treinado (ADR 0060 d.14c). Mas o construtor só roda ANTES do extrato no `leave-hunt`
+  (`#runTransition` constrói antes de gravar); a arma que acaba sozinha (`#settleOne` grava o extrato
+  e SÓ DEPOIS constrói a Cidade), o logout dentro do Treino e a drenagem gravam o extrato sem passar
+  por ele, e o ledger guardaria o marco da ENTRADA — o próximo ticket recuperaria o tempo treinado
+  inteiro. Por isso `#persistReceipt` também segura o marco (`holdStamina(owner, wallNow)`) quando a
+  sessão é `training`, e `settleSnapshotAsReceipt` (`nowMs`) faz o mesmo para o snapshot
+  irrestaurável. **`wallNow` é OUTRO relógio que `now`:** `now` é o monotônico do processo
+  (`performance.now`, só para o ciclo) e não grava instante que sobrevive a restart; o marco de
+  stamina é epoch (`Date.now`). A entrada materializa como qualquer transição.
+- **O `training-exhaustion` do Canary (10 s entre dois Treinos) é cooldown de PAREDE, e mora no
+  registro `training`** (ADR 0052 d.6): `exerciseExhaustedUntilMs`, epoch ms, comparado com o relógio
+  que o servidor passa (`OfflineTraining.exerciseCooldownLeftMs(nowMs, cooldownMs)`; `sim` não lê
+  relógio). O host recusa em palavras (`#requestEnterTraining`) e `trainingFor` recusa de novo e
+  CARIMBA ao construir (`beginExerciseCooldown`); o carimbo viaja no extrato do Treino (`training` é
+  ABSOLUTO) e no snapshot. O valor é `training.startCooldownMs` do conteúdo (10 000).
+- **Achado fora do escopo, sem correção aqui:** o `materializeStamina` de TODA transição também
+  roda ao SAIR da hunt, e o marco (`staminaUpdatedAtMs`) é o da ENTRADA — então o tempo de parede
+  da hunt inteira volta como recuperação, por cima do que `drainStamina` gastou. Sonda com uma hunt
+  silenciosa de 1 h simulada e 1 h de relógio: stamina 10 h na entrada, 10,86 h na Cidade. O Treino
+  não tem o problema (`holdStamina` só avança o marco); a hunt merece uma issue própria.
 
 ## Testes de autenticação e admissão
 

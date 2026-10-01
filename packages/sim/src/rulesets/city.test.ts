@@ -6,7 +6,7 @@ import type { BotConfigV2, BotSlot, Combat, Item, Progression, Spell } from '@dr
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
 import { Rng } from '../rng.js';
-import { Session } from '../session.js';
+import { Session, progressOf } from '../session.js';
 import type { SlotOutcome, UseSlotTarget } from './hunt.js';
 import { createCityRuleset } from './city.js';
 
@@ -172,6 +172,12 @@ describe('chegar na Cidade (FUN-120)', () => {
     expect(createCityRuleset({ map: temple }).mapId).toBe('templo');
     expect(createCityRuleset().mapId).toBeUndefined();
   });
+
+  it('a Cidade não declara `progress`: ausente, ela é shard e não credita, como sempre (OW-03)', () => {
+    const ruleset = createCityRuleset({ map: temple });
+    expect('progress' in ruleset).toBe(false);
+    expect(progressOf(ruleset)).toBe('none');
+  });
 });
 
 // --- conjurar na Cidade (#792, ADR 0044 d.2) --------------------------------------------------
@@ -200,11 +206,18 @@ const healSpell: Spell = {
   effect: { kind: 'heal', amount: 60 },
 };
 
-const citizenWithGold = (over: Partial<{ mana: number; soul: number; gold: number }> = {}): CharacterRuntime =>
+const citizenWithGold = (
+  over: Partial<{ mana: number; soul: number; gold: number; learned: readonly string[] }> = {},
+): CharacterRuntime =>
   new CharacterRuntime({
     id: 'hero', position: { x: -1, y: -1, z: 0 },
     health: 150, maxHealth: 150, mana: over.mana ?? 100, maxMana: 100, soul: over.soul ?? 100,
     level: 10, xp: 0, gold: over.gold ?? 100, goldDelta: 0, alive: true, cooldowns: {},
+    // Sabe as três magias da cena (#624), salvo `learned`: o portão do aprendizado é assunto de
+    // `casting.test.ts`, e o bloco `conjurar sem aprender` abaixo prende o dele na Cidade.
+    learnedSpells: {
+      spellIds: [...(over.learned ?? [conjureRune.id, attackSpell.id, healSpell.id])], version: 1,
+    },
   });
 
 /** Um conjunto v2 com os slots dados no ATIVO — mesmo helper de `hunt.test.ts`. */
@@ -233,6 +246,34 @@ describe('conjurar na Cidade (#792, ADR 0044 d.2)', () => {
     session.enter(character);
     return { session, ruleset: ruleset as unknown as CityUseSlot };
   };
+
+  it('conjurar SEM ter aprendido a magia é recusado com `not-learned`, sem gastar mana, alma nem gold (#624)', () => {
+    // A conjuração de runa é magia (o Canary a trata como `InstantSpell`), e exige o aprendizado
+    // como qualquer outra — só a runa em si, o item, dispensa.
+    const { session, ruleset } = sessionWith(citizenWithGold({ soul: 2, gold: 7, learned: [] }));
+    ruleset.configureBot(session, botConfigWithSlot({ kind: 'spell', spellId: 'conjure-test-rune' }), 'hero');
+
+    expect(ruleset.useSlot(session, 'hero', 0, 0))
+      .toEqual({ ok: false, reason: 'not-learned', retryInMs: 0 });
+
+    const hero = session.participants[0] as CharacterRuntime;
+    expect(hero.mana).toBe(100);
+    expect(hero.soul).toBe(2);
+    expect(hero.goldDelta).toBe(0);
+    expect((hero.supplyStock as Map<string, number>).get('test-rune')).toBeUndefined();
+  });
+
+  it('e conjura normalmente depois de aprender', () => {
+    const { session, ruleset } = sessionWith(citizenWithGold({ soul: 2, gold: 7, learned: [] }));
+    ruleset.configureBot(session, botConfigWithSlot({ kind: 'spell', spellId: 'conjure-test-rune' }), 'hero');
+    const hero = session.participants[0] as CharacterRuntime;
+    expect(ruleset.useSlot(session, 'hero', 0, 0).ok).toBe(false);
+
+    hero.learnedSpells.grant('conjure-test-rune');
+
+    expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+    expect((hero.supplyStock as Map<string, number>).get('test-rune')).toBe(5);
+  });
 
   it('sem configuração de bot, o slot recusa `empty-slot`', () => {
     const { session, ruleset } = sessionWith(citizenWithGold());

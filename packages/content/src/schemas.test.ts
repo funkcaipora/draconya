@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { MonsterRace as ProtocolMonsterRace } from '@draconya/protocol';
 import {
   ammunitionSchema, appearancesSchema, botConditionSchema, botConfigV2Schema, botSetSchema,
-  botTargetPolicySchema, DEFAULT_MONSTER_RACE, huntSchema, itemSchema, MONSTER_RACES, monsterSchema,
-  NEUTRAL_MONSTER_OUTFIT, routeSchema, spellAreaSchema, spellFormulaSchema, tilemapSchema,
+  botTargetPolicySchema, DEFAULT_MONSTER_RACE, huntSchema, itemSchema, loyaltySchema, MONSTER_RACES,
+  monsterSchema, NEUTRAL_MONSTER_OUTFIT, routeSchema, spellAreaSchema, spellFormulaSchema, tilemapSchema,
 } from './schemas.js';
 
 describe('routeSchema.spawnPoints — `monsters` com peso na mesma posição (#582)', () => {
@@ -391,6 +391,34 @@ describe('appearancesSchema — o efeito do golpe físico por raça (#620)', () 
     expect(appearancesSchema.parse({ ...base, hits: { melee: 1, byRace: { venom: 17, undead: 10 } } }).hits.byRace)
       .toEqual({ venom: 17, undead: 10 });
     expect(() => appearancesSchema.parse({ ...base, hits: { byRace: { plasma: 17 } } })).toThrow();
+  });
+});
+
+describe('loyaltySchema — a tabela de idade da conta (#628, ADR 0052 d.5)', () => {
+  const base = {
+    id: 'baseline', enabled: true, pointsPerCreationDay: 1, bonusPercentageMultiplier: 1,
+    tiers: [{ minPoints: 360, percent: 5 }, { minPoints: 720, percent: 10 }],
+  };
+
+  it('aceita degraus em ordem crescente de minPoints', () => {
+    expect(loyaltySchema.safeParse(base).success).toBe(true);
+  });
+
+  it('recusa degraus fora de ordem ou repetidos — o laço do Canary fica com o ÚLTIMO que cabe', () => {
+    // Fora de ordem daria o percentual do degrau ERRADO em silêncio: 720 pontos cairiam no de 5 %.
+    expect(loyaltySchema.safeParse({
+      ...base, tiers: [{ minPoints: 720, percent: 10 }, { minPoints: 360, percent: 5 }],
+    }).success).toBe(false);
+    expect(loyaltySchema.safeParse({
+      ...base, tiers: [{ minPoints: 360, percent: 5 }, { minPoints: 360, percent: 10 }],
+    }).success).toBe(false);
+  });
+
+  it('recusa tabela vazia, percentual não inteiro ou zero, e multiplicador negativo', () => {
+    expect(loyaltySchema.safeParse({ ...base, tiers: [] }).success).toBe(false);
+    expect(loyaltySchema.safeParse({ ...base, tiers: [{ minPoints: 360, percent: 5.5 }] }).success).toBe(false);
+    expect(loyaltySchema.safeParse({ ...base, tiers: [{ minPoints: 360, percent: 0 }] }).success).toBe(false);
+    expect(loyaltySchema.safeParse({ ...base, bonusPercentageMultiplier: -1 }).success).toBe(false);
   });
 });
 

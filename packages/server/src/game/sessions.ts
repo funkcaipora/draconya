@@ -7,7 +7,8 @@
 import { randomUUID } from 'node:crypto';
 import {
   CharacterRuntime, DEFAULT_DIFFICULTY_NAME, Rng, Session, createCityRuleset, createHuntSession,
-  huntRulesetFromSnapshot, materializeStamina, statsForLevel,
+  createTrainingSession, holdStamina, huntRulesetFromSnapshot, materializeStamina, statsForLevel,
+  trainingRulesetFromSnapshot,
 } from '@draconya/sim';
 import type {
   HuntDifficultyName, InventoryState, Ruleset, SessionSnapshot, SkillsState,
@@ -288,6 +289,22 @@ export function characterFromTicket(
       // (`isCharmsState`); ausente, a sessão parte sem nenhum ponto/tier/atribuição — o mesmo
       // personagem novo que `bestiary` ausente já descreve.
       ...(initialCharacter.charms === undefined ? {} : { charms: initialCharacter.charms }),
+      // O Bosstiary (#629, ADR 0052 d.1): validado na emissão e no consumo (`isBosstiaryState`);
+      // ausente, a sessão parte sem nenhum abate de boss — o mesmo personagem novo que `bestiary`
+      // ausente já descreve.
+      ...(initialCharacter.bosstiary === undefined ? {} : { bosstiary: initialCharacter.bosstiary }),
+      // As magias aprendidas (#624, ADR 0058 d.1): validadas na emissão e no consumo
+      // (`isLearnedSpellsState`); ausente, a sessão parte sem nenhuma — personagem novo, que
+      // não lança nada até comprar (quem já existia ganhou o registro pela migração 0024).
+      ...(initialCharacter.learnedSpells === undefined
+        ? {} : { learnedSpells: initialCharacter.learnedSpells }),
+      // O familiar (M38-02, #599, ADR 0057 d.3): os carimbos de parede do cooldown e da recriação
+      // — validados na emissão e no consumo (`isFamiliarState`); ausente, o personagem nunca
+      // invocou, e a sessão parte sem carimbo.
+      ...(initialCharacter.familiar === undefined ? {} : { familiar: initialCharacter.familiar }),
+      // O registro do Treino (#631, ADR 0059 d.3): validado na emissão e no consumo; ausente, a
+      // sessão parte de banco zero e nenhuma skill escolhida — o mesmo personagem novo.
+      ...(initialCharacter.training === undefined ? {} : { training: initialCharacter.training }),
       // Os storages (#731, ADR 0050 d.6 T2): validados como o Bestiário; ausente, a sessão
       // parte sem storage nenhum setado — a mesma degradação de sempre.
       ...(initialCharacter.storages === undefined ? {} : { storages: initialCharacter.storages }),
@@ -312,6 +329,12 @@ export function characterFromTicket(
       ...(initialCharacter.boostedMonsterId === undefined
         ? {}
         : { boostedMonsterId: initialCharacter.boostedMonsterId }),
+      // O bônus de Loyalty (#628, ADR 0052 decisão 5): calculado pela `api` na emissão e fixado
+      // AGORA, como a boosted — a sessão nunca relê conta nem relógio, e o valor atravessa toda
+      // transição Cidade↔hunt e toda retomada de snapshot (vive no `CharacterState`).
+      ...(initialCharacter.loyaltyBonusPercent === undefined
+        ? {}
+        : { loyaltyBonusPercent: initialCharacter.loyaltyBonusPercent }),
     });
     // Materializa na ENTRADA (§10): o personagem esteve fora de hunt desde a última vez, e
     // esse tempo é recuperação. Fazer a conta aqui, e não na leitura de cada consulta, é o
@@ -362,10 +385,11 @@ export function createSessionRestorer(content: Content): SessionRestorer {
 }
 
 function rulesetFor(snapshot: SessionSnapshot, content: Content): Ruleset | null {
-  // Cidade e hunt são as duas que existem. Treino, quest, boss e guild war ainda não têm
+  // Cidade, hunt e Treino (#631) são as que existem. Quest, boss e guild war ainda não têm
   // ruleset — e forçar um conhecido em cima produziria uma sessão que mente sobre o que é.
   if (snapshot.type === 'city') return cityRulesetFor(content);
   if (snapshot.type === 'hunt') return huntRulesetFromSnapshot(snapshot, content);
+  if (snapshot.type === 'training') return trainingRulesetFromSnapshot(snapshot, content);
   return null;
 }
 
@@ -403,12 +427,19 @@ export function createSessionBuilder(
 
     // Materializar a stamina é da FRONTEIRA, e toda transição é uma (§10). Fazer aqui, e não
     // dentro de cada destino, é o que garante que nenhum caminho novo esqueça.
-    materializeStamina(character, now(), content.stamina);
+    //
+    // A exceção é sair do TREINO (#631): a stamina não anda nele — o exercise training do Canary é
+    // online, e o Canary só regenera stamina deslogado (ADR 0060 d.14c, emenda ao ADR 0059 d.1) —,
+    // então o marco avança sem recuperar o tempo de treino. A entrada nele (Cidade → Treino)
+    // materializa normalmente: o tempo que veio ANTES do treino ainda é recuperação.
+    if (from.ruleset.type === 'training') holdStamina(character, now());
+    else materializeStamina(character, now(), content.stamina);
 
     if (request.to === 'city') return cityFor(shard, from, character);
     if (request.to === 'hunt') return huntFor(content, request, character, now);
-    // Treino, quest, boss e guild war ainda não têm ruleset. `null` recusa a transição com
-    // erro claro, que é melhor que construir uma sessão que mente sobre o que é.
+    if (request.to === 'training') return trainingFor(content, request, character, now);
+    // Quest, boss e guild war ainda não têm ruleset. `null` recusa a transição com erro claro,
+    // que é melhor que construir uma sessão que mente sobre o que é.
     return null;
   };
 }
@@ -458,6 +489,45 @@ function huntFor(
   } catch {
     // Hunt inexistente, dificuldade que ela não define, rota que saiu do conteúdo. Recusar é
     // a resposta certa: o personagem fica onde estava, e o jogador vê o motivo.
+    return null;
+  }
+}
+
+/**
+ * A sessão de Treino (#631, ADR 0059 d.1): o personagem entra sozinho, com a exercise weapon que
+ * escolheu. `null` recusa a transição — instância que ele não carrega, item que não é exercise
+ * weapon, arma sem carga, conteúdo sem `training/` ou sem o mapa da Cidade — e o personagem fica
+ * onde estava, que é o estado seguro. O host confere e responde o motivo em palavras ANTES de
+ * chegar aqui; esta é a segunda linha, porque o construtor é quem tem a autoridade sobre o que
+ * uma sessão de Treino pode ser (invariante 4: o cliente só disse qual instância).
+ */
+function trainingFor(
+  content: Content,
+  request: TransitionRequest,
+  character: CharacterRuntime,
+  now: () => number,
+): Session | null {
+  if (request.itemInstanceId === undefined) return null;
+  try {
+    // O `training-exhaustion` do Canary (ADR 0052 d.6, cooldown de parede): um novo início só
+    // passados `startCooldownMs` (10 s) do anterior. Recusar aqui é a segunda linha — o host já
+    // respondeu em palavras —, e é a que carimba: o instante entra no registro do personagem, que o
+    // extrato do Treino leva ao banco. Sem ele, entrar/sair/entrar a cada ciclo creditaria um golpe
+    // por entrada (o primeiro vence em t = 0) e esgotaria a arma bem mais depressa que 1 carga / 2 s.
+    const rules = content.training;
+    const startedAtMs = now();
+    if (rules !== undefined && character.training.exerciseCooldownLeftMs(startedAtMs, rules.startCooldownMs) > 0) {
+      return null;
+    }
+    const session = createTrainingSession({
+      id: randomUUID(), content, itemInstanceId: request.itemInstanceId, createdAtMs: startedAtMs,
+    });
+    session.enter(character);
+    if (rules !== undefined) character.training.beginExerciseCooldown(startedAtMs, rules.startCooldownMs);
+    return session;
+  } catch {
+    // Sem Treino no conteúdo, sem a arma, sem onde ficar (`TrainingUnavailableError`): recusar é a
+    // resposta certa, como a hunt que saiu do conteúdo.
     return null;
   }
 }

@@ -38,6 +38,7 @@ import {
   FALLBACK_EFFECT_PHASES, effectPhaseAt, floatingTextColor, floatingTextOffset, loopPhaseAt, missileProgress,
 } from './effects.js';
 import { facingOf, walkFrame } from './facing.js';
+import { ambientTint } from './light.js';
 import { createFpsMeter } from './fps.js';
 import { shade, veilTint } from './floors.js';
 import {
@@ -80,8 +81,6 @@ function sceneKeyOf(scene: Scene): string {
 const COLOR_FLOOR = 0x2b2b33;
 const COLOR_WALL = 0x14141a;
 const COLOR_GRID = 0x3a3a45;
-/** O tom do bueiro (`ambience: 'cavern'`): o mundo inteiro, sob uma luz fria. */
-const CAVERN_TINT = 0x8e8eb0;
 const COLOR_CREATURE = 0xc25b4a;
 const COLOR_SELF = 0x4ac26a;
 const COLOR_HEALTH_FRAME = 0x000000;
@@ -651,6 +650,7 @@ export async function mountViewport(
   function paintTerrain(
     center: { x: number; y: number; z: number },
     visibility: { readonly floors: readonly number[]; readonly first: number; readonly last: number },
+    nowMs: number,
   ): void {
     // A janela de RENDER (M23): três tiles além de cada borda visível já estão pintados, e é
     // ao pintá-los que a textura deles é pedida ao livro — três tiles antes de entrarem na
@@ -666,7 +666,8 @@ export async function mountViewport(
     floorsRoot.y = Math.round(origin.y);
     // O ambiente é um tom sobre as camadas inteiras (FUN-121): o bueiro é escuro, a rua não. O
     // tint do container multiplica o dos filhos, então `ambiente × véu` sai igual ao de hoje.
-    floorsRoot.tint = world.ambience === 'cavern' ? CAVERN_TINT : 0xffffff;
+    // A luz do próprio jogador (#623) clareia o bueiro; na superfície não muda nada.
+    floorsRoot.tint = ambientTint(world.ambience, world.selfLight, nowMs);
 
     // A chave inclui a VERSÃO do livro de texturas: o primeiro quadro pinta retângulo, e o
     // quadro em que uma folha resolve — ou em que um despejo esquece uma célula — precisa
@@ -1450,7 +1451,7 @@ export async function mountViewport(
       : visibleFloors(scene.floors, visibility.first, visibility.last);
     warmWindow(center, prefetchFloors);
     if (warmed !== null) warmOutfitsNear(warmed.window);
-    paintTerrain(center, visibility);
+    paintTerrain(center, visibility, nowMs);
     // Por quadro, DEPOIS da repintura: o alpha de cada andar do pool. A rampa anda mesmo sem
     // repintura — é o fade que faz o andar sumir/volar, não a lista de andares.
     for (const layers of floorLayers.values()) {

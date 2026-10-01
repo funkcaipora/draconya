@@ -2,12 +2,13 @@
 
 Separa `packages/content/staging/items/generated/*.json` (a transcrição pura do Canary, #573/#574) em `data/items/generated/` + `data/appearances/baseline.json.items` — o mesmo movimento que `promote-monsters.ts` (#580) já fez para monstro. Exclusões, cada uma contada: id que colide com item AUTORAL (o autoral vence, ADR 0014), `appearanceId` fora do inventário do pacote de assets conferido (FUN-21), regra de conteúdo que `buildContent` reprovaria no boot, e item exclusivo da vocação Monk (fora do escopo do Draconya).
 
-1858 item(ns) promovido(s) em 10 fatia(s):
+1879 item(ns) promovido(s) em 11 fatia(s):
 
 - `amulets.json`: 81
 - `armors.json`: 140
 - `boots.json`: 53
 - `creature-products.json`: 626
+- `exercise-weapons.json`: 21
 - `helmets.json`: 117
 - `legs.json`: 53
 - `rings.json`: 38

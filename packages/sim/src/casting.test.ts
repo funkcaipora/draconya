@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Combat, Spell, Supply } from '@draconya/content';
 import { evaluateSpellPower } from '@draconya/content';
 import { CharacterRuntime } from './character.js';
+import { learnedSpellsStateOf } from './learned-spells.js';
 import { actionExhaustKey, balanceOf, castSpell, executeHealing, spellCooldownKey, useSupply } from './casting.js';
 import type { SpellScaling } from './casting.js';
 import { normalRandomInt } from './combat/weapon-power.js';
@@ -39,8 +40,23 @@ const manaPotion: Supply = {
   effect: { kind: 'mana', amount: 100 },
 };
 
+// O herói sabe TODA magia que este arquivo declara: o portão do aprendizado (#624) é o assunto de
+// um bloco só (`castSpell — o aprendizado`), e o resto dos testes é sobre o que vem depois dele —
+// level, cooldown, alcance, mana. Quem quer o herói que NÃO aprendeu passa `learned`.
+const KNOWN_SPELLS = [
+  'antidote-rune', 'avalanche-rune', 'base-healing', 'blast', 'blood-rage', 'cancel-magic-shield',
+  'challenge', 'conjure-arrow', 'conjure-avalanche-rune', 'cure-poison', 'destroy-field-rune',
+  'divine-caldera', 'ethereal-spear', 'fair-wound-cleansing', 'fire-field-rune', 'fire-wave',
+  'flame-strike', 'food', 'great-death-beam', 'great-energy-beam', 'great-fireball-rune',
+  'great-light', 'haste', 'heal', 'heal-party', 'ice-strike', 'intense-healing',
+  'intense-healing-rune', 'invisibility-druid', 'levitate-up', 'light', 'light-healing', 'long',
+  'magic-shield', 'nature-heal', 'paralyze-rune', 'player-fire-field', 'protect-party', 'recovery',
+  'short', 'strike', 'sudden-death-rune', 'summon-creature', 'swift-foot', 'ultimate-healing-rune',
+];
+
 const hero = (over: Partial<{
   health: number; mana: number; soul: number; level: number; gold: number; goldDelta: number;
+  learned: readonly string[];
 }> = {}): CharacterRuntime => new CharacterRuntime({
   id: 'hero', position: { x: 1, y: 1, z: 7 },
   health: over.health ?? 100, maxHealth: 100,
@@ -50,6 +66,7 @@ const hero = (over: Partial<{
   staminaMs: null, staminaUpdatedAtMs: 0,
   gold: over.gold ?? 0, goldDelta: over.goldDelta ?? 0,
   alive: true, cooldowns: {},
+  learnedSpells: learnedSpellsStateOf(over.learned ?? KNOWN_SPELLS),
 });
 
 /** Uma mira de alvo único, que é o caso mais comum. */
@@ -114,12 +131,16 @@ describe('castSpell — o portão, na ordem em que ele custa a descobrir', () =>
       .toEqual({ ok: false, reason: 'not-enough-mana', retryInMs: 0 });
   });
 
-  describe('stairhop (#554, M30-07, ADR 0040 decisão 1): trava de ataque ao trocar de andar', () => {
+  describe('pacified (#554/#622, ADR 0040 decisão 1 e ADR 0041): trava de ataque', () => {
     const combatV3: Combat = { ...combat, compatibilityProfile: 'combat-v3' };
+    /** A condição `pacified` até `expiresAtMs` — o mesmo estado que a trava de escada aplica. */
+    const pacify = (caster: CharacterRuntime, expiresAtMs: number): void => {
+      caster.conditions.apply({ key: 'pacified', expiresAtMs, merge: 'longest' });
+    };
 
     it('magia AGRESSIVA recusa com `attack-locked` e o prazo exato — antes do alvo, e sem gastar mana', () => {
       const caster = hero();
-      caster.attackLockedUntil = 2_000;
+      pacify(caster, 2_000);
       // Sem mira nenhuma (`null`): se a checagem de alcance/alvo viesse primeiro, a recusa
       // seria `no-target`, não `attack-locked` — a ordem é a mesma do `playerSpellCheck` do
       // Canary, que confere `CONDITION_PACIFIED` antes do alvo.
@@ -128,22 +149,64 @@ describe('castSpell — o portão, na ordem em que ele custa a descobrir', () =>
       expect(caster.mana).toBe(100);
     });
 
-    it('vencida a trava, a magia agressiva sai normalmente', () => {
+    it('vencida a condição, a magia agressiva sai normalmente — no instante EXATO do vencimento', () => {
       const caster = hero();
-      caster.attackLockedUntil = 2_000;
+      pacify(caster, 2_000);
+      expect(castSpell(caster, strike, near(), 1_999, combatV3, rng()).ok).toBe(false);
       expect(castSpell(caster, strike, near(), 2_000, combatV3, rng()).ok).toBe(true);
     });
 
-    it('cura NÃO é bloqueada pela MESMA trava — só `damage`/`damage-over-time` são agressivas', () => {
+    it('cura NÃO é bloqueada pela MESMA condição — só `damage`/`damage-over-time` são agressivas', () => {
       const caster = hero({ health: 10 });
-      caster.attackLockedUntil = 2_000;
+      pacify(caster, 2_000);
       expect(castSpell(caster, heal, null, 0, combatV3, rng()).ok).toBe(true);
     });
 
-    it('só o `combat-v3` lê: sob `combat-v1`/`v2` a mesma trava não bloqueia a magia agressiva', () => {
+    it('Summon Creature é AGRESSIVA por padrão no Canary: recusa com `attack-locked`, sem gastar mana (#622)', () => {
+      // `summon_creature.lua` não chama `isAggressive(false)` — toda cura, condição própria e
+      // conjuração chama —, e `Spell::playerSpellCheck` recusa a magia agressiva sob
+      // `CONDITION_PACIFIED` (`spells.cpp:517`) ANTES do script que cria a invocação.
+      const summon: Spell = {
+        id: 'summon-creature', name: 'Summon Creature', manaCost: 0, cooldownMs: 2_000, minLevel: 1,
+        effect: { kind: 'summon' },
+      };
       const caster = hero();
-      caster.attackLockedUntil = 2_000;
-      expect(castSpell(caster, strike, near(), 0, combat, rng()).ok).toBe(true);
+      pacify(caster, 2_000);
+      const cast = (nowMs: number) => castSpell(
+        caster, summon, null, nowMs, combatV3, rng(), undefined, undefined, undefined, undefined,
+        undefined, 30,
+      );
+      expect(cast(500)).toEqual({ ok: false, reason: 'attack-locked', retryInMs: 1_500 });
+      expect(caster.mana).toBe(100);
+      expect(cast(2_000)).toMatchObject({ ok: true, summon: true });
+      expect(caster.mana).toBe(70);
+    });
+
+    it('a condição é o portão, em QUALQUER perfil: a trava de escada só a aplica no combat-v3, mas o conteúdo pode aplicá-la', () => {
+      const caster = hero();
+      pacify(caster, 2_000);
+      expect(castSpell(caster, strike, near(), 0, combat, rng()))
+        .toEqual({ ok: false, reason: 'attack-locked', retryInMs: 2_000 });
+    });
+  });
+
+  describe('feared (#622, ADR 0041): nenhuma magia nem runa sai', () => {
+    const fear = (caster: CharacterRuntime, expiresAtMs: number): void => {
+      caster.conditions.apply({ key: 'feared', expiresAtMs, merge: 'longest' });
+    };
+
+    it('recusa QUALQUER magia — cura inclusive — com `feared` e o prazo do medo, antes de tudo', () => {
+      const caster = hero({ health: 10, level: 1 });
+      fear(caster, 3_000);
+      // Antes do level (`heal` do fixture exige level 1, `strike` mais) e antes do alvo: a
+      // primeira coisa que `playerSpellCheck` confere, depois das flags de grupo, é o medo.
+      expect(castSpell(caster, heal, null, 1_000, combat, rng()))
+        .toEqual({ ok: false, reason: 'feared', retryInMs: 2_000 });
+      expect(castSpell(caster, strike, null, 1_000, combat, rng()))
+        .toEqual({ ok: false, reason: 'feared', retryInMs: 2_000 });
+      expect(caster.mana).toBe(100);
+      // Vencido o medo, a mesma cura sai.
+      expect(castSpell(caster, heal, null, 3_000, combat, rng()).ok).toBe(true);
     });
   });
 
@@ -162,6 +225,122 @@ describe('castSpell — o portão, na ordem em que ele custa a descobrir', () =>
     const costly: Spell = { ...heal, soulCost: 3 };
     expect(castSpell(caster, costly, null, 0, combat, rng()).ok).toBe(true);
     expect(caster.soul).toBe(2);
+  });
+});
+
+describe('useSupply — medo e pacificação alcançam a RUNA, não a poção (#622)', () => {
+  const attackRune: Supply = {
+    id: 'sudden-death-rune', name: 'Sudden Death', price: 20, group: 'attack', groupCooldownMs: 2_000,
+    requires: {}, effect: { kind: 'damage', basePower: 45, range: 4, damageType: 'death' },
+  };
+  const healingRune: Supply = {
+    id: 'uh-rune', name: 'Ultimate Healing Rune', price: 20, group: 'healing', groupCooldownMs: 1_000,
+    requires: {}, effect: { kind: 'heal', amount: 60 },
+  };
+  const fieldRune: Supply = {
+    id: 'fire-field-rune', name: 'Fire Field', price: 10, group: 'attack', groupCooldownMs: 2_000,
+    requires: {}, effect: {
+      kind: 'field', range: 4,
+      field: { id: 'fire-field', durationMs: 5_000, shape: { shape: 'point' } },
+    },
+  };
+  const antidote: Supply = {
+    id: 'antidote-rune', name: 'Antidote', price: 15, group: 'healing', groupCooldownMs: 1_000,
+    requires: {}, effect: { kind: 'dispel', types: ['poison'] },
+  };
+  const aim = { distance: 2, targets: [{ armor: 0, dodgeChance: 0 }] };
+  const scaling = { skillLevel: 10, powerScale: 1 };
+  const condition = (key: string, expiresAtMs: number) => ({ key, expiresAtMs, merge: 'longest' as const });
+
+  it('feared recusa TODA runa (cura inclusive) e não gasta nada — mas a poção sai', () => {
+    const user = hero({ gold: 200, health: 10 });
+    user.conditions.apply(condition('feared', 3_000));
+    expect(useSupply(user, attackRune, aim, combat, rng(), scaling, undefined, undefined, 1_000))
+      .toEqual({ ok: false, reason: 'feared', retryInMs: 2_000 });
+    expect(useSupply(user, healingRune, null, combat, rng(), scaling, undefined, undefined, 1_000))
+      .toEqual({ ok: false, reason: 'feared', retryInMs: 2_000 });
+    expect(useSupply(user, antidote, null, combat, rng(), scaling, undefined, undefined, 1_000))
+      .toEqual({ ok: false, reason: 'feared', retryInMs: 2_000 });
+    expect(user.goldDelta).toBe(0);
+    // A poção não passa por `Spell::playerSpellCheck` — continua liberada.
+    expect(useSupply(user, potion, null, combat, rng(), scaling, undefined, undefined, 1_000).ok).toBe(true);
+  });
+
+  it('pacified recusa só a runa AGRESSIVA (dano e campo) com `attack-locked`; cura e antídoto passam', () => {
+    const user = hero({ gold: 200, health: 10 });
+    user.conditions.apply(condition('pacified', 2_000));
+    expect(useSupply(user, attackRune, aim, combat, rng(), scaling, undefined, undefined, 500))
+      .toEqual({ ok: false, reason: 'attack-locked', retryInMs: 1_500 });
+    expect(useSupply(user, fieldRune, aim, combat, rng(), scaling, undefined, undefined, 500))
+      .toEqual({ ok: false, reason: 'attack-locked', retryInMs: 1_500 });
+    expect(useSupply(user, healingRune, null, combat, rng(), scaling, undefined, undefined, 500).ok).toBe(true);
+    expect(useSupply(user, antidote, null, combat, rng(), scaling, undefined, undefined, 500).ok).toBe(true);
+    // Vencida a condição, a runa de ataque sai.
+    expect(useSupply(user, attackRune, aim, combat, rng(), scaling, undefined, undefined, 2_000).ok).toBe(true);
+  });
+
+  // As duas runas de invocação (#600) são do grupo `support`, mas `convince_creature.lua` e
+  // `animate_dead_rune.lua` NÃO chamam `isAggressive(false)` — `Spell::aggressive` fica `true`, e
+  // `Spell::playerSpellCheck` recusa as duas sob `CONDITION_PACIFIED` como recusa a runa de dano.
+  describe('as runas de invocação (Convince Creature e Animate Dead)', () => {
+    const convinceRune: Supply = {
+      id: 'convince-creature-rune', name: 'Convince Creature Rune', price: 80, group: 'support',
+      groupCooldownMs: 2_000, requires: {}, effect: { kind: 'convince', range: 8 },
+    };
+    const animateRune: Supply = {
+      id: 'animate-dead-rune', name: 'Animate Dead Rune', price: 375, group: 'support',
+      groupCooldownMs: 2_000, requires: {}, effect: { kind: 'animate-dead', monsterId: 'skeleton', range: 8 },
+    };
+    const monsterAim = { distance: 2, targets: [{ armor: 0, dodgeChance: 0 }] };
+    const tileAim = { distance: 2, targets: [], point: { x: 3, y: 3, z: 7 } };
+
+    it('pacified recusa as duas com `attack-locked` e o prazo, sem gastar gold nem cooldown', () => {
+      const user = hero({ gold: 1_000 });
+      user.conditions.apply(condition('pacified', 2_000));
+      expect(useSupply(user, convinceRune, monsterAim, combat, rng(), scaling, undefined, undefined, 500))
+        .toEqual({ ok: false, reason: 'attack-locked', retryInMs: 1_500 });
+      expect(useSupply(user, animateRune, tileAim, combat, rng(), scaling, undefined, undefined, 500))
+        .toEqual({ ok: false, reason: 'attack-locked', retryInMs: 1_500 });
+      expect(user.goldDelta).toBe(0);
+      // Vencida a condição, as duas chegam ao resto do checklist e saem.
+      expect(useSupply(user, convinceRune, monsterAim, combat, rng(), scaling, undefined, undefined, 2_000))
+        .toMatchObject({ ok: true, convince: true });
+      expect(useSupply(user, animateRune, tileAim, combat, rng(), scaling, undefined, undefined, 5_000))
+        .toMatchObject({ ok: true, animateDead: { monsterId: 'skeleton' } });
+    });
+
+    it('feared recusa as duas com `feared`, como toda runa', () => {
+      const user = hero({ gold: 1_000 });
+      user.conditions.apply(condition('feared', 3_000));
+      expect(useSupply(user, convinceRune, monsterAim, combat, rng(), scaling, undefined, undefined, 1_000))
+        .toEqual({ ok: false, reason: 'feared', retryInMs: 2_000 });
+      expect(useSupply(user, animateRune, tileAim, combat, rng(), scaling, undefined, undefined, 1_000))
+        .toEqual({ ok: false, reason: 'feared', retryInMs: 2_000 });
+      expect(user.goldDelta).toBe(0);
+    });
+  });
+});
+
+describe('castSpell — Swift Foot: a haste que pacifica (#622, `swift_foot.lua`)', () => {
+  const swiftFoot: Spell = {
+    id: 'swift-foot', name: 'Swift Foot', manaCost: 20, cooldownMs: 10_000, minLevel: 1,
+    effect: { kind: 'haste', speedPercent: 80, durationMs: 10_000, pacifies: true },
+  };
+  const plainHaste: Spell = {
+    ...swiftFoot, id: 'haste', effect: { kind: 'haste', speedPercent: 30, durationMs: 10_000 },
+  };
+
+  it('devolve a haste E a pacificação, pelo MESMO prazo e com `merge: longest`', () => {
+    const result = castSpell(hero(), swiftFoot, null, 1_000, combat, rng());
+    expect(result.ok && result.condition).toMatchObject({ key: 'haste', speedPercent: 80, expiresAtMs: 11_000 });
+    expect(result.ok && result.alsoConditions).toEqual([{
+      key: 'pacified', spellId: 'swift-foot', expiresAtMs: 11_000, merge: 'longest',
+    }]);
+  });
+
+  it('a haste comum não pacifica — `alsoConditions` nem existe', () => {
+    const result = castSpell(hero(), plainHaste, null, 0, combat, rng());
+    expect(result.ok && result.alsoConditions).toBeUndefined();
   });
 });
 
@@ -272,6 +451,112 @@ describe('castSpell/useSupply — dispel (#590, Cure Poison e afins)', () => {
     const user = hero({ gold: 0 });
     const result = useSupply(user, antidoteRune, null, combat, rng());
     expect(result).toEqual({ ok: false, reason: 'not-enough-gold', retryInMs: 0 });
+  });
+});
+
+describe('castSpell — as magias utilitárias (#623)', () => {
+  const levitate: Spell = {
+    id: 'levitate-up', name: 'Levitate (up)', manaCost: 50, cooldownMs: 2_000, minLevel: 12,
+    group: 'support', groupCooldownMs: 2_000, effect: { kind: 'levitate', direction: 'up' },
+  };
+  const light: Spell = {
+    id: 'light', name: 'Light', manaCost: 20, cooldownMs: 2_000, minLevel: 8,
+    effect: { kind: 'light', level: 6, color: 215, durationMs: 370_000 },
+  };
+  const greatLight: Spell = {
+    ...light, id: 'great-light', manaCost: 60,
+    effect: { kind: 'light', level: 8, color: 215, durationMs: 695_000 },
+  };
+  const food: Spell = {
+    id: 'food', name: 'Food', manaCost: 120, soulCost: 1, cooldownMs: 2_000, minLevel: 14,
+    effect: { kind: 'food', items: ['meat', 'ham', 'cheese'] },
+  };
+
+  it('a recusa do RULESET (`preflight`) sai DEPOIS de level e mana e ANTES de pagar — a ordem do Canary', () => {
+    // `Spell::playerSpellCheck` (cooldown, level, mana, alma) vem primeiro; só o `onCastSpell` do
+    // script recusa o destino — sem custo e sem cooldown (`postCastSpell` só roda com `true`).
+    const caster = hero({ mana: 100, level: 20 });
+    expect(castSpell(caster, levitate, null, 0, combat, rng(), undefined, caster, undefined, null, undefined, undefined, undefined, 'not-possible'))
+      .toEqual({ ok: false, reason: 'not-possible', retryInMs: 0 });
+    expect(caster.mana).toBe(100);
+    expect(caster.cooldowns.remainingMs('spell:levitate-up', 0)).toBe(0);
+    expect(caster.cooldowns.remainingMs('group:support', 0)).toBe(0);
+
+    // O level vem antes: quem não tem o level ouve o level, não o destino.
+    const novice = hero({ level: 1 });
+    expect(castSpell(novice, levitate, null, 0, combat, rng(), undefined, novice, undefined, null, undefined, undefined, undefined, 'not-possible'))
+      .toEqual({ ok: false, reason: 'level-too-low', retryInMs: 0 });
+    // A mana vem antes também: sem mana E sem destino, o jogador ouve a mana.
+    const dry = hero({ mana: 10, level: 20 });
+    expect(castSpell(dry, levitate, null, 0, combat, rng(), undefined, dry, undefined, null, undefined, undefined, undefined, 'not-possible'))
+      .toEqual({ ok: false, reason: 'not-enough-mana', retryInMs: 0 });
+  });
+
+  it('sem recusa do ruleset a magia sai: paga mana, inicia cooldown e grupo, e não devolve condição', () => {
+    const caster = hero({ mana: 100, level: 20 });
+    const result = castSpell(caster, levitate, null, 500, combat, rng());
+    expect(result).toEqual({ ok: true, healed: 0, manaRestored: 0, damage: 0, hits: [], goldSpent: 0 });
+    expect(caster.mana).toBe(50);
+    expect(caster.cooldowns.remainingMs('spell:levitate-up', 500)).toBe(2_000);
+    expect(caster.cooldowns.remainingMs('group:support', 500)).toBe(2_000);
+  });
+
+  it('a `preflight` é IGNORADA por quem não é utilitária: uma cura não lê a recusa do ruleset', () => {
+    const caster = hero({ health: 10 });
+    expect(castSpell(caster, heal, null, 0, combat, rng(), undefined, caster, undefined, null, undefined, undefined, undefined, 'not-possible').ok).toBe(true);
+  });
+
+  it('Light devolve a condição com o nível, a cor e o prazo TOTAL; sem sorteio', () => {
+    const caster = hero({ mana: 100, level: 10 });
+    const random = rng();
+    const before = random.getState();
+    const result = castSpell(caster, light, null, 1_000, combat, random);
+    expect(result).toMatchObject({
+      ok: true,
+      condition: {
+        key: 'light', spellId: 'light', expiresAtMs: 371_000,
+        light: { level: 6, color: 215, durationMs: 370_000 },
+      },
+    });
+    expect(caster.mana).toBe(80);
+    expect(random.getState()).toEqual(before);
+  });
+
+  it('Light com uma luz que dura MAIS: gasta a mana e NÃO devolve condição (`updateCondition`)', () => {
+    const caster = hero({ mana: 100, level: 20 });
+    caster.conditions.apply({
+      key: 'light', spellId: 'great-light', expiresAtMs: 695_000,
+      light: { level: 8, color: 215, durationMs: 695_000 },
+    });
+    const result = castSpell(caster, light, null, 0, combat, rng());
+    expect(result).toEqual({ ok: true, healed: 0, manaRestored: 0, damage: 0, hits: [], goldSpent: 0 });
+    expect(caster.mana).toBe(80);
+  });
+
+  it('a luz de prazo IGUAL renova (o Canary só recusa quando o fim atual é ESTRITAMENTE maior)', () => {
+    const caster = hero({ mana: 200, level: 20 });
+    caster.conditions.apply({ key: 'light', spellId: 'light', expiresAtMs: 370_000 });
+    const result = castSpell(caster, light, null, 0, combat, rng());
+    expect(result).toMatchObject({ ok: true, condition: { key: 'light', expiresAtMs: 370_000 } });
+    // E uma de prazo MAIOR sempre renova.
+    const later = castSpell(caster, greatLight, null, 5_000, combat, rng());
+    expect(later).toMatchObject({ ok: true, condition: { spellId: 'great-light', expiresAtMs: 700_000 } });
+  });
+
+  it('Food paga mana E alma e devolve o sorteio na ordem do script — ou recusa sem alma, sem nada gasto', () => {
+    const caster = hero({ mana: 200, soul: 3, level: 20 });
+    const result = castSpell(caster, food, null, 0, combat, rng());
+    expect(result.ok).toBe(true);
+    const foods = (result as { foods?: readonly string[] }).foods ?? [];
+    expect([1, 2]).toContain(foods.length);
+    for (const item of foods) expect(['meat', 'ham', 'cheese']).toContain(item);
+    expect(caster.mana).toBe(80);
+    expect(caster.soul).toBe(2);
+
+    const dry = hero({ mana: 200, soul: 0, level: 20 });
+    expect(castSpell(dry, food, null, 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'not-enough-soul', retryInMs: 0 });
+    expect(dry.mana).toBe(200);
   });
 });
 
@@ -1761,6 +2046,7 @@ describe('a normal truncada do Canary no `combat-v3` (#681)', () => {
       level, xp: 0, vocationId: null,
       staminaMs: null, staminaUpdatedAtMs: 0,
       gold: 10_000, goldDelta: 0, alive: true, cooldowns: {},
+      learnedSpells: learnedSpellsStateOf(KNOWN_SPELLS),
     });
 
   it('poção `amountRange` 250–350 sorteia `normalRandomInt` — e o v1 continua `rng.integer`', () => {
@@ -2031,5 +2317,84 @@ describe('useSupply — runa de campo e Destroy Field (#591)', () => {
     if (!result.ok) throw new Error('esperava usar a runa');
     expect(result.destroyFieldAt).toEqual({ x: 4, y: 4, z: 7 });
     expect(result.goldSpent).toBe(10);
+  });
+});
+
+describe('castSpell — o aprendizado (#624, ADR 0058 d.1)', () => {
+  // No Canary o `toggleLearnSpells` vem ligado, e `Spell::playerSpellCheck` recusa toda magia
+  // instantânea que `hasLearnedInstantSpell` não reconhece. A runa é item: exige só level e magic
+  // level. A CONJURAÇÃO da runa é magia, e exige o aprendizado como qualquer outra.
+  const untaught = (over: Partial<Parameters<typeof hero>[0]> = {}): CharacterRuntime =>
+    hero({ learned: [], ...over });
+
+  it('recusa a magia NÃO aprendida com `spell-not-learned`, sem prazo — esperar não a ensina', () => {
+    const caster = untaught({ health: 10 });
+    expect(castSpell(caster, heal, null, 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'spell-not-learned', retryInMs: 0 });
+  });
+
+  it('a recusa não gasta NADA: nem mana, nem alma, nem cooldown, nem gold', () => {
+    const caster = untaught({ health: 10, gold: 50 });
+    castSpell(caster, heal, null, 0, combat, rng());
+    expect(caster.mana).toBe(100);
+    expect(caster.soul).toBe(100);
+    expect(caster.goldDelta).toBe(0);
+    expect(caster.health).toBe(10);
+    expect(caster.cooldowns.isReady(spellCooldownKey('heal'), 0)).toBe(true);
+  });
+
+  it('depois de aprender, a MESMA magia sai — o aprendizado é o único portão que mudou', () => {
+    const caster = untaught({ health: 10 });
+    expect(castSpell(caster, heal, null, 0, combat, rng()).ok).toBe(false);
+    caster.learnedSpells.grant('heal');
+    expect(castSpell(caster, heal, null, 0, combat, rng()).ok).toBe(true);
+    expect(caster.health).toBe(70);
+  });
+
+  it('é POR magia: aprender uma não ensina a outra', () => {
+    const caster = untaught({ health: 10 });
+    caster.learnedSpells.grant('heal');
+    expect(castSpell(caster, strike, near(), 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'spell-not-learned', retryInMs: 0 });
+  });
+
+  it('vem DEPOIS de level e vocação — que também nunca melhoram esperando —, e ANTES de cooldown e mana', () => {
+    // Level baixo vence: o jogador que não tem o level ouve "level", não "aprenda" (a magia
+    // sequer está à venda para ele).
+    expect(castSpell(untaught({ level: 1 }), { ...heal, minLevel: 50 }, null, 0, combat, rng()))
+      .toMatchObject({ reason: 'level-too-low' });
+    expect(castSpell(untaught(), { ...heal, vocationId: 'knight' }, null, 0, combat, rng()))
+      .toMatchObject({ reason: 'wrong-vocation' });
+    // E antes de cooldown e mana: sem mana e sem aprender, a resposta é o aprendizado.
+    expect(castSpell(untaught({ mana: 0 }), heal, null, 0, combat, rng()))
+      .toMatchObject({ reason: 'spell-not-learned' });
+  });
+
+  it('vale para TODO efeito de magia: dano, cura, condição e conjuração', () => {
+    const haste: Spell = {
+      id: 'haste', name: 'Haste', manaCost: 60, cooldownMs: 2_000, minLevel: 1,
+      effect: { kind: 'haste', speedPercent: 30, durationMs: 10_000 },
+    };
+    const conjure: Spell = {
+      id: 'conjure-avalanche-rune', name: 'Avalanche Rune', manaCost: 530, soulCost: 3, cooldownMs: 2_000,
+      minLevel: 1, effect: { kind: 'conjure', supplyId: 'avalanche-rune', charges: 4, blankPrice: 10 },
+    };
+    for (const spell of [strike, heal, haste, conjure]) {
+      expect(castSpell(untaught({ gold: 100 }), spell, near(), 0, combat, rng()), spell.id)
+        .toEqual({ ok: false, reason: 'spell-not-learned', retryInMs: 0 });
+    }
+  });
+
+  it('a RUNA (supply) NÃO exige aprendizado: só level e magic level, como no Tibia', () => {
+    const rune: Supply = {
+      id: 'ultimate-healing-rune', name: 'Ultimate Healing Rune', price: 40, group: 'healing',
+      groupCooldownMs: 2_000, requires: { level: 24, magicLevel: 4 },
+      effect: { kind: 'heal', amount: 100 },
+    };
+    // Não aprendeu NENHUMA magia, inclusive a que conjura a runa — e a usa do mesmo jeito.
+    const caster = untaught({ level: 30, health: 10, gold: 100 });
+    const scaling: SpellScaling = { skillLevel: 4, powerScale: 1, magicLevel: 4 };
+    expect(useSupply(caster, rune, null, combat, rng(), scaling).ok).toBe(true);
+    expect(caster.learnedSpells.size).toBe(0);
   });
 });

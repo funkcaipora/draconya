@@ -8,6 +8,7 @@
 // a linha única "Corpo a Corpo" pelas quatro skills que a #567 separou por tipo de arma.
 
 import { useState } from 'react';
+import type { SkillProgress } from '../state/hud.js';
 import { useHudSlice } from '../state/useSlice.js';
 import {
   SKILL_LABELS,
@@ -28,6 +29,21 @@ const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 
 function count(value: number): string {
   return integer.format(Math.round(value));
+}
+
+/**
+ * O nível que a linha mostra: o COM Loyalty (#628), quando o bônus muda o nível — é o que o
+ * Canary/Tibia desenha na janela de skills, e o que dano, cura e requisito de runa leem. A
+ * barra de progresso continua a do nível BASE (o `percent`), porque é nele que os tries entram.
+ */
+function shownLevel(skill: SkillProgress): number {
+  return skill.loyaltyLevel ?? skill.level;
+}
+
+/** A dica da linha quando o Loyalty a mudou: o nível base e quanto o bônus soma. */
+function loyaltyHint(skill: SkillProgress): string | undefined {
+  if (skill.loyaltyLevel === undefined || skill.loyaltyLevel <= skill.level) return undefined;
+  return 'Base ' + String(skill.level) + ' + ' + String(skill.loyaltyLevel - skill.level) + ' de Loyalty';
 }
 
 const TONE_BY_ID: Partial<Record<SkillId, string>> = {
@@ -86,6 +102,7 @@ export function SkillsPanel() {
   const staminaMs = useHudSlice((state) => state.staminaMs);
   const speed = useHudSlice((state) => state.speed);
   const skills = useHudSlice((state) => state.skills);
+  const loyaltyBonusPercent = useHudSlice((state) => state.loyaltyBonusPercent);
   const soul = useHudSlice((state) => state.soul);
   const soulMax = useHudSlice((state) => state.soulMax);
 
@@ -108,12 +125,22 @@ export function SkillsPanel() {
     stamina: staminaClock(staminaMs),
     // `0/0` é "sem vocação escolhida" — a mesma degradação de `vocationId: null` no HUD.
     soul: count(soul) + '/' + count(soulMax),
-    magic: String(skills.magic.level),
-    fist: String(skills.fist.level),
-    club: String(skills.club.level),
-    sword: String(skills.sword.level),
-    axe: String(skills.axe.level),
-    distance: String(skills.distance.level),
+    magic: String(shownLevel(skills.magic)),
+    fist: String(shownLevel(skills.fist)),
+    club: String(shownLevel(skills.club)),
+    sword: String(shownLevel(skills.sword)),
+    axe: String(shownLevel(skills.axe)),
+    distance: String(shownLevel(skills.distance)),
+  };
+
+  // Só as skills de combate têm nível base para explicar quando o Loyalty a mudou.
+  const hints: Partial<Record<SkillId, string | undefined>> = {
+    magic: loyaltyHint(skills.magic),
+    fist: loyaltyHint(skills.fist),
+    club: loyaltyHint(skills.club),
+    sword: loyaltyHint(skills.sword),
+    axe: loyaltyHint(skills.axe),
+    distance: loyaltyHint(skills.distance),
   };
 
   // Só as skills de combate desenham a barra — as demais linhas não têm "próximo nível".
@@ -131,6 +158,8 @@ export function SkillsPanel() {
       <Panel
         dock
         title="Skills"
+        // O bônus de Loyalty da conta (#628): fixado no login, constante pela sessão.
+        {...(loyaltyBonusPercent > 0 ? { meta: 'Loyalty +' + String(loyaltyBonusPercent) + '%' } : {})}
         collapsed={collapsed}
         onToggle={() => { setCollapsed((current) => !current); }}
         actions={<IconButton title="Personalizar skills" onClick={() => { setCustomizing(true); }}>⚙</IconButton>}
@@ -138,6 +167,7 @@ export function SkillsPanel() {
         {SKILL_ORDER.filter((id) => visible.includes(id)).map((id) => {
           const tone = TONE_BY_ID[id];
           const percent = percents[id];
+          const hint = hints[id];
           return (
             <StatRow
               key={id}
@@ -145,6 +175,7 @@ export function SkillsPanel() {
               value={values[id]}
               {...(tone !== undefined ? { tone } : {})}
               {...(percent !== undefined ? { percent } : {})}
+              {...(hint !== undefined ? { title: hint } : {})}
             />
           );
         })}

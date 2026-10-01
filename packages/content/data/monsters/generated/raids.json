@@ -157,6 +157,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -172,6 +178,11 @@
           "count": 1
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 440
     }
   },
   {
@@ -315,10 +326,21 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/battlemaster_zunzu.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 635
     }
   },
   {
@@ -453,6 +475,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -639,10 +667,21 @@
       ]
     },
     "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/captain_jones.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 430
     }
   },
   {
@@ -770,6 +809,12 @@
       "feet": 99,
       "addons": 0
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 3610000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -938,6 +983,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1146,6 +1197,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1216,6 +1273,10 @@
         {
           "itemId": "staff",
           "chance": 0.13
+        },
+        {
+          "itemId": "bread",
+          "chance": 0.07
         },
         {
           "itemId": "green-tunic",
@@ -1347,6 +1408,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1426,10 +1493,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/fleabringer.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 640
     }
   },
   {
@@ -1502,10 +1580,21 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/foreman_kneebiter.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 424
     }
   },
   {
@@ -1564,6 +1653,12 @@
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
     "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1912,10 +2007,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/grorlam.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 205
     }
   },
   {
@@ -2009,6 +2115,12 @@
       "feet": 115,
       "addons": 3
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2187,6 +2299,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2202,6 +2320,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 338
     }
   },
   {
@@ -2373,10 +2496,21 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/mawhawk.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1028
     }
   },
   {
@@ -2594,6 +2728,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2769,10 +2909,21 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/ocyakao.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 970
     }
   },
   {
@@ -2972,6 +3123,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3175,6 +3332,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3285,6 +3448,13 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "manaCost": 300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3488,6 +3658,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3940,6 +4116,12 @@
       ]
     },
     "race": "fire",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3955,6 +4137,11 @@
           "count": 4
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 201
     }
   },
   {
@@ -4097,6 +4284,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4189,6 +4382,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 610000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4256,10 +4455,21 @@
     },
     "staticAttack": 0.5,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/rotworm_queen.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 459
     }
   },
   {
@@ -4421,6 +4631,12 @@
       ]
     },
     "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4436,6 +4652,11 @@
           "count": 4
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 476
     }
   },
   {
@@ -4602,6 +4823,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4871,6 +5098,12 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4886,6 +5119,11 @@
           "count": 4
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 972
     }
   },
   {
@@ -5037,10 +5275,21 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/xenia.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 428
     }
   },
   {
@@ -5114,10 +5363,21 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/zomba.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 956
     }
   },
   {
@@ -5375,10 +5635,21 @@
         }
       ]
     },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/zulazza_the_corruptor.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 628
     }
   }
 ]
