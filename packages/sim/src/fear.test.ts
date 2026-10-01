@@ -44,7 +44,7 @@ describe('stepFrom — getNextPosition do Canary', () => {
   });
 });
 
-describe('initialFleeIndex — as cinco regiões de `getFleeDirection` (condition.cpp:2223)', () => {
+describe('initialFleeIndex — as cinco regiões de `getFleeDirection` (condition.cpp:2223-2297)', () => {
   const rng = (): Rng => Rng.fromSeed('fear-regions');
   const from = { x: 20, y: 20 };
   /** A criatura em (20,20) e o lançador deslocado por `(-dx, -dy)` — o offset da criatura é (dx, dy). */
@@ -136,7 +136,7 @@ describe('initialFleeIndex — as cinco regiões de `getFleeDirection` (conditio
   });
 });
 
-describe('fleePath — `getFleePath` (condition.cpp:2299), num campo aberto', () => {
+describe('fleePath — `getFleePath` (condition.cpp:2299-2383), num campo aberto', () => {
   const from = { x: 20, y: 20 };
 
   it('índice 0 (N): foge para o norte, sete passos — o limite da caixa de busca', () => {
@@ -186,6 +186,39 @@ describe('fleePath — `getFleePath` (condition.cpp:2299), num campo aberto', ()
         expect(Math.abs(cursor.y - from.y)).toBeLessThanOrEqual(7);
       }
     }
+  });
+
+  it('uma parede na reta do índice 0 desvia para o tile vizinho do destino: o OESTE antes do leste', () => {
+    // Com (20,13) barrado, os destinos mais longe do ponto sintético são (19,13) e (21,13), a
+    // mesma distância, o mesmo custo. O Canary escolhe o do lado OESTE — o desempate é a ordem
+    // dele, e aqui é `STEP_ORDER` (oeste, leste, norte, sul). O caminho é de oito passos
+    // cardinais: a diagonal custa 35 contra 20 de dois cardinais, e nunca é a melhor num campo
+    // aberto.
+    const { path } = fleePath(field({ blocked: [[20, 13]] }), from, 0);
+    let cursor = { ...from };
+    for (const direction of path) cursor = stepFrom(cursor, direction);
+    expect(cursor).toEqual({ x: 19, y: 13 });
+    expect(path).toHaveLength(8);
+    expect(path.every((direction) => direction <= CANARY_DIRECTION.west)).toBe(true);
+  });
+
+  it('empate entre braços diferentes: oeste e leste antes de norte e sul (índices 3 e 5 em campo aberto)', () => {
+    // Índice 3 (SE do vetor) mira o ponto a sudoeste: o leste e o norte empatam em distância e
+    // custo, e o leste vale. Índice 5 mira o sudeste: o oeste e o norte empatam, e o oeste vale.
+    // (Os dois valores de `letters` abaixo já estão em "SE e SW também não fogem...", acima; aqui
+    // o que se fixa é a REGRA do desempate, num mapa onde ela é a única diferença.)
+    expect(letters(fleePath(openField, from, 3).path)).toBe('EEEEEEE');
+    expect(letters(fleePath(openField, from, 5).path)).toBe('WWWWWWW');
+  });
+
+  it('a diagonal passa por quina: com norte e oeste barrados, o único jeito de sair é pelo noroeste', () => {
+    // O Tibia não impede a diagonal entre dois tiles bloqueados (nenhuma regra de quina), e a
+    // busca de caminho do Canary também não: o passo custa 35 e é o que existe.
+    const map = field({
+      blocked: [[20, 19], [19, 20], [21, 19], [21, 21], [19, 21], [21, 20], [20, 21]],
+    });
+    const { path } = fleePath(map, from, 0);
+    expect(path[0]).toBe(CANARY_DIRECTION.northwest);
   });
 
   it('a mesma entrada dá SEMPRE o mesmo caminho (determinismo)', () => {

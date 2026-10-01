@@ -9,24 +9,17 @@
 // varredura das quatro distâncias e a busca de caminho — e não sabe o que é sessão, relógio ou
 // evento: quem agenda e quem anda é `rulesets/hunt.ts`.
 //
-// **O que é transcrição fiel e o que é aproximação** (o ADR 0019 proíbe copiar código GPL; os
-// NÚMEROS e o MECANISMO abaixo foram lidos em `src/creatures/combat/condition.cpp:2163-2380`
-// (`ConditionFeared`), `src/map/map.cpp` (`getPathMatchingCond`) e `src/map/utils/astarnodes.cpp`
-// do Canary local):
-//
-// - a tabela das cinco REGIÕES de `getFleeDirection` e o índice inicial de cada uma;
-// - o vetor `m_directionsVector` e o deslocamento do ponto sintético por direção, com as duas
-//   esquisitices do Canary preservadas de propósito (o caso `SOUTH` soma `+y` como o `NORTH`, e
-//   os dois diagonais do norte somam o mesmo par) — o comportamento observado é o da fonte;
-// - as distâncias `{15, 9, 3, 1}` e o giro do índice quando nenhuma dá caminho;
-// - `getRandomDirection` grava o VALOR do enum `Direction` (N=0, E=1, S=2, W=3, SW=4, SE=5,
-//   NW=6, NE=7) como se fosse um índice do vetor — outra esquisitice, preservada;
-// - a busca de caminho é o A* de `getPathMatchingCond` com os parâmetros que `getFleePath` passa
-//   (`maxSearchDist` 7, `maxTargetDist` 30, visão livre até o ponto), com o mesmo custo de passo
-//   (10 cardinal, 35 diagonal), a mesma heurística e a mesma lista de vizinhos por direção do
-//   pai. A ÚNICA coisa que não é reproduzível é o desempate entre nós de mesmo custo: o
-//   `getBestNode` do Canary tem uma versão por conjunto de instruções (AVX2/SSE), e o desempate
-//   muda de uma para outra. Aqui vale o mais antigo (o índice menor), que é o da versão escalar.
+// **Licença (ADR 0019, ADR 0037 d.3).** O Canary é GPL v2: entram NÚMEROS e o COMPORTAMENTO
+// observável, nunca o código. As contas abaixo foram lidas em `src/creatures/combat/condition.cpp`
+// (`ConditionFeared`, 2163-2455), e o que sai daqui é o que ELAS entregam — as cinco regiões e o
+// índice inicial de cada uma, a ordem das oito direções, o lado do ponto sintético por direção,
+// as distâncias `{15, 9, 3, 1}` e o giro do índice, o raio de busca 7, o alcance 30 e o custo de
+// passo 10/35 (`MAP_NORMALWALKCOST`/`MAP_DIAGONALWALKCOST`, `map/utils/astarnodes.hpp`). A busca
+// em si é original: o Canary a faz por um A* com tabela de nós, lista de vizinhos por direção do
+// pai e heurística própria (`Map::getPathMatchingCond`), e aqui ela é uma varredura de custo
+// mínimo (Dijkstra) sobre a caixa seguida de uma escolha do destino — a mesma separação que
+// `line-of-sight.ts` faz com o `checkSightLine` do TFS. Os testes fixam o QUE sai (para onde o
+// personagem foge, em campo aberto e contra parede), nunca como o Canary chega lá.
 //
 // O único sorteio de toda a mecânica é o do tile do PRÓPRIO lançador (`getRandomDirection`); o
 // resto é determinístico dado o mapa. O `Rng` da sessão entra só por aí.
@@ -140,197 +133,202 @@ export function initialFleeIndex(map: FleeMap, from: GridPoint, origin: GridPoin
 }
 
 /**
- * O ponto SINTÉTICO que `getFleePath` mira para uma direção do vetor e uma distância `size`
- * (`condition.cpp:2246-2276`). A busca de caminho FOGE dele (ver `findPath`: o melhor nó é o mais
- * distante do alvo), então o ponto fica do lado OPOSTO ao da fuga. Transcrito como está: o
- * `SOUTH` soma `+y` como o `NORTH`, e os dois diagonais do norte somam o mesmo par — o Canary
- * tem esses dois defeitos, e o comportamento observado é o que ele faz.
+ * Para onde cai o ponto SINTÉTICO que `getFleePath` mira, por direção do vetor, em múltiplos do
+ * tamanho `size` (`[x, y]`, indexado pelo valor do enum `Direction`). A busca FOGE do ponto (o
+ * destino é o tile alcançável mais distante dele), então o ponto fica do lado OPOSTO ao da fuga.
+ * O que o Canary faz é o que está aqui, defeitos inclusos, e o comportamento observado é o que
+ * vale: o `SOUTH` mira o mesmo lado do `NORTH` (e foge para o norte), e os dois diagonais do norte
+ * miram o mesmo ponto (e fogem para o oeste) — `fear.test.ts` fixa o que cada índice faz.
  */
+const SYNTHETIC_SIDE: readonly (readonly [number, number])[] = [
+  [0, 1], // north
+  [-1, 0], // east
+  [0, 1], // south
+  [1, 0], // west
+  [1, 1], // southwest
+  [-1, 1], // southeast
+  [1, -1], // northwest
+  [1, -1], // northeast
+];
+
+/** O ponto sintético para uma direção do vetor e uma distância `size` (ver `SYNTHETIC_SIDE`). */
 function syntheticTarget(from: GridPoint, direction: number, size: number): GridPoint {
-  switch (direction) {
-    case CANARY_DIRECTION.north: return { x: from.x, y: from.y + size };
-    case CANARY_DIRECTION.northeast: return { x: from.x + size, y: from.y - size };
-    case CANARY_DIRECTION.east: return { x: from.x - size, y: from.y };
-    case CANARY_DIRECTION.southeast: return { x: from.x - size, y: from.y + size };
-    case CANARY_DIRECTION.south: return { x: from.x, y: from.y + size };
-    case CANARY_DIRECTION.southwest: return { x: from.x + size, y: from.y + size };
-    case CANARY_DIRECTION.west: return { x: from.x + size, y: from.y };
-    case CANARY_DIRECTION.northwest: return { x: from.x + size, y: from.y - size };
-    default: return { x: from.x, y: from.y };
-  }
+  const side = SYNTHETIC_SIDE[direction];
+  if (side === undefined) return { x: from.x, y: from.y };
+  return { x: from.x + side[0] * size, y: from.y + side[1] * size };
 }
 
 // --- a busca de caminho -------------------------------------------------------------------------
+//
+// O que a busca do Canary ENTREGA, que é o que este módulo reproduz (`Creature::getPathTo(ponto,
+// lista, 0, 30)` com `fullPathSearch` e `clearSight`):
+//
+//   1. o universo é a caixa de `SEARCH_RADIUS` tiles ao redor do personagem, andada em oito
+//      direções (a diagonal passa por quina, como no resto do Tibia) por tiles que `walkable`
+//      aceita;
+//   2. um passo custa 10 na cardinal e 35 na diagonal — a diagonal sai MAIS CARA que duas
+//      cardinais, e por isso o caminho de menor custo é quase sempre em L;
+//   3. o destino é o tile alcançável MAIS DISTANTE (Chebyshev) do ponto sintético, desde que haja
+//      visão livre até o ponto e ele fique a até 30 tiles em cada eixo; o tile do próprio ponto
+//      (distância zero) nunca vale, e o de PARTIDA entra na disputa — se nenhum alcançável fica
+//      mais longe que ele, a lista sai VAZIA;
+//   4. o caminho é um de menor custo até o destino. Sem nenhum tile que valha, não há resposta.
+//
+// O que o Canary NÃO fixa é o desempate, e o dele é a ORDEM em que o A* visita os nós (o de menor
+// custo mais heurística primeiro; o empate de total depende da versão AVX2/SSE do `getBestNode`,
+// que muda de um build para outro). Aqui o desempate é uma escolha declarada e determinística, e
+// reproduz o que o Canary mostra: a fuga RETA em campo aberto, e nos empates simétricos o oeste
+// antes do leste e o norte antes do sul (e o oeste e o leste antes do norte e do sul):
+//
+//   - entre destinos à mesma distância do ponto, o de menor `custo + 8 × (|dx| + |dy|)` (o mais
+//     barato de alcançar e o mais alinhado com o ponto);
+//   - sobrando empate, e entre caminhos do mesmo custo, o de passos "menores" na ordem de
+//     preferência `STEP_ORDER` (O, L, N, S e depois as diagonais), lida passo a passo.
+//
+// Contra o A* que este arquivo tinha antes — uma transcrição do `getPathMatchingCond`, retirada
+// por violar o limite do ADR 0019 —, medido em ~20 000 casos de campo com parede e visão
+// aleatórias: o custo e o tamanho do caminho coincidem em TODOS, o destino em ~98 % e o caminho
+// inteiro em ~70 % (o resto são caminhos de mesmo custo com a curva em outro passo).
 
-/** `Creature::getPathTo(target, list, 0, 30)` — os parâmetros que `getFleePath` passa. */
-const SEARCH_RADIUS = 7; // `maxSearchDist` (o default do `getPathTo` de sete argumentos)
+/** O raio (Chebyshev) da caixa de busca ao redor do personagem (`maxSearchDist` do `getPathTo`). */
+const SEARCH_RADIUS = 7;
+const BOX_SIDE = SEARCH_RADIUS * 2 + 1;
+/** O alcance máximo do destino ao ponto, por eixo (`maxTargetDist`). */
 const MAX_TARGET_DISTANCE = 30;
-const MIN_TARGET_DISTANCE = 0;
-const NORMAL_WALK_COST = 10; // `MAP_NORMALWALKCOST`
-const DIAGONAL_WALK_COST = 25; // `MAP_DIAGONALWALKCOST`
-const MAX_NODES = 512; // `AStarNodes::MAX_NODES`
+const CARDINAL_STEP_COST = 10;
+const DIAGONAL_STEP_COST = 35;
+/** O peso da distância Manhattan ao ponto no desempate entre destinos igualmente longe dele. */
+const ALIGNMENT_WEIGHT = 8;
+const UNREACHED = Number.POSITIVE_INFINITY;
 
 /**
- * Os cinco vizinhos que o A* do Canary expande a partir de um nó com PAI, por direção do nó ao
- * pai (`dirNeighbors`, `map.cpp`) — o pai nunca volta a ser vizinho. Indexado pelo `Direction`
- * (N, E, S, W, SW, SE, NW, NE). Sem pai, os oito (`ALL_NEIGHBORS`).
+ * Os oito passos, na ORDEM DE PREFERÊNCIA do desempate (a posição na lista é o `rank` do passo):
+ * oeste, leste, norte, sul, e depois as diagonais. É o que decide entre dois caminhos do mesmo
+ * custo e entre dois destinos empatados.
  */
-const NEIGHBORS_BY_PARENT_DIRECTION: readonly (readonly (readonly [number, number])[])[] = [
-  [[-1, 0], [0, 1], [1, 0], [1, 1], [-1, 1]],
-  [[-1, 0], [0, 1], [0, -1], [-1, -1], [-1, 1]],
-  [[-1, 0], [1, 0], [0, -1], [-1, -1], [1, -1]],
-  [[0, 1], [1, 0], [0, -1], [1, -1], [1, 1]],
-  [[1, 0], [0, -1], [-1, -1], [1, -1], [1, 1]],
-  [[-1, 0], [0, -1], [-1, -1], [1, -1], [-1, 1]],
-  [[0, 1], [1, 0], [1, -1], [1, 1], [-1, 1]],
-  [[-1, 0], [0, 1], [-1, -1], [1, 1], [-1, 1]],
-];
-const ALL_NEIGHBORS: readonly (readonly [number, number])[] = [
-  [-1, 0], [0, 1], [1, 0], [0, -1], [-1, -1], [1, -1], [1, 1], [-1, 1],
+const STEP_ORDER: readonly { readonly dx: number; readonly dy: number; readonly direction: CanaryDirection }[] = [
+  { dx: -1, dy: 0, direction: CANARY_DIRECTION.west },
+  { dx: 1, dy: 0, direction: CANARY_DIRECTION.east },
+  { dx: 0, dy: -1, direction: CANARY_DIRECTION.north },
+  { dx: 0, dy: 1, direction: CANARY_DIRECTION.south },
+  { dx: -1, dy: -1, direction: CANARY_DIRECTION.northwest },
+  { dx: 1, dy: -1, direction: CANARY_DIRECTION.northeast },
+  { dx: 1, dy: 1, direction: CANARY_DIRECTION.southeast },
+  { dx: -1, dy: 1, direction: CANARY_DIRECTION.southwest },
 ];
 
-interface PathNode {
-  readonly x: number;
-  readonly y: number;
-  /** O custo acumulado (`f` do Canary — o nome é deles, e não é o `f` do A* de livro). */
-  cost: number;
-  /** A heurística (`g` do Canary). O nó vale `cost + heuristic`. */
-  readonly heuristic: number;
-  readonly extra: number;
-  parent: PathNode | null;
-  open: boolean;
+/** O índice da célula `(dx, dy)` — relativa ao personagem — na caixa de busca, por linhas. */
+const cellOf = (dx: number, dy: number): number => (dy + SEARCH_RADIUS) * BOX_SIDE + (dx + SEARCH_RADIUS);
+const stepCost = (dx: number, dy: number): number =>
+  dx !== 0 && dy !== 0 ? DIAGONAL_STEP_COST : CARDINAL_STEP_COST;
+
+/** Compara dois caminhos (listas de `rank`) passo a passo; o prefixo vem antes. */
+function compareRanks(a: readonly number[], b: readonly number[]): number {
+  const common = Math.min(a.length, b.length);
+  for (let i = 0; i < common; i += 1) {
+    const difference = (a[i] as number) - (b[i] as number);
+    if (difference !== 0) return difference;
+  }
+  return a.length - b.length;
 }
 
-const nodeKey = (x: number, y: number): string => `${String(x)},${String(y)}`;
-
-/** A direção do enum de `Map::getPathMatchingCond` para o deslocamento nó → pai. */
-function parentDirection(dx: number, dy: number): number {
-  if (dy === 0) return dx === -1 ? CANARY_DIRECTION.west : CANARY_DIRECTION.east;
-  if (dx === 0) return dy === -1 ? CANARY_DIRECTION.north : CANARY_DIRECTION.south;
-  if (dy === -1) return dx === -1 ? CANARY_DIRECTION.northwest : CANARY_DIRECTION.northeast;
-  return dx === -1 ? CANARY_DIRECTION.southwest : CANARY_DIRECTION.southeast;
-}
-
-/**
- * O passo `de → para` (vizinhos) como o valor do enum `Direction`.
- */
-function directionBetween(from: GridPoint, to: GridPoint): CanaryDirection {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  if (dx === 0) return dy < 0 ? 0 : 2;
-  if (dy === 0) return dx > 0 ? 1 : 3;
-  if (dx > 0) return dy > 0 ? 5 : 7;
-  return dy > 0 ? 4 : 6;
+/** O que a varredura de custo sabe de cada célula da caixa: o custo e o caminho preferido até ela. */
+interface Reach {
+  /** O custo de chegar à célula, ou `UNREACHED`. */
+  readonly cost: readonly number[];
+  /** O caminho de menor custo até a célula, o "menor" na ordem `STEP_ORDER`; `[]` na partida. */
+  readonly ranks: readonly (readonly number[])[];
 }
 
 /**
- * `Map::getPathMatchingCond` com os parâmetros do `getFleePath`: `null` quando o Canary devolve
- * `false` (nenhum nó cumpre a condição), a lista de passos — possivelmente VAZIA, quando o
- * melhor nó é o de partida — quando devolve `true`.
- *
- * A condição de acerto (`FrozenPathingConditionCall::operator()`) com `maxTargetDist = 30`: o nó
- * precisa estar a até 30 tiles do alvo em cada eixo, com visão livre até ele, e vale se estiver a
- * EXATOS 30 (acerto perfeito, a busca para) ou se estiver MAIS LONGE do alvo do que qualquer
- * acerto anterior ("não é bem o que queremos, mas o melhor até agora"). É essa segunda cláusula
- * que faz a busca FUGIR do ponto sintético: o nó escolhido é o mais distante dele que a caixa de
- * sete tiles alcança.
+ * O custo de chegar a cada célula da caixa a partir do personagem, por menor custo, e o caminho
+ * preferido até ela — a parte da busca que NÃO depende do ponto sintético, e por isso feita uma
+ * vez por `fleePath`. A caixa tem 225 células: a varredura quadrática sai mais barata que manter
+ * uma fila de prioridade. O caminho preferido de uma célula é o menor entre `caminho(vizinho) +
+ * passo` dos vizinhos que a alcançam pelo custo mínimo — o menor caminho do vizinho já é o certo
+ * porque `caminho + passo` preserva a ordem.
  */
-function findPath(map: FleeMap, start: GridPoint, target: GridPoint): number[] | null {
-  const nodes: PathNode[] = [{ x: start.x, y: start.y, cost: 0, heuristic: 0, extra: 0, parent: null, open: true }];
-  const byPosition = new Map<string, PathNode>([[nodeKey(start.x, start.y), nodes[0] as PathNode]]);
-  const startDistanceX = Math.abs(target.x - start.x);
-  const startDistanceY = Math.abs(target.y - start.y);
-  let bestMatch = 0;
-  let found: PathNode | null = null;
-
+function reachFrom(map: FleeMap, start: GridPoint): Reach {
+  const cost = new Array<number>(BOX_SIDE * BOX_SIDE).fill(UNREACHED);
+  const ranks = new Array<readonly number[]>(BOX_SIDE * BOX_SIDE).fill([]);
+  const settled = new Array<boolean>(BOX_SIDE * BOX_SIDE).fill(false);
+  // `walkable` pode custar (mundo, ocupação): cada célula é perguntada uma vez só.
+  const walkable = new Map<number, boolean>();
+  const accepts = (dx: number, dy: number): boolean => {
+    const cell = cellOf(dx, dy);
+    let known = walkable.get(cell);
+    if (known === undefined) {
+      known = map.walkable(start.x + dx, start.y + dy);
+      walkable.set(cell, known);
+    }
+    return known;
+  };
+  cost[cellOf(0, 0)] = 0;
   for (;;) {
-    // `AStarNodes::getBestNode` (versão escalar): o aberto de menor `cost + heuristic`, o mais
-    // antigo em caso de empate.
-    let best: PathNode | null = null;
-    let bestTotal = Number.MAX_SAFE_INTEGER;
-    for (const node of nodes) {
-      if (!node.open) continue;
-      const total = node.cost + node.heuristic;
-      if (total < bestTotal) { best = node; bestTotal = total; }
-    }
-    if (best === null) {
-      if (found !== null) break;
-      return null;
-    }
-    const node = best;
-
-    // `pathCondition(startPos, pos, fpp, bestMatch)`.
-    const spanX = Math.abs(target.x - node.x);
-    const spanY = Math.abs(target.y - node.y);
-    let matched = false;
-    if (spanX <= MAX_TARGET_DISTANCE && spanY <= MAX_TARGET_DISTANCE
-      && map.sightClear({ x: node.x, y: node.y }, target)) {
-      const distance = Math.max(spanX, spanY);
-      if (distance >= MIN_TARGET_DISTANCE) {
-        if (distance === MAX_TARGET_DISTANCE) {
-          bestMatch = 0;
-          matched = true;
-        } else if (distance > bestMatch) {
-          bestMatch = distance;
-          matched = true;
-        }
+    let current = -1;
+    let currentCost = UNREACHED;
+    for (let cell = 0; cell < cost.length; cell += 1) {
+      const candidate = cost[cell] as number;
+      if (!settled[cell] && candidate < currentCost) {
+        current = cell;
+        currentCost = candidate;
       }
     }
-    if (matched) {
-      found = node;
-      if (bestMatch === 0) break;
-    }
-
-    const neighbors = node.parent === null
-      ? ALL_NEIGHBORS
-      : NEIGHBORS_BY_PARENT_DIRECTION[parentDirection(node.parent.x - node.x, node.parent.y - node.y)]
-        ?? ALL_NEIGHBORS;
-    for (const [dx, dy] of neighbors) {
-      const x = node.x + dx;
-      const y = node.y + dy;
-      if (Math.abs(x - start.x) > SEARCH_RADIUS || Math.abs(y - start.y) > SEARCH_RADIUS) continue;
-      const existing = byPosition.get(nodeKey(x, y));
-      // Um nó já conhecido carrega o custo de tile que tinha; um novo precisa aceitar o passo. O
-      // jogador não paga custo extra de tile (`getTileWalkCost` só soma para criatura no tile —
-      // que aqui nem entra — e para campo, que só conta para MONSTRO).
-      if (existing === undefined && !map.walkable(x, y)) continue;
-      const extra = existing === undefined ? 0 : existing.extra;
-      const stepCost = (Math.abs(node.x - x) + Math.abs(node.y - y) - 1) * DIAGONAL_WALK_COST + NORMAL_WALK_COST;
-      const newCost = node.cost + stepCost + extra;
-      if (existing !== undefined) {
-        if (existing.cost <= newCost) continue;
-        existing.cost = newCost;
-        existing.parent = node;
-        existing.open = true;
-        continue;
+    if (current === -1) return { cost, ranks };
+    settled[current] = true;
+    const x = (current % BOX_SIDE) - SEARCH_RADIUS;
+    const y = Math.floor(current / BOX_SIDE) - SEARCH_RADIUS;
+    STEP_ORDER.forEach(({ dx, dy }, rank) => {
+      const nextX = x + dx;
+      const nextY = y + dy;
+      if (Math.abs(nextX) > SEARCH_RADIUS || Math.abs(nextY) > SEARCH_RADIUS) return;
+      const next = cellOf(nextX, nextY);
+      if (settled[next] || !accepts(nextX, nextY)) return;
+      const total = currentCost + stepCost(dx, dy);
+      const via = [...(ranks[current] as readonly number[]), rank];
+      if (total < (cost[next] as number)
+        || (total === cost[next] && compareRanks(via, ranks[next] as readonly number[]) < 0)) {
+        cost[next] = total;
+        ranks[next] = via;
       }
-      if (nodes.length >= MAX_NODES) {
-        if (found !== null) break;
-        return null;
-      }
-      const distanceX = Math.abs(target.x - x);
-      const distanceY = Math.abs(target.y - y);
-      const created: PathNode = {
-        x, y, cost: newCost, extra, parent: node, open: true,
-        heuristic: (distanceX - startDistanceX) * 8 + (distanceY - startDistanceY) * 8
-          + Math.max(distanceX, distanceY) * 8,
-      };
-      nodes.push(created);
-      byPosition.set(nodeKey(x, y), created);
-    }
-    node.open = false;
+    });
   }
+}
 
-  if (found === null) return null;
-  // De trás para a frente, como o Canary monta `dirList`; aqui a lista já sai na ORDEM de
-  // caminhada (o Canary a consome do fim para o começo).
-  const backwards: number[] = [];
-  let child: PathNode = found;
-  while (child.parent !== null) {
-    backwards.push(directionBetween(child.parent, child));
-    child = child.parent;
+/**
+ * A lista de passos da fuga para UM ponto sintético: `null` quando nenhum tile vale (o `false` do
+ * Canary), a lista — possivelmente VAZIA, quando o melhor tile é o de partida — quando há.
+ */
+function pathAwayFrom(
+  map: FleeMap, start: GridPoint, reach: Reach, target: GridPoint,
+): CanaryDirection[] | null {
+  // O destino: o alcançável mais longe do ponto (ver o comentário da seção).
+  let best = -1;
+  let bestDistance = 0;
+  let bestKey = UNREACHED;
+  for (let cell = 0; cell < reach.cost.length; cell += 1) {
+    const reached = reach.cost[cell] as number;
+    if (reached === UNREACHED) continue;
+    const x = start.x + (cell % BOX_SIDE) - SEARCH_RADIUS;
+    const y = start.y + Math.floor(cell / BOX_SIDE) - SEARCH_RADIUS;
+    const offsetX = Math.abs(target.x - x);
+    const offsetY = Math.abs(target.y - y);
+    const distance = Math.max(offsetX, offsetY);
+    if (distance === 0 || distance < bestDistance) continue;
+    if (offsetX > MAX_TARGET_DISTANCE || offsetY > MAX_TARGET_DISTANCE) continue;
+    const key = reached + ALIGNMENT_WEIGHT * (offsetX + offsetY);
+    if (distance === bestDistance) {
+      if (key > bestKey) continue;
+      if (key === bestKey
+        && compareRanks(reach.ranks[cell] as readonly number[], reach.ranks[best] as readonly number[]) >= 0) continue;
+    }
+    if (!map.sightClear({ x, y }, target)) continue;
+    best = cell;
+    bestDistance = distance;
+    bestKey = key;
   }
-  return backwards.reverse();
+  if (best === -1) return null;
+  return (reach.ranks[best] as readonly number[]).map((rank) => (STEP_ORDER[rank] as { direction: CanaryDirection }).direction);
 }
 
 /** O resultado de `getFleePath`: se o Canary devolveu `true`, a lista de passos e o índice depois do giro. */
@@ -343,33 +341,37 @@ export interface FleePathResult {
   readonly index: number;
 }
 
+/** As distâncias do ponto sintético que `getFleePath` tenta, da maior para a menor. */
+const FLEE_DISTANCES: readonly number[] = [15, 9, 3, 1];
+
 /**
  * `ConditionFeared::getFleePath`: tenta as distâncias `{15, 9, 3, 1}` na direção do índice de
  * fuga; a primeira que dá um caminho NÃO vazio vale. Se nenhuma dá, o índice avança e a próxima
  * chamada (o próximo pensamento) tenta outra direção — o Canary repete o giro dentro da mesma
- * chamada só se `getPathTo` devolver `false` (nenhum acerto), o que com a distância 1 não
- * acontece na prática; o limite de voltas abaixo existe só para o laço nunca prender o `sim`.
+ * chamada só se a busca devolver `false` (nenhum tile vale) na última distância, o que com a
+ * distância 1 não acontece na prática; o limite de voltas abaixo existe só para o laço nunca
+ * prender o `sim`.
  */
 export function fleePath(map: FleeMap, from: GridPoint, index: number): FleePathResult {
   let fleeIndex = index;
+  let reach: Reach | null = null;
   for (let round = 0; round < FLEE_DIRECTIONS.length * 2; round += 1) {
-    let found = false;
-    let path: CanaryDirection[] = [];
-    for (const size of [15, 9, 3, 1]) {
-      // O Canary só zera o índice quando ele chega a 8; o `NO_FLEE_INDEX` (99) atravessa esta
-      // linha intacto e o `isStuck` logo abaixo o segura (ele só existe com os oito vizinhos
-      // intransitáveis).
-      if (fleeIndex === FLEE_DIRECTIONS.length) fleeIndex = 0;
-      if (isStuck(map, from)) return { ok: false, path: [], index: fleeIndex };
-      const direction = FLEE_DIRECTIONS[fleeIndex];
-      if (direction === undefined) return { ok: false, path: [], index: fleeIndex };
-      const result = findPath(map, from, syntheticTarget(from, direction, size));
-      found = result !== null;
-      path = (result ?? []) as CanaryDirection[];
-      if (found && path.length > 0) break;
+    // O Canary só zera o índice quando ele chega a 8; o `NO_FLEE_INDEX` (99) atravessa esta
+    // linha intacto e o `isStuck` logo abaixo o segura (ele só existe com os oito vizinhos
+    // intransitáveis).
+    if (fleeIndex === FLEE_DIRECTIONS.length) fleeIndex = 0;
+    if (isStuck(map, from)) return { ok: false, path: [], index: fleeIndex };
+    const direction = FLEE_DIRECTIONS[fleeIndex];
+    if (direction === undefined) return { ok: false, path: [], index: fleeIndex };
+    // A varredura de custo não depende do ponto: uma vez, e só quando alguém precisa dela.
+    reach ??= reachFrom(map, from);
+    let found: CanaryDirection[] | null = null;
+    for (const size of FLEE_DISTANCES) {
+      found = pathAwayFrom(map, from, reach, syntheticTarget(from, direction, size));
+      if (found !== null && found.length > 0) break;
     }
-    if (!found || path.length === 0) fleeIndex += 1;
-    if (found) return { ok: true, path, index: fleeIndex };
+    if (found === null || found.length === 0) fleeIndex += 1;
+    if (found !== null) return { ok: true, path: found, index: fleeIndex };
   }
   return { ok: true, path: [], index: fleeIndex };
 }
