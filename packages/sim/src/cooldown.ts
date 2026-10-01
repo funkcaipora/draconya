@@ -74,4 +74,31 @@ export class Cooldowns {
   clear(key: string): void {
     this.#until.delete(key);
   }
+
+  /**
+   * Traduz TODOS os cooldowns do relógio lógico de uma sessão para o de outra, preservando o que
+   * FALTA (#812). `fromMs` é o "agora" da sessão de onde o personagem sai e `toMs` o da que ele
+   * entra: o `until` guardado é instante do relógio que o gravou, e o relógio de cada sessão tem a
+   * própria origem. Lido na sessão seguinte sem tradução, o `until` de uma hunt que já andou 57 s
+   * significa outra coisa no relógio novo, que nasce em zero: o cooldown de 3 s viraria um de
+   * quase um minuto, e o de 10 minutos (Intense Wound Cleansing) seria cobrado ou perdoado na
+   * medida do acaso de por onde o objeto passou — e não do estado e da semente (invariante 3).
+   *
+   * O que já venceu em `fromMs` sai do mapa (pronto é a ausência da chave); o resto vira
+   * `until − fromMs + toMs`, o MESMO restante no relógio novo. É o que o Canary faz com a condição
+   * de cooldown de magia (`CONDITION_SPELLCOOLDOWN`, `CONDITIONID_DEFAULT`, `Condition::isPersistent`
+   * a mantém no logout com os ticks que faltavam) e também o que `HuntRuleset#parkEquipment` faz com
+   * o prazo do anel (#689): sair e voltar não renova de graça.
+   *
+   * A tradução é reversível — `rebase(toMs, fromMs)` devolve o mapa de antes, menos o que já tinha
+   * vencido (que é "pronto" de qualquer jeito), porque nada que sobra venceu em `toMs` —, e é isso
+   * que deixa a entrada recusada (`Session.enter`) desfazer sem perder nada que ainda valha.
+   */
+  rebase(fromMs: number, toMs: number): void {
+    const deltaMs = toMs - fromMs;
+    for (const [key, untilMs] of this.#until) {
+      if (untilMs <= fromMs) this.#until.delete(key);
+      else this.#until.set(key, untilMs + deltaMs);
+    }
+  }
 }

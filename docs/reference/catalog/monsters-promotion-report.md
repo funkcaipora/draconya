@@ -2,7 +2,7 @@
 
 Separa `packages/content/staging/monsters/generated/*.json` (a transcrição pura do Canary, #578/#579) em `data/monsters/generated/` + `data/bestiary/baseline.json` + `data/appearances/baseline.json`, e valida `loot.items` contra o catálogo de itens REAL (`packages/content/data/items`, autoral + `generated/` — o que `loadContent` de fato carrega hoje; a promoção de itens é `promote-items.ts`, #748).
 
-1030 monstro(s) promovido(s) em 27 fatia(s):
+1033 monstro(s) promovido(s) em 27 fatia(s):
 
 - `amphibics.json`: 11
 - `aquatics.json`: 33
@@ -22,12 +22,12 @@ Separa `packages/content/staging/monsters/generated/*.json` (a transcrição pur
 - `humans.json`: 55
 - `lycanthropes.json`: 8
 - `magicals.json`: 37
-- `mammals.json`: 68
+- `mammals.json`: 69
 - `nostalgia.json`: 8
 - `plants.json`: 7
-- `quests.json`: 368
+- `quests.json`: 369
 - `raids.json`: 32
-- `reptiles.json`: 20
+- `reptiles.json`: 21
 - `slimes.json`: 7
 - `undeads.json`: 48
 - `vermins.json`: 46
@@ -44,11 +44,11 @@ Separa `packages/content/staging/monsters/generated/*.json` (a transcrição pur
 | rat | hand-authored — regenerado só pelo #581, nunca por esta promoção |
 | rotworm | hand-authored — regenerado só pelo #581, nunca por esta promoção |
 
-## Linhas de loot removidas (2808)
+## Linhas de loot removidas (2812)
 
 Item referenciado por `loot.items` que não existe no catálogo real, ou que excede a pilha de um item que não empilha. A linha inteira é removida — nunca creditada como item fantasma (§"Loot" de `packages/content/CLAUDE.md`).
 
-602 item(ns) distinto(s) referenciado(s) e ausente(s) do catálogo real.
+604 item(ns) distinto(s) referenciado(s) e ausente(s) do catálogo real.
 
 | item | ocorrências | motivo (da primeira ocorrência) |
 |---|---|---|
@@ -81,7 +81,7 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | behemoth-trophy | 1 | item ausente do catálogo (packages/content/data/items) |
 | beijinho | 1 | item ausente do catálogo (packages/content/data/items) |
 | berserk-potion | 30 | item ausente do catálogo (packages/content/data/items) |
-| big-bone | 9 | item ausente do catálogo (packages/content/data/items) |
+| big-bone | 10 | item ausente do catálogo (packages/content/data/items) |
 | black-pearl | 19 | max 15 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | black-skull | 2 | item ausente do catálogo (packages/content/data/items) |
 | blank-parchment | 1 | item ausente do catálogo (packages/content/data/items) |
@@ -160,6 +160,7 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | corncob | 3 | item ausente do catálogo (packages/content/data/items) |
 | cornucopia | 1 | item ausente do catálogo (packages/content/data/items) |
 | crab-man-claws | 1 | max 2 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
+| crawlers-essence | 1 | item ausente do catálogo (packages/content/data/items) |
 | cream-cake | 1 | item ausente do catálogo (packages/content/data/items) |
 | crystal-arrow | 1 | item ausente do catálogo (packages/content/data/items) |
 | crystal-ball | 2 | item ausente do catálogo (packages/content/data/items) |
@@ -280,6 +281,7 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | golden-can-of-oil | 2 | item ausente do catálogo (packages/content/data/items) |
 | golden-idol-of-tukh | 1 | item ausente do catálogo (packages/content/data/items) |
 | golden-mask | 1 | item ausente do catálogo (packages/content/data/items) |
+| gore-horn | 1 | item ausente do catálogo (packages/content/data/items) |
 | grant-of-arms | 1 | item ausente do catálogo (packages/content/data/items) |
 | grapes | 11 | item ausente do catálogo (packages/content/data/items) |
 | grave-flower | 5 | item ausente do catálogo (packages/content/data/items) |
@@ -585,7 +587,7 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | true-book-of-death | 1 | item ausente do catálogo (packages/content/data/items) |
 | tusk | 2 | max 2 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | twigs | 4 | item ausente do catálogo (packages/content/data/items) |
-| ultimate-health-potion | 62 | item ausente do catálogo (packages/content/data/items) |
+| ultimate-health-potion | 63 | item ausente do catálogo (packages/content/data/items) |
 | ultimate-mana-potion | 28 | item ausente do catálogo (packages/content/data/items) |
 | ultimate-spirit-potion | 22 | item ausente do catálogo (packages/content/data/items) |
 | unholy-bone | 1 | max 5 pede pilha, e o item não empilha (rollModel "canary" daria 1) |

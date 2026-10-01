@@ -19,14 +19,15 @@ import {
   packSchema,
   blessingSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
-  bestiarySchema, boostedSchema, bosstiarySchema, charmSchema, itemSchema, partySchema, skillSchema, spellSchema,
+  bestiarySchema, boostedSchema, bosstiarySchema, charmSchema, itemSchema, loyaltySchema, partySchema, skillSchema,
+  skinningSchema, spellSchema,
   staminaSchema, supplySchema, tilemapSchema, vocationSchema, weaponFamilySchema,
 } from './schemas.js';
 import type {
   Ammunition, AmmunitionDefinition, Appearances, Bestiary, Blessing, Boosted, BotLimits, Bosstiary, Charm,
-  Combat, CompiledMitigation,
+  Combat, Loyalty, CompiledMitigation,
   CompiledReflect, DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
-  MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Spell, Stamina, Supply,
+  MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Skinning, Spell, Stamina, Supply,
   Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
   WeaponPowerFormula, WeaponProfile,
 } from './schemas.js';
@@ -72,11 +73,23 @@ export interface Content {
    */
   readonly charms: ReadonlyMap<string, Charm>;
   /**
+   * Como o cadáver de cada monstro esfolável é esfolado (#626, ADR 0048 d.5/d.6; ADR 0053 d.5):
+   * `content/data/skinning/generated/skinning.json`, chave `monsterId`. Vazio no conteúdo de teste
+   * que não fala de esfola — nenhuma ferramenta é reconhecida e o sorteio nunca corre.
+   */
+  readonly skinning: ReadonlyMap<string, Skinning>;
+  /**
    * A Boosted Creature diária (M42, #615, ADR 0054 decisão 7): a hora de virada. Opcional —
    * sem ela o `jobs` não sorteia nada, e nenhuma hunt aplica o bônus. É o conteúdo de teste que
    * não fala de engajamento diário.
    */
   readonly boosted?: Boosted;
+  /**
+   * O Loyalty (M44, #628, ADR 0052 decisão 5): a tabela de degraus da idade da conta. Opcional —
+   * sem ela nenhum ticket carrega bônus, e o conteúdo de teste que não fala de Loyalty continua
+   * valendo o nível BASE de toda skill.
+   */
+  readonly loyalty?: Loyalty;
   /** Vocabulário e limites do bot (§13). Sem ele não há automação, que é o produto. */
   readonly bot: BotLimits;
   /** Catálogo de magias (§4.1). Custo, cooldown e efeito são conteúdo, nunca motor. */
@@ -153,7 +166,10 @@ export interface RawContent {
   /** Os níveis do Bosstiary (#629), `bosstiary/baseline.json`. */
   readonly bosstiary?: readonly unknown[];
   readonly charms?: readonly unknown[];
+  /** Como o cadáver de cada monstro esfolável é esfolado (#626), `skinning/generated/`. */
+  readonly skinning?: readonly unknown[];
   readonly boosted?: readonly unknown[];
+  readonly loyalty?: readonly unknown[];
   readonly bot?: readonly unknown[];
   readonly spells?: readonly unknown[];
   readonly supplies?: readonly unknown[];
@@ -619,6 +635,7 @@ export function buildContent(raw: RawContent): Content {
   // independentes, cada uma com o próprio id).
   const charms = parseAll('charm', raw.charms ?? [], charmSchema, problems);
   const boosted = parseAll('boosted', raw.boosted ?? [], boostedSchema, problems).get('baseline');
+  const loyalty = parseAll('loyalty', raw.loyalty ?? [], loyaltySchema, problems).get('baseline');
   // Ausente é ERRO pela mesma razão dos outros dois: a stamina é o TETO DE SIMULAÇÃO do
   // projeto (ADR 0001), e um default em código faria o número que sustenta a projeção de
   // custo morar onde ninguém procura por ele.
@@ -676,6 +693,28 @@ export function buildContent(raw: RawContent): Content {
   // O catálogo de MUNIÇÃO (ADR 0026 d.3): flecha e virote abstratos, gold no tiro.
   const ammunitionDefinitions = parseAll('munição', raw.ammunition ?? [], ammunitionSchema,
     problems);
+  // A esfola (#626): uma entrada por MONSTRO. Cada referência é conferida aqui, no boot — um
+  // monstro, uma ferramenta ou um material que não existe deixaria a esfola muda (ou, pior,
+  // sortearia sem entregar nada) no meio de uma hunt.
+  const skinning = parseAll('skinning', raw.skinning ?? [], skinningSchema, problems);
+  for (const entry of skinning.values()) {
+    const where = `skinning/${entry.id}`;
+    const monster = monsterDefinitions.get(entry.id);
+    if (monster === undefined) problems.push(`${where}: o monstro não existe`);
+    // A janela de esfola é um PREFIXO da vida do cadáver (os primeiros estágios da cadeia de
+    // decaimento): passar do `corpseTtlMs` do monstro seria esfolar um cadáver que já sumiu.
+    const window = entry.stages.reduce((sum, stage) => sum + stage.durationMs, 0);
+    if (monster?.corpseTtlMs !== undefined && window > monster.corpseTtlMs) {
+      problems.push(
+        `${where}: a janela de esfola (${String(window)} ms) passa da vida do cadáver `
+          + `(corpseTtlMs ${String(monster.corpseTtlMs)})`,
+      );
+    }
+    if (!itemDefinitions.has(entry.toolId)) problems.push(`${where}: a ferramenta "${entry.toolId}" não existe`);
+    if (!itemDefinitions.has(entry.materialId)) {
+      problems.push(`${where}: o material "${entry.materialId}" não existe`);
+    }
+  }
 
   // A skill de defesa (CMB-04) precisa existir E subir por bloqueio. Uma referência a skill
   // inexistente deixaria o escudo sem treinar nada; uma que sobe por outra fonte escalaria a
@@ -901,6 +940,13 @@ export function buildContent(raw: RawContent): Content {
           problems.push(`${where}: requires.vocationId "${vocationId}" não existe`);
         }
       }
+    }
+    // A Animate Dead (#600) nasce um monstro do catálogo: `monsterId` errado subiria mudo e a runa
+    // consumiria o cadáver (e o gold) sem invocar nada. Só quando HÁ monstros (a mesma tolerância
+    // das referências acima, para o conteúdo de teste sem catálogo).
+    if (effect.kind === 'animate-dead' && monsterDefinitions.size > 0
+      && !monsterDefinitions.has(effect.monsterId)) {
+      problems.push(`${where}: animate-dead.monsterId "${effect.monsterId}" não existe no catálogo de monstros`);
     }
     // A poção de buff (#576) aponta skill pelo id do catálogo em `skillDeltas` — como o bônus de
     // equipamento (linha ~890) e a família de arma (abaixo), pela MESMA razão: um id errado
@@ -1450,6 +1496,28 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
+  // As janelas de Animate Dead do cadáver (#600) vivem DENTRO da vida dele: sem `corpseTtlMs` não
+  // há cadáver, e uma janela que passa do prazo (ou que se sobrepõe à anterior) é uma transcrição
+  // errada da cadeia `decayTo` — o `sim` a leria como um cadáver animável depois de sumir.
+  for (const monster of monsterDefinitions.values()) {
+    const windows = monster.corpseAnimatable;
+    if (windows === undefined) continue;
+    if (monster.corpseTtlMs === undefined) {
+      problems.push(`monstro "${monster.id}": corpseAnimatable sem corpseTtlMs`);
+      continue;
+    }
+    let previousEnd = 0;
+    for (const window of windows) {
+      if (window.fromMs < previousEnd || window.untilMs > monster.corpseTtlMs) {
+        problems.push(
+          `monstro "${monster.id}": corpseAnimatable ${window.fromMs}-${window.untilMs} fora de ordem `
+            + `ou além de corpseTtlMs (${monster.corpseTtlMs})`,
+        );
+      }
+      previousEnd = window.untilMs;
+    }
+  }
+
   // A invocação (#546): cada entrada aponta um monstro que precisa existir no catálogo — a
   // mesma referência cruzada de `loot.items` acima, agora contra `monsterDefinitions` (o
   // Slime pode invocar a si mesmo; o boot não recusa self-reference, o TFS também não). E o
@@ -1615,6 +1683,7 @@ export function buildContent(raw: RawContent): Content {
     ...(bosstiary?._open === undefined ? [] : [`bosstiary/${bosstiary.id}: ${bosstiary._open}`]),
     // `boosted` não tem `_open`: a hora de virada não é um número disputado do PRD, é
     // configuração de operação — não pede uma seção de `docs/product` para justificar.
+    ...(loyalty?._open === undefined ? [] : [`loyalty/${loyalty.id}: ${loyalty._open}`]),
     ...openOf('spell', spells),
     ...openOf('charm', charms),
     ...openOf('supply', supplies),
@@ -1653,7 +1722,9 @@ export function buildContent(raw: RawContent): Content {
     ...(bestiary === undefined ? {} : { bestiary }),
     ...(bosstiary === undefined ? {} : { bosstiary }),
     charms,
+    skinning,
     ...(boosted === undefined ? {} : { boosted }),
+    ...(loyalty === undefined ? {} : { loyalty }),
     maps,
     routes,
     openValues,

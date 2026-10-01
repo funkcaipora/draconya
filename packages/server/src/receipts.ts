@@ -20,8 +20,7 @@ import type { ChainableCommander, Redis } from 'ioredis';
 import { isFamiliarState, isFightMode } from '@draconya/sim';
 import type {
   Aggregates, BestiaryState, BosstiaryState, CharacterStorageMap, CharmsState, EndReason, FamiliarState,
-  FightMode,
-  ItemInstanceOverlay, NotableEvent, SkillsState,
+  FightMode, ItemInstanceOverlay, LearnedSpellsState, NotableEvent, SkillsState,
 } from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
 
@@ -80,6 +79,17 @@ export interface SessionReceipt {
    * estado final da sessão dona.
    */
   readonly charms?: CharmsState;
+  /**
+   * As magias aprendidas (#624, ADR 0058 d.1, ADR 0052 d.1): os ids de `content.spells` que o
+   * personagem comprou. Ao contrário de `charms`/`ammo`, NÃO é última-escrita-vence: o ledger
+   * FUNDE pela UNIÃO dos ids (`LearnedSpells.merge`), como o Bestiário funde pelo maior. O
+   * registro só CRESCE, e dois extratos pendentes se aplicam em ordem qualquer (o `SCAN` de
+   * `pending()` não ordena) — o mais antigo chegando depois do mais novo não pode derrubar uma
+   * magia já paga —, e um extrato de base desconhecida (sessão retomada sem registro) carrega só
+   * as compras dela e não pode apagar a concessão da migração (ADR 0014). Extrato SEM o campo (nó
+   * antigo em deploy) não toca na coluna.
+   */
+  readonly learnedSpells?: LearnedSpellsState;
   /**
    * O familiar de vocação (M38-02, #599, ADR 0057 d.3, ADR 0052 d.1): os carimbos de relógio de
    * PAREDE — até quando a invocação vale e até quando a magia volta. ABSOLUTO e ÚLTIMA-ESCRITA-
@@ -397,6 +407,10 @@ function parseReceipt(raw: string): SessionReceipt | null {
     // A economia de Charms (M39-02, #602): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['charms'] === 'object' && value['charms'] !== null
       ? { charms: value['charms'] as CharmsState }
+      : {}),
+    // As magias aprendidas (#624): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['learnedSpells'] === 'object' && value['learnedSpells'] !== null
+      ? { learnedSpells: value['learnedSpells'] as LearnedSpellsState }
       : {}),
     // O familiar (M38-02, #599): lista de PERMISSÃO, pela razão das skills — e validado por forma,
     // porque a coluna é `jsonb` sem CHECK e um registro torto nunca deve chegar ao banco.

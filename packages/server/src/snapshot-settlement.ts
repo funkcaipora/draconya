@@ -123,6 +123,10 @@ export async function settleSnapshotAsReceipt(
     // A economia de Charms (M39-02, #602, ADR 0052 d.1): ABSOLUTA como `ammo` — sem ela aqui,
     // um `charm-unlock` aceito antes da queda sumiria junto com o snapshot irrestaurável.
     ...(owner?.charms === undefined ? {} : { charms: owner.charms }),
+    // As magias aprendidas (#624, ADR 0058 d.1): ABSOLUTAS como `charms` — sem isto aqui, um
+    // `learn-spell` aceito antes da queda sumiria com o snapshot irrestaurável, com o gold já
+    // debitado no `goldDelta` do mesmo snapshot.
+    ...(owner?.learnedSpells === undefined ? {} : { learnedSpells: owner.learnedSpells }),
     // O familiar (M38-02, #599, ADR 0057 d.3): ABSOLUTO como `charms` — sem ele aqui, um familiar
     // lançado antes da queda perderia o cooldown de 30 min junto com o snapshot irrestaurável.
     ...(owner?.familiar === undefined ? {} : { familiar: owner.familiar }),

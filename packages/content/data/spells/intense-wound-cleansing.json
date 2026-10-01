@@ -4,6 +4,7 @@
   "description": "Cura você.",
   "vocationId": "knight",
   "minLevel": 80,
+  "learnPrice": 6000,
   "manaCost": 200,
   "group": "healing",
   "groupCooldownMs": 1000,

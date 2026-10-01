@@ -27,6 +27,15 @@ estrutura em memória, vai para `content.ts` e pode ser usada por qualquer um.
 
 ## O catálogo importado (ADR 0038, #572)
 
+**`convinceable`, `manaCost` e `corpseAnimatable` (#600).** O importador de monstros lê
+`flags.convinceable` e `manaCost` (de TODO monstro que o declara, `summonable` ou não — `summonable`
+em si continua NÃO importado) e gera `corpseAnimatable`, as janelas em ms desde a morte em que o item
+do topo do cadáver é `isCorpse() and isMovable()` — a Animate Dead do Canary. O dado é de cada
+estágio da cadeia `decayTo`, e a flag `unmove` vem de `data/items/appearances.dat` (lido por
+`readCorpseItemFlags`, sobre o `Reader` de protobuf do cliente), não do `items.xml`: o estágio
+recém-abatido é `unmove`, então a janela típica é `[10 000, corpseTtlMs)`. `pnpm catalog:import
+monsters` sem `appearances.dat` não gera janela nenhuma (monstro nunca animável), nunca inventa uma.
+
 **`staging/monsters/` não é conteúdo carregado** (#578/#579): é onde `pnpm catalog:import monsters`
 escreve — a transcrição PURA do Canary, item ainda por slug de nome, sem passar pelo catálogo de
 itens (#573/#574) nem pela tabela de aparências. `pnpm catalog:promote-monsters` (#580) é o passo
@@ -94,6 +103,40 @@ migrar o catálogo manual para `overrides/` + `generated/` é trabalho de #596/#
 cobrem o resto das ~120 magias e as runas fora das duas formas de fórmula que este leitor
 reconhece (`docs/reference/catalog/spells-report.md`/`runes-report.md` listam o que ficou de
 fora, com o motivo).
+
+**`learnPrice` da magia (#624, ADR 0058 d.3) é importado dos NPCs, sem `staging/`:** a magia continua
+autoral em `data/spells/*.json`, e `pnpm catalog:spell-prices` (`scripts/catalog/spell-prices.ts`,
+o irmão de `catalog:npc-prices`) lê as ~1 800 chamadas `StdModule.learnSpell` dos 51 NPCs de
+`data-otservbr-global/npc/` com `luaparse` — nunca executa Lua, e um preço/nome/vocação que não é
+literal vai para o relatório em vez de virar `0` — e regrava SÓ a linha `"learnPrice"` do arquivo
+(insere antes de `"manaCost"`, preserva a formatação). Regras: o **MENOR** preço entre os NPCs que
+ensinam a magia à vocação dela (ADR 0038 d.6); a ligação é o NOME sem diferenciar caixa (o
+`hasLearnedInstantSpell` do Canary é `strcasecmp`), não o id do arquivo — `haste-druid` e
+`haste-sorcerer` têm o mesmo nome, e é a vocação do NPC (normalizada para a base: Master Sorcerer →
+Sorcerer; Monk fica de fora) que separa; `premium` não entra. **`learnPrice: 0` é magia grátis** (as
+básicas), e AUSENTE é "ninguém a ensina" — nunca confunda os dois (`!== undefined`, jamais truthy).
+Magia sem NPC (`challenge`, `conjure-power-bolt`, `conjure-sniper-arrow`, `great-death-beam`) NUNCA
+é tocada pelo script: o preço dela é curado à mão com a fonte no `_open` (três provisórios, um
+ausente de propósito — ver `docs/product/progression.md`, "Aprender magia"). `pnpm check` roda
+`catalog:spell-prices --check`: um arquivo de magia divergente do Canary, ou o relatório
+(`docs/reference/catalog/spell-prices-report.md`) desatualizado, reprova. `load.test.ts` fecha o
+outro lado: toda magia do catálogo real tem preço, exceto a `NOT_TAUGHT` — uma magia nova sem
+`learnPrice` seria uma magia que ninguém consegue lançar.
+
+**`data/skinning/generated/` é a esfola de cadáver** (#626, ADR 0048 d.5/d.6): `pnpm catalog:import
+skinning` lê o `skinning.lua` do Canary (`config[ferramenta][id do cadáver]`) e a cruza com o
+`monster.corpse` e a cadeia de decaimento (`duration`/`decayTo`) de cada monstro do catálogo — uma
+linha por MONSTRO, com a ferramenta, o material, a `chance` (`SKINNING_CHANCE_SCALE = 100000`) e
+os `stages` esfoláveis do cadáver (`canaryItemId` é identidade para o Scavenge, nunca arte;
+`afterTtlMs` é a vida do cadáver DEPOIS da tentativa — o `duration` do `after` do Lua mais a cadeia
+`decayTo` dele no `items.xml`, 360 s em todas as 62 entradas, porque o `transform` do Canary reinicia
+o decaimento). Depende
+de `data/monsters/**` e `data/items/**` já promovidos: monstro, ferramenta ou material fora do
+catálogo saem em `skipped` no relatório, e o boot recusa referência solta. A obsidian knife, a
+blessed wooden stake e o `rabbits-foot` são itens AUTORAIS (o importador de itens não classifica
+`primarytype="tools"`); o pé de coelho vale 50 gp (o preço de compra de `shops.lua`, que o `items.xml`
+não dá) e NÃO leva `creatureProduct`, porque o flag vem do `primarytype="creature products"`.
+Reimportar depois de promover mais monstros recupera o que ficou de fora.
 
 Qualquer `data/<tipo>/` (`items/`, `monsters/`) aceita, além do arquivo autoral direto na pasta,
 duas subpastas que `load.ts` lê sozinho, sem precisar de mudança em `content.ts`:
@@ -624,12 +667,21 @@ entre arquivos resolvem.
   PERCENTUAL INTEIRO, como o reflexo de item, e compilam no boot (`compileElementHealing`,
   `compileReflect` com `flat` zero); ausentes no monstro compilado quando nada cura/reflete.
 - **`monster.conditionImmunities` é o `monster.immunities[].condition` do Canary** (#559, ADR 0041
-  d.2) — distinto de `mitigation.immunities` (`combat = true`, DANO). Onze nomes:
-  `paralyze`, `drunk`, `invisible` e as oito DOTs (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY`, a
-  `Combat::DamageToConditionType`: `physical` sangra, `earth` envenena, `fire` queima…) — o
-  vocabulário do ADR, NÃO os nomes do Lua (`bleed`, `fire`, `earth`…), que o importador traduz.
-  **`invisible` significa "enxerga o invisível"** (`Monster::canSeeInvisibility`), nunca "não pode
-  ficar invisível": é a exceção que não bloqueia a condição. `outfit` (119 monstros) fica fora até
-  o M44-03. Ausente é `[]`, sem imunidade nenhuma.
+  d.2) — distinto de `mitigation.immunities` (`combat = true`, DANO). Catorze nomes:
+  `paralyze`, `drunk`, `invisible`, as oito DOTs (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY`, a
+  `Combat::DamageToConditionType`: `physical` sangra, `earth` envenena, `fire` queima…) e, desde o
+  #622, `rooted`, `feared` e `pacified` — o vocabulário do ADR, NÃO os nomes do Lua (`bleed`,
+  `fire`, `earth`…), que o importador traduz. Os três últimos são AUTORAIS: o Lua não os nomeia, e
+  nenhum monstro do bestiário os declara. **`invisible` significa "enxerga o invisível"**
+  (`Monster::canSeeInvisibility`), nunca "não pode ficar invisível": é a exceção que não bloqueia a
+  condição. `outfit` (119 monstros) fica fora até o M44-03. Ausente é `[]`, sem imunidade nenhuma.
+- **As condições de controle (#622, M44-04) são chave RESERVADA sem campo próprio, como o drunk:**
+  `rooted`, `feared` e `pacified` (`ROOTED_CONDITION_KEY`… em `schemas.ts`), e `conditionSpecSchema`
+  confere as duas implicações (a chave só com o efeito dela, e vice-versa). **Exigem
+  `merge: 'longest'`** — o quarto valor de `conditionMergeSchema`, a regra de
+  `Condition::updateCondition` do Canary (prazo menor não encurta o que já corre) —, e o schema
+  recusa qualquer outro valor: não é escolha do conteúdo. Nunca como self-buff de defesa
+  (`DEFENSE_SELF_CONDITION_KINDS`). O `haste` de magia ganhou `pacifies: true` (Swift Foot,
+  `swift_foot.lua`: acelera e pacifica pelos mesmos 10 s).
 
 Issue: FUN-8.

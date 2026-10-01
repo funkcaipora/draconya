@@ -28,7 +28,12 @@ function skillsOf(
   if (Object.keys(skills).length === 0) return previous;
   const of = (id: keyof PlayerSkills): SkillProgress => {
     const progress = skills[id];
-    return progress === undefined ? previous[id] : { level: progress.level, percent: progress.percentToNext };
+    if (progress === undefined) return previous[id];
+    // O nível com Loyalty (#628) só vem quando o bônus muda o nível; a ausência é "igual ao base".
+    return {
+      level: progress.level, percent: progress.percentToNext,
+      ...(progress.loyaltyLevel === undefined ? {} : { loyaltyLevel: progress.loyaltyLevel }),
+    };
   };
   return {
     fist: of('fist'), club: of('club'), sword: of('sword'), axe: of('axe'),
@@ -246,6 +251,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         fightMode: message.fightMode,
         speed: message.speed,
         skills: skillsOf(message.skills, state.skills),
+        loyaltyBonusPercent: message.loyaltyBonusPercent ?? 0,
         soul: message.soul,
         soulMax: message.soulMax,
       }));
@@ -390,6 +396,13 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       }));
       return;
 
+    case 'learned-spells':
+      // SUBSTITUI, como as bênçãos: é o registro INTEIRO das magias aprendidas (#624, ADR 0058),
+      // não um delta — o servidor manda no attach e a cada `learn-spell` aceito. A tela resolve
+      // nome, preço e requisito pelo catálogo (invariante 6).
+      hud.set((state) => ({ ...state, learnedSpells: message.spellIds }));
+      return;
+
     case 'blessings':
       // O BITMASK inteiro (#570, ADR 0052) — nunca um delta. Compra e consumo na morte chegam
       // pela mesma mensagem, e a tela resolve os nomes pelo catálogo (invariante 6).
@@ -508,6 +521,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         promoted: message.self.promoted,
         speed: message.self.speed,
         skills: skillsOf(message.self.skills, state.skills),
+        loyaltyBonusPercent: message.self.loyaltyBonusPercent ?? 0,
         soul: message.self.soul,
         soulMax: message.self.soulMax,
         // O analisador (§16.1, FUN-83). `elapsedMs` da mensagem é o mesmo

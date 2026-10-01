@@ -292,6 +292,11 @@ export function characterFromTicket(
       // ausente, a sessão parte sem nenhum abate de boss — o mesmo personagem novo que `bestiary`
       // ausente já descreve.
       ...(initialCharacter.bosstiary === undefined ? {} : { bosstiary: initialCharacter.bosstiary }),
+      // As magias aprendidas (#624, ADR 0058 d.1): validadas na emissão e no consumo
+      // (`isLearnedSpellsState`); ausente, a sessão parte sem nenhuma — personagem novo, que
+      // não lança nada até comprar (quem já existia ganhou o registro pela migração 0024).
+      ...(initialCharacter.learnedSpells === undefined
+        ? {} : { learnedSpells: initialCharacter.learnedSpells }),
       // O familiar (M38-02, #599, ADR 0057 d.3): os carimbos de parede do cooldown e da recriação
       // — validados na emissão e no consumo (`isFamiliarState`); ausente, o personagem nunca
       // invocou, e a sessão parte sem carimbo.
@@ -320,6 +325,12 @@ export function characterFromTicket(
       ...(initialCharacter.boostedMonsterId === undefined
         ? {}
         : { boostedMonsterId: initialCharacter.boostedMonsterId }),
+      // O bônus de Loyalty (#628, ADR 0052 decisão 5): calculado pela `api` na emissão e fixado
+      // AGORA, como a boosted — a sessão nunca relê conta nem relógio, e o valor atravessa toda
+      // transição Cidade↔hunt e toda retomada de snapshot (vive no `CharacterState`).
+      ...(initialCharacter.loyaltyBonusPercent === undefined
+        ? {}
+        : { loyaltyBonusPercent: initialCharacter.loyaltyBonusPercent }),
     });
     // Materializa na ENTRADA (§10): o personagem esteve fora de hunt desde a última vez, e
     // esse tempo é recuperação. Fazer a conta aqui, e não na leitura de cada consulta, é o

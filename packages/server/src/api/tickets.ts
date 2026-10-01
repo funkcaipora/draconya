@@ -5,8 +5,12 @@ import { z } from 'zod';
 import { OutfitColors } from '@draconya/protocol';
 import { isFightMode, readItemOverlay } from '@draconya/sim';
 import { isFamiliarState } from '@draconya/sim';
-import type { BestiaryState, BosstiaryState, CharmsState, FamiliarState } from '@draconya/sim';
-import { isAmmoSelection, isBestiaryState, isBosstiaryState, isCharmsState, isStockMap } from '../tickets.js';
+import type {
+  BestiaryState, BosstiaryState, CharmsState, FamiliarState, LearnedSpellsState,
+} from '@draconya/sim';
+import {
+  isAmmoSelection, isBestiaryState, isBosstiaryState, isCharmsState, isLearnedSpellsState, isStockMap,
+} from '../tickets.js';
 import type { InitialCharacter, IssueFailure, TicketService } from '../tickets.js';
 import type { CharacterRecord, GameRepository } from '../db/repository.js';
 
@@ -59,6 +63,13 @@ export interface TicketRouteDependencies {
    * `boosted/baseline.json`: nenhuma hunt deste ticket aplica o bônus.
    */
   readonly currentBoostedMonsterId?: () => Promise<string | undefined>;
+  /**
+   * O bônus de Loyalty da CONTA (#628, ADR 0052 decisão 5): `accountId → percentual`, calculado
+   * de `account.created_at` na hora da emissão e fixado no ticket — o `game` o mantém pela
+   * sessão inteira. Ausente é `api` sem conteúdo de Loyalty (ou montado sem banco): nenhum
+   * ticket carrega bônus e toda skill vale o nível base.
+   */
+  readonly loyaltyBonusPercentOf?: (accountId: string) => Promise<number | undefined>;
   /**
    * Os storages do personagem (#731, ADR 0050 d.6 T2), para o ticket carregar — mesma razão e
    * mesma degradação de `listItemInstances`: ausente é personagem sem storage nenhum setado.
@@ -159,6 +170,9 @@ export function createTicketHandler(
     // sai da trava, como a resolução de nó (FUN-53): uma lentidão do Redis aqui não segura a
     // linha do personagem.
     const boostedMonsterId = await deps.currentBoostedMonsterId?.();
+    // O Loyalty (#628) também não depende da linha do personagem — é da CONTA —, e o carimbo de
+    // criação dela é lido fora da trava, pela mesma razão da boosted.
+    const loyaltyBonusPercent = await deps.loyaltyBonusPercentOf?.(principal.accountId);
 
     // 404, e não 403: responder "existe, mas não é seu" transforma este endpoint num
     // verificador de nomes de personagem para qualquer conta autenticada.
@@ -173,6 +187,7 @@ export function createTicketHandler(
           await deps.listItemInstances?.(character.id) ?? [],
           await deps.listCharacterStorages?.(character.id) ?? [],
           boostedMonsterId,
+          loyaltyBonusPercent,
         ),
         resolution.node,
       ),
@@ -208,6 +223,8 @@ export function initialCharacterOf(
   storages: readonly { readonly storageKey: string; readonly value: number }[] = [],
   /** A Boosted Creature do dia (#615), do cache em Redis. Ver `TicketRouteDependencies`. */
   boostedMonsterId?: string,
+  /** O bônus de Loyalty da conta (#628), já calculado pela `api`. Ver `TicketRouteDependencies`. */
+  loyaltyBonusPercent?: number,
 ): InitialCharacter {
   return {
     level: character.level,
@@ -216,6 +233,9 @@ export function initialCharacterOf(
     gold: character.gold,
     soul: character.soul,
     ...(boostedMonsterId === undefined ? {} : { boostedMonsterId }),
+    // O Loyalty (#628): fixado no ticket como a boosted, e ausente quando não há degrau — o
+    // ticket do caso comum (conta com menos de 360 dias) continua idêntico ao de antes.
+    ...(loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent }),
     // A configuração do bot viaja no ticket (FUN-81): é assim que ela chega ao `game`,
     // que não fala com o Postgres. Mesmo caminho de level, XP e gold.
     ...(character.botConfig === null ? {} : { botConfig: character.botConfig }),
@@ -240,6 +260,9 @@ export function initialCharacterOf(
     ...charmsOf(character.charms),
     // E o Bosstiary (#629), pela mesma régua do Bestiário.
     ...bosstiaryOf(character.bosstiary),
+    // E as magias aprendidas (#624, ADR 0058), pela mesma régua: sem isto, quem comprou ontem
+    // entraria hoje na hunt sem lançar nada, apesar de ter pago.
+    ...learnedSpellsOf(character.learnedSpells),
     // E o familiar (M38-02, #599, ADR 0057 d.3): os carimbos de parede que o cooldown de 30 min e a
     // recriação ao entrar consultam — sem eles, sair da hunt zeraria o cooldown.
     ...familiarOf(character.familiar),
@@ -303,6 +326,11 @@ function bestiaryOf(stored: unknown): { bestiary?: BestiaryState } {
 /** O Bosstiary (#629), pela mesma régua e razão de `bestiaryOf`: torto ou `null` vira ausente. */
 function bosstiaryOf(stored: unknown): { bosstiary?: BosstiaryState } {
   return isBosstiaryState(stored) ? { bosstiary: stored } : {};
+}
+
+/** As magias aprendidas (#624, ADR 0058), pela mesma régua e razão de `bestiaryOf`. */
+function learnedSpellsOf(stored: unknown): { learnedSpells?: LearnedSpellsState } {
+  return isLearnedSpellsState(stored) ? { learnedSpells: stored } : {};
 }
 
 /** A economia de Charms (M39-02, #602), pela mesma régua e razão de `bestiaryOf`. */

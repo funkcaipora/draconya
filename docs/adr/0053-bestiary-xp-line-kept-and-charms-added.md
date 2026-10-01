@@ -135,6 +135,33 @@ dele. A decisão 5 continua válida como ordem e como escopo.
   resultado de todo golpe do jogador no perfil novo, declarada como estágio.
 - **O perfil passa a `breaking`.** O estágio #598 era `additive`; este muda resultado e ordem de
   sorteio (ADR 0031/0052 d.7). Sessão fixada em `combat-v3` nunca rola charm.
-- **Fora desta emenda:** o Scavenge (#626); o `getCharmChanceModifier()` das Concoctions (M42,
+- **Fora desta emenda:** o Scavenge (#626, feito na emenda seguinte); o `getCharmChanceModifier()` das Concoctions (M42,
   sempre zero até a fonte existir); `rooted`/`feared` no Cleanse (M44-04); a apresentação (efeitos,
   mensagens de log dos charms — não é regra de caça, ADR 0037 d.6).
+
+## Emenda — 2026-09-29: o Scavenge e a esfola de cadáver (#626)
+
+Esta emenda registra a implementação do 25º charm dentro da decisão 5 ("Scavenge na esfola") e
+o que ela decidiu; a esfola em si (ferramenta, janela, sorteio, destino do material) é a emenda
+do [ADR 0048](0048-corpse-loot-and-per-character-quick-loot-filter.md) da mesma data.
+
+- **A fórmula é a do `skinning.lua`, com o defeito dela.** O Scavenge não soma à chance: ele
+  ENCOLHE o `chanceRange` (`100 000 × chance / 100`, com `chance` 60/90/120 do catálogo), e o
+  sucesso continua `random <= 25 000`. Como o charm vem escrito em 60/90/120 e o intervalo cresce
+  com o número, o **tier 1 (41,7 %) é o melhor, o tier 2 (27,8 %) mal supera os 25 % e o tier 3
+  (20,8 %) fica ABAIXO da chance sem charm** — o oposto do que a descrição do Lua diz ("enhances
+  your chances"). A emenda do #603 não reproduziu três defeitos do `47dfd51` por decisão do
+  autor daquela PR; esta segue a regra do dono (caça idêntica ao Canary, ADR 0037 d.6) e reproduz
+  esta, pela mesma razão que o motor reproduz o teto de 2× o level dos elementais: é coerente,
+  não impede o charm de fazer algo. É uma função de uma linha (`skinningChanceRange`,
+  `sim/skinning.ts`), e **a decisão de corrigi-la é do dono**.
+- **Vale pelo ID do cadáver, não pelo monstro** (`charmCorpse == target.itemid or
+  ItemType(charmCorpse):getDecayId() == target.itemid`): o charm escolhido no Minotaur vale no
+  Minotaur Bruiser, e o do Demon no Orshabaal. O catálogo de esfola guarda o `canaryItemId` de
+  cada estágio esfolável do cadáver, e o Scavenge compara o estágio em que o alvo está agora com
+  os dois primeiros estágios do monstro escolhido.
+- **Muda o intervalo, nunca a quantidade de sorteios.** Com e sem charm a esfola consome UM
+  sorteio de `session.rng`, e o `combat-v4` só o consome com ferramenta e monstro esfolável.
+- **Sem exigência de tier na atribuição além da que já existe** (ADR 0053 d.4): o tier vem do
+  registro `charms` (`tierOf('scavenge')`) e o `getCharmChanceModifier()` das Concoctions não
+  entra (zero até M42).

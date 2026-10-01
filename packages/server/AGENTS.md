@@ -596,8 +596,9 @@ branch vai reivindicar o mesmo número até alguém mesclar — o merge é quem 
 Issues seguintes (Imbuements #605–#607, Wheel #608–#611, Prey #612–#615, Forja #616–#618, …):
 copie esta seção trocando `charms` pelo nome do sistema, e as seis regras continuam valendo.
 
-**A regra 1 tem UMA exceção de fusão, e o #629 (Bosstiary) é quem a usa: contador monotônico é
-fundido por MÁXIMO no ledger, não última-escrita-vence.** "Última escrita vence" serve ao registro
+**A regra 1 tem uma exceção de fusão — o registro que só cresce —, e duas issues a usam: o #629
+(Bosstiary, por MÁXIMO, aqui) e o #624 (`learnedSpells`, por UNIÃO, na seção seguinte). Contador
+monotônico é fundido no ledger, não última-escrita-vence.** "Última escrita vence" serve ao registro
 de ESTADO (Charms, Roda, Prey), cujo valor final pode descer. O `bosstiary` (`{ kills, points,
 version }`, `kills` chaveado pelo `raceId` do boss em texto) só sobe — a natureza do Bestiário —, e
 recebe a mesma fusão: `Bosstiary.merge` em `jobs/ledger.ts`, que lê a coluna sob a trava de linha
@@ -609,7 +610,7 @@ sobe e desce (alocação, gasto) copia os `charms`. Nos dois a lista de PERMISS�
 toca na coluna".
 
 **O `familiar` (#599, M38-02) é uma aplicação do padrão que mantém a regra 1 (última escrita vence), com duas particularidades.**
-`characters.familiar` (`jsonb`, migração `0024`) guarda `{ version, summonUntilMs, cooldownUntilMs }`
+`characters.familiar` (`jsonb`, migração `0025`) guarda `{ version, summonUntilMs, cooldownUntilMs }`
 — DOIS carimbos de relógio de PAREDE (epoch em ms), não conteúdo. (1) **Nunca funda por máximo:** o
 `summonUntilMs` desce quando o familiar morre (o `FamiliarDeath` do Canary zera a recriação), e um
 `GREATEST` no ledger ressuscitaria o familiar se um extrato antigo chegasse depois de um mais novo —
@@ -618,6 +619,59 @@ compara os carimbos com `Session.createdAtMs + Session.nowMs` (o `createdAtMs` q
 passa), então o `api` os leva no ticket (`familiarOf`, `isFamiliarState`) e o `host` os leva no
 extrato — o da hunt e o de estado da Cidade. O extrato SEM o campo não toca a coluna (personagem que
 nunca invocou), e é por isso que o vazio (`isEmptyFamiliarState`) não é escrito.
+
+### O que o `learnedSpells` (#624) acrescentou ao padrão
+
+`learn-spell` (C2S 36) / `learned-spells` (S2C 47), coluna `characters.learned_spells`
+(migração 0024). Quatro coisas que os Charms não tinham e o próximo registro provavelmente terá:
+
+- **O registro que já tinha dado em produção antes da coluna existir precisa de CONCESSÃO na
+  própria migração** (ADR 0014). `0024_624-learned-spells.sql` faz `ADD COLUMN` e um `UPDATE` que
+  concede a cada personagem existente as magias da vocação dele até o level dele, a partir de um
+  RETRATO do catálogo escrito no SQL (id, vocação, `minLevel`) — a migração descreve o que era
+  verdade na hora, e o que o conteúdo criar depois é comprado. `NULL` é personagem NOVO. O teste é
+  `db/learned-spells-migration.postgres.test.ts` (aplica 0000–0023, semeia, roda só a 0024).
+- **O registro só vai no extrato quando é a verdade do personagem** (`LearnedSpells#recorded`, em
+  `#receiptFor` e `#saveDurableReceipt`). Um snapshot retomado de antes da issue, ou um ticket de
+  um `api` ainda antigo, chega SEM registro, e afirmar o vazio seria afirmar o que a sessão não
+  sabe. Registro que herda dado migrado de produção deve seguir a mesma regra — `charms` não
+  precisou porque nasceu vazio em todo lugar.
+- **Registro que só cresce o ledger FUNDE, não sobrescreve** (`LearnedSpells.merge`, a união dos
+  ids, lida na MESMA leitura `FOR UPDATE` de `applyProgression`). Última-escrita-vence é a regra
+  geral do ADR 0052 d.1 e vale para o que sobe E desce (`charms`, bênção, soul), mas aqui custava
+  duas perdas: extratos pendentes se aplicam em ordem qualquer (`ReceiptStore.pending()` é um
+  `SCAN`, sem ordem), e um extrato de base desconhecida (só as compras dele) apagava a concessão
+  da migração. Um registro novo com essa propriedade (nunca desce) segue a união, como o
+  Bestiário segue o máximo; revogar é migração de dado versionada, nunca efeito do extrato.
+- **A intenção é aceita em Cidade E hunt, e o gold segue a regra 3** (`goldDelta` mais
+  `credit('goldSpent')` só fora do shard). Idempotência é estrutural: `CharacterRuntime
+  .learnSpell` recusa `already-learned` ANTES do débito, então um retry nunca cobra duas vezes; o
+  ledger só recusa o mesmo `(session_id, seq)`. Na hunt o host ainda acorda o bot
+  (`HuntRuleset#rearmBot`).
+
+O catálogo de magias entra como mapa (`spellCatalog: content.spells`, regra 4).
+
+## Loyalty viaja no ticket e não é persistido (#628, ADR 0052 d.5)
+
+O bônus de Loyalty é da IDADE DA CONTA — dado de banco e de relógio de parede, que o `sim` nunca
+lê (invariante 1). A `api` o calcula na EMISSÃO do ticket, o ÚNICO momento em que a linha não tem
+dono quente, e o resto é o caminho da boosted (#615): `loyaltyBonusPercentOf(accountId)`
+(`loyalty.ts`, montado no `main.ts` a partir de `content.loyalty`) → `initialCharacterOf(...,
+loyaltyBonusPercent)` → `InitialCharacter.loyaltyBonusPercent` (`parseInitialCharacter` valida:
+inteiro de 1 a 65 535 ou AUSENTE, nunca ticket recusado) → `characterFromTicket` → `CharacterState.
+loyaltyBonusPercent`, fixado pela sessão. Duas armadilhas:
+
+- **É por CONTA, não por personagem, e a party não o nivela**: `/start` chama o resolver com o
+  `accountId` de CADA membro, e `/join` com o de quem entra. Um resolver por sessão (o do líder)
+  daria a todos o bônus dele.
+- **Não há coluna, migração, extrato nem ledger.** Deriva de `account.created_at`
+  (`GameRepository.getAccountCreatedAt`) a cada ticket. Persistir o percentual congelaria o
+  degrau de quem entrou véspera do dia 360; recalcular no `game` traria relógio e conta para
+  dentro do processo que não fala com o Postgres.
+
+`player-stats` e `session-state.self` levam `loyaltyBonusPercent` (ausente = zero) e cada skill
+leva `loyaltyLevel` (ausente = igual ao base); o `sameStats` do host compara os dois, senão o HUD
+não recebe o nível efetivo quando só ele muda.
 
 ## A munição é abstrata e escolhida por família (#152, #420)
 

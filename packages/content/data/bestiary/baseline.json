@@ -471,6 +471,17 @@
       "stars": 3,
       "occurrence": 0
     },
+    "branchy-crawler": {
+      "class": "plant",
+      "race": "plant",
+      "raceId": 1931,
+      "toKill": 5000,
+      "firstUnlock": 200,
+      "secondUnlock": 2000,
+      "charmsPoints": 100,
+      "stars": 5,
+      "occurrence": 0
+    },
     "brinebrute-inferniarch": {
       "class": "demon",
       "race": "demon",
@@ -2263,6 +2274,17 @@
       "charmsPoints": 25,
       "stars": 3,
       "occurrence": 1
+    },
+    "gore-horn": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 2266,
+      "toKill": 5000,
+      "firstUnlock": 200,
+      "secondUnlock": 2000,
+      "charmsPoints": 100,
+      "stars": 5,
+      "occurrence": 0
     },
     "gozzler": {
       "class": "demon",

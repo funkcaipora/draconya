@@ -4,6 +4,7 @@
   "description": "Conjura flechas comuns, sem gastar runa em branco.",
   "vocationId": "paladin",
   "minLevel": 13,
+  "learnPrice": 450,
   "manaCost": 100,
   "soulCost": 1,
   "group": "support",

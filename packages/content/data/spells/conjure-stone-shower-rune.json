@@ -4,6 +4,7 @@
   "description": "Conjura cargas da Stone Shower Rune, consumindo uma runa em branco.",
   "vocationId": "druid",
   "minLevel": 28,
+  "learnPrice": 1100,
   "manaCost": 430,
   "soulCost": 3,
   "group": "support",

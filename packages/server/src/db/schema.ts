@@ -240,6 +240,18 @@ export const characters = pgTable(
     bosstiary: jsonb('bosstiary'),
 
     /**
+     * As magias aprendidas (#624, ADR 0058 d.1, ADR 0052 d.1): `{ spellIds, version }` — os ids
+     * de `content.spells` que o personagem comprou dos NPCs (aqui, da tela de serviço). Nulável:
+     * `null` é personagem NOVO, que não sabe magia nenhuma, como no Tibia. Todo personagem que
+     * já existia quando a migração 0024 rodou ganhou o registro com as magias da vocação dele
+     * até o level dele (ADR 0058 d.4, ADR 0014). Lido INTEIRO no ticket, escrito INTEIRO pela
+     * transação do ledger a partir do extrato — mas FUNDIDO pela UNIÃO dos ids (`LearnedSpells.merge`),
+     * e não última-escrita-vence como `charms`: magia aprendida só cresce, e um extrato antigo (ou de
+     * base desconhecida) não pode apagar a concessão da migração nem a compra de outro.
+     */
+    learnedSpells: jsonb('learned_spells'),
+
+    /**
      * O familiar de vocação (M38-02, #599, ADR 0057 d.3, ADR 0052 d.1): os dois carimbos de
      * relógio de PAREDE — `{ version, summonUntilMs, cooldownUntilMs }` — que o personagem
      * carrega entre hunts (`packages/sim/src/familiar.ts`): até quando a invocação vale

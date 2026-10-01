@@ -1143,6 +1143,63 @@ describe('o familiar de vocação (#599, M38-02, ADR 0057 d.3; Canary `Player:Cr
   });
 });
 
+describe('Convince Creature e Animate Dead (#600, ADR 0057 d.5–d.6)', () => {
+  const skeleton = {
+    id: 'skeleton', name: 'Skeleton', recommendedLevel: 1, health: 50, experience: 0, attack: 0, armor: 0,
+    attackIntervalMs: 2_000, speed: 300, aggroRadius: 0, loot: { items: [] },
+  };
+  const convinceRune = {
+    id: 'convince-creature-rune', name: 'Convince Creature Rune', price: 80, group: 'support',
+    requires: { level: 16, magicLevel: 5 }, effect: { kind: 'convince', range: 8 },
+  };
+  const animateRune = {
+    id: 'animate-dead-rune', name: 'Animate Dead Rune', price: 375, group: 'support',
+    requires: { level: 27, magicLevel: 4 }, effect: { kind: 'animate-dead', monsterId: 'skeleton', range: 8 },
+  };
+
+  it('monta as duas runas, e o monstro guarda `convinceable`, `manaCost` e as janelas do cadáver', () => {
+    const convincible = {
+      ...skeleton, convinceable: true, manaCost: 300, corpseTtlMs: 670_000,
+      corpseAnimatable: [{ fromMs: 10_000, untilMs: 670_000 }],
+    };
+    const content = buildContent(base({
+      monsters: [rat, convincible], supplies: [convinceRune, animateRune],
+    }));
+    expect(content.supplies.get('convince-creature-rune')?.effect).toEqual({ kind: 'convince', range: 8 });
+    expect(content.supplies.get('animate-dead-rune')?.effect)
+      .toEqual({ kind: 'animate-dead', monsterId: 'skeleton', range: 8 });
+    const monster = content.monsters.get('skeleton');
+    expect(monster).toMatchObject({ convinceable: true, manaCost: 300, corpseAnimatable: [{ fromMs: 10_000, untilMs: 670_000 }] });
+    // `convinceable` ausente é `false`, o default do Canary; sem janela, nunca animável.
+    expect(content.monsters.get('rat')?.convinceable).toBe(false);
+    expect(content.monsters.get('rat')?.corpseAnimatable).toBeUndefined();
+  });
+
+  it('recusa Animate Dead que aponta um monstro inexistente', () => {
+    expect(() => buildContent(base({ supplies: [animateRune] })))
+      .toThrow(/supply\/animate-dead-rune: animate-dead\.monsterId "skeleton" não existe/);
+  });
+
+  it('recusa janela sem `corpseTtlMs`, fora de ordem ou além do prazo do cadáver', () => {
+    const window = [{ fromMs: 10_000, untilMs: 20_000 }];
+    expect(() => buildContent(base({ monsters: [{ ...rat, corpseAnimatable: window }] })))
+      .toThrow(/monstro "rat": corpseAnimatable sem corpseTtlMs/);
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, corpseTtlMs: 15_000, corpseAnimatable: window }],
+    }))).toThrow(/corpseAnimatable 10000-20000 fora de ordem ou além de corpseTtlMs \(15000\)/);
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat, corpseTtlMs: 60_000,
+        corpseAnimatable: [{ fromMs: 10_000, untilMs: 30_000 }, { fromMs: 20_000, untilMs: 40_000 }],
+      }],
+    }))).toThrow(/fora de ordem ou além/);
+    // Uma janela vazia (`untilMs <= fromMs`) já cai no schema.
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, corpseTtlMs: 60_000, corpseAnimatable: [{ fromMs: 10_000, untilMs: 10_000 }] }],
+    }))).toThrow(ContentError);
+  });
+});
+
 describe('o perfil de compatibilidade de combate (ADR 0031, CMB-02)', () => {  it('conteúdo legado/fixture SEM o campo recebe o default compatível `combat-v1`', () => {
     // O default existe para o conteúdo anterior ao perfil continuar montando. O perfil é
     // ADITIVO: nada do resultado entregue muda por ele estar implícito.
@@ -3124,5 +3181,139 @@ describe('condição drunk — desvio de passo (M31-03, #558, ADR 0041)', () => 
         abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: chaveReservadaComEfeitoErrado }],
       }],
     }))).toThrow(ContentError);
+  });
+});
+
+describe('condições de controle: rooted, feared e pacified (M44-04, #622, ADR 0041)', () => {
+  // As três aplicadas por um ataque de monstro, como o `fear`/`root` do Canary
+  // (`data-otservbr-global/scripts/spells/monster/fear.lua`/`root.lua`: `CONDITION_PARAM_TICKS`
+  // 3000, alvo único).
+  const controlCondition = (kind: 'rooted' | 'feared' | 'pacified', over: Record<string, unknown> = {}) => ({
+    key: kind, merge: 'longest' as const, durationMs: 3_000, effect: { kind }, ...over,
+  });
+  const withCondition = (condition: unknown) => base({
+    monsters: [{
+      ...rat, abilities: [{ id: 'x', cadenceMs: 2_000, chance: 0.3, power: 0, target: { range: 7 }, condition }],
+    }],
+  });
+
+  it('monsterAbilitySchema aceita cada uma, com a chave reservada e merge `longest`', () => {
+    for (const kind of ['rooted', 'feared', 'pacified'] as const) {
+      const content = buildContent(withCondition(controlCondition(kind)));
+      expect(content.monsters.get('rat')?.abilities.find((a) => a.id === 'x')?.condition)
+        .toEqual(controlCondition(kind));
+    }
+  });
+
+  it('cada uma exige a chave reservada — e SÓ ela (as duas implicações)', () => {
+    for (const kind of ['rooted', 'feared', 'pacified'] as const) {
+      // A chave errada com o efeito certo.
+      expect(() => buildContent(withCondition(controlCondition(kind, { key: 'preso' })))).toThrow(ContentError);
+      // A chave reservada com um efeito que NÃO é o dela: `Conditions.isActive` reconhece pela
+      // chave, e um `buff` copiado com `key: 'rooted'` prenderia quem o carrega.
+      expect(() => buildContent(withCondition({
+        key: kind, merge: 'longest', durationMs: 3_000, effect: { kind: 'buff', damageTakenPercent: -20 },
+      }))).toThrow(ContentError);
+    }
+  });
+
+  it('exigem merge `longest` — `Condition::updateCondition`, não uma escolha do conteúdo', () => {
+    for (const kind of ['rooted', 'feared', 'pacified'] as const) {
+      for (const merge of ['refresh', 'replace', 'strongest'] as const) {
+        expect(() => buildContent(withCondition(controlCondition(kind, { merge }))), `${kind}/${merge}`)
+          .toThrow(ContentError);
+      }
+    }
+  });
+
+  it('não aceitam campo além do que toda condição já tem — só `kind`', () => {
+    // Como o `drunk`: o mecanismo inteiro mora no `sim`; um campo estranho é descartado.
+    expect(() => buildContent(withCondition(controlCondition('feared', {
+      effect: { kind: 'feared', flee: 'norte' },
+    })))).not.toThrow();
+  });
+
+  it('nunca como self-buff de DEFESA — o Canary só as aplica em ataque, contra o alvo', () => {
+    for (const kind of ['rooted', 'feared', 'pacified'] as const) {
+      expect(() => buildContent(base({
+        monsters: [{
+          ...rat, defenses: [{ id: 'd', cadenceMs: 1_000, chance: 1, condition: controlCondition(kind) }],
+        }],
+      })), kind).toThrow(ContentError);
+    }
+  });
+
+  it('monsterSchema.conditionImmunities aceita rooted/feared/pacified (imunidade por monstro)', () => {
+    const content = buildContent(base({
+      monsters: [{ ...rat, conditionImmunities: ['rooted', 'feared', 'pacified'] }],
+    }));
+    expect(content.monsters.get('rat')?.conditionImmunities).toEqual(['rooted', 'feared', 'pacified']);
+    expect(CONDITION_IMMUNITIES).toEqual(expect.arrayContaining(['rooted', 'feared', 'pacified']));
+  });
+
+  it('a runa/magia que aplica a condição em si também usa `conditionSpecSchema` — mesma regra', () => {
+    const pacifyRune = {
+      id: 'calm-rune', name: 'Calm', price: 10, group: 'support' as const, groupCooldownMs: 2_000,
+      effect: { kind: 'condition' as const, condition: controlCondition('pacified') },
+    };
+    expect(() => buildContent(base({ supplies: [pacifyRune] }))).not.toThrow();
+    expect(() => buildContent(base({
+      supplies: [{ ...pacifyRune, effect: { ...pacifyRune.effect, condition: controlCondition('pacified', { merge: 'refresh' }) } }],
+    }))).toThrow(ContentError);
+  });
+});
+
+describe('a esfola de cadáver no catálogo (#626, ADR 0048 d.5/d.6)', () => {
+  const knife = { id: 'obsidian-knife', name: 'Obsidian Knife', kind: 'other', weight: 1, value: 0 };
+  const leather = { id: 'leather', name: 'Leather', kind: 'other', weight: 1, value: 10 };
+  const skinnableRat = { ...rat, corpseTtlMs: 670_000 };
+  const entry = {
+    id: 'rat', toolId: 'obsidian-knife', materialId: 'leather', chance: 25_000,
+    stages: [
+      { canaryItemId: 5973, durationMs: 10_000, afterTtlMs: 360_000 },
+      { canaryItemId: 4025, durationMs: 300_000, afterTtlMs: 360_000 },
+    ],
+  };
+  const withSkinning = (over: Record<string, unknown> = {}, monsters: readonly object[] = [skinnableRat]) => base({
+    monsters, items: [knife, leather], skinning: [{ ...entry, ...over }],
+  });
+
+  it('monta a esfola indexada pelo id do MONSTRO, com a janela e a chance', () => {
+    const content = buildContent(withSkinning());
+    expect(content.skinning.get('rat')).toMatchObject({
+      toolId: 'obsidian-knife', materialId: 'leather', chance: 25_000, stages: entry.stages,
+    });
+  });
+
+  it('sem `skinning` no conteúdo, o mapa é vazio e nenhuma ferramenta é reconhecida', () => {
+    expect(buildContent(base()).skinning.size).toBe(0);
+  });
+
+  it('recusa monstro, ferramenta ou material que não existem, e diz qual', () => {
+    expect(() => buildContent(withSkinning({ id: 'fantasma' }))).toThrow(/skinning\/fantasma: o monstro não existe/);
+    expect(() => buildContent(withSkinning({ toolId: 'faca' }))).toThrow(/a ferramenta "faca" não existe/);
+    expect(() => buildContent(withSkinning({ materialId: 'ouro' }))).toThrow(/o material "ouro" não existe/);
+  });
+
+  it('recusa janela de esfola que passa da vida do cadáver do monstro', () => {
+    const curto = { ...rat, corpseTtlMs: 100_000 };
+    expect(() => buildContent(withSkinning({}, [curto]))).toThrow(/a janela de esfola \(310000 ms\) passa da vida do cadáver/);
+    // Monstro SEM `corpseTtlMs` (o cadáver não persiste) só esfola no abate: não há vida a comparar.
+    expect(() => buildContent(withSkinning({}, [rat]))).not.toThrow();
+  });
+
+  it('o schema é estrito e exige ao menos um estágio, chance dentro da escala e ids positivos', () => {
+    expect(() => buildContent(withSkinning({ stages: [] }))).toThrow(ContentError);
+    expect(() => buildContent(withSkinning({ chance: 100_001 }))).toThrow(ContentError);
+    expect(() => buildContent(withSkinning({ chance: 0 }))).toThrow(ContentError);
+    expect(() => buildContent(withSkinning({ stages: [{ canaryItemId: 0, durationMs: 1, afterTtlMs: 1 }] }))).toThrow(ContentError);
+    // Sem a vida que o cadáver tem DEPOIS da tentativa o estágio não se reagenda: o campo é obrigatório.
+    expect(() => buildContent(withSkinning({ stages: [{ canaryItemId: 5973, durationMs: 10_000 }] }))).toThrow(ContentError);
+    expect(() => buildContent(withSkinning({ stages: [{ canaryItemId: 5973, durationMs: 10_000, afterTtlMs: 0 }] }))).toThrow(ContentError);
+    expect(() => buildContent(withSkinning({ appearanceId: 5 }))).toThrow(ContentError);
+  });
+
+  it('a esfola entra na versão do conteúdo: mudar a chance muda a versão (invariante 7)', () => {
+    expect(buildContent(withSkinning()).version).not.toBe(buildContent(withSkinning({ chance: 50_000 })).version);
   });
 });

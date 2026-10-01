@@ -8,7 +8,8 @@ const CHARACTER: CharacterRecord = {
   id: 'p1', accountId: 'a1', name: 'Hero', vocation: null, promoted: false, level: 1, xp: 0, soul: 0, gold: 0,
   capacity: 400, premiumUntil: null, staminaMs: 86400000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
-  ammo: null, supplyStock: null, ammunitionStock: null, charms: null, bosstiary: null, familiar: null, fedMs: 0, blessings: 0, fightMode: 'attack',
+  ammo: null, supplyStock: null, ammunitionStock: null, charms: null, bosstiary: null, learnedSpells: null,
+  familiar: null, fedMs: 0, blessings: 0, fightMode: 'attack',
   createdAt: new Date(),
 };
 
@@ -295,6 +296,32 @@ describe('POST /api/tickets', () => {
     expect(await issuedWith(['arrow'])).not.toHaveProperty('ammo');
   });
 
+  it('as magias aprendidas da linha entram no ticket; nulas ou tortas, ficam de fora (#624, ADR 0058)', async () => {
+    // Sem elas na sessão o CAST recusa toda magia (`spell-not-learned`) — quem comprou ontem
+    // entraria hoje sem lançar nada. O `null` do personagem novo NÃO vira chave, e a linha é
+    // `jsonb` sem CHECK: um registro torto cai fora aqui, sem trancar o login por causa dele.
+    const issuedWith = async (learnedSpells: unknown) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, learnedSpells })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    const record = { spellIds: ['berserk', 'wound-cleansing'], version: 1 };
+    expect(await issuedWith(record)).toMatchObject({ learnedSpells: record });
+    expect(await issuedWith({ spellIds: [], version: 1 })).toMatchObject({ learnedSpells: { spellIds: [] } });
+    expect(await issuedWith(null)).not.toHaveProperty('learnedSpells');
+    expect(await issuedWith({ spellIds: ['berserk', 'berserk'], version: 1 })).not.toHaveProperty('learnedSpells');
+    expect(await issuedWith(['berserk'])).not.toHaveProperty('learnedSpells');
+  });
+
   it('leva a vocação da linha, e a ausência quando ainda não há uma (#154)', async () => {
     // A vocação é escrita uma vez pelo `jobs` e volta pelo ticket a cada entrada — sem isto o
     // diálogo do level 8 reapareceria a cada login. Mutação que mata: tirar o espalhamento.
@@ -336,6 +363,28 @@ describe('POST /api/tickets', () => {
     expect(await issuedWith(new Date(Date.now() + 60_000))).toMatchObject({ premium: true });
     expect(await issuedWith(null)).not.toHaveProperty('premium');
     expect(await issuedWith(new Date(Date.now() - 60_000))).not.toHaveProperty('premium');
+  });
+
+  it('leva o bônus de Loyalty da CONTA do chamador, e nada quando a conta não tem degrau (#628)', async () => {
+    // A idade da conta é da CONTA, e a rota a pede com o `accountId` autenticado — nunca com o
+    // que vem no corpo. Sem degrau (ou sem o sistema ligado) o resolver devolve `undefined` e o
+    // ticket sai idêntico ao de antes desta issue.
+    const issuedWith = async (loyaltyBonusPercentOf?: (accountId: string) => Promise<number | undefined>) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        ...(loyaltyBonusPercentOf === undefined ? {} : { loyaltyBonusPercentOf }),
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    const seen: string[] = [];
+    expect(await issuedWith(async (accountId) => { seen.push(accountId); return 15; }))
+      .toMatchObject({ loyaltyBonusPercent: 15 });
+    expect(seen).toEqual(['a1']);
+    expect(await issuedWith(async () => undefined)).not.toHaveProperty('loyaltyBonusPercent');
+    expect(await issuedWith()).not.toHaveProperty('loyaltyBonusPercent');
   });
 
   it('reconstrói os containers pela posição gravada; a linha sem posição entra no primeiro lugar livre (#160)', async () => {

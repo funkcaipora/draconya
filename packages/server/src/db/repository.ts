@@ -72,6 +72,13 @@ export interface CharacterRecord {
    */
   readonly bosstiary: unknown;
   /**
+   * As magias aprendidas (#624, ADR 0058), como vieram do banco. `unknown` pela mesma razão de
+   * `charms`: a forma (`LearnedSpellsState`) é do `sim`, e quem a confere é quem monta o ticket.
+   * `null` é personagem novo, que não aprendeu nada. Sem método de escrita: quem escreve é o
+   * ledger, na transação do extrato (ADR 0052 d.1).
+   */
+  readonly learnedSpells: unknown;
+  /**
    * O familiar de vocação (M38-02, #599, ADR 0057 d.3), como veio do banco: `unknown` pela mesma
    * razão de `charms` — a forma (`FamiliarState`) é do `sim`, e quem a confere é quem monta o
    * ticket. `null` é personagem que nunca invocou. Sem método de escrita: quem escreve é o ledger.
@@ -157,6 +164,13 @@ export interface FriendView {
 
 export interface GameRepository {
   ensureAccount(identity: { externalAuthId: string; email: string }): Promise<AccountRecord>;
+  /**
+   * Quando a conta nasceu (`account.created_at`) — a idade que o Loyalty (#628, ADR 0052 d.5)
+   * conta na emissão do ticket. `null` para uma conta que não existe. Leitura só do carimbo, e
+   * não o `AccountRecord` inteiro: quem chama é a `api`, uma vez por ticket, e a linha da conta
+   * não tem mais nada de que o ticket precise.
+   */
+  getAccountCreatedAt(accountId: string): Promise<Date | null>;
   /**
    * Cria o personagem. `initial.botConfig` é a configuração de bot com que ele NASCE (FUN-114)
    * — a padrão do conteúdo, gravada aqui porque o personagem novo precisa entrar na primeira
@@ -263,6 +277,15 @@ export class DrizzleGameRepository implements GameRepository {
       }
       throw error;
     }
+  }
+
+  async getAccountCreatedAt(accountId: string): Promise<Date | null> {
+    const rows = await this.#db
+      .select({ createdAt: accounts.createdAt })
+      .from(accounts)
+      .where(eq(accounts.id, accountId))
+      .limit(1);
+    return rows[0]?.createdAt ?? null;
   }
 
   async createCharacter(
@@ -602,6 +625,7 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     ammunitionStock: row.ammunitionStock,
     charms: row.charms,
     bosstiary: row.bosstiary,
+    learnedSpells: row.learnedSpells,
     familiar: row.familiar,
     fedMs: row.fedMs,
     blessings: row.blessings,

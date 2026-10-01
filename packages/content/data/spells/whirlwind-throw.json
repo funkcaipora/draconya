@@ -4,6 +4,7 @@
   "description": "Causa dano mágico no seu alvo atual.",
   "vocationId": "knight",
   "minLevel": 28,
+  "learnPrice": 1500,
   "manaCost": 40,
   "group": "attack",
   "groupCooldownMs": 2000,

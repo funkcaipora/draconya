@@ -265,8 +265,13 @@ export class MonsterRuntime {
   readonly scheduledAbilities: Set<string>;
   /** Ver `MonsterState.scheduledDefenses` (#518). */
   readonly scheduledDefenses: Set<string>;
-  /** Ver `MonsterState.masterId` (#546/#598). `null` é "não é invocação" — o de sempre. */
-  readonly masterId: number | string | null;
+  /**
+   * Ver `MonsterState.masterId` (#546/#598). `null` é "não é invocação" — o de sempre. **Mutável só
+   * pela Convince Creature Rune** (#600, `Creature::setMaster`): o monstro que nasceu do Spawner passa
+   * a ter o personagem por mestre no meio da vida. `HuntRuleset#convertToSummon` é o ÚNICO escritor —
+   * ele também cancela o que uma invocação nunca arma (a lista de invocação própria) e reavalia o alvo.
+   */
+  masterId: number | string | null;
   /** Ver `MonsterState.scheduledSummons` (#546). */
   readonly scheduledSummons: Set<string>;
   /** Mutadas pelo ruleset ao lançar e ao vencer — ver `Conditions` (CMB-07). */

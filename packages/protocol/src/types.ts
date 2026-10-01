@@ -65,10 +65,16 @@ const PaletteIndex = z.number().int().min(0).max(132);
 
 /**
  * Progresso até o próximo nível de uma skill (#340, SV-04): nível atual e percentual acumulado.
+ *
+ * `loyaltyLevel` (#628): o nível COM o bônus de Loyalty da conta — o `getLoyaltySkill` que o
+ * Canary manda ao lado do nível base. AUSENTE quando o bônus não muda o nível (a conta sem
+ * degrau, ou tries de bônus que ainda não fecham um nível): quem lê o trata como `level`. Um nó
+ * `game` anterior à issue nunca o manda, e o HUD mostra o nível base.
  */
 export const SkillProgress = z.object({
   level: z.number().int().nonnegative(),
   percentToNext: z.number().int().min(0).max(99),
+  loyaltyLevel: z.number().int().nonnegative().optional(),
 });
 export type SkillProgress = z.infer<typeof SkillProgress>;
 
@@ -421,6 +427,12 @@ export const C2S_SCHEMAS = {
    * defesa e de mitigação que ele liga são do servidor (invariante 4).
    */
   'set-fight-mode': z.object({ mode: z.enum(FIGHT_MODES) }),
+  /**
+   * Aprender UMA magia por gold (#624, ADR 0058 d.2). INTENÇÃO: só o id do catálogo
+   * (`content.spells`); vocação, level, "já aprendida", preço e saldo são do servidor
+   * (invariante 4).
+   */
+  'learn-spell': z.object({ spellId: z.string().min(1) }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */
@@ -690,6 +702,8 @@ export const S2C_SCHEMAS = {
       speed: z.number().int().nonnegative().default(0),
       skills: z.record(z.string().min(1), SkillProgress).default({}),
       magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
+      /** O bônus de Loyalty (#628), como em `player-stats` — para quem reanexa ver sem esperar. */
+      loyaltyBonusPercent: z.number().int().nonnegative().optional(),
       /** Pontos de alma (#593), como em `player-stats` — para quem reanexa ver sem esperar. */
       soul: z.number().int().nonnegative().default(0),
       soulMax: z.number().int().nonnegative().default(0),
@@ -1050,6 +1064,12 @@ export const S2C_SCHEMAS = {
         manaCost: z.number().int().nonnegative(),
         minLevel: z.number().int().positive(),
         vocationId: z.string().nullable(),
+        /**
+         * O preço de APRENDER a magia (#624, ADR 0058 d.3), em gold — `0` é de graça. Opcional SEM
+         * `default`: um nó `game` anterior manda sem, e o cliente novo não pode recusar a
+         * mensagem; AUSENTE é "não há quem ensine" (a tela não oferece a compra).
+         */
+        learnPrice: z.number().int().nonnegative().optional(),
         /** `heal`, `mana` ou `damage`: é o que separa a categoria em que ela cabe. */
         effect: z.string().min(1),
         /** O grupo do Tibia (#155): `attack`, `healing`, `support`. `default`: nó anterior manda sem. */
@@ -1332,6 +1352,14 @@ export const S2C_SCHEMAS = {
     skills: z.record(z.string().min(1), SkillProgress).default({}),
     magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
     /**
+     * O bônus de Loyalty da CONTA (#628, ADR 0052 decisão 5), em percentual inteiro: fixado no
+     * ticket e constante pela sessão — o HUD o mostra ao lado das skills, e `loyaltyLevel` de
+     * cada uma diz quanto ele vale. Opcional, e não `default(0)`: ausente é zero para quem lê, e
+     * um nó `game` anterior (ou uma conta sem degrau) manda sem — o HUD não mostra bônus que não
+     * existiu.
+     */
+    loyaltyBonusPercent: z.number().int().nonnegative().optional(),
+    /**
      * Pontos de alma (#593). `soulMax` é da VOCAÇÃO — zero é "sem vocação escolhida", o mesmo
      * "sem teto para mostrar" que `vocationId: null` já significa. `default(0)` nos dois: um
      * nó `game` anterior a esta issue manda sem, e o HUD mostra "0/0" em vez de recusar o
@@ -1514,6 +1542,13 @@ export const S2C_SCHEMAS = {
     phase: z.enum(['countdown', 'in-combat']).optional(),
     remainingMs: z.number().int().nonnegative().optional(),
   }),
+  /**
+   * As magias que o personagem APRENDEU (#624, ADR 0058 d.1): os ids de `content.spells` — o
+   * registro cru, como `charms`. Preço, level e vocação de cada uma são do `catalogue`
+   * (`bot.spells[]`); a tela deriva "aprendida / à venda / bloqueada" cruzando os dois. Só para o
+   * dono. Ausente da lista é "não aprendida": o slot da barra que aponta para ela fica marcado.
+   */
+  'learned-spells': z.object({ spellIds: z.array(z.string().min(1)) }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;

@@ -405,6 +405,9 @@ describe.runIf(ready)('critério de saída do M20 (§5, ADR 0035)', () => {
       const premium = i === 0; // será o líder
       await db.update(characters).set({
         level: 20, xp: totalXpForLevel(20, content.progression), vocation, gold: 100,
+        // Aprendeu a única magia do conteúdo (#624, ADR 0058): a cura da party é o assunto, e o
+        // portão do aprendizado recusaria o cast do bot de quem não a comprou.
+        learnedSpells: { spellIds: ['heal'], version: 1 },
         ...(premium ? { premiumUntil: new Date(Date.now() + 86_400_000) } : {}),
       }).where(eq(characters.id, characterId));
       members.push({ cookie, accountId, characterId, vocation, name, premium });

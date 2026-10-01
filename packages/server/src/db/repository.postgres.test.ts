@@ -58,6 +58,22 @@ describe.runIf(databaseAvailable)('PostgreSQL game repository', () => {
     expect(character.createdAt).toBeInstanceOf(Date);
   });
 
+  it('devolve o carimbo de criação da conta — a idade que o Loyalty conta (#628) —, e nulo para conta que não existe', async () => {
+    const before = Date.now();
+    const account = await repository.ensureAccount({ externalAuthId: 'ext-loyalty', email: 'loyal@example.com' });
+    const createdAt = await repository.getAccountCreatedAt(account.id);
+    expect(createdAt).toBeInstanceOf(Date);
+    expect((createdAt as Date).getTime()).toBeGreaterThanOrEqual(before - 5_000);
+    expect((createdAt as Date).getTime()).toBeLessThanOrEqual(Date.now() + 5_000);
+
+    // O carimbo é o da linha: uma conta antiga (escrita por SQL, como uma migração de dados faria)
+    // devolve o que está lá — é a idade real, e não a data do último login.
+    const old = new Date('2020-01-15T12:00:00Z');
+    await testDatabase.database.db.update(accounts).set({ createdAt: old }).where(eq(accounts.id, account.id));
+    expect(await repository.getAccountCreatedAt(account.id)).toEqual(old);
+    expect(await repository.getAccountCreatedAt(randomUUID())).toBeNull();
+  });
+
   it('o bot padrão entra na linha ao criar, e sem padrão a coluna nasce nula (FUN-114)', async () => {
     const account = await repository.ensureAccount({ externalAuthId: 'ext-bot', email: 'bot@example.com' });
     const config = { version: 1, heal: [], potion: [], attack: [], rune: [], support: [] };

@@ -38,6 +38,11 @@ export interface SystemLine {
 export interface SkillProgress {
   level: number;
   percent: number;
+  /**
+   * O nível COM o bônus de Loyalty da conta (#628). Ausente é "igual ao base" — a conta sem
+   * degrau, ou um nó `game` anterior à issue. O `percent` é sempre o do nível BASE.
+   */
+  loyaltyLevel?: number;
 }
 
 /** #568: `melee` virou quatro skills na #567 — cada tipo de arma treina a sua. */
@@ -136,6 +141,8 @@ export type CharmDefinition = Catalogue['charms'][number];
  * que já deriva o bônus de XP do Bestiário (`bestiary-progress.ts`).
  */
 export type CharmsRegister = Readonly<S2CProps<'charms'>>;
+/** Uma magia do catálogo (#624): o que a tela de aprendizado lista, com `learnPrice` e requisitos. */
+export type SpellDefinition = Catalogue['bot']['spells'][number];
 /** As sete bênçãos e o preço por level (#570). Ausente do catálogo: este servidor não as tem. */
 export type BlessingsConfig = NonNullable<Catalogue['blessings']>;
 export type BlessingDefinition = BlessingsConfig['list'][number];
@@ -257,6 +264,12 @@ export interface HudState {
   readonly speed: number;
   readonly skills: PlayerSkills;
   /**
+   * O bônus de Loyalty da conta (#628, ADR 0052 decisão 5), em percentual inteiro; `0` é "sem
+   * degrau". Fixado no ticket, constante pela sessão. Chega em `player-stats` e em
+   * `session-state.self`, como `skills`.
+   */
+  readonly loyaltyBonusPercent: number;
+  /**
    * Pontos de alma (#593): `soulMax` é da vocação — `0` é "sem vocação escolhida", o mesmo
    * "sem teto para mostrar" que `vocationId: null` já significa. Chega em `player-stats` e em
    * `session-state.self`, como `speed`/`skills`.
@@ -354,6 +367,13 @@ export interface HudState {
    */
   readonly blessings: number;
   /**
+   * As magias que o personagem APRENDEU (#624, ADR 0058): ids de `catalogue.bot.spells`. `null`
+   * até chegar — o primeiro segundo de toda conexão, ou um nó anterior a esta issue —, e é o que
+   * impede a barra de marcar TODO slot como "não aprendida" antes de o servidor dizer o que ele
+   * sabe. SUBSTITUI: é o registro inteiro, não um delta.
+   */
+  readonly learnedSpells: readonly string[] | null;
+  /**
    * A party desta sessão (#196). `null` é solo — e é o que todo `session-state` sem o bloco
    * diz. A bolsa só existe no modo compartilhado; o último settlement fica até o próximo
    * `session-state` limpar, para a tela dizer "vendeu N, você levou M" depois de alguém sair.
@@ -417,6 +437,7 @@ export const INITIAL_HUD: HudState = {
     distance: { level: 0, percent: 0 },
     magic: { level: 0, percent: 0 },
   },
+  loyaltyBonusPercent: 0,
   soul: 0,
   soulMax: 0,
   vocationId: null,
@@ -436,6 +457,7 @@ export const INITIAL_HUD: HudState = {
   charms: null,
   bosstiary: null,
   blessings: 0,
+  learnedSpells: null,
   party: null,
   partyBag: null,
   lastSettlement: null,

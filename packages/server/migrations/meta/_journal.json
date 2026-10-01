@@ -174,7 +174,14 @@
       "idx": 24,
       "version": "7",
       "when": 1791300000000,
-      "tag": "0024_599-familiar",
+      "tag": "0024_624-learned-spells",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791400000000,
+      "tag": "0025_599-familiar",
       "breakpoints": true
     }
   ]

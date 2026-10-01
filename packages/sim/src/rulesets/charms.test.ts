@@ -1202,3 +1202,67 @@ describe('a conformance de RNG com e sem charms (combat-v4)', () => {
       .toEqual(straight.ruleset.monsters.map((m) => m.health));
   });
 });
+
+describe('Cleanse também limpa rooted e feared (M44-04, #622, `Creature::getCleansableConditions`)', () => {
+  const binder = (kind: 'rooted' | 'feared') => ({
+    ...biter, id: 'binder', name: 'Binder',
+    abilities: [{
+      id: kind, cadenceMs: 1_000, power: { min: 100, max: 100 }, damageType: 'physical',
+      target: { range: 1 },
+      condition: { key: kind, merge: 'longest', durationMs: 3_000, effect: { kind } },
+    }],
+  });
+  const scene = (kind: 'rooted' | 'feared', chance = ALWAYS) => {
+    const loaded = buildContent(raw({
+      monsters: [binder(kind), bat], charms: catalogue({ cleanse: chance }),
+      routes: [{ ...route, spawnPoints: [{ routeIndex: 0, radius: 3, monsterId: 'binder', respawnDelayMs: 600_000 }] }],
+    }));
+    const started = start({ content: loaded, maxHealth: 100_000, assign: { cleanse: 'binder' } });
+    started.session.advanceBy(50);
+    place(started.ruleset, [{ x: 1, y: 2 }]);
+    return started;
+  };
+  /** O instante do primeiro golpe que deixou a condição no herói, e o do primeiro que a tirou. */
+  const timeline = (started: ReturnType<typeof scene>, key: string) => {
+    let applied = -1;
+    let cleaned = -1;
+    for (let t = 0; t < 6_000; t += 50) {
+      started.session.advanceBy(50);
+      const has = started.hero.conditions.get(key) !== null;
+      if (has && applied < 0) applied = started.session.nowMs;
+      if (!has && applied >= 0 && cleaned < 0) cleaned = started.session.nowMs;
+    }
+    return { applied, cleaned };
+  };
+
+  for (const kind of ['rooted', 'feared'] as const) {
+    it(`${kind}: o 1º golpe aplica; o seguinte limpa, imuniza o tipo por 11 s e não aplica de novo`, () => {
+      const started = scene(kind);
+      const { applied, cleaned } = timeline(started, kind);
+      expect(applied).toBeGreaterThan(0);
+      // Limpou LOGO no golpe seguinte (1 s depois), muito antes de os 3 s da condição acabarem.
+      expect(cleaned).toBeGreaterThan(applied);
+      expect(cleaned - applied).toBeLessThanOrEqual(1_500);
+      // A imunidade é do TIPO e dura 11 s (`Player::setImmuneCleanse` → `setImmuneFear(11000)`).
+      const until = started.hero.cleanseImmunity.get(kind) ?? -1;
+      expect(until).toBeGreaterThan(cleaned + 9_000);
+      expect(until).toBeLessThanOrEqual(cleaned + 11_100);
+      // E a condição NÃO voltou nos golpes seguintes, dentro da janela.
+      expect(started.hero.conditions.get(kind)).toBeNull();
+    });
+
+    it(`${kind}: chance zero não limpa nada — a condição segue nos golpes seguintes`, () => {
+      const started = scene(kind, NEVER);
+      // Espera a condição entrar e confere que 2 s depois ela ainda está lá: sem Cleanse, nenhum
+      // golpe a tira, e a ability só a renova (`longest`).
+      let applied = -1;
+      for (let t = 0; t < 6_000 && applied < 0; t += 50) {
+        started.session.advanceBy(50);
+        if (started.hero.conditions.get(kind) !== null) applied = started.session.nowMs;
+      }
+      expect(applied).toBeGreaterThan(0);
+      run(started.session, 2_000);
+      expect(started.hero.conditions.get(kind)).not.toBeNull();
+    });
+  }
+});

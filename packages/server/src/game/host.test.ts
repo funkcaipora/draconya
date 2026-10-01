@@ -1,13 +1,16 @@
 import {
-  CharacterRuntime, HuntRuleset, PartyFullError, Rng, Session, createHuntSession, statsForLevel, totalXpForLevel,
-  type CharmBestiaryEntry, type EndReason, type Ruleset, type SessionSnapshot,
+  CharacterRuntime, HuntRuleset, PartyFullError, Rng, Session, createHuntSession, learnedSpellsStateOf,
+  pointsForLevel, statsForLevel, totalXpForLevel,
+  type CharmBestiaryEntry, type EndReason, type Ruleset, type SessionSnapshot, type SkillsState,
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigSchema, buildContent, compileItem,
-  itemSchema, migrateBotConfigV1, placeholderAppearances,
+  itemSchema, migrateBotConfigV1, placeholderAppearances, skillSchema,
 } from '@draconya/content';
-import type { Ammunition, Appearances, BotConfig, Charm, Progression, RawContent, Vocation } from '@draconya/content';
+import type {
+  Ammunition, Appearances, BotConfig, Charm, Progression, RawContent, Skill, Spell, Vocation,
+} from '@draconya/content';
 import { C2S_SCHEMAS } from '@draconya/protocol';
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import { createLogger } from '../log.js';
@@ -728,12 +731,12 @@ describe('session host', () => {
 
     host.handle(viewer, { type: 'session-attach' });
     expect(socket.frames).toHaveLength(0);
-    // Oito: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
+    // Nove: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
     // e stamina só viajam na segunda —, o alvo (`target-changed`, #470), as condições ativas
     // (`active-conditions`, #341), o Bestiário (`bestiary`, FUN-113), as bênçãos (`blessings`,
-    // #570, ADR 0052), a economia de Charms (`charms`, M39-02, #602) e o Bosstiary (`bosstiary`,
-    // #629). Os oito na FILA, nenhum no fio.
-    expect(viewer.queued).toBe(8);
+    // #570, ADR 0052), a economia de Charms (`charms`, M39-02, #602), o Bosstiary (`bosstiary`,
+    // #629) e as magias aprendidas (`learned-spells`, #624, ADR 0058). Os nove na FILA, nenhum no fio.
+    expect(viewer.queued).toBe(9);
 
     host.flush();
     const state = socket.received().find((m) => m.type === 'session-state');
@@ -3804,6 +3807,9 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     weapon: 'bow' | 'wand';
     /** Skills do conteúdo de teste (#340, SV-04). */
     skills: readonly unknown[];
+    /** As skills com que o herói nasce e o bônus de Loyalty que o ticket lhe deu (#628). */
+    heroSkills: SkillsState;
+    loyaltyBonusPercent: number;
   }> = {}) {
     const raw = rawTestContent();
     // As armas precisam de linha na tabela de aparência (FUN-94); a munição abstrata, só do
@@ -3888,7 +3894,11 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
           mana: over.mana ?? stats.maxMana, maxMana: stats.maxMana,
           level: 1, xp: 0, gold: over.gold ?? 0, goldDelta: 0, alive: true, cooldowns: {},
           staminaMs: over.stamina ?? FULL_STAMINA_MS, staminaUpdatedAtMs: 0,
+          // Sabe toda magia do conteúdo (#624): o portão do aprendizado tem bloco próprio.
+          learnedSpells: learnedSpellsStateOf(content.spells.keys()),
           ...armed,
+          ...(over.heroSkills === undefined ? {} : { skills: over.heroSkills }),
+          ...(over.loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent: over.loyaltyBonusPercent }),
         }));
         return session;
       },
@@ -4133,6 +4143,92 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     // Próximo ciclo sem mudanças: nenhum player-stats adicional
     runFor(100);
     expect(ofType(received(), 'player-stats').length).toBe(2);
+  });
+
+  it('o HUD recebe o bônus de Loyalty e o nível efetivo de cada skill; sem bônus, a forma é a de sempre (#628)', () => {
+    // O Canary manda ao cliente o nível COM Loyalty ao lado do base. Aqui: `loyaltyLevel` só
+    // viaja quando o bônus muda o nível, e `loyaltyBonusPercent` só quando é > 0 — o
+    // `player-stats` da conta sem degrau não ganha campo nenhum. O percentual continua o do
+    // nível BASE, e o dado persistido (`level`) também.
+    //
+    // Mutações que matam: tirar `loyaltyLevel` de `skillProgressOf` (a skill vai sem o nível
+    // efetivo), ou `loyaltyBonusPercent` de `playerStatsOf`/do `session-state.self`.
+    const loyal = hunt({
+      regen: false, stamina: MID_MINUTE_STAMINA_MS, monsters: false, skills: [TEST_MELEE_SKILL],
+      heroSkills: { melee: { level: 100, points: 0 } }, loyaltyBonusPercent: 50,
+    });
+    const stats = ofType(loyal.received(), 'player-stats')[0];
+    expect(stats?.loyaltyBonusPercent).toBe(50);
+    // Tries até o 100 (fator 1,1): 2.655.971; 50 % fecham quatro níveis (ver `loyalty.test.ts`).
+    expect(stats?.skills.melee).toEqual({ level: 100, percentToNext: 0, loyaltyLevel: 104 });
+    const attach = ofType(loyal.socket.received(), 'session-state').at(-1);
+    expect(attach?.self.loyaltyBonusPercent).toBe(50);
+    expect(attach?.self.skills.melee).toEqual({ level: 100, percentToNext: 0, loyaltyLevel: 104 });
+    // O persistido não sabe do bônus.
+    expect(loyal.hero().skills.getState()['melee']).toEqual({ level: 100, points: 0 });
+
+    const plain = hunt({
+      regen: false, stamina: MID_MINUTE_STAMINA_MS, monsters: false, skills: [TEST_MELEE_SKILL],
+      heroSkills: { melee: { level: 100, points: 0 } },
+    });
+    const plainStats = ofType(plain.received(), 'player-stats')[0];
+    expect(plainStats).not.toHaveProperty('loyaltyBonusPercent');
+    expect(plainStats?.skills.melee).toEqual({ level: 100, percentToNext: 0 });
+    const plainAttach = ofType(plain.socket.received(), 'session-state').at(-1);
+    expect(plainAttach?.self).not.toHaveProperty('loyaltyBonusPercent');
+  });
+
+  it('uma mudança SÓ do nível efetivo (Loyalty) gera player-stats — a comparação olha loyaltyLevel (#628)', () => {
+    // O nível efetivo sobe em passos que não coincidem com o nível/percentual BASE: existe um
+    // try que fecha o nível efetivo sem mexer em nenhum dos dois. Este teste o ENCONTRA (bisseção
+    // sobre os tries de um nível de custo alto, onde um try é uma fração de percentual ínfima) e
+    // ganha exatamente esse try — o HUD tem de receber o novo `loyaltyLevel` mesmo assim.
+    //
+    // Mutação que mata: tirar `a.loyaltyLevel === b.loyaltyLevel` de `sameSkillProgress`.
+    const melee: Skill = skillSchema.parse(TEST_MELEE_SKILL);
+    const at = (level: number, points: number) => new CharacterRuntime({
+      id: 'probe', position: { x: 0, y: 0, z: 7 }, health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+      level: 1, xp: 0, goldDelta: 0, alive: true, cooldowns: {}, skills: { melee: { level, points } },
+      loyaltyBonusPercent: 50,
+    });
+    let boundary: { level: number; points: number } | null = null;
+    for (let level = 40; level < 120 && boundary === null; level += 1) {
+      const cost = pointsForLevel(melee, level, 1.1);
+      const effective = (points: number) => at(level, points).loyaltyLevelOf(melee, 1.1);
+      if (effective(cost - 1) === effective(0)) continue;
+      let low = 0;
+      let high = cost - 1; // efetivo(low) < efetivo(high)
+      while (high - low > 1) {
+        const mid = Math.floor((low + high) / 2);
+        if (effective(mid) === effective(0)) low = mid; else high = mid;
+      }
+      const percent = (points: number) => at(level, points).skills.progressOf(melee, 1.1).percentToNext;
+      // Só serve se o try do meio NÃO mexe no percentual base (senão o teste não isola nada).
+      if (percent(low) === percent(high)) boundary = { level, points: low };
+    }
+    if (boundary === null) throw new Error('nenhum nível de custo alto tem um try de fronteira isolado');
+
+    const { runFor, received, hero } = hunt({
+      regen: false, stamina: MID_MINUTE_STAMINA_MS, monsters: false, skills: [TEST_MELEE_SKILL],
+      heroSkills: { melee: boundary }, loyaltyBonusPercent: 50,
+    });
+    const before = ofType(received(), 'player-stats');
+    expect(before).toHaveLength(1);
+    const beforeMelee = before[0]?.skills.melee;
+
+    hero().skills.gain(melee, 1);
+    runFor(100);
+
+    const stats = ofType(received(), 'player-stats');
+    expect(stats).toHaveLength(2);
+    const afterMelee = stats[1]?.skills.melee;
+    // Nível e percentual BASE iguais; só o efetivo andou um nível.
+    expect(afterMelee?.level).toBe(beforeMelee?.level);
+    expect(afterMelee?.percentToNext).toBe(beforeMelee?.percentToNext);
+    expect(afterMelee?.loyaltyLevel).toBe((beforeMelee?.loyaltyLevel ?? 0) + 1);
+    // Ciclo seguinte sem mudança: nenhum pacote a mais.
+    runFor(100);
+    expect(ofType(received(), 'player-stats')).toHaveLength(2);
   });
 
   it('a magia com tabela vira missile do conjurador ao alvo e effect NO alvo, com os ids da tabela', () => {
@@ -5104,6 +5200,225 @@ describe('a economia de Charms pelo socket (M39-02, #602, ADR 0052/0053)', () =>
     expect(hero.charms.assignmentOf('wound')).toBe('rat');
     const warning = warnings(socket)[0];
     expect(warning?.type === 'system-message' && warning.text).toContain('gold');
+  });
+});
+
+describe('aprender magia pelo socket (#624, ADR 0058, ADR 0052)', () => {
+  const heal = { kind: 'heal' as const, amount: 10, target: 'self' as const };
+  const berserk: Spell = {
+    id: 'berserk', name: 'Berserk', manaCost: 115, cooldownMs: 4_000, minLevel: 35, vocationId: 'knight',
+    learnPrice: 2_500, effect: heal,
+  };
+  const woundCleansing: Spell = {
+    id: 'wound-cleansing', name: 'Wound Cleansing', manaCost: 40, cooldownMs: 6_000, minLevel: 8,
+    vocationId: 'knight', learnPrice: 0, effect: heal,
+  };
+  const haste: Spell = {
+    id: 'haste-druid', name: 'Haste', manaCost: 60, cooldownMs: 2_000, minLevel: 14, vocationId: 'druid',
+    learnPrice: 600, effect: heal,
+  };
+  const unpriced: Spell = {
+    id: 'great-death-beam', name: 'Great Death Beam', manaCost: 140, cooldownMs: 10_000, minLevel: 30,
+    vocationId: 'knight', effect: heal,
+  };
+  const spellCatalog = new Map([berserk, woundCleansing, haste, unpriced].map((spell) => [spell.id, spell]));
+
+  const warnings = (socket: FakeSocket): string[] =>
+    socket.received().flatMap((m) => (m.type === 'system-message' && m.level === 'warning' ? [m.text] : []));
+  const learnedMessages = (socket: FakeSocket) =>
+    socket.received().filter((m): m is S2CMessage & { type: 'learned-spells' } => m.type === 'learned-spells');
+
+  /** Uma Cidade de verdade, com um knight nível `level` e `gold`, e o extrato de estado durável capturado. */
+  async function inCity(over: { level?: number; gold?: number; learned?: readonly string[] } = {}) {
+    const content = testContent();
+    const shard = new CityShard(content, () => 0);
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const directory = { register: async () => true, succeed: async () => true } as unknown as SessionDirectory;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger, receipts, directory, spellCatalog,
+      createSession: createCitySessionFactory(content, () => 0, shard),
+      buildSession: createSessionBuilder(content, () => 0, shard),
+      now: () => 0,
+    });
+    await host.prepare('p1', {
+      level: over.level ?? 40, xp: 0, gold: over.gold ?? 10_000, vocation: 'knight',
+      ...(over.learned === undefined ? {} : { learnedSpells: { spellIds: [...over.learned], version: 1 } }),
+    }, 'a1');
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    socket.frames.length = 0;
+    const hero = host.sessionFor('p1')?.participants[0] as CharacterRuntime;
+    return { host, viewer, socket, hero, saved };
+  }
+
+  it('compra na Cidade: debita o preço, marca a magia e manda `learned-spells` e o saldo novo', async () => {
+    const { host, viewer, socket, hero } = await inCity();
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
+    host.flush();
+
+    expect(hero.learnedSpells.has('berserk')).toBe(true);
+    expect(hero.gold + hero.goldDelta).toBe(7_500);
+    expect(warnings(socket)).toEqual([]);
+    expect(learnedMessages(socket).at(-1)?.spellIds).toEqual(['berserk']);
+    // O saldo novo chega ao HUD: a compra é a única coisa que mexeu no gold.
+    const stats = socket.received().filter((m) => m.type === 'player-stats').at(-1);
+    expect(stats?.type === 'player-stats' && stats.gold).toBe(7_500);
+  });
+
+  it('é IDEMPOTENTE: pedir de novo é recusado e NÃO cobra outra vez (invariante 10)', async () => {
+    const { host, viewer, socket, hero, saved } = await inCity();
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
+    host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
+    host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
+    host.flush();
+
+    expect(hero.gold + hero.goldDelta).toBe(7_500);
+    expect(warnings(socket)).toEqual([
+      'Você já aprendeu essa magia.', 'Você já aprendeu essa magia.',
+    ]);
+    // E o extrato liquida UMA cobrança, no mesmo registro que a magia (nunca uma sem a outra).
+    await host.release('p1', 1000, 'logout');
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({
+      aggregates: { goldSpent: 2_500, goldGained: 0 },
+      learnedSpells: { spellIds: ['berserk'], version: 1 },
+    });
+  });
+
+  it('a magia grátis (`learnPrice: 0`) fica aprendida sem gold nenhum', async () => {
+    const { host, viewer, hero } = await inCity({ gold: 0 });
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'wound-cleansing' });
+    host.flush();
+
+    expect(hero.learnedSpells.has('wound-cleansing')).toBe(true);
+    expect(hero.goldDelta).toBe(0);
+  });
+
+  it('cada recusa diz o motivo e não muda NADA: nem registro, nem gold, nem extrato', async () => {
+    const cases: Array<{ spellId: string; over?: { level?: number; gold?: number }; text: string }> = [
+      { spellId: 'no-such-spell', text: 'Essa magia não existe.' },
+      { spellId: 'great-death-beam', text: 'Ninguém ensina essa magia.' },
+      { spellId: 'haste-druid', over: { level: 40 }, text: 'Essa magia não é da sua vocação.' },
+      { spellId: 'berserk', over: { level: 34 }, text: 'Você ainda não tem o level dessa magia.' },
+      { spellId: 'berserk', over: { gold: 2_499 }, text: 'Você não tem gold suficiente para aprender essa magia.' },
+    ];
+    for (const { spellId, over, text } of cases) {
+      const { host, viewer, socket, hero, saved } = await inCity(over);
+      host.handle(viewer, { type: 'learn-spell', spellId });
+      host.flush();
+      expect(warnings(socket), spellId).toEqual([text]);
+      expect(hero.learnedSpells.size, spellId).toBe(0);
+      expect(hero.goldDelta, spellId).toBe(0);
+      expect(learnedMessages(socket), spellId).toEqual([]);
+      // Nada mudou, então a Cidade nem gera extrato de estado durável no logout.
+      await host.release('p1', 1000, 'logout');
+      expect(saved, spellId).toHaveLength(0);
+    }
+  });
+
+  it('sem catálogo de magias no host a compra é recusada com honestidade — nunca aceita às cegas', async () => {
+    const content = testContent();
+    const shard = new CityShard(content, () => 0);
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger,
+      createSession: createCitySessionFactory(content, () => 0, shard),
+      now: () => 0,
+    });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
+    host.flush();
+
+    expect(warnings(socket)).toEqual(['Essa magia não existe.']);
+  });
+
+  it('quem reconecta recebe o que já aprendeu — a barra não fica toda marcada até a próxima compra', async () => {
+    const { host, viewer, socket } = await inCity({ learned: ['wound-cleansing'] });
+
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+
+    expect(learnedMessages(socket).at(-1)?.spellIds).toEqual(['wound-cleansing']);
+  });
+
+  it('sessão que chegou SEM o registro não o reescreve vazio: o extrato omite o campo e o Postgres fica como está (ADR 0014)', async () => {
+    // Um ticket de um `api` anterior à issue (ou um snapshot antigo) não diz o que o personagem
+    // aprendeu. Gravar `{ spellIds: [] }` no logout apagaria a concessão da migração 0024.
+    const { host, viewer, saved } = await inCity();
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'defense' });
+    host.flush();
+    await host.release('p1', 1000, 'logout');
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ fightMode: 'defense' });
+    expect(saved[0]).not.toHaveProperty('learnedSpells');
+
+    // Já com o registro do ticket (vazio inclusive), ele é a verdade e vai no extrato.
+    const known = await inCity({ learned: [] });
+    known.host.handle(known.viewer, { type: 'set-fight-mode', mode: 'defense' });
+    known.host.flush();
+    await known.host.release('p1', 1000, 'logout');
+    expect(known.saved[0]).toMatchObject({ learnedSpells: { spellIds: [], version: 1 } });
+  });
+
+  it('o registro do ticket entra na sessão: quem comprou ontem entra hoje sabendo a magia', async () => {
+    const { hero } = await inCity({ learned: ['berserk', 'wound-cleansing'] });
+    expect(hero.learnedSpells.getState().spellIds).toEqual(['berserk', 'wound-cleansing']);
+  });
+
+  it('é aceito NA HUNT, sem rolagem: debita por `goldDelta` E pelo agregado `goldSpent` da sessão', async () => {
+    const content = testContent();
+    const shard = new CityShard(content, () => 0);
+    const saved: Array<Record<string, unknown> & { aggregates: { goldSpent: number } }> = [];
+    const receipts = {
+      save: async (r: Record<string, unknown> & { aggregates: { goldSpent: number } }) => { saved.push(r); },
+    } as unknown as ReceiptStore;
+    const directory = { register: async () => true, succeed: async () => true } as unknown as SessionDirectory;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger, receipts, directory, spellCatalog,
+      createSession: createCitySessionFactory(content, () => 0, shard),
+      buildSession: createSessionBuilder(content, () => 0, shard),
+      now: () => 0,
+    });
+    await host.prepare('p1', { level: 40, xp: 0, gold: 10_000, vocation: 'knight' }, 'a1');
+    await host.transition('p1', { to: 'hunt', huntId: 'arena', difficulty: 'cautious' });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    socket.frames.length = 0;
+    const hunt = host.sessionFor('p1');
+    const hero = hunt?.participants[0] as CharacterRuntime;
+    expect(hunt?.ruleset.type).toBe('hunt');
+    // O bot que vinha PULANDO a magia (recusa sem prazo) precisa acordar na compra — só nela.
+    const rearm = vi.spyOn(hunt?.ruleset as HuntRuleset, 'rearmBot');
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'unknown-spell' });
+    host.flush();
+    expect(rearm).not.toHaveBeenCalled();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
+    host.flush();
+
+    expect(rearm).toHaveBeenCalledTimes(1);
+    expect(rearm).toHaveBeenCalledWith(hunt, 'p1');
+    expect(warnings(socket)).toEqual([]);
+    expect(hero.learnedSpells.has('berserk')).toBe(true);
+    expect(hero.gold + hero.goldDelta).toBe(7_500);
+    expect(hunt?.aggregates.goldSpent).toBe(2_500);
+    expect(learnedMessages(socket).at(-1)?.spellIds).toEqual(['berserk']);
+
+    // O extrato da hunt leva a magia e a cobrança JUNTAS.
+    await host.transition('p1', { to: 'city' });
+    const receipt = saved.find((r) => r.aggregates.goldSpent === 2_500);
+    expect(receipt).toMatchObject({ learnedSpells: { spellIds: ['berserk'], version: 1 } });
   });
 });
 
@@ -7323,6 +7638,7 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
           id: characterId, position: { x: 1, y: 1, z: 7 },
           health: 1_200, maxHealth: 1_200, mana: 50, maxMana: 50,
           level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+          learnedSpells: learnedSpellsStateOf(content.spells.keys()),
         }));
         sessions.push(session);
         return session;

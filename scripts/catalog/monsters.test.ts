@@ -7,9 +7,10 @@ import { bestiaryEntrySchema, MONSTER_CLASSES, monsterSchema } from '../../packa
 import { readSourceCommit } from './env.js';
 import type { CatalogEntity } from './generated-writer.js';
 import {
-  BESTIARY_CLASS_MAP, CANARY_LOOT_CHANCE_SCALE, convertMonster, corpseTtlMsFromChain,
-  listMonsterFiles, loadReaderDeps, lootChance, readCorpseDecayChains, readFamiliarLooktypes,
-  readMonsterCatalog, readTfsSpeeds, slugify, type DecayStage, type MonsterReaderDeps,
+  BESTIARY_CLASS_MAP, CANARY_LOOT_CHANCE_SCALE, convertMonster, corpseAnimatableWindows,
+  corpseTtlMsFromChain, listMonsterFiles, loadReaderDeps, lootChance, readCorpseDecayChains,
+  readCorpseItemFlags, readFamiliarLooktypes, readMonsterCatalog, readTfsSpeeds, slugify,
+  type CorpseItemFlags, type DecayStage, type MonsterReaderDeps,
 } from './monsters.js';
 import type { CatalogImportContext } from './registry.js';
 import { ABILITY_KIND_SUPPORTED } from './monster-abilities.js';
@@ -195,6 +196,20 @@ monster.summon = { maxSummons = 1, summons = { { name = "Test Rat", chance = 20,
 mType:register(monster)
 `;
 
+// O que a Convince Creature Rune aceita (#600): `flags.convinceable` e o `manaCost` que ela debita.
+const CONVINCEABLE = `
+local mType = Game.createMonsterType("Test Skeleton")
+local monster = {}
+monster.outfit = { lookType = 21 }
+monster.health = 50
+monster.maxHealth = 50
+monster.corpse = 1
+monster.speed = 80
+monster.manaCost = 300
+monster.flags = { summonable = true, convinceable = true, targetDistance = 1 }
+mType:register(monster)
+`;
+
 // Um boss sintético (#629): o bloco `monster.bosstiary` do Canary, sem `Bestiary` (boss não tem
 // ficha de Bestiário).
 const BOSS = (bosstiary: string) => `
@@ -266,6 +281,7 @@ function fixture(withTfs: boolean): CatalogImportContext {
   write(join(monsters, 'undeads', 'test_wraith.lua'), OUT_OF_PACK);
   write(join(monsters, 'undeads', 'test_summoner.lua'), SUMMONER);
   write(join(monsters, 'mammals', 'test_rat_caller.lua'), RAT_CALLER);
+  write(join(monsters, 'undeads', 'test_skeleton.lua'), CONVINCEABLE);
   write(join(canary, 'data', 'items', 'items.xml'), ITEMS_XML);
   if (withTfs) write(join(tfs, 'data', 'monster', 'monsters', 'test drake.xml'), TFS_DRAKE);
   return {
@@ -497,6 +513,137 @@ describe('convertMonster (fixture sintética)', () => {
   });
 });
 
+
+// ---------------------------------------------------------------------------------------------
+// Convince Creature e Animate Dead (#600): `convinceable`, `manaCost` e as janelas do cadáver.
+
+/** Um varint protobuf de até 32 bits. */
+const varint = (value: number): number[] => {
+  const out: number[] = [];
+  let rest = value;
+  while (rest > 0x7f) { out.push((rest & 0x7f) | 0x80); rest = Math.floor(rest / 128); }
+  out.push(rest);
+  return out;
+};
+const pbField = (field: number, wire: number, payload: readonly number[]): number[] =>
+  [...varint(field * 8 + wire), ...payload];
+const pbBytes = (field: number, bytes: readonly number[]): number[] =>
+  pbField(field, 2, [...varint(bytes.length), ...bytes]);
+
+/** Um `Appearance` de objeto (campo 1 do `Appearances`) com as flags que a Animate Dead lê. */
+function appearanceBytes(id: number, flags: { corpse?: boolean; playerCorpse?: boolean; unmove?: boolean }): number[] {
+  const flagBytes = [
+    // Uma submensagem e um varint que o leitor NÃO conhece (`bank`, `clip`): pulados por wire type.
+    ...pbBytes(1, pbField(1, 0, [5])),
+    ...pbField(2, 0, [1]),
+    ...(flags.unmove === true ? pbField(14, 0, [1]) : []),
+    ...(flags.corpse === true ? pbField(42, 0, [1]) : []),
+    ...(flags.playerCorpse === true ? pbField(43, 0, [1]) : []),
+  ];
+  return pbBytes(1, [...pbField(1, 0, varint(id)), ...pbBytes(3, flagBytes)]);
+}
+
+/** O `appearances.dat` sintético: dois cadáveres, um item comum e um OUTFIT (campo 2, ignorado). */
+function writeAppearances(path: string): void {
+  const bytes = [
+    ...appearanceBytes(1, { corpse: true, unmove: true }),
+    ...appearanceBytes(2, { corpse: true }),
+    ...appearanceBytes(3, { playerCorpse: true }),
+    ...appearanceBytes(4, {}),
+    // Um outfit com o mesmo id 1: NÃO pode sobrescrever o objeto 1.
+    ...pbBytes(2, [...pbField(1, 0, [1]), ...pbBytes(3, pbField(42, 0, [1]))]),
+  ];
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, Buffer.from(bytes));
+}
+
+describe('readCorpseItemFlags (#600, `appearances.dat`)', () => {
+  it('lê corpse/player_corpse e unmove só dos OBJETOS, pulando o resto por wire type', () => {
+    workdir = mkdtempSync(join(tmpdir(), 'catalog-appearances-'));
+    const path = join(workdir, 'appearances.dat');
+    writeAppearances(path);
+    expect(readCorpseItemFlags(path)).toEqual(new Map([
+      [1, { movable: false }],
+      [2, { movable: true }],
+      [3, { movable: true }],
+    ]));
+  });
+
+  it('arquivo ausente devolve mapa vazio, nunca lança nem inventa um cadáver movível', () => {
+    expect(readCorpseItemFlags('/nao/existe/appearances.dat')).toEqual(new Map());
+  });
+});
+
+describe('corpseAnimatableWindows (#600)', () => {
+  const chain = (...stages: [number, number | undefined][]): Map<number, DecayStage> =>
+    new Map(stages.map(([seconds, decayTo], index) => [
+      index + 1, decayTo === undefined ? { durationSeconds: seconds } : { durationSeconds: seconds, decayTo },
+    ]));
+  const flags = (movable: readonly boolean[]): Map<number, CorpseItemFlags> =>
+    new Map(movable.map((value, index) => [index + 1, { movable: value }]));
+
+  it('o estágio recém-abatido é `unmove`: a janela abre no primeiro decaimento e vai até o fim da cadeia', () => {
+    // 10 s (unmove) → 300 s → 300 s → 60 s (todos movíveis): o caso de 610 dos 1.028 monstros.
+    const chains = chain([10, 2], [300, 3], [300, 4], [60, 0]);
+    expect(corpseAnimatableWindows(1, chains, flags([false, true, true, true])))
+      .toEqual([{ fromMs: 10_000, untilMs: 670_000 }]);
+    expect(corpseTtlMsFromChain(1, chains)).toBe(670_000);
+  });
+
+  it('o primeiro estágio já movível abre a janela em zero', () => {
+    expect(corpseAnimatableWindows(1, chain([5, 2], [10, 0]), flags([true, true])))
+      .toEqual([{ fromMs: 0, untilMs: 15_000 }]);
+  });
+
+  it('estágios movíveis separados por um imóvel viram DUAS janelas', () => {
+    expect(corpseAnimatableWindows(1, chain([10, 2], [20, 3], [30, 0]), flags([true, false, true])))
+      .toEqual([{ fromMs: 0, untilMs: 10_000 }, { fromMs: 30_000, untilMs: 60_000 }]);
+  });
+
+  it('sem estágio movível, sem flags, sem cadeia ou sem `corpse`: undefined (nunca animável)', () => {
+    expect(corpseAnimatableWindows(1, chain([10, 0]), flags([false]))).toBeUndefined();
+    expect(corpseAnimatableWindows(1, chain([10, 0]), new Map())).toBeUndefined();
+    expect(corpseAnimatableWindows(9, chain([10, 0]), flags([true]))).toBeUndefined();
+    expect(corpseAnimatableWindows(undefined, chain([10, 0]), flags([true]))).toBeUndefined();
+  });
+
+  it('ciclo no decayTo termina sem repetir janela', () => {
+    const cyclic: Map<number, DecayStage> = new Map([
+      [1, { durationSeconds: 10, decayTo: 2 }], [2, { durationSeconds: 10, decayTo: 1 }],
+    ]);
+    expect(corpseAnimatableWindows(1, cyclic, flags([true, true]))).toEqual([{ fromMs: 0, untilMs: 20_000 }]);
+  });
+});
+
+describe('convertMonster: convinceable, manaCost e corpseAnimatable (#600)', () => {
+  it('traz `convinceable`, o `manaCost` do monstro e a janela do cadáver; `summonable` NÃO sai', () => {
+    const ctx = fixture(false);
+    writeAppearances(join(ctx.canaryDir, 'data', 'items', 'appearances.dat'));
+    const converted = convertMonster(CONVINCEABLE, 'x/undeads/test_skeleton.lua', 'undeads', COMMIT, deps(ctx));
+
+    expect(converted.blockers).toEqual([]);
+    // `monster.corpse = 1`: 1 (10 s, unmove) → 2 (5 s, movível) → fim.
+    expect(converted.entity).toMatchObject({
+      id: 'test-skeleton', convinceable: true, manaCost: 300, corpseTtlMs: 15_000,
+      corpseAnimatable: [{ fromMs: 10_000, untilMs: 15_000 }],
+    });
+    expect(converted.entity['summonable']).toBeUndefined();
+    expect(() => monsterSchema.parse(asMonster(converted.entity))).not.toThrow();
+  });
+
+  it('monstro sem os campos não ganha nenhum (`manaCost` 0 não é escrito, sem `.dat` não há janela)', () => {
+    const ctx = fixture(false);
+    const text = CONVINCEABLE.replace('monster.manaCost = 300', 'monster.manaCost = 0')
+      .replace('convinceable = true', 'convinceable = false');
+    const converted = convertMonster(text, 'x/undeads/test_skeleton.lua', 'undeads', COMMIT, deps(ctx));
+    expect(converted.entity['convinceable']).toBeUndefined();
+    expect(converted.entity['manaCost']).toBeUndefined();
+    // O fixture não escreveu `appearances.dat`: sem o dado do Canary, nunca animável.
+    expect(converted.entity['corpseAnimatable']).toBeUndefined();
+    expect(converted.entity['corpseTtlMs']).toBe(15_000);
+  });
+});
+
 describe('o Bosstiary do Canary (#629)', () => {
   const convertBoss = (bosstiary: string) => {
     const ctx = fixture(false);
@@ -607,7 +754,7 @@ describe('readMonsterCatalog (fixture sintética)', () => {
     expect(listMonsterFiles(ctx.canaryDir)).toContain('data-otservbr-global/monster/familiars/test_familiar.lua');
     const catalog = readMonsterCatalog(ctx, deps(ctx));
 
-    expect([...catalog.slices.keys()].sort()).toEqual(['dragons', 'familiars', 'mammals']);
+    expect([...catalog.slices.keys()].sort()).toEqual(['dragons', 'familiars', 'mammals', 'undeads']);
     expect(catalog.slices.get('dragons')?.map((entity) => entity.id)).toEqual(['test-drake']);
     // O familiar do Monk é lido e barrado pelo recorte, com o motivo no relatório.
     expect(catalog.slices.get('familiars')?.map((entity) => entity.id)).toEqual(['test-familiar']);
@@ -694,6 +841,21 @@ describe.skipIf(!HAS_CANARY)('leitor contra o Canary real (CANARY_DIR)', () => {
     ] as const) {
       expect(generated[field], field).toEqual(authored[field]);
     }
+  });
+
+  it('Convince e Animate Dead (#600): o Skeleton é convencível (mana 300) e só animável 10 s depois da morte', () => {
+    const skeleton = convertReal('undeads/skeleton.lua');
+    expect(skeleton.blockers).toEqual([]);
+    // `skeleton.lua`: `monster.manaCost = 300`, `flags.convinceable = true`; `monster.corpse = 5972`
+    // (10 s, `unmove` no `appearances.dat`) → 4024 (300 s) → … → 670 s de cadeia inteira.
+    expect(skeleton.entity).toMatchObject({
+      convinceable: true, manaCost: 300, corpseTtlMs: 670_000,
+      corpseAnimatable: [{ fromMs: 10_000, untilMs: 670_000 }],
+    });
+    // O Dragon não é convencível (`dragon.lua` não declara), e o cadáver dele também nasce `unmove`.
+    const dragon = convertReal('dragons/dragon.lua');
+    expect(dragon.entity['convinceable']).toBeUndefined();
+    expect(dragon.entity['corpseAnimatable']).toEqual([{ fromMs: 10_000, untilMs: 670_000 }]);
   });
 
   it('o Slime invoca Slime (maxSummons 3, chance 10, intervalo 2000, até 3)', () => {

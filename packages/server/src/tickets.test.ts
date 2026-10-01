@@ -160,6 +160,51 @@ describe.runIf(available)('session ticket', () => {
     }
   });
 
+  it('carries the learned spells, and drops a record it cannot trust (#624)', async () => {
+    // As magias entram na sessão pelo ticket porque o CAST as confere: um personagem que entrasse
+    // sem elas não lançaria nada, apesar de ter pago. Torto vira AUSENTE, nunca ticket recusado
+    // (a linha é `jsonb` sem CHECK). Mutação que mata: aceitar qualquer objeto — a lista com
+    // repetido, o id vazio e a lista que não é lista passariam.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+
+    const learnedSpells = { spellIds: ['berserk', 'wound-cleansing'], version: 1 };
+    const good = await tickets.issue('a1', 'p1', { level: 1, xp: 0, learnedSpells });
+    if (!good.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(good.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+      initialCharacter: { level: 1, xp: 0, learnedSpells },
+    });
+
+    // A lista VAZIA é válida: é o personagem novo, e distinguir "não veio" de "veio vazio" é do tipo.
+    const empty = await tickets.issue('a1', 'p1', { level: 1, xp: 0, learnedSpells: { spellIds: [], version: 1 } });
+    if (!empty.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(empty.value.ticket, 'n1')).toMatchObject({
+      initialCharacter: { level: 1, xp: 0, learnedSpells: { spellIds: [], version: 1 } },
+    });
+
+    for (const bad of [
+      { spellIds: ['berserk', 'berserk'], version: 1 },
+      { spellIds: [''], version: 1 },
+      { spellIds: [7], version: 1 },
+      { spellIds: 'berserk', version: 1 },
+      { spellIds: ['berserk'] },
+      { spellIds: ['berserk'], version: '1' },
+      ['berserk'],
+      'berserk',
+      null,
+    ]) {
+      const issued = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, learnedSpells: bad } as unknown as InitialCharacter,
+      );
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1'), JSON.stringify(bad)).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0 },
+      });
+    }
+  });
+
   it('carries the familiar stamps, and drops a record it cannot trust (#599)', async () => {
     // Os dois carimbos de relógio de PAREDE do familiar entram na sessão pelo ticket: é ELA quem os
     // compara com o relógio, e o cooldown de 30 min tem de atravessar a saída da hunt. Um registro
@@ -437,6 +482,35 @@ describe.runIf(available)('session ticket', () => {
       accountId: 'a1', characterId: 'p1', nodeId: 'n1',
       initialCharacter: { level: 1, xp: 0 },
     });
+  });
+
+  it('carries the Loyalty bonus of the account, and drops a value it cannot trust (#628)', async () => {
+    // O bônus é da IDADE DA CONTA, calculado pela `api` na emissão e fixado na sessão (ADR 0052
+    // d.5): sem ele no ticket, o `game` — que não fala com o Postgres — valeria o nível base a
+    // hunt inteira. Um valor torto (fracionário, zero, negativo, texto, acima do `uint16_t` do
+    // Canary) vira AUSENTE, nunca ticket recusado, a mesma régua do Premium.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+    for (const loyaltyBonusPercent of [5, 50]) {
+      const issued = await tickets.issue('a1', 'p1', { level: 1, xp: 0, loyaltyBonusPercent });
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1')).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0, loyaltyBonusPercent },
+      });
+      await tickets.revoke(issued.value.ticket, 'a1', 'p1');
+    }
+    for (const torto of [0, -5, 7.5, 65_536, '5', null]) {
+      const issued = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, loyaltyBonusPercent: torto } as unknown as InitialCharacter,
+      );
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1')).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0 },
+      });
+      await tickets.revoke(issued.value.ticket, 'a1', 'p1');
+    }
   });
 
   it('revoke frees the slot, the ticket and the reservation (#195)', async () => {
