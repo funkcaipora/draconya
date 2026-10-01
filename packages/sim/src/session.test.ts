@@ -638,7 +638,7 @@ describe('entrada em curso: reversão e joinedAtMs (#397, ADR 0035 decisão 6)',
       // Identidade e progressão: atravessam a sessão, é para isso que existem.
       id: 'none', position: 'none', health: 'none', maxHealth: 'none', mana: 'none', maxMana: 'none',
       level: 'none', xp: 'none', soul: 'none', vocationId: 'none', boostedMonsterId: 'none', speed: 'none',
-      gold: 'none', goldDelta: 'none', alive: 'none', skills: 'none', bestiary: 'none', bosstiary: 'none', charms: 'none',
+      gold: 'none', goldDelta: 'none', alive: 'none', skills: 'none', bestiary: 'none', bosstiary: 'none', charms: 'none', learnedSpells: 'none',
       capacity: 'none', inventory: 'none', removedInstances: 'none', lootSeq: 'none',
       contribution: 'none', ammo: 'none', supplyStock: 'none', ammunitionStock: 'none', storages: 'none',
       direction: 'none', blessings: 'none', promoted: 'none', fightMode: 'none',
