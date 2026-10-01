@@ -5,7 +5,7 @@ import { applyDamageOutcome } from './combat/outcome.js';
 import type { DamageOutcome } from './combat/damage.js';
 import {
   Conditions, conditionFromSpec, conditionImmunityOf, damageOverTimeTicks, generateDamageList,
-  resolveSpeedPercent, retiredTick, rollDrunkDeviation, tickOf,
+  outfitConditionOf, resolveSpeedPercent, retiredTick, rollDrunkDeviation, tickOf,
 } from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import { MonsterRuntime } from './monster/monster.js';
@@ -644,6 +644,81 @@ describe('conditionImmunityOf — que imunidade de monstro barra esta condição
     })).toBeNull();
     expect(conditionImmunityOf({ key: 'buff', expiresAtMs: 1, damageTakenPercent: -20 })).toBeNull();
     expect(conditionImmunityOf({ key: 'mana-shield', expiresAtMs: 1 })).toBeNull();
+  });
+});
+
+
+describe('a condição `outfit` — a aparência emprestada (#621, M44-03, `ConditionOutfit` do Canary)', () => {
+  const rat = { monsterId: 'rat' } as const;
+  const dragon = { monsterId: 'dragon' } as const;
+  const spec = (look: typeof rat | typeof dragon, durationMs: number) => ({
+    key: 'outfit' as const, merge: 'strongest' as const, durationMs,
+    effect: { kind: 'outfit' as const, look },
+  });
+
+  it('`conditionFromSpec` carrega o `look` e o prazo absoluto, sem tique nem campo de combate', () => {
+    const condition = conditionFromSpec(spec(rat, 4_000), 'm:2', 'm:1', 1_000, 'monster-attack');
+    expect(condition).toEqual({
+      key: 'outfit', targetId: 'm:2', sourceId: 'm:1', expiresAtMs: 5_000, merge: 'strongest', look: rat,
+    });
+    expect(tickOf(condition)).toBeNull();
+    expect(condition.speedPercent).toBeUndefined();
+    expect(condition.damageTakenPercent).toBeUndefined();
+  });
+
+  it('o lançamento do jogador (`outfitConditionOf`) monta a MESMA condição', () => {
+    expect(outfitConditionOf(dragon, 180_000, 'hero', 'hero', 2_000, 'creature-illusion'))
+      .toEqual({
+        key: 'outfit', targetId: 'hero', spellId: 'creature-illusion', sourceId: 'hero',
+        expiresAtMs: 182_000, merge: 'strongest', look: dragon,
+      });
+  });
+
+  it('`Conditions.look()` lê a aparência emprestada, e `null` sem ela', () => {
+    const conditions = new Conditions();
+    expect(conditions.look()).toBeNull();
+    conditions.apply(outfitConditionOf(rat, 10_000, 'hero', 'hero', 0));
+    expect(conditions.look()).toEqual(rat);
+    conditions.remove('outfit');
+    expect(conditions.look()).toBeNull();
+  });
+
+  it('fusão do Canary (`Condition::updateCondition`): o que acaba DEPOIS vence; o que acaba antes é recusado', () => {
+    const conditions = new Conditions();
+    conditions.apply(outfitConditionOf(rat, 10_000, 'hero', 'hero', 0)); // acaba em 10 000
+    // Um segundo outfit que acabaria ANTES do que já está ativo não entra: nem a aparência, nem o prazo.
+    const shorter = outfitConditionOf(dragon, 4_000, 'hero', 'hero', 1_000); // acaba em 5 000
+    expect(conditions.apply(shorter)?.look).toEqual(rat);
+    expect(conditions.look()).toEqual(rat);
+    expect(conditions.get('outfit')?.expiresAtMs).toBe(10_000);
+    // Um que acaba DEPOIS substitui os dois.
+    conditions.apply(outfitConditionOf(dragon, 20_000, 'hero', 'hero', 1_000)); // acaba em 21 000
+    expect(conditions.look()).toEqual(dragon);
+    expect(conditions.get('outfit')?.expiresAtMs).toBe(21_000);
+  });
+
+  it('o empate no fim também substitui — `getEndTime() > now + ticks` recusa só o ESTRITAMENTE maior', () => {
+    const conditions = new Conditions();
+    conditions.apply(outfitConditionOf(rat, 10_000, 'hero', 'hero', 0)); // acaba em 10 000
+    conditions.apply(outfitConditionOf(dragon, 5_000, 'hero', 'hero', 5_000)); // também em 10 000
+    expect(conditions.look()).toEqual(dragon);
+  });
+
+  it('o monstro carrega a aparência emprestada como qualquer outra condição', () => {
+    const monster = new MonsterRuntime({
+      id: 1, monsterId: 'rat', position: { x: 0, y: 0 }, home: { x: 0, y: 0 },
+      health: 100, targetId: null, cooldowns: {},
+    });
+    expect(monster.conditions.look()).toBeNull();
+    monster.conditions.apply(outfitConditionOf(dragon, 10_000, monster.subject, monster.subject, 0));
+    expect(monster.conditions.look()).toEqual(dragon);
+    // Sobrevive ao snapshot: `look` é um campo do estado da condição.
+    const restored = new MonsterRuntime(monster.getState());
+    expect(restored.conditions.look()).toEqual(dragon);
+  });
+
+  it('`outfit` casa com a imunidade `outfit` — e só com ela', () => {
+    expect(conditionImmunityOf(outfitConditionOf(rat, 1_000, 'hero', 'hero', 0))).toBe('outfit');
   });
 });
 

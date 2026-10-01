@@ -196,6 +196,7 @@
       "rarity": "nemesis",
       "raceId": 440
     },
+    "rewardBoss": true,
     "outfitId": 264
   },
   {
@@ -361,6 +362,7 @@
       "rarity": "nemesis",
       "raceId": 635
     },
+    "rewardBoss": true,
     "outfitId": 343
   },
   {
@@ -516,6 +518,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/brutus_bloodbeard.lua"
     },
+    "rewardBoss": true,
     "outfitId": 98
   },
   {
@@ -655,6 +658,30 @@
           "missileKey": "death",
           "impactKey": "smallclouds"
         }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 3
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "explosion"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 4000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "skeleton"
+            }
+          }
+        }
       }
     ],
     "defenses": [
@@ -714,6 +741,7 @@
       "rarity": "nemesis",
       "raceId": 430
     },
+    "rewardBoss": true,
     "outfitId": 196
   },
   {
@@ -839,6 +867,25 @@
         "presentation": {
           "impactKey": "blueshimmer"
         }
+      },
+      {
+        "id": "outfit-2",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "chayenne"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "energyhit"
+        }
       }
     ],
     "targetChange": {
@@ -871,6 +918,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/chayenne.lua"
     },
+    "rewardBoss": true,
     "outfitId": 155
   },
   {
@@ -1056,6 +1104,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/deadeye_devious.lua"
     },
+    "rewardBoss": true,
     "outfitId": 151
   },
   {
@@ -1483,6 +1532,25 @@
         "presentation": {
           "impactKey": "magic-red"
         }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 1000,
+        "chance": 0.05,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 14000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "war-wolf"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
       }
     ],
     "targetChange": {
@@ -1541,6 +1609,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 206
   },
   {
@@ -1621,6 +1690,7 @@
       "rarity": "nemesis",
       "raceId": 640
     },
+    "rewardBoss": true,
     "outfitId": 341
   },
   {
@@ -2033,6 +2103,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/glooth_bomb.lua"
     },
+    "rewardBoss": true,
     "outfitId": 680
   },
   {
@@ -2189,6 +2260,7 @@
       "rarity": "nemesis",
       "raceId": 205
     },
+    "rewardBoss": true,
     "outfitId": 205
   },
   {
@@ -2322,6 +2394,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 155
   },
   {
@@ -2522,6 +2595,7 @@
       "rarity": "nemesis",
       "raceId": 338
     },
+    "rewardBoss": true,
     "outfitId": 128
   },
   {
@@ -2749,6 +2823,7 @@
       "rarity": "archfoe",
       "raceId": 1028
     },
+    "rewardBoss": true,
     "outfitId": 595
   },
   {
@@ -3016,6 +3091,7 @@
         }
       ]
     },
+    "rewardBoss": true,
     "outfitId": 209
   },
   {
@@ -3206,6 +3282,7 @@
       "rarity": "nemesis",
       "raceId": 970
     },
+    "rewardBoss": true,
     "outfitId": 259
   },
   {
@@ -4569,6 +4646,7 @@
       "rarity": "nemesis",
       "raceId": 201
     },
+    "rewardBoss": true,
     "outfitId": 201
   },
   {
@@ -4736,6 +4814,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/ron_the_ripper.lua"
     },
+    "rewardBoss": true,
     "outfitId": 151
   },
   {
@@ -4835,6 +4914,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/raids/rottie_the_rotworm.lua"
     },
+    "rewardBoss": true,
     "outfitId": 26
   },
   {
@@ -4914,6 +4994,7 @@
       "rarity": "nemesis",
       "raceId": 459
     },
+    "rewardBoss": true,
     "outfitId": 295
   },
   {
@@ -5110,6 +5191,7 @@
       "rarity": "nemesis",
       "raceId": 476
     },
+    "rewardBoss": true,
     "outfitId": 287
   },
   {
@@ -5651,6 +5733,7 @@
       "rarity": "nemesis",
       "raceId": 972
     },
+    "rewardBoss": true,
     "outfitId": 557
   },
   {
@@ -5824,6 +5907,7 @@
       "rarity": "nemesis",
       "raceId": 428
     },
+    "rewardBoss": true,
     "outfitId": 137
   },
   {
@@ -5854,6 +5938,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 180,
     "aggroRadius": 11,
@@ -5919,6 +6004,7 @@
       "rarity": "nemesis",
       "raceId": 956
     },
+    "rewardBoss": true,
     "outfitId": 570
   },
   {
@@ -6232,6 +6318,7 @@
       "rarity": "nemesis",
       "raceId": 628
     },
+    "rewardBoss": true,
     "outfitId": 334
   }
 ]

@@ -144,7 +144,9 @@ describe('apresentação de combate E2E (M24-12, #477)', () => {
     const title = slotTitle(
       {
         label: 'Avalanche Rune', hotkey: undefined, element: undefined, cooldownMs: 0, blocked: true,
-        needsAim: false, unlearned: false,
+        needsAim: false,
+        aimsAtItem: false,
+        unlearned: false,
       },
       reason,
     );

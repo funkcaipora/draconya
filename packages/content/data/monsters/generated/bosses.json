@@ -239,7 +239,8 @@
           "count": 2
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "armenius-creature",
@@ -349,6 +350,25 @@
     ],
     "defenses": [
       {
+        "id": "outfit",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "bat"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "groundshaker"
+        }
+      },
+      {
         "id": "haste",
         "cadenceMs": 2000,
         "chance": 0.15,
@@ -409,7 +429,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/armenius.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "bazir",
@@ -742,6 +763,64 @@
         }
       },
       {
+        "id": "outfit",
+        "cadenceMs": 1000,
+        "chance": 0.02,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 8,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "loseenergy"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "demon"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-2",
+        "cadenceMs": 1000,
+        "chance": 0.02,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 8,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "loseenergy"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "objectKey": "strange-symbol"
+            }
+          }
+        }
+      },
+      {
         "id": "fireball",
         "cadenceMs": 1000,
         "chance": 0.34,
@@ -861,6 +940,25 @@
             "kind": "invisible"
           }
         }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 1000,
+        "chance": 0.02,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 7000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "objectKey": "used-lamp"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
       }
     ],
     "targetChange": {
@@ -920,7 +1018,8 @@
           "count": 1
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "bibby-bloodbath",
@@ -1132,7 +1231,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 900
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "big-boss-trolliver",
@@ -1250,7 +1350,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 432
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "black-knight",
@@ -1457,7 +1558,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 46
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "brain-parasite",
@@ -1814,7 +1916,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 2366
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "chikhaton",
@@ -1935,7 +2038,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 647
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "clubarc-the-plunderer",
@@ -2119,7 +2223,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/clubarc_the_plunderer.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "dharalion",
@@ -2361,7 +2466,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 203
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "diblis-the-fair",
@@ -2550,7 +2656,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 477
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "diseased-bill",
@@ -2777,7 +2884,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 485
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "diseased-dan",
@@ -3003,7 +3111,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 486
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "diseased-fred",
@@ -3230,7 +3339,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 484
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "ekatrix",
@@ -3259,6 +3369,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 204,
     "aggroRadius": 11,
@@ -3444,7 +3555,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1140
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "elvira-hammerthrust",
@@ -3474,6 +3586,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 103,
     "aggroRadius": 11,
@@ -3605,7 +3718,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 858
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "general-murius",
@@ -3825,7 +3939,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 207
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "glitterscale",
@@ -3957,7 +4072,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 670
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "grandfather-tridian",
@@ -4158,7 +4274,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 431
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "groam",
@@ -4297,7 +4414,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 736
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "guard-captain-quaid",
@@ -4575,7 +4693,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 1791
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "hairman-the-huge",
@@ -4689,7 +4808,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 425
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "incredibly-old-witch",
@@ -4732,6 +4852,269 @@
       "rollModel": "canary",
       "items": []
     },
+    "abilities": [
+      {
+        "id": "outfit",
+        "cadenceMs": 4000,
+        "chance": 0.12,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 2000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "rat"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-2",
+        "cadenceMs": 4000,
+        "chance": 0.12,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 2000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "chicken"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-3",
+        "cadenceMs": 4000,
+        "chance": 0.12,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 2000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "green-frog"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-4",
+        "cadenceMs": 4000,
+        "chance": 0.12,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 2000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "bug"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-5",
+        "cadenceMs": 4000,
+        "chance": 0.12,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 2000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "pig"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-6",
+        "cadenceMs": 4000,
+        "chance": 0.12,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 2000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "kongra"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-7",
+        "cadenceMs": 4000,
+        "chance": 0.12,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 2000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "dog"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-8",
+        "cadenceMs": 4000,
+        "chance": 0.12,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 2000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "skunk"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-9",
+        "cadenceMs": 4000,
+        "chance": 0.12,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 2000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "donkey"
+            }
+          }
+        }
+      }
+    ],
     "targetChange": {
       "intervalMs": 5000,
       "chance": 0.08
@@ -4744,7 +5127,6 @@
     },
     "runOnHealth": 100,
     "staticAttack": 0.9,
-    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 3610000,
     "voices": {
       "intervalMs": 5000,
@@ -5104,7 +5486,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/izcandar_champion_of_summer.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "izcandar-champion-of-winter",
@@ -5429,7 +5812,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/izcandar_champion_of_winter.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "jesse-the-wicked",
@@ -5662,7 +6046,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/kraknaknork's_demon.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "mad-mage",
@@ -5958,7 +6343,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 703
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "mad-technomancer",
@@ -5990,6 +6376,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 200,
     "aggroRadius": 11,
@@ -6133,7 +6520,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/mad_technomancer.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "morik-the-gladiator",
@@ -6296,7 +6684,8 @@
           "count": 2
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "mornenion",
@@ -6686,6 +7075,64 @@
         }
       },
       {
+        "id": "outfit",
+        "cadenceMs": 1000,
+        "chance": 0.02,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 8,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "loseenergy"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "demon"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-2",
+        "cadenceMs": 1000,
+        "chance": 0.02,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 8,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "loseenergy"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "objectKey": "strange-symbol"
+            }
+          }
+        }
+      },
+      {
         "id": "fireball",
         "cadenceMs": 1000,
         "chance": 0.34,
@@ -6805,6 +7252,25 @@
             "kind": "invisible"
           }
         }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 1000,
+        "chance": 0.02,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 7000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "objectKey": "used-lamp"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
       }
     ],
     "targetChange": {
@@ -6852,7 +7318,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 2118
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "munster",
@@ -6952,7 +7419,8 @@
           "count": 2
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "mutated-visco",
@@ -7211,7 +7679,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/visco.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "pythius-the-rotten",
@@ -7440,7 +7909,8 @@
           "count": 2
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "raxias",
@@ -7592,7 +8062,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 1624
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "renegade-orc",
@@ -7744,7 +8215,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/renegade_orc.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "robby-the-reckless",
@@ -8062,7 +8534,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 435
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "smuggler-baron-silvertoe",
@@ -8226,7 +8699,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 436
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "splasher",
@@ -8488,7 +8962,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/splasher.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "sugar-daddy",
@@ -8747,7 +9222,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 2562
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "sugar-mommy",
@@ -8933,7 +9409,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 2580
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "teleskor",
@@ -9034,7 +9511,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/teleskor.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-abomination",
@@ -9324,7 +9802,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 373
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-blightfather",
@@ -9431,7 +9910,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 638
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-book-of-death",
@@ -9853,7 +10333,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 2055
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-collector",
@@ -10001,7 +10482,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/the_collector.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-evil-eye",
@@ -10345,7 +10827,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 210
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-first-dragon",
@@ -10374,6 +10857,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 350,
     "aggroRadius": 11,
@@ -10572,7 +11056,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 1368
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-frog-prince",
@@ -10663,7 +11148,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 420
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-rootkraken",
@@ -10811,7 +11297,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 2528
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "vemiath",
@@ -11107,7 +11594,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 2365
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "warlord-ruzad",
@@ -11255,7 +11743,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 419
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "weakened-demon",
@@ -11336,7 +11825,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/weakened_demon.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "willi-wasp",
@@ -11362,6 +11852,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 1500,
     "speed": 270,
     "aggroRadius": 11,
@@ -11445,7 +11936,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 955
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "zevelon-duskbringer",
@@ -11657,7 +12149,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 475
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "zoralurk",
@@ -11686,6 +12179,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -11861,6 +12355,82 @@
         "presentation": {
           "impactKey": "magic-red"
         }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "behemoth"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "craps"
+        }
+      },
+      {
+        "id": "outfit-2",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "fire-devil"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "craps"
+        }
+      },
+      {
+        "id": "outfit-3",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "giant-spider"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "craps"
+        }
+      },
+      {
+        "id": "outfit-5",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "lost-soul"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "craps"
+        }
       }
     ],
     "targetChange": {
@@ -11918,7 +12488,8 @@
           "count": 2
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "zushuka",
@@ -12140,6 +12711,30 @@
         }
       },
       {
+        "id": "outfit",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 4000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "objectKey": "snowman"
+            }
+          }
+        }
+      },
+      {
         "id": "paralyze",
         "cadenceMs": 2000,
         "chance": 0.15,
@@ -12253,6 +12848,7 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 969
-    }
+    },
+    "rewardBoss": true
   }
 ]

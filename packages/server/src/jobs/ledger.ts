@@ -291,6 +291,10 @@ async function applyProgression(
   // banco de offline training sobe por tempo de sessão e DESCE quando a `api` o gasta, então
   // fundir pelo maior ressuscitaria tempo já gasto. Extrato SEM o campo não toca na coluna.
   const training = receipt.training === undefined ? {} : { training: receipt.training };
+  // O Hazard (M44-14, #632, ADR 0052 d.1): ABSOLUTO e última-escrita-vence, como `charms` — a
+  // escolha de nível desce e sobe, e o teto só sobe por `levelUp` dentro da sessão dona. Extrato
+  // SEM o campo (quem nunca tocou no hazard, ou nó antigo em deploy) não toca na coluna.
+  const hazard = receipt.hazard === undefined ? {} : { hazard: receipt.hazard };
   // As bênçãos (#570, ADR 0052): ABSOLUTAS e última-escrita-vence, NUNCA fundidas pelo maior
   // (ao contrário do Bestiário/skills-antes-do-#569) — bênção DESCE na morte, e "ficar com o
   // maior de cada extrato" ressuscitaria uma bênção recém-consumida se um extrato antigo, fora
@@ -381,6 +385,7 @@ async function applyProgression(
       ...learnedSpells,
       ...familiar,
       ...training,
+      ...hazard,
       ...blessings,
       ...fightMode,
       // A vocação (#154, ADR 0026 decisão 1): escrita UMA vez. `coalesce` mantém o que já

@@ -97,6 +97,8 @@ const TYPE_LABEL: Readonly<Record<string, string>> = {
   mana: 'Mana',
   damage: 'Dano', 'damage-over-time': 'Dano',
   haste: 'Suporte', buff: 'Suporte', 'mana-shield': 'Suporte', 'remove-condition': 'Suporte',
+  // A aparência emprestada (#621, M44-03): Creature Illusion e Chameleon Rune.
+  illusion: 'Suporte', chameleon: 'Suporte',
   // As utilitárias (#623): luz, Levitate, Magic Rope, Find e Food.
   light: 'Suporte', levitate: 'Suporte', 'magic-rope': 'Suporte', find: 'Suporte', food: 'Suporte',
   // As duas runas de invocação (#600): Convince Creature e Animate Dead.
@@ -196,6 +198,9 @@ function effectValue(entry: ActionEntry, detail: EffectDetail, context: DetailCo
   }
   if (effect === 'mana-shield' && detail.durationMs !== undefined) {
     return `Escudo de mana por ${seconds(detail.durationMs)}`;
+  }
+  if ((effect === 'illusion' || effect === 'chameleon') && detail.durationMs !== undefined) {
+    return `Ilusão por ${seconds(detail.durationMs)}`;
   }
   if (
     (effect === 'damage-over-time' || effect === 'heal-over-time')

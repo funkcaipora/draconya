@@ -151,6 +151,14 @@ export type SpellDefinition = Catalogue['bot']['spells'][number];
 export type TrainingRegister = Readonly<S2CProps<'training-state'>>;
 /** As regras do Treino do catálogo (#631). Ausente: este servidor não tem Treino. */
 export type TrainingRules = NonNullable<Catalogue['training']>;
+/** Uma zona de Hazard do catálogo (M44-14, #632): nome e faixa de níveis. */
+export type HazardZoneDefinition = NonNullable<Catalogue['hazardZones']>[number];
+/**
+ * O Hazard do personagem (M44-14, #632, ADR 0052 d.1): o registro CRU que o servidor manda — o teto
+ * desbloqueado e o nível escolhido de cada zona. Zona ausente é o `minLevel` dela
+ * (`catalogue.hazardZones`).
+ */
+export type HazardRegister = Readonly<S2CProps<'hazard'>>;
 /** As sete bênçãos e o preço por level (#570). Ausente do catálogo: este servidor não as tem. */
 export type BlessingsConfig = NonNullable<Catalogue['blessings']>;
 export type BlessingDefinition = BlessingsConfig['list'][number];
@@ -374,6 +382,11 @@ export interface HudState {
    */
   readonly training: TrainingRegister | null;
   /**
+   * O Hazard do personagem (M44-14, #632). `null` até chegar — o primeiro segundo de toda
+   * conexão, ou um nó anterior a esta issue. SUBSTITUI: é o registro inteiro, não um delta.
+   */
+  readonly hazard: HazardRegister | null;
+  /**
    * As sete bênçãos PvE (#570, ADR 0052): o BITMASK — um bit por `order` do catálogo
    * (`catalogue.blessings.list`), nunca uma lista de nomes (invariante 6: a tela resolve o
    * nome pelo catálogo, o servidor só manda o número). `0` até o attach/enter responder — é
@@ -471,6 +484,7 @@ export const INITIAL_HUD: HudState = {
   charms: null,
   bosstiary: null,
   training: null,
+  hazard: null,
   blessings: 0,
   learnedSpells: null,
   party: null,

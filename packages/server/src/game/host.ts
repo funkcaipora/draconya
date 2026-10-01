@@ -24,8 +24,8 @@ import type {
 } from '@draconya/protocol';
 import { DEFAULT_MONSTER_RACE, ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
 import type {
-  Ammunition, Appearances, Blessing, BotConfigV2, Charm, Item, ItemSlot, Monster, RemovedBotSlot,
-  Skill, Spell, Training, Vocation,
+  Ammunition, Appearances, Blessing, BotConfigV2, Charm, Hazard, Item, ItemSlot, Monster, OutfitLook,
+  RemovedBotSlot, Skill, Spell, Training, Vocation,
 } from '@draconya/content';
 import {
   blessingCost, buyItem, containerRulesFor, DEFAULT_FIGHT_MODE, hasBlessing, holdStamina, isEmptyFamiliarState,
@@ -34,7 +34,7 @@ import {
 import type {
   AmmoRefusal, BuyRefusal, CarriedItem, CharacterRuntime, CharmAssignRefusal, CharmBestiaryEntry,
   CharmRemoveRefusal, CharmUnlockRefusal, ConfigurePartyResult, ContainerRules, ExitStatus, FightMode,
-  HuntRuleset, TrainingRuleset,
+  HazardSelectRefusal, HuntRuleset, TrainingRuleset,
   InventoryRefusal, InventoryResult, InventoryState, ItemRef, PartyBagChanged, PartyEndVoteResult,
   LearnSpellRefusal, PartySettingsPatch, Place, PromoteRefusal, SlotRefusal, SlotState, TakeLootRefusal,
   TileAppearanceChange, UseItemRefusal, UseOnMapRejection, UseSlotTarget, VocationRefusal,
@@ -50,7 +50,7 @@ import type { InitialCharacter, PartyTicket } from '../tickets.js';
 import { AreaOfInterest } from './aoi.js';
 import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
 import { findPersonText } from './find-text.js';
-import { hitEffectOf, isPhysicalHit, monsterLookOf } from './monster-look.js';
+import { hitEffectOf, isPhysicalHit, monsterLookOf, monsterOutfitOf, monsterPresentationOf } from './monster-look.js';
 import { REFUSAL_TEXT, TransitionError, refuseTransition } from './transitions.js';
 import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
 
@@ -178,6 +178,12 @@ export interface SessionHostOptions {
    * ponto de Charm é ganho, e nenhum major é atribuível (a mesma degradação honesta de acima).
    */
   readonly charmBestiaryEntries?: ReadonlyMap<string, CharmBestiaryEntry>;
+  /**
+   * O Hazard (M44-14, #632, ADR 0052 d.5): os multiplicadores e as zonas, para `set-hazard-level`
+   * conferir a zona e a faixa. Ausente: a escolha é recusada, e a recusa é honesta — um host sem
+   * conteúdo não sabe o que é uma zona de hazard.
+   */
+  readonly hazard?: Hazard;
   /**
    * As sete bênçãos PvE (#570, ADR 0052), para `buy-blessing`. Ausente: a compra é recusada,
    * e a recusa é honesta — um host sem conteúdo não sabe o que é uma bênção.
@@ -344,6 +350,22 @@ const BUY_REFUSAL: Readonly<Record<BuyRefusal, string>> = {
   'stack-too-large': 'Você não pode carregar tantos.',
 };
 
+/**
+ * O fluxo de extratos da escolha de hazard (#632): o sufixo do `sessionId` com que o extrato só de
+ * hazard é gravado, para NUNCA dividir a chave `(sessionId, characterId)` do `ReceiptStore` com o
+ * extrato do personagem na Cidade — ver `#saveHazardChoice`. O `session_id` do ledger é texto, e
+ * `(session_id, seq)` segue único porque o `seq` é o contador da própria sessão.
+ */
+const HAZARD_RECEIPT_STREAM = ':hazard';
+
+/** A recusa de `set-hazard-level` (M44-14, #632, ADR 0052 d.5), em palavras. */
+const HAZARD_REFUSAL: Readonly<Record<HazardSelectRefusal, string>> = {
+  'unknown-zone': 'Essa zona não tem nível de hazard.',
+  'below-minimum': 'Esse nível de hazard é menor que o mínimo da zona.',
+  'above-maximum': 'Você ainda não desbloqueou esse nível de hazard.',
+  'invalid-level': 'Esse nível de hazard não é válido.',
+};
+
 /** A recusa de `open-corpse`/`take-loot` (#722, ADR 0048 d.4), em palavras — FUN-73. */
 const CORPSE_REFUSAL: Readonly<Record<TakeLootRefusal, string>> = {
   'not-found': 'Esse cadáver já não está mais lá.',
@@ -387,6 +409,9 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   // teto de 2 invocações vivas já atingido — as três causas caem na mesma frase, como
   // `not-in-catalog` já faz para magia/supply/level/vocação.
   'not-summonable': 'Você não pode invocar essa criatura agora.',
+  // A ilusão (#621, M44-03): monstro que não existe ou não é ilusionável, ou item nenhum apontado
+  // — o `RETURNVALUE_NOTPOSSIBLE` ("Sorry, not possible.") de `creature_illusion.lua`/`chameleon.lua`.
+  'not-illusionable': 'Não é possível.',
   // A magia do slot ainda não foi aprendida (#624, ADR 0058 d.1): a tela oferece a compra.
   'not-learned': 'Você ainda não aprendeu essa magia.',
   // `not-possible` tem duas fontes. As runas de invocação restantes (#600, M38-03): o
@@ -1065,6 +1090,13 @@ interface HostedSession {
    * novo o que já foi. Entrada ausente é "ninguém recebeu ainda".
    */
   readonly sentTraining: Map<string, string>;
+  /**
+   * A última REVISÃO do registro de Hazard ENTREGUE a quem olha cada personagem (#632), por
+   * `characterId` — `HazardProgress.revision`, um inteiro, para o ciclo não serializar o registro.
+   * A escolha (Cidade) já manda a mensagem na hora; isto cobre a SUBIDA de nível que a sessão da
+   * hunt faz sozinha quando o chefe da zona morre.
+   */
+  readonly sentHazard: Map<string, number>;
   /**
    * O último ESTADO de cada interativo ENTREGUE aos viewers da sessão (#734, ADR 0050 d.6 T3),
    * por `interactableId`. Cenário é COMPARTILHADO (DT-01 do #729) — uma entrada por sessão, não
@@ -1775,6 +1807,11 @@ export class SessionHost {
         // `select-ammo` (#550, M30-03).
         this.#requestSetFightMode(viewer, message.mode);
         return;
+      case 'set-hazard-level':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL zona e QUAL nível; a faixa e o teto
+        // desbloqueado são daqui — serviço de Cidade, dentro da sessão dona (#632, ADR 0052 d.5).
+        this.#requestSetHazardLevel(viewer, message.zoneId, message.level);
+        return;
       case 'buy-blessing':
         // INTENÇÃO (invariante 4): o cliente diz QUAL bênção; preço por level, saldo e "já tem
         // esta bênção" são daqui — serviço de Cidade, dentro da sessão dona (#570, ADR 0052).
@@ -2317,6 +2354,9 @@ export class SessionHost {
       // entra a chave quando o cliente de fato mandou o andar.
       return { kind: 'position', position: z === undefined ? { x, y } : { x, y, z } };
     }
+    // Um item que o personagem carrega (#621, Chameleon Rune): só a instância — quem confere que
+    // ela existe e é dele é o `sim` (`useSupply` recusa `not-illusionable` se não for).
+    if ('instanceId' in target) return { kind: 'item', instanceId: target.instanceId };
     const subject = this.#subjectOfCreature(hosted, target.creatureId);
     if (subject === null) return { kind: 'invalid' };
     return subject.startsWith('m:')
@@ -2726,6 +2766,114 @@ export class SessionHost {
     }
     this.#markDirty(character.id);
     this.#sendToViewersOf(hosted, character.id, this.#charmsMessageFor(character));
+  }
+
+  /**
+   * O registro de Hazard (M44-14, #632), na forma que `hazard` (S2C) manda — o teto e o nível
+   * escolhido de cada zona, crus, como `charms` manda o registro dos Charms.
+   */
+  #hazardMessageFor(character: CharacterRuntime): S2CMessage {
+    const { maxLevel, currentLevel } = character.hazard.getState();
+    return { type: 'hazard', maxLevel, currentLevel };
+  }
+
+  /**
+   * Escolher o nível de Hazard de uma zona (M44-14, #632, ADR 0052 d.2/d.5). INTENÇÃO: o cliente
+   * diz QUAL zona e QUAL nível; a zona, o piso e o teto que o personagem desbloqueou são do
+   * servidor (invariante 4), dentro da sessão dona (invariante 9). **Só na Cidade**: o nível de
+   * uma hunt em curso é FIXO desde a entrada — como a versão de conteúdo (invariante 7) —, e
+   * aceitá-lo lá mudaria o dano do monstro no meio da sessão. No Canary quem muda o nível é o NPC
+   * Gnomadness (`gnomadness.lua`), que fica DENTRO dos jardins, e a troca vale na hora
+   * (`player:updateHazard()`); o Draconya a leva para a Cidade porque a sessão é instanciada e o
+   * nível é fixado na entrada (ADR 0052 d.5), sem rolagem (d.4). O sucesso é `hazard` reenviado;
+   * a recusa, `system-message`.
+   */
+  #requestSetHazardLevel(viewer: Viewer, zoneId: string, level: number): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    if (hosted.session.ruleset.shared !== true) {
+      viewer.send({
+        type: 'system-message', level: 'warning',
+        text: 'O nível de hazard só muda na Cidade, antes de entrar na hunt.',
+      });
+      return;
+    }
+    // A zona sai por PROPRIEDADE PRÓPRIA: `zones` é um objeto comum, e `zones['constructor']` ou
+    // `zones['__proto__']` seriam uma "zona" para um `zoneId` que o cliente escolhe (invariante 4).
+    const zones = this.#options.hazard?.zones;
+    const zone = zones !== undefined && Object.hasOwn(zones, zoneId) ? zones[zoneId] : undefined;
+    const revision = character.hazard.revision;
+    const result = character.hazard.select(zoneId, zone, level);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: HAZARD_REFUSAL[result.reason] });
+      return;
+    }
+    hosted.sentHazard.set(character.id, character.hazard.revision);
+    this.#sendToViewersOf(hosted, character.id, this.#hazardMessageFor(character));
+    // Escolher o nível em que já estava não muda nada: nenhum extrato a gravar.
+    if (character.hazard.revision === revision) return;
+    // DURÁVEL JÁ, e não só no `release`: o ticket de uma party (#195) é emitido pela `api` a partir
+    // da LINHA do banco, e o nível que o membro acabou de escolher na praça só chega lá pelo extrato
+    // — que a `api` liquida antes de emitir (ADR 0028 d.5). Sem este envio o membro entraria na
+    // hunt de hazard com o nível de ANTES, e o "menor da party" seria o de uma escolha que o
+    // jogador já tinha trocado. O extrato é só do hazard (`#saveHazardChoice`), e nunca o de estado
+    // inteiro: aquele leva o gold e as instâncias vendidas ainda não liquidados, e gravá-lo a cada
+    // escolha os perderia (ver lá).
+    void this.#saveHazardChoice(character.id, hosted).catch((error: unknown) => {
+      this.#logger.error({ err: error, characterId: character.id }, 'Failed to save the hazard choice');
+    });
+  }
+
+  /**
+   * O extrato da ESCOLHA de hazard (#632): um extrato SÓ de estado, com o registro de hazard e mais
+   * nada — agregados zerados, sem `goldDelta`, sem `removedInstances`, sem equipamento, bênçãos
+   * nem o resto do estado durável da Cidade. Não é o `#saveDurableReceipt`, de propósito, por duas
+   * razões que o review do #897 encontrou:
+   *
+   * - **O `ReceiptStore` guarda UM extrato por `(sessionId, characterId)`** (a chave não leva o
+   *   `seq`; o #823 corrige isso). A Cidade é uma sessão compartilhada, então todo extrato de um
+   *   personagem nela divide a chave — e o de estado inteiro carrega valor (o gold de uma bênção
+   *   comprada, a venda e as instâncias apagadas) que só sai UMA vez, porque `settleGoldDelta` e
+   *   `drainRemovedInstances` o zeram. Um segundo extrato na mesma chave antes da varredura do
+   *   `jobs` (até 10 s) sobrescreveria o primeiro e o valor sumiria: bênção de graça, venda
+   *   revertida. O extrato de hazard é ABSOLUTO e última-escrita-vence, então sobrescrever outro
+   *   DELE é inofensivo — e vai num fluxo próprio (`HAZARD_RECEIPT_STREAM`) para nunca encostar no
+   *   extrato do personagem.
+   * - **Nada é liquidado aqui**, então um pedido que chega durante o `await` do Redis não tem o
+   *   delta absorvido nem a marca de "sujo" apagada sem ter saído.
+   *
+   * O `seq` é o mesmo contador da sessão (`ledgerSeq`), tomado de forma síncrona antes do `await`:
+   * `(session_id, seq)` do ledger continua único. O registro é montado AGORA, e a gravação sai na
+   * ordem das chamadas (uma conexão só), então a última escolha é a última a chegar ao Redis.
+   *
+   * Se o Redis falhar, o personagem fica marcado como sujo: o extrato de estado do `release` leva o
+   * registro, como levava antes desta função existir.
+   */
+  async #saveHazardChoice(characterId: string, hosted: HostedSession): Promise<void> {
+    const receipts = this.#options.receipts;
+    const accountId = this.#accountIdByCharacter.get(characterId);
+    const owner = hosted.session.participants.find((p) => p.id === characterId);
+    if (receipts === undefined || accountId === undefined || owner === undefined) {
+      this.#markDirty(characterId);
+      return;
+    }
+    hosted.session.ledgerSeq += 1;
+    try {
+      await receipts.save({
+        sessionId: `${hosted.session.id}${HAZARD_RECEIPT_STREAM}`,
+        characterId,
+        accountId,
+        reason: 'manual-exit',
+        seq: hosted.session.ledgerSeq,
+        aggregates: EMPTY_AGGREGATES,
+        notableEvents: [],
+        hazard: owner.hazard.getState(),
+      });
+    } catch (error) {
+      this.#markDirty(characterId);
+      throw error;
+    }
   }
 
   /**
@@ -3344,6 +3492,7 @@ export class SessionHost {
       // ver o número chegar sem reconectar.
       this.#presentBosstiary(hosted);
       this.#presentBlessings(hosted);
+      this.#presentHazard(hosted);
       // E as cargas da exercise weapon, se o Treino gastou uma (#631).
       this.#presentTraining(hosted);
       // E o cenário, se algo mudou de estado PASSIVAMENTE (#734, ADR 0050 d.6 T3) — o walker
@@ -3403,6 +3552,7 @@ export class SessionHost {
         case 'creature-appeared':
         case 'creature-vanished':
         case 'creature-health-changed':
+        case 'creature-look-changed':
         case 'ground-item-appeared':
         case 'ground-item-vanished':
         case 'field-appeared':
@@ -3585,6 +3735,15 @@ export class SessionHost {
         // invocação". Ausente para todo o resto, inclusive invocação de MONSTRO (#546).
         ...(event.masterId === undefined ? {} : { masterId: event.masterId }),
       };
+    } else if (event.kind === 'creature-look-changed') {
+      // A aparência emprestada (#621): quem nunca foi anunciado não tem o que atualizar — o
+      // `creature-appear`/`session-state` que vier já a carrega (`#lookFor`).
+      const id = hosted.creatureIds.get(key);
+      if (id === undefined) return;
+      // Uma aparência SEM linha na tabela é MUDA (invariante 6): a condição vale no `sim`, e a
+      // criatura continua desenhada como estava — a mesma regra de `field-appear` sem arte.
+      if (event.look !== null && this.#resolveLook(event.look) === null) return;
+      message = { type: 'creature-update', id, ...this.#lookFor(hosted, key) };
     } else if (event.kind === 'creature-vanished') {
       const id = hosted.creatureIds.get(key);
       // Nunca anunciado — morreu antes de alguém olhar. Não há o que retirar da tela.
@@ -3976,6 +4135,23 @@ export class SessionHost {
   }
 
   /**
+   * O Hazard do personagem, se a hunt o mudou (#632): o teto sobe quando o chefe da zona morre no
+   * nível máximo, e a tela precisa ver sem reconectar. Só a hunt muda o registro por conta própria
+   * — a escolha da Cidade manda a mensagem na hora —, e a comparação é um inteiro (`revision`),
+   * nunca o registro serializado. Sem visualizador não se compara nada (invariante 3).
+   */
+  #presentHazard(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0 || hosted.session.ruleset.type !== 'hunt') return;
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      const revision = character.hazard.revision;
+      if (hosted.sentHazard.get(character.id) === revision) continue;
+      hosted.sentHazard.set(character.id, revision);
+      this.#sendToViewersOf(hosted, character.id, this.#hazardMessageFor(character));
+    }
+  }
+
+  /**
    * O estado dos slots do conjunto ativo, para quem olha CADA personagem (AB-09, DT-06).
    *
    * O gatilho é o par `(state, reason)`, nunca o `remainingMs`: ele decresce sempre, e compará-lo
@@ -4075,6 +4251,12 @@ export class SessionHost {
     // Sempre (`force`): quem reanexa PERDEU a tela, e comparar com o último entregue a deixaria
     // vazia. Host sem Treino não manda nada.
     if (participant !== undefined) this.#syncTraining(hosted, characterId, true);
+    // E o Hazard (M44-14, #632), pela mesma razão: o seletor de nível da Cidade precisa do teto
+    // que o personagem já desbloqueou, e quem reconecta não espera a próxima escolha para vê-lo.
+    if (participant !== undefined) {
+      hosted.sentHazard.set(characterId, participant.hazard.revision);
+      viewer.send(this.#hazardMessageFor(participant));
+    }
     // E o estado dos slots (AB-09): a barra do conjunto ativo precisa dele ao montar, e a
     // Cidade não tem ciclo para o mandar depois. Ruleset sem slots (a Cidade) não manda nada.
     const slotStates = participant === undefined
@@ -4400,12 +4582,71 @@ export class SessionHost {
       type: 'creature-appear',
       id: this.#creatureId(hosted, characterId),
       position: character?.position ?? { x: 0, y: 0, z: 0 },
-      appearanceId: this.#options.playerOutfitId ?? 0,
       name: this.#nameByCharacter.get(characterId) ?? characterId,
       health: character?.health ?? 0,
       maxHealth: character?.maxHealth ?? 0,
-      ...this.#colorsOf(characterId),
+      // A aparência de AGORA (#621): quem entra na tela no meio de uma ilusão a vê já vestida.
+      ...this.#lookFor(hosted, characterId),
     };
+  }
+
+  /**
+   * A aparência de uma aparência emprestada (#621, M44-03) em id de pacote — a MESMA indireção de
+   * `creature-appear` (invariante 6): o `sim` diz QUEM (monstro, item, chave de objeto), e a tabela
+   * diz o id. `object` separa o registro (`lookTypeEx`: a criatura virou uma coisa). `null` é
+   * aparência sem linha na tabela — MUDA, como o campo sem arte.
+   */
+  #resolveLook(look: OutfitLook): {
+    readonly appearanceId: number;
+    readonly object: boolean;
+    readonly colors?: OutfitColors;
+    readonly addons?: number;
+  } | null {
+    if ('monsterId' in look) {
+      const definition = this.#options.monsterCatalog?.get(look.monsterId);
+      // O outfit de monstro leva as cores e os addons dele (#620): são parte do `Outfit_t` que a
+      // condição troca por inteiro, e sem eles o cliente pintaria o outfit emprestado com as cores
+      // do dono — ou com as de personagem novo.
+      return definition === undefined
+        ? null
+        : { appearanceId: definition.outfitId, object: false, ...monsterOutfitOf(definition) };
+    }
+    const objectId = 'itemId' in look
+      ? this.#options.itemCatalog?.get(look.itemId)?.appearanceId
+      : this.#options.appearances?.looks[look.objectKey];
+    return objectId === undefined ? null : { appearanceId: objectId, object: true };
+  }
+
+  /**
+   * A aparência que a criatura `key` (o `subject` do `sim`) mostra AGORA, nos campos do fio
+   * (`appearanceId`, `object`, `colors`, `addons`): a emprestada, se há uma e ela tem arte; senão a
+   * PRÓPRIA — o outfit do monstro, com as cores e os addons dele, ou o do personagem com as cores
+   * do ticket. É o que `creature-appear`,
+   * `session-state` e `creature-update` compartilham, para o reanexado ver o mesmo que quem nunca
+   * saiu (invariante 3: o estado mora na condição do `sim`, nunca num campo daqui).
+   */
+  #lookFor(
+    hosted: HostedSession, key: string,
+  ): { appearanceId: number; object?: true; colors?: OutfitColors; addons?: number } {
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    const worn = ruleset.lookOf?.(hosted.session, key) ?? null;
+    const borrowed = worn === null ? null : this.#resolveLook(worn);
+    if (borrowed !== null) {
+      if (borrowed.object) return { appearanceId: borrowed.appearanceId, object: true };
+      return {
+        appearanceId: borrowed.appearanceId,
+        ...(borrowed.colors === undefined ? {} : { colors: borrowed.colors }),
+        ...(borrowed.addons === undefined ? {} : { addons: borrowed.addons }),
+      };
+    }
+    if (key.startsWith('m:')) {
+      const monster = ruleset.monsters?.find((candidate) => candidate.subject === key);
+      const definition = monster === undefined ? undefined : this.#options.monsterCatalog?.get(monster.monsterId);
+      // O outfit PRÓPRIO do monstro — com as cores e os addons (#620): quando a condição acaba, o
+      // `creature-update` os devolve junto do `appearanceId`, e o cliente nunca guarda os "originais".
+      return { appearanceId: definition?.outfitId ?? 0, ...monsterOutfitOf(definition) };
+    }
+    return { appearanceId: this.#options.playerOutfitId ?? 0, ...this.#colorsOf(key) };
   }
 
   /**
@@ -4698,6 +4939,7 @@ export class SessionHost {
       sentBosstiary: new Map(),
       sentBlessings: new Map(),
       sentTraining: new Map(),
+      sentHazard: new Map(),
       sentTileOverrides: new Map(),
       sentParty: null,
       lastPartyBag: null,
@@ -5009,6 +5251,9 @@ export class SessionHost {
       // E o registro do Treino (#631, ADR 0059 d.3): ABSOLUTO como `charms` — o banco que a sessão
       // acabou de encher (`onEnd` de hunt e de treino) e a skill do livro.
       ...(owner === undefined ? {} : { training: owner.training.getState() }),
+      // E o Hazard (M44-14, #632, ADR 0052 d.1): o nível escolhido e o teto, ABSOLUTOS como os
+      // Charms. Só quando há o que guardar — quem nunca tocou no hazard não escreve a coluna.
+      ...(owner === undefined || owner.hazard.isEmpty ? {} : { hazard: owner.hazard.getState() }),
       // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
       // login se ficasse só na sessão.
       ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
@@ -5127,6 +5372,9 @@ export class SessionHost {
       // O registro do Treino (#631, ADR 0059 d.3): escolher a skill do livro na praça marca
       // `dirty`, e sem este campo a escolha sumiria no logout. ABSOLUTO, como `charms`.
       training: owner.training.getState(),
+      // O Hazard (#632): a escolha do nível acontece na Cidade, e a Cidade não gera `Receipt` de
+      // progresso — sem isto ela sumiria no logout, como a de um Charm.
+      ...(owner.hazard.isEmpty ? {} : { hazard: owner.hazard.getState() }),
       // O estoque de supply/munição (#792, ADR 0044 d.2): conjurar na Cidade credita
       // `supplyStock`/`ammunitionStock` do mesmo jeito que o loot da hunt credita — ABSOLUTO,
       // como `ammo` (`receipts.ts`). Sem isto, a carga conjurada na praça sumia no logout: o
@@ -5242,13 +5490,13 @@ export class SessionHost {
     const creatures = visible.map((participant) => ({
       id: this.#creatureId(hosted, participant.id),
       position: participant.position,
-      appearanceId: this.#options.playerOutfitId ?? 0,
       name: this.#nameByCharacter.get(participant.id) ?? participant.id,
       health: participant.health,
       maxHealth: participant.maxHealth,
-      // As cores do ticket (FUN-104), pelo MESMO espalhamento do `creature-appear`: o cliente
-      // aplica os dois pelo mesmo caminho, e o reanexado precisa ver o vizinho pintado igual.
-      ...this.#colorsOf(participant.id),
+      // A aparência de AGORA e as cores do ticket (FUN-104), pelo MESMO espalhamento do
+      // `creature-appear`: o cliente aplica os dois pelo mesmo caminho, e o reanexado precisa ver o
+      // vizinho pintado igual — e ilusionado igual (#621).
+      ...this.#lookFor(hosted, participant.id),
     }));
 
     // Os monstros VIVOS da hunt entram na mesma lista (FUN-103): quem reanexa no meio precisa
@@ -5266,13 +5514,16 @@ export class SessionHost {
         // errado até aqui. `?? ruleset.floor ?? 0` sobra para o monstro de snapshot anterior a
         // esta issue, sem `z` nenhum na posição.
         position: { ...monster.position, z: monster.position.z ?? ruleset.floor ?? 0 },
-        appearanceId: definition?.outfitId ?? 0,
+        // A aparência de AGORA (#621): o outfit do monstro, ou a que ele tomou emprestada.
+        ...this.#lookFor(hosted, monster.subject),
         name: definition?.name ?? monster.monsterId,
         health: monster.health,
         maxHealth: definition?.health ?? monster.health,
         // A apresentação (#620), pelo MESMO espalhamento do `creature-appear`: quem reanexa no
-        // meio vê o monstro pintado, com luz e falas, sem esperar um segundo aparecimento.
-        ...monsterLookOf(definition),
+        // meio vê o monstro com luz e falas, sem esperar um segundo aparecimento. Só o que NÃO é do
+        // outfit: as cores e os addons já vêm de `#lookFor`, e o monstro ilusionado os tem do
+        // outfit que veste (#621) — espalhar os do monstro de novo os trocaria pelos do dono.
+        ...monsterPresentationOf(definition),
         // A invocação do JOGADOR (#598) — o mesmo espalhamento do `creature-appear`, para quem
         // reanexa no meio ver a invocação já marcada, sem esperar um segundo aparecimento.
         ...(typeof monster.masterId === 'string' ? { masterId: monster.masterId } : {}),
@@ -5559,6 +5810,7 @@ export class SessionHost {
       sentBestiary: new Map(),
       sentBosstiary: new Map(),
       sentBlessings: new Map(),
+      sentHazard: new Map(),
       sentTraining: new Map(),
       sentTileOverrides: new Map(),
       sentParty: null,

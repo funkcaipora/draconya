@@ -111,7 +111,12 @@ export function applyDamageOutcome(
   // para a vida. O escudo NÃO some ao esvaziar a mana — ele vence no prazo, como sempre.
   if (target instanceof CharacterRuntime
     && (target.conditions.hasManaShield() || extraManaShield)) {
-    absorbedByMana = Math.min(remaining, target.mana);
+    // O teto do Hazard (#632): num golpe de monstro de zona, o Canary absorve `min(mana,
+    // healthChange)` com o `healthChange` de ANTES do reforço (`Game::combatChangeHealth` o soma
+    // antes de `handleHazardSystemAttack` e não o recalcula) — o crítico e o reforço caem na vida.
+    const shieldCap = outcome.preHazardDamage === undefined
+      ? scaled : Math.max(0, Math.round(outcome.preHazardDamage * damageTakenScale));
+    absorbedByMana = Math.min(remaining, target.mana, shieldCap);
     target.mana -= absorbedByMana;
     remaining -= absorbedByMana;
   }
