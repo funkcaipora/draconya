@@ -133,19 +133,24 @@ A decisão 1 listou `rooted`, `feared` e `pacified` como "entram no M44". O #622
 três escolhas merecem registro porque não são as que o plano do endgame supunha:
 
 1. **`feared` não é "um passo de fuga sorteado como o drunk".** Lido no Canary
-   (`condition.cpp:2163-2380`), é uma caminhada FORÇADA: a cada segundo de pensamento a condição
+   (`condition.cpp:2163-2455`), é uma caminhada FORÇADA: a cada segundo de pensamento a condição
    escolhe uma direção a partir de onde o lançador estava (cinco regiões, sem sorteio — só o tile do
    próprio lançador sorteia), busca um caminho até um ponto sintético (A*, caixa de sete tiles) e
    entrega a lista a `Game::forcePlayerAutoWalk`, que substitui a caminhada do próprio jogador —
    só jogador. Como `hunting mechanics must be IDENTICAL` (ADR 0037 d.6), o `sim` reproduz o
-   mecanismo e QUANDO ele dispara: o pensamento é um evento da fila com fase sorteada (o desenho do
-   `VISIBILITY_THINK` do #559), o fim da condição é o primeiro pensamento depois do prazo (a fuga do
-   último pensamento sai antes de ela fechar), a imunidade de 10 s e o orçamento de party
-   `(membros + 5) / 5` são os do Canary. As duas coisas que NÃO se reproduzem bit a bit — o
-   desempate entre nós de mesmo custo do A* (o `getBestNode` do Canary tem uma versão por conjunto
-   de instruções) e o primeiro passo forçado cair no próximo `PLAYER_STEP` em vez do
-   `getEventStepTicks` — não mudam o gatilho, e estão em `docs/product/combat.md`. As esquisitices
-   da fonte (o ponto sintético do `SOUTH`, o valor do enum gravado como índice) ficam preservadas.
+   mecanismo e QUANDO ele dispara: o pensamento é um evento da fila na grade de pensamento do
+   personagem (a fase sorteada UMA vez, persistida — o desenho do `VISIBILITY_THINK` do #559, só que
+   com fase fixa), o fim da condição é o primeiro pensamento depois do prazo (a fuga do último
+   pensamento sai antes de ela fechar), a imunidade de 10 s e o orçamento de party `(membros + 5) /
+   5` são os do Canary. **A busca de caminho é original, não uma transcrição do algoritmo do
+   Canary** (ADR 0019, limite 1): `fear.ts` entrega o que o `getPathMatchingCond` entrega — custo
+   10/35 na caixa de sete tiles, destino o mais distante do ponto sintético — com um desempate
+   declarado, e uma versão anterior que traduzia o A* linha a linha foi retirada na revisão do #622.
+   O que NÃO se reproduz bit a bit — o desempate entre nós de mesmo custo (o `getBestNode` do Canary
+   tem uma versão por conjunto de instruções) e o primeiro passo forçado cair no próximo
+   `PLAYER_STEP` em vez do `getEventStepTicks` — não muda o gatilho, e está em
+   `docs/product/combat.md`. As esquisitices da fonte (o ponto sintético do `SOUTH`, o valor do enum
+   gravado como índice) ficam preservadas.
 2. **`merge` ganha o valor `longest`.** `Condition::updateCondition` do Canary — que `rooted`,
    `pacified` (`ConditionGeneric`) e `feared` usam — mantém a condição que já corre quando o prazo
    novo terminaria antes dela. Nenhum dos três valores de fusão existentes diz isso: `refresh`
@@ -157,7 +162,11 @@ três escolhas merecem registro porque não são as que o plano do endgame supun
    (`attackLockedUntil`) deixou de existir; um snapshot antigo é lido como um `pacified` que vence
    no mesmo instante (ADR 0014). O Swift Foot passa a acelerar e pacificar pelos mesmos 10 s, como
    `swift_foot.lua` (ramo sem a Roda) — o conteúdo deixa de carregar a redução de 30 % de dano do
-   TibiaWiki.
+   TibiaWiki. O golpe básico NÃO volta no instante exato do vencimento: `Player::doAttacking` volta
+   sob a condição e o Canary não re-arma o ataque ao fim dela, então o golpe sai no primeiro gatilho
+   depois — o pensamento seguinte do personagem (até 1000 ms) ou um passo dele ou do alvo. A magia e
+   a runa AGRESSIVAS (dano, DOT, a invocação — `summon_creature.lua` não chama `isAggressive(false)`
+   —, as runas de dano/campo e a Paralyze Rune) recusam sob a condição (`spells.cpp:517`).
 
 **Vocabulário de imunidade.** `monster.conditionImmunities` sobe de onze para catorze nomes
 (`rooted`, `feared`, `pacified`). É vocabulário autoral: a ponte do Lua

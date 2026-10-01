@@ -81,8 +81,11 @@ hunt sem gold para pagar o próximo supply e pode morrer.
   ele volta à rota pelo caminho de sempre (`not-adjacent` → resincroniza). Sob `feared` nenhuma
   magia nem runa sai (`feared`, com o prazo do medo no `retryInMs`, para o bot re-armar quando o
   medo acabar); a poção sai. Sob `pacified` (a trava de escada de 2 s e o Swift Foot) nem o golpe
-  básico nem a magia/runa agressiva saem, e o golpe volta no instante exato do vencimento; cura,
-  poção e o resto seguem. Nada disso é falha do motor de bot. Ver "Condições de controle" em
+  básico nem a magia/runa agressiva (dano, DOT, a invocação, as runas de dano/campo e a Paralyze
+  Rune) saem, e o golpe volta no PENSAMENTO seguinte ao vencimento — até 1 s depois dele, ou antes
+  se o personagem ou o alvo der um passo —, porque o Canary não re-arma o ataque quando a condição
+  acaba; cura, poção e o resto seguem. Um `walk-to` que o jogador deixou guardado cai quando a raiz
+  o prende. Nada disso é falha do motor de bot. Ver "Condições de controle" em
   `docs/product/combat.md`.
 
 ## O vocabulário, por inteiro (AB-03, ADR 0032 d.1)

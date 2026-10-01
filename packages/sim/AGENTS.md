@@ -752,10 +752,17 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   `combat-v3` (`#isV3`) e com `combat.stairhopDelayMs` declarado (ausente é identidade, como
   `defense`/`modifiers`); v1/v2 nunca aplicam a trava de escada. **O portão lê a CONDIÇÃO, em
   qualquer perfil** (`Conditions.isActive`, o PRAZO — não o evento `condition-expire`, que vence
-  depois do ataque do mesmo instante): `#onPlayerAttack` reagenda para o INSTANTE EXATO do
-  vencimento (nunca para o intervalo normal de ataque) e `castSpell`/`useSupply` (`casting.ts`)
-  recusam a magia e a runa AGRESSIVAS com `attack-locked` — cura e o resto do vocabulário continuam
-  liberados, a mesma exceção do `Spell::aggressive` do Canary. `attackLockedUntil` deixou de
+  depois do ataque do mesmo instante): `#onPlayerAttack` ESTACIONA o golpe (`#parkAttack`) — o
+  Canary não re-arma o ataque quando `pacified` acaba, e o golpe sai no primeiro gatilho depois: o
+  pensamento do personagem (`ATTACK_THINK`, na grade de 1000 ms dele) ou um passo do personagem ou
+  do alvo (`#releaseParkedAttacks`, o `onCreatureMove` do Canary) — NUNCA no instante exato do
+  vencimento nem no intervalo normal de ataque. E `castSpell`/`useSupply` (`casting.ts`) recusam a
+  magia e a runa AGRESSIVAS com `attack-locked` — dano, DOT, a invocação (`summon_creature.lua` não
+  chama `isAggressive(false)`), as runas de dano/campo e a Paralyze Rune; cura e o resto do
+  vocabulário continuam liberados, a mesma exceção do `Spell::aggressive` do Canary.
+  **Enquanto o golpe está estacionado (`Runner.attackParked`), `#armPlayerAttack` o ignora**: um
+  personagem parado não reacende a cadeia por conta própria, e liberar no passo de combate-stop
+  traria o golpe antes do pensamento. `attackLockedUntil` deixou de
   existir no runtime: o construtor de `CharacterRuntime` converte o campo de um snapshot antigo
   num `pacified` que vence no mesmo instante, e `getState` nunca mais o escreve.
 - **As condições de controle (#622, M44-04, ADR 0041): `rooted`, `feared` e `pacified`.** Mesmo
@@ -764,10 +771,12 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   Nada de `hasRooted()`/`hasFeared()`: seriam três nomes para a mesma leitura.
   - **`#step` é o portão dos três** (o único lugar que escreve posição). Sem `forced`, recusa a
     caminhada PRÓPRIA antes de qualquer sorteio (`rooted`/`feared`, razões novas em `MoveRejection`);
-    depois do desvio de drunk, recusa `rooted` sempre e, sob `feared`, o campo que causa dano. O
-    parâmetro `forced` marca o que NÃO é a caminhada própria: a fuga do medo e o empurrão
-    (`#pushAside`). Esquecer `forced` num passo forçado o faria recusar sob `feared`; passá-lo num
-    passo próprio o faria fugir do medo.
+    sob `feared`, o passo de lista do PERSONAGEM (`forced` com `rollDrunk`) para um campo que causa
+    dano volta ANTES do sorteio do drunk (`Player::onWalk`: sem sorteio e sem desvio); depois do
+    desvio, recusa `rooted` sempre e, sob `feared`, o campo que causa dano no tile desviado
+    (`internalMoveCreature`). O parâmetro `forced` marca o que NÃO é a caminhada própria — a fuga do
+    medo, o passo de um `walk-to` já guardado e o empurrão (`#pushAside`). Esquecer `forced` num passo
+    forçado o faria recusar sob `feared`; passá-lo num passo próprio o faria fugir do medo.
   - **O medo de PERSONAGEM não tem `condition-expire`.** Quem o encerra é o `FEAR_THINK` (o primeiro
     pensamento DEPOIS do prazo) — porque o Canary só limpa a condição nesse pensamento, e a fuga do
     último pensamento sai ANTES dele. Um `condition-expire` agendado limparia a condição antes desse
@@ -781,13 +790,34 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
     valores do enum `Direction` do Canary (`fear.ts`), não `Direction` do `sim` — a fuga anda em
     diagonal. `requestMove` a zera (um `startAutoWalk` novo limpa `listWalkDir`) e recusa antes de
     guardar caminho quando a criatura está presa ou com medo.
-  - **`fear.ts` é PURO e transcreve números, não código** (ADR 0019): as cinco regiões, o vetor de
-    direções, o A* de `getPathMatchingCond`. As esquisitices da fonte estão PRESERVADAS de propósito
-    (o ponto sintético do `SOUTH` soma `+y` como o do `NORTH`; o sorteio grava o valor do enum como
-    índice) e fixadas em `fear.test.ts` — "corrigi" uma delas e o teste que a nomeia falha por
-    desenho. O desempate do `getBestNode` é o da versão escalar (índice menor).
+  - **A lista de passos do Canary é UMA, e aqui mora em dois lugares: `Runner.fearWalk` e o
+    `walk-to` distante (`Runner.manualWalkTo`).** Os dois nunca coexistem (`#startFleeWalk` e
+    `requestMove` limpam um ao pôr o outro), e três regras dependem de tratá-los como a mesma lista:
+    o pensamento do medo só foge com `getWalkSize() < 2` (`#onFearThink` soma o comprimento do
+    `walk-to`); o passo de um `walk-to` JÁ guardado é `forced` (continua a lista, o que o
+    `startAutoWalk` recusou foi só o INÍCIO) e portanto segue andando sob `feared`; e sob `rooted`
+    o passo recusado derruba o `walk-to` (`resetMovementState`, `creature.cpp:503`) — sem isso ele
+    retomava sozinho ao fim da raiz.
+  - **A grade de pensamento do personagem (`Runner.thinkPhaseMs`).** `Game::checkCreatures` roda o
+    `onAttacking` e o `executeConditions` de cada criatura a cada 1000 ms numa fase própria; o `sim`
+    a sorteia UMA vez por personagem (`#thinkDelayMs`, preguiçosa, persistida no snapshot) e agenda
+    quem depende do pensamento — o `FEAR_THINK` e o `ATTACK_THINK` — para o próximo instante da
+    grade. Nunca um evento por segundo (invariante 2). O `VISIBILITY_THINK` do #559 ainda sorteia a
+    fase dele por evento, e vale a pena unificar quando alguém mexer ali.
+  - **`fear.ts` é PURO e transcreve números e comportamento, não código** (ADR 0019): as cinco
+    regiões, o vetor de direções, o lado do ponto sintético por direção, as distâncias
+    `{15, 9, 3, 1}`, o raio 7 e o custo 10/35. A BUSCA de caminho é original — uma varredura de
+    custo mínimo na caixa mais a escolha do destino mais distante do ponto —, NÃO o A* do
+    `getPathMatchingCond`: o limite de licença proíbe a tradução linha a linha, e uma versão
+    anterior deste arquivo a tinha feito (retirada na revisão do #622). Os testes fixam o QUE sai,
+    nunca como o Canary chega lá. As esquisitices da fonte estão PRESERVADAS de propósito (o ponto
+    sintético do `SOUTH` cai do lado do `NORTH`; o sorteio grava o valor do enum como índice) e
+    fixadas em `fear.test.ts` — "corrigi" uma delas e o teste que a nomeia falha por desenho. O
+    desempate entre destinos e caminhos de mesmo custo é uma escolha declarada (`STEP_ORDER`), que
+    reproduz o do Canary em campo aberto.
   - **Nunca `Math.random`/`Date.now` na fuga**: o `Rng` da sessão entra em DOIS lugares só — a
-    fase do primeiro pensamento (`[0, 1000)` ms) e o sorteio do tile do próprio lançador.
+    fase de pensamento do personagem (`[0, 1000)` ms, uma vez) e o sorteio do tile do próprio
+    lançador.
 - **Campo bloqueante é PAREDE, não desvio de dano** (#560). `Fields.blockedAt`/
   `TileOccupancy.blockedAt` bloqueiam para QUALQUER criatura, e valem em `canOccupy`/`move`
   sem checagem extra em `hunt.ts` — ao contrário do desvio de dano do M29-05
