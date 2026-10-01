@@ -3,6 +3,7 @@
   "name": "Great Light",
   "description": "Ilumina um raio maior ao seu redor por 11 minutos e 35 segundos. A luz diminui aos poucos.",
   "minLevel": 13,
+  "learnPrice": 500,
   "manaCost": 60,
   "group": "support",
   "groupCooldownMs": 2000,

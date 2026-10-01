@@ -3,6 +3,7 @@
   "name": "Find Fiend",
   "description": "Diz em que direção e a que distância está o monstro fiendish mais próximo.",
   "minLevel": 25,
+  "learnPrice": 1000,
   "manaCost": 20,
   "group": "support",
   "groupCooldownMs": 2000,

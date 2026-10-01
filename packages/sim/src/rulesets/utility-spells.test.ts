@@ -202,6 +202,9 @@ function start(loaded: Content, options: StartOptions = {}): Started {
     staminaMs: 86_400_000, staminaUpdatedAtMs: 0, gold: 0, goldDelta: 0, alive: true, cooldowns: {},
     capacity: options.capacity ?? 1_000, soul: options.soul ?? 5,
   });
+  // O herói sabe TODA magia do conteúdo do teste: o portão do aprendizado (#624) é assunto do
+  // bloco `o aprendizado` do `hunt.test.ts`, e aqui o assunto é o que vem depois dele.
+  for (const id of loaded.spells.keys()) hero.learnedSpells.grant(id);
   session.enter(hero);
   if (options.facing !== undefined) hero.direction = options.facing;
   const seen: DomainEvent[] = [];
@@ -418,6 +421,24 @@ describe('Levitate — sobe e desce um andar pelas regras de tile (#623)', () =>
     expect(cast(run, 'levitate-up')).toMatchObject({ ok: false, reason: 'not-possible' });
   });
 
+  it('`rooted` recusa o Levitate sem custo e sem cooldown (`internalMoveCreature`), no cast e no slotStates (#622)', () => {
+    // O script chama `creature:move`, e `Game::internalMoveCreature` recusa quem tem
+    // `CONDITION_ROOTED` com o MESMO `RETURNVALUE_NOTPOSSIBLE` do destino sem chão.
+    const run = start(contentOf(world), { facing: 'east' });
+    run.hero.conditions.apply({ key: 'rooted', expiresAtMs: 10_000, merge: 'longest' });
+    expect(cast(run, 'levitate-up')).toEqual({ ok: false, reason: 'not-possible', retryInMs: 0 });
+    expect(run.hero.position).toEqual({ x: 2, y: 2, z: 9 });
+    expect(run.hero.mana).toBe(500);
+    expect(cooldownOf(run, 'levitate-up')).toBe(0);
+    const index = spells.findIndex((spell) => spell.id === 'levitate-up');
+    expect(run.ruleset.slotStates(run.session, run.hero)[index])
+      .toMatchObject({ state: 'blocked', reason: 'not-possible' });
+    // Sem a condição, o MESMO cast sai — o portão lê a condição, não o mapa.
+    run.hero.conditions.remove('rooted');
+    expect(cast(run, 'levitate-up')).toEqual({ ok: true });
+    expect(run.hero.position.z).toBe(8);
+  });
+
   it('o salto tranca o ataque por `stairhopDelayMs` sob o combat-v3 (`teleport || oldPos.z != newPos.z`)', () => {
     const run = start(contentOf(world, { combat: [combatV3] }), { facing: 'east' });
     expect(run.hero.conditions.get('pacified')).toBeNull();
@@ -488,6 +509,13 @@ describe('Magic Rope — sobe pelo rope spot (#623)', () => {
     const semChao = start(contentOf(world(walled)));
     expect(cast(semChao, 'magic-rope')).toEqual({ ok: false, reason: 'not-enough-room', retryInMs: 0 });
     expect(semChao.hero.mana).toBe(500);
+  });
+
+  it('`rooted` NÃO prende a corda: `teleportTo` (`internalTeleport`) não confere a condição, só o Levitate (#622)', () => {
+    const run = start(contentOf(world(UP)));
+    run.hero.conditions.apply({ key: 'rooted', expiresAtMs: 10_000, merge: 'longest' });
+    expect(cast(run, 'magic-rope')).toEqual({ ok: true });
+    expect(run.hero.position).toEqual({ x: 2, y: 3, z: 8 });
   });
 
   it('o salto tranca o ataque sob o combat-v3, como o Levitate', () => {

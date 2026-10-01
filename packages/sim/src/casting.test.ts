@@ -47,11 +47,11 @@ const KNOWN_SPELLS = [
   'antidote-rune', 'avalanche-rune', 'base-healing', 'blast', 'blood-rage', 'cancel-magic-shield',
   'challenge', 'conjure-arrow', 'conjure-avalanche-rune', 'cure-poison', 'destroy-field-rune',
   'divine-caldera', 'ethereal-spear', 'fair-wound-cleansing', 'fire-field-rune', 'fire-wave',
-  'flame-strike', 'great-death-beam', 'great-energy-beam', 'great-fireball-rune', 'haste', 'heal',
-  'heal-party', 'ice-strike', 'intense-healing', 'intense-healing-rune', 'invisibility-druid',
-  'light-healing', 'long', 'magic-shield', 'nature-heal', 'paralyze-rune', 'player-fire-field',
-  'protect-party', 'recovery', 'short', 'strike', 'sudden-death-rune', 'summon-creature', 'swift-foot',
-  'ultimate-healing-rune',
+  'flame-strike', 'food', 'great-death-beam', 'great-energy-beam', 'great-fireball-rune',
+  'great-light', 'haste', 'heal', 'heal-party', 'ice-strike', 'intense-healing',
+  'intense-healing-rune', 'invisibility-druid', 'levitate-up', 'light', 'light-healing', 'long',
+  'magic-shield', 'nature-heal', 'paralyze-rune', 'player-fire-field', 'protect-party', 'recovery',
+  'short', 'strike', 'sudden-death-rune', 'summon-creature', 'swift-foot', 'ultimate-healing-rune',
 ];
 
 const hero = (over: Partial<{

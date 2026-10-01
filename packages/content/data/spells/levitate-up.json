@@ -3,6 +3,7 @@
   "name": "Levitate (up)",
   "description": "Sobe um andar, para o tile à sua frente, quando o espaço acima de você está vazio.",
   "minLevel": 12,
+  "learnPrice": 500,
   "manaCost": 50,
   "group": "support",
   "groupCooldownMs": 2000,
@@ -11,5 +12,5 @@
     "kind": "levitate",
     "direction": "up"
   },
-  "_open": "Canary `data/scripts/spells/support/levitate.lua` (47dfd51): words \"exani hur\" + parâmetro \"up\", id 81, level 12, mana 50, cooldown/groupCooldown 2000 (grupo support), `hasParams(true)`, `isAggressive(false)`, `isPremium(true)` (não modelado). O parâmetro de TEXTO do Canary (`up`/`down`) não tem lugar na barra de ações — que é do Draconya (ADR 0037 d.2) — e vira DUAS magias do catálogo (`levitate-up`/`levitate-down`), cada uma com o mesmo cooldown, o mesmo grupo e o mesmo custo; o resultado é idêntico ao de digitar o parâmetro. As regras do destino (o `z` de fronteira, o tile de cima vazio, o tile da frente com chão e sem escada) estão em `packages/sim/src/utility-spells.ts` e em `docs/product/utility-spells.md`. Vocação: TODAS, por isso sem `vocationId`. Efeito CONST_ME_TELEPORT (11)."
+  "_open": "Canary `data/scripts/spells/support/levitate.lua` (47dfd51): words \"exani hur\" + parâmetro \"up\", id 81, level 12, mana 50, cooldown/groupCooldown 2000 (grupo support), `hasParams(true)`, `isAggressive(false)`, `isPremium(true)` (não modelado). O parâmetro de TEXTO do Canary (`up`/`down`) não tem lugar na barra de ações — que é do Draconya (ADR 0037 d.2) — e vira DUAS magias do catálogo (`levitate-up`/`levitate-down`), cada uma com o mesmo cooldown, o mesmo grupo e o mesmo custo; o resultado é idêntico ao de digitar o parâmetro. As regras do destino (o `z` de fronteira, o tile de cima vazio, o tile da frente com chão e sem escada) estão em `packages/sim/src/utility-spells.ts` e em `docs/product/utility-spells.md`. Vocação: TODAS, por isso sem `vocationId`. Efeito CONST_ME_TELEPORT (11). learnPrice (#624, ADR 0058 d.3): 500, o preço do `levitate` em TODAS as 32 chamadas de `data-otservbr-global/npc` que o ensinam (`StdModule.learnSpell`, spellName \"levitate\", level 12, todas as vocações). O leitor `catalog:spell-prices` liga por NOME e este arquivo se chama \"Levitate (up)\"/\"Levitate (down)\", então ele aparece em \"sem NPC\" e o número é curado à mão. DIVERGÊNCIA: no Canary uma compra ensina os DOIS parâmetros (`up` e `down`); aqui são duas magias do catálogo e cada uma é comprada — 1000 gold no total em vez de 500: [ABERTO — decidir se `levitate-down` vem junto da compra de `levitate-up`]."
 }

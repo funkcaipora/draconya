@@ -4,6 +4,7 @@
   "description": "Ilumina o seu redor por 33 minutos e 10 segundos. A luz diminui aos poucos.",
   "vocationId": "druid",
   "minLevel": 26,
+  "learnPrice": 1600,
   "manaCost": 140,
   "group": "support",
   "groupCooldownMs": 2000,

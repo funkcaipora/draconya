@@ -1045,7 +1045,12 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   antes de cancelar — o `castSpell` inicia os livros de cooldown (magia e grupo) nesse caso, sem
   mana nem alma; as recusas de Levitate, Magic Rope e Find Fiend NÃO iniciam nada. O destino que o
   `preflight` aprova é o que o salto aplica (`#jumpToApproved` falha alto se o `relocate` recusar),
-  então `ropeDestination` também confere a ocupação — tile é exclusivo, como no Levitate.
+  então `ropeDestination` também confere a ocupação — tile é exclusivo, como no Levitate. `rooted`
+  (#622) recusa o Levitate com `not-possible` (o `creature:move` cai em `internalMoveCreature`) e
+  NÃO o Magic Rope (`teleportTo` não confere a condição) — por isso `#utilityRefusalOf` recebe o
+  `nowMs`. Toda utilitária é magia nova e precisa de `learnPrice` (`pnpm catalog:spell-prices`; as que
+  o leitor não liga por NOME, como `levitate-up`/`levitate-down`, têm o preço curado à mão), senão
+  ninguém a compra (`not-for-sale`).
   (b) O salto (`#relocateCharacter`, `movement.ts#relocate`) é o OUTRO escritor de posição e NÃO vira
   o personagem (o Canary não passa direção); todo salto novo passa por `#lockAfterJump` (o stairhop
   de `teleport || oldPos.z != newPos.z`, que `#step` também usa) e emite `creature-moved`. Ele

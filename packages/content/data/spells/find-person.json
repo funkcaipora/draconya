@@ -3,6 +3,7 @@
   "name": "Find Person",
   "description": "Diz em que direção e a que distância está um personagem da sua party.",
   "minLevel": 8,
+  "learnPrice": 80,
   "manaCost": 20,
   "group": "support",
   "groupCooldownMs": 2000,

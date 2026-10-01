@@ -5993,7 +5993,7 @@ const slots = bot.groups.get(group);
       // Bolsa default (solo); o `manaCost` REAL da invocação é do MONSTRO (ADR 0057 d.3).
       undefined, summonMonster?.manaCost,
       // As utilitárias (#623) recusam pelo que só este ruleset vê — mapa, overlay e sessão.
-      this.#utilityRefusalOf(character, spell.effect, recipient),
+      this.#utilityRefusalOf(character, spell.effect, recipient, session.nowMs),
     );
     if (!result.ok) return result;
     // A magia SAIU: a mana gasta é o que ela rende de skill (§9.4) — o custo REAL: o do
@@ -6138,7 +6138,10 @@ const slots = bot.groups.get(group);
    * nada e não consome sorteio, porque `slotStates` (a apresentação) a chama pelo espelho
    * (`#naturalStateOf`) e o `castSpell` a recebe como `preflight`, ANTES de gastar a mana.
    *
-   * - **Levitate:** sem destino pelas regras de `levitateDestination` → `not-possible`.
+   * - **Levitate:** sem destino pelas regras de `levitateDestination` → `not-possible`; e `rooted`
+   *   (M44-04, #622) também: o script chama `creature:move`, que cai em `Game::internalMoveCreature`,
+   *   e ele recusa `CONDITION_ROOTED` com o MESMO `RETURNVALUE_NOTPOSSIBLE`. O Magic Rope NÃO — usa
+   *   `teleportTo` (`internalTeleport`), que não confere `rooted`.
    * - **Magic Rope:** fora de um rope spot → `not-possible` (o `isRopeSpot` do Canary; o overlay
    *   de cenário é quem sabe onde ele está); sem onde pousar → `not-enough-room`.
    * - **Find Person:** o alvo é o `recipient` (o personagem que o `use-slot` mirou); sem alvo — o
@@ -6154,10 +6157,11 @@ const slots = bot.groups.get(group);
    *   ESTE é o único ponto a ligar: um monstro fiendish achado troca a recusa pela mensagem.
    */
   #utilityRefusalOf(
-    character: CharacterRuntime, effect: SpellEffect, recipient: CharacterRuntime,
+    character: CharacterRuntime, effect: SpellEffect, recipient: CharacterRuntime, nowMs: number,
   ): UtilityRefusal | null {
     switch (effect.kind) {
       case 'levitate':
+        if (character.conditions.isActive(ROOTED_CONDITION_KEY, nowMs)) return 'not-possible';
         return levitateDestination(this.#world, this.#at(character), character.direction, effect.direction) === null
           ? 'not-possible' : null;
       case 'magic-rope': {
@@ -7899,7 +7903,7 @@ const slots = bot.groups.get(group);
       // espelho não vê: ele diz `person-not-found` só quando NÃO HÁ ninguém mais na sessão.
       const utility = effect.kind === 'find' && effect.target === 'person'
         ? (session.participants.length <= 1 ? 'person-not-found' : null)
-        : this.#utilityRefusalOf(character, effect, character);
+        : this.#utilityRefusalOf(character, effect, character, session.nowMs);
       if (utility !== null) return blocked(utility);
       if (this.#needsTarget(spell.effect)) {
         const range = 'range' in spell.effect ? spell.effect.range : undefined;

@@ -24,8 +24,14 @@ const SPELLS = [
   'find-person', 'find-fiend', 'food',
 ] as const;
 
-/** Um druida level 60 — a única vocação que lança Food e a Ultimate Light junto do resto. */
-function enter(content: Content, huntId: string): { session: Session; ruleset: HuntRuleset; hero: CharacterRuntime } {
+/**
+ * Um druida level 60 — a única vocação que lança Food e a Ultimate Light junto do resto. Sabe as
+ * nove magias (`learned`): o portão do aprendizado (#624) tem o teste dele logo abaixo, e os
+ * outros são sobre o que vem depois dele.
+ */
+function enter(
+  content: Content, huntId: string, learned: readonly string[] = SPELLS,
+): { session: Session; ruleset: HuntRuleset; hero: CharacterRuntime } {
   const session = createHuntSession({
     id: 'utility-real', content, huntId, difficulty: 'default', createdAtMs: 0,
     botConfig: botConfigV2Schema.parse({
@@ -49,6 +55,7 @@ function enter(content: Content, huntId: string): { session: Session; ruleset: H
     staminaMs: 86_400_000, staminaUpdatedAtMs: 0, gold: 0, goldDelta: 0, alive: true, cooldowns: {},
     soul: 100, capacity: 100_000,
   });
+  for (const id of learned) hero.learnedSpells.grant(id);
   session.enter(hero);
   return { session, ruleset: session.ruleset as HuntRuleset, hero };
 }
@@ -126,6 +133,34 @@ describe('as utilitárias do #623 no conteúdo real', () => {
     if (first === undefined) throw new Error('a Food não criou nada');
     expect(run.ruleset.useItem(run.session, 'hero', { instanceId: first.instanceId }, 1)).toEqual({ ok: true });
     expect(run.hero.fedMs).toBeGreaterThan(0);
+  });
+
+  it('sem aprender, o slot recusa `not-learned`; o preço real do Canary compra e destrava (#624)', () => {
+    // As nove são magias NOVAS do #623, criadas depois da migração 0024 (que é um retrato): quem
+    // já existe também as COMPRA (ADR 0058 d.4). Light é grátis (`price = 0` nos NPCs), e o
+    // `learnPrice` ausente seria `not-for-sale` — nunca vendável.
+    const content = real();
+    const run = enter(content, 'darashia-dragon-lair', []);
+    expect(cast(run, 'light')).toEqual({ ok: false, reason: 'not-learned', retryInMs: 0 });
+    expect(run.hero.mana).toBe(10_000);
+    // Great Light custa 500 e o herói não tem gold: recusa sem cobrar e o slot segue bloqueado.
+    expect(run.hero.learnSpell(content.spells.get('great-light')))
+      .toEqual({ ok: false, reason: 'insufficient-gold' });
+    expect(cast(run, 'great-light')).toEqual({ ok: false, reason: 'not-learned', retryInMs: 0 });
+    expect(run.hero.learnSpell(content.spells.get('light'))).toEqual({ ok: true, price: 0 });
+    expect(cast(run, 'light')).toEqual({ ok: true });
+  });
+
+  it('as nove magias têm o `learnPrice` dos NPCs do Canary — nenhuma fica `not-for-sale` (#624)', () => {
+    const content = real();
+    const prices = Object.fromEntries(SPELLS.map((id) => [id, content.spells.get(id)?.learnPrice]));
+    expect(prices).toEqual({
+      light: 0, 'great-light': 500, 'ultimate-light-druid': 1_600,
+      // O `levitate` do Canary custa 500 e ensina `up` e `down` de uma vez; aqui são duas magias
+      // do catálogo, cada uma comprada (`_open` dos dois arquivos registra a divergência).
+      'levitate-up': 500, 'levitate-down': 500,
+      'magic-rope': 200, 'find-person': 80, 'find-fiend': 1_000, food: 300,
+    });
   });
 
   it('as nove magias existem no catálogo real com o vocacional certo', () => {

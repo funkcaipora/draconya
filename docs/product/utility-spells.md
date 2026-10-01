@@ -152,8 +152,24 @@ modelo de mapa, a estrutura de sessão ou o escopo que o dono fixou.
   cadáver, e o que não coube por peso SE PERDE, registrado como `food-not-carried` no extrato (o cliente o escreve em palavras, "Comida perdida, sem espaço", em `shell/event-text.ts`).
 - **Premium.** `isPremium(true)` de Ultimate Light, Levitate e Magic Rope não é modelado — nenhuma
   magia do catálogo o modela (o mesmo que as de party e as de conjuração).
-- **Rooted.** O `internalMoveCreature` do Canary recusa o Levitate de quem está `CONDITION_ROOTED`; a
-  condição é a #622 e ainda não existe. Quando pousar, `#utilityRefusalOf` passa a recusá-lo.
+- **Rooted (#622).** O `internalMoveCreature` do Canary recusa o Levitate de quem está
+  `CONDITION_ROOTED` (o script chama `creature:move`), com o mesmo `RETURNVALUE_NOTPOSSIBLE` do
+  destino sem chão: `#utilityRefusalOf` devolve `not-possible` antes de pagar, no cast e no
+  `slotStates`. O Magic Rope NÃO é preso — `teleportTo` cai em `internalTeleport`, que não confere
+  a condição.
+
+## Aprendizado e preço (#624, ADR 0058)
+
+Os dez arquivos de magia (a Ultimate Light é um por vocação) exigem ser APRENDIDOS como
+qualquer outra magia — `castSpell` recusa `spell-not-learned` e o slot da barra mostra `not-learned`.
+Elas nasceram depois da migração 0024 (um retrato das 119 magias do dia), então quem já existe
+também as COMPRA (ADR 0058 d.4). O `learnPrice` vem dos NPCs do Canary (`pnpm
+catalog:spell-prices`): Light 0 (grátis), Great Light 500, Ultimate Light 1600 (druid e sorcerer),
+Magic Rope 200, Find Person 80, Find Fiend 1000 e Food 300. O leitor liga por NOME, e o Canary tem
+uma magia `Levitate`; aqui são `Levitate (up)` e `Levitate (down)`, então os dois arquivos trazem o
+`learnPrice: 500` curado à mão (o mesmo valor em todas as 32 chamadas de NPC que a ensinam),
+com a citação no `_open`. **Divergência:** no Canary uma compra ensina `up` e `down`; aqui são
+duas compras (1000 gold no total) — ver "Em aberto".
 
 ## Em aberto
 
@@ -163,3 +179,5 @@ modelo de mapa, a estrutura de sessão ou o escopo que o dono fixou.
 - `[ABERTO]` O tint do cliente é uma aproximação (clareia o `cavern` inteiro na proporção do nível);
   o Tibia abre um círculo de luz em volta do jogador. A camada de luz por tile já existe no explorador
   do mundo (`WorldLightLayer`) e é o caminho se a apresentação da hunt pedir o mesmo.
+- `[ABERTO]` `levitate-down` vem junto da compra de `levitate-up`? No Canary uma compra de 500 gold
+  ensina os dois parâmetros; o catálogo tem duas magias e cada uma custa 500.

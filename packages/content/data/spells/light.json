@@ -3,6 +3,7 @@
   "name": "Light",
   "description": "Ilumina o seu redor por 6 minutos e 10 segundos. A luz diminui aos poucos.",
   "minLevel": 8,
+  "learnPrice": 0,
   "manaCost": 20,
   "group": "support",
   "groupCooldownMs": 2000,

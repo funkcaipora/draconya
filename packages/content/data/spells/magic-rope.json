@@ -3,6 +3,7 @@
   "name": "Magic Rope",
   "description": "Sobe um andar quando você está sobre um lugar de corda.",
   "minLevel": 9,
+  "learnPrice": 200,
   "manaCost": 20,
   "group": "support",
   "groupCooldownMs": 2000,

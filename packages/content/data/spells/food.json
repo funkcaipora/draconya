@@ -4,6 +4,7 @@
   "description": "Cria comida na sua mochila: sempre um item, e um segundo item em metade das vezes.",
   "vocationId": "druid",
   "minLevel": 14,
+  "learnPrice": 300,
   "manaCost": 120,
   "soulCost": 1,
   "group": "support",
