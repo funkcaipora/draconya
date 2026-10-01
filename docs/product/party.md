@@ -459,6 +459,11 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
   `eligible ∩ presentes`.
 - `autoSellLimit` = `autoSellItemTypes.{free,premium}` = 5/20 do **personagem líder**.
 - `itemSchema.value` é obrigatório; `0` é "não se vende" e vai para o líder.
+- O campo de um membro não fere membro: o fire field (ou qualquer campo de dano) lançado por um
+  personagem — ou pela invocação dele — não pega personagem nem invocação de personagem, o
+  próprio lançador incluso; o monstro no mesmo campo continua levando (OW-05, #826, ver
+  `combat.md`). A parede de um membro (Magic Wall, Wild Growth) cede ao passo de qualquer
+  membro, e segue barrando monstro.
 - Sair e morrer são `leave` com extrato próprio; o último encerra; `party-member-lost` cascateia.
 - Settlement ao sair, no fim e ao desligar `splitLoot`; `reason` no evento.
 - Encerrar para todos exige o sim de todos (`party-end-vote`, C2S 18 / S2C 31): proposta do líder,

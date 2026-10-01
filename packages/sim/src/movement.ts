@@ -78,9 +78,12 @@ export interface MovementWorld {
    * `TileOverrides` (porta fechada, capim, stone pile) e `Fields` (parede temporária) — UMA
    * pergunta para `canOccupy`/`move`, o passo guloso e o BFS do follow, em vez de cada um saber
    * que existem três lugares para conferir. Vale IGUAL para jogador e monstro — ao contrário do
-   * desvio de dano (`canMonsterEnterField`), que só o monstro respeita.
+   * desvio de dano (`canMonsterEnterField`), que só o monstro respeita — com UMA exceção
+   * (OW-05, #826): a parede de PERSONAGEM (a variante segura do Canary, `isSafeWall`) não bloqueia
+   * quem a dissolve ao pisar. `dissolvesSafeWalls` é essa pergunta (`Movable.dissolvesSafeWalls`);
+   * ausente é `false`, a pergunta de sempre.
    */
-  blockedAt(x: number, y: number, z: number): boolean;
+  blockedAt(x: number, y: number, z: number, dissolvesSafeWalls?: boolean): boolean;
   /** Pisar aqui muda de andar — escada do mapa OU overlay (stone pile virada buraco, #728)? */
   floorChangeAt(x: number, y: number, z: number): WorldPoint | null;
   /**
@@ -118,6 +121,15 @@ export interface Movable<P extends GridPoint = GridPoint> {
    * checagem antes desta issue, e não podem continuar sendo.
    */
   readonly crossesFloors?: boolean;
+  /**
+   * Dissolve a parede de personagem ao pisar (OW-05, #826)? Só o PERSONAGEM: no Canary é
+   * `creature->getPlayer()` que `Tile::queryAdd` confere antes de remover `ITEM_MAGICWALL_SAFE`/
+   * `ITEM_WILDGROWTH_SAFE` e deixar o passo seguir (`canary/src/items/tile.cpp:864-876`). Monstro
+   * e invocação — inclusive a de personagem — não têm isto, e a parede segue bloqueando os dois.
+   * Ausente é `false`. Este campo só diz que o passo É LEGAL; quem remove a parede, depois do
+   * passo aceito, é o ruleset (`HuntRuleset#step`).
+   */
+  readonly dissolvesSafeWalls?: boolean;
 }
 
 /**
@@ -196,9 +208,9 @@ export function canOccupy(
     // monstro multiandar (#519), que carrega `z` para achar o PRÓPRIO andar mas nunca troca de
     // andar sozinho. Para quem sobra, a legalidade é a do DESTINO da escada.
     if (!('z' in from) || mover.crossesFloors === false) return 'tile-blocked';
-    return tileAdmits(world, change);
+    return tileAdmits(world, change, mover.dissolvesSafeWalls === true);
   }
-  return tileAdmits(world, { x: to.x, y: to.y, z });
+  return tileAdmits(world, { x: to.x, y: to.y, z }, mover.dissolvesSafeWalls === true);
 }
 
 /**
@@ -209,10 +221,12 @@ export function canOccupy(
  * coordenada fora dos limites. As duas razões ficam separadas mesmo assim — "andei para fora
  * do mapa" e "bati numa parede" são bugs diferentes de quem chamou.
  */
-function tileAdmits(world: MovementWorld, to: WorldPoint): MoveRejection | null {
+function tileAdmits(
+  world: MovementWorld, to: WorldPoint, dissolvesSafeWalls = false,
+): MoveRejection | null {
   const { map } = world;
   if (to.x < 0 || to.y < 0 || to.x >= map.width || to.y >= map.height) return 'out-of-bounds';
-  if (world.blockedAt(to.x, to.y, to.z)) return 'tile-blocked';
+  if (world.blockedAt(to.x, to.y, to.z, dissolvesSafeWalls)) return 'tile-blocked';
   if (world.occupied(to.x, to.y, to.z)) return 'tile-occupied';
   return null;
 }
@@ -247,7 +261,10 @@ export function move<P extends GridPoint>(
   // no mesmo tile de conteúdo real, mas a ordem é a mais segura das duas.
   if (change === null) {
     const teleportTarget = world.teleportAt(to.x, to.y, fromZ);
-    if (teleportTarget !== null && tileAdmits(world, teleportTarget) === null) dest = teleportTarget;
+    if (
+      teleportTarget !== null
+      && tileAdmits(world, teleportTarget, mover.dissolvesSafeWalls === true) === null
+    ) dest = teleportTarget;
   }
 
   world.vacate(from.x, from.y, fromZ);
@@ -433,13 +450,16 @@ export class TileOccupancy implements MovementWorld {
     this.overrides?.closeDoorIfVacant(x, y, z, this.occupied(x, y, z));
   }
 
-  blockedAt(x: number, y: number, z: number = this.map.z): boolean {
+  blockedAt(
+    x: number, y: number, z: number = this.map.z, dissolvesSafeWalls = false,
+  ): boolean {
     return isBlocked(this.map, x, y, z)
       || (this.overrides?.blockedAt(x, y, z) ?? false)
       // Campo bloqueante (#560, Magic Wall/Wild Growth) — a terceira fonte, igual para
       // qualquer criatura: `canOccupy`/`move` não distinguem jogador de monstro aqui, ao
       // contrário do desvio de dano que só o monstro respeita (`#fieldBlocksMonster`, hunt.ts).
-      || (this.fields?.blockedAt({ x, y, z }) ?? false);
+      // A exceção é a parede de PERSONAGEM, que quem a dissolve ao pisar atravessa (OW-05, #826).
+      || (this.fields?.blockedAt({ x, y, z }, dissolvesSafeWalls) ?? false);
   }
 
   floorChangeAt(x: number, y: number, z: number = this.map.z): WorldPoint | null {
