@@ -28,6 +28,10 @@ local config = {
 		[101] = { value = CREATURE_SKINNING_CHANCE, newItem = 30, after = 102 }, -- after being killed
 		-- test rabbit: só o primeiro estágio
 		[200] = { value = CREATURE_SKINNING_CHANCE, newItem = 31, after = 202 },
+		-- sem after: o Canary usaria o decayTo, que a importação não modela
+		[250] = { value = CREATURE_SKINNING_CHANCE, newItem = 30 },
+		-- o after não decai (sem duration no items.xml): o cadáver esfolado não sumiria
+		[260] = { value = CREATURE_SKINNING_CHANCE, newItem = 30, after = 999 },
 		-- cadáver de mapa: nenhum monstro tem
 		[300] = { value = CREATURE_SKINNING_CHANCE, newItem = 30, after = 301 },
 		-- um monstro que o catálogo não tem
@@ -69,8 +73,12 @@ const ITEMS_XML = `<?xml version="1.0"?>
 	<item id="101" name="dead test drake"><attribute key="duration" value="300"/><attribute key="decayTo" value="102"/></item>
 	<item id="102" name="dead test drake"><attribute key="duration" value="300"/><attribute key="decayTo" value="103"/></item>
 	<item id="103" name="dead test drake"><attribute key="duration" value="60"/><attribute key="decayTo" value="0"/></item>
+	<item id="202" name="dead test rabbit"><attribute key="duration" value="300"/><attribute key="decayTo" value="203"/></item>
+	<item id="203" name="dead test rabbit"><attribute key="duration" value="60"/><attribute key="decayTo" value="0"/></item>
 	<item id="200" name="dead test rabbit"><attribute key="duration" value="10"/><attribute key="decayTo" value="201"/></item>
 	<item id="201" name="dead test rabbit"><attribute key="duration" value="300"/><attribute key="decayTo" value="0"/></item>
+	<item id="250" name="dead test noafter"><attribute key="duration" value="10"/><attribute key="decayTo" value="0"/></item>
+	<item id="260" name="dead test open"><attribute key="duration" value="10"/><attribute key="decayTo" value="0"/></item>
 	<item id="400" name="dead outsider"><attribute key="duration" value="10"/><attribute key="decayTo" value="0"/></item>
 	<item id="700" name="dead test demon"><attribute key="duration" value="10"/><attribute key="decayTo" value="701"/></item>
 	<item id="701" name="dead test demon"><attribute key="duration" value="300"/><attribute key="decayTo" value="0"/></item>
@@ -110,7 +118,10 @@ function fixture(files: Readonly<Record<string, string>>): CatalogImportContext 
 }
 
 const DEPS: SkinningReaderDeps = {
-  monsterIds: new Set(['test-drake', 'test-rabbit', 'test-demon', 'test-vampire', 'test-gap', 'test-shared']),
+  monsterIds: new Set([
+    'test-drake', 'test-rabbit', 'test-demon', 'test-vampire', 'test-gap', 'test-shared',
+    'test-noafter', 'test-open',
+  ]),
   itemIds: new Set(['test-knife', 'test-stake', 'test-leather', 'test-foot', 'test-dust', 'test-other-dust']),
 };
 
@@ -118,9 +129,9 @@ describe('readSkinningTable', () => {
   it('lê as duas ferramentas, as chaves simples, as listas de prêmio e a escala do chanceRange', () => {
     const table = readSkinningTable(SKINNING_LUA);
     expect([...table.tools.keys()]).toEqual([10, 20]);
-    expect(table.tools.get(10)?.get(100)).toEqual({ value: 25_000, newItem: 30 });
+    expect(table.tools.get(10)?.get(100)).toEqual({ value: 25_000, newItem: 30, after: 102 });
     // A escultura de gelo é uma chave simples (sem `after`), e a lista de prêmios NÃO é.
-    expect(table.tools.get(10)?.get(600)).toEqual({ value: 22_344, newItem: 601 });
+    expect(table.tools.get(10)?.get(600)).toEqual({ value: 22_344, newItem: 601, after: undefined });
     expect(table.nonCreatureKeys).toEqual([500]);
     expect(table.chanceScale).toBe(SKINNING_CHANCE_SCALE);
     expect(table.chanceScale).toBe(CANARY_SKINNING_CHANCE_SCALE);
@@ -154,7 +165,11 @@ describe('corpseChain e resolveSkinnableCorpse', () => {
     const resolved = resolveSkinnableCorpse(corpseChain(100, chains), tools);
     expect(resolved).toMatchObject({
       toolItemId: 10, entry: { value: 25_000, newItem: 30 },
-      stages: [{ canaryItemId: 100, durationMs: 10_000 }, { canaryItemId: 101, durationMs: 300_000 }],
+      // O `after` é o da entrada de CADA estágio (aqui os dois apontam para o mesmo `102`).
+      stages: [
+        { canaryItemId: 100, durationMs: 10_000, afterItemId: 102 },
+        { canaryItemId: 101, durationMs: 300_000, afterItemId: 102 },
+      ],
     });
   });
 
@@ -178,6 +193,9 @@ describe('corpseChain e resolveSkinnableCorpse', () => {
     // Um estágio esfolável sem duration no items.xml (não decai): a janela não fecha.
     const open = resolveSkinnableCorpse([{ itemId: 100, durationMs: undefined }], tools);
     expect(open).toMatchObject({ problem: expect.stringContaining('duration') as unknown });
+    // Um estágio esfolável sem `after`: o Canary cairia no decayTo, que a importação não modela.
+    const noAfter = resolveSkinnableCorpse([{ itemId: 250, durationMs: 10_000 }], tools);
+    expect(noAfter).toMatchObject({ problem: expect.stringContaining('after') as unknown });
   });
 });
 
@@ -211,6 +229,9 @@ describe('readSkinningCatalog (fixture sintética)', () => {
     'demons/test_demon.lua': monster('Test Demon', 700),
     // Um buraco na janela: 900 não é chave.
     'demons/test_gap.lua': monster('Test Gap', 900),
+    // Sem `after`, e com um `after` que não decai: o cadáver esfolado não teria vida a guardar.
+    'mammals/test_noafter.lua': monster('Test Noafter', 250),
+    'mammals/test_open.lua': monster('Test Open', 260),
     // Pasta que o catálogo pula.
     'familiars/test_familiar.lua': monster('Test Familiar', 100),
   });
@@ -222,18 +243,22 @@ describe('readSkinningCatalog (fixture sintética)', () => {
     const drake = entities.find((entity) => entity.id === 'test-drake');
     expect(drake).toEqual({
       id: 'test-drake', toolId: 'test-knife', materialId: 'test-leather', chance: 25_000,
-      stages: [{ canaryItemId: 100, durationMs: 10_000 }, { canaryItemId: 101, durationMs: 300_000 }],
+      // A vida DEPOIS da tentativa é a do `after` (`102`: 300 s) mais o resto da cadeia (`103`: 60 s).
+      stages: [
+        { canaryItemId: 100, durationMs: 10_000, afterTtlMs: 360_000 },
+        { canaryItemId: 101, durationMs: 300_000, afterTtlMs: 360_000 },
+      ],
       source: { engine: 'canary', commit: COMMIT, path: CANARY_SKINNING_LUA },
     });
     // O coelho só é esfolável no primeiro estágio.
     expect(entities.find((entity) => entity.id === 'test-rabbit')).toMatchObject({
-      materialId: 'test-foot', stages: [{ canaryItemId: 200, durationMs: 10_000 }],
+      materialId: 'test-foot', stages: [{ canaryItemId: 200, durationMs: 10_000, afterTtlMs: 360_000 }],
     });
     // O monstro que compartilha o cadáver leva os MESMOS estágios (é o que o Scavenge compara).
     expect(entities.find((entity) => entity.id === 'test-shared')).toMatchObject({ stages: drake?.['stages'] });
     // Toda entidade gerada valida contra o schema real de `@draconya/content`.
     for (const entity of entities) expect(() => skinningSchema.parse(entity)).not.toThrow();
-    expect(catalog.skinnableInCanary).toBe(7);
+    expect(catalog.skinnableInCanary).toBe(9);
   });
 
   it('o que fica fora entra em `skipped` com o motivo, nunca em silêncio', () => {
@@ -243,6 +268,8 @@ describe('readSkinningCatalog (fixture sintética)', () => {
     expect(reasonOf('test-vampire')).toContain('material 99');
     expect(reasonOf('test-demon')).toContain('ferramenta, material ou chance diferentes');
     expect(reasonOf('test-gap')).toBe('');
+    expect(reasonOf('test-noafter')).toContain('não declara `after`');
+    expect(reasonOf('test-open')).toContain('o `after` 999 não tem duration');
     // O `test-drake` duplicado não vira uma segunda entidade.
     expect(skipped.filter((entry) => entry.id === 'test-drake')).toHaveLength(1);
     expect(reasonOf('test-drake')).toContain('duplicado');
@@ -299,13 +326,17 @@ describe.skipIf(!HAS_REAL_CANARY)('o leitor contra o Canary real (CANARY_DIR)', 
   it('o Dragon, o Demon e o Rabbit reais batem com as cadeias do items.xml', () => {
     const catalog = readSkinningCatalog(ctx(), loadSkinningDeps(repoRoot));
     const byId = new Map((catalog.slices.get('skinning') ?? []).map((entity) => [entity.id, entity]));
+    // O Dragon esfolado vira o `4026` (300 s) e depois o `4027` (60 s): 360 s, em qualquer idade.
     expect(byId.get('dragon')).toMatchObject({
       toolId: 'obsidian-knife', materialId: 'green-dragon-leather', chance: 25_000,
-      stages: [{ canaryItemId: 5973, durationMs: 10_000 }, { canaryItemId: 4025, durationMs: 300_000 }],
+      stages: [
+        { canaryItemId: 5973, durationMs: 10_000, afterTtlMs: 360_000 },
+        { canaryItemId: 4025, durationMs: 300_000, afterTtlMs: 360_000 },
+      ],
     });
     expect(byId.get('demon')).toMatchObject({ toolId: 'blessed-wooden-stake', materialId: 'demon-dust' });
     expect(byId.get('rabbit')).toMatchObject({
-      materialId: 'rabbits-foot', stages: [{ canaryItemId: 6017, durationMs: 10_000 }],
+      materialId: 'rabbits-foot', stages: [{ canaryItemId: 6017, durationMs: 10_000, afterTtlMs: 360_000 }],
     });
     for (const entity of byId.values()) expect(() => skinningSchema.parse(entity)).not.toThrow();
     // Nenhum problema de tabela × cadeia entre os monstros reais: o único motivo de corte é o catálogo.

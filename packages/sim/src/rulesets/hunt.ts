@@ -284,17 +284,17 @@ const PENDING_MANUAL_ACTION = 'pending-manual-action';
 const MANUAL_ITEM_EXHAUST_MS = 1_000;
 
 /**
- * O alcance de `use-item-on` sobre um tile (ADR 0049 d.3): o `canUseFar` do Canary
- * (`Actions::canUseFar`, `Position::areInRange<7, 5>`) — 7 tiles em x e 5 em y, no mesmo andar,
- * com linha de visão.
+ * O resultado da esfola do bot no abate (#626). `afterTtlMs` só existe quando HOUVE sorteio — é
+ * ele que diz "tentou": a vida que o cadáver passa a ter (do estágio em que foi esfolado; o
+ * `transform(skin.after)` do Canary reinicia o decaimento). `material` é o que o sorteio rendeu.
  */
-const CAN_USE_FAR_X = 7;
-const CAN_USE_FAR_Y = 5;
+interface SkinAtDeath {
+  readonly material: LootItem | null;
+  readonly afterTtlMs: number | undefined;
+}
 
 /** O abate sem esfola: sem ferramenta, sem monstro esfolável ou fora do `combat-v4` (#626). */
-const NO_SKIN: { readonly attempted: boolean; readonly material: LootItem | null } = {
-  attempted: false, material: null,
-};
+const NO_SKIN: SkinAtDeath = { material: null, afterTtlMs: undefined };
 
 /**
  * O vencimento de um item equipado por TEMPO (ADR 0032 d.8): o anel que gasta por duração. É
@@ -1152,7 +1152,10 @@ export interface CorpseState {
   readonly ownerId?: string | null;
   readonly eligible?: readonly string[];
   readonly diedAtMs?: number;
-  /** MUTÁVEL: vira `true` na primeira tentativa de esfola, do bot ou à mão. */
+  /**
+   * MUTÁVEL: vira `true` na primeira tentativa de esfola, do bot ou à mão — e é nela que o fim do
+   * cadáver é reagendado (`#retimeCorpse`): o decaimento recomeça no `after` do Canary.
+   */
   skinned?: boolean;
 }
 
@@ -9975,8 +9978,9 @@ const slots = bot.groups.get(group);
     let corpseItems: CarriedItem[] = [];
     // A esfola do bot (#626, ADR 0048 d.5): tentada no MESMO evento, DEPOIS de todo o sorteio de
     // loot — a ordem do RNG é contrato (FUN-63), e o estágio novo entra por último para não
-    // deslocar nada do que já saía. `skinAttempted` só marca o cadáver quando houve sorteio.
-    let skinAttempted = false;
+    // deslocar nada do que já saía. `skinAfterTtlMs` só existe quando houve sorteio — é ele que
+    // marca o cadáver como esfolado e que o reagenda (o `transform` do Canary reinicia o decaimento).
+    let skinAfterTtlMs: number | undefined;
     if (!isSummon && definition !== undefined && this.#bag !== null && session.participants.length > 1) {
       // Modo compartilhado (#192): tudo cai na BOLSA — sem destinatário, sem modificador
       // individual, e a ordem do RNG é a de solo (gold, depois itens na ordem da tabela).
@@ -9998,7 +10002,7 @@ const slots = bot.groups.get(group);
         // Sem dono do cadáver, a esfola é de quem entre os elegíveis tem a ferramenta (na ordem
         // da sessão) e o material cai na bolsa, como o resto do loot desta modalidade.
         const skin = this.#skinAtDeath(session, monster, eligible);
-        skinAttempted = skin.attempted;
+        skinAfterTtlMs = skin.afterTtlMs;
         if (skin.material !== null) this.#deliverToBag(session, [skin.material]);
       }
     } else if (!isSummon && definition !== undefined && recipient !== null) {
@@ -10020,7 +10024,7 @@ const slots = bot.groups.get(group);
       // dono no `#collectFromCorpse` logo abaixo (ADR 0048 d.3/d.5) — sobra por filtro ou por
       // capacidade fica lá, como qualquer item.
       const skin = this.#skinAtDeath(session, monster, [recipient]);
-      skinAttempted = skin.attempted;
+      skinAfterTtlMs = skin.afterTtlMs;
       if (skin.material !== null) {
         corpseItems = [...corpseItems, ...this.#instantiateCorpseItems(session, recipient, [skin.material])];
       }
@@ -10075,7 +10079,7 @@ const slots = bot.groups.get(group);
       ownerId: recipient?.id ?? null,
       eligible: eligible.map((p) => p.id),
       diedAtMs: session.nowMs,
-      ...(skinAttempted ? { skinned: true } : {}),
+      ...(skinAfterTtlMs !== undefined ? { skinned: true } : {}),
     };
     // O dono coleta AGORA, sem plateia (invariante 3, ADR 0048 decisão 3): o `autoLoot` do
     // Canary, sem trava de Premium. O que o filtro não aceita ou não cabe fica no cadáver.
@@ -10086,7 +10090,10 @@ const slots = bot.groups.get(group);
         kind: 'ground-item-appeared', itemId: corpse.id, monsterId: corpse.monsterId,
         position: corpse.position,
       });
-      session.scheduleIn(CORPSE, corpseTtlMs, {
+      // Esfolado no abate, o cadáver não vive o `corpseTtlMs` inteiro: o Canary o transforma em
+      // `skin.after` (com ou sem sucesso), e o decaimento recomeça dali — a vida passa a ser a do
+      // `after` (`Skinning.stages[].afterTtlMs`), contada a partir do abate.
+      session.scheduleIn(CORPSE, skinAfterTtlMs ?? corpseTtlMs, {
         priority: EventPriority.Housekeeping, subject: String(corpse.id),
       });
     }
@@ -10749,19 +10756,20 @@ const slots = bot.groups.get(group);
 
   /**
    * A esfola do bot no abate: o primeiro candidato com a ferramenta do monstro na mochila esfola,
-   * com a idade zero do cadáver (a janela abre no primeiro estágio). `attempted` diz se houve
-   * sorteio — o cadáver nasce `skinned` — e `material` é o que o sorteio rendeu.
+   * com a idade zero do cadáver (a janela abre no primeiro estágio). `afterTtlMs` presente diz que
+   * houve sorteio — o cadáver nasce `skinned` e com a vida do `after` — e `material` é o que o
+   * sorteio rendeu.
    */
   #skinAtDeath(
     session: Session, monster: MonsterRuntime, candidates: readonly CharacterRuntime[],
-  ): { readonly attempted: boolean; readonly material: LootItem | null } {
+  ): SkinAtDeath {
     const entry = this.#options.skinning?.get(monster.monsterId);
     if (entry === undefined || !hasSkinningStage(this.#options.combat.compatibilityProfile)) return NO_SKIN;
     const stage = skinningStageAt(entry, 0);
     if (stage === null) return NO_SKIN;
     for (const candidate of candidates) {
       if (candidate.inventory.findStack(entry.toolId) === null) continue;
-      return { attempted: true, material: this.#rollSkin(session, candidate, entry, stage) };
+      return { material: this.#rollSkin(session, candidate, entry, stage), afterTtlMs: stage.afterTtlMs };
     }
     return NO_SKIN;
   }
@@ -10803,14 +10811,17 @@ const slots = bot.groups.get(group);
 
   /**
    * A esfola à mão (`use-item-on` da ferramenta com o TILE do cadáver por alvo — ADR 0049
-   * decisão 3): confere alcance (`canUseFar` do Canary, 7×5 no mesmo andar com linha de visão),
+   * decisão 3): confere alcance (o `Actions::canUse` do Canary — mesmo andar e adjacente,
+   * `|dx| <= 1` e `|dy| <= 1`, SEM linha de visão: o `skinning.lua` não chama `allowFarUse`, então o
+   * `canUseFar` 7×5 das runas não vale aqui, e o jogador longe é recusado e andado até o cadáver),
    * que a ferramenta é a do monstro, que o cadáver não foi esfolado e que a janela do estágio
    * ainda está aberta; sorteia; e o material passa pelo filtro de Quick Loot de quem esfolou —
    * o que não é aceito, ou não cabe, fica no cadáver, como o resto do loot.
    *
    * Tudo que o Canary responde com "not possible" (sem cadáver, ferramenta errada, já esfolado,
-   * estágio fora da janela) é `not-usable`; alcance e linha de visão são `out-of-range`. A
-   * tentativa gasta o cadáver — `skinned` — com ou sem sucesso, e nenhuma recusa consome sorteio.
+   * estágio fora da janela) é `not-usable`; o alcance é `out-of-range`. A tentativa gasta o
+   * cadáver — `skinned` — com ou sem sucesso, REINICIA o decaimento dele (`#retimeCorpse`) e
+   * nenhuma recusa consome sorteio.
    */
   #performSkin(
     session: Session, character: CharacterRuntime, tool: CarriedItem, target: UseSlotTarget | undefined,
@@ -10820,11 +10831,12 @@ const slots = bot.groups.get(group);
     const corpse = this.#topCorpseAt(target.position);
     if (corpse === undefined) return refuseItem('not-usable', 0);
 
+    // O `canUse` do Canary (`Actions::canUse`): mesmo andar e `areInRange<1, 1>`, sem linha de
+    // visão — a mesma conferência de `useOnMap` e de `open-corpse`/`take-loot`.
     const from = character.position;
     if (!sameFloor(from.z, corpse.position.z)
-      || Math.abs(from.x - corpse.position.x) > CAN_USE_FAR_X
-      || Math.abs(from.y - corpse.position.y) > CAN_USE_FAR_Y
-      || !isSightClear(this.#world.map, from, corpse.position)) {
+      || Math.abs(from.x - corpse.position.x) > 1
+      || Math.abs(from.y - corpse.position.y) > 1) {
       return refuseItem('out-of-range', 0);
     }
 
@@ -10837,6 +10849,10 @@ const slots = bot.groups.get(group);
     if (stage === null) return refuseItem('not-usable', 0);
 
     corpse.skinned = true;
+    // O `topItem:transform(skin.after)` do Canary roda com sucesso ou sem, e o `Item::setID` do
+    // item novo reinicia o decaimento: o cadáver passa a viver a cadeia do `after` a partir de
+    // AGORA, e não mais o que faltava dos 670 s.
+    this.#retimeCorpse(session, corpse, stage.afterTtlMs);
     const material = this.#rollSkin(session, character, entry, stage);
     if (material !== null) {
       const left = this.#collectItems(session, character, this.#instantiateCorpseItems(session, character, [material]));
@@ -10846,6 +10862,19 @@ const slots = bot.groups.get(group);
     session.emit({ kind: 'equipment-changed', characterId: character.id });
     character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
     return { ok: true };
+  }
+
+  /**
+   * Reagenda o fim de um cadáver esfolado (#626): o evento `CORPSE` que o abate marcou em
+   * `corpseTtlMs` é cancelado e um novo vence `afterTtlMs` depois de agora — a vida do `after` do
+   * `skinning.lua`. O que ficou no cadáver (o loot que o filtro recusou, ou que não coube) vive
+   * esse prazo e some com ele, como na decisão 6 do ADR 0048: continua sendo "um número só, o do
+   * Tibia", agora o do cadáver esfolado.
+   */
+  #retimeCorpse(session: Session, corpse: CorpseState, afterTtlMs: number): void {
+    const subject = String(corpse.id);
+    session.cancelEvent(CORPSE, subject);
+    session.scheduleIn(CORPSE, afterTtlMs, { priority: EventPriority.Housekeeping, subject });
   }
 
   /** Ache o cadáver por id do item do chão (#722), ou `undefined` — já apodreceu ou nunca existiu. */

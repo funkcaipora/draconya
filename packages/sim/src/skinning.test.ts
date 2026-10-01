@@ -11,12 +11,15 @@ import {
 // (300 s) e o `4027` (60 s) que fecham os 670 s de vida do cadáver não são chave do `config`.
 const dragon: Skinning = {
   id: 'dragon', toolId: 'obsidian-knife', materialId: 'green-dragon-leather', chance: 25_000,
-  stages: [{ canaryItemId: 5973, durationMs: 10_000 }, { canaryItemId: 4025, durationMs: 300_000 }],
+  stages: [
+    { canaryItemId: 5973, durationMs: 10_000, afterTtlMs: 360_000 },
+    { canaryItemId: 4025, durationMs: 300_000, afterTtlMs: 360_000 },
+  ],
 };
 // O coelho: só o `6017`, 10 s (o `4301` que vem depois não é chave).
 const rabbit: Skinning = {
   id: 'rabbit', toolId: 'obsidian-knife', materialId: 'rabbits-foot', chance: 25_000,
-  stages: [{ canaryItemId: 6017, durationMs: 10_000 }],
+  stages: [{ canaryItemId: 6017, durationMs: 10_000, afterTtlMs: 360_000 }],
 };
 const scavenge: Charm = {
   id: 'scavenge', name: 'Scavenge', canaryCharmId: 13, category: 'minor', type: 'passive',
@@ -69,7 +72,10 @@ describe('o Scavenge vale pelo ID do cadáver que está sendo esfolado', () => {
   // O Minotaur, o Minotaur Bruiser e o Depowered Minotaur são todos `5969`: o mesmo par de estágios.
   const minotaur: Skinning = {
     id: 'minotaur', toolId: 'obsidian-knife', materialId: 'minotaur-leather', chance: 25_000,
-    stages: [{ canaryItemId: 5969, durationMs: 10_000 }, { canaryItemId: 4011, durationMs: 300_000 }],
+    stages: [
+      { canaryItemId: 5969, durationMs: 10_000, afterTtlMs: 360_000 },
+      { canaryItemId: 4011, durationMs: 300_000, afterTtlMs: 360_000 },
+    ],
   };
   const bruiser: Skinning = { ...minotaur, id: 'minotaur-bruiser' };
 
@@ -94,11 +100,12 @@ describe('o Scavenge vale pelo ID do cadáver que está sendo esfolado', () => {
     const three: Skinning = {
       ...dragon,
       stages: [
-        { canaryItemId: 1, durationMs: 1 }, { canaryItemId: 2, durationMs: 1 }, { canaryItemId: 3, durationMs: 1 },
+        { canaryItemId: 1, durationMs: 1, afterTtlMs: 1 }, { canaryItemId: 2, durationMs: 1, afterTtlMs: 1 },
+        { canaryItemId: 3, durationMs: 1, afterTtlMs: 1 },
       ],
     };
-    expect(scavengeChanceFor(scavenge, 1, three, { canaryItemId: 2, durationMs: 1 })).toBe(60);
-    expect(scavengeChanceFor(scavenge, 1, three, { canaryItemId: 3, durationMs: 1 })).toBeUndefined();
+    expect(scavengeChanceFor(scavenge, 1, three, { canaryItemId: 2, durationMs: 1, afterTtlMs: 1 })).toBe(60);
+    expect(scavengeChanceFor(scavenge, 1, three, { canaryItemId: 3, durationMs: 1, afterTtlMs: 1 })).toBeUndefined();
   });
 
   it('sem charm, sem monstro escolhido esfolável ou sem tier desbloqueado, nada muda', () => {

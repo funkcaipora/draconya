@@ -7,11 +7,13 @@
     "stages": [
       {
         "canaryItemId": 21004,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 21005,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -28,11 +30,13 @@
     "stages": [
       {
         "canaryItemId": 5995,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4097,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -49,11 +53,13 @@
     "stages": [
       {
         "canaryItemId": 22742,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 22743,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -70,11 +76,13 @@
     "stages": [
       {
         "canaryItemId": 20996,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 20997,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -91,11 +99,13 @@
     "stages": [
       {
         "canaryItemId": 5981,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4047,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -112,11 +122,13 @@
     "stages": [
       {
         "canaryItemId": 6006,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4137,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -133,11 +145,13 @@
     "stages": [
       {
         "canaryItemId": 6006,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4137,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -154,7 +168,8 @@
     "stages": [
       {
         "canaryItemId": 10364,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -171,7 +186,8 @@
     "stages": [
       {
         "canaryItemId": 4097,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -188,11 +204,13 @@
     "stages": [
       {
         "canaryItemId": 5999,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4112,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -209,11 +227,13 @@
     "stages": [
       {
         "canaryItemId": 22742,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 22743,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -230,11 +250,13 @@
     "stages": [
       {
         "canaryItemId": 5984,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4062,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -251,11 +273,13 @@
     "stages": [
       {
         "canaryItemId": 5995,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4097,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -272,11 +296,13 @@
     "stages": [
       {
         "canaryItemId": 5995,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4097,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -293,11 +319,13 @@
     "stages": [
       {
         "canaryItemId": 5995,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4097,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -314,11 +342,13 @@
     "stages": [
       {
         "canaryItemId": 5969,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4011,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -335,11 +365,13 @@
     "stages": [
       {
         "canaryItemId": 8109,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 8110,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -356,11 +388,13 @@
     "stages": [
       {
         "canaryItemId": 5973,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4025,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -377,11 +411,13 @@
     "stages": [
       {
         "canaryItemId": 5984,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4062,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -398,11 +434,13 @@
     "stages": [
       {
         "canaryItemId": 5984,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4062,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -419,11 +457,13 @@
     "stages": [
       {
         "canaryItemId": 21004,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 21005,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -440,11 +480,13 @@
     "stages": [
       {
         "canaryItemId": 4239,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4321,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -461,11 +503,13 @@
     "stages": [
       {
         "canaryItemId": 10367,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 10364,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -482,11 +526,13 @@
     "stages": [
       {
         "canaryItemId": 21091,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 21092,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -503,11 +549,13 @@
     "stages": [
       {
         "canaryItemId": 20996,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 20997,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -524,11 +572,13 @@
     "stages": [
       {
         "canaryItemId": 5995,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4097,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -545,11 +595,13 @@
     "stages": [
       {
         "canaryItemId": 5984,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4062,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -566,7 +618,8 @@
     "stages": [
       {
         "canaryItemId": 6017,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -583,11 +636,13 @@
     "stages": [
       {
         "canaryItemId": 10355,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 10352,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -604,11 +659,13 @@
     "stages": [
       {
         "canaryItemId": 10359,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 10356,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -625,11 +682,13 @@
     "stages": [
       {
         "canaryItemId": 6041,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4327,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -646,11 +705,13 @@
     "stages": [
       {
         "canaryItemId": 6040,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4324,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -667,11 +728,13 @@
     "stages": [
       {
         "canaryItemId": 4239,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4321,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -688,11 +751,13 @@
     "stages": [
       {
         "canaryItemId": 10367,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 10364,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -709,11 +774,13 @@
     "stages": [
       {
         "canaryItemId": 10355,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 10352,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -730,11 +797,13 @@
     "stages": [
       {
         "canaryItemId": 6006,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4137,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -751,11 +820,13 @@
     "stages": [
       {
         "canaryItemId": 4239,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4321,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -772,11 +843,13 @@
     "stages": [
       {
         "canaryItemId": 5969,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4011,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -793,11 +866,13 @@
     "stages": [
       {
         "canaryItemId": 5982,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4052,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -814,11 +889,13 @@
     "stages": [
       {
         "canaryItemId": 5969,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4011,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -835,11 +912,13 @@
     "stages": [
       {
         "canaryItemId": 5969,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4011,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -856,11 +935,13 @@
     "stages": [
       {
         "canaryItemId": 5983,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4057,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -877,11 +958,13 @@
     "stages": [
       {
         "canaryItemId": 5983,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4057,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -898,11 +981,13 @@
     "stages": [
       {
         "canaryItemId": 5983,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4057,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -919,11 +1004,13 @@
     "stages": [
       {
         "canaryItemId": 5981,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4047,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -940,11 +1027,13 @@
     "stages": [
       {
         "canaryItemId": 5981,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4047,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -961,11 +1050,13 @@
     "stages": [
       {
         "canaryItemId": 5982,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4052,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -982,11 +1073,13 @@
     "stages": [
       {
         "canaryItemId": 20996,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 20997,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -1003,11 +1096,13 @@
     "stages": [
       {
         "canaryItemId": 5995,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4097,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -1024,7 +1119,8 @@
     "stages": [
       {
         "canaryItemId": 6017,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -1041,11 +1137,13 @@
     "stages": [
       {
         "canaryItemId": 21004,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 21005,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -1062,11 +1160,13 @@
     "stages": [
       {
         "canaryItemId": 8109,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 8110,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -1083,11 +1183,13 @@
     "stages": [
       {
         "canaryItemId": 6006,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4137,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -1104,11 +1206,13 @@
     "stages": [
       {
         "canaryItemId": 5999,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4112,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -1125,11 +1229,13 @@
     "stages": [
       {
         "canaryItemId": 8109,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 8110,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -1146,11 +1252,13 @@
     "stages": [
       {
         "canaryItemId": 5983,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4057,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -1167,11 +1275,13 @@
     "stages": [
       {
         "canaryItemId": 6006,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4137,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -1188,11 +1298,13 @@
     "stages": [
       {
         "canaryItemId": 5995,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4097,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -1209,11 +1321,13 @@
     "stages": [
       {
         "canaryItemId": 5995,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4097,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -1230,11 +1344,13 @@
     "stages": [
       {
         "canaryItemId": 6006,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 4137,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -1251,11 +1367,13 @@
     "stages": [
       {
         "canaryItemId": 8744,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 8738,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {
@@ -1272,11 +1390,13 @@
     "stages": [
       {
         "canaryItemId": 8109,
-        "durationMs": 10000
+        "durationMs": 10000,
+        "afterTtlMs": 360000
       },
       {
         "canaryItemId": 8110,
-        "durationMs": 300000
+        "durationMs": 300000,
+        "afterTtlMs": 360000
       }
     ],
     "source": {

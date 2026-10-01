@@ -36,7 +36,8 @@ describe('a tabela de esfola gerada do skinning.lua do Canary (#626)', () => {
     const dragon = real().skinning.get('dragon');
     expect(dragon).toMatchObject({ toolId: 'obsidian-knife', materialId: 'green-dragon-leather' });
     expect(dragon?.stages).toEqual([
-      { canaryItemId: 5973, durationMs: 10_000 }, { canaryItemId: 4025, durationMs: 300_000 },
+      { canaryItemId: 5973, durationMs: 10_000, afterTtlMs: 360_000 },
+      { canaryItemId: 4025, durationMs: 300_000, afterTtlMs: 360_000 },
     ]);
     expect(real().monsters.get('dragon')?.corpseTtlMs).toBe(670_000);
   });
@@ -72,7 +73,7 @@ describe('a tabela de esfola gerada do skinning.lua do Canary (#626)', () => {
 
   it('o coelho só se esfola nos 10 s do primeiro estágio, e rende o pé de coelho', () => {
     expect(real().skinning.get('rabbit')).toMatchObject({
-      materialId: 'rabbits-foot', stages: [{ canaryItemId: 6017, durationMs: 10_000 }],
+      materialId: 'rabbits-foot', stages: [{ canaryItemId: 6017, durationMs: 10_000, afterTtlMs: 360_000 }],
     });
   });
 
@@ -83,6 +84,20 @@ describe('a tabela de esfola gerada do skinning.lua do Canary (#626)', () => {
       expect(ttl, entry.id).toBeDefined();
       expect(window, entry.id).toBeLessThanOrEqual(ttl as number);
     }
+  });
+
+  it('o cadáver esfolado vive o que o `after` do Canary diz: 360 s (4026 + 4027, ou o equivalente) em todo estágio', () => {
+    // `Item::setID` reinicia o decaimento na tentativa: o `duration` do `after` (300 s) e o último
+    // estágio da cadeia dele (60 s) — o mesmo número para as 62 entradas e as 120 chaves do `config`.
+    for (const entry of real().skinning.values()) {
+      for (const stage of entry.stages) expect(stage.afterTtlMs, `${entry.id}/${String(stage.canaryItemId)}`).toBe(360_000);
+      // E é MENOR que a vida inteira do cadáver: esfolar nunca o faz viver mais.
+      expect(entry.stages[0]?.afterTtlMs, entry.id).toBeLessThan(real().monsters.get(entry.id)?.corpseTtlMs as number);
+    }
+  });
+
+  it('o pé de coelho vale 50 gp (o preço de compra dos NPCs, `shops.lua`), e os outros materiais seguem o catálogo', () => {
+    expect(real().items.get('rabbits-foot')?.value).toBe(50);
   });
 
   it('todo material é um item do catálogo: creature product (o Gut lê o flag), menos o pé de coelho', () => {

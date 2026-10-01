@@ -20,6 +20,13 @@
 // id (o `5969` é do Minotaur, do Minotaur Bruiser e do Depowered Minotaur; o `5995`, de todo
 // demônio e do Orshabaal) — e o Canary esfola todos, chefes inclusive, porque a regra é pelo item.
 //
+// **A tentativa reinicia o decaimento.** Com ou sem sucesso o Canary roda `topItem:transform(
+// skin.after)`, e o `Item::setID` do item novo reinicia o `duration` (e limpa o dono do cadáver):
+// o cadáver esfolado vive o `duration` do `after` mais a cadeia `decayTo` dele (o Dragon esfolado
+// vira `4026`: 300 s + 60 s do `4027`), e não mais o que faltava da vida de 670 s. O importador
+// guarda essa soma por estágio (`afterTtlMs`, de `corpseTtlMsFromChain`), porque o `after` é da
+// entrada de cada id.
+//
 // **"87 mapeamentos" é a contagem da palavra `newItem` no arquivo.** A issue conta as 87
 // ocorrências, que incluem o código da função e os prêmios de quest. O que a tabela declara de
 // fato são chaves simples (`[id] = { value, newItem, after }`), duas LISTAS de prêmio (o boss da
@@ -39,8 +46,8 @@ import { repoRootFrom } from './env.js';
 import type { CatalogEntity, CatalogSource } from './generated-writer.js';
 import { constantsFrom, evaluateAssignments, type LuaValue } from './lua-table.js';
 import {
-  CANARY_ITEMS_XML, listMonsterFiles, monsterTypeName, readCorpseDecayChains, readItemNames, slugify,
-  type DecayStage,
+  CANARY_ITEMS_XML, corpseTtlMsFromChain, listMonsterFiles, monsterTypeName, readCorpseDecayChains,
+  readItemNames, slugify, type DecayStage,
 } from './monsters.js';
 import { registerCatalogType, type CatalogImportContext, type CatalogImportResult } from './registry.js';
 import type { SkippedEntity } from './report.js';
@@ -67,6 +74,12 @@ export interface SkinningReaderDeps {
 interface SkinEntry {
   readonly value: number;
   readonly newItem: number;
+  /**
+   * O `after` do Lua: o id em que o cadáver se TRANSFORMA quando a esfola é tentada
+   * (`topItem:transform(skin.after)`, com sucesso ou sem). `undefined` quando a entrada não o
+   * declara — o Lua cairia no `decayTo` do item, e esta importação não modela esse ramo.
+   */
+  readonly after: number | undefined;
 }
 
 /** `ferramenta (id do Canary) → id do cadáver → entrada`. */
@@ -105,9 +118,13 @@ export function readSkinningTable(source: string): {
         nonCreatureKeys.push(corpseId);
         continue;
       }
-      // `after` (o cadáver esfolado em que ele vira) não entra: o `sim` não tem outro cadáver — a
-      // esfola só marca este como já esfolado.
-      entries.set(corpseId, { value: raw['value'], newItem: raw['newItem'] });
+      // `after` (o cadáver esfolado em que ele vira) entra só pela VIDA que ele tem: o `sim` não
+      // tem outro cadáver — a esfola marca este como já esfolado —, mas o `transform` reinicia o
+      // decaimento no `duration` do `after`, e é essa soma que vira `Skinning.stages[].afterTtlMs`.
+      const after = raw['after'];
+      entries.set(corpseId, {
+        value: raw['value'], newItem: raw['newItem'], after: typeof after === 'number' ? after : undefined,
+      });
     }
     tools.set(toolId, entries);
   }
@@ -152,8 +169,13 @@ export function corpseChain(
 export interface SkinnableCorpse {
   readonly toolItemId: number;
   readonly entry: SkinEntry;
-  /** Os estágios esfoláveis — o prefixo da cadeia cujos ids são chave da ferramenta. */
-  readonly stages: readonly { readonly canaryItemId: number; readonly durationMs: number }[];
+  /**
+   * Os estágios esfoláveis — o prefixo da cadeia cujos ids são chave da ferramenta, cada um com o
+   * `after` que a ENTRADA DELE declara (o id em que o cadáver vira quando se tenta esfolá-lo).
+   */
+  readonly stages: readonly {
+    readonly canaryItemId: number; readonly durationMs: number; readonly afterItemId: number;
+  }[];
 }
 
 /**
@@ -174,7 +196,7 @@ export function resolveSkinnableCorpse(
     return undefined;
   };
 
-  const skinnable: { canaryItemId: number; durationMs: number }[] = [];
+  const skinnable: { canaryItemId: number; durationMs: number; afterItemId: number }[] = [];
   let first: { tool: number; entry: SkinEntry } | undefined;
   let prefixEnded = false;
   for (const stage of stages) {
@@ -188,7 +210,10 @@ export function resolveSkinnableCorpse(
     if (stage.durationMs === undefined) {
       return { problem: `o estágio ${String(stage.itemId)} não tem duration no items.xml (não decai — a janela não fecha)` };
     }
-    skinnable.push({ canaryItemId: stage.itemId, durationMs: stage.durationMs });
+    if (key.entry.after === undefined) {
+      return { problem: `o estágio ${String(stage.itemId)} não declara \`after\` (o Canary usaria o decayTo, que esta importação não modela)` };
+    }
+    skinnable.push({ canaryItemId: stage.itemId, durationMs: stage.durationMs, afterItemId: key.entry.after });
   }
   if (first === undefined) return undefined;
   return { toolItemId: first.tool, entry: first.entry, stages: skinnable };
@@ -254,8 +279,23 @@ export function readSkinningCatalog(ctx: CatalogImportContext, deps: SkinningRea
       skip(`material ${String(resolved.entry.newItem)} (${materialId ?? 'sem nome no items.xml'}) fora do catálogo de itens`);
       continue;
     }
+    // A vida do cadáver DEPOIS da tentativa, por estágio: o `Item::setID` do `after` reinicia o
+    // decaimento no `duration` dele e segue a cadeia `decayTo` (`corpseTtlMsFromChain`, a mesma
+    // soma do `corpseTtlMs` do monstro). Um `after` que não decai deixaria o cadáver para sempre —
+    // vida que o `sim` não representa —, e vira `skipped` em vez de um número adivinhado.
+    const windows: { canaryItemId: number; durationMs: number; afterTtlMs: number }[] = [];
+    let openAfter: number | undefined;
+    for (const stage of resolved.stages) {
+      const afterTtlMs = corpseTtlMsFromChain(stage.afterItemId, chains);
+      if (afterTtlMs === undefined) { openAfter = stage.afterItemId; break; }
+      windows.push({ canaryItemId: stage.canaryItemId, durationMs: stage.durationMs, afterTtlMs });
+    }
+    if (openAfter !== undefined) {
+      skip(`o \`after\` ${String(openAfter)} não tem duration no items.xml (o cadáver esfolado não decairia)`);
+      continue;
+    }
     entities.push({
-      id, toolId, materialId, chance: resolved.entry.value, stages: resolved.stages, source: skinSource,
+      id, toolId, materialId, chance: resolved.entry.value, stages: windows, source: skinSource,
     });
   }
 

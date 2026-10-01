@@ -51,7 +51,12 @@ const items = [
 ];
 
 /** O rato do Canary: os dois estágios esfoláveis do Dragon (`5973`, `4025`). */
-const STAGES = [{ canaryItemId: 5973, durationMs: 10_000 }, { canaryItemId: 4025, durationMs: 300_000 }];
+// O que resta de vida depois da tentativa: o `after` (`4026`, 300 s) e o `4027` (60 s) — 360 s.
+const AFTER_TTL_MS = 360_000;
+const STAGES = [
+  { canaryItemId: 5973, durationMs: 10_000, afterTtlMs: AFTER_TTL_MS },
+  { canaryItemId: 4025, durationMs: 300_000, afterTtlMs: AFTER_TTL_MS },
+];
 const skinRat = (over: Partial<Skinning> = {}): Skinning => ({
   id: 'rat', toolId: 'obsidian-knife', materialId: 'hide', chance: 25_000, stages: STAGES, ...over,
 });
@@ -391,13 +396,28 @@ describe('a esfola à mão: use-item-on da ferramenta no tile do cadáver (ADR 0
     expect(use({ kind: 'position', position: { x: 5, y: 3, z: MAP_Z } })).toMatchObject({ ok: false, reason: 'not-usable' });
     // A instância que não existe.
     expect(use(tileOf(corpse), 'nao-existe')).toMatchObject({ ok: false, reason: 'not-carried' });
-    // Longe demais: 7 tiles em x e 5 em y é o `canUseFar` do Canary.
-    hero.position = { x: 1, y: 1, z: MAP_Z };
-    const far = { ...corpse, position: { x: 1, y: 1 + 6, z: MAP_Z } };
-    Object.assign(corpse, { position: far.position });
-    expect(use(tileOf(far))).toMatchObject({ ok: false, reason: 'out-of-range' });
+    // Longe demais: a esfola é o `Actions::canUse` do Canary (adjacente, `areInRange<1, 1>`) — o
+    // `skinning.lua` não chama `allowFarUse`, então 2 tiles já é `out-of-range`.
+    hero.position = { x: corpse.position.x, y: corpse.position.y + 2, z: MAP_Z };
+    expect(use(tileOf(corpse))).toMatchObject({ ok: false, reason: 'out-of-range' });
+    hero.position = { x: corpse.position.x - 2, y: corpse.position.y, z: MAP_Z };
+    expect(use(tileOf(corpse))).toMatchObject({ ok: false, reason: 'out-of-range' });
+    // Muito longe (o que o `canUseFar` 7×5 das runas aceitaria, com linha de visão) também.
+    hero.position = { x: corpse.position.x + 6, y: corpse.position.y, z: MAP_Z };
+    expect(use(tileOf(corpse))).toMatchObject({ ok: false, reason: 'out-of-range' });
+    // Outro andar, mesmo em cima do tile.
+    hero.position = { x: corpse.position.x, y: corpse.position.y, z: MAP_Z + 1 };
+    expect(use(tileOf(corpse))).toMatchObject({ ok: false, reason: 'out-of-range' });
     expect(session.rng.getState()).toEqual(before);
     expect(corpse.skinned).toBeUndefined();
+  });
+
+  it('adjacente vale na diagonal também: `|dx| <= 1` e `|dy| <= 1`, o `areInRange<1, 1>` do Canary', () => {
+    const { session, hero, ruleset, corpse } = withUnskinnedCorpse();
+    const { x, y } = corpse.position;
+    hero.position = { x: x + 1, y: y + 1, z: MAP_Z };
+    expect(ruleset.useItemOn(session, 'hero', { instanceId: 'kit:knife' }, 1, tileOf(corpse))).toEqual({ ok: true });
+    expect(held(hero, 'hide')).toBe(1);
   });
 
   it('a ferramenta errada para o monstro é "not possible" e não gasta o cadáver', () => {
@@ -431,12 +451,175 @@ describe('a esfola à mão: use-item-on da ferramenta no tile do cadáver (ADR 0
   });
 });
 
+describe('a tentativa de esfola reinicia o decaimento do cadáver (o `transform(skin.after)` do Canary)', () => {
+  // O Canary roda `topItem:transform(skin.after)` com ou sem sucesso, e o `Item::setID` do item
+  // novo reinicia o `duration`: o Dragon esfolado vira o `4026` (300 s) e depois o `4027` (60 s),
+  // 360 s a partir da TENTATIVA, e não mais o que faltava dos 670 s do abate.
+  const alive = (ruleset: HuntRuleset, corpse: CorpseState) => ruleset.groundItems.includes(corpse);
+  /** Avança o relógio da sessão até o instante lógico `atMs`. */
+  const advanceTo = (session: Session, atMs: number) => {
+    session.advanceBy(atMs - session.nowMs);
+    session.drainEvents();
+  };
+  /** O cadáver ainda não esfolado, com a faca já na mochila do herói e o herói em cima dele. */
+  function readyToSkin(content?: Content) {
+    const built = start(content === undefined ? {} : { content });
+    const corpse = killTheRat(built.session, built.ruleset);
+    built.hero.inventory.forceAdd(KNIFE, built.loaded.items, { backpackSlots: 0, satchelSlots: 10, row: 5 });
+    built.hero.position = { ...corpse.position };
+    return { ...built, corpse, diedAt: corpse.diedAtMs as number };
+  }
+  const skin = (built: ReturnType<typeof readyToSkin>) => built.ruleset.useItemOn(
+    built.session, 'hero', { instanceId: 'kit:knife' }, 1, tileOf(built.corpse),
+  );
+
+  it('controle: sem esfola o cadáver vive os 670 s inteiros (`corpseTtlMs`)', () => {
+    const { session, ruleset } = start();
+    const corpse = killTheRat(session, ruleset);
+    const diedAt = corpse.diedAtMs as number;
+    advanceTo(session, diedAt + 669_999);
+    expect(alive(ruleset, corpse)).toBe(true);
+    advanceTo(session, diedAt + 670_000);
+    expect(alive(ruleset, corpse)).toBe(false);
+  });
+
+  it('esfolado no abate pelo bot: vive 360 s a partir do abate, e some com o que o filtro deixou', () => {
+    // O filtro `accept []` não leva nada: o material espera no cadáver e some junto com ele.
+    const { session, ruleset } = start({ carrying: [KNIFE], loot: { filter: 'accept', itemIds: [], autoSell: [] } });
+    const corpse = killTheRat(session, ruleset);
+    expect(corpse.skinned).toBe(true);
+    expect(corpse.items?.map((item) => item.itemId)).toEqual(['hide']);
+    const diedAt = corpse.diedAtMs as number;
+    advanceTo(session, diedAt + 359_999);
+    expect(alive(ruleset, corpse)).toBe(true);
+    advanceTo(session, diedAt + 360_000);
+    expect(alive(ruleset, corpse)).toBe(false);
+  });
+
+  it('a tentativa que FALHA reinicia do mesmo jeito (o transform roda nos dois casos)', () => {
+    const never = buildContent(raw({ skinning: [skinRat({ chance: 1 })] }));
+    const { session, hero, ruleset } = start({ content: never, carrying: [KNIFE] });
+    const corpse = killTheRat(session, ruleset);
+    expect(corpse.skinned).toBe(true);
+    expect(held(hero, 'hide')).toBe(0);
+    const diedAt = corpse.diedAtMs as number;
+    advanceTo(session, diedAt + 359_999);
+    expect(alive(ruleset, corpse)).toBe(true);
+    advanceTo(session, diedAt + 360_000);
+    expect(alive(ruleset, corpse)).toBe(false);
+  });
+
+  it('esfolado À MÃO aos 100 s: some 360 s depois da tentativa (aos 460 s), não aos 670 s', () => {
+    const built = readyToSkin();
+    advanceTo(built.session, built.diedAt + 100_000);
+    expect(skin(built)).toEqual({ ok: true });
+    const skinnedAt = built.session.nowMs;
+    expect(skinnedAt).toBe(built.diedAt + 100_000);
+    advanceTo(built.session, skinnedAt + 359_999);
+    expect(alive(built.ruleset, built.corpse)).toBe(true);
+    advanceTo(built.session, skinnedAt + 360_000);
+    expect(alive(built.ruleset, built.corpse)).toBe(false);
+  });
+
+  it('esfolado à mão no fim da janela (305 s): vive até 665 s, 5 s ANTES dos 670 s do abate', () => {
+    const built = readyToSkin();
+    advanceTo(built.session, built.diedAt + 305_000);
+    expect(skin(built)).toEqual({ ok: true });
+    advanceTo(built.session, built.diedAt + 664_999);
+    expect(alive(built.ruleset, built.corpse)).toBe(true);
+    advanceTo(built.session, built.diedAt + 665_000);
+    expect(alive(built.ruleset, built.corpse)).toBe(false);
+  });
+
+  it('a tentativa RECUSADA não mexe no prazo: fora da janela (312 s) o cadáver ainda vive os 670 s', () => {
+    const built = readyToSkin();
+    advanceTo(built.session, built.diedAt + 312_000);
+    expect(skin(built)).toMatchObject({ ok: false, reason: 'not-usable' });
+    advanceTo(built.session, built.diedAt + 669_999);
+    expect(alive(built.ruleset, built.corpse)).toBe(true);
+    advanceTo(built.session, built.diedAt + 670_000);
+    expect(alive(built.ruleset, built.corpse)).toBe(false);
+  });
+
+  it('o prazo novo é o do ESTÁGIO: o `afterTtlMs` do conteúdo manda, não a constante dos 360 s', () => {
+    // O `after` de cada estágio é o dele — aqui o primeiro (abate) deixa 100 s e o segundo 200 s.
+    const custom = buildContent(raw({
+      skinning: [skinRat({
+        chance: SURE,
+        stages: [
+          { canaryItemId: 5973, durationMs: 10_000, afterTtlMs: 100_000 },
+          { canaryItemId: 4025, durationMs: 300_000, afterTtlMs: 200_000 },
+        ],
+      })],
+    }));
+    const atKill = start({ content: custom, carrying: [KNIFE] });
+    const killed = killTheRat(atKill.session, atKill.ruleset);
+    const diedAt = killed.diedAtMs as number;
+    advanceTo(atKill.session, diedAt + 99_999);
+    expect(alive(atKill.ruleset, killed)).toBe(true);
+    advanceTo(atKill.session, diedAt + 100_000);
+    expect(alive(atKill.ruleset, killed)).toBe(false);
+
+    const byHand = readyToSkin(custom);
+    advanceTo(byHand.session, byHand.diedAt + 50_000);
+    expect(skin(byHand)).toEqual({ ok: true });
+    const skinnedAt = byHand.session.nowMs;
+    advanceTo(byHand.session, skinnedAt + 199_999);
+    expect(alive(byHand.ruleset, byHand.corpse)).toBe(true);
+    advanceTo(byHand.session, skinnedAt + 200_000);
+    expect(alive(byHand.ruleset, byHand.corpse)).toBe(false);
+  });
+
+  it('em party com bolsa compartilhada o cadáver esfolado no abate também vive 360 s', () => {
+    const stats = statsForLevel(1, null, progression as Progression);
+    const member = (id: string, carrying: readonly CarriedItem[]) => new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 }, health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: 0, maxMana: stats.maxMana, level: 10, xp: totalXpForLevel(10, progression as Progression),
+      vocationId: null, staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0, gold: 0, goldDelta: 0,
+      alive: true, cooldowns: {}, capacity: 1_000,
+      inventory: { backpack: [], satchel: [...carrying], equipped: {} },
+    });
+    const session = createHuntSession({
+      id: 'skin-party-ttl', content: buildContent(raw()), huntId: 'pit', difficulty: 'cautious', createdAtMs: 0,
+      partyOptions: { leaderId: 'lead', mode: 'split', shareCosts: false, splitLoot: true },
+    });
+    session.enter(member('lead', []));
+    session.enter(member('mate', [KNIFE]));
+    const ruleset = session.ruleset as HuntRuleset;
+    const corpse = killTheRat(session, ruleset);
+    expect(corpse.skinned).toBe(true);
+    const diedAt = corpse.diedAtMs as number;
+    advanceTo(session, diedAt + 359_999);
+    expect(alive(ruleset, corpse)).toBe(true);
+    advanceTo(session, diedAt + 360_000);
+    expect(alive(ruleset, corpse)).toBe(false);
+  });
+
+  it('o prazo novo sobrevive ao snapshot: o cadáver restaurado também some aos 360 s da tentativa', () => {
+    const built = readyToSkin();
+    advanceTo(built.session, built.diedAt + 100_000);
+    expect(skin(built)).toEqual({ ok: true });
+    const skinnedAt = built.session.nowMs;
+
+    const snapshot = built.session.snapshot();
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, built.loaded) as HuntRuleset, Rng.fromSeed('resume'),
+    );
+    const resumedRuleset = resumed.ruleset as HuntRuleset;
+    const stillThere = () => resumedRuleset.groundItems.some((c) => c.id === built.corpse.id);
+    advanceTo(resumed, skinnedAt + 359_999);
+    expect(stillThere()).toBe(true);
+    advanceTo(resumed, skinnedAt + 360_000);
+    expect(stillThere()).toBe(false);
+  });
+});
+
 describe('o Scavenge encolhe o intervalo — no cadáver do monstro escolhido e nos que compartilham o dele', () => {
   // O rato e o primo compartilham os DOIS estágios do cadáver (`5973`/`4025`, como o Minotaur e o
   // Bruiser); o morcego tem o dele (`6017`).
   const skinning = [
     skinRat(), skinRat({ id: 'cousin' }),
-    skinRat({ id: 'bat', stages: [{ canaryItemId: 6017, durationMs: 10_000 }] }),
+    skinRat({ id: 'bat', stages: [{ canaryItemId: 6017, durationMs: 10_000, afterTtlMs: AFTER_TTL_MS }] }),
   ];
   /** Abates de `monster` (renasce a cada segundo, três pontos) com o charm dado, chance real de 25 %. */
   const farm = (

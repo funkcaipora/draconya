@@ -2993,7 +2993,10 @@ describe('a esfola de cadáver no catálogo (#626, ADR 0048 d.5/d.6)', () => {
   const skinnableRat = { ...rat, corpseTtlMs: 670_000 };
   const entry = {
     id: 'rat', toolId: 'obsidian-knife', materialId: 'leather', chance: 25_000,
-    stages: [{ canaryItemId: 5973, durationMs: 10_000 }, { canaryItemId: 4025, durationMs: 300_000 }],
+    stages: [
+      { canaryItemId: 5973, durationMs: 10_000, afterTtlMs: 360_000 },
+      { canaryItemId: 4025, durationMs: 300_000, afterTtlMs: 360_000 },
+    ],
   };
   const withSkinning = (over: Record<string, unknown> = {}, monsters: readonly object[] = [skinnableRat]) => base({
     monsters, items: [knife, leather], skinning: [{ ...entry, ...over }],
@@ -3027,7 +3030,10 @@ describe('a esfola de cadáver no catálogo (#626, ADR 0048 d.5/d.6)', () => {
     expect(() => buildContent(withSkinning({ stages: [] }))).toThrow(ContentError);
     expect(() => buildContent(withSkinning({ chance: 100_001 }))).toThrow(ContentError);
     expect(() => buildContent(withSkinning({ chance: 0 }))).toThrow(ContentError);
-    expect(() => buildContent(withSkinning({ stages: [{ canaryItemId: 0, durationMs: 1 }] }))).toThrow(ContentError);
+    expect(() => buildContent(withSkinning({ stages: [{ canaryItemId: 0, durationMs: 1, afterTtlMs: 1 }] }))).toThrow(ContentError);
+    // Sem a vida que o cadáver tem DEPOIS da tentativa o estágio não se reagenda: o campo é obrigatório.
+    expect(() => buildContent(withSkinning({ stages: [{ canaryItemId: 5973, durationMs: 10_000 }] }))).toThrow(ContentError);
+    expect(() => buildContent(withSkinning({ stages: [{ canaryItemId: 5973, durationMs: 10_000, afterTtlMs: 0 }] }))).toThrow(ContentError);
     expect(() => buildContent(withSkinning({ appearanceId: 5 }))).toThrow(ContentError);
   });
 

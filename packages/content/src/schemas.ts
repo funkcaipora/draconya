@@ -3865,10 +3865,18 @@ export const SKINNING_CHANCE_SCALE = 100_000;
  * por isso também vale entre monstros que compartilham o mesmo cadáver (o Minotaur, o Minotaur
  * Bruiser e o Depowered Minotaur são todos `5969`). É um número de PROVENIÊNCIA e de identidade,
  * nunca arte (invariante 6): a arte do cadáver é `appearances.corpses`, pelo monstro.
+ *
+ * `afterTtlMs` é a vida que o cadáver TEM DEPOIS da tentativa: o Canary roda
+ * `topItem:transform(skin.after)` com ou sem sucesso, e o `Item::setID` do item novo reinicia o
+ * decaimento — `duration` do `after` e a cadeia `decayTo` dele (o Dragon esfolado vira `4026`:
+ * 300 s + o `4027` de 60 s = 360 s, qualquer que seja a idade em que se esfolou). É a soma que o
+ * importador tira do `items.xml` a partir do `after` DESTE estágio (`corpseTtlMsFromChain`), e é
+ * o que reagenda o fim do cadáver: ele deixa de viver os 670 s de `corpseTtlMs`.
  */
 export const skinningStageSchema = z.strictObject({
   canaryItemId: z.number().int().positive(),
   durationMs: z.number().int().positive(),
+  afterTtlMs: z.number().int().positive(),
 });
 export type SkinningStage = z.infer<typeof skinningStageSchema>;
 
