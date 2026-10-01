@@ -15,8 +15,7 @@
 import { performance } from 'node:perf_hooks';
 import type {
   Aggregates, CombatEvent, EndReason, FollowState, GridPoint, ManualActionResult, MemberLeft,
-  PartyEvent, PresenceEvent, Receipt, Session, SessionSnapshot, SessionType, SkillProgress,
-  WorldPoint,
+  PartyEvent, PresenceEvent, Receipt, Session, SessionSnapshot, SessionType, WorldPoint,
 } from '@draconya/sim';
 import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
@@ -329,9 +328,11 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   'out-of-range': 'O alvo está fora de alcance.',
   'on-cooldown': 'Ainda em cooldown.',
   'group-cooldown': 'O grupo ainda está em cooldown.',
-  // Stairhop (#554, M30-07): trocou de andar ou foi teleportado há pouco — a mesma frase que o
-  // Canary usa (`RETURNVALUE_YOUAREEXHAUSTED`).
+  // Pacificação (#554, M30-07 → M44-04, #622): trocou de andar, foi teleportado ou está sob
+  // `pacified` — a mesma frase que o Canary usa (`RETURNVALUE_YOUAREEXHAUSTED`).
   'attack-locked': 'Você está exausto.',
+  // Medo (M44-04, #622): nenhuma magia nem runa sai — o "You are feared." do Canary.
+  'feared': 'Você está com medo.',
   // Magia agressiva disparada na Cidade (#792, ADR 0044 d.2): protect zone não aceita combate.
   'protection-zone': 'Você está em uma zona de proteção.',
   // A invocação (#598, M38-01, ADR 0057 decisão 3): monstro fora do catálogo, não invocável, ou
@@ -469,6 +470,8 @@ function equipmentOfState(inventory: InventoryState): Record<string, string> {
 
 /** Os vitais do jogador como o HUD os lê. */
 type PlayerStats = S2CProps<'player-stats'>;
+/** O progresso de UMA skill como o HUD o lê: nível, percentual e, com Loyalty (#628), o nível efetivo. */
+type SkillProgress = PlayerStats['skills'][string];
 
 /**
  * Os vitais do jogador, montados UMA vez para os dois caminhos (FUN-109): o `session-state`
@@ -491,7 +494,12 @@ function skillProgressOf(
 ): SkillProgress {
   if (character === undefined || definition === undefined) return { level: 0, percentToNext: 0 };
   const factor = progression === undefined ? undefined : skillFactorFor(definition, vocation, progression);
-  return character.skills.progressOf(definition, factor);
+  const progress = character.skills.progressOf(definition, factor);
+  // O nível COM Loyalty (#628) só viaja quando o bônus muda o nível — o caso comum (conta sem
+  // degrau, ou tries de bônus que ainda não fecham um nível) manda a mesma forma de antes, e o
+  // HUD lê a ausência como "igual ao base". O percentual continua o do nível BASE, como no Canary.
+  const loyaltyLevel = character.loyaltyLevelOf(definition, factor);
+  return loyaltyLevel > progress.level ? { ...progress, loyaltyLevel } : progress;
 }
 
 function playerStatsOf(
@@ -531,6 +539,10 @@ function playerStatsOf(
     speed: character === undefined ? 0 : Math.round(character.speed * character.speedScale),
     skills,
     magicLevel: skillProgressOf(character, skillCatalog?.get('magic'), vocation, progression),
+    // O bônus de Loyalty da conta (#628): fixado no ticket, constante pela sessão. Ausente quando
+    // é zero — o `player-stats` do caso comum continua idêntico ao de antes.
+    ...(character === undefined || character.loyaltyBonusPercent === 0
+      ? {} : { loyaltyBonusPercent: character.loyaltyBonusPercent }),
     // Alma (#593): `soulMax` é da VOCAÇÃO — zero sem uma escolhida, o "sem teto" do HUD. A
     // vocação PROMOVIDA (#566) reescreve o teto quando o conteúdo declara `promotion.soulMax`.
     soul: character?.soul ?? 0,
@@ -539,7 +551,7 @@ function playerStatsOf(
 }
 
 function sameSkillProgress(a: SkillProgress, b: SkillProgress): boolean {
-  return a.level === b.level && a.percentToNext === b.percentToNext;
+  return a.level === b.level && a.percentToNext === b.percentToNext && a.loyaltyLevel === b.loyaltyLevel;
 }
 
 function sameSkills(a: Record<string, SkillProgress>, b: Record<string, SkillProgress>): boolean {
@@ -581,6 +593,7 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
     && a.speed === b.speed
     && sameSkills(a.skills, b.skills)
     && sameSkillProgress(a.magicLevel, b.magicLevel)
+    && a.loyaltyBonusPercent === b.loyaltyBonusPercent
     && a.soul === b.soul
     && a.soulMax === b.soulMax;
 }
@@ -721,6 +734,17 @@ const staminaMinute = (staminaMs: number): number => Math.floor(staminaMs / 60_0
 function bestiaryTotal(counts: Readonly<Record<string, number>>): number {
   let total = 0;
   for (const kills of Object.values(counts)) total += kills;
+  return total;
+}
+
+/**
+ * A soma dos abates de boss do Bosstiary (#629): o gatilho da mensagem `bosstiary` ao vivo. Um
+ * número só, pela razão de `bestiaryTotal`: abate nunca desce, então a soma muda se, e só se,
+ * algum contador mudou (e os pontos só mudam com um abate).
+ */
+function bosstiaryTotal(kills: Readonly<Record<string, number>>): number {
+  let total = 0;
+  for (const count of Object.values(kills)) total += count;
   return total;
 }
 
@@ -942,6 +966,11 @@ interface HostedSession {
    * e no ciclo com visualizador, pela razão registrada em `sentStats`.
    */
   readonly sentBestiary: Map<string, number>;
+  /**
+   * A soma dos abates do Bosstiary ENTREGUE a quem olha cada personagem (#629), por `characterId`
+   * — o mesmo mecanismo de `sentBestiary`, para outra grandeza que só sobe.
+   */
+  readonly sentBosstiary: Map<string, number>;
   /**
    * O último BITMASK de bênçãos ENTREGUE a quem olha cada personagem (#570, ADR 0052), por
    * `characterId` — o mesmo mecanismo de `sentBestiary`: compra (sobe) e morte (zera) são as
@@ -2983,6 +3012,9 @@ export class SessionHost {
       // E o Bestiário, se um abate contou (FUN-113): é progressão permanente, e a tela precisa
       // ver o marco chegar sem reconectar.
       this.#presentBestiary(hosted);
+      // E o Bosstiary (#629), pela mesma razão: o nível de um boss fecha no abate, e a tela precisa
+      // ver o número chegar sem reconectar.
+      this.#presentBosstiary(hosted);
       this.#presentBlessings(hosted);
       // E o cenário, se algo mudou de estado PASSIVAMENTE (#734, ADR 0050 d.6 T3) — o walker
       // abrindo uma porta sozinho, uma placa de pressão, um `TILE_REVERT`. `useOnMap` já manda
@@ -3552,6 +3584,23 @@ export class SessionHost {
   }
 
   /**
+   * O Bosstiary ao vivo (#629): os abates de boss e os pontos, para quem olha CADA personagem,
+   * quando a soma dos abates mudou desde a última entrega — a MESMA regra de `#presentBestiary`
+   * (por personagem, só com visualizador; sem ele o `sim` conta do mesmo jeito, invariante 3).
+   */
+  #presentBosstiary(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      const { kills, points } = character.bosstiary.getState();
+      const total = bosstiaryTotal(kills);
+      if (hosted.sentBosstiary.get(character.id) === total) continue;
+      hosted.sentBosstiary.set(character.id, total);
+      this.#sendToViewersOf(hosted, character.id, { type: 'bosstiary', kills, points });
+    }
+  }
+
+  /**
    * As bênçãos ao vivo (#570, ADR 0052), pela MESMA regra do Bestiário: só quem está olhando,
    * só quando o bitmask mudou desde a última entrega. A compra (`#requestBuyBlessing`) já manda
    * direto a quem comprou; isto cobre quem só está OLHANDO — e o consumo na morte, que a hunt
@@ -3648,6 +3697,11 @@ export class SessionHost {
     const counts = participant?.bestiary.getState() ?? {};
     hosted.sentBestiary.set(characterId, bestiaryTotal(counts));
     viewer.send({ type: 'bestiary', counts });
+    // E o Bosstiary (#629), pela mesma razão do Bestiário: sem isto, quem reconecta veria os
+    // abates de boss zerados até o próximo — na Cidade, que não tem ciclo, para sempre.
+    const bosstiary = participant?.bosstiary.getState() ?? { kills: {}, points: 0 };
+    hosted.sentBosstiary.set(characterId, bosstiaryTotal(bosstiary.kills));
+    viewer.send({ type: 'bosstiary', kills: bosstiary.kills, points: bosstiary.points });
     // E as bênçãos (#570, ADR 0052), pela mesma razão: quem reconecta precisa ver o que já
     // comprou, sem esperar a próxima compra/morte para descobrir.
     hosted.sentBlessings.set(characterId, participant?.blessings ?? 0);
@@ -4252,6 +4306,7 @@ export class SessionHost {
       lastTargetSeq: new Map(),
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
+      sentBosstiary: new Map(),
       sentBlessings: new Map(),
       sentTileOverrides: new Map(),
       sentParty: null,
@@ -4535,6 +4590,9 @@ export class SessionHost {
       // E o Bestiário (FUN-113), pela mesma razão: abate que não chega ao banco é abate que
       // some no próximo logout, e o marco 10 000 nunca chegaria.
       ...(owner === undefined ? {} : { bestiary: owner.bestiary.getState() }),
+      // E o Bosstiary (#629, ADR 0052 d.1), pela mesma razão: abate de boss que não chega ao
+      // banco é abate que some no próximo logout, e o nível 3 nunca fecharia.
+      ...(owner === undefined ? {} : { bosstiary: owner.bosstiary.getState() }),
       // E a economia de Charms (M39-02, #602, ADR 0052 d.1): ABSOLUTA como `ammo` — sem ela
       // aqui, um `charm-unlock`/`charm-assign` aceito na Cidade sumiria a cada logout.
       ...(owner === undefined ? {} : { charms: owner.charms.getState() }),
@@ -4818,6 +4876,7 @@ export class SessionHost {
         speed: self.speed,
         skills: self.skills,
         magicLevel: self.magicLevel,
+        ...(self.loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent: self.loyaltyBonusPercent }),
         soul: self.soul,
         soulMax: self.soulMax,
       },
@@ -5063,6 +5122,7 @@ export class SessionHost {
       lastTargetSeq: new Map(),
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
+      sentBosstiary: new Map(),
       sentBlessings: new Map(),
       sentTileOverrides: new Map(),
       sentParty: null,

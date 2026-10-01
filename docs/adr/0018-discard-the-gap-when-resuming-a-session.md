@@ -1,6 +1,7 @@
 # 0018 — Retomada descarta o intervalo, não o simula
 
 **Status:** aceito
+**Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30):** o mundo perde até 60 s numa queda.
 **Data:** 2026-09-08
 **Contexto técnico:** `sim`, `server` (FUN-28), e o extrato do jogador
 

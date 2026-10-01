@@ -304,7 +304,8 @@ produto. "Registro" é sempre no sentido do ADR 0052 d.1; "intenção de Cidade"
   fixo na sessão (ADR 0052 d.5); `sim` converte tries totais em níveis extras por skill e ML
   (`getLoyaltySkill`/`getLoyaltyMagicLevel`) como nível efetivo; tela mostra o bônus.
 - **#629 — Bosstiary.** `bosstiary.rarity` importado (Bane/Archfoe/Nemesis); registro
-  `bosstiary { kills: {monsterId → n}, points }` escrito no evento de abate (mesmo do Bestiário);
+  `bosstiary { kills: {raceId → n}, points, version }` escrito no evento de abate (mesmo do
+  Bestiário; a chave é o `raceId` do Canary e não o `monsterId` — emenda de 2026-09-29 do ADR 0052);
   pontos por tabela do `io_bosstiary`; Cyclopedia mostra. Boss Slot/boosted boss ficam para o
   sistema de bosses (`bosses.md`).
 - **#631 — Treino.** Ruleset `training` (estado ATIVO, eventos na fila no intervalo de ataque da

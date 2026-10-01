@@ -19,14 +19,15 @@ import {
   packSchema,
   blessingSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
-  bestiarySchema, boostedSchema, charmSchema, itemSchema, partySchema, skillSchema, spellSchema,
+  bestiarySchema, boostedSchema, bosstiarySchema, charmSchema, itemSchema, loyaltySchema, partySchema, skillSchema,
+  skinningSchema, spellSchema,
   staminaSchema, supplySchema, tilemapSchema, vocationSchema, weaponFamilySchema,
 } from './schemas.js';
 import type {
-  Ammunition, AmmunitionDefinition, Appearances, Bestiary, Blessing, Boosted, BotLimits, Charm,
-  Combat, CompiledMitigation,
+  Ammunition, AmmunitionDefinition, Appearances, Bestiary, Blessing, Boosted, BotLimits, Bosstiary, Charm,
+  Combat, Loyalty, CompiledMitigation,
   CompiledReflect, DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
-  MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Spell, Stamina, Supply,
+  MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Skinning, Spell, Stamina, Supply,
   Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
   WeaponPowerFormula, WeaponProfile,
 } from './schemas.js';
@@ -57,6 +58,14 @@ export interface Content {
    */
   readonly bestiary?: Bestiary;
   /**
+   * Os níveis do Bosstiary por raridade (#629): quantos abates levam a cada um dos três níveis e
+   * quantos pontos de boss cada nível rende (`IOBosstiary::levelInfos` do Canary). Opcional, como
+   * `bestiary`: sem ele o abate de boss continua contado no personagem, só não há nível nem
+   * ponto — é o conteúdo de teste que não fala de progressão permanente. O conteúdo REAL o tem,
+   * e `load.test.ts` prende.
+   */
+  readonly bosstiary?: Bosstiary;
+  /**
    * O catálogo dos 25 Charms do Canary (M39-02, #602; ADR 0053 d.3): `content/data/charms/
    * generated/charms.json`, chave `charmId` (o slug). Vazio no conteúdo de teste que não fala
    * de Charms — a economia (`@draconya/sim/charms.ts`) trata catálogo ausente como "nenhum
@@ -64,11 +73,23 @@ export interface Content {
    */
   readonly charms: ReadonlyMap<string, Charm>;
   /**
+   * Como o cadáver de cada monstro esfolável é esfolado (#626, ADR 0048 d.5/d.6; ADR 0053 d.5):
+   * `content/data/skinning/generated/skinning.json`, chave `monsterId`. Vazio no conteúdo de teste
+   * que não fala de esfola — nenhuma ferramenta é reconhecida e o sorteio nunca corre.
+   */
+  readonly skinning: ReadonlyMap<string, Skinning>;
+  /**
    * A Boosted Creature diária (M42, #615, ADR 0054 decisão 7): a hora de virada. Opcional —
    * sem ela o `jobs` não sorteia nada, e nenhuma hunt aplica o bônus. É o conteúdo de teste que
    * não fala de engajamento diário.
    */
   readonly boosted?: Boosted;
+  /**
+   * O Loyalty (M44, #628, ADR 0052 decisão 5): a tabela de degraus da idade da conta. Opcional —
+   * sem ela nenhum ticket carrega bônus, e o conteúdo de teste que não fala de Loyalty continua
+   * valendo o nível BASE de toda skill.
+   */
+  readonly loyalty?: Loyalty;
   /** Vocabulário e limites do bot (§13). Sem ele não há automação, que é o produto. */
   readonly bot: BotLimits;
   /** Catálogo de magias (§4.1). Custo, cooldown e efeito são conteúdo, nunca motor. */
@@ -142,8 +163,13 @@ export interface RawContent {
   readonly stamina?: readonly unknown[];
   readonly party?: readonly unknown[];
   readonly bestiary?: readonly unknown[];
+  /** Os níveis do Bosstiary (#629), `bosstiary/baseline.json`. */
+  readonly bosstiary?: readonly unknown[];
   readonly charms?: readonly unknown[];
+  /** Como o cadáver de cada monstro esfolável é esfolado (#626), `skinning/generated/`. */
+  readonly skinning?: readonly unknown[];
   readonly boosted?: readonly unknown[];
+  readonly loyalty?: readonly unknown[];
   readonly bot?: readonly unknown[];
   readonly spells?: readonly unknown[];
   readonly supplies?: readonly unknown[];
@@ -599,11 +625,15 @@ export function buildContent(raw: RawContent): Content {
   const staminas = parseAll('stamina', raw.stamina ?? [], staminaSchema, problems);
   const stamina = staminas.get('baseline');
   const bestiary = parseAll('bestiary', raw.bestiary ?? [], bestiarySchema, problems).get('baseline');
+  // Os níveis do Bosstiary (#629): um documento `baseline` único, como `bestiary` — a tabela de
+  // 3 raridades × 3 níveis é uma coisa só, e o `id` fixo é o que impede duas versões dela.
+  const bosstiary = parseAll('bosstiary', raw.bosstiary ?? [], bosstiarySchema, problems).get('baseline');
   // O catálogo de Charms (M39-02, #602): uma entidade por charm, como `spells`/`items` — não
   // um documento `baseline` único como `bestiary` (aqui não há "marco global", só 25 fichas
   // independentes, cada uma com o próprio id).
   const charms = parseAll('charm', raw.charms ?? [], charmSchema, problems);
   const boosted = parseAll('boosted', raw.boosted ?? [], boostedSchema, problems).get('baseline');
+  const loyalty = parseAll('loyalty', raw.loyalty ?? [], loyaltySchema, problems).get('baseline');
   // Ausente é ERRO pela mesma razão dos outros dois: a stamina é o TETO DE SIMULAÇÃO do
   // projeto (ADR 0001), e um default em código faria o número que sustenta a projeção de
   // custo morar onde ninguém procura por ele.
@@ -661,6 +691,28 @@ export function buildContent(raw: RawContent): Content {
   // O catálogo de MUNIÇÃO (ADR 0026 d.3): flecha e virote abstratos, gold no tiro.
   const ammunitionDefinitions = parseAll('munição', raw.ammunition ?? [], ammunitionSchema,
     problems);
+  // A esfola (#626): uma entrada por MONSTRO. Cada referência é conferida aqui, no boot — um
+  // monstro, uma ferramenta ou um material que não existe deixaria a esfola muda (ou, pior,
+  // sortearia sem entregar nada) no meio de uma hunt.
+  const skinning = parseAll('skinning', raw.skinning ?? [], skinningSchema, problems);
+  for (const entry of skinning.values()) {
+    const where = `skinning/${entry.id}`;
+    const monster = monsterDefinitions.get(entry.id);
+    if (monster === undefined) problems.push(`${where}: o monstro não existe`);
+    // A janela de esfola é um PREFIXO da vida do cadáver (os primeiros estágios da cadeia de
+    // decaimento): passar do `corpseTtlMs` do monstro seria esfolar um cadáver que já sumiu.
+    const window = entry.stages.reduce((sum, stage) => sum + stage.durationMs, 0);
+    if (monster?.corpseTtlMs !== undefined && window > monster.corpseTtlMs) {
+      problems.push(
+        `${where}: a janela de esfola (${String(window)} ms) passa da vida do cadáver `
+          + `(corpseTtlMs ${String(monster.corpseTtlMs)})`,
+      );
+    }
+    if (!itemDefinitions.has(entry.toolId)) problems.push(`${where}: a ferramenta "${entry.toolId}" não existe`);
+    if (!itemDefinitions.has(entry.materialId)) {
+      problems.push(`${where}: o material "${entry.materialId}" não existe`);
+    }
+  }
 
   // A skill de defesa (CMB-04) precisa existir E subir por bloqueio. Uma referência a skill
   // inexistente deixaria o escudo sem treinar nada; uma que sobe por outra fonte escalaria a
@@ -1474,6 +1526,28 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
+  // O boss (#629): `bosstiary` sem `boss` seria um monstro que conta no Bosstiary e, ao mesmo
+  // tempo, no Bestiário e nos rates de monstro comum — o `isBoss` do Canary é "tem bloco
+  // bosstiary", e a flag existe para o resto do motor não precisar olhar o bloco.
+  // O contador é do `raceId`, e variantes de um boss o compartilham (`monsterSchema.bosstiary`):
+  // o NÍVEL de um contador compartilhado sai de UMA raridade, então duas raridades para o mesmo
+  // `raceId` fariam o nível depender de qual variante foi abatida por último.
+  const rarityByRaceId = new Map<number, string>();
+  for (const monster of monsterDefinitions.values()) {
+    if (monster.bosstiary === undefined) continue;
+    if (!monster.boss) {
+      problems.push(`monstro "${monster.id}": declara bosstiary e não declara boss: true`);
+    }
+    const seen = rarityByRaceId.get(monster.bosstiary.raceId);
+    if (seen === undefined) rarityByRaceId.set(monster.bosstiary.raceId, monster.bosstiary.rarity);
+    else if (seen !== monster.bosstiary.rarity) {
+      problems.push(
+        `monstro "${monster.id}": bosstiary.raceId ${String(monster.bosstiary.raceId)} é compartilhado `
+          + `com um boss de raridade "${seen}", e este declara "${monster.bosstiary.rarity}"`,
+      );
+    }
+  }
+
   // As abilities DECLARADAS (CMB-06, área estendida em #518), conferidas no arquivo CRU — o
   // compilado já tem a básica sintetizada, e validá-lo reprovaria todo monstro legado pelo id
   // reservado. O `basic` é do BOOT; a duplicata tornaria a escolha por id ambígua. `wave`, `rows`
@@ -1567,8 +1641,10 @@ export function buildContent(raw: RawContent): Content {
     ...(stamina?._open === undefined ? [] : [`stamina/${stamina.id}: ${stamina._open}`]),
     ...(party?._open === undefined ? [] : [`party/${party.id}: ${party._open}`]),
     ...(bestiary?._open === undefined ? [] : [`bestiary/${bestiary.id}: ${bestiary._open}`]),
+    ...(bosstiary?._open === undefined ? [] : [`bosstiary/${bosstiary.id}: ${bosstiary._open}`]),
     // `boosted` não tem `_open`: a hora de virada não é um número disputado do PRD, é
     // configuração de operação — não pede uma seção de `docs/product` para justificar.
+    ...(loyalty?._open === undefined ? [] : [`loyalty/${loyalty.id}: ${loyalty._open}`]),
     ...openOf('spell', spells),
     ...openOf('charm', charms),
     ...openOf('supply', supplies),
@@ -1605,8 +1681,11 @@ export function buildContent(raw: RawContent): Content {
     stamina: stamina as Stamina,
     party: party as PartyConfig,
     ...(bestiary === undefined ? {} : { bestiary }),
+    ...(bosstiary === undefined ? {} : { bosstiary }),
     charms,
+    skinning,
     ...(boosted === undefined ? {} : { boosted }),
+    ...(loyalty === undefined ? {} : { loyalty }),
     maps,
     routes,
     openValues,

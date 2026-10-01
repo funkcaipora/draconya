@@ -64,6 +64,10 @@ hunt sem gold para pagar o próximo supply e pode morrer.
   comportamento de antes deste ADR) e `autoSell` (vende ao coletar, cortado pelo limite do
   PRÓPRIO Premium — 5 tipos Free, 20 Premium, o mesmo `party.autoSellItemTypes`). Campo novo com
   default, como `follow`: config salva antes deste ADR volta pegando tudo, sem venda automática.
+- **O bot esfola sozinho, sem configuração nenhuma** (#626, ADR 0048 d.5): quem tem a faca ou a
+  estaca na mochila esfola o cadáver no mesmo evento em que coleta o loot, e o material segue o
+  filtro de Quick Loot acima. Não há regra a ligar — é a automação que o Tibia deixa à mão do
+  jogador, legítima pelo invariante 11. Ver "Esfola de cadáver" em `docs/product/items.md`.
 - Usar um supply debita o `price` do gold na hora (`useSupply`); o saldo nunca fica negativo, e a
   garantia é a ordem — o débito é recusado antes, não corrigido depois.
 - Personagem sem configuração não agenda nada.
@@ -74,6 +78,19 @@ hunt sem gold para pagar o próximo supply e pode morrer.
   bêbado que se afasta da rota sozinho, ou perde um passo contra uma parede, não é bug do motor
   de bot: é a mesma condição que afetaria o jogador jogando manualmente (invariante 11 — não há
   exceção de automação). Ver "Drunk: desvio de passo" em `docs/product/combat.md`.
+- **`rooted`, `feared` e `pacified` (#622, M44-04) valem para o bot como para o jogador manual.**
+  Sob `rooted` ou `feared` o passo do bot (rota, follow, `walk-to`) é recusado em `HuntRuleset#step`
+  — o bot só manda intenção e não tem como escapar da recusa (invariante 11) —, e sob `feared` a
+  fuga forçada (`Runner.fearWalk`) assume o movimento: enquanto ela dura o bot não anda, e ao acabar
+  ele volta à rota pelo caminho de sempre (`not-adjacent` → resincroniza). Sob `feared` nenhuma
+  magia nem runa sai (`feared`, com o prazo do medo no `retryInMs`, para o bot re-armar quando o
+  medo acabar); a poção sai. Sob `pacified` (a trava de escada de 2 s e o Swift Foot) nem o golpe
+  básico nem a magia/runa agressiva (dano, DOT, a invocação, as runas de dano/campo e a Paralyze
+  Rune) saem, e o golpe volta no PENSAMENTO seguinte ao vencimento — até 1 s depois dele, ou antes
+  se o personagem ou o alvo der um passo —, porque o Canary não re-arma o ataque quando a condição
+  acaba; cura, poção e o resto seguem. Um `walk-to` que o jogador deixou guardado cai quando a raiz
+  o prende. Nada disso é falha do motor de bot. Ver "Condições de controle" em
+  `docs/product/combat.md`.
 
 ## O vocabulário, por inteiro (AB-03, ADR 0032 d.1)
 

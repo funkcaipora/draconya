@@ -100,6 +100,15 @@ const BESTIARY_RACE_CONSTANTS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * `RARITY_*` (`BosstiaryRarity_t`, `src/io/io_bosstiary.hpp`) → a raridade do Bosstiary no
+ * vocabulário do Draconya (`BOSSTIARY_RARITIES`, `packages/content/src/schemas.ts`, #629). O
+ * `BOSS_INVALID` do Canary é só marcador de leitura do servidor e nenhum monstro o declara.
+ */
+export const BOSSTIARY_RARITY_CONSTANTS: Readonly<Record<string, string>> = {
+  RARITY_BANE: 'bane', RARITY_ARCHFOE: 'archfoe', RARITY_NEMESIS: 'nemesis',
+};
+
+/**
  * `COMBAT_*` (`CombatType_t`) → o `DamageType` do Draconya. Os quatro sem par (`UNDEFINED`,
  * `HEALING`, `AGONY`, `NEUTRAL`) resolvem para o próprio nome, e quem lê decide o que fazer — em
  * elemento de monstro, viram nota no relatório. Um `COMBAT_*` que o enum do Canary NÃO tem
@@ -137,6 +146,8 @@ function monsterConstants(): ConstantResolver {
       if (name.startsWith('COMBAT_')) return COMBAT_TYPE_CONSTANTS[name];
       const race = BESTIARY_RACE_CONSTANTS[name];
       if (race !== undefined) return race;
+      const rarity = BOSSTIARY_RARITY_CONSTANTS[name];
+      if (rarity !== undefined) return rarity;
       return /^[A-Z][A-Z0-9_]*$/.test(name) ? name : undefined;
     },
   };
@@ -501,15 +512,15 @@ export interface ConvertedMonster {
 
 /** Os campos que o leitor lê para `monsterSchema`; o resto vira `ignoredFields`. */
 const READ_FIELDS: ReadonlySet<string> = new Set([
-  'name', 'description', 'experience', 'outfit', 'raceId', 'Bestiary', 'health', 'maxHealth', 'race',
-  'speed', 'manaCost', 'changeTarget', 'strategiesTarget', 'flags', 'loot', 'attacks', 'defenses',
+  'name', 'description', 'experience', 'outfit', 'raceId', 'Bestiary', 'bosstiary', 'health', 'maxHealth',
+  'race', 'speed', 'manaCost', 'changeTarget', 'strategiesTarget', 'flags', 'loot', 'attacks', 'defenses',
   'elements', 'immunities', 'summon', 'maxSummons', 'summons', 'critChance', 'corpse',
 ]);
 
 /** Campos que não entram NUNCA nesta issue, com o dono de cada um. */
 const IGNORED_FIELD_OWNERS: Readonly<Record<string, string>> = {
   events: 'M44', voices: 'M44', light: 'M44',
-  heals: '#683', reflects: '#683', bosstiary: 'sem sistema de Bosstiary', faction: 'sem facção',
+  heals: '#683', reflects: '#683', faction: 'sem facção',
   enemyFactions: 'sem facção',
 };
 
@@ -752,6 +763,33 @@ function readBestiary(raw: LuaValue | undefined, raceId: number | undefined): Be
   return draft;
 }
 
+/** O bloco `monster.bosstiary` de um boss do Canary (#629): a raridade e o `raceId` do contador. */
+export interface BosstiaryDraft {
+  readonly rarity: string;
+  readonly raceId: number;
+}
+
+/**
+ * `monster.bosstiary = { bossRaceId, bossRace }` (`register_monster_type.lua`, `bosstiary`). O
+ * Canary recusa o boss SEM `bossRace` (`Attempting to register a bosstiary boss without a race`
+ * — `mtype:bossRace` nunca roda, e o monstro não vira boss); sem `bossRaceId` ele registra a
+ * raridade mas o `raceid` fica 0, e `IOBosstiary::addBosstiaryKill` devolve cedo com `bossId == 0`
+ * — o boss nunca conta abate. Nos dois casos o que sai aqui é um bloqueio com o motivo, e nenhum
+ * monstro do Canary 47dfd51 cai nele (os 249 declaram os dois campos).
+ */
+function readBosstiary(raw: LuaValue | undefined): BosstiaryDraft | string | undefined {
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) return 'bosstiary não é uma tabela';
+  // `RARITY_*` já saiu do avaliador como o texto do Draconya (`monsterConstants`).
+  const rarity = str(raw['bossRace']);
+  if (rarity === undefined || !(Object.values(BOSSTIARY_RARITY_CONSTANTS) as string[]).includes(rarity)) {
+    return `raridade de Bosstiary desconhecida: ${rarity ?? 'nil'}`;
+  }
+  const raceId = num(raw['bossRaceId']);
+  if (raceId === undefined || !Number.isInteger(raceId) || raceId <= 0) return 'bosstiary sem bossRaceId';
+  return { rarity, raceId };
+}
+
 /** O nome do `Game.createMonsterType("…")` — a chave única de registro do Canary. */
 export function monsterTypeName(source: string): string | undefined {
   return /Game\.createMonsterType\(\s*"([^"]+)"/.exec(source)?.[1];
@@ -830,6 +868,8 @@ export function convertMonster(
 
   const bestiary = readBestiary(raw['Bestiary'], num(raw['raceId']));
   if (typeof bestiary === 'string') blockers.push(bestiary);
+  const bosstiary = readBosstiary(raw['bosstiary']);
+  if (typeof bosstiary === 'string') blockers.push(bosstiary);
 
   const flags = isRecord(raw['flags']) ? raw['flags'] : {};
   const changeTarget = isRecord(raw['changeTarget']) ? raw['changeTarget'] : {};
@@ -923,6 +963,13 @@ export function convertMonster(
   if (manaCost !== undefined && manaCost > 0) entity['manaCost'] = manaCost;
   entity['source'] = source;
   if (summons.summons !== undefined) entity['summons'] = summons.summons;
+  // O boss (#629): `isBoss` do Canary é "tem bloco bosstiary", e o `boss: true` escolhe os rates de
+  // boss e tira o monstro do Bestiário. Vai para `data/` como está — `bosstiary` é campo do
+  // `monsterSchema`, ao contrário de `bestiary`/`outfitId`, que `promote-monsters` separa.
+  if (typeof bosstiary === 'object') {
+    entity['boss'] = true;
+    entity['bosstiary'] = bosstiary;
+  }
   // Staging (#580 separa): a ficha de Bestiário e o outfit não moram na entidade de `data/`.
   if (typeof bestiary === 'object') entity['bestiary'] = bestiary;
   if (lookType > 0) entity['outfitId'] = lookType;

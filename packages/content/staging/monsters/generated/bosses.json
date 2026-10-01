@@ -1167,6 +1167,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/bibby_bloodbath.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 900
+    },
     "outfitId": 2
   },
   {
@@ -1266,6 +1271,11 @@
           "count": 5
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 432
     },
     "outfitId": 281
   },
@@ -1456,6 +1466,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/black_knight.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 46
     },
     "outfitId": 131
   },
@@ -1835,6 +1850,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/chagorz.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 2366
+    },
     "outfitId": 1666
   },
   {
@@ -1937,6 +1957,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/chikhaton.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 647
     },
     "outfitId": 361
   },
@@ -2349,6 +2374,11 @@
         }
       ]
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 203
+    },
     "outfitId": 203
   },
   {
@@ -2518,6 +2548,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 477
     },
     "outfitId": 287
   },
@@ -2715,6 +2750,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/diseased_bill.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 485
+    },
     "outfitId": 299
   },
   {
@@ -2909,6 +2949,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/diseased_dan.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 486
     },
     "outfitId": 299
   },
@@ -3105,6 +3150,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/diseased_fred.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 484
     },
     "outfitId": 299
   },
@@ -3330,6 +3380,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/ekatrix.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1140
+    },
     "outfitId": 54
   },
   {
@@ -3403,6 +3458,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/elvira_hammerthrust.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 766
+    },
     "outfitId": 70
   },
   {
@@ -3461,6 +3521,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/fleshslicer.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 858
     },
     "outfitId": 457
   },
@@ -3686,6 +3751,11 @@
         }
       ]
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 207
+    },
     "outfitId": 611
   },
   {
@@ -3813,6 +3883,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/glitterscale.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 670
     },
     "outfitId": 34
   },
@@ -4020,6 +4095,11 @@
         }
       ]
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 431
+    },
     "outfitId": 193
   },
   {
@@ -4142,6 +4222,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/groam.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 736
     },
     "outfitId": 413
   },
@@ -4426,6 +4511,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/guard_captain_quaid.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1791
+    },
     "outfitId": 1217
   },
   {
@@ -4521,6 +4611,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/hairman_the_huge.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 425
     },
     "outfitId": 116
   },
@@ -5450,6 +5545,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/jesse_the_wicked.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 763
+    },
     "outfitId": 134
   },
   {
@@ -5881,6 +5981,11 @@
         }
       ]
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 703
+    },
     "outfitId": 394
   },
   {
@@ -6288,6 +6393,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/mornenion.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 765
     },
     "outfitId": 64
   },
@@ -6733,6 +6843,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/morshabaal.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 2118
     },
     "outfitId": 1468
   },
@@ -7447,6 +7562,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/raxias.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 1624
+    },
     "outfitId": 980
   },
   {
@@ -7676,6 +7796,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/robby_the_reckless.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 764
+    },
     "outfitId": 129
   },
   {
@@ -7873,6 +7998,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/rukor_zad.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 435
+    },
     "outfitId": 152
   },
   {
@@ -7999,6 +8129,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 436
     },
     "outfitId": 134
   },
@@ -8463,6 +8598,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/sugar_daddy.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 2562
+    },
     "outfitId": 1764
   },
   {
@@ -8649,6 +8789,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/sugar_mommy.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 2580
     },
     "outfitId": 1764
   },
@@ -9032,6 +9177,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/the_abomination.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 373
+    },
     "outfitId": 1393
   },
   {
@@ -9133,6 +9283,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/the_blightfather.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 638
     },
     "outfitId": 348
   },
@@ -9561,6 +9716,11 @@
           "count": 1
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 2055
     },
     "outfitId": 1412
   },
@@ -10026,6 +10186,11 @@
         }
       ]
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 210
+    },
     "outfitId": 210
   },
   {
@@ -10242,6 +10407,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/the_first_dragon.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 1368
+    },
     "outfitId": 947
   },
   {
@@ -10302,6 +10472,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/the_frog_prince.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 420
     },
     "outfitId": 224
   },
@@ -10523,6 +10698,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/the_rootkraken.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 2528
     },
     "outfitId": 1765
   },
@@ -10851,6 +11031,11 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/vemiath.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 2365
+    },
     "outfitId": 1668
   },
   {
@@ -10984,6 +11169,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 419
     },
     "outfitId": 2
   },
@@ -11159,6 +11349,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/williwasp.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 955
     },
     "outfitId": 44
   },
@@ -11336,6 +11531,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 475
     },
     "outfitId": 287
   },
@@ -11928,6 +12128,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/zushuka.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 969
     },
     "outfitId": 149
   }
