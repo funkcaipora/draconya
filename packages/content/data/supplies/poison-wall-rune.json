@@ -1,0 +1,57 @@
+{
+  "id": "poison-wall-rune",
+  "name": "Poison Wall Rune",
+  "description": "Planta uma parede de veneno perpendicular à mira, cruzando o tile alvo.",
+  "price": 52,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "actionExhaustMs": 1000,
+  "requires": {
+    "level": 29,
+    "magicLevel": 5
+  },
+  "effect": {
+    "kind": "field",
+    "range": 8,
+    "field": {
+      "id": "player-poison-wall",
+      "durationMs": 248000,
+      "shape": {
+        "shape": "wall",
+        "width": 3
+      },
+      "condition": {
+        "key": "poisoned",
+        "merge": "strongest",
+        "durationMs": 230000,
+        "effect": {
+          "kind": "damage-over-time",
+          "form": "generated",
+          "totalDamage": 100,
+          "intervalMs": 5000,
+          "startDamage": 5,
+          "damageType": "earth"
+        }
+      },
+      "stages": [
+        {
+          "durationMs": 248000,
+          "condition": {
+            "key": "poisoned",
+            "merge": "strongest",
+            "durationMs": 230000,
+            "effect": {
+              "kind": "damage-over-time",
+              "form": "generated",
+              "totalDamage": 100,
+              "intervalMs": 5000,
+              "startDamage": 5,
+              "damageType": "earth"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6; #591). Canary `poison_wall.lua`: MESMO item da Poison Field (ITEM_POISONFIELD_PVP, 105), com `setArea(AREA_WALLFIELD, AREADIAGONAL_WALLFIELD)` — só a contagem de 3 tiles é transcrita (ADR 0019). Level 29, magic level 5 (rune:level/magicLevel do Lua). `price` 52 — resolvido por `pnpm catalog:npc-prices` contra o clientId 3176 (menor `buy`, fonte asima.lua). Sem aparência conferida."
+}

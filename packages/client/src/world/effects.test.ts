@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ELEMENT_COLORS, FALLBACK_EFFECT_PHASES, FLOATING_TEXT_LIFETIME_MS, MISSILE_MIN_MS,
   MISSILE_MS_PER_TILE, effectPhaseAt, elementColor, floatingTextColor, floatingTextOffset,
-  mergeFloatingText, missileDuration, missileProgress,
+  mergeFloatingText, missileDuration, missileProgress, raceHitColor,
 } from './effects.js';
 import type { FloatingText } from '../state/world.js';
 
@@ -148,11 +148,23 @@ describe('floatingTextColor (#479)', () => {
     expect(floatingTextColor('spell', 'physical')).toBe(0xff0000);
   });
 
-  it('são os oito elementos, e `arcane` é o roxo da magia', () => {
-    expect(Object.keys(ELEMENT_COLORS)).toHaveLength(9); // oito elementos + heal
+  it('são os onze elementos, e `arcane` é o roxo da magia', () => {
+    expect(Object.keys(ELEMENT_COLORS)).toHaveLength(12); // onze elementos + heal
     expect(elementColor('arcane')).toBe(0xcc33ff);
     // Tipo desconhecido nunca vira preto — some no fundo.
     expect(elementColor('poison')).toBe(0xcc33ff);
+  });
+
+  it('drown/lifedrain/manadrain (#547, M29-07) têm cor própria', () => {
+    // Lifedrain reusa o vermelho do físico — a mesma cor que o Canary manda para os dois
+    // (`TEXTCOLOR_RED`). Drown e manadrain são dois azuis DISTINTOS entre si e do gelo:
+    // mutação que mata é qualquer um dos três colapsar no roxo genérico de magia.
+    expect(elementColor('lifedrain')).toBe(0xff0000);
+    expect(elementColor('drown')).toBe(0x3399ff);
+    expect(elementColor('manadrain')).toBe(0x0033ff);
+    expect(elementColor('drown')).not.toBe(elementColor('manadrain'));
+    expect(elementColor('drown')).not.toBe(elementColor('ice'));
+    expect(elementColor('manadrain')).not.toBe(elementColor('ice'));
   });
 });
 
@@ -164,5 +176,41 @@ describe('mergeFloatingText (#479)', () => {
     mergeFloatingText(text, 12);
     mergeFloatingText(text, 5);
     expect(text.amount).toBe(47);
+  });
+});
+
+describe('o número do golpe físico segue a RAÇA do alvo (#620)', () => {
+  // `Game::combatGetTypeInfo` do Canary: sangue vermelho, veneno verde, morto-vivo/tinta/chocolate
+  // cinza, doce vermelho-escuro, fogo laranja e energia roxa — índices `TextColor_t` na paleta de 216.
+  const RACES = {
+    blood: 0xff0000, venom: 0x00ff00, undead: 0x999999, ink: 0x999999, chocolate: 0x999999,
+    candy: 0x990000, fire: 0xff9900, energy: 0xcc33cc,
+  } as const;
+
+  it('cada raça tem a cor do Canary, e `blood` é o vermelho de sempre', () => {
+    for (const [race, color] of Object.entries(RACES)) {
+      expect(raceHitColor(race as keyof typeof RACES), race).toBe(color);
+    }
+    expect(raceHitColor('blood')).toBe(floatingTextColor('melee'));
+  });
+
+  it('o golpe `physical` (ou o `melee` sem elemento, de um nó anterior) usa a cor da raça', () => {
+    // Mutação que mata: ignorar a raça, ou aplicá-la a TODO golpe — o fogo de uma magia não
+    // vira verde só porque o alvo é venenoso.
+    expect(floatingTextColor('melee', 'physical', 'venom')).toBe(RACES.venom);
+    expect(floatingTextColor('melee', undefined, 'undead')).toBe(RACES.undead);
+    expect(floatingTextColor('spell', 'physical', 'candy')).toBe(RACES.candy);
+  });
+
+  it('elemento e cura NÃO mudam de cor pela raça', () => {
+    expect(floatingTextColor('spell', 'fire', 'venom')).toBe(elementColor('fire'));
+    expect(floatingTextColor('melee', 'energy', 'undead')).toBe(elementColor('energy'));
+    expect(floatingTextColor('heal', undefined, 'venom')).toBe(0x00ff00);
+    expect(floatingTextColor('spell', undefined, 'undead')).toBe(0xcc33ff);
+  });
+
+  it('sem raça é o vermelho do físico — o herói e todo monstro comum', () => {
+    expect(floatingTextColor('melee', 'physical')).toBe(0xff0000);
+    expect(floatingTextColor('melee', 'physical', undefined)).toBe(0xff0000);
   });
 });

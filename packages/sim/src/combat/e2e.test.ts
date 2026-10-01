@@ -55,15 +55,22 @@ const ROUTE = {
   tiles: [
     { x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 2, y: 2, z: 7 }, { x: 1, y: 2, z: 7 },
   ],
-  spawnPoints: [{ routeIndex: 2, radius: 1 }],
+  spawnPoints: [{ routeIndex: 2, radius: 1, monsterId: 'rat', respawnDelayMs: 30_000 }],
+};
+
+/** Três pontos no mesmo lugar (#583: fim do pull por dificuldade) — o que "bold" costumava
+ * dar de graça via `monsterCount: 3`, preservado para os cenários que pedem vários ratos. */
+const ROUTE_BOLD = {
+  ...ROUTE,
+  spawnPoints: [
+    { routeIndex: 2, radius: 1, monsterId: 'rat', respawnDelayMs: 30_000 },
+    { routeIndex: 2, radius: 1, monsterId: 'rat', respawnDelayMs: 30_000 },
+    { routeIndex: 2, radius: 1, monsterId: 'rat', respawnDelayMs: 30_000 },
+  ],
 };
 
 const HUNT = {
   id: 'arena', name: 'Arena', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
-  difficulties: {
-    cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000 },
-    bold: { monsterCount: 3, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000 },
-  },
 };
 
 // Ataque ZERO: o rato não encosta a vida do herói, então o teste mede o que ele se propôs a
@@ -79,15 +86,15 @@ const PROGRESSION = {
   id: 'baseline', startingHealth: 500_000, startingMana: 2_000, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
   startingSpeed: 300, speedPerLevel: 0,
-  regen: { healthPerSecond: 0, manaPerSecond: 0 },
+  regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
   xp: { kind: 'power', base: 20, exponent: 2 },
-  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessingReduction: 0.56, promotionReduction: 0.3 },
 };
 
 const COMBAT = {
   id: 'baseline', dodgeMultiplier: 0.5,
   armorEffectiveness: {
-    physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0,
+    physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
   },
   minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0 },
@@ -176,7 +183,13 @@ function board(options: {
   health?: number; gold?: number; level?: number; magicLevel?: number;
   monsters?: readonly Record<string, unknown>[];
 } = {}): Started {
-  const loaded = content(options.monsters === undefined ? {} : { monsters: options.monsters });
+  // "bold" não seleciona mais nada no conteúdo (#583) — é só um rótulo ignorado pelo `sim`.
+  // Os três ratos que "bold" costumava dar de graça (`monsterCount: 3`) vêm agora da ROTA:
+  // `ROUTE_BOLD` continua tendo três pontos quando o chamador pede "bold" (o default daqui).
+  const routes = (options.difficulty ?? 'bold') === 'bold' ? [ROUTE_BOLD] : [ROUTE];
+  const loaded = content({
+    routes, ...(options.monsters === undefined ? {} : { monsters: options.monsters }),
+  });
   const session = createHuntSession({
     id: options.id ?? 'e2e',
     content: loaded,
@@ -198,6 +211,9 @@ function board(options: {
       ? {}
       : { skills: { magic: { level: options.magicLevel, points: 0 } } }),
   });
+  // Sabe todas as magias do conteúdo do cenário (#624): o portão do aprendizado é assunto de
+  // `casting.test.ts`, e este arquivo prende a paridade do COMBATE.
+  for (const id of loaded.spells.keys()) hero.learnedSpells.grant(id);
   session.enter(hero);
   if (options.level !== undefined) {
     hero.level = options.level;
@@ -254,9 +270,9 @@ describe('combate E2E e paridade completa (M24-12, #477)', () => {
 
     const uses = session.aggregates.suppliesUsed;
     expect(uses).toBeGreaterThan(0);
-    // Gold debita no uso (§20.1), pelo preço REAL da runa — 14.
-    expect(session.aggregates.goldSpent).toBe(uses * 14);
-    expect(hero.goldDelta).toBe(-uses * 14);
+    // Gold debita no uso (§20.1), pelo preço REAL da runa — 64 (M34-03/#574).
+    expect(session.aggregates.goldSpent).toBe(uses * 64);
+    expect(hero.goldDelta).toBe(-uses * 64);
 
     const events = drain(session);
     const used = events.filter((event) => event.kind === 'supply-used');

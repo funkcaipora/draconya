@@ -8,6 +8,7 @@
 import { sql } from 'drizzle-orm';
 import {
   bigint,
+  boolean,
   check,
   index,
   integer,
@@ -77,6 +78,13 @@ export const itemInstances = pgTable(
      */
     container: text('container'),
     slotIndex: integer('slot_index'),
+    /**
+     * O estado por INSTÂNCIA (#604, ADR 0046): imbuements hoje; o prazo do anel (#689) e o tier
+     * da Forja (#617) entram como campos nomeados do mesmo objeto (`ItemInstanceOverlay`, `sim`).
+     * `null` é a instância igual à definição. Escrito inteiro pelo extrato, lido defensivamente
+     * no ticket (`readItemOverlay`) — sem CHECK, como os outros `jsonb`.
+     */
+    overlay: jsonb('overlay'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -101,9 +109,40 @@ export const characters = pgTable(
     // Nulável de propósito: o personagem nasce sem vocação e escolhe no level 8 (§7.4).
     vocation: text('vocation'),
 
+    /**
+     * Promoção de vocação (#566, ADR 0042 decisão 1): level 20, 20.000 gold, na Cidade.
+     * `not null default false`, diferente de `vocation` (nulável) — não precisa distinguir
+     * "nunca promovido" de `false`, os dois são o mesmo estado, e ele SÓ SOBE (nunca existe
+     * des-promoção no Tibia). Escrita pelo ledger, fundida por `OR` (nunca `coalesce`, que
+     * serve para "grava uma vez" — aqui o boolean não tem "ausente" a preencher).
+     */
+    promoted: boolean('promoted').notNull().default(false),
+
     level: integer('level').notNull().default(1),
     xp: bigint('xp', { mode: 'number' }).notNull().default(0),
     skills: jsonb('skills').notNull().default({}),
+    /**
+     * O instante da SESSÃO que escreveu `skills` pela última vez (#569). Guarda contra o
+     * mesmo problema que `stamina_updated_at` já resolve: skill deixou de ser monotônica
+     * quando a penalidade de morte passou a derrubar tries (#569), então fundir pelo MAIOR de
+     * cada uma reergueria a perda se um extrato mais antigo chegasse depois de um mais novo já
+     * aplicado. `endedAtMs` do extrato é o relógio da SESSÃO, e como o personagem só está em
+     * uma sessão de cada vez (invariante 8), as sessões dele terminam em ordem cronológica
+     * real — comparar contra o instante já gravado decide sozinho qual dos dois é mais
+     * recente, sem precisar saber se a skill subiu ou desceu.
+     */
+    skillsUpdatedAt: timestamp('skills_updated_at', { withTimezone: true }).notNull().defaultNow(),
+
+    /**
+     * Pontos de alma (#593): o `soul` do Canary — teto e cadência de ganho na vocação
+     * (`content`), custo na magia. O valor inicial do Canary é `soul = 100` desde a criação
+     * (todo personagem lá nasce com vocação); aqui o personagem nasce sem uma (§7.4), então o
+     * default é `0` — sem vocação, sem alma — e `chooseVocation` (`sim`) enche pela primeira
+     * vez ao escolher. PODE DESCER (gasto): é por isso que o ledger o escreve como valor
+     * ABSOLUTO, última-escrita-vence — a mesma régua de `ammo`/`equipment`, nunca a fusão por
+     * máximo de `skills`/`bestiary` (ver `jobs/ledger.ts`).
+     */
+    soul: integer('soul').notNull().default(0),
 
     gold: bigint('gold', { mode: 'number' }).notNull().default(0),
     capacity: integer('capacity').notNull().default(400),
@@ -112,8 +151,11 @@ export const characters = pgTable(
     premiumUntil: timestamp('premium_until', { withTimezone: true }),
 
     // Stamina é função do tempo decorrido, não recurso decrementado por job (FUN-39).
-    // Guarda-se o valor materializado e o instante em que ele valia.
-    staminaMs: bigint('stamina_ms', { mode: 'number' }).notNull().default(86_400_000),
+    // Guarda-se o valor materializado e o instante em que ele valia. Default 12 h
+    // (43.200.000 ms) desde M32-01 (#562, ADR 0043 emenda 2026-09-25 — o teto do Huntera);
+    // era 24 h (86.400.000 ms) antes, um número nosso sem fonte. Migração 0011 clampa quem já
+    // tinha mais que o novo teto persistido.
+    staminaMs: bigint('stamina_ms', { mode: 'number' }).notNull().default(43_200_000),
     staminaUpdatedAt: timestamp('stamina_updated_at', { withTimezone: true }).notNull().defaultNow(),
 
     /**
@@ -176,6 +218,90 @@ export const characters = pgTable(
      */
     ammunitionStock: jsonb('ammunition_stock'),
 
+    /**
+     * A economia de Charms (M39-02, #602): pontos/echoes gastos, tier de cada charm e as
+     * atribuições por monstro — `{ pointsSpent, echoesSpent, tiers, assignments, version }`.
+     * Nulável: `null` é quem nunca gastou um ponto de Charm. Primeira issue a materializar o
+     * ADR 0052 decisão 1: registro `jsonb` por sistema, lido INTEIRO no ticket, escrito
+     * INTEIRO pela transação do ledger a partir do extrato — ÚLTIMA ESCRITA VENCE, como
+     * `ammo`/`equipment`, NÃO fusão por máximo como o Bestiário (não há contador externo
+     * monotônico a fundir; é o estado final da sessão dona).
+     */
+    charms: jsonb('charms'),
+
+    /**
+     * O Bosstiary (#629): abates por boss (chave = `raceId` do Canary, em texto), pontos de boss e
+     * a versão — `{ kills, points, version }`. Nulável: `null` é quem nunca abateu um boss.
+     * Registro `jsonb` por sistema (ADR 0052 d.1), lido INTEIRO no ticket e escrito INTEIRO pela
+     * transação do ledger a partir do extrato — mas FUNDIDO pelo MAIOR de cada boss e dos pontos,
+     * como o Bestiário, e não última-escrita-vence como `charms`: abate e ponto de boss só sobem,
+     * então um extrato antigo processado fora de ordem não pode rebaixar nada.
+     */
+    bosstiary: jsonb('bosstiary'),
+
+    /**
+     * As magias aprendidas (#624, ADR 0058 d.1, ADR 0052 d.1): `{ spellIds, version }` — os ids
+     * de `content.spells` que o personagem comprou dos NPCs (aqui, da tela de serviço). Nulável:
+     * `null` é personagem NOVO, que não sabe magia nenhuma, como no Tibia. Todo personagem que
+     * já existia quando a migração 0024 rodou ganhou o registro com as magias da vocação dele
+     * até o level dele (ADR 0058 d.4, ADR 0014). Lido INTEIRO no ticket, escrito INTEIRO pela
+     * transação do ledger a partir do extrato — mas FUNDIDO pela UNIÃO dos ids (`LearnedSpells.merge`),
+     * e não última-escrita-vence como `charms`: magia aprendida só cresce, e um extrato antigo (ou de
+     * base desconhecida) não pode apagar a concessão da migração nem a compra de outro.
+     */
+    learnedSpells: jsonb('learned_spells'),
+
+    /**
+     * O familiar de vocação (M38-02, #599, ADR 0057 d.3, ADR 0052 d.1): os dois carimbos de
+     * relógio de PAREDE — `{ version, summonUntilMs, cooldownUntilMs }` — que o personagem
+     * carrega entre hunts (`packages/sim/src/familiar.ts`): até quando a invocação vale
+     * (recriada ao entrar na hunt) e até quando a magia volta. Nulável: `null` é quem nunca
+     * invocou. `jsonb`, como `charms`: lido INTEIRO no ticket, escrito INTEIRO pela transação
+     * do ledger a partir do extrato, ÚLTIMA ESCRITA VENCE — nunca fundido por máximo, porque o
+     * `summonUntilMs` DESCE quando o familiar morre (`FamiliarDeath` zera a recriação).
+     */
+    familiar: jsonb('familiar'),
+
+    /**
+     * O registro do Treino (#631, M44-13, ADR 0059 d.3): `{ offlineBankMs, offlineSkill, version }` —
+     * o banco de offline training (cresce 1:1 com o tempo de hunt/treino, teto 12 h) e a skill
+     * escolhida no livro. Nulável: `null` é quem nunca caçou nem treinou. ABSOLUTO e última escrita
+     * vence, como `charms` (o banco sobe por tempo de sessão e DESCE quando a `api` o gasta, então
+     * fundir por máximo ressuscitaria tempo já gasto). Escrito pelo ledger a partir do extrato da
+     * sessão dona e — o único caminho fora dela — pela `api` na emissão do ticket, com o
+     * personagem em repouso e sob a trava de linha (ADR 0052 d.1/d.5).
+     */
+    training: jsonb('training'),
+
+    /**
+     * Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, em milissegundos — a
+     * `CONDITION_REGENERATION` do Tibia. Drenado pelo TEMPO DE HUNT decorrido
+     * (`packages/sim/src/food.ts`), não por job — não precisa de um `updatedAt` companheiro
+     * como a stamina, porque não recupera fora de hunt (a Cidade não anda, ADR 0004/0023).
+     * `bigint`/`number`, não `jsonb`: é um número só, como `staminaMs`. Default 0: quem nunca
+     * comeu, ou todo personagem anterior a esta migração.
+     */
+    fedMs: bigint('fed_ms', { mode: 'number' }).notNull().default(0),
+
+    /**
+     * As sete bênçãos PvE (#570, ADR 0052): BITMASK, um bit por `order` de
+     * `content.blessings` — `packages/sim/src/blessings.ts`. Mesmo padrão de `fedMs`:
+     * `bigint`/`number`, ABSOLUTO, última escrita vence — nunca fundido por máximo, porque
+     * bênção DESCE na morte (fundir pelo maior ressuscitaria uma bênção recém-consumida se um
+     * extrato antigo, fora de ordem, chegasse depois de um mais novo já aplicado). Default 0:
+     * quem nunca comprou, ou todo personagem anterior a esta migração.
+     */
+    blessings: bigint('blessings', { mode: 'number' }).notNull().default(0),
+
+    /**
+     * A postura de luta (#550, M30-03, ADR 0040): o `fightMode` do Canary — `attack`, `balanced` ou
+     * `defense` —, o `FIGHTMODE_ATTACK` de quem nunca escolheu. Escolhida na HUD (`set-fight-mode`) e
+     * aplicada pela sessão dona ao dano de arma, à defesa e à mitigação do `combat-v3`. ABSOLUTO,
+     * última escrita vence, como `blessings`: não há ordem entre os três modos, então nada de fusão
+     * por máximo. CHECK no banco (`character_fight_mode`): vocabulário fechado do protocolo.
+     */
+    fightMode: text('fight_mode').notNull().default('attack'),
+
     state: text('state').notNull().default('city'),
     sessionId: text('session_id'),
 
@@ -189,8 +315,47 @@ export const characters = pgTable(
       .on(sql`lower(normalize(${t.name}, NFC))`)
       .where(sql`${t.deletedAt} is null`),
     normalizedName: check('character_name_nfc', sql`${t.name} = normalize(${t.name}, NFC)`),
+    fightModeVocabulary: check(
+      'character_fight_mode',
+      sql`${t.fightMode} in ('attack', 'balanced', 'defense')`,
+    ),
     byAccount: index('character_by_account').on(t.accountId),
   }),
+);
+
+/**
+ * Storages por personagem (#731, ADR 0050 d.6 T2): `storageKey → value` — a semente do motor de
+ * quest, a mesma pergunta do Canary (`player:getStorageValue`/`setStorageValue`).
+ *
+ * **Uma linha por chave, e não uma coluna `jsonb`** — ao contrário de `bestiary`/`ammo`/
+ * `supplyStock`: uma linha da Cidade de Thais sozinha já tem ~110 interativos gated por
+ * storage (51 portas de chave + 59 baús, ADR 0050 contexto), e o motor de quest inteiro que
+ * este sistema semeia só cresce daqui. Uma linha por chave é o que permite ler/escrever POR
+ * CHAVE mais tarde, sem reescrever um blob inteiro a cada storage tocado.
+ *
+ * `id` próprio, como `friend`: a linha é uma entidade, e o índice único faz o papel de trava
+ * contra o duplo clique/retry. Sem CHECK no valor — `-1` (ausência) nunca é gravado aqui por
+ * construção (`CharacterRuntime.setStorageValue` apaga a linha em vez de gravar `-1`), mas o
+ * banco não é o lugar de impor isso: quem lê de volta é defensivo (`readCharacterStorage`), na
+ * régua do Bestiário/overlay de item.
+ */
+export const characterStorages = pgTable(
+  'character_storage',
+  {
+    id: text('id').primaryKey(),
+    characterId: text('character_id').notNull().references(() => characters.id),
+    storageKey: text('storage_key').notNull(),
+    value: integer('value').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Um personagem, uma chave — uma linha. É a trava contra o duplo clique/retry, como
+    // `friend_pair_unique`; o extrato faz `ON CONFLICT` contra ela.
+    uniqueIndex('character_storage_key_unique').on(table.characterId, table.storageKey),
+    // O acesso real é "os storages DESTE personagem", na emissão do ticket — sem índice, ler
+    // varre a tabela inteira.
+    index('character_storage_character').on(table.characterId),
+  ],
 );
 
 /**
@@ -242,3 +407,17 @@ export const ledger = pgTable(
     byCharacter: index('ledger_by_character').on(t.characterId, t.createdAt),
   }),
 );
+
+/**
+ * A Boosted Creature do dia (M42, #615, ADR 0054 decisão 7): uma linha por dia. `day` é a
+ * data (UTC, deslocada por `boosted.rolloverHourUtc`) em formato `YYYY-MM-DD` — chave primária
+ * de propósito: o `jobs` faz `INSERT … ON CONFLICT (day) DO NOTHING` para sortear no máximo
+ * uma vez por dia mesmo rodando a cada ciclo (idempotência sem lock a mais, a mesma trava que
+ * o índice único já dá ao ledger, invariante 10). Sem `characterId`: é do MUNDO, não de quem
+ * joga — todo mundo vê a mesma boosted no mesmo dia.
+ */
+export const worldDaily = pgTable('world_daily', {
+  day: text('day').primaryKey(),
+  boostedMonsterId: text('boosted_monster_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

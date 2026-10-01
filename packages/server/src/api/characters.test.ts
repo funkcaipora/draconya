@@ -6,6 +6,8 @@ import {
   CharacterNameTakenError,
   type AccountRecord,
   type CharacterRecord,
+  type CharacterStorageRecord,
+  type CharacterWriter,
   type GameRepository,
   type ItemInstanceRecord,
   type StartingKitPiece,
@@ -35,11 +37,14 @@ class MemoryRepository implements GameRepository {
     return {
       id: 'i1', itemId: instance.itemId, ownerCharacterId: instance.ownerCharacterId,
       quantity: instance.quantity ?? 1, origin: instance.origin, equippedSlot: null,
-      container: null, slotIndex: null,
+      container: null, slotIndex: null, overlay: null,
       createdAt: new Date(0),
     };
   }
   async listItemInstances(): Promise<readonly ItemInstanceRecord[]> {
+    return [];
+  }
+  async listCharacterStorages(): Promise<readonly CharacterStorageRecord[]> {
     return [];
   }
   async saveBotConfig(characterId: string, config: unknown): Promise<void> {
@@ -48,6 +53,10 @@ class MemoryRepository implements GameRepository {
   }
   async ensureAccount(identity: { externalAuthId: string; email: string }): Promise<AccountRecord> {
     return { id: 'a1', email: identity.email, externalAuthId: identity.externalAuthId, coins: 0 };
+  }
+  async getAccountCreatedAt(): Promise<Date | null> {
+    // A idade da conta só importa para o ticket (Loyalty, #628), que não passa por este arquivo.
+    return null;
   }
   async createCharacter(
     accountId: string, name: string,
@@ -58,10 +67,18 @@ class MemoryRepository implements GameRepository {
     }
     const now = new Date('2026-09-07T12:00:00Z');
     const character: CharacterRecord = {
-      id: `c${++this.next}`, accountId, name, vocation: null, level: 1, xp: 0, gold: 0,
+      id: `c${++this.next}`, accountId, name, vocation: null, promoted: false, level: 1, xp: 0, soul: 0, gold: 0,
       capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: now,
       state: 'city', sessionId: null, botConfig: initial.botConfig ?? null, skills: {},
       outfitColors: null, bestiary: null, ammo: null, supplyStock: null, ammunitionStock: null,
+      charms: null,
+      bosstiary: null,
+      learnedSpells: null,
+      familiar: null,
+      training: null,
+      fedMs: 0,
+      blessings: 0,
+      fightMode: 'attack',
       createdAt: now,
     };
     this.characters.set(character.id, character);
@@ -97,10 +114,15 @@ class MemoryRepository implements GameRepository {
   async withOwnedCharacter<T>(
     accountId: string,
     characterId: string,
-    operation: (character: CharacterRecord) => Promise<T>,
+    operation: (character: CharacterRecord, writer: CharacterWriter) => Promise<T>,
   ) {
     const character = await this.getCharacter(accountId, characterId);
-    return character === null ? null : operation(character);
+    // O escritor da trava (#631) só existe para o gasto do offline training no ticket, que estes
+    // testes de personagem não exercitam: o fake o recusa em vez de fingir que gravou.
+    const writer: CharacterWriter = {
+      applyOfflineTraining: async () => { throw new Error('not exercised by the character tests'); },
+    };
+    return character === null ? null : operation(character, writer);
   }
   async softDeleteCharacter(
     accountId: string,

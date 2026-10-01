@@ -1,0 +1,21 @@
+{
+  "id": "holy-flash",
+  "name": "Holy Flash",
+  "description": "Ofusca o seu alvo com luz sagrada, causando dano ao longo do tempo.",
+  "vocationId": "paladin",
+  "minLevel": 70,
+  "learnPrice": 7500,
+  "manaCost": 30,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 40000,
+  "effect": {
+    "kind": "damage-over-time",
+    "amount": 20,
+    "intervalMs": 3000,
+    "durationMs": 27000,
+    "range": 3,
+    "damageType": "holy"
+  },
+  "_open": "Magia que faltava no catálogo (#596; ADR 0037): DOT sagrado (ofuscante) do Paladin (level 70), `utori san` no Canary. Fonte `data/scripts/spells/attack/holy_flash.lua` (Canary local, 47dfd51): `spell:id(143)`, level 70, mana 30, cooldown 40s, grupo `attack` 2s, `range 3`, `COMBAT_HOLYDAMAGE`, `needTarget`. Mecanismo `Condition:addDamage` (M31-02) com uma DIFERENÇA das outras quatro DOTs desta issue: `condition:addDamage(math.random(7, 11), 3000, -20)` — o NÚMERO DE TIQUES é aleatório (7 a 11), o dano por tique é FIXO (20). `durationMs` usa a MÉDIA (9 tiques × 3000 ms = 27000 ms), porque `spellEffectSchema.damage-over-time` não modela duração aleatória — a aproximação preserva o dano total ESPERADO (180) com erro de ±2 tiques (±40 de dano), razoável para uma DOT de suporte (spec DT-03). Aparência: efeito 39 e projétil 31, reaproveitados de `divine-missile` (mesmo tema sagrado/`CONST_ANI_SMALLHOLY`) — biblioteca parcial (47/4171 folhas, `docs/combat-presentation-audit.md`), conferência visual pendente."
+}

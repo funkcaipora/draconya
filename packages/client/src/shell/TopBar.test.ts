@@ -57,7 +57,7 @@ const catalogue: Catalogue = {
   vocations: [
     { id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25, startingWeaponItemId: 'steel-axe' },
   ],
-  vocationLevel: 8,
+  charms: [], vocationLevel: 8,
 };
 
 beforeEach(() => {

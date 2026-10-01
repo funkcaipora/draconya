@@ -3,7 +3,8 @@
 **Status:** parcial — vocabulário v2 (`sets[4] × slots[24]`, AB-03), motor por grupo de cooldown
 (AB-07), automações (AB-08), suprimento abstrato com gold no uso (AB-04), intenções `use-slot`/
 `select-target`/`select-ammo` e migração v1→v2 (AB-09), barra de ações e painel de Automações
-(AB-10…AB-13) implementados; postura (`stance`) e moedas são M21/M22
+(AB-10…AB-13) implementados; a postura de luta é do jogador (`character.fight_mode`, M30-03) e o
+`stance` da config v2 é vestigial; moedas são M21/M22
 **PRD:** §13, §43.3
 **Épico:** E4
 
@@ -21,7 +22,14 @@ esquerda para a direita, depois a fileira 2) e a **cadência é o grupo de coold
 (`attack`/`healing`/`support` para magia, mais `potion` para poção e `attack` para runa). A cada
 grupo pronto, os slots ligados são tentados em ordem; o primeiro que consegue executar tranca o
 grupo pelo cooldown dele, e quem não consegue agora é **pulado no mesmo ciclo** — sem mana, sem
-gold, sem alvo, ou em cooldown individual.
+gold, sem alvo, em cooldown individual, ou com a **magia ainda não aprendida** (#624, ADR 0058: o
+cast exige `learnedSpells`; a recusa não tem prazo, o slot fica marcado na barra, e a hunt nunca
+encerra por isso — aprender no meio dela acorda o bot na hora).
+
+Poção e runa ainda dividem um terceiro relógio, a **exaustão de ação** de 1000 ms (#690, o
+`nextPotionAction` do Canary, `actionExhaustMs` no supply): uma poção logo depois de uma runa de
+ataque espera 1000 ms mesmo com o grupo `potion` livre. O slot em exaustão é pulado no ciclo e o
+grupo volta no vencimento dela — adiado, não perdido. Magia não lê este relógio.
 
 O jogador também administra targeting: mirar no alvo mais próximo, no de menor ou maior HP, ou
 no alvo que ele escolheu clicando no mundo; priorizar ou ignorar criaturas específicas; e a
@@ -53,9 +61,38 @@ hunt sem gold para pagar o próximo supply e pode morrer.
   id de monstro; postura `stand` (padrão), `follow`, `keep-distance`.
 - Regras de saída: `hp-below`, `out-of-gold`, `party-member-lost`, `out-of-capacity`, com teto de
   4 slots em `bot/baseline.json`.
+- **O filtro de Quick Loot** (`loot`, ADR 0048 decisão 2): `filter` (`'accept'` ou `'skip'`,
+  padrão `'skip'`), `itemIds` (padrão vazia — com `skip` e lista vazia, aceita tudo, o
+  comportamento de antes deste ADR) e `autoSell` (vende ao coletar, cortado pelo limite do
+  PRÓPRIO Premium — 5 tipos Free, 20 Premium, o mesmo `party.autoSellItemTypes`). Campo novo com
+  default, como `follow`: config salva antes deste ADR volta pegando tudo, sem venda automática.
+- **O bot esfola sozinho, sem configuração nenhuma** (#626, ADR 0048 d.5): quem tem a faca ou a
+  estaca na mochila esfola o cadáver no mesmo evento em que coleta o loot, e o material segue o
+  filtro de Quick Loot acima. Não há regra a ligar — é a automação que o Tibia deixa à mão do
+  jogador, legítima pelo invariante 11. Ver "Esfola de cadáver" em `docs/product/items.md`.
 - Usar um supply debita o `price` do gold na hora (`useSupply`); o saldo nunca fica negativo, e a
   garantia é a ordem — o débito é recusado antes, não corrigido depois.
 - Personagem sem configuração não agenda nada.
+- **A condição `drunk` (M31-03, #558, ADR 0041) desvia o passo do bot igual a qualquer outro
+  passo.** O bot continua mandando só a intenção de andar (invariante 4); é `HuntRuleset#step`
+  (`packages/sim/src/rulesets/hunt.ts`) quem resolve se o passo vai para onde a rota pediu ou é
+  desviado pelo sorteio da sessão — o MESMO `#step` do `walk` manual e do monstro. Um personagem
+  bêbado que se afasta da rota sozinho, ou perde um passo contra uma parede, não é bug do motor
+  de bot: é a mesma condição que afetaria o jogador jogando manualmente (invariante 11 — não há
+  exceção de automação). Ver "Drunk: desvio de passo" em `docs/product/combat.md`.
+- **`rooted`, `feared` e `pacified` (#622, M44-04) valem para o bot como para o jogador manual.**
+  Sob `rooted` ou `feared` o passo do bot (rota, follow, `walk-to`) é recusado em `HuntRuleset#step`
+  — o bot só manda intenção e não tem como escapar da recusa (invariante 11) —, e sob `feared` a
+  fuga forçada (`Runner.fearWalk`) assume o movimento: enquanto ela dura o bot não anda, e ao acabar
+  ele volta à rota pelo caminho de sempre (`not-adjacent` → resincroniza). Sob `feared` nenhuma
+  magia nem runa sai (`feared`, com o prazo do medo no `retryInMs`, para o bot re-armar quando o
+  medo acabar); a poção sai. Sob `pacified` (a trava de escada de 2 s e o Swift Foot) nem o golpe
+  básico nem a magia/runa agressiva (dano, DOT, a invocação, as runas de dano/campo, a Paralyze
+  Rune e as de invocação, Convince Creature e Animate Dead) saem, e o golpe volta no PENSAMENTO seguinte ao vencimento — até 1 s depois dele, ou antes
+  se o personagem ou o alvo der um passo —, porque o Canary não re-arma o ataque quando a condição
+  acaba; cura, poção e o resto seguem. Um `walk-to` que o jogador deixou guardado cai quando a raiz
+  o prende. Nada disso é falha do motor de bot. Ver "Condições de controle" em
+  `docs/product/combat.md`.
 
 ## O vocabulário, por inteiro (AB-03, ADR 0032 d.1)
 
@@ -79,6 +116,7 @@ errado em vez de dizer "nenhuma variante casou".
 | `targets` | `op`, `count` (≥ 0) | Quantos alvos estão dentro do alcance do grupo (#152, #216, #444): o da arma, ou o da ação de dano à distância do grupo (uma runa de alcance 8 conta a 8) |
 | `target-hp` | `op`, `percent` (0–100) | Vida do alvo atual. Sem alvo, a condição é falsa — nunca erro |
 | `condition` | `conditionId`, `present` (padrão `true`) | Efeito ativo/ausente no personagem, por chave semântica (`haste`, `mana-shield`, `buff`) — "castar haste só sem haste" |
+| `summons` | `op`, `count` (≥ 0) | Quantas invocações VIVAS o personagem tem (#598) — "sem invocação viva → invocar" é `summons <= 0` |
 
 **Operadores:** `<`, `<=`, `>`, `>=`. **Sem `==`** — comparar percentual exato quase nunca
 dispara, e é a armadilha que faz o jogador achar que configurou cura e não ter cura nenhuma.
@@ -87,8 +125,14 @@ dispara, e é a armadilha que faz o jogador achar que configurou cura e não ter
 
 | `kind` | Campo | Catálogo |
 |---|---|---|
-| `spell` | `spellId` | `packages/content/data/spells/*.json` (FUN-74) |
+| `spell` | `spellId`, `monsterId?` | `packages/content/data/spells/*.json` (FUN-74). `monsterId` só existe para a Summon Creature (#598): QUAL `summonable` nascer |
 | `supply` | `supplyId` | `packages/content/data/supplies/*.json` (FUN-77) — poção e runa |
+
+**O familiar de vocação (#599)** é uma ação `spell` comum (`summon-<vocação>-familiar`, level 200), sem
+`monsterId`. Regra de preset: `spell` do familiar com `summons <= 0`. O cooldown de 30 min NÃO precisa
+de condição própria: a recusa por cooldown de parede engatilha sem agendar o grupo, então o bot a
+reavalia a cada evento e lança no instante em que a magia volta — e a barra mostra o cooldown real.
+Ver `combat.md`, "O familiar de vocação".
 
 O token `item` da v1 saiu com o AB-03 (ADR 0032 d.6): poção e runa voltaram a ser **suprimento
 abstrato**, com `price`, `effect`, `requires` e `group` em `data/supplies/`, e o gold é debitado
@@ -207,8 +251,9 @@ por cooldown.
 | Cooldown de fallback de um grupo | 1 s | `packages/content/data/bot/baseline.json`, `categoryCooldownMs` |
 | Grupo de cooldown por magia | `attack` / `healing` / `support` | `packages/content/data/spells/*.json`, campo `group` |
 | Grupo de cooldown por supply | `potion` / `attack` | `packages/content/data/supplies/*.json`, campo `group` |
-| Preço do supply (gold no uso) | poção de vida 45; poção de mana 50; avalanche 14 `[ABERTO — provisório]`; as nove poções do Tibia (#524, kit level 200) 115–480, preço de NPC real, NÃO provisório — tabela completa em `items.md` | `packages/content/data/supplies/*.json`, campo `price` |
-| Preço do tiro de munição | arrow 1; burst arrow 3; sniper arrow 5; onyx arrow 7 `[ABERTO — provisório]`; power bolt 10 (#524, NÃO provisório) | `packages/content/data/ammunition/*.json`, campo `price` |
+| Exaustão de ação compartilhada (poção + runa) | 1000 ms (`timeBetweenExActions` do Canary, #690) | `packages/content/data/supplies/*.json`, campo `actionExhaustMs` |
+| Preço do supply (gold no uso) | small health potion 20; poção de vida 50; poção de mana 56; avalanche 64 — menor `buy` de NPC do Canary (M34-03/#574, NÃO provisório); as nove poções do Tibia (#524, kit level 200) 115–650, preço de NPC real, NÃO provisório — tabela completa em `items.md` | `packages/content/data/supplies/*.json`, campo `price` |
+| Preço do tiro de munição | arrow 2; burst arrow 15; sniper arrow 5; onyx arrow 7 — menor `buy` de NPC do Canary (M34-03/#574, NÃO provisório); power bolt 7 (idem) | `packages/content/data/ammunition/*.json`, campo `price` |
 | Raio de busca de alvo | 8 tiles | `packages/content/data/bot/baseline.json`, `targetSearchRadius` |
 | Teto de regras de saída | 4 | `packages/content/data/bot/baseline.json`, `slots.exit` |
 | Baseline v2 por vocação (slots + automações) | cavaleiro: arma/escudo por vida; paladino: munição por alvos; sorcerer: renovar anel; druid: renovar colar `[ABERTO — provisório]` | `packages/content/data/bot/baseline.json`, `defaultConfigByVocation` |
@@ -220,9 +265,13 @@ por cooldown.
 
 - Vocabulário final de todas as condições possíveis do bot (§43.3).
 - `[ABERTO — valor provisório: 1]` Alcance da poção com `target: 'friend'` (§26, ADR 0035 d.10) — o PRD não fixa alcance de poção; 1 é o mínimo que ainda é "em terceiro", em `packages/content/data/supplies/{health-potion,mana-potion}.json`.
-- **Postura de combate** (`stance`: `offensive`/`balanced`/`defensive`) já existe no schema e no
+- ~~**Postura de combate** (`stance`: `offensive`/`balanced`/`defensive`) já existe no schema e no
   rascunho do cliente, mas o efeito sobre o combate é **M21** (ADR 0032 d.10) — não está em
-  vigor no `sim`.
+  vigor no `sim`.~~ → **Resolvido (M30-03, #550):** a postura de luta é escolha do JOGADOR e mora
+  em `character.fight_mode` (intenção `set-fight-mode`, três botões sob o set — ver
+  `docs/product/combat.md`, "A postura de luta"). **O bot não a troca** e o vocabulário da
+  automação não mudou. O `stance` da config v2 continua no schema, sem efeito e sem leitor, só
+  por compatibilidade com config já salva (ADR 0014).
 - **Baseline v2 por vocação**: `defaultConfigByVocation` é declarada e validada no boot, mas o
   `api` ainda semeia o personagem novo com o `defaultConfig` v1, migrado na entrada (ver
   "Divergências").
@@ -278,6 +327,8 @@ O que ele faz, por tipo de ação:
 | `spell` com efeito `damage` | resolve o dano por `resolveDamage` com `kind: 'magic'`, aplica no alvo e **atribui** (`recordDamage`) | level, vocação, cooldown, sem alvo, fora de alcance, mana |
 | `supply` `heal`/`mana` | repõe HP ou mana (faixa fixa sorteada, `amountRange`, ou `alsoMana` junto — #524, kit level 200) e **debita `price` do gold** no ato | level, vocação (#524 — a poção do Tibia pede as duas, como a magia), sem gold |
 | `supply` `damage` (runa) | mira como a magia em área, escala pelo magic level, aplica pelo mesmo `#applyHits` e **debita `price` do gold** | level, vocação, magic level, sem alvo, fora de alcance, sem gold |
+| `supply` `convince` (Convince Creature, #600) | mira o alvo do bot como a runa de dano, confere `convinceable`/sem mestre/teto de 2/mana do monstro e **passa a posse** dele ao personagem; debita `price` e a `manaCost` do monstro | level, vocação, magic level, sem alvo, fora de alcance, alvo não `convinceable` ou com mestre (`not-possible`), teto (`too-many-summons`), mana, sem gold |
+| `supply` `animate-dead` (Animate Dead, #600) | sem mira manual, o bot escolhe o **cadáver animável mais próximo** ao alcance e à vista; consome o cadáver (e o loot que sobrou) e ergue o Skeleton; debita só `price` | level, vocação, magic level, sem cadáver movível ao alcance (`no-target`/`not-possible`), teto, sem gold |
 | `item` com efeito `blessing` | nada — quem o executa é a TP-03 (M22) | sempre |
 
 Três coisas que não podem mudar sem pensar duas vezes:
@@ -350,6 +401,15 @@ monstro:
 
 `ignore` vence `prioritize` quando o mesmo id está nas duas listas. É configuração contraditória
 do jogador, e "não ataque" é a leitura conservadora.
+
+**O bot nunca mira monstro invisível** (#559, ADR 0041 d.2): o jogador não enxerga o que o Canary
+esconde (`Player::canSeeCreature`), então a escolha de alvo, a contagem de `targets` e a contagem
+por footprint de área pulam quem está invisível — o Killer Rabbit e ~107 outros têm a defesa
+`invisible` — até a condição vencer, ou até um golpe o revelar (o monstro invisível que leva dano
+volta a ficar visível). O alvo que o BOT elegeu cai na hora quando o monstro some; o que o jogador
+FIXOU clicando segue até o próximo "think" do Canary (até 1000 ms, um sorteio da sessão) e o golpe
+dele nesse intervalo revela o monstro. Detalhe e fontes em `docs/product/combat.md`, "Imunidade de
+condição, invisibilidade e a Paralyze Rune".
 
 Os ids são validados contra o **catálogo inteiro** de monstros, não contra a composição da hunt:
 a configuração é do personagem e sobrevive à troca de hunt.
@@ -619,7 +679,8 @@ mana e inicia cooldown é o servidor.
 | `select-ammo` | C2S | `{ ammoId }` — escolhe a munição da família; o servidor valida `requires.level` e responde em `player-stats.ammo` |
 | `target-changed` | S2C | o alvo autoritativo: `creatureId` positivo ou `null` (cancelamento confirmado), com o `seq` de volta quando veio de um `select-target` (#470) |
 | `target-cancel` | S2C | a recusa do `select-target` (criatura desconhecida ou morta); nada mudou (#470) |
-| `slot-state` | S2C | o estado dos 24 slots do conjunto ativo: `ready`/`cooldown`/`blocked`/`empty`, `remainingMs` e o motivo em palavras |
+| `slot-state` | S2C | o estado dos 24 slots do conjunto ativo: `ready`/`cooldown`/`blocked`/`empty`, `remainingMs` e o motivo em palavras (`not-learned` — "Você ainda não aprendeu essa magia." — para a magia comprada de menos, #624) |
+| `learn-spell` | C2S | `{ spellId }` — aprende a magia por gold, na Cidade ou na hunt (#624, ADR 0058); resposta `learned-spells` (S2C) com o registro inteiro |
 | `slot-result` | S2C | a resposta ao `use-slot`: `ok` e, quando falso, o motivo para o tooltip |
 
 **Manual é manual.** `use-slot` ignora as condições (`when`) e a chave automática (`auto`), mas
@@ -646,6 +707,38 @@ A configuração v1 salva é convertida para v2 de forma **determinística e ide
 Uma config já na v2 volta apenas parseada (idempotência). A detecção de "já é v2" é compartilhada
 com o `server`, que precisa dela para saber se o que veio no ticket é dado novo a persistir.
 
+## Uso manual de item/suprimento fora da barra (#726, ADR 0049 decisão 3/6)
+
+`use-item`/`use-item-on` (C2S 25/26; `use-result`, S2C 37 — o 36 é `corpse-contents`, #722) usam um item da mochila/bolsa
+(`ref: { instanceId }`) OU uma unidade do estoque de suprimento (`ref: { supplyId }`) **sem
+passar pela barra** — o `HuntRuleset` resolve pelo catálogo: `supplyId` reaproveita
+`#useSupply`/`useSupply` (`casting.ts`) por inteiro, o MESMO caminho de `use-slot`; comida soma
+`fedMs`; a carga de bênção consome e soma `blessings`. `target` é a MESMA mira opcional de
+`use-slot` (decisão 2) — obrigatória em `use-item-on`, o "usar com…" do menu de contexto contra
+"usar". Só HUNT: a Cidade recusa `not-in-hunt` para as duas (o subconjunto de container/look da
+decisão 8 não passa por aqui — mochila/equipamento já têm caminho próprio em `move-item`/`equip`).
+
+**A exaustão de ação compartilhada (`exhaust:action`, #690) é ADIADA para o manual, não
+recusada** (decisão 6, o `setNextActionTask` do Canary) — ao contrário do cooldown de
+GRUPO/individual da runa/poção usada, que continua recusa IMEDIATA como sempre. Um `use-item`/
+`use-item-on` que chega com `exhaust:action` ainda trancado vira `pendingManualAction` no
+personagem (evento `pending-manual-action` na fila, invariante 2), reagendado para o
+vencimento do livro; um segundo disparo antes disso SUBSTITUI o primeiro. O jogador recebe
+`use-result { ok: true }` na hora — aceito, não necessariamente já executado — e só recebe uma
+SEGUNDA mensagem (`manual-action-result` → `use-result` de novo, com o MESMO `seq`) se a ação
+adiada, na hora de rodar, afinal não coube. Sucesso não gera segunda mensagem (decisão 7): o
+`inventory`/`player-stats`/`creature-hit` de sempre é a confirmação.
+
+**O menu de contexto da mochila** (`ContainerWindow.tsx`) abre no clique direito de um item
+`kind: 'consumable'`: "Usar" manda `use-item` na hora (`shell/use-item-intent.ts`, a decisão
+pura, no molde de `drag-intent.ts`); "Usar com…" arma a mira (`state/aim.ts`,
+`startAimForItem`) e o PRÓXIMO clique no mundo/Batalha resolve com `use-item-on` — a MESMA
+máquina de mira do `use-slot` (decisão 2), generalizada para carregar um `ItemRef` em vez de um
+`set`/`slot`. O `ContextMenu` (`shell/ui/ContextMenu.tsx`) é o MESMO componente que a #741/#724
+("Vender/Descartar") introduziu — trazido de lá para a tela nunca ter dois menus de contexto
+diferentes. A seção **Suprimentos** — ver `economy.md` — lista `inventory.supplies` por nome e
+contagem, sem sprite (o catálogo não carrega `appearanceId` para suprimento abstrato hoje).
+
 ## A tela (AB-10…AB-13)
 
 **A barra de ações 2 × 12 é a configuração E a superfície de disparo manual** — um só
@@ -661,21 +754,44 @@ mensagem de erro.
 **Nada de estado do bot é calculado no cliente**: o cooldown e o bloqueio vêm do `slot-state`, e a
 recusa da tecla do `slot-result`. A munição selecionada vem do `player-stats.ammo`.
 
-**O clique simples abre o `ActionConfigModal`**, redesenhado no M18 (#437, ADR 0033) na régua da
-imagem do "Configurar ação" do cliente Tibia em vez do kit de três `Select` do #426: abas
-**Magias / Runas / Itens** (magia é `bot.spells`; runa é `bot.supplies` com `group === 'attack'`;
-item é o resto), uma lista à esquerda ordenada por level exigido e um painel de detalhe à
-direita — título, `Lv. X+` (e `ML Y+` quando o suprimento exige), Tipo, Área, Tipo de dano, Dano/
-Cura/Efeito, Custo, Cooldown e Descrição. A faixa de dano/cura (`min~max`) é calculada no cliente
-por `spellPowerRange` (`@draconya/content`) a partir de `catalogue.bot.spellPower` e do level/magic
-level do personagem — uma PRÉVIA da mesma fórmula que o servidor usa para sortear; a rolagem de
-verdade continua exclusiva dele (invariante 4). Campo que o catálogo não manda (nó `game` anterior
-à #436) nunca vira número inventado: a linha correspondente some. Abaixo, as condições e a tecla e
-`auto` de sempre; trocar de aba não descarta a ação escolhida em outra. **Shift+clique desliga o
-automático** (`auto: false`) — o atalho continua manual. O
-`AutomationsPanel` lista uma linha por automação do rascunho (interruptor, nome, resumo dos
-parâmetros, ⚙ e ×), com "+ Adicionar" abrindo o catálogo de modelos; os modais
-`AddAutomationModal`/`AutomationConfigModal` editam. O `ExitRulesPopover` grava a lista `exit`.
+**O clique esquerdo DISPARA o slot; o clique direito CONFIGURA** (#725, ADR 0049 decisão 1) — o
+gesto do Tibia, emendando o ADR 0032 d.3 (que fazia o clique simples abrir a configuração). Slot
+vazio não tem o que disparar: o clique — esquerdo ou direito — continua abrindo o
+`ActionConfigModal`, único jeito de chegar lá sem um ⚙ na barra. **Shift+clique continua
+desligando o automático** (`auto: false`), sem disparar nem configurar — o atalho continua manual.
+Slot sem tecla é configuração válida desde sempre (DT-02, ADR 0032): ele só não responde a
+teclado, o clique basta. `BOT_HOTKEYS` ganhou as 10 combinações `shift+1…shift+0`/`shift+F1…
+shift+F12` (32 teclas para 24 slots — ADR 0049 decisão 1 emenda o DT-02, que deixava dois slots
+sem tecla própria); `Shift` sozinho compõe a tecla no teclado, sem armar mira nenhuma — mirar um
+aliado específico é gesto de clique, não de atalho.
+
+**Uma ação de ALIADO (`targets: 'friend'` no catálogo — cura, suporte) precisa de MIRA** (ADR
+0049 decisão 2): o clique nesse slot arma o modo de mira em vez de disparar sem alvo, e o
+PRÓXIMO clique no mundo (Viewport) ou na Batalha (`BattlePanel`) completa a intenção com
+`use-slot.target: { creatureId }` — o mesmo id numérico que `select-target` já usa. O estado de
+mira mora em `state/aim.ts`, ao lado do `targetTracker` (mesmo padrão, mesmo motivo: `apply.ts`
+zera os dois no `session-state`); Esc cancela sem mandar nada. Toda outra ação (ataque, runa,
+self) dispara direto, com o alvo default de sempre — fixado se houver, senão o candidato do bot;
+mirar um monstro específico por clique e mirar um tile vazio (`target.position`, para runa de
+área) o protocolo e o `sim` já aceitam, mas nenhum caminho do cliente os envia ainda — fica para
+quando houver pedido concreto. O servidor confere alcance (`effect.range`) e devolve `out-of-
+range`/`no-target` em palavras no `slot-result`, como toda recusa; linha de visão é a #553,
+paralela a esta issue.
+
+**O `ActionConfigModal`**, redesenhado no M18 (#437, ADR 0033) na régua da imagem do "Configurar
+ação" do cliente Tibia em vez do kit de três `Select` do #426: abas **Magias / Runas / Itens**
+(magia é `bot.spells`; runa é `bot.supplies` com `group === 'attack'`; item é o resto), uma lista
+à esquerda ordenada por level exigido e um painel de detalhe à direita — título, `Lv. X+` (e
+`ML Y+` quando o suprimento exige), Tipo, Área, Tipo de dano, Dano/Cura/Efeito, Custo, Cooldown e
+Descrição. A faixa de dano/cura (`min~max`) é calculada no cliente por `spellPowerRange`
+(`@draconya/content`) a partir de `catalogue.bot.spellPower` e do level/magic level do
+personagem — uma PRÉVIA da mesma fórmula que o servidor usa para sortear; a rolagem de verdade
+continua exclusiva dele (invariante 4). Campo que o catálogo não manda (nó `game` anterior à
+#436) nunca vira número inventado: a linha correspondente some. Abaixo, as condições e a tecla e
+`auto` de sempre; trocar de aba não descarta a ação escolhida em outra. O `AutomationsPanel`
+lista uma linha por automação do rascunho (interruptor, nome, resumo dos parâmetros, ⚙ e ×), com
+"+ Adicionar" abrindo o catálogo de modelos; os modais `AddAutomationModal`/`AutomationConfigModal`
+editam. O `ExitRulesPopover` grava a lista `exit`.
 
 **O interruptor salva sozinho.** Não há botão "Salvar" na barra: mudar o conjunto, o alvo, uma
 regra ou uma automação agenda um `bot-config` com **debounce de 300 ms** (ADR 0028); o Salvar do

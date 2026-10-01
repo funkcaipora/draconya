@@ -1,0 +1,4530 @@
+[
+  {
+    "id": "albino-plate",
+    "name": "albino plate",
+    "kind": "armor",
+    "weight": 84,
+    "value": 1500,
+    "slot": "chest",
+    "armor": 11,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 19358
+  },
+  {
+    "id": "amazon-armor",
+    "name": "amazon armor",
+    "kind": "armor",
+    "weight": 45,
+    "value": 0,
+    "slot": "chest",
+    "armor": 13,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 60,
+      "vocationId": "paladin"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3394
+  },
+  {
+    "id": "arcane-dragon-robe",
+    "name": "arcane dragon robe",
+    "kind": "armor",
+    "weight": 43,
+    "value": 0,
+    "slot": "chest",
+    "armor": 15,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "fire": {
+        "percent": -6
+      },
+      "ice": {
+        "percent": 12
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "energy": 1
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 44623
+  },
+  {
+    "id": "ball-gown",
+    "name": "ball gown",
+    "kind": "armor",
+    "weight": 25,
+    "value": 0,
+    "slot": "chest",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3570
+  },
+  {
+    "id": "bear-skin",
+    "name": "bear skin",
+    "kind": "armor",
+    "weight": 44,
+    "value": 0,
+    "slot": "chest",
+    "armor": 16,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 230,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "fire": {
+        "percent": -2
+      },
+      "earth": {
+        "percent": 11
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 31578
+  },
+  {
+    "id": "belted-cape",
+    "name": "belted cape",
+    "kind": "armor",
+    "weight": 35,
+    "value": 500,
+    "slot": "chest",
+    "armor": 10,
+    "requires": {
+      "vocationId": "paladin"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8044
+  },
+  {
+    "id": "blue-robe",
+    "name": "blue robe",
+    "kind": "armor",
+    "weight": 22,
+    "value": 0,
+    "slot": "chest",
+    "armor": 11,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3567
+  },
+  {
+    "id": "brass-armor",
+    "name": "brass armor",
+    "kind": "armor",
+    "weight": 80,
+    "value": 150,
+    "slot": "chest",
+    "armor": 8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3359
+  },
+  {
+    "id": "broken-iks-cuirass",
+    "name": "broken Iks cuirass",
+    "kind": "armor",
+    "weight": 19,
+    "value": 640,
+    "slot": "chest",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 40533
+  },
+  {
+    "id": "buckle",
+    "name": "buckle",
+    "kind": "armor",
+    "weight": 75,
+    "value": 7000,
+    "slot": "chest",
+    "armor": 12,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 17829
+  },
+  {
+    "id": "burial-shroud",
+    "name": "burial shroud",
+    "kind": "armor",
+    "weight": 5,
+    "value": 0,
+    "slot": "chest",
+    "absorb": {
+      "death": {
+        "percent": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 32585
+  },
+  {
+    "id": "calopteryx-cape",
+    "name": "calopteryx cape",
+    "kind": "armor",
+    "weight": 20,
+    "value": 15000,
+    "slot": "chest",
+    "armor": 12,
+    "requires": {
+      "level": 80,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "ice": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 14086
+  },
+  {
+    "id": "cape",
+    "name": "cape",
+    "kind": "armor",
+    "weight": 32,
+    "value": 0,
+    "slot": "chest",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3565
+  },
+  {
+    "id": "chain-armor",
+    "name": "chain armor",
+    "kind": "armor",
+    "weight": 100,
+    "value": 70,
+    "slot": "chest",
+    "armor": 6,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3358
+  },
+  {
+    "id": "coat",
+    "name": "coat",
+    "kind": "armor",
+    "weight": 27,
+    "value": 1,
+    "slot": "chest",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3562
+  },
+  {
+    "id": "crown-armor",
+    "name": "crown armor",
+    "kind": "armor",
+    "weight": 99,
+    "value": 210,
+    "slot": "chest",
+    "armor": 13,
+    "imbuementSlots": 1,
+    "requires": {
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3381
+  },
+  {
+    "id": "crystalline-armor",
+    "name": "crystalline armor",
+    "kind": "armor",
+    "weight": 84.5,
+    "value": 16000,
+    "slot": "chest",
+    "armor": 13,
+    "requires": {
+      "level": 60,
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": -3
+      },
+      "ice": {
+        "percent": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8050
+  },
+  {
+    "id": "dark-armor",
+    "name": "dark armor",
+    "kind": "armor",
+    "weight": 120,
+    "value": 400,
+    "slot": "chest",
+    "armor": 10,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3383
+  },
+  {
+    "id": "dark-lords-cape",
+    "name": "dark lord's cape",
+    "kind": "armor",
+    "weight": 29,
+    "value": 0,
+    "slot": "chest",
+    "armor": 11,
+    "requires": {
+      "level": 65,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "death": {
+        "percent": 8
+      },
+      "holy": {
+        "percent": -8
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8037
+  },
+  {
+    "id": "dauntless-dragon-scale-armor",
+    "name": "dauntless dragon scale armor",
+    "kind": "armor",
+    "weight": 152,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "club",
+          "amount": 3
+        },
+        {
+          "skillId": "sword",
+          "amount": 3
+        },
+        {
+          "skillId": "axe",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 44621
+  },
+  {
+    "id": "dawnfire-sherwani",
+    "name": "dawnfire sherwani",
+    "kind": "armor",
+    "weight": 28,
+    "value": 0,
+    "slot": "chest",
+    "armor": 16,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 270,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "earth": {
+        "percent": -2
+      },
+      "fire": {
+        "percent": 10
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39164
+  },
+  {
+    "id": "death-oyoroi",
+    "name": "death oyoroi",
+    "kind": "armor",
+    "weight": 105,
+    "value": 0,
+    "slot": "chest",
+    "armor": 9,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 230,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "death": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 4
+        },
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50260
+  },
+  {
+    "id": "demon-armor",
+    "name": "demon armor",
+    "kind": "armor",
+    "weight": 80,
+    "value": 195,
+    "slot": "chest",
+    "armor": 16,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3388
+  },
+  {
+    "id": "depth-lorica",
+    "name": "depth lorica",
+    "kind": "armor",
+    "weight": 145,
+    "value": 30000,
+    "slot": "chest",
+    "armor": 16,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 150,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "death": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 13994
+  },
+  {
+    "id": "divine-plate",
+    "name": "divine plate",
+    "kind": "armor",
+    "weight": 75,
+    "value": 55000,
+    "slot": "chest",
+    "armor": 13,
+    "requires": {
+      "level": 75,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "death": {
+        "percent": 10
+      },
+      "holy": {
+        "percent": -10
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8057
+  },
+  {
+    "id": "doublet",
+    "name": "doublet",
+    "kind": "armor",
+    "weight": 25,
+    "value": 3,
+    "slot": "chest",
+    "armor": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3379
+  },
+  {
+    "id": "dragon-robe",
+    "name": "dragon robe",
+    "kind": "armor",
+    "weight": 28.5,
+    "value": 50000,
+    "slot": "chest",
+    "armor": 12,
+    "requires": {
+      "level": 75,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 12
+      },
+      "ice": {
+        "percent": -12
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8039
+  },
+  {
+    "id": "dragon-scale-mail",
+    "name": "dragon scale mail",
+    "kind": "armor",
+    "weight": 114,
+    "value": 40000,
+    "slot": "chest",
+    "armor": 15,
+    "imbuementSlots": 1,
+    "requires": {
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3386
+  },
+  {
+    "id": "dream-shroud",
+    "name": "dream shroud",
+    "kind": "armor",
+    "weight": 25,
+    "value": 0,
+    "slot": "chest",
+    "armor": 12,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 180,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": 10
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 29423
+  },
+  {
+    "id": "dwarven-armor",
+    "name": "dwarven armor",
+    "kind": "armor",
+    "weight": 130,
+    "value": 30000,
+    "slot": "chest",
+    "armor": 10,
+    "imbuementSlots": 2,
+    "absorb": {
+      "physical": {
+        "percent": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3397
+  },
+  {
+    "id": "earthborn-titan-armor",
+    "name": "earthborn titan armor",
+    "kind": "armor",
+    "weight": 120,
+    "value": 0,
+    "slot": "chest",
+    "armor": 15,
+    "requires": {
+      "level": 100,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "fire": {
+        "percent": -5
+      },
+      "earth": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "axe",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8054
+  },
+  {
+    "id": "earthheart-cuirass",
+    "name": "earthheart cuirass",
+    "kind": "armor",
+    "weight": 145,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "requires": {
+      "level": 200,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "fire": {
+        "percent": -8
+      },
+      "earth": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "sword",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22521
+  },
+  {
+    "id": "earthheart-hauberk",
+    "name": "earthheart hauberk",
+    "kind": "armor",
+    "weight": 145,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "requires": {
+      "level": 200,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "fire": {
+        "percent": -8
+      },
+      "earth": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "axe",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22522
+  },
+  {
+    "id": "earthheart-platemail",
+    "name": "earthheart platemail",
+    "kind": "armor",
+    "weight": 145,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "requires": {
+      "level": 200,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "fire": {
+        "percent": -8
+      },
+      "earth": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "club",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22523
+  },
+  {
+    "id": "earthmind-raiment",
+    "name": "earthmind raiment",
+    "kind": "armor",
+    "weight": 55,
+    "value": 0,
+    "slot": "chest",
+    "armor": 15,
+    "requires": {
+      "level": 200,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": -8
+      },
+      "earth": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22535
+  },
+  {
+    "id": "earthsoul-tabard",
+    "name": "earthsoul tabard",
+    "kind": "armor",
+    "weight": 145,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "requires": {
+      "level": 200,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "fire": {
+        "percent": -8
+      },
+      "earth": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22531
+  },
+  {
+    "id": "eldritch-cuirass",
+    "name": "eldritch cuirass",
+    "kind": "armor",
+    "weight": 110,
+    "value": 0,
+    "slot": "chest",
+    "armor": 16,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 250,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 10
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 36663
+  },
+  {
+    "id": "elite-draken-mail",
+    "name": "elite draken mail",
+    "kind": "armor",
+    "weight": 120,
+    "value": 0,
+    "slot": "chest",
+    "armor": 15,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 100,
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "bonuses": {
+      "speed": 10
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 11651
+  },
+  {
+    "id": "elven-mail",
+    "name": "elven mail",
+    "kind": "armor",
+    "weight": 90,
+    "value": 0,
+    "slot": "chest",
+    "armor": 9,
+    "imbuementSlots": 3,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3399
+  },
+  {
+    "id": "embrace-of-nature",
+    "name": "embrace of nature",
+    "kind": "armor",
+    "weight": 24,
+    "value": 0,
+    "slot": "chest",
+    "armor": 16,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 220,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "energy": {
+        "percent": -3
+      },
+      "ice": {
+        "percent": 11
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 31579
+  },
+  {
+    "id": "energy-robe",
+    "name": "energy robe",
+    "kind": "armor",
+    "weight": 75,
+    "value": 0,
+    "slot": "chest",
+    "armor": 9,
+    "requires": {
+      "level": 200,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "earth": {
+        "percent": -8
+      },
+      "energy": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 4
+        },
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50279
+  },
+  {
+    "id": "ethno-coat",
+    "name": "ethno coat",
+    "kind": "armor",
+    "weight": 25.5,
+    "value": 200,
+    "slot": "chest",
+    "armor": 7,
+    "requires": {
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8064
+  },
+  {
+    "id": "falcon-plate",
+    "name": "falcon plate",
+    "kind": "armor",
+    "weight": 188,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 12
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "shielding",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 28719
+  },
+  {
+    "id": "fireborn-giant-armor",
+    "name": "fireborn giant armor",
+    "kind": "armor",
+    "weight": 120,
+    "value": 0,
+    "slot": "chest",
+    "armor": 15,
+    "requires": {
+      "level": 100,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 5
+      },
+      "ice": {
+        "percent": -5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "sword",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8053
+  },
+  {
+    "id": "fireheart-cuirass",
+    "name": "Fireheart cuirass",
+    "kind": "armor",
+    "weight": 145,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "requires": {
+      "level": 200,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 8
+      },
+      "ice": {
+        "percent": -8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "sword",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22518
+  },
+  {
+    "id": "fireheart-hauberk",
+    "name": "fireheart hauberk",
+    "kind": "armor",
+    "weight": 145,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "requires": {
+      "level": 200,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 8
+      },
+      "ice": {
+        "percent": -8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "axe",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22519
+  },
+  {
+    "id": "fireheart-platemail",
+    "name": "fireheart platemail",
+    "kind": "armor",
+    "weight": 145,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "requires": {
+      "level": 200,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 8
+      },
+      "ice": {
+        "percent": -8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "club",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22520
+  },
+  {
+    "id": "firemind-raiment",
+    "name": "firemind raiment",
+    "kind": "armor",
+    "weight": 55,
+    "value": 0,
+    "slot": "chest",
+    "armor": 15,
+    "requires": {
+      "level": 200,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": 8
+      },
+      "ice": {
+        "percent": -8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22534
+  },
+  {
+    "id": "firesoul-tabard",
+    "name": "firesoul tabard",
+    "kind": "armor",
+    "weight": 145,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "requires": {
+      "level": 200,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 8
+      },
+      "ice": {
+        "percent": -8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22530
+  },
+  {
+    "id": "flower-dress",
+    "name": "flower dress",
+    "kind": "armor",
+    "weight": 19,
+    "value": 1000,
+    "slot": "chest",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 9015
+  },
+  {
+    "id": "focus-cape",
+    "name": "focus cape",
+    "kind": "armor",
+    "weight": 21,
+    "value": 6000,
+    "slot": "chest",
+    "armor": 9,
+    "requires": {
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8043
+  },
+  {
+    "id": "frostheart-cuirass",
+    "name": "frostheart cuirass",
+    "kind": "armor",
+    "weight": 145,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "requires": {
+      "level": 200,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "energy": {
+        "percent": -8
+      },
+      "ice": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "sword",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22527
+  },
+  {
+    "id": "frostheart-hauberk",
+    "name": "frostheart hauberk",
+    "kind": "armor",
+    "weight": 145,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "requires": {
+      "level": 200,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "energy": {
+        "percent": -8
+      },
+      "ice": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "axe",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22528
+  },
+  {
+    "id": "frostheart-platemail",
+    "name": "frostheart platemail",
+    "kind": "armor",
+    "weight": 145,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "requires": {
+      "level": 200,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "energy": {
+        "percent": -8
+      },
+      "ice": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "club",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22529
+  },
+  {
+    "id": "frostmind-raiment",
+    "name": "frostmind raiment",
+    "kind": "armor",
+    "weight": 55,
+    "value": 0,
+    "slot": "chest",
+    "armor": 15,
+    "requires": {
+      "level": 200,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": -8
+      },
+      "ice": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22537
+  },
+  {
+    "id": "frostsoul-tabard",
+    "name": "frostsoul tabard",
+    "kind": "armor",
+    "weight": 145,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "requires": {
+      "level": 200,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "energy": {
+        "percent": -8
+      },
+      "ice": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22533
+  },
+  {
+    "id": "frozen-plate",
+    "name": "frozen plate",
+    "kind": "armor",
+    "weight": 75,
+    "value": 0,
+    "slot": "chest",
+    "armor": 13,
+    "requires": {
+      "level": 75,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "energy": {
+        "percent": -7
+      },
+      "ice": {
+        "percent": 7
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8059
+  },
+  {
+    "id": "fur-armor",
+    "name": "fur armor",
+    "kind": "armor",
+    "weight": 49,
+    "value": 5000,
+    "slot": "chest",
+    "armor": 11,
+    "requires": {
+      "level": 50
+    },
+    "absorb": {
+      "ice": {
+        "percent": 5
+      },
+      "earth": {
+        "percent": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22085
+  },
+  {
+    "id": "furious-frock",
+    "name": "furious frock",
+    "kind": "armor",
+    "weight": 34,
+    "value": 0,
+    "slot": "chest",
+    "armor": 12,
+    "requires": {
+      "level": 130,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 19391
+  },
+  {
+    "id": "genesis-serenity-armor",
+    "name": "genesis serenity armor",
+    "kind": "armor",
+    "weight": 107,
+    "value": 0,
+    "slot": "chest",
+    "armor": 11,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 800,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 8
+      },
+      "physical": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 4
+        },
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 51295
+  },
+  {
+    "id": "ghazbaran-oyoroi",
+    "name": "ghazbaran oyoroi",
+    "kind": "armor",
+    "weight": 135,
+    "value": 0,
+    "slot": "chest",
+    "armor": 8,
+    "requires": {
+      "level": 75,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 7
+      },
+      "ice": {
+        "percent": -7
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 1
+        },
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50275
+  },
+  {
+    "id": "ghost-chestplate",
+    "name": "ghost chestplate",
+    "kind": "armor",
+    "weight": 123,
+    "value": 0,
+    "slot": "chest",
+    "armor": 17,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 230,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 32628
+  },
+  {
+    "id": "gill-coat",
+    "name": "gill coat",
+    "kind": "armor",
+    "weight": 19,
+    "value": 0,
+    "slot": "chest",
+    "armor": 12,
+    "requires": {
+      "level": 150,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": -10
+      },
+      "earth": {
+        "percent": 10
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 16105
+  },
+  {
+    "id": "glacier-robe",
+    "name": "glacier robe",
+    "kind": "armor",
+    "weight": 22.5,
+    "value": 11000,
+    "slot": "chest",
+    "armor": 11,
+    "requires": {
+      "level": 50,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": -8
+      },
+      "ice": {
+        "percent": 8
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 824
+  },
+  {
+    "id": "glooth-cape",
+    "name": "glooth cape",
+    "kind": "armor",
+    "weight": 29,
+    "value": 7000,
+    "slot": "chest",
+    "armor": 9,
+    "requires": {
+      "level": 40,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": -5
+      },
+      "earth": {
+        "percent": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 21164
+  },
+  {
+    "id": "gnome-armor",
+    "name": "gnome armor",
+    "kind": "armor",
+    "weight": 120,
+    "value": 0,
+    "slot": "chest",
+    "armor": 17,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 200,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 8
+      },
+      "ice": {
+        "percent": -2
+      },
+      "physical": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 27648
+  },
+  {
+    "id": "gnomish-cuirass",
+    "name": "gnomish cuirass",
+    "kind": "armor",
+    "weight": 100,
+    "value": 0,
+    "slot": "chest",
+    "armor": 8,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 150,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50276
+  },
+  {
+    "id": "golden-armor",
+    "name": "golden armor",
+    "kind": "armor",
+    "weight": 80,
+    "value": 20000,
+    "slot": "chest",
+    "armor": 14,
+    "imbuementSlots": 2,
+    "requires": {
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3360
+  },
+  {
+    "id": "goo-shell",
+    "name": "goo shell",
+    "kind": "armor",
+    "weight": 58,
+    "value": 4000,
+    "slot": "chest",
+    "armor": 12,
+    "absorb": {
+      "fire": {
+        "percent": -2
+      },
+      "earth": {
+        "percent": 2
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 19372
+  },
+  {
+    "id": "green-demon-armor",
+    "name": "green demon armor",
+    "kind": "armor",
+    "weight": 80,
+    "value": 0,
+    "slot": "chest",
+    "armor": 16,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 37608
+  },
+  {
+    "id": "green-tunic",
+    "name": "green tunic",
+    "kind": "armor",
+    "weight": 9.3,
+    "value": 0,
+    "slot": "chest",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3563
+  },
+  {
+    "id": "greenwood-coat",
+    "name": "greenwood coat",
+    "kind": "armor",
+    "weight": 28.5,
+    "value": 50000,
+    "slot": "chest",
+    "armor": 12,
+    "requires": {
+      "level": 75,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "fire": {
+        "percent": -12
+      },
+      "earth": {
+        "percent": 12
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8041
+  },
+  {
+    "id": "heat-core",
+    "name": "heat core",
+    "kind": "armor",
+    "weight": 55,
+    "value": 10000,
+    "slot": "chest",
+    "armor": 12,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 21167
+  },
+  {
+    "id": "heavy-metal-t-shirt",
+    "name": "heavy metal t-shirt",
+    "kind": "armor",
+    "weight": 8,
+    "value": 0,
+    "slot": "chest",
+    "armor": 6,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 9379
+  },
+  {
+    "id": "hibiscus-dress",
+    "name": "hibiscus dress",
+    "kind": "armor",
+    "weight": 19,
+    "value": 3000,
+    "slot": "chest",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8045
+  },
+  {
+    "id": "ice-robe",
+    "name": "ice robe",
+    "kind": "armor",
+    "weight": 75,
+    "value": 0,
+    "slot": "chest",
+    "armor": 9,
+    "requires": {
+      "level": 200,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "energy": {
+        "percent": -8
+      },
+      "ice": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50280
+  },
+  {
+    "id": "jacket",
+    "name": "jacket",
+    "kind": "armor",
+    "weight": 24,
+    "value": 1,
+    "slot": "chest",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3561
+  },
+  {
+    "id": "knight-armor",
+    "name": "knight armor",
+    "kind": "armor",
+    "weight": 120,
+    "value": 5000,
+    "slot": "chest",
+    "armor": 12,
+    "imbuementSlots": 2,
+    "requires": {
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3370
+  },
+  {
+    "id": "lavos-armor",
+    "name": "lavos armor",
+    "kind": "armor",
+    "weight": 85,
+    "value": 16000,
+    "slot": "chest",
+    "armor": 13,
+    "requires": {
+      "level": 60,
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": 3
+      },
+      "ice": {
+        "percent": -3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8049
+  },
+  {
+    "id": "leaf-robe",
+    "name": "leaf robe",
+    "kind": "armor",
+    "weight": 75,
+    "value": 0,
+    "slot": "chest",
+    "armor": 9,
+    "requires": {
+      "level": 200,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 8
+      },
+      "fire": {
+        "percent": -8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50277
+  },
+  {
+    "id": "leather-armor",
+    "name": "leather armor",
+    "kind": "armor",
+    "weight": 60,
+    "value": 12,
+    "slot": "chest",
+    "armor": 4,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3361
+  },
+  {
+    "id": "leather-harness",
+    "name": "leather harness",
+    "kind": "armor",
+    "weight": 29,
+    "value": 750,
+    "slot": "chest",
+    "armor": 9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 17846
+  },
+  {
+    "id": "leopard-armor",
+    "name": "leopard armor",
+    "kind": "armor",
+    "weight": 95,
+    "value": 1000,
+    "slot": "chest",
+    "armor": 9,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3404
+  },
+  {
+    "id": "lightning-robe",
+    "name": "lightning robe",
+    "kind": "armor",
+    "weight": 22.5,
+    "value": 11000,
+    "slot": "chest",
+    "armor": 11,
+    "requires": {
+      "level": 50,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": 8
+      },
+      "earth": {
+        "percent": -8
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 825
+  },
+  {
+    "id": "lion-plate",
+    "name": "lion plate",
+    "kind": "armor",
+    "weight": 150,
+    "value": 0,
+    "slot": "chest",
+    "armor": 17,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 270,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 6
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "club",
+          "amount": 3
+        },
+        {
+          "skillId": "sword",
+          "amount": 3
+        },
+        {
+          "skillId": "axe",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 34157
+  },
+  {
+    "id": "living-armor",
+    "name": "living armor",
+    "kind": "armor",
+    "weight": 48,
+    "value": 0,
+    "slot": "chest",
+    "armor": 13,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 180,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": -5
+      },
+      "earth": {
+        "percent": 12
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 29418
+  },
+  {
+    "id": "magic-plate-armor",
+    "name": "magic plate armor",
+    "kind": "armor",
+    "weight": 85,
+    "value": 90000,
+    "slot": "chest",
+    "armor": 17,
+    "imbuementSlots": 2,
+    "requires": {
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3366
+  },
+  {
+    "id": "magicians-robe",
+    "name": "magician's robe",
+    "kind": "armor",
+    "weight": 25,
+    "value": 0,
+    "slot": "chest",
+    "armor": 6,
+    "requires": {
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 7991
+  },
+  {
+    "id": "magma-coat",
+    "name": "magma coat",
+    "kind": "armor",
+    "weight": 22.5,
+    "value": 11000,
+    "slot": "chest",
+    "armor": 11,
+    "requires": {
+      "level": 50,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": 8
+      },
+      "ice": {
+        "percent": -8
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 826
+  },
+  {
+    "id": "magma-robe",
+    "name": "magma robe",
+    "kind": "armor",
+    "weight": 75,
+    "value": 0,
+    "slot": "chest",
+    "armor": 9,
+    "requires": {
+      "level": 200,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 8
+      },
+      "ice": {
+        "percent": -8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50278
+  },
+  {
+    "id": "mammoth-fur-cape",
+    "name": "mammoth fur cape",
+    "kind": "armor",
+    "weight": 20,
+    "value": 6000,
+    "slot": "chest",
+    "armor": 10,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 7463
+  },
+  {
+    "id": "master-archers-armor",
+    "name": "master archer's armor",
+    "kind": "armor",
+    "weight": 69,
+    "value": 0,
+    "slot": "chest",
+    "armor": 15,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 100,
+      "vocationId": "paladin"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8060
+  },
+  {
+    "id": "merudri-battle-mail",
+    "name": "merudri battle mail",
+    "kind": "armor",
+    "weight": 29,
+    "value": 0,
+    "slot": "chest",
+    "armor": 10,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 10
+      },
+      "energy": {
+        "percent": -5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 4
+        },
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50264
+  },
+  {
+    "id": "merudri-nanbando",
+    "name": "merudri nanbando",
+    "kind": "armor",
+    "weight": 106,
+    "value": 0,
+    "slot": "chest",
+    "armor": 7,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 125,
+      "vocationId": "monk"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50261
+  },
+  {
+    "id": "merudri-scale-mail",
+    "name": "merudri scale mail",
+    "kind": "armor",
+    "weight": 29,
+    "value": 0,
+    "slot": "chest",
+    "armor": 7,
+    "requires": {
+      "level": 100,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50263
+  },
+  {
+    "id": "midnight-tunic",
+    "name": "midnight tunic",
+    "kind": "armor",
+    "weight": 27,
+    "value": 0,
+    "slot": "chest",
+    "armor": 16,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39165
+  },
+  {
+    "id": "molten-plate",
+    "name": "molten plate",
+    "kind": "armor",
+    "weight": 75,
+    "value": 0,
+    "slot": "chest",
+    "armor": 13,
+    "requires": {
+      "level": 75,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 7
+      },
+      "ice": {
+        "percent": -7
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8058
+  },
+  {
+    "id": "monk-robe",
+    "name": "monk robe",
+    "kind": "armor",
+    "weight": 70,
+    "value": 0,
+    "slot": "chest",
+    "armor": 7,
+    "requires": {
+      "vocationId": "monk"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50258
+  },
+  {
+    "id": "moohtah-plate",
+    "name": "mooh'tah plate",
+    "kind": "armor",
+    "weight": 125,
+    "value": 6000,
+    "slot": "chest",
+    "armor": 12,
+    "imbuementSlots": 2,
+    "requires": {
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 21166
+  },
+  {
+    "id": "mutated-skin-armor",
+    "name": "mutated skin armor",
+    "kind": "armor",
+    "weight": 63,
+    "value": 0,
+    "slot": "chest",
+    "armor": 17,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 270,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 3
+      },
+      "earth": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 40591
+  },
+  {
+    "id": "mystical-dragon-robe",
+    "name": "mystical dragon robe",
+    "kind": "armor",
+    "weight": 38,
+    "value": 0,
+    "slot": "chest",
+    "armor": 15,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 12
+      },
+      "ice": {
+        "percent": -6
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "earth": 1
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 44624
+  },
+  {
+    "id": "naga-tanko",
+    "name": "naga tanko",
+    "kind": "armor",
+    "weight": 90,
+    "value": 0,
+    "slot": "chest",
+    "armor": 10,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 270,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 6
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 3
+        },
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50262
+  },
+  {
+    "id": "native-armor",
+    "name": "native armor",
+    "kind": "armor",
+    "weight": 80,
+    "value": 0,
+    "slot": "chest",
+    "armor": 7,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3402
+  },
+  {
+    "id": "noble-armor",
+    "name": "noble armor",
+    "kind": "armor",
+    "weight": 120,
+    "value": 140,
+    "slot": "chest",
+    "armor": 11,
+    "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3380
+  },
+  {
+    "id": "norcferatu-bloodhide",
+    "name": "norcferatu bloodhide",
+    "kind": "armor",
+    "weight": 39,
+    "value": 0,
+    "slot": "chest",
+    "armor": 16,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 270,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "specializedMagicLevel": {
+        "energy": 6,
+        "fire": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 51263
+  },
+  {
+    "id": "norcferatu-bonecloak",
+    "name": "norcferatu bonecloak",
+    "kind": "armor",
+    "weight": 42,
+    "value": 0,
+    "slot": "chest",
+    "armor": 16,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 270,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "specializedMagicLevel": {
+        "earth": 6,
+        "healing": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 51264
+  },
+  {
+    "id": "norcferatu-tuskplate",
+    "name": "norcferatu tuskplate",
+    "kind": "armor",
+    "weight": 148,
+    "value": 0,
+    "slot": "chest",
+    "armor": 22,
+    "requires": {
+      "level": 270,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "club",
+          "amount": 3
+        },
+        {
+          "skillId": "sword",
+          "amount": 3
+        },
+        {
+          "skillId": "axe",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 51262
+  },
+  {
+    "id": "oceanborn-leviathan-armor",
+    "name": "oceanborn leviathan armor",
+    "kind": "armor",
+    "weight": 100,
+    "value": 0,
+    "slot": "chest",
+    "armor": 15,
+    "requires": {
+      "level": 100,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "energy": {
+        "percent": -5
+      },
+      "ice": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "shielding",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8056
+  },
+  {
+    "id": "old-cape",
+    "name": "old cape",
+    "kind": "armor",
+    "weight": 35,
+    "value": 0,
+    "slot": "chest",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 11701
+  },
+  {
+    "id": "ornate-chestplate",
+    "name": "ornate chestplate",
+    "kind": "armor",
+    "weight": 156,
+    "value": 60000,
+    "slot": "chest",
+    "armor": 16,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 200,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "shielding",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 13993
+  },
+  {
+    "id": "ornate-testtplate",
+    "name": "ornate testtplate",
+    "kind": "armor",
+    "weight": 0,
+    "value": 0,
+    "slot": "chest",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 28475
+  },
+  {
+    "id": "pair-of-old-bracers",
+    "name": "pair of old bracers",
+    "kind": "armor",
+    "weight": 2,
+    "value": 500,
+    "slot": "chest",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 32705
+  },
+  {
+    "id": "paladin-armor",
+    "name": "paladin armor",
+    "kind": "armor",
+    "weight": 65,
+    "value": 15000,
+    "slot": "chest",
+    "armor": 12,
+    "imbuementSlots": 1,
+    "requires": {
+      "vocationId": "paladin"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8063
+  },
+  {
+    "id": "pirate-shirt",
+    "name": "pirate shirt",
+    "kind": "armor",
+    "weight": 20,
+    "value": 500,
+    "slot": "chest",
+    "armor": 3,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 6095
+  },
+  {
+    "id": "plain-monk-robe",
+    "name": "plain monk robe",
+    "kind": "armor",
+    "weight": 65,
+    "value": 0,
+    "slot": "chest",
+    "armor": 6,
+    "requires": {
+      "vocationId": "monk"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50257
+  },
+  {
+    "id": "plate-armor",
+    "name": "plate armor",
+    "kind": "armor",
+    "weight": 120,
+    "value": 400,
+    "slot": "chest",
+    "armor": 10,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3357
+  },
+  {
+    "id": "prismatic-armor",
+    "name": "prismatic armor",
+    "kind": "armor",
+    "weight": 79,
+    "value": 0,
+    "slot": "chest",
+    "armor": 15,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 120,
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "absorb": {
+      "physical": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "speed": 15
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 16110
+  },
+  {
+    "id": "rain-coat",
+    "name": "rain coat",
+    "kind": "armor",
+    "weight": 32,
+    "value": 0,
+    "slot": "chest",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 9400
+  },
+  {
+    "id": "rangers-cloak",
+    "name": "ranger's cloak",
+    "kind": "armor",
+    "weight": 48,
+    "value": 0,
+    "slot": "chest",
+    "armor": 7,
+    "requires": {
+      "vocationId": "paladin"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3571
+  },
+  {
+    "id": "red-robe",
+    "name": "red robe",
+    "kind": "armor",
+    "weight": 26,
+    "value": 0,
+    "slot": "chest",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3566
+  },
+  {
+    "id": "red-tunic",
+    "name": "red tunic",
+    "kind": "armor",
+    "weight": 14,
+    "value": 0,
+    "slot": "chest",
+    "armor": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3564
+  },
+  {
+    "id": "robe-of-enlightenment",
+    "name": "robe of enlightenment",
+    "kind": "armor",
+    "weight": 24,
+    "value": 150,
+    "slot": "chest",
+    "armor": 8,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 150,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 3
+        },
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50268
+  },
+  {
+    "id": "robe-of-the-ice-queen",
+    "name": "robe of the ice queen",
+    "kind": "armor",
+    "weight": 29.5,
+    "value": 0,
+    "slot": "chest",
+    "armor": 12,
+    "requires": {
+      "level": 75,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "energy": {
+        "percent": -12
+      },
+      "ice": {
+        "percent": 12
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8038
+  },
+  {
+    "id": "robe-of-the-underworld",
+    "name": "robe of the underworld",
+    "kind": "armor",
+    "weight": 31,
+    "value": 0,
+    "slot": "chest",
+    "armor": 12,
+    "requires": {
+      "level": 100,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "death": {
+        "percent": 12
+      },
+      "holy": {
+        "percent": -12
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8062
+  },
+  {
+    "id": "royal-draken-mail",
+    "name": "royal draken mail",
+    "kind": "armor",
+    "weight": 130,
+    "value": 0,
+    "slot": "chest",
+    "armor": 16,
+    "requires": {
+      "level": 100,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "shielding",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 11686
+  },
+  {
+    "id": "royal-scale-robe",
+    "name": "royal scale robe",
+    "kind": "armor",
+    "weight": 45,
+    "value": 0,
+    "slot": "chest",
+    "armor": 12,
+    "requires": {
+      "level": 100,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 11687
+  },
+  {
+    "id": "scale-armor",
+    "name": "scale armor",
+    "kind": "armor",
+    "weight": 105,
+    "value": 75,
+    "slot": "chest",
+    "armor": 9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3377
+  },
+  {
+    "id": "simple-dress",
+    "name": "simple dress",
+    "kind": "armor",
+    "weight": 10,
+    "value": 50,
+    "slot": "chest",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3568
+  },
+  {
+    "id": "skullcracker-armor",
+    "name": "skullcracker armor",
+    "kind": "armor",
+    "weight": 110,
+    "value": 18000,
+    "slot": "chest",
+    "armor": 14,
+    "requires": {
+      "level": 85,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "death": {
+        "percent": 5
+      },
+      "holy": {
+        "percent": -5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8061
+  },
+  {
+    "id": "soulgarb",
+    "name": "soulgarb",
+    "kind": "armor",
+    "weight": 107,
+    "value": 0,
+    "slot": "chest",
+    "armor": 11,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 400,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 8
+      },
+      "physical": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 4
+        },
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50254
+  },
+  {
+    "id": "soulmantle",
+    "name": "soulmantle",
+    "kind": "armor",
+    "weight": 24,
+    "value": 0,
+    "slot": "chest",
+    "armor": 17,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 400,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 34095
+  },
+  {
+    "id": "soulshell",
+    "name": "soulshell",
+    "kind": "armor",
+    "weight": 123,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 400,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 15
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 34094
+  },
+  {
+    "id": "soulshroud",
+    "name": "soulshroud",
+    "kind": "armor",
+    "weight": 24,
+    "value": 0,
+    "slot": "chest",
+    "armor": 17,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 400,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "death": {
+        "percent": 10
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 34096
+  },
+  {
+    "id": "spectral-dress",
+    "name": "spectral dress",
+    "kind": "armor",
+    "weight": 10,
+    "value": 0,
+    "slot": "chest",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 4836
+  },
+  {
+    "id": "spellweavers-robe",
+    "name": "spellweaver's robe",
+    "kind": "armor",
+    "weight": 23.5,
+    "value": 12000,
+    "slot": "chest",
+    "armor": 11,
+    "requires": {
+      "level": 60,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": 10
+      },
+      "earth": {
+        "percent": -10
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 10438
+  },
+  {
+    "id": "spirit-bind",
+    "name": "spirit bind",
+    "kind": "armor",
+    "weight": 135,
+    "value": 0,
+    "slot": "chest",
+    "armor": 8,
+    "requires": {
+      "level": 75,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 5
+      },
+      "ice": {
+        "percent": -5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 51294
+  },
+  {
+    "id": "spirit-cloak",
+    "name": "spirit cloak",
+    "kind": "armor",
+    "weight": 26.5,
+    "value": 350,
+    "slot": "chest",
+    "armor": 8,
+    "requires": {
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8042
+  },
+  {
+    "id": "spiritthorn-armor",
+    "name": "spiritthorn armor",
+    "kind": "armor",
+    "weight": 160,
+    "value": 0,
+    "slot": "chest",
+    "armor": 20,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 400,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 13
+      }
+    },
+    "reflect": {
+      "physical": {
+        "flat": 19
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "club",
+          "amount": 4
+        },
+        {
+          "skillId": "sword",
+          "amount": 4
+        },
+        {
+          "skillId": "axe",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39147
+  },
+  {
+    "id": "stoic-iks-chestplate",
+    "name": "stoic iks chestplate",
+    "kind": "armor",
+    "weight": 142,
+    "value": 0,
+    "slot": "chest",
+    "armor": 16,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 250,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "shielding",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 44620
+  },
+  {
+    "id": "stoic-iks-cuirass",
+    "name": "stoic iks cuirass",
+    "kind": "armor",
+    "weight": 44,
+    "value": 0,
+    "slot": "chest",
+    "armor": 15,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 250,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "death": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 44619
+  },
+  {
+    "id": "stoic-iks-robe",
+    "name": "stoic iks robe",
+    "kind": "armor",
+    "weight": 1280,
+    "value": 0,
+    "slot": "chest",
+    "armor": 9,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 250,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 5
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50255
+  },
+  {
+    "id": "studded-armor",
+    "name": "studded armor",
+    "kind": "armor",
+    "weight": 71,
+    "value": 25,
+    "slot": "chest",
+    "armor": 5,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3378
+  },
+  {
+    "id": "summer-dress",
+    "name": "summer dress",
+    "kind": "armor",
+    "weight": 10,
+    "value": 1500,
+    "slot": "chest",
+    "absorb": {
+      "death": {
+        "percent": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8046
+  },
+  {
+    "id": "swamplair-armor",
+    "name": "swamplair armor",
+    "kind": "armor",
+    "weight": 84.5,
+    "value": 16000,
+    "slot": "chest",
+    "armor": 13,
+    "requires": {
+      "level": 60,
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": -3
+      },
+      "earth": {
+        "percent": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8052
+  },
+  {
+    "id": "swan-feather-cloak",
+    "name": "swan feather cloak",
+    "kind": "armor",
+    "weight": 4,
+    "value": 0,
+    "slot": "chest",
+    "armor": 12,
+    "requires": {
+      "level": 60
+    },
+    "absorb": {
+      "energy": {
+        "percent": 12
+      },
+      "earth": {
+        "percent": 12
+      }
+    },
+    "bonuses": {
+      "speed": 10
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 25779
+  },
+  {
+    "id": "terra-mantle",
+    "name": "terra mantle",
+    "kind": "armor",
+    "weight": 22.5,
+    "value": 11000,
+    "slot": "chest",
+    "armor": 11,
+    "requires": {
+      "level": 50,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": -8
+      },
+      "earth": {
+        "percent": 8
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 811
+  },
+  {
+    "id": "thunderheart-cuirass",
+    "name": "thunderheart cuirass",
+    "kind": "armor",
+    "weight": 145,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "requires": {
+      "level": 200,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 8
+      },
+      "earth": {
+        "percent": -8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "sword",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22524
+  },
+  {
+    "id": "thunderheart-hauberk",
+    "name": "thunderheart hauberk",
+    "kind": "armor",
+    "weight": 145,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "requires": {
+      "level": 200,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 8
+      },
+      "earth": {
+        "percent": -8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "axe",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22525
+  },
+  {
+    "id": "thunderheart-platemail",
+    "name": "thunderheart platemail",
+    "kind": "armor",
+    "weight": 145,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "requires": {
+      "level": 200,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 8
+      },
+      "earth": {
+        "percent": -8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "club",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22526
+  },
+  {
+    "id": "thundermind-raiment",
+    "name": "thundermind raiment",
+    "kind": "armor",
+    "weight": 55,
+    "value": 0,
+    "slot": "chest",
+    "armor": 15,
+    "requires": {
+      "level": 200,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": 8
+      },
+      "earth": {
+        "percent": -8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22536
+  },
+  {
+    "id": "thundersoul-tabard",
+    "name": "thundersoul tabard",
+    "kind": "armor",
+    "weight": 145,
+    "value": 0,
+    "slot": "chest",
+    "armor": 18,
+    "requires": {
+      "level": 200,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 8
+      },
+      "earth": {
+        "percent": -8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22532
+  },
+  {
+    "id": "toga-mortis",
+    "name": "toga mortis",
+    "kind": "armor",
+    "weight": 52,
+    "value": 0,
+    "slot": "chest",
+    "armor": 16,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 220,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "death": {
+        "percent": 6
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 31583
+  },
+  {
+    "id": "traditional-shirt",
+    "name": "traditional shirt",
+    "kind": "armor",
+    "weight": 4,
+    "value": 0,
+    "slot": "chest",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 32099
+  },
+  {
+    "id": "tunic",
+    "name": "tunic",
+    "kind": "armor",
+    "weight": 15,
+    "value": 0,
+    "slot": "chest",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8047
+  },
+  {
+    "id": "unerring-dragon-scale-armor",
+    "name": "unerring dragon scale armor",
+    "kind": "armor",
+    "weight": 135,
+    "value": 0,
+    "slot": "chest",
+    "armor": 17,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "earth": {
+        "percent": -5
+      },
+      "energy": {
+        "percent": 10
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "holy": 1
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 44622
+  },
+  {
+    "id": "velvet-mantle",
+    "name": "velvet mantle",
+    "kind": "armor",
+    "weight": 28.5,
+    "value": 0,
+    "slot": "chest",
+    "armor": 12,
+    "requires": {
+      "level": 75,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 12
+      },
+      "earth": {
+        "percent": -12
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8040
+  },
+  {
+    "id": "voltage-armor",
+    "name": "voltage armor",
+    "kind": "armor",
+    "weight": 84.5,
+    "value": 0,
+    "slot": "chest",
+    "armor": 13,
+    "requires": {
+      "level": 60,
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": 3
+      },
+      "earth": {
+        "percent": -3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8051
+  },
+  {
+    "id": "white-dress",
+    "name": "white dress",
+    "kind": "armor",
+    "weight": 24,
+    "value": 0,
+    "slot": "chest",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3569
+  },
+  {
+    "id": "windborn-colossus-armor",
+    "name": "windborn colossus armor",
+    "kind": "armor",
+    "weight": 120,
+    "value": 50000,
+    "slot": "chest",
+    "armor": 15,
+    "requires": {
+      "level": 100,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 5
+      },
+      "earth": {
+        "percent": -5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "club",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8055
+  },
+  {
+    "id": "witchhunters-coat",
+    "name": "witchhunter's coat",
+    "kind": "armor",
+    "weight": 25,
+    "value": 0,
+    "slot": "chest",
+    "armor": 11,
+    "requires": {
+      "level": 50
+    },
+    "absorb": {
+      "death": {
+        "percent": 2
+      },
+      "holy": {
+        "percent": -2
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 7993
+  },
+  {
+    "id": "yalahari-armor",
+    "name": "yalahari armor",
+    "kind": "armor",
+    "weight": 70,
+    "value": 0,
+    "slot": "chest",
+    "armor": 16,
+    "requires": {
+      "level": 80,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "death": {
+        "percent": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 8862
+  },
+  {
+    "id": "zaoan-armor",
+    "name": "Zaoan armor",
+    "kind": "armor",
+    "weight": 95.5,
+    "value": 0,
+    "slot": "chest",
+    "armor": 13,
+    "requires": {
+      "level": 50,
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "bonuses": {
+      "speed": 10
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 10384
+  },
+  {
+    "id": "zaoan-monk-robe",
+    "name": "zaoan monk robe",
+    "kind": "armor",
+    "weight": 1100,
+    "value": 0,
+    "slot": "chest",
+    "armor": 7,
+    "requires": {
+      "level": 50,
+      "vocationId": "monk"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50259
+  },
+  {
+    "id": "zaoan-robe",
+    "name": "Zaoan robe",
+    "kind": "armor",
+    "weight": 24.5,
+    "value": 12000,
+    "slot": "chest",
+    "armor": 11,
+    "requires": {
+      "level": 60,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": 10
+      },
+      "ice": {
+        "percent": -10
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 10439
+  }
+]

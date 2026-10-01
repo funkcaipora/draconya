@@ -21,16 +21,13 @@ export const TEST_ROUTE = {
   tiles: [
     { x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 2, y: 2, z: 7 }, { x: 1, y: 2, z: 7 },
   ],
-  spawnPoints: [{ routeIndex: 2, radius: 1 }],
+  // Fim do pull por dificuldade (#583, ADR 0039): o ponto declara o próprio monstro e o
+  // próprio `respawnDelayMs` — não há mais dificuldade nenhuma para cair como fallback.
+  spawnPoints: [{ routeIndex: 2, radius: 1, monsterId: 'rat', respawnDelayMs: 1000 }],
 };
 
 export const TEST_HUNT = {
   id: 'arena', name: 'Arena', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
-  difficulties: {
-    cautious: {
-      monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000,
-    },
-  },
 };
 
 export const TEST_PROGRESSION = {
@@ -48,15 +45,15 @@ export const TEST_PROGRESSION = {
   // O número é do teste; o balanceamento de verdade é `packages/content/data`.
   id: 'baseline', startingHealth: 1_200, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
-  startingSpeed: 300, speedPerLevel: 0, regen: { healthPerSecond: 1, manaPerSecond: 1 },
+  startingSpeed: 300, speedPerLevel: 0, regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
   xp: { kind: 'power', base: 20, exponent: 2 },
-  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessingReduction: 0.56, promotionReduction: 0.3 },
   skillMultipliers: {},
 };
 
 export const TEST_COMBAT = {
   id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
-  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0 },
   minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 0, dodgeChance: 0 },
 };
@@ -138,4 +135,60 @@ export function rawTestContent(): RawContent {
 
 export function testContent(): Content {
   return buildContent(rawTestContent());
+}
+
+// ---------------------------------------------------------------------------------------------
+// O Treino (#631, ADR 0059): a exercise weapon, as skills que ela treina, o boneco na Cidade de
+// teste e o livro do offline training. Existe aqui, e não em cada teste, porque o `game` (host,
+// builder) e a `api` (gasto do banco no ticket) leem o MESMO conteúdo.
+
+const trainingSkill = (id: string, gain: Record<string, unknown>) => ({
+  id, name: id, startingLevel: 10, curve: { base: 50, factor: 2 }, gain, damagePerLevel: 0,
+});
+
+/** As skills do Treino de teste: `melee`/`distance`/`magic` das famílias de arma, mais `sword` e o escudo. */
+export const TEST_TRAINING_SKILLS = [
+  trainingSkill('melee', { on: 'melee-hit', points: 1 }),
+  trainingSkill('sword', { on: 'melee-hit', points: 1 }),
+  trainingSkill('shielding', { on: 'shield-block', points: 1 }),
+  trainingSkill('distance', { on: 'distance-hit', points: 1 }),
+  { ...trainingSkill('magic', { on: 'spell-cast', pointsPerMana: 1 }), startingLevel: 0, curve: { base: 1600, factor: 4 } },
+];
+
+/** Uma exercise weapon de 3 cargas, à venda por 100 gold. */
+export const TEST_EXERCISE_SWORD = {
+  id: 'exercise-sword', name: 'exercise sword', kind: 'other', weight: 10, value: 0, charges: 3,
+  exercise: { skillId: 'sword' }, purchasable: true, buyPrice: 100,
+};
+
+/** O boneco fica no tile (2,3) da Cidade de teste, e o personagem ao lado dele, em (3,3). */
+export const TEST_TRAINING = {
+  id: 'baseline',
+  dummy: { id: 'exercise-dummy', rate: 100 },
+  strike: { triesPerCharge: 7, manaSpentPerCharge: 600 },
+  startCooldownMs: 10_000,
+  place: { stand: { x: 3, y: 3, z: 7 }, dummy: { x: 2, y: 3, z: 7 } },
+  offline: {
+    bankCapMs: 43_200_000, graceMs: 600_000, maxAwayMs: 1_814_400_000,
+    spendCapMs: { free: 21_600_000, premium: 43_200_000 }, shieldingDivisor: 4,
+    skills: [{ skillId: 'sword', kind: 'attacks', divisor: 2 }, { skillId: 'magic', kind: 'mana' }],
+  },
+};
+
+/** O conteúdo de teste COM Treino — `rawTestContent()` mais skills, itens e o bloco `training`. */
+export function rawTrainingTestContent(
+  overrides: { readonly items?: readonly unknown[] } = {},
+): RawContent {
+  const raw = rawTestContent();
+  const shaped: RawContent = {
+    ...raw,
+    skills: TEST_TRAINING_SKILLS,
+    items: overrides.items ?? [TEST_EXERCISE_SWORD, { id: 'rock', name: 'Rock', kind: 'other', weight: 1, value: 0 }],
+    training: [TEST_TRAINING],
+  };
+  return { ...shaped, appearances: [placeholderAppearances(shaped)] };
+}
+
+export function trainingTestContent(): Content {
+  return buildContent(rawTrainingTestContent());
 }

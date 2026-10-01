@@ -73,7 +73,7 @@ ln -s /caminho/para/things things
 
 `THINGS_DIR` é só de ferramenta (importador de mapa, inventário de pacote); o servidor em si só
 recusa subir se `THINGS_VERSION` não bater com a versão contra a qual o conteúdo foi conferido
-(`packages/content/data/packs/`) — o `.env.example` já traz `THINGS_VERSION=1332` certo.
+(`packages/content/data/packs/`) — o `.env.example` já traz `THINGS_VERSION=1533` certo.
 
 ## 4. Instalar, migrar, compilar
 
@@ -103,7 +103,6 @@ Flags (todas opcionais):
 | Flag | Default | O quê |
 |---|---|---|
 | `--hunt-id=` | `darashia-dragon-lair` | qual hunt configurar na party |
-| `--difficulty=` | `bold` | qual dificuldade daquela hunt |
 | `--start` | — | inicia a hunt depois de configurar, e ANEXA o ticket do líder para o `game` criar a sessão de verdade (#527; exclusivo com `--reset`) |
 | `--reset` | — | tira os quatro da party, devolve à Cidade e liquida snapshot pendente (#527) |
 | `--database-url=`, `--redis-url=`, `--content-dir=`, `--api-base=`, `--api-port=`, `--client-origin=` | do `.env`/padrão | sobrescrevem o que o `.env` traz, para rodar fora do fluxo acima |
@@ -116,7 +115,7 @@ iniciar; as quatro contas, personagens e a party continuam formados e prontos, s
 configurar assim que a hunt chegar. Para testar o fluxo inteiro antes disso:
 
 ```bash
-pnpm dev:dragon-party --hunt-id=rat-cellars --difficulty=bold --start
+pnpm dev:dragon-party --hunt-id=rat-cellars --start
 ```
 
 **Idempotente**: rodar de novo atualiza as MESMAS quatro contas/personagens (por e-mail e nome) —
@@ -158,8 +157,10 @@ por membro. Cada personagem ("Draco Knight", "Draco Paladin", "Draco Sorcerer", 
   ferido com Heal Friend e lança Mass Healing pelo próprio HP (o vocabulário do bot não tem uma
   condição de "N membros feridos" — ver o comentário em `botConfigFor`), ataca com Eternal Winter
   (gelo, a própria fraqueza do dragão) com alvo de sobra e Avalanche como base — nunca Terra Wave/
-  Wrath of Nature, terra é 80% resistida. Todos bebem a poção certa por vocação/level (Supreme
-  Health, Ultimate Spirit, Ultimate Mana) por limiar de HP/mana. Cada degrau da rotação só entra
+  Wrath of Nature, terra é 80% resistida. Todos lançam o familiar de vocação (#599, level 200: Summon
+  Knight/Paladin/Sorcerer/Druid Familiar, mana 1000/2000/3000/3000, 15 min de vida e 30 min de
+  cooldown) quando não têm invocação viva (`summons <= 0`), ao lado da haste. Todos bebem a poção
+  certa por vocação/level (Supreme Health, Ultimate Spirit, Ultimate Mana) por limiar de HP/mana. Cada degrau da rotação só entra
   se a magia existir no conteúdo desta branch (`spellCascade`) — o motor já cai para o próximo
   quando o de cima está em cooldown ou sem mana, então não há limiar de mana escrito à mão. Uma
   regra de saída (`hp-below 10%`) evita que o personagem morra sozinho numa hunt sem ninguém

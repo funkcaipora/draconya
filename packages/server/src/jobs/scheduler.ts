@@ -1,8 +1,8 @@
 // Processo `jobs` — singleton com lock. Agendador, expirações e reconciliação.
 //
-// ESQUELETO. O laço existe; as tarefas entram depois: Guild War diária, expiração da
-// Caixa de Loot, reset de Prey, expiração de Premium, recuperação de sessão órfã (FUN-28)
-// e reconciliação de pagamento.
+// ESQUELETO. O laço existe; as tarefas entram depois: Guild War diária, reset de Prey,
+// expiração de Premium, recuperação de sessão órfã (FUN-28) e reconciliação de pagamento.
+// (A expiração da Caixa de Loot foi uma dessas — o ADR 0048 a retirou, junto com a caixa.)
 //
 // Desde a FUN-59 o `jobs` tem por onde falar: um `/metrics` próprio, em `JOBS_PORT`, como os
 // outros dois papéis. É a forma que o Prometheus espera, e o que faz o alvo SUMIR quando o
@@ -27,7 +27,8 @@ import { writePendingBotConfigs } from './bot-config.js';
 import { writePendingReceipts } from './ledger.js';
 import type { JobsMetrics } from './metrics.js';
 import type { SingletonLock } from './lock.js';
-import type { LootBoxStore } from '../loot-box.js';
+import { rollBoostedCreature } from './boosted.js';
+import type { WorldDailyStore } from '../world-daily.js';
 
 export interface JobsDependencies {
   readonly tickets?: TicketService;
@@ -48,12 +49,15 @@ export interface JobsDependencies {
    */
   readonly lock?: SingletonLock;
   /**
-   * A Caixa de Loot da Sessão (FUN-88). O ciclo só a OBSERVA: quem expira é o TTL do Redis.
-   *
-   * Ausente: o `jobs` roda igual, e a gauge fica sem ser escrita — que é o estado honesto de
-   * "ninguém olhou", diferente de "não há nenhuma".
+   * A Boosted Creature do dia (#615, ADR 0054 decisão 7). Ausente: conteúdo sem
+   * `boosted/baseline.json` ou sem Bestiário — o ciclo roda igual, só não sorteia nada, o
+   * mesmo espírito de `metrics`/`lock` ausentes.
    */
-  readonly lootBoxes?: LootBoxStore;
+  readonly boosted?: {
+    readonly store: WorldDailyStore;
+    readonly rolloverHourUtc: number;
+    readonly monsterIds: readonly string[];
+  };
 }
 
 const SCHEDULE_INTERVAL_MS = 10_000;
@@ -157,11 +161,18 @@ export function createJobsCycle(
         }
       }
 
-      // FUN-88: a caixa expira sozinha, por TTL. O que o ciclo faz é CONTAR — uma pilha que só
-      // cresce é jogador ganhando item que não consegue resgatar, e isso não aparece em
-      // lugar nenhum sem alguém publicar o número.
-      if (dependencies.lootBoxes !== undefined) {
-        metrics?.observeLootBoxes(await dependencies.lootBoxes.pending());
+      // #615: a primeira tarefa diária real do esqueleto. Roda todo ciclo — idempotente por
+      // construção, ver `world-daily.ts` — em vez de calcular "já é hora?" aqui: a hora certa
+      // é decidida pela CHAVE do dia (`boostedDayKey`), não por comparar o relógio com
+      // `rolloverHourUtc` a cada 10 s, o que erraria por fuso ou por ciclo perdido.
+      if (dependencies.boosted !== undefined) {
+        await rollBoostedCreature({
+          worldDaily: dependencies.boosted.store,
+          rolloverHourUtc: dependencies.boosted.rolloverHourUtc,
+          monsterIds: dependencies.boosted.monsterIds,
+          now,
+          logger,
+        });
       }
 
       metrics?.observeCycle(

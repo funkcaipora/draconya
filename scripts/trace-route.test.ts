@@ -55,7 +55,13 @@ describe('traceRoute (FUN-123)', () => {
   });
 
   it('o JSON escrito é válido e reconstrói a rota', () => {
-    const route = traceRoute(map, 7, 'volta', [{ x: 1, y: 1 }, { x: 5, y: 4 }], [{ x: 5, y: 4, radius: 3 }]);
+    // Desde o #583, todo `spawnPoint` do schema final precisa declarar o monstro e o
+    // `respawnDelayMs` — o par que `catalog:spawns` preenche a partir do Canary. Aqui a rota
+    // já nasce completa, só para provar que `formatRoute`/`routeSchema` fecham o ciclo.
+    const route = traceRoute(
+      map, 7, 'volta', [{ x: 1, y: 1 }, { x: 5, y: 4 }],
+      [{ x: 5, y: 4, radius: 3, monsterId: 'rat', respawnDelayMs: 2_000 }],
+    );
     const parsed = routeSchema.parse(JSON.parse(formatRoute(route)));
     expect(parsed.tiles).toEqual(route.tiles);
     expect(parsed.spawnPoints).toEqual(route.spawnPoints);

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { BitmapBudget, spriteBytes } from './bitmap-budget.js';
 import type { Sprite } from './bitmap-budget.js';
 import {
-  colorize, OUTFIT_COLORS, OutfitComposer, outfitColor, outfitKey,
+  addonRowsOf, colorize, compositeOver, OUTFIT_COLORS, OutfitComposer, outfitColor, outfitKey,
 } from './outfit.js';
 
 class FakeBitmap implements Sprite {
@@ -274,6 +274,133 @@ describe('OutfitComposer (FUN-20)', () => {
     clock = 1; await composer.get(1, colors, 0, 0, 0);
     clock = 2; await composer.get(1, colors, 0, 1, 0);
     expect(avisos).toEqual([{ key: outfitKey(1, colors, 0, 0, 0), closedAtNotice: false }]);
+  });
+});
+
+describe('os addons do outfit (#620)', () => {
+  it('a máscara do Tibia liga a linha 1 (primeiro addon) e a linha 2 (segundo), em ordem', () => {
+    // Mutação que mata: trocar os bits (1 ligar a linha 2), ou devolver a linha 0 — o base, que
+    // é sempre desenhado e nunca é um addon.
+    expect(addonRowsOf(0)).toEqual([]);
+    expect(addonRowsOf(1)).toEqual([1]);
+    expect(addonRowsOf(2)).toEqual([2]);
+    expect(addonRowsOf(3)).toEqual([1, 2]);
+    // Bit fora das duas linhas é lixo, e não pede um quadro que o pacote não tem.
+    expect(addonRowsOf(4)).toEqual([]);
+    expect(addonRowsOf(7)).toEqual([1, 2]);
+  });
+
+  it('a chave de quem não tem addon é a de antes, e cada máscara é outra chave', () => {
+    const colors = { head: 1, body: 2, legs: 3, feet: 4 };
+    expect(outfitKey(1, colors, 0, 0, 0, 0)).toBe(outfitKey(1, colors, 0, 0, 0));
+    const chaves = new Set([0, 1, 2, 3].map((addons) => outfitKey(1, colors, 0, 0, 0, addons)));
+    expect(chaves.size).toBe(4);
+  });
+
+  describe('compositeOver', () => {
+    const px = (...pixels: ReadonlyArray<readonly [number, number, number, number]>) =>
+      new Uint8ClampedArray(pixels.flat());
+
+    it('opaco vence, transparente deixa o de baixo, e é por PIXEL', () => {
+      const under = px([10, 20, 30, 255], [40, 50, 60, 255], [70, 80, 90, 0]);
+      const over = px([200, 0, 0, 255], [0, 0, 0, 0], [0, 200, 0, 255]);
+      expect([...compositeOver(under, over)]).toEqual([
+        200, 0, 0, 255,        // o addon cobre
+        40, 50, 60, 255,       // o addon é transparente: sobra o base
+        0, 200, 0, 255,        // o base era transparente e o addon não
+      ]);
+    });
+
+    it('alfa parcial mistura pelos dois alfas', () => {
+      // 50% de branco sobre preto opaco: cinza médio, opaco.
+      const out = compositeOver(px([0, 0, 0, 255]), px([255, 255, 255, 128]));
+      const [r, g, b, a] = [...out];
+      expect(r).toBeGreaterThanOrEqual(127);
+      expect(r).toBeLessThanOrEqual(128);
+      expect([g, b]).toEqual([r, r]);
+      expect(a).toBe(255);
+      // Sobre o vazio, o addon meio transparente continua meio transparente e da MESMA cor.
+      const onEmpty = [...compositeOver(px([0, 0, 0, 0]), px([255, 0, 0, 128]))];
+      expect(onEmpty.slice(0, 3)).toEqual([255, 0, 0]);
+      expect(onEmpty[3]).toBe(128);
+    });
+
+    it('não altera o base que recebeu e recusa tamanhos diferentes', () => {
+      const under = px([1, 2, 3, 255]);
+      compositeOver(under, px([9, 9, 9, 255]));
+      expect([...under]).toEqual([1, 2, 3, 255]);
+      expect(() => compositeOver(under, px([0, 0, 0, 0], [0, 0, 0, 0]))).toThrow(/tamanho diferente/);
+    });
+  });
+
+  describe('OutfitComposer com addons', () => {
+    const colors = { head: 0, body: 94, legs: 0, feet: 0 };
+    /** Um quadro de 1×1: o `base` na cor dada e um template vermelho (a máscara de CORPO). */
+    const layer = (base: readonly [number, number, number, number]) => ({
+      base: new Uint8ClampedArray(base), template: new Uint8ClampedArray([255, 0, 0, 255]),
+      width: 1, height: 1,
+    });
+
+    const build = (rows: Readonly<Record<number, ReturnType<typeof layer> | null>>) => {
+      const created: Array<{ pixels: Uint8ClampedArray }> = [];
+      const layersOf = vi.fn(async (_outfit: number, _group: number, _dir: number, _phase: number, row = 0) => rows[row] ?? null);
+      const composer = new OutfitComposer({
+        maxBytes: 1_000_000, layersOf,
+        createBitmap: async (pixels, w, h) => {
+          created.push({ pixels });
+          return new FakeBitmap(w, h);
+        },
+      });
+      return { composer, created, layersOf };
+    };
+
+    it('sem addon pede só a linha do base — a chamada de antes, com quatro argumentos', async () => {
+      const { composer, layersOf } = build({ 0: layer([100, 100, 100, 255]) });
+      await composer.get(1, colors, 0, 2, 1);
+      expect(layersOf).toHaveBeenCalledTimes(1);
+      expect(layersOf).toHaveBeenCalledWith(1, 0, 2, 1);
+    });
+
+    it('cada addon pede a SUA linha e entra por cima, na ordem: o segundo cobre o primeiro', async () => {
+      // Base cinza, addon 1 verde opaco, addon 2 azul opaco. O template vermelho (máscara de
+      // CORPO) pinta o quadro com a cor 94, que é vermelho puro: multiplicar zera G e B do
+      // quadro que ele pinta. O addon é PINTADO igual ao base, e o último a entrar cobre.
+      const { composer, created, layersOf } = build({
+        0: layer([100, 100, 100, 255]), 1: layer([0, 200, 0, 255]), 2: layer([0, 0, 200, 255]),
+      });
+      await composer.get(1, colors, 0, 0, 0, 3);
+      expect(layersOf.mock.calls).toEqual([[1, 0, 0, 0], [1, 0, 0, 0, 1], [1, 0, 0, 0, 2]]);
+      expect([...(created[0]?.pixels ?? [])]).toEqual([0, 0, 0, 255]);
+    });
+
+    it('só o primeiro addon: a linha 2 nem é pedida', async () => {
+      const { composer, layersOf } = build({
+        0: layer([100, 100, 100, 255]), 1: layer([0, 200, 0, 255]), 2: layer([0, 0, 200, 255]),
+      });
+      await composer.get(1, colors, 0, 0, 0, 1);
+      expect(layersOf.mock.calls).toEqual([[1, 0, 0, 0], [1, 0, 0, 0, 1]]);
+      await composer.get(1, colors, 0, 0, 1, 2);
+      expect(layersOf.mock.calls.slice(2)).toEqual([[1, 0, 0, 1], [1, 0, 0, 1, 2]]);
+    });
+
+    it('um addon que o pacote não tem, ou de outro tamanho, é pulado: o monstro aparece sem ele', async () => {
+      const { composer, created } = build({
+        0: layer([100, 100, 100, 255]), 1: null,
+        2: { base: new Uint8ClampedArray(8), template: new Uint8ClampedArray(8), width: 2, height: 1 },
+      });
+      expect(await composer.get(1, colors, 0, 0, 0, 3)).not.toBeNull();
+      // O base pintado, sem nenhum dos dois addons.
+      expect([...(created[0]?.pixels ?? [])]).toEqual([100, 0, 0, 255]);
+    });
+
+    it('a mesma combinação com addon diferente é outro bitmap; a igual é o MESMO', async () => {
+      const { composer, created } = build({ 0: layer([100, 100, 100, 255]), 1: layer([0, 200, 0, 255]) });
+      const sem = await composer.get(1, colors, 0, 0, 0, 0);
+      const com = await composer.get(1, colors, 0, 0, 0, 1);
+      expect(com).not.toBe(sem);
+      expect(await composer.get(1, colors, 0, 0, 0, 1)).toBe(com);
+      expect(created).toHaveLength(2);
+    });
   });
 });
 

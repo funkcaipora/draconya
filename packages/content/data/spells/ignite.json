@@ -1,0 +1,21 @@
+{
+  "id": "ignite",
+  "name": "Ignite",
+  "description": "Incendeia o seu alvo, causando dano de fogo ao longo do tempo.",
+  "vocationId": "sorcerer",
+  "minLevel": 26,
+  "learnPrice": 1500,
+  "manaCost": 30,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 30000,
+  "effect": {
+    "kind": "damage-over-time",
+    "amount": 45,
+    "intervalMs": 3000,
+    "durationMs": 75000,
+    "range": 3,
+    "damageType": "fire"
+  },
+  "_open": "Magia que faltava no catálogo (#596; ADR 0037): DOT de fogo do Sorcerer (level 26), `utori flam` no Canary. Fonte `data/scripts/spells/attack/ignite.lua` (Canary local, 47dfd51): `spell:id(138)`, level 26, mana 30, cooldown 30s, grupo `attack` 2s, `range 3`, `COMBAT_FIREDAMAGE`, `needTarget`. Mecanismo `Condition:addDamage` (M31-02, `spellEffectSchema.damage-over-time`): `condition:addDamage(25, 3000, -45)` — 25 tiques de 45 de dano a cada 3000 ms, total 75000 ms. Aparência: efeito 7 e projétil 4, reaproveitados de `fire-wave`/`flame-strike-sorcerer` (mesmo elemento fogo) — biblioteca parcial (47/4171 folhas, `docs/combat-presentation-audit.md`), conferência visual pendente."
+}

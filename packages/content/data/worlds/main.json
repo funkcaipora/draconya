@@ -1,0 +1,10 @@
+{
+  "id": "main",
+  "name": "Draconya",
+  "worldType": "no-pvp",
+  "map": "thais",
+  "towns": [
+    { "id": "thais", "name": "Thais", "temple": { "x": 32369, "y": 32241, "z": 7 } }
+  ],
+  "capacity": 200
+}

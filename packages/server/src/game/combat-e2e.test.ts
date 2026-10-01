@@ -21,7 +21,7 @@ import { createLogger } from '../log.js';
 import { SessionHost } from './host.js';
 import { FakeSocket } from './testing.js';
 import { createBotConfigValidator } from './sessions.js';
-import { TEST_CITY_MAP, TEST_HUNT, TEST_PROGRESSION, rawTestContent } from '../testing/content.js';
+import { TEST_CITY_MAP, TEST_PROGRESSION, rawTestContent } from '../testing/content.js';
 import realAvalancheRune from '../../../content/data/supplies/avalanche-rune.json';
 
 const logger = createLogger('silent', 'test');
@@ -51,7 +51,17 @@ const ROUTE = {
   tiles: [
     { x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 2, y: 2, z: 7 }, { x: 1, y: 2, z: 7 },
   ],
-  spawnPoints: [{ routeIndex: 2, radius: 1 }],
+  spawnPoints: [{ routeIndex: 2, radius: 1, monsterId: 'rat', respawnDelayMs: 30_000 }],
+};
+
+/** A mesma rota, com dois pontos (#583: fim do pull por dificuldade) — o que `monsterCount: 2`
+ * costumava dar de graça, agora um ponto por rato. */
+const ROUTE_TWO = {
+  ...ROUTE,
+  spawnPoints: [
+    { routeIndex: 2, radius: 1, monsterId: 'rat', respawnDelayMs: 30_000 },
+    { routeIndex: 0, radius: 1, monsterId: 'rat', respawnDelayMs: 30_000 },
+  ],
 };
 
 /** A tabela de aparências (invariante 6): a Avalanche projeta o míssil 29 e estoura o efeito 41. */
@@ -98,25 +108,15 @@ function hunt(options: {
   const shaped: RawContent = {
     ...raw,
     maps: [MAP, TEST_CITY_MAP],
-    routes: [ROUTE],
+    routes: [options.monsterCount === undefined ? ROUTE : ROUTE_TWO],
     supplies: [...(raw.supplies ?? []), realAvalancheRune],
     skills: SKILLS,
     progression: [{
       ...TEST_PROGRESSION, startingMana: 2_000,
-      regen: { healthPerSecond: 0, manaPerSecond: 0 },
+      regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
     }],
     monsters: (raw.monsters as Array<Record<string, unknown>>).map((monster) =>
       monster['id'] === 'rat' ? { ...monster, attack: 0, health: options.ratHealth ?? 100_000 } : monster),
-    ...(options.monsterCount === undefined
-      ? {}
-      : {
-        hunts: [{
-          ...TEST_HUNT,
-          difficulties: {
-            cautious: { ...TEST_HUNT.difficulties.cautious, monsterCount: options.monsterCount },
-          },
-        }],
-      }),
   };
   const content = buildContent(shaped);
   const appearances = {
@@ -211,8 +211,8 @@ describe('combate E2E pelo socket (M24-12, #477)', () => {
     const missileAt = all.indexOf(missiles[0] as S2CMessage);
     const effectAt = all.indexOf(effects[0] as S2CMessage);
     expect(effectAt).toBeGreaterThan(missileAt);
-    // Gold pelo preço real, uma vez por uso.
-    expect(fixture.hero().goldDelta).toBe(-14 * casts);
+    // Gold pelo preço real, uma vez por uso — 64 (M34-03/#574).
+    expect(fixture.hero().goldDelta).toBe(-64 * casts);
   });
 
   it('RF-02: com magic level 3 o slot-state explica "Magic level insuficiente.", e nada é gasto', () => {

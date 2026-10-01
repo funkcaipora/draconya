@@ -26,10 +26,26 @@ export interface ContributionState {
   readonly lastHitBy?: string;
 }
 
+/**
+ * O balde de TODO monstro que já saiu (#619): quando um monstro morre ou some, o dano que ele
+ * causou em outro monstro deixa de ter dono por `m:<id>` e passa a ser somado aqui. O Canary nunca
+ * apaga uma entrada do `damageMap` (`Creature::getDamageRatio` soma todas, vivas ou não), então a
+ * fatia de quem bateu depois continua `dano / total` com o dano do morto DENTRO do total — esquecer
+ * o ator, como `forget` faz, inflaria a XP de quem terminou o abate. Um balde só, e não uma chave
+ * por morto, é o que mantém o mapa do monstro limitado numa hunt de oito horas com respawn. Começa
+ * com `m:` de propósito: tudo que pergunta "o dano veio de monstro?" continua valendo para ele.
+ * Nunca é o dono do cadáver nem entra em `mostDamageBy` — o `getCreatureByID` do `onDeath` pula
+ * quem não existe mais.
+ */
+export const DEPARTED_ACTOR = 'm:departed';
+
 export interface KillCredit {
   /** Quem desferiu o último golpe. É a quem a hunt credita hoje (DT-03). */
   readonly lastHitBy: string | null;
-  /** Quem causou mais dano. Pode diferir do último golpe, e é o que party vai usar. */
+  /**
+   * Quem causou mais dano. Pode diferir do último golpe, e é o que party vai usar. Nunca é o
+   * balde `DEPARTED_ACTOR`: quem já saiu não é dono de nada (`Creature::onDeath`).
+   */
   readonly mostDamageBy: string | null;
   readonly damageByActor: Readonly<Record<string, number>>;
 }
@@ -84,6 +100,16 @@ export class Contribution {
   }
 
   /**
+   * Esquece TODA a atribuição (#655, `Creature::onIdleStatus`: `damageMap.clear()` e
+   * `lastHitCreatureId = 0`): o monstro que volta ao spawn e fica ocioso recomeça sem dono. Muta
+   * no lugar, como `record`.
+   */
+  clear(): void {
+    this.#damage.clear();
+    this.#lastHitBy = null;
+  }
+
+  /**
    * Esquece um ator que deixou de existir. Chamado quando um monstro morre, para cada
    * personagem em que ele bateu: sem isto, o mapa do personagem ganha uma chave por monstro
    * que já o atingiu — e como cada respawn tem id novo, numa hunt de oito horas são milhares
@@ -94,6 +120,20 @@ export class Contribution {
     if (this.#lastHitBy === actorId) this.#lastHitBy = null;
   }
 
+  /**
+   * Funde o dano de um ator que deixou de existir no balde `bucket` (#619, `DEPARTED_ACTOR`): o
+   * total do mapa não muda, só deixa de haver uma chave por morto. O último golpe dele passa a ser
+   * o balde — o Canary guarda o `lastHitCreatureId` mesmo depois da morte do atacante, e quem
+   * pergunta "foi monstro?" continua recebendo sim. Muta no lugar, como `record`.
+   */
+  fold(actorId: string, bucket: string): void {
+    const amount = this.#damage.get(actorId);
+    if (amount === undefined) return;
+    this.#damage.delete(actorId);
+    this.#damage.set(bucket, (this.#damage.get(bucket) ?? 0) + amount);
+    if (this.#lastHitBy === actorId) this.#lastHitBy = bucket;
+  }
+
   /** Resolve o crédito. Empate em dano vai para quem bateu primeiro. */
   credit(): KillCredit {
     let mostDamageBy: string | null = null;
@@ -101,6 +141,7 @@ export class Contribution {
     const damageByActor: Record<string, number> = {};
     for (const [actorId, damage] of this.#damage) {
       damageByActor[actorId] = damage;
+      if (actorId === DEPARTED_ACTOR) continue;
       if (damage <= most) continue;
       most = damage;
       mostDamageBy = actorId;
@@ -127,6 +168,11 @@ export function recordDamage(contribution: Contribution, actorId: string, amount
 
 export function forgetActor(contribution: Contribution, actorId: string): void {
   contribution.forget(actorId);
+}
+
+/** Ver `Contribution.fold`: o dano de `actorId` passa a ser do balde `DEPARTED_ACTOR`. */
+export function foldActor(contribution: Contribution, actorId: string): void {
+  contribution.fold(actorId, DEPARTED_ACTOR);
 }
 
 export function creditFor(contribution: Contribution): KillCredit {

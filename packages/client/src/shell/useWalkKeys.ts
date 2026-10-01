@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { sendIntent } from '../net/current.js';
 import { world } from '../state/world.js';
+import { cancelCorpseApproach } from './corpse-approach.js';
+import { cancelTileApproach } from './tile-approach.js';
 import { DEFAULT_STEP_MS, WalkKeys, directionOf, nextWalkDelay } from './walk-keys.js';
 
 /** O foco está num campo de texto? Andar ali seria apagar o que o jogador digita. */
@@ -50,6 +52,11 @@ export function useWalkKeys(): void {
       }
       sentAtMs = performance.now();
       sendIntent({ type: 'walk', direction });
+      // Andar pelo teclado cancela um pedido de abrir cadáver (#722, ADR 0048 d.4) OU de usar
+      // um tile (#729) em curso — o jogador escolheu ir para outro lugar, e o `open-corpse`/
+      // `use-on-map` de um clique antigo não pode mandar sozinho atrás dele.
+      cancelCorpseApproach();
+      cancelTileApproach();
       timer = setTimeout(tick, Math.max(1, Math.min(DEFAULT_STEP_MS, lastStepMs)));
     };
     const tick = (): void => {

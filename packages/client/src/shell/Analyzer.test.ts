@@ -33,7 +33,7 @@ function setActiveAnalyzer(overrides: Partial<AnalyzerState> = {}): void {
 const catalogue: Catalogue = {
   hunts: [{ id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['cautious'], difficultyDetails: [], outfitIds: [], lootDrops: 0, monsters: [], loot: [] }],
   monsters: [{ id: 'rat', name: 'Rato' }],
-  vocations: [], vocationLevel: 8,
+  vocations: [], charms: [], vocationLevel: 8,
   bot: {
     vocabularyVersion: 1, slots: {},
     spells: [], supplies: [{ id: 'mana-potion', name: 'Poção de Mana', price: 50, effect: 'mana', group: 'potion', requires: {} }],
@@ -57,14 +57,39 @@ describe('os eventos notáveis com os nomes do CATÁLOGO (FUN-110, FUN-113)', ()
     // montagem de `names` em `Events` — o evento sairia com o id cru.
     hud.set((state) => ({ ...state, catalogue }));
     const html = await render(createElement(Events, { events }));
-    expect(html).toContain('Entrou em Rat Cellars · Cauteloso');
+    expect(html).toContain('Entrou em Rat Cellars');
     expect(html).toContain('Gold acabou para Poção de Mana');
     expect(html).toContain('Bestiário: Rato · marco 1 (+1 % XP)');
   });
 
+  it('a perda de item na morte (#571) sai com o nome do catálogo, agrupada, e só a do PRÓPRIO personagem', async () => {
+    // Mutação que mata: apagar `items` da montagem de `names` em `Events` (o item sairia com o id
+    // cru), ou não passar `me` (o item que um companheiro de party perdeu apareceria aqui).
+    const named = {
+      ...catalogue,
+      items: [
+        { id: 'backpack', name: 'Backpack', appearanceId: 1, weight: 18, slot: 'back', twoHanded: false },
+        { id: 'gem', name: 'Gem', appearanceId: 2, weight: 1, slot: null, twoHanded: false },
+      ],
+    } as unknown as Catalogue;
+    hud.set((state) => ({ ...state, catalogue: named, characterId: 'hero' }));
+    const html = await render(createElement(Events, {
+      events: [
+        { atMs: 4_000, type: 'death', detail: 'hero' },
+        { atMs: 4_000, type: 'item-lost-on-death', detail: 'backpack/1/i:bp/hero' },
+        { atMs: 4_000, type: 'item-lost-on-death', detail: 'gem/12/i:gem/hero' },
+        { atMs: 4_000, type: 'item-lost-on-death', detail: 'gem/1/i:other/ana' },
+      ],
+    }));
+    expect(html).toContain('Perdeu na morte · Backpack, Gem ×12');
+    // O item de `ana` não entra: uma linha só, e sem o nome dele.
+    expect(html.match(/Perdeu na morte/g)).toHaveLength(1);
+    expect(html).not.toContain('Gem, ');
+  });
+
   it('sem catálogo os ids ficam no lugar dos nomes, e o marco sai sem bônus', async () => {
     const html = await render(createElement(Events, { events }));
-    expect(html).toContain('Entrou em rat-cellars · Cauteloso');
+    expect(html).toContain('Entrou em rat-cellars');
     expect(html).toContain('Bestiário: rat · marco 1');
     expect(html).not.toContain('% XP');
   });

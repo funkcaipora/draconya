@@ -17,7 +17,7 @@
 //   7  api/phase-one-exit.postgres.test.ts
 //   8  receipts.test.ts
 //   9  jobs/lock.test.ts
-//  10  loot-box.test.ts
+//  10  world-daily.postgres.test.ts (#615, era loot-box.test.ts, retirado pelo ADR 0048)
 //  11  api/phase-two-exit.postgres.test.ts
 //  12  party-store.test.ts
 //  13  api/party.test.ts

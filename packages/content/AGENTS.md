@@ -25,6 +25,170 @@ esse tipo de violação difícil de enxergar em revisão.
 Regra prática: se a função lê arquivo, ela vai para `load.ts`. Se ela só valida ou monta
 estrutura em memória, vai para `content.ts` e pode ser usada por qualquer um.
 
+## O catálogo importado (ADR 0038, #572)
+
+**`convinceable`, `manaCost` e `corpseAnimatable` (#600).** O importador de monstros lê
+`flags.convinceable` e `manaCost` (de TODO monstro que o declara, `summonable` ou não — `summonable`
+em si continua NÃO importado) e gera `corpseAnimatable`, as janelas em ms desde a morte em que o item
+do topo do cadáver é `isCorpse() and isMovable()` — a Animate Dead do Canary. O dado é de cada
+estágio da cadeia `decayTo`, e a flag `unmove` vem de `data/items/appearances.dat` (lido por
+`readCorpseItemFlags`, sobre o `Reader` de protobuf do cliente), não do `items.xml`: o estágio
+recém-abatido é `unmove`, então a janela típica é `[10 000, corpseTtlMs)`. `pnpm catalog:import
+monsters` sem `appearances.dat` não gera janela nenhuma (monstro nunca animável), nunca inventa uma.
+
+**`staging/monsters/` não é conteúdo carregado** (#578/#579): é onde `pnpm catalog:import monsters`
+escreve — a transcrição PURA do Canary, item ainda por slug de nome, sem passar pelo catálogo de
+itens (#573/#574) nem pela tabela de aparências. `pnpm catalog:promote-monsters` (#580) é o passo
+SEGUINTE, e não depende de `CANARY_DIR`: lê o que já está commitado em `staging/` e separa cada
+entidade (a forma do `monsterSchema` mais `bestiary` e `outfitId`) em três destinos —
+`data/monsters/generated/<fatia>.json` (o monstro, sem os dois campos), `bestiary/baseline.json`
+(`entries`) e `appearances/baseline.json` (`monsters`). De caminho, valida `loot.items` contra o
+catálogo de itens REAL (`data/items` — o que `load.ts` de fato carrega hoje) e remove a linha cujo
+item não existe, ou que pede pilha de item que não empilha — contada, nunca em silêncio, em
+`docs/reference/catalog/monsters-promotion-report.md`. Rat, Rotworm, Dragon, Dragon Lord e Dragon Lord
+Hatchling nunca são promovidos POR ESTE SCRIPT (`HAND_AUTHORED_MONSTER_IDS`, `scripts/catalog/promote-monsters.ts`)
+— o #581 os regenerou uma única vez, direto em `generated/<fatia>.json` (Rat em `mammals.json`,
+Rotworm em `vermins.json`, os três dragões em `dragons.json`). O #581 tinha dado aos dois um
+override próprio (`data/monsters/overrides/rat.json`/`rotworm.json`) para o `blockable: true`
+temporário que Rat Cellars e Rotworm Caves ainda exigiam com o modelo antigo de pull; o #586
+(M36-05) converteu as duas hunts para os spawns reais do Canary e apagou os dois arquivos — Rat e
+Rotworm caem no `blockable: false` do próprio Canary, como o resto do bestiário. `pnpm
+catalog:promote-monsters` (`preserveHandAuthored`) NUNCA sobrescreve essas cinco entradas numa
+reimportação futura — elas só mudam de novo por decisão deliberada, como o #581. **A apresentação
+(`outfit`, `voices`, `light`, `race`, #620) é a exceção:** o `promote-monsters` a renova nas
+cinco entradas hand-authored também (`PRESENTATION_FIELDS`, `withPresentation`) — a regra do #581 protege os números de
+combate, não a fala do rato. `load.ts` não lê `staging/`, e nada do jogo deve ler.
+
+**Os familiares de vocação (#599)**: `familiars/` deixou de ser pulada — o leitor gera os quatro
+(`data/monsters/generated/familiars.json`; o do Monk sai pela linha explícita `OUT_OF_CUT_MONSTERS`,
+com o motivo no relatório), com o `lookType` de `FAMILIAR_ID` (`data/libs/systems/familiar.lua`, o
+`.lua` do monstro o deixa comentado). Entram `familiar: true` e o `manaCost` — **nunca `summonable`**:
+o Canary o declara `false` nos quatro, e é isso que impede a Summon Creature de invocá-los. As
+três magias por NOME que eles lançam ganharam mapeador (`scripts/catalog/monster-abilities.ts`):
+`ice strike` e `sudden death rune` (dano da PRÓPRIA entrada — `Monster::getCombatValues` —, tipo e
+alvo único do script da magia registrada, e o `spell:range(3)` do Ice Strike por cima do `range` do
+monstro) e `summon challenge` (a ability `challenge`, 8 s, `circle` de raio 4 de MONSTRO centrado
+no lançador = os 21 tiles da `AREA_CIRCLE2X2`). Efeito colateral do mapeador do Sudden Death Rune:
+os monstros que o usam e antes ficavam fora por isso (lost exile, scarlett etzel, xogixath) passaram
+a ser gerados. A magia `familiar` (`spellEffectSchema`) carrega `durationMs`/`cooldownMs`, e o
+`cooldownMs` da própria magia fica em 2 s (o `groupCooldown` do script) — ver `docs/product/
+combat.md`, "O familiar de vocação".
+
+**`staging/items/` também não é conteúdo carregado** (#573/#574): `pnpm catalog:import items`
+escreve lá — 1946 itens de caça. `items.ts` já resolve `slot: 'hand'` por default em TODA arma
+sem `<script><attribute key="slot">` (a maioria do Canary não declara — os 22 itens `kind:
+'weapon'` autorais concordam: `hand`, twoHanded ou não), e não copia `defense` de item que o
+PRÓPRIO Canary classifica fora de `shield`/arma (`primarytype` "valuables"/"creature products"
+com `weaponType shield`/`sword` residual — "rusted shield", "broken macuahuitl": curiosidade de
+quest, não equipamento). Uma arma cujo `primarytype` MENTE (diz "axe weapons" mas `weaponType` é
+`distance` sem `ammotype` — "broken Iks spear") também sai do corte, pela mesma regra M34-04 que
+já vale para `primarytype: "distance weapons"`. `pnpm catalog:promote-items` (#748) é o passo
+SEGUINTE, na mesma forma de `promote-monsters.ts`: lê `staging/items/generated/`, e escreve
+`data/items/generated/<fatia>.json` MENOS duas exclusões, cada uma contada em
+`docs/reference/catalog/items-promotion-report.md`, nunca em silêncio — id que colide com item
+AUTORAL (os 73 de sempre; o autoral vence, ADR 0014), e `appearanceId` (o `id` do `<item>` do
+Canary, que É o clientid do OTB) fora do inventário do pacote que `appearances/baseline.json.pack`
+DECLARA (FUN-21; lido pelo nome do campo, nunca fixo em código — a troca de pacote, quando
+acontecer, não pede mudança aqui). `appearanceId` é staging-only — o mesmo recurso que `outfitId`
+usa em monstro — e vira linha em `appearances/baseline.json.items`, nunca campo do item
+(`itemSchema` não o declara).
+
+**`staging/spells/` e `staging/runes/` também não são conteúdo carregado** (M37-08, #595):
+`pnpm catalog:import spells`/`pnpm catalog:import runes` lê `data/scripts/spells/**`/`data/scripts/
+runes/**` do Canary (`scripts/catalog/spell-calls.ts` para a chamada de método, `scripts/catalog/
+spell-formula.ts` para o reconhecedor estrutural de `onGetFormulaValues` — nunca executa Lua, ADR
+0019) e escreve lá, por fatia de VOCAÇÃO (`generated/knight.json`, `generated/general.json` para
+o que não tem restrição). As 82 magias e 20 supplies do #523 continuam autorais em `data/spells/
+*.json`/`data/supplies/*.json` com os MESMOS ids — gerar direto em `data/spells/generated/`
+colidiria (a mesma razão de `staging/monsters/`); não existe `pnpm catalog:promote-spells` ainda —
+migrar o catálogo manual para `overrides/` + `generated/` é trabalho de #596/#597, que também
+cobrem o resto das ~120 magias e as runas fora das duas formas de fórmula que este leitor
+reconhece (`docs/reference/catalog/spells-report.md`/`runes-report.md` listam o que ficou de
+fora, com o motivo).
+
+**`learnPrice` da magia (#624, ADR 0058 d.3) é importado dos NPCs, sem `staging/`:** a magia continua
+autoral em `data/spells/*.json`, e `pnpm catalog:spell-prices` (`scripts/catalog/spell-prices.ts`,
+o irmão de `catalog:npc-prices`) lê as ~1 800 chamadas `StdModule.learnSpell` dos 51 NPCs de
+`data-otservbr-global/npc/` com `luaparse` — nunca executa Lua, e um preço/nome/vocação que não é
+literal vai para o relatório em vez de virar `0` — e regrava SÓ a linha `"learnPrice"` do arquivo
+(insere antes de `"manaCost"`, preserva a formatação). Regras: o **MENOR** preço entre os NPCs que
+ensinam a magia à vocação dela (ADR 0038 d.6); a ligação é o NOME sem diferenciar caixa (o
+`hasLearnedInstantSpell` do Canary é `strcasecmp`), não o id do arquivo — `haste-druid` e
+`haste-sorcerer` têm o mesmo nome, e é a vocação do NPC (normalizada para a base: Master Sorcerer →
+Sorcerer; Monk fica de fora) que separa; `premium` não entra. **`learnPrice: 0` é magia grátis** (as
+básicas), e AUSENTE é "ninguém a ensina" — nunca confunda os dois (`!== undefined`, jamais truthy).
+Magia sem NPC (`challenge`, `conjure-power-bolt`, `conjure-sniper-arrow`, `great-death-beam`) NUNCA
+é tocada pelo script: o preço dela é curado à mão com a fonte no `_open` (três provisórios, um
+ausente de propósito — ver `docs/product/progression.md`, "Aprender magia"). `pnpm check` roda
+`catalog:spell-prices --check`: um arquivo de magia divergente do Canary, ou o relatório
+(`docs/reference/catalog/spell-prices-report.md`) desatualizado, reprova. `load.test.ts` fecha o
+outro lado: toda magia do catálogo real tem preço, exceto a `NOT_TAUGHT` — uma magia nova sem
+`learnPrice` seria uma magia que ninguém consegue lançar.
+
+**`data/skinning/generated/` é a esfola de cadáver** (#626, ADR 0048 d.5/d.6): `pnpm catalog:import
+skinning` lê o `skinning.lua` do Canary (`config[ferramenta][id do cadáver]`) e a cruza com o
+`monster.corpse` e a cadeia de decaimento (`duration`/`decayTo`) de cada monstro do catálogo — uma
+linha por MONSTRO, com a ferramenta, o material, a `chance` (`SKINNING_CHANCE_SCALE = 100000`) e
+os `stages` esfoláveis do cadáver (`canaryItemId` é identidade para o Scavenge, nunca arte;
+`afterTtlMs` é a vida do cadáver DEPOIS da tentativa — o `duration` do `after` do Lua mais a cadeia
+`decayTo` dele no `items.xml`, 360 s em todas as 62 entradas, porque o `transform` do Canary reinicia
+o decaimento). Depende
+de `data/monsters/**` e `data/items/**` já promovidos: monstro, ferramenta ou material fora do
+catálogo saem em `skipped` no relatório, e o boot recusa referência solta. A obsidian knife, a
+blessed wooden stake e o `rabbits-foot` são itens AUTORAIS (o importador de itens não classifica
+`primarytype="tools"`); o pé de coelho vale 50 gp (o preço de compra de `shops.lua`, que o `items.xml`
+não dá) e NÃO leva `creatureProduct`, porque o flag vem do `primarytype="creature products"`.
+Reimportar depois de promover mais monstros recupera o que ficou de fora.
+
+Qualquer `data/<tipo>/` (`items/`, `monsters/`) aceita, além do arquivo autoral direto na pasta,
+duas subpastas que `load.ts` lê sozinho, sem precisar de mudança em `content.ts`:
+
+```
+data/items/backpack.json             # autoral, uma entidade por arquivo (de sempre)
+data/items/generated/weapons.json    # promovido por `pnpm catalog:promote-items` — um ARRAY por fatia
+data/items/overrides/*.json          # correção nossa: { id, reason, patch }
+data/monsters/generated/mammals.json # promovido/regenerado — um ARRAY (Rat mora aqui desde o #581)
+data/monsters/overrides/*.json       # correção nossa: { id, reason, patch } — nenhuma hoje (#586 apagou as duas que existiam)
+```
+
+Um arquivo — autoral ou gerado — que contém um **array** vira várias entidades; um objeto solto
+continua sendo uma entidade só, como sempre foi. **Id repetido entre autoral e gerado é erro no
+boot** (a mesma checagem de duplicata que `parseAll` já fazia, sem código novo: as duas listas só
+se juntam antes de chegar lá).
+
+Um `overrides/*.json` **nunca** vira entidade nova — é `{ id, reason, patch }` aplicado por cima
+da entidade de mesmo id (autoral OU gerada) toda vez que o conteúdo é CARREGADO, nunca uma vez só
+na hora de importar. `reason` é obrigatório e sem default (o boot recusa sem ele): correção sem
+motivo é indistinguível de erro de digitação na próxima revisão. Override para um id que não
+existe em lugar nenhum é erro — correção órfã quase sempre significa que o id mudou. O patch é
+**raso**: sobrescreve os campos que lista, não troca o objeto inteiro nem faz merge profundo em
+campo aninhado.
+
+Por que a correção não entra em `generated/` direto: `pnpm catalog:import` regenera essa pasta a
+cada reimportação, sempre como transcrição PURA do Canary — um campo editado ali seria
+sobrescrito em silêncio na próxima vez. `overrides/` é o único lugar em que uma correção
+sobrevive a uma reimportação. Ver `scripts/catalog/` para quem escreve `generated/`.
+
+Toda entidade em `generated/` carrega um bloco `source: { engine, commit, path }` (ADR 0038
+decisão 2, `CatalogSource` em `scripts/catalog/generated-writer.ts`). Como cada schema de
+entidade é `z.strictObject`, isso só chega até `sim`/`server` sem derrubar o boot porque o
+schema declara `source: catalogSourceSchema.optional()` explicitamente — a MESMA forma que
+`tilemapSchema` já usa para o `source` do mapa importado (ADR 0025 decisão 3). Todo schema novo
+que passar a hospedar entidade gerada precisa do mesmo campo; esquecê-lo só aparece quando a
+primeira entidade de verdade for importada, e o erro (`Unrecognized key: "source"`) não aponta
+para cá.
+
+**O boss é o monstro com bloco `bosstiary`** (#629): `monsterSchema.bosstiary = { rarity, raceId }`
+(`bane`/`archfoe`/`nemesis` e o `bossRaceId` do Canary, a chave do contador de abates) e `boss:
+true` — o `isBoss` do Canary É "tem bloco bosstiary" (`!bosstiaryClass.empty()`). O importador
+(`scripts/catalog/monsters.ts`, `readBosstiary`) escreve os dois juntos, e a promoção os leva a
+`data/monsters/generated/` como estão (é campo do schema, ao contrário de `bestiary`/`outfitId`);
+`buildContent` recusa `bosstiary` sem `boss` e duas raridades para o mesmo `raceId` (variantes do
+mesmo boss compartilham o contador). A tabela de níveis por raridade — abates e pontos de cada um
+dos três níveis, a `IOBosstiary::levelInfos` — é `data/bosstiary/baseline.json`, transcrita à mão
+de UM arquivo do Canary (bloco `source`, sem `_open`: o boot avisa todo `_open` como valor não
+decidido, e este é decidido). Boss não tem `bestiary` no Canary, e não entra em
+`bestiary/baseline.json`.
 
 ## Mapa e rota
 
@@ -48,9 +212,24 @@ nunca aqui.
 Huntera); a hunt anda pela fórmula do Tibia com `progression.startingSpeed`/`speedPerLevel` e
 `monster.speed`.
 
+**Zonas por tile** (#830, OW-09, ADR 0060 d.8, que reverte o ADR 0025 d.9). `floors[z].zones` é a
+quarta camada por andar, na forma de `speed` e `sight` — uma string por linha, um caractere por
+tile —, lida de `TILE_FLAGS` do OTBM. A paleta é FIXA (`ZONE_PALETTE`, em `map.ts`; não por mapa,
+como `speedPalette` é): `.` normal, `p` PZ, `n` no-pvp, `a` arena (`PVPZONE`), `l` só no-logout, e
+`P`/`N`/`A` a zona mais no-logout. Em memória, `Floor.zones` é `Uint8Array | null` com a soma dos
+bits do OTBM (`ZONE_FLAG`: PZ 1, no-pvp 4, no-logout 8, arena 16) e `zoneFlagsAt(map, x, y, z)`
+lê um tile — `0`, normal, quando a camada falta, o tile está fora do mapa ou o andar não existe.
+Ausente é `null` e tudo é normal: **as hunts não mudam**, e hoje só `thais.json` a tem. O valor já
+vem normalizado como o Canary carrega o mapa (PZ, no-pvp e arena exclusivos; no-logout soma; casa é
+PZ), então o `sim` aplica a precedência de `Tile::getZoneType` e nunca precisa re-normalizar. É dado,
+sem regra: o que PZ, no-pvp e no-logout proíbem é do `sim` (OW-10, OW-27). Caractere fora da
+paleta derruba o boot, como velocidade fora de `speedPalette`. `pnpm map:import --id <id>
+--zones-only` acrescenta só a camada a um mapa já importado — sem pacote de arte, geometria
+intacta —, e `--check` a confere mesmo onde a geometria sai `absent`.
+
 **Mapa importado: o que é gerado e o que é autorado** (FUN-118, FUN-120, ADR 0025). Um mapa com
-`source` veio do OTBM real por `pnpm map:import`: `floors` (grade e velocidade), `speedPalette`
-e `source` são GERADOS, e `pnpm map:import --check` — que o `pnpm check` roda — reprova a grade
+`source` veio do OTBM real por `pnpm map:import`: `floors` (grade, velocidade, visão e zonas),
+`speedPalette` e `source` são GERADOS, e `pnpm map:import --check` — que o `pnpm check` roda — reprova a grade
 editada à mão, porque ela é a geometria do arquivo de origem e não uma opinião. O que se autora
 no JSON é `entryPoint` e `floorChanges`; reimportar preserva os dois. Mapa importado NÃO tem
 linha em `appearances.maps`: a arte dele é a pilha por tile em `things/<versão>/maps/<id>.json`,
@@ -64,11 +243,50 @@ só como fixture em `packages/server/src/testing/content.ts`.
 personagem chegar ao fim e parar — o sintoma chega dias depois como "a hunt travou", sem ligação
 nenhuma com o arquivo de rota.
 
+**Cenário usável: o importador CLASSIFICA, o mecanismo é a #728** (#727, ADR 0050 d.1).
+`tilemapSchema.interactables[]` diz o que cada tile É — porta (comum, de chave, de level, de
+quest), capim, stone pile, rope spot, ladder, alavanca, baú, placa, teleporte — a partir de
+`aid`/`uid`/`text` do OTBM (portas e capim, pela tabela; baú e placa, pelo atributo) e das
+tabelas do Canary transcritas como DADO em `data/scenery/canary-tables.json` (`doors.lua`,
+`register_actions.lua`, `global.lua`, `items.xml` — só números e pares de id, nunca o script,
+ADR 0019). **O tile de um interativo nunca é `#` na grade**, mesmo fechado/trancado: quem sabe
+se dá para pisar ali agora é o interativo — hoje só a classificação existe; o estado que muda por
+sessão (`TileOverrides`) é a #728, que ainda não existe, e o `sim` não lê `interactables` até
+lá. `docs/product/scenery.md` traz os números medidos nos quatro mapas.
+
 Confira antes de subir o servidor:
 
 ```
 pnpm content:check
 ```
+
+## O mundo (#829, OW-08, ADR 0060)
+
+`data/worlds/<id>.json` — um arquivo por mundo — diz o que um mundo **é**: `{ id, name, worldType,
+map, towns: [{ id, name, temple }], capacity }`. `Content.worlds` é um mapa por id, vazio no
+conteúdo de teste sem mundo aberto; o conteúdo real tem o `main` (tipo `no-pvp`, mapa `thais`,
+teto 200), e `load.test.ts` prende. Quem lê é a topologia do `sim` (OW-13) e as colunas de mundo
+em `characters` (OW-15); os spawns entram à parte (OW-25).
+
+- **`worldType` é um vocabulário FECHADO** (`WORLD_TYPES`), como `COMBAT_PROFILES`: hoje só
+  `no-pvp`. O Canary aceita também `retro-pvp`/`pvp`/`expert-pvp`/`pvp-enforced`
+  (`canary/config.lua.dist:28-33`), mas o `sim` não tem dano entre jogadores — aceitar um deles
+  num arquivo seria subir um mundo que promete o que o motor não faz. Tipo novo entra por ADR.
+- **O templo é coordenada ABSOLUTA do Tibia**, a mesma de `characters.world_x/y/z` (ADR 0060
+  d.3.b), e o mapa do recorte é LOCAL. `absoluteToLocal`/`localToAbsolute` (`map.ts`) traduzem pela
+  origem de `source.region`: `x` e `y` perdem ou ganham a origem, `z` não muda (os andares do
+  recorte são chaveados pelo `z` absoluto). Só mapa IMPORTADO tem `source`, e por isso só ele
+  serve a um mundo. Não compare coordenada de mundo com `entryPoint` ou `floorChanges` sem
+  traduzir: em Thais o erro é de 32275 em x e 32153 em y, e não aparece em teste que usa só o mapa local.
+- **`buildContent` confere o que o schema não vê:** o `map` existe e tem `source`; o templo cai
+  dentro do recorte nos três eixos e num tile que não é parede (`isBlocked`, a regra do
+  `entryPoint` da Cidade); id de cidade e de mundo únicos. Quebra no boot, não no personagem que
+  nasce preso.
+- **Entra em `computeVersion`** como todo o `RawContent` (invariante 7): mudar o teto muda a
+  versão que a sessão congela.
+- **`capacity` só se guarda aqui.** O teto vale só na entrada vinda do repouso (ADR 0060 d.2.b) e
+  quem o aplica é a admissão (OW-18/OW-20); `CITY_SHARD_CAPACITY` continua sendo o da Cidade.
+- Sem arte (invariante 6): `worldSchema` é `strictObject`.
 
 ## Invariantes locais
 
@@ -143,6 +361,14 @@ nascer com número, que é a ordem errada. Por isso o placeholder emite as três
 por isso `load.test.ts` — e não `buildContent` — é quem prende que todo spell do repositório
 tem efeito hoje.
 
+**`hits.byRace` é o efeito do golpe FÍSICO por raça do alvo** (#620, `Game::combatGetTypeInfo`):
+uma linha por `MonsterRace` (`blood`/`venom`/`undead`/`fire`/`energy`/`ink`/`chocolate`/`candy`),
+cada uma um id de efeito que o pacote tem. É opcional e o host cai em `hits.melee` para a raça sem
+linha — a tabela de antes da #620 (só `melee`) continua válida. O `monster.race`, o
+`monster.outfit` (cores e addons), as `voices` e a `light` do monstro são campos do `monsterSchema`,
+todos opcionais, todos APRESENTAÇÃO: `sim` e combate não os leem, e o que não é arte neles são
+índices (cor 0–132, luz 0–215, máscara de addons 0–3), nunca um id de desenho (invariante 6).
+
 **`appearances.abilities` é a única seção sem conferência dos dois lados** (CMB-06). As chaves
 dela são SEMÂNTICAS e compartilhadas (`spit`, `fire-impact`) — a ability de monstro aponta
 `presentation.missileKey`/`impactKey`, nunca um id de arte (invariante 6). Chave sem linha é
@@ -157,8 +383,8 @@ faixa é o quadrado invisível da FUN-21, agora a cada lançamento.
 `monsterAbilitySchema.chance` é OPCIONAL e sem default preenchido de propósito — não
 `z.number().default(1)` — porque a diferença entre "ausente" e "declarado como 1" é observável
 no `sim` (ausente não rola sorteio, declarado rola sempre). `monsterAbilityTargetSchema.area`
-aceita `circle`, `wave` e `beam` (`buildContent` recusa o resto); `wave`/`beam` saem do monstro
-na direção do alvo, recalculada no `sim` — o schema não guarda direção nenhuma. `monster.defenses`
+aceita `circle`, `wave`, `rows` e `beam` (`buildContent` recusa o resto; o catálogo usa `rows`,
+#679); `wave`/`rows`/`beam` saem do monstro na direção do alvo, recalculada no `sim` — o schema não guarda direção nenhuma. `monster.defenses`
 (cura própria) é normalizado no boot como `abilities` (`normalizeMonsterDefenses`, ausente vira
 lista VAZIA — nunca `undefined` — para o `sim` iterar sem `?? []`), mas sem básica a sintetizar:
 nenhum monstro cura sozinho por padrão. `monster.targetChange`/`runOnHealth`/`staticAttack` são
@@ -222,6 +448,21 @@ porque o pacote ganhou ids não muda o que ninguém vê, e contá-lo faria um `p
 assets:inventory` recusar todo snapshot de uma queda sem drenagem. O que muda a arte de uma
 sessão é o `pack` da tabela, e esse já conta.
 
+**`appearances.scenery` é GERADO, e mora numa tabela SEPARADA** (#727, ADR 0050 d.1):
+`data/appearances/generated/scenery.json`, escrito por `pnpm map:import` — nunca à mão, como
+`baseline.json`. `load.ts` lê a subpasta `appearances/generated/` junto com `appearances/`, e
+`buildContent` mescla a seção `scenery` de toda tabela que não seja `baseline` por cima da de
+`baseline` (mesma chave, o último arquivo em ordem alfabética vence — a mesma regra do resto do
+conteúdo). A forma é `appearanceKey → { estado → id }` — `door-1629: { closed, open }`,
+`grass-3696: { uncut, cut }`, `lever: { down, up }` (uma alavanca só, compartilhada por todo
+mapa: 2772/2773 do Canary são o par físico, não um por instância) —, e só entram as chaves que
+ALGUM interativo de ALGUM mapa importado realmente usa: a tabela do Canary tem centenas de
+portas que o jogo inteiro usa, a maioria fora dos quatro recortes do Draconya e fora do
+inventário do pacote (`packs/tibia-1332.json` é a sombra de Thais/Rat Cellars/Rotworm
+Caves/Dragon Lair, não do jogo inteiro) — gerar a tabela toda faria `packProblems` recusar id
+que nenhum mapa usa, e o boot cairia por causa de porta que não está em lugar nenhum do jogo
+importado. `packProblems` confere cada estado de cada chave contra o pacote, como `corpses`.
+
 ## Loot (FUN-63)
 
 A tabela do monstro separa **moeda** de **item**: `loot.gold` é `{ chance, min, max }` e
@@ -243,10 +484,21 @@ em vez de virar um slot morto que ninguém explica.
 **Suprimento é abstrato** (AB-01, ADR 0032 d.6). Poção e runa vivem em `supplies/*.json` com
 `price`, `effect`, `requires` e `group`; o uso debita gold direto (`useSupply`), sem pilha e sem
 reposição. O vocabulário v2 do bot (AB-03) usa o token `supply` com `supplyId`, e
-`validateBotConfigV2` cruza `spellId`/`supplyId` contra os catálogos. A carga de bênção é a única
-exceção: segue item `kind: 'consumable'` **não-empilhável** em `items/blessing-charge.json`, sem
-`restock` nem `group` obrigatórios, e quem a consome é a TP-03 (M22). O motor por grupo é a AB-07
+`validateBotConfigV2` cruza `spellId`/`supplyId` contra os catálogos. O motor por grupo é a AB-07
 (#422).
+
+A carga de bênção (`items/blessing-charge.json`, item `consumable` não-empilhável do M22) foi
+**removida pelo #570**: bênção deixou de ser item de mochila e virou serviço de Cidade (ADR
+0052) — intenção C2S tratada pela sessão de Cidade, gold pelo ledger, nunca um `use-item`. O
+catálogo novo é `data/blessings/*.json` (`blessingSchema`): sete bênçãos PvE (o `Blessings.All`
+do Canary tem 8 ids; o 1º, Twist of Fate, é PvP e fica fora), cada uma com `order` — o índice do
+BIT que `CharacterRuntime.blessings` guarda (`packages/sim/src/blessings.ts`) — e `enhanced`
+(as duas mais caras, Heart/Blood of the Mountain). O preço por level é `progression.
+blessingPricing` (`getBlessingCost` do Canary, `blessing.lua:148-166`): faixa fixa até o level
+30, faixa linear até o 119, faixa linear com base maior dali em diante — `enhanced` multiplica
+mais em cada faixa —, e GRÁTIS abaixo do level 21 (o Adventurer's Blessing, `config.lua.dist:
+496`). A redução na morte é `deathPenalty.blessingReduction` (8%) MULTIPLICADA pela contagem de
+bits — nunca mais a soma pronta de um binário `premium`.
 
 ## Skills (FUN-75)
 
@@ -282,6 +534,25 @@ recusa `defense > 0` fora daí. O perfil declara `combat.defense` (`blockChance`
 `skillId`); ausente é o estágio identidade, que preserva o v1. A `skillId` precisa existir no
 catálogo de skills E subir por `shield-block` — as duas coisas são conferidas no boot, porque uma
 referência torta deixaria o escudo sem treinar ou uma skill que nunca sobe.
+
+**`extraDefense`/`spellbook`/`quiver` só existem para a conta do JOGADOR** (#549, M30-02;
+`sim/combat/player-defense.ts`) — diferente de `defense` acima, nenhum dos três entra no
+`combat-v3` de monstro nem no bloqueio do CMB-04. `extraDefense` (só `kind: 'weapon'`) é o
+`extradef` do Canary, somado ao `defense` do ESCUDO (ou da própria arma, se for de duas mãos) —
+a Mystic Blade do kit level 200 é o único item que o declara hoje. `spellbook`/`quiver` (só
+`kind: 'shield'`, mutuamente exclusivos) marcam o "escudo" que usa `secondaryShield` da vocação
+em vez de `primaryShield` na mitigação — o Spellbook of Mind Control (Sorcerer/Druid) declara o
+primeiro; nenhum item hoje declara o segundo (a Royal Crossbow do Paladin é de duas mãos e usa
+`Weapon.ammoFamily` para o mesmo efeito, não um item de escudo).
+
+**`vocation.mitigation`/`progression.mitigation`** (#549, M30-02) são o `<mitigation multiplier
+primaryShield secondaryShield>` de `vocations.xml` — SEM relação com `mitigationSchema`
+(resistência/imunidade por tipo, CMB-03) nem com `Monster.defenseMitigation` (ADR 0040), apesar
+do nome repetido (o próprio Canary também reusa "mitigação" para os três). O de `progression` tem
+DEFAULT (os números da vocação `None`) — diferente de `regen`, que fica sem um de propósito —
+porque aqui o número É o do Canary, verificado, e o default só existe para não reabrir a dúzia de
+fixtures de teste que constroem `Progression` sem falar de combate; o conteúdo REAL declara os
+três de qualquer forma.
 
 **O kit de nascimento e as armas de vocação** (#151, ADR 0026) são os primeiros itens com
 que o jogo se compromete, e cada id de aparência foi **conferido de olho** — o índice da
@@ -324,6 +595,17 @@ sobrevive como fallback legado do conteúdo de teste — se ele e o kit coexiste
 a arma declarada seja uma das peças, porque o host prefere o kit e o campo ficaria só a mentira
 de exibição; é daí que o `catalogue` deriva a arma que o diálogo do level 8 mostra.
 
+**`creatureProduct: true` é do importador — e o override o leva ao item autoral** (#603, o charm
+Gut): o `scripts/catalog/items.ts` o escreve em todo item da fatia `creature-products`
+(`primarytype="creature products"`), e `sim/loot.ts` o lê para somar o Gut à chance de drop. Item
+autoral (`data/items/*.json`) vence o gerado no mesmo slug, então o flag nunca chegaria a ele: o
+`reconcileAuthored` emite o override `data/items/overrides/<id>.json` (`patch.creatureProduct:
+true`, com o motivo) sozinho, a cada `pnpm catalog:import items`. São cinco hoje — `worm`,
+`green-dragon-leather`, `green-dragon-scale`, `red-dragon-leather`, `red-dragon-scale`, justo os
+drops do Dragon, do Dragon Lord, do Rotworm e da Cave Rat. Item autoral novo que o Canary declare
+creature product não precisa de edição à mão: reimporte. O teste de `charms-combat.test.ts` cruza o
+staging inteiro com o conteúdo carregado, então o esquecimento quebra o `pnpm check`.
+
 ## Munição (#151, AB-02, ADR 0032 decisão 7)
 
 **Munição é abstrata** (ADR 0032 d.7; a decisão 3 do ADR 0026 volta a valer): flecha e virote
@@ -343,6 +625,19 @@ família (a primeira em ordem de id), que também é paga. O primeiro colar (`gl
 (`wooden-shield`, `kind: 'shield'`, `slot: 'shield'`, `defense`) entram como itens; o consumo da
 carga é a AB-06 (#421).
 
+## O Treino (#631, ADR 0059)
+
+`data/training/baseline.json` (`trainingSchema`, `Content.training` opcional) guarda o boneco (`rate`
+100), o que cada golpe rende (`7` tries, `600` de mana gasta), onde ele está no mapa da Cidade
+(`place.stand`/`place.dummy`, conferidos no boot: o tile do personagem é andável e adjacente ao
+boneco) e o offline training (banco 12 h, carência 10 min, teto do "fora" 21 dias, teto de gasto
+Free 6 h / Premium 12 h, o livro). Todo número do Canary cita a fonte no `_open`. O item ganha três
+campos: `exercise: { skillId }` (só `kind: 'other'` com `charges`, e a skill tem de existir),
+`purchasable: true` e `buyPrice` — sempre JUNTOS. As 21 exercise weapons vêm do importador de itens
+(`scripts/catalog/items.ts`, fatia `exercise-weapons`): cargas e skill da tabela Lua, preço = o MENOR
+`buy` de NPC do Canary; as exercise wraps de fist (Monk) e as de 50 cargas ficam fora do corte.
+`ITEM_ORIGINS` ganhou `purchase` (a compra do NPC; `market` é o comércio entre jogadores).
+
 ## Como testar
 
 ```
@@ -356,6 +651,12 @@ entre arquivos resolvem.
 
 - É tentador colocar lógica aqui ("esse monstro se comporta assim"). Comportamento é `sim`;
   aqui só ficam os números e as tabelas que o comportamento lê.
+- **Uma porta TRANCADA (id `locked` de `KeyDoorTable`) é `.` na grade, não `#`** (#727, ADR
+  0050 d.1) — o mesmo vale para toda porta/capim/pile/rope spot/ladder/alavanca classificados.
+  Quem espera "porta fechada bloqueia o bot" precisa olhar `interactables[].initialState` e
+  `requires`, não `isBlocked`: até a #728 (`TileOverrides`) pousar, NADA impede o bot de andar
+  por cima de uma porta trancada — é a troca deliberada do ADR (a alternativa, manter `#` para
+  sempre, prendia o bot atrás de toda porta de Thais sem jeito nenhum de destrancar).
 - **`lure` e `ringSwap` são configuração de PERSONAGEM, não conteúdo** (FUN-87). Os schemas
   moram aqui porque o vocabulário do bot mora aqui; os valores vêm do `bot_config` de quem
   configurou. Nenhum arquivo de `data/` os define, e nenhum deveria.
@@ -373,16 +674,108 @@ entre arquivos resolvem.
   da escada assim que o passo pisa nela — exatamente como `move()` do `sim` resolve de verdade.
   Um tile que É origem de escada nunca é o problema por si só; o que é sempre um erro é um ponto
   de PASSAGEM (`--via` do `trace-route.ts`) sobre um degrau, porque ninguém "para" numa escada.
-- **`routeSchema.spawnPoints` ganhou `monsterId`, `at` e `respawnDelayMs`, todos opcionais e
-  todos por PONTO** (#519, o formato do spawn do Canary — um `<monster>` por posição, com
-  `spawntime` próprio, nunca um sorteio por zona). Ausentes, o comportamento é o de sempre:
-  `Spawner` sorteia da composição, a posição é o tile do `routeIndex`, o respawn usa o
-  `respawnDelayMs` da DIFICULDADE. `routeIndex` continua obrigatório mesmo com `at` declarado —
-  ele ancora ao laço (ordem, andar de referência); `at` é só a posição de nascimento.
+- **`routeSchema.spawnPoints[i].monsterId`/`at`/`respawnDelayMs` são OBRIGATÓRIOS desde o #583**
+  (nasceram opcionais no #519, o formato do spawn do Canary — um `<monster>` por posição, com
+  `spawntime` próprio, nunca um sorteio por zona; `at` continua opcional, só posição de
+  nascimento). Um de `monsterId`/`monsters` é exigido por `.refine` — não existe mais
+  composição de dificuldade para cair como fallback quando o ponto não declara nada (fim do
+  pull por dificuldade, ADR 0039). `routeIndex` continua obrigatório mesmo com `at` declarado —
+  ele ancora ao laço (ordem, andar de referência).
+- **`routeSchema.spawnPoints` ganhou `monsters` (#582)**: vários candidatos com peso na MESMA
+  posição — o caso do Canary em que dois `<monster>` do mesmo `<spawn>` caem exatamente no
+  mesmo ponto (`spawn_monster.cpp:90-96`). Mutuamente exclusivo com `monsterId` (`.refine`); o
+  `Spawner` sorteia entre os candidatos DO PONTO, um sorteio só por resolução de spawn.
+  Nenhum ponto do recorte real (Darashia Dragon Lair, 47 pontos) usa este campo — `weight` não
+  ocorre em nenhuma das 187081 linhas de `otservbr-monster.xml` —, mas o mecanismo existe no
+  Canary e `scripts/catalog/spawns.ts` precisa reconhecê-lo sem quebrar quando aparecer.
 - **`monsterSchema.blockable` é o `isBlockable` do TFS/Canary, e o default é `false`** (#519) —
   NÃO esperar o jogador sair da vista antes de respawnar, porque é isso que 1.640 dos 1.656
-  monstros do bestiário do Canary fazem, Dragon e Dragon Lord inclusive. `spawnClearRadius`
-  (#236) da hunt só vale para quem declara `blockable: true` — Rat e Rotworm o fazem, porque o
-  comportamento deles vem do Huntera observado, não do Canary, e não podia mudar aqui.
+  monstros do bestiário do Canary fazem, Dragon e Dragon Lord inclusive. O campo da HUNT que
+  fazia isso antes (`spawnClearRadius`, #236) foi REMOVIDO no #583; hoje `blockable: true` no
+  MONSTRO — Rat e Rotworm o declaram, comportamento do Huntera observado, preservado por decisão
+  explícita, não do Canary — só vale para RESPAWN pós-morte, nunca para a população inicial da
+  hunt (que sempre nasce na hora, como o `startup()` do Canary).
+- **A condição `speed` (CMB-11, #556) é `delta` OU `formula`, nunca os dois nem nenhum, e a
+  `key` é FIXA** (`conditionEffectSchema`/`conditionSpecSchema`). `delta` (inteiro, milésimos) é
+  o formato do `speedChange` de ATAQUE/DEFESA de monstro, copiado sem conversão do Lua; `formula`
+  (`{ mina, minb, maxa, maxb }`) é o formato de RUNA/MAGIA, o `setFormula` do Canary/TFS
+  transcrito. `type` (`'haste' | 'paralyze'`) é o nome do Tibia — não é derivado do sinal
+  calculado, porque só o `sim` sabe o resultado depois de sortear. `SPEED_CONDITION_KEY`
+  (`'speed'`) é OBRIGATÓRIA em `conditionSpecSchema.key` sempre que `effect.kind === 'speed'` —
+  `buildContent` recusa qualquer outra —, e é essa chave única compartilhada que faz haste e
+  paralyze de fontes diferentes se substituírem no `sim`, sem lógica de exclusão mútua a mais.
+- **`monsterDefenseSchema.heal` virou OPCIONAL, e `condition` é a alternativa** (CMB-11, #556) —
+  `buildContent` exige pelo menos um dos dois; uma `condition` de defesa só aceita `type:
+  'haste'` (o self-haste do Doom Deer), nunca `paralyze` — uma defesa que se paralisa sozinha
+  não é o mecanismo que o bestiário observado usa.
+- **`item.combatModifiers` é pontos-base (×10000); `monster.critChance` é PERCENTUAL** (M30-04,
+  #551) — unidades DIFERENTES de propósito, cada uma a escala do campo correspondente no Canary
+  (`items.xml` já usa ×10000; o Lua do monstro usa `critChance = 10` direto). Quem soma os dois
+  em pontos-base é o `sim` (`Inventory.combatModifiers`/`monsterCriticalModifiers`,
+  `combat/modifiers.ts`), não este pacote — `content` só valida a forma. `lifeleechchance`/
+  `manaleechchance` do Canary (`items.xml`) NÃO têm campo aqui: `Game::calculateLeechAmount` só
+  lê a skill AMOUNT, e o próprio Canary as pula na descrição do item — são vestigiais, sem
+  consumidor na resolução de dano (a pergunta do `_open` do #548 "conferir se a chance ainda é
+  lida" está respondida: não é). Nenhum item ou monstro do catálogo real declara os campos novos
+  ainda — os quatro monstros do bestiário (rat, rotworm, dragon, dragon lord) ficam no default
+  `critChance: 0`, a identidade; só 6 bosses do Canary declaram, fora do recorte hoje.
+- **`item.absorb`/`increase`/`reflect`/`cleavePercent` são PERCENTUAL INTEIRO** (M30-05, #552),
+  a escala do `items.xml` do Canary — diferente de `mitigation.resistances` (fração) e de
+  `combatModifiers` (pontos-base). O `combat-v3` aplica a absorção item a item com arredondamento,
+  e a conta inteira é a do Canary. `mitigation.resistances` de ITEM e `absorb.<tipo>.percent` são
+  o MESMO `absorbpercent*`: o schema recusa os dois no mesmo tipo. O reflexo compila no boot
+  (`compileReflect`, tabela completa por tipo, ausente quando nada reflete) — é a forma que o
+  reflexo de monstro (#683) reusa.
+- **`item.elementalBond` e `item.bonuses.magicShieldCapacity` são DADO sem consumidor no `sim`**
+  (#627, M44-09) — de propósito, e não por esquecimento. No Canary (47dfd51) o bond só troca o
+  tipo de dano da magia de `VOCATION_MONK_CIP` (`combat.cpp:159-174`) e os 32 itens são todos
+  arma `fist` (fora do corte: Monk e DT-01); a capacidade só aparece na descrição do item e na
+  Cyclopedia, e `magic_shield.lua` monta o balde sem consultá-la. Ligar qualquer um dos dois ao
+  combate seria comportamento que o Canary não tem (ADR 0037 d.6). O bond é só `kind: 'weapon'`
+  (`buildContent` recusa o resto) e a capacidade só em item com `slot`; o catálogo real tem zero
+  itens com bond e exatamente quatro com capacidade (`load.test.ts` prende as duas contagens).
+  Ver `docs/product/items.md`, "Atributos raros".
+- **O monstro tem schema de mitigação PRÓPRIO** (#683): `monsterMitigationSchema` aceita
+  resistência em `[-2, 1)` (o `minElementalResistance` do Canary); o `mitigationSchema` do item
+  continua `[-1, 1)`. Os dois são `mitigationSchemaWith(piso)` — alargar o compartilhado mudaria o
+  item sem pedido. `monster.elementHealing` (teto 500) e `monster.reflect` (teto 200) são
+  PERCENTUAL INTEIRO, como o reflexo de item, e compilam no boot (`compileElementHealing`,
+  `compileReflect` com `flat` zero); ausentes no monstro compilado quando nada cura/reflete.
+- **`monster.conditionImmunities` é o `monster.immunities[].condition` do Canary** (#559, ADR 0041
+  d.2) — distinto de `mitigation.immunities` (`combat = true`, DANO). Catorze nomes:
+  `paralyze`, `drunk`, `invisible`, as oito DOTs (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY`, a
+  `Combat::DamageToConditionType`: `physical` sangra, `earth` envenena, `fire` queima…) e, desde o
+  #622, `rooted`, `feared` e `pacified` — o vocabulário do ADR, NÃO os nomes do Lua (`bleed`,
+  `fire`, `earth`…), que o importador traduz. Os três últimos são AUTORAIS: o Lua não os nomeia, e
+  nenhum monstro do bestiário os declara. **`invisible` significa "enxerga o invisível"**
+  (`Monster::canSeeInvisibility`), nunca "não pode ficar invisível": é a exceção que não bloqueia a
+  condição. `outfit` (119 monstros) fica fora até o M44-03. Ausente é `[]`, sem imunidade nenhuma.
+- **As condições de controle (#622, M44-04) são chave RESERVADA sem campo próprio, como o drunk:**
+  `rooted`, `feared` e `pacified` (`ROOTED_CONDITION_KEY`… em `schemas.ts`), e `conditionSpecSchema`
+  confere as duas implicações (a chave só com o efeito dela, e vice-versa). **Exigem
+  `merge: 'longest'`** — o quarto valor de `conditionMergeSchema`, a regra de
+  `Condition::updateCondition` do Canary (prazo menor não encurta o que já corre) —, e o schema
+  recusa qualquer outro valor: não é escolha do conteúdo. Nunca como self-buff de defesa
+  (`DEFENSE_SELF_CONDITION_KINDS`). O `haste` de magia ganhou `pacifies: true` (Swift Foot,
+  `swift_foot.lua`: acelera e pacifica pelos mesmos 10 s).
+- **`monster.faction`/`enemyFactions` são o `Faction_t` do Canary** (#619, M44-01): dez nomes em
+  `MONSTER_FACTIONS`, **na ordem do enum — o índice É o valor numérico** (`factionValue`), porque o
+  `sim` soma `valor × 100` à distância no desempate de alvo (o jogador = 1 antes de qualquer monstro
+  inimigo). `faction` ausente é `default`; `enemyFactions` só vale para quem tem facção
+  (`isEnemyFaction` só é consultado com `getFaction() != FACTION_DEFAULT`), e `player` na lista é o
+  que faz o monstro caçar o jogador — as três da Lion não o listam e o ignoram. Os nomes não são os
+  identificadores colados do Lua (`FACTION_LIONUSURPERS` → `lion-usurpers`); o importador traduz e
+  bloqueia uma constante desconhecida. Nenhum campo tem default preenchido: ausência é o monstro de
+  sempre.
 
 Issue: FUN-8.
+- **Os efeitos utilitários de magia (#623: `light`, `levitate`, `magic-rope`, `find`, `food`)
+  vivem em `spellEffectSchema`, e cada um traz uma armadilha.** O parâmetro de TEXTO do Canary
+  (`exani hur up`/`down`) vira DOIS ids (`levitate-up`/`levitate-down`) — a barra de ações é do
+  Draconya, e um campo de parâmetro em `botActionV2Schema` só existe para a invocação (`monsterId`).
+  A vocação dupla do Canary vira um arquivo por vocação (`ultimate-light-druid`/`-sorcerer`); a
+  geral não declara `vocationId` (Light, Great Light, Levitate, Magic Rope, Find). `food.items` é
+  ORDENADO (o índice do sorteio é a posição) e `buildContent` exige que cada id seja comida de
+  verdade (consumível com efeito `food`) e que não repita. `light.color` é o índice da paleta de 216
+  cores do Tibia (215 é branco). Ultimate Light é nível 8 no Canary e 9 no TFS: vale o Canary
+  (ADR 0037 d.4).

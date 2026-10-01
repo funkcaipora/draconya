@@ -195,7 +195,9 @@ de cada membro se aplica à **cota** dele, somando-se aos demais bônus numa mul
   (#563, `applyExperienceBonus`), e o abate conta no Bestiário de **todo** elegível (decisão 4),
   não só do matador.
 Level up e marco de Bestiário são eventos notáveis que dizem de quem (`id/level`,
-`id/monstro/marco`).
+`id/monstro/marco`). O abate de BOSS não passa por `eligible`: o Bosstiary (#629) conta para os
+`killers` do Canary — quem bateu no boss, mais o roster inteiro enquanto a XP compartilhada está
+ativa —, sem o portão de stamina e de vida da XP (ver [`bosses.md`](./bosses.md), "O Bosstiary").
 
 O desconto de −10 pontos é gatilhado pelo TAMANHO da party (`n` de personagens), não pela
 contagem de vocações únicas — o comentário do próprio Canary fala em "todas as vocações
@@ -297,7 +299,10 @@ null`; `null` = tudo) e **o que vender automaticamente** (`autoSell`), com um li
 Premium do **personagem líder**:
 
 - `collect` filtra **depois** de `rollLoot` (zero RNG a mais): item fora da lista **não é
-  coletado** — fica no cadáver e não conta `itemsLooted`. Gold nunca é item: entra sempre.
+  coletado** — fica no cadáver e não conta `itemsLooted`. Desde o ADR 0048 isso é LITERAL: o
+  cadáver do monstro carrega o item de verdade, até decair (`corpseTtlMs`) — antes deste ADR a
+  frase descrevia um item que simplesmente desaparecia, porque o cadáver ainda não guardava
+  nada. Gold nunca é item: entra sempre (com `splitLoot` ligado, direto na bolsa).
 - `autoSell` é subconjunto lógico da coleta: item na lista efetiva **não entra na bolsa** — vira
   `value × quantity` gold na hora, dividido entre os elegíveis com `splitEqually` (resto na ordem
   de entrada), creditado em `goldDelta`/`goldGained` de cada um. Emite `party-settlement` com
@@ -337,8 +342,12 @@ d.8).
 Sair e morrer são `leave`, não `end` (decisão 7): quem sai leva o **próprio extrato** — um
 `Receipt` por membro, cada um com `seq` próprio, uma linha de ledger cada (invariante 10) — e a
 cota do settlement; a sessão continua para os outros. Morte mantém a penalidade de hoje. Saída
-pelo cliente é `leave-hunt` (opcode 10), como no solo; o `session-ended` que volta é o extrato de
-quem saiu. Depois de uma saída, quem tem a regra `party-member-lost` no bot sai também, em cascata
+pelo cliente é `leave-hunt` (opcode 10), como no solo — e, desde o #802, ela PEDE a saída ao
+ruleset (`requestExit`): o membro sai depois do `exitDelayMs` e fora da janela de combate de 60 s,
+e o `session-ended` que volta é o extrato de quem saiu. O membro que sai por dentro do `sim`
+(`member-left`: morte, regra de saída, esta saída) volta para a Cidade pela mesma sucessão — o
+construtor de sessão recebe o personagem que já saiu (`departed`), porque ele não está mais em
+`from.participants`. Depois de uma saída, quem tem a regra `party-member-lost` no bot sai também, em cascata
 e na ordem de entrada (`bot.md`). O último a sair encerra a sessão com o motivo dele; se a cascata
 levou alguém, o motivo é `exit-rule`. Uma party que ficou com um membro vira, na prática, solo:
 morte encerra, loot é do matador sem sorteio.
@@ -362,8 +371,9 @@ líder, encerra a sessão da party para os outros** por um clique só:
   membro leva o seu `Receipt` com `reason: 'party-vote'` — a mesma máquina do encerramento por
   morte/saída, com um motivo novo. Quem sair no meio da votação deixa de contar; se os que
   ficaram já tinham aprovado todo, a sessão encerra depois do extrato de quem saiu.
-- **Sair sozinho continua livre.** `leave-hunt` (opcode 10) tira só quem pediu, com o extrato
-  dele, e não abre votação nenhuma.
+- **Sair sozinho continua livre de votação.** `leave-hunt` (opcode 10) tira só quem pediu, com o
+  extrato dele, e não abre votação nenhuma — mas, desde o #802, respeita o `exitDelayMs` e a
+  trava de combate como no solo (`hunt.md`, "Saída da hunt").
 - **A votação atravessa o snapshot** (`endVote` no estado do ruleset, sem bump de
   `SNAPSHOT_FORMAT_VERSION`): quem reconecta no meio da janela recebe o estado pelo `party-end-vote`
   do attach e não perde quem já aprovou.
@@ -451,11 +461,44 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
   `eligible ∩ presentes`.
 - `autoSellLimit` = `autoSellItemTypes.{free,premium}` = 5/20 do **personagem líder**.
 - `itemSchema.value` é obrigatório; `0` é "não se vende" e vai para o líder.
+- O campo de um membro não fere membro: o fire field (ou qualquer campo de dano) lançado por um
+  personagem — ou pela invocação dele — não pega personagem nem invocação de personagem, o
+  próprio lançador incluso; o monstro no mesmo campo continua levando (OW-05, #826, ver
+  `combat.md`). A parede de um membro (Magic Wall, Wild Growth) cede ao passo de qualquer
+  membro, e segue barrando monstro.
 - Sair e morrer são `leave` com extrato próprio; o último encerra; `party-member-lost` cascateia.
 - Settlement ao sair, no fim e ao desligar `splitLoot`; `reason` no evento.
 - Encerrar para todos exige o sim de todos (`party-end-vote`, C2S 18 / S2C 31): proposta do líder,
   aprovação de cada presente em 60 s lógicos, `session.end('party-vote')` só com todos os sins.
   Sair sozinho continua `leave-hunt` (10), livre.
+
+### Magias de party — Heal, Protect, Enchant e Train Party (#588)
+
+Uma por vocação, level 32: Heal Party (Druid, regenera vida), Protect Party (Paladin, +shielding),
+Enchant Party (Sorcerer, +magic level) e Train Party (Knight, +skills corpo a corpo/distância).
+As quatro seguem o MESMO mecanismo do Canary (`data/scripts/spells/party/*.lua`), novo neste
+motor: alvo **raio**, não área — quem está a até `range` tiles (36, distância Chebyshev, mesmo
+andar) do lançador, incluindo ele mesmo, recebe a condição, sem forma desenhada no chão (o
+`AREA_CIRCLE5X5` do script é só o efeito visual). Content declara isso em
+`spellEffectSchema` com `target: 'party'` — nos efeitos `heal-over-time` (Heal Party) e `buff`
+(as outras três) — e `range`; `sim` (`HuntRuleset#collectPartyAllies`,
+`packages/sim/src/rulesets/hunt.ts`) resolve quem está no alcance a partir de
+`session.participants`, e aplica a MESMA condição (sem sorteio por membro) a cada um.
+
+Sozinho, o lançador recusa `no-target` — a mesma mensagem "No party members in range" do Canary,
+antes de gastar mana. Com 2+ no alcance, o custo escala pela fórmula do Canary
+(`manaCost: { kind: 'party-scaled', base, decay }`, `packages/content/src/schemas.ts`):
+`mana = ceil((decay^(n−1) × base) × n)`, `n` sendo quantos estão no alcance (líder incluso) —
+NUNCA o `base` de exibição do catálogo, que é só o custo anunciado no grimório
+(`manaCostDisplayOf`). `partyScaledManaCost` (`packages/sim/src/party.ts`) é a conta pura,
+testada por tabela nos quatro `n` (1 a 4) das quatro magias.
+
+Train Party ilustra uma divergência deliberada do Canary: `CONDITION_PARAM_SKILL_MELEE` do
+Canary é uma skill agregada que este motor não tem — o catálogo separa `axe`/`club`/`sword`/
+`fist` (#152) —, então o `skillDelta` de +3 entra nas QUATRO, para cobrir qualquer arma corpo a
+corpo que o membro estiver usando no momento; é decisão deste conteúdo, não um número do Canary.
+`skillDeltas` no `buff` de MAGIA é novo (só o `buff` de SUPPLY o tinha, #576) — o consumo é o
+MESMO `Conditions.skillBonus` já ativo (`packages/sim/src/conditions.ts`), sem lógica nova.
 
 ## Parâmetros de balanceamento
 
@@ -475,6 +518,9 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
 | Raio de entrada do 2º+ membro | 3 tiles do ponto de entrada | `packages/sim/src/rulesets/hunt.ts`, `ENTRY_RADIUS` |
 | Janela de aprovação da votação de encerrar | 60 000 ms (lógico) | `packages/sim/src/rulesets/hunt.ts`, `END_VOTE_WINDOW_MS` |
 | Alcance provisório da poção com `target: 'friend'` | 1 tile | `packages/content/data/supplies/{health-potion,mana-potion}.json`, `effect.range` |
+| Alcance das magias de party (#588) | 36 tiles, distância Chebyshev | `packages/content/data/spells/{heal,protect,enchant,train}-party.json`, `effect.range` |
+| Custo de mana das magias de party (`base`/`decay` do Canary) | Heal 120, Protect 90, Enchant 120, Train 60 — `decay` 0,9 nas quatro | `packages/content/data/spells/{heal,protect,enchant,train}-party.json`, `manaCost` |
+| Duração e números do efeito das magias de party | 2 min (120 000 ms); Heal +20 a cada 2 s; Protect +3 shielding; Enchant +1 magic; Train +3 em axe/club/sword/fist/distance | `packages/content/data/spells/{heal,protect,enchant,train}-party.json`, `effect` |
 | Intervalo de polling de `/mine` | 2 000 ms | `packages/client/src/party/store.ts`, `PARTY_POLL_MS` — dono único do `setInterval`: `Shell.tsx` |
 | Intervalo de polling da busca de salas | 2 000 ms, só com a view de busca montada | `packages/client/src/shell/PartyModal.tsx`, `ROOMS_POLL_MS` |
 

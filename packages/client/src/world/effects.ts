@@ -11,7 +11,9 @@
 // elemento do golpe. Continuam ajustáveis aqui num lugar só, e continuam sendo apresentação —
 // o `sim` não sabe de cor nem de px.
 
+import type { MonsterRace } from '@draconya/protocol';
 import type { FloatingText, HitKind, Point } from '../state/world.js';
+import { tibiaRgb } from './minimap.js';
 
 /**
  * Qual fase de um efeito está tocando em `elapsedMs`, ou `null` quando ele acabou.
@@ -128,9 +130,15 @@ const FLOATING_TEXT_COLORS: Readonly<Record<HitKind, number>> = {
 };
 
 /**
- * A cor de cada TIPO DE DANO (RF-02, #479). É a paleta do cliente de referência: gelo azul
- * claro, fogo laranja, energia roxa, terra verde, sagrado amarelo, morte cinza, físico
- * vermelho, cura verde. `arcane` cai no roxo da magia — é o tipo "mágico" do v1.
+ * A cor de cada TIPO DE DANO (RF-02, #479; drown/lifedrain/manadrain pelo #547, M29-07). É a
+ * paleta do cliente de referência: gelo azul claro, fogo laranja, energia roxa, terra verde,
+ * sagrado amarelo, morte cinza, físico vermelho, cura verde. `arcane` cai no roxo da magia — é
+ * o tipo "mágico" do v1. `lifedrain` reusa o vermelho do físico — o Canary manda a MESMA cor
+ * (`TEXTCOLOR_RED`, `game.cpp`) pros dois, e no Tibia o dreno de vida lê como um golpe vermelho
+ * comum. `drown` e `manadrain` são dois azuis distintos entre si e do gelo: `drown` mais claro
+ * (afogamento, `TEXTCOLOR_LIGHTBLUE`), `manadrain` mais saturado (a cor da própria mana,
+ * `TEXTCOLOR_BLUE`) — aproximações RGB do nome do Canary, não uma paleta extraída (ADR 0019: só
+ * o NOME da cor é fato de domínio, o pixel exato não).
  */
 export const ELEMENT_COLORS: Readonly<Record<string, number>> = {
   physical: 0xff0000,
@@ -140,6 +148,9 @@ export const ELEMENT_COLORS: Readonly<Record<string, number>> = {
   earth: 0x00cc00,
   holy: 0xffff00,
   death: 0xcccccc,
+  drown: 0x3399ff,
+  lifedrain: 0xff0000,
+  manadrain: 0x0033ff,
   arcane: 0xcc33ff,
   heal: 0x00ff00,
 };
@@ -150,10 +161,41 @@ export function elementColor(type: string): number {
 }
 
 /**
+ * A cor do número do golpe FÍSICO por RAÇA do alvo (#620, `Game::combatGetTypeInfo` do Canary):
+ * sangue vermelho, veneno verde, morto-vivo / tinta / chocolate cinza, doce vermelho-escuro, fogo
+ * laranja e energia roxa. Os valores são os índices `TextColor_t` do Canary na paleta de 216 cores
+ * do Tibia (`tibiaRgb`, a mesma do automapa): `TEXTCOLOR_RED` 180, `LIGHTGREEN` 30, `LIGHTGREY` 129,
+ * `DARKRED` 108, `ORANGE` 198, `PURPLE` 154. **Só o físico**: o elemento tem a cor dele, e a raça
+ * do alvo não a muda.
+ */
+const RACE_PHYSICAL_TEXT_COLOR: Readonly<Record<MonsterRace, number>> = {
+  blood: 180,
+  venom: 30,
+  undead: 129,
+  ink: 129,
+  chocolate: 129,
+  candy: 108,
+  fire: 198,
+  energy: 154,
+};
+
+/** A cor do golpe físico num alvo de raça `race`, como `0xRRGGBB`. */
+export function raceHitColor(race: MonsterRace): number {
+  const [r, g, b] = tibiaRgb(RACE_PHYSICAL_TEXT_COLOR[race]);
+  return (r << 16) | (g << 8) | b;
+}
+
+/**
  * A cor do número: o ELEMENTO quando o servidor o mandou, senão o `kind` (RF-02). A ausência é
  * a degradação para um nó `game` anterior — a mesma leitura de antes da #479.
+ *
+ * **O golpe físico segue a RAÇA do alvo** (#620), quando o servidor a mandou: o golpe é `physical`
+ * pelo elemento, ou `melee` sem elemento (o nó anterior). Sem raça é `blood`, o vermelho de
+ * sempre — o herói e todo monstro comum.
  */
-export function floatingTextColor(kind: HitKind, damageType?: string): number {
+export function floatingTextColor(kind: HitKind, damageType?: string, race?: MonsterRace): number {
+  const physical = damageType === 'physical' || (damageType === undefined && kind === 'melee');
+  if (physical && race !== undefined) return raceHitColor(race);
   return damageType === undefined ? FLOATING_TEXT_COLORS[kind] : elementColor(damageType);
 }
 

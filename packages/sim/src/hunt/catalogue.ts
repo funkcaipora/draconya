@@ -18,10 +18,18 @@ export interface HuntListing {
   readonly name: string;
   /** §14.3: isto o jogador vê. */
   readonly recommendedLevel: number;
-  /** As dificuldades que ESTA hunt define — não obrigatoriamente as quatro. */
+  /**
+   * Vestígio do pull por dificuldade, removido do conteúdo pelo #583 (ADR 0039): toda hunt
+   * nasce direto dos pontos de spawn, sem escolha de tamanho. O campo continua existindo só
+   * por compatibilidade de protocolo (#584) — sempre `['default']`, um nome só, até o #584
+   * tirar de vez a tela que ainda pede para escolher uma dificuldade.
+   */
   readonly difficulties: readonly HuntDifficultyName[];
   readonly description?: string;
 }
+
+/** O único nome de "dificuldade" que sobrou depois do #583 — ver `HuntListing.difficulties`. */
+export const DEFAULT_DIFFICULTY_NAME = 'default';
 
 /**
  * As hunts disponíveis, em ordem de level recomendado.
@@ -38,7 +46,7 @@ export function huntListings(content: Content): HuntListing[] {
       id: hunt.id,
       name: hunt.name,
       recommendedLevel: hunt.recommendedLevel,
-      difficulties: Object.keys(hunt.difficulties) as HuntDifficultyName[],
+      difficulties: [DEFAULT_DIFFICULTY_NAME],
       ...(hunt.description === undefined ? {} : { description: hunt.description }),
     }))
     .sort((a, b) => a.recommendedLevel - b.recommendedLevel || a.id.localeCompare(b.id));

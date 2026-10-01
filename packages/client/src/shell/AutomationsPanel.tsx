@@ -9,16 +9,23 @@
 // O cliente só manda intenção (invariante 4): toggle/× agendam `bot-config` com debounce, e o
 // Salvar do modal manda na hora. Nada aqui calcula elegibilidade, estoque ou alvo.
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { BotAutomation } from '@draconya/content';
+import type { ItemDefinition } from '../state/hud.js';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
-import { bot, removeAutomation, setFollow, toggleAutomation } from '../bot/store.js';
+import {
+  bot, removeAutomation, setFollow, setLootFilter, toggleAutoSellItem, toggleAutomation,
+  toggleLootItem,
+} from '../bot/store.js';
 import { automationSummary, blankAutomation } from '../bot/automation-text.js';
+import { LOOT_SEARCH_RESULT_LIMIT, visibleLootItems } from './loot-filter.js';
+import { ItemSprite } from './ItemSprite.js';
 import { Panel } from './ui/Panel.js';
 import { Select } from './ui/Select.js';
 import { Switch } from './ui/Switch.js';
 import { IconButton } from './ui/IconButton.js';
 import { Button } from './ui/Button.js';
+import { Input } from './ui/Input.js';
 import { AddAutomationModal } from './AddAutomationModal.js';
 import { AutomationConfigModal } from './AutomationConfigModal.js';
 
@@ -39,10 +46,15 @@ export function AutomationsPanel({ collapsed, onToggle }: AutomationsPanelProps)
   const followState = useHudSlice((state) => state.followState);
   const automations = useStoreSlice(bot, (state) => state.draft.automations);
   const follow = useStoreSlice(bot, (state) => state.draft.follow);
+  const loot = useStoreSlice(bot, (state) => state.draft.loot);
   const save = useStoreSlice(bot, (state) => state.save);
   const reason = useStoreSlice(bot, (state) => state.reason);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<{ index: number | null; initial: BotAutomation } | null>(null);
+  // A busca do bloco Loot (#764): sem ela o catálogo inteiro (~1858 itens após a #748) montava
+  // como uma `<ul>` só, sempre — mesmo com o painel fechado. `visibleLootItems` é a decisão PURA
+  // do que aparece (`loot-filter.ts`, testado sem DOM); aqui só o texto digitado.
+  const [lootQuery, setLootQuery] = useState('');
 
   const panelProps = {
     collapsed: isCollapsed,
@@ -51,6 +63,18 @@ export function AutomationsPanel({ collapsed, onToggle }: AutomationsPanelProps)
   };
 
   const descriptor = catalogue?.bot.automations;
+  // `items`/`ammunition` calculados ANTES do retorno antecipado abaixo: hooks (`useMemo`) não
+  // podem ficar depois dele — a regra dos hooks exige a mesma ordem em toda renderização, e um
+  // `return` antes do `useMemo` faria a contagem variar entre "carregando" e catálogo pronto.
+  const items: readonly ItemDefinition[] = catalogue?.items ?? [];
+  const ammunition = catalogue?.ammunition ?? [];
+  const lootItemIds = loot?.itemIds ?? [];
+  const lootAutoSell = loot?.autoSell ?? [];
+  const lootRows = useMemo(
+    () => visibleLootItems(items, { itemIds: lootItemIds, autoSell: lootAutoSell }, lootQuery, LOOT_SEARCH_RESULT_LIMIT),
+    [items, lootItemIds, lootAutoSell, lootQuery],
+  );
+
   // Sem catálogo (ou num nó v1, que não traz `automations`) é "ainda não sei", nunca "não tem".
   if (catalogue === null || descriptor === undefined) {
     return (
@@ -60,8 +84,6 @@ export function AutomationsPanel({ collapsed, onToggle }: AutomationsPanelProps)
     );
   }
 
-  const items = catalogue.items;
-  const ammunition = catalogue.ammunition;
   const labelOf = (model: BotAutomation['model']): string =>
     descriptor.find((entry) => entry.model === model)?.label ?? model;
 
@@ -125,6 +147,66 @@ export function AutomationsPanel({ collapsed, onToggle }: AutomationsPanelProps)
         <Button variant="secondary" size="sm" block onClick={() => { setAdding(true); }}>+ Adicionar</Button>
         {/* A recusa fica na tela e o rascunho FICA: descartar seria a pior resposta a "corrija isto". */}
         {save === 'refused' && reason !== null && <p className="system-error">{reason}</p>}
+        {/* O filtro de Quick Loot (#722, ADR 0048 d.2/d.4): o que o bot coleta sozinho no abate,
+            e o que ele vende na hora — a mesma config que `#collectFromCorpse` já lê no `sim`.
+            A busca (#764) troca o "todo o catálogo numa `<ul>`" por: marcados no topo, e o resto
+            só entra pelo nome — `visibleLootItems` (`loot-filter.ts`) é quem decide. */}
+        <div className="automation-loot">
+          <Select
+            label="Loot"
+            size="sm"
+            options={[
+              { value: 'skip', label: 'Pegar tudo, exceto…' },
+              { value: 'accept', label: 'Pegar só…' },
+            ]}
+            value={loot?.filter ?? 'skip'}
+            onChange={(value) => { setLootFilter(value === 'accept' ? 'accept' : 'skip'); }}
+          />
+          <Input
+            size="sm"
+            placeholder="Buscar item…"
+            value={lootQuery}
+            className="automation-loot-search"
+            onChange={(event) => { setLootQuery(event.target.value); }}
+          />
+          {lootRows.rows.length > 0
+            ? (
+              <ul className="automation-loot-items">
+                {lootRows.rows.map((item) => (
+                  <li key={item.id} className="automation-loot-row">
+                    <span className="automation-loot-row-sprite">
+                      <ItemSprite appearanceId={item.appearanceId} name={item.name} />
+                    </span>
+                    <span className="automation-loot-row-name" title={item.name}>{item.name}</span>
+                    <Switch
+                      tone="traffic"
+                      on={loot?.itemIds.includes(item.id) ?? false}
+                      title={`${loot?.filter === 'accept' ? 'Pegar' : 'Ignorar'} ${item.name}`}
+                      onChange={() => { toggleLootItem(item.id); }}
+                    />
+                    {item.value !== undefined && item.value > 0 && (
+                      <Switch
+                        tone="gold"
+                        on={loot?.autoSell.includes(item.id) ?? false}
+                        title={`Vender ${item.name} automaticamente ao coletar`}
+                        onChange={() => { toggleAutoSellItem(item.id); }}
+                      />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )
+            : (
+              <p className="quiet automation-loot-empty">
+                {lootQuery.trim() === '' ? 'Busque um item para adicionar ao filtro.' : 'Nenhum item encontrado.'}
+              </p>
+            )}
+          {lootRows.truncated && (
+            <p className="quiet automation-loot-hint">
+              {`${String(lootRows.shownMatches)} de ${String(lootRows.matchCount)} resultados — refine a busca.`}
+            </p>
+          )}
+        </div>
       </Panel>
       {adding && (
         <AddAutomationModal

@@ -28,9 +28,17 @@ const catalog = new Map<string, Item>([
 const knight: Vocation = {
   id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
   startingWeaponItemId: 'steel-axe', spellSkill: 'magic', startingKit: [], skillMultipliers: {},
-  meleeDamageMultiplier: 1, distDamageMultiplier: 1,
+  meleeDamageMultiplier: 1, distDamageMultiplier: 1, soulMax: 100, soulGainTicksMs: 120000,
 };
 const paladin: Vocation = { ...knight, id: 'paladin', name: 'Paladin', startingWeaponItemId: 'bow' };
+const promotableKnight: Vocation = {
+  ...knight,
+  promotion: {
+    name: 'Elite Knight',
+    regen: { health: { ticksMs: 4000, amount: 1 }, mana: { ticksMs: 6000, amount: 2 } },
+    soulMax: 200, soulGainTicksMs: 15_000, minLevel: 20, price: 20_000,
+  },
+};
 
 const options = (over: Partial<VocationChoiceOptions> = {}): VocationChoiceOptions => ({
   catalog, vocationLevel: 8, instanceId: 'city-1:hero:vocation',
@@ -73,15 +81,14 @@ describe('chooseVocation', () => {
     expect([...hero.inventory.items()].map((item) => item.itemId)).toEqual(['machete']);
   });
 
-  it('keeps the choice when the weapon does not fit the capacity: it goes to the loot box', () => {
+  it('keeps the choice when the weapon does not fit the capacity: it equips anyway (ADR 0048 d.7, forceAdd ignores weight)', () => {
     // A vocação não pode ser punida pela mochila. Mutação que mata: devolver `ok: false`
-    // quando `add` recusa por peso.
+    // quando o peso estoura, ou deixar de vestir por causa dele.
     const heavy = new CharacterRuntime(state({ capacity: 20 }));
     const result = heavy.chooseVocation(knight, catalog.get('steel-axe') ?? null, options());
-    expect(result).toEqual({ ok: true, weapon: 'in-loot-box' });
+    expect(result).toEqual({ ok: true, weapon: 'equipped' });
     expect(heavy.vocationId).toBe('knight');
-    expect(heavy.lootBox.map((item) => item.itemId)).toEqual(['steel-axe']);
-    expect(heavy.inventory.equippedAt('hand')?.itemId).toBe('machete');
+    expect(heavy.inventory.equippedAt('hand')?.itemId).toBe('steel-axe');
   });
 
   it('leaves the bow in the backpack when a shield is worn (hands-full), and the choice still holds', () => {
@@ -168,18 +175,18 @@ describe('chooseVocation com o kit completo da vocação (#496)', () => {
       .toBe('vocation-choice');
   });
 
-  it('sends the piece that does not fit the capacity to the loot box, and equips what fits', () => {
-    // A vocação não pode ser punida pela mochila — nem pela metade: o que coube veste, o que
-    // não coube vai para a Caixa, e a escolha vale inteira.
-    const hero = new CharacterRuntime(state({ capacity: 60 }));
+  it('equips every piece even when none of them fits the capacity (ADR 0048 d.7, forceAdd ignores weight)', () => {
+    // A vocação não pode ser punida pela mochila — nem pela metade: a escolha vale inteira,
+    // peso nenhum.
+    const hero = new CharacterRuntime(state({ capacity: 0 }));
     const result = hero.chooseVocation(knight, null, kitOptions());
     expect(result).toEqual({
       ok: true, weapon: 'none',
-      kit: [{ itemId: 'steel-axe', status: 'equipped' }, { itemId: 'shield', status: 'in-loot-box' }],
+      kit: [{ itemId: 'steel-axe', status: 'equipped' }, { itemId: 'shield', status: 'equipped' }],
     });
     expect(hero.vocationId).toBe('knight');
-    expect(hero.lootBox.map((item) => item.itemId)).toEqual(['shield']);
     expect(hero.inventory.equippedAt('hand')?.itemId).toBe('steel-axe');
+    expect(hero.inventory.equippedAt('shield')?.itemId).toBe('shield');
   });
 
   it('keeps the legacy single-weapon path when there is no kit (test content and old calls)', () => {
@@ -187,6 +194,41 @@ describe('chooseVocation com o kit completo da vocação (#496)', () => {
     expect(hero.chooseVocation(knight, catalog.get('steel-axe') ?? null, options()))
       .toEqual({ ok: true, weapon: 'equipped' });
     expect(hero.inventory.equippedAt('hand')?.instanceId).toBe('city-1:hero:vocation');
+  });
+});
+
+describe('promote (#566, ADR 0042 decisão 1)', () => {
+  it('refuses without a chosen vocation', () => {
+    const hero = new CharacterRuntime(state({ vocationId: null, level: 20, gold: 20_000 }));
+    expect(hero.promote(promotableKnight, 20_000)).toEqual({ ok: false, reason: 'no-vocation' });
+  });
+
+  it('refuses when already promoted', () => {
+    const hero = new CharacterRuntime(state({ vocationId: 'knight', level: 20, gold: 20_000, promoted: true }));
+    expect(hero.promote(promotableKnight, 20_000)).toEqual({ ok: false, reason: 'already-promoted' });
+  });
+
+  it('refuses below the vocation minLevel', () => {
+    const hero = new CharacterRuntime(state({ vocationId: 'knight', level: 19, gold: 20_000 }));
+    expect(hero.promote(promotableKnight, 20_000)).toEqual({ ok: false, reason: 'level-too-low' });
+  });
+
+  it('refuses without enough gold', () => {
+    const hero = new CharacterRuntime(state({ vocationId: 'knight', level: 20, gold: 19_999 }));
+    expect(hero.promote(promotableKnight, 19_999)).toEqual({ ok: false, reason: 'insufficient-gold' });
+  });
+
+  it('refuses a vocation without a promotion block', () => {
+    const hero = new CharacterRuntime(state({ vocationId: 'knight', level: 20, gold: 20_000 }));
+    expect(hero.promote(knight, 20_000)).toEqual({ ok: false, reason: 'not-promotable' });
+  });
+
+  it('promotes at level 20 with 20000 gold, debiting the price and marking promoted', () => {
+    const hero = new CharacterRuntime(state({ vocationId: 'knight', level: 20, gold: 20_000 }));
+    expect(hero.promote(promotableKnight, 20_000)).toEqual({ ok: true });
+    expect(hero.promoted).toBe(true);
+    expect(hero.goldDelta).toBe(-20_000);
+    expect(hero.getState()).toMatchObject({ promoted: true });
   });
 });
 
@@ -199,5 +241,134 @@ describe('settleGoldDelta', () => {
     expect(hero.gold).toBe(11_045);
     expect(hero.goldDelta).toBe(0);
     expect(hero.getState()).toMatchObject({ gold: 11_045, goldDelta: 0 });
+  });
+});
+
+describe('storages (#731)', () => {
+  it('reads -1 (the Tibia convention) for a key never set', () => {
+    const hero = new CharacterRuntime(state());
+    expect(hero.getStorageValue('quest:rat-cellars')).toBe(-1);
+  });
+
+  it('sets and reads a storage back', () => {
+    const hero = new CharacterRuntime(state());
+    hero.setStorageValue('quest:rat-cellars', 1);
+    expect(hero.getStorageValue('quest:rat-cellars')).toBe(1);
+  });
+
+  it('setting -1 erases the key, back to "never set"', () => {
+    const hero = new CharacterRuntime(state());
+    hero.setStorageValue('quest:rat-cellars', 1);
+    hero.setStorageValue('quest:rat-cellars', -1);
+    expect(hero.getStorageValue('quest:rat-cellars')).toBe(-1);
+    expect(hero.storages.has('quest:rat-cellars')).toBe(false);
+  });
+
+  it('always includes storages in getState, even when drained back to empty (#536 lesson)', () => {
+    const hero = new CharacterRuntime(state());
+    hero.setStorageValue('a', 1);
+    hero.setStorageValue('a', -1);
+    expect(hero.getState().storages).toEqual({});
+  });
+
+  it('round-trips through a snapshot', () => {
+    const hero = new CharacterRuntime(state());
+    hero.setStorageValue('quest:rat-cellars', 1);
+    hero.setStorageValue('quest:progress', 0);
+
+    const restored = new CharacterRuntime(JSON.parse(JSON.stringify(hero.getState())) as CharacterState);
+
+    expect(restored.getStorageValue('quest:rat-cellars')).toBe(1);
+    expect(restored.getStorageValue('quest:progress')).toBe(0);
+    expect(restored.getStorageValue('quest:never-touched')).toBe(-1);
+  });
+
+  it('drops a crooked stored value defensively instead of throwing (readCharacterStorage)', () => {
+    const hero = new CharacterRuntime(state({
+      storages: { good: 2, bad: Number.NaN } as unknown as Readonly<Record<string, number>>,
+    }));
+    expect(hero.getStorageValue('good')).toBe(2);
+    expect(hero.getStorageValue('bad')).toBe(-1);
+  });
+});
+
+describe('lastCombatActionAtMs (#625)', () => {
+  it('starts null — "never fought this session" —, and is omitted from getState', () => {
+    const hero = new CharacterRuntime(state());
+    expect(hero.lastCombatActionAtMs).toBeNull();
+    expect(hero.getState()).not.toHaveProperty('lastCombatActionAtMs');
+  });
+
+  it('round-trips through a snapshot once written', () => {
+    const hero = new CharacterRuntime(state());
+    hero.lastCombatActionAtMs = 12_345;
+
+    expect(hero.getState()).toMatchObject({ lastCombatActionAtMs: 12_345 });
+    const restored = new CharacterRuntime(
+      JSON.parse(JSON.stringify(hero.getState())) as CharacterState,
+    );
+    expect(restored.lastCombatActionAtMs).toBe(12_345);
+  });
+});
+
+describe('fightMode e lastAttackAtMs (M30-03, #550)', () => {
+  it('nasce ofensivo, sem ter batido, e ambos ficam FORA do snapshot (o construtor os repõe)', () => {
+    const hero = new CharacterRuntime(state());
+    expect(hero.fightMode).toBe('attack');
+    expect(hero.lastAttackAtMs).toBeNull();
+    expect(hero.getState()).not.toHaveProperty('fightMode');
+    expect(hero.getState()).not.toHaveProperty('lastAttackAtMs');
+  });
+
+  it('setFightMode troca o modo e devolve se MUDOU — escolher o mesmo modo não escreve nada', () => {
+    const hero = new CharacterRuntime(state());
+    expect(hero.setFightMode('attack')).toBe(false);
+    expect(hero.setFightMode('defense')).toBe(true);
+    expect(hero.fightMode).toBe('defense');
+    expect(hero.setFightMode('defense')).toBe(false);
+    expect(hero.setFightMode('balanced')).toBe(true);
+    expect(hero.fightMode).toBe('balanced');
+  });
+
+  it('atravessa o snapshot quente com o modo e o instante do último golpe', () => {
+    const hero = new CharacterRuntime(state());
+    hero.setFightMode('balanced');
+    hero.lastAttackAtMs = 41_500;
+
+    expect(hero.getState()).toMatchObject({ fightMode: 'balanced', lastAttackAtMs: 41_500 });
+    const restored = new CharacterRuntime(
+      JSON.parse(JSON.stringify(hero.getState())) as CharacterState,
+    );
+    expect(restored.fightMode).toBe('balanced');
+    expect(restored.lastAttackAtMs).toBe(41_500);
+  });
+
+  it('o estado inicial do ticket entra pelo construtor', () => {
+    expect(new CharacterRuntime(state({ fightMode: 'defense' })).fightMode).toBe('defense');
+  });
+
+  it('um modo que não é um dos três vira o default do Canary, em vez de travar a sessão', () => {
+    const torto = state({ fightMode: 'aggressive' as unknown as 'attack' });
+    expect(new CharacterRuntime(torto).fightMode).toBe('attack');
+  });
+});
+
+describe('drainRemovedInstances (#724, ADR 0048 d.8)', () => {
+  it('returns what sell-items/discard-item destroyed and empties the list', () => {
+    const hero = new CharacterRuntime(state());
+    hero.removedInstances.push('s1:0', 's1:1');
+
+    expect(hero.drainRemovedInstances()).toEqual(['s1:0', 's1:1']);
+    expect(hero.removedInstances).toEqual([]);
+    expect(hero.getState()).not.toHaveProperty('removedInstances');
+  });
+
+  it('round-trips through JSON, and is absent when nothing was removed', () => {
+    const hero = new CharacterRuntime(state());
+    expect(hero.getState()).not.toHaveProperty('removedInstances');
+
+    hero.removedInstances.push('s1:0');
+    const restored = new CharacterRuntime(JSON.parse(JSON.stringify(hero.getState())) as CharacterState);
+    expect(restored.removedInstances).toEqual(['s1:0']);
   });
 });

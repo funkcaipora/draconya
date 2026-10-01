@@ -16,7 +16,11 @@
 import { randomBytes } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import { OutfitColors } from '@draconya/protocol';
-import type { BestiaryState } from '@draconya/sim';
+import { isCharacterStorageMap, isFamiliarState, isFightMode, readOfflineTrainingState } from '@draconya/sim';
+import type {
+  BestiaryState, BosstiaryState, CharacterStorageMap, CharmsState, FamiliarState, FightMode,
+  LearnedSpellsState, OfflineTrainingState,
+} from '@draconya/sim';
 import type { NodeStatus, SessionDirectory } from './directory.js';
 
 export interface TicketClaim {
@@ -82,6 +86,12 @@ export interface InitialCharacter {
    * com zero e recusa gasto. Degrada para o lado seguro — não gastar o que não se sabe ter.
    */
   readonly gold?: number;
+  /**
+   * Pontos de alma (#593). Vem do banco pela mesma razão de gold: nada que o cliente manda
+   * participa da criação da sessão (invariante 4). Ausente é personagem gravado antes desta
+   * issue — a sessão entra com zero, que é o normal de quem ainda não escolheu vocação.
+   */
+  readonly soul?: number;
   /**
    * A configuração do bot, crua e ainda NÃO validada (FUN-81).
    *
@@ -153,11 +163,91 @@ export interface InitialCharacter {
   /** O estoque de munição do loot (#520), pela mesma razão e a mesma forma do `supplyStock`. */
   readonly ammunitionStock?: Readonly<Record<string, number>>;
   /**
+   * Storages por personagem (#731, ADR 0050 d.6 T2): `storageKey → value`, a semente do motor
+   * de quest. Entra na sessão, e não só sai dela, porque a porta/baú de quest confere o
+   * storage DURANTE a hunt (a checagem é a mesma pergunta do Canary, `getStorageValue`).
+   * Validado como o Bestiário/estoque: mapa de inteiros, sem o valor de ausência (`-1`). Ausente
+   * é quem nunca setou nada, ou ticket de um `api` antigo: a sessão parte de `{}`.
+   */
+  readonly storages?: CharacterStorageMap;
+  /**
+   * A economia de Charms (M39-02, #602, ADR 0052 d.1): pontos/echoes gastos, tier de cada
+   * charm e as atribuições por monstro. Entra na sessão, e não só sai dela, porque intenções
+   * de Charm são aceitas em qualquer sessão (Cidade e hunt, ADR 0052 d.4) — sem o registro
+   * de entrada, um `charm-unlock` na primeira hunt do dia partiria sempre de zero. Validado
+   * como o Bestiário/estoque (`isCharmsState`). Ausente é personagem que nunca gastou um
+   * ponto de Charm, ou ticket de um `api` anterior: a sessão parte vazia.
+   */
+  readonly charms?: CharmsState;
+  /**
+   * O Bosstiary (#629, ADR 0052 d.1): abates por boss (chave = `raceId`), pontos de boss e a
+   * versão. Entra na sessão, e não só sai dela, porque o nível de um boss depende do abate
+   * anterior — sem o registro de entrada, o abate 5 de um Nemesis na segunda hunt do dia seria
+   * o 1º. Validado como o Bestiário (`isBosstiaryState`). Ausente é quem nunca abateu um boss,
+   * ou ticket de um `api` anterior: a sessão parte vazia.
+   */
+  readonly bosstiary?: BosstiaryState;
+  /**
+   * As magias aprendidas (#624, ADR 0058 d.1, ADR 0052 d.1): os ids de `content.spells` que o
+   * personagem comprou. Entra na sessão, e não só sai dela, porque o CAST confere o registro
+   * (`casting.ts`) e `learn-spell` é aceito em qualquer sessão (Cidade e hunt) — sem ele, quem
+   * comprou ontem entraria hoje sem lançar nada. Validado como o Bestiário/Charms
+   * (`isLearnedSpellsState`). Ausente é personagem novo, que não aprendeu nada, ou ticket de um
+   * `api` anterior: a sessão parte vazia.
+   */
+  readonly learnedSpells?: LearnedSpellsState;
+  /**
+   * O familiar de vocação (M38-02, #599, ADR 0057 d.3, ADR 0052 d.1): os dois carimbos de relógio
+   * de PAREDE — até quando a invocação vale e até quando a magia volta (`packages/sim/src/
+   * familiar.ts`). Entra na sessão porque é ELA quem os compara com o relógio (o `sim` não lê
+   * relógio nenhum): o cooldown de 30 min tem de atravessar a saída da hunt, e a recriação ao
+   * entrar depende do `summonUntilMs`. Validado por forma (`isFamiliarState`). Ausente é quem
+   * nunca invocou, ou ticket de um `api` anterior: a sessão parte sem carimbo.
+   */
+  readonly familiar?: FamiliarState;
+  /**
+   * O registro do Treino (#631, ADR 0059 d.3, ADR 0052 d.1): o banco de offline training e a skill
+   * escolhida no livro. Entra na sessão, e não só sai dela: o banco CRESCE com o tempo de hunt e
+   * de treino, e o livro se escolhe na Cidade — sem o registro de entrada, a primeira hunt do dia
+   * partiria sempre de um banco zerado e o extrato sobrescreveria o que já estava na linha. O
+   * banco JÁ chega com o gasto do offline training feito (a `api` o calcula na emissão, com o
+   * personagem em repouso — o `sim` nunca lê relógio). Validado pela leitura defensiva do `sim`
+   * (`readOfflineTrainingState`); ausente é quem nunca caçou nem treinou, ou ticket de um `api`
+   * anterior: a sessão parte de banco zero e nenhuma skill escolhida.
+   */
+  readonly training?: OfflineTrainingState;
+  /**
+   * Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, lido de `characters.fed_ms`.
+   * Entra na sessão, e não só sai dela — sem isto, quem comeu antes de deslogar voltaria em
+   * jejum. Ausente é quem nunca comeu, ou ticket de um `api` antigo: a sessão parte de `0`.
+   */
+  readonly fedMs?: number;
+  /**
+   * As sete bênçãos PvE (#570, ADR 0052): o BITMASK, lido de `characters.blessings`. Entra na
+   * sessão, e não só sai dela — sem isto, quem comprou na Cidade morreria na hunt seguinte sem
+   * a redução que pagou. Ausente é quem nunca comprou, ou ticket de um `api` antigo: a sessão
+   * parte de `0`.
+   */
+  readonly blessings?: number;
+  /**
    * A vocação (#154), lida de `characters.vocation`. Ausente é quem ainda não escolheu — ou
    * ticket de um `api` anterior: a sessão entra sem vocação e o diálogo aparece de novo, o que
    * `already-chosen` no `sim` não impede, mas o `coalesce` do `jobs` impede de gravar duas.
    */
   readonly vocation?: string;
+  /**
+   * Promovido (#566, ADR 0042 decisão 1), lido de `characters.promoted`. Ausente/`false` é
+   * "não promovido" — a coluna não é nulável, e o `game` só escreve `true` depois de
+   * `CharacterRuntime.promote()` aceitar (level ≥ 20, gold ≥ 20.000, ainda não promovido).
+   */
+  readonly promoted?: boolean;
+  /**
+   * A postura de luta (#550, M30-03, ADR 0040), lida de `characters.fight_mode`. Entra na sessão, e
+   * não só sai dela — sem isto, quem escolheu a defensiva voltaria à ofensiva a cada login. Ausente
+   * é quem nunca escolheu, ou ticket de um `api` anterior: a sessão parte do `FIGHTMODE_ATTACK` do
+   * Canary.
+   */
+  readonly fightMode?: FightMode;
   /**
    * Premium do personagem (ADR 0035 D3), já resolvido contra o relógio pelo `api` — a sessão
    * nunca compara datas, só lê um boolean. É o que decide o limite de venda automática do
@@ -168,6 +258,24 @@ export interface InitialCharacter {
    * `api` antigo — nunca ticket recusado (regra do Bestiário).
    */
   readonly premium?: boolean;
+  /**
+   * A Boosted Creature do dia (M42, #615, ADR 0052 decisão 5, ADR 0054 decisão 7): o
+   * `monsterId` que o `jobs` sorteou na última virada, lido pela `api` do cache em Redis que o
+   * `jobs` publica (`packages/server/src/world-daily.ts`) na hora da EMISSÃO do ticket — nunca
+   * relido depois. Fixado no personagem daqui em diante (`characterFromTicket`), como a versão
+   * de conteúdo: a hunt que atravessa a virada continua com a boosted com que nasceu. Ausente é
+   * conteúdo sem `boosted/baseline.json`, cache ainda vazio (primeiro ciclo do `jobs` não
+   * rodou), ou `api` antigo em deploy em rolagem — nenhuma hunt aplica o bônus.
+   */
+  readonly boostedMonsterId?: string;
+  /**
+   * O bônus de Loyalty (M44, #628, ADR 0052 decisão 5), em percentual inteiro: a `api` o calcula
+   * de `account.created_at` na hora da EMISSÃO (`loyalty.ts`) e o `game` o fixa no
+   * `CharacterRuntime` — nunca recalculado durante a sessão, como a versão de conteúdo. Ausente é
+   * conta abaixo do primeiro degrau, conteúdo sem `loyalty/` ou `api` antigo em deploy em
+   * rolagem: a sessão vale o nível BASE de toda skill.
+   */
+  readonly loyaltyBonusPercent?: number;
 }
 
 export interface IssuedTicket {
@@ -179,7 +287,17 @@ export interface IssuedTicket {
 
 /** O nó resolvido, ou por que não deu. Ver `resolveNode`. */
 export type NodeResolution =
-  | { readonly ok: true; readonly node: NodeStatus }
+  | {
+    readonly ok: true;
+    readonly node: NodeStatus;
+    /**
+     * O personagem está em REPOUSO: o diretório não tem sessão hospedada para ele (#631, ADR 0052
+     * d.5). É o único momento em que a linha do Postgres não tem dono quente — e por isso o único em
+     * que a `api` pode calcular e escrever algo nela (o gasto do offline training). Ausente é quem
+     * não sabe dizer, e é tratado como NÃO em repouso: nunca se escreve por palpite.
+     */
+    readonly resting?: boolean;
+  }
   | { readonly ok: false; readonly reason: IssueFailure };
 
 export type IssueFailure =
@@ -302,7 +420,9 @@ export class TicketService {
 
     if (existing === null) {
       const node = await this.#leastLoadedNode();
-      return node === null ? { ok: false, reason: 'no-node-available' } : { ok: true, node };
+      return node === null
+        ? { ok: false, reason: 'no-node-available' }
+        : { ok: true, node, resting: true };
     }
 
     let node = await this.#directory.node(existing.nodeId);
@@ -611,14 +731,58 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     // um valor torto vira AUSENTE, nunca ticket recusado.
     ...(isStockMap(initial['supplyStock']) ? { supplyStock: initial['supplyStock'] } : {}),
     ...(isStockMap(initial['ammunitionStock']) ? { ammunitionStock: initial['ammunitionStock'] } : {}),
+    // Storages (#731): mesma régua do Bestiário/estoque — inteiro seguro, e nunca o `-1` de
+    // ausência (`isCharacterStorageMap`, `sim`). Torto vira AUSENTE, nunca ticket recusado.
+    ...(isCharacterStorageMap(initial['storages']) ? { storages: initial['storages'] } : {}),
+    // A economia de Charms (M39-02, #602): mesma régua do Bestiário/estoque — forma validada
+    // por inteiro, torto vira AUSENTE, nunca ticket recusado.
+    ...(isCharmsState(initial['charms']) ? { charms: initial['charms'] } : {}),
+    // O Bosstiary (#629): mesma régua — forma validada por inteiro, torto vira AUSENTE.
+    ...(isBosstiaryState(initial['bosstiary']) ? { bosstiary: initial['bosstiary'] } : {}),
+    // As magias aprendidas (#624): mesma régua — forma validada por inteiro, torto vira AUSENTE,
+    // nunca ticket recusado.
+    ...(isLearnedSpellsState(initial['learnedSpells']) ? { learnedSpells: initial['learnedSpells'] } : {}),
+    // O familiar (M38-02, #599): mesma régua — forma validada, torto vira AUSENTE.
+    ...(isFamiliarState(initial['familiar']) ? { familiar: initial['familiar'] } : {}),
+    // O registro do Treino (#631): a leitura defensiva do `sim` — banco não negativo e skill não
+    // vazia —, e torto vira AUSENTE, nunca ticket recusado, como o Bestiário.
+    ...trainingOf(initial['training']),
+    // Comida ativa (#726): inteiro seguro não negativo, ou AUSENTE — a mesma régua acima.
+    ...(typeof initial['fedMs'] === 'number' && Number.isSafeInteger(initial['fedMs'])
+      && initial['fedMs'] >= 0
+      ? { fedMs: initial['fedMs'] }
+      : {}),
+    // As bênçãos (#570): mesma régua — inteiro seguro não negativo, ou AUSENTE.
+    ...(typeof initial['blessings'] === 'number' && Number.isSafeInteger(initial['blessings'])
+      && initial['blessings'] >= 0
+      ? { blessings: initial['blessings'] }
+      : {}),
     // A vocação (#154): string não vazia; qualquer outra coisa vira AUSENTE, nunca ticket
     // recusado — como o Bestiário.
     ...(typeof initial['vocation'] === 'string' && initial['vocation'].length > 0
       ? { vocation: initial['vocation'] }
       : {}),
+    // A postura de luta (#550): um dos três nomes ou AUSENTE, nunca ticket recusado — a mesma
+    // régua da vocação. Um valor torto (linha editada à mão) degrada para a ofensiva do Canary.
+    ...(isFightMode(initial['fightMode']) ? { fightMode: initial['fightMode'] } : {}),
+    // Promovido (#566, ADR 0042 decisão 1): booleano ou AUSENTE, nunca ticket recusado — a
+    // mesma régua do Premium. Um valor torto degrada para "não promovido" (o lado seguro).
+    ...(typeof initial['promoted'] === 'boolean' ? { promoted: initial['promoted'] } : {}),
     // O Premium (ADR 0035 D3): booleano ou AUSENTE, nunca ticket recusado. Um valor torto vira
     // Free — a mesma régua das cores e do Bestiário —, porque a linha do banco não tem CHECK.
     ...(typeof initial['premium'] === 'boolean' ? { premium: initial['premium'] } : {}),
+    // A Boosted Creature do dia (#615): string não vazia; qualquer outra coisa vira AUSENTE,
+    // nunca ticket recusado — como a vocação.
+    ...(typeof initial['boostedMonsterId'] === 'string' && initial['boostedMonsterId'].length > 0
+      ? { boostedMonsterId: initial['boostedMonsterId'] }
+      : {}),
+    // O bônus de Loyalty (#628): inteiro de 1 a 65535 (o `uint16_t` do Canary) ou AUSENTE, nunca
+    // ticket recusado — a mesma régua da boosted. Um valor torto vale o nível base.
+    ...(typeof initial['loyaltyBonusPercent'] === 'number'
+      && Number.isInteger(initial['loyaltyBonusPercent'])
+      && initial['loyaltyBonusPercent'] > 0 && initial['loyaltyBonusPercent'] <= 65_535
+      ? { loyaltyBonusPercent: initial['loyaltyBonusPercent'] }
+      : {}),
   };
 }
 
@@ -652,6 +816,81 @@ export function isBestiaryState(value: unknown): value is BestiaryState {
     && typeof kills === 'number'
     && Number.isSafeInteger(kills)
     && kills >= 0);
+}
+
+/** O registro do Treino como o ticket o carrega, ou nada (#631): a régua do `sim`, uma só. */
+function trainingOf(stored: unknown): { training?: OfflineTrainingState } {
+  const training = readOfflineTrainingState(stored);
+  return training === undefined ? {} : { training };
+}
+
+/**
+ * A forma de `BosstiaryState` (#629, ADR 0052 d.1): `kills` é um mapa de inteiros seguros não
+ * negativos sob chaves não vazias (o `raceId` em texto), `points` um inteiro seguro não negativo e
+ * `version` um número. Por forma, nunca por conteúdo de domínio — um `raceId` que nenhum boss do
+ * catálogo tem simplesmente não resolve nada. Um valor que não bate vira AUSENTE, nunca ticket
+ * recusado, pela mesma razão do Bestiário: a linha é `jsonb` sem CHECK.
+ *
+ * Exportada para o `api` conferir a linha com a MESMA régua que o `consume` usa.
+ */
+export function isBosstiaryState(value: unknown): value is BosstiaryState {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record['points'] !== 'number' || !Number.isSafeInteger(record['points']) || record['points'] < 0
+    || typeof record['version'] !== 'number'
+  ) return false;
+  const kills = record['kills'];
+  if (typeof kills !== 'object' || kills === null || Array.isArray(kills)) return false;
+  return Object.entries(kills).every(([raceId, count]) =>
+    raceId.length > 0 && typeof count === 'number' && Number.isSafeInteger(count) && count >= 0);
+}
+
+/**
+ * A forma de `CharmsState` (M39-02, #602, ADR 0052 d.1): os quatro campos do registro, cada um
+ * conferido por forma — nunca por conteúdo de domínio (isso é `Charms.unlock`/`assign`/`remove`,
+ * no `sim`). Um valor que não bate vira AUSENTE, nunca ticket recusado, pela mesma razão do
+ * Bestiário: a linha é `jsonb` sem CHECK.
+ *
+ * Exportada para o `api` conferir a linha com a MESMA régua que o `consume` usa.
+ */
+export function isCharmsState(value: unknown): value is CharmsState {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record['pointsSpent'] !== 'number' || !Number.isSafeInteger(record['pointsSpent'])
+    || record['pointsSpent'] < 0
+    || typeof record['echoesSpent'] !== 'number' || !Number.isSafeInteger(record['echoesSpent'])
+    || record['echoesSpent'] < 0
+    || typeof record['version'] !== 'number'
+  ) return false;
+  const tiers = record['tiers'];
+  if (typeof tiers !== 'object' || tiers === null || Array.isArray(tiers)) return false;
+  if (!Object.entries(tiers).every(([charmId, tier]) =>
+    charmId.length > 0 && typeof tier === 'number' && [0, 1, 2, 3].includes(tier))) return false;
+  const assignments = record['assignments'];
+  if (typeof assignments !== 'object' || assignments === null || Array.isArray(assignments)) return false;
+  return Object.entries(assignments).every(([charmId, monsterId]) =>
+    charmId.length > 0 && typeof monsterId === 'string' && monsterId.length > 0);
+}
+
+/**
+ * A forma de `LearnedSpellsState` (#624, ADR 0058, ADR 0052 d.1): `spellIds` é uma lista de ids
+ * não vazios, SEM repetição, e `version` um número — conferida por forma, nunca por conteúdo
+ * (um id fora do catálogo é dado do jogador, ADR 0014, e simplesmente não resolve nada). Um valor
+ * que não bate vira AUSENTE, nunca ticket recusado, pela mesma razão do Bestiário: a linha é
+ * `jsonb` sem CHECK.
+ *
+ * Exportada para o `api` conferir a linha com a MESMA régua que o `consume` usa.
+ */
+export function isLearnedSpellsState(value: unknown): value is LearnedSpellsState {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (typeof record['version'] !== 'number') return false;
+  const spellIds = record['spellIds'];
+  if (!Array.isArray(spellIds)) return false;
+  if (!spellIds.every((id) => typeof id === 'string' && id.length > 0)) return false;
+  return new Set(spellIds).size === spellIds.length;
 }
 
 /**

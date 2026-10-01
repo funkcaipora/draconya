@@ -6,6 +6,7 @@ import type { ExternalIdentity, IdentityProvider } from '../auth/workos.js';
 import type {
   AccountRecord,
   CharacterRecord,
+  CharacterStorageRecord,
   GameRepository,
   ItemInstanceRecord,
 } from '../db/repository.js';
@@ -48,15 +49,22 @@ class MemoryRepository implements GameRepository {
     return {
       id: 'i1', itemId: instance.itemId, ownerCharacterId: instance.ownerCharacterId,
       quantity: instance.quantity ?? 1, origin: instance.origin, equippedSlot: null,
-      container: null, slotIndex: null,
+      container: null, slotIndex: null, overlay: null,
       createdAt: new Date(0),
     };
   }
   async listItemInstances(): Promise<readonly ItemInstanceRecord[]> {
     return [];
   }
+  async listCharacterStorages(): Promise<readonly CharacterStorageRecord[]> {
+    return [];
+  }
   async saveBotConfig(): Promise<void> {
     // Este arquivo é sobre autenticação. A configuração do bot não passa por aqui.
+  }
+  async getAccountCreatedAt(): Promise<Date | null> {
+    // A idade da conta só importa para o ticket (Loyalty, #628), que não passa por este arquivo.
+    return null;
   }
   async ensureAccount(identity: { externalAuthId: string; email: string }) {
     const existing = [...this.accounts.values()].find(

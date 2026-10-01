@@ -20,7 +20,7 @@ const catalogue = (): Catalogue => ({
   monsters: [],
   ammunition: [],
   vocations: [],
-  vocationLevel: 0,
+  charms: [], vocationLevel: 0,
   items: [],
   bot: {
     vocabularyVersion: 2,

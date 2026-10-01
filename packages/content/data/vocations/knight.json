@@ -6,7 +6,9 @@
   "capacityPerLevel": 25,
   "meleeDamageMultiplier": 1,
   "distDamageMultiplier": 1,
-  "spellSkill": "melee",
+  "soulMax": 100,
+  "soulGainTicksMs": 120000,
+  "spellSkill": "weapon",
   "startingKit": [
     {
       "itemId": "steel-axe",
@@ -18,13 +20,32 @@
     }
   ],
   "regen": {
-    "healthPerSecond": 0.16666666666666666,
-    "manaPerSecond": 0.3333333333333333
+    "health": { "ticksMs": 6000, "amount": 1 },
+    "mana": { "ticksMs": 6000, "amount": 2 }
   },
   "skillMultipliers": {
-    "melee": 1.1,
+    "fist": 1.1,
+    "club": 1.1,
+    "sword": 1.1,
+    "axe": 1.1,
     "distance": 1.4,
     "shielding": 1.1,
     "magic": 3.0
+  },
+  "mitigation": {
+    "multiplier": 1.3,
+    "primaryShield": 2.05,
+    "secondaryShield": 1.25
+  },
+  "promotion": {
+    "name": "Elite Knight",
+    "regen": {
+      "health": { "ticksMs": 4000, "amount": 1 },
+      "mana": { "ticksMs": 6000, "amount": 2 }
+    },
+    "soulMax": 200,
+    "soulGainTicksMs": 15000,
+    "minLevel": 20,
+    "price": 20000
   }
 }

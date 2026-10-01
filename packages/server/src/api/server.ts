@@ -172,12 +172,19 @@ export function buildApi(
       getCharacter: repository.getCharacter.bind(repository),
       getCharacterById: repository.getCharacterById.bind(repository),
       listItemInstances: repository.listItemInstances.bind(repository),
+      listCharacterStorages: repository.listCharacterStorages.bind(repository),
       settleProgress,
       locateSession,
       directory,
       snapshots: partySnapshots,
       limits: partyLimits,
       ...(dependencies.matchmakingLevelRange === undefined ? {} : { matchmakingLevelRange: dependencies.matchmakingLevelRange }),
+      ...(dependencies.currentBoostedMonsterId === undefined
+        ? {}
+        : { currentBoostedMonsterId: dependencies.currentBoostedMonsterId }),
+      ...(dependencies.loyaltyBonusPercentOf === undefined
+        ? {}
+        : { loyaltyBonusPercentOf: dependencies.loyaltyBonusPercentOf }),
     });
   }
 

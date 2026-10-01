@@ -26,6 +26,7 @@ const view = (over: {
   targetCount: over.targetCount ?? 0,
   target: null,
   partyTarget: null,
+  summonCount: 0,
 });
 
 interface FakeOptions {

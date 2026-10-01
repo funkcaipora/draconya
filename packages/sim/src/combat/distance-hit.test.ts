@@ -3,9 +3,10 @@
 // balde flat de `ammunition.maxHitChance` (#524) e o bônus/malus `weapon.hitChance` (#524).
 
 import type { Combat } from '@draconya/content';
+import { buildTilemap } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../rng.js';
-import { distanceHitChancePercent, rollDistanceHit } from './distance-hit.js';
+import { distanceHitChancePercent, missShotTile, rollDistanceHit } from './distance-hit.js';
 
 /** As três tabelas do Canary, transcritas como dado — `baseline.json`. */
 const TABLE: NonNullable<Combat['distanceHitChance']> = {
@@ -230,5 +231,64 @@ describe('rollDistanceHit — a rolagem, sempre consumida (#522)', () => {
     for (let i = 0; i < 50; i += 1) {
       expect(rollDistanceHit(6, 90, TABLE, Rng.fromSeed(`clampmax-${i}`), undefined, undefined, 100)).toBe(true);
     }
+  });
+});
+
+// --- destino do tiro que ERRA (#555) -----------------------------------------------------------
+//
+// `WeaponDistance::useWeapon` (Canary `things/sources/canary/src/items/weapons/weapons.cpp:830-
+// 855`): adjacente ao alvo, nunca redireciona; a mais de 1 tile, sorteia entre os nove do quadro
+// 3×3 centrado nele (8 vizinhos + o próprio), e só entre os ANDÁVEIS.
+
+describe('missShotTile: destino do tiro que erra (#555)', () => {
+  // Sala 5×5 toda aberta — nenhum candidato do quadro 3×3 cai fora dela para um alvo no meio.
+  const openMap = buildTilemap({ id: 'open', z: 7, grid: ['#####', '#...#', '#...#', '#...#', '#####'] });
+  const target = { x: 2, y: 2, z: 7 };
+
+  it('adjacente (1 tile): o destino continua o alvo, e NENHUM sorteio é consumido', () => {
+    const rng = Rng.fromSeed('miss-adjacent');
+    const before = rng.getState();
+    expect(missShotTile(openMap, 1, target, rng)).toEqual(target);
+    expect(rng.getState()).toEqual(before);
+  });
+
+  it('a mais de 1 tile: o destino é sempre um dos 8 vizinhos ou o próprio alvo, nunca fora do quadro 3×3', () => {
+    for (let i = 0; i < 200; i += 1) {
+      const to = missShotTile(openMap, 3, target, Rng.fromSeed(`miss-${i}`));
+      expect(Math.abs(to.x - target.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs(to.y - target.y)).toBeLessThanOrEqual(1);
+      expect(to.z).toBe(target.z);
+    }
+  });
+
+  it('o próprio tile do alvo É candidato (como no Canary): com os 8 vizinhos bloqueados, o destino é sempre o alvo', () => {
+    // Sala 1×1 aberta cercada de parede: só o tile do alvo, no meio, é andável.
+    const walled = buildTilemap({ id: 'walled', z: 7, grid: ['###', '#.#', '###'] });
+    const center = { x: 1, y: 1, z: 7 };
+    for (let i = 0; i < 20; i += 1) {
+      expect(missShotTile(walled, 3, center, Rng.fromSeed(`walled-${i}`))).toEqual(center);
+    }
+  });
+
+  it('isolar "é vizinho" de "pode ser o alvo": com o próprio tile do alvo bloqueado, nunca sorteia o alvo', () => {
+    // Alvo no meio de uma sala aberta, mas com o próprio tile marcado como parede — só os
+    // vizinhos sobram como candidato.
+    const holeMap = buildTilemap({
+      id: 'hole', z: 7, grid: ['#####', '#...#', '#.#.#', '#...#', '#####'],
+    });
+    const holeTarget = { x: 2, y: 2, z: 7 };
+    for (let i = 0; i < 200; i += 1) {
+      const to = missShotTile(holeMap, 3, holeTarget, Rng.fromSeed(`hole-${i}`));
+      expect(to).not.toEqual(holeTarget);
+    }
+  });
+
+  it('sem candidato andável nenhum (quadro inteiro bloqueado): cai de volta no alvo, sem crashar', () => {
+    // Alvo isolado num corredor de 1 tile — os 8 vizinhos e o próprio tile do alvo ficam TODOS
+    // fora do mapa (fora do mapa é bloqueado, `isBlocked`), exceto o próprio, que também é
+    // bloqueado (mapa 1×1 é só parede — nenhum tile aberto existe).
+    const blockedMap = buildTilemap({ id: 'blocked', z: 7, grid: ['#'] });
+    const isolated = { x: 0, y: 0, z: 7 };
+    expect(missShotTile(blockedMap, 3, isolated, Rng.fromSeed('all-blocked'))).toEqual(isolated);
   });
 });

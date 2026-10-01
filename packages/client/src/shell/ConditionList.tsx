@@ -33,7 +33,7 @@ export interface ConditionListProps {
 
 /** Troca o valor de uma condição, respeitando o campo que o tipo dela usa. */
 function withValue(condition: BotConditionV2, value: number): BotConditionV2 {
-  if (condition.kind === 'targets') return { ...condition, count: value };
+  if (condition.kind === 'targets' || condition.kind === 'summons') return { ...condition, count: value };
   if (condition.kind === 'condition') return condition;
   return { ...condition, percent: value };
 }
@@ -97,7 +97,8 @@ export function ConditionList({
               <IconButton size="sm" title="aumentar" onClick={() => { step(index, condition, 1); }}>
                 +
               </IconButton>
-              {condition.kind !== 'targets' && <Checkbox checked disabled size={13} />}
+              {condition.kind !== 'targets' && condition.kind !== 'summons'
+                && <Checkbox checked disabled size={13} />}
             </>
           )}
           <IconButton

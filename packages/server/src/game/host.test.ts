@@ -1,13 +1,17 @@
 import {
-  CharacterRuntime, HuntRuleset, PartyFullError, Rng, Session, createHuntSession, statsForLevel, totalXpForLevel,
-  type EndReason, type Ruleset, type SessionSnapshot,
+  CharacterRuntime, HuntRuleset, PartyFullError, Rng, Session, createHuntSession, learnedSpellsStateOf,
+  pointsForLevel, statsForLevel, totalXpForLevel,
+  type CharmBestiaryEntry, type EndReason, type Ruleset, type SessionSnapshot, type SkillsState,
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigSchema, buildContent, compileItem,
-  itemSchema, migrateBotConfigV1, placeholderAppearances,
+  itemSchema, migrateBotConfigV1, placeholderAppearances, skillSchema,
 } from '@draconya/content';
-import type { Ammunition, Appearances, BotConfig, Progression, RawContent, Vocation } from '@draconya/content';
+import type {
+  Ammunition, Appearances, BotConfig, Charm, Progression, RawContent, Skill, Spell, Vocation,
+} from '@draconya/content';
+import { C2S_SCHEMAS } from '@draconya/protocol';
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import { createLogger } from '../log.js';
 import type { SessionDirectory } from '../directory.js';
@@ -17,10 +21,12 @@ import { SessionHost } from './host.js';
 import type { SessionHostOptions } from './host.js';
 import type { GameMetrics } from './metrics.js';
 import { FakeSocket } from './testing.js';
-import { CityShard, createBotConfigValidator, createCitySessionFactory, createSessionBuilder } from './sessions.js';
+import {
+  CityShard, createBotConfigLoader, createBotConfigValidator, createCitySessionFactory, createSessionBuilder,
+} from './sessions.js';
 import { buildCatalogue } from './catalogue.js';
 import {
-  TEST_COMBAT, TEST_HUNT, TEST_MAP, TEST_PROGRESSION, TEST_ROUTE, TEST_WEAPON_FAMILIES, rawTestContent,
+  TEST_COMBAT, TEST_MAP, TEST_PROGRESSION, TEST_ROUTE, TEST_WEAPON_FAMILIES, rawTestContent,
   testContent,
 } from '../testing/content.js';
 
@@ -73,24 +79,40 @@ function buildHost(
     // `NonNullable`: `SessionHostOptions['x']` já inclui `undefined`, e espalhar uma opcional
     // desse tipo é o que `exactOptionalPropertyTypes` recusa.
     acceptBotConfig?: NonNullable<SessionHostOptions['acceptBotConfig']>;
+    loadBotConfig?: NonNullable<SessionHostOptions['loadBotConfig']>;
     itemCatalog?: NonNullable<SessionHostOptions['itemCatalog']>;
     ammunitionCatalog?: NonNullable<SessionHostOptions['ammunitionCatalog']>;
+    charmCatalog?: NonNullable<SessionHostOptions['charmCatalog']>;
+    charmBestiaryEntries?: NonNullable<SessionHostOptions['charmBestiaryEntries']>;
     vocations?: NonNullable<SessionHostOptions['vocations']>;
     vocationLevel?: number;
     progression?: NonNullable<SessionHostOptions['progression']>;
     saveBotConfig?: NonNullable<SessionHostOptions['saveBotConfig']>;
     level?: number;
+    gold?: number;
   } = {},
 ) {
   const sessions: Session[] = [];
-  // `level` é do PERSONAGEM de teste, não do host: tirar do espalhamento é o que impede
-  // `exactOptionalPropertyTypes` de recusar uma chave que `SessionHostOptions` não tem.
-  const { level, ...hostOptions } = options;
+  // `level`/`gold` são do PERSONAGEM de teste, não do host: tirar do espalhamento é o que
+  // impede `exactOptionalPropertyTypes` de recusar uma chave que `SessionHostOptions` não tem.
+  const { level, gold, ...hostOptions } = options;
+  // `loadBotConfig` é a CARGA (ADR 0014) — função separada de `acceptBotConfig`, a EDIÇÃO. Um
+  // teste que só configura `acceptBotConfig` (a maioria, escrita antes do #596) ainda precisa
+  // do ticket adotar o bot: adapta o mesmo julgador para a forma de carga, com `removed: []` —
+  // nenhum teste aqui exercita conteúdo removido debaixo de uma config, e `sanitizeBotConfigV2`
+  // tem cobertura própria em `packages/content/src/bot.test.ts`/`bot-migration.test.ts`.
+  const loadBotConfig = hostOptions.loadBotConfig ?? (hostOptions.acceptBotConfig === undefined
+    ? undefined
+    : (raw: unknown, lvl: number) => {
+      const decision = (hostOptions.acceptBotConfig as NonNullable<SessionHostOptions['acceptBotConfig']>)(raw, lvl);
+      return decision.ok ? { ok: true as const, config: decision.config, removed: [] } : decision;
+    });
   const host = new SessionHost({
     nodeId: 'n1',
     contentVersion: 'v-test',
     logger,
     ...hostOptions,
+    ...(loadBotConfig === undefined ? {} : { loadBotConfig }),
     createSession: (characterId) => {
       const session = new Session({
         id: `s-${characterId}`,
@@ -103,7 +125,7 @@ function buildHost(
         id: characterId,
         position: { x: 0, y: 0, z: 7 },
         health: 100, maxHealth: 100, mana: 10, maxMana: 10,
-        level: level ?? 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+        level: level ?? 8, xp: 0, gold: gold ?? 0, goldDelta: 0, alive: true, cooldowns: {},
       }));
       sessions.push(session);
       return session;
@@ -166,6 +188,34 @@ describe('session host', () => {
     await host.drainAll('drain');
 
     expect(saved[0]?.bestiary).toEqual({ rat: 2, bat: 1 });
+  });
+
+  it('the receipt carries the Bosstiary of the owner, absolute (#629)', async () => {
+    // O abate de boss que não chega ao extrato some no próximo logout, e o nível 3 nunca
+    // fecharia. Absoluto como o Bestiário: o ledger funde pelo maior. Mutação que mata: apagar a
+    // linha do `bosstiary` em `#persistReceipt` (a lista de permissão do `parseReceipt` está
+    // coberta em `receipts.test.ts`; esta é a outra ponta).
+    const saved: Array<{ bosstiary?: { kills: Record<string, number>; points: number; version: number } }> = [];
+    const receipts = {
+      save: async (r: { bosstiary?: { kills: Record<string, number>; points: number; version: number } }) => {
+        saved.push(r);
+      },
+    } as unknown as ReceiptStore;
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, { directory, receipts });
+    await host.prepare('p1', undefined, 'a1');
+    const owner = sessions[0]?.participants[0];
+    if (owner === undefined) throw new Error('sem personagem');
+    const table = { levels: {
+      bane: [{ kills: 25, points: 5 }], archfoe: [{ kills: 5, points: 10 }], nemesis: [{ kills: 1, points: 10 }],
+    } };
+    owner.bosstiary.record(639, 'nemesis', table);
+    owner.bosstiary.record(639, 'nemesis', table);
+
+    await host.drainAll('drain');
+
+    expect(saved[0]?.bosstiary).toEqual({ kills: { '639': 2 }, points: 10, version: 1 });
   });
 
   it('saves the receipt before telling the player', async () => {
@@ -316,6 +366,40 @@ describe('session host', () => {
     expect(host.sessionFor('p1')?.id).toBe('s-retomada');
     // A fábrica NÃO foi chamada: um personagem novo teria apagado a sessão retomada.
     expect(sessions).toHaveLength(0);
+  });
+
+  it('re-anchors the wall clock of the resumed session by the discarded gap (#599, ADR 0018, ADR 0052 d.6)', async () => {
+    // `createdAtMs + nowMs` é o relógio de PAREDE que o `sim` compara com os carimbos do familiar. A
+    // retomada descarta o intervalo (o relógio lógico continua de onde parou), então sem recolocar
+    // o anchor a soma ficaria atrasada pela queda inteira e o cooldown de 30 min nasceria já curto.
+    const gapMs = 20 * 60_000;
+    const before = Date.now();
+    const snapshots = {
+      load: async () => ({
+        characterId: 'p1', accountId: 'a1', nodeId: 'n0', savedAtMs: before - gapMs,
+        snapshot: { id: 's', type: 'city', createdAtMs: 1_790_000_000_000, logicalNowMs: 5_000 } as unknown as SessionSnapshot,
+      }),
+      save: async () => {},
+      remove: async () => {},
+    } as unknown as SnapshotStore;
+    const restored = new Session({
+      id: 's-retomada', contentVersion: 'v-test',
+      ruleset: countingRuleset().ruleset, rng: Rng.fromSeed('x'), createdAtMs: 0,
+    });
+    let received: SessionSnapshot | undefined;
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, {
+      directory, snapshots, restoreSession: (snapshot) => { received = snapshot; return restored; },
+    });
+    await host.prepare('p1', undefined, 'a1');
+
+    // O intervalo medido na retomada (pelo menos 20 min, e só a folga de execução do teste a mais).
+    const delta = (received?.createdAtMs ?? 0) - 1_790_000_000_000;
+    expect(delta).toBeGreaterThanOrEqual(gapMs);
+    expect(delta).toBeLessThan(gapMs + 5_000);
+    // O relógio lógico NÃO anda: o intervalo é descartado, não simulado.
+    expect((received as { logicalNowMs?: number } | undefined)?.logicalNowMs).toBe(5_000);
   });
 
   it('tells the player that the session was resumed, and how much was lost', async () => {
@@ -647,11 +731,12 @@ describe('session host', () => {
 
     host.handle(viewer, { type: 'session-attach' });
     expect(socket.frames).toHaveLength(0);
-    // Cinco: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
+    // Nove: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
     // e stamina só viajam na segunda —, o alvo (`target-changed`, #470), as condições ativas
-    // (`active-conditions`, #341) e o Bestiário (`bestiary`, FUN-113). Os cinco na FILA,
-    // nenhum no fio.
-    expect(viewer.queued).toBe(5);
+    // (`active-conditions`, #341), o Bestiário (`bestiary`, FUN-113), as bênçãos (`blessings`,
+    // #570, ADR 0052), a economia de Charms (`charms`, M39-02, #602), o Bosstiary (`bosstiary`,
+    // #629) e as magias aprendidas (`learned-spells`, #624, ADR 0058). Os nove na FILA, nenhum no fio.
+    expect(viewer.queued).toBe(9);
 
     host.flush();
     const state = socket.received().find((m) => m.type === 'session-state');
@@ -943,6 +1028,107 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
 
     host.cycle(1100);
     await vi.waitFor(() => expect(acts).toEqual(['remove:p1']));
+  });
+
+  it('a morte com perda de item (#571): o extrato leva o que caiu e a bag, e a tela de morte lista o que se perdeu', async () => {
+    // O caminho inteiro pelo host, com a hunt de verdade: `HuntRuleset#onCharacterDied` destrói as
+    // instâncias, o extrato as entrega ao `jobs` (`removedInstances`), a bag nova nasce como
+    // `acquired` já vestida em `equipment`, e o `session-ended` leva um evento por instância —
+    // sem ninguém olhar para nada disso acontecer (invariante 3).
+    const raw = rawTestContent();
+    const withLoss = buildContent({
+      ...raw,
+      items: [
+        { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', initialSlots: 20, weight: 18, value: 5 },
+        { id: 'bag', name: 'Bag', kind: 'container', slot: 'back', initialSlots: 8, weight: 8, value: 1 },
+        { id: 'gem', name: 'Gem', kind: 'other', weight: 1, value: 10, stackable: true },
+      ],
+      progression: [{
+        ...TEST_PROGRESSION,
+        deathPenalty: {
+          ...TEST_PROGRESSION.deathPenalty,
+          itemLoss: {
+            enabled: true, lossPercentByBlessings: [100, 70, 45, 25, 10, 0, 0, 0],
+            nonContainerDivisor: 10, replacementContainerId: 'bag',
+          },
+        },
+      }],
+      appearances: [placeholderAppearances({
+        ...raw,
+        items: [
+          { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', initialSlots: 20, weight: 18, value: 5 },
+          { id: 'bag', name: 'Bag', kind: 'container', slot: 'back', initialSlots: 8, weight: 8, value: 1 },
+          { id: 'gem', name: 'Gem', kind: 'other', weight: 1, value: 10, stackable: true },
+        ],
+      })],
+    } as unknown as RawContent);
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = {
+      save: async (r: Record<string, unknown>) => { saved.push(r); },
+    } as unknown as ReceiptStore;
+    const directory = {
+      register: async () => true, succeed: async () => true,
+    } as unknown as SessionDirectory;
+    let hero: CharacterRuntime | undefined;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: withLoss.version, logger, directory, receipts,
+      itemCatalog: withLoss.items, progression: withLoss.progression as Progression,
+      buildSession: citySuccessor(), now: () => 1000,
+      createSession: (characterId) => {
+        const session = createHuntSession({
+          id: `s-${characterId}`, content: withLoss, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+        });
+        hero = new CharacterRuntime({
+          id: characterId, position: { x: 0, y: 0, z: 7 },
+          // Com vocação: sem ela o Canary e o TFS não perdem item nenhum na morte.
+          health: 100, maxHealth: 100, mana: 0, maxMana: 0, level: 8, xp: 0, vocationId: 'knight',
+          gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+          inventory: {
+            backpack: [{ instanceId: 'i:gems', itemId: 'gem', quantity: 12 }],
+            equipped: { back: { instanceId: 'i:backpack', itemId: 'backpack', quantity: 1 } },
+          },
+        });
+        session.enter(hero);
+        // A morte acontece DENTRO do avanço do ciclo — o `cycle` pula sessão que já chegou
+        // encerrada —, como acontece numa hunt de verdade: o herói morre no meio de um `advanceBy`.
+        const advance = session.advanceBy.bind(session);
+        let killed = false;
+        (session as unknown as { advanceBy: (dtMs: number) => void }).advanceBy = (dtMs) => {
+          advance(dtMs);
+          if (killed) return;
+          killed = true;
+          session.kill(hero as CharacterRuntime);
+        };
+        return session;
+      },
+    });
+    await host.prepare('p1', undefined, 'a1');
+    const socket = new FakeSocket();
+    host.attach(socket, 'p1');
+
+    const session = host.sessionFor('p1') as Session;
+    host.cycle(1100);
+    await vi.waitFor(() => expect(host.sessionFor('p1')?.ruleset.type).toBe('city'));
+    host.flush();
+
+    // O extrato durável: o que o `jobs` apaga, a bag que ele insere, e onde ela está vestida.
+    expect(saved).toHaveLength(1);
+    expect(saved[0]?.['reason']).toBe('death');
+    expect(saved[0]?.['removedInstances']).toEqual(['i:backpack', 'i:gems']);
+    const bagId = `${session.id}:0`;
+    expect(saved[0]?.['acquired']).toEqual([
+      { instanceId: bagId, itemId: 'bag', quantity: 1, origin: 'death-replacement' },
+    ]);
+    expect(saved[0]?.['equipment']).toEqual({ back: bagId });
+    // A tela de morte: um evento por instância perdida, no formato que o cliente lê.
+    const ended = socket.received().find((m) => m.type === 'session-ended');
+    expect(ended?.type === 'session-ended' && ended.notableEvents
+      .filter((e) => e.type === 'item-lost-on-death').map((e) => e.detail))
+      .toEqual(['backpack/1/i:backpack/p1', 'gem/12/i:gems/p1']);
+    // E a Cidade que sucede já é a do inventário NOVO: a bag vestida, vazia.
+    const city = host.sessionFor('p1')?.participants[0];
+    expect(city?.inventory.equippedAt('back')?.itemId).toBe('bag');
+    expect(city?.inventory.backpack.every((slot) => slot === null)).toBe(true);
   });
 
   it('solta o personagem quando o registro no diretório trocou de dono', async () => {
@@ -2692,7 +2878,10 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
       maps: [{ id: 'arena', z: 7, grid }, ...(raw.maps ?? []).filter((m) =>
         (m as { id: string }).id !== 'arena')],
       // O spawn no índice 10 é (6,6): o canto oposto ao herói em (1,1).
-      routes: [{ id: 'arena-loop', mapId: 'arena', tiles, spawnPoints: [{ routeIndex: 10, radius: 1 }] }],
+      routes: [{
+        id: 'arena-loop', mapId: 'arena', tiles,
+        spawnPoints: [{ routeIndex: 10, radius: 1, monsterId: 'rat', respawnDelayMs: 2_000 }],
+      }],
       monsters: (raw.monsters as Array<Record<string, unknown>>).map((m) =>
         m['id'] === 'rat' ? { ...m, health: 100_000, aggroRadius: 10 } : m),
     };
@@ -2706,14 +2895,33 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     wide: boolean;
     /** O rato deixa cadáver (FUN-123): aparência 7 na tabela, meio segundo no chão. */
     corpses: boolean;
+    /** O rato é um BOSS Nemesis (raceId 9001, #629) e o conteúdo tem a tabela de níveis do Canary. */
+    boss: boolean;
   }> = {}) {
     const raw = rawTestContent();
     const withCorpses = (base: RawContent): RawContent => ({
       ...base,
-      hunts: (base.hunts as Array<Record<string, unknown>>).map((h) => ({ ...h, corpseTtlMs: 500 })),
+      // `corpseTtlMs` mora no MONSTRO (#585, era da hunt).
+      monsters: (base.monsters as Array<Record<string, unknown>>).map((m) => ({ ...m, corpseTtlMs: 500 })),
       appearances: (base.appearances as Array<Record<string, unknown>>).map((a) => ({ ...a, corpses: { rat: 7 } })),
     });
-    const content = over.corpses === true
+    const content = over.boss === true
+      ? buildContent({
+        ...raw,
+        monsters: (raw.monsters as Array<Record<string, unknown>>).map((m) =>
+          m['id'] === 'rat'
+            ? {
+              ...m, ...(over.tanky === true ? { health: 100_000 } : {}),
+              boss: true, bosstiary: { rarity: 'nemesis', raceId: 9001 },
+            }
+            : m),
+        bosstiary: [{ id: 'baseline', levels: {
+          bane: [{ kills: 25, points: 5 }, { kills: 100, points: 15 }, { kills: 300, points: 30 }],
+          archfoe: [{ kills: 5, points: 10 }, { kills: 20, points: 30 }, { kills: 60, points: 60 }],
+          nemesis: [{ kills: 1, points: 10 }, { kills: 3, points: 30 }, { kills: 5, points: 60 }],
+        } }],
+      })
+      : over.corpses === true
       ? buildContent(withCorpses(raw))
       : over.wide === true
         ? buildContent(wideArena())
@@ -2828,6 +3036,38 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     expect((appears[0] as { appearanceId: number }).appearanceId).toBeGreaterThan(0);
     // E o andar vem junto: o cliente desenha por `z`.
     expect((appears[0] as { position: { z: number } }).position.z).toBe(7);
+  });
+
+  it('o monstro RECOLOCADO (o teleporte do familiar, #599) some e reaparece no tile novo, com id novo', () => {
+    // O `sim` não emite `creature-moved` de duração zero para o teleporte do familiar: o protocolo
+    // exige duração positiva, e o `#presentMoves` descarta o resto — o cliente nunca o veria
+    // chegar. O par `creature-vanished` + `creature-appeared` do MESMO subject é a relocação: o
+    // cliente o tira de onde estava e o desenha onde ficou (o id numérico não se reaproveita).
+    const { host, runFor, received } = hunt({ tanky: true });
+    runFor(300);
+    const session = host.sessionFor('hero');
+    if (session === undefined) throw new Error('sem sessão');
+    const rat = (session.ruleset as HuntRuleset).monsters[0];
+    if (rat === undefined) throw new Error('sem monstro');
+    const firstId = (received().filter((m) => m.type === 'creature-appear') as unknown as Array<{ id: number }>)[0]?.id;
+    expect(firstId).toBeDefined();
+    const before = received().length;
+
+    session.emit({ kind: 'creature-vanished', creatureId: rat.subject });
+    session.emit({
+      kind: 'creature-appeared', creatureId: rat.subject, monsterId: 'rat',
+      position: { x: 5, y: 5, z: 7 }, health: 20, maxHealth: 20, masterId: 'hero',
+    });
+    runFor(100);
+
+    const after = received().slice(before);
+    const gone = after.filter((m) => m.type === 'creature-disappear');
+    const appeared = after.filter((m) => m.type === 'creature-appear') as unknown as Array<{ id: number; position: unknown; masterId?: string }>;
+    expect(gone).toHaveLength(1);
+    expect((gone[0] as unknown as { id: number }).id).toBe(firstId);
+    expect(appeared).toHaveLength(1);
+    expect(appeared[0]).toMatchObject({ position: { x: 5, y: 5, z: 7 }, masterId: 'hero' });
+    expect(appeared[0]?.id).not.toBe(firstId);
   });
 
   it('NENHUM passo chega com id que não foi anunciado', () => {
@@ -3011,6 +3251,61 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     expect(received().filter((m) => m.type === 'bestiary')).toHaveLength(before);
   });
 
+  it('o Bosstiary chega no session-attach, DEPOIS do Bestiário, mesmo sem abate nenhum (#629)', () => {
+    // Pela mesma razão do Bestiário: progressão que só viaja em mensagem própria, e a Cidade não
+    // tem ciclo para mandar depois. Mutação que mata: apagar o `viewer.send` do Bosstiary em
+    // `#sendState`.
+    const { socket, viewer, stateOf, received } = hunt({ boss: true });
+    stateOf(socket, viewer);
+
+    const types = received().map((m) => m.type);
+    const bosstiary = received().filter((m) => m.type === 'bosstiary');
+    expect(bosstiary).toHaveLength(1);
+    expect(bosstiary[0]).toEqual({ type: 'bosstiary', kills: {}, points: 0 });
+    expect(types.indexOf('bosstiary')).toBeGreaterThan(types.indexOf('bestiary'));
+  });
+
+  it('o abate de boss sobe o Bosstiary ao vivo, e o Bestiário fica de fora dele (#629)', () => {
+    // O contador sobe no `sim` com ou sem visualizador (invariante 3); a mensagem é apresentação,
+    // e sai quando a SOMA dos abates mudou. Mutação que mata: apagar a chamada de
+    // `#presentBosstiary` no ciclo (nenhuma mensagem além do attach), ou apagar a comparação com
+    // `sentBosstiary` (uma por ciclo, e a lista teria repetição).
+    const { host, socket, viewer, stateOf, runFor, received } = hunt({ boss: true });
+    stateOf(socket, viewer);
+    runFor(60_000);
+    const hero = host.sessionFor('hero')?.participants[0];
+    const kills = hero?.bosstiary.killsOf(9001) ?? 0;
+    expect(kills).toBeGreaterThan(1);
+    // Nemesis: nível 1 no abate 1 (10 pontos) — e o boss NÃO conta no Bestiário.
+    expect(hero?.bosstiary.points).toBeGreaterThanOrEqual(10);
+    expect(hero?.bestiary.getState()).toEqual({});
+
+    const updates = received().filter((m) => m.type === 'bosstiary') as unknown as
+      Array<{ kills: Record<string, number>; points: number }>;
+    // A do attach (vazia) e pelo menos uma por abate contado depois dela.
+    expect(updates.length).toBeGreaterThan(1);
+    expect(updates.at(-1)?.kills).toEqual({ '9001': kills });
+    expect(updates.at(-1)?.points).toBe(hero?.bosstiary.points);
+    const totals = updates.map((u) => u.kills['9001'] ?? 0);
+    expect(new Set(totals).size).toBe(totals.length);
+    // O Bestiário não recebe nada do boss.
+    const bestiary = received().filter((m) => m.type === 'bestiary') as unknown as Array<{ counts: object }>;
+    expect(bestiary.every((message) => Object.keys(message.counts).length === 0)).toBe(true);
+    expect(kills).toBe(host.sessionFor('hero')?.aggregates.kills);
+  });
+
+  it('sem abate de boss não sai Bosstiary nenhum — o tempo não é gatilho (#629)', () => {
+    const { host, socket, viewer, stateOf, runFor, received } = hunt({ boss: true, tanky: true });
+    stateOf(socket, viewer);
+    const before = received().filter((m) => m.type === 'bosstiary').length;
+    expect(before).toBe(1);
+
+    runFor(2_000);
+
+    expect(host.sessionFor('hero')?.aggregates.kills).toBe(0);
+    expect(received().filter((m) => m.type === 'bosstiary')).toHaveLength(before);
+  });
+
   it('a vida do monstro desce por creature-health, e a morte vira creature-disappear', () => {
     // `creature-health` existia no protocolo sem emissor nenhum: o monstro aparecia, andava e
     // morria com a barra cheia o tempo todo — e o sintoma parecia bug do cliente.
@@ -3080,6 +3375,139 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     const appears = received().filter((m) => m.type === 'creature-appear');
     expect(appears.length).toBeGreaterThan(0);
     expect(appears[0]).toMatchObject({ name: 'rat', appearanceId: 0 });
+  });
+});
+
+describe('open-corpse / take-loot pelo socket (#722, ADR 0048 decisão 4)', () => {
+  /**
+   * Uma hunt de verdade cujo rato SEMPRE larga uma `gem` (peso 50), com cadáver persistente
+   * (`corpseTtlMs`) e capacidade controlada — o mesmo desenho de `comDrop` em
+   * `packages/sim/src/rulesets/hunt.test.ts`, só que ponta a ponta pelo `SessionHost`.
+   */
+  function corpseHunt(over: { capacity?: number } = {}) {
+    const base = rawTestContent();
+    const gem = itemSchema.parse({ id: 'gem', name: 'Gem', kind: 'other', weight: 50, value: 10 });
+    const raw: RawContent = {
+      ...base,
+      items: [gem],
+      // `corpseTtlMs` mora no MONSTRO (#585, era da hunt).
+      monsters: (base.monsters as Array<Record<string, unknown>>).map((m) => (m['id'] === 'rat'
+        ? {
+          ...m,
+          loot: { gold: { chance: 1, min: 2, max: 2 }, items: [{ itemId: 'gem', chance: 1, min: 1, max: 1 }] },
+          corpseTtlMs: 60_000,
+        }
+        : m)),
+      appearances: (base.appearances as Array<Record<string, unknown>>).map((a) => ({
+        ...a, corpses: { rat: 7 }, items: { gem: 5 },
+      })),
+      progression: [{ ...TEST_PROGRESSION, startingCapacity: over.capacity ?? 1, capacityPerLevel: 0 }],
+    };
+    const content = buildContent(raw);
+    let now = 0;
+    let hero: CharacterRuntime | undefined;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger, now: () => now,
+      monsterCatalog: content.monsters,
+      itemCatalog: content.items,
+      createSession: (characterId) => {
+        const session = createHuntSession({
+          id: `hunt-${characterId}`, content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+        });
+        hero = new CharacterRuntime({
+          id: characterId, position: { x: 1, y: 1, z: 7 },
+          health: 1_200, maxHealth: 1_200, mana: 50, maxMana: 50,
+          level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+          capacity: over.capacity ?? 1,
+        });
+        session.enter(hero);
+        return session;
+      },
+    });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'hero');
+    const runFor = (ms: number, step = 100) => { for (let t = 0; t < ms; t += step) { now += step; host.cycle(); } host.flush(); };
+    return { host, socket, viewer, runFor, received: () => socket.received(), hero: hero! };
+  }
+
+  it('open-corpse devolve o conteúdo do cadáver perto do personagem', () => {
+    // Capacidade 1: a gem (peso 50) nunca entra na mochila no abate — fica toda no cadáver. O
+    // ouro é sempre coletado no MESMO instante por `#collectFromCorpse` (ADR 0048 decisão 3),
+    // então o cadáver já chega com `gold: 0` quando o jogador o abre.
+    const { host, viewer, runFor, received } = corpseHunt();
+    runFor(3_000, 100);
+    const appeared = received().find((m) => m.type === 'ground-item-appear');
+    if (appeared?.type !== 'ground-item-appear') throw new Error('sem cadáver');
+    expect(appeared.lootable).toBe(true);
+
+    host.handle(viewer, { type: 'open-corpse', groundItemId: appeared.id });
+    host.flush();
+
+    const contents = received().find((m) => m.type === 'corpse-contents');
+    expect(contents).toMatchObject({
+      groundItemId: appeared.id, gold: 0, items: [{ itemId: 'gem', quantity: 1 }],
+    });
+  });
+
+  it('open-corpse recusa too-far-away em palavras', () => {
+    const { host, viewer, runFor, received, socket, hero } = corpseHunt();
+    runFor(3_000, 100);
+    const appeared = received().find((m) => m.type === 'ground-item-appear');
+    if (appeared?.type !== 'ground-item-appear') throw new Error('sem cadáver');
+    socket.frames.length = 0;
+    // Afasta o personagem do cadáver — o `sim` confere distância pela posição ATUAL, e o
+    // teste manipula direto o runtime, como os testes de recusa de inventário com o catálogo vazio.
+    hero.position = { x: hero.position.x + 10, y: hero.position.y, z: hero.position.z };
+
+    host.handle(viewer, { type: 'open-corpse', groundItemId: appeared.id });
+    host.flush();
+    const refusal = socket.received().find((m) => m.type === 'system-message');
+    expect(refusal).toMatchObject({ level: 'warning', text: 'Você está longe demais.' });
+    expect(socket.received().some((m) => m.type === 'corpse-contents')).toBe(false);
+  });
+
+  it('take-loot(instanceId: null) aplica o filtro do personagem e reenvia inventory', () => {
+    // Capacidade curta no abate deixa a gem no cadáver (o mesmo cenário do teste acima); o
+    // personagem então "abre espaço" (level up, por exemplo) e o clique reaplica o filtro.
+    const { host, viewer, runFor, received, hero } = corpseHunt();
+    runFor(3_000, 100);
+    const appeared = received().find((m) => m.type === 'ground-item-appear');
+    if (appeared?.type !== 'ground-item-appear') throw new Error('sem cadáver');
+    hero.capacity = 1_000;
+
+    host.handle(viewer, { type: 'take-loot', groundItemId: appeared.id, instanceId: null });
+    host.flush();
+
+    // Sem mochila equipada, o item entra na BOLSA (`satchel`), que tem slots por padrão do
+    // conteúdo — a mesma razão de `containerRulesFor` devolver `backpackSlots: 0` sem `back`.
+    // O ÚLTIMO `inventory` (não o do attach inicial) é o que reflete a coleta.
+    const inventory = received().findLast((m) => m.type === 'inventory');
+    expect(inventory?.type === 'inventory' && inventory.satchel.some(
+      (slot) => slot !== null && slot.itemId === 'gem',
+    )).toBe(true);
+    const contents = received().findLast((m) => m.type === 'corpse-contents');
+    expect(contents).toMatchObject({ groundItemId: appeared.id, items: [] });
+  });
+
+  it('take-loot recusa not-enough-capacity sem mover nada', () => {
+    const { host, viewer, runFor, received, socket } = corpseHunt({ capacity: 1 });
+    runFor(3_000, 100);
+    const appeared = received().find((m) => m.type === 'ground-item-appear');
+    if (appeared?.type !== 'ground-item-appear') throw new Error('sem cadáver');
+    host.handle(viewer, { type: 'open-corpse', groundItemId: appeared.id });
+    host.flush();
+    const contents = received().find((m) => m.type === 'corpse-contents');
+    const instanceId = contents?.type === 'corpse-contents' ? contents.items[0]?.instanceId : undefined;
+    expect(instanceId).toBeDefined();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'take-loot', groundItemId: appeared.id, instanceId: instanceId ?? '' });
+    host.flush();
+
+    expect(socket.received().some((m) => m.type === 'inventory')).toBe(false);
+    expect(socket.received().find((m) => m.type === 'system-message')).toMatchObject({
+      level: 'warning', text: 'Você não aguenta carregar mais isso.',
+    });
   });
 });
 
@@ -3189,10 +3617,11 @@ describe('as cores do outfit chegam ao cliente (FUN-104)', () => {
     expect(appears[0]).not.toHaveProperty('colors');
   });
 
-  it('o monstro NUNCA traz cores, mesmo ao lado de um herói pintado', async () => {
-    // O rato é uma camada só: o campo é de personagem, e a tabela é indexada por
-    // `characterId`. Mandar `colors` num monstro faria o cliente tentar pintar o que não
-    // tem máscara — e o herói pintado ao lado prova que a tabela estava povoada.
+  it('o monstro traz as cores do CONTEÚDO, e nunca as do herói pintado ao lado', async () => {
+    // O campo `colors` era só de personagem: a tabela do host é indexada por `characterId`. Desde
+    // o #620 o monstro também o traz — mas das cores do CONTEÚDO (`monster.outfit`, o neutro
+    // 0/0/0/0 do rato), e jamais as do ticket do jogador: o herói pintado ao lado prova que a
+    // tabela de personagens estava povoada, e o rato não a herda.
     // Um rato que AGUENTA, como no fixture da FUN-109: o herói de teste mata o comum num
     // golpe, e o `session-state` só lista monstro vivo — com o rato comum a lista vinha
     // vazia e o laço abaixo não afirmava nada (a mutação que sobreviveu na revisão).
@@ -3225,15 +3654,16 @@ describe('as cores do outfit chegam ao cliente (FUN-104)', () => {
     for (let t = 0; t < 300; t += 100) { now += 100; host.cycle(); }
     host.flush();
 
+    const NEUTRAL = { head: 0, body: 0, legs: 0, feet: 0 };
     const ratos = appearsOn(socket).filter((c) => c.name === 'Rat');
     expect(ratos.length).toBeGreaterThan(0);
-    for (const rato of ratos) expect(rato).not.toHaveProperty('colors');
+    for (const rato of ratos) expect(rato.colors).toEqual(NEUTRAL);
 
     const visto = stateOf(host, socket, viewer);
     expect(visto?.world.creatures.find((c) => c.name === 'hero')?.colors).toEqual(COLORS);
     const vivos = visto?.world.creatures.filter((c) => c.name === 'Rat') ?? [];
     expect(vivos.length).toBeGreaterThan(0);
-    for (const rato of vivos) expect(rato).not.toHaveProperty('colors');
+    for (const rato of vivos) expect(rato.colors).toEqual(NEUTRAL);
   });
 
   it('quem já está hospedado continua com as cores com que entrou, mesmo com ticket novo', async () => {
@@ -3292,6 +3722,11 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     // As chaves SEMÂNTICAS da ability de monstro (CMB-06): o conteúdo aponta a chave, e é AQUI
     // que ela vira id de arte.
     abilities: { spit: { missile: 9 }, 'spit-hit': { effect: 8 } },
+    // O campo de tile que uma ability deixa no chão (#561, M31-06): o id de CONTEÚDO do campo
+    // (`FieldSpec.id`) vira o id de arte daqui — a MESMA indireção de `corpses`.
+    fields: { flame: 2118 },
+    // A arte dos estágios 1, 2, … da cadeia `decayTo` (#560) — o índice 0 continua em `fields`.
+    fieldStages: { flame: [2119, 2120] as number[] },
   } as const;
   /** As armas de tiro do #152, e a munição abstrata que o bow dispara. */
   const BOW = {
@@ -3374,6 +3809,13 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     weapon: 'bow' | 'wand';
     /** Skills do conteúdo de teste (#340, SV-04). */
     skills: readonly unknown[];
+    /** O `hits` da tabela de aparências, trocado por cima do de teste (#620: o efeito por raça). */
+    hits: Record<string, unknown>;
+    /** Magias a mais no conteúdo, além de `strike` e `blast` (#620: o golpe FÍSICO de magia). */
+    spells: readonly unknown[];
+    /** As skills com que o herói nasce e o bônus de Loyalty que o ticket lhe deu (#628). */
+    heroSkills: SkillsState;
+    loyaltyBonusPercent: number;
   }> = {}) {
     const raw = rawTestContent();
     // As armas precisam de linha na tabela de aparência (FUN-94); a munição abstrata, só do
@@ -3407,20 +3849,23 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
       }),
       ...armory,
       appearances: [placeholderAppearances({ ...raw, ...armory })],
-      spells: [...(raw.spells ?? []), STRIKE, BLAST],
+      spells: [...(raw.spells ?? []), STRIKE, BLAST, ...(over.spells ?? [])],
       progression: [{
         ...TEST_PROGRESSION, startingMana: 200,
-        ...(over.regen === false ? { regen: { healthPerSecond: 0, manaPerSecond: 0 } } : {}),
+        ...(over.regen === false ? { regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } } : {}),
       }],
       ...(over.combat === undefined ? {} : { combat: [{ ...TEST_COMBAT, ...over.combat }] }),
+      // Fim do pull por dificuldade (#583, ADR 0039): "quantos ratos por ponto de spawn" virou
+      // "quantos pontos de spawn" — um ponto a mais por rato extra, no mesmo lugar de sempre.
       ...(over.monsterCount === undefined
         ? {}
         : {
-          hunts: [{
-            ...TEST_HUNT,
-            difficulties: {
-              cautious: { ...TEST_HUNT.difficulties.cautious, monsterCount: over.monsterCount },
-            },
+          routes: [{
+            ...TEST_ROUTE,
+            spawnPoints: Array.from(
+              { length: over.monsterCount },
+              () => TEST_ROUTE.spawnPoints[0],
+            ),
           }],
         }),
       ...(over.monsters === false
@@ -3433,7 +3878,10 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
         }
         : {}),
     });
-    const appearances = { ...(content.appearances as Appearances), ...TABLE };
+    const appearances = {
+      ...(content.appearances as Appearances), ...TABLE,
+      ...(over.hits === undefined ? {} : { hits: over.hits as Appearances['hits'] }),
+    };
     const stats = statsForLevel(1, null, content.progression);
     let now = 0;
     const host = new SessionHost({
@@ -3455,7 +3903,11 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
           mana: over.mana ?? stats.maxMana, maxMana: stats.maxMana,
           level: 1, xp: 0, gold: over.gold ?? 0, goldDelta: 0, alive: true, cooldowns: {},
           staminaMs: over.stamina ?? FULL_STAMINA_MS, staminaUpdatedAtMs: 0,
+          // Sabe toda magia do conteúdo (#624): o portão do aprendizado tem bloco próprio.
+          learnedSpells: learnedSpellsStateOf(content.spells.keys()),
           ...armed,
+          ...(over.heroSkills === undefined ? {} : { skills: over.heroSkills }),
+          ...(over.loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent: over.loyaltyBonusPercent }),
         }));
         return session;
       },
@@ -3613,8 +4065,12 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     //
     // Mutação que mata: `xp: 0` em `playerStatsOf` (a XP do fio fica em zero com o herói em
     // 30); `level: 0` idem, pelo level.
+    //
+    // 45 s, não 10 (#583, ADR 0039): o rato não é `blockable`, então cada respawn passa pelo
+    // telegraph de 4200 ms do Canary além do `respawnDelayMs` de 1000 — o ciclo de encontro
+    // de ~2,25 s vira ~7,5 s, e seis abates precisam de ~45 s, não mais dos ~13 s de antes.
     const { runFor, received, hero } = hunt();
-    runFor(10_000);
+    runFor(45_000);
 
     expect(hero().xp).toBeGreaterThan(0);
     expect(hero().level).toBeGreaterThan(1);
@@ -3698,19 +4154,110 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(ofType(received(), 'player-stats').length).toBe(2);
   });
 
+  it('o HUD recebe o bônus de Loyalty e o nível efetivo de cada skill; sem bônus, a forma é a de sempre (#628)', () => {
+    // O Canary manda ao cliente o nível COM Loyalty ao lado do base. Aqui: `loyaltyLevel` só
+    // viaja quando o bônus muda o nível, e `loyaltyBonusPercent` só quando é > 0 — o
+    // `player-stats` da conta sem degrau não ganha campo nenhum. O percentual continua o do
+    // nível BASE, e o dado persistido (`level`) também.
+    //
+    // Mutações que matam: tirar `loyaltyLevel` de `skillProgressOf` (a skill vai sem o nível
+    // efetivo), ou `loyaltyBonusPercent` de `playerStatsOf`/do `session-state.self`.
+    const loyal = hunt({
+      regen: false, stamina: MID_MINUTE_STAMINA_MS, monsters: false, skills: [TEST_MELEE_SKILL],
+      heroSkills: { melee: { level: 100, points: 0 } }, loyaltyBonusPercent: 50,
+    });
+    const stats = ofType(loyal.received(), 'player-stats')[0];
+    expect(stats?.loyaltyBonusPercent).toBe(50);
+    // Tries até o 100 (fator 1,1): 2.655.971; 50 % fecham quatro níveis (ver `loyalty.test.ts`).
+    expect(stats?.skills.melee).toEqual({ level: 100, percentToNext: 0, loyaltyLevel: 104 });
+    const attach = ofType(loyal.socket.received(), 'session-state').at(-1);
+    expect(attach?.self.loyaltyBonusPercent).toBe(50);
+    expect(attach?.self.skills.melee).toEqual({ level: 100, percentToNext: 0, loyaltyLevel: 104 });
+    // O persistido não sabe do bônus.
+    expect(loyal.hero().skills.getState()['melee']).toEqual({ level: 100, points: 0 });
+
+    const plain = hunt({
+      regen: false, stamina: MID_MINUTE_STAMINA_MS, monsters: false, skills: [TEST_MELEE_SKILL],
+      heroSkills: { melee: { level: 100, points: 0 } },
+    });
+    const plainStats = ofType(plain.received(), 'player-stats')[0];
+    expect(plainStats).not.toHaveProperty('loyaltyBonusPercent');
+    expect(plainStats?.skills.melee).toEqual({ level: 100, percentToNext: 0 });
+    const plainAttach = ofType(plain.socket.received(), 'session-state').at(-1);
+    expect(plainAttach?.self).not.toHaveProperty('loyaltyBonusPercent');
+  });
+
+  it('uma mudança SÓ do nível efetivo (Loyalty) gera player-stats — a comparação olha loyaltyLevel (#628)', () => {
+    // O nível efetivo sobe em passos que não coincidem com o nível/percentual BASE: existe um
+    // try que fecha o nível efetivo sem mexer em nenhum dos dois. Este teste o ENCONTRA (bisseção
+    // sobre os tries de um nível de custo alto, onde um try é uma fração de percentual ínfima) e
+    // ganha exatamente esse try — o HUD tem de receber o novo `loyaltyLevel` mesmo assim.
+    //
+    // Mutação que mata: tirar `a.loyaltyLevel === b.loyaltyLevel` de `sameSkillProgress`.
+    const melee: Skill = skillSchema.parse(TEST_MELEE_SKILL);
+    const at = (level: number, points: number) => new CharacterRuntime({
+      id: 'probe', position: { x: 0, y: 0, z: 7 }, health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+      level: 1, xp: 0, goldDelta: 0, alive: true, cooldowns: {}, skills: { melee: { level, points } },
+      loyaltyBonusPercent: 50,
+    });
+    let boundary: { level: number; points: number } | null = null;
+    for (let level = 40; level < 120 && boundary === null; level += 1) {
+      const cost = pointsForLevel(melee, level, 1.1);
+      const effective = (points: number) => at(level, points).loyaltyLevelOf(melee, 1.1);
+      if (effective(cost - 1) === effective(0)) continue;
+      let low = 0;
+      let high = cost - 1; // efetivo(low) < efetivo(high)
+      while (high - low > 1) {
+        const mid = Math.floor((low + high) / 2);
+        if (effective(mid) === effective(0)) low = mid; else high = mid;
+      }
+      const percent = (points: number) => at(level, points).skills.progressOf(melee, 1.1).percentToNext;
+      // Só serve se o try do meio NÃO mexe no percentual base (senão o teste não isola nada).
+      if (percent(low) === percent(high)) boundary = { level, points: low };
+    }
+    if (boundary === null) throw new Error('nenhum nível de custo alto tem um try de fronteira isolado');
+
+    const { runFor, received, hero } = hunt({
+      regen: false, stamina: MID_MINUTE_STAMINA_MS, monsters: false, skills: [TEST_MELEE_SKILL],
+      heroSkills: { melee: boundary }, loyaltyBonusPercent: 50,
+    });
+    const before = ofType(received(), 'player-stats');
+    expect(before).toHaveLength(1);
+    const beforeMelee = before[0]?.skills.melee;
+
+    hero().skills.gain(melee, 1);
+    runFor(100);
+
+    const stats = ofType(received(), 'player-stats');
+    expect(stats).toHaveLength(2);
+    const afterMelee = stats[1]?.skills.melee;
+    // Nível e percentual BASE iguais; só o efetivo andou um nível.
+    expect(afterMelee?.level).toBe(beforeMelee?.level);
+    expect(afterMelee?.percentToNext).toBe(beforeMelee?.percentToNext);
+    expect(afterMelee?.loyaltyLevel).toBe((beforeMelee?.loyaltyLevel ?? 0) + 1);
+    // Ciclo seguinte sem mudança: nenhum pacote a mais.
+    runFor(100);
+    expect(ofType(received(), 'player-stats')).toHaveLength(2);
+  });
+
   it('a magia com tabela vira missile do conjurador ao alvo e effect NO alvo, com os ids da tabela', () => {
     // O `sim` diz "saiu `strike` contra o rato"; a tabela diz que isso é o projétil 5 e a
     // explosão 12 (invariante 6). A ordem é a do Tibia: o projétil voa, o efeito estoura no
     // tile de chegada, o número cai.
     //
-    // Na arena de 2×2 o rato nasce colado e o primeiro morre no golpe engatilhado do herói,
-    // antes de bater; o segundo nasce com esse golpe em cooldown e bate primeiro — e é o dano
-    // levado que acorda a categoria `attack` do bot (é assim que o `sim` a arma). A magia sai
-    // aí, com `targets ≥ 1`, e por isso a hunt precisa de alguns segundos.
+    // Na arena de 2×2 o rato nasce colado ao herói. Antes do #583, o primeiro rato morria no
+    // golpe engatilhado do herói antes de bater, e o SEGUNDO nascia a tempo de bater primeiro
+    // enquanto o golpe do herói ainda estava em cooldown — e era o dano levado que acordava a
+    // categoria `attack` do bot. Desde o #583 (ADR 0039) um rato não-`blockable` só respawna
+    // depois do `respawnDelayMs` mais o telegraph de 4200 ms do Canary — tempo de sobra para o
+    // golpe do herói já estar pronto de novo e matar o segundo rato tão instantâneo quanto o
+    // primeiro, e a categoria nunca acordaria. Este rato tem vida de sobra para aguentar o
+    // golpe do herói e bater de volta NA PRIMEIRA vida — sem depender de respawn nenhum.
     //
     // Mutação que mata: trocar `from` e `to` no `missile` — o `effect` deixa de estourar
     // onde o projétil chegou. `effectId: look.missile` mata pelo id.
     const { runFor, received } = hunt({
+      rat: { health: 200 },
       bot: rules({ attack: [{
         when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId: 'strike' },
       }] }),
@@ -3813,8 +4360,14 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     //
     // Mutação que mata: ler `appearances.spells[spellId].effect` sem a guarda de `undefined`
     // — o ciclo explode num `TypeError` no primeiro lançamento.
+    //
+    // Vida extra pelo mesmo motivo do teste da magia com tabela (#583, ADR 0039): sem ela, o
+    // rato morre no golpe engatilhado do herói antes de bater, e o respawn não-`blockable`
+    // (`respawnDelayMs` + telegraph de 4200 ms) nunca chega a tempo do cooldown do herói ainda
+    // estar de pé — a categoria `attack` do bot nunca acordaria.
     const { runFor, received } = hunt({
       table: false,
+      rat: { health: 200 },
       bot: rules({ attack: [{
         when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId: 'strike' },
       }] }),
@@ -4031,6 +4584,130 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     for (const effect of effects) expect(effect.effectId).toBe(1);
   });
 
+  it('o golpe físico sangra com o efeito da RAÇA de quem o levou: veneno no rato venenoso, sangue no herói (#620)', () => {
+    // O `combatGetTypeInfo` do Canary: o efeito do golpe físico depende da raça do alvo. O rato
+    // desta hunt é `venom` (efeito 17) e o herói é `blood` (efeito 1, o default). Cada `effect`
+    // vem logo depois do `creature-hit` que o causou, e é o alvo daquele golpe que escolhe o id.
+    //
+    // Mutação que mata: ler a raça do ATACANTE, ou esquecer o `byRace` e mandar sempre `melee` —
+    // o golpe no rato sai com 1, e não 17.
+    const { runFor, received, heroId } = hunt({
+      rat: { race: 'venom' }, hits: { melee: 1, byRace: { blood: 1, venom: 17 } },
+    });
+    runFor(10_000);
+
+    const all = received();
+    let onRat = 0;
+    let onHero = 0;
+    all.forEach((message, index) => {
+      if (message.type !== 'creature-hit' || message.kind !== 'melee' || message.amount <= 0) return;
+      const effect = all[index + 1];
+      expect(effect?.type).toBe('effect');
+      const expected = message.id === heroId ? 1 : 17;
+      expect((effect as { effectId: number }).effectId).toBe(expected);
+      if (message.id === heroId) onHero += 1;
+      else onRat += 1;
+    });
+    // Os dois lados aconteceram: sem isso o teste só provaria um deles.
+    expect(onRat).toBeGreaterThan(0);
+    expect(onHero).toBeGreaterThan(0);
+  });
+
+  it('o golpe físico de MAGIA também segue a raça — o gatilho é o elemento, e não a origem (#620)', () => {
+    // `Game::sendEffects` roda em todo dano com valor, de corpo a corpo ou de magia, e só o tipo
+    // `COMBAT_PHYSICALDAMAGE` cai no `switch` da raça. A magia física (Explosion, Inflict Wound…)
+    // num rato venenoso solta a gota de veneno (17) logo depois do `creature-hit`; a de
+    // elemento — o `strike` de teste é `arcane` — não solta efeito de raça nenhum.
+    //
+    // Mutação que mata: voltar a guarda para `event.source === 'melee'` — o golpe `spell`
+    // físico fica sem o efeito 17; ou tirar a guarda do elemento — o `strike` arcano passa a
+    // soltar 17 também.
+    const physical = {
+      id: 'wound', name: 'Ferida', manaCost: 15, cooldownMs: 2_000,
+      effect: { kind: 'damage', power: 40, range: 3, damageType: 'physical' },
+    };
+    const run = (spellId: string) => {
+      const { runFor, received, heroId } = hunt({
+        rat: { race: 'venom', health: 200 }, hits: { melee: 1, byRace: { venom: 17 } },
+        spells: [physical],
+        bot: rules({ attack: [{
+          when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId },
+        }] }),
+      });
+      runFor(5_000);
+      const all = received();
+      return all
+        .map((message, index) => ({ message, next: all[index + 1] }))
+        .filter(({ message }) => message.type === 'creature-hit' && message.kind === 'spell'
+          && message.id !== heroId && message.amount > 0);
+    };
+
+    const physicalHits = run('wound');
+    expect(physicalHits.length).toBeGreaterThan(0);
+    for (const { message, next } of physicalHits) {
+      expect(message).toMatchObject({ damageType: 'physical' });
+      expect(next).toMatchObject({ type: 'effect', effectId: 17 });
+    }
+    const arcaneHits = run('strike');
+    expect(arcaneHits.length).toBeGreaterThan(0);
+    for (const { message, next } of arcaneHits) {
+      expect(message).toMatchObject({ damageType: 'arcane' });
+      expect(next?.type === 'effect' && next.effectId === 17).toBe(false);
+    }
+  });
+
+  it('sem `byRace` na tabela, todo golpe físico sangra com hits.melee como antes (#620)', () => {
+    // A tabela de antes desta issue continua valendo: raça é apresentação, e a ausência dela
+    // nunca apaga o efeito. O rato é `venom`, e mesmo assim o efeito é o 1 do `melee`.
+    const { runFor, received } = hunt({ rat: { race: 'venom' } });
+    runFor(10_000);
+    const effects = ofType(received(), 'effect');
+    expect(effects.length).toBeGreaterThan(0);
+    for (const effect of effects) expect(effect.effectId).toBe(1);
+  });
+
+  it('o monstro nasce com a apresentação do conteúdo: cores, addons, raça, luz e falas (#620)', () => {
+    // O `sim` não conhece nada disto: o host lê da definição do catálogo, e o cliente desenha.
+    // Mutação que mata: espalhar `monsterLookOf` só no `creature-appear` e não no `session-state`
+    // (o segundo caso abaixo), ou o inverso.
+    const look = {
+      outfit: { head: 113, body: 120, legs: 95, feet: 115, addons: 3 },
+      light: { level: 4, color: 208 },
+      race: 'fire',
+      voices: { intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!', yell: false }, { text: 'GRR', yell: true }] },
+    };
+    const { runFor, received, host, viewer, heroId } = hunt({ rat: look, tanky: true });
+    runFor(500);
+
+    const appears = ofType(received(), 'creature-appear').filter((m) => m.id !== heroId);
+    expect(appears.length).toBeGreaterThan(0);
+    const expected = {
+      colors: { head: 113, body: 120, legs: 95, feet: 115 }, addons: 3, race: 'fire',
+      light: { level: 4, color: 208 },
+      voices: { intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!' }, { text: 'GRR', yell: true }] },
+    };
+    expect(appears[0]).toMatchObject(expected);
+
+    // Quem reanexa no meio vê o mesmo monstro, pintado igual.
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = ofType(received(), 'session-state').at(-1);
+    const rats = (state?.world.creatures ?? []).filter((c) => c.id !== heroId);
+    expect(rats.length).toBeGreaterThan(0);
+    expect(rats[0]).toMatchObject(expected);
+  });
+
+  it('o monstro comum manda cores neutras e nada mais: sem addon, sem raça, sem luz e sem falas (#620)', () => {
+    const { runFor, received, heroId } = hunt();
+    runFor(500);
+    const rat = ofType(received(), 'creature-appear').find((m) => m.id !== heroId);
+    expect(rat?.colors).toEqual({ head: 0, body: 0, legs: 0, feet: 0 });
+    for (const key of ['addons', 'race', 'light', 'voices'] as const) expect(key in (rat ?? {})).toBe(false);
+    // O herói é outra coisa: não ganha a apresentação de monstro.
+    const hero = ofType(received(), 'session-state').at(-1)?.world.creatures.find((c) => c.id === heroId);
+    expect(hero?.colors).toBeUndefined();
+  });
+
   it('a cura vira creature-hit com kind heal, e o efeito dela sai no tile do conjurador', () => {
     // O número em verde é o que a cura REPÔS (60), com o id do herói; o efeito 13 não vem do
     // `creature-healed`, vem do `spell-cast` sem alvo — é por isso que ele estoura no
@@ -4145,24 +4822,203 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
         shape: { shape: 'circle', radius: 1, centered: 'target' },
         condition: {
           key: 'flame', merge: 'refresh', durationMs: 4_000,
-          effect: { kind: 'damage-over-time', amount: 4, intervalMs: 500, damageType: 'fire' },
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 8, intervalMs: 500, damage: 4 }], damageType: 'fire',
+          },
         },
       },
     };
 
-    const withTable = hunt({ rat: { abilities: [ability] }, regen: false, table: true });
+    // O rato sobrevive ao herói (#583, ADR 0039): com um único ponto de spawn e o telegraph
+    // não-`blockable` de 4200 ms, um rato com a vida padrão morreria no primeiro golpe do
+    // herói e o PRÓXIMO só nasceria depois do herói já estar pronto para outro golpe instantâneo
+    // — nunca sobraria tempo para o campo bater nem uma vez. A vida alta aqui é só para o rato
+    // aguentar os golpes do herói pelos 6 s inteiros; a ability é quem faz o dano que o teste mede.
+    const withTable = hunt({ rat: { abilities: [ability], health: 1_000 }, regen: false, table: true });
     withTable.runFor(6_000);
     const hitsWith = ofType(withTable.received(), 'creature-hit')
       .filter((h) => h.id === withTable.heroId && h.kind === 'spell');
     expect(hitsWith.length).toBeGreaterThan(0);
-    expect(withTable.hero().health).toBeLessThan(withTable.maxHealth);
+    // O máximo de AGORA: o herói pode subir de level no meio, e desde #678 o level up enche a
+    // vida — o que conta é o campo ter ferido depois disso.
+    expect(withTable.hero().health).toBeLessThan(withTable.hero().maxHealth);
 
-    const withoutTable = hunt({ rat: { abilities: [ability] }, regen: false, table: false });
+    const withoutTable = hunt({ rat: { abilities: [ability], health: 1_000 }, regen: false, table: false });
     withoutTable.runFor(6_000);
     const hitsWithout = ofType(withoutTable.received(), 'creature-hit')
       .filter((h) => h.id === withoutTable.heroId && h.kind === 'spell');
     expect(hitsWithout.length).toBeGreaterThan(0);
-    expect(withoutTable.hero().health).toBeLessThan(withoutTable.maxHealth);
+    expect(withoutTable.hero().health).toBeLessThan(withoutTable.hero().maxHealth);
+  });
+
+  it('o campo vira field-appear com a arte da tabela, e o vencimento vira field-disappear (#561, M31-06)', () => {
+    // A MESMA ability do teste acima, com uma linha em `appearances.fields` (TABLE.fields.flame).
+    const ability = {
+      id: 'flame', cadenceMs: 500, target: { range: 3 }, power: 0, damageType: 'fire',
+      field: {
+        id: 'flame', durationMs: 1_000,
+        shape: { shape: 'circle', radius: 1, centered: 'target' },
+        condition: {
+          key: 'flame', merge: 'refresh', durationMs: 1_000,
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 2, intervalMs: 500, damage: 4 }], damageType: 'fire',
+          },
+        },
+      },
+    };
+    // Vida extra pelo mesmo motivo do teste CMB-07 acima (#583, ADR 0039): sem ela, o rato de
+    // vida padrão morre no golpe engatilhado do herói antes de bater, e o respawn não-`blockable`
+    // (`respawnDelayMs` + telegraph de 4200 ms) nunca chega a tempo do herói ainda estar
+    // esperando — a ability nunca dispararia e nenhum `field-appear` sairia. Menos vida que o
+    // CMB-07 (50, não 1_000) DE PROPÓSITO: este teste também precisa do `field-disappear`, que só
+    // sai quando o rato PARA de relançar a ability — vida de sobra manteria o campo se
+    // reiniciando (`merge: 'refresh'`) para sempre dentro da janela de 3 s.
+    const { runFor, received } = hunt({
+      rat: { abilities: [ability], health: 50 }, regen: false, table: true,
+    });
+    runFor(3_000);
+    const all = received();
+    const appeared = ofType(all, 'field-appear');
+    expect(appeared.length).toBeGreaterThan(0);
+    expect(appeared[0]).toMatchObject({ id: 'flame', appearanceId: 2118 });
+    expect(appeared[0]?.tiles.length).toBeGreaterThan(0);
+    const gone = ofType(all, 'field-disappear');
+    expect(gone.length).toBeGreaterThan(0);
+    expect(gone[0]).toMatchObject({ id: 'flame' });
+  });
+
+  // As três a seguir aplicam o campo DIRETO por `ruleset.applyField` (como o describe de campos
+  // de `hunt.test.ts` já faz), em vez de por uma ability de monstro: a ability recasta a cada
+  // `cadenceMs` e `applyField` SEMPRE reinicia no estágio 0 ao relançar — com uma cadência curta
+  // o bastante para caber na janela do teste, o recast apagava a troca de estágio antes do
+  // `session-attach` correr, e é exatamente o que aconteceu na primeira versão deste teste.
+  // Aplicar direto tira essa corrida: o campo decai sozinho, sem ninguém para relançá-lo.
+  const stagedFire = {
+    id: 'flame', durationMs: 1_000, // ignorado — `stages` manda.
+    shape: { shape: 'circle' as const, radius: 1, centered: 'caster' as const },
+    stages: [
+      {
+        durationMs: 500,
+        condition: {
+          key: 'flame', merge: 'refresh' as const, durationMs: 500,
+          effect: {
+            kind: 'damage-over-time' as const, form: 'rounds' as const,
+            rounds: [{ count: 1, intervalMs: 500, damage: 4 }], damageType: 'fire' as const,
+          },
+        },
+      },
+      { durationMs: 500 }, // estágio 2, mudo — some sem mais dano.
+    ],
+  };
+
+  it('a troca de estágio (#560, decayTo) vira field-stage-change com o appearanceId do índice certo', () => {
+    const { host, runFor, received } = hunt({ regen: false, table: true });
+    const session = host.sessionFor('hero');
+    if (session === undefined) throw new Error('sem sessão');
+    (session.ruleset as HuntRuleset).applyField(session, stagedFire, { x: 1, y: 1, z: 7 });
+
+    runFor(600); // passa dos 500 do estágio 0: a troca já aconteceu.
+    const all = received();
+    expect(ofType(all, 'field-appear')[0]).toMatchObject({ id: 'flame', appearanceId: 2118 });
+    // Estágio 1: `fieldStages.flame[0]` (índice `stageIndex - 1`).
+    expect(ofType(all, 'field-stage-change')[0]).toMatchObject({ id: 'flame', appearanceId: 2119 });
+
+    runFor(500); // passa dos 500 do estágio 1: o campo desaparece de vez.
+    expect(ofType(received(), 'field-disappear').length).toBeGreaterThan(0);
+  });
+
+  it('SEM linha em appearances.fieldStages a troca de estágio é MUDA — nem chega a sair (invariante 6)', () => {
+    const { host, runFor, received } = hunt({ regen: false, table: true });
+    const session = host.sessionFor('hero');
+    if (session === undefined) throw new Error('sem sessão');
+    const ruleset = session.ruleset as HuntRuleset;
+    ruleset.applyField(session, { ...stagedFire, id: 'unmapped-stage' }, { x: 1, y: 1, z: 7 });
+
+    runFor(600);
+    expect(ofType(received(), 'field-stage-change')).toHaveLength(0);
+    // A mecânica continua rodando — a ausência é só da apresentação (invariante 6).
+    expect(ruleset.fields[0]?.stageIndex).toBe(1);
+  });
+
+  it('quem reanexa no meio da hunt vê os campos ATIVOS em session-state.world.fields', () => {
+    const ability = {
+      id: 'flame', cadenceMs: 500, target: { range: 3 }, power: 0, damageType: 'fire',
+      field: {
+        id: 'flame', durationMs: 10_000,
+        shape: { shape: 'circle', radius: 1, centered: 'target' },
+        condition: {
+          key: 'flame', merge: 'refresh', durationMs: 10_000,
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 20, intervalMs: 500, damage: 4 }], damageType: 'fire',
+          },
+        },
+      },
+    };
+    // Vida extra pelo mesmo motivo do CMB-07 (#583, ADR 0039) — ver comentário acima.
+    const { host, viewer, runFor, received } = hunt({
+      rat: { abilities: [ability], health: 50 }, regen: false, table: true,
+    });
+    runFor(1_000);
+    expect(ofType(received(), 'field-appear').length).toBeGreaterThan(0);
+
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = ofType(received(), 'session-state').at(-1);
+    expect(state?.world.fields).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'flame', appearanceId: 2118 })]),
+    );
+  });
+
+  it('quem reanexa NO MEIO da cadeia (#560) vê a arte do estágio ATUAL, não a do nascimento', () => {
+    const { host, viewer, runFor, received } = hunt({ regen: false, table: true });
+    const session = host.sessionFor('hero');
+    if (session === undefined) throw new Error('sem sessão');
+    // Estágio 1 LONGO de propósito: o reanexo precisa cair dentro dele, não no 2 (mudo).
+    const [firstStage] = stagedFire.stages;
+    if (firstStage === undefined) throw new Error('faltou o primeiro estágio da fixture');
+    (session.ruleset as HuntRuleset).applyField(
+      session, { ...stagedFire, stages: [firstStage, { durationMs: 10_000 }] },
+      { x: 1, y: 1, z: 7 },
+    );
+
+    runFor(600); // passa dos 500 do estágio 0: já está no estágio 1 quando reanexa.
+    expect(ofType(received(), 'field-stage-change').length).toBeGreaterThan(0);
+
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = ofType(received(), 'session-state').at(-1);
+    expect(state?.world.fields).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'flame', appearanceId: 2119 })]),
+    );
+  });
+
+  it('SEM linha em appearances.fields o campo é mudo, e a mecânica não muda (invariante 6)', () => {
+    const ability = {
+      id: 'flame', cadenceMs: 500, target: { range: 3 }, power: 0, damageType: 'fire',
+      field: {
+        id: 'unmapped-flame', durationMs: 1_000,
+        shape: { shape: 'circle', radius: 1, centered: 'target' },
+        condition: {
+          key: 'unmapped-flame', merge: 'refresh', durationMs: 1_000,
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 2, intervalMs: 500, damage: 4 }], damageType: 'fire',
+          },
+        },
+      },
+    };
+    // Vida extra pelo mesmo motivo do CMB-07 (#583, ADR 0039) — ver comentário acima.
+    const { runFor, received, hero } = hunt({
+      rat: { abilities: [ability], health: 50 }, regen: false, table: true,
+    });
+    runFor(3_000);
+    expect(ofType(received(), 'field-appear')).toHaveLength(0);
+    expect(ofType(received(), 'field-disappear')).toHaveLength(0);
+    // Sem arte, a chama ainda fere — a apresentação é que fica muda (invariante 6).
+    expect(hero().health).toBeLessThan(hero().maxHealth);
   });
 });
 
@@ -4223,6 +5079,482 @@ describe('a munição escolhida pelo socket (#152, ADR 0026 decisão 4)', () => 
   });
 });
 
+describe('a postura de luta pelo socket (M30-03, #550, ADR 0040)', () => {
+  const shard: Ruleset = {
+    type: 'city', shared: true, hz: () => 0,
+    onEnter: () => {}, onEvent: () => {}, onCreatureDied: () => {}, onEnd: () => {},
+  };
+  const statsOf = (socket: FakeSocket, from = 0) =>
+    socket.received().slice(from).filter((m): m is S2CMessage & { type: 'player-stats' } => m.type === 'player-stats');
+  const attach = () => {
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset);
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    return { host, viewer, socket, hero, before: socket.received().length };
+  };
+
+  it('quem entra sem ter escolhido vê a ofensiva — o `FIGHTMODE_ATTACK` do Canary — no player-stats do attach', () => {
+    const { host, viewer, socket } = attach();
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    expect(statsOf(socket).at(-1)?.fightMode).toBe('attack');
+  });
+
+  it('escolhe a postura no personagem da sessão dona, e a resposta é player-stats com o modo NOVO', () => {
+    const { host, viewer, socket, hero, before } = attach();
+
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'defense' });
+    host.flush();
+
+    expect(hero.fightMode).toBe('defense');
+    expect(statsOf(socket, before).at(-1)?.fightMode).toBe('defense');
+    // E a troca é imediata em cada direção — os três modos, sem ordem.
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'balanced' });
+    host.flush();
+    expect(hero.fightMode).toBe('balanced');
+    expect(statsOf(socket, before).at(-1)?.fightMode).toBe('balanced');
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'attack' });
+    host.flush();
+    expect(hero.fightMode).toBe('attack');
+    expect(statsOf(socket, before).at(-1)?.fightMode).toBe('attack');
+  });
+
+  it('escolher o modo em que já está confirma do mesmo jeito (o cliente não fica sem resposta) e nada muda', () => {
+    const { host, viewer, socket, hero, before } = attach();
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'attack' });
+    host.flush();
+    expect(hero.fightMode).toBe('attack');
+    expect(statsOf(socket, before)).toHaveLength(1);
+    expect(statsOf(socket, before)[0]?.fightMode).toBe('attack');
+  });
+
+  it('um modo que o protocolo não conhece nunca chega ao personagem — o schema o barra antes', () => {
+    // O host confia no tipo do protocolo; quem recusa o lixo é `C2S_SCHEMAS` (invariante 4).
+    expect(C2S_SCHEMAS['set-fight-mode'].safeParse({ mode: 'aggressive' }).success).toBe(false);
+  });
+
+  it('quem reanexa vê a postura que ficou — a hunt desanexada continua com o modo que o jogador deixou', () => {
+    const { host, viewer, hero } = attach();
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'balanced' });
+    host.flush();
+    host.detach(viewer);
+
+    const socket = new FakeSocket();
+    const again = host.attach(socket, 'p1');
+    host.handle(again, { type: 'session-attach' });
+    host.flush();
+    expect(hero.fightMode).toBe('balanced');
+    expect(statsOf(socket).at(-1)?.fightMode).toBe('balanced');
+  });
+
+  it('na Cidade: escolher marca sujo, e o extrato durável leva a postura (ABSOLUTA) ao ledger', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const { host, sessions } = buildHost(shard, { receipts });
+    await host.prepare('p1', undefined, 'a1');
+    const viewer = host.attach(new FakeSocket(), 'p1');
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'defense' });
+    host.flush();
+    await host.release('p1', 1000, 'logout');
+
+    expect(hero.fightMode).toBe('defense');
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ fightMode: 'defense' });
+  });
+
+  it('na Cidade: quem nunca mexeu na postura não gera extrato só por causa dela', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const { host } = buildHost(shard, { receipts });
+    await host.prepare('p1', undefined, 'a1');
+    host.attach(new FakeSocket(), 'p1');
+    await host.release('p1', 1000, 'logout');
+    expect(saved).toHaveLength(0);
+  });
+
+  it('o extrato de hunt leva a postura do dono mesmo quando ele voltou à ofensiva (nunca gateada pelo default)', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, { directory, receipts });
+    await host.prepare('p1', undefined, 'a1');
+    const viewer = host.attach(new FakeSocket(), 'p1');
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'defense' });
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'attack' });
+    host.flush();
+    expect(hero.fightMode).toBe('attack');
+
+    await host.drainAll('drain');
+
+    // `attack` no extrato — omitir a chave deixaria uma postura antiga do Postgres voltar.
+    expect(saved[0]).toHaveProperty('fightMode', 'attack');
+  });
+
+  it('o extrato de hunt leva os carimbos do familiar do dono, e quem nunca invocou não leva a chave (#599)', async () => {
+    // Sem os carimbos no extrato, o cooldown de 30 min NÃO atravessaria a saída da hunt: o ticket
+    // seguinte leria o personagem como quem nunca invocou. Quem nunca invocou fica sem a chave — o
+    // ledger não toca na coluna (o `receipts.ts` distingue "não veio" de "veio vazio").
+    const run = async (stamp: boolean) => {
+      const saved: Array<Record<string, unknown>> = [];
+      const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+      const directory = { register: async () => true } as unknown as SessionDirectory;
+      const { ruleset } = countingRuleset();
+      const { host, sessions } = buildHost(ruleset, { directory, receipts });
+      await host.prepare('p1', undefined, 'a1');
+      host.attach(new FakeSocket(), 'p1');
+      const hero = sessions[0]?.participants[0] as CharacterRuntime;
+      if (stamp) {
+        hero.familiar = { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 };
+      }
+      await host.drainAll('drain');
+      return saved[0];
+    };
+
+    expect(await run(true)).toMatchObject({
+      familiar: { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 },
+    });
+    expect(await run(false)).not.toHaveProperty('familiar');
+  });
+});
+
+describe('a economia de Charms pelo socket (M39-02, #602, ADR 0052/0053)', () => {
+  const WOUND: Charm = {
+    id: 'wound', name: 'Wound', canaryCharmId: 0, category: 'major', type: 'offensive',
+    damageType: 'physical', percent: 5, chance: [5, 10, 11], points: [10, 20, 30],
+  };
+  const charmCatalog = new Map([[WOUND.id, WOUND]]);
+  const RAT_ENTRY: CharmBestiaryEntry = { toKill: 1, charmsPoints: 20 };
+  const WOLF_ENTRY: CharmBestiaryEntry = { toKill: 1_000, charmsPoints: 50 };
+  const charmBestiaryEntries = new Map([['rat', RAT_ENTRY], ['wolf', WOLF_ENTRY]]);
+  const warnings = (socket: FakeSocket) =>
+    socket.received().filter((m) => m.type === 'system-message');
+  const charmsMessages = (socket: FakeSocket) =>
+    socket.received().filter((m): m is S2CMessage & { type: 'charms' } => m.type === 'charms');
+
+  function setUp(gold = 0) {
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, { charmCatalog, charmBestiaryEntries, gold });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    socket.frames.length = 0;
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    // Completa a ficha do rat (toKill: 1) para o unlock ter pontos e o assign aceitar o alvo.
+    hero.bestiary.record('rat');
+    return { host, viewer, socket, hero };
+  }
+
+  it('desbloqueia com pontos derivados do Bestiário, e manda o registro por charms', () => {
+    const { host, viewer, socket, hero } = setUp();
+
+    host.handle(viewer, { type: 'charm-unlock', charmId: 'wound' });
+    host.flush();
+
+    expect(hero.charms.tierOf('wound')).toBe(1);
+    expect(warnings(socket)).toHaveLength(0);
+    const last = charmsMessages(socket).at(-1);
+    expect(last).toMatchObject({ pointsSpent: 10, tiers: { wound: 1 } });
+  });
+
+  it('sem pontos suficientes, recusa com o motivo e não muda nada', () => {
+    // Ficha do rat NUNCA completa (`toKill: 1_000`) — `pointsEarned` é zero, recusa antes de
+    // gastar qualquer coisa.
+    const { ruleset } = countingRuleset();
+    const emptyEntries = new Map([['rat', { toKill: 1_000, charmsPoints: 20 }]]);
+    const { host, sessions } = buildHost(ruleset, { charmCatalog, charmBestiaryEntries: emptyEntries });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+
+    host.handle(viewer, { type: 'charm-unlock', charmId: 'wound' });
+    host.flush();
+
+    expect(hero.charms.tierOf('wound')).toBe(0);
+    const warning = warnings(socket)[0];
+    expect(warning?.type === 'system-message' && warning.text).toContain('pontos');
+  });
+
+  it('atribui a um monstro com a ficha completa, e remove cobrando level × 100 gold', () => {
+    const { host, viewer, socket, hero } = setUp(1_000);
+    host.handle(viewer, { type: 'charm-unlock', charmId: 'wound' });
+    host.flush();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'charm-assign', charmId: 'wound', monsterId: 'rat' });
+    host.flush();
+    expect(hero.charms.assignmentOf('wound')).toBe('rat');
+    expect(warnings(socket)).toHaveLength(0);
+
+    const goldBefore = hero.gold + hero.goldDelta;
+    host.handle(viewer, { type: 'charm-remove', charmId: 'wound' });
+    host.flush();
+
+    expect(hero.charms.assignmentOf('wound')).toBeUndefined();
+    // level 8 (o default de `buildHost`) × 100 = 800.
+    expect(goldBefore - (hero.gold + hero.goldDelta)).toBe(800);
+    expect(warnings(socket)).toHaveLength(0);
+  });
+
+  it('atribuir major a monstro incompleto é recusado com o motivo', () => {
+    // Desbloqueia com os pontos do rat (ficha completa), mas tenta atribuir ao WOLF — cuja
+    // ficha está longe de completa (`toKill: 1_000`, zero abates): a exigência é por ALVO, não
+    // por ter pontos suficientes para desbloquear.
+    const { host, viewer, socket, hero } = setUp();
+    host.handle(viewer, { type: 'charm-unlock', charmId: 'wound' });
+    host.flush();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'charm-assign', charmId: 'wound', monsterId: 'wolf' });
+    host.flush();
+
+    expect(hero.charms.assignmentOf('wound')).toBeUndefined();
+    const warning = warnings(socket)[0];
+    expect(warning?.type === 'system-message' && warning.text).toContain('Bestiário');
+  });
+
+  it('remover sem gold suficiente recusa, e a atribuição fica', () => {
+    const { host, viewer, socket, hero } = setUp(0);
+    host.handle(viewer, { type: 'charm-unlock', charmId: 'wound' });
+    host.handle(viewer, { type: 'charm-assign', charmId: 'wound', monsterId: 'rat' });
+    host.flush();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'charm-remove', charmId: 'wound' });
+    host.flush();
+
+    expect(hero.charms.assignmentOf('wound')).toBe('rat');
+    const warning = warnings(socket)[0];
+    expect(warning?.type === 'system-message' && warning.text).toContain('gold');
+  });
+});
+
+describe('aprender magia pelo socket (#624, ADR 0058, ADR 0052)', () => {
+  const heal = { kind: 'heal' as const, amount: 10, target: 'self' as const };
+  const berserk: Spell = {
+    id: 'berserk', name: 'Berserk', manaCost: 115, cooldownMs: 4_000, minLevel: 35, vocationId: 'knight',
+    learnPrice: 2_500, effect: heal,
+  };
+  const woundCleansing: Spell = {
+    id: 'wound-cleansing', name: 'Wound Cleansing', manaCost: 40, cooldownMs: 6_000, minLevel: 8,
+    vocationId: 'knight', learnPrice: 0, effect: heal,
+  };
+  const haste: Spell = {
+    id: 'haste-druid', name: 'Haste', manaCost: 60, cooldownMs: 2_000, minLevel: 14, vocationId: 'druid',
+    learnPrice: 600, effect: heal,
+  };
+  const unpriced: Spell = {
+    id: 'great-death-beam', name: 'Great Death Beam', manaCost: 140, cooldownMs: 10_000, minLevel: 30,
+    vocationId: 'knight', effect: heal,
+  };
+  const spellCatalog = new Map([berserk, woundCleansing, haste, unpriced].map((spell) => [spell.id, spell]));
+
+  const warnings = (socket: FakeSocket): string[] =>
+    socket.received().flatMap((m) => (m.type === 'system-message' && m.level === 'warning' ? [m.text] : []));
+  const learnedMessages = (socket: FakeSocket) =>
+    socket.received().filter((m): m is S2CMessage & { type: 'learned-spells' } => m.type === 'learned-spells');
+
+  /** Uma Cidade de verdade, com um knight nível `level` e `gold`, e o extrato de estado durável capturado. */
+  async function inCity(over: { level?: number; gold?: number; learned?: readonly string[] } = {}) {
+    const content = testContent();
+    const shard = new CityShard(content, () => 0);
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const directory = { register: async () => true, succeed: async () => true } as unknown as SessionDirectory;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger, receipts, directory, spellCatalog,
+      createSession: createCitySessionFactory(content, () => 0, shard),
+      buildSession: createSessionBuilder(content, () => 0, shard),
+      now: () => 0,
+    });
+    await host.prepare('p1', {
+      level: over.level ?? 40, xp: 0, gold: over.gold ?? 10_000, vocation: 'knight',
+      ...(over.learned === undefined ? {} : { learnedSpells: { spellIds: [...over.learned], version: 1 } }),
+    }, 'a1');
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    socket.frames.length = 0;
+    const hero = host.sessionFor('p1')?.participants[0] as CharacterRuntime;
+    return { host, viewer, socket, hero, saved };
+  }
+
+  it('compra na Cidade: debita o preço, marca a magia e manda `learned-spells` e o saldo novo', async () => {
+    const { host, viewer, socket, hero } = await inCity();
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
+    host.flush();
+
+    expect(hero.learnedSpells.has('berserk')).toBe(true);
+    expect(hero.gold + hero.goldDelta).toBe(7_500);
+    expect(warnings(socket)).toEqual([]);
+    expect(learnedMessages(socket).at(-1)?.spellIds).toEqual(['berserk']);
+    // O saldo novo chega ao HUD: a compra é a única coisa que mexeu no gold.
+    const stats = socket.received().filter((m) => m.type === 'player-stats').at(-1);
+    expect(stats?.type === 'player-stats' && stats.gold).toBe(7_500);
+  });
+
+  it('é IDEMPOTENTE: pedir de novo é recusado e NÃO cobra outra vez (invariante 10)', async () => {
+    const { host, viewer, socket, hero, saved } = await inCity();
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
+    host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
+    host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
+    host.flush();
+
+    expect(hero.gold + hero.goldDelta).toBe(7_500);
+    expect(warnings(socket)).toEqual([
+      'Você já aprendeu essa magia.', 'Você já aprendeu essa magia.',
+    ]);
+    // E o extrato liquida UMA cobrança, no mesmo registro que a magia (nunca uma sem a outra).
+    await host.release('p1', 1000, 'logout');
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({
+      aggregates: { goldSpent: 2_500, goldGained: 0 },
+      learnedSpells: { spellIds: ['berserk'], version: 1 },
+    });
+  });
+
+  it('a magia grátis (`learnPrice: 0`) fica aprendida sem gold nenhum', async () => {
+    const { host, viewer, hero } = await inCity({ gold: 0 });
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'wound-cleansing' });
+    host.flush();
+
+    expect(hero.learnedSpells.has('wound-cleansing')).toBe(true);
+    expect(hero.goldDelta).toBe(0);
+  });
+
+  it('cada recusa diz o motivo e não muda NADA: nem registro, nem gold, nem extrato', async () => {
+    const cases: Array<{ spellId: string; over?: { level?: number; gold?: number }; text: string }> = [
+      { spellId: 'no-such-spell', text: 'Essa magia não existe.' },
+      { spellId: 'great-death-beam', text: 'Ninguém ensina essa magia.' },
+      { spellId: 'haste-druid', over: { level: 40 }, text: 'Essa magia não é da sua vocação.' },
+      { spellId: 'berserk', over: { level: 34 }, text: 'Você ainda não tem o level dessa magia.' },
+      { spellId: 'berserk', over: { gold: 2_499 }, text: 'Você não tem gold suficiente para aprender essa magia.' },
+    ];
+    for (const { spellId, over, text } of cases) {
+      const { host, viewer, socket, hero, saved } = await inCity(over);
+      host.handle(viewer, { type: 'learn-spell', spellId });
+      host.flush();
+      expect(warnings(socket), spellId).toEqual([text]);
+      expect(hero.learnedSpells.size, spellId).toBe(0);
+      expect(hero.goldDelta, spellId).toBe(0);
+      expect(learnedMessages(socket), spellId).toEqual([]);
+      // Nada mudou, então a Cidade nem gera extrato de estado durável no logout.
+      await host.release('p1', 1000, 'logout');
+      expect(saved, spellId).toHaveLength(0);
+    }
+  });
+
+  it('sem catálogo de magias no host a compra é recusada com honestidade — nunca aceita às cegas', async () => {
+    const content = testContent();
+    const shard = new CityShard(content, () => 0);
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger,
+      createSession: createCitySessionFactory(content, () => 0, shard),
+      now: () => 0,
+    });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
+    host.flush();
+
+    expect(warnings(socket)).toEqual(['Essa magia não existe.']);
+  });
+
+  it('quem reconecta recebe o que já aprendeu — a barra não fica toda marcada até a próxima compra', async () => {
+    const { host, viewer, socket } = await inCity({ learned: ['wound-cleansing'] });
+
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+
+    expect(learnedMessages(socket).at(-1)?.spellIds).toEqual(['wound-cleansing']);
+  });
+
+  it('sessão que chegou SEM o registro não o reescreve vazio: o extrato omite o campo e o Postgres fica como está (ADR 0014)', async () => {
+    // Um ticket de um `api` anterior à issue (ou um snapshot antigo) não diz o que o personagem
+    // aprendeu. Gravar `{ spellIds: [] }` no logout apagaria a concessão da migração 0024.
+    const { host, viewer, saved } = await inCity();
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'defense' });
+    host.flush();
+    await host.release('p1', 1000, 'logout');
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ fightMode: 'defense' });
+    expect(saved[0]).not.toHaveProperty('learnedSpells');
+
+    // Já com o registro do ticket (vazio inclusive), ele é a verdade e vai no extrato.
+    const known = await inCity({ learned: [] });
+    known.host.handle(known.viewer, { type: 'set-fight-mode', mode: 'defense' });
+    known.host.flush();
+    await known.host.release('p1', 1000, 'logout');
+    expect(known.saved[0]).toMatchObject({ learnedSpells: { spellIds: [], version: 1 } });
+  });
+
+  it('o registro do ticket entra na sessão: quem comprou ontem entra hoje sabendo a magia', async () => {
+    const { hero } = await inCity({ learned: ['berserk', 'wound-cleansing'] });
+    expect(hero.learnedSpells.getState().spellIds).toEqual(['berserk', 'wound-cleansing']);
+  });
+
+  it('é aceito NA HUNT, sem rolagem: debita por `goldDelta` E pelo agregado `goldSpent` da sessão', async () => {
+    const content = testContent();
+    const shard = new CityShard(content, () => 0);
+    const saved: Array<Record<string, unknown> & { aggregates: { goldSpent: number } }> = [];
+    const receipts = {
+      save: async (r: Record<string, unknown> & { aggregates: { goldSpent: number } }) => { saved.push(r); },
+    } as unknown as ReceiptStore;
+    const directory = { register: async () => true, succeed: async () => true } as unknown as SessionDirectory;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger, receipts, directory, spellCatalog,
+      createSession: createCitySessionFactory(content, () => 0, shard),
+      buildSession: createSessionBuilder(content, () => 0, shard),
+      now: () => 0,
+    });
+    await host.prepare('p1', { level: 40, xp: 0, gold: 10_000, vocation: 'knight' }, 'a1');
+    await host.transition('p1', { to: 'hunt', huntId: 'arena', difficulty: 'cautious' });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    socket.frames.length = 0;
+    const hunt = host.sessionFor('p1');
+    const hero = hunt?.participants[0] as CharacterRuntime;
+    expect(hunt?.ruleset.type).toBe('hunt');
+    // O bot que vinha PULANDO a magia (recusa sem prazo) precisa acordar na compra — só nela.
+    const rearm = vi.spyOn(hunt?.ruleset as HuntRuleset, 'rearmBot');
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'unknown-spell' });
+    host.flush();
+    expect(rearm).not.toHaveBeenCalled();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'learn-spell', spellId: 'berserk' });
+    host.flush();
+
+    expect(rearm).toHaveBeenCalledTimes(1);
+    expect(rearm).toHaveBeenCalledWith(hunt, 'p1');
+    expect(warnings(socket)).toEqual([]);
+    expect(hero.learnedSpells.has('berserk')).toBe(true);
+    expect(hero.gold + hero.goldDelta).toBe(7_500);
+    expect(hunt?.aggregates.goldSpent).toBe(2_500);
+    expect(learnedMessages(socket).at(-1)?.spellIds).toEqual(['berserk']);
+
+    // O extrato da hunt leva a magia e a cobrança JUNTAS.
+    await host.transition('p1', { to: 'city' });
+    const receipt = saved.find((r) => r.aggregates.goldSpent === 2_500);
+    expect(receipt).toMatchObject({ learnedSpells: { spellIds: ['berserk'], version: 1 } });
+  });
+});
+
 describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () => {
   const axe = {
     ...compileItem(itemSchema.parse({
@@ -4234,7 +5566,7 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
   const knight = {
     id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
     startingWeaponItemId: 'steel-axe', spellSkill: 'magic', startingKit: [], skillMultipliers: {},
-    meleeDamageMultiplier: 1, distDamageMultiplier: 1,
+    meleeDamageMultiplier: 1, distDamageMultiplier: 1, soulMax: 100, soulGainTicksMs: 120000,
   };
   const vocations = new Map([[knight.id, knight]]);
   const itemCatalog = new Map([[axe.id, axe]]);
@@ -4248,7 +5580,8 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
     host.flush();
     const before = socket.received().length;
     const hero = sessions[0]?.participants[0] as CharacterRuntime;
-    // O personagem de `buildHost` nasce sem capacidade; sem ela a arma iria para a Caixa.
+    // O personagem de `buildHost` nasce sem capacidade; a arma equipa igual (`forceAdd` ignora
+    // peso, ADR 0048 decisão 7), mas 400 mantém o cenário simples para quem só quer a vocação.
     hero.capacity = 400;
     return { host, viewer, socket, hero, before };
   };
@@ -4371,6 +5704,211 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
     });
   });
 
+  describe('promover a vocação pelo socket, só na Cidade (#566, ADR 0042 decisão 1)', () => {
+    const shard = (): Ruleset => ({
+      type: 'city', shared: true, hz: () => 0,
+      onEnter: () => {}, onEvent: () => {}, onCreatureDied: () => {}, onEnd: () => {},
+    });
+    const promotableKnight = {
+      ...knight,
+      promotion: {
+        name: 'Elite Knight',
+        regen: { health: { ticksMs: 4000, amount: 1 }, mana: { ticksMs: 6000, amount: 2 } },
+        minLevel: 20, price: 20_000,
+      },
+    };
+    const promotableVocations = new Map([[promotableKnight.id, promotableKnight]]);
+
+    it('promove na Cidade: debita o gold, marca promoted, e player-stats reflete', () => {
+      const { host, viewer, socket, hero, before } = atLevel(
+        20, shard(), { vocations: promotableVocations },
+      );
+      hero.vocationId = 'knight';
+      hero.goldDelta = 20_000;
+
+      host.handle(viewer, { type: 'promote-vocation' });
+      host.flush();
+
+      expect(hero.promoted).toBe(true);
+      expect(hero.goldDelta).toBe(0);
+      expect(warnings(socket)).toHaveLength(0);
+      const after = socket.received().slice(before);
+      const stats = after.filter((m) => m.type === 'player-stats').at(-1);
+      expect(stats?.type === 'player-stats' && stats.promoted).toBe(true);
+    });
+
+    it('recusa fora da Cidade, mesmo com level e gold', () => {
+      const { host, viewer, socket, hero } = atLevel(
+        20, countingRuleset().ruleset, { vocations: promotableVocations },
+      );
+      hero.vocationId = 'knight';
+      hero.goldDelta = 20_000;
+
+      host.handle(viewer, { type: 'promote-vocation' });
+      host.flush();
+
+      expect(hero.promoted).toBe(false);
+      expect(warnings(socket).map((m) => m.type === 'system-message' && m.text)).toEqual([
+        'Você precisa estar na Cidade para se promover.',
+      ]);
+    });
+
+    it('recusa sem vocação, level baixo, gold insuficiente, já promovido e vocação sem bloco', () => {
+      const noVocation = atLevel(20, shard(), { vocations: promotableVocations });
+      noVocation.host.handle(noVocation.viewer, { type: 'promote-vocation' });
+      noVocation.host.flush();
+      expect(warnings(noVocation.socket).map((m) => m.type === 'system-message' && m.text)).toEqual([
+        'Escolha uma vocação antes de se promover.',
+      ]);
+
+      const tooLow = atLevel(19, shard(), { vocations: promotableVocations });
+      tooLow.hero.vocationId = 'knight';
+      tooLow.hero.goldDelta = 20_000;
+      tooLow.host.handle(tooLow.viewer, { type: 'promote-vocation' });
+      tooLow.host.flush();
+      expect(warnings(tooLow.socket).map((m) => m.type === 'system-message' && m.text)).toEqual([
+        'Você ainda não chegou ao level da promoção.',
+      ]);
+
+      const poor = atLevel(20, shard(), { vocations: promotableVocations });
+      poor.hero.vocationId = 'knight';
+      poor.host.handle(poor.viewer, { type: 'promote-vocation' });
+      poor.host.flush();
+      expect(warnings(poor.socket).map((m) => m.type === 'system-message' && m.text)).toEqual([
+        'Você não tem gold suficiente para se promover.',
+      ]);
+
+      const already = atLevel(20, shard(), { vocations: promotableVocations });
+      already.hero.vocationId = 'knight';
+      already.hero.goldDelta = 20_000;
+      already.hero.promoted = true;
+      already.host.handle(already.viewer, { type: 'promote-vocation' });
+      already.host.flush();
+      expect(warnings(already.socket).map((m) => m.type === 'system-message' && m.text)).toEqual([
+        'Você já foi promovido.',
+      ]);
+
+      const notPromotable = atLevel(20, shard(), { vocations });
+      notPromotable.hero.vocationId = 'knight';
+      notPromotable.hero.goldDelta = 20_000;
+      notPromotable.host.handle(notPromotable.viewer, { type: 'promote-vocation' });
+      notPromotable.host.flush();
+      expect(warnings(notPromotable.socket).map((m) => m.type === 'system-message' && m.text)).toEqual([
+        'Sua vocação não tem promoção.',
+      ]);
+    });
+  });
+
+  describe('vender e descartar pelo socket (#724, ADR 0048 d.8)', () => {
+    const gem = {
+      ...compileItem(itemSchema.parse({ id: 'gem', name: 'Gem', kind: 'other', weight: 1, value: 30 })),
+      appearanceId: 3,
+    };
+    const rock = {
+      ...compileItem(itemSchema.parse({ id: 'rock', name: 'Rock', kind: 'other', weight: 5, value: 0 })),
+      appearanceId: 4,
+    };
+    const sellCatalog = new Map([[gem.id, gem], [rock.id, rock]]);
+    const mensagens = (socket: FakeSocket) =>
+      socket.received().filter((m) => m.type === 'system-message');
+
+    it('vende: credita goldDelta E o agregado da hunt, some da mochila, e o extrato leva removedInstances', async () => {
+      const saved: Array<Record<string, unknown>> = [];
+      const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+      const { ruleset } = countingRuleset();
+      const { host, sessions } = buildHost(ruleset, { itemCatalog: sellCatalog, receipts });
+      await host.prepare('p1', undefined, 'a1');
+      const viewer = host.attach(new FakeSocket(), 'p1');
+      const hero = sessions[0]?.participants[0] as CharacterRuntime;
+      hero.capacity = 1_000;
+      hero.inventory.add(
+        { instanceId: 'g1', itemId: 'gem', quantity: 2 }, sellCatalog, hero,
+        { backpackSlots: 0, satchelSlots: 0, row: 1 },
+      );
+
+      host.handle(viewer, { type: 'sell-items', instanceIds: ['g1'] });
+      host.flush();
+
+      expect(hero.goldDelta).toBe(60);
+      expect(hero.inventory.findStack('gem')).toBeNull();
+
+      await host.release('p1', 1000, 'logout');
+
+      expect(saved).toHaveLength(1);
+      expect(saved[0]).toMatchObject({ removedInstances: ['g1'] });
+      expect((saved[0] as { aggregates: { goldGained: number } }).aggregates.goldGained).toBe(60);
+    });
+
+    it('`value: 0` recusa o lote inteiro com "Ninguém compra isto.", sem mexer no gold nem na mochila', () => {
+      const { ruleset } = countingRuleset();
+      const { host, sessions } = buildHost(ruleset, { itemCatalog: sellCatalog });
+      const socket = new FakeSocket();
+      const viewer = host.attach(socket, 'p1');
+      const hero = sessions[0]?.participants[0] as CharacterRuntime;
+      hero.capacity = 1_000;
+      hero.inventory.add(
+        { instanceId: 'r1', itemId: 'rock', quantity: 1 }, sellCatalog, hero,
+        { backpackSlots: 0, satchelSlots: 0, row: 1 },
+      );
+
+      host.handle(viewer, { type: 'sell-items', instanceIds: ['r1'] });
+      host.flush();
+
+      expect(hero.goldDelta).toBe(0);
+      expect(hero.inventory.findStack('rock')).not.toBeNull();
+      expect(mensagens(socket).map((m) => m.type === 'system-message' && m.text))
+        .toEqual(['Ninguém compra isto.']);
+    });
+
+    it('descarta: destrói sem gold, e a instância entra em `removedInstances`', () => {
+      const { ruleset } = countingRuleset();
+      const { host, sessions } = buildHost(ruleset, { itemCatalog: sellCatalog });
+      const viewer = host.attach(new FakeSocket(), 'p1');
+      const hero = sessions[0]?.participants[0] as CharacterRuntime;
+      hero.capacity = 1_000;
+      hero.inventory.add(
+        { instanceId: 'g1', itemId: 'gem', quantity: 1 }, sellCatalog, hero,
+        { backpackSlots: 0, satchelSlots: 0, row: 1 },
+      );
+
+      host.handle(viewer, { type: 'discard-item', instanceId: 'g1' });
+      host.flush();
+
+      expect(hero.goldDelta).toBe(0);
+      expect(hero.inventory.findStack('gem')).toBeNull();
+      expect(hero.removedInstances).toEqual(['g1']);
+    });
+
+    it('na Cidade: vender credita goldDelta e o extrato durável leva goldGained e removedInstances', async () => {
+      const saved: Array<Record<string, unknown>> = [];
+      const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+      const shard: Ruleset = {
+        type: 'city', shared: true, hz: () => 0,
+        onEnter: () => {}, onEvent: () => {}, onCreatureDied: () => {}, onEnd: () => {},
+      };
+      const { host, sessions } = buildHost(shard, { itemCatalog: sellCatalog, receipts });
+      await host.prepare('p1', undefined, 'a1');
+      const viewer = host.attach(new FakeSocket(), 'p1');
+      const hero = sessions[0]?.participants[0] as CharacterRuntime;
+      hero.capacity = 1_000;
+      hero.inventory.add(
+        { instanceId: 'g1', itemId: 'gem', quantity: 1 }, sellCatalog, hero,
+        { backpackSlots: 0, satchelSlots: 0, row: 1 },
+      );
+
+      host.handle(viewer, { type: 'sell-items', instanceIds: ['g1'] });
+      host.flush();
+      await host.release('p1', 1000, 'logout');
+
+      expect(saved).toHaveLength(1);
+      expect(saved[0]).toMatchObject({ removedInstances: ['g1'] });
+      expect((saved[0] as { aggregates: { goldGained: number } }).aggregates.goldGained).toBe(30);
+      // Liquidado: a próxima sessão do mesmo shard começa do saldo já incorporado, como o
+      // `#persistReceipt` da hunt já faz — nunca reencontra um `goldDelta` pendente duas vezes.
+      expect(hero.goldDelta).toBe(0);
+    });
+  });
+
   describe('o kit completo da vocação (#496)', () => {
     const shield = {
       ...compileItem(itemSchema.parse({
@@ -4389,11 +5927,13 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
       ['knight', {
         id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
         spellSkill: 'magic', skillMultipliers: {}, meleeDamageMultiplier: 1, distDamageMultiplier: 1,
+        soulMax: 100, soulGainTicksMs: 120000,
         startingKit: [{ itemId: 'steel-axe', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' }],
       }],
       ['paladin', {
         id: 'paladin', name: 'Paladin', healthPerLevel: 10, manaPerLevel: 15, capacityPerLevel: 20,
         spellSkill: 'distance', skillMultipliers: {}, meleeDamageMultiplier: 1, distDamageMultiplier: 1,
+        soulMax: 100, soulGainTicksMs: 120000,
         startingKit: [{ itemId: 'bow', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' }],
       }],
     ]);
@@ -4443,18 +5983,16 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
       expect(after.filter((m) => m.type === 'system-message')).toHaveLength(0);
     });
 
-    it('a piece that does not fit goes to the loot box, with a message naming it', () => {
-      // A vocação não pode ser punida pela mochila: o que coube veste, o que não coube vai
-      // para a Caixa, e a escolha vale inteira. Mutação que mata: devolver `ok: false`.
+    it('equips every piece even without capacity for both, and warns nothing (ADR 0048 d.7, forceAdd ignores weight)', () => {
+      // A vocação não pode ser punida pela mochila: a escolha vale inteira, peso nenhum.
+      // Mutação que mata: devolver `ok: false`, ou deixar de vestir por causa do peso.
       const { hero, socket, before } = atLevel(8, 'knight', 70);
 
       expect(hero.vocationId).toBe('knight');
       expect(hero.inventory.equippedAt('hand')?.itemId).toBe('steel-axe');
-      expect(hero.lootBox.map((item) => item.itemId)).toEqual(['wooden-shield']);
+      expect(hero.inventory.equippedAt('shield')?.itemId).toBe('wooden-shield');
       const after = socket.received().slice(before);
-      const infos = after.filter((m) => m.type === 'system-message' && m.level === 'info');
-      expect(infos).toHaveLength(1);
-      expect(infos[0]?.type === 'system-message' && infos[0]?.text).toContain('Wooden Shield');
+      expect(after.filter((m) => m.type === 'system-message')).toHaveLength(0);
     });
 
     it('the kit travels in the receipt with both pieces and the provenance', async () => {
@@ -4541,6 +6079,25 @@ describe('mover item pelo socket (#160, ADR 0026 decisão 6)', () => {
     host.handle(viewer, { type: 'move-item', from: { container: 'satchel', index: 0 }, to: { container: 'satchel', index: 9 } });
     await host.release('p1', 1000, 'logout');
     expect(saved[0]).toMatchObject({ layout: { r1: { container: 'satchel', index: 9 } }, equipment: {} });
+  });
+
+  it('o extrato leva o overlay por instância; `null` é a instância igual à definição (#604)', async () => {
+    // Mutação que mata: esquecer `overlays` no extrato do fim de sessão — o imbuement aplicado
+    // (ou vencido) na hunt morreria no logout.
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const { host, sessions } = buildHost(countingRuleset().ruleset, { itemCatalog, progression, receipts });
+    await host.prepare('p1', undefined, 'a1');
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    hero.capacity = 1_000;
+    const rules = { backpackSlots: 0, satchelSlots: 10, row: 5 };
+    hero.inventory.ensureContainers(rules);
+    hero.inventory.add({ instanceId: 'r1', itemId: 'rock', quantity: 1 }, itemCatalog, hero, rules);
+    hero.inventory.add({ instanceId: 'r2', itemId: 'rock', quantity: 1 }, itemCatalog, hero, rules);
+    const imbued = { imbuements: [{ slot: 0, typeId: 'strike-basic', remainingMs: 1000 }] };
+    hero.inventory.setOverlay('r1', imbued);
+    await host.release('p1', 1000, 'logout');
+    expect(saved[0]).toMatchObject({ overlays: { r1: imbued, r2: null } });
   });
 });
 
@@ -5684,7 +7241,7 @@ describe('targetId, active conditions and hunt identity (#341, SV-05)', () => {
       progression: [{
         ...TEST_PROGRESSION,
         startingMana: 200,
-        ...(over.regen === false ? { regen: { healthPerSecond: 0, manaPerSecond: 0 } } : {}),
+        ...(over.regen === false ? { regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } } : {}),
       }],
       ...(over.monsters === false ? { routes: [{ ...TEST_ROUTE, spawnPoints: [] }] } : {}),
       ...(Object.keys(ratOverride).length > 0
@@ -5845,6 +7402,56 @@ describe('targetId, active conditions and hunt identity (#341, SV-05)', () => {
     // 7. Idle cycles after expiry do NOT duplicate
     runFor(500);
     expect(ofType(received(), 'active-conditions')).toHaveLength(3);
+  });
+
+  it('a luz (#623) vai em `active-conditions` com o raio, a cor e o prazo; muda o nível → reenvia', () => {
+    const { hero, runFor, received } = createHuntFixture({ monsters: false, regen: false });
+
+    hero().conditions.apply({
+      key: 'light', spellId: 'light', expiresAtMs: 370_000,
+      light: { level: 6, color: 215, durationMs: 370_000 },
+    });
+    runFor(100);
+    const first = ofType(received(), 'active-conditions').at(-1);
+    expect(first?.conditions).toEqual([{
+      kind: 'light', remainingMs: expect.any(Number), light: { level: 6, color: 215, durationMs: 370_000 },
+    }]);
+
+    // Mesmo instante de fim, OUTRO nível (uma luz que sobrescreveu a outra): a assinatura não pode
+    // ser só o fim — o cliente desenharia o raio errado até a próxima mudança.
+    const count = ofType(received(), 'active-conditions').length;
+    hero().conditions.apply({
+      key: 'light', spellId: 'great-light', expiresAtMs: 370_000,
+      light: { level: 8, color: 215, durationMs: 370_000 },
+    });
+    runFor(100);
+    const after = ofType(received(), 'active-conditions');
+    expect(after).toHaveLength(count + 1);
+    expect(after.at(-1)?.conditions[0]?.light?.level).toBe(8);
+
+    // Sem os dados de luz (um snapshot que não os carrega) NÃO vira badge: a luz sem o que
+    // desenhar é ruído.
+    hero().conditions.remove('light');
+    hero().conditions.apply({ key: 'light', spellId: 'light', expiresAtMs: 370_000 });
+    runFor(100);
+    expect(ofType(received(), 'active-conditions').at(-1)?.conditions).toEqual([]);
+  });
+
+  it('um Find Person (#623) vira `system-message` só para quem lançou, com a frase em português', () => {
+    const { host, runFor, received } = createHuntFixture({ monsters: false, regen: false });
+    const before = ofType(received(), 'system-message').length;
+    host.sessionFor('hero')?.emit({
+      kind: 'find-result', characterId: 'hero', target: 'person', subjectId: 'hero',
+      relation: { distance: 'close', level: 'lower', direction: 'north-east' },
+    });
+    runFor(100);
+
+    const messages = ofType(received(), 'system-message');
+    expect(messages).toHaveLength(before + 1);
+    // O nome de quem foi achado vem do host (`#nameByCharacter`); sem ele, "Alguém".
+    expect(messages.at(-1)).toMatchObject({
+      level: 'info', text: expect.stringMatching(/está em um andar inferior, a nordeste\.$/),
+    });
   });
 
   it('instance-enter and session-state carry huntId and difficulty when in a hunt, but not in City', () => {
@@ -6204,6 +7811,7 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
       progression: content.progression,
       skillCatalog: content.skills,
       acceptBotConfig: createBotConfigValidator(content),
+      loadBotConfig: createBotConfigLoader(content),
       saveBotConfig: async (characterId, config) => { saved.push({ characterId, config }); },
       createSession: (characterId) => {
         const session = createHuntSession({
@@ -6213,6 +7821,7 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
           id: characterId, position: { x: 1, y: 1, z: 7 },
           health: 1_200, maxHealth: 1_200, mana: 50, maxMana: 50,
           level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+          learnedSpells: learnedSpellsStateOf(content.spells.keys()),
         }));
         sessions.push(session);
         return session;
@@ -6248,7 +7857,10 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
     return config;
   };
 
-  it('na Cidade (ruleset sem `useSlot`) responde ok:false com motivo, nunca em silêncio (RF-02)', async () => {
+  it('na Cidade, sem configuração de bot, responde ok:false com motivo, nunca em silêncio (RF-02, #792)', async () => {
+    // Desde o #792 a Cidade TEM `useSlot` (conjuração, ADR 0044 d.2): a recusa genérica "Você
+    // não está numa caçada." só sai quando o ruleset não tem o método nenhum — aqui ela dá
+    // lugar a uma recusa tipada de verdade. Sem `bot-config`, o slot 0 nunca foi preenchido.
     const content = testContent();
     const host = new SessionHost({
       nodeId: 'n1', contentVersion: content.version, logger,
@@ -6261,7 +7873,7 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
     host.flush();
 
     expect(socket.received()).toContainEqual({
-      type: 'slot-result', set: 0, slot: 0, ok: false, reason: 'Você não está numa caçada.',
+      type: 'slot-result', set: 0, slot: 0, ok: false, reason: 'Este slot está vazio.',
     });
   });
 
@@ -6308,6 +7920,27 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
     expect(socket.received()).not.toContainEqual({ type: 'target-changed', creatureId: ratId, seq: 2 });
   });
 
+  it('select-target num monstro INVISÍVEL é recusado com target-cancel — o jogador não o enxerga (#559)', async () => {
+    const { host, socket, viewer, runFor, send, sessions } = realHunt(true);
+    runFor(200);
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = socket.received().filter((m) => m.type === 'session-state').at(-1);
+    if (state?.type !== 'session-state') throw new Error('não veio session-state');
+    const rat = state.world.creatures.find((c) => c.name === 'Rat');
+    const ratId = rat?.id as number;
+    const monster = (sessions[0]?.ruleset as HuntRuleset).monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    monster.conditions.apply({ key: 'invisible', targetId: monster.subject, expiresAtMs: 999_999 });
+
+    // O auto-target (#444) pode já ter anunciado o rato ANTES de ele ficar invisível: o que se
+    // confere é que o pedido de seleção NÃO gera uma confirmação a mais.
+    const before = socket.received().filter((m) => m.type === 'target-changed').length;
+    await send({ type: 'select-target', creatureId: ratId, seq: 1 });
+    expect(socket.received()).toContainEqual({ type: 'target-cancel', seq: 1 });
+    expect(socket.received().filter((m) => m.type === 'target-changed')).toHaveLength(before);
+  });
+
   it('slot-state sai no primeiro ciclo e só muda quando o par (state, reason) muda (RF-09)', async () => {
     const { socket, runFor, send } = realHunt(false, false);
     await send({ type: 'bot-config', config: manualHealConfig() });
@@ -6338,6 +7971,7 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
     const host = new SessionHost({
       nodeId: 'n1', contentVersion: content.version, logger,
       acceptBotConfig: createBotConfigValidator(content),
+      loadBotConfig: createBotConfigLoader(content),
       saveBotConfig: async (_id, config) => { saved.push(config); },
       createSession: createCitySessionFactory(content),
     });
@@ -6351,5 +7985,117 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
     const v2 = migrateBotConfigV1(healConfig);
     await host.prepare('p2', { level: 8, xp: 0, botConfig: v2 }, 'a2');
     expect(saved).toHaveLength(1);
+  });
+});
+
+describe('cenário usável: use-on-map, look e tile-update (#729, ADR 0050 d.7)', () => {
+  // Uma sala 4×4 com uma porta em (2,1) e uma placa em (1,2) — pequena o bastante para o herói
+  // (que entra em (1,1)) nascer adjacente à porta sem precisar andar.
+  const scenarioMap = {
+    id: 'arena', z: 7, grid: ['####', '#..#', '#..#', '####'],
+    interactables: [
+      { at: { x: 2, y: 1, z: 7 }, kind: 'door', initialState: 'closed', appearanceKey: 'door-1' },
+      { at: { x: 1, y: 2, z: 7 }, kind: 'sign', initialState: 'default', appearanceKey: 'sign-1', text: 'Beware of the rats.' },
+    ],
+  };
+  const scenarioRaw = (): RawContent => {
+    const raw = rawTestContent();
+    return {
+      ...raw,
+      maps: [scenarioMap, ...(raw.maps ?? []).filter((m) => (m as { id: string }).id !== 'arena')],
+      appearances: (raw.appearances as Array<Record<string, unknown>>).map((a) => ({
+        ...a,
+        scenery: { 'door-1': { closed: 1638, open: 1639 }, 'sign-1': { default: 2600 } },
+      })),
+    };
+  };
+
+  function scenarioHunt() {
+    const content = buildContent(scenarioRaw());
+    let now = 0;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger,
+      now: () => now,
+      monsterCatalog: content.monsters,
+      ...(content.appearances === undefined ? {} : { appearances: content.appearances }),
+      createSession: (characterId) => {
+        const session = createHuntSession({
+          id: `hunt-${characterId}`, content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+        });
+        session.enter(new CharacterRuntime({
+          id: characterId,
+          position: { x: 1, y: 1, z: 7 },
+          health: 1_200, maxHealth: 1_200, mana: 50, maxMana: 50,
+          level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+        }));
+        return session;
+      },
+    });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'hero');
+    host.flush();
+    return { host, socket, viewer, received: () => socket.received() };
+  }
+
+  it('abre a porta adjacente e broadcasta tile-update com os ids de appearances.scenery (RF-01, RF-04)', () => {
+    const { host, viewer, received } = scenarioHunt();
+    host.handle(viewer, { type: 'use-on-map', position: { x: 2, y: 1, z: 7 } });
+    host.flush();
+    const update = received().find((m) => m.type === 'tile-update');
+    expect(update).toEqual({
+      type: 'tile-update', position: { x: 2, y: 1, z: 7 }, replace: [{ from: 1638, to: 1639 }],
+    });
+  });
+
+  it('broadcasta o tile-update para um SEGUNDO viewer da mesma sessão (DT-01)', () => {
+    const { host, viewer, socket } = scenarioHunt();
+    const otherSocket = new FakeSocket();
+    // Um segundo membro da party olhando a MESMA sessão hospedada (#196) — sem precisar montar
+    // uma party inteira, basta anexar outro socket ao mesmo personagem: os dois são viewers da
+    // mesma `HostedSession`, que é exatamente o que `DT-01` afirma sobre broadcast.
+    const otherViewer = host.attach(otherSocket, 'hero');
+    host.handle(viewer, { type: 'use-on-map', position: { x: 2, y: 1, z: 7 } });
+    host.flush();
+    expect(otherSocket.received().some((m) => m.type === 'tile-update')).toBe(true);
+    expect(otherViewer).not.toBe(viewer);
+  });
+
+  it('recusa fora de alcance com system-message, e não manda tile-update nenhum (RF-02)', () => {
+    const { host, viewer, received } = scenarioHunt();
+    // A porta está em (2,1); um segundo `use-on-map` no MESMO tile depois de sair de perto não
+    // é o cenário aqui — o simples: o herói nasce em (1,1), adjacente. Recusa vem de um tile
+    // fora do mapa/alcance, como (0,0) — fora do mapa e não adjacente.
+    host.handle(viewer, { type: 'use-on-map', position: { x: 0, y: 0, z: 7 } });
+    host.flush();
+    expect(received().some((m) => m.type === 'tile-update')).toBe(false);
+    const refusal = received().find((m) => m.type === 'system-message');
+    expect(refusal).toMatchObject({ level: 'warning' });
+  });
+
+  it('look devolve look-result com o text da placa (RF-03)', () => {
+    const { host, viewer, received } = scenarioHunt();
+    host.handle(viewer, { type: 'look', position: { x: 1, y: 2, z: 7 } });
+    host.flush();
+    expect(received().find((m) => m.type === 'look-result')).toEqual({
+      type: 'look-result', text: 'Beware of the rats.',
+    });
+  });
+
+  it('session-state.world.tileUpdates carrega o overlay ativo para quem reanexa (RF-05)', () => {
+    const { host, viewer, socket } = scenarioHunt();
+    host.handle(viewer, { type: 'use-on-map', position: { x: 2, y: 1, z: 7 } });
+    host.flush();
+
+    const reattached = new FakeSocket();
+    const reViewer = host.attach(reattached, 'hero');
+    host.handle(reViewer, { type: 'session-attach' });
+    host.flush();
+    const state = reattached.received().find((m) => m.type === 'session-state') as
+      { world: { tileUpdates: Array<{ position: unknown; replace: unknown }> } } | undefined;
+    expect(state?.world.tileUpdates).toEqual([
+      { position: { x: 2, y: 1, z: 7 }, replace: [{ from: 1638, to: 1639 }] },
+    ]);
+    // Idem para quem nunca tinha visto o mapa antes de a porta abrir (o socket original).
+    expect(socket.received().length).toBeGreaterThan(0);
   });
 });

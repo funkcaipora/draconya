@@ -2,9 +2,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildContent, placeholderAppearances } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_DIFFICULTY_NAME } from '@draconya/sim';
 import { loadContent } from '../../../content/src/load.js';
 import { buildCatalogue } from './catalogue.js';
-import { TEST_HUNT, rawTestContent, testContent } from '../testing/content.js';
+import { TEST_HUNT, TEST_ROUTE, rawTestContent, testContent } from '../testing/content.js';
 
 const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'content', 'data');
 const content = testContent();
@@ -43,26 +44,28 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(arena?.outfitIds).toEqual([rat]);
   });
 
-  it('o mesmo monstro em duas dificuldades sai UMA vez, e a lista vem em ordem de id', () => {
+  it('o mesmo monstro em dois pontos de spawn sai UMA vez, e a lista vem em ordem de id', () => {
     // Um id repetido seria uma folha pedida duas vezes; a ordem é o que faz a mensagem ser a
     // mesma a cada boot. Mutação que mata: `push` num array em vez do `Set`, ou sem o `sort`.
     // O morcego entra ANTES do rato no conteúdo cru (placeholder: outfit 1), mas a hunt o lista
-    // depois — a ordem do catálogo tem que ser a do id, não a da composição.
+    // depois — a ordem do catálogo tem que ser a do id, não a da rota.
+    //
+    // Fim do pull por dificuldade (#583, ADR 0039): quem decide os monstros de uma hunt agora
+    // é a ROTA, não mais uma composição por dificuldade — um segundo ponto de spawn com
+    // `monsterId: 'bat'` é o equivalente atual de "dois monstros na mesma hunt".
     const { appearances: _placeholder, ...raw } = rawTestContent();
     const rat = raw.monsters[0] as Record<string, unknown>;
     const bat = { ...rat, id: 'bat', name: 'Bat' };
     const twoTiers = {
       ...raw,
       monsters: [bat, rat],
-      hunts: [{
-        ...TEST_HUNT,
-        difficulties: {
-          cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
-          reckless: {
-            monsterCount: 2, respawnDelayMs: 1000,
-            composition: [{ monsterId: 'rat', weight: 1 }, { monsterId: 'bat', weight: 1 }],
-          },
-        },
+      hunts: [TEST_HUNT],
+      routes: [{
+        ...TEST_ROUTE,
+        spawnPoints: [
+          TEST_ROUTE.spawnPoints[0],
+          { ...TEST_ROUTE.spawnPoints[0], routeIndex: 0, monsterId: 'bat' },
+        ],
       }],
     };
     const content = buildContent({ ...twoTiers, appearances: [placeholderAppearances(twoTiers)] });
@@ -156,6 +159,36 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     ]);
   });
 
+  it('leva o bloco de promoção — nome, level e preço — para a tela de serviço da Cidade (#566, ADR 0042 decisão 1)', () => {
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withPromotion = {
+      ...raw,
+      items: [
+        ...(raw.items ?? []),
+        { id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, value: 0, attack: 21, requires: { vocationId: 'knight' } },
+      ],
+      vocations: [
+        {
+          id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
+          startingWeaponItemId: 'steel-axe',
+          promotion: { name: 'Elite Knight', minLevel: 20, price: 20_000 },
+        },
+        { id: 'monk', name: 'Monk', healthPerLevel: 10, manaPerLevel: 10, capacityPerLevel: 10 },
+      ],
+    };
+    const content = buildContent({ ...withPromotion, appearances: [placeholderAppearances(withPromotion)] });
+
+    const { vocations } = buildCatalogue(content);
+
+    expect(vocations).toEqual([
+      {
+        id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
+        startingWeaponItemId: 'steel-axe',
+        promotion: { name: 'Elite Knight', minLevel: 20, price: 20_000 },
+      },
+    ]);
+  });
+
   it('leva os monstros — id e nome, em ordem de id — para a tela do Bestiário (FUN-113)', () => {
     // O contador chega por id; a tela de detalhes ganha vida e XP (SV-02, #338).
     // Mutação que mata: devolver `[]`, vazar o monstro inteiro, ou não ordenar.
@@ -189,6 +222,27 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     });
     expect(buildCatalogue(withBestiary).bestiary)
       .toEqual({ milestones: [3, 5], xpBonusPercentPerMilestone: 20 });
+  });
+
+  it('leva os níveis do Bosstiary e a raridade de cada boss quando o conteúdo os tem, e a chave some quando não (#629)', () => {
+    // Fixado na sessão (invariante 7): a tela deriva o nível de cada boss da tabela por raridade e
+    // do registro cru. O conteúdo de teste não tem Bosstiary — a chave fica AUSENTE, não `undefined`.
+    expect(buildCatalogue(content)).not.toHaveProperty('bosstiary');
+    expect('bosstiary' in (buildCatalogue(content).monsters[0] ?? {})).toBe(false);
+
+    const real = buildCatalogue(loadContent(DATA));
+    expect(real.bosstiary).toEqual({
+      levels: {
+        bane: [{ kills: 25, points: 5 }, { kills: 100, points: 15 }, { kills: 300, points: 30 }],
+        archfoe: [{ kills: 5, points: 10 }, { kills: 20, points: 30 }, { kills: 60, points: 60 }],
+        nemesis: [{ kills: 1, points: 10 }, { kills: 3, points: 30 }, { kills: 5, points: 60 }],
+      },
+    });
+    // Dreadmaw: Nemesis, raceId 639 — só a raridade e a chave do contador atravessam, o resto do
+    // bloco do conteúdo é assunto do carregador. E monstro comum não ganha a chave.
+    const dreadmaw = real.monsters.find((m) => m.id === 'dreadmaw');
+    expect(dreadmaw?.bosstiary).toEqual({ rarity: 'nemesis', raceId: 639 });
+    expect('bosstiary' in (real.monsters.find((m) => m.id === 'rat') ?? {})).toBe(false);
   });
 
   it('leva o vocabulário do bot v2, e é ele que a tela oferece (AB-09, RF-10)', () => {
@@ -403,22 +457,22 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     });
   });
 
-  it('o mesmo monstro em duas dificuldades aparece UMA vez na hunt, ordenado por id (SV-02, #338)', () => {
+  it('o mesmo monstro em dois pontos de spawn aparece UMA vez na hunt, ordenado por id (SV-02, #338)', () => {
+    // #583: dois pontos de spawn (não mais duas dificuldades) é o que dá uma hunt com mais de
+    // um monstro.
     const { appearances: _placeholder, ...raw } = rawTestContent();
     const rat = raw.monsters[0] as Record<string, unknown>;
     const bat = { ...rat, id: 'bat', name: 'Bat' };
     const twoTiers = {
       ...raw,
       monsters: [bat, rat],
-      hunts: [{
-        ...TEST_HUNT,
-        difficulties: {
-          cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
-          reckless: {
-            monsterCount: 2, respawnDelayMs: 1000,
-            composition: [{ monsterId: 'rat', weight: 1 }, { monsterId: 'bat', weight: 1 }],
-          },
-        },
+      hunts: [TEST_HUNT],
+      routes: [{
+        ...TEST_ROUTE,
+        spawnPoints: [
+          TEST_ROUTE.spawnPoints[0],
+          { ...TEST_ROUTE.spawnPoints[0], routeIndex: 0, monsterId: 'bat' },
+        ],
       }],
     };
     const content = buildContent({ ...twoTiers, appearances: [placeholderAppearances(twoTiers)] });
@@ -465,15 +519,13 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
           },
         },
       ],
-      hunts: [{
-        ...TEST_HUNT,
-        difficulties: {
-          cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
-          reckless: {
-            monsterCount: 2, respawnDelayMs: 1000,
-            composition: [{ monsterId: 'rat', weight: 1 }, { monsterId: 'bat', weight: 1 }],
-          },
-        },
+      hunts: [TEST_HUNT],
+      routes: [{
+        ...TEST_ROUTE,
+        spawnPoints: [
+          TEST_ROUTE.spawnPoints[0],
+          { ...TEST_ROUTE.spawnPoints[0], routeIndex: 0, monsterId: 'bat' },
+        ],
       }],
     };
     const content = buildContent({
@@ -539,11 +591,14 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     ]);
   });
 
-  it('leva a contagem de monstros por dificuldade na mesma ordem de difficulties (SV-19, #355)', () => {
+  it('leva a contagem de monstros por hunt — o total de pontos de spawn da rota (SV-19, #355; #583)', () => {
+    // Fim do pull por dificuldade (ADR 0039): só existe UM nome agora, `DEFAULT_DIFFICULTY_NAME`
+    // (vestígio de protocolo, #584), e a contagem é o total de pontos que a rota declara — não
+    // mais um número por dificuldade.
     const { hunts } = buildCatalogue(content);
     const arena = hunts.find((hunt) => hunt.id === 'arena');
     expect(arena?.difficultyDetails).toEqual([
-      { id: 'cautious', monsterCount: 1 },
+      { id: DEFAULT_DIFFICULTY_NAME, monsterCount: TEST_ROUTE.spawnPoints.length },
     ]);
   });
 
@@ -557,6 +612,9 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       class: 'mammal',
       health: 20,
       experience: 5,
+      bestiary: {
+        stars: 1, occurrence: 0, firstUnlock: 10, secondUnlock: 100, toKill: 250, charmsPoints: 5,
+      },
     });
     expect('class' in (rat ?? {})).toBe(true);
 
@@ -564,6 +622,51 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     const withoutClass = buildCatalogue(content).monsters[0];
     expect(withoutClass).toBeDefined();
     expect('class' in (withoutClass ?? {})).toBe(false);
+  });
+
+  it('leva a ficha do Canary por monstro quando content.bestiary.entries a tem, e omite quando não (#601, ADR 0053 d.1)', () => {
+    const realContent = loadContent(DATA);
+    const { monsters } = buildCatalogue(realContent);
+    const dragon = monsters.find((m) => m.id === 'dragon');
+    // Os mesmos números do issue #601 e de `content/data/bestiary/baseline.json`.
+    expect(dragon?.bestiary).toEqual({
+      stars: 3, occurrence: 0, firstUnlock: 50, secondUnlock: 500, toKill: 1_000, charmsPoints: 25,
+    });
+
+    // A fixture de teste não tem `bestiary` no conteúdo: a chave fica AUSENTE, não `undefined`.
+    const withoutEntry = buildCatalogue(content).monsters[0];
+    expect(withoutEntry).toBeDefined();
+    expect('bestiary' in (withoutEntry ?? {})).toBe(false);
+  });
+
+  it('leva o preço de aprender de cada magia, `0` incluso, e omite a chave da magia que ninguém ensina (#624, ADR 0058 d.3)', () => {
+    const realContent = loadContent(DATA);
+    const { bot } = buildCatalogue(realContent);
+    const price = (id: string) => bot.spells.find((spell) => spell.id === id);
+    expect(price('berserk')?.learnPrice).toBe(2_500);
+    expect(price('ultimate-flame-strike')?.learnPrice).toBe(15_000);
+    // `0` é magia grátis, e NÃO "sem preço": a checagem no catálogo é `undefined`, nunca truthy.
+    expect(price('wound-cleansing')).toHaveProperty('learnPrice', 0);
+    // A Great Death Beam só a Wheel concede: a chave fica AUSENTE, e a tela não oferece a compra.
+    expect(price('great-death-beam')).toBeDefined();
+    expect('learnPrice' in (price('great-death-beam') ?? {})).toBe(false);
+    // Toda magia com preço no conteúdo chega com o MESMO preço ao cliente.
+    for (const spell of realContent.spells.values()) {
+      expect(price(spell.id)?.learnPrice, spell.id).toBe(spell.learnPrice);
+    }
+  });
+
+  it('o familiar anuncia o cooldown de VERDADE (30 min), e a magia comum o seu (#599)', () => {
+    // O `cooldownMs` da magia do familiar é o `groupCooldown` do script (2 s); os 30 min moram no
+    // efeito, e é o que o jogador espera ver na barra. Mutação que mata: anunciar `spell.cooldownMs`.
+    const { bot } = buildCatalogue(loadContent(DATA));
+    const familiar = bot.spells.find((spell) => spell.id === 'summon-knight-familiar');
+    expect(familiar).toMatchObject({
+      effect: 'familiar', minLevel: 200, manaCost: 1_000, cooldownMs: 1_800_000, groupCooldownMs: 2_000,
+      detail: { durationMs: 900_000 },
+    });
+    // A magia comum continua com o dela.
+    expect(bot.spells.find((spell) => spell.id === 'summon-creature-druid')).toMatchObject({ cooldownMs: 2_000 });
   });
 
   it('leva description quando a hunt a define (como a rat-cellars do conteúdo real) e omite a chave quando ausente (SV-21, #357)', () => {
@@ -581,16 +684,59 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect('description' in (huntWithoutDescription ?? {})).toBe(false);
   });
 
-  it('o catálogo lista as três hunts em ordem de level, e a Rotworm Caves traz monstro e loot (#511, #520)', () => {
+  it('o catálogo lista as nove hunts em ordem de level, e a Rotworm Caves traz monstro e loot (#511, #520, #586, #587)', () => {
     const realContent = loadContent(DATA);
     const { hunts } = buildCatalogue(realContent);
-    expect(hunts.map((h) => h.id)).toEqual(['rat-cellars', 'rotworm-caves', 'darashia-dragon-lair']);
+    // Ordem por recommendedLevel crescente, empate por id (huntListings, packages/sim/src/hunt/
+    // catalogue.ts): rat-cellars=1, dwarf-mines=rotworm-caves=8 (empate, "dwarf-mines" <
+    // "rotworm-caves"), cyclopolis=34, darashia-dragon-lair=40, minotaur-camp=60, bone-crypt=100,
+    // hydra-mountain=150, hellhound-den=250 — o primeiro lote de hunts reais por faixa (#587).
+    expect(hunts.map((h) => h.id)).toEqual([
+      'rat-cellars', 'dwarf-mines', 'rotworm-caves', 'cyclopolis', 'darashia-dragon-lair',
+      'minotaur-camp', 'bone-crypt', 'hydra-mountain', 'hellhound-den',
+    ]);
     const rotworm = hunts.find((h) => h.id === 'rotworm-caves');
-    expect(rotworm?.monsters).toEqual([{ id: 'rotworm', name: 'Rotworm' }]);
+    // Composição real do Canary (#586): rotworm E terramite, não mais só rotworm.
+    expect(rotworm?.monsters).toEqual([
+      { id: 'rotworm', name: 'Rotworm' },
+      { id: 'terramite', name: 'Terramite' },
+    ]);
     expect(rotworm?.loot.map((l) => l.itemId).sort()).toEqual(
-      ['ham', 'legion-helmet', 'lump-of-dirt', 'mace', 'meat', 'sword', 'worm'].sort(),
+      [
+        'ham', 'legion-helmet', 'lump-of-dirt', 'mace', 'meat', 'sword', 'worm',
+        'terramite-shell', 'terramite-legs',
+      ].sort(),
     );
-    expect(rotworm?.lootDrops).toBe(8); // 7 itens + gold (lootDropsOf, catalogue.ts:301-315)
+    expect(rotworm?.lootDrops).toBe(10); // 9 itens + gold (lootDropsOf, catalogue.ts:301-315)
+  });
+
+  it('as utilitárias (#623) chegam ao catálogo como Suporte; só o Find Person pede MIRA', () => {
+    // O cliente separa a categoria pelo `effect` e arma a mira do `use-slot` pelo `aim`
+    // (ADR 0049 d.2): o Find Person nomeia o personagem por clique, e nenhuma outra utilitária
+    // (nem o Levitate, nem a Food) declara `aim`. Mutação que mata: publicar `aim` em todo
+    // `find` — o Find Fiend armaria uma mira que não tem alvo nenhum.
+    const { bot } = buildCatalogue(loadContent(DATA));
+    const byId = new Map(bot.spells.map((spell) => [spell.id, spell]));
+    const kinds: Record<string, string> = {
+      light: 'light', 'great-light': 'light', 'ultimate-light-druid': 'light',
+      'ultimate-light-sorcerer': 'light', 'levitate-up': 'levitate', 'levitate-down': 'levitate',
+      'magic-rope': 'magic-rope', 'find-person': 'find', 'find-fiend': 'find', food: 'food',
+    };
+    for (const [id, kind] of Object.entries(kinds)) {
+      expect(byId.get(id)?.effect, id).toBe(kind);
+      expect(byId.get(id)?.group, id).toBe('support');
+    }
+    // A mira vai em `aim`, e NÃO em `targets: 'friend'`: este abriria o seletor de alvo do editor
+    // de slot do bot (`acceptsFriend`), e `validateBotConfigV2` recusa salvar esse alvo num efeito
+    // que não é cura/mana — o editor prometeria o que o servidor nega.
+    expect(byId.get('find-person')?.aim).toBe('character');
+    expect(byId.get('find-person')?.targets).toBeUndefined();
+    for (const id of Object.keys(kinds).filter((k) => k !== 'find-person')) {
+      expect(byId.get(id)?.aim, id).toBeUndefined();
+      expect(byId.get(id)?.targets, id).toBeUndefined();
+    }
+    // A duração da luz é `detail.durationMs` — o que o painel da magia mostra.
+    expect(byId.get('light')?.detail?.durationMs).toBe(370_000);
   });
 
   it('buildCatalogue includes progression matching content.progression (SV-25, #361)', () => {
@@ -598,10 +744,8 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(progression).toEqual({
       startingSpeed: content.progression.startingSpeed,
       speedPerLevel: content.progression.speedPerLevel,
-      regen: {
-        healthPerSecond: content.progression.regen.healthPerSecond,
-        manaPerSecond: content.progression.regen.manaPerSecond,
-      },
+      // A taxa é DERIVADA do pulso (#678): `amount × 1000 / ticksMs` — 1 a cada 1 000 ms é 1/s.
+      regen: { healthPerSecond: 1, manaPerSecond: 1 },
     });
 
     const realContent = loadContent(DATA);
@@ -609,10 +753,8 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(realCatalogue.progression).toEqual({
       startingSpeed: realContent.progression.startingSpeed,
       speedPerLevel: realContent.progression.speedPerLevel,
-      regen: {
-        healthPerSecond: realContent.progression.regen.healthPerSecond,
-        manaPerSecond: realContent.progression.regen.manaPerSecond,
-      },
+      // A base do Canary (vocação None): 1 de vida a cada 12 s e 2 de mana a cada 6 s (#678).
+      regen: { healthPerSecond: 1000 / 12_000, manaPerSecond: 2000 / 6_000 },
     });
   });
 });

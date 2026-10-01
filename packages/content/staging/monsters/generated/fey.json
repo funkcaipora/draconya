@@ -1,0 +1,2600 @@
+[
+  {
+    "id": "arctic-faun",
+    "name": "Arctic Faun",
+    "class": "fey",
+    "health": 300,
+    "experience": 300,
+    "attack": {
+      "min": 0,
+      "max": 200
+    },
+    "armor": 30,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.1,
+        "energy": -0.1,
+        "earth": 0.7,
+        "fire": -0.15,
+        "ice": 0.8,
+        "holy": 0.3,
+        "death": 0.2
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible"
+    ],
+    "defenseMitigation": 0.83,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 210,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 105
+      },
+      "items": [
+        {
+          "itemId": "dandelion-seeds",
+          "chance": 0.1487
+        },
+        {
+          "itemId": "strong-health-potion",
+          "chance": 0.1176
+        },
+        {
+          "itemId": "fresh-fruit",
+          "chance": 0.1029
+        },
+        {
+          "itemId": "shimmering-beetles",
+          "chance": 0.0933
+        },
+        {
+          "itemId": "leaf-star",
+          "chance": 0.0872,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "goat-grass",
+          "chance": 0.0728
+        },
+        {
+          "itemId": "cookie",
+          "chance": 0.0615,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "grapes",
+          "chance": 0.054
+        },
+        {
+          "itemId": "rainbow-quartz",
+          "chance": 0.0526,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "small-stone",
+          "chance": 0.0526,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "panpipes",
+          "chance": 0.0451
+        },
+        {
+          "itemId": "great-health-potion",
+          "chance": 0.0359
+        },
+        {
+          "itemId": "wood-cape",
+          "chance": 0.0082
+        },
+        {
+          "itemId": "leaf-legs",
+          "chance": 0.0034
+        },
+        {
+          "itemId": "wooden-spellbook",
+          "chance": 0.0021
+        },
+        {
+          "itemId": "die",
+          "chance": 0.0014
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 1000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 180
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "snowball",
+          "impactKey": "poff"
+        }
+      },
+      {
+        "id": "energybeam",
+        "cadenceMs": 1000,
+        "chance": 0.12,
+        "target": {
+          "range": 3,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 175
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "poff"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 85,
+      "body": 0,
+      "legs": 0,
+      "feet": 85,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Dance with me!",
+          "yell": false
+        },
+        {
+          "text": "In vino veritas! Hahaha!",
+          "yell": false
+        },
+        {
+          "text": "Wine, women and song!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/arctic_faun.lua"
+    },
+    "bestiary": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 1626,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 1
+    },
+    "outfitId": 980
+  },
+  {
+    "id": "cream-blob",
+    "name": "Cream Blob",
+    "class": "fey",
+    "health": 76,
+    "experience": 21,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 7,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.25,
+        "fire": -0.15,
+        "ice": 0.15,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.36,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 280,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 76,
+    "staticAttack": 0.9,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Just taking a walk, friend.",
+          "yell": false
+        },
+        {
+          "text": "Work in the Chocolate Mines? No, no, leave it to the sugar cubes.",
+          "yell": false
+        },
+        {
+          "text": "Nothing better than to lie on the vanilla sugar beach on a sunny day.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/cream_blob.lua"
+    },
+    "bestiary": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 2568,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 1757
+  },
+  {
+    "id": "dark-faun",
+    "name": "Dark Faun",
+    "class": "fey",
+    "health": 1100,
+    "experience": 900,
+    "attack": {
+      "min": 0,
+      "max": 515
+    },
+    "armor": 50,
+    "defense": 50,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.1,
+        "energy": -0.1,
+        "earth": 0.7,
+        "fire": -0.05,
+        "holy": -0.1,
+        "death": 0.4
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible"
+    ],
+    "defenseMitigation": 1.21,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 216,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.3,
+        "min": 1,
+        "max": 112
+      },
+      "items": [
+        {
+          "itemId": "wood-cape",
+          "chance": 0.00492
+        },
+        {
+          "itemId": "wooden-spellbook",
+          "chance": 0.00092
+        },
+        {
+          "itemId": "mandrake",
+          "chance": 0.0005
+        },
+        {
+          "itemId": "leaf-legs",
+          "chance": 0.00492
+        },
+        {
+          "itemId": "small-stone",
+          "chance": 0.00492,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "small-enchanted-sapphire",
+          "chance": 0.00492,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "shimmering-beetles",
+          "chance": 0.00492
+        },
+        {
+          "itemId": "cave-turnip",
+          "chance": 0.55,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "leaf-legs",
+          "chance": 0.00719
+        },
+        {
+          "itemId": "dark-mushroom",
+          "chance": 0.00719
+        },
+        {
+          "itemId": "panpipes",
+          "chance": 0.00719
+        },
+        {
+          "itemId": "prismatic-quartz",
+          "chance": 0.00719
+        },
+        {
+          "itemId": "leaf-star",
+          "chance": 0.1,
+          "min": 1,
+          "max": 8
+        },
+        {
+          "itemId": "strong-health-potion",
+          "chance": 0.068,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "goat-grass",
+          "chance": 0.05155
+        },
+        {
+          "itemId": "great-health-potion",
+          "chance": 0.00591
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 515
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 60,
+          "max": 115
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "poison",
+          "impactKey": "poisonarea"
+        }
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 2000,
+        "chance": 0.11,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              3,
+              3,
+              5,
+              5
+            ]
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "sound-purple"
+        },
+        "condition": {
+          "key": "drunk",
+          "durationMs": 25000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.3,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 100
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "leafstar"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 85,
+          "max": 105
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 20,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 94,
+      "body": 95,
+      "legs": 0,
+      "feet": 94,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "This will be your last dance!",
+          "yell": false
+        },
+        {
+          "text": "This is a nightmare and you won't wake up!",
+          "yell": false
+        },
+        {
+          "text": "Blood, fight and rage!",
+          "yell": false
+        },
+        {
+          "text": "You're a threat to this realm! You have to die!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/dark_faun.lua"
+    },
+    "bestiary": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 1496,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 980
+  },
+  {
+    "id": "dryad",
+    "name": "Dryad",
+    "class": "fey",
+    "health": 310,
+    "experience": 190,
+    "attack": {
+      "min": 0,
+      "max": 150
+    },
+    "armor": 15,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.3,
+        "fire": -0.2,
+        "ice": 0.2
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 1.26,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 230,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.4,
+        "min": 1,
+        "max": 20
+      },
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 150
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 40
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "throwingknife"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 99,
+      "body": 41,
+      "legs": 5,
+      "feet": 102,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Feel the wrath of mother Tibia!",
+          "yell": false
+        },
+        {
+          "text": "Defiler of nature!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/dryad.lua"
+    },
+    "bestiary": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 383,
+      "toKill": 5,
+      "firstUnlock": 2,
+      "secondUnlock": 3,
+      "charmsPoints": 50,
+      "stars": 3,
+      "occurrence": 3
+    },
+    "outfitId": 137
+  },
+  {
+    "id": "faun",
+    "name": "Faun",
+    "class": "fey",
+    "health": 900,
+    "experience": 800,
+    "attack": {
+      "min": 0,
+      "max": 370
+    },
+    "armor": 45,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.1,
+        "energy": -0.1,
+        "earth": 0.7,
+        "fire": -0.15,
+        "holy": 0.3,
+        "death": 0.2
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible"
+    ],
+    "defenseMitigation": 1.1,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 210,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.3,
+        "min": 1,
+        "max": 136
+      },
+      "items": [
+        {
+          "itemId": "goat-grass",
+          "chance": 0.05155
+        },
+        {
+          "itemId": "leaf-star",
+          "chance": 0.1,
+          "min": 1,
+          "max": 7
+        },
+        {
+          "itemId": "grapes",
+          "chance": 0.301,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "small-enchanted-sapphire",
+          "chance": 0.00492,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "leaf-legs",
+          "chance": 0.00492
+        },
+        {
+          "itemId": "dandelion-seeds",
+          "chance": 0.058
+        },
+        {
+          "itemId": "shimmering-beetles",
+          "chance": 0.00492
+        },
+        {
+          "itemId": "panpipes",
+          "chance": 0.00172
+        },
+        {
+          "itemId": "cookie",
+          "chance": 0.55,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "great-health-potion",
+          "chance": 0.064,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "wooden-spellbook",
+          "chance": 0.00092
+        },
+        {
+          "itemId": "strong-health-potion",
+          "chance": 0.068,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "fresh-fruit",
+          "chance": 0.034,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "rainbow-quartz",
+          "chance": 0.01086,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "small-stone",
+          "chance": 0.00492,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "wood-cape",
+          "chance": 0.00492
+        },
+        {
+          "itemId": "die",
+          "chance": 0.0008
+        },
+        {
+          "itemId": "mandrake",
+          "chance": 0.0005
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 370
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 60,
+          "max": 115
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "poison",
+          "impactKey": "poisonarea"
+        }
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 2000,
+        "chance": 0.11,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              3,
+              3,
+              5,
+              5
+            ]
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "sound-purple"
+        },
+        "condition": {
+          "key": "drunk",
+          "durationMs": 25000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.3,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 100
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "leafstar"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 75,
+          "max": 90
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 20,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 61,
+      "body": 96,
+      "legs": 95,
+      "feet": 62,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "In vino veritas! Hahaha!",
+          "yell": false
+        },
+        {
+          "text": "Wine, women and song!",
+          "yell": false
+        },
+        {
+          "text": "Are you posing a threat to this realm? I suppose so.",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/faun.lua"
+    },
+    "bestiary": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 1434,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 980
+  },
+  {
+    "id": "fruit-drop",
+    "name": "Fruit Drop",
+    "class": "fey",
+    "health": 63,
+    "experience": 18,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 8,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.2,
+        "earth": 0.4,
+        "fire": -0.1,
+        "holy": 0.1,
+        "death": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.36,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 280,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 63,
+    "staticAttack": 0.9,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You're very sweet!",
+          "yell": false
+        },
+        {
+          "text": "Have you ever seen the Big Ice Cream Machine?",
+          "yell": false
+        },
+        {
+          "text": "Hello, sweetie!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/fruit_drop.lua"
+    },
+    "bestiary": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 2565,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 1754
+  },
+  {
+    "id": "nymph",
+    "name": "Nymph",
+    "class": "fey",
+    "health": 900,
+    "experience": 850,
+    "attack": {
+      "min": 0,
+      "max": 205
+    },
+    "armor": 60,
+    "defense": 60,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.1,
+        "earth": 0.6,
+        "holy": 0.4,
+        "death": 0.4
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 1.26,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 228,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.65,
+        "min": 1,
+        "max": 110
+      },
+      "items": [
+        {
+          "itemId": "blue-rose",
+          "chance": 0.004
+        },
+        {
+          "itemId": "boots-of-haste",
+          "chance": 0.0015
+        },
+        {
+          "itemId": "dandelion-seeds",
+          "chance": 0.12
+        },
+        {
+          "itemId": "emerald-bangle",
+          "chance": 0.018
+        },
+        {
+          "itemId": "flower-wreath",
+          "chance": 0.005
+        },
+        {
+          "itemId": "wild-flowers",
+          "chance": 0.15,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "great-mana-potion",
+          "chance": 0.03
+        },
+        {
+          "itemId": "hibiscus-dress",
+          "chance": 0.0065
+        },
+        {
+          "itemId": "sacred-tree-amulet",
+          "chance": 0.01
+        },
+        {
+          "itemId": "small-enchanted-amethyst",
+          "chance": 0.02,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "small-topaz",
+          "chance": 0.025,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "colourful-snail-shell",
+          "chance": 0.12
+        },
+        {
+          "itemId": "dream-blossom-staff",
+          "chance": 0.0072
+        },
+        {
+          "itemId": "butterfly-ring",
+          "chance": 0.0084
+        },
+        {
+          "itemId": "fresh-fruit",
+          "chance": 0.15,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "strong-mana-potion",
+          "chance": 0.01
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 205
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 85,
+          "max": 135
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "energy",
+          "impactKey": "energyhit"
+        }
+      },
+      {
+        "id": "energystrike-2",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 4
+        },
+        "power": {
+          "min": 85,
+          "max": 135
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "energy",
+          "impactKey": "hearts"
+        }
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 85,
+          "max": 135
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "hearts"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 75,
+          "max": 90
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 20,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Looking at a nymph can blind you. Be careful, mortal being!",
+          "yell": false
+        },
+        {
+          "text": "Are you one of those evil nightmare creatures? Leave this realm alone!",
+          "yell": false
+        },
+        {
+          "text": "Come here, sweetheart! I won't hurt you! *giggle*",
+          "yell": false
+        },
+        {
+          "text": "I'm just protecting nature's beauty!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/nymph.lua"
+    },
+    "bestiary": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 1485,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 989
+  },
+  {
+    "id": "pooka",
+    "name": "Pooka",
+    "class": "fey",
+    "health": 500,
+    "experience": 500,
+    "attack": {
+      "min": 0,
+      "max": 120
+    },
+    "armor": 38,
+    "defense": 38,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": 0.7,
+        "fire": 0.2,
+        "ice": 0.2,
+        "holy": 0.2,
+        "death": 0.1
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible"
+    ],
+    "defenseMitigation": 0.99,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 230,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.3,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "carrot-on-a-stick",
+          "chance": 0.0002
+        },
+        {
+          "itemId": "dream-blossom-staff",
+          "chance": 0.0002
+        },
+        {
+          "itemId": "small-stone",
+          "chance": 0.002,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "stealth-ring",
+          "chance": 0.00492
+        },
+        {
+          "itemId": "carrot",
+          "chance": 0.55,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "strong-health-potion",
+          "chance": 0.00719
+        },
+        {
+          "itemId": "orange-mushroom",
+          "chance": 0.1
+        },
+        {
+          "itemId": "fern",
+          "chance": 0.301
+        },
+        {
+          "itemId": "opal",
+          "chance": 0.05155
+        },
+        {
+          "itemId": "shimmering-beetles",
+          "chance": 0.00591
+        },
+        {
+          "itemId": "rainbow-quartz",
+          "chance": 0.058
+        },
+        {
+          "itemId": "small-enchanted-ruby",
+          "chance": 0.034,
+          "min": 1,
+          "max": 2
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 120
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 4
+        },
+        "power": {
+          "min": 0,
+          "max": 50
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "smallstone",
+          "impactKey": "stones"
+        }
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 2000,
+        "chance": 0.11,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              3,
+              3,
+              5,
+              5
+            ]
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "stun"
+        },
+        "condition": {
+          "key": "drunk",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "heal": {
+          "min": 40,
+          "max": 60
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 20,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "This was the initial trick, but the second follows quick!",
+          "yell": false
+        },
+        {
+          "text": "Hoppel-di-hopp!",
+          "yell": false
+        },
+        {
+          "text": "Jinx!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/pooka.lua"
+    },
+    "bestiary": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 1435,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 977
+  },
+  {
+    "id": "sugar-cube",
+    "name": "Sugar Cube",
+    "class": "fey",
+    "health": 28,
+    "experience": 19,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 8,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": 0.2,
+        "fire": -0.1,
+        "ice": 0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.36,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 480,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 28,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 15000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "No I don't work in the mines right now. That's my day off.",
+          "yell": false
+        },
+        {
+          "text": "Catch me if you can!",
+          "yell": false
+        },
+        {
+          "text": "No touching please.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 15000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/sugar_cube.lua"
+    },
+    "bestiary": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 2548,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 1753
+  },
+  {
+    "id": "sugar-cube-worker",
+    "name": "Sugar Cube Worker",
+    "class": "fey",
+    "health": 65,
+    "experience": 20,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 8,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.05,
+        "earth": 0.3,
+        "fire": -0.05,
+        "ice": 0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.3,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 480,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 65,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 15000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Please do not obstruct our work.",
+          "yell": false
+        },
+        {
+          "text": "So much work in the Chocolate Mines!",
+          "yell": false
+        },
+        {
+          "text": "Petulant sugar balls ...",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 15000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/sugar_cube_worker.lua"
+    },
+    "bestiary": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 2567,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 1756
+  },
+  {
+    "id": "swan-maiden",
+    "name": "Swan Maiden",
+    "class": "fey",
+    "health": 800,
+    "experience": 700,
+    "attack": {
+      "min": 0,
+      "max": 215
+    },
+    "armor": 54,
+    "defense": 54,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.1,
+        "earth": 0.3,
+        "fire": -0.1,
+        "holy": 0.3,
+        "death": 0.5
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 1.18,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 234,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.3,
+        "min": 1,
+        "max": 112
+      },
+      "items": [
+        {
+          "itemId": "small-enchanted-emerald",
+          "chance": 0.00492,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "green-mushroom",
+          "chance": 0.00492,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "white-pearl",
+          "chance": 0.00492,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "opal",
+          "chance": 0.00492,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "strong-mana-potion",
+          "chance": 0.068
+        },
+        {
+          "itemId": "clerical-mace",
+          "chance": 0.05155
+        },
+        {
+          "itemId": "great-mana-potion",
+          "chance": 0.00591
+        },
+        {
+          "itemId": "colourful-snail-shell",
+          "chance": 0.058
+        },
+        {
+          "itemId": "diamond-sceptre",
+          "chance": 0.034
+        },
+        {
+          "itemId": "coral-brooch",
+          "chance": 0.034
+        },
+        {
+          "itemId": "flower-wreath",
+          "chance": 0.034
+        },
+        {
+          "itemId": "powder-herb",
+          "chance": 0.034
+        },
+        {
+          "itemId": "silver-brooch",
+          "chance": 0.034
+        },
+        {
+          "itemId": "summer-dress",
+          "chance": 0.034
+        },
+        {
+          "itemId": "wild-flowers",
+          "chance": 0.034
+        },
+        {
+          "itemId": "boots-of-haste",
+          "chance": 0.0005
+        },
+        {
+          "itemId": "butterfly-ring",
+          "chance": 0.001
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 215
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 60,
+          "max": 115
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "energy",
+          "impactKey": "energyhit"
+        }
+      },
+      {
+        "id": "manadrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.11,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 82,
+          "max": 215
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "holy",
+          "impactKey": "holyarea"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.11,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "circle",
+            "radius": 6,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "pixie-explosion"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -450
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 85,
+          "max": 105
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 20,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 0,
+      "body": 0,
+      "legs": 114,
+      "feet": 78,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Nightmarish monster! This dream is not meant for you!",
+          "yell": false
+        },
+        {
+          "text": "You won't steal my robe! Back off!",
+          "yell": false
+        },
+        {
+          "text": "You are not allowed to lay eyes on me in this shape!",
+          "yell": false
+        },
+        {
+          "text": "Are you stalking me? You will bitterly regret this!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/swan_maiden.lua"
+    },
+    "bestiary": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 1437,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 1
+    },
+    "outfitId": 138
+  },
+  {
+    "id": "tainted-soul",
+    "name": "Tainted Soul",
+    "class": "magical",
+    "health": 250,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 10
+    },
+    "armor": 10,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.5,
+        "energy": 0.2,
+        "holy": -0.1
+      },
+      "immunities": [
+        "death"
+      ]
+    },
+    "conditionImmunities": [
+      "paralyze"
+    ],
+    "defenseMitigation": 0.46,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 170,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 7,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "small-ruby",
+          "chance": 0.01
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 10
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 15,
+          "max": 37
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 200
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "heal": {
+          "min": 15,
+          "max": 25
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 60000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 115,
+    "staticAttack": 0.15,
+    "corpseTtlMs": 310000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "*Crinkle*",
+          "yell": false
+        },
+        {
+          "text": "*Sizzle*",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 310000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/tainted_soul.lua"
+    },
+    "bestiary": {
+      "class": "magical",
+      "race": "fey",
+      "raceId": 1137,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 712
+  },
+  {
+    "id": "truffle",
+    "name": "Truffle",
+    "class": "fey",
+    "health": 70,
+    "experience": 15,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 13,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.3,
+        "fire": -0.1,
+        "ice": -0.05,
+        "holy": -0.05,
+        "death": 0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.38,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 290,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 70,
+    "staticAttack": 0.9,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "What a beautiful day in Candia.",
+          "yell": false
+        },
+        {
+          "text": "Time for a bath in the Hot Milk Springs, I guess.",
+          "yell": false
+        },
+        {
+          "text": "What should I bake next?",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/truffle.lua"
+    },
+    "bestiary": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 2547,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 1750
+  },
+  {
+    "id": "truffle-cook",
+    "name": "Truffle Cook",
+    "class": "fey",
+    "health": 54,
+    "experience": 13,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 13,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.25,
+        "fire": 0.05,
+        "ice": -0.05,
+        "holy": -0.05,
+        "death": 0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.3,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 54,
+    "staticAttack": 0.9,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You have to taste my latest creation!",
+          "yell": false
+        },
+        {
+          "text": "Please stand still and try my newest creation.",
+          "yell": false
+        },
+        {
+          "text": "Delicious!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/truffle_cook.lua"
+    },
+    "bestiary": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 2563,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 1751
+  },
+  {
+    "id": "wisp",
+    "name": "Wisp",
+    "class": "fey",
+    "health": 115,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 10
+    },
+    "armor": 7,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.6,
+        "energy": 0.4,
+        "earth": 0.9
+      },
+      "immunities": [
+        "death"
+      ]
+    },
+    "conditionImmunities": [
+      "paralyze"
+    ],
+    "defenseMitigation": 0.43,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 162,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 7,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "moon-backpack",
+          "chance": 0.0022
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 10
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 3,
+          "max": 7
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 200
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "heal": {
+          "min": 15,
+          "max": 25
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 60000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 115,
+    "staticAttack": 0.15,
+    "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Crackle!",
+          "yell": false
+        },
+        {
+          "text": "Tsshh",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 4,
+      "color": 204
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/wisp.lua"
+    },
+    "bestiary": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 462,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 294
+  }
+]

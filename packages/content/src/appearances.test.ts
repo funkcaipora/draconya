@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -6,10 +6,25 @@ import { loadContent } from './load.js';
 import { packHas } from './pack.js';
 import type { Appearances } from './schemas.js';
 
+/**
+ * Todo arquivo dentro de `dir`, recursivo — `data/items/generated/` e `data/items/overrides/`
+ * (ADR 0038, o importador de catálogo) são subpastas de verdade desde o #573, e uma varredura que
+ * só lê `readdirSync` raso lançaria `EISDIR` ao tentar ler uma delas como arquivo.
+ */
+function filesRecursively(dir: string): string[] {
+  const out: string[] = [];
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) out.push(...filesRecursively(path));
+    else out.push(path);
+  }
+  return out;
+}
+
 // A auditoria de apresentação de combate (#242, CMB-09): o contrato que o host usa para
 // transformar o que o `sim` emite em `effect`/`missile` no fio é a tabela de aparências, e a
 // tabela só vale se cada id EXISTIR no pacote citado. O `buildContent` já recusa o id fora do
-// inventário versionado (`packs/tibia-1332.json`, FUN-21); este arquivo prende o mesmo de forma
+// inventário versionado (`packs/tibia-1533.json`, FUN-21); este arquivo prende o mesmo de forma
 // independente, e acrescenta a metade que depende da biblioteca local — sem transformar
 // `things/` (fora do Git) em dependência da suíte.
 //
@@ -65,8 +80,10 @@ function combatPresentationReferences(appearances: Appearances): CombatPresentat
   for (const [id, weapon] of Object.entries(appearances.weapons)) {
     push(`weapon:${id}`, { missile: weapon.missile });
   }
-  for (const [id, effect] of Object.entries(appearances.hits)) {
-    push(`hit:${id}`, { effect });
+  push('hit:melee', { effect: appearances.hits.melee });
+  // O efeito do golpe físico por raça (#620): cada linha é um id de efeito como os outros.
+  for (const [race, effect] of Object.entries(appearances.hits.byRace ?? {})) {
+    push(`hit:byRace.${race}`, { effect });
   }
   for (const [id, ability] of Object.entries(appearances.abilities)) {
     push(`ability:${id}`, { effect: ability.effect, missile: ability.missile });
@@ -114,7 +131,7 @@ describe('apresentação de combate: os ids existem no inventário versionado (#
   it('a tabela real tem pacote e inventário, e toda referência cai nas faixas dele', () => {
     // O `buildContent` já reprova id fora do pacote; isto é a checagem independente, para a
     // auditoria não depender de o boot estar ligado. Mutação que mata: trocar um id em
-    // `appearances/baseline.json` por um número que o pacote 1332 não tem.
+    // `appearances/baseline.json` por um número que o pacote 1533 não tem.
     expect(appearances, 'o conteúdo real tem tabela de aparências').toBeDefined();
     expect(pack, 'o conteúdo real tem inventário do pacote').toBeDefined();
     if (appearances === undefined || pack === undefined) return;
@@ -129,6 +146,17 @@ describe('apresentação de combate: os ids existem no inventário versionado (#
       }
     }
     expect(missing).toEqual([]);
+  });
+
+  it('a forma ativa dos anéis (#689) é o objeto do Canary e existe no pacote', () => {
+    // Energy Ring 3051 → 3088 e Life Ring 3052 → 3089 (`transformequipto`, items.xml). O boot já
+    // recusa linha órfã ou fora do pacote; isto prende os NÚMEROS, que o boot não conhece.
+    expect(appearances?.equippedItems).toEqual({ 'energy-ring': 3088, 'life-ring': 3089 });
+    if (pack === undefined) return;
+    expect(packHas(pack, 'object', 3088)).toBe(true);
+    expect(packHas(pack, 'object', 3089)).toBe(true);
+    expect(content.items.get('energy-ring')?.equippedAppearanceId).toBe(3088);
+    expect(content.items.get('life-ring')?.appearanceId).toBe(3052);
   });
 
   it('cobre as cinco famílias com arte nesta versão, e a chave semântica nomeia a origem', () => {
@@ -168,9 +196,9 @@ describe('apresentação de combate: os ids existem no inventário versionado (#
     // Mutação que mata: colar a frase de volta.
     const offenders: string[] = [];
     for (const folder of readdirSync(DATA)) {
-      for (const file of readdirSync(join(DATA, folder))) {
-        const text = readFileSync(join(DATA, folder, file), 'utf8');
-        if (/sem conferência visual/.test(text)) offenders.push(`${folder}/${file}`);
+      for (const file of filesRecursively(join(DATA, folder))) {
+        const text = readFileSync(file, 'utf8');
+        if (/sem conferência visual/.test(text)) offenders.push(file);
       }
     }
     expect(offenders).toEqual([]);

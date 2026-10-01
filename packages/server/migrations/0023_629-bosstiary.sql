@@ -1,0 +1,15 @@
+-- #629 (M44-11): o Bosstiary — abates por boss, pontos de boss e a versão do registro:
+-- `{ kills, points, version }`. `kills` é chaveado pelo `raceId` do Canary (em texto), porque
+-- quatro `raceId` são compartilhados por variantes do mesmo boss e o contador é um só
+-- (`STORAGEVALUE_BESTIARYKILLCOUNT + raceid`). Segue o ADR 0052 decisão 1: registro `jsonb` por
+-- sistema, uma coluna só, lido INTEIRO no ticket e escrito INTEIRO pela transação do ledger.
+--
+-- Aditiva por construção (ADR 0014): coluna nova, nulável, sem default. `null` é quem nunca
+-- abateu um boss — o mesmo personagem novo que `bestiary`/`charms` já tratam.
+--
+-- FUNDIDO pelo MAIOR de cada boss e dos pontos (`Bosstiary.merge`, `jobs/ledger.ts`), como o
+-- Bestiário, e NÃO última-escrita-vence como `charms`: abate e ponto de boss só sobem (o Canary
+-- só soma: `addBossPoints`), então um extrato antigo, processado fora de ordem, não pode rebaixar
+-- um contador que já subiu. Sem CHECK: o `raceId` é conteúdo, versionado à parte, e um `raceId`
+-- que nenhum boss do catálogo tem simplesmente não resolve nada, nunca vira linha ilegível.
+ALTER TABLE character ADD COLUMN bosstiary jsonb;

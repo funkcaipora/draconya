@@ -5,8 +5,10 @@
 // algum número aparecer aqui, a tabela deixou de ser a fonte da verdade e o balanceamento
 // virou tarefa de quem mexe em código.
 
-import type { Progression, Vocation } from '@draconya/content';
+import type { Progression, Skill, Vocation } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
+import { pointsForLevel, skillFactorFor } from './skills.js';
+import type { SkillLevelChange } from './skills.js';
 
 export interface Stats {
   readonly maxHealth: number;
@@ -145,9 +147,13 @@ export interface LevelChange {
 /**
  * Credita XP e sobe de level se couber. Devolve a mudança, ou `null` se o level não mudou.
  *
- * Subir de level aumenta o máximo E o atual na mesma quantidade — o personagem ganha os
- * pontos, não é curado. Curar no level up faria "subir de level" virar poção grátis, e um bot
- * bem configurado morando na fronteira de um level nunca mais morreria.
+ * Subir de level ENCHE vida e mana (#678, ADR 0037) — Canary `Player::addExperience`
+ * (`player.cpp`): `if (prevLevel != level) { health = healthMax; mana = manaMax; }`. Vários
+ * levels num abate curam uma vez, nos máximos finais. A descida da penalidade de morte passa
+ * por `retarget` e NÃO cura: ela só reduz os máximos, como no Canary.
+ *
+ * Até #678 o level up só somava o delta dos máximos ("dá os pontos, não cura"), uma divergência
+ * do Tibia sem ADR. O "bot morando na fronteira de um level" que ela evitava é o Tibia.
  */
 export function grantXp(
   character: CharacterRuntime,
@@ -157,7 +163,12 @@ export function grantXp(
 ): LevelChange | null {
   if (amount === 0) return null;
   character.xp = Math.max(0, character.xp + amount);
-  return retarget(character, vocation, progression);
+  const change = retarget(character, vocation, progression);
+  if (change !== null && change.to > change.from) {
+    character.health = character.maxHealth;
+    character.mana = character.maxMana;
+  }
+  return change;
 }
 
 /**
@@ -194,15 +205,30 @@ export function applyExperienceBonus(experience: number, bonusPercent: number): 
   return Math.floor((experience * (100 + bonusPercent)) / 100);
 }
 
+/** Quanto UMA skill perdeu na morte (#569): tries e, se cruzou fronteira, o nível. */
+export interface SkillLoss {
+  readonly skillId: string;
+  readonly triesLost: number;
+  readonly levelChange: SkillLevelChange | null;
+}
+
 export interface DeathPenalty {
   readonly xpLost: number;
   readonly levelChange: LevelChange | null;
+  /**
+   * Uma entrada por skill do catálogo que perdeu tries (#569, `Player::death` do Canary). A
+   * skill `magic` está NESTA lista, como qualquer outra — é ela quem carrega a perda de MANA
+   * GASTA: `manaSpent` do Canary não tem campo próprio aqui porque o Draconya já modela "mana
+   * gasta" como os PONTOS da skill `magic` (`gain.on === 'spell-cast'`, `skills.ts`); perder
+   * tries dela É perder mana gasta, sem precisar de um segundo acumulador para a mesma ideia.
+   */
+  readonly skillLosses: readonly SkillLoss[];
 }
 
 /**
- * A penalidade de morte do Tibia (#521, ADR 0037 — `Player::getLostPercent` e `Player::death`
- * do Canary/TFS, verificados em `opentibiabr/canary` `main` 2026-09-24; a ausência de piso
- * confirmada na TibiaPlan, "Tibia Death Penalty", 2026-09-24).
+ * A penalidade de morte do Tibia (#521/#569, ADR 0037 — `Player::getLostPercent` e
+ * `Player::death` do Canary/TFS, verificados em `opentibiabr/canary` `main` 2026-09-24/26; a
+ * ausência de piso confirmada na TibiaPlan, "Tibia Death Penalty", 2026-09-24).
  *
  * Abaixo de `cubicFromLevel` (Tibia: 24) a perda é uma fração FIXA da XP acumulada
  * (`flatFraction`, 10%). A partir dali é a fórmula cúbica clássica —
@@ -212,54 +238,131 @@ export interface DeathPenalty {
  * ACUMULADA, não mais sobre `xpToCompleteLevel` — o modelo antigo (uma fração de UM level)
  * media perda errado porque não é assim que o Tibia mede.
  *
- * `options.premium` continua o nome do parâmetro (não é renomeado para não recascatear pelos
- * chamadores existentes), mas o que ele representa agora é "está abençoado" — mapeia o conceito
- * de bênção do Tibia (`blessedReduction`, sete bênçãos × 8% = 56%) no binário que o repo já
- * tinha. Cobrança/promoção/PvP e o gradiente por NÚMERO de bênçãos ficam fora — fora do escopo
- * da #521, e o repo nunca teve blessing de verdade para gradiente nenhum.
+ * **O MESMO percentual (`Player::death`'s `deathLossPercent`) tira XP, mana gasta e skill
+ * tries** (#569) — não é uma fração calculada três vezes, é UMA fração aplicada a três somas
+ * acumuladas diferentes. Para XP a soma é `character.xp`; para cada skill é
+ * `totalPointsForLevel(definition, level, factor) + points` — o análogo exato do
+ * `sumSkillTries`/`sumMana` do Canary (soma de todo `getReqSkillTries`/`getReqMana` até o nível
+ * atual, mais o progresso corrente).
  *
- * **Abaixo de `cubicFromLevel` a redução do abençoado é TETADA em 50%, não os 56% crus**
- * (correção de revisão — `Player::getLostPercent` do Canary, ramo `else` do `if (level >= 24)`:
+ * `options.blessings` (#570) é a CONTAGEM de bênçãos que o morto tinha —
+ * `blessingCount(character.blessings)`, nunca mais o binário `premium` que a #569 deixou como
+ * ponto de extensão. Cada bênção soma `blessingReduction` (8% no Tibia): sete bênçãos dão os
+ * mesmos 56% que o binário `premium: true` dava antes, mas agora o gradiente é de verdade —
+ * quem morre com três bênçãos perde menos que quem não comprou nenhuma, e mais que quem
+ * comprou as sete.
+ *
+ * **Abaixo de `cubicFromLevel` a redução de bênção é TETADA em 50%, não o valor cru** (correção
+ * de revisão — `Player::getLostPercent` do Canary, ramo `else` do `if (level >= 24)`:
  * `percentReduction = (percentReduction >= 0.40 ? 0.50 : percentReduction)`). Sete bênçãos dão
  * 56%, que é ≥ 40%, e o Tibia arredonda isso para exatamente 50% NESSE ramo — não é o valor
- * bruto. O teto só existe no ramo da fração fixa; a fórmula cúbica (level ≥ 24) usa a redução
- * crua, sem teto.
+ * bruto; CINCO bênçãos (40%) já cruzam o mesmo teto, pela mesma conta. O teto só existe no
+ * ramo da fração fixa e só sobre a parcela de BÊNÇÃO; a fórmula cúbica (level ≥ 24) usa a
+ * redução crua, sem teto — e a parcela de PROMOÇÃO nunca passa pelo teto, nos dois ramos (ver
+ * abaixo).
  *
- * **O piso do level 8 protege, nunca promove.** Um personagem que já está abaixo dele não
- * perde nada; um acima dele nunca desce além. **Não tem equivalente no Tibia** — lá não existe
- * piso —, e é decisão de PRODUTO do Draconya (documentada em `docs/product/progression.md`) para
- * não punir quem acabou de escolher vocação. Escrito como `max` puro, o piso levantaria a XP de
- * quem está no level 5 — um "castigo" que dá level, que é o tipo de bug que só aparece quando
- * alguém reclama de ter subido ao morrer.
+ * **`options.promoted` (#569, ligado ao estado real pelo #566) soma mais 30% de redução, sempre
+ * ADITIVO e nunca tetado** (`Player::getLostPercent`: o `percentReduction += 0.30` acontece
+ * DEPOIS do teto do ramo `level < cubicFromLevel`, incondicional aos dois ramos). `promoted` é
+ * opcional e por padrão `false` — `hunt.ts#onCharacterDied` passa `character.promoted`
+ * (`CharacterRuntime.promoted`, #566/ADR 0042).
  *
- * O piso é de XP, não só de level: parar no level 8 com XP negativa é um estado impossível que
- * dá erro estranho três sistemas adiante.
+ * **`options.charmBlessReduction` (#603, o charm Bless) é uma redução MULTIPLICATIVA por cima de
+ * tudo o que veio antes** (`Player::death`, `player.cpp:4092-4098`): o Canary calcula
+ * `deathLossPercent = getLostPercent() × unfairFight` — com bênção e promoção já dentro — e só
+ * então faz `deathLossPercent -= deathLossPercent × chance[tier] / 100` quando o último golpe foi
+ * do monstro do charm. Aqui é a fração `chance/100` (0,06 / 0,09 / 0,12), e vale para a XP e para
+ * as skills, o mesmo `deathLossPercent` das duas somas. Ausente é zero, e a conta fica idêntica.
+ *
+ * **Sem piso de level** (#569 removeu o `levelFloor` do Draconya): o Tibia não tem piso para
+ * a penalidade de morte, e o repo alinhou a isso — o personagem pode cair até o level 1.
  */
 export function applyDeathPenalty(
   character: CharacterRuntime,
-  options: { readonly premium: boolean },
+  options: {
+    readonly blessings: number;
+    readonly promoted?: boolean;
+    readonly charmBlessReduction?: number;
+  },
   vocation: Vocation | null,
   progression: Progression,
+  skills: ReadonlyMap<string, Skill>,
 ): DeathPenalty {
-  const { flatFraction, cubicFromLevel, blessedReduction, levelFloor } = progression.deathPenalty;
+  const { flatFraction, cubicFromLevel, blessingReduction, promotionReduction } = progression.deathPenalty;
   const level = character.level;
   const belowCubic = level < cubicFromLevel;
-  // O teto de 50% é só do ramo `level < cubicFromLevel` (ver o comentário da função).
-  const reduction = options.premium
-    ? (belowCubic && blessedReduction >= 0.40 ? 0.50 : blessedReduction)
-    : 0;
+  // O teto de 50% é só da parcela de BÊNÇÃO, e só no ramo `level < cubicFromLevel` (comentário
+  // da função). A promoção soma DEPOIS, sem passar pelo teto — como no Canary.
+  const blessingFraction = blessingReduction * options.blessings;
+  const blessing = belowCubic && blessingFraction >= 0.40 ? 0.50 : blessingFraction;
+  const reduction = blessing + (options.promoted ? promotionReduction : 0);
+  // O charm Bless age DEPOIS de bênção e promoção, multiplicando o que sobrou (ver a função). Sem
+  // o charm o fator é exatamente `1 - reduction`, como antes.
+  const keptFraction = options.charmBlessReduction === undefined
+    ? 1 - reduction
+    : (1 - reduction) * (1 - options.charmBlessReduction);
 
   const raw = belowCubic
     ? flatFraction * character.xp
     : cubicLoss(level + fractionIntoLevel(character, progression));
-  const loss = Math.round(raw * (1 - reduction));
+  const loss = Math.round(raw * keptFraction);
 
-  const floorXp = totalXpForLevel(levelFloor, progression);
-  const lowest = Math.min(character.xp, floorXp);
+  // A FRAÇÃO efetiva (não o valor absoluto) é o que se reaplica às skills e à mana gasta: o
+  // Canary calcula um `deathLossPercent` só e o usa três vezes, sobre somas diferentes. Sem XP
+  // acumulada (level 1, recém-caído) não há fração nenhuma para extrair — e como `belowCubic`
+  // cobre justamente `character.xp === 0`, a divisão abaixo nunca vê um denominador zero.
+  const lossFraction = character.xp > 0 ? raw / character.xp : 0;
+
   const before = character.xp;
-  character.xp = Math.max(lowest, character.xp - loss);
+  character.xp = Math.max(0, character.xp - loss);
 
-  return { xpLost: before - character.xp, levelChange: retarget(character, vocation, progression) };
+  const skillLosses = applySkillLosses(character, skills, vocation, progression, lossFraction * keptFraction);
+
+  return {
+    xpLost: before - character.xp,
+    levelChange: retarget(character, vocation, progression),
+    skillLosses,
+  };
+}
+
+/**
+ * Aplica `lossFraction` a cada skill do catálogo — a mesma perda proporcional que a XP levou,
+ * sobre o total acumulado de CADA skill (`totalPointsForLevel` + progresso corrente), como o
+ * laço `for (uint8_t i = SKILL_FIRST; i <= SKILL_LAST; ++i)` de `Player::death`. `magic` está
+ * no MESMO laço — é ela quem representa a perda de mana gasta (ver `DeathPenalty.skillLosses`).
+ */
+function applySkillLosses(
+  character: CharacterRuntime,
+  skills: ReadonlyMap<string, Skill>,
+  vocation: Vocation | null,
+  progression: Progression,
+  lossFraction: number,
+): SkillLoss[] {
+  if (lossFraction <= 0) return [];
+  const losses: SkillLoss[] = [];
+  for (const definition of skills.values()) {
+    const factor = skillFactorFor(definition, vocation, progression);
+    const level = character.skills.levelOf(definition);
+    const totalAccrued = totalPointsForLevel(definition, level, factor)
+      + character.skills.pointsOf(definition);
+    const triesLost = Math.floor(totalAccrued * lossFraction);
+    if (triesLost <= 0) continue;
+    const levelChange = character.skills.lose(definition, triesLost, factor);
+    losses.push({ skillId: definition.id, triesLost, levelChange });
+  }
+  return losses;
+}
+
+/**
+ * Soma de tudo que já foi preciso para SAIR de cada level, do inicial até `level` (exclusive) —
+ * o análogo de `totalXpForLevel`, mas para uma skill: `Σ pointsForLevel(startingLevel..level-1)`.
+ * É o mesmo `sumSkillTries`/`sumMana` do Canary (soma de `getReqSkillTries`/`getReqMana` de 11 —
+ * ou 1, para magia — até o nível atual).
+ */
+function totalPointsForLevel(definition: Skill, level: number, factor: number): number {
+  let total = 0;
+  for (let l = definition.startingLevel; l < level; l++) total += pointsForLevel(definition, l, factor);
+  return total;
 }
 
 /**

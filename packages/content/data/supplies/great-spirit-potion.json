@@ -2,9 +2,10 @@
   "id": "great-spirit-potion",
   "name": "Great Spirit Potion",
   "description": "Cura entre 250 e 350 pontos de vida e recupera entre 100 e 200 pontos de mana. Nível 80 ou mais, Paladino.",
-  "price": 225,
+  "price": 254,
   "group": "potion",
   "groupCooldownMs": 1000,
+  "actionExhaustMs": 1000,
   "effect": {
     "kind": "heal",
     "amountRange": { "min": 250, "max": 350 },
@@ -16,5 +17,5 @@
     "level": 80,
     "vocationId": "paladin"
   },
-  "_open": "Kit level 200 (#524) — a poção de vida E mana num uso só, exclusiva do Paladin. Canary `potions.lua`, item id 7642: `health = {250, 350}`, `mana = {100, 200}`, `vocations = {PALADIN, MONK}`, `level = 80` — Monk omitido. `effect.alsoMana` (#524) é o campo novo para isto: `useSupply` repõe os dois no MESMO uso, e `CastSuccess` já carregava `healed`/`manaRestored` separados. `price` 225: preço uniforme de NPCs (TibiaWiki via tibiascape.com/library/items/great-spirit-potion)."
+  "_open": "Kit level 200 (#524) — a poção de vida E mana num uso só, exclusiva do Paladin. Canary `potions.lua`, item id 7642: `health = {250, 350}`, `mana = {100, 200}`, `vocations = {PALADIN, MONK}`, `level = 80` — Monk omitido. `effect.alsoMana` (#524) é o campo novo para isto: `useSupply` repõe os dois no MESMO uso, e `CastSuccess` já carregava `healed`/`manaRestored` separados. `price` 254 (M34-03/#574): menor `buy` de `data-otservbr-global/npc/*.lua` para o clientId 7642 (ex. `alaistar.lua`) — corrige o 225 anterior (TibiaWiki), o Canary é a fonte precedente (ADR 0037 d.4)."
 }

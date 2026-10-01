@@ -2,9 +2,10 @@
   "id": "supreme-health-potion",
   "name": "Supreme Health Potion",
   "description": "Cura entre 875 e 1125 pontos de vida. Nível 200 ou mais, Cavaleiro.",
-  "price": 480,
+  "price": 650,
   "group": "potion",
   "groupCooldownMs": 1000,
+  "actionExhaustMs": 1000,
   "effect": {
     "kind": "heal",
     "amountRange": { "min": 875, "max": 1125 },
@@ -15,5 +16,5 @@
     "level": 200,
     "vocationId": "knight"
   },
-  "_open": "Kit level 200 (#524) — a poção mais forte do Tibia, level 200 exato (o piso do teste da party de dragões). Canary `potions.lua`, item id 23375: `health = {875, 1125}`, `vocations = {KNIGHT}`, `level = 200`. `price` 480: preço uniforme de NPCs (TibiaWiki via tibiascape.com/library/items/supreme-health-potion)."
+  "_open": "Kit level 200 (#524) — a poção mais forte do Tibia, level 200 exato (o piso do teste da party de dragões). Canary `potions.lua`, item id 23375: `health = {875, 1125}`, `vocations = {KNIGHT}`, `level = 200`. `price` 650 (M34-03/#574): menor `buy` de `data-otservbr-global/npc/*.lua` para o clientId 23375 (ex. `alaistar.lua`) — corrige o 480 anterior (TibiaWiki), o Canary é a fonte precedente (ADR 0037 d.4)."
 }

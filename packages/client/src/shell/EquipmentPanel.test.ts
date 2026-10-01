@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -23,7 +24,7 @@ async function render(): Promise<string> {
 const catalogue: Catalogue = {
   hunts: [],
   monsters: [],
-  vocations: [], vocationLevel: 8,
+  vocations: [], charms: [], vocationLevel: 8,
   bot: {
     vocabularyVersion: 1, slots: {},
     spells: [], supplies: [],
@@ -44,6 +45,8 @@ const inventory = (over: Partial<InventoryState> = {}): InventoryState => ({
   satchel: [],
   equipped: {},
   capacity: { used: 10, total: 400 },
+  supplies: [],
+  ammunition: [],
   ...over,
 });
 
@@ -189,5 +192,49 @@ describe('a coluna da direita (#161)', () => {
     const html = await new Response(prelude).text();
     expect(html).toContain('collapsed');
     expect(html).toContain('<strong class="ui-panel-title">Set</strong>');
+  });
+});
+
+describe('a postura de luta sob a capacidade (M30-03, #550)', () => {
+  // `prerender` não dispara evento: o que se prende aqui é o que a tela MOSTRA (a postura que o
+  // servidor confirmou) e, por leitura de fonte — como `CorpseWindow.test.ts` —, o que o clique
+  // MANDA. O clique em si é de `ui/Stance.test.ts` e `fight-mode-intent.test.ts`.
+  const stanceButtons = (html: string): string[] =>
+    html.split('<button').slice(1).map((chunk) => `<button${chunk}`)
+      .filter((button) => button.includes('role="radio"'));
+
+  it('desenha o seletor com as três posturas, abaixo da capacidade', async () => {
+    hud.set((state) => ({ ...state, catalogue, inventory: inventory() }));
+    const html = await render();
+    expect(html).toContain('role="radiogroup"');
+    expect(html.indexOf('class="capacity"')).toBeGreaterThan(-1);
+    expect(html.indexOf('role="radiogroup"')).toBeGreaterThan(html.indexOf('class="capacity"'));
+    expect(stanceButtons(html)).toHaveLength(3);
+  });
+
+  it('marca a postura que o SERVIDOR confirmou — ofensiva até chegar, e depois a de `player-stats`', async () => {
+    hud.set((state) => ({ ...state, catalogue, inventory: inventory() }));
+    const marked = (html: string): string[] => stanceButtons(html)
+      .filter((button) => button.includes('aria-checked="true"'))
+      .map((button) => /ui-stance-label">([^<]+)</.exec(button)?.[1] ?? '?');
+    expect(marked(await render())).toEqual(['Atacante']);
+
+    hud.set((state) => ({ ...state, fightMode: 'defense' }));
+    expect(marked(await render())).toEqual(['Defensiva']);
+    hud.set((state) => ({ ...state, fightMode: 'balanced' }));
+    expect(marked(await render())).toEqual(['Balanceada']);
+  });
+
+  it('o clique manda `set-fight-mode` pelo `chooseFightMode`, e não decide nada por conta própria', async () => {
+    const panel = await readFile(new URL('./EquipmentPanel.tsx', import.meta.url), 'utf8');
+    expect(panel).toContain('chooseFightMode(sendIntent, mode)');
+    // O valor marcado é o do HUD (servidor), nunca um estado local do clique.
+    expect(panel).toContain('<Stance value={fightMode}');
+    expect(panel).not.toMatch(/useState[^;]*fightMode/);
+  });
+
+  it('carregando (sem inventário), o painel não desenha a postura — não há o que marcar ainda', async () => {
+    hud.set((state) => ({ ...state, catalogue: null, inventory: null }));
+    expect(await render()).not.toContain('role="radiogroup"');
   });
 });

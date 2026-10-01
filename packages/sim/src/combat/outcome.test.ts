@@ -188,3 +188,114 @@ describe('leech com base no HP aplicado, clampado no teto', () => {
     expect(attacker.mana).toBe(50);
   });
 });
+
+describe('leech dividido por targetsAffected (M30-04, #551, Game::calculateLeechAmount)', () => {
+  it('targetsAffected 1 (default) é a identidade — bit a bit o de sempre', () => {
+    const attacker = character({ health: 0 });
+    const applied = applyDamageOutcome(monster(100), outcome(40, { lifeLeech: 0.5 }), attacker);
+    expect(applied.lifeLeechApplied).toBe(20);
+  });
+
+  it('cinco alvos: o fator é (0,1×5+0,9)/5 = 0,28, NÃO 0,2 (uma divisão simples)', () => {
+    // 40 de HP removido, 50 % de leech, 5 alvos na MESMA ação: 40 × 0,5 × 0,28 = 5,6 → 6.
+    // Uma divisão ingênua por 5 daria 40 × 0,5 / 5 = 4 — um número MENOR e diferente.
+    const attacker = character({ health: 0 });
+    const applied = applyDamageOutcome(
+      monster(100), outcome(40, { lifeLeech: 0.5 }), attacker, 1, false, 5,
+    );
+    expect(applied.lifeLeechApplied).toBe(6);
+  });
+
+  it('mana leech também divide pelo mesmo targetsAffected', () => {
+    const attacker = character({ mana: 0, maxMana: 100 });
+    const applied = applyDamageOutcome(
+      monster(100), outcome(40, { manaLeech: 0.5 }), attacker, 1, false, 5,
+    );
+    expect(applied.manaLeechApplied).toBe(6);
+  });
+
+  it('ainda clampado no teto do atacante mesmo com targetsAffected > 1', () => {
+    const attacker = character({ health: 97, mana: 100 });
+    const applied = applyDamageOutcome(
+      monster(100), outcome(40, { lifeLeech: 0.5 }), attacker, 1, false, 5,
+    );
+    // 6 de leech não caberia todo — só 3 até o teto de 100.
+    expect(applied.lifeLeechApplied).toBe(3);
+    expect(attacker.health).toBe(100);
+  });
+});
+
+describe('manadrain (#547, M29-07): dreno de MANA, nunca de vida', () => {
+  /** Um outcome `manadrain` resolvido, sem mais estágio nenhum incidindo (a mesma forma básica). */
+  const manadrainOutcome = (resolvedDamage: number): DamageOutcome => ({
+    profile: 'combat-v3',
+    intent: { rawDamage: resolvedDamage, source: 'monster-attack', damageType: 'manadrain' },
+    damageType: 'manadrain',
+    afterDefense: resolvedDamage, afterArmor: resolvedDamage, armorReduction: 0,
+    minimumDamage: 0, afterResistance: resolvedDamage, immune: false, dodged: false,
+    critical: false, resolvedDamage,
+  });
+
+  it('manadrain de 50 com mana 30 tira 30 e deixa a vida intacta', () => {
+    const hero = character({ mana: 30 });
+    const applied = applyDamageOutcome(hero, manadrainOutcome(50), null);
+    expect(applied.manaDamage).toBe(30);
+    expect(hero.mana).toBe(0);
+    expect(applied.healthDamage).toBe(0);
+    expect(hero.health).toBe(100);
+  });
+
+  it('dano menor que a mana disponível tira exatamente o dano, sem sobrar para a vida', () => {
+    const hero = character({ mana: 80 });
+    const applied = applyDamageOutcome(hero, manadrainOutcome(30), null);
+    expect(applied.manaDamage).toBe(30);
+    expect(hero.mana).toBe(50);
+    expect(applied.healthDamage).toBe(0);
+  });
+
+  it('a mana shield NÃO se aplica ao manadrain — ela é para vida, isto já é mana', () => {
+    const hero = character({
+      mana: 50,
+      conditions: [{ key: 'mana-shield', spellId: 'magic-shield', expiresAtMs: 180_000 }],
+    });
+    const applied = applyDamageOutcome(hero, manadrainOutcome(20), null);
+    expect(applied.absorbedByMana).toBe(0);
+    expect(applied.manaDamage).toBe(20);
+    expect(hero.mana).toBe(30);
+  });
+
+  it('monstro não tem mana: manadrain contra ele não tira nada (o mesmo `manaLoss <= 0` do Canary)', () => {
+    const applied = applyDamageOutcome(monster(50), manadrainOutcome(30), null);
+    expect(applied.manaDamage).toBe(0);
+    expect(applied.healthDamage).toBe(0);
+  });
+
+  it('personagem já sem mana: manadrain não perde nada nem mexe na vida', () => {
+    const hero = character({ mana: 0 });
+    const applied = applyDamageOutcome(hero, manadrainOutcome(40), null);
+    expect(applied.manaDamage).toBe(0);
+    expect(hero.mana).toBe(0);
+    expect(applied.healthDamage).toBe(0);
+    expect(hero.health).toBe(100);
+  });
+
+  it('não cura o atacante — a correção do inventário: lifedrain/manadrain não curam quem ataca', () => {
+    const attacker = character({ health: 50, mana: 50 });
+    const withLeech: DamageOutcome = {
+      ...manadrainOutcome(40),
+      intent: { ...manadrainOutcome(40).intent, modifiers: { lifeLeech: 1, manaLeech: 1 } },
+    };
+    const applied = applyDamageOutcome(character({ mana: 100 }), withLeech, attacker);
+    expect(applied.lifeLeechApplied).toBe(0);
+    expect(applied.manaLeechApplied).toBe(0);
+    expect(attacker.health).toBe(50);
+    expect(attacker.mana).toBe(50);
+  });
+
+  it('a postura escala o dreno como escalaria a vida', () => {
+    const hero = character({ mana: 100 });
+    const applied = applyDamageOutcome(hero, manadrainOutcome(20), null, 0.5);
+    expect(applied.manaDamage).toBe(10);
+    expect(hero.mana).toBe(90);
+  });
+});

@@ -1,0 +1,7 @@
+{
+  "id": "wisdom-of-solitude",
+  "name": "The Wisdom of Solitude",
+  "order": 0,
+  "enhanced": false,
+  "_open": "#570, `Blessings.All` do Canary (`data/libs/systems/blessing.lua`), id 2 — o 1º, Twist of Fate, é PvP e fica fora do catálogo PvE. Regular: preço por `blessingPricing`, redução 8% (`deathPenalty.blessingReduction`), grátis abaixo do level 21 (Adventurer's Blessing, `config.lua.dist:496`)."
+}

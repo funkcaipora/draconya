@@ -84,6 +84,16 @@ describe.runIf(databaseAvailable)('a semente da party de dragões grava o Postgr
       expect(row?.xp).toBe(expectedXp);
       expect(row?.gold).toBe(result.gold);
 
+      // As magias da vocação até o level 200 (#624, ADR 0058 d.4): o cast confere o registro, e a
+      // rotação de magia que `botConfigFor` acabou de gravar não lançaria nada sem ele.
+      const learned = (row?.learnedSpells as { spellIds: string[]; version: number } | null);
+      expect(learned?.version).toBe(1);
+      for (const spell of content.spells.values()) {
+        const mine = (spell.vocationId === undefined || spell.vocationId === member.vocationId)
+          && spell.minLevel <= DRAGON_PARTY_LEVEL;
+        expect(learned?.spellIds.includes(spell.id), `${member.vocationId}: ${spell.id}`).toBe(mine);
+      }
+
       const botConfig = row?.botConfig;
       expect(botConfig).toBeTruthy();
       const problems = validateBotConfigV2(

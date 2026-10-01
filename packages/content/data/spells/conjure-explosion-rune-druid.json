@@ -1,0 +1,20 @@
+{
+  "id": "conjure-explosion-rune-druid",
+  "name": "Explosion Rune",
+  "description": "Conjura cargas da Explosion Rune, consumindo uma runa em branco.",
+  "vocationId": "druid",
+  "minLevel": 31,
+  "learnPrice": 1800,
+  "manaCost": 570,
+  "soulCost": 4,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "conjure",
+    "supplyId": "explosion-rune",
+    "charges": 6,
+    "blankPrice": 10
+  },
+  "_open": "Números do Canary (#594, ADR 0044): `data/scripts/spells/conjuring/explosion_rune.lua` — `creature:conjureItem(3147, 3200, 6)`, `spell:level(31)`, `spell:mana(570)`, `spell:soul(4)`. A magia do Canary declara QUATRO vocações (`druid;true`, `elder druid;true`, `sorcerer;true`, `master sorcerer;true`) — Draconya não tem promoção (ADR 0044 §Em aberto) e `spellSchema.vocationId` é uma vocação só; este arquivo é a metade Druid, `conjure-explosion-rune-sorcerer.json` a metade Sorcerer — o mesmo split que `apprentices-strike-druid.json`/`apprentices-strike-sorcerer.json` já usa para uma magia de duas vocações. `blankPrice` 10, como em toda runa (`npc/alexander.lua`, blank rune clientId 3147)."
+}

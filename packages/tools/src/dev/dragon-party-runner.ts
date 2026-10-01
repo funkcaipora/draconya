@@ -26,7 +26,6 @@ export interface DragonPartyOptions {
   readonly apiBaseUrl: string;
   readonly clientOrigin: string;
   readonly huntId: string;
-  readonly difficulty: string;
   readonly start: boolean;
   readonly reset: boolean;
   readonly redisUrl?: string | undefined;
@@ -118,16 +117,16 @@ async function seedAndFormParty(
   }
 
   const configured = await api.configure(leader.session, party.id, leader.characterId, {
-    huntId: options.huntId, difficulty: options.difficulty, shareCosts: true, splitLoot: true,
+    huntId: options.huntId, shareCosts: true, splitLoot: true,
   });
   if (configured.status !== 200) {
     log(
-      `ERRO: configurar a party para "${options.huntId}"/"${options.difficulty}" falhou `
+      `ERRO: configurar a party para "${options.huntId}" falhou `
         + `(${configured.status}): ${JSON.stringify(configured.body)}`,
     );
     return { exitCode: 1 };
   }
-  log(`party configurada: hunt "${options.huntId}", dificuldade "${options.difficulty}"`);
+  log(`party configurada: hunt "${options.huntId}"`);
 
   if (!options.start) {
     log('party pronta. Rode com --start para iniciar, ou clique em "Iniciar" no navegador logado como o líder.');
@@ -212,7 +211,7 @@ export async function settleStaleSnapshot(
   const stored = await options.snapshots.load(characterId);
   if (stored === null) return { settled: false };
   await settleSnapshotAsReceipt(stored.snapshot, {
-    characterId, accountId: stored.accountId, receipts: options.receipts,
+    characterId, accountId: stored.accountId, receipts: options.receipts, nowMs: Date.now(),
   });
   await options.snapshots.remove(characterId);
   return { settled: true, sessionId: stored.snapshot.id };

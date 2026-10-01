@@ -1,8 +1,11 @@
 // A preferência do painel Skills é exclusivamente de tela: não representa estado do personagem
 // nem passa pelo servidor. Falhar ao ler ou gravar armazenamento nunca pode esconder o painel.
 
+// #568: `melee` virou quatro skills na #567 (fist/club/sword/axe treinam separadamente, uma por
+// tipo de arma) — o painel troca a linha única "Corpo a Corpo" pelas quatro, na mesma posição.
 export const SKILL_ORDER = [
-  'exp', 'level', 'hp', 'mana', 'capacity', 'speed', 'stamina', 'magic', 'melee', 'distance',
+  'exp', 'level', 'hp', 'mana', 'capacity', 'speed', 'stamina', 'soul', 'magic',
+  'fist', 'club', 'sword', 'axe', 'distance',
 ] as const;
 
 export type SkillId = (typeof SKILL_ORDER)[number];
@@ -15,8 +18,15 @@ export const SKILL_LABELS: Record<SkillId, string> = {
   capacity: 'Capacidade',
   speed: 'Speed',
   stamina: 'Stamina',
+  // Pontos de alma (#593): "n/teto", como o Tibia mostra na janela de personagem — teto
+  // zero é "sem vocação escolhida", o mesmo "sem barra" de magic/fist/club/sword/axe/distance
+  // ali embaixo.
+  soul: 'Soul Points',
   magic: 'Magic Level',
-  melee: 'Corpo a Corpo',
+  fist: 'Punho',
+  club: 'Maça',
+  sword: 'Espada',
+  axe: 'Machado',
   distance: 'Distância',
 };
 

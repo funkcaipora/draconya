@@ -1,0 +1,17 @@
+{
+  "id": "cure-bleeding-druid",
+  "name": "Cure Bleeding",
+  "description": "Estanca o sangramento.",
+  "vocationId": "druid",
+  "learnPrice": 2500,
+  "manaCost": 30,
+  "cooldownMs": 6000,
+  "group": "healing",
+  "groupCooldownMs": 1000,
+  "minLevel": 45,
+  "effect": {
+    "kind": "dispel",
+    "types": ["bleeding"]
+  },
+  "_open": "Canary `data/scripts/spells/healing/cure_bleeding.lua` (main, 2026-09-27): words \"exana kor\", id 144, level 45, mana 30, cooldown 6000/1000, vocação Druid/Elder Druid E Knight/Elite Knight — duas vocações, por isso duas linhas de catálogo (`cure-bleeding-druid`/`cure-bleeding-knight`), como `recovery-knight`/`recovery-paladin` já fazem para a mesma magia em duas vocações. Só `COMBAT_PARAM_DISPEL` (CONDITION_BLEEDING) — sem cura."
+}

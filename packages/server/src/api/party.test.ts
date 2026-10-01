@@ -23,10 +23,11 @@ beforeEach(async () => {
 // `PartyStore` de verdade, no Redis; ticket, banco e diretório são falsos.
 
 const character = (id: string, accountId: string, over: Partial<CharacterRecord> = {}): CharacterRecord => ({
-  id, accountId, name: `Hero ${id}`, vocation: null, level: 10, xp: 0, gold: 50,
+  id, accountId, name: `Hero ${id}`, vocation: null, promoted: false, level: 10, xp: 0, soul: 0, gold: 50,
   capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
-  ammo: null, supplyStock: null, ammunitionStock: null,
+  ammo: null, supplyStock: null, ammunitionStock: null, charms: null, bosstiary: null, learnedSpells: null,
+  familiar: null, training: null, fedMs: 0, blessings: 0, fightMode: 'attack',
   createdAt: new Date(),
   ...over,
 });
@@ -38,6 +39,8 @@ function build(over: {
   locate?: (characterId: string) => { type: string } | null;
   /** O relógio do `PartyStore` (#527, carência do disband) — real por padrão. */
   now?: () => number;
+  /** O bônus de Loyalty de cada CONTA (#628). Ausente é a `api` sem conteúdo de Loyalty. */
+  loyaltyBonusPercentOf?: (accountId: string) => Promise<number | undefined>;
 } = {}) {
   const app = Fastify();
   const characters = new Map<string, CharacterRecord>([
@@ -77,6 +80,7 @@ function build(over: {
       return found !== undefined && found.accountId === accountId ? found : null;
     },
     getCharacterById: async (characterId) => characters.get(characterId) ?? null,
+    ...(over.loyaltyBonusPercentOf === undefined ? {} : { loyaltyBonusPercentOf: over.loyaltyBonusPercentOf }),
     settleProgress: async () => ({ written: 0, failed: 0 }),
     locateSession: async (characterId) => over.locate?.(characterId) ?? locations.get(characterId) ?? null,
     directory: {
@@ -173,9 +177,10 @@ describe.runIf(available)('as rotas da party (#195, ADR 0027 decisão 8)', () =>
     expect((await as('p1').post(`/api/party/${id}/configure`, { vocationTargets: { necromancer: 2 } })).json()).toEqual({ error: 'unknown-vocation' });
     // Soma > maxMembers do conteúdo (4 aqui): 400 composition-too-large — nunca um 8 escrito à mão.
     expect((await as('p1').post(`/api/party/${id}/configure`, { vocationTargets: { knight: 3, druid: 2 } })).json()).toEqual({ error: 'composition-too-large' });
-    // Hunt e dificuldade validadas pelo conteúdo, cada eixo sozinho.
+    // Hunt validada pelo conteúdo; dificuldade NÃO É MAIS VALIDADA POR VALOR (#584, ADR 0039 —
+    // fim do pull por dificuldade): um valor que não existe em nenhuma hunt é aceito e ignorado.
     expect((await as('p1').post(`/api/party/${id}/configure`, { huntId: 'nope' })).json()).toEqual({ error: 'unknown-hunt' });
-    expect((await as('p1').post(`/api/party/${id}/configure`, { difficulty: 'nope' })).json()).toEqual({ error: 'unknown-difficulty' });
+    expect((await as('p1').post(`/api/party/${id}/configure`, { difficulty: 'nope' })).statusCode).toBe(200);
     // `none` é chave válida (personagem sem vocação, level < 8).
     const configured = await as('p1').post(`/api/party/${id}/configure`, {
       huntId: 'arena', difficulty: 'bold', minLevel: 10, vocationTargets: { [NO_VOCATION]: 4 },
@@ -189,6 +194,39 @@ describe.runIf(available)('as rotas da party (#195, ADR 0027 decisão 8)', () =>
     expect((await as('p1').post(`/api/party/${id}/configure`, { splitLoot: false })).json()).toMatchObject({ shareCosts: false, splitLoot: false, mode: 'split' });
     // A composição continua lá: o patch dos eixos não tocou nela.
     expect(((await as('p1').post(`/api/party/${id}/configure`, { minLevel: 1 })).json() as { vocationTargets: unknown }).vocationTargets).toEqual({ [NO_VOCATION]: 4 });
+  });
+
+  it('configure without difficulty auto-fills DEFAULT_DIFFICULTY_NAME, and start never refuses by difficulty value (#584, RF-03/RF-04)', async () => {
+    const { as } = build();
+    const id = ((await as('p1').post('/api/party')).json() as { id: string }).id;
+    await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p2' });
+    await as('p2').post(`/api/party/${id}/join`);
+    // O líder configura SÓ `huntId`, sem `difficulty` — o cliente novo nunca manda o campo.
+    const configured = await as('p1').post(`/api/party/${id}/configure`, {
+      huntId: 'arena', minLevel: 1, vocationTargets: { [NO_VOCATION]: 4 },
+    });
+    expect(configured.statusCode).toBe(200);
+    // Sem o auto-preenchimento, `difficulty` ficaria `null` e `/start` recusaria com
+    // `nothing-proposed` — o bug que o #584 fecha.
+    expect((configured.json() as { difficulty: string | null }).difficulty).toBe('default');
+    // `/start` não recusa mais nem por VALOR (`difficulty: 'nope'` — um nome que nenhuma hunt
+    // define) nem por AUSÊNCIA — as duas causas de `unknown-difficulty`/`nothing-proposed` que
+    // existiam antes desta issue.
+    await as('p1').post(`/api/party/${id}/configure`, { difficulty: 'nope' });
+    const started = await as('p1').post(`/api/party/${id}/start`);
+    expect(started.statusCode).toBe(200);
+  });
+
+  it('propose and configure never refuse by difficulty VALUE — only an unknown hunt does (#584, RF-04)', async () => {
+    const { as } = build();
+    const id = ((await as('p1').post('/api/party')).json() as { id: string }).id;
+    // `/propose` (shim legado) continua recusando hunt desconhecida, mas não mais um valor de
+    // dificuldade que nenhuma hunt define — o cliente antigo manda `'bold'`/`'reckless'` e o
+    // conteúdo real só declara `'default'` desde o #583.
+    expect((await as('p1').post(`/api/party/${id}/propose`, { huntId: 'nope', difficulty: 'bold', mode: 'shared' })).statusCode).toBe(400);
+    const proposed = await as('p1').post(`/api/party/${id}/propose`, { huntId: 'arena', difficulty: 'legendary', mode: 'shared' });
+    expect(proposed.statusCode).toBe(200);
+    expect((proposed.json() as { difficulty: string | null }).difficulty).toBe('legendary');
   });
 
   it('publish validates the configured state and has no body (RF-03); unpublish closes without undoing', async () => {
@@ -359,8 +397,10 @@ describe.runIf(available)('a party em curso, a sala pública e a busca (#402, #5
   async function startedParty(over: {
     minLevel?: number;
     vocationTargets?: Record<string, number>;
+    loyaltyBonusPercentOf?: (accountId: string) => Promise<number | undefined>;
   } = {}) {
-    const context = build();
+    const context = build(over.loyaltyBonusPercentOf === undefined
+      ? {} : { loyaltyBonusPercentOf: over.loyaltyBonusPercentOf });
     const { as } = context;
     const id = ((await as('p1').post('/api/party')).json() as { id: string }).id;
     await as('p1').post(`/api/party/${id}/configure`, {
@@ -443,6 +483,27 @@ describe.runIf(available)('a party em curso, a sala pública e a busca (#402, #5
     const withoutSlot = await as('p4').post(`/api/party/${id}/join`);
     expect(withoutSlot.statusCode).toBe(409);
     expect((withoutSlot.json() as { error: string }).error).toBe('no-vocation-slot');
+  });
+
+  it('carries the Loyalty bonus of EACH member\'s own account in the start and join tickets (#628)', async () => {
+    // O bônus é da idade da CONTA de cada um, e a party não o nivela: p1 (conta velha) e p2
+    // (conta sem degrau) entram na MESMA hunt, cada um com o dele; quem entra em curso carrega o
+    // dele, não o do líder. O `game` fixa cada valor no `CharacterRuntime` do membro.
+    const byAccount: Record<string, number | undefined> = { a1: 30, a2: undefined, a3: 5 };
+    const { as, issued, id } = await startedParty({
+      loyaltyBonusPercentOf: async (accountId) => byAccount[accountId],
+    });
+    const started = issued[0]?.party;
+    expect(started?.members.map((m) => [m.characterId, m.initialCharacter.loyaltyBonusPercent])).toEqual([
+      ['p1', 30], ['p2', undefined],
+    ]);
+    // Ausente, e não `0`: o ticket de quem não tem degrau é o de antes desta issue.
+    expect(started?.members[1]?.initialCharacter).not.toHaveProperty('loyaltyBonusPercent');
+
+    expect((await as('p3').post(`/api/party/${id}/join`)).statusCode).toBe(200);
+    const joined = issued[issued.length - 1]?.party;
+    expect(joined?.members).toHaveLength(1);
+    expect(joined?.members[0]?.initialCharacter.loyaltyBonusPercent).toBe(5);
   });
 
   it('refuses a public-room join outside the configured minimum level (RF-04, RF-05)', async () => {

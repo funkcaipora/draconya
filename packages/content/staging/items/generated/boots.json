@@ -1,0 +1,1597 @@
+[
+  {
+    "id": "alchemists-boots",
+    "name": "alchemist's boots",
+    "kind": "armor",
+    "weight": 16,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 250,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 40592
+  },
+  {
+    "id": "badger-boots",
+    "name": "badger boots",
+    "kind": "armor",
+    "weight": 12,
+    "value": 7500,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 60
+    },
+    "bonuses": {
+      "speed": 10
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22086
+  },
+  {
+    "id": "boots-of-enlightenment",
+    "name": "boots of enlightenment",
+    "kind": "armor",
+    "weight": 9,
+    "value": 80,
+    "slot": "feet",
+    "armor": 1,
+    "requires": {
+      "level": 8,
+      "vocationId": "monk"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50267
+  },
+  {
+    "id": "boots-of-haste",
+    "name": "boots of haste",
+    "kind": "armor",
+    "weight": 7.5,
+    "value": 0,
+    "slot": "feet",
+    "imbuementSlots": 1,
+    "bonuses": {
+      "speed": 20
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3079
+  },
+  {
+    "id": "boots-of-homecoming",
+    "name": "boots of homecoming",
+    "kind": "armor",
+    "weight": 16,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "requires": {
+      "level": 100
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22773
+  },
+  {
+    "id": "broken-iks-sandals",
+    "name": "broken Iks sandals",
+    "kind": "armor",
+    "weight": 3.8,
+    "value": 440,
+    "slot": "feet",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 40534
+  },
+  {
+    "id": "bunnyslippers",
+    "name": "bunnyslippers",
+    "kind": "armor",
+    "weight": 6,
+    "value": 0,
+    "slot": "feet",
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3553
+  },
+  {
+    "id": "cobra-boots",
+    "name": "cobra boots",
+    "kind": "armor",
+    "weight": 9,
+    "value": 0,
+    "slot": "feet",
+    "armor": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 220,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 6
+      }
+    },
+    "bonuses": {
+      "speed": 10
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 30394
+  },
+  {
+    "id": "coconut-shoes",
+    "name": "coconut shoes",
+    "kind": "armor",
+    "weight": 6,
+    "value": 500,
+    "slot": "feet",
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 9017
+  },
+  {
+    "id": "crocodile-boots",
+    "name": "crocodile boots",
+    "kind": "armor",
+    "weight": 9,
+    "value": 1000,
+    "slot": "feet",
+    "armor": 1,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3556
+  },
+  {
+    "id": "crystal-boots",
+    "name": "crystal boots",
+    "kind": "armor",
+    "weight": 18.5,
+    "value": 0,
+    "slot": "feet",
+    "armor": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 70,
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": -3
+      },
+      "ice": {
+        "percent": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 10200
+  },
+  {
+    "id": "depth-calcei",
+    "name": "depth calcei",
+    "kind": "armor",
+    "weight": 37,
+    "value": 25000,
+    "slot": "feet",
+    "armor": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 150,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 13997
+  },
+  {
+    "id": "dragon-scale-boots",
+    "name": "dragon scale boots",
+    "kind": "armor",
+    "weight": 18.5,
+    "value": 0,
+    "slot": "feet",
+    "armor": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 70,
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": 3
+      },
+      "ice": {
+        "percent": -3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 10201
+  },
+  {
+    "id": "draken-boots",
+    "name": "draken boots",
+    "kind": "armor",
+    "weight": 25,
+    "value": 0,
+    "slot": "feet",
+    "armor": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 80,
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "bonuses": {
+      "speed": 15
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 4033
+  },
+  {
+    "id": "eldritch-monk-boots",
+    "name": "eldritch monk boots",
+    "kind": "armor",
+    "weight": 13,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 2
+        },
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50266
+  },
+  {
+    "id": "feverbloom-boots",
+    "name": "feverbloom boots",
+    "kind": "armor",
+    "weight": 9.8,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 270,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 7
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 1
+        }
+      ],
+      "speed": 15
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39161
+  },
+  {
+    "id": "filthy-bunnyslippers",
+    "name": "filthy bunnyslippers",
+    "kind": "armor",
+    "weight": 6,
+    "value": 0,
+    "slot": "feet",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 24409
+  },
+  {
+    "id": "firewalker-boots",
+    "name": "firewalker boots",
+    "kind": "armor",
+    "weight": 9.5,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "durationMs": 3600000,
+    "requires": {
+      "level": 130
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 9018
+  },
+  {
+    "id": "fish-tail",
+    "name": "fish tail",
+    "kind": "armor",
+    "weight": 2.5,
+    "value": 0,
+    "slot": "feet",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 11542
+  },
+  {
+    "id": "frostflower-boots",
+    "name": "frostflower boots",
+    "kind": "armor",
+    "weight": 11,
+    "value": 0,
+    "slot": "feet",
+    "armor": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 270,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 5
+      },
+      "physical": {
+        "percent": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39158
+  },
+  {
+    "id": "fur-boots",
+    "name": "fur boots",
+    "kind": "armor",
+    "weight": 12,
+    "value": 2000,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 7457
+  },
+  {
+    "id": "glacier-shoes",
+    "name": "glacier shoes",
+    "kind": "armor",
+    "weight": 7.5,
+    "value": 2500,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 35,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": -5
+      },
+      "ice": {
+        "percent": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 819
+  },
+  {
+    "id": "gnomish-footwraps",
+    "name": "gnomish footwraps",
+    "kind": "armor",
+    "weight": 11,
+    "value": 0,
+    "slot": "feet",
+    "armor": 1,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 150,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 3
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50290
+  },
+  {
+    "id": "golden-boots",
+    "name": "golden boots",
+    "kind": "armor",
+    "weight": 31,
+    "value": 0,
+    "slot": "feet",
+    "armor": 4,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3555
+  },
+  {
+    "id": "green-demon-slippers",
+    "name": "green demon slippers",
+    "kind": "armor",
+    "weight": 6,
+    "value": 0,
+    "slot": "feet",
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 37610
+  },
+  {
+    "id": "guardian-boots",
+    "name": "guardian boots",
+    "kind": "armor",
+    "weight": 22.5,
+    "value": 0,
+    "slot": "feet",
+    "armor": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 70,
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "absorb": {
+      "holy": {
+        "percent": -2
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 10323
+  },
+  {
+    "id": "iks-footwraps",
+    "name": "iks footwraps",
+    "kind": "armor",
+    "weight": 8,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 250,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50291
+  },
+  {
+    "id": "leather-boots",
+    "name": "leather boots",
+    "kind": "armor",
+    "weight": 9,
+    "value": 2,
+    "slot": "feet",
+    "armor": 1,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3552
+  },
+  {
+    "id": "lightning-boots",
+    "name": "lightning boots",
+    "kind": "armor",
+    "weight": 7.5,
+    "value": 2500,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 35,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": 5
+      },
+      "earth": {
+        "percent": -5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 820
+  },
+  {
+    "id": "magma-boots",
+    "name": "magma boots",
+    "kind": "armor",
+    "weight": 7.5,
+    "value": 2500,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 35,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": 5
+      },
+      "ice": {
+        "percent": -5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 818
+  },
+  {
+    "id": "make-do-boots",
+    "name": "make-do boots",
+    "kind": "armor",
+    "weight": 14.5,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 150,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 6
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 35520
+  },
+  {
+    "id": "makeshift-boots",
+    "name": "makeshift boots",
+    "kind": "armor",
+    "weight": 14.5,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 150,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 6
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 35519
+  },
+  {
+    "id": "metal-spats",
+    "name": "metal spats",
+    "kind": "armor",
+    "weight": 18,
+    "value": 2000,
+    "slot": "feet",
+    "armor": 1,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 50,
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "absorb": {
+      "physical": {
+        "percent": 1
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 21169
+  },
+  {
+    "id": "mutant-bone-boots",
+    "name": "mutant bone boots",
+    "kind": "armor",
+    "weight": 11,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 250,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "death": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 40593
+  },
+  {
+    "id": "norcferatu-fangstompers",
+    "name": "norcferatu fangstompers",
+    "kind": "armor",
+    "weight": 12.5,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 270,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "death": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ],
+      "speed": 15
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 51269
+  },
+  {
+    "id": "norcferatu-goretrampers",
+    "name": "norcferatu goretrampers",
+    "kind": "armor",
+    "weight": 12.5,
+    "value": 0,
+    "slot": "feet",
+    "armor": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 270,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 3
+      },
+      "physical": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "speed": 15
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 51268
+  },
+  {
+    "id": "oriental-shoes",
+    "name": "oriental shoes",
+    "kind": "armor",
+    "weight": 5,
+    "value": 15000,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 80,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "bonuses": {
+      "speed": 15
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 21981
+  },
+  {
+    "id": "pair-of-dreamwalkers",
+    "name": "pair of dreamwalkers",
+    "kind": "armor",
+    "weight": 8,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 180,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "earth": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 29424
+  },
+  {
+    "id": "pair-of-nightmare-boots",
+    "name": "pair of nightmare boots",
+    "kind": "armor",
+    "weight": 13,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 140,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": 6
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 32619
+  },
+  {
+    "id": "pair-of-soft-boots",
+    "name": "pair of soft boots",
+    "kind": "armor",
+    "weight": 8,
+    "value": 0,
+    "slot": "feet",
+    "durationMs": 14400000,
+    "bonuses": {
+      "regeneration": {
+        "healthGain": 3,
+        "healthTicksMs": 6000,
+        "manaGain": 12,
+        "manaTicksMs": 6000
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3549
+  },
+  {
+    "id": "pair-of-soulstalkers",
+    "name": "pair of soulstalkers",
+    "kind": "armor",
+    "weight": 13,
+    "value": 0,
+    "slot": "feet",
+    "armor": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 400,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 1
+        }
+      ],
+      "speed": 20
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 34098
+  },
+  {
+    "id": "pair-of-soulwalkers",
+    "name": "pair of soulwalkers",
+    "kind": "armor",
+    "weight": 13,
+    "value": 0,
+    "slot": "feet",
+    "armor": 4,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 400,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 5
+      },
+      "physical": {
+        "percent": 7
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "club",
+          "amount": 1
+        },
+        {
+          "skillId": "sword",
+          "amount": 1
+        },
+        {
+          "skillId": "axe",
+          "amount": 1
+        }
+      ],
+      "speed": 15
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 34097
+  },
+  {
+    "id": "patched-boots",
+    "name": "patched boots",
+    "kind": "armor",
+    "weight": 10,
+    "value": 2000,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3550
+  },
+  {
+    "id": "pirate-boots",
+    "name": "pirate boots",
+    "kind": "armor",
+    "weight": 8,
+    "value": 3000,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 5461
+  },
+  {
+    "id": "prismatic-boots",
+    "name": "prismatic boots",
+    "kind": "armor",
+    "weight": 18,
+    "value": 0,
+    "slot": "feet",
+    "armor": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 150,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "death": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "speed": 15
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 16112
+  },
+  {
+    "id": "sandals",
+    "name": "sandals",
+    "kind": "armor",
+    "weight": 6,
+    "value": 0,
+    "slot": "feet",
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3551
+  },
+  {
+    "id": "sanguine-boots",
+    "name": "sanguine boots",
+    "kind": "armor",
+    "weight": 19,
+    "value": 0,
+    "slot": "feet",
+    "armor": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 500,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 8
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ],
+      "speed": 10,
+      "specializedMagicLevel": {
+        "death": 1
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 43884
+  },
+  {
+    "id": "sanguine-galoshes",
+    "name": "sanguine galoshes",
+    "kind": "armor",
+    "weight": 17,
+    "value": 0,
+    "slot": "feet",
+    "armor": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 500,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 8
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ],
+      "speed": 10,
+      "specializedMagicLevel": {
+        "healing": 1
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 43887
+  },
+  {
+    "id": "soulsoles",
+    "name": "soulsoles",
+    "kind": "armor",
+    "weight": 13,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 400,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 6
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50240
+  },
+  {
+    "id": "steel-boots",
+    "name": "steel boots",
+    "kind": "armor",
+    "weight": 29,
+    "value": 30000,
+    "slot": "feet",
+    "armor": 3,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3554
+  },
+  {
+    "id": "stoic-iks-boots",
+    "name": "stoic iks boots",
+    "kind": "armor",
+    "weight": 15,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 250,
+      "vocationId": "paladin"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 1
+        }
+      ],
+      "speed": 15
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 44648
+  },
+  {
+    "id": "stoic-iks-sandals",
+    "name": "stoic iks sandals",
+    "kind": "armor",
+    "weight": 9,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 250,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 6
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 44649
+  },
+  {
+    "id": "terra-boots",
+    "name": "terra boots",
+    "kind": "armor",
+    "weight": 7.5,
+    "value": 2500,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 35,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": -5
+      },
+      "earth": {
+        "percent": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 813
+  },
+  {
+    "id": "traditional-leather-shoes",
+    "name": "traditional leather shoes",
+    "kind": "armor",
+    "weight": 5,
+    "value": 0,
+    "slot": "feet",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 32098
+  },
+  {
+    "id": "treader-of-torment",
+    "name": "treader of torment",
+    "kind": "armor",
+    "weight": 36,
+    "value": 0,
+    "slot": "feet",
+    "armor": 4,
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 22756
+  },
+  {
+    "id": "vampire-silk-slippers",
+    "name": "vampire silk slippers",
+    "kind": "armor",
+    "weight": 11.5,
+    "value": 0,
+    "slot": "feet",
+    "imbuementSlots": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 19374
+  },
+  {
+    "id": "void-boots",
+    "name": "void boots",
+    "kind": "armor",
+    "weight": 15,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "durationMs": 3600000,
+    "requires": {
+      "level": 150
+    },
+    "absorb": {
+      "energy": {
+        "percent": 10
+      }
+    },
+    "bonuses": {
+      "speed": 30,
+      "regeneration": {
+        "healthGain": 3,
+        "healthTicksMs": 6000,
+        "manaGain": 12,
+        "manaTicksMs": 6000
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 23476
+  },
+  {
+    "id": "winged-boots",
+    "name": "winged boots",
+    "kind": "armor",
+    "weight": 12,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 220,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 7
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 1
+        }
+      ],
+      "speed": 15
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 31617
+  },
+  {
+    "id": "yalahari-footwraps",
+    "name": "yalahari footwraps",
+    "kind": "armor",
+    "weight": 7,
+    "value": 0,
+    "slot": "feet",
+    "armor": 1,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 80,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 6
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50289
+  },
+  {
+    "id": "yetislippers",
+    "name": "yetislippers",
+    "kind": "armor",
+    "weight": 7.4,
+    "value": 0,
+    "slot": "feet",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 30196
+  },
+  {
+    "id": "zaoan-shoes",
+    "name": "Zaoan shoes",
+    "kind": "armor",
+    "weight": 7,
+    "value": 0,
+    "slot": "feet",
+    "armor": 1,
+    "imbuementSlots": 1,
+    "bonuses": {
+      "speed": 5
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 10386
+  }
+]

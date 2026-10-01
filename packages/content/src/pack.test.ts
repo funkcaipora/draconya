@@ -15,8 +15,9 @@ const pack: Pack = packSchema.parse({
 
 const table = (over: Partial<Appearances> = {}): Appearances => ({
   id: 'baseline', pack: 'tibia-test',
-  monsters: {}, items: {}, ammunition: {}, weapons: {}, corpses: {}, maps: {}, spells: {},
-  supplies: {}, hits: {}, abilities: {},
+  monsters: {}, items: {}, equippedItems: {}, ammunition: {}, weapons: {}, corpses: {}, fields: {},
+  fieldStages: {},
+  scenery: {}, maps: {}, spells: {}, supplies: {}, hits: {}, abilities: {},
   ...over,
 });
 
@@ -61,6 +62,14 @@ describe('packProblems', () => {
     // O projétil é conferido no registro de MISSILES: 43 é o buraco entre as faixas.
     expect(packProblems(table({ ammunition: { arrow: { icon: 1200, missile: 43 } } }), pack))
       .toEqual(['appearances.ammunition.arrow.missile: missile 43 não existe no pacote tibia-test']);
+  });
+
+  it('confere a forma ativa do item vestido no registro de objetos (#689)', () => {
+    // Mutação que mata: esquecer o laço de `equippedItems` — o anel ligado com id fora do pacote
+    // viraria o quadrado invisível justamente no slot do dedo.
+    expect(packProblems(table({ equippedItems: { 'energy-ring': 1200 } }), pack)).toEqual([]);
+    expect(packProblems(table({ equippedItems: { 'energy-ring': 168 } }), pack))
+      .toEqual(['appearances.equippedItems.energy-ring: object 168 não existe no pacote tibia-test']);
   });
 
   it('confere o projétil da wand e do rod no registro de missiles (#152)', () => {
@@ -121,11 +130,13 @@ describe('packProblems', () => {
       spells: { strike: { effect: 81, missile: 43 } },
       supplies: { potion: { effect: 81 } },
       hits: { melee: 81 },
+      fields: { fire: 999 },
     }), pack);
     expect(problems).toEqual([
       'appearances.monsters.rat: outfit 999 não existe no pacote tibia-test',
       'appearances.characters.default: outfit 999 não existe no pacote tibia-test',
       'appearances.items.sword: object 168 não existe no pacote tibia-test',
+      'appearances.fields.fire: object 999 não existe no pacote tibia-test',
       'appearances.maps.cellars.floor: object 99 não existe no pacote tibia-test',
       'appearances.maps.cellars.wall.vertical: object 371 não existe no pacote tibia-test',
       'appearances.maps.cellars.wall.horizontal: object 371 não existe no pacote tibia-test',

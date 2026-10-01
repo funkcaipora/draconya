@@ -1,0 +1,89 @@
+{
+  "id": "fire-bomb-rune",
+  "name": "Fire Bomb Rune",
+  "description": "Espalha fogo numa área 3x3 ao redor do tile mirado.",
+  "price": 147,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "actionExhaustMs": 1000,
+  "requires": {
+    "level": 27,
+    "magicLevel": 5
+  },
+  "effect": {
+    "kind": "field",
+    "range": 8,
+    "field": {
+      "id": "player-fire-bomb",
+      "durationMs": 200000,
+      "shape": {
+        "shape": "circle",
+        "radius": 1,
+        "centered": "target"
+      },
+      "condition": {
+        "key": "burning",
+        "merge": "strongest",
+        "durationMs": 70000,
+        "effect": {
+          "kind": "damage-over-time",
+          "form": "rounds",
+          "rounds": [
+            {
+              "count": 7,
+              "intervalMs": 10000,
+              "damage": 20
+            }
+          ],
+          "damageType": "fire"
+        }
+      },
+      "stages": [
+        {
+          "durationMs": 200000,
+          "condition": {
+            "key": "burning",
+            "merge": "strongest",
+            "durationMs": 70000,
+            "effect": {
+              "kind": "damage-over-time",
+              "form": "rounds",
+              "rounds": [
+                {
+                  "count": 7,
+                  "intervalMs": 10000,
+                  "damage": 20
+                }
+              ],
+              "damageType": "fire"
+            }
+          }
+        },
+        {
+          "durationMs": 148000,
+          "condition": {
+            "key": "burning",
+            "merge": "strongest",
+            "durationMs": 70000,
+            "effect": {
+              "kind": "damage-over-time",
+              "form": "rounds",
+              "rounds": [
+                {
+                  "count": 7,
+                  "intervalMs": 10000,
+                  "damage": 10
+                }
+              ],
+              "damageType": "fire"
+            }
+          }
+        },
+        {
+          "durationMs": 98000
+        }
+      ]
+    }
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6; #591). Canary `fire_bomb.lua`: MESMO item da Fire Field (ITEM_FIREFIELD_PVP_FULL, 2118→2119→2120), com `setArea(AREA_SQUARE1X1)` — o 3x3 centrado no alvo, o MESMO mecanismo que `circle radius:1 centered:'target'` já cobre neste schema (9 tiles). Level 27, magic level 5 (rune:level/magicLevel do Lua). `price` 147 — resolvido por `pnpm catalog:npc-prices` contra o clientId 3192 (menor `buy`, fonte asima.lua). Sem aparência conferida."
+}

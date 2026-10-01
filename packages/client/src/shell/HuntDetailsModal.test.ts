@@ -4,9 +4,7 @@ import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Catalogue, HuntListing } from '../state/hud.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
-import {
-  HuntDetailsModal, lootItemsOf, monstersOf, pullSizeLabel, pullSizesOf,
-} from './HuntDetailsModal.js';
+import { HuntDetailsModal, lootItemsOf, monstersOf } from './HuntDetailsModal.js';
 
 const ratMonster = { id: 'rat', name: 'Rat', health: 20, experience: 5 };
 const caveRatMonster = { id: 'cave-rat', name: 'Cave Rat', health: 30, experience: 10 };
@@ -22,12 +20,9 @@ const huntWithDesc: HuntListing = {
   id: 'rat-cellars',
   name: 'Rat Cellars',
   recommendedLevel: 1,
-  difficulties: ['cautious', 'bold', 'reckless'],
-  difficultyDetails: [
-    { id: 'cautious', monsterCount: 2 },
-    { id: 'bold', monsterCount: 5 },
-    { id: 'reckless', monsterCount: 8 },
-  ],
+  // Vestigial (#584, ADR 0039, fim do pull por dificuldade): só `'default'` desde o #583.
+  difficulties: ['default'],
+  difficultyDetails: [],
   outfitIds: [21],
   lootDrops: 2,
   description: 'Bueiro infestado de ratos sob Rookgaard.',
@@ -55,7 +50,7 @@ const catalogue: Catalogue = {
   items: [cheeseItem, goldCoinItem],
   ammunition: [],
   vocations: [],
-  vocationLevel: 8,
+  charms: [], vocationLevel: 8,
 };
 
 async function render(props: { open: boolean; onClose?: () => void }): Promise<string> {
@@ -80,13 +75,15 @@ describe('HuntDetailsModal (#325, #349, SV-05, SV-13)', () => {
     expect(html).toContain('Exp 10');
   });
 
-  it('RF-02: hunt with three difficulties shows pull sizes with count', async () => {
+  it('RF-06: never shows "Tamanhos de pull" or "Dificuldades" — that axis ended with #584', async () => {
     hud.set((state) => ({ ...state, huntId: 'rat-cellars', difficulty: 'bold' }));
     const html = await render({ open: true });
 
-    expect(html).toContain('Cauteloso · 2');
-    expect(html).toContain('Ousado · 5');
-    expect(html).toContain('Agressivo · 8');
+    expect(html).not.toContain('Tamanhos de pull');
+    expect(html).not.toContain('Dificuldades');
+    expect(html).not.toContain('Cauteloso');
+    expect(html).not.toContain('Ousado');
+    expect(html).not.toContain('Agressivo');
   });
 
   it('RF-03: hunt with loot shows name of each item, without PEGAR, VENDER or rarity words', async () => {
@@ -267,33 +264,5 @@ describe('pure helpers (#349)', () => {
       ],
     };
     expect(lootItemsOf(huntOrder, catalogueItems)).toEqual([goldCoinItem, cheeseItem]);
-  });
-
-  it('pullSizesOf returns pull sizes in the exact order of hunt.difficulties and filters missing', () => {
-    const customHunt: HuntListing = {
-      ...huntWithDesc,
-      difficulties: ['reckless', 'cautious', 'missing-diff'],
-      difficultyDetails: [
-        { id: 'cautious', monsterCount: 2 },
-        { id: 'bold', monsterCount: 5 },
-        { id: 'reckless', monsterCount: 8 },
-      ],
-    };
-    expect(pullSizesOf(customHunt)).toEqual([
-      { id: 'reckless', monsterCount: 8 },
-      { id: 'cautious', monsterCount: 2 },
-    ]);
-  });
-
-  it('pullSizesOf returns an empty list for a node prior to SV-19 (empty difficultyDetails)', () => {
-    const rolledBack: HuntListing = { ...huntWithDesc, difficultyDetails: [] };
-    expect(pullSizesOf(rolledBack)).toEqual([]);
-  });
-
-  it('pullSizeLabel formats pull size with localized difficulty and count', () => {
-    expect(pullSizeLabel({ id: 'cautious', monsterCount: 2 })).toBe('Cauteloso · 2');
-    expect(pullSizeLabel({ id: 'bold', monsterCount: 5 })).toBe('Ousado · 5');
-    expect(pullSizeLabel({ id: 'reckless', monsterCount: 8 })).toBe('Agressivo · 8');
-    expect(pullSizeLabel({ id: 'custom', monsterCount: 10 })).toBe('custom · 10');
   });
 });

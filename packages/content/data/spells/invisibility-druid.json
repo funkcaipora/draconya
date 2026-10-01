@@ -1,0 +1,17 @@
+{
+  "id": "invisibility-druid",
+  "name": "Invisibility",
+  "description": "Torna você invisível por 200 segundos.",
+  "vocationId": "druid",
+  "minLevel": 35,
+  "learnPrice": 2000,
+  "manaCost": 440,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "invisible",
+    "durationMs": 200000
+  },
+  "_open": "Canary `data/scripts/spells/support/invisible.lua` (main, 2026-09-27): `words(\"utana vid\")`, `id(45)`, `level(35)`, `mana(440)`, `cooldown(2*1000)`/`groupCooldown(2*1000)`, `isSelfTarget(true)`, `isAggressive(false)`, `vocation(\"druid;true\", \"elder druid;true\", \"sorcerer;true\", \"master sorcerer;true\")` — arquivo duplicado por vocação (`invisibility-sorcerer.json`), como `light-healing-druid`/`light-healing-paladin` já fazem. Um monstro sem `seesInvisible` (#592, parcial de #559 — `canSeeInvisibility` do Canary/TFS) não seleciona nem retém o jogador como alvo enquanto a condição durar. Efeito (magic blue, `CONST_ME_MAGIC_BLUE`), auditado em 2026-09-27 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver `docs/combat-presentation-audit.md`)."
+}

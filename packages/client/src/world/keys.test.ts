@@ -112,6 +112,15 @@ describe('as cores da criatura na chave (FUN-104)', () => {
       .not.toBe(creatureKey(128, 'south', false, 0, DEFAULT_OUTFIT_COLORS));
   });
 
+  it('os addons (#620) entram na chave: a mesma criatura com outro addon é outro bitmap', () => {
+    // O quadro composto do monstro com addon não pode reaproveitar a entrada do sem addon.
+    // Mutação que mata: `creatureKey` ignorar `addons`. E quem não tem addon guarda a chave de antes.
+    const colors = { head: 1, body: 2, legs: 3, feet: 4 };
+    expect(creatureKey(128, 'south', false, 0, colors, 0)).toBe(creatureKey(128, 'south', false, 0, colors));
+    const chaves = new Set([0, 1, 2, 3].map((addons) => creatureKey(128, 'south', false, 0, colors, addons)));
+    expect(chaves.size).toBe(4);
+  });
+
   it('uma criatura sem cores é pintada com as de reserva — nunca pede o quadro cru', () => {
     // Sem cores na chave o quadro pintado cairia na entrada do quadro cru, e o primeiro a
     // chegar ganharia. Mutação que mata: `paintOf` devolver `creature.colors` sem o `??`.

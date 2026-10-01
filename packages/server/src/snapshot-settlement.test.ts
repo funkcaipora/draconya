@@ -42,6 +42,15 @@ describe('settleSnapshotAsReceipt (#527)', () => {
       // O dono existe e o snapshot é anterior ao estoque: `{}` é "sem estoque", nunca a chave
       // omitida — omitida deixaria o valor antigo da coluna ressuscitar (#520).
       supplyStock: {}, ammunitionStock: {},
+      // E anterior aos storages (#731): `{}` pela mesma razão.
+      storages: {},
+      // Comida ativa (#726): mesma regra acima — `0` é "sem comida", nunca a chave omitida.
+      fedMs: 0,
+      // As bênçãos (#570): mesma regra — `0` é "nenhuma", nunca a chave omitida.
+      blessings: 0,
+      // A postura de luta (#550): o snapshot omite o default, e `attack` é GRAVADO — nunca a chave
+      // omitida, ou a postura antiga do Postgres ressuscitaria no próximo login.
+      fightMode: 'attack',
     }]);
   });
 
@@ -60,7 +69,8 @@ describe('settleSnapshotAsReceipt (#527)', () => {
     expect(saved[0]?.aggregates).toEqual(snapshot.aggregatesByCharacter?.['a']);
   });
 
-  it('carries stamina, skills, bestiary, ammo, stock, vocation, equipment and the loot box of the OWNER', async () => {
+  it('carries stamina, skills, bestiary, ammo, stock, vocation and equipment of the OWNER', async () => {
+    const imbued = { imbuements: [{ slot: 0, typeId: 'strike-basic', remainingMs: 1000 }] };
     const { receipts, saved } = fakeReceipts();
     const snapshot: SessionSnapshot = {
       ...baseSnapshot,
@@ -75,9 +85,8 @@ describe('settleSnapshotAsReceipt (#527)', () => {
         vocationId: 'knight',
         inventory: {
           backpack: [{ instanceId: 's-old:1', itemId: 'gold-coin', quantity: 50 }],
-          equipped: { hand: { instanceId: 's-old:2', itemId: 'sword', quantity: 1 } },
+          equipped: { hand: { instanceId: 's-old:2', itemId: 'sword', quantity: 1, overlay: imbued } },
         },
-        lootBox: [{ instanceId: 's-old:3', itemId: 'dragon-hide', quantity: 1 }],
       }],
     };
     await settleSnapshotAsReceipt(snapshot, { characterId: 'a', accountId: 'acc-a', receipts });
@@ -92,12 +101,127 @@ describe('settleSnapshotAsReceipt (#527)', () => {
     expect(receipt?.vocation).toBe('knight');
     expect(receipt?.equipment).toEqual({ hand: 's-old:2' });
     expect(receipt?.layout).toEqual({ 's-old:1': { container: 'backpack', index: 0 } });
+    // O overlay por instância (#604): containers E corpo; `null` é a instância sem overlay.
+    expect(receipt?.overlays).toEqual({ 's-old:1': null, 's-old:2': imbued });
     // Nasceu NESTA sessão (prefixo `s-old:`) — vira item a inserir, não só posição.
     expect(receipt?.acquired).toEqual([
       { instanceId: 's-old:1', itemId: 'gold-coin', quantity: 50 },
-      { instanceId: 's-old:2', itemId: 'sword', quantity: 1 },
+      { instanceId: 's-old:2', itemId: 'sword', quantity: 1, overlay: imbued },
     ]);
-    expect(receipt?.lootBox).toEqual([{ instanceId: 's-old:3', itemId: 'dragon-hide', quantity: 1 }]);
+  });
+
+  it('carries the Bosstiary of the OWNER (#629), and a snapshot without one omits the key', async () => {
+    // Monotônico como o Bestiário (o ledger funde pelo maior): sem ele aqui, o abate de boss de uma
+    // sessão irrestaurável sumia junto com o snapshot.
+    const { receipts, saved } = fakeReceipts();
+    const bosstiary = { kills: { '639': 3 }, points: 40, version: 1 };
+    const snapshot: SessionSnapshot = {
+      ...baseSnapshot,
+      participants: [{ ...baseSnapshot.participants[0]!, bosstiary }],
+    };
+    await settleSnapshotAsReceipt(snapshot, { characterId: 'a', accountId: 'acc-a', receipts });
+    expect(saved[0]?.bosstiary).toEqual(bosstiary);
+
+    await settleSnapshotAsReceipt(baseSnapshot, { characterId: 'a', accountId: 'acc-a', receipts });
+    expect(saved[1]).not.toHaveProperty('bosstiary');
+  });
+
+  it('carries the posture of the OWNER (#550), and a snapshot without one is the Canary offensive default', async () => {
+    const { receipts, saved } = fakeReceipts();
+    const snapshot: SessionSnapshot = {
+      ...baseSnapshot,
+      participants: [{ ...baseSnapshot.participants[0]!, fightMode: 'defense' }],
+    };
+    await settleSnapshotAsReceipt(snapshot, { characterId: 'a', accountId: 'acc-a', receipts });
+    expect(saved[0]?.fightMode).toBe('defense');
+
+    // `getState` omite o default: o snapshot de quem nunca trocou de postura NÃO tem a chave, e o
+    // extrato grava `attack` mesmo assim — omitir deixaria uma postura antiga do Postgres voltar.
+    const { receipts: other, saved: otherSaved } = fakeReceipts();
+    await settleSnapshotAsReceipt(baseSnapshot, { characterId: 'a', accountId: 'acc-a', receipts: other });
+    expect(otherSaved[0]?.fightMode).toBe('attack');
+  });
+
+  it('carries the learned spells of the OWNER (#624), so a `learn-spell` accepted before the crash is not lost', async () => {
+    const { receipts, saved } = fakeReceipts();
+    const learnedSpells = { spellIds: ['berserk', 'wound-cleansing'], version: 1 };
+    const snapshot: SessionSnapshot = {
+      ...baseSnapshot,
+      participants: [{ ...baseSnapshot.participants[0]!, learnedSpells }],
+    };
+    await settleSnapshotAsReceipt(snapshot, { characterId: 'a', accountId: 'acc-a', receipts });
+    expect(saved[0]?.learnedSpells).toEqual(learnedSpells);
+
+    // Snapshot anterior à issue: sem a chave no dono, e o extrato NÃO inventa um registro vazio —
+    // o ledger não toca na coluna, e as magias do Postgres (migração 0024) continuam valendo.
+    const { receipts: legacy, saved: legacySaved } = fakeReceipts();
+    await settleSnapshotAsReceipt(baseSnapshot, { characterId: 'a', accountId: 'acc-a', receipts: legacy });
+    expect(legacySaved[0]).not.toHaveProperty('learnedSpells');
+  });
+
+  it('carries the familiar stamps of the OWNER (#599), and a snapshot without them writes nothing', async () => {
+    // Sem os carimbos aqui, um familiar lançado antes da queda perderia o cooldown de 30 min junto
+    // com o snapshot irrestaurável — e o `familiar` ausente NÃO vira chave (o ledger não toca).
+    const { receipts, saved } = fakeReceipts();
+    const familiar = { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 };
+    const snapshot: SessionSnapshot = {
+      ...baseSnapshot,
+      participants: [{ ...baseSnapshot.participants[0]!, familiar }],
+    };
+    await settleSnapshotAsReceipt(snapshot, { characterId: 'a', accountId: 'acc-a', receipts });
+    expect(saved[0]?.familiar).toEqual(familiar);
+
+    const { receipts: other, saved: otherSaved } = fakeReceipts();
+    await settleSnapshotAsReceipt(baseSnapshot, { characterId: 'a', accountId: 'acc-a', receipts: other });
+    expect(otherSaved[0]).not.toHaveProperty('familiar');
+  });
+
+  it('carries the offline training record and the exercise weapon charges of a Training snapshot (#631)', async () => {
+    // A sessão de Treino que caiu: o banco que ela já tinha acumulado (ABSOLUTO, como `charms`) e as
+    // cargas RESTANTES da arma — que moram no overlay da instância — voltam ao banco pelo extrato, e a
+    // arma não é destruída (`removedInstances` só sai quando a última carga foi gasta).
+    const { receipts, saved } = fakeReceipts();
+    const training = { offlineBankMs: 4_000, offlineSkill: 'sword', version: 1 };
+    const snapshot: SessionSnapshot = {
+      ...baseSnapshot,
+      id: 's-train',
+      type: 'training',
+      participants: [{
+        ...baseSnapshot.participants[0]!,
+        training,
+        inventory: {
+          backpack: [{ instanceId: 'w1', itemId: 'exercise-sword', quantity: 1, overlay: { charges: 2 } }],
+          equipped: {},
+        },
+      }],
+    };
+    await settleSnapshotAsReceipt(snapshot, { characterId: 'a', accountId: 'acc-a', receipts });
+    expect(saved[0]?.training).toEqual(training);
+    expect(saved[0]?.overlays).toEqual({ w1: { charges: 2 } });
+    expect(saved[0]).not.toHaveProperty('removedInstances');
+  });
+
+  it('holds the stamina marker of a Training snapshot at the settlement time — Training time is not recovery (#631, ADR 0060 d.14c)', async () => {
+    // A stamina não anda no Treino: o marco que o extrato leva avança até a liquidação, senão o tempo
+    // treinado voltaria como recuperação no próximo ticket. Só o Treino, e só para a frente.
+    const { receipts, saved } = fakeReceipts();
+    const participant = { ...baseSnapshot.participants[0]!, staminaMs: 6_000, staminaUpdatedAtMs: 1_000 };
+    const settle = (type: SessionSnapshot['type'], nowMs?: number) => settleSnapshotAsReceipt(
+      { ...baseSnapshot, type, participants: [participant] },
+      { characterId: 'a', accountId: 'acc-a', receipts, ...(nowMs === undefined ? {} : { nowMs }) },
+    );
+
+    await settle('training', 9_000);
+    expect(saved.at(-1)).toMatchObject({ staminaMs: 6_000, staminaUpdatedAtMs: 9_000 });
+    // Relógio para trás não recua o marco.
+    await settle('training', 500);
+    expect(saved.at(-1)).toMatchObject({ staminaUpdatedAtMs: 1_000 });
+    // Sem o relógio de quem liquida, o marco fica como o snapshot o tinha.
+    await settle('training');
+    expect(saved.at(-1)).toMatchObject({ staminaUpdatedAtMs: 1_000 });
+    // E uma hunt nunca o segura: o marco é o de sempre, qualquer que seja o relógio.
+    await settle('hunt', 9_000);
+    expect(saved.at(-1)).toMatchObject({ staminaUpdatedAtMs: 1_000 });
   });
 
   it('omits every optional field when the participant record has none of them', async () => {
@@ -110,7 +234,7 @@ describe('settleSnapshotAsReceipt (#527)', () => {
     expect(receipt).not.toHaveProperty('ammo');
     expect(receipt).not.toHaveProperty('vocation');
     expect(receipt).not.toHaveProperty('equipment');
-    expect(receipt).not.toHaveProperty('lootBox');
+    expect(receipt).not.toHaveProperty('training');
   });
 
   it('rejects when the character never participated in that session, leaving no receipt saved', async () => {

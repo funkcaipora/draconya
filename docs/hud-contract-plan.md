@@ -175,7 +175,7 @@ nenhuma configuração salva se perdeu.
 
 | Id | Issue | Camadas | Depende de | Notas |
 |---|---|---|---|---|
-| CO-01 | Postura: `stance` no personagem (persistida com a configuração de combate), C2S `set-stance`, fatores do TFS em `resolveDamage`/defesa, perfil `combat-v2` com teste de conformidade (ADR 0031); `Stance` do set ligado, default Balanceada | content, sim, protocol, server, client | AB-09 (a config v2 carrega `stance`) | Decisão 10 |
+| CO-01 | Postura: `stance` no personagem (persistida com a configuração de combate), C2S `set-stance`, fatores do TFS em `resolveDamage`/defesa, perfil `combat-v2` com teste de conformidade (ADR 0031); `Stance` do set ligado, default Balanceada | content, sim, protocol, server, client | AB-09 (a config v2 carrega `stance`) | Decisão 10. **Entregue pela #550 (M30-03) com outra forma** — intenção `set-fight-mode`, coluna `character.fight_mode` com default do Canary (ofensiva), fatores do Canary no `combat-v3`; ver a emenda de 2026-09-29 do ADR 0032 |
 | CO-02 | Moedas físicas: `gold-coin`/`platinum-coin`/`crystal-coin` como itens (rótulos GOLD/PLAT/GEM), loot deposita na bolsa com troca automática 100→1, crédito no ledger ao sair e ao despachar; a bolsa da party continua | content, sim, server | AB-01 | Decisão 11 |
 | CO-03 | Loot na mochila e Despachar loot: o drop entra na mochila limitado pela capacidade; C2S `dispatch-loot` vende ao `value` pelo ledger (party: `shareLoot`); capacidade cheia despacha sozinho; a Caixa de Loot em Redis sai | sim, protocol, server | CO-02 | Decisão 12 |
 | CO-04 | Cliente: Bolsa GOLD/PLAT/GEM, pill "Despachar loot »" + modal (captura 25), topo = saldo | client | CO-03 | Régua: `BagPanel` em `Hud.jsx:67-70`, `DispatchLootModal` |

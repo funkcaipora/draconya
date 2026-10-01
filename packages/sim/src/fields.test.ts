@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import type { FieldSpec } from '@draconya/content';
-import { Fields, fieldTileKey } from './fields.js';
+import type { ConditionSpec } from '@draconya/content';
+import { Fields, fieldTileKey, isCharacterOwned, isSafeWall } from './fields.js';
 import type { TileFieldState } from './fields.js';
 
 // Os campos de tile (CMB-07): o índice por tile, a sobreposição e a serialização. O que este
 // teste prende é a ESTRUTURA — a leitura é O(1) por tile e nenhum passo varre a lista.
 
-const dot = (amount: number): FieldSpec['condition'] => ({
+const dot = (amount: number): ConditionSpec => ({
   key: 'fire', merge: 'refresh', durationMs: 5_000,
-  effect: { kind: 'damage-over-time', amount, intervalMs: 1_000, damageType: 'fire' },
+  effect: {
+    kind: 'damage-over-time', form: 'rounds',
+    rounds: [{ count: 5, intervalMs: 1_000, damage: amount }], damageType: 'fire',
+  },
 });
 
 const field = (
@@ -64,5 +67,81 @@ describe('Fields', () => {
 
   it('a chave do tile distingue o andar', () => {
     expect(fieldTileKey(1, 2, 7)).not.toBe(fieldTileKey(1, 2, 6));
+  });
+
+  // Campo bloqueante (#560, Magic Wall/Wild Growth).
+  it('blockedAt/blocksProjectileAt só valem com a flag — o campo comum de dano não bloqueia', () => {
+    const fields = new Fields();
+    fields.apply(field('fire', [p(2, 2)]));
+    expect(fields.blockedAt(p(2, 2))).toBe(false);
+    expect(fields.blocksProjectileAt(p(2, 2))).toBe(false);
+
+    fields.apply({ id: 'wall', tiles: [p(3, 3)], expiresAtMs: 20_000, blocksMovement: true });
+    expect(fields.blockedAt(p(3, 3))).toBe(true);
+    expect(fields.blocksProjectileAt(p(3, 3))).toBe(false); // sem a flag, não bloqueia LOS
+    expect(fields.blockedAt(p(4, 4))).toBe(false); // fora do campo, nunca bloqueia
+  });
+
+  it('restoreState MUTA a mesma instância — quem já guarda a referência (TileOccupancy) vê o novo estado', () => {
+    const fields = new Fields();
+    fields.apply(field('old', [p(1, 1)]));
+    const sameInstance = fields;
+
+    fields.restoreState([{ id: 'new', tiles: [p(9, 9)], expiresAtMs: 1_000 }]);
+
+    expect(sameInstance.at(p(1, 1))).toBeNull(); // o campo velho não sobrevive à restauração
+    expect(sameInstance.at(p(9, 9))?.id).toBe('new');
+    expect(sameInstance.size).toBe(1);
+
+    fields.restoreState(undefined);
+    expect(sameInstance.size).toBe(0);
+  });
+});
+
+// O dono do campo (OW-05, #826). A estrutura só guarda e responde; quem ferir ou não é o ruleset.
+describe('Fields com dono', () => {
+  const wall = (owner?: TileFieldState['owner']): TileFieldState => ({
+    id: 'wall', tiles: [p(2, 2)], expiresAtMs: 20_000, blocksMovement: true,
+    ...(owner === undefined ? {} : { owner }),
+  });
+
+  it('`isCharacterOwned` só vale para dono `character` — sem dono é campo de mapa', () => {
+    expect(isCharacterOwned(wall({ kind: 'character', id: 'hero' }))).toBe(true);
+    expect(isCharacterOwned(wall({ kind: 'monster', id: 'm:1' }))).toBe(false);
+    expect(isCharacterOwned(wall())).toBe(false);
+    expect(isCharacterOwned(field('fire', [p(2, 2)]))).toBe(false);
+  });
+
+  it('`isSafeWall` é a parede bloqueante de personagem — o campo de dano de personagem não é parede', () => {
+    expect(isSafeWall(wall({ kind: 'character', id: 'hero' }))).toBe(true);
+    expect(isSafeWall(wall({ kind: 'monster', id: 'm:1' }))).toBe(false);
+    expect(isSafeWall(wall())).toBe(false);
+    expect(isSafeWall({ ...field('fire', [p(2, 2)]), owner: { kind: 'character', id: 'hero' } })).toBe(false);
+  });
+
+  it('`blockedAt` só abre a parede de personagem, e só para quem pergunta como quem a dissolve', () => {
+    const fields = new Fields();
+    fields.apply(wall({ kind: 'character', id: 'hero' }));
+    expect(fields.blockedAt(p(2, 2))).toBe(true);
+    expect(fields.blockedAt(p(2, 2), false)).toBe(true);
+    expect(fields.blockedAt(p(2, 2), true)).toBe(false);
+
+    const mapWall = new Fields();
+    mapWall.apply(wall());
+    expect(mapWall.blockedAt(p(2, 2), true)).toBe(true);
+  });
+
+  it('o dono sobrevive ao JSON e ao `replace`; o snapshot sem dono restaura como campo de mapa', () => {
+    const fields = new Fields();
+    const owned = { ...field('fire', [p(2, 2)]), owner: { kind: 'character' as const, id: 'hero' } };
+    fields.apply(owned);
+    fields.replace({ ...owned, nextTickAtMs: 1_000 });
+    const restored = Fields.fromState(JSON.parse(JSON.stringify(fields.getState())) as TileFieldState[]);
+    expect(restored.get('fire')?.owner).toEqual({ kind: 'character', id: 'hero' });
+
+    // Um snapshot gravado antes desta issue: nenhum campo tinha `owner`.
+    const legacy = JSON.parse(JSON.stringify([field('old', [p(3, 3)])])) as TileFieldState[];
+    expect('owner' in (legacy[0] as object)).toBe(false);
+    expect(isCharacterOwned(Fields.fromState(legacy).get('old') as TileFieldState)).toBe(false);
   });
 });

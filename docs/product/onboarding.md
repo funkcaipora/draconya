@@ -45,9 +45,10 @@ Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. O conteúdo exato de c
   `sim` grava `vocationId` e concede o **kit completo da vocação** (`startingKit` — arma +
   escudo, desde #496) como `CarriedItem` com `origin: 'vocation-choice'`, vestindo o que
   couber; a machete volta para a mochila. A ordem do kit é contrato — a arma veste antes do
-  escudo —, e é por isso que o bow de duas mãos deixa o `wooden-shield` na mochila. Sem
-  capacidade para uma peça ela vai para a Caixa de Loot, com mensagem nomeando o item — a
-  escolha vale mesmo assim. Os stats NÃO mudam
+  escudo —, e é por isso que o bow de duas mãos deixa o `wooden-shield` na mochila. Peso NUNCA
+  recusa aqui (`Inventory.forceAdd`, ADR 0048 decisão 7 — desde a #723, sem a Caixa de Loot da
+  Sessão para segurar o excedente): a peça sem capacidade entra na mochila do mesmo jeito, e a
+  escolha vale inteira, sem aviso nenhum. Os stats NÃO mudam
   na hora: a tabela da vocação vale do próximo level em diante (`progression.md`).
 - **Como persiste:** `characters.vocation` é escrita UMA vez pelo `jobs`
   (`coalesce(vocation, $1)`), a partir do extrato — o da hunt, ou o **extrato de estado
@@ -69,6 +70,26 @@ Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. O conteúdo exato de c
   Paladin), porque esse kit passa por `equip` e o estado impedido é alcançável. A
   mochila é um item nas costas até os containers do #160.
 
+## Sem magia nenhuma no início (#624, ADR 0058)
+
+**Personagem novo não sabe magia nenhuma** — como no Tibia, onde toda magia é comprada de um NPC
+(ver `progression.md`, "Aprender magia"). O kit de nascimento (ADR 0026) NÃO muda: continua sendo
+só equipamento, e nenhuma magia é dada de graça. Quem escolhe vocação no level 8 entra na Cidade
+com a barra de ações já preenchida pelo preset da vocação, mas com os slots de magia **marcados
+como "não aprendida"** — o servidor recusa o disparo, e o bot os pula.
+
+O caminho é a seção **Magias** do modal Personagem (a tela de serviço): lista as magias da
+vocação por level, com o preço; as básicas de cada vocação são de graça (`learnPrice: 0`, como no
+Canary — Wound Cleansing e Bruise Bane do Knight, Apprentice's Strike, Light Healing…), e o resto
+custa gold. **Isto é atrito novo e é o mesmo do Tibia**: o tutorial (E14) precisa levar o jogador a
+essa tela cedo, antes da primeira hunt em que ele espera ver a cura disparar. Enquanto o tutorial
+não existe, é o jogador quem descobre a seção — e o slot marcado é a pista.
+
+**Quem já existia antes da #624 não passa por isso**: a migração 0024 concedeu a ele todas as
+magias da vocação até o level em que estava (ADR 0014; ver `progression.md`).
+
 ## Divergências do PRD
 
-Vazio por enquanto. É aqui que vai o que foi construído diferente do especificado, e por quê.
+- **Magia é comprada, não liberada por level** (#624, ADR 0058): o §9 do PRD descreve as magias
+  como liberadas conforme o level; o Tibia as vende, e o ADR 0037 escolhe o Tibia. O level libera a
+  COMPRA (`minLevel`), o gold a paga.

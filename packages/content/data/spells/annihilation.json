@@ -1,0 +1,27 @@
+{
+  "id": "annihilation",
+  "name": "Annihilation",
+  "description": "Causa dano físico devastador no seu alvo atual, pela força do golpe.",
+  "vocationId": "knight",
+  "minLevel": 110,
+  "learnPrice": 20000,
+  "manaCost": 300,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 30000,
+  "effect": {
+    "kind": "damage",
+    "range": 1,
+    "damageType": "physical",
+    "formula": {
+      "levelFactor": 0.256,
+      "skillMin": 0,
+      "skillMax": 0,
+      "baseMin": 16.64,
+      "baseMax": 43.52,
+      "skillAttackMin": 0.2176,
+      "skillAttackMax": 0.256
+    }
+  },
+  "_open": "Magia que faltava no catálogo (#596; ADR 0037): o topo da linha de golpe do Knight (level 110), `exori gran ico` no Canary — a única magia desta issue que escala pela SKILL de combate (`needWeapon`), não pelo magic level. Fonte `data/scripts/spells/attack/annihilation.lua` (Canary local, 47dfd51): `spell:id(62)`, level 110, mana 300, cooldown 30s, grupo `attack` 2s, `range 1`, `COMBAT_PHYSICALDAMAGE`, sem área. `onGetFormulaValues(player, skill, attack, factor)`: `min = -(((skill*attack)*0.17 + 13) + level/5) * 1.28`, `max = -(((skill*attack)*0.20 + 34) + level/5) * 1.28` — reconhecida pelo extrator (#595, `staging/spells/generated/knight.json`), forma `skillAttackMin/skillAttackMax`. `basePower` de exibição omitido — a fórmula é a única fonte, como Executioner's Throw/Ice Burst/Terra Burst (fora desta issue, Roda do Destino). Aparência: efeito 10 e projétil 10, reaproveitados de `physical-strike` (mesmo tipo físico, mesmo `CONST_ANI_WEAPONTYPE`) — biblioteca parcial (47/4171 folhas, `docs/combat-presentation-audit.md`), conferência visual pendente."
+}

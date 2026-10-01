@@ -1,10 +1,16 @@
 {
   "id": "mana-potion",
   "name": "Poção de Mana",
-  "description": "Recupera 100 pontos de mana.",
-  "price": 50,
+  "description": "Recupera de 75 a 125 pontos de mana.",
+  "price": 56,
   "group": "potion",
   "groupCooldownMs": 1000,
-  "effect": { "kind": "mana", "amount": 100, "target": "friend", "range": 1 },
-  "_open": "Suprimento abstrato (gold no uso): preço de referência do §20.2. Não é valor final. `target`/`range` são §26 — `range: 1` é PROVISÓRIO (o PRD não fixa alcance de poção; 1 é o mínimo que ainda é \"em terceiro\" e evita reaproveitar o alcance de magia sem decisão)."
+  "actionExhaustMs": 1000,
+  "effect": {
+    "kind": "mana",
+    "amountRange": { "min": 75, "max": 125 },
+    "target": "friend",
+    "range": 1
+  },
+  "_open": "Canary `potions.lua`, item id 268: `mana = {75, 125}`, sem level nem vocação (#690; era 100 fixo). `price` 56 (M34-03/#574): menor `buy` de `data-otservbr-global/npc/*.lua` para o clientId 268 (ex. `alaistar.lua`), não mais provisório. `target`/`range` são §26 — `range: 1` é PROVISÓRIO (o PRD não fixa alcance de poção; 1 é o mínimo que ainda é \"em terceiro\" e evita reaproveitar o alcance de magia sem decisão)."
 }

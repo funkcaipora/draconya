@@ -1,0 +1,19 @@
+{
+  "id": "conjure-arrow",
+  "name": "Conjure Arrow",
+  "description": "Conjura flechas comuns, sem gastar runa em branco.",
+  "vocationId": "paladin",
+  "minLevel": 13,
+  "learnPrice": 450,
+  "manaCost": 100,
+  "soulCost": 1,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "conjure",
+    "ammunitionId": "arrow",
+    "charges": 10
+  },
+  "_open": "Números do Canary (#594, ADR 0044): `data/scripts/spells/conjuring/conjure_arrow.lua` — `creature:conjureItem(0, 3447, 10, CONST_ME_MAGIC_BLUE)`, `spell:level(13)`, `spell:mana(100)`, `spell:soul(1)`, vocação `paladin;true`/`royal paladin;true` (sem promoção, ADR 0044 §Em aberto). `blankId` 0 no Canary: sem runa em branco nenhuma (`blankPrice` ausente, default 0) — diferente das runas de dano/cura, a munição do Paladin nasce do nada, só pagando mana e alma."
+}

@@ -38,6 +38,39 @@ export function sameFloor(a: number | undefined, b: number | undefined): boolean
   return a === undefined || b === undefined || a === b;
 }
 
+/** `MAP_INIT_SURFACE_LAYER` do Canary (`src/map/map_const.hpp`): o último andar de superfície. */
+const SURFACE_LAYER = 7;
+/** `MAP_LAYER_VIEW_LIMIT`: de baixo da terra, quantos andares acima/abaixo a criatura enxerga. */
+const LAYER_VIEW_LIMIT = 2;
+
+/**
+ * `to` está na área de visão de quem está em `from` (#655, Canary `Creature::canSee(myPos, pos,
+ * viewRangeX, viewRangeY)`, `src/creatures/creature.cpp:68-87` — mecanismo, não código, ADR
+ * 0019)? É a pergunta que enche e esvazia a `targetList` do monstro (`Monster::updateTargetList`)
+ * e, com ela, decide se ele está ocioso, volta ao spawn ou anda ao acaso.
+ *
+ * `range` é o `aggroRadius` do monstro (11 = `MAP_MAX_VIEW_PORT_X`/`_Y` do Canary, que herda o
+ * quadrado de `Creature::canSee` sem sobrescrevê-lo): o Canary usa o MESMO raio nos dois eixos,
+ * então um único número basta. No MESMO andar é exatamente a distância de Chebyshev ≤ `range`;
+ * em andares diferentes valem as regras do Canary — de superfície (z ≤ 7) não se enxerga o
+ * subsolo, de subsolo só se enxerga até dois andares de diferença, e a caixa se desloca em
+ * `from.z − to.z` tiles por andar (a perspectiva do cliente). Sem `z` de um dos lados (snapshot
+ * anterior ao #519, hunt de andar único) é o `sameFloor` de sempre: só a distância.
+ */
+export function canSeePoint(from: FloorPoint, to: FloorPoint, range: number): boolean {
+  const fromZ = from.z;
+  const toZ = to.z;
+  if (fromZ === undefined || toZ === undefined) return distance(from, to) <= range;
+  if (fromZ <= SURFACE_LAYER) {
+    if (toZ > SURFACE_LAYER) return false;
+  } else if (Math.abs(fromZ - toZ) > LAYER_VIEW_LIMIT) {
+    return false;
+  }
+  const offsetZ = fromZ - toZ;
+  return to.x >= from.x - range + offsetZ && to.x <= from.x + range + offsetZ
+    && to.y >= from.y - range + offsetZ && to.y <= from.y + range + offsetZ;
+}
+
 /**
  * `true` quando o tile não pode ser ocupado — parede, borda, ou outra criatura. O `z` é opcional
  * porque a maioria dos chamadores (o passo guloso de personagem e monstro) já sabe o andar pelo
@@ -58,6 +91,16 @@ export type Blocked = (x: number, y: number, z?: number, monsterId?: string) => 
 const DIRECTIONS: readonly GridPoint[] = [
   { x: 0, y: -1 }, { x: 1, y: -1 }, { x: 1, y: 0 }, { x: 1, y: 1 },
   { x: 0, y: 1 }, { x: -1, y: 1 }, { x: -1, y: 0 }, { x: -1, y: -1 },
+];
+
+/**
+ * As quatro direções CARDINAIS, na ordem que o Canary embaralha para escolher onde empurrar
+ * uma criatura fora do caminho (M29-08, `Monster::pushCreature`, `monster.cpp:2387-2403`:
+ * dirList `{NORTH, WEST, EAST, SOUTH}` antes do `std::ranges::shuffle`). Nunca diagonal — o
+ * Tibia empurra só para os quatro lados retos.
+ */
+export const PUSH_DIRECTIONS: readonly GridPoint[] = [
+  { x: 0, y: -1 }, { x: -1, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 },
 ];
 
 const sign = (value: number): number => (value > 0 ? 1 : value < 0 ? -1 : 0);
@@ -115,4 +158,99 @@ export function distance(a: GridPoint, b: GridPoint): number {
 export function isAdjacent(a: GridPoint, b: GridPoint): boolean {
   const d = distance(a, b);
   return d === 1;
+}
+
+/**
+ * O passo LATERAL de quem já não tem passo a dar rumo ao alvo (#543, TFS/Canary
+ * `Monster::getDanceStep`, `monster.cpp:2570-2624` — mecanismo, não código, ADR 0019). Chamado
+ * só quando o monstro está "colado" (o guloso já devolveria `null` para aproximar mais), este é
+ * o passo cosmético que evita o monstro parecer uma estátua.
+ *
+ * Só as quatro direções CARDINAIS entram — nunca diagonal, diferente do guloso/fuga. Uma
+ * candidata só é válida se a distância Chebyshev dela ATÉ O ALVO for EXATAMENTE igual à
+ * distância atual (nunca aproxima, nunca afasta) e o tile for andável. O filtro de sinal
+ * (`offsetX`/`offsetY`, a posição do monstro MENOS a do alvo) é o `keepDistance` do Canary: só
+ * tenta o lado que não empurra o monstro para mais perto do eixo já mais próximo.
+ *
+ * Esta função só replica o ramo `keepAttack=true, keepDistance=true` (o não-fugindo) — a dança
+ * durante a fuga é fora do escopo do #543. Por isso não há parâmetro de alcance nem de "ainda
+ * consegue atacar": com a distância EXATAMENTE preservada, quem já podia atacar da posição atual
+ * continua podendo da candidata — o `keepAttack` do Canary vira identidade sob essa restrição.
+ *
+ * Sorteia uniformemente entre as candidatas — mesmo com uma só, para o sorteio não depender de
+ * quantas sobraram (o mesmo `uniform_random` do Canary, chamado sempre que a lista não é vazia).
+ * Lista vazia devolve `null` sem consumir `rng`.
+ */
+export function danceStep(
+  from: GridPoint, target: GridPoint, blocked: Blocked, rng: { integer(min: number, max: number): number },
+): GridPoint | null {
+  const centerToDist = distance(from, target);
+  const offsetX = from.x - target.x;
+  const offsetY = from.y - target.y;
+  const candidates: GridPoint[] = [];
+  const tryAdd = (x: number, y: number): void => {
+    if (Math.max(Math.abs(x - target.x), Math.abs(y - target.y)) !== centerToDist) return;
+    if (blocked(x, y)) return;
+    candidates.push({ x, y });
+  };
+  if (offsetY >= 0) tryAdd(from.x, from.y - 1); // norte
+  if (offsetY <= 0) tryAdd(from.x, from.y + 1); // sul
+  if (offsetX <= 0) tryAdd(from.x + 1, from.y); // leste
+  if (offsetX >= 0) tryAdd(from.x - 1, from.y); // oeste
+  if (candidates.length === 0) return null;
+  return candidates[rng.integer(0, candidates.length - 1)] ?? null;
+}
+
+/**
+ * A ordem embaralhada das quatro direções CARDINAIS (#655, `Monster::getRandomStep`,
+ * `monster.cpp:2552-2570`: `dirList {NORTH, WEST, EAST, SOUTH}` e `std::ranges::shuffle` a cada
+ * chamada). Um Fisher-Yates completo — sempre três sorteios, mesmo que só uma direção sirva, e
+ * é isso que faz a primeira direção livre da lista embaralhada ser uniforme entre as livres.
+ * Compartilhado com o empurrão de criatura (`HuntRuleset#pushAside`, M29-08): as duas fontes
+ * embaralham a MESMA lista, e uma cópia do laço divergiria na primeira correção.
+ */
+export function shuffledCardinals(rng: { integer(min: number, max: number): number }): GridPoint[] {
+  const order = PUSH_DIRECTIONS.slice();
+  for (let i = order.length - 1; i > 0; i -= 1) {
+    const pick = rng.integer(0, i);
+    const chosen = order[pick] as GridPoint;
+    order[pick] = order[i] as GridPoint;
+    order[i] = chosen;
+  }
+  return order;
+}
+
+/**
+ * O passo ao acaso do monstro que não persegue nem volta ao spawn (#655, TFS/Canary
+ * `Monster::getRandomStep`): as quatro direções cardinais embaralhadas, e a PRIMEIRA cujo tile
+ * de destino está livre. Nunca diagonal — o Canary só sorteia entre norte, oeste, leste e sul.
+ * Sem nenhuma livre devolve `null` (o monstro fica onde está), depois de já ter consumido os três
+ * sorteios do embaralhamento, como o Canary consome o dele antes de olhar qualquer tile.
+ */
+export function randomStep(
+  from: GridPoint, blocked: Blocked, rng: { integer(min: number, max: number): number },
+): GridPoint | null {
+  for (const direction of shuffledCardinals(rng)) {
+    const x = from.x + direction.x;
+    const y = from.y + direction.y;
+    if (!blocked(x, y)) return { x, y };
+  }
+  return null;
+}
+
+/**
+ * O passo RÁPIDO da volta ao spawn (#655, `Monster::doWalkBack`, `monster.cpp:2501-2526`): o
+ * passo guloso rumo ao `home` — o mesmo movimento que o monstro já usa para perseguir (ADR 0009;
+ * o Canary usa A* aqui). Devolve `null` quando empaca, e quem chama (`nextWalkBackStep`, em
+ * `monster.ts`) cai para a busca de caminho (`walkBackPathStep`): empacar numa concavidade é o
+ * comportamento certo de quem PERSEGUE, mas não de quem volta para casa. Com uma exceção que o
+ * guloso puro erraria: A UM tile do `home` só vale pisar NELE. O guloso tentaria também os dois
+ * vizinhos da direção, que a essa distância NÃO aproximam — só rodeiam —, e um `home` ocupado
+ * por outro monstro faria quem volta girar em volta dele para sempre. O Canary nem chega a
+ * andar quando o destino exato está ocupado (não há caminho até ele); aqui o monstro chega ao
+ * lado e espera, sem oscilar. Já no `home` devolve `null`, como o guloso.
+ */
+export function walkBackStep(from: GridPoint, home: GridPoint, blocked: Blocked): GridPoint | null {
+  if (distance(from, home) === 1) return blocked(home.x, home.y) ? null : { x: home.x, y: home.y };
+  return greedyStep(from, home, blocked);
 }

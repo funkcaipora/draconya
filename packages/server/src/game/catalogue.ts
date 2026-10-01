@@ -21,11 +21,12 @@
 // coisas mudam a cada golpe.
 
 import type { S2CProps } from '@draconya/protocol';
-import type { Content, Spell, Supply } from '@draconya/content';
+import type { Content, Spell, Supply, Training } from '@draconya/content';
 import {
   BOT_AUTOMATION_CATALOGUE, BOT_HOTKEYS, BOT_SET_COUNT, BOT_SET_NAMES, BOT_SLOTS_PER_SET,
+  manaCostDisplayOf,
 } from '@draconya/content';
-import { huntListings } from '@draconya/sim';
+import { DEFAULT_DIFFICULTY_NAME, huntListings } from '@draconya/sim';
 
 export type Catalogue = S2CProps<'catalogue'>;
 
@@ -87,8 +88,14 @@ export function buildCatalogue(content: Content): Catalogue {
       spells: [...content.spells.values()].map((spell) => ({
         id: spell.id,
         name: spell.name,
-        manaCost: spell.manaCost,
+        // O ANUNCIADO (#588): o custo escalado pela party depende de quem está no alcance no
+        // instante do cast, e só a sessão sabe isso — o catálogo é conteúdo fixado (invariante
+        // 7) e mostra o `base`, como o grimório do Tibia sempre mostrou.
+        manaCost: manaCostDisplayOf(spell.manaCost),
         minLevel: spell.minLevel,
+        // O preço de aprender (#624, ADR 0058 d.3): ausente é "ninguém a ensina" — a tela não
+        // oferece a compra. `0` é de graça, e por isso a checagem é `undefined`, nunca truthy.
+        ...(spell.learnPrice === undefined ? {} : { learnPrice: spell.learnPrice }),
         // `null` e não ausente: a tela precisa distinguir "qualquer um lança" de "o servidor
         // não disse", e campo opcional colapsa os dois no mesmo `undefined`.
         vocationId: spell.vocationId ?? null,
@@ -97,8 +104,17 @@ export function buildCatalogue(content: Content): Catalogue {
         effect: spell.effect.kind,
         // O grupo (#155): a tela mostra ao lado do nome.
         group: spell.group ?? 'attack',
-        // Os números de EXIBIÇÃO (ADR 0033): cooldown, grupo, descrição e o detalhe do efeito.
-        cooldownMs: spell.cooldownMs,
+        // Find Person (#623) precisa de MIRA: o "nome" do Canary é o personagem clicado, e o
+        // servidor não tem como adivinhar quem. É o campo `aim`, e NÃO `targets: 'friend'`: este
+        // também abre o seletor de alvo do editor de slot do bot (`acceptsFriend`), e a validação
+        // do bot recusa salvar alvo que não seja de cura/mana. Só a barra de ação lê `aim`, para
+        // armar a mira do `use-slot` (ADR 0049 d.2). Só ela declara.
+        ...(spell.effect.kind === 'find' && spell.effect.target === 'person'
+          ? { aim: 'character' as const } : {}),
+        // Os números de EXIBIÇÃO (ADR 0033): cooldown, grupo, descrição e o detalhe do efeito. O
+        // familiar (#599) anuncia o cooldown de VERDADE — os 30 min do efeito —, e não os 2 s da
+        // magia (o `groupCooldown` do script): é o número que o jogador espera ver na tela.
+        cooldownMs: spell.effect.kind === 'familiar' ? spell.effect.cooldownMs : spell.cooldownMs,
         ...(spell.groupCooldownMs === undefined ? {} : { groupCooldownMs: spell.groupCooldownMs }),
         ...(spell.description === undefined ? {} : { description: spell.description }),
         detail: detailOf(spell.effect),
@@ -147,6 +163,8 @@ export function buildCatalogue(content: Content): Catalogue {
       id: item.id,
       name: item.name,
       appearanceId: item.appearanceId,
+      // A forma ativa no slot vestido (#689): o Energy Ring ligado. Só quando a tabela a tem.
+      ...(item.equippedAppearanceId === undefined ? {} : { equippedAppearanceId: item.equippedAppearanceId }),
       weight: item.weight,
       // `null` e não ausente: "não veste em lugar nenhum" é uma informação, e campo opcional
       // a confundiria com "o servidor não disse".
@@ -160,6 +178,13 @@ export function buildCatalogue(content: Content): Catalogue {
       kind: item.kind,
       // O rótulo curto da barra/Mochila (AB-13), só quando o conteúdo o declara.
       ...(item.shortLabel === undefined ? {} : { shortLabel: item.shortLabel }),
+      // A exercise weapon (#631, ADR 0059): a skill que treina e o TOTAL de cargas — as restantes
+      // são da instância e viajam em `training-state`. `buildContent` garante `charges` com `exercise`.
+      ...(item.exercise === undefined || item.charges === undefined
+        ? {}
+        : { exercise: { skillId: item.exercise.skillId, charges: item.charges } }),
+      // O preço do `buy-item` mínimo (#631, ADR 0059 d.2): só quem é `purchasable`.
+      ...(item.purchasable === true && item.buyPrice !== undefined ? { buyPrice: item.buyPrice } : {}),
       // Como a arma bate (#152): tipo, alcance e família — para o tooltip. Mana por golpe e
       // faixa de dano ficam de fora: balanceamento (invariante 4).
       ...(item.weapon === undefined
@@ -208,6 +233,15 @@ export function buildCatalogue(content: Content): Catalogue {
           manaPerLevel: vocation.manaPerLevel,
           capacityPerLevel: vocation.capacityPerLevel,
           startingWeaponItemId: weaponItemId,
+          // A promoção (#566, ADR 0042 decisão 1): nome, level e preço, para a tela de serviço
+          // da Cidade — o mesmo motivo de `startingWeaponItemId` ir para o diálogo do level 8.
+          ...(vocation.promotion === undefined ? {} : {
+            promotion: {
+              name: vocation.promotion.name,
+              minLevel: vocation.promotion.minLevel,
+              price: vocation.promotion.price,
+            },
+          }),
         };
       })
       .filter((vocation) => vocation !== null),
@@ -215,20 +249,65 @@ export function buildCatalogue(content: Content): Catalogue {
     progression: {
       startingSpeed: content.progression.startingSpeed,
       speedPerLevel: content.progression.speedPerLevel,
-      regen: { ...content.progression.regen },
+      // O conteúdo guarda PULSOS (#678, `amount` a cada `ticksMs`); o contrato de protocolo segue
+      // em pontos por segundo, derivado aqui — o cliente não lê o campo, e mudá-lo seria mudança
+      // sem consumidor.
+      regen: {
+        healthPerSecond: (content.progression.regen.health.amount * 1000) / content.progression.regen.health.ticksMs,
+        manaPerSecond: (content.progression.regen.mana.amount * 1000) / content.progression.regen.mana.ticksMs,
+      },
     },
+    // As sete bênçãos PvE (#570, ADR 0052): ausente sem catálogo/preço no conteúdo — a tela de
+    // compra da Cidade não aparece, como `bestiary` some sem marco (mesma degradação de sempre).
+    ...(content.blessings.size === 0 || content.progression.blessingPricing === undefined
+      ? {}
+      : {
+        blessings: {
+          list: [...content.blessings.values()]
+            .map((blessing) => ({
+              id: blessing.id, name: blessing.name, order: blessing.order, enhanced: blessing.enhanced,
+            }))
+            .sort((a, b) => a.order - b.order),
+          pricing: content.progression.blessingPricing,
+        },
+      }),
+    // O Treino (#631, ADR 0059): o que UMA carga rende e o livro do offline training, para a tela
+    // de Treino mostrar o que vale antes de o jogador agir. Ausente sem `training/` no conteúdo.
+    ...(content.training === undefined ? {} : { training: trainingCatalogueOf(content, content.training) }),
     // Os monstros que existem, para a tela do Bestiário ter nome onde o contador tem id
     // (FUN-113). Vida e XP para o detalhe (SV-02, #338). Em ordem de id para a mensagem ser a
     // mesma a cada boot: a arte chega pelo `creature-appear`, e o resto é balanceamento que o
     // cliente não simula (invariante 4).
     monsters: [...content.monsters.values()]
-      .map((monster) => ({
-        id: monster.id,
-        name: monster.name,
-        ...(monster.class !== undefined ? { class: monster.class } : {}),
-        health: monster.health,
-        experience: monster.experience,
-      }))
+      .map((monster) => {
+        const bestiaryEntry = content.bestiary?.entries[monster.id];
+        return {
+          id: monster.id,
+          name: monster.name,
+          ...(monster.class !== undefined ? { class: monster.class } : {}),
+          health: monster.health,
+          experience: monster.experience,
+          // A ficha do Canary (#601, ADR 0053 d.1): estágio e pontos são DERIVADOS no cliente a
+          // partir destes limiares e do contador de `bestiary.counts` — não calculados aqui.
+          ...(bestiaryEntry === undefined
+            ? {}
+            : {
+              bestiary: {
+                stars: bestiaryEntry.stars,
+                occurrence: bestiaryEntry.occurrence,
+                firstUnlock: bestiaryEntry.firstUnlock,
+                secondUnlock: bestiaryEntry.secondUnlock,
+                toKill: bestiaryEntry.toKill,
+                charmsPoints: bestiaryEntry.charmsPoints,
+              },
+            }),
+          // O boss no Bosstiary (#629): a raridade escolhe a linha da tabela de níveis abaixo, e o
+          // `raceId` é a chave do contador de abates — nível e pontos são DERIVADOS no cliente.
+          ...(monster.bosstiary === undefined
+            ? {}
+            : { bosstiary: { rarity: monster.bosstiary.rarity, raceId: monster.bosstiary.raceId } }),
+        };
+      })
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
     // Os marcos e o bônus por marco, do conteúdo fixado na sessão (invariante 7). A chave só
     // existe quando o conteúdo tem Bestiário: ausente, a tela mostra só a contagem — e é o
@@ -242,7 +321,83 @@ export function buildCatalogue(content: Content): Catalogue {
           xpBonusPercentPerMilestone: content.bestiary.xpBonusPercentPerMilestone,
         },
       }),
+    // Os níveis do Bosstiary por raridade (#629), do conteúdo fixado na sessão (invariante 7). A
+    // chave só existe quando o conteúdo tem a tabela: ausente, a tela mostra só a contagem de
+    // abates — o conteúdo de teste, que não fala de progressão permanente. Só `levels`: `id`,
+    // `source` e `_open` são assunto do carregador.
+    ...(content.bosstiary === undefined
+      ? {}
+      : {
+        bosstiary: {
+          levels: {
+            bane: content.bosstiary.levels.bane.map((level) => ({ ...level })),
+            archfoe: content.bosstiary.levels.archfoe.map((level) => ({ ...level })),
+            nemesis: content.bosstiary.levels.nemesis.map((level) => ({ ...level })),
+          },
+        },
+      }),
+    // Os 25 Charms do Canary (M39-02, #602, ADR 0053 d.3), do conteúdo fixado na sessão
+    // (invariante 7) — nome, categoria, tipo, elemento e custo/chance por tier, para a tela
+    // do Cyclopedia mostrar ANTES de desbloquear. Em ordem de id, pela mesma razão de `monsters`.
+    charms: [...content.charms.values()]
+      .map((charm) => ({
+        id: charm.id,
+        name: charm.name,
+        category: charm.category,
+        type: charm.type,
+        ...(charm.damageType === undefined ? {} : { damageType: charm.damageType }),
+        ...(charm.percent === undefined ? {} : { percent: charm.percent }),
+        chance: charm.chance,
+        points: charm.points,
+      }))
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
   };
+}
+
+/**
+ * O Treino no catálogo (#631, ADR 0059): o que UMA carga rende (`triesPerCharge × rate / 100`,
+ * truncado como o `uint64_t` do Canary — a mesma conta do golpe do ruleset) e o livro do offline
+ * training, com o nome de cada skill do CONTEÚDO (o cliente não tem a lista em código). Uma skill
+ * do livro que saiu de `skills/` cai fora — `buildContent` já a reprova, e o filtro é a rede de
+ * segurança de quem monta o catálogo de um conteúdo de teste.
+ */
+function trainingCatalogueOf(content: Content, training: Training): NonNullable<Catalogue['training']> {
+  const { strike, dummy, offline } = training;
+  return {
+    perCharge: {
+      tries: Math.floor((strike.triesPerCharge * dummy.rate) / 100),
+      manaSpent: Math.floor((strike.manaSpentPerCharge * dummy.rate) / 100),
+    },
+    bankCapMs: offline.bankCapMs,
+    graceMs: offline.graceMs,
+    spendCapMs: { free: offline.spendCapMs.free, premium: offline.spendCapMs.premium },
+    offlineSkills: offline.skills.flatMap((entry) => {
+      const skill = content.skills.get(entry.skillId);
+      return skill === undefined ? [] : [{ skillId: entry.skillId, name: skill.name, kind: entry.kind }];
+    }),
+    skills: trainedSkillsOf(content, training),
+  };
+}
+
+/**
+ * Toda skill que o Treino toca, com nome e tipo de ganho: as do livro, na ordem dele, e depois as
+ * que só uma exercise weapon treina (o `shielding` do exercise shield), em ordem de id. O tipo é o
+ * do GOLPE — `mana` quando a skill sobe por mana gasta (`gain.on === 'spell-cast'`, o que o
+ * ruleset do Treino lê), `attacks` quando sobe por tries —, não o do livro: o livro pode deixar de
+ * oferecer o magic level sem que a wand e a rod deixem de render mana.
+ */
+function trainedSkillsOf(content: Content, training: Training): NonNullable<Catalogue['training']>['skills'] {
+  const ids: string[] = training.offline.skills.map((entry) => entry.skillId);
+  const fromWeapons = new Set<string>();
+  for (const item of content.items.values()) {
+    if (item.exercise !== undefined && !ids.includes(item.exercise.skillId)) fromWeapons.add(item.exercise.skillId);
+  }
+  ids.push(...[...fromWeapons].sort());
+  return ids.flatMap((skillId) => {
+    const skill = content.skills.get(skillId);
+    return skill === undefined
+      ? [] : [{ skillId, name: skill.name, kind: skill.gain.on === 'spell-cast' ? 'mana' as const : 'attacks' as const }];
+  });
 }
 
 /**
@@ -261,15 +416,30 @@ function groupsOf(content: Content): string[] {
   return [...groups].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
-function monstersOf(content: Content, huntId: string): Array<{ id: string; name: string }> {
+/**
+ * Todo `monsterId` que os pontos de spawn da rota desta hunt citam (#583, ADR 0039) — direto
+ * (`monsterId`) ou entre os candidatos com peso (`monsters`, #582). Substitui a antiga leitura
+ * de `Object.values(hunt.difficulties).composition`, removida junto do pull por dificuldade:
+ * quem decide o monstro de uma hunt agora é a ROTA, nunca mais a dificuldade.
+ */
+function huntMonsterIdsOf(content: Content, huntId: string): readonly string[] {
   const hunt = content.hunts.get(huntId);
   if (hunt === undefined) return [];
+  const route = content.routes.get(hunt.routeId);
+  if (route === undefined) return [];
+  const ids = new Set<string>();
+  for (const point of route.spawnPoints) {
+    if (point.monsterId !== undefined) ids.add(point.monsterId);
+    for (const candidate of point.monsters ?? []) ids.add(candidate.monsterId);
+  }
+  return [...ids];
+}
+
+function monstersOf(content: Content, huntId: string): Array<{ id: string; name: string }> {
   const found = new Map<string, string>();
-  for (const difficulty of Object.values(hunt.difficulties)) {
-    for (const entry of difficulty.composition) {
-      const monster = content.monsters.get(entry.monsterId);
-      if (monster !== undefined) found.set(monster.id, monster.name);
-    }
+  for (const monsterId of huntMonsterIdsOf(content, huntId)) {
+    const monster = content.monsters.get(monsterId);
+    if (monster !== undefined) found.set(monster.id, monster.name);
   }
   return [...found.entries()]
     .map(([id, name]) => ({ id, name }))
@@ -277,22 +447,18 @@ function monstersOf(content: Content, huntId: string): Array<{ id: string; name:
 }
 
 function lootOf(content: Content, huntId: string): Array<{ itemId: string; name: string }> {
-  const hunt = content.hunts.get(huntId);
-  if (hunt === undefined) return [];
   const found = new Map<string, string>();
-  for (const difficulty of Object.values(hunt.difficulties)) {
-    for (const entry of difficulty.composition) {
-      const loot = content.monsters.get(entry.monsterId)?.loot;
-      if (loot === undefined) continue;
-      for (const item of loot.items) {
-        if (item.chance <= 0) continue;
-        // Loot de supply (#520) não tem `itemId` — não é item físico, e esta lista é só do
-        // catálogo de item (FUN-76). Fica fora da vitrine da hunt por enquanto; ver o `_open`
-        // de `CharacterState.supplyStock`.
-        if (item.itemId === undefined) continue;
-        const definition = content.items.get(item.itemId);
-        if (definition !== undefined) found.set(item.itemId, definition.name);
-      }
+  for (const monsterId of huntMonsterIdsOf(content, huntId)) {
+    const loot = content.monsters.get(monsterId)?.loot;
+    if (loot === undefined) continue;
+    for (const item of loot.items) {
+      if (item.chance <= 0) continue;
+      // Loot de supply (#520) não tem `itemId` — não é item físico, e esta lista é só do
+      // catálogo de item (FUN-76). Fica fora da vitrine da hunt por enquanto; ver o `_open`
+      // de `CharacterState.supplyStock`.
+      if (item.itemId === undefined) continue;
+      const definition = content.items.get(item.itemId);
+      if (definition !== undefined) found.set(item.itemId, definition.name);
     }
   }
   return [...found.entries()]
@@ -313,53 +479,44 @@ function lootOf(content: Content, huntId: string): Array<{ itemId: string; name:
  * (gold e queijo). Só o NÚMERO: a lista de loot possível é da tela de detalhe, que não existe.
  */
 function lootDropsOf(content: Content, huntId: string): number {
-  const hunt = content.hunts.get(huntId);
-  if (hunt === undefined) return 0;
   const items = new Set<string>();
   let gold = false;
-  for (const difficulty of Object.values(hunt.difficulties)) {
-    for (const entry of difficulty.composition) {
-      const loot = content.monsters.get(entry.monsterId)?.loot;
-      if (loot === undefined) continue;
-      if (loot.gold !== undefined && loot.gold.chance > 0) gold = true;
-      // Supply (#520) não conta aqui — mesma razão de `lootOf`, acima.
-      for (const item of loot.items) {
-        if (item.chance > 0 && item.itemId !== undefined) items.add(item.itemId);
-      }
+  for (const monsterId of huntMonsterIdsOf(content, huntId)) {
+    const loot = content.monsters.get(monsterId)?.loot;
+    if (loot === undefined) continue;
+    if (loot.gold !== undefined && loot.gold.chance > 0) gold = true;
+    // Supply (#520) não conta aqui — mesma razão de `lootOf`, acima.
+    for (const item of loot.items) {
+      if (item.chance > 0 && item.itemId !== undefined) items.add(item.itemId);
     }
   }
   return items.size + (gold ? 1 : 0);
 }
 
 function monsterOutfitsOf(content: Content, huntId: string): number[] {
-  const hunt = content.hunts.get(huntId);
-  if (hunt === undefined) return [];
   const outfits = new Set<number>();
-  for (const difficulty of Object.values(hunt.difficulties)) {
-    for (const entry of difficulty.composition) {
-      const outfit = content.monsters.get(entry.monsterId)?.outfitId;
-      if (outfit !== undefined) outfits.add(outfit);
-    }
+  for (const monsterId of huntMonsterIdsOf(content, huntId)) {
+    const outfit = content.monsters.get(monsterId)?.outfitId;
+    if (outfit !== undefined) outfits.add(outfit);
   }
   return [...outfits].sort((a, b) => a - b);
 }
 
 /**
- * Quantos monstros cada dificuldade desta hunt mantém vivos, NO TOTAL (FUN-123,
- * `huntDifficultySchema.monsterCount`) — o "Ousado · 4" que o Huntera mostra ao lado do nome
- * da dificuldade. Mesma ORDEM de `Object.keys(hunt.difficulties)`, que é a MESMA fonte que
- * `huntListings` usa para `difficulties` (`packages/sim/src/hunt/catalogue.ts:40`) — os dois
- * lêem o mesmo objeto, então a ordem entre os dois campos é garantida sem precisar reordenar
- * nada aqui.
+ * Quantos monstros a hunt mantém vivos, NO TOTAL — antes do #583 era por dificuldade
+ * (`huntDifficultySchema.monsterCount`, o "Ousado · 4" do Huntera); sem pull nenhum, o total é
+ * simplesmente quantos pontos de spawn a rota tem, porque todos nascem (ADR 0039). Só existe
+ * UM nome agora (`DEFAULT_DIFFICULTY_NAME`), a mesma fonte que `huntListings` usa para
+ * `difficulties` (`packages/sim/src/hunt/catalogue.ts`) — o campo sobrevive no protocolo só
+ * por compatibilidade (#584).
  */
 function difficultyDetailsOf(content: Content, huntId: string): { id: string; monsterCount: number }[] {
   const hunt = content.hunts.get(huntId);
   if (hunt === undefined) return [];
-  const details: { id: string; monsterCount: number }[] = [];
-  for (const [id, difficulty] of Object.entries(hunt.difficulties)) {
-    if (difficulty === undefined) continue;
-    details.push({ id, monsterCount: difficulty.monsterCount });
-  }
+  const route = content.routes.get(hunt.routeId);
+  const details: { id: string; monsterCount: number }[] = [
+    { id: DEFAULT_DIFFICULTY_NAME, monsterCount: route?.spawnPoints.length ?? 0 },
+  ];
   return details;
 }
 

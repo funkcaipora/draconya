@@ -26,6 +26,8 @@ import { AssetPackContext } from './AssetPackContext.js';
 import { useBrowserPack } from './useBrowserPack.js';
 import { useWarmHuntOutfits } from './useWarmHuntOutfits.js';
 import { useWalkKeys } from './useWalkKeys.js';
+import { useCorpseApproach } from './useCorpseApproach.js';
+import { useTileApproach } from './useTileApproach.js';
 import { Viewport } from './Viewport.js';
 import { BattlePanel } from './BattlePanel.js';
 import { Chat } from './Chat.js';
@@ -44,6 +46,7 @@ import { AutomationsPanel } from './AutomationsPanel.js';
 import { CharacterModal } from './CharacterModal.js';
 import { EquipmentPanel } from './EquipmentPanel.js';
 import { ContainerWindow } from './ContainerWindow.js';
+import { CorpseWindow } from './CorpseWindow.js';
 import { FriendsModal } from './FriendsModal.js';
 import { PartyInviteDialog } from './PartyInviteDialog.js';
 import { VocationChoice } from './VocationChoice.js';
@@ -54,6 +57,8 @@ import { BuffBar } from './BuffBar.js';
 import { PlayerVitalsOverlay } from './PlayerVitalsOverlay.js';
 import type { WindowId } from './TopBar.js';
 import { chatBadgeTier } from './chat-badge.js';
+import { isHunting } from './is-hunting.js';
+import { TrainingModal } from './TrainingModal.js';
 
 /**
  * Quais janelas nascem abertas: as do loop de todo dia. Bot e Bestiário são visita. Set,
@@ -108,6 +113,11 @@ export function Shell() {
   useWarmHuntOutfits(loaded?.pack ?? null);
   // Setas e WASD andam (FUN-122): a janela inteira ouve, o canvas não tem foco.
   useWalkKeys();
+  // O laço que reavalia um pedido de abrir cadáver pendente (#722, ADR 0048 d.4).
+  useCorpseApproach();
+  // O pedido de usar um tile sozinho (#729, ADR 0050 d.7): reavalia a cada 150 ms se o
+  // personagem já chegou perto do tile clicado, e manda `use-on-map` sozinho quando chegar.
+  useTileApproach();
   // A store do bot não importa `net/` (ADR 0007): a casca instala o remetente UMA vez. Antes a
   // `ActionBar` e o `AutomationsPanel` instalavam cada um o mesmo singleton, e o unmount de um
   // zerava o remetente do outro; um painel condicional bastaria para quebrar todo Salvar.
@@ -119,7 +129,15 @@ export function Shell() {
   // `sessionType` do analisador é o que o servidor disse por último — o cliente não adivinha
   // onde está (#259, o mesmo cálculo que o menu de hunts de antes já fazia).
   const sessionType = useHudSlice((state) => state.analyzer.sessionType);
-  const hunting = sessionType !== null && sessionType !== 'city';
+  const hunting = isHunting(sessionType);
+  // O Treino (#631, ADR 0059) é uma sessão privada que não caça: o pill dele mostra as cargas e o
+  // "Parar treino"; na Cidade o pill abre a tela de Treino.
+  const training = sessionType === 'training';
+  const [trainingOpen, setTrainingOpen] = useState(false);
+  // Entrar no Treino fecha a tela dele — e ela não pode reaparecer sozinha na volta à Cidade.
+  useEffect(() => {
+    if (training) setTrainingOpen(false);
+  }, [training]);
   // A party de formação (HTTP): decide se a pill abre `mine` ou `home` (DT-02 de #499).
   const formationParty = useStoreSlice(party, (state) => state.party);
 
@@ -148,7 +166,7 @@ export function Shell() {
               Pixi de forma imperativa. */}
           <PlayerVitalsOverlay />
         </div>
-        <WorldOverlay hunting={hunting} />
+        <WorldOverlay hunting={hunting} training={training} />
         {/* Condições ativas sobre o mundo (#348, SV-12): existe sozinha — devolve `null` sem
             nenhuma em `hud.conditions`. */}
         <BuffBar />
@@ -201,6 +219,10 @@ export function Shell() {
         {hunting && partyLootOpen && (
           <PartyLootWindow onClose={() => { setPartyLootOpen(false); }} />
         )}
+        {/* A janela do cadáver (#722, ADR 0048 d.4): SEMPRE montada, como o Analisador — é ela
+            quem decide, por dentro, se há cadáver aberto (`hud.corpse`). Abre pelo clique no
+            cadáver no mundo (`Viewport.tsx`), não por um botão da barra. */}
+        <CorpseWindow />
         {/* "Gerenciar party" (#503): UMA instância, aberta por pill, engrenagem e "Encontrar
             Party". A chave recria o modal quando o ponto de entrada muda com ele aberto — a
             navegação interna nasce dos props a cada montagem. */}
@@ -225,7 +247,12 @@ export function Shell() {
             ações desde o AB-10 (`bottom: calc(var(--actionbar-h) + 6px)`). O modal abre pelo
             MESMO `open.hunts` que a pill aciona, ou pelo ícone "Hunts" do topo — os dois só
             alternam a mesma fatia. */}
-        <HuntActions hunting={hunting} onChoose={() => { toggle('hunts'); }} />
+        <HuntActions
+          hunting={hunting}
+          training={training}
+          onChoose={() => { toggle('hunts'); }}
+          onTraining={() => { setTrainingOpen(true); }}
+        />
         {/* A pill permanente "Party" (#503, RF-11): na Cidade e na hunt, à direita. Com party
             ela abre `mine`; sem, `home`. */}
         <PartyActions onOpen={() => { openPartyModal(formationParty !== null ? 'mine' : 'home'); }} />
@@ -247,6 +274,9 @@ export function Shell() {
           />
         )}
         {open.character && <CharacterModal onClose={() => { toggle('character'); }} />}
+        {/* O Treino (#631, ADR 0059): o livro do offline training, a loja mínima de exercise weapons
+            e as armas que o personagem carrega — só na Cidade, aberto pelo pill "Treino". */}
+        {trainingOpen && <TrainingModal onClose={() => { setTrainingOpen(false); }} />}
         {/* Cyclopedia (#321, RC-08): o mesmo ícone de topo agora abre um modal, não um painel
             da coluna. Só a aba Bestiary é montada enquanto as demais não têm sistema atrás. */}
         {open.bestiary && <CyclopediaModal onClose={() => { toggle('bestiary'); }} />}

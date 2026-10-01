@@ -1,6 +1,6 @@
 # Economia, consumíveis e Market
 
-**Status:** parcial — gold por abate (FUN-63), suprimento abstrato com gold no uso e munição abstrata com gold no tiro (AB-01/AB-04/AB-05, ADR 0032 d.6/d.7) e loot de item com Caixa de Loot da Sessão (FUN-88) implementados; autovenda, Market e Coins não implementados
+**Status:** parcial — gold por abate (FUN-63), suprimento abstrato com gold no uso e munição abstrata com gold no tiro (AB-01/AB-04/AB-05, ADR 0032 d.6/d.7) e o cadáver com loot e filtro de Quick Loot por personagem, com autovenda individual e de party (FUN-88, ADR 0048) implementados; Market e Coins não implementados
 **PRD:** §20, §32, §33, §43.5
 **Épico:** E5 (consumível, ledger); E13 (Market, Coins por gold)
 
@@ -13,6 +13,13 @@ cada tiro debita o `price` da munição escolhida da família, sem pilha e sem m
 único item `consumable` que resta é a `blessing-charge` (a TP-03, M22, é quem a consome). Os
 preços usam o Tibia como referência inicial de balanceamento, e todos os valores são
 configuráveis.
+
+**Conjuração CRIA estoque em vez de gastá-lo (#594, ADR 0044).** É a MESMA moeda de gold-no-ato
+acima, na direção oposta: a magia de conjuração debita mana, alma (#593) e o preço da runa em
+branco (10 gold, uma runa de cada vez) do LANÇADOR, e credita cargas no `supplyStock`/
+`ammunitionStock` dele — nunca um item de runa físico. A munição do Paladin (Conjure Arrow/
+Sniper Arrow/Power Bolt) não paga runa em branco nenhuma (`blankId` zero no Canary): só mana e
+alma. Ver `docs/product/items.md` §"Conjuração CREDITA o mesmo estoque, pelo lançador".
 
 Se o gold do personagem acabar durante a hunt: com a regra "sair quando o gold acabar" ativa no
 bot, ele sai da hunt; sem essa regra, ele permanece, mas deixa de conseguir pagar o próximo
@@ -37,6 +44,14 @@ ser altamente auditável e consistente.
   `Rng` da sessão; vira `goldDelta` no personagem e `goldGained` no extrato, e chega à linha do
   personagem pelo ledger com `(session_id, seq)` único — nunca por escrita direta em `gold`
   (invariante 10). Stamina zero bloqueia o loot como bloqueia a XP (§10.2).
+- A tabela declara o modelo de sorteio em `loot.rollModel` (#685): ausente é o FUN-63 (a chance é
+  a probabilidade exata, a quantidade é um sorteio à parte); `canary` é o do Canary, que o
+  catálogo importado usa — fator 95–105 % por linha, rolagem em cem-milésimos e quantidade tirada
+  da mesma rolagem. No `canary` a chance nominal não é sempre a efetiva: perto de 100 % ela cai
+  ("100 %" rende ~98,6 %), e quando a chance em cem-milésimos é menor que a largura da pilha a
+  quantidade puxa para o `min` (a rolagem que caiu é pequena demais para cobrir o intervalo).
+  Detalhe em
+  [`hunt.md`](./hunt.md), "O loot cai".
 - O encerramento só pode remover a sessão e seu snapshot depois de confirmar a gravação do
   extrato no Redis (#267). Tentativas concorrentes aguardam a mesma gravação; falha permite
   retry com o mesmo `(session_id, seq)`. Se o Redis gravou e a resposta se perdeu, repetir não
@@ -75,28 +90,36 @@ ser altamente auditável e consistente.
   instante do abate: é **regra de runtime**, calculada a cada drop, não um campo novo em
   `itemSchema` — `value` continua sendo o único campo do catálogo usado pela venda. A venda
   (automática ou settlement) divide cada entrada entre `eligible ∩ presentes`; `value: 0` não se
-  vende e vai para o líder. É a primeira venda ao NPC do jogo, e usa o mesmo campo que a autovenda
-  (§22.1) vai usar. Ver `party.md`.
+  vende e vai para o líder. É a primeira venda ao NPC do jogo. Ver `party.md`.
+- **A autovenda individual (§22.1) existe desde o ADR 0048.** Fora de party (ou com `splitLoot`
+  desligado), o filtro de Quick Loot de cada personagem (`botConfig.loot`, ver `bot.md`) tem sua
+  própria lista `autoSell`: ao coletar o item do cadáver, se ele está na lista e `value > 0`,
+  vende na hora ao `value` do catálogo — mesmo campo que a venda de party usa — e o gold vira
+  `goldDelta`/`goldGained` direto, sem passar pela mochila. O limite de tipos (5 Free, 20
+  Premium) é o mesmo `party.autoSellItemTypes` da venda de party, mas lido do Premium do
+  **próprio personagem**, nunca do líder.
 
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
 |---|---|---|
 | Loot de gold por monstro (chance, mínimo, máximo) | Rat: 90%, 1–4 | `data/monsters/*.json`, bloco `loot.gold` |
+| Modelo de sorteio da tabela de loot | ausente (FUN-63) nos autorais; `canary` no catálogo importado | `loot.rollModel` do monstro (#685) |
+| Fator dinâmico por linha no modelo `canary` | 95–105 % (Canary `monstertype.lua`) | constante em `packages/sim/src/loot.ts` (`rollCanaryLine`) |
 | Taxa de listagem no Market | 0% | caminho previsto: `packages/content/economia` |
 | Comissão sobre venda no Market | 0% | caminho previsto: `packages/content/economia` |
-| Preço de venda de cada item ao NPC | `value` por item — `bow` 130, `machete` 6, `cheese` 0 (não se vende); mochila `[ABERTO — 5, provisório]` | `packages/content/data/items/*.json`, campo `value` (#188, ADR 0027) |
-| Preço da Poção de Vida (gold no uso) | 45 `[ABERTO — valor provisório: 45]` | `packages/content/data/supplies/health-potion.json`, campo `price` |
-| Preço da Poção de Mana (gold no uso) | 50 `[ABERTO — valor provisório: 50]` | `packages/content/data/supplies/mana-potion.json`, campo `price` |
-| Preço por tiro da munição | arrow 1 `[ABERTO — provisório: 1]`, burst arrow 3 `[ABERTO — provisório: 3]`, sniper arrow 5 `[ABERTO — provisório: 5, preço do NPC no Tibia]`, onyx arrow 7 `[ABERTO — provisório: 7, preço do NPC no Tibia]` | `packages/content/data/ammunition/{arrow,burst-arrow,sniper-arrow,onyx-arrow}.json`, `price` |
-| Preço da Avalanche Rune (gold no uso) | 14 `[ABERTO — valor provisório: 14]` | `packages/content/data/supplies/avalanche-rune.json`, campo `price` |
+| Preço de venda de cada item ao NPC | `value` por item — maior `sell` de `data-otservbr-global/npc/*.lua` (M34-03/#574): `bow` 400, `sword` 25, `machete` 6, `cheese` 0 (não se vende); mochila `[ABERTO — 5, provisório]` (container, fora do corte do importador de itens) | `packages/content/data/items/*.json`, campo `value` (#188, ADR 0027) |
+| Preço da Poção de Vida (gold no uso) | 50 — menor `buy` de NPC do Canary (M34-03/#574, não mais provisório) | `packages/content/data/supplies/health-potion.json`, campo `price` |
+| Preço da Poção de Mana (gold no uso) | 56 — menor `buy` de NPC do Canary (M34-03/#574, não mais provisório) | `packages/content/data/supplies/mana-potion.json`, campo `price` |
+| Preço por tiro da munição | arrow 2, burst arrow 15, sniper arrow 5, onyx arrow 7 — menor `buy` de NPC do Canary (M34-03/#574, não mais provisório) | `packages/content/data/ammunition/{arrow,burst-arrow,sniper-arrow,onyx-arrow}.json`, `price` |
+| Preço da Avalanche Rune (gold no uso) | 64 — menor `buy` de NPC do Canary (M34-03/#574, não mais provisório; a runa se compra pronta, não é dividida por carga) | `packages/content/data/supplies/avalanche-rune.json`, campo `price` |
 
 ## Em aberto
 
 - ~~[ABERTO] Preço de arrows e demais munições (§20.2, §43.5)~~ → **Resolvido:** a munição é
-  abstrata, com `price` por tiro (ADR 0032 d.7, AB-02/AB-05); a `arrow` tem preço maior que zero
-  (ponto de partida 1), e os valores 1, 3, 5 e 7 são provisórios, em
-  `packages/content/data/ammunition/*.json`.
+  abstrata, com `price` por tiro (ADR 0032 d.7, AB-02/AB-05); os valores (arrow 2, burst arrow 15,
+  sniper arrow 5, onyx arrow 7) vêm do menor `buy` de NPC do Canary (M34-03/#574), não mais
+  provisórios, em `packages/content/data/ammunition/*.json`.
 
 ## Suprimento abstrato, na prática (FUN-77, ADR 0032 d.6)
 
@@ -123,11 +146,24 @@ O que vale do desenho original:
   **uma** linha (`supply-unaffordable`) no extrato, não uma por tentativa. A regra de saída "sair
   quando o gold acabar" é da FUN-86.
 
+### O estoque abstrato agora é VISÍVEL (#726, ADR 0049 decisão 4)
+
+Desde o #520 `useSupply` já gastava do estoque de loot (`supplyStock`/`ammunitionStock`) antes do
+gold — mas o jogador não via o número. A #726 expõe os dois: `inventory.supplies`/`ammunition`
+(`[{ id, quantity }]`, opcionais, `default([])`) levam o estoque inteiro a cada `inventory`
+reenviado, e o cliente já desenha a seção "Suprimentos" sob a mochila
+(`ContainerWindow.tsx`): nome (resolvido em `catalogue.bot.supplies`) e contagem por linha,
+clicar usa direto (`use-item`) e o clique direito abre "Usar"/"Usar com…" — o mesmo
+`ContextMenu` do item consumível. **Sem sprite**: `catalogue.bot.supplies` não carrega
+`appearanceId` — só item de verdade tem essa coluna (FUN-94) —, e dar ícone ao suprimento
+abstrato fica para quando isso for decidido; a linha hoje é texto.
+
 ## Divergências do PRD
 
-~~**Loot de item não cai, e a tabela recusa tentar.**~~ → **Resolvido (FUN-76, FUN-88):** existe
-catálogo, `loot.items` é conferido contra ele, e o item cai — mochila se couber, Caixa de Loot da
-Sessão se não. Ver [`items.md`](./items.md).
+~~**Loot de item não cai, e a tabela recusa tentar.**~~ → **Resolvido (FUN-76, FUN-88; ADR 0048):**
+existe catálogo, `loot.items` é conferido contra ele, e o item cai no cadáver — mochila se o
+filtro de Quick Loot aceitar e couber, senão fica no cadáver até ele decair. Ver
+[`items.md`](./items.md).
 
 **O §20.1 está de volta.** O PRD tratava o supply como abstração que debitava gold por uso, e é o
 que a implementação faz hoje: poção, runa e munição não são itens físicos; usar um supply

@@ -6,16 +6,18 @@
 
 import { randomUUID } from 'node:crypto';
 import {
-  CharacterRuntime, Rng, Session, createCityRuleset, createHuntSession,
-  huntRulesetFromSnapshot, materializeStamina, statsForLevel,
+  CharacterRuntime, DEFAULT_DIFFICULTY_NAME, Rng, Session, createCityRuleset, createHuntSession,
+  createTrainingSession, holdStamina, huntRulesetFromSnapshot, materializeStamina, statsForLevel,
+  trainingRulesetFromSnapshot,
 } from '@draconya/sim';
 import type {
   HuntDifficultyName, InventoryState, Ruleset, SessionSnapshot, SkillsState,
 } from '@draconya/sim';
 import {
-  BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, migrateBotConfigV1, validateBotConfigV2,
+  BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, migrateBotConfigV1, sanitizeBotConfigV2,
+  validateBotConfigV2,
 } from '@draconya/content';
-import type { BotConfigV2, Content } from '@draconya/content';
+import type { BotConfigV2, Content, RemovedBotSlot } from '@draconya/content';
 import type {
   SessionBuilder, SessionFactory, SessionRestorer, TransitionRequest,
 } from './host.js';
@@ -49,6 +51,10 @@ function cityRulesetFor(content: Content, entryTiles?: number) {
     // Os containers ganham os tamanhos iniciais na entrada (#160), como na hunt.
     containers: { items: content.items, progression: content.progression },
     vocations: content.vocations,
+    // Conjuração na Cidade (#792, ADR 0044 d.2): `useSlot` precisa do catálogo de magias e dos
+    // coeficientes de combate para chamar `castSpell`, mesmo que conjurar não role nada.
+    spells: content.spells,
+    combat: content.combat,
   });
 }
 
@@ -189,11 +195,15 @@ export function createLateJoiner(
 
 /**
  * A hunt de uma party, com os N membros dentro (#195): o mesmo `createHuntSession` da
- * transição, com `partyOptions` fixadas e o bot de cada um — validado AQUI, com o conteúdo,
- * porque chega cru do ticket como o solo chega, e o host só valida o do personagem que entrou.
+ * transição, com `partyOptions` fixadas e o bot de cada um — carregado AQUI, com o conteúdo,
+ * porque chega cru do ticket como o solo chega, e o host só carrega o do personagem que entrou.
+ *
+ * `createBotConfigLoader`, não `createBotConfigValidator` (ADR 0014): isto é CARGA de uma
+ * configuração já persistida, não uma edição — um slot cuja magia/supply saiu do catálogo (o
+ * #596, por exemplo) vira `null` em vez de derrubar a configuração inteira do membro.
  */
 function partyHuntFor(content: Content, party: PartyTicket, now: () => number): Session {
-  const accept = createBotConfigValidator(content);
+  const load = createBotConfigLoader(content);
 const botConfigs: Record<string, BotConfigV2> = {};
   const premiumByCharacter: Record<string, boolean> = {};
   for (const member of party.members) {
@@ -202,15 +212,22 @@ const botConfigs: Record<string, BotConfigV2> = {};
     premiumByCharacter[member.characterId] = member.initialCharacter.premium ?? false;
     const raw = member.initialCharacter.botConfig;
     if (raw === undefined) continue;
-    const decision = accept(raw, member.initialCharacter.level);
+    const decision = load(raw, member.initialCharacter.level);
     if (decision.ok) botConfigs[member.characterId] = decision.config;
   }
+  // A boosted do dia (#615) vem do TICKET do líder — é o mesmo valor para todo mundo que
+  // entrou no jogo no mesmo dia, e um membro que entrou véspera da virada carrega o de ontem
+  // (fixado no login dele, ADR 0052 decisão 5); o líder é quem decide a identidade da
+  // instância nova, como já decide `partyOptions.leaderId`.
+  const leaderBoostedMonsterId = party.members
+    .find((member) => member.characterId === party.leaderId)?.initialCharacter.boostedMonsterId;
   const session = createHuntSession({
     id: party.sessionId,
     content,
     huntId: party.huntId,
     difficulty: party.difficulty as HuntDifficultyName,
     createdAtMs: now(),
+    ...(leaderBoostedMonsterId === undefined ? {} : { boostedMonsterId: leaderBoostedMonsterId }),
     partyOptions: {
       leaderId: party.leaderId,
       // Coleta/venda nascem vazias — o líder configura depois de entrar, por `party-settings`.
@@ -241,7 +258,11 @@ export function characterFromTicket(
       ...INITIAL_FLAGS,
       level: initialCharacter.level,
       xp: initialCharacter.xp,
+      soul: initialCharacter.soul ?? 0,
       vocationId,
+      // Promovido (#566, ADR 0042 decisão 1): vem do ticket, como a vocação. Ausente é `false`
+      // no construtor de `CharacterRuntime` — o normal de quem nunca promoveu.
+      ...(initialCharacter.promoted === true ? { promoted: true } : {}),
       health: stats.maxHealth, maxHealth: stats.maxHealth,
       mana: stats.maxMana, maxMana: stats.maxMana,
       capacity: stats.capacity,
@@ -264,6 +285,36 @@ export function characterFromTicket(
         ? {} : { supplyStock: initialCharacter.supplyStock }),
       ...(initialCharacter.ammunitionStock === undefined
         ? {} : { ammunitionStock: initialCharacter.ammunitionStock }),
+      // A economia de Charms (M39-02, #602, ADR 0052 d.1): validada na emissão e no consumo
+      // (`isCharmsState`); ausente, a sessão parte sem nenhum ponto/tier/atribuição — o mesmo
+      // personagem novo que `bestiary` ausente já descreve.
+      ...(initialCharacter.charms === undefined ? {} : { charms: initialCharacter.charms }),
+      // O Bosstiary (#629, ADR 0052 d.1): validado na emissão e no consumo (`isBosstiaryState`);
+      // ausente, a sessão parte sem nenhum abate de boss — o mesmo personagem novo que `bestiary`
+      // ausente já descreve.
+      ...(initialCharacter.bosstiary === undefined ? {} : { bosstiary: initialCharacter.bosstiary }),
+      // As magias aprendidas (#624, ADR 0058 d.1): validadas na emissão e no consumo
+      // (`isLearnedSpellsState`); ausente, a sessão parte sem nenhuma — personagem novo, que
+      // não lança nada até comprar (quem já existia ganhou o registro pela migração 0024).
+      ...(initialCharacter.learnedSpells === undefined
+        ? {} : { learnedSpells: initialCharacter.learnedSpells }),
+      // O familiar (M38-02, #599, ADR 0057 d.3): os carimbos de parede do cooldown e da recriação
+      // — validados na emissão e no consumo (`isFamiliarState`); ausente, o personagem nunca
+      // invocou, e a sessão parte sem carimbo.
+      ...(initialCharacter.familiar === undefined ? {} : { familiar: initialCharacter.familiar }),
+      // O registro do Treino (#631, ADR 0059 d.3): validado na emissão e no consumo; ausente, a
+      // sessão parte de banco zero e nenhuma skill escolhida — o mesmo personagem novo.
+      ...(initialCharacter.training === undefined ? {} : { training: initialCharacter.training }),
+      // Os storages (#731, ADR 0050 d.6 T2): validados como o Bestiário; ausente, a sessão
+      // parte sem storage nenhum setado — a mesma degradação de sempre.
+      ...(initialCharacter.storages === undefined ? {} : { storages: initialCharacter.storages }),
+      // Comida ativa (#726, ADR 0049 decisão 5): ausente, a sessão parte sem — ninguém comeu
+      // ainda, o de sempre.
+      ...(initialCharacter.fedMs === undefined ? {} : { fedMs: initialCharacter.fedMs }),
+      // As bênçãos (#570, ADR 0052): ausente, a sessão parte sem — ninguém comprou ainda.
+      ...(initialCharacter.blessings === undefined ? {} : { blessings: initialCharacter.blessings }),
+      // A postura de luta (#550, M30-03): ausente, a sessão parte do `FIGHTMODE_ATTACK` do Canary.
+      ...(initialCharacter.fightMode === undefined ? {} : { fightMode: initialCharacter.fightMode }),
       // A mochila vem do ticket porque a arma equipada decide o dano (FUN-82). Entrada
       // quebrada vira "sem item", não sessão que não abre.
       ...(isInventoryState(initialCharacter.inventory)
@@ -273,6 +324,17 @@ export function characterFromTicket(
       ...(initialCharacter.staminaUpdatedAtMs === undefined
         ? {}
         : { staminaUpdatedAtMs: initialCharacter.staminaUpdatedAtMs }),
+      // A Boosted Creature do dia (#615, ADR 0052 decisão 5): fixada no personagem AGORA, como
+      // a versão de conteúdo — não relida do mundo em transição nenhuma depois do login.
+      ...(initialCharacter.boostedMonsterId === undefined
+        ? {}
+        : { boostedMonsterId: initialCharacter.boostedMonsterId }),
+      // O bônus de Loyalty (#628, ADR 0052 decisão 5): calculado pela `api` na emissão e fixado
+      // AGORA, como a boosted — a sessão nunca relê conta nem relógio, e o valor atravessa toda
+      // transição Cidade↔hunt e toda retomada de snapshot (vive no `CharacterState`).
+      ...(initialCharacter.loyaltyBonusPercent === undefined
+        ? {}
+        : { loyaltyBonusPercent: initialCharacter.loyaltyBonusPercent }),
     });
     // Materializa na ENTRADA (§10): o personagem esteve fora de hunt desde a última vez, e
     // esse tempo é recuperação. Fazer a conta aqui, e não na leitura de cada consulta, é o
@@ -323,10 +385,11 @@ export function createSessionRestorer(content: Content): SessionRestorer {
 }
 
 function rulesetFor(snapshot: SessionSnapshot, content: Content): Ruleset | null {
-  // Cidade e hunt são as duas que existem. Treino, quest, boss e guild war ainda não têm
+  // Cidade, hunt e Treino (#631) são as que existem. Quest, boss e guild war ainda não têm
   // ruleset — e forçar um conhecido em cima produziria uma sessão que mente sobre o que é.
   if (snapshot.type === 'city') return cityRulesetFor(content);
   if (snapshot.type === 'hunt') return huntRulesetFromSnapshot(snapshot, content);
+  if (snapshot.type === 'training') return trainingRulesetFromSnapshot(snapshot, content);
   return null;
 }
 
@@ -348,22 +411,35 @@ export function createSessionBuilder(
   now: () => number = () => Date.now(),
   shard: CityShard = new CityShard(content, now),
 ): SessionBuilder {
-  return (request, from, characterId): Session | null => {
+  return (request, from, characterId, departed): Session | null => {
     // Quem atravessa é UM personagem, mesmo quando a origem tem duzentos (FUN-71). Mover
     // `from.participants` inteiro faria um jogador clicando em caçar levar a praça junto — e
     // a hunt recusa o segundo participante, então o sintoma seria a transição falhar para
     // todo mundo sempre que houvesse mais alguém na praça.
-    const character = from.participants.find((p) => p.id === characterId);
+    //
+    // Quem já SAIU da origem (#802) vem em `departed`: o membro de uma party que a deixou por
+    // dentro do `sim` — morte, regra de saída, a saída que o ruleset concluiu depois do
+    // `exitDelayMs` — não está mais em `from.participants`. Sem isto o construtor devolvia
+    // `null`, o host caía no `release`, e o `release` de uma sessão privada a ENCERRA: a saída
+    // de UM membro acabava a party inteira, com `manual-exit`, para os que ficaram.
+    const character = from.participants.find((p) => p.id === characterId) ?? departed;
     if (character === undefined) return null;
 
     // Materializar a stamina é da FRONTEIRA, e toda transição é uma (§10). Fazer aqui, e não
     // dentro de cada destino, é o que garante que nenhum caminho novo esqueça.
-    materializeStamina(character, now(), content.stamina);
+    //
+    // A exceção é sair do TREINO (#631): a stamina não anda nele — o exercise training do Canary é
+    // online, e o Canary só regenera stamina deslogado (ADR 0060 d.14c, emenda ao ADR 0059 d.1) —,
+    // então o marco avança sem recuperar o tempo de treino. A entrada nele (Cidade → Treino)
+    // materializa normalmente: o tempo que veio ANTES do treino ainda é recuperação.
+    if (from.ruleset.type === 'training') holdStamina(character, now());
+    else materializeStamina(character, now(), content.stamina);
 
     if (request.to === 'city') return cityFor(shard, from, character);
     if (request.to === 'hunt') return huntFor(content, request, character, now);
-    // Treino, quest, boss e guild war ainda não têm ruleset. `null` recusa a transição com
-    // erro claro, que é melhor que construir uma sessão que mente sobre o que é.
+    if (request.to === 'training') return trainingFor(content, request, character, now);
+    // Quest, boss e guild war ainda não têm ruleset. `null` recusa a transição com erro claro,
+    // que é melhor que construir uma sessão que mente sobre o que é.
     return null;
   };
 }
@@ -388,25 +464,70 @@ function huntFor(
   character: CharacterRuntime,
   now: () => number,
 ): Session | null {
-  if (request.huntId === undefined || request.difficulty === undefined) return null;
+  if (request.huntId === undefined) return null;
   try {
     const session = createHuntSession({
       id: randomUUID(),
       content,
       huntId: request.huntId,
-      // A dificuldade chega como string do cliente e é validada pelo CONTEÚDO, não por um
-      // enum no protocolo: uma hunt define as dificuldades que fazem sentido para ela.
-      difficulty: request.difficulty as HuntDifficultyName,
+      // #584: `difficulty` é aceito e IGNORADO pelo `sim` desde o #583 (ADR 0039, fim do
+      // pull por dificuldade) — não seleciona mais nada no conteúdo. Ausente (cliente novo)
+      // vira o único nome compat que o conteúdo ainda expõe, só para o snapshot/extrato
+      // continuarem redondos; presente (cliente antigo) é aceito sem validar contra nada.
+      difficulty: (request.difficulty ?? DEFAULT_DIFFICULTY_NAME) as HuntDifficultyName,
       createdAtMs: now(),
       // A configuração do bot já vem VALIDADA (FUN-81): quem a aceitou foi o host, no socket
       // ou ao ler o ticket. Aqui ela só é compilada — e é a hunt que a guarda no snapshot.
       ...(request.botConfig === undefined ? {} : { botConfig: request.botConfig }),
+      // A Boosted Creature do dia (#615) vem do PERSONAGEM, fixada nele desde o ticket que o
+      // trouxe para o jogo (ADR 0052 decisão 5) — não é relida do mundo nesta transição, para
+      // a hunt nascer com a boosted de quando ele entrou, mesmo que o dia já tenha virado.
+      ...(character.boostedMonsterId === undefined ? {} : { boostedMonsterId: character.boostedMonsterId }),
     });
     session.enter(character);
     return session;
   } catch {
     // Hunt inexistente, dificuldade que ela não define, rota que saiu do conteúdo. Recusar é
     // a resposta certa: o personagem fica onde estava, e o jogador vê o motivo.
+    return null;
+  }
+}
+
+/**
+ * A sessão de Treino (#631, ADR 0059 d.1): o personagem entra sozinho, com a exercise weapon que
+ * escolheu. `null` recusa a transição — instância que ele não carrega, item que não é exercise
+ * weapon, arma sem carga, conteúdo sem `training/` ou sem o mapa da Cidade — e o personagem fica
+ * onde estava, que é o estado seguro. O host confere e responde o motivo em palavras ANTES de
+ * chegar aqui; esta é a segunda linha, porque o construtor é quem tem a autoridade sobre o que
+ * uma sessão de Treino pode ser (invariante 4: o cliente só disse qual instância).
+ */
+function trainingFor(
+  content: Content,
+  request: TransitionRequest,
+  character: CharacterRuntime,
+  now: () => number,
+): Session | null {
+  if (request.itemInstanceId === undefined) return null;
+  try {
+    // O `training-exhaustion` do Canary (ADR 0052 d.6, cooldown de parede): um novo início só
+    // passados `startCooldownMs` (10 s) do anterior. Recusar aqui é a segunda linha — o host já
+    // respondeu em palavras —, e é a que carimba: o instante entra no registro do personagem, que o
+    // extrato do Treino leva ao banco. Sem ele, entrar/sair/entrar a cada ciclo creditaria um golpe
+    // por entrada (o primeiro vence em t = 0) e esgotaria a arma bem mais depressa que 1 carga / 2 s.
+    const rules = content.training;
+    const startedAtMs = now();
+    if (rules !== undefined && character.training.exerciseCooldownLeftMs(startedAtMs, rules.startCooldownMs) > 0) {
+      return null;
+    }
+    const session = createTrainingSession({
+      id: randomUUID(), content, itemInstanceId: request.itemInstanceId, createdAtMs: startedAtMs,
+    });
+    session.enter(character);
+    if (rules !== undefined) character.training.beginExerciseCooldown(startedAtMs, rules.startCooldownMs);
+    return session;
+  } catch {
+    // Sem Treino no conteúdo, sem a arma, sem onde ficar (`TrainingUnavailableError`): recusar é a
+    // resposta certa, como a hunt que saiu do conteúdo.
     return null;
   }
 }
@@ -437,42 +558,83 @@ export type BotConfigDecision =
   | { readonly ok: false; readonly reason: string };
 
 /**
+ * O portão de versão mais a migração v1→v2, compartilhados por `createBotConfigValidator`
+ * (EDIÇÃO — recusa com motivo) e `createBotConfigLoader` (CARGA — nunca recusa por conteúdo,
+ * ver o comentário de `sanitizeBotConfigV2`). O que os dois têm em comum é só isto: o FORMATO
+ * precisa ser reconhecível. Versão desconhecida ou vocabulário torto continuam recusa em
+ * QUALQUER caminho — não é conteúdo que mudou sob a configuração, é a configuração que nunca
+ * foi válida (corrompida, ou de um servidor que fala outra versão).
+ */
+function migrateBotConfigGate(raw: unknown): { readonly ok: true; readonly config: BotConfigV2 } | { readonly ok: false; readonly reason: string } {
+  // O portão de versão ANTES da migração: `migrateBotConfigV1` aceita qualquer v1 bem formado,
+  // e uma config com `version: 99` que trouxesse as cinco categorias migraria em silêncio.
+  const version = typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>)['version']
+    : undefined;
+  if (version !== BOT_VOCABULARY_VERSION_V1 && version !== BOT_VOCABULARY_VERSION) {
+    return {
+      ok: false,
+      reason: `configuração na versão ${String(version)} de vocabulário; este servidor `
+        + `entende ${BOT_VOCABULARY_VERSION}`,
+    };
+  }
+  try {
+    return { ok: true, config: migrateBotConfigV1(raw) };
+  } catch {
+    return { ok: false, reason: 'configuração fora do vocabulário' };
+  }
+}
+
+/**
  * O juiz único da configuração do bot (FUN-81, AB-09). Migra v1→v2 e valida contra o conteúdo
  * fixado na sessão (invariante 7). A migração é pura e idempotente (AB-03): v2 volta só
  * parseada, v1 vira v2. Versão desconhecida é recusa com motivo — o portão de versão.
+ *
+ * **Só para a EDIÇÃO** (`#configureBot`, uma configuração NOVA que o jogador acabou de salvar):
+ * recusar tudo com o motivo é o certo aqui — é o jogador que escreveu a regra torta, e ele
+ * precisa saber qual foi para corrigir. Quem CARREGA uma configuração já persistida usa
+ * `createBotConfigLoader`, que nunca recusa por causa de conteúdo (ADR 0014).
  */
 export function createBotConfigValidator(
   content: Content,
 ): (raw: unknown, level: number) => BotConfigDecision {
   return (raw, _level) => {
-    // O portão de versão ANTES da migração: `migrateBotConfigV1` aceita qualquer v1 bem formado,
-    // e uma config com `version: 99` que trouxesse as cinco categorias migraria em silêncio.
-    const version = typeof raw === 'object' && raw !== null && !Array.isArray(raw)
-      ? (raw as Record<string, unknown>)['version']
-      : undefined;
-    if (version !== BOT_VOCABULARY_VERSION_V1 && version !== BOT_VOCABULARY_VERSION) {
-      return {
-        ok: false,
-        reason: `configuração na versão ${String(version)} de vocabulário; este servidor `
-          + `entende ${BOT_VOCABULARY_VERSION}`,
-      };
-    }
+    const gated = migrateBotConfigGate(raw);
+    if (!gated.ok) return gated;
 
-    let config: BotConfigV2;
-    try {
-      config = migrateBotConfigV1(raw);
-    } catch {
-      return { ok: false, reason: 'configuração fora do vocabulário' };
-    }
-
-    const problems = validateBotConfigV2(config, content);
+    const problems = validateBotConfigV2(gated.config, content);
     if (problems.length > 0) {
       // Só o primeiro problema vai para o socket. A lista inteira é da UI (M10), que consegue
       // apontar slot por slot; numa linha de chat, cinco motivos viram ruído.
       return { ok: false, reason: problems[0] as string };
     }
 
-    return { ok: true, config };
+    return { ok: true, config: gated.config };
+  };
+}
+
+export type BotConfigLoadResult =
+  | { readonly ok: true; readonly config: BotConfigV2; readonly removed: readonly RemovedBotSlot[] }
+  | { readonly ok: false; readonly reason: string };
+
+/**
+ * O carregador de uma configuração JÁ PERSISTIDA (FUN-81, ADR 0014) — o que
+ * `#adoptTicketBotConfig` e `partyHuntFor` usam para o bot que chega no TICKET, não o que o
+ * jogador acabou de editar. Mesmo portão de versão/migração de `createBotConfigValidator`, mas
+ * a referência cruzada (`sanitizeBotConfigV2`) esvazia o slot torto em vez de recusar tudo: o
+ * personagem que entra na hunt não pode ficar sem NENHUM automatismo — o `swap-weapon-shield-
+ * by-hp`, o `ringSwap`, os outros 23 slots do conjunto — só porque uma magia que ele configurou
+ * meses atrás saiu do catálogo (#596). `ok: false` aqui continua existindo para o que É
+ * corrupção de verdade: versão desconhecida, ou vocabulário que nem migra.
+ */
+export function createBotConfigLoader(
+  content: Content,
+): (raw: unknown, level: number) => BotConfigLoadResult {
+  return (raw, _level) => {
+    const gated = migrateBotConfigGate(raw);
+    if (!gated.ok) return gated;
+
+    return { ok: true, ...sanitizeBotConfigV2(gated.config, content) };
   };
 }
 

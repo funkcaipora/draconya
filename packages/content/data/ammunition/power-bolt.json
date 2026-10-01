@@ -3,10 +3,10 @@
   "name": "Power Bolt",
   "family": "bolt",
   "attack": 40,
-  "price": 10,
+  "price": 7,
   "maxHitChance": 91,
   "requires": {
     "level": 55
   },
-  "_open": "Kit level 200 (#524), Paladin — a munição da Royal Crossbow, primeira `family: \"bolt\"` do catálogo. `attack` 40, `maxhitchance` 91 e level 55 do Canary `items.xml` id 3450 (`maxHitChance` é só dado — a chance de acerto por skill/distância é a issue #522, que lê `weapon.hitChance` + `ammunition.maxHitChance`). `price` 10: o que os NPCs vendem por bolt (TibiaWiki via tibiascape.com/library/items/power-bolt — 11 NPCs, todos a 10 gold)."
+  "_open": "Kit level 200 (#524), Paladin — a munição da Royal Crossbow, primeira `family: \"bolt\"` do catálogo. `attack` 40, `maxhitchance` 91 e level 55 do Canary `items.xml` id 3450 (`maxHitChance` é só dado — a chance de acerto por skill/distância é a issue #522, que lê `weapon.hitChance` + `ammunition.maxHitChance`). `price` 7 (M34-03/#574): menor `buy` de `data-otservbr-global/npc/*.lua` para o clientId 3450 (`archery.lua`) — corrige o 10 anterior (TibiaWiki), o Canary é a fonte precedente (ADR 0037 d.4)."
 }

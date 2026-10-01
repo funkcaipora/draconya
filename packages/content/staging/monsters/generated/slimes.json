@@ -1,0 +1,882 @@
+[
+  {
+    "id": "acid-blob",
+    "name": "Acid Blob",
+    "class": "slime",
+    "health": 250,
+    "experience": 250,
+    "attack": {
+      "min": 0,
+      "max": 80
+    },
+    "armor": 3,
+    "defense": 1,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "fire": -0.1,
+        "ice": 0.2
+      },
+      "immunities": [
+        "death",
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0.25,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 180,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "glob-of-acid-slime",
+          "chance": 0.1852
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 80
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 2000,
+        "chance": 0.3,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 10,
+          "max": 20
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "hitbypoison"
+        }
+      },
+      {
+        "id": "earthwave",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3
+            ]
+          }
+        },
+        "power": {
+          "min": 40,
+          "max": 60
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "green-rings"
+        }
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 0
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "poison"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.85,
+    "corpseTtlMs": 910000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Kzzchhhh",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 910000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/slimes/acid_blob.lua"
+    },
+    "summons": {
+      "max": 3,
+      "entries": [
+        {
+          "monsterId": "acid-blob",
+          "intervalMs": 2000,
+          "chance": 0.1,
+          "count": 3
+        }
+      ]
+    },
+    "bestiary": {
+      "class": "slime",
+      "race": "slime",
+      "raceId": 513,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 314
+  },
+  {
+    "id": "chocolate-blob",
+    "name": "Chocolate Blob",
+    "class": "slime",
+    "health": 70,
+    "experience": 17,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 11,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.3,
+        "earth": 0.35,
+        "fire": 0.4,
+        "ice": -0.05,
+        "holy": 0.1,
+        "death": 0.25
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.36,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 160,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 70,
+    "staticAttack": 0.9,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "*Splotch*",
+          "yell": false
+        },
+        {
+          "text": "Smudge",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/slimes/chocolate_blob.lua"
+    },
+    "bestiary": {
+      "class": "slime",
+      "race": "slime",
+      "raceId": 2550,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 1732
+  },
+  {
+    "id": "mercury-blob",
+    "name": "Mercury Blob",
+    "class": "slime",
+    "health": 150,
+    "experience": 180,
+    "attack": {
+      "min": 0,
+      "max": 75
+    },
+    "armor": 3,
+    "defense": 1,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.1,
+        "earth": 0.65,
+        "fire": 0.1,
+        "lifedrain": 0.8,
+        "ice": 0.15,
+        "holy": 0.65
+      },
+      "immunities": [
+        "death"
+      ]
+    },
+    "defenseMitigation": 0.25,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 180,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "glob-of-mercury",
+          "chance": 0.1875
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 75
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "holy",
+          "impactKey": "stun"
+        },
+        "condition": {
+          "key": "drunk",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 10,
+          "max": 30
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "energy",
+          "impactKey": "energyhit"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "heal": {
+          "min": 20,
+          "max": 30
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.85,
+    "corpseTtlMs": 910000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Crackle",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 910000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/slimes/mercury_blob.lua"
+    },
+    "summons": {
+      "max": 3,
+      "entries": [
+        {
+          "monsterId": "mercury-blob",
+          "intervalMs": 2000,
+          "chance": 0.1,
+          "count": 3
+        }
+      ]
+    },
+    "bestiary": {
+      "class": "slime",
+      "race": "slime",
+      "raceId": 515,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 316
+  },
+  {
+    "id": "midnight-spawn",
+    "name": "Midnight Spawn",
+    "class": "slime",
+    "health": 2000,
+    "experience": 900,
+    "attack": {
+      "min": 0,
+      "max": 100
+    },
+    "armor": 40,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.1,
+        "energy": 0.1,
+        "earth": 0.8,
+        "fire": 0.3,
+        "ice": -0.1,
+        "holy": 0.3,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 1.18,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 230,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "midnight-shard",
+          "chance": 0.08333
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.85,
+    "corpseTtlMs": 60000,
+    "race": "undead",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/slimes/midnight_spawn.lua"
+    },
+    "bestiary": {
+      "class": "slime",
+      "race": "slime",
+      "raceId": 584,
+      "toKill": 5,
+      "firstUnlock": 2,
+      "secondUnlock": 3,
+      "charmsPoints": 50,
+      "stars": 3,
+      "occurrence": 3
+    },
+    "outfitId": 315
+  },
+  {
+    "id": "slime",
+    "name": "Slime",
+    "class": "slime",
+    "health": 150,
+    "experience": 160,
+    "attack": {
+      "min": 0,
+      "max": 110
+    },
+    "armor": 3,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "fire": -0.1,
+        "ice": 0.2
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0.25,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 120,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 2000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Blubb",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/slimes/slime.lua"
+    },
+    "summons": {
+      "max": 3,
+      "entries": [
+        {
+          "monsterId": "slime",
+          "intervalMs": 2000,
+          "chance": 0.1,
+          "count": 3
+        }
+      ]
+    },
+    "bestiary": {
+      "class": "slime",
+      "race": "slime",
+      "raceId": 19,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 19
+  },
+  {
+    "id": "son-of-verminor",
+    "name": "Son of Verminor",
+    "class": "slime",
+    "health": 8500,
+    "experience": 5900,
+    "attack": {
+      "min": 0,
+      "max": 473
+    },
+    "armor": 48,
+    "defense": 0,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "fire": 0.1
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 1.32,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 240,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 473
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 296000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 450,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 150,
+          "max": 200
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "poison"
+        }
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 350,
+          "max": 390
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "poisonarea"
+        }
+      },
+      {
+        "id": "deathburst",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 220,
+          "max": 270
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "smallclouds"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "heal": {
+          "min": 250,
+          "max": 350
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.7,
+    "corpseTtlMs": 248000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Blubb.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/slimes/son_of_verminor.lua"
+    },
+    "bestiary": {
+      "class": "slime",
+      "race": "slime",
+      "raceId": 265,
+      "toKill": 2500,
+      "firstUnlock": 100,
+      "secondUnlock": 1000,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 0
+    },
+    "outfitId": 19
+  },
+  {
+    "id": "squidgy-slime",
+    "name": "Squidgy Slime",
+    "class": "slime",
+    "health": 150,
+    "experience": 55,
+    "attack": {
+      "min": 0,
+      "max": 110
+    },
+    "armor": 3,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "fire": -0.1,
+        "ice": 0.2
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0.25,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 120,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 2000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Blubb",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/slimes/squidgy_slime.lua"
+    },
+    "summons": {
+      "max": 3,
+      "entries": [
+        {
+          "monsterId": "squidgy-slime",
+          "intervalMs": 2000,
+          "chance": 0.1,
+          "count": 3
+        }
+      ]
+    },
+    "bestiary": {
+      "class": "slime",
+      "race": "slime",
+      "raceId": 20,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 2
+    },
+    "outfitId": 19
+  }
+]

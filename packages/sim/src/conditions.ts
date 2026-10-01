@@ -20,12 +20,33 @@
 // ruleset a compila para este estado, que é o que viaja no snapshot. A POLÍTICA de fusão
 // (`merge`) é declarada por condição, e não um campo por efeito: `refresh` (relançar reinicia,
 // o de sempre), `replace` (o novo substitui o antigo) e `strongest` (o mais forte vence).
+//
+// M31-02 (#557): o dano ao longo do tempo ganhou a forma do Tibia — uma FILA de tiques,
+// possivelmente com valores DIFERENTES (a lista decrescente do Canary), em vez de um valor único
+// repetido. `tick.amount`/`tick.intervalMs` continuam sendo o tique CORRENTE — todo código que já
+// lia os dois campos direto continua funcionando sem mudança —, e `tick.queue` é o QUE FALTA
+// depois dele, em ordem. Ausente é o tique antigo, infinito até `expiresAtMs` (cura ao longo do
+// tempo, e qualquer snapshot anterior a esta issue); presente, mesmo vazio, é a fila do Tibia —
+// esgotada, ela para de tiquetar ANTES do vencimento, como `ConditionDamage::executeCondition` do
+// Canary faz quando `damageList` esvazia.
 
-import type { ConditionEffect, ConditionSpec } from '@draconya/content';
+import type { ConditionEffect, ConditionImmunity, ConditionSpec } from '@draconya/content';
 import type { DamageType } from '@draconya/content';
+// `generateDamageList`/`damageOverTimeTicks` moram em `content` (achado da revisão do #557):
+// `conditionSpecSchema` também precisa delas para conferir `durationMs` contra o total da fila, e
+// duas implementações do mesmo cálculo é o defeito que a DT-03 já nomeia noutro lugar do content.
+import {
+  DAMAGE_OVER_TIME_CONDITION_IMMUNITY, DRUNK_CONDITION_KEY, FEARED_CONDITION_KEY,
+  PACIFIED_CONDITION_KEY, ROOTED_CONDITION_KEY, SPEED_CONDITION_KEY, damageOverTimeTicks,
+  generateDamageList,
+} from '@draconya/content';
+import type { Direction } from './area.js';
 import type { DamageSource } from './combat/damage.js';
+import type { Rng } from './rng.js';
 
-export type ConditionKind = 'haste' | 'buff' | 'mana-shield' | 'heal-over-time' | 'damage-over-time';
+export type ConditionKind =
+  | 'speed' | 'buff' | 'mana-shield' | 'heal-over-time' | 'damage-over-time' | 'drunk' | 'invisible'
+  | 'rooted' | 'feared' | 'pacified' | 'light';
 
 /**
  * A POLÍTICA de fusão de uma condição (CMB-07, DT-02). Declarada no conteúdo, nunca um campo
@@ -33,9 +54,12 @@ export type ConditionKind = 'haste' | 'buff' | 'mana-shield' | 'heal-over-time' 
  *
  * - `refresh`: relançar reinicia o prazo (o comportamento de sempre do #155);
  * - `replace`: o novo estado substitui o antigo;
- * - `strongest`: o de maior magnitude vence; o mais fraco não derruba o que já está ativo.
+ * - `strongest`: o de maior magnitude vence; o mais fraco não derruba o que já está ativo;
+ * - `longest` (M44-04, #622): o de prazo mais LONGO vence — `Condition::updateCondition` do Canary
+ *   para `rooted`/`pacified`/`feared`: relançar com um prazo que termina antes do atual não muda
+ *   nada, e com um que termina no mesmo instante ou depois substitui.
  */
-export type ConditionMerge = 'replace' | 'refresh' | 'strongest';
+export type ConditionMerge = 'replace' | 'refresh' | 'strongest' | 'longest';
 
 /**
  * A FAMÍLIA de golpe que a condição escala (`damageDealtPercent`). É vocabulário de skill, não
@@ -50,6 +74,13 @@ export interface DamagePercentBySource {
   readonly spell?: number | undefined;
 }
 
+/** Um tique AINDA por vir na fila do Tibia (M31-02) — sem `kind`/`damageType`/`source`: são os
+ * mesmos do tique corrente, `queue` não os repete. */
+export interface QueuedTick {
+  readonly amount: number;
+  readonly intervalMs: number;
+}
+
 /**
  * O tique de uma condição. `heal` repõe vida; `damage` (CMB-07) é um DANO AO LONGO DO TEMPO,
  * com tipo e origem próprios para entrar no MESMO resolver canônico do golpe.
@@ -57,13 +88,42 @@ export interface DamagePercentBySource {
  * `kind` é OPCIONAL de propósito: um snapshot anterior ao CMB-07 gravou só `{ amount,
  * intervalMs }`, e o único tique que existia era cura. Ausente é `heal`, e é o que mantém o
  * formato antigo legível sem bump.
+ *
+ * `queue` (M31-02) é o QUE FALTA depois deste tique, em ordem — a lista do Tibia gerada por
+ * `damageOverTimeTicks`. Ausente é o tique antigo, que se repete a `intervalMs` até
+ * `expiresAtMs`; presente, mesmo `[]`, é a fila nova, que PARA de tiquetar quando esgota, antes
+ * do vencimento se for o caso (`ConditionDamage::executeCondition` do Canary faz o mesmo).
  */
 export interface ConditionTick {
   readonly amount: number;
   readonly intervalMs: number;
-  readonly kind?: 'heal' | 'damage';
+  /**
+   * `'soul'` (#593) é o `CONDITION_SOUL` do Canary: um ponto de alma por tique, aplicado pelo
+   * ganho de XP (`hunt.ts`), nunca declarado por `ConditionSpec` de conteúdo — é por isso que
+   * `conditionFromSpec` não tem um `case` para ele.
+   */
+  readonly kind?: 'heal' | 'damage' | 'soul';
   readonly damageType?: DamageType;
   readonly source?: DamageSource;
+  readonly queue?: readonly QueuedTick[];
+}
+
+/**
+ * Para onde a condição `feared` foge (M44-04, #622) — o estado que `ConditionFeared` do Canary
+ * guarda no próprio objeto (`fleeingFromPos`, `fleeIndx`). Viaja no snapshot junto da condição,
+ * porque é a mesma vida útil dela: a hunt retomada no meio do medo continua fugindo do mesmo
+ * lugar, na mesma direção.
+ */
+export interface FleeState {
+  /** O tile do LANÇADOR quando a condição entrou (`CONDITION_PARAM_CASTER_POSITION`). */
+  readonly from: { readonly x: number; readonly y: number; readonly z: number };
+  /**
+   * O `fleeIndx` do Canary: índice `0..7` no vetor de direções de fuga (`FLEE_DIRECTIONS` em
+   * `fear.ts`), ou `NO_FLEE_INDEX` (`99`, o valor inicial do Canary) enquanto nenhuma
+   * direção foi escolhida — o que só acontece se o sorteio do tile do próprio lançador achou os
+   * oito vizinhos intransitáveis.
+   */
+  readonly index: number;
 }
 
 export interface ConditionState {
@@ -89,17 +149,44 @@ export interface ConditionState {
   readonly speedPercent?: number;
   readonly damageDealtPercent?: DamagePercentBySource;
   readonly damageTakenPercent?: number;
+  /**
+   * Bônus/malus FLAT numa skill pelo id do catálogo (#576: Berserk soma 5 em `melee` e tira 10
+   * de `shielding`). Somado por `Conditions.skillBonus`, do MESMO jeito que
+   * `Inventory.skillBonus` soma o bônus de equipamento — as duas fontes se somam porque quem lê
+   * (`#skillLevelOf`/`#spellScaling`/`#defenseSourceOf` em `hunt.ts`) soma as duas, nunca escolhe
+   * uma.
+   */
+  readonly skillDeltas?: Readonly<Record<string, number>>;
+  /**
+   * A luz do lançador (#623: Light, Great Light, Ultimate Light — o `CONDITION_LIGHT` do Canary).
+   * Só APRESENTAÇÃO: nenhuma regra de jogo a lê, o cliente é quem ajusta a escuridão. Viaja com a
+   * condição (e no snapshot, opcional: o formato anterior nunca a teve, sem bump) porque o cliente
+   * precisa de `level`/`color`/`durationMs` para desenhar o decaimento — `level` cai 1 a cada
+   * `durationMs / level`, o `lightChangeInterval` do `ConditionLight`, e a conta mora no cliente
+   * (`expiresAtMs` já é o instante do fim).
+   */
+  readonly light?: LightInfo;
   /** Tique periódico: `amount` a cada `intervalMs`, até `expiresAtMs`. */
   readonly tick?: ConditionTick;
+  /** Só a `feared` de PERSONAGEM (M44-04, #622): de onde e para onde foge. Ausente nas demais. */
+  readonly flee?: FleeState;
+}
+
+/** O que a condição de luz carrega (#623). `durationMs` é o prazo TOTAL da (re)aplicação. */
+export interface LightInfo {
+  readonly level: number;
+  readonly color: number;
+  readonly durationMs: number;
 }
 
 /** O tique normalizado: um snapshot antigo sem `kind` é cura. */
 export interface NormalizedTick {
   readonly amount: number;
   readonly intervalMs: number;
-  readonly kind: 'heal' | 'damage';
+  readonly kind: 'heal' | 'damage' | 'soul';
   readonly damageType?: DamageType;
   readonly source?: DamageSource;
+  readonly queue?: readonly QueuedTick[];
 }
 
 export function tickOf(condition: ConditionState): NormalizedTick | null {
@@ -111,7 +198,40 @@ export function tickOf(condition: ConditionState): NormalizedTick | null {
     kind: tick.kind ?? 'heal',
     ...(tick.damageType === undefined ? {} : { damageType: tick.damageType }),
     ...(tick.source === undefined ? {} : { source: tick.source }),
+    ...(tick.queue === undefined ? {} : { queue: tick.queue }),
   };
+}
+
+/**
+ * O PRÓXIMO tique, avançando a fila do Tibia (M31-02) — puro, sem mexer no estado. `null` é "a
+ * fila esgotou, pare de tiquetar": o chamador não reagenda, exatamente como o Canary faz quando
+ * `damageList` (ou o `getNextDamage` do `periodDamage`) fica vazio. Sem `queue` (tique antigo,
+ * infinito), devolve o MESMO tique — o comportamento de sempre, repetir até `expiresAtMs`.
+ */
+export function advanceTick(tick: NormalizedTick): { amount: number; intervalMs: number; queue?: readonly QueuedTick[] } | null {
+  const queue = tick.queue;
+  if (queue === undefined) return { amount: tick.amount, intervalMs: tick.intervalMs };
+  if (queue.length === 0) return null;
+  const [next, ...rest] = queue as [QueuedTick, ...QueuedTick[]];
+  return { amount: next.amount, intervalMs: next.intervalMs, queue: rest };
+}
+
+/**
+ * O estado de uma condição depois que seu AGENDAMENTO de tique termina — por exaustão da fila do
+ * Tibia (`advanceTick` devolvendo `null`) ou porque o próximo tique cairia depois de
+ * `expiresAtMs`. `nextTickAtMs` sai: não sobra evento de tique pendente para o #334 proteger.
+ *
+ * Quando o tique tem fila (`queue` presente), a força que falta também vai a zero: nenhum tique
+ * a mais será entregue por esta condição, e `strengthOf` precisa refletir isso — senão a
+ * política `strongest` protege uma condição já esgotada (com o `amount` do ÚLTIMO tique já
+ * entregue) contra uma reaplicação real com dano de fato pendente (M31-02, #557). Um tique
+ * PLANO (sem `queue`, o `amount` que nunca muda ao longo da vida da condição) fica como estava
+ * — não há nada obsoleto para limpar nele.
+ */
+export function retiredTick(condition: ConditionState): ConditionState {
+  const { nextTickAtMs: _nextTickAtMs, ...withoutTick } = condition;
+  if (condition.tick?.queue === undefined) return withoutTick;
+  return { ...withoutTick, tick: { ...condition.tick, amount: 0, queue: [] } };
 }
 
 /**
@@ -127,19 +247,76 @@ export function sameTick(a: ConditionState, b: ConditionState): boolean {
 }
 
 /**
- * A magnitude de uma condição, para a política `strongest`. É deliberadamente simples: um DOT
- * vale o dano por tique, haste o percentual, postura o que ela soma. Empate fica com o novo.
+ * A imunidade de condição que barraria esta condição num monstro (`Monster::isImmune(
+ * ConditionType_t)` do Canary, ADR 0041 d.2), ou `null` se nenhuma imunidade declarável a cobre.
+ *
+ * - **`paralyze`**: a condição vive na chave RESERVADA `speed` (haste e paralyze dividem o slot,
+ *   CMB-11), então só o sinal NEGATIVO conta — a imunidade nunca impede o monstro de se acelerar;
+ * - **`drunk`**: casa direto pela chave reservada;
+ * - **DOT** (tique de dano): o tipo de dano do tique dá a condição do Tibia
+ *   (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY` — `physical` sangra, `fire` queima…), como
+ *   `Combat::DamageToConditionType`. Um tique sem `damageType` é físico, o mesmo default de
+ *   `#applyConditionTick`.
+ *
+ * `invisible` NUNCA sai daqui: no Canary a MESMA imunidade é repropositada para "enxerga quem
+ * está invisível" (`Monster::canSeeInvisibility`), e não bloqueia a aplicação da condição.
+ */
+export function conditionImmunityOf(condition: ConditionState): ConditionImmunity | null {
+  if (condition.key === SPEED_CONDITION_KEY) return (condition.speedPercent ?? 0) < 0 ? 'paralyze' : null;
+  if (condition.key === DRUNK_CONDITION_KEY) return 'drunk';
+  // As três de controle (M44-04, #622): `Monster::isImmune` é um bitset sobre todo
+  // `ConditionType_t`, e a chave reservada é o que identifica cada uma.
+  if (condition.key === ROOTED_CONDITION_KEY) return 'rooted';
+  if (condition.key === FEARED_CONDITION_KEY) return 'feared';
+  if (condition.key === PACIFIED_CONDITION_KEY) return 'pacified';
+  if (condition.tick?.kind === 'damage') {
+    return DAMAGE_OVER_TIME_CONDITION_IMMUNITY[condition.tick.damageType ?? 'physical'] ?? null;
+  }
+  return null;
+}
+
+/**
+ * A magnitude de uma condição, para a política `strongest`. Um DOT vale o dano TOTAL que falta
+ * — o tique corrente mais a fila (M31-02, a mesma comparação de `ConditionDamage::
+ * updateCondition` do Canary: `getTotalDamage()`, a soma do `damageList` inteiro, não só o
+ * próximo elemento). Sem fila (tique antigo, infinito), é só o tique. Haste/paralyze valem o
+ * quanto DESVIAM de 1× velocidade — em módulo, porque `speedPercent` tem SINAL (CMB-11, #556):
+ * um paralyze severo (`-80`) precisa vencer um haste fraco (`+5`) na comparação de `strongest`.
+ * Postura o que ela soma. Empate fica com o novo.
  */
 function strengthOf(condition: ConditionState): number {
-  if (condition.tick !== undefined) return condition.tick.amount;
-  if (condition.speedPercent !== undefined) return condition.speedPercent;
+  const tick = condition.tick;
+  if (tick !== undefined) {
+    const remaining = tick.queue?.reduce((sum, queued) => sum + queued.amount, 0) ?? 0;
+    return tick.amount + remaining;
+  }
+  if (condition.speedPercent !== undefined) return Math.abs(condition.speedPercent);
   if (condition.damageTakenPercent !== undefined) return Math.abs(condition.damageTakenPercent);
   const dealt = condition.damageDealtPercent;
   if (dealt !== undefined) {
     return Math.abs(dealt.melee ?? 0) + Math.abs(dealt.distance ?? 0) + Math.abs(dealt.spell ?? 0);
   }
+  if (condition.skillDeltas !== undefined) {
+    let total = 0;
+    for (const delta of Object.values(condition.skillDeltas)) total += Math.abs(delta);
+    return total;
+  }
   return 0;
 }
+
+/**
+ * `generateDamageList` (a lista DECRESCENTE do Tibia) e `damageOverTimeTicks` (a expansão das
+ * duas formas para a fila ordenada de tiques) moram em `@draconya/content`, não aqui — achado da
+ * revisão do #557: `conditionSpecSchema` também precisa delas para conferir `durationMs` contra
+ * o total que a própria fila soma, e `content` não pode importar de `sim`. Reimplementar aqui
+ * criaria DUAS contas para o mesmo número (o defeito que a DT-03 já nomeia no `content`), então
+ * este módulo importa as funções de lá em vez de as ter — `QueuedTick` e o
+ * `DamageOverTimeTick` de `content` têm a MESMA forma (`{ amount, intervalMs }`), então o retorno
+ * de `damageOverTimeTicks` continua compatível com todo código abaixo sem conversão. Reexportadas
+ * aqui porque quem já importava as duas de `./conditions.js` (o `sim` era a única origem antes do
+ * #557) não deveria precisar saber que a origem mudou.
+ */
+export { damageOverTimeTicks, generateDamageList };
 
 /**
  * Compila um `ConditionSpec` do conteúdo para o estado de runtime (CMB-07). `nowMs` é o relógio
@@ -148,12 +325,73 @@ function strengthOf(condition: ConditionState): number {
  * `source` só entra no tique de dano — é o que decide de ONDE o DOT veio (magia, ability,
  * runa). Cura e leitura ignoram.
  */
+/**
+ * O contexto que só a condição `speed` (CMB-11, #556) precisa: a velocidade BASE do alvo no
+ * instante da aplicação (`Creature::getBaseSpeed()` do Canary/TFS — o `mover.speed` de
+ * `movement.ts`, antes de qualquer `speedScale`) e o `Rng` da sessão, para a mesma rolagem que
+ * `ConditionSpeed::startCondition` faz. Nenhum outro efeito usa isto.
+ */
+export interface SpeedContext {
+  readonly baseSpeed: number;
+  readonly rng: Rng;
+}
+
+/**
+ * Resolve o percentual de velocidade de um efeito `speed` (CMB-11, #556) reproduzindo
+ * `ConditionSpeed` do CANARY (`src/creatures/combat/condition.cpp`) — a classe existe também no
+ * TFS, mas o `−40` e o piso abaixo são mecanismo só do Canary; o TFS usa `baseSpeed` direto, sem
+ * deslocamento nem piso (`monsters.cpp`). A precedência é a do ADR 0037 decisão 4.
+ *
+ * - `delta` (o `speedChange` do ATAQUE/DEFESA de monstro, em milésimos) vira a MESMA fórmula
+ *   aleatória que o Canary deriva sozinho em `Monsters::deserializeSpell` — nunca menos que
+ *   -1000 ("Cant be slower than 100%"), `multiplier = 1 + delta/1000`, `mina = multiplier/2`,
+ *   `maxa = multiplier`, `minb = maxb = 40`.
+ * - `formula` (a RUNA/MAGIA) é usada como está, copiada direto do `setFormula` do Lua.
+ *
+ * As duas convergem no MESMO cálculo: `difference = baseSpeed − 40`; `min`/`max` são LINEARES
+ * nele e TRUNCADOS para inteiro — como o C++ trunca ao atribuir um `float` a `int32_t`, nunca
+ * arredonda —; o resultado é sorteado INTEIRO e inclusivo no intervalo (`min === max` não
+ * consome sorteio, como `uniform_random` do Canary não consome quando os limites coincidem).
+ *
+ * O piso (`speedDelta < 40 − baseSpeed`) é aplicado SEMPRE, não só quando `effect.type ===
+ * 'paralyze'`: no Canary ele é condicionado ao `ConditionType_t`, mas aqui `type` é um campo de
+ * CONTEÚDO — nada impede um `formula`/`delta` de sinal de paralyze rotulado por engano como
+ * `haste` (o schema em `packages/content/src/schemas.ts` recusa a maioria desses casos, mas o
+ * caso geral de `formula` não é sempre decidível estaticamente). Sem o piso incondicional, esse
+ * erro de conteúdo produziria `speedDelta` arbitrariamente negativo e um `speedScale` NEGATIVO
+ * (`1 + percent/100 < 0`), que `movement.ts` (`Math.max(1, mover.speed * speedScale)`) trata como
+ * velocidade zero — o personagem congela em vez de só receber o rótulo errado. Aplicar sempre é
+ * seguro: para `haste`/formulas legítimas o resultado nunca chega perto de `40 − baseSpeed`, e a
+ * escala do nosso `speed` já é a do TFS (ADR 0037 decisão 4: Dragon 172, jogador 220), então "40"
+ * é o valor real do Canary, não um número reescalado.
+ */
+export function resolveSpeedPercent(
+  effect: Extract<ConditionEffect, { kind: 'speed' }>, baseSpeed: number, rng: Rng,
+): number {
+  let mina: number; let minb: number; let maxa: number; let maxb: number;
+  if (effect.formula !== undefined) {
+    ({ mina, minb, maxa, maxb } = effect.formula);
+  } else {
+    const speedChange = Math.max(-1000, effect.delta ?? 0);
+    const multiplier = 1 + speedChange / 1000;
+    mina = multiplier / 2; minb = 40; maxa = multiplier; maxb = 40;
+  }
+  const difference = baseSpeed - 40;
+  let min = Math.trunc(mina * difference + minb);
+  let max = Math.trunc(maxa * difference + maxb);
+  if (min > max) { const swap = min; min = max; max = swap; }
+  let speedDelta = (min === max ? min : rng.integer(min, max)) - baseSpeed;
+  if (speedDelta < 40 - baseSpeed) speedDelta = 40 - baseSpeed;
+  return baseSpeed === 0 ? 0 : (speedDelta / baseSpeed) * 100;
+}
+
 export function conditionFromSpec(
   spec: ConditionSpec,
   targetId: string,
   sourceId: string,
   nowMs: number,
   source: DamageSource,
+  speed?: SpeedContext,
 ): ConditionState {
   const base = {
     key: spec.key,
@@ -164,39 +402,66 @@ export function conditionFromSpec(
   } as const;
   const effect: ConditionEffect = spec.effect;
   switch (effect.kind) {
-    case 'haste':
+    case 'speed': {
+      if (speed === undefined) {
+        throw new Error(`condição speed "${spec.key}" precisa do contexto de velocidade (baseSpeed/rng)`);
+      }
       return {
         ...base,
-        speedPercent: effect.speedPercent,
+        speedPercent: resolveSpeedPercent(effect, speed.baseSpeed, speed.rng),
         ...(effect.damageDealtPercent === undefined ? {} : { damageDealtPercent: effect.damageDealtPercent }),
       };
+    }
     case 'buff':
       return {
         ...base,
         ...(effect.damageDealtPercent === undefined ? {} : { damageDealtPercent: effect.damageDealtPercent }),
         ...(effect.damageTakenPercent === undefined ? {} : { damageTakenPercent: effect.damageTakenPercent }),
+        ...(effect.skillDeltas === undefined ? {} : { skillDeltas: effect.skillDeltas }),
       };
     case 'mana-shield':
       return { ...base };
+    case 'drunk':
+      // Sem campo próprio (M31-03, #558): a chave RESERVADA (`DRUNK_CONDITION_KEY`, exigida pelo
+      // schema) é o que `Conditions.hasDrunk` reconhece — o mesmo desenho de `hasManaShield`.
+      return { ...base };
+    case 'invisible':
+      // Sem campo próprio (#592): a chave RESERVADA (`INVISIBLE_CONDITION_KEY`) é o que
+      // `Conditions.hasInvisible` reconhece — o mesmo desenho de `hasDrunk`/`hasManaShield`.
+      return { ...base };
+    case 'rooted':
+    case 'feared':
+    case 'pacified':
+      // Sem campo próprio (M44-04, #622): a chave reservada é o que `Conditions.isActive` lê. O
+      // `feared` de personagem ganha o `flee` DEPOIS, na aplicação (`HuntRuleset#applyConditionTo`):
+      // de onde ele foge só se sabe quando o lançador é conhecido, e este módulo não conhece posição.
+      return { ...base };
     case 'heal-over-time':
       return { ...base, tick: { kind: 'heal', amount: effect.amount, intervalMs: effect.intervalMs } };
-    case 'damage-over-time':
+    case 'damage-over-time': {
+      // M31-02: a fila inteira sai pré-calculada AQUI, pura — o primeiro elemento é o tique
+      // corrente, o resto é `queue`. Sempre >= 1 elemento (`damageOverTimeTicks`).
+      const [first, ...rest] = damageOverTimeTicks(effect) as [QueuedTick, ...QueuedTick[]];
       return {
         ...base,
         tick: {
-          kind: 'damage', amount: effect.amount, intervalMs: effect.intervalMs,
-          damageType: effect.damageType, source,
+          kind: 'damage', amount: first.amount, intervalMs: first.intervalMs,
+          damageType: effect.damageType, source, queue: rest,
         },
       };
+    }
   }
 }
 
-/** O intervalo do tique de um `ConditionSpec`, para o campo agendar o próprio evento. */
+/** O intervalo do PRIMEIRO tique de um `ConditionSpec`, para o campo agendar o próprio evento —
+ * o campo (CMB-07) regenera a condição a cada pulso e nunca acompanha a fila (M31-02: um campo
+ * com a forma `generated` sempre bate o valor de `startDamage`, nunca decresce; o Dragon Lord usa
+ * `rounds` com valor constante, e por isso não diverge). */
 export function specTickIntervalMs(spec: ConditionSpec): number | null {
   const effect = spec.effect;
-  return effect.kind === 'heal-over-time' || effect.kind === 'damage-over-time'
-    ? effect.intervalMs
-    : null;
+  if (effect.kind === 'heal-over-time') return effect.intervalMs;
+  if (effect.kind !== 'damage-over-time') return null;
+  return effect.form === 'generated' ? effect.intervalMs : (effect.rounds[0]?.intervalMs ?? null);
 }
 
 export class Conditions {
@@ -220,11 +485,13 @@ export class Conditions {
    */
   apply(condition: ConditionState): ConditionState | null {
     const previous = this.#active.get(condition.key) ?? null;
-    if (
-      previous !== null
-      && (condition.merge ?? 'refresh') === 'strongest'
-      && strengthOf(previous) > strengthOf(condition)
-    ) {
+    const merge = condition.merge ?? 'refresh';
+    if (previous !== null && merge === 'strongest' && strengthOf(previous) > strengthOf(condition)) {
+      return previous;
+    }
+    // `longest`: `getEndTime() > now + novoTicks` mantém a antiga (`Condition::updateCondition`).
+    // O prazo aqui é absoluto nos dois lados, então é só comparar os vencimentos.
+    if (previous !== null && merge === 'longest' && previous.expiresAtMs > condition.expiresAtMs) {
       return previous;
     }
     this.#active.set(condition.key, condition);
@@ -246,6 +513,32 @@ export class Conditions {
     return this.#active.get(key) ?? null;
   }
 
+  /**
+   * Traduz TODAS as condições do relógio lógico de uma sessão para o de outra, preservando o que
+   * FALTA (#812) — a mesma conta de `Cooldowns.rebase`, aplicada a `expiresAtMs` e a
+   * `nextTickAtMs`, que são instantes do relógio que os gravou. Quem já venceu em `fromMs` sai; o
+   * resto mantém o restante do prazo e a fase do próximo tique, e é a sessão que ENTRA que reagenda
+   * os eventos (`HuntRuleset#armConditions`): o vencimento morava na fila da sessão anterior, e uma
+   * condição herdada sem evento novo nunca acabaria (a haste, o Mana Shield ficariam para sempre).
+   *
+   * Não cancela evento nenhum — quem chama não tem sessão onde cancelar; os eventos da origem
+   * morrem com ela ou são cancelados pelo `onLeave` do ruleset que os agendou.
+   */
+  rebase(fromMs: number, toMs: number): void {
+    const deltaMs = toMs - fromMs;
+    for (const [key, condition] of this.#active) {
+      if (condition.expiresAtMs <= fromMs) {
+        this.#active.delete(key);
+        continue;
+      }
+      this.#active.set(key, {
+        ...condition,
+        expiresAtMs: condition.expiresAtMs + deltaMs,
+        ...(condition.nextTickAtMs === undefined ? {} : { nextTickAtMs: condition.nextTickAtMs + deltaMs }),
+      });
+    }
+  }
+
   get size(): number {
     return this.#active.size;
   }
@@ -257,7 +550,7 @@ export class Conditions {
     return percent === 0 ? 1 : 1 + percent / 100;
   }
 
-  /** O multiplicador de dano CAUSADO por fonte: haste (Swift Foot) e postura somam. */
+  /** O multiplicador de dano CAUSADO por fonte: haste (campo `damageDealtPercent`) e postura somam. */
   damageDealtScale(source: DamageScaleSource): number {
     let percent = 0;
     for (const condition of this.#active.values()) {
@@ -276,4 +569,92 @@ export class Conditions {
   hasManaShield(): boolean {
     return this.#active.has('mana-shield');
   }
+
+  /**
+   * A condição de `key` está VIGENTE em `nowMs`? Diferente de `get(key) !== null`: o vencimento é
+   * um evento da fila (`condition-expire`, `Housekeeping`), que vence DEPOIS do movimento e do
+   * ataque do mesmo instante — e o Canary consulta `hasCondition` contra o `endTime`, não contra o
+   * evento que limpa a lista (`Creature::hasCondition`, `creature.cpp:1585`). Ler o prazo daqui é
+   * o que faz um portão (o golpe, a magia, o passo) enxergar a janela fechada no instante EXATO em
+   * que a condição vence, sem depender da ordem dos eventos. O vencimento é exclusivo: em
+   * `expiresAtMs` a condição já não vale.
+   *
+   * É o portão de `rooted`, `feared` e `pacified` (M44-04, #622): `hasRooted`/`hasFeared`/
+   * `hasPacified` seriam três nomes para a mesma leitura pela chave reservada.
+   */
+  isActive(key: string, nowMs: number): boolean {
+    const condition = this.#active.get(key);
+    return condition !== undefined && condition.expiresAtMs > nowMs;
+  }
+
+  /** A condição `drunk` (M31-03, #558) está ativa? Reconhecida pela chave reservada, como
+   * `hasManaShield` — nenhum campo do estado distingue as duas condições sem tique. */
+  hasDrunk(): boolean {
+    return this.#active.has('drunk');
+  }
+
+  /** A condição `invisible` (#592) está ativa? Reconhecida pela chave reservada, como
+   * `hasDrunk`/`hasManaShield` — nenhum campo do estado distingue esta condição de um `buff`
+   * vazio. É o que `chooseTarget` (`sim/monster/monster.ts`) confere via `Prey.invisible`. */
+  hasInvisible(): boolean {
+    return this.#active.has('invisible');
+  }
+
+  /**
+   * O bônus/malus FLAT somado numa skill pelas condições ativas (#576: Berserk soma 5 em
+   * `melee`, tira 10 de `shielding`). Molde de `Inventory.skillBonus` — soma simples pelas
+   * poucas condições ativas, nunca uma tabela por skill —, e as DUAS fontes se somam em quem lê
+   * (equipamento E poção contam juntos).
+   */
+  skillBonus(skillId: string): number {
+    let total = 0;
+    for (const condition of this.#active.values()) total += condition.skillDeltas?.[skillId] ?? 0;
+    return total;
+  }
+}
+
+/**
+ * As direções cardeais, na ORDEM do enum `Direction` do Canary/TFS (`game/movement/
+ * position.hpp`: `NORTH = 0, EAST = 1, SOUTH = 2, WEST = 3`) — é essa ordem que
+ * `rollDrunkDeviation` usa para transformar o sorteio no rótulo de direção.
+ */
+const DRUNK_CARDINALS: readonly Direction[] = ['north', 'east', 'south', 'west'];
+
+/** O que um passo com drunk ativo decide (M31-03, #558). */
+export interface DrunkDeviation {
+  /**
+   * A direção CARDEAL para onde o passo é desviado, ou `null` quando o sorteio não desvia nada
+   * — inclusive o caso `r === 4` do Canary, que também não desvia (só fala).
+   */
+  readonly direction: Direction | null;
+  /**
+   * `r <= 4`: no Canary é quando a criatura fala "Hicks!" (`Creature::onWalk`). Devolvido para
+   * quando o evento de fala de criatura existir no protocolo; hoje nada o consome (ver
+   * `docs/product/combat.md`) — é presentação, não regra de hunt (ADR 0037 d.6).
+   */
+  readonly speak: boolean;
+}
+
+/**
+ * O desvio de passo da condição `drunk` (M31-03, #558), reproduzindo `Creature::onWalk` do
+ * Canary/TFS (`creatures/creature.cpp:291-301`): sorteia UM `r` com o `Rng` da sessão em [0, 60]
+ * — 61 valores, `uniform_random(0, 60)` do Canary, inclusive nos dois extremos, como
+ * `Rng.integer` já é. Só `r <= 4` (`DIRECTION_DIAGONAL_MASK`, `game/movement/position.hpp`) tem
+ * qualquer efeito; dentro disso, só `r < 4` troca a direção — para a CARDEAL do PRÓPRIO `r`
+ * (índice na ordem do enum do Canary, nunca relacionada à direção que o passo já ia tomar). O
+ * caso `r === 4` representaria uma diagonal lá (`DIRECTION_SOUTHWEST`), que o Canary também NÃO
+ * aplica (`r < DIRECTION_DIAGONAL_MASK` dá falso) — só fala. O próprio ALGORITMO do Canary é quem
+ * nunca troca para uma diagonal nesse ramo — não uma limitação do motor de destino: o Draconya
+ * TEM passo diagonal de criatura (`monster/step.ts`, ADR 0009 — o passo guloso anda nas oito
+ * direções, e `movement.ts` cobra ×3 de duração dele). Este caso não precisa de tratamento
+ * especial aqui porque o `r === 4` do Canary nunca chega a pedir uma direção nova, não porque
+ * uma diagonal aqui fosse impossível de representar.
+ *
+ * Quem chama SÓ rola quando a criatura tem drunk (`Conditions.hasDrunk`) — uma criatura sem a
+ * condição nunca consome este sorteio, a mesma regra do `chance` ausente de uma ability (CMB-06).
+ */
+export function rollDrunkDeviation(rng: Rng): DrunkDeviation {
+  const r = rng.integer(0, 60);
+  if (r > 4) return { direction: null, speak: false };
+  return { direction: r < 4 ? (DRUNK_CARDINALS[r] as Direction) : null, speak: true };
 }

@@ -1,15 +1,10 @@
-import type { HuntDifficulty, Point } from '@draconya/content';
+import type { Point } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../rng.js';
 import { Spawner, pickByWeight } from './spawner.js';
 
-const cautious: HuntDifficulty = {
-  monsterCount: 4,
-  composition: [{ monsterId: 'rat', weight: 1 }],
-  respawnDelayMs: 30_000,
-};
 const points: Point[] = [{ x: 5, y: 5, z: 7 }, { x: 15, y: 5, z: 7 }];
-const positionOf = (i: number) => ({ at: points[i] as Point, radius: 3 });
+const ratPointOf = (i: number) => ({ at: points[i] as Point, radius: 3, monsterId: 'rat' });
 const open = () => false;
 
 describe('pickByWeight', () => {
@@ -52,7 +47,7 @@ describe('pickByWeight', () => {
  */
 function fillAll(
   spawner: Spawner,
-  difficulty: HuntDifficulty,
+  spawnPointOf: (i: number) => ReturnType<typeof ratPointOf>,
   blocked: (x: number, y: number) => boolean = open,
   seed = 'a',
 ) {
@@ -61,7 +56,7 @@ function fillAll(
   const withTaken = (x: number, y: number) => blocked(x, y) || taken.has(`${x},${y}`);
   const filled = [];
   for (let slot = 0; slot < spawner.slots.length; slot++) {
-    const request = spawner.fill(slot, difficulty, positionOf, withTaken, rng);
+    const request = spawner.fill(slot, spawnPointOf, withTaken, rng);
     if (request === null) continue;
     taken.add(`${request.position.x},${request.position.y}`);
     filled.push(request);
@@ -70,49 +65,39 @@ function fillAll(
 }
 
 describe('Spawner', () => {
-  it('creates exactly the density the difficulty says, never a random one', () => {
-    // §14.5: sem variação aleatória de densidade no MVP. Densidade é DADO.
-    const spawner = new Spawner(points.length, cautious);
-    expect(spawner.slots).toHaveLength(cautious.monsterCount);
-    expect(fillAll(spawner, cautious)).toHaveLength(cautious.monsterCount);
+  it('creates exactly one slot per point (#583) — no more pull sizing the density', () => {
+    const spawner = new Spawner(points.length);
+    expect(spawner.slots).toHaveLength(points.length);
+    expect(spawner.slots.map((s) => s.pointIndex)).toEqual([0, 1]);
+    expect(fillAll(spawner, ratPointOf)).toHaveLength(points.length);
   });
 
-  it('spreads the total over the whole loop, evenly, and never piles it on the first points (FUN-123)', () => {
-    // Com 3 monstros em 14 pontos, o rodízio `i % pontos` deixava 11 pontos sem nada e os três
-    // amontoados no começo do laço; espalhados, cobrem o laço inteiro em intervalos iguais.
-    const three = { ...cautious, monsterCount: 3 };
-    expect(new Spawner(14, three).slots.map((s) => s.pointIndex)).toEqual([0, 4, 9]);
-    const eight = { ...cautious, monsterCount: 8 };
-    expect(new Spawner(14, eight).slots.map((s) => s.pointIndex)).toEqual([0, 1, 3, 5, 7, 8, 10, 12]);
-    // Mais monstros que pontos: a mesma quantidade em cada um.
-    expect(new Spawner(2, { ...cautious, monsterCount: 6 }).slots.map((s) => s.pointIndex)).toEqual([0, 0, 0, 1, 1, 1]);
-    expect(new Spawner(0, cautious).slots).toEqual([]);
+  it('an empty route has no slots at all', () => {
+    expect(new Spawner(0).slots).toEqual([]);
   });
 
   it('searches a free tile up to the radius of the POINT, not a constant (FUN-123)', () => {
     // A rota autora o raio; um raio 0 é "neste tile ou nada".
-    const tight = (i: number) => ({ at: points[i] as Point, radius: 0 });
-    const spawner = new Spawner(points.length, cautious);
-    const onCenter = spawner.fill(0, cautious, tight, open, Rng.fromSeed('a'));
+    const tight = (i: number) => ({ at: points[i] as Point, radius: 0, monsterId: 'rat' });
+    const spawner = new Spawner(points.length);
+    const onCenter = spawner.fill(0, tight, open, Rng.fromSeed('a'));
     expect(onCenter?.position).toEqual(points[0]);
     const centerTaken = (x: number, y: number) => x === 5 && y === 5;
-    expect(spawner.fill(0, cautious, tight, centerTaken, Rng.fromSeed('a'))).toBeNull();
+    expect(spawner.fill(0, tight, centerTaken, Rng.fromSeed('a'))).toBeNull();
   });
 
   it('puts the same monster in the same tile every time', () => {
     // Uma hunt cujo spawn "anda" a cada respawn é uma hunt que o jogador não consegue
     // planejar — e planejar é o que o §17.1 vende ao tornar o monstro previsível.
-    const first = fillAll(new Spawner(points.length, cautious), cautious, open, 'a')
-      .map((r) => r.position);
-    const second = fillAll(new Spawner(points.length, cautious), cautious, open, 'b')
-      .map((r) => r.position);
+    const first = fillAll(new Spawner(points.length), ratPointOf, open, 'a').map((r) => r.position);
+    const second = fillAll(new Spawner(points.length), ratPointOf, open, 'b').map((r) => r.position);
     // Semente diferente, mesmas posições: a posição não sorteia.
     expect(second).toEqual(first);
   });
 
   it('never stacks two monsters on the same tile', () => {
-    const dense = { ...cautious, monsterCount: 10 };
-    const tiles = fillAll(new Spawner(points.length, dense), dense)
+    const wide = (i: number) => ({ at: points[i] as Point, radius: 5, monsterId: 'rat' });
+    const tiles = fillAll(new Spawner(points.length), wide)
       .map((r) => `${r.position.x},${r.position.y}`);
     expect(tiles.length).toBeGreaterThan(0);
     expect(new Set(tiles).size).toBe(tiles.length);
@@ -121,76 +106,77 @@ describe('Spawner', () => {
   it('gives nothing for a slot that is already occupied', () => {
     // O lugar volta a render monstro quando `release` o devolve, e não antes. Quem marca a
     // hora do respawn é o evento agendado por quem chamou `release` (FUN-68).
-    const spawner = new Spawner(1, cautious);
-    const [first] = fillAll(spawner, cautious);
+    const spawner = new Spawner(1);
+    const [first] = fillAll(spawner, ratPointOf);
     if (first === undefined) throw new Error('esperava um pedido de spawn');
     spawner.occupy(first.slot, 101);
 
-    expect(spawner.fill(first.slot, cautious, positionOf, open, Rng.fromSeed('a'))).toBeNull();
+    expect(spawner.fill(first.slot, ratPointOf, open, Rng.fromSeed('a'))).toBeNull();
     expect(spawner.release(101)).toBe(first.slot);
-    expect(spawner.fill(first.slot, cautious, positionOf, open, Rng.fromSeed('a'))).not.toBeNull();
+    expect(spawner.fill(first.slot, ratPointOf, open, Rng.fromSeed('a'))).not.toBeNull();
   });
 
   it('carries no clock of its own', () => {
     // O `respawnAtMs` saiu do estado na FUN-68. Guardar o instante aqui e na fila de eventos
     // seria duas verdades sobre a mesma coisa, e a errada só apareceria numa retomada.
-    const spawner = new Spawner(1, cautious);
+    const spawner = new Spawner(1);
     for (const slot of spawner.slots) {
       expect(Object.keys(slot).sort()).toEqual(['occupantId', 'pointIndex']);
     }
   });
 
   it('release tells which slot came back, and nothing for an unknown occupant', () => {
-    const spawner = new Spawner(1, cautious);
-    const [first] = fillAll(spawner, cautious);
+    const spawner = new Spawner(1);
+    const [first] = fillAll(spawner, ratPointOf);
     if (first === undefined) throw new Error('esperava um pedido de spawn');
     spawner.occupy(first.slot, 55);
     expect(spawner.release(999)).toBeNull();
     expect(spawner.release(55)).toBe(first.slot);
   });
 
-  it('changing the difficulty changes density and composition, with no code touched', () => {
-    // O teste que define a issue: as outras três dificuldades são DADOS. Se exigissem
-    // código, o formato estaria errado.
-    const legendary: HuntDifficulty = {
-      monsterCount: 24,
-      composition: [{ monsterId: 'cave-rat', weight: 1 }],
-      respawnDelayMs: 10_000,
-    };
-    const requests = fillAll(new Spawner(points.length, legendary), legendary);
-    expect(requests).toHaveLength(24);
-    expect(requests.every((r) => r.monsterId === 'cave-rat')).toBe(true);
+  it('gives nothing without a declared monster — no composition left to fall back on (#583)', () => {
+    const bare = (i: number) => ({ at: points[i] as Point, radius: 1 });
+    expect(new Spawner(points.length).fill(0, bare, open, Rng.fromSeed('a'))).toBeNull();
   });
 
   it('skips a blocked spot instead of spawning inside a wall', () => {
     const walls = (x: number) => x < 10;
-    const requests = fillAll(new Spawner(points.length, cautious), cautious, walls);
-    // Só o segundo ponto tem espaço — e o rodízio pôs metade dos lugares nele.
+    const requests = fillAll(new Spawner(points.length), ratPointOf, walls);
+    // Só o segundo ponto tem espaço.
     expect(requests.every((r) => r.position.x >= 10)).toBe(true);
-    expect(requests).toHaveLength(cautious.monsterCount / points.length);
+    expect(requests).toHaveLength(1);
   });
 
-  it('a point that DECLARES the monster always spawns it, ignoring the composition (#519)', () => {
+  it('a point that DECLARES the monster always spawns it (#519)', () => {
     // O spawn do Canary é um `<monster name>` por posição, nunca um sorteio — é como a Darashia
     // Dragon Lair funciona: cada um dos 47 pontos declara o SEU monstro.
     const points19: Point[] = [{ x: 5, y: 5, z: 10 }, { x: 15, y: 5, z: 11 }];
     const positionWithMonster = (i: number) =>
       ({ at: points19[i] as Point, radius: 1, monsterId: i === 0 ? 'dragon' : 'dragon-lord' });
-    const spawner = new Spawner(2, { ...cautious, monsterCount: 2 });
+    const spawner = new Spawner(2);
     const rng = Rng.fromSeed('a');
-    const a = spawner.fill(0, cautious, positionWithMonster, open, rng);
-    const b = spawner.fill(1, cautious, positionWithMonster, open, rng);
+    const a = spawner.fill(0, positionWithMonster, open, rng);
+    const b = spawner.fill(1, positionWithMonster, open, rng);
     expect(a?.monsterId).toBe('dragon');
     expect(b?.monsterId).toBe('dragon-lord');
     expect(a?.position).toEqual(points19[0]);
     expect(b?.position).toEqual(points19[1]);
   });
 
-  it('without a declared monster, the composition keeps deciding — unchanged behaviour', () => {
-    const dense = { ...cautious, monsterCount: 1 };
-    const spawner = new Spawner(1, dense);
-    const request = spawner.fill(0, dense, positionOf, open, Rng.fromSeed('a'));
-    expect(request?.monsterId).toBe('rat');
+  it('a point with `monsters` sorts between ITS candidates only (#582)', () => {
+    // O caso do Canary em que dois `<monster>` do mesmo `<spawn>` caem na mesma posição, com
+    // `weight` (`spawn_monster.cpp:90-96`).
+    const heavyDragon = () => ({
+      at: points[0] as Point, radius: 1,
+      monsters: [{ monsterId: 'dragon', weight: 9 }, { monsterId: 'dragon-lord', weight: 1 }],
+    });
+    // Slot nunca ocupado (nenhum `occupy()`): cada `fill()` sorteia de novo, independente.
+    const spawner = new Spawner(1);
+    const rng = Rng.fromSeed('spawn');
+    const draws = Array.from({ length: 500 }, () => spawner.fill(0, heavyDragon, open, rng)?.monsterId);
+    expect(draws.some((d) => d === 'dragon')).toBe(true);
+    expect(draws.some((d) => d === 'dragon-lord')).toBe(true);
+    expect(draws.every((d) => d === 'dragon' || d === 'dragon-lord')).toBe(true);
   });
 
   it('checks the FLOOR of each candidate tile, not the map default (#519)', () => {
@@ -198,42 +184,34 @@ describe('Spawner', () => {
     // senão todo ponto de um recorte multiandar seria checado no andar padrão do mapa.
     const seenFloors: number[] = [];
     const blockedRecordingFloor = (_x: number, _y: number, z = 0) => { seenFloors.push(z); return false; };
-    const spawner = new Spawner(1, cautious);
-    const onZ11 = () => ({ at: { x: 5, y: 5, z: 11 }, radius: 0 });
-    spawner.fill(0, cautious, onZ11, blockedRecordingFloor, Rng.fromSeed('a'));
+    const spawner = new Spawner(1);
+    const onZ11 = () => ({ at: { x: 5, y: 5, z: 11 }, radius: 0, monsterId: 'rat' });
+    spawner.fill(0, onZ11, blockedRecordingFloor, Rng.fromSeed('a'));
     expect(seenFloors).toEqual([11]);
   });
 
   it('passes the RESOLVED monsterId to `blocked` — declared or sorted (#519)', () => {
     // `#spawnBlockedFor` (hunt.ts) precisa saber QUAL monstro para decidir se `blockable`
-    // vale — o spawner é quem resolve isso (composição sorteada, ou o ponto declarado), então
+    // vale — o spawner é quem resolve isso (sorteio entre `monsters`, ou o ponto declarado), e
     // é ele quem precisa repassar.
     const seenIds: Array<string | undefined> = [];
     const blockedRecordingId = (_x: number, _y: number, _z?: number, monsterId?: string) => {
       seenIds.push(monsterId); return false;
     };
-    const spawner = new Spawner(1, cautious);
-    spawner.fill(0, cautious, positionOf, blockedRecordingId, Rng.fromSeed('a'));
-    expect(seenIds).toEqual(['rat']); // sorteado da composição — só 'rat' no peso.
-
-    const declared = new Spawner(1, cautious);
+    const declared = new Spawner(1);
     const onDragon = () => ({ at: points[0] as Point, radius: 1, monsterId: 'dragon' });
-    seenIds.length = 0;
-    declared.fill(0, cautious, onDragon, blockedRecordingId, Rng.fromSeed('a'));
+    declared.fill(0, onDragon, blockedRecordingId, Rng.fromSeed('a'));
     expect(seenIds).toEqual(['dragon']); // declarado no ponto — nunca sorteado.
   });
 
   it('round-trips its state, so a resumed session keeps who is alive where', () => {
-    const spawner = new Spawner(1, cautious);
-    for (const [i, request] of fillAll(spawner, cautious).entries()) {
+    const spawner = new Spawner(1);
+    for (const [i, request] of fillAll(spawner, ratPointOf).entries()) {
       spawner.occupy(request.slot, 7 + i);
     }
-    spawner.release(7);
 
-    const restored = new Spawner(1, cautious, spawner.getState());
+    const restored = new Spawner(1, spawner.getState());
     expect(restored.getState()).toEqual(spawner.getState());
-    // O lugar devolvido continua vago do outro lado da retomada, e os ocupados continuam
-    // ocupados: é o que impede a sessão retomada de duplicar os monstros que já existem.
-    expect(restored.slots.filter((s) => s.occupantId === null)).toHaveLength(1);
+    expect(restored.slots.filter((s) => s.occupantId === null)).toHaveLength(0);
   });
 });

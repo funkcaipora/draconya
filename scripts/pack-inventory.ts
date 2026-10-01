@@ -185,7 +185,7 @@ if (import.meta.main) {
     },
     strict: true,
   });
-  // Os mesmos nomes do `.env.example`; o `.env` não é lido aqui, e `things/1332` é o padrão
+  // Os mesmos nomes do `.env.example`; o `.env` não é lido aqui, e `things/1533` é o padrão
   // documentado nele.
   const thingsDir = resolve(ROOT, values.things ?? process.env.THINGS_DIR ?? 'things');
   if (values.check) {

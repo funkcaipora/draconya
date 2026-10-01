@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { compileItem, itemSchema } from '@draconya/content';
 import type { Item } from '@draconya/content';
 import { NO_DEFENSE } from './combat/defense.js';
-import { Inventory, MAX_STACK } from './inventory.js';
+import {
+  equipmentAbsorb, equipmentCleavePercent, equipmentReflect, Inventory, MAX_STACK,
+} from './inventory.js';
 import type { CarriedItem, ContainerRules, Wearer } from './inventory.js';
 
 // A aparência é resolvida por `buildContent` a partir de `appearances/baseline.json` (FUN-94),
@@ -42,15 +44,47 @@ const catalog = new Map<string, Item>([
   // Bônus de equipamento (#524, kit level 200): skill e velocidade, ativos só enquanto vestido.
   ['ml-hat', define({
     id: 'ml-hat', kind: 'armor', slot: 'head', weight: 5, value: 0,
-    bonuses: { skill: { skillId: 'magic', amount: 1 } },
+    bonuses: { skills: [{ skillId: 'magic', amount: 1 }] },
   })],
   ['dist-armor', define({
     id: 'dist-armor', kind: 'armor', slot: 'chest', weight: 30, value: 0,
-    bonuses: { skill: { skillId: 'distance', amount: 2 } },
+    bonuses: { skills: [{ skillId: 'distance', amount: 2 }] },
+  })],
+  // Várias skills num item só (#688, o collar of red plasma do Canary soma três) e a supressão
+  // de condição (o Dwarven Ring suprime drunk).
+  ['twin-collar', define({
+    id: 'twin-collar', kind: 'amulet', slot: 'neck', weight: 5, value: 0,
+    bonuses: { skills: [{ skillId: 'melee', amount: 3 }, { skillId: 'distance', amount: 3 }] },
+  })],
+  ['dwarven-ring', define({
+    id: 'dwarven-ring', kind: 'ring', slot: 'finger', weight: 2, bonuses: { suppress: ['drunk'] },
   })],
   ['haste-boots', define({
     id: 'haste-boots', kind: 'armor', slot: 'feet', weight: 5, value: 0,
     bonuses: { speed: 20 },
+  })],
+  // Crítico e leech (M30-04, #551): a arma bonifica crítico, o anel bonifica leech de vida e
+  // mana — os dois enquanto vestidos, como `bonuses`.
+  ['crit-sword', define({
+    id: 'crit-sword', kind: 'weapon', slot: 'hand', weight: 40, value: 0, attack: 20,
+    combatModifiers: { criticalChance: 1000, criticalDamage: 3500 },
+  })],
+  ['leech-ring', define({
+    id: 'leech-ring', kind: 'ring', slot: 'finger', weight: 2, value: 0,
+    combatModifiers: { lifeLeech: 1000, manaLeech: 500 },
+  })],
+  // ML especializado por elemento (#680): `firemagiclevelpoints` & cia. do Canary.
+  ['fire-wand', define({
+    id: 'fire-wand', kind: 'weapon', slot: 'hand', weight: 20, value: 0,
+    bonuses: { specializedMagicLevel: { fire: 1 } },
+  })],
+  ['fire-healing-hat', define({
+    id: 'fire-healing-hat', kind: 'armor', slot: 'head', weight: 5, value: 0,
+    bonuses: { specializedMagicLevel: { fire: 2, healing: 1 } },
+  })],
+  ['crit-armor', define({
+    id: 'crit-armor', kind: 'armor', slot: 'chest', weight: 60, value: 0,
+    combatModifiers: { criticalChance: 500 },
   })],
 ]);
 
@@ -72,8 +106,9 @@ const rules: ContainerRules = { backpackSlots: 0, satchelSlots: 0, row: 1 };
 
 describe('capacidade é PESO, no paradigma do Tibia (§21.5)', () => {
   it('recusa o que não cabe, e não guarda pela metade', () => {
-    // Recusar em vez de estourar: o item que não cabe vai para a Caixa de Loot da Sessão, que
-    // é issue própria. Guardar parte dele seria inventar meia espada.
+    // Recusar em vez de estourar: quem chama decide o destino de `over-capacity` (hoje, o item
+    // fica no cadáver do monstro — ADR 0048 decisão 7). Guardar parte dele seria inventar meia
+    // espada.
     const inventory = new Inventory();
     const apertado = wearer({ capacity: 100 });
 
@@ -81,6 +116,24 @@ describe('capacidade é PESO, no paradigma do Tibia (§21.5)', () => {
     expect(inventory.add(carried('sword'), catalog, apertado, rules))
       .toEqual({ ok: false, reason: 'over-capacity' });
     expect([...inventory.items()]).toHaveLength(1);
+  });
+
+  it('forceAdd ignora o peso: usado só onde não há cadáver para segurar o excedente (ADR 0048 d.7)', () => {
+    const inventory = new Inventory();
+    inventory.add(carried('armor'), catalog, wearer({ capacity: 100 }), rules);
+
+    expect(inventory.forceAdd(carried('sword'), catalog, rules).ok).toBe(true);
+    expect([...inventory.items()].map((i) => i.itemId)).toEqual(['armor', 'sword']);
+    // O peso passa a estourar a capacidade de propósito — `forceAdd` não confere `Wearer`.
+    expect(inventory.weight(catalog)).toBeGreaterThan(100);
+  });
+
+  it('forceAdd ainda recusa catálogo desconhecido e pilha grande demais — só o peso é ignorado', () => {
+    const inventory = new Inventory();
+    expect(inventory.forceAdd(carried('nope'), catalog, rules))
+      .toEqual({ ok: false, reason: 'not-carried' });
+    expect(inventory.forceAdd(carried('arrow', 'a', 101), catalog, rules))
+      .toEqual({ ok: false, reason: 'stack-too-large' });
   });
 
   it('o que está EQUIPADO conta no peso', () => {
@@ -245,6 +298,36 @@ describe('equipar (§21.4)', () => {
     expect(greatSwordInHand.weaponAttack(catalog, wearer({ level: 20 }))).toBe(40);
   });
 
+  it('`heldWeapon()`: abaixo do level, 50 com wieldUnproperly e 0 sem — nunca mão vazia (#687)', () => {
+    // O `playerWeaponCheck` do Canary: a arma que ficou na mão depois de uma perda de level bate
+    // metade (`unproperly`) ou não bate. Ao contrário de `weapon()`, não vira punho.
+    const fireSword = define({
+      id: 'fire-sword', kind: 'weapon', slot: 'hand', weight: 23, attack: 24, defense: 20,
+      requires: { level: 30 },
+      weapon: { kind: 'melee', element: { type: 'fire', attack: 11 }, wieldUnproperly: true },
+    });
+    const spikeSword = define({
+      id: 'spike-sword', kind: 'weapon', slot: 'hand', weight: 50, attack: 24, defense: 10,
+      requires: { level: 30 },
+    });
+    const withThem = new Map([...catalog, ['fire-sword', fireSword], ['spike-sword', spikeSword]]);
+    const holding = (id: string): Inventory => Inventory.fromState({
+      backpack: [], equipped: { hand: carried(id) },
+    });
+
+    expect(holding('fire-sword').heldWeapon(withThem, wearer({ level: 20 })))
+      .toEqual({ item: fireSword, damagePercent: 50 });
+    expect(holding('spike-sword').heldWeapon(withThem, wearer({ level: 20 })))
+      .toEqual({ item: spikeSword, damagePercent: 0 });
+    expect(holding('fire-sword').heldWeapon(withThem, wearer({ level: 30 }))?.damagePercent).toBe(100);
+    expect(holding('spike-sword').heldWeapon(withThem, wearer({ level: 30 }))?.damagePercent).toBe(100);
+    // `weapon()` não muda: abaixo do level continua mão vazia (v1/v2).
+    expect(holding('fire-sword').weapon(withThem, wearer({ level: 20 }))).toBeNull();
+    // Vocação errada e mão vazia continuam `null`.
+    expect(holding('druid-staff').heldWeapon(catalog, wearer())).toBeNull();
+    expect(new Inventory().heldWeapon(catalog, wearer())).toBeNull();
+  });
+
   it('recusa equipar o que ele não tem', () => {
     expect(new Inventory().equip('sword', wearer(), catalog))
       .toEqual({ ok: false, reason: 'not-carried' });
@@ -333,6 +416,35 @@ describe('carga e destruição do equipado (#421)', () => {
     ]);
   });
 
+  it('na troca direta, `onEquip` recebe o item que saiu, já de volta no container (#689)', () => {
+    const inventory = new Inventory();
+    const comLugar: ContainerRules = { backpackSlots: 0, satchelSlots: 2, row: 2 };
+    inventory.ensureContainers(comLugar);
+    inventory.add(carried('ring', 'r1'), amuletCatalog, wearer(), comLugar);
+    inventory.add(carried('ring', 'r2'), amuletCatalog, wearer(), comLugar);
+    inventory.equip('r1', wearer(), amuletCatalog);
+    const weight = inventory.weight(amuletCatalog);
+    const events: string[] = [];
+    inventory.setEquipmentObserver({
+      onEquip: (slot, item, previous) => {
+        events.push(`equip:${slot}:${item.instanceId}:${previous?.instanceId ?? '-'}`);
+        // O observer guarda o prazo do que saiu no próprio `onEquip`: a instância já está no
+        // container, e `setOverlay` a acha lá.
+        if (previous !== null) {
+          inventory.setOverlay(previous.instanceId, { ...previous.overlay, durationRemainingMs: 1234 });
+        }
+      },
+      onUnequip: (slot, item) => events.push(`unequip:${slot}:${item.instanceId}`),
+    });
+
+    inventory.equip('r2', wearer(), amuletCatalog);
+    // Mutação que mata: `onEquip` sem o `previous` — o anel que saiu perderia o prazo.
+    expect(events).toEqual(['equip:finger:r2:r1']);
+    const r1 = inventory.satchel.find((item) => item?.instanceId === 'r1');
+    expect(r1?.overlay).toEqual({ durationRemainingMs: 1234 });
+    expect(inventory.weight(amuletCatalog)).toBe(weight);
+  });
+
   it('`charges` sobrevive ao snapshot (RF-08)', () => {
     const inventory = comCarga(1);
     const state = JSON.parse(JSON.stringify(inventory.getState())) as ReturnType<Inventory['getState']>;
@@ -402,6 +514,31 @@ describe('o que o combate lê', () => {
     expect(inventory.skillBonus(catalog, 'distance')).toBe(2);
   });
 
+  it('skillBonus soma CADA skill de um item com várias (#688), não só a primeira', () => {
+    const inventory = new Inventory();
+    inventory.add(carried('twin-collar'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.add(carried('dist-armor'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.equip('twin-collar', wearer(), catalog);
+    expect(inventory.skillBonus(catalog, 'melee')).toBe(3);
+    expect(inventory.skillBonus(catalog, 'distance')).toBe(3);
+    expect(inventory.skillBonus(catalog, 'magic')).toBe(0);
+    // Soma entre peças: o colar (+3) e a armadura (+2) na mesma skill.
+    inventory.equip('dist-armor', wearer(), catalog);
+    expect(inventory.skillBonus(catalog, 'distance')).toBe(5);
+  });
+
+  it('suppresses só é verdade enquanto o item que suprime está vestido (#688)', () => {
+    const inventory = new Inventory();
+    expect(inventory.suppresses(catalog, 'drunk')).toBe(false);
+    inventory.add(carried('dwarven-ring'), catalog, wearer(), rules);
+    // Carregado na mochila não suprime nada.
+    expect(inventory.suppresses(catalog, 'drunk')).toBe(false);
+    inventory.equip('dwarven-ring', wearer(), catalog);
+    expect(inventory.suppresses(catalog, 'drunk')).toBe(true);
+    inventory.unequip('finger', rules);
+    expect(inventory.suppresses(catalog, 'drunk')).toBe(false);
+  });
+
   it('speedBonus soma a velocidade do que está vestido (#524, boots of haste)', () => {
     const inventory = new Inventory();
     expect(inventory.speedBonus(catalog)).toBe(0);
@@ -410,6 +547,110 @@ describe('o que o combate lê', () => {
     expect(inventory.speedBonus(catalog)).toBe(20);
     inventory.unequip('feet', rules);
     expect(inventory.speedBonus(catalog)).toBe(0);
+  });
+
+  it('combatModifiers soma crítico e leech do que está vestido (M30-04, #551)', () => {
+    const inventory = new Inventory();
+    // Ausente sem NENHUMA peça de combatModifiers — o caso comum, sem alocar nada.
+    expect(inventory.combatModifiers(catalog)).toBeUndefined();
+
+    inventory.add(carried('crit-sword'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.add(carried('leech-ring'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.equip('crit-sword', wearer(), catalog);
+    inventory.equip('leech-ring', wearer(), catalog);
+
+    // 1000 pontos-base = 10 % de chance; 3500 = +35 % de dano; leech em fração (÷10000).
+    expect(inventory.combatModifiers(catalog)).toEqual({
+      critical: { chance: 0.1, multiplier: 1.35 },
+      lifeLeech: 0.1,
+      manaLeech: 0.05,
+    });
+
+    // Só enquanto vestido: tirar o anel apaga o leech e mantém o crítico da espada.
+    inventory.unequip('finger', rules);
+    expect(inventory.combatModifiers(catalog)).toEqual({
+      critical: { chance: 0.1, multiplier: 1.35 },
+    });
+  });
+
+  it('specializedMagicLevel soma por elemento só o que está vestido (#680)', () => {
+    const inventory = new Inventory();
+    // Nada declara: `undefined`, e a fórmula fica bit a bit.
+    expect(inventory.specializedMagicLevel(catalog)).toBeUndefined();
+    inventory.add(carried('fire-wand'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.add(carried('fire-healing-hat'), catalog, wearer({ capacity: 1_000 }), rules);
+    // Na mochila não conta.
+    expect(inventory.specializedMagicLevel(catalog)).toBeUndefined();
+    inventory.equip('fire-wand', wearer(), catalog);
+    inventory.equip('fire-healing-hat', wearer(), catalog);
+    expect(inventory.specializedMagicLevel(catalog)).toEqual({ fire: 3, healing: 1 });
+    inventory.unequip('head', rules);
+    expect(inventory.specializedMagicLevel(catalog)).toEqual({ fire: 1 });
+  });
+
+  it('duas peças de crítico somam pontos-base antes de UMA rolagem só (como o Canary soma itens)', () => {
+    const inventory = new Inventory();
+    inventory.add(carried('crit-sword'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.add(carried('crit-armor'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.equip('crit-sword', wearer(), catalog);
+    inventory.equip('crit-armor', wearer(), catalog);
+    // Chance: 1000 + 500 = 1500 pontos-base = 15 %. Dano: só a espada declara, 3500 = +35 %.
+    expect(inventory.combatModifiers(catalog)).toEqual({
+      critical: { chance: 0.15, multiplier: 1.35 },
+    });
+  });
+});
+
+describe('absorção, aumento, reflexo e cleave do equipamento (#552)', () => {
+  const local = new Map<string, Item>([
+    ['glacier', define({
+      id: 'glacier', kind: 'amulet', slot: 'neck', weight: 5, value: 0,
+      mitigation: { resistances: { ice: 0.07 } },
+    })],
+    ['ice-legs', define({
+      id: 'ice-legs', kind: 'armor', slot: 'legs', weight: 5, value: 0,
+      absorb: { ice: { percent: 20, flat: 3 } }, increase: { ice: 10 },
+      reflect: { physical: { flat: 13 } }, cleavePercent: 2,
+    })],
+    ['ice-helmet', define({
+      id: 'ice-helmet', kind: 'armor', slot: 'head', weight: 5, value: 0,
+      absorb: { ice: { flat: 2 } }, increase: { ice: 5 },
+      reflect: { physical: { flat: 29 }, fire: { percent: 10 } }, cleavePercent: 1,
+    })],
+  ]);
+  const dress = (...ids: readonly string[]): Inventory => {
+    const inventory = new Inventory();
+    for (const id of ids) {
+      inventory.add(carried(id), local, wearer({ capacity: 1_000 }), rules);
+      inventory.equip(id, wearer(), local);
+    }
+    return inventory;
+  };
+
+  it('nada vestido que absorva, reflita ou divida: tudo ausente, zero de cleave', () => {
+    const inventory = dress();
+    expect(equipmentAbsorb(inventory, local)).toBeUndefined();
+    expect(equipmentReflect(inventory, local)).toBeUndefined();
+    expect(equipmentCleavePercent(inventory, local)).toBe(0);
+    expect(inventory.combatModifiers(local)).toBeUndefined();
+  });
+
+  it('a absorção percentual é POR ITEM, na ordem de slot do Canary, e a resistência legada entra ×100', () => {
+    // Vestidos fora de ordem: pernas primeiro, colar depois. O Canary varre head → neck → … → legs.
+    const inventory = dress('ice-legs', 'glacier', 'ice-helmet');
+    expect(equipmentAbsorb(inventory, local)).toEqual({
+      items: [{ ice: 7 }, { ice: 20 }],
+      flat: { ice: 5 },
+    });
+  });
+
+  it('reflexo e cleave somam entre os vestidos; o aumento viaja em combatModifiers', () => {
+    const inventory = dress('ice-legs', 'ice-helmet');
+    const reflect = equipmentReflect(inventory, local);
+    expect(reflect?.flat.physical).toBe(42);
+    expect(reflect?.percent.fire).toBe(10);
+    expect(equipmentCleavePercent(inventory, local)).toBe(3);
+    expect(inventory.combatModifiers(local)).toEqual({ increase: { ice: 15 } });
   });
 });
 
@@ -641,5 +882,232 @@ describe('mochila e bolsa posicionais (#160, ADR 0026 decisão 6)', () => {
     expect(state.backpack).toHaveLength(20);
     expect(state.satchel).toHaveLength(10);
     expect(Inventory.fromState(state).getState()).toEqual(inventory.getState());
+  });
+});
+
+describe('vender e descartar (#724, ADR 0048 d.8)', () => {
+  const backpack = define({ id: 'backpack', kind: 'container', slot: 'back', weight: 18, value: 0, initialSlots: 20 });
+  const gem = define({ id: 'gem', kind: 'other', weight: 1, value: 50 });
+  const withContainers = new Map<string, Item>([...catalog, ['backpack', backpack], ['gem', gem]]);
+  const huntera: ContainerRules = { backpackSlots: 20, satchelSlots: 10, row: 5 };
+  const rich = wearer({ capacity: 100_000 });
+
+  const born = (): Inventory => {
+    const inventory = Inventory.fromState({
+      backpack: [], equipped: { back: { instanceId: 'kit:back', itemId: 'backpack', quantity: 1 } },
+    });
+    inventory.ensureContainers(huntera);
+    return inventory;
+  };
+
+  it('vende uma instância ao `value × quantity` do catálogo, e some da mochila', () => {
+    const inventory = born();
+    inventory.add(carried('gem', 'g1', 3), withContainers, rich, huntera);
+    const result = inventory.sellItems(['g1'], withContainers);
+    expect(result).toEqual({ ok: true, removed: [carried('gem', 'g1', 3)], gold: 150 });
+    expect(inventory.findStack('gem')).toBeNull();
+  });
+
+  it('vende N instâncias num lote só, somando o gold de cada uma', () => {
+    const inventory = born();
+    inventory.add(carried('gem', 'g1'), withContainers, rich, huntera);
+    inventory.add(carried('gem', 'g2', 2), withContainers, rich, huntera);
+    const result = inventory.sellItems(['g1', 'g2'], withContainers);
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.gold).toBe(50 + 100);
+    expect(inventory.findStack('gem')).toBeNull();
+  });
+
+  it('`value: 0` recusa o LOTE inteiro — "ninguém compra isto" — sem vender parte dele', () => {
+    const inventory = born();
+    inventory.add(carried('gem', 'g1'), withContainers, rich, huntera);
+    inventory.add(carried('rock', 'r1'), withContainers, rich, huntera);
+    const before = inventory.getState();
+    expect(inventory.sellItems(['g1', 'r1'], withContainers)).toEqual({ ok: false, reason: 'not-for-sale' });
+    expect(inventory.getState()).toEqual(before);
+  });
+
+  it('instância que não está carregada recusa sem mutar — inclusive equipada', () => {
+    const inventory = born();
+    inventory.add(carried('sword', 's1'), withContainers, rich, huntera);
+    inventory.equip('s1', rich, withContainers);
+    const before = inventory.getState();
+    expect(inventory.sellItems(['s1'], withContainers)).toEqual({ ok: false, reason: 'not-carried' });
+    expect(inventory.sellItems(['nunca-existiu'], withContainers)).toEqual({ ok: false, reason: 'not-carried' });
+    expect(inventory.getState()).toEqual(before);
+  });
+
+  it('descarta um item da mochila/bolsa: destrói, sem gold', () => {
+    const inventory = born();
+    inventory.add(carried('gem', 'g1'), withContainers, rich, huntera);
+    const result = inventory.discardItem('g1');
+    expect(result).toEqual({ ok: true, removed: carried('gem', 'g1') });
+    expect(inventory.findStack('gem')).toBeNull();
+  });
+
+  it('descartar instância inexistente ou equipada recusa', () => {
+    const inventory = born();
+    inventory.add(carried('sword', 's1'), withContainers, rich, huntera);
+    inventory.equip('s1', rich, withContainers);
+    expect(inventory.discardItem('s1')).toEqual({ ok: false, reason: 'not-carried' });
+    expect(inventory.discardItem('nunca-existiu')).toEqual({ ok: false, reason: 'not-carried' });
+  });
+});
+
+describe('overlay por instância: imbuements (#604, ADR 0046)', () => {
+  const backpack = define({ id: 'backpack', kind: 'container', slot: 'back', weight: 18, value: 0, initialSlots: 20 });
+  const cheese = define({ id: 'cheese', kind: 'other', weight: 1, value: 0, stackable: true });
+  const withContainers = new Map<string, Item>([...catalog, ['backpack', backpack], ['cheese', cheese]]);
+  const huntera: ContainerRules = { backpackSlots: 20, satchelSlots: 10, row: 5 };
+  const rich = wearer({ capacity: 100_000 });
+  const born = (): Inventory => {
+    const inventory = Inventory.fromState({
+      backpack: [], equipped: { back: { instanceId: 'kit:back', itemId: 'backpack', quantity: 1 } },
+    });
+    inventory.ensureContainers(huntera);
+    return inventory;
+  };
+  const imbued = { imbuements: [{ slot: 0, typeId: 'vampirism-basic', remainingMs: 72_000_000 }] };
+
+  it('item com overlay não entra numa pilha, e a pilha não entra nele', () => {
+    // Mutação que mata: `add` juntar pela regra antiga (mesmo id, empilhável) e apagar o
+    // estado de uma das instâncias na soma.
+    const inventory = born();
+    inventory.add({ ...carried('cheese', 'c1', 3), overlay: imbued }, withContainers, rich, huntera);
+    inventory.add(carried('cheese', 'c2', 4), withContainers, rich, huntera);
+    inventory.add({ ...carried('cheese', 'c3', 2), overlay: imbued }, withContainers, rich, huntera);
+    expect(inventory.backpack[0]).toMatchObject({ instanceId: 'c1', quantity: 3, overlay: imbued });
+    expect(inventory.backpack[1]).toMatchObject({ instanceId: 'c2', quantity: 4 });
+    expect(inventory.backpack[2]).toMatchObject({ instanceId: 'c3', quantity: 2, overlay: imbued });
+    // Sem overlay continua empilhando como sempre.
+    inventory.add(carried('cheese', 'c4', 1), withContainers, rich, huntera);
+    expect(inventory.backpack[1]).toMatchObject({ instanceId: 'c2', quantity: 5 });
+  });
+
+  it('mover uma instância com overlay sobre a pilha do mesmo id TROCA, não empilha', () => {
+    const inventory = born();
+    inventory.add({ ...carried('cheese', 'c1', 3), overlay: imbued }, withContainers, rich, huntera);
+    inventory.add(carried('cheese', 'c2', 4), withContainers, rich, huntera);
+    expect(inventory.move(
+      { container: 'backpack', index: 0 }, { container: 'backpack', index: 1 }, withContainers, rich, huntera,
+    ).ok).toBe(true);
+    expect(inventory.backpack[0]).toMatchObject({ instanceId: 'c2', quantity: 4 });
+    expect(inventory.backpack[1]).toMatchObject({ instanceId: 'c1', quantity: 3, overlay: imbued });
+  });
+
+  it('setOverlay regrava a instância onde ela estiver, sem mudar lugar nem peso', () => {
+    const inventory = born();
+    inventory.add(carried('sword', 's1'), withContainers, rich, huntera);
+    inventory.add(carried('armor', 'a1'), withContainers, rich, huntera);
+    inventory.equip('a1', rich, withContainers);
+    const weight = inventory.weight(withContainers);
+
+    expect(inventory.setOverlay('s1', imbued)).toBe(true);
+    expect(inventory.setOverlay('a1', imbued)).toBe(true);
+    expect(inventory.backpack[0]).toEqual({ ...carried('sword', 's1'), overlay: imbued });
+    expect(inventory.equippedAt('chest')).toEqual({ ...carried('armor', 'a1'), overlay: imbued });
+    expect(inventory.weight(withContainers)).toBe(weight);
+
+    // Overlay vazio TIRA o overlay: a peça volta a ser igual à definição.
+    expect(inventory.setOverlay('s1', { imbuements: [] })).toBe(true);
+    expect(inventory.backpack[0]).toEqual(carried('sword', 's1'));
+    expect(inventory.setOverlay('nope', imbued)).toBe(false);
+  });
+
+  it('o overlay atravessa o snapshot (JSON) e volta igual, equipado ou no container', () => {
+    const inventory = born();
+    inventory.add({ ...carried('sword', 's1'), overlay: imbued }, withContainers, rich, huntera);
+    inventory.add({ ...carried('armor', 'a1'), overlay: imbued }, withContainers, rich, huntera);
+    inventory.equip('a1', rich, withContainers);
+    const state = JSON.parse(JSON.stringify(inventory.getState())) as ReturnType<Inventory['getState']>;
+    const back = Inventory.fromState(state);
+    expect(back.getState()).toEqual(inventory.getState());
+    expect(back.backpack[0]?.overlay).toEqual(imbued);
+    expect(back.equippedAt('chest')?.overlay).toEqual(imbued);
+  });
+});
+
+describe('perder e receber uma peça vestida (#571, perda de item na morte)', () => {
+  const backpack = define({ id: 'backpack', kind: 'container', slot: 'back', weight: 18, value: 0, initialSlots: 20 });
+  const bag = define({ id: 'bag', kind: 'container', slot: 'back', weight: 8, value: 0, initialSlots: 8 });
+  const withContainers = new Map<string, Item>([...catalog, ['backpack', backpack], ['bag', bag]]);
+  const huntera: ContainerRules = { backpackSlots: 20, satchelSlots: 10, row: 5 };
+
+  const dressed = (): Inventory => {
+    const inventory = Inventory.fromState({
+      backpack: [carried('rock', 'r1'), null, carried('rock', 'r2')],
+      satchel: [carried('rock', 's1')],
+      equipped: {
+        back: carried('backpack', 'kit:back'),
+        chest: carried('armor', 'kit:armor'),
+      },
+    });
+    inventory.ensureContainers(huntera);
+    return inventory;
+  };
+
+  it('perder a MOCHILA leva o que ela carrega e zera o vetor — a bolsa, do personagem, fica', () => {
+    const inventory = dressed();
+
+    const lost = inventory.loseEquipped('back');
+
+    expect(lost?.item.instanceId).toBe('kit:back');
+    expect(lost?.contents.map((c) => c.instanceId)).toEqual(['r1', 'r2']);
+    expect(inventory.equippedAt('back')).toBeNull();
+    // O vetor de 20 lugares era DA mochila que se foi: não sobra um container órfão.
+    expect(inventory.backpack).toEqual([]);
+    expect(inventory.satchel.filter((c) => c !== null).map((c) => c?.instanceId)).toEqual(['s1']);
+    // O tamanho inicial volta a zero: `ensureContainers` da bag nova não herda os 20 de antes.
+    inventory.grantEquipped('back', carried('bag', 'death:bag'));
+    inventory.ensureContainers({ backpackSlots: 8, satchelSlots: 10, row: 5 });
+    expect(inventory.backpack).toHaveLength(8);
+  });
+
+  it('perder outra peça vestida não mexe na mochila nem no que ela carrega', () => {
+    const inventory = dressed();
+
+    const lost = inventory.loseEquipped('chest');
+
+    expect(lost).toEqual({ slot: 'chest', item: carried('armor', 'kit:armor'), contents: [] });
+    expect(inventory.equippedAt('back')?.instanceId).toBe('kit:back');
+    expect(inventory.backpack.filter((c) => c !== null)).toHaveLength(2);
+    expect(inventory.loseEquipped('chest')).toBeNull();
+  });
+
+  it('avisa o observer como `destroy`: quem cancela o prazo do anel e a bota de haste depende dele', () => {
+    const inventory = dressed();
+    const seen: string[] = [];
+    inventory.setEquipmentObserver({
+      onEquip: (slot, item) => seen.push(`equip:${slot}:${item.instanceId}`),
+      onUnequip: (slot, item) => seen.push(`unequip:${slot}:${item.instanceId}`),
+    });
+
+    inventory.loseEquipped('chest');
+    inventory.loseEquipped('back');
+    inventory.grantEquipped('back', carried('bag', 'death:bag'));
+
+    expect(seen).toEqual(['unequip:chest:kit:armor', 'unequip:back:kit:back', 'equip:back:death:bag']);
+  });
+
+  it('`grantEquipped` recusa slot ocupado — trocar por cima destruiria em silêncio o que estava lá', () => {
+    const inventory = dressed();
+    expect(inventory.grantEquipped('back', carried('bag', 'death:bag'))).toBe(false);
+    expect(inventory.equippedAt('back')?.instanceId).toBe('kit:back');
+    expect(inventory.grantEquipped('head', carried('helmet', 'gift:helmet'))).toBe(true);
+    expect(inventory.equippedAt('head')?.instanceId).toBe('gift:helmet');
+  });
+
+  it('sem mochila nas costas o loot vai para a bolsa, e com a bag concedida volta a ir para ela', () => {
+    const inventory = dressed();
+    inventory.loseEquipped('back');
+    const rich = wearer({ capacity: 10_000 });
+    // Sem mochila: a bolsa recebe (ADR 0026 d.6).
+    expect(inventory.add(carried('rock', 'loot-1'), withContainers, rich, huntera).ok).toBe(true);
+    expect(inventory.satchel.some((c) => c?.instanceId === 'loot-1')).toBe(true);
+    // Com a bag, o próximo loot cai nela.
+    inventory.grantEquipped('back', carried('bag', 'death:bag'));
+    inventory.ensureContainers({ backpackSlots: 8, satchelSlots: 10, row: 5 });
+    expect(inventory.add(carried('rock', 'loot-2'), withContainers, rich, huntera).ok).toBe(true);
+    expect(inventory.backpack[0]?.instanceId).toBe('loot-2');
   });
 });

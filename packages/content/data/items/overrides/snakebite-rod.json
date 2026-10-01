@@ -1,0 +1,21 @@
+{
+  "id": "snakebite-rod",
+  "reason": "Reconciliação do importador de itens (#573/#574) contra o Canary items.xml em `47dfd51f4528`: requires.level: (ausente) → 6; weapon.manaPerHit: 1 → 2.",
+  "patch": {
+    "requires": {
+      "vocationId": "druid",
+      "level": 6
+    },
+    "weapon": {
+      "kind": "wand",
+      "family": "rod",
+      "range": 3,
+      "damageType": "earth",
+      "manaPerHit": 2,
+      "damage": {
+        "min": 8,
+        "max": 18
+      }
+    }
+  }
+}

@@ -17,7 +17,7 @@ const catalogue = (): Catalogue => ({
   hunts: [],
   monsters: [],
   vocations: [],
-  vocationLevel: 0,
+  charms: [], vocationLevel: 0,
   items: [
     { id: 'life-ring', name: 'Life Ring', appearanceId: 1, weight: 1, slot: 'finger', twoHanded: false, kind: 'ring' },
     { id: 'steel-axe', name: 'Steel Axe', appearanceId: 4, weight: 1, slot: 'hand', twoHanded: false, kind: 'weapon' },
@@ -207,5 +207,78 @@ describe('AutomationsPanel — Follow de membro (#406, ADR 0035 d.9/§24-25.1)',
 
     hud.set((state) => ({ ...state, followState: { active: true, targetId: 'p1' } }));
     expect(await render()).not.toContain('Follow interrompido');
+  });
+});
+
+describe('AutomationsPanel — bloco Loot com busca (#722, #764, ADR 0048 d.2/d.4)', () => {
+  it('desenha o Select do filtro e o campo de busca, mas NÃO o catálogo inteiro sem busca nem item marcado', async () => {
+    const html = await render();
+    expect(html).toContain('Loot');
+    expect(html).toContain('Pegar tudo, exceto…');
+    expect(html).toContain('Pegar só…');
+    expect(html).toContain('Buscar item…');
+    // #764: sem query e sem nada marcado, nenhuma linha do catálogo (~1858 no jogo real) monta.
+    expect(html).not.toContain('automation-loot-row');
+    expect(html).toContain('Busque um item para adicionar ao filtro.');
+  });
+
+  it('o filtro do rascunho decide a opção selecionada do Select', async () => {
+    edit((draft) => ({ ...draft, loot: { filter: 'accept', itemIds: [], autoSell: [] } }));
+    expect(await render()).toMatch(/<option[^>]*value="accept"[^>]*selected/);
+
+    edit((draft) => ({ ...draft, loot: { filter: 'skip', itemIds: [], autoSell: [] } }));
+    expect(await render()).toMatch(/<option[^>]*value="skip"[^>]*selected/);
+  });
+
+  it('item marcado em itemIds aparece SEMPRE, mesmo sem busca — e só ele', async () => {
+    edit((draft) => ({ ...draft, loot: { filter: 'skip', itemIds: [], autoSell: [] } }));
+    expect((await render()).match(/automation-loot-row"/g) ?? []).toHaveLength(0);
+
+    edit((draft) => ({ ...draft, loot: { filter: 'skip', itemIds: ['spike-sword'], autoSell: [] } }));
+    const html = await render();
+    expect((html.match(/automation-loot-row"/g) ?? []).length).toBe(1);
+    expect(html).toContain('Spike Sword');
+    // 2 automações (sempre ligadas na fixture) + 1 interruptor do item marcado (sem autovenda,
+    // porque a fixture não declara `value`) = 3 interruptores no total.
+    expect((html.match(/role="switch"/g) ?? []).length).toBe(3);
+  });
+
+  it('item sem `value` no catálogo não ganha o interruptor de autovenda', async () => {
+    // A fixture não declara `value` em nenhum item: mesmo marcado, nenhum segundo interruptor
+    // (autovenda) aparece na linha dele.
+    edit((draft) => ({ ...draft, loot: { filter: 'skip', itemIds: ['spike-sword'], autoSell: [] } }));
+    const html = await render();
+    expect(html).not.toContain('automaticamente ao coletar');
+  });
+
+  it('item COM value > 0 ganha o interruptor de autovenda, e a fiação chama toggleAutoSellItem/toggleLootItem', async () => {
+    hud.set((state) => ({
+      ...state,
+      catalogue: {
+        ...catalogue(),
+        items: [
+          ...catalogue().items,
+          { id: 'topaz-ring', name: 'Topaz Ring', appearanceId: 9, weight: 1, slot: 'finger', twoHanded: false, kind: 'ring', value: 50 },
+        ],
+      },
+    }));
+    edit((draft) => ({ ...draft, loot: { filter: 'skip', itemIds: ['topaz-ring'], autoSell: [] } }));
+    const html = await render();
+    expect(html).toContain('Topaz Ring');
+    expect(html).toContain('Vender Topaz Ring automaticamente ao coletar');
+    // 2 automações + 2 interruptores do item marcado (loot + autovenda, `value: 50`) = 4.
+    expect((html.match(/role="switch"/g) ?? []).length).toBe(4);
+
+    const source = await readFile(new URL('./AutomationsPanel.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('toggleLootItem(item.id)');
+    expect(source).toContain('toggleAutoSellItem(item.id)');
+    expect(source).toContain('item.value !== undefined && item.value > 0');
+  });
+
+  it('a decisão de quais linhas mostrar vem de `visibleLootItems`, com o limite exportado — por fonte', async () => {
+    const source = await readFile(new URL('./AutomationsPanel.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('visibleLootItems(');
+    expect(source).toContain('LOOT_SEARCH_RESULT_LIMIT');
+    expect(source).toContain('lootRows.truncated');
   });
 });
