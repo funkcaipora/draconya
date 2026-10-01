@@ -184,10 +184,27 @@ desse espaço — o detalhe de produto está em `docs/product/items.md` ("Esfola
   esfolável nos 310 s dos 670 s. Por isso `CorpseState` ganha `diedAtMs` (a idade) e `skinned` (a
   tentativa gasta o cadáver, com ou sem sucesso), ambos opcionais na leitura — sem bump de
   `SNAPSHOT_FORMAT_VERSION`; cadáver sem `diedAtMs` não se esfola à mão (idade desconhecida).
-- **À mão é `use-item-on` com `target: { position }`** no tile do cadáver, com o alcance
-  `canUseFar` do ADR 0049 d.3 (7×5, mesmo andar, linha de visão). O material da esfola manual
-  passa só ele pelo filtro (`#collectItems`, extraído de `#collectFromCorpse`): o que já esperava
-  no cadáver não é reprocessado.
+- **A tentativa REINICIA o decaimento do cadáver**, e por isso a vida do loot (decisão 6) muda
+  quando ele é esfolado. O Canary roda `topItem:transform(skin.after)` com ou sem sucesso, e o
+  `Item::setID` do item novo reinicia o `duration` (e limpa o dono): o Dragon esfolado vira o
+  `4026` (300 s) e depois o `4027` (60 s) — 360 s a partir da TENTATIVA, no abate pelo bot ou à mão
+  aos 100 s ou aos 305 s —, e não mais o que faltava dos 670 s. `Skinning.stages[].afterTtlMs` guarda
+  essa vida por estágio (o importador soma o `duration` do `after` e a cadeia `decayTo` dele,
+  `corpseTtlMsFromChain`), e a tentativa cancela o evento `CORPSE` do abate e agenda outro
+  `afterTtlMs` à frente (`#retimeCorpse`). O que o filtro deixou no cadáver, ou que não coube, vive
+  esse prazo e some com ele. Uma tentativa recusada (fora da janela, ferramenta errada) não mexe no
+  prazo. O dono do cadáver (`CORPSEOWNER`) que o `setID` também limpa NÃO é reproduzido aqui: o
+  `ownerId`/`eligible` do cadáver (decisão 4) seguem os do abate — o `setID` limpa o dono em TODA
+  troca de id, inclusive a do primeiro decaimento aos 10 s, e o ADR não o modelou nem para o cadáver
+  que nunca é esfolado.
+- **À mão é `use-item-on` com `target: { position }`** no tile do cadáver, com o `Actions::canUse`
+  do Canary: mesmo andar e adjacente (`|dx| <= 1`, `|dy| <= 1`), SEM linha de visão. O
+  `skinning.lua` registra a `Action` sem `allowFarUse`, então o `canUseFar` 7×5 que o ADR 0049 d.3
+  descreve (o das runas, que o pedem) não vale para esta ferramenta; longe, o Canary recusa
+  `TOOFARAWAY` e anda o jogador até o cadáver — aqui o cliente manda o `walk-to` antes, e o servidor
+  recusa `out-of-range` sem andar por ele, como `take-loot` (decisão 4) e `useOnMap` (ADR 0050). O
+  material da esfola manual passa só ele pelo filtro (`#collectItems`, extraído de
+  `#collectFromCorpse`): o que já esperava no cadáver não é reprocessado.
 - **Em party**, com `splitLoot` ligado esfola o primeiro elegível com a ferramenta e o material
   vai para a bolsa; com ele desligado esfola o dono sorteado do cadáver.
 - **O material NÃO tem origem própria**: entra como `loot` (a origem padrão de `item_instance`),

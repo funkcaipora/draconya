@@ -84,11 +84,16 @@ fora, com o motivo).
 skinning` lê o `skinning.lua` do Canary (`config[ferramenta][id do cadáver]`) e a cruza com o
 `monster.corpse` e a cadeia de decaimento (`duration`/`decayTo`) de cada monstro do catálogo — uma
 linha por MONSTRO, com a ferramenta, o material, a `chance` (`SKINNING_CHANCE_SCALE = 100000`) e
-os `stages` esfoláveis do cadáver (`canaryItemId` é identidade para o Scavenge, nunca arte). Depende
+os `stages` esfoláveis do cadáver (`canaryItemId` é identidade para o Scavenge, nunca arte;
+`afterTtlMs` é a vida do cadáver DEPOIS da tentativa — o `duration` do `after` do Lua mais a cadeia
+`decayTo` dele no `items.xml`, 360 s em todas as 62 entradas, porque o `transform` do Canary reinicia
+o decaimento). Depende
 de `data/monsters/**` e `data/items/**` já promovidos: monstro, ferramenta ou material fora do
 catálogo saem em `skipped` no relatório, e o boot recusa referência solta. A obsidian knife, a
 blessed wooden stake e o `rabbits-foot` são itens AUTORAIS (o importador de itens não classifica
-`primarytype="tools"`); reimportar depois de promover mais monstros recupera o que ficou de fora.
+`primarytype="tools"`); o pé de coelho vale 50 gp (o preço de compra de `shops.lua`, que o `items.xml`
+não dá) e NÃO leva `creatureProduct`, porque o flag vem do `primarytype="creature products"`.
+Reimportar depois de promover mais monstros recupera o que ficou de fora.
 
 Qualquer `data/<tipo>/` (`items/`, `monsters/`) aceita, além do arquivo autoral direto na pasta,
 duas subpastas que `load.ts` lê sozinho, sem precisar de mudança em `content.ts`:

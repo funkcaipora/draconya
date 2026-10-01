@@ -507,13 +507,28 @@ da sessão) que tenha a ferramenta, e o material vai para a bolsa. A tentativa m
 (`skinned`), com ou sem sucesso: o Canary o transforma no "esfolado" nos dois casos, e esse não
 é chave de tabela nenhuma — **esfola-se uma vez só**.
 
-**À mão: `use-item-on` da ferramenta com o tile do cadáver por alvo** (`target: { position }`,
-ADR 0049 d.3). O servidor confere alcance (`canUseFar` do Canary: 7 tiles em x, 5 em y, mesmo
-andar, com linha de visão — `out-of-range`), que a ferramenta é a do monstro, que o cadáver não
-foi esfolado e que o estágio atual é esfolável — tudo o que o Canary responde com "not possible"
-é `not-usable`, e nenhuma recusa consome sorteio. Vale o cadáver do TOPO da pilha do tile (o
-`getTopDownItem` do Canary). O material passa pelo filtro de quem esfolou; o que sobra fica no
-cadáver, sem reprocessar o que já esperava lá. A exaustão de ação (1 s) é a de todo `use-item`.
+**À mão: `use-item-on` da ferramenta com o tile do cadáver por alvo** (`target: { position }`).
+O servidor confere alcance — o `Actions::canUse` do Canary: **mesmo andar e adjacente, `|dx| <= 1` e
+`|dy| <= 1`, sem linha de visão** (`out-of-range`); o `skinning.lua` registra a `Action` sem
+`allowFarUse`, então o `canUseFar` 7×5 das runas (ADR 0049 d.3) NÃO vale aqui, e é a mesma régua de
+`use-on-map` (ADR 0050) e de `take-loot`. Longe, o Canary recusa `TOOFARAWAY` e anda o jogador até o
+cadáver: aqui o cliente manda o `walk-to` antes e o servidor não anda por ele. Confere ainda que a
+ferramenta é a do monstro, que o cadáver não foi esfolado e que o estágio atual é esfolável — tudo
+o que o Canary responde com "not possible" é `not-usable`, e nenhuma recusa consome sorteio. Vale o
+cadáver do TOPO da pilha do tile (o `getTopDownItem` do Canary). O material passa pelo filtro de
+quem esfolou; o que sobra fica no cadáver, sem reprocessar o que já esperava lá. A exaustão de ação
+(1 s) é a de todo `use-item`.
+
+**A tentativa REINICIA o decaimento do cadáver.** Com ou sem sucesso o Canary roda
+`topItem:transform(skin.after)`, e o `Item::setID` do item novo reinicia o `duration`: o cadáver
+esfolado vive o `duration` do `after` mais a cadeia `decayTo` dele (o Dragon esfolado vira o `4026`,
+300 s, e depois o `4027`, 60 s — **360 s a partir da tentativa**, em qualquer idade em que se esfolou
+e para todos os 62 monstros da tabela). Aqui a tentativa — a do bot no abate e a manual, e só a que
+chega a sortear (a recusada não mexe) — cancela o evento `CORPSE` que o abate marcou em
+`corpseTtlMs` e agenda outro `afterTtlMs` à frente (`#retimeCorpse`). O loot que o filtro deixou no
+cadáver, ou que não coube, vive esse prazo: uma pele de Dragon deixa o cadáver ficar 310 s a menos
+do que o de um Dragon que ninguém esfolou. O prazo está na fila da sessão, então sobrevive ao
+snapshot e não depende de haver alguém olhando.
 
 **O Scavenge (charm menor, 60/90/120 por tier) ENCOLHE o `chanceRange`**: `100 000 × chance / 100`
 em vez de `100 000`, e o sucesso continua `random <= value` — a chance vira `25 000 / range`, e o
@@ -528,12 +543,17 @@ charm**. Está em `sim/skinning.ts` (`skinningChanceRange`) e a PR do #626 a lis
 rever.
 
 **Parâmetros e onde moram.** A chance, o material, a ferramenta e os estágios (`canaryItemId` +
-`durationMs`): `packages/content/data/skinning/generated/skinning.json` (`skinningSchema`,
+`durationMs` + `afterTtlMs`, a vida do cadáver depois da tentativa, que o importador soma do `after`
+do Lua e da cadeia `decayTo` dele no `items.xml`):
+`packages/content/data/skinning/generated/skinning.json` (`skinningSchema`,
 `SKINNING_CHANCE_SCALE = 100000`). Os três itens novos — `obsidian-knife`, `blessed-wooden-stake`
 e `rabbits-foot` (o material do coelho) — são AUTORAIS em `content/data/items/` (peso do
 `items.xml`; o importador de itens não classifica `primarytype="tools"`), com a linha de
-aparência em `appearances/baseline.json`. O charm: `charms/generated/charms.json` (`scavenge`,
-`chance [60, 90, 120]`).
+aparência em `appearances/baseline.json`. O `rabbits-foot` vale **50 gp**, o preço de compra dos
+NPCs (`data/scripts/lib/shops.lua:638` e `grizzly_adams.lua:61`) — o `items.xml` só dá o peso — e
+NÃO é `creatureProduct`, porque o flag vem do `primarytype="creature products"` do `items.xml` e o
+12172 não o declara (o Gut não o soma). A faca e a estaca valem 0: nenhuma loja de NPC (`shops.lua`) as lista. O charm:
+`charms/generated/charms.json` (`scavenge`, `chance [60, 90, 120]`).
 
 **O que diverge do Tibia, e por quê.**
 
@@ -551,6 +571,11 @@ aparência em `appearances/baseline.json`. O charm: `charms/generated/charms.jso
   de 4 h), o mármore e o gelo (escultura de item de mapa) e o ramo `target.itemid == 4301` da
   faca (quest Rottin Wood: `12172` garantido no segundo estágio do cadáver do coelho, sem sorteio
   e sem consumir o cadáver, sem conferir a quest). O `sim` não tem quest.
+- **O dono do cadáver não é limpo pela esfola.** O `Item::setID` do `transform(skin.after)` limpa o
+  `CORPSEOWNER` (e o faz em toda troca de id, o primeiro decaimento aos 10 s inclusive), então no
+  Canary o cadáver esfolado abre para qualquer um. Aqui `ownerId`/`eligible` seguem os do abate
+  durante toda a vida do cadáver (ADR 0048 d.4 — a janela de dono do Canary, de um estágio, nunca
+  foi modelada, nem para o cadáver que ninguém esfola): fica para o dia em que ela for.
 
 ### O id da instância é determinístico, e é isso que dá idempotência
 

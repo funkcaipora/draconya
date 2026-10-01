@@ -317,7 +317,7 @@ ao FIM do abate:
 | # | Onde | Quando | Rolagem |
 |---|---|---|---|
 | 1 | `#onMonsterDied` → `#skinAtDeath`/`#rollSkin`, DEPOIS de todo o sorteio de loot (gold, itens, o resto de supply/munição da party) e antes da XP | abate de monstro não invocado, com um elegível/dono que tenha a ferramenta DO MONSTRO na mochila ou na bolsa, e o monstro tenha entrada em `content.skinning` | `rng.integer(1, range) <= chance`, `chance` 25 000 e `range` 100 000 — ou `100 000 × charm / 100` com o Scavenge que vale para o estágio do cadáver |
-| 2 | `#performSkin` (`use-item-on` da ferramenta com o tile do cadáver) | à mão, com alcance `canUseFar`, ferramenta certa, cadáver não esfolado e estágio esfolável | a mesma rolagem, no `session.rng` da sessão |
+| 2 | `#performSkin` (`use-item-on` da ferramenta com o tile do cadáver) | à mão, com alcance `canUse` (adjacente, sem linha de visão), ferramenta certa, cadáver não esfolado e estágio esfolável | a mesma rolagem, no `session.rng` da sessão |
 
 **A regra que faz do estágio "declarado":** com a ferramenta ausente, com a ferramenta errada,
 num monstro sem entrada de esfola ou fora do `combat-v4`, o `session.rng` NÃO é tocado — uma hunt de
