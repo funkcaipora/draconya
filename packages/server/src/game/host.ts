@@ -1190,6 +1190,13 @@ const SLOT_STATE_INTERVAL_MS = 500;
  */
 const RESTING_GRACE_MS = 5 * 60_000;
 
+/**
+ * Quanto tempo o nó guarda a versão durável de um personagem que soltou (#823,
+ * `#retiredVersions`). O ticket vale 30 s; dez minutos cobrem qualquer atraso entre emitir e
+ * conectar com folga, e a poda mantém o mapa do tamanho de quem saiu há pouco.
+ */
+const RETIRED_VERSION_TTL_MS = 10 * 60_000;
+
 const DIRECTION_DX = { north: 0, east: 1, south: 0, west: -1 } as const;
 const DIRECTION_DY = { north: -1, east: 0, south: 1, west: 0 } as const;
 
@@ -1224,6 +1231,25 @@ export class SessionHost {
    * inventada aqui (1, 2…) seria menor que a coluna e descartaria os absolutos em silêncio.
    */
   readonly #durableVersionByCharacter = new Map<string, number>();
+  /**
+   * A maior versão que o nó gravou de um personagem que ele SOLTOU (`release`), e quando (#823).
+   *
+   * O contador some com o `release`, mas o TICKET da próxima sessão pode ter sido emitido ANTES
+   * dele — e o `api` lê a versão na emissão, sem como ver um extrato que o `release` ainda vai
+   * gravar. O caso real: o ticket sai com a versão `c` de um personagem em repouso na Cidade, e
+   * antes de o websocket conectar o `#collectResting` (ou um logout em outra aba) o solta e grava o
+   * extrato de estado `c+1`. A sessão nova adotaria `c` e o PRIMEIRO extrato dela também seria
+   * `c+1`: o ledger o trataria como atrasado e descartaria os absolutos dele (equipamento, skills,
+   * stamina…) em silêncio. Por isso a adoção também faz `max` com este piso.
+   *
+   * Vale para o MESMO nó, que é onde a corrida mora: o ticket é preso ao nó que hospedava o
+   * personagem, então quem o consome é quem soltou. Vive `RETIRED_VERSION_TTL_MS` — bem mais que
+   * os 30 s do ticket — e é podado do mais antigo (a ordem de inserção é a do tempo), para não
+   * crescer com cada personagem que já passou por aqui. Ficam de fora o nó que cai com o ticket
+   * vivo (o contador morre com ele) e um `api` sem versão no ticket; o extrato da sessão nova é
+   * então o único prejudicado, e o seguinte a corrige — todo extrato versionado é o estado inteiro.
+   */
+  readonly #retiredVersions = new Map<string, { readonly version: number; readonly atMs: number }>();
   /**
    * As versões já tomadas por um extrato cuja gravação AINDA NÃO foi confirmada (#823): a
    * chave é `characterId|sessionId|seq`. Falhou ou a resposta se perdeu, a tentativa seguinte
@@ -1680,7 +1706,7 @@ export class SessionHost {
     this.#nameByCharacter.delete(characterId);
     this.#colorsByCharacter.delete(characterId);
     this.#premiumByCharacter.delete(characterId);
-    this.#durableVersionByCharacter.delete(characterId);
+    this.#retireDurableVersion(characterId);
     for (const claim of this.#claimedVersions.keys()) {
       if (claim.startsWith(`${characterId}|`)) this.#claimedVersions.delete(claim);
     }
@@ -5107,6 +5133,19 @@ export class SessionHost {
         goldSpent: Math.max(-owner.goldDelta, 0),
       },
       notableEvents: [],
+      // O ESTADO ABSOLUTO INTEIRO, como `#persistReceipt` (#823, ADR 0060 decisão 10d): o ledger só
+      // escreve um absoluto quando o extrato é mais novo que o que a coluna já viu, e descarta o
+      // mais velho por INTEIRO. Um extrato de estado que não levasse skills, stamina, comida e
+      // storages — e o estoque quando vazio — apagaria, ao chegar na frente, o que só o extrato
+      // de hunt anterior carregava: o treino da hunt, a stamina gasta, as poções usadas. Todos
+      // vêm do mesmo `CharacterRuntime` que a hunt acabou de encerrar (a Cidade o recebe por
+      // `shard.admit`), então são o estado de verdade, nunca um valor antigo.
+      ...(owner.staminaMs === undefined || owner.staminaMs === null
+        ? {}
+        : { staminaMs: owner.staminaMs, staminaUpdatedAtMs: owner.staminaUpdatedAtMs }),
+      skills: owner.skills.getState(),
+      storages: Object.fromEntries(owner.storages),
+      fedMs: owner.fedMs,
       ...(owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       // A promoção (#566, ADR 0042 decisão 1): AUSENTE/`false` nunca é gravado — `promoted` só
       // sobe no ledger (`characters.promoted OR receipt.promoted`), nunca desce.
@@ -5130,9 +5169,12 @@ export class SessionHost {
       // `supplyStock`/`ammunitionStock` do mesmo jeito que o loot da hunt credita — ABSOLUTO,
       // como `ammo` (`receipts.ts`). Sem isto, a carga conjurada na praça sumia no logout: o
       // shard nunca grava as duas fora deste extrato de estado durável.
-      ...(owner.supplyStock.size === 0 ? {} : { supplyStock: Object.fromEntries(owner.supplyStock) }),
-      ...(owner.ammunitionStock.size === 0
-        ? {} : { ammunitionStock: Object.fromEntries(owner.ammunitionStock) }),
+      //
+      // SEMPRE, inclusive vazio (#823): `{}` é "esgotado", e omitir a chave deixaria o ledger
+      // sem o que dizer — o estoque antigo do Postgres, que uma hunt anterior ainda pendente
+      // esvaziou, voltaria na ordem inversa. A mesma regra do extrato de hunt.
+      supplyStock: Object.fromEntries(owner.supplyStock),
+      ammunitionStock: Object.fromEntries(owner.ammunitionStock),
       // Alma (#593): escolher a vocação na praça enche a alma pela primeira vez
       // (`CharacterRuntime.chooseVocation`), e sem este campo o shard perderia esse enchimento
       // no logout — o mesmo buraco que a vocação e o equipamento já tapavam antes do #154.
@@ -5360,8 +5402,31 @@ export class SessionHost {
     const fromTicket = initial?.durableVersion;
     if (fromTicket === undefined) return false;
     const current = this.#durableVersionByCharacter.get(characterId);
-    this.#durableVersionByCharacter.set(characterId, Math.max(current ?? 0, fromTicket));
+    // O piso do que este nó soltou (`#retiredVersions`): o ticket pode ter sido emitido antes do
+    // `release` que gravou um extrato de versão maior.
+    const retired = this.#retiredVersions.get(characterId)?.version ?? 0;
+    this.#durableVersionByCharacter.set(characterId, Math.max(current ?? 0, retired, fromTicket));
     return current === undefined;
+  }
+
+  /**
+   * Solta o contador do personagem em `release`, guardando a versão que ele tinha como piso da
+   * próxima adoção (`#retiredVersions`) e podando o que já passou do prazo.
+   */
+  #retireDurableVersion(characterId: string): void {
+    const version = this.#durableVersionByCharacter.get(characterId);
+    this.#durableVersionByCharacter.delete(characterId);
+    const now = this.#now();
+    // A ordem de inserção é a do tempo: para no primeiro que ainda vale.
+    for (const [id, retired] of this.#retiredVersions) {
+      if (now - retired.atMs <= RETIRED_VERSION_TTL_MS) break;
+      this.#retiredVersions.delete(id);
+    }
+    if (version === undefined) return;
+    // `delete` antes de `set`: regravar uma chave existente a manteria na posição ANTIGA da
+    // ordem de inserção, e a poda de cima pararia no lugar errado.
+    this.#retiredVersions.delete(characterId);
+    this.#retiredVersions.set(characterId, { version, atMs: now });
   }
 
   /**
