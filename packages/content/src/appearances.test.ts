@@ -181,7 +181,7 @@ describe('apresentação de combate: os ids existem no inventário versionado (#
 // bloco PULA — a suíte roda no CI sem pacote de arte, e o que segura lá é o inventário
 // versionado, acima. Com a biblioteca presente, o id tem que existir no ÍNDICE dela (não só no
 // inventário de faixas), e o PNG do primeiro sprite é a evidência quando ele existe.
-const LIBRARY_VERSION = '1332';
+const LIBRARY_VERSION = '1533';
 const LIBRARY_DIR = join(THINGS_DIR, LIBRARY_VERSION, 'library');
 const MANIFEST_PATH = join(LIBRARY_DIR, 'manifest.json');
 const hasLibrary = existsSync(MANIFEST_PATH);

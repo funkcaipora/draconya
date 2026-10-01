@@ -208,7 +208,7 @@ if (import.meta.main) {
     }
     process.exit(stale ? 1 : 0);
   }
-  const version = values.version ?? process.env.THINGS_VERSION ?? '1332';
+  const version = values.version ?? process.env.THINGS_VERSION ?? '1533';
   const pack = readPackInventory(thingsDir, version);
   if (pack === null) {
     console.error(`pacote ${version} não encontrado em ${thingsDir}\n${usage()}`);

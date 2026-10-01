@@ -494,7 +494,7 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     // O teste acima prende que o arquivo existe; este prende que `load.ts` o LÊ. Sem ele,
     // apagar a linha `packs:` do carregador deixaria a suíte verde com a conferência
     // desligada — a mutação que sobreviveu na revisão. O conteúdo real é copiado e um id
-    // que o pacote 1332 não tem entra na tabela; o resto do repositório fica como está.
+    // que o pacote 1533 não tem entra na tabela; o resto do repositório fica como está.
     const copy = mkdtempSync(join(tmpdir(), 'draconya-content-'));
     try {
       cpSync(DATA, copy, { recursive: true });
@@ -503,7 +503,7 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
       expect(text).toMatch(/"rat": 21/);
       writeFileSync(table, text.replace('"rat": 21', '"rat": 999999'));
       expect(() => loadContent(copy))
-        .toThrow('appearances.monsters.rat: outfit 999999 não existe no pacote tibia-1332');
+        .toThrow('appearances.monsters.rat: outfit 999999 não existe no pacote tibia-1533');
     } finally {
       rmSync(copy, { recursive: true, force: true });
     }

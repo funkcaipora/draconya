@@ -113,7 +113,7 @@ data/appearances/baseline.json     # id de conteúdo → id de aparência
 ```jsonc
 {
   "id": "baseline",
-  "pack": "tibia-1332",            // de qual pacote vieram estes números
+  "pack": "tibia-1533",            // de qual pacote vieram estes números
   "monsters": { "rat": 21 },       // → outfitId
   "items": { "spike-sword": 3271 } // → appearanceId
 }
@@ -185,7 +185,7 @@ ninguém conferir arte à mão.
 ## O inventário do pacote (FUN-21)
 
 ```
-data/packs/tibia-1332.json         # quais ids EXISTEM no pacote, por registro, em faixas
+data/packs/tibia-1533.json         # quais ids EXISTEM no pacote, por registro, em faixas
 ```
 
 A tabela acima diz que o rato é o outfit 21; nada conferia que o outfit 21 **existe**. O
@@ -194,7 +194,7 @@ invisível — o cliente pede um quadro que não há e desenha o fallback, a tr�
 causa. O pacote em si mora em `things/`, fora do Git, e o servidor nem o carrega; o que entra
 aqui é a **sombra** dele: `[[100,167],[169,370],…]` por `object`, `outfit`, `effect` e
 `missile`. `buildContent` cruza a tabela com essas faixas e recusa o id que não está em
-nenhuma — `appearances.monsters.rat: outfit 9999 não existe no pacote tibia-1332`. Roda no
+nenhuma — `appearances.monsters.rat: outfit 9999 não existe no pacote tibia-1533`. Roda no
 boot, no `pnpm content:check` e em `load.test.ts`, que é o que faz o CI reprovar sem ter pacote
 nenhum.
 
@@ -214,7 +214,7 @@ senão apagar `packs/` desligaria a conferência em silêncio.
 `VITE_THINGS_URL`, que é configuração de deploy. `buildContent` expõe `content.pack`, e o
 `game` recusa subir quando `THINGS_VERSION` não bate com `pack.version`
 (`packages/server/src/served-pack.ts`) — o compose deriva `VITE_THINGS_URL` da mesma
-variável. Sem isso, um deploy apontando `/things/1400` com o conteúdo conferido contra o 1332
+variável. Sem isso, um deploy apontando `/things/1400` com o conteúdo conferido contra o 1533
 passaria em tudo e desenharia exatamente o quadrado que a conferência existe para impedir.
 
 **Fica fora de `computeVersion`.** O inventário não é lido por sessão nenhuma; regenerá-lo

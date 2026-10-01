@@ -511,7 +511,7 @@ if (import.meta.main) {
     strict: true,
   });
   const thingsDir = resolve(ROOT, values.things ?? process.env.THINGS_DIR ?? 'things');
-  const version = values.version ?? process.env.THINGS_VERSION ?? '1332';
+  const version = values.version ?? process.env.THINGS_VERSION ?? '1533';
   const otbmDir = join(thingsDir, 'maps');
 
   if (values.check) {
