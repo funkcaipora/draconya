@@ -1,0 +1,25 @@
+{
+  "id": "baseline",
+  "levels": {
+    "bane": [
+      { "kills": 25, "points": 5 },
+      { "kills": 100, "points": 15 },
+      { "kills": 300, "points": 30 }
+    ],
+    "archfoe": [
+      { "kills": 5, "points": 10 },
+      { "kills": 20, "points": 30 },
+      { "kills": 60, "points": 60 }
+    ],
+    "nemesis": [
+      { "kills": 1, "points": 10 },
+      { "kills": 3, "points": 30 },
+      { "kills": 5, "points": 60 }
+    ]
+  },
+  "source": {
+    "engine": "canary",
+    "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+    "path": "src/io/io_bosstiary.hpp"
+  }
+}

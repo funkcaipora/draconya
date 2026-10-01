@@ -1,6 +1,7 @@
 # 0037 — Fidelidade ao TFS/Canary como regra, exceto a barra de ações e a automação
 
 **Status:** aceito — revoga o limite 2 do [ADR 0019](0019-opentibia-as-domain-specification.md) para mecânica de jogo; abre um perfil de combate novo pelo caminho que o [ADR 0031](0031-contrato-de-compatibilidade-de-combate-e-migracao.md) exige
+**Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30) — d.2:** sai “sessão instanciada” da lista de exceções.
 **Data:** 2026-09-24
 **Contexto técnico:** `sim` (monstro, combate, progressão, party, spawn), `content` (monstros, itens, magias, vocações, mapas), `server` (migração de dados), `tools` (mapa multiandar, semente local)
 **Issues:** M28 — #518 a #527

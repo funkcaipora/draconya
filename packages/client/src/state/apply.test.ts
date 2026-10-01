@@ -1341,6 +1341,50 @@ describe('o catálogo (FUN-79, FUN-89)', () => {
   });
 });
 
+describe('o Bosstiary (#629, ADR 0052 d.1)', () => {
+  const vocabulary = { vocabularyVersion: 1, slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } };
+  it('ausente e vazio são coisas DIFERENTES, como no Bestiário', () => {
+    expect(hud.get().bosstiary).toBeNull();
+    applyMessage({ type: 'bosstiary', kills: {}, points: 0 }, 0);
+    expect(hud.get().bosstiary).toEqual({ kills: {}, points: 0 });
+  });
+
+  it('guarda o registro como veio, e SUBSTITUI em vez de somar', () => {
+    applyMessage({ type: 'bosstiary', kills: { '639': 3 }, points: 40 }, 0);
+    expect(hud.get().bosstiary).toEqual({ kills: { '639': 3 }, points: 40 });
+
+    applyMessage({ type: 'bosstiary', kills: { '639': 5, '100': 1 }, points: 110 }, 1_000);
+    expect(hud.get().bosstiary).toEqual({ kills: { '639': 5, '100': 1 }, points: 110 });
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state.inventory, notified);
+    subscribeSlice(hud, (state) => state.bestiary, notified);
+
+    applyMessage({ type: 'bosstiary', kills: { '639': 1 }, points: 10 }, 0);
+
+    expect(notified).not.toHaveBeenCalled();
+  });
+
+  it('o catálogo leva a tabela de níveis e a raridade de cada boss, e sem tabela a chave fica AUSENTE', () => {
+    const bosstiary = { levels: {
+      bane: [{ kills: 25, points: 5 }], archfoe: [{ kills: 5, points: 10 }], nemesis: [{ kills: 1, points: 10 }],
+    } };
+    const monsters = [{ id: 'dreadmaw', name: 'Dreadmaw', bosstiary: { rarity: 'nemesis', raceId: 639 } }];
+    applyMessage({
+      type: 'catalogue', hunts: [], monsters, bosstiary, bot: vocabulary, items: [],
+    } as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue?.bosstiary).toEqual(bosstiary);
+    expect(hud.get().catalogue?.monsters).toEqual(monsters);
+
+    applyMessage({
+      type: 'catalogue', hunts: [], monsters: [], bot: vocabulary, items: [],
+    } as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue).not.toHaveProperty('bosstiary');
+  });
+});
+
 describe('o bestiário (FUN-113, §18)', () => {
   it('ausente e vazio são coisas DIFERENTES', () => {
     // `null` é "ainda não chegou": um nó anterior à FUN-113 nunca manda, e o primeiro

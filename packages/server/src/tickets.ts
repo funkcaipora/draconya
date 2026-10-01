@@ -17,7 +17,7 @@ import { randomBytes } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import { OutfitColors } from '@draconya/protocol';
 import { isCharacterStorageMap, isFightMode } from '@draconya/sim';
-import type { BestiaryState, CharacterStorageMap, CharmsState, FightMode } from '@draconya/sim';
+import type { BestiaryState, BosstiaryState, CharacterStorageMap, CharmsState, FightMode } from '@draconya/sim';
 import type { NodeStatus, SessionDirectory } from './directory.js';
 
 export interface TicketClaim {
@@ -176,6 +176,14 @@ export interface InitialCharacter {
    * ponto de Charm, ou ticket de um `api` anterior: a sessão parte vazia.
    */
   readonly charms?: CharmsState;
+  /**
+   * O Bosstiary (#629, ADR 0052 d.1): abates por boss (chave = `raceId`), pontos de boss e a
+   * versão. Entra na sessão, e não só sai dela, porque o nível de um boss depende do abate
+   * anterior — sem o registro de entrada, o abate 5 de um Nemesis na segunda hunt do dia seria
+   * o 1º. Validado como o Bestiário (`isBosstiaryState`). Ausente é quem nunca abateu um boss,
+   * ou ticket de um `api` anterior: a sessão parte vazia.
+   */
+  readonly bosstiary?: BosstiaryState;
   /**
    * Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, lido de `characters.fed_ms`.
    * Entra na sessão, e não só sai dela — sem isto, quem comeu antes de deslogar voltaria em
@@ -685,6 +693,8 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     // A economia de Charms (M39-02, #602): mesma régua do Bestiário/estoque — forma validada
     // por inteiro, torto vira AUSENTE, nunca ticket recusado.
     ...(isCharmsState(initial['charms']) ? { charms: initial['charms'] } : {}),
+    // O Bosstiary (#629): mesma régua — forma validada por inteiro, torto vira AUSENTE.
+    ...(isBosstiaryState(initial['bosstiary']) ? { bosstiary: initial['bosstiary'] } : {}),
     // Comida ativa (#726): inteiro seguro não negativo, ou AUSENTE — a mesma régua acima.
     ...(typeof initial['fedMs'] === 'number' && Number.isSafeInteger(initial['fedMs'])
       && initial['fedMs'] >= 0
@@ -754,6 +764,28 @@ export function isBestiaryState(value: unknown): value is BestiaryState {
     && typeof kills === 'number'
     && Number.isSafeInteger(kills)
     && kills >= 0);
+}
+
+/**
+ * A forma de `BosstiaryState` (#629, ADR 0052 d.1): `kills` é um mapa de inteiros seguros não
+ * negativos sob chaves não vazias (o `raceId` em texto), `points` um inteiro seguro não negativo e
+ * `version` um número. Por forma, nunca por conteúdo de domínio — um `raceId` que nenhum boss do
+ * catálogo tem simplesmente não resolve nada. Um valor que não bate vira AUSENTE, nunca ticket
+ * recusado, pela mesma razão do Bestiário: a linha é `jsonb` sem CHECK.
+ *
+ * Exportada para o `api` conferir a linha com a MESMA régua que o `consume` usa.
+ */
+export function isBosstiaryState(value: unknown): value is BosstiaryState {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record['points'] !== 'number' || !Number.isSafeInteger(record['points']) || record['points'] < 0
+    || typeof record['version'] !== 'number'
+  ) return false;
+  const kills = record['kills'];
+  if (typeof kills !== 'object' || kills === null || Array.isArray(kills)) return false;
+  return Object.entries(kills).every(([raceId, count]) =>
+    raceId.length > 0 && typeof count === 'number' && Number.isSafeInteger(count) && count >= 0);
 }
 
 /**

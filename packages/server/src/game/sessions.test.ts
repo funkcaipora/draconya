@@ -365,6 +365,27 @@ describe('o bônus de Loyalty vem do TICKET e fica fixado no personagem (#628, A
   });
 });
 
+describe('o Bosstiary de entrada vem do TICKET, nunca do cliente (#629)', () => {
+  const content = testContent();
+
+  it('os abates e os pontos persistidos chegam ao personagem da sessão', () => {
+    // O nível de um boss depende do abate anterior: um personagem que entrasse vazio recomeçaria
+    // a contagem do boss a cada hunt. E vem do ticket pela mesma razão do gold (invariante 4).
+    const bosstiary = { kills: { '639': 4 }, points: 40, version: 1 };
+    const session = createCitySessionFactory(content)('p1', { level: 1, xp: 0, bosstiary });
+
+    expect(session.participants[0]?.bosstiary.killsOf(639)).toBe(4);
+    expect(session.participants[0]?.bosstiary.points).toBe(40);
+    expect(session.participants[0]?.bosstiary.getState()).toEqual(bosstiary);
+  });
+
+  it('ticket sem Bosstiary entra com nada contado', () => {
+    // É o personagem anterior à issue, ou o ticket de um `api` antigo em deploy em rolagem.
+    const session = createCitySessionFactory(content)('p1', { level: 1, xp: 0 });
+    expect(session.participants[0]?.bosstiary.getState()).toEqual({ kills: {}, points: 0, version: 1 });
+  });
+});
+
 describe('o Bestiário de entrada vem do TICKET, nunca do cliente (FUN-113)', () => {
   const content = testContent();
 

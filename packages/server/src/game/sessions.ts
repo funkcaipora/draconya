@@ -288,6 +288,10 @@ export function characterFromTicket(
       // (`isCharmsState`); ausente, a sessão parte sem nenhum ponto/tier/atribuição — o mesmo
       // personagem novo que `bestiary` ausente já descreve.
       ...(initialCharacter.charms === undefined ? {} : { charms: initialCharacter.charms }),
+      // O Bosstiary (#629, ADR 0052 d.1): validado na emissão e no consumo (`isBosstiaryState`);
+      // ausente, a sessão parte sem nenhum abate de boss — o mesmo personagem novo que `bestiary`
+      // ausente já descreve.
+      ...(initialCharacter.bosstiary === undefined ? {} : { bosstiary: initialCharacter.bosstiary }),
       // Os storages (#731, ADR 0050 d.6 T2): validados como o Bestiário; ausente, a sessão
       // parte sem storage nenhum setado — a mesma degradação de sempre.
       ...(initialCharacter.storages === undefined ? {} : { storages: initialCharacter.storages }),

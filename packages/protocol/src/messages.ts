@@ -449,6 +449,17 @@ export const SERVER_TO_CLIENT = {
    * 45: o 44 é do `charms`.
    */
   'exit-pending': 45,
+  /**
+   * O Bosstiary do personagem (#629, ADR 0052 d.1): os abates por boss (chaveados pelo `raceId`
+   * do Canary, em texto), os pontos de boss e nada mais — o registro cru, como `bestiary` manda
+   * os abates crus. A tabela de níveis e a raridade de cada boss vêm no `catalogue` (fixadas na
+   * sessão, invariante 7); o cliente deriva o nível de cada boss do mesmo jeito que já deriva o
+   * marco do Bestiário (`bosstiary-progress.ts`). Sai no attach e sempre que um abate de boss
+   * muda o registro. Por PERSONAGEM, como `bestiary`: o Bosstiary é do personagem.
+   *
+   * 46: o 45 é do `exit-pending`.
+   */
+  bosstiary: 46,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */
