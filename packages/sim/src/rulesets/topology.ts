@@ -261,7 +261,7 @@ export interface SessionTopology {
 
   /**
    * O detalhe dos eventos notáveis de progresso (`level-up`, `bestiary-milestone`,
-   * `bosstiary-level`) NOMEIA o dono?
+   * `bosstiary-level` e `hazard-level-up`) NOMEIA o dono?
    *
    * Instância: só com mais de um presente — solo mantém o formato de sempre, e `event-text.ts` o
    * lê. É uma decisão sobre o FORMATO que dependia de quantos estão online; no mundo o número de

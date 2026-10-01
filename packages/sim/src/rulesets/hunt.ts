@@ -11408,12 +11408,13 @@ const slots = bot.groups.get(group);
     if (!Number.isFinite(points)) points = zone.minLevel;
 
     if (zone.levelUpMonsterId !== undefined && dead.monsterId === zone.levelUpMonsterId) {
-      const solo = session.participants.length === 1;
+      // Quem decide se o detalhe nomeia o dono é a topologia (`namesOwnerInEvents`, OW-12).
+      const namesOwner = this.#topology.namesOwnerInEvents(session);
       for (const damager of damagers) {
         if (damager.hazard.maxLevelOf(zoneId, zone) !== points) continue;
         if (!damager.hazard.levelUp(zoneId, zone)) continue;
         const detail = `${zoneId}/${String(damager.hazard.maxLevelOf(zoneId, zone))}`;
-        session.record('hazard-level-up', solo ? detail : `${damager.id}/${detail}`);
+        session.record('hazard-level-up', namesOwner ? `${damager.id}/${detail}` : detail);
       }
     }
 

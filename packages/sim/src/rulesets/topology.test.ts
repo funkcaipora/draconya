@@ -18,6 +18,7 @@ import type { Content, Progression, RawContent, Tilemap } from '@draconya/conten
 import { describe, expect, it, vi } from 'vitest';
 import { CharacterRuntime } from '../character.js';
 import { resolveDeath } from '../death.js';
+import type { HazardState } from '../hazard.js';
 import { TileOccupancy, place } from '../movement.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
@@ -99,7 +100,10 @@ const raw = (over: Partial<RawContent> = {}): RawContent => {
 };
 const content = (over: Partial<RawContent> = {}): Content => buildContent(raw(over));
 
-const member = (id: string, over: Partial<{ health: number; xp: number; level: number }> = {}) => {
+const member = (
+  id: string,
+  over: Partial<{ health: number; xp: number; level: number; hazard: HazardState }> = {},
+) => {
   const stats = statsForLevel(1, null, progression as Progression);
   return new CharacterRuntime({
     id, position: { x: 0, y: 0, z: 7 },
@@ -107,6 +111,7 @@ const member = (id: string, over: Partial<{ health: number; xp: number; level: n
     mana: 0, maxMana: stats.maxMana, level: over.level ?? 1, xp: over.xp ?? 0, vocationId: null,
     staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
     gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+    ...(over.hazard === undefined ? {} : { hazard: over.hazard }),
   });
 };
 
@@ -619,5 +624,81 @@ describe('extrato: o formato do detalhe não depende de quantos estão online', 
     expect(pairDetail).toBe('2');
     // Na instância, com dois presentes, o dono vem no detalhe.
     expect(levelUpDetail([nearLevelTwo('hero'), member('b')])).toBe('hero/2');
+  });
+
+  it('namesOwnerInEvents decide também o formato do bestiary-milestone e do bosstiary-level', () => {
+    // Um marco no primeiro abate do Bestiário, e o nível 1 do Bosstiary (Nemesis) no primeiro boss.
+    const bestiary = { id: 'baseline', milestones: [1], xpBonusPercentPerMilestone: 20 };
+    const bosstiary = {
+      id: 'baseline',
+      levels: {
+        bane: [{ kills: 25, points: 5 }, { kills: 100, points: 15 }, { kills: 300, points: 30 }],
+        archfoe: [{ kills: 5, points: 10 }, { kills: 20, points: 30 }, { kills: 60, points: 60 }],
+        nemesis: [{ kills: 1, points: 10 }, { kills: 3, points: 30 }, { kills: 5, points: 60 }],
+      },
+    };
+    const bossRat = {
+      ...rat, id: 'boss-rat', name: 'Boss Rat', boss: true, bosstiary: { rarity: 'nemesis', raceId: 9001 },
+    };
+    const bossRoute = {
+      ...route,
+      spawnPoints: [0, 1, 2].map(() => (
+        { routeIndex: 4, radius: 2, monsterId: 'boss-rat', respawnDelayMs: 10_000 }
+      )),
+    };
+    const detail = (type: string, loaded: Content, topology?: SessionTopology) => {
+      const { session } = start([member('hero')], { loaded, ...(topology === undefined ? {} : { topology }) });
+      run(session, 60_000);
+      return session.notableEvents.find((e) => e.type === type)?.detail;
+    };
+    const comum = content({ bestiary: [bestiary], routes: [threeRatsRoute] });
+    const chefe = content({ monsters: [bossRat], routes: [bossRoute], bosstiary: [bosstiary] });
+    const names = topologyWith({ namesOwnerInEvents: () => true });
+
+    expect(detail('bestiary-milestone', comum)).toBe('rat/1');
+    expect(detail('bestiary-milestone', comum, names)).toBe('hero/rat/1');
+    expect(detail('bosstiary-level', chefe)).toBe('boss-rat/1');
+    expect(detail('bosstiary-level', chefe, names)).toBe('hero/boss-rat/1');
+  });
+
+  it('namesOwnerInEvents decide também o formato do hazard-level-up (#632)', () => {
+    // O chefe da zona morre no primeiro golpe, e o herói está no teto: o teto sobe e vira evento.
+    const zoneId = 'pit-zone';
+    const boss = { ...rat, id: 'the-primal-menace', name: 'The Primal Menace', health: 1, experience: 0 };
+    const hazard = {
+      id: 'baseline', criticalIntervalMs: 2000, criticalChance: 0, criticalMultiplier: 25,
+      damageMultiplier: 200, defenseMultiplier: 0, dodgeMultiplier: 0, expBonusMultiplier: 2,
+      lootBonusMultiplier: 2, podDropMultiplier: 0, plunderSpawnMultiplier: 0,
+      zones: {
+        [zoneId]: {
+          name: 'Pit Zone', minLevel: 1, maxLevel: 12, crit: true, dodge: true, damageBoost: true,
+          defenseBoost: true, levelUpMonsterId: boss.id,
+        },
+      },
+    };
+    const combatV4 = {
+      ...combat, compatibilityProfile: 'combat-v4',
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    };
+    const loaded = content({
+      monsters: [boss], combat: [combatV4], hazard: [hazard], hunts: [{ ...hunt, hazardZoneId: zoneId }],
+      routes: [{
+        ...route, spawnPoints: [{
+          routeIndex: 0, radius: 3, respawnDelayMs: 600_000, monsterId: boss.id, at: { x: 1, y: 2, z: 7 },
+        }],
+      }],
+    });
+    const detail = (topology?: SessionTopology) => {
+      const registry: HazardState = { maxLevel: { [zoneId]: 3 }, currentLevel: { [zoneId]: 3 }, version: 1 };
+      const { session } = start([member('hero', { hazard: registry })], {
+        loaded, ...(topology === undefined ? {} : { topology }),
+      });
+      run(session, 5_000);
+      return session.notableEvents.find((e) => e.type === 'hazard-level-up')?.detail;
+    };
+    // Solo, o formato de sempre; a topologia que nomeia o dono põe o id na frente.
+    expect(detail()).toBe(`${zoneId}/4`);
+    expect(detail(topologyWith({ namesOwnerInEvents: () => true }))).toBe(`hero/${zoneId}/4`);
   });
 });
