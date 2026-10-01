@@ -52,6 +52,9 @@ import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
 import { findPersonText } from './find-text.js';
 import { hitEffectOf, isPhysicalHit, monsterLookOf, monsterOutfitOf, monsterPresentationOf } from './monster-look.js';
 import { REFUSAL_TEXT, TransitionError, refuseTransition } from './transitions.js';
+import {
+  creditsAggregates, keepsSnapshot, leavesOnExit, offersCityServices, usesAreaOfInterest,
+} from './ruleset-traits.js';
 import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
 
 /** Cria a sessão de um personagem que ainda não tem uma. */
@@ -1009,6 +1012,13 @@ interface HostedSession {
   /** Tentativa em voo por membro: concorrentes aguardam inclusive a falha, sem soltar antes. */
   readonly receiptSaves: Map<string, Promise<void>>;
   /**
+   * Extratos de SAÍDA em voo, por personagem — o `receiptSaves` de quem sai por personagem
+   * (`leavesOnExit`), que não cabe na vaga única dele: o mesmo personagem sai da mesma sessão
+   * mais de uma vez, e cada saída tem o extrato (e o `seq`) próprio. Quem acha o personagem já
+   * fora (`leave` devolve `null`) espera estes antes de soltar o que é dele (`#awaitExitSaves`).
+   */
+  readonly exitSaves: Map<string, Set<Promise<void>>>;
+  /**
    * Quem saiu por DENTRO do `sim` — morte ou regra de saída numa party (#193) — e ainda não
    * foi gravado nem devolvido à Cidade. `#presentMoves` enfileira; `#settleDepartures` drena
    * fora do ciclo, porque gravar é I/O.
@@ -1455,8 +1465,9 @@ export class SessionHost {
    * apontando para a Cidade, caía no `#takeOver`, e ele recusava SEMPRE — "active reservation
    * expired before session registration" em todo handshake, porque o nó nunca estava morto.
    *
-   * Espelha o ramo de shard de `release` — a Cidade não credita e não encerra por personagem
-   * (ADR 0023), mas guarda o que mudou (`#saveDurableReceipt`, #154).
+   * Espelha o ramo de `release` para a sessão que SAI POR PERSONAGEM (`leavesOnExit`) — a Cidade
+   * não credita e não encerra por personagem (ADR 0023), mas guarda o que mudou
+   * (`#saveDurableReceipt`, #154); o mundo credita por extrato de delta (`#departFromSharedSession`).
    *
    * A sessão de origem só deveria ser um shard: a API só emite ticket de party para quem o
    * diretório via na Cidade (ou em repouso) no instante da emissão — `/start` e o `/join` em
@@ -1470,9 +1481,8 @@ export class SessionHost {
       this.#sessionIdByCharacter.delete(characterId);
     } else {
       this.#dropViewers(hosted, characterId);
-      if (existing.ruleset.shared === true) {
-        await this.#saveDurableReceipt(characterId, hosted, 'manual-exit');
-        hosted.session.leave(characterId);
+      if (leavesOnExit(existing.ruleset)) {
+        await this.#departFromSharedSession(characterId, hosted, 'manual-exit');
         this.#announceDeparture(hosted, characterId);
       } else {
         let receipt: Receipt | null;
@@ -1671,17 +1681,16 @@ export class SessionHost {
     const hosted = this.#hostedSession(characterId);
     if (hosted === undefined) return;
     const accountId = this.#accountIdByCharacter.get(characterId);
-    const shared = hosted.session.ruleset.shared === true;
+    const leaves = leavesOnExit(hosted.session.ruleset);
 
     this.#dropViewers(hosted, characterId, closeCode, closeReason);
 
-    if (shared) {
+    if (leaves) {
       // Num shard, sair é SAIR — não encerrar (FUN-71, ADR 0023). O jogador que fecha o jogo
       // na praça não pode levar a praça junto, e nada há a creditar: a Cidade não gera
       // progresso (§37). O que ela gera é ESTADO (#154) — e ele sai antes de o participante
-      // sair, porque `leave` o tira da lista.
-      await this.#saveDurableReceipt(characterId, hosted, 'manual-exit');
-      hosted.session.leave(characterId);
+      // sair, porque `leave` o tira da lista. O mundo, que credita, sai por extrato de delta.
+      await this.#departFromSharedSession(characterId, hosted, 'manual-exit');
       this.#announceDeparture(hosted, characterId);
       // A cópia vazia deixa de ser hospedada. A próxima entrada cria outra, já na versão de
       // conteúdo do momento — ver `CityShard.admit`.
@@ -2063,12 +2072,12 @@ export class SessionHost {
    * generalização do "Despachar loot" do ADR 0032 d.12). Processado NA CHEGADA, como equipar.
    *
    * O gold entra do MESMO jeito que o loot credita (`hunt.ts`): `character.goldDelta` E o
-   * agregado da sessão, quando ela é PRIVADA (hunt) — o extrato de fim de sessão já soma
-   * `aggregatesOf`. Numa Cidade (shard, `ruleset.shared`), o agregado da sessão é CUMULATIVO
-   * entre vários extratos de estado (#154) e nunca é zerado por flush; somar ali faria o
-   * segundo logout re-creditar a venda do primeiro. Lá o gold vai só por `goldDelta`, que
-   * `#saveDurableReceipt` drena e liquida a cada extrato — a mesma disciplina de
-   * `settleGoldDelta`.
+   * agregado da sessão, quando ela credita por agregado (`creditsAggregates` — a hunt, e o
+   * mundo) — o extrato já soma `aggregatesOf`. Numa Cidade (shard que não credita), o agregado
+   * da sessão é CUMULATIVO entre vários extratos de estado (#154) e nunca é zerado por flush;
+   * somar ali faria o segundo logout re-creditar a venda do primeiro. Lá o gold vai só por
+   * `goldDelta`, que `#saveDurableReceipt` drena e liquida a cada extrato — a mesma disciplina
+   * de `settleGoldDelta`. A escolha é de `#mirrorGold`, o canal único (ADR 0060 d.10c).
    */
   #requestSellItems(viewer: Viewer, instanceIds: readonly string[]): void {
     const character = this.#ownerOf(viewer.characterId);
@@ -2077,9 +2086,7 @@ export class SessionHost {
     const result = character.inventory.sellItems(instanceIds, this.#options.itemCatalog ?? EMPTY_ITEMS);
     if (result.ok) {
       character.goldDelta += result.gold;
-      if (hosted.session.ruleset.shared !== true) {
-        hosted.session.credit(viewer.characterId, 'goldGained', result.gold);
-      }
+      this.#mirrorGold(hosted, viewer.characterId, result.gold);
       character.removedInstances.push(...result.removed.map((item) => item.instanceId));
       this.#markDirty(viewer.characterId);
     }
@@ -2568,6 +2575,8 @@ export class SessionHost {
       viewer.send({ type: 'system-message', level: 'warning', text: PROMOTE_REFUSAL[result.reason] });
       return;
     }
+    // `promote` já debitou o preço em `goldDelta`; `ok` garante o bloco de promoção.
+    this.#mirrorGold(hosted, character.id, -(vocation.promotion?.price ?? 0));
     this.#markDirty(character.id);
     const stats = this.#statsOf(character);
     hosted.sentStats.set(character.id, stats);
@@ -2652,11 +2661,12 @@ export class SessionHost {
    * Tibia também não exige protect zone para o NPC ensinar.
    *
    * O gold sai do MESMO jeito que `charm-remove`: `goldDelta` (o `sim` já debitou), e o agregado
-   * `goldSpent` só quando a sessão é PRIVADA (hunt) — o extrato de fim de sessão soma
-   * `aggregatesOf`. Na Cidade (shard, `ruleset.shared`) o agregado é cumulativo entre extratos e
-   * nunca zerado por flush, então somar ali re-creditaria a compra no próximo logout; lá o gold
-   * vai só por `goldDelta`, que `#saveDurableReceipt` drena e liquida (invariante 10). Aprender
-   * de novo é recusado ANTES de qualquer débito, então repetir a intenção nunca cobra duas vezes.
+   * `goldSpent` só quando a sessão credita por agregado (`creditsAggregates` — a hunt, e o mundo)
+   * — o extrato soma `aggregatesOf`. Na Cidade (shard que não credita) o agregado é cumulativo
+   * entre extratos e nunca zerado por flush, então somar ali re-creditaria a compra no próximo
+   * logout; lá o gold vai só por `goldDelta`, que `#saveDurableReceipt` drena e liquida
+   * (invariante 10). A escolha é de `#mirrorGold`. Aprender de novo é recusado ANTES de qualquer
+   * débito, então repetir a intenção nunca cobra duas vezes.
    */
   #requestLearnSpell(viewer: Viewer, spellId: string): void {
     const hosted = this.#hostedSession(viewer.characterId);
@@ -2668,9 +2678,7 @@ export class SessionHost {
       viewer.send({ type: 'system-message', level: 'warning', text: LEARN_SPELL_REFUSAL[result.reason] });
       return;
     }
-    if (result.price > 0 && hosted.session.ruleset.shared !== true) {
-      hosted.session.credit(viewer.characterId, 'goldSpent', result.price);
-    }
+    this.#mirrorGold(hosted, viewer.characterId, -result.price);
     this.#markDirty(character.id);
     // No meio de uma hunt, a magia recém-aprendida destrava a regra do bot que vinha sendo
     // pulada (`spell-not-learned` não tem prazo): sem acordá-lo, ela só voltaria a valer no
@@ -2738,8 +2746,9 @@ export class SessionHost {
   /**
    * Remover a atribuição de um Charm (ADR 0053 d.4): custa `level × 100` gold pelo ledger
    * (invariante 10) — o mesmo caminho de `#requestSellItems` para o gold entrar/sair pela
-   * sessão certa (agregado só em hunt privada; na Cidade só `goldDelta`, drenado no extrato de
-   * estado durável). O gold é conferido ANTES de mexer no `sim`: sem saldo, nada muda.
+   * sessão certa (`#mirrorGold`: agregado só quando a sessão credita por agregado; na Cidade só
+   * `goldDelta`, drenado no extrato de estado durável). O gold é conferido ANTES de mexer no
+   * `sim`: sem saldo, nada muda.
    */
   #requestCharmRemove(viewer: Viewer, charmId: string): void {
     const hosted = this.#hostedSession(viewer.characterId);
@@ -2761,9 +2770,7 @@ export class SessionHost {
       return;
     }
     character.goldDelta -= fee;
-    if (hosted.session.ruleset.shared !== true) {
-      hosted.session.credit(viewer.characterId, 'goldSpent', fee);
-    }
+    this.#mirrorGold(hosted, viewer.characterId, -fee);
     this.#markDirty(character.id);
     this.#sendToViewersOf(hosted, character.id, this.#charmsMessageFor(character));
   }
@@ -2882,9 +2889,10 @@ export class SessionHost {
    * pela mesma razão. INTENÇÃO: o cliente diz QUAL bênção; preço por level
    * (`blessingCost`/`progression.blessingPricing`), saldo e "já tem esta bênção"
    * (`hasBlessing`) são do servidor. Gold sai por `goldDelta` — o MESMO caminho de
-   * `sell-items` na Cidade (ADR 0048 d.8): a sessão de shard não zera o agregado a cada
-   * extrato, então somar ali re-creditaria a compra no próximo logout; `#saveDurableReceipt`
-   * drena e liquida `goldDelta` a cada extrato. O bit fica em `character.blessings`
+   * `sell-items` na Cidade (ADR 0048 d.8): a sessão de shard que não credita não zera o agregado
+   * a cada extrato, então somar ali re-creditaria a compra no próximo logout;
+   * `#saveDurableReceipt` drena e liquida `goldDelta` a cada extrato (`#mirrorGold` decide, e
+   * numa sessão que credita por agregado soma os dois). O bit fica em `character.blessings`
    * (bitmask), e o sucesso sai como `blessings` — não `player-stats.blessings`, porque bênção
    * não é vital nem item.
    */
@@ -2892,7 +2900,7 @@ export class SessionHost {
     const hosted = this.#hostedSession(viewer.characterId);
     const character = this.#ownerOf(viewer.characterId);
     if (hosted === undefined || character === undefined) return;
-    if (hosted.session.ruleset.shared !== true) {
+    if (!offersCityServices(hosted.session.ruleset)) {
       viewer.send({
         type: 'system-message', level: 'warning', text: 'Bênçãos só se compram na Cidade.',
       });
@@ -2916,6 +2924,7 @@ export class SessionHost {
       return;
     }
     character.goldDelta -= cost;
+    this.#mirrorGold(hosted, character.id, -cost);
     character.blessings = withBlessing(character.blessings, blessing.order);
     this.#markDirty(viewer.characterId);
     const stats = this.#statsOf(character);
@@ -3006,6 +3015,8 @@ export class SessionHost {
       viewer.send({ type: 'system-message', level: 'warning', text: BUY_REFUSAL[result.reason] });
       return;
     }
+    // `buyItem` já debitou o preço em `goldDelta`.
+    this.#mirrorGold(hosted, character.id, -result.price);
     this.#markDirty(character.id);
     const stats = this.#statsOf(character);
     hosted.sentStats.set(character.id, stats);
@@ -4533,9 +4544,12 @@ export class SessionHost {
     return hosted.session.participants.find((participant) => participant.id === characterId);
   }
 
-  /** Esta sessão tem campo de visão por célula? Só shard, e só com a opção ligada (FUN-33). */
+  /**
+   * Esta sessão tem campo de visão por célula? Só a que `usesAreaOfInterest` (o shard), e só com
+   * a opção ligada (FUN-33).
+   */
   #interestManaged(session: Session): boolean {
-    return session.ruleset.shared === true && this.#options.areaOfInterest !== false;
+    return usesAreaOfInterest(session.ruleset) && this.#options.areaOfInterest !== false;
   }
 
   /** Manda para todos os visualizadores de UM personagem. Abas contam separado. */
@@ -4833,19 +4847,26 @@ export class SessionHost {
       );
     }
 
-    // Sair de um SHARD não encerra nada e não credita nada (FUN-71, ADR 0023): a praça fica
-    // de pé com quem ficou, e a Cidade não gera progresso (§37). Encerrar aqui mandaria um
-    // extrato de Cidade — zerado — para todo mundo que estivesse lá dentro.
+    // Sair de um SHARD não encerra nada (FUN-71, ADR 0023): a praça fica de pé com quem ficou.
+    // Encerrar aqui mandaria um extrato de Cidade — zerado — para todo mundo que estivesse lá
+    // dentro. E a Cidade não credita nada (§37): o que ela gera é ESTADO.
     //
     // O que a praça MUDOU, porém, é gravado antes de o personagem sair para uma sessão privada
     // (#631): `#leaveForParty` já fazia o mesmo para a party, e sem isto a exercise weapon comprada
     // aqui — uma instância NOVA, com o prefixo da sessão da praça — nunca chegaria ao banco, porque
     // o extrato do Treino só leva o `acquired` que nasceu NELE; e o gold gasto sumiria junto, já que
     // o `goldDelta` da praça não entra nos agregados da sessão de destino.
-    if (hosted.session.ruleset.shared === true && hosted.dirty.has(characterId)) {
-      await this.#saveDurableReceipt(characterId, hosted, 'manual-exit');
-    }
-    if (hosted.session.ruleset.shared !== true) {
+    //
+    // O shard que credita (o mundo) sai pelo `leave` que EMITE o extrato de delta, e o grava aqui,
+    // antes de o diretório trocar — como a sessão privada logo abaixo. O `leave` do `#replace`
+    // fica sem o que fazer: quem já saiu não é participante.
+    if (leavesOnExit(hosted.session.ruleset)) {
+      if (creditsAggregates(hosted.session.ruleset)) {
+        await this.#leaveWithReceipt(characterId, hosted, 'manual-exit');
+      } else if (hosted.dirty.has(characterId)) {
+        await this.#saveDurableReceipt(characterId, hosted, 'manual-exit');
+      }
+    } else {
       // Party (#194, ADR 0027): com mais de um dono, sair é SAIR — o extrato é o dele, a hunt
       // continua para os outros, e a cascata do §13.9 roda no próximo evento do `sim`.
       let receipt: Receipt | null;
@@ -4907,9 +4928,11 @@ export class SessionHost {
       hosted.session.detach(viewer.id);
     }
 
-    // Sai da anterior. Num shard isso é `leave`; numa sessão privada ela já foi encerrada por
-    // quem chamou, e some daqui inteira.
-    if (hosted.session.ruleset.shared === true) {
+    // Sai da anterior. Num shard isso é `leave` — o extrato que ele emite é descartado: a Cidade
+    // não credita (o estado já saiu em `#runTransition`) e o mundo já gravou o dele lá, e quem já
+    // saiu não é participante (`leave` devolve `null`). Numa sessão privada ela já foi encerrada
+    // por quem chamou, e some daqui inteira.
+    if (leavesOnExit(hosted.session.ruleset)) {
       hosted.session.leave(characterId);
       this.#announceDeparture(hosted, characterId);
     }
@@ -4928,6 +4951,7 @@ export class SessionHost {
       lastAdvancedAtMs: this.#now(),
       credited: new Set(),
       receiptSaves: new Map(),
+      exitSaves: new Map(),
       departures: [],
       dirty: new Set(),
       sentItemsLooted: next.aggregates.itemsLooted,
@@ -4969,18 +4993,18 @@ export class SessionHost {
     // intervalos é o pior caso: o jogador volta vivo, na hunt, e a penalidade aparece do nada
     // um pouco depois.
     //
-    // Shard não tem snapshot (ADR 0023): não há progresso a guardar, e o que ele guardaria
-    // seria a praça inteira, uma cópia por participante. Mas o snapshot da sessão ANTERIOR
-    // precisa sumir — ele é apagado, não simplesmente não reescrito.
+    // Shard não tem snapshot (`keepsSnapshot`, ADR 0023): não há progresso a guardar, e o que ele
+    // guardaria seria a praça inteira, uma cópia por participante. Mas o snapshot da sessão
+    // ANTERIOR precisa sumir — ele é apagado, não simplesmente não reescrito.
     //
     // Não fazer as duas coisas é o defeito silencioso: quem morre volta para a praça, o
     // snapshot da hunt encerrada fica em pé no Redis, e a próxima conexão RETOMA a hunt que
     // já foi creditada. Antes desta issue o `save` da Cidade cobria essa linha por acidente.
     const snapshots = this.#options.snapshots;
     if (snapshots !== undefined && accountId !== undefined) {
-      await (next.ruleset.shared === true
-        ? snapshots.remove(characterId)
-        : snapshots.save(characterId, accountId, this.#options.nodeId, next.snapshot()));
+      await (keepsSnapshot(next.ruleset)
+        ? snapshots.save(characterId, accountId, this.#options.nodeId, next.snapshot())
+        : snapshots.remove(characterId));
     }
     this.#logger.info(
       { characterId, from: hosted.session.id, to: next.id, type: next.ruleset.type },
@@ -5120,11 +5144,17 @@ export class SessionHost {
       const hosted = this.#sessions.get(sessionId);
       if (hosted === undefined) continue;
       try {
-        // Shard não credita e não encerra por personagem (FUN-71, ADR 0023): a praça não gera
-        // progresso (§37), e chamar `end` uma vez por participante mandaria o mesmo extrato
-        // zerado para duzentas pessoas. Sair basta, e `release` faz isso logo abaixo.
-        if (hosted.session.ruleset.shared === true) {
-          await this.#saveDurableReceipt(characterId, hosted, reason);
+        // Shard não encerra por personagem (FUN-71, ADR 0023): chamar `end` uma vez por
+        // participante mandaria o mesmo extrato zerado para duzentas pessoas. Sair basta, e
+        // `release` faz isso logo abaixo. A Cidade não credita (§37) e só grava o estado; o
+        // mundo, que credita, sai por extrato de delta aqui mesmo, e o `release` acha o
+        // personagem já fora.
+        if (leavesOnExit(hosted.session.ruleset)) {
+          if (creditsAggregates(hosted.session.ruleset)) {
+            await this.#leaveWithReceipt(characterId, hosted, reason);
+          } else {
+            await this.#saveDurableReceipt(characterId, hosted, reason);
+          }
         } else {
           hosted.session.end(reason);
           const receipt = receiptOf(hosted, characterId);
@@ -5171,6 +5201,31 @@ export class SessionHost {
     const receipts = this.#options.receipts;
     const accountId = this.#accountIdByCharacter.get(characterId);
     if (receipts === undefined || accountId === undefined) return;
+    // A sessão que SAI POR PERSONAGEM e credita (o mundo) emite um extrato por saída, e o
+    // personagem pode voltar à mesma sessão e sair de novo: nenhum extrato dela é "o" extrato do
+    // personagem, e por isso nem `credited` (uma marca por sessão e personagem) nem o voo
+    // pendente (que devolveria o de OUTRO extrato) servem aqui. Cada um leva o `seq` que o `sim`
+    // lhe deu, e o ledger recusa só o MESMO `(session_id, seq)` — retry continua seguro.
+    //
+    // O voo fica registrado em `exitSaves`: quem sair do mesmo personagem enquanto este extrato
+    // ainda não pousou acha o personagem fora e não tem extrato próprio a gravar, e tem de esperar
+    // este antes de soltar o que é dele — a drenagem não pode contar uma saída que ainda não gravou.
+    if (leavesOnExit(hosted.session.ruleset)) {
+      const saving = this.#persistReceipt(characterId, hosted, receipt, receipts, accountId, departed);
+      const inFlight = hosted.exitSaves.get(characterId) ?? new Set<Promise<void>>();
+      inFlight.add(saving);
+      hosted.exitSaves.set(characterId, inFlight);
+      try {
+        await saving;
+      } finally {
+        // Também na falha: quem espera recebe o mesmo desfecho, e a vaga não pode vazar.
+        inFlight.delete(saving);
+        if (inFlight.size === 0 && hosted.exitSaves.get(characterId) === inFlight) {
+          hosted.exitSaves.delete(characterId);
+        }
+      }
+      return;
+    }
     if (hosted.credited.has(characterId)) return;
     const pending = hosted.receiptSaves.get(characterId);
     if (pending !== undefined) return pending;
@@ -5320,7 +5375,84 @@ export class SessionHost {
   }
 
   /**
-   * O extrato de ESTADO DURÁVEL de um shard (#154).
+   * Tira `characterId` de uma sessão que SAI POR PERSONAGEM (`leavesOnExit`) e grava o que ele
+   * rendeu, pelo canal de gold que a sessão tem (ADR 0060 d.10c). Quem chama anuncia a saída.
+   *
+   * - **sem `creditsAggregates`** (a Cidade): o extrato de ESTADO sai ANTES do `leave` — ele lê o
+   *   dono em `participants` —, com o `goldDelta` como agregado. O extrato de agregados que o
+   *   `leave` emite é descartado: está zerado, e o agregado da Cidade é cumulativo.
+   * - **com ele** (o mundo): `leave` emite o extrato de DELTA — só o que o personagem rendeu
+   *   desde o último checkpoint —, e o hospedeiro o grava (`#leaveWithReceipt`).
+   */
+  async #departFromSharedSession(characterId: string, hosted: HostedSession, reason: EndReason): Promise<void> {
+    if (creditsAggregates(hosted.session.ruleset)) {
+      await this.#leaveWithReceipt(characterId, hosted, reason);
+      return;
+    }
+    await this.#saveDurableReceipt(characterId, hosted, reason);
+    hosted.session.leave(characterId);
+  }
+
+  /**
+   * `leave` + o extrato de delta que ele emite, gravado (ADR 0060 d.10c) — o ramo da sessão que
+   * sai por personagem E credita por agregado. Quem já saiu não é participante: `leave` devolve
+   * `null` e não há extrato a gravar, o que torna a saída idempotente (a drenagem sai por aqui
+   * e o `release` que vem logo depois encontra o personagem já fora). Idempotente, mas não
+   * apressada: se a saída que tirou o personagem ainda está gravando o extrato, esta espera por ele
+   * (`#awaitExitSaves`) — senão a drenagem contaria, e o `release` soltaria, o que ainda não pousou.
+   *
+   * Grava o dono que `leave` devolveu (`departed`): ele já não está em `participants`, como o
+   * membro de uma party que sai por dentro do `sim` (#194). O `goldDelta` dele é liquidado por
+   * `#persistReceipt` depois de gravar — o canal único de gold.
+   */
+  async #leaveWithReceipt(characterId: string, hosted: HostedSession, reason: EndReason): Promise<void> {
+    const departure = hosted.session.leave(characterId, reason);
+    if (departure === null) {
+      await this.#awaitExitSaves(hosted, characterId);
+      return;
+    }
+    // O que estava pendente de estado vai INTEIRO neste extrato (`#persistReceipt` leva todos os
+    // campos absolutos): não sobra marca de `dirty` para um extrato de estado que ninguém grava.
+    hosted.dirty.delete(characterId);
+    await this.#saveReceipt(characterId, hosted, departure.receipt, departure.character);
+  }
+
+  /**
+   * Espera os extratos de saída de `characterId` que ainda estão gravando (`exitSaves`) — o que o
+   * `#saveReceipt` da sessão privada faz devolvendo o voo de `receiptSaves`. A falha também chega
+   * a quem espera: soltar o personagem (diretório, slot, snapshot) depois de um extrato que não
+   * pousou perderia o que ele rendeu, e é o mesmo contrato do `release` concorrente (#267).
+   */
+  async #awaitExitSaves(hosted: HostedSession, characterId: string): Promise<void> {
+    const inFlight = hosted.exitSaves.get(characterId);
+    if (inFlight === undefined) return;
+    await Promise.all([...inFlight]);
+  }
+
+  /**
+   * O canal ÚNICO de gold da sessão (ADR 0060 d.10c, OW-04). Todo gold que um serviço move fora
+   * do loot — vender, aprender magia, remover Charm, bênção, promoção, compra — JÁ passou por
+   * `goldDelta`; aqui ele passa, ou não, pelo AGREGADO:
+   *
+   * - sessão que `creditsAggregates` (a hunt, o mundo): o agregado se move junto — `goldGained`
+   *   no ganho, `goldSpent` no gasto — e o extrato o leva. O `goldDelta` é liquidado depois de
+   *   gravar (`#persistReceipt`, `settleGoldDelta`);
+   * - sessão que não credita (a Cidade): nada aqui. O `goldDelta` vai como agregado do extrato de
+   *   estado (`#saveDurableReceipt`).
+   *
+   * **Nunca as duas coisas.** Um valor que andasse pelo agregado E fosse lido do `goldDelta` como
+   * agregado seria creditado duas vezes — e retry não impediria, porque cada extrato tem o seu
+   * `seq` (`#saveDurableReceipt` recusa a sessão que credita por isso).
+   *
+   * `delta` tem o sinal do `goldDelta`: positivo ganha, negativo gasta; zero não faz nada.
+   */
+  #mirrorGold(hosted: HostedSession, characterId: string, delta: number): void {
+    if (delta === 0 || !creditsAggregates(hosted.session.ruleset)) return;
+    hosted.session.credit(characterId, delta > 0 ? 'goldGained' : 'goldSpent', Math.abs(delta));
+  }
+
+  /**
+   * O extrato de ESTADO DURÁVEL de um shard que NÃO credita (#154) — a Cidade.
    *
    * O shard não credita progresso (ADR 0023) — mas guarda estado: vocação, equipamento, arma
    * de vocação e munição equipada mudam na praça e, sem isto, sumiam no logout (o `equip` da
@@ -5328,8 +5460,17 @@ export class SessionHost {
    * Agregados zerados: a linha de ledger que o `jobs` insere é a chave de idempotência
    * (`UNIQUE (session_id, seq)`), não um crédito. `seq` avança na cópia compartilhada, e
    * cada extrato tem o seu.
+   *
+   * É o canal "sem agregado" do gold (`#mirrorGold`): o `goldDelta` entra aqui como agregado. Por
+   * isso uma sessão que `creditsAggregates` NUNCA passa por aqui — o mesmo gold já estaria no
+   * agregado dela, e seria creditado duas vezes. É erro de programação, e falha em voz alta.
    */
   async #saveDurableReceipt(characterId: string, hosted: HostedSession, reason: EndReason): Promise<void> {
+    if (creditsAggregates(hosted.session.ruleset)) {
+      throw new Error(
+        `session ${hosted.session.id} credits by aggregate: its gold must not also leave as goldDelta`,
+      );
+    }
     const receipts = this.#options.receipts;
     const accountId = this.#accountIdByCharacter.get(characterId);
     const owner = hosted.session.participants.find((p) => p.id === characterId);
@@ -5415,10 +5556,11 @@ export class SessionHost {
       const hosted = this.#sessions.get(sessionId);
       const accountId = this.#accountIdByCharacter.get(characterId);
       if (hosted === undefined || accountId === undefined) continue;
-      // Shard não tem snapshot (FUN-71, ADR 0023). Não há progresso a guardar na praça, e o
-      // que seria guardado é a praça INTEIRA — uma cópia por participante, duzentas vezes o
-      // mesmo estado a cada dez segundos.
-      if (hosted.session.ruleset.shared === true) continue;
+      // Shard não tem snapshot (`keepsSnapshot`, FUN-71, ADR 0023). Não há progresso a guardar na
+      // praça, e o que seria guardado é a praça INTEIRA — uma cópia por participante, duzentas
+      // vezes o mesmo estado a cada dez segundos. O mundo chega ao banco por checkpoint, com
+      // timer próprio (OW-16), e não por aqui.
+      if (!keepsSnapshot(hosted.session.ruleset)) continue;
       try {
         await snapshots.save(
           characterId, accountId, this.#options.nodeId, hosted.session.snapshot(),
@@ -5800,6 +5942,7 @@ export class SessionHost {
       lastAdvancedAtMs: this.#now(),
       credited: new Set(),
       receiptSaves: new Map(),
+      exitSaves: new Map(),
       departures: [],
       dirty: new Set(),
       sentItemsLooted: session.aggregates.itemsLooted,
