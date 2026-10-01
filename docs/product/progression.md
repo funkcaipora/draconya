@@ -29,8 +29,9 @@ O catálogo de magias do jogo usa como referência de escopo funcional as magias
 - A escolha de vocação ocorre no level 8 (ver `onboarding.md`).
 - Existe exatamente uma promoção de classe no MVP, permanente e única — obtida na Cidade (#566),
   não por quest.
-- Magias liberadas por level: a maioria; magias mais fortes: condicionadas à promoção (ainda não
-  ligado — ver "Em aberto").
+- Magia é **aprendida por gold**, como no Tibia (#624, ADR 0058): o level e a vocação liberam a
+  COMPRA, não o cast — o cast exige a magia aprendida. Ver "Aprender magia" abaixo. Magias mais
+  fortes condicionadas à promoção: ainda não ligado — ver "Em aberto".
 - Skills evoluem por uso, não por level.
 - Pontos de passiva são distribuídos em árvore própria por vocação (dano / suporte / sustain).
 - Respec de passivas é livre, ilimitado e restrito a PZ.
@@ -256,7 +257,8 @@ cada aplicação curto-circuita e nenhum número muda — nem um arredondamento 
 | `monster` / `boss` `.attack` | golpe do monstro | `trunc(dano sorteado × mult)` — o sorteio é o mesmo, e a sequência do `Rng` não muda |
 
 `monster.boss: true` (o `MonsterType::isBoss` do Canary) escolhe o bloco `boss`; ausente é
-`false`. Só a flag: raridade e pontos do Bosstiary são o #629.
+`false`. Desde o #629 o importador o escreve junto com o bloco `bosstiary` (raridade e `raceId`) de
+cada boss do Canary — ver [`bosses.md`](./bosses.md), "O Bosstiary".
 
 Com `useStages`, a primeira faixa que contém o level vence (`getRateFromTable`), e sem faixa
 vale o rate simples. `buildContent` recusa faixa sem `maxLevel` que não seja a última, faixa com
@@ -315,6 +317,7 @@ Fora daqui: `rateSpawn` e `rateKillingInTheNameOfPoints` (sem sistema correspond
 | Penalidade de morte — redução de quem está promovido | 30 %, ADITIVA à de bênção e NUNCA tetada (`Player::getLostPercent`, #569; `promoted` ainda não é estado do personagem — ver #566/ADR 0042) | `packages/content/data/progression/baseline.json`, `deathPenalty.promotionReduction` |
 | Penalidade de morte — piso de level | **removido pelo #569** — o Tibia nunca teve piso (ver "Divergências do PRD"); o personagem pode cair até o level 1 | — |
 | Penalidade de morte — skill tries e mana gasta | o MESMO percentual que tira XP tira também os tries de cada skill (podendo derrubar o nível dela) e a mana gasta — modelada como os pontos da skill `magic`, sem campo próprio (#569, `Player::death`) | — (mecanismo em `packages/sim/src/progression.ts`, `applySkillLosses`) |
+| Loyalty (bônus da idade da conta sobre skill e ML) | 1 ponto por dia de conta; 10 degraus de 360 em 360 pontos, de 5 % a 50 % (o Canary, #628; ver "Loyalty") | `packages/content/data/loyalty/baseline.json` |
 | Rates do servidor (XP, skill, magia, loot, stages, monstro, boss) | todos 1, stages desligados — o Tibia com rate 1 (#691; ver "Rates do servidor") | `packages/content/data/progression/baseline.json`, `rates` (ausente = neutro) |
 | Referência de catálogo de magias | Tibia até o level 80 no M12 (ADR 0026), ~120 depois (referência funcional; números por Base Power do TibiaWiki) | `packages/content/data/spells/` |
 | Fist/Club/Sword/Axe — início, curva (base), dano por nível | 10 / 50 / +2% `[ABERTO — dano por nível provisório]` (base = `skillBase` do Canary para os quatro tipos, #521/#567, ADR 0037; `factor` por vocação, ver acima — separadas da antiga skill única `melee` no #567) | `packages/content/data/skills/{fist,club,sword,axe}.json` |
@@ -448,7 +451,88 @@ enquanto o personagem não promoveu.
 **O que ainda não está ligado.** `promotion.soulMax`/`promotion.soulGainTicksMs` existem no
 conteúdo (os números do Canary, 200/15.000 ms) mas não têm consumidor: dependem do mecanismo de
 soul (#593) mesclar primeiro. Liberação de magia por promoção (linha 12 acima) também não está
-ligada — depende do catálogo de magias que a exigiria.
+ligada — depende do catálogo de magias que a exigiria. (O aprendizado de magia por gold, esse sim,
+está ligado desde a #624 — ver "Aprender magia".)
+
+## Aprender magia (#624, ADR 0058)
+
+**Status:** implementado — registro `learnedSpells`, intenção `learn-spell`, cast que confere o
+aprendizado, preço importado dos NPCs do Canary, tela de serviço no modal Personagem e migração
+de concessão a quem já existia. **Não implementado:** a Great Death Beam (a Wheel of Destiny é a
+única que a concede no Canary, e o dono a deixou fora em 2026-09-29).
+
+**A regra é a do Canary com `toggleLearnSpells` ligado** (o padrão): toda magia INSTANTÂNEA exige
+`hasLearnedInstantSpell` no cast (`Spell::playerSpellCheck`, `RETURNVALUE_YOUNEEDTOLEARNTHISSPELL`).
+A **runa** (o item — `supply` no Draconya) não: exige só level e magic level. A **conjuração** da
+runa é magia e exige o aprendizado como qualquer outra. Aprender é o `StdModule.learnSpell` dos 51
+NPCs do Canary, sem o diálogo: o Draconya o mostra como **tela de serviço** (ADR 0042), uma seção
+"Magias" do modal Personagem, sem NPC dialogável.
+
+**O que a compra confere, na ordem do Canary:** a magia existe e tem `learnPrice`
+(`not-for-sale` senão) → ainda não foi aprendida (`already-learned`, **sem cobrar** — é a
+idempotência) → é da vocação do personagem (`wrong-vocation`) → ele tem o `minLevel`
+(`level-too-low`) → tem o gold (`insufficient-gold`). O gold sai pelo ledger
+(`goldDelta`, invariante 10): na Cidade só por `goldDelta`, liquidado no extrato de estado durável;
+na hunt também pelo agregado `goldSpent` da sessão. **É aceito nas duas** — não há rolagem (ADR
+0052 d.4), e o Tibia também não exige protect zone para o NPC ensinar. `magic level` que o Canary
+confere em `canLearnSpell` não existe aqui: nenhuma magia instantânea real declara `magicLevel`
+(só a `#example.lua`).
+
+**O que o bot faz.** Slot com magia não aprendida é **PULADO** como o de magia sem mana: a recusa
+(`spell-not-learned`) não tem prazo, o slot seguinte do mesmo grupo dispara no mesmo ciclo, e a
+hunt nunca encerra por isso. O slot continua na barra, **marcado** ("não aprendida" no tooltip e
+borda tracejada) — nada é escondido (ADR 0032 d.5). Aprender no meio da hunt acorda o bot na hora
+(`HuntRuleset#rearmBot`, um evento na fila, nada por tick).
+
+**De onde vem o preço.** `learnPrice` em `packages/content/data/spells/*.json`, importado por
+`pnpm catalog:spell-prices`: o **MENOR** preço entre os NPCs que ensinam a magia à vocação
+(ADR 0038 d.6), ligando pelo NOME (o Canary compara sem diferenciar caixa) e normalizando a
+vocação do NPC para a base (Master Sorcerer → Sorcerer). `premium` do NPC não entra. As básicas
+de cada vocação são de graça no Canary (`price = 0`), e `0` não é "sem preço". O relatório
+(`docs/reference/catalog/spell-prices-report.md`) lista o preço, o NPC de origem e quantos ensinam;
+`pnpm check` reprova se ele ou algum arquivo de magia divergir do Canary.
+
+**Sem NPC que ensine, o preço é curado à mão** (fallback do ADR 0058 d.3), com a fonte no `_open`
+do arquivo:
+
+| Magia | `learnPrice` | Situação |
+|---|---|---|
+| `challenge` | 2000 | **PROVISÓRIO** — TibiaWiki, sem conferência (o site ficou inacessível ao gravar) `[ABERTO — conferir]` |
+| `conjure-power-bolt` | 2200 | **PROVISÓRIO** — idem |
+| `conjure-sniper-arrow` | 800 | **PROVISÓRIO** — idem |
+| `great-death-beam` | ausente | Só a Wheel of Destiny a concede no Canary; `learn-spell` recusa `not-for-sale` |
+
+**Personagem que já existia (migração 0024, ADR 0014).** Quem existia quando a migração rodou
+recebe **todas as magias da vocação dele cujo `minLevel` é ≤ o level dele** (e as sem vocação,
+como Cure Poison, se ele tem o level) — "poder lançar" é capacidade persistida por level, e
+exigir que quem já jogava comprasse de novo o que lançava ontem seria regressão sem fonte que a
+justifique. É um retrato das 119 magias do dia, escrito no SQL da migração; magia criada depois
+é COMPRADA. **Personagem novo começa sem nenhuma**, como no Tibia, e o kit de nascimento (ADR
+0026) não muda — o que faz do primeiro passo depois da escolha de vocação uma ida à tela de
+Magias (ver `onboarding.md`).
+
+**Persistência.** Registro `jsonb` `characters.learned_spells` = `{ spellIds, version: 1 }`, lido
+INTEIRO no ticket e gravado pelo ledger a partir do extrato — mas **fundido pela UNIÃO dos ids**
+com o que já está na linha (`LearnedSpells.merge`), e não por última escrita vence como `charms`:
+o registro só cresce, extratos pendentes se aplicam em ordem qualquer (o `SCAN` do Redis não
+ordena) e um extrato de base desconhecida só carrega as compras dele — a última escrita derrubaria
+uma magia paga ou a concessão da migração (ADR 0058, Emenda, ponto 6). **Só viaja no extrato quando
+o registro é a verdade do personagem** (`LearnedSpells#recorded`): uma sessão retomada de um
+snapshot anterior à #624, ou um ticket de um `api` antigo, não sabe o que ele aprendeu.
+
+**Parâmetros:**
+
+| Parâmetro | Valor | Onde mora |
+|---|---|---|
+| Preço de aprender, por magia | menor `price` dos NPCs do Canary (0 nas básicas; 2 500 no Berserk; 15 000 nas Ultimate) | `packages/content/data/spells/*.json`, `learnPrice` |
+| Exigência de aprendizado no cast | toda magia instantânea; runa (supply) não | `packages/sim/src/casting.ts` (`spell-not-learned`) |
+| Registro | `{ spellIds, version: 1 }` | `packages/sim/src/learned-spells.ts`; coluna `characters.learned_spells` |
+| Intenção | `learn-spell { spellId }` (C2S 36); resposta `learned-spells` (S2C 47) | `packages/protocol/src/messages.ts` |
+
+**Divergências do Tibia:** (1) sem diálogo de NPC e sem ir até o NPC — é uma tela de serviço, ADR
+0042; (2) o gold é um só (`removeMoneyBank` do Canary tira do banco OU da mochila; aqui há um
+saldo); (3) o `premium` do NPC é ignorado; (4) a `level` que o NPC anuncia é ignorada — vale o
+`minLevel` da magia, que é o que o Canary confere de verdade.
 
 ## Skills sobem pelo USO (FUN-75)
 
@@ -585,6 +669,82 @@ Três campos são expostos em `player-stats` e em `session-state.self`:
 - `magicLevel`: atalho com `{ level, percentToNext }` para a skill `magic` (`skills.magic`), duplicado no topo para facilitar acesso direto nas barras de interface do HUD e manter paridade com as barras clássicas.
 
 O percentual para o próximo nível (`percentToNext`) é um número inteiro de 0 a 99 (truncado via piso `Math.floor` e limitado a 99 enquanto o nível não fecha).
+
+## Loyalty: o bônus da idade da conta sobre skill e ML (#628, ADR 0052 d.5)
+
+**Status:** implementado — bônus no nível efetivo de toda skill de uso e do magic level, fixado
+por sessão, mostrado no painel Skills. **Fora:** o título de Loyalty ("Scout of Tibia" …
+"Enlightened of Tibia") — é apresentação, sem efeito de jogo, e o Draconya não tem onde
+mostrá-lo.
+
+O Tibia dá a quem tem conta velha um bônus percentual sobre os **tries** que a skill já
+acumulou, convertido em níveis extras na curva REAL da vocação (`Player::getLoyaltySkill` e
+`getLoyaltyMagicLevel`, `player.cpp:1100-1125` e `7429-7453`). `getSkillLevel`/`getMagicLevel`
+usam esse nível no lugar do base — por isso o bônus vale no dano, na chance à distância, na
+defesa do escudo, na cura, na fórmula de magia e no requisito de `magicLevel` de uma runa, e não
+só no que a tela mostra.
+
+### Quem calcula o quê
+
+| Peça | Quem | Onde |
+|---|---|---|
+| Dias de conta | a `api`, na EMISSÃO do ticket, com o relógio dela: `floor((agora − account.created_at) / 86 400 000)` — `Account::getAccountAgeInDays` do Canary, que divide inteiro | `packages/server/src/loyalty.ts` (`accountAgeDays`), `GameRepository.getAccountCreatedAt` |
+| Pontos e degrau | a `api`, com a tabela do conteúdo: `dias × pointsPerCreationDay`, o `percent` do MAIOR degrau que os pontos alcançam, × `bonusPercentageMultiplier`, **truncado** (`setLoyaltyBonus(uint16_t)`) | `packages/sim/src/loyalty.ts` (`loyaltyPointsOf`, `loyaltyBonusPercentOf`) |
+| Bônus na sessão | o `game`, fixado no `CharacterRuntime` ao entrar (`InitialCharacter.loyaltyBonusPercent`) e **nunca relido** — atravessa toda transição Cidade↔hunt e toda retomada de snapshot | `CharacterState.loyaltyBonusPercent` |
+| Tries → níveis extras | o `sim` | `LoyaltyLevels.levelOf`, `CharacterRuntime.loyaltyLevelOf`, `HuntRuleset#loyaltyLevelOf` |
+
+O valor **não é persistido**: deriva de `account.created_at` a cada ticket, então não há coluna,
+migração, extrato nem ledger. Uma conta que completa o dia 360 no meio de uma sessão só ganha o
+degrau na PRÓXIMA entrada — o `initializeLoyaltySystem` do Canary também roda só no login. Numa
+party, cada membro carrega o bônus da PRÓPRIA conta (`/start` e `/join`); o do líder não nivela
+ninguém.
+
+### A conta do Canary
+
+`total = tries acumulados até o nível + tries do nível corrente` (soma do custo de todos os
+níveis já fechados, `Σ pointsForLevel` de `startingLevel` a `level − 1`); `bonus = floor(total ×
+percent / 100)`; e o `bonus` é gasto nível a nível — cada nível custa o `pointsForLevel` dele, o
+primeiro já contando os tries que o personagem tinha — até acabar. É o **mesmo custo** que
+`Skills.gain` cobra, e o mesmo piso vale para skill (10) e para o magic level (0) porque o piso é
+o `startingLevel` do conteúdo. O bônus é sobre TRIES, não sobre o nível: 50 % numa espada de
+Knight nível 100 (2 655 971 tries acumulados) vale **4 níveis** (104), não 50; e 10 % no mesmo
+ponto (265 597 tries) fica 54 tries abaixo do custo de sair do 100 (265 651) e não vale nada.
+
+O "nível máximo" do Canary também vale: quando o custo do próximo nível deixa de crescer
+(`currReqTries >= nextReqTries` — a conversão para `uint64` estourou, ou o fator é 1), o nível
+base é o teto e o bônus não passa dele. Os tries do `Skills` do Draconya podem ser fracionários
+(rate ≠ 1); a conta usa o piso, como os tries inteiros do Tibia.
+
+### O que lê o nível efetivo, e o que continua no base
+
+| Lê o nível COM Loyalty | Continua no nível BASE |
+|---|---|
+| golpe corpo a corpo e à distância, chance de acerto à distância, defesa do escudo/arma, fórmula de magia e de cura, requisito de `magicLevel` de runa e o espelho dele no `slotStates` | ganhar tries, o estágio de rate de skill/ML (`getBaseMagicLevel`), a penalidade de morte, o extrato e o snapshot |
+
+Um único ponto, `HuntRuleset#loyaltyLevelOf`, faz a leitura; sem bônus (o caso de toda conta com
+menos de 360 dias) ele devolve o nível base sem achar a vocação nem calcular fator nenhum. O
+custo acumulado por skill fica num cache derivado do personagem (`LoyaltyLevels`), que nunca vai
+ao snapshot.
+
+**Correção junto:** o espelho do `slotStates` para o requisito de `magicLevel` de uma runa lia só
+o nível base, enquanto o disparo (`#runeScaling`) já somava o bônus de equipamento (#524) e o de
+condição (#576) — a tela podia mostrar a runa trancada com o disparo liberado. Os três lugares
+(`#runeScaling`, `#spellScaling` e o espelho) leem agora o mesmo `#magicLevelOf`.
+
+### O que chega ao cliente
+
+`player-stats` e `session-state.self` ganham `loyaltyBonusPercent` (inteiro; **ausente** quando
+é zero) e cada `SkillProgress` ganha `loyaltyLevel` (o nível efetivo; **ausente** quando o bônus
+não muda o nível). O painel Skills mostra o nível efetivo na linha (o que o Tibia desenha), o
+base e o quanto o Loyalty soma na dica da linha ("Base 100 + 4 de Loyalty"), e "Loyalty +50%" no
+cabeçalho. A barra de progresso continua a do nível BASE — é nele que os tries entram.
+
+| Parâmetro | Valor | Onde mora em packages/content |
+|---|---|---|
+| Loyalty ligado | `true` (`loyaltyEnabled`) | `packages/content/data/loyalty/baseline.json`, `enabled` |
+| Pontos por dia de conta | 1 (`loyaltyPointsPerCreationDay`); os dois de Premium (`loyaltyPointsPerPremiumDay*`) valem 0 no `config.lua.dist` e o Draconya não rastreia dias de Premium comprados — o resultado é o mesmo | `loyalty/baseline.json`, `pointsPerCreationDay` |
+| Multiplicador do percentual | 1,0 (`loyaltyBonusPercentageMultiplier`) | `loyalty/baseline.json`, `bonusPercentageMultiplier` |
+| Degraus | 360 → 5 %, 720 → 10 % … 3 600 → 50 %, de 360 em 360 pontos (`data/libs/functions/player.lua:762-790`) | `loyalty/baseline.json`, `tiers` |
 
 ## Alma (soul, #593)
 

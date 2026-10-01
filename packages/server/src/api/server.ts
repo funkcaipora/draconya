@@ -185,6 +185,9 @@ export function buildApi(
       ...(dependencies.pendingDurableVersion === undefined
         ? {}
         : { pendingDurableVersion: dependencies.pendingDurableVersion }),
+      ...(dependencies.loyaltyBonusPercentOf === undefined
+        ? {}
+        : { loyaltyBonusPercentOf: dependencies.loyaltyBonusPercentOf }),
     });
   }
 

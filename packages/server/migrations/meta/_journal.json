@@ -167,7 +167,35 @@
       "idx": 23,
       "version": "7",
       "when": 1791200000000,
-      "tag": "0023_823-durable-version",
+      "tag": "0023_629-bosstiary",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791300000000,
+      "tag": "0024_624-learned-spells",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791400000000,
+      "tag": "0025_599-familiar",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791500000000,
+      "tag": "0026_631-training",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1791600000000,
+      "tag": "0027_823-durable-version",
       "breakpoints": true
     }
   ]

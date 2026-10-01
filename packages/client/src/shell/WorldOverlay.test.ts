@@ -77,6 +77,15 @@ describe('WorldOverlay (#327, #348, RC-14, SV-12)', () => {
     expect(html).not.toContain('Bênção');
   });
 
+  it('says Training instead of the city text while training — the plaza credits nothing, the training does (#631)', async () => {
+    const html = await render(createElement(WorldOverlay, { hunting: false, training: true }));
+
+    expect(html).toContain('Treino · zona protegida');
+    expect(html).toContain('cada golpe gasta uma carga');
+    expect(html).not.toContain('a praça não credita nada');
+    expect(html).not.toContain('criaturas no alcance');
+  });
+
   it('shows the count derived from world.creatures during a hunt', async () => {
     world.selfId = 1;
     world.creatures.set(1, creature(1, { name: 'você' }));

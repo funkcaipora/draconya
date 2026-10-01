@@ -12,6 +12,7 @@ const CONDITION_BADGE: Record<ActiveCondition['kind'], { tone: BadgeTone; label:
   'heal-over-time': { tone: 'ice', label: 'Cura contínua' },
   'mana-shield': { tone: 'energy', label: 'Escudo mágico' },
   buff: { tone: 'gold', label: 'Bônus ativo' },
+  light: { tone: 'gold', label: 'Luz' },
 };
 
 function remainingLabel(remainingMs: number): string {

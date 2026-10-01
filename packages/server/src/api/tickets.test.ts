@@ -1,6 +1,8 @@
 import Fastify from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
+import { offlineTrainingRulesOf } from '@draconya/sim';
 import { createTicketHandler, type TicketRouteDependencies } from './tickets.js';
+import { trainingTestContent } from '../testing/content.js';
 import type { IssueResult } from '../tickets.js';
 import type { CharacterRecord } from '../db/repository.js';
 
@@ -8,7 +10,8 @@ const CHARACTER: CharacterRecord = {
   id: 'p1', accountId: 'a1', name: 'Hero', vocation: null, promoted: false, level: 1, xp: 0, soul: 0, gold: 0,
   capacity: 400, premiumUntil: null, staminaMs: 86400000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
-  ammo: null, supplyStock: null, ammunitionStock: null, charms: null, fedMs: 0, blessings: 0, fightMode: 'attack',
+  ammo: null, supplyStock: null, ammunitionStock: null, charms: null, bosstiary: null, learnedSpells: null,
+  familiar: null, training: null, fedMs: 0, blessings: 0, fightMode: 'attack',
   durableVersion: 0, createdAt: new Date(),
 };
 
@@ -256,6 +259,55 @@ describe('POST /api/tickets', () => {
     expect(await issuedWith([10_000])).not.toHaveProperty('bestiary');
   });
 
+  it('o Bosstiary da linha entra no ticket; nulo ou corrompido, fica de fora (#629)', async () => {
+    // A mesma régua do Bestiário: a linha é `jsonb` sem CHECK, e um registro torto cai fora aqui
+    // sem trancar o login; o `null` de quem nunca abateu um boss NÃO vira chave.
+    const issuedWith = async (bosstiary: unknown) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, bosstiary })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    const record = { kills: { '639': 3 }, points: 40, version: 1 };
+    expect(await issuedWith(record)).toMatchObject({ bosstiary: record });
+    expect(await issuedWith(null)).not.toHaveProperty('bosstiary');
+    expect(await issuedWith({ kills: { '639': -1 }, points: 0, version: 1 })).not.toHaveProperty('bosstiary');
+    expect(await issuedWith({ kills: {} })).not.toHaveProperty('bosstiary');
+    expect(await issuedWith([1])).not.toHaveProperty('bosstiary');
+  });
+
+  it('leva os carimbos do familiar quando a linha tem um registro válido, e descarta o torto (#599)', async () => {
+    // Sem eles no ticket, sair da hunt zeraria o cooldown de 30 min: a sessão seguinte leria o
+    // personagem como quem nunca invocou. O `null` de quem nunca invocou NÃO vira chave.
+    const issuedWith = async (familiar: unknown) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, familiar })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    const stamps = { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 };
+    expect(await issuedWith(stamps)).toMatchObject({ familiar: stamps });
+    expect(await issuedWith(null)).not.toHaveProperty('familiar');
+    expect(await issuedWith({ version: 1, summonUntilMs: -1, cooldownUntilMs: 0 })).not.toHaveProperty('familiar');
+    expect(await issuedWith('nunca')).not.toHaveProperty('familiar');
+  });
+
   it('leva a munição escolhida quando a linha tem uma válida, e descarta a torta (#152)', async () => {
     // A mesma régua do Bestiário: uma escolha torta vira ausente — a sessão atira a grátis —,
     // nunca login recusado por causa de uma preferência.
@@ -277,6 +329,32 @@ describe('POST /api/tickets', () => {
     expect(await issuedWith(null)).not.toHaveProperty('ammo');
     expect(await issuedWith({ arrow: 7 })).not.toHaveProperty('ammo');
     expect(await issuedWith(['arrow'])).not.toHaveProperty('ammo');
+  });
+
+  it('as magias aprendidas da linha entram no ticket; nulas ou tortas, ficam de fora (#624, ADR 0058)', async () => {
+    // Sem elas na sessão o CAST recusa toda magia (`spell-not-learned`) — quem comprou ontem
+    // entraria hoje sem lançar nada. O `null` do personagem novo NÃO vira chave, e a linha é
+    // `jsonb` sem CHECK: um registro torto cai fora aqui, sem trancar o login por causa dele.
+    const issuedWith = async (learnedSpells: unknown) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, learnedSpells })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    const record = { spellIds: ['berserk', 'wound-cleansing'], version: 1 };
+    expect(await issuedWith(record)).toMatchObject({ learnedSpells: record });
+    expect(await issuedWith({ spellIds: [], version: 1 })).toMatchObject({ learnedSpells: { spellIds: [] } });
+    expect(await issuedWith(null)).not.toHaveProperty('learnedSpells');
+    expect(await issuedWith({ spellIds: ['berserk', 'berserk'], version: 1 })).not.toHaveProperty('learnedSpells');
+    expect(await issuedWith(['berserk'])).not.toHaveProperty('learnedSpells');
   });
 
   it('leva a vocação da linha, e a ausência quando ainda não há uma (#154)', async () => {
@@ -320,6 +398,28 @@ describe('POST /api/tickets', () => {
     expect(await issuedWith(new Date(Date.now() + 60_000))).toMatchObject({ premium: true });
     expect(await issuedWith(null)).not.toHaveProperty('premium');
     expect(await issuedWith(new Date(Date.now() - 60_000))).not.toHaveProperty('premium');
+  });
+
+  it('leva o bônus de Loyalty da CONTA do chamador, e nada quando a conta não tem degrau (#628)', async () => {
+    // A idade da conta é da CONTA, e a rota a pede com o `accountId` autenticado — nunca com o
+    // que vem no corpo. Sem degrau (ou sem o sistema ligado) o resolver devolve `undefined` e o
+    // ticket sai idêntico ao de antes desta issue.
+    const issuedWith = async (loyaltyBonusPercentOf?: (accountId: string) => Promise<number | undefined>) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        ...(loyaltyBonusPercentOf === undefined ? {} : { loyaltyBonusPercentOf }),
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    const seen: string[] = [];
+    expect(await issuedWith(async (accountId) => { seen.push(accountId); return 15; }))
+      .toMatchObject({ loyaltyBonusPercent: 15 });
+    expect(seen).toEqual(['a1']);
+    expect(await issuedWith(async () => undefined)).not.toHaveProperty('loyaltyBonusPercent');
+    expect(await issuedWith()).not.toHaveProperty('loyaltyBonusPercent');
   });
 
   it('reconstrói os containers pela posição gravada; a linha sem posição entra no primeiro lugar livre (#160)', async () => {
@@ -464,5 +564,136 @@ describe('POST /api/tickets', () => {
     const response = await post(app, { characterId: 'p1' });
     expect(response.statusCode).toBe(status);
     expect(response.json()).toEqual({ error: reason });
+  });
+});
+
+describe('POST /api/tickets: o gasto do banco de offline training (#631, ADR 0059 d.3-d.4)', () => {
+  const HOUR = 3_600_000;
+  const NOW = 1_000 * HOUR;
+  const rules = offlineTrainingRulesOf(trainingTestContent()) as NonNullable<ReturnType<typeof offlineTrainingRulesOf>>;
+  const bank = (offlineBankMs: number, offlineSkill: string | null = 'sword') =>
+    ({ offlineBankMs, offlineSkill, version: 1 });
+
+  /**
+   * A rota com Treino: o personagem VEM da linha (`row`), o carimbo de repouso é `restedSince`, e o
+   * `writer` grava o que a rota mandou escrever — a mesma forma de `withOwnedCharacter` de verdade.
+   */
+  function scenario(options: {
+    row?: Partial<CharacterRecord>;
+    restedSinceMs?: number | null;
+    resting?: boolean;
+    issued?: IssueResult;
+  } = {}) {
+    const writes: Array<{ training: unknown; skills?: unknown; at: Date }> = [];
+    const issue = vi.fn(async (..._args: unknown[]) => options.issued ?? ISSUED);
+    const restedSince = vi.fn(async () => options.restedSinceMs === undefined ? null : options.restedSinceMs);
+    const app = build({
+      tickets: {
+        issue,
+        resolveNode: async () => ({ ok: true, node: NODE, resting: options.resting ?? true }),
+      } as never,
+      withOwnedCharacter: (async (
+        _accountId: string,
+        _characterId: string,
+        operation: (character: CharacterRecord, writer: unknown) => unknown,
+      ) => operation({ ...CHARACTER, ...options.row }, {
+        applyOfflineTraining: async (update: { training: unknown; skills?: unknown; at: Date }) => { writes.push(update); },
+      })) as never,
+      offlineTraining: { rules, restedSince, now: () => NOW },
+    });
+    const ticketOf = () => issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    return { app, writes, issue, restedSince, ticketOf };
+  }
+
+  it('gasta o banco com o personagem em repouso: o ticket leva as skills e o banco novos, e a MESMA transação os grava', async () => {
+    // 2 h fora, banco de 3 h, skill sword: treina `min(2 h, 3 h, 6 h do Free)` = 2 h. O golpe é a
+    // cada 2 s e a melee rende `/ 2`: 7 200 s / 2 s / 2 = 1 800 tries de sword.
+    const s = scenario({ row: { training: bank(3 * HOUR) }, restedSinceMs: NOW - 2 * HOUR });
+    const response = await post(s.app, { characterId: 'p1' });
+
+    expect(response.statusCode).toBe(200);
+    const ticket = s.ticketOf() as { skills: Record<string, { level: number; points: number }>; training: unknown };
+    expect(ticket.training).toEqual(bank(1 * HOUR, null));
+    // A escolha do livro é CONSUMIDA (`null`): o mesmo ticket reemitido não gasta de novo.
+    expect(ticket.skills['sword']?.level).toBeGreaterThan(10);
+    expect(s.writes).toHaveLength(1);
+    expect(s.writes[0]?.training).toEqual(bank(1 * HOUR, null));
+    expect(s.writes[0]?.skills).toEqual(ticket.skills);
+    expect(s.writes[0]?.at).toEqual(new Date(NOW));
+  });
+
+  it('o teto é o da CONTA: Free 6 h, Premium 12 h (ADR 0059 d.4), mesmo com banco e ausência maiores', async () => {
+    const tempoTreinado = async (premiumUntil: Date | null) => {
+      const s = scenario({
+        row: { training: bank(12 * HOUR), premiumUntil }, restedSinceMs: NOW - 20 * HOUR,
+      });
+      await post(s.app, { characterId: 'p1' });
+      return (s.ticketOf() as { training: { offlineBankMs: number } }).training.offlineBankMs;
+    };
+    // Free: gasta 6 h de 12 h; sobram 6 h. Premium (válido em NOW): gasta 12 h; sobra 0.
+    expect(await tempoTreinado(null)).toBe(6 * HOUR);
+    expect(await tempoTreinado(new Date(NOW + HOUR))).toBe(0);
+    // Premium VENCIDO é Free.
+    expect(await tempoTreinado(new Date(NOW - HOUR))).toBe(6 * HOUR);
+  });
+
+  it('dentro da carência (menos de 10 min fora) a escolha é consumida, o banco fica e nenhuma skill sobe', async () => {
+    const s = scenario({ row: { training: bank(3 * HOUR) }, restedSinceMs: NOW - 5 * 60_000 });
+    await post(s.app, { characterId: 'p1' });
+
+    expect(s.writes).toHaveLength(1);
+    expect(s.writes[0]?.training).toEqual(bank(3 * HOUR, null));
+    // Nada rendeu: as skills e o instante delas NÃO são reescritos.
+    expect(s.writes[0]).not.toHaveProperty('skills');
+  });
+
+  it('sem carimbo de repouso — Redis reiniciado, sessão que caiu sem `release` — o banco NÃO é gasto e nada é escrito', async () => {
+    const s = scenario({ row: { training: bank(3 * HOUR) }, restedSinceMs: null });
+    await post(s.app, { characterId: 'p1' });
+
+    expect(s.writes).toEqual([]);
+    // O ticket leva o registro como está: o tempo continua no banco, e a escolha do livro também.
+    expect(s.ticketOf()).toMatchObject({ training: bank(3 * HOUR) });
+  });
+
+  it('personagem que ainda tem sessão hospedada não está em repouso: nem consulta o carimbo, nem escreve (invariante 9)', async () => {
+    const s = scenario({ row: { training: bank(3 * HOUR) }, restedSinceMs: NOW - 2 * HOUR, resting: false });
+    await post(s.app, { characterId: 'p1' });
+
+    expect(s.restedSince).not.toHaveBeenCalled();
+    expect(s.writes).toEqual([]);
+    expect(s.ticketOf()).toMatchObject({ training: bank(3 * HOUR) });
+  });
+
+  it('sem skill escolhida no livro não há o que gastar — e a linha não é tocada', async () => {
+    const s = scenario({ row: { training: bank(3 * HOUR, null) }, restedSinceMs: NOW - 2 * HOUR });
+    await post(s.app, { characterId: 'p1' });
+    expect(s.writes).toEqual([]);
+  });
+
+  it('personagem que nunca caçou (sem registro) segue como sempre', async () => {
+    const s = scenario({ row: { training: null }, restedSinceMs: NOW - 2 * HOUR });
+    const response = await post(s.app, { characterId: 'p1' });
+    expect(response.statusCode).toBe(200);
+    expect(s.writes).toEqual([]);
+    expect(s.ticketOf()).not.toHaveProperty('training');
+  });
+
+  it('ticket recusado (active-limit) não gasta o banco: a escolha do livro fica para o próximo login', async () => {
+    const s = scenario({
+      row: { training: bank(3 * HOUR) }, restedSinceMs: NOW - 2 * HOUR,
+      issued: { ok: false, reason: 'active-limit' },
+    });
+    const response = await post(s.app, { characterId: 'p1' });
+    expect(response.statusCode).toBe(409);
+    expect(s.writes).toEqual([]);
+  });
+
+  it('um registro torto na linha vira ausente no ticket e não trava o login', async () => {
+    const s = scenario({ row: { training: { offlineBankMs: -5, offlineSkill: 7 } }, restedSinceMs: NOW - HOUR });
+    const response = await post(s.app, { characterId: 'p1' });
+    expect(response.statusCode).toBe(200);
+    expect(s.ticketOf()).not.toHaveProperty('training');
+    expect(s.writes).toEqual([]);
   });
 });

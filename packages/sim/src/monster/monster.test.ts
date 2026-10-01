@@ -7,7 +7,7 @@ import { Rng } from '../rng.js';
 import {
   CHALLENGE_CONDITION_KEY, MonsterRuntime, RANDOM_STEP_INTERVAL_MS, canMonsterEnterField,
   chooseTarget, decideMonsterAction, decideUnengagedMove, hasActiveCondition, isInSpawnLocation,
-  isInSpawnRange, isMonsterFleeing, walkBackPathStep, type Prey,
+  isInSpawnRange, isMonsterFleeing, summonFollowStep, walkBackPathStep, type Prey, type SummonFollow,
 } from './monster.js';
 
 const rat: Monster = {
@@ -1240,10 +1240,22 @@ describe('decideUnengagedMove (#655, Canary `Monster::updateIdleStatus` + `getNe
   });
 
   describe('invocação (`isSummon`)', () => {
-    it('sem alvo fica parada — seguir o mestre não é modelado, e a volta ao spawn não se aplica', () => {
+    it('a invocação de MONSTRO sem alvo fica parada — seguir o mestre não é modelado, e a volta ao spawn não se aplica', () => {
       const summon = monsterAt(5, 5, { home: { x: 0, y: 0 }, masterId: 3 });
       expect(decide(summon, { rng: explodingRng })).toEqual({ kind: 'still' });
       expect(summon.walkingBack).toBe(false);
+    });
+
+    it('a invocação de PERSONAGEM que chega aqui (sem seguidor) anda ao acaso, e nunca volta ao spawn (#599)', () => {
+      // O mestre fora da área de visão: o `getNextStep` do Canary cai em `doRandomStep` — a invocação
+      // nunca é ociosa e não tem spawn para onde voltar.
+      const summon = monsterAt(5, 5, { home: { x: 0, y: 0 }, masterId: 'hero' });
+      const action = decide(summon);
+      expect(action.kind).toBe('random-step');
+      expect(summon.walkingBack).toBe(false);
+      // O intervalo mínimo de 1 s entre passos também vale: acabou de andar, não sorteia.
+      summon.lastMoveAtMs = 9_500;
+      expect(decide(summon, { nowMs: 10_000, rng: explodingRng })).toEqual({ kind: 'random-step', to: null });
     });
 
     it('com alvo e sem passo até ele, anda ao acaso como qualquer monstro', () => {
@@ -1252,5 +1264,101 @@ describe('decideUnengagedMove (#655, Canary `Monster::updateIdleStatus` + `getNe
       expect(action.kind).toBe('random-step');
       expect(summon.walkingBack).toBe(false);
     });
+  });
+});
+
+describe('`summonFollowStep` (#599, `Monster::updateSummonTarget` + `doFollowCreature`)', () => {
+  const VIEW = 11;
+  const summon = (x: number, y: number, z?: number) =>
+    monsterAt(x, y, { masterId: 'hero', ...(z === undefined ? {} : { position: { x, y, z } }) });
+  const master = (x: number, y: number, z?: number, alive = true): Prey =>
+    ({ id: 'hero', position: z === undefined ? { x, y } : { x, y, z }, alive, health: 100 });
+  const stepOf = (follow: SummonFollow): { x: number; y: number } | null =>
+    follow.kind === 'step' ? follow.to : null;
+
+  it('a EXATAMENTE 2 tiles do mestre, com visão livre: já está no lugar — não anda', () => {
+    expect(summonFollowStep(summon(5, 5), master(7, 7), VIEW, open)).toEqual({ kind: 'stay' });
+    expect(summonFollowStep(summon(5, 5), master(5, 3), VIEW, open)).toEqual({ kind: 'stay' });
+    expect(summonFollowStep(summon(5, 5), master(7, 5), VIEW, open)).toEqual({ kind: 'stay' });
+  });
+
+  it('encostada no mestre (1 tile), ela se AFASTA até a 2: o tile a 1 é só o "melhor até agora"', () => {
+    // `FrozenPathingConditionCall` (`creature.cpp:1819-1847`): só `testDist == maxTargetDist` encerra
+    // a busca; a 1 tile é guardado e a busca segue. A invocação ao lado do mestre anda até a faixa
+    // a 2, e para ali — nunca fica encostada para sempre.
+    const first = summonFollowStep(summon(5, 5), master(6, 5), VIEW, open);
+    expect(first.kind).toBe('step');
+    // Um passo que a leva a 2 do mestre (a invocação em (5, 5), o mestre em (6, 5): o oeste).
+    const to = stepOf(first) as { x: number; y: number };
+    expect(Math.max(Math.abs(to.x - 6), Math.abs(to.y - 5))).toBeGreaterThanOrEqual(1);
+    // Ao chegar a 2, fica.
+    expect(summonFollowStep(summon(4, 5), master(6, 5), VIEW, open)).toEqual({ kind: 'stay' });
+  });
+
+  it('sem nenhum tile a 2 alcançável (beco de duas casas), cai no tile a 1 e fica', () => {
+    // A invocação em (1, 0) e o mestre em (2, 0), as únicas livres: nenhum tile a 2 do mestre
+    // existe — o "melhor até agora" é o tile onde ela já está.
+    const alley = (x: number, y: number): boolean => !(y === 0 && (x === 1 || x === 2));
+    expect(summonFollowStep(summon(1, 0), master(2, 0), VIEW, alley)).toEqual({ kind: 'stay' });
+  });
+
+  it('a 3 tiles ou mais: um passo na direção do mestre, o primeiro do caminho mais curto', () => {
+    // Em linha reta anda em linha reta: quatro cardeais (40) até a faixa a 2 do mestre.
+    expect(summonFollowStep(summon(0, 0), master(6, 0), VIEW, open)).toEqual({ kind: 'step', to: { x: 1, y: 0 } });
+    // Diagonal: o caminho de MENOR CUSTO (cardinal 10, diagonal 35) é feito de passos cardeais —
+    // o primeiro vai para leste ou para sul, nunca de viés.
+    const corner = stepOf(summonFollowStep(summon(0, 0), master(6, 6), VIEW, open));
+    expect((corner?.x ?? 0) + (corner?.y ?? 0)).toBe(1);
+  });
+
+  it('contorna a parede que o passo guloso não contorna (A*, não guloso)', () => {
+    // Uma parede vertical em x = 3 (y de 0 a 4) entre a invocação (à esquerda) e o mestre. Só o
+    // buraco em y = 5 deixa passar: o guloso encostaria na parede e empacaria.
+    const wall = (x: number, y: number): boolean => x === 3 && y >= 0 && y <= 4;
+    let position = { x: 1, y: 2 };
+    const target = master(6, 2);
+    for (let i = 0; i < 20; i += 1) {
+      const step = stepOf(summonFollowStep(summon(position.x, position.y), target, VIEW, wall));
+      if (step === null) break;
+      expect(wall(step.x, step.y)).toBe(false);
+      position = step;
+    }
+    // Parou a EXATAMENTE 2 tiles do mestre, do outro lado da parede.
+    expect(Math.max(Math.abs(position.x - 6), Math.abs(position.y - 2))).toBe(2);
+    expect(position.x).toBeGreaterThan(3);
+  });
+
+  it('o tile bom precisa de linha de visão livre até o mestre (`clearSight`)', () => {
+    // Uma parede entre (4, 5) e o mestre em (6, 5): a invocação a 2 tiles, sem visão, continua
+    // andando até um tile de onde enxerga.
+    const noSight = (from: { x: number; y: number }, to: { x: number; y: number }): boolean =>
+      !(from.x <= 4 && to.x >= 6);
+    expect(summonFollowStep(summon(4, 5), master(6, 5), VIEW, open, noSight).kind).toBe('step');
+    // Com visão livre, o mesmo caso fica parado.
+    expect(summonFollowStep(summon(4, 5), master(6, 5), VIEW, open)).toEqual({ kind: 'stay' });
+  });
+
+  it('mestre fora da área de visão ou em outro andar: sem `followCreature`, ela VAGUEIA (`doRandomStep`)', () => {
+    // `Creature::setFollowCreature` recusa quem `canSee` não alcança; sem seguidor o `getNextStep`
+    // do Canary cai no passo aleatório — a invocação nunca é ociosa.
+    expect(summonFollowStep(summon(0, 0), master(VIEW + 1, 0), VIEW, open)).toEqual({ kind: 'wander' });
+    expect(summonFollowStep(summon(0, 0), master(VIEW, 0), VIEW, open).kind).toBe('step');
+    expect(summonFollowStep(summon(0, 0, 7), master(5, 0, 8), VIEW, open)).toEqual({ kind: 'wander' });
+  });
+
+  it('mestre morto: fica parada — a invocação some com ele, nunca passeia atrás de um corpo', () => {
+    expect(summonFollowStep(summon(0, 0), master(5, 0, undefined, false), VIEW, open)).toEqual({ kind: 'stay' });
+  });
+
+  it('sem caminho (cercada): `hasFollowPath` falso — vagueia, sem lançar', () => {
+    const boxed = (x: number, y: number): boolean => !(x === 0 && y === 0);
+    expect(summonFollowStep(summon(0, 0), master(8, 0), VIEW, boxed)).toEqual({ kind: 'wander' });
+  });
+
+  it('não PODE seguir (`canFollowMaster` falso: mestre invisível que ela não enxerga): fica parada', () => {
+    // `Creature::goToFollowCreature` esvazia a lista de passos — não vagueia, não anda.
+    expect(summonFollowStep(summon(0, 0), master(6, 0), VIEW, open, () => true, false)).toEqual({ kind: 'stay' });
+    // Mas só DEPOIS de o mestre estar à vista: fora dela não há `followCreature` e ela vagueia.
+    expect(summonFollowStep(summon(0, 0), master(VIEW + 1, 0), VIEW, open, () => true, false)).toEqual({ kind: 'wander' });
   });
 });

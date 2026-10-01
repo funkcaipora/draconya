@@ -471,6 +471,17 @@
       "stars": 3,
       "occurrence": 0
     },
+    "branchy-crawler": {
+      "class": "plant",
+      "race": "plant",
+      "raceId": 1931,
+      "toKill": 5000,
+      "firstUnlock": 200,
+      "secondUnlock": 2000,
+      "charmsPoints": 100,
+      "stars": 5,
+      "occurrence": 0
+    },
     "brinebrute-inferniarch": {
       "class": "demon",
       "race": "demon",
@@ -2264,6 +2275,17 @@
       "stars": 3,
       "occurrence": 1
     },
+    "gore-horn": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 2266,
+      "toKill": 5000,
+      "firstUnlock": 200,
+      "secondUnlock": 2000,
+      "charmsPoints": 100,
+      "stars": 5,
+      "occurrence": 0
+    },
     "gozzler": {
       "class": "demon",
       "race": "demon",
@@ -3021,6 +3043,17 @@
       "secondUnlock": 1000,
       "charmsPoints": 50,
       "stars": 4,
+      "occurrence": 0
+    },
+    "lost-exile": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 1529,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
       "occurrence": 0
     },
     "lost-husher": {

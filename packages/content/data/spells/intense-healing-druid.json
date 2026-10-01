@@ -4,6 +4,7 @@
   "description": "Cura você.",
   "vocationId": "druid",
   "minLevel": 20,
+  "learnPrice": 350,
   "manaCost": 70,
   "group": "healing",
   "groupCooldownMs": 1000,
