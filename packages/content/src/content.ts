@@ -902,6 +902,13 @@ export function buildContent(raw: RawContent): Content {
         }
       }
     }
+    // A Animate Dead (#600) nasce um monstro do catálogo: `monsterId` errado subiria mudo e a runa
+    // consumiria o cadáver (e o gold) sem invocar nada. Só quando HÁ monstros (a mesma tolerância
+    // das referências acima, para o conteúdo de teste sem catálogo).
+    if (effect.kind === 'animate-dead' && monsterDefinitions.size > 0
+      && !monsterDefinitions.has(effect.monsterId)) {
+      problems.push(`${where}: animate-dead.monsterId "${effect.monsterId}" não existe no catálogo de monstros`);
+    }
     // A poção de buff (#576) aponta skill pelo id do catálogo em `skillDeltas` — como o bônus de
     // equipamento (linha ~890) e a família de arma (abaixo), pela MESMA razão: um id errado
     // bonificaria uma skill que ninguém lê, e a poção pareceria funcionar sem fazer nada.
@@ -1447,6 +1454,28 @@ export function buildContent(raw: RawContent): Content {
             + 'existe no catálogo',
         );
       }
+    }
+  }
+
+  // As janelas de Animate Dead do cadáver (#600) vivem DENTRO da vida dele: sem `corpseTtlMs` não
+  // há cadáver, e uma janela que passa do prazo (ou que se sobrepõe à anterior) é uma transcrição
+  // errada da cadeia `decayTo` — o `sim` a leria como um cadáver animável depois de sumir.
+  for (const monster of monsterDefinitions.values()) {
+    const windows = monster.corpseAnimatable;
+    if (windows === undefined) continue;
+    if (monster.corpseTtlMs === undefined) {
+      problems.push(`monstro "${monster.id}": corpseAnimatable sem corpseTtlMs`);
+      continue;
+    }
+    let previousEnd = 0;
+    for (const window of windows) {
+      if (window.fromMs < previousEnd || window.untilMs > monster.corpseTtlMs) {
+        problems.push(
+          `monstro "${monster.id}": corpseAnimatable ${window.fromMs}-${window.untilMs} fora de ordem `
+            + `ou além de corpseTtlMs (${monster.corpseTtlMs})`,
+        );
+      }
+      previousEnd = window.untilMs;
     }
   }
 

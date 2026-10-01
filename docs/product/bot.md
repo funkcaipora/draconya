@@ -87,8 +87,8 @@ hunt sem gold para pagar o próximo supply e pode morrer.
   ele volta à rota pelo caminho de sempre (`not-adjacent` → resincroniza). Sob `feared` nenhuma
   magia nem runa sai (`feared`, com o prazo do medo no `retryInMs`, para o bot re-armar quando o
   medo acabar); a poção sai. Sob `pacified` (a trava de escada de 2 s e o Swift Foot) nem o golpe
-  básico nem a magia/runa agressiva (dano, DOT, a invocação, as runas de dano/campo e a Paralyze
-  Rune) saem, e o golpe volta no PENSAMENTO seguinte ao vencimento — até 1 s depois dele, ou antes
+  básico nem a magia/runa agressiva (dano, DOT, a invocação, as runas de dano/campo, a Paralyze
+  Rune e as de invocação, Convince Creature e Animate Dead) saem, e o golpe volta no PENSAMENTO seguinte ao vencimento — até 1 s depois dele, ou antes
   se o personagem ou o alvo der um passo —, porque o Canary não re-arma o ataque quando a condição
   acaba; cura, poção e o resto seguem. Um `walk-to` que o jogador deixou guardado cai quando a raiz
   o prende. Nada disso é falha do motor de bot. Ver "Condições de controle" em
@@ -320,6 +320,8 @@ O que ele faz, por tipo de ação:
 | `spell` com efeito `damage` | resolve o dano por `resolveDamage` com `kind: 'magic'`, aplica no alvo e **atribui** (`recordDamage`) | level, vocação, cooldown, sem alvo, fora de alcance, mana |
 | `supply` `heal`/`mana` | repõe HP ou mana (faixa fixa sorteada, `amountRange`, ou `alsoMana` junto — #524, kit level 200) e **debita `price` do gold** no ato | level, vocação (#524 — a poção do Tibia pede as duas, como a magia), sem gold |
 | `supply` `damage` (runa) | mira como a magia em área, escala pelo magic level, aplica pelo mesmo `#applyHits` e **debita `price` do gold** | level, vocação, magic level, sem alvo, fora de alcance, sem gold |
+| `supply` `convince` (Convince Creature, #600) | mira o alvo do bot como a runa de dano, confere `convinceable`/sem mestre/teto de 2/mana do monstro e **passa a posse** dele ao personagem; debita `price` e a `manaCost` do monstro | level, vocação, magic level, sem alvo, fora de alcance, alvo não `convinceable` ou com mestre (`not-possible`), teto (`too-many-summons`), mana, sem gold |
+| `supply` `animate-dead` (Animate Dead, #600) | sem mira manual, o bot escolhe o **cadáver animável mais próximo** ao alcance e à vista; consome o cadáver (e o loot que sobrou) e ergue o Skeleton; debita só `price` | level, vocação, magic level, sem cadáver movível ao alcance (`no-target`/`not-possible`), teto, sem gold |
 | `item` com efeito `blessing` | nada — quem o executa é a TP-03 (M22) | sempre |
 
 Três coisas que não podem mudar sem pensar duas vezes:

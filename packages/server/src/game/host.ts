@@ -358,6 +358,11 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   'not-summonable': 'Você não pode invocar essa criatura agora.',
   // A magia do slot ainda não foi aprendida (#624, ADR 0058 d.1): a tela oferece a compra.
   'not-learned': 'Você ainda não aprendeu essa magia.',
+  // As runas de invocação restantes (#600, M38-03): o `RETURNVALUE_NOTPOSSIBLE` ("Sorry, not
+  // possible.") do Canary para alvo/cadáver que não servem, e o "You cannot control more creatures."
+  // do teto de 2 invocações.
+  'not-possible': 'Isso não é possível.',
+  'too-many-summons': 'Você não pode controlar mais criaturas.',
 };
 
 /**

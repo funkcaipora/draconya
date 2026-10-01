@@ -1540,6 +1540,31 @@ export const supplySchema = z.object({
       kind: z.literal('destroy-field'),
       range: z.number().int().positive(),
     }),
+    /**
+     * Convince Creature (#600, ADR 0057 d.5, `convince_creature.lua`): transfere a posse de UM
+     * monstro `convinceable` da hunt ao usuário. Alvo único, como a runa de dano sem `area`
+     * (`needTarget(true)`/`allowFarUse(true)`): mira o monstro selecionado, com `range` até ele —
+     * a convenção de alcance 8 deste catálogo, porque o script não declara `rune:range`. O CUSTO
+     * não é do arquivo: é a MANA do monstro (`monster.manaCost`), debitada pelo ruleset depois que
+     * o alvo, o teto de 2 invocações e a mana confirmam — `casting.ts` não conhece monstro
+     * (invariante 1). O gold da runa (`price`) só sai com o sucesso, como toda runa.
+     */
+    z.object({
+      kind: z.literal('convince'),
+      range: z.number().int().positive(),
+    }),
+    /**
+     * Animate Dead (#600, ADR 0057 d.6, `animate_dead_rune.lua`): consome o CADÁVER do tile mirado
+     * e nasce o monstro `monsterId` como invocação do usuário. `monsterId` é o `"Skeleton"` que o
+     * script do Canary escreve no código — aqui é conteúdo, e `buildContent` confere que existe.
+     * Mira um TILE, não uma criatura (`Tile(position):getTopDownItem()`): `range` é o alcance até
+     * ele. Não custa mana (o script nunca chama `addMana`) — só o gold da runa.
+     */
+    z.object({
+      kind: z.literal('animate-dead'),
+      monsterId: z.string().min(1),
+      range: z.number().int().positive(),
+    }),
   ]).refine(
     (effect) => effect.kind !== 'condition' || (effect.target === 'enemy') === (effect.range !== undefined),
     { message: 'o efeito condition com target "enemy" exige range, e só ele (#592)' },
@@ -2738,6 +2763,32 @@ export const monsterSchema = z.strictObject({
    */
   corpseTtlMs: z.number().int().positive().optional(),
   /**
+   * As JANELAS do cadáver em que a Animate Dead Rune o aceita (#600, ADR 0057 d.6): `fromMs`
+   * inclusive, `untilMs` exclusivo, em milissegundos desde a morte — o mesmo relógio de
+   * `corpseTtlMs`. O Canary (`animate_dead_rune.lua`) exige que o item do TOPO do tile seja
+   * `itemType:isCorpse() and itemType:isMovable()`, e isso é propriedade de CADA ESTÁGIO da cadeia
+   * `decayTo` (`appearances.dat`: flag `corpse`, e `unmove` ausente): o primeiro estágio de quase
+   * todo monstro é `unmove` — o cadáver recém-abatido NÃO pode ser animado — e vira movível ao
+   * decair (10 s depois, no caso comum: 5972 → 4024 do esqueleto). Por isso são janelas, e não um
+   * booleano. Ausente é "nunca" — monstro sem cadáver (`corpseTtlMs` ausente) ou cuja cadeia
+   * nunca tem um estágio movível. Gerado pelo importador a partir de `data/items/appearances.dat`
+   * e do `items.xml` do Canary; nunca escrito à mão.
+   */
+  corpseAnimatable: z.array(z.strictObject({
+    fromMs: z.number().int().nonnegative(),
+    untilMs: z.number().int().positive(),
+  }).refine((window) => window.untilMs > window.fromMs, { message: 'untilMs precisa passar de fromMs' }))
+    .optional(),
+  /**
+   * O monstro pode ser CONVENCIDO pela Convince Creature Rune (#600, ADR 0057 d.5; Canary
+   * `monster.flags.convinceable`, lido por `MonsterType::isConvinceable` em `convince_creature.lua`).
+   * Ausente é `false` — o default do Canary: 139 dos monstros do bestiário o declaram. O custo da
+   * convicção é o `manaCost` abaixo (ausente conta como zero: `MonsterType::info.manaCost`, o que o
+   * binding `monsterType:manaCost()` devolve, fica zerado, e o script debita esse valor — ver a nota
+   * de `manaCost` sobre o `getManaCost` que o script chama).
+   */
+  convinceable: z.boolean().default(false),
+  /**
    * As abilities declaradas (CMB-06, DT-01). AUSENTE (ou vazia) normaliza no boot para UMA
    * ability básica montada do `attack`/`attackIntervalMs`/`attackRange`/`damageType` — é o que
    * preserva o monstro legado bit a bit, e é o caminho do rato. Quando declaradas, o
@@ -2795,7 +2846,16 @@ export const monsterSchema = z.strictObject({
   /**
    * `manaCost` da invocação (#598, `MonsterType::info.manaCost`, o custo de mana que
    * `summon_creature.lua` debita do mestre por invocação) — 184 monstros do Canary o declaram.
-   * Obrigatório quando `summonable` é `true` (`.refine` abaixo); sem uso quando `false`.
+   * Obrigatório quando `summonable` é `true` (`.refine` abaixo). Também é o custo da Convince
+   * Creature Rune (#600, `convince_creature.lua`: `manaCost = target:getType():getManaCost()`) — por
+   * isso o importador o traz para todo monstro que o declara, `summonable` ou não. Ausente é zero.
+   *
+   * **Nota de fonte:** nenhum dos dois motores registra um `MonsterType:getManaCost()` — o binding Lua
+   * é `monsterType:manaCost()` (Canary `monster_type_functions.cpp`, "manaCost"; TFS `luascript.cpp`,
+   * "manaCost"), e só o C++ `Monster::getManaCost()` existe, lendo `info.manaCost`. Os scripts
+   * `convince_creature.lua` e `summon_creature.lua` chamam o nome que não existe e, como escritos,
+   * falhariam com "attempt to call method". O catálogo segue a INTENÇÃO evidente deles (o custo é o
+   * `info.manaCost` do monstro), registrada no ADR 0057 (emenda de 2026-09-30).
    */
   manaCost: z.number().int().positive().optional(),
   /** Nota de proveniência do arquivo inteiro — número medido, fonte TFS/Canary, decisão tomada. */
@@ -4940,7 +5000,7 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
    * `monsterId`, ver `botActionV2Schema`) ou do preset do bot, e é ele que escolhe QUAL
    * `summonable` nascer. A magia em si só declara o portão (level, vocação, cooldown, grupo) —
    * `manaCost` do CATÁLOGO desta magia fica sem uso aqui: o custo real é o `manaCost` do
-   * MONSTRO (`MonsterType::getManaCost()`), e é assim que a mesma "Summon Creature" custa mais
+   * MONSTRO (`MonsterType::info.manaCost`), e é assim que a mesma "Summon Creature" custa mais
    * mana para um Fire Elemental do que para um Poison Spider. `HuntRuleset#castSpell` lê o
    * monstro do catálogo e faz esse desvio — `casting.ts` continua puro e genérico, sem
    * conhecer monstro nenhum.

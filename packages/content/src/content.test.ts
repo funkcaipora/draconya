@@ -1084,6 +1084,63 @@ describe('invocação de monstro por monstro (#546, TFS/Canary monster.summon/ma
   });
 });
 
+describe('Convince Creature e Animate Dead (#600, ADR 0057 d.5–d.6)', () => {
+  const skeleton = {
+    id: 'skeleton', name: 'Skeleton', recommendedLevel: 1, health: 50, experience: 0, attack: 0, armor: 0,
+    attackIntervalMs: 2_000, speed: 300, aggroRadius: 0, loot: { items: [] },
+  };
+  const convinceRune = {
+    id: 'convince-creature-rune', name: 'Convince Creature Rune', price: 80, group: 'support',
+    requires: { level: 16, magicLevel: 5 }, effect: { kind: 'convince', range: 8 },
+  };
+  const animateRune = {
+    id: 'animate-dead-rune', name: 'Animate Dead Rune', price: 375, group: 'support',
+    requires: { level: 27, magicLevel: 4 }, effect: { kind: 'animate-dead', monsterId: 'skeleton', range: 8 },
+  };
+
+  it('monta as duas runas, e o monstro guarda `convinceable`, `manaCost` e as janelas do cadáver', () => {
+    const convincible = {
+      ...skeleton, convinceable: true, manaCost: 300, corpseTtlMs: 670_000,
+      corpseAnimatable: [{ fromMs: 10_000, untilMs: 670_000 }],
+    };
+    const content = buildContent(base({
+      monsters: [rat, convincible], supplies: [convinceRune, animateRune],
+    }));
+    expect(content.supplies.get('convince-creature-rune')?.effect).toEqual({ kind: 'convince', range: 8 });
+    expect(content.supplies.get('animate-dead-rune')?.effect)
+      .toEqual({ kind: 'animate-dead', monsterId: 'skeleton', range: 8 });
+    const monster = content.monsters.get('skeleton');
+    expect(monster).toMatchObject({ convinceable: true, manaCost: 300, corpseAnimatable: [{ fromMs: 10_000, untilMs: 670_000 }] });
+    // `convinceable` ausente é `false`, o default do Canary; sem janela, nunca animável.
+    expect(content.monsters.get('rat')?.convinceable).toBe(false);
+    expect(content.monsters.get('rat')?.corpseAnimatable).toBeUndefined();
+  });
+
+  it('recusa Animate Dead que aponta um monstro inexistente', () => {
+    expect(() => buildContent(base({ supplies: [animateRune] })))
+      .toThrow(/supply\/animate-dead-rune: animate-dead\.monsterId "skeleton" não existe/);
+  });
+
+  it('recusa janela sem `corpseTtlMs`, fora de ordem ou além do prazo do cadáver', () => {
+    const window = [{ fromMs: 10_000, untilMs: 20_000 }];
+    expect(() => buildContent(base({ monsters: [{ ...rat, corpseAnimatable: window }] })))
+      .toThrow(/monstro "rat": corpseAnimatable sem corpseTtlMs/);
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, corpseTtlMs: 15_000, corpseAnimatable: window }],
+    }))).toThrow(/corpseAnimatable 10000-20000 fora de ordem ou além de corpseTtlMs \(15000\)/);
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat, corpseTtlMs: 60_000,
+        corpseAnimatable: [{ fromMs: 10_000, untilMs: 30_000 }, { fromMs: 20_000, untilMs: 40_000 }],
+      }],
+    }))).toThrow(/fora de ordem ou além/);
+    // Uma janela vazia (`untilMs <= fromMs`) já cai no schema.
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, corpseTtlMs: 60_000, corpseAnimatable: [{ fromMs: 10_000, untilMs: 10_000 }] }],
+    }))).toThrow(ContentError);
+  });
+});
+
 describe('o perfil de compatibilidade de combate (ADR 0031, CMB-02)', () => {  it('conteúdo legado/fixture SEM o campo recebe o default compatível `combat-v1`', () => {
     // O default existe para o conteúdo anterior ao perfil continuar montando. O perfil é
     // ADITIVO: nada do resultado entregue muda por ele estar implícito.
