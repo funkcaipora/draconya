@@ -190,6 +190,14 @@ function isWalkableForRope(world: MovementWorld, at: WorldPoint): boolean {
  * (o `teleportTo` então falha calado e a mana é gasta); o mapa não separa "existe mas é parede" de
  * "inexistente", então sem tile andável a resposta é sempre `null` — nenhuma mana perdida num pouso
  * que não acontece.
+ *
+ * **Tile é exclusivo neste motor** (a estrutura de `TileOccupancy` que o Levitate também respeita).
+ * O `moveUpstairs` ignora criatura (`isWalkable(false, false, false, false, true)`) e o
+ * `internalTeleport` do Canary pousa com `FLAG_NOLIMIT` — EMPILHARIA o lançador sobre quem estiver
+ * no tile. Aqui o tile ocupado é pulado e a busca segue a ordem do `moveUpstairs`; sem nenhum
+ * livre, `null`, e a recusa "not enough room" sai ANTES de pagar. Assim o destino que a
+ * pré-conferência aprova é sempre aplicável (`relocate` confere a mesma ocupação). Não é regra de
+ * caça: é a estrutura de ocupação, a mesma divergência já documentada no Levitate.
  */
 export function ropeDestination(world: MovementWorld, from: WorldPoint): WorldPoint | null {
   const z = from.z - 1;
@@ -198,7 +206,7 @@ export function ropeDestination(world: MovementWorld, from: WorldPoint): WorldPo
   for (const [dx, dy] of candidates) {
     const at = { x: from.x + dx, y: from.y + dy, z };
     if (at.x < 0 || at.y < 0 || at.x >= world.map.width || at.y >= world.map.height) continue;
-    if (isWalkableForRope(world, at)) return at;
+    if (isWalkableForRope(world, at) && !world.occupied(at.x, at.y, at.z)) return at;
   }
   return null;
 }

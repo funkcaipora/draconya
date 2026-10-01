@@ -5584,13 +5584,16 @@ const slots = bot.groups.get(group);
     | { ok: false; reason: SlotRefusal } | null {
     // Find Person (#623): o "nome" do Canary é o personagem que o jogador MIROU. O alvo vira o
     // `recipient` — o mesmo canal da cura de amigo —, e qualquer outra mira (monstro, tile, criatura
-    // que já saiu de vista) é o `Player(name)` que não acha ninguém: `person-not-found`.
+    // que já saiu de vista, ninguém) é o nome que `getPlayerByNameWildcard` não acha. Essa recusa
+    // NÃO sai daqui: no Canary ela vem DEPOIS de `playerSpellCheck` (exaustão, level, mana, alma) e
+    // INICIA o cooldown da magia e do grupo (`playerCastInstant` chama `applyCooldownConditions`
+    // antes de cancelar). Sem `recipient`, o `castSpell` recebe "ninguém nomeado" (o próprio
+    // lançador) e `#utilityRefusalOf` devolve `person-not-found` no ponto certo da ordem.
     const findEffect = action.kind === 'spell' ? this.#options.spells.get(action.spellId)?.effect : undefined;
     if (findEffect?.kind === 'find' && findEffect.target === 'person') {
-      if (target === undefined) return null;
-      if (target.kind !== 'character') return { ok: false, reason: 'person-not-found' };
+      if (target === undefined || target.kind !== 'character') return { ok: true };
       const member = findById(session.participants, target.characterId);
-      if (member === null || !member.alive) return { ok: false, reason: 'person-not-found' };
+      if (member === null || !member.alive) return { ok: true };
       return { ok: true, recipient: member };
     }
     const healRange = this.#healRangeOf(action);
@@ -5712,6 +5715,12 @@ const slots = bot.groups.get(group);
      */
     monsterId?: string,
   ): CastResult {
+    // A ocupação pode estar VAZIA logo depois de restaurar um snapshot (`#occupancyStale`, remontada
+    // no primeiro evento ou em `requestMove`). Levitate e Magic Rope leem (`utilityRefusalOf`) e
+    // ESCREVEM (`relocate`) a posição, e um `use-slot` do espectador chega entre eventos — sem a
+    // remontagem, o salto cairia num tile de outro personagem, e o `#rebuildOccupancy` seguinte
+    // marcaria os dois no mesmo tile (a mesma guarda de `requestMove`).
+    if (this.#occupancyStale) this.#rebuildOccupancy(session);
     const spell = this.#options.spells.get(spellId);
     if (spell === undefined) return NOT_IN_CATALOG;
 
@@ -5903,8 +5912,11 @@ const slots = bot.groups.get(group);
    *   de cenário é quem sabe onde ele está); sem onde pousar → `not-enough-room`.
    * - **Find Person:** o alvo é o `recipient` (o personagem que o `use-slot` mirou); sem alvo — o
    *   `recipient` é o próprio lançador, o valor de "ninguém nomeado" — recusa `person-not-found`,
-   *   como o `Player("")` do Canary. Procurar a si mesmo não é oferecido: a resposta seria sempre
-   *   "ao lado de você".
+   *   o `RETURNVALUE_PLAYERWITHTHISNAMEISNOTONLINE` de `InstantSpell::playerCastInstant`. Esta é a
+   *   ÚNICA recusa da família que INICIA o cooldown (o `castSpell` o faz, sem mana nem alma): no
+   *   Canary o nome sem jogador roda `applyCooldownConditions` antes de cancelar, ao contrário das
+   *   recusas dos scripts de Levitate, Magic Rope e Find Fiend. Procurar a si mesmo não é
+   *   oferecido: a resposta seria sempre "ao lado de você".
    * - **Find Fiend:** nenhum monstro é fiendish — o Exaltation Forge (#616) está fora do catálogo
    *   por decisão do dono (2026-09-29) e `ForgeMonster:pickClosestFiendish` devolve `nil` num mundo
    *   sem ele, então a magia recusa como o Canary ("No creatures around"). Quando o Forge pousar,
@@ -5942,12 +5954,12 @@ const slots = bot.groups.get(group);
     switch (effect.kind) {
       case 'levitate': {
         const to = levitateDestination(this.#world, this.#at(character), character.direction, effect.direction);
-        if (to !== null) this.#relocateCharacter(session, character, to);
+        if (to !== null) this.#jumpToApproved(session, character, to);
         return;
       }
       case 'magic-rope': {
         const to = ropeDestination(this.#world, this.#at(character));
-        if (to !== null) this.#relocateCharacter(session, character, to);
+        if (to !== null) this.#jumpToApproved(session, character, to);
         return;
       }
       case 'find':
@@ -5961,6 +5973,24 @@ const slots = bot.groups.get(group);
         this.#createFood(session, character, result.foods ?? []);
         return;
       default:
+    }
+  }
+
+  /**
+   * O salto de uma utilitária cujo destino `#utilityRefusalOf` JÁ aprovou (#623). Recusar aqui é
+   * impossível por construção: as duas chamadas rodam na mesma `#castSpell`, sem nada que mova
+   * criatura, abra campo ou troque o overlay entre elas, e `levitateDestination`/`ropeDestination`
+   * conferem tudo o que `relocate` confere (limites, bloqueio e ocupação). Se um dia recusar, a
+   * magia já PAGOU mana, cooldown e skill por um salto que não aconteceu — calar isso era o defeito
+   * que escondia o Magic Rope sobre tile ocupado —, então é erro de programação e falha alto, em
+   * vez de cobrar do jogador um efeito que ele não recebeu.
+   */
+  #jumpToApproved(session: Session, character: CharacterRuntime, to: WorldPoint): void {
+    if (!this.#relocateCharacter(session, character, to)) {
+      throw new Error(
+        `utility spell: the approved destination (${String(to.x)},${String(to.y)},${String(to.z)}) ` +
+          `was refused for ${character.id}`,
+      );
     }
   }
 
@@ -8695,6 +8725,18 @@ const slots = bot.groups.get(group);
   #relocateCharacter(session: Session, character: CharacterRuntime, to: WorldPoint): boolean {
     const result = relocate(this.#world, character, to);
     if (!result.ok) return false;
+    // O salto CANCELA a caminhada manual em curso (`walk-to`, #763): `Creature::onCreatureMove`
+    // do Canary chama `stopEventWalk()` para todo `teleport || oldPos.z != newPos.z`, e Levitate e
+    // Magic Rope são os dois. Sem isto o `manualWalkTo` ficava de pé com o `path[0]` do ANDAR
+    // ANTIGO, e `#playerStep` — que dá prioridade a ele sobre combate, follow e rota — repetia o
+    // mesmo tile recusado (`same-tile`/`not-adjacent`) para sempre: a hunt idle congelada, com o
+    // navegador fechado, até alguém mandar uma intenção nova. É o mesmo descarte que o ramo
+    // adjacente de `requestMove` faz, e o bot retoma pela rota no vencimento seguinte.
+    const runner = this.#runners.get(character.id);
+    if (runner !== undefined) {
+      runner.manualWalkTo = null;
+      runner.manualWalkHoldUntilMs = null;
+    }
     this.#lockAfterJump(session, character, result);
     session.emit({
       kind: 'creature-moved', creatureId: character.id,

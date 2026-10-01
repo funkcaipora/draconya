@@ -219,6 +219,36 @@ const cast = (run: Started, spellId: string, target?: Parameters<HuntRuleset['us
 const cooldownOf = (run: Started, spellId: string): number =>
   run.hero.cooldowns.remainingMs(`spell:${spellId}`, run.session.nowMs);
 
+/**
+ * A mesma sessão DEPOIS de um snapshot (passando pelo JSON de verdade, como o Redis), com
+ * `positions` reescrevendo onde cada personagem está. É o jeito de pôr alguém num tile e ter a
+ * ocupação CONSISTENTE com isso: a restauração deixa a ocupação VAZIA (`#occupancyStale`) até o
+ * primeiro evento, e é essa janela — entre a retomada e o primeiro evento — que o `use-slot` de
+ * um espectador atravessa.
+ */
+function resumed(
+  run: Started, loaded: Content,
+  positions: Readonly<Record<string, { x: number; y: number; z: number }>> = {},
+): Started {
+  const snapshot = JSON.parse(JSON.stringify(run.session.snapshot())) as {
+    participants: Array<{ id: string; position: { x: number; y: number; z: number } }>;
+  } & SessionSnapshot;
+  for (const state of snapshot.participants) {
+    const moved = positions[state.id];
+    if (moved !== undefined) state.position = moved;
+  }
+  const session = Session.fromSnapshot(
+    snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed('resume'),
+  );
+  const seen: DomainEvent[] = [];
+  return {
+    session,
+    hero: session.participants.find((participant) => participant.id === 'hero') as CharacterRuntime,
+    ruleset: session.ruleset as HuntRuleset,
+    events: () => { seen.push(...session.drainEvents()); return seen; },
+  };
+}
+
 // --- Light ----------------------------------------------------------------------------------
 
 describe('Light, Great Light e Ultimate Light — a condição de luz (#623)', () => {
@@ -464,6 +494,47 @@ describe('Magic Rope — sobe pelo rope spot (#623)', () => {
     expect(run.hero.attackLockedUntil).toBe(2_000);
   });
 
+  /** O herói no rope spot (2,2,9) e `other` na posição dada do andar de cima — ocupação consistente. */
+  function withOccupant(loaded: Content, at: { x: number; y: number; z: number }): Started {
+    const run = start(loaded);
+    run.session.enter(new CharacterRuntime({ ...run.hero.getState(), id: 'other', cooldowns: {} }));
+    return resumed(run, loaded, { other: at });
+  }
+
+  it('o tile ao sul OCUPADO é pulado: o pouso segue a ordem do moveUpstairs, e paga normalmente', () => {
+    // O Canary empilharia o lançador sobre quem está no tile (`FLAG_NOLIMIT`); aqui o tile é
+    // exclusivo, e a busca cai no próximo andável da ordem — o norte (2,1). Antes, o pouso ao sul
+    // era escolhido SEM olhar a ocupação, `relocate` recusava calado e a mana era cobrada à toa.
+    const loaded = contentOf(world(UP));
+    const run = withOccupant(loaded, { x: 2, y: 3, z: 8 });
+    expect(cast(run, 'magic-rope')).toEqual({ ok: true });
+    expect(run.hero.position).toEqual({ x: 2, y: 1, z: 8 });
+    expect(run.hero.mana).toBe(480);
+    expect(cooldownOf(run, 'magic-rope')).toBe(2_000);
+    expect(run.events().filter((event) => event.kind === 'creature-moved')).toEqual([
+      expect.objectContaining({ creatureId: 'hero', to: { x: 2, y: 1, z: 8 } }),
+    ]);
+  });
+
+  it('todo pouso possível ocupado: `not-enough-room` ANTES de pagar — sem mana, sem cooldown, sem evento', () => {
+    // O andar de cima só tem o tile sul livre, e há alguém nele: sem onde pousar, a recusa é a do
+    // Levitate — antes de pagar. Nada de `spell-cast` para uma magia que não saiu.
+    const loaded = contentOf(world(['######', '######', '######', '#.####', '######'].map((row, y) => (
+      y === 3 ? '######'.replace(/^(.{2})#/, '$1.') : row
+    ))));
+    const run = withOccupant(loaded, { x: 2, y: 3, z: 8 });
+    run.events();
+    expect(cast(run, 'magic-rope')).toEqual({ ok: false, reason: 'not-enough-room', retryInMs: 0 });
+    expect(run.hero.position).toEqual({ x: 2, y: 2, z: 9 });
+    expect(run.hero.mana).toBe(500);
+    expect(cooldownOf(run, 'magic-rope')).toBe(0);
+    expect(run.events().filter((event) => event.kind === 'spell-cast' || event.kind === 'creature-moved')).toEqual([]);
+    // O slotStates promete o mesmo (DT-08): bloqueado, com o MESMO motivo.
+    const index = spells.findIndex((spell) => spell.id === 'magic-rope');
+    expect(run.ruleset.slotStates(run.session, run.hero)[index])
+      .toMatchObject({ state: 'blocked', reason: 'not-enough-room' });
+  });
+
   it('o slotStates espelha o motivo: blocked/not-possible fora do rope spot', () => {
     const noSpot: World = { ...world(UP), interactables: [] };
     const run = start(contentOf(noSpot));
@@ -505,18 +576,65 @@ describe('Find Person e Find Fiend — a mensagem de direção (#623)', () => {
     }]);
   });
 
-  it('Find Person sem alvo, ou com alvo que não é personagem da sessão: `person-not-found`, sem custo', () => {
+  it('Find Person sem alvo, ou com alvo que não é personagem da sessão: `person-not-found`, sem custo MAS com cooldown', () => {
+    // O Canary: o nome que `getPlayerByNameWildcard` não acha NÃO é recusa de script — é a de
+    // `InstantSpell::playerCastInstant`, que roda `applyCooldownConditions` ANTES de cancelar.
+    // Sem mana e sem alma (o `postCastSpell` não roda), mas o cooldown da magia e o do grupo de
+    // suporte correm: Light, Haste, Levitate… ficam travados por 2 s.
+    const aims: ReadonlyArray<Parameters<typeof cast>[2]> = [
+      undefined,
+      { kind: 'monster', subject: 'm:1' },
+      { kind: 'character', characterId: 'nobody' },
+      { kind: 'invalid' },
+    ];
+    for (const aim of aims) {
+      const run = start(contentOf(wide));
+      withCompanion(run, { x: 22, y: 2, z: 8 });
+      run.events(); // drena o que a entrada produziu
+      expect(cast(run, 'find-person', aim)).toEqual({ ok: false, reason: 'person-not-found', retryInMs: 0 });
+      expect(run.hero.mana, JSON.stringify(aim)).toBe(500);
+      expect(run.hero.soul).toBe(5);
+      expect(cooldownOf(run, 'find-person'), JSON.stringify(aim)).toBe(2_000);
+      // O grupo de suporte também: uma magia de OUTRA família do grupo recusa por exaustão.
+      expect(cast(run, 'light')).toEqual({ ok: false, reason: 'on-cooldown', retryInMs: 2_000 });
+      // Nenhum efeito saiu: nem mensagem de Find, nem `spell-cast`.
+      expect(run.events().filter((event) => event.kind === 'find-result' || event.kind === 'spell-cast')).toEqual([]);
+      // E o cooldown vence na fila, no instante exato.
+      run.session.advanceBy(2_000);
+      expect(cast(run, 'light')).toEqual({ ok: true });
+    }
+  });
+
+  it('Find Person com a mira de um membro VIVO é a única que acha: o alvo nomeado não inicia nada além do cast', () => {
     const run = start(contentOf(wide));
-    withCompanion(run, { x: 22, y: 2, z: 8 });
-    expect(cast(run, 'find-person')).toEqual({ ok: false, reason: 'person-not-found', retryInMs: 0 });
-    expect(cast(run, 'find-person', { kind: 'monster', subject: 'm:1' }))
+    const other = withCompanion(run, { x: 22, y: 2, z: 8 });
+    other.alive = false;
+    // Membro morto: o `Player(name)` do Canary não o acha — mesma recusa, mesmo cooldown.
+    expect(cast(run, 'find-person', { kind: 'character', characterId: 'other' }))
       .toEqual({ ok: false, reason: 'person-not-found', retryInMs: 0 });
-    expect(cast(run, 'find-person', { kind: 'character', characterId: 'nobody' }))
-      .toEqual({ ok: false, reason: 'person-not-found', retryInMs: 0 });
-    expect(cast(run, 'find-person', { kind: 'invalid' }))
-      .toEqual({ ok: false, reason: 'person-not-found', retryInMs: 0 });
+    expect(cooldownOf(run, 'find-person')).toBe(2_000);
     expect(run.hero.mana).toBe(500);
-    expect(cooldownOf(run, 'find-person')).toBe(0);
+  });
+
+  it('a ordem do `playerSpellCheck`: exaustão, level, mana e alma vêm ANTES do nome — e não iniciam cooldown', () => {
+    // O Find Person pede level 8 aqui (o do Canary), para o level 5 não bastar.
+    const eightSpells = spells.map((spell) => (spell.id === 'find-person' ? { ...spell, minLevel: 8 } : spell));
+    const lowLevel = start(contentOf(wide, { spells: eightSpells }), { level: 5 });
+    expect(cast(lowLevel, 'find-person', { kind: 'invalid' }))
+      .toEqual({ ok: false, reason: 'not-in-catalog', retryInMs: 0 });
+    expect(cooldownOf(lowLevel, 'find-person')).toBe(0);
+
+    const noMana = start(contentOf(wide), { mana: 5 });
+    expect(cast(noMana, 'find-person', { kind: 'invalid' }))
+      .toEqual({ ok: false, reason: 'not-enough-mana', retryInMs: 0 });
+    expect(cooldownOf(noMana, 'find-person')).toBe(0);
+
+    // Com o cooldown já correndo, a mira ruim diz EXAUSTÃO, e não `person-not-found`.
+    const exhausted = start(contentOf(wide));
+    withCompanion(exhausted, { x: 22, y: 2, z: 8 });
+    expect(cast(exhausted, 'find-person', { kind: 'character', characterId: 'other' })).toEqual({ ok: true });
+    expect(cast(exhausted, 'find-person', { kind: 'invalid' }))
+      .toEqual({ ok: false, reason: 'on-cooldown', retryInMs: 2_000 });
   });
 
   it('Find Person em outro ANDAR diz o andar: o alvo mais fundo está "abaixo"', () => {
@@ -629,6 +747,90 @@ describe('Food — cria comida na mochila (#623)', () => {
   });
 });
 
+// --- o salto e a caminhada manual -------------------------------------------------------------
+
+describe('o salto cancela a caminhada manual em curso (#623, `stopEventWalk` do Canary)', () => {
+  // 12×5: o herói nasce em (1,2) e clica (10,2). O primeiro passo do caminho manual para em
+  // (2,1,9); o andar 8 é aberto, com UMA parede em (2,1) — a SONDA do `up` (o tile de cima do
+  // lançador) —, e o pouso do Levitate (3,1,8) livre: exatamente o `path[0]` seguinte, o que faz o
+  // caminho manual velho recusar `same-tile` para sempre.
+  const OPEN = ['############', '#..........#', '#..........#', '#..........#', '############'];
+  const WITH_WALL = OPEN.map((row, y) => (y === 1 ? `${row.slice(0, 2)}#${row.slice(3)}` : row));
+  const ropeSpot = (x: number, y: number) => ({
+    at: { x, y, z: 9 }, kind: 'rope-spot', initialState: 'default', appearanceKey: 'rope-1',
+  });
+
+  /** O herói a caminho de (10,2,9) pelo `walk-to`, com o primeiro passo já dado (x = 2). */
+  function walking(world: World) {
+    const run = start(contentOf(world));
+    const first = run.ruleset.requestMove(run.session, 'hero', { x: 10, y: 2 });
+    expect(first.ok).toBe(true);
+    expect(run.hero.position.x).toBe(2);
+    run.hero.direction = 'east';
+    run.events();
+    return run;
+  }
+
+  /** Quantos passos o herói dá nos `seconds` seguintes (`events()` é cumulativo: conta só o que veio depois). */
+  function afterwards(run: Started, seconds: number) {
+    const stepsOf = () => run.events().filter((event) => event.kind === 'creature-moved').length;
+    const before = stepsOf();
+    for (let t = 0; t < seconds * 4; t += 1) run.session.advanceBy(250);
+    return { steps: stepsOf() - before };
+  }
+
+  it('Levitate no meio do `walk-to`: o caminho manual morre e a hunt segue (não congela para sempre)', () => {
+    const run = walking({ floors: { 8: WITH_WALL, 9: OPEN }, z: 9, start: { x: 1, y: 2 } });
+    expect(cast(run, 'levitate-up')).toEqual({ ok: true });
+    expect(run.hero.position.z).toBe(8);
+    run.events();
+
+    // Antes do conserto o `path[0]` do andar antigo era tentado para sempre (`same-tile`/
+    // `not-adjacent`): zero passos e o herói parado onde pousou, mesmo 10 minutos depois. Agora a
+    // rota (o walker que resincroniza com `rejoinNearest`) volta a decidir.
+    const later = afterwards(run, 5);
+    expect(later.steps).toBeGreaterThan(0);
+  });
+
+  it('Magic Rope no meio do `walk-to`: o mesmo — o salto cancela o caminho manual', () => {
+    // O próximo tile do caminho manual (3,1) é parede no andar de cima: sem o cancelamento, o
+    // `path[0]` recusado ficava de pé para sempre (`tile-blocked`, "bloqueio passageiro").
+    const upper = OPEN.map((row, y) => (y === 1 ? `${row.slice(0, 3)}#${row.slice(4)}` : row));
+    const run = walking({
+      floors: { 8: upper, 9: OPEN }, z: 9, start: { x: 1, y: 2 },
+      interactables: [ropeSpot(2, 1), ropeSpot(2, 2), ropeSpot(2, 3)],
+    });
+    expect(cast(run, 'magic-rope')).toEqual({ ok: true });
+    expect(run.hero.position.z).toBe(8);
+    run.events();
+
+    const later = afterwards(run, 5);
+    expect(later.steps).toBeGreaterThan(0);
+  });
+
+  it('a janela de espera do `walk-to` também cai: o salto não deixa o bot suprimido por 10 s', () => {
+    // O herói CHEGA ao destino (4,2) — a janela `manualWalkHoldUntilMs` abre e suprime rota e
+    // perseguição por `MANUAL_WALK_HOLD_MS` — e levita dentro dela. A janela existia para o
+    // jogador agir no tile ONDE ELE ESTAVA; depois do salto o tile é outro, e o bot retoma já.
+    const wall = OPEN.map((row, y) => (y === 2 ? `${row.slice(0, 4)}#${row.slice(5)}` : row));
+    const run = start(contentOf({ floors: { 8: wall, 9: OPEN }, z: 9, start: { x: 1, y: 2 } }));
+    expect(run.ruleset.requestMove(run.session, 'hero', { x: 4, y: 2 }).ok).toBe(true);
+    // 4 s: chegou (o último passo, na diagonal, dura 1,5 s) e o vencimento seguinte — a 3,5 s — já
+    // abriu a janela, que só nasce quando o caminho esgota num `#playerStep`.
+    for (let t = 0; t < 16; t += 1) run.session.advanceBy(250);
+    expect(run.hero.position).toMatchObject({ x: 4, y: 2, z: 9 });
+    run.hero.direction = 'east';
+    run.events();
+
+    expect(cast(run, 'levitate-up')).toEqual({ ok: true });
+    expect(run.hero.position).toEqual({ x: 5, y: 2, z: 8 });
+    run.events();
+    // Cinco segundos depois, ainda DENTRO dos 10 s da janela antiga (ela abriu há ~0,5 s):
+    // o herói já voltou a andar. Com a janela de pé, zero passos.
+    expect(afterwards(run, 5).steps).toBeGreaterThan(0);
+  });
+});
+
 // --- restore --------------------------------------------------------------------------------
 
 describe('snapshot e retomada (invariante 3)', () => {
@@ -653,6 +855,30 @@ describe('snapshot e retomada (invariante 3)', () => {
     expect(hero.conditions.get('light')).not.toBeNull();
     resumed.advanceBy(1);
     expect(hero.conditions.get('light')).toBeNull();
+  });
+
+  it('o Levitate logo depois da retomada vê a ocupação REAL: o tile de outro personagem recusa', () => {
+    // Depois de `Session.fromSnapshot` a ocupação nasce VAZIA (`#occupancyStale`) e só é remontada
+    // no primeiro evento ou em `requestMove`. O `use-slot` do espectador chega ENTRE eventos: sem a
+    // remontagem na entrada do cast, o salto pousava em cima de `other` e o `rebuild` seguinte
+    // marcava os dois no mesmo tile.
+    const upper = ['######', '#....#', '#.#..#', '#....#', '######'];
+    const world: World = { floors: { 8: upper, 9: ROOM }, z: 9, start: { x: 2, y: 2 } };
+    const loaded = contentOf(world);
+    const run = start(loaded, { facing: 'east' });
+    run.session.enter(new CharacterRuntime({ ...run.hero.getState(), id: 'other', cooldowns: {} }));
+
+    // `other` no pouso do Levitate do herói — o mesmo mundo, retomado.
+    const again = resumed(run, loaded, { other: { x: 3, y: 2, z: 8 } });
+    again.hero.direction = 'east';
+    const other = again.session.participants.find((participant) => participant.id === 'other') as CharacterRuntime;
+    const index = spells.findIndex((spell) => spell.id === 'levitate-up');
+    expect(again.ruleset.useSlot(again.session, 'hero', 0, index))
+      .toEqual({ ok: false, reason: 'not-possible', retryInMs: 0 });
+    expect(again.hero.position).toEqual({ x: 2, y: 2, z: 9 });
+    expect(other.position).toEqual({ x: 3, y: 2, z: 8 });
+    expect(again.hero.mana).toBe(500);
+    expect(again.hero.cooldowns.remainingMs('spell:levitate-up', again.session.nowMs)).toBe(0);
   });
 
   it('o mundo depois de um Levitate é o mesmo a 10 Hz e a 1 Hz (ADR 0020)', () => {

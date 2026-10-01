@@ -87,7 +87,9 @@ export type CastRefusal =
   /**
    * Find Person sem o alvo na sessão (#623): o `RETURNVALUE_PLAYERWITHTHISNAMEISNOTONLINE` do
    * Canary. A hunt hospeda só os personagens da própria sessão, então "online" é "está nesta
-   * sessão" — ver `docs/product/utility-spells.md`.
+   * sessão" — ver `docs/product/utility-spells.md`. **É a única destas recusas que INICIA o
+   * cooldown** (sem mana nem alma): sai de `InstantSpell::playerCastInstant`, que roda
+   * `applyCooldownConditions` antes de cancelar, e não de um script.
    */
   | 'person-not-found'
   /** Find Fiend sem nenhum monstro fiendish na sessão (#623): o "No creatures around" do Canary. */
@@ -478,6 +480,25 @@ export const NOT_SUMMONABLE: CastRefused = {
 };
 
 /**
+ * Os três livros de cooldown de uma vez: a magia, o grupo e, se houver, o secundário. É o
+ * `applyCooldownConditions` do Canary — chamado pelo `postCastSpell` de toda magia que sai e
+ * também pela única recusa de utilitária que o dispara (Find Person sem jogador com o nome, #623).
+ * Função de módulo, e não closure em `castSpell`: nada aqui aloca por lançamento.
+ */
+function startCooldowns(
+  caster: CharacterRuntime, spell: Spell, nowMs: number,
+  key: string, groupKey: string | null, secondaryKey: string | null,
+): void {
+  caster.cooldowns.start(key, nowMs, spell.cooldownMs);
+  if (groupKey !== null && spell.groupCooldownMs !== undefined) {
+    caster.cooldowns.start(groupKey, nowMs, spell.groupCooldownMs);
+  }
+  if (secondaryKey !== null && spell.secondaryGroup !== undefined) {
+    caster.cooldowns.start(secondaryKey, nowMs, spell.secondaryGroup.cooldownMs);
+  }
+}
+
+/**
  * Lança a magia, se puder.
  *
  * A ordem das recusas é deliberada: level, cooldown, alvo, alcance e só então mana. **A mana
@@ -545,7 +566,8 @@ export function castSpell(
    * conhece (invariante 1). Entra DEPOIS de level, cooldown, mana e alma e ANTES de pagar, o que
    * preserva a ordem do Canary: `Spell::playerSpellCheck` confere os requisitos e só o
    * `onCastSpell` do script recusa o destino — sem custo, sem cooldown. `null` é "nada a
-   * recusar" (e o único valor de toda magia que não é utilitária).
+   * recusar" (e o único valor de toda magia que não é utilitária). A exceção é `person-not-found`
+   * (Find Person sem jogador com o nome): o cooldown corre, sem mana nem alma.
    */
   preflight: UtilityRefusal | null = null,
 ): CastResult {
@@ -641,24 +663,23 @@ export function castSpell(
   // e alma, e ANTES de pagar: é a ordem do Canary, onde `Spell::playerSpellCheck` confere os
   // requisitos e só o `onCastSpell` do script recusa o destino (`RETURNVALUE_NOTPOSSIBLE`), sem
   // custo e sem cooldown — `postCastSpell` só roda quando o script devolve `true`.
+  //
+  // A EXCEÇÃO é o Find Person sem jogador com o nome: não é recusa de script, é a do
+  // `InstantSpell::playerCastInstant` (`hasPlayerNameParam` → `getPlayerByNameWildcard`), que chama
+  // `applyCooldownConditions` ANTES de cancelar — sem mana, sem alma e sem evento, mas com o
+  // cooldown da magia e o do grupo de suporte correndo (Light, Haste e Levitate travam 2 s).
   if (
     preflight !== null
     && (effect.kind === 'levitate' || effect.kind === 'magic-rope' || effect.kind === 'find')
   ) {
+    if (preflight === 'person-not-found') startCooldowns(caster, spell, nowMs, key, groupKey, secondaryKey);
     return { ok: false, reason: preflight, retryInMs: NOT_WAITING };
   }
 
   caster.mana -= manaCost;
   caster.soul -= soulCost;
   if (blankPrice > 0) purse.pay(blankPrice);
-  // Os três livros de uma vez: a magia, o grupo e, se houver, o secundário.
-  caster.cooldowns.start(key, nowMs, spell.cooldownMs);
-  if (groupKey !== null && spell.groupCooldownMs !== undefined) {
-    caster.cooldowns.start(groupKey, nowMs, spell.groupCooldownMs);
-  }
-  if (secondaryKey !== null && spell.secondaryGroup !== undefined) {
-    caster.cooldowns.start(secondaryKey, nowMs, spell.secondaryGroup.cooldownMs);
-  }
+  startCooldowns(caster, spell, nowMs, key, groupKey, secondaryKey);
 
   switch (effect.kind) {
     case 'damage': {
