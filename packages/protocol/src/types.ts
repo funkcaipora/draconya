@@ -1345,7 +1345,9 @@ export const S2C_SCHEMAS = {
     soulMax: z.number().int().nonnegative().default(0),
     /**
      * A zona do tile do personagem e se ele está em luta (OW-11, #832, ADR 0060 d.8) — os dois
-     * ícones do HUD do mundo (PZ e espadas cruzadas, `ICON_PIGEON`/`ICON_INFIGHT` do Canary).
+     * ícones do HUD do mundo (PZ e espadas cruzadas, `PlayerIcon::Pigeon` e `PlayerIcon::Swords`
+     * do Canary, `canary/src/creatures/players/player.cpp:926-934` e
+     * `canary/src/creatures/combat/condition.cpp:590-593`).
      * **Opcionais, SEM `default`**, ao contrário dos campos acima: ausente quer dizer "este nó
      * não informa" (um nó `game` anterior, ou uma sessão que não tem zona, como toda hunt), e
      * um `default` pintaria "normal, sem luta" como se o servidor tivesse dito — o HUD então
