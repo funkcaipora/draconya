@@ -9497,8 +9497,12 @@ const slots = bot.groups.get(group);
    *   MONSTROS também (a ilusão do Halloween Hare vira os bichos em volta dele). Sem forma é o
    *   alvo principal (`castSpell(creature, target)` sem área → `doCombat(creature, target)`);
    * - **sem dano nem defesa**: `combatType` é `COMBAT_NONE` → `CombatNullFunc` → só
-   *   `CombatConditionFunc`, que NÃO rola bloqueio, esquiva nem crítico. Nenhum sorteio sai daqui:
-   *   o `chance` já foi rolado por quem chamou, e mais nada;
+   *   `CombatConditionFunc`, que NÃO rola bloqueio, esquiva nem crítico. O único sorteio que sai
+   *   daqui, além do `chance` que quem chamou já rolou, é o do **Cleanse**: o primeiro bloco da
+   *   `CombatConditionFunc` (`combat.cpp:1039-1062`) roda para QUALQUER condição de monstro num
+   *   jogador, o `outfit` inclusive — com o charm atribuído a este monstro e uma condição
+   *   limpável ativa, ele rola, remove uma, dá os 11 s de imunidade e `return`a SEM vestir a
+   *   aparência (`#cleanseBeforeCondition`, a mesma peça e a mesma ordem de sorteio do golpe);
    * - **a imunidade** é `!target->isImmune(CONDITION_OUTFIT)` — exceto `caster == target`, que a
    *   pula (`#applyConditionTo` com `fromCombat`, e `sourceId` = o próprio monstro).
    *
@@ -9527,8 +9531,14 @@ const slots = bot.groups.get(group);
       ...(ability.presentation?.impactKey === undefined
         ? {} : { impactKey: ability.presentation.impactKey }),
     });
+    const charmStage = this.#charmStage();
     for (const target of targets) {
       if (!target.alive) continue;
+      // O Cleanse (#603) é do jogador atingido, nunca de monstro: `targetPlayer && casterMonster`.
+      // Se limpou uma condição dele, a aparência NÃO entra — o `return` do Canary aborta toda a
+      // `conditionList` da ability, e aqui ela só tem o `outfit`.
+      if (charmStage && target instanceof CharacterRuntime
+        && this.#cleanseBeforeCondition(session, monster, target, ability)) continue;
       this.#applyConditionTo(session, target, conditionFromSpec(
         spec, this.#subjectOf(target), subject, session.nowMs, 'monster-attack',
       ), true);

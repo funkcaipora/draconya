@@ -191,11 +191,18 @@ M44-03) fixou o **como**, e cinco escolhas merecem registro porque não são ób
    outfit emprestado (chave reservada `outfit`); o segundo só entra se acabar DEPOIS do ativo
    (`getEndTime() > now + novo.ticks` recusa) — `merge: 'strongest'` com a força igual a
    `expiresAtMs`, e o schema exige `strongest` explícito: é o mecanismo da classe, não parâmetro da
-   fonte. A recusa não emite evento.
+   fonte. A recusa não emite evento. (O #622 acrescentou depois `merge: 'longest'`, a MESMA regra de
+   prazo de `Condition::updateCondition` para as condições de controle; o `outfit` segue com
+   `strongest` medido pelo prazo — o resultado é idêntico, e migrá-lo para `longest` é limpeza de
+   vocabulário que não muda regra de caça, deixada fora desta emenda.)
 3. **O ataque `outfit` de monstro é uma condição NÃO agressiva, e por isso não é um golpe.**
    `COMBAT_PARAM_AGGRESSIVE 0` + `COMBAT_NONE` faz o caminho ser `CombatNullFunc` → só
    `CombatConditionFunc`: sem bloqueio, esquiva, crítico nem dano — o `sim` o executa antes do
-   pipeline de dano e não consome sorteio além do `chance` do vencimento —, e, com área,
+   pipeline de dano e o único sorteio além do `chance` do vencimento é o do **Cleanse**, o primeiro
+   bloco dessa mesma função (`combat.cpp:1039-1062`), que roda para QUALQUER condição de monstro
+   num jogador: com o charm atribuído ao monstro e uma condição limpável ativa ele rola, limpa
+   uma, dá os 11 s de imunidade e a aparência NÃO entra (`#cleanseBeforeCondition`, na mesma ordem
+   de sorteio do golpe) —, e, com área,
    `Combat::CombatFunc` só exclui o lançador quando a ability é agressiva: a forma atinge TODOS os
    personagens e monstros nela, o LANÇADOR inclusive. Sem área, o ataque vai no alvo (o flag `target`
    do Lua só decide algo com área). A defesa é o próprio monstro.

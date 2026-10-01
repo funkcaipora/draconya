@@ -3241,8 +3241,14 @@ do Avatar do Wheel of Destiny (#610, fora do corte).
   personagens** (o Halloween Hare transforma os bichos em volta dele); (3) **não há golpe**:
   `combatType` é `COMBAT_NONE` e o caminho é `CombatNullFunc` → só `CombatConditionFunc`, sem
   bloqueio, esquiva, crítico nem dano — o ataque sai ANTES do pipeline de dano
-  (`#executeMonsterAbility`), não consome sorteio além do `chance` que o vencimento da cadência já
-  rolou e nenhum `creature-hit` é emitido. O alvo de uma forma tem visão livre do lançador, como toda
+  (`#executeMonsterAbility`), nenhum `creature-hit` é emitido e o único sorteio além do `chance` que
+  o vencimento da cadência já rolou é o do **Cleanse** (#603): o primeiro bloco da
+  `CombatConditionFunc` (`combat.cpp:1039-1062`) roda para QUALQUER condição de monstro num jogador,
+  o `outfit` inclusive — com o charm atribuído a este monstro e uma condição limpável ativa, rola
+  `chance ≥ normal(0, 10000)/100`, remove UMA, dá os 11 s de imunidade e `return`a SEM vestir a
+  aparência. `#executeOutfitAbility` o chama por personagem atingido (`#cleanseBeforeCondition`, só
+  no estágio `combat-v4`), na mesma ordem de sorteio do golpe, e só para jogador — o monstro e a
+  defesa (o próprio monstro) nunca o rolam. O alvo de uma forma tem visão livre do lançador, como toda
   ability (#553). O importador mapeia a ability com `power: 0` e `damageType: 'physical'` — o que
   o schema exige —, o `range` declarado ou a VISTA (11): o `sb.range` 0 do Canary é "sem limite além da
   vista" (`Monster::canUseSpell`), e um círculo em volta do lançador o acerta de qualquer distância
@@ -3250,7 +3256,7 @@ do Avatar do Wheel of Destiny (#610, fora do corte).
 - **A defesa é o monstro em si** (`Monster::onThinkDefense` → `castSpell(monster, monster)`,
   `monster.cpp:2220`), e `caster == target` PULA a imunidade (`CombatConditionFunc`,
   `combat.cpp:1079`) — um monstro imune a `outfit` ainda se disfarça. `DEFENSE_SELF_CONDITION_KINDS`
-  aceita `outfit` (52 defesas do Canary). A defesa passa por `#applyConditionTo` SEM `fromCombat`,
+  aceita `outfit` (55 defesas do Canary). A defesa passa por `#applyConditionTo` SEM `fromCombat`,
   e o ataque COM: o portão de imunidade de monstro (#559) agora conhece `outfit`
   (`conditionImmunityOf`), então o monstro de `conditionImmunities: ['outfit']` (119 no Canary, 42
   no catálogo gerado) recusa o ataque de OUTRO monstro, e a ilusão do jogador — `addCondition`
@@ -3281,8 +3287,9 @@ do Avatar do Wheel of Destiny (#610, fora do corte).
   (`no-target` do ponto de vista do bot — engatilha, nunca consome).
 - **Expira na fila (invariante 2) e a aparência mora na condição (invariante 3).** O vencimento é o
   `condition-expire` de sempre (`#onConditionExpire`), que emite a volta à aparência própria; o
-  mesmo vale para `#dispelConditions` e para a saída do personagem (`#cancelConditions` — o monstro
-  que morre some da tela de qualquer jeito e não emite). O `ConditionState.look` é opcional no
+  mesmo vale para `#dispelConditions` e para a MORTE do personagem (`#cancelConditions` — o monstro
+  que morre some da tela de qualquer jeito e não emite). A saída para outra sessão (#812) NÃO desfaz
+  a ilusão: a condição, com o `look`, segue o personagem, e a sessão que o recebe a rearma. O `ConditionState.look` é opcional no
   snapshot (sem bump de `SNAPSHOT_FORMAT_VERSION`), a hunt retomada no meio da ilusão volta com a
   aparência e as trocas seguintes caem nos mesmos instantes, e 1 Hz == 10 Hz == 20 Hz
   (`outfit-condition.test.ts`).
