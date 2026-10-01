@@ -150,6 +150,44 @@ describe('LearnedSpells — o registro das magias aprendidas (#624, ADR 0058)', 
       expect(learned.size).toBe(1);
     });
   });
+
+  describe('merge: o ledger funde pela UNIÃO, nunca perde uma magia (ADR 0058, Emenda, ponto 6)', () => {
+    const state = (...ids: string[]) => learnedSpellsStateOf(ids);
+
+    it('sem nada gravado devolve o extrato; com algo, a união na ordem em que foram aprendidas', () => {
+      expect(LearnedSpells.merge(undefined, state('a', 'b'))).toEqual(state('a', 'b'));
+      // O gravado vem primeiro, as novas do extrato depois — e o repetido não entra duas vezes.
+      expect(LearnedSpells.merge(state('a', 'b'), state('b', 'c'))).toEqual(state('a', 'b', 'c'));
+    });
+
+    it('o extrato ANTIGO chegando depois do novo não derruba a magia já paga (fora de ordem)', () => {
+      const older = state('a');
+      const newer = state('a', 'b');
+      // Do jeito certo e do avesso: o resultado é o mesmo conjunto — comutativa.
+      const inOrder = LearnedSpells.merge(LearnedSpells.merge(undefined, older), newer);
+      const reversed = LearnedSpells.merge(LearnedSpells.merge(undefined, newer), older);
+      expect([...inOrder.spellIds].sort()).toEqual(['a', 'b']);
+      expect([...reversed.spellIds].sort()).toEqual(['a', 'b']);
+    });
+
+    it('o extrato PARCIAL (base desconhecida: só a compra) não apaga o que já estava gravado', () => {
+      const migrated = state('a', 'b', 'c');
+      expect(LearnedSpells.merge(migrated, state('x'))).toEqual(state('a', 'b', 'c', 'x'));
+    });
+
+    it('é idempotente — aplicar o mesmo extrato de novo não muda nada — e não toca nos argumentos', () => {
+      const current = state('a');
+      const incoming = state('b');
+      const once = LearnedSpells.merge(current, incoming);
+      expect(LearnedSpells.merge(once, incoming)).toEqual(once);
+      expect(current.spellIds).toEqual(['a']);
+      expect(incoming.spellIds).toEqual(['b']);
+    });
+
+    it('carrega a versão do registro', () => {
+      expect(LearnedSpells.merge(state('a'), state('b')).version).toBe(LEARNED_SPELLS_STATE_VERSION);
+    });
+  });
 });
 
 describe('CharacterRuntime.learnSpell — a compra numa transação só (#624, ADR 0058 d.2)', () => {

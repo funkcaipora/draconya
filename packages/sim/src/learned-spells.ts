@@ -69,14 +69,40 @@ export class LearnedSpells {
   private constructor(state: LearnedSpellsState | undefined) {
     // `recorded`: este registro é a VERDADE do personagem, e não só o "nada" de quem chegou sem
     // registro nenhum (snapshot anterior a esta issue, ticket de um `api` antigo). A diferença
-    // importa no extrato: o registro é ABSOLUTO e última-escrita-vence, e escrever um vazio que
-    // nunca foi lido apagaria as magias que a migração 0023 concedeu (ADR 0014).
+    // importa no extrato: o ledger funde por UNIÃO (`merge`), então um registro parcial não apaga
+    // mais as magias que a migração 0023 concedeu (ADR 0014) — mas gravar o vazio de quem nunca
+    // leu o registro seria inventar `{ spellIds: [] }` onde a linha diz `null`, e afirmar uma
+    // verdade que a sessão não tem. O campo só viaja quando ela tem.
     this.#recorded = state !== undefined;
     for (const id of state?.spellIds ?? []) this.#ids.add(id);
   }
 
   static fromState(state?: LearnedSpellsState): LearnedSpells {
     return new LearnedSpells(state);
+  }
+
+  /**
+   * Absorve o registro de outro extrato ao que já está gravado, ficando com a UNIÃO dos ids.
+   *
+   * Existe para o ledger, por duas razões que a última-escrita-vence NÃO cobre: (1) extratos
+   * pendentes se aplicam em ordem qualquer (o `SCAN` do Redis não ordena), e o mais antigo
+   * chegando depois do mais novo derrubaria a magia já paga; (2) um extrato que parte de uma
+   * base DESCONHECIDA (sessão retomada de um snapshot sem registro que depois comprou uma
+   * magia) carrega só as compras dela, e escreveria por cima da concessão da migração (ADR
+   * 0014).
+   *
+   * O registro só CRESCE: o único caminho que esquece magia no Canary é a Wheel of Destiny
+   * (`forgetInstantSpell` em `player_wheel.cpp`, ao refazer a Roda), e a Roda está fora do jogo
+   * (ADR 0058, Emenda 2026-09-29). É isso que torna a união a fusão certa, não uma escolha
+   * conservadora — e o dia em que uma magia puder ser revogada, a revogação é uma migração de
+   * dado VERSIONADA (ADR 0014), não um efeito colateral da última-escrita-vence. Comutativa,
+   * associativa e idempotente, como `Bestiary.merge` e `Skills.merge`.
+   *
+   * A ordem é a de quem já estava gravado, seguida pelas novas na ordem do extrato: o registro
+   * continua na ordem em que as magias foram aprendidas.
+   */
+  static merge(current: LearnedSpellsState | undefined, incoming: LearnedSpellsState): LearnedSpellsState {
+    return learnedSpellsStateOf([...(current?.spellIds ?? []), ...incoming.spellIds]);
   }
 
   /**
