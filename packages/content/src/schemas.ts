@@ -5093,6 +5093,53 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
     (effect) => (effect.supplyId !== undefined) !== (effect.ammunitionId !== undefined),
     { message: 'conjure precisa de exatamente um entre "supplyId" e "ammunitionId"' },
   ),
+  /**
+   * Luz do LANÇADOR (#623, M44-05; Canary `data/scripts/spells/support/{light,great_light,
+   * ultimate_light}.lua`: `CONDITION_LIGHT` com `CONDITION_PARAM_LIGHT_LEVEL`/`_LIGHT_COLOR`/
+   * `_TICKS`). É condição de APRESENTAÇÃO — o `sim` guarda e vence a condição, mas nenhuma regra
+   * de jogo a lê (visão do monstro, mira e dano não dependem de luz): o cliente é quem ajusta a
+   * escuridão. `level` é o raio inicial em tiles e decai 1 a cada `durationMs / level` (o
+   * `lightChangeInterval` do `ConditionLight`); `color` é o índice da paleta de 216 cores do
+   * Tibia (215 nas três magias), a mesma que `world-lights` já resolve para o explorador.
+   */
+  z.object({
+    kind: z.literal('light'),
+    level: z.number().int().min(1).max(255),
+    color: z.number().int().min(0).max(255),
+    durationMs: z.number().int().positive(),
+  }),
+  /**
+   * Levitate (#623; Canary `support/levitate.lua`): sobe ou desce UM andar para o tile da frente
+   * do lançador — a direção do parâmetro (`exani hur up`/`down`) vira DUAS magias do catálogo,
+   * porque o parâmetro de texto do Canary não tem lugar na barra de ações (que é do Draconya) e
+   * dois ids dão o mesmo resultado sem plumbing novo. O destino sai das regras de tile do mapa
+   * multiandar (`utility-spells.ts`, `sim`).
+   */
+  z.object({ kind: z.literal('levitate'), direction: z.enum(['up', 'down']) }),
+  /**
+   * Magic Rope (#623; Canary `support/magic_rope.lua`): quem está EM CIMA de um rope spot sobe
+   * um andar, como a corda faria (`Position:moveUpstairs`). Sem campo: o mecanismo é fixo.
+   */
+  z.object({ kind: z.literal('magic-rope') }),
+  /**
+   * Find Person / Find Fiend (#623; Canary `support/find_person.lua`/`find_fiend.lua`): não muda
+   * nada no mundo, só devolve UMA mensagem de direção e distância. `person` mira um personagem da
+   * MESMA sessão (o parâmetro de nome do Canary vira o alvo manual do `use-slot`); `fiend` procura
+   * o monstro fiendish mais próximo (Exaltation Forge — ainda fora do catálogo, ver
+   * `docs/product/utility-spells.md`).
+   */
+  z.object({ kind: z.literal('find'), target: z.enum(['person', 'fiend']) }),
+  /**
+   * Food (#623; Canary `support/food.lua`): cria comida na mochila do lançador — UM item
+   * garantido e um segundo com 50 % (`math.random(0, 1) == 1`), cada um sorteado UNIFORME da lista
+   * `items`, NA ORDEM declarada (o índice do sorteio é a posição — trocar a ordem troca o que a
+   * mesma semente rende). Cada id precisa ser um consumível `food` do catálogo de itens
+   * (`buildContent` confere).
+   */
+  z.object({
+    kind: z.literal('food'),
+    items: z.array(z.string().min(1)).min(1),
+  }),
 ]);
 export type SpellEffect = z.infer<typeof spellEffectSchema>;
 

@@ -1261,6 +1261,27 @@ describe('catalogue bot targets (#393)', () => {
       [],
     )).success).toBe(false);
   });
+
+  it('carries the manual aim of a spell apart from `targets`, and leaves an older node without it (#623)', () => {
+    // Find Person pede mira SEM ser ação de aliado: `aim` é lido só pela barra de ação, e
+    // `targets: 'friend'` abriria o seletor de alvo do editor do bot.
+    const parsed = S2C_SCHEMAS.catalogue.parse(catalogue(
+      [{ id: 'find-person', name: 'Find Person', manaCost: 20, minLevel: 8, vocationId: null, effect: 'find', aim: 'character' }],
+      [],
+    ));
+    expect(parsed.bot.spells[0]?.aim).toBe('character');
+    expect(parsed.bot.spells[0]?.targets).toBeUndefined();
+
+    const older = S2C_SCHEMAS.catalogue.parse(catalogue(
+      [{ id: 'find-person', name: 'Find Person', manaCost: 20, minLevel: 8, vocationId: null, effect: 'find' }],
+      [],
+    ));
+    expect(older.bot.spells[0]?.aim).toBeUndefined();
+    expect(S2C_SCHEMAS.catalogue.safeParse(catalogue(
+      [{ id: 'find-person', name: 'Find Person', manaCost: 20, minLevel: 8, vocationId: null, effect: 'find', aim: 'monster' }],
+      [],
+    )).success).toBe(false);
+  });
 });
 
 describe('catalogue supply vocationId (#524, kit level 200)', () => {
@@ -1380,6 +1401,28 @@ describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
       ],
     };
     expect(decodeS2C(encodeS2C(msg))).toEqual([msg]);
+  });
+
+  it('round trips a light condition with its radius, colour and total duration (#623)', () => {
+    const msg: S2CMessage = {
+      type: 'active-conditions',
+      conditions: [
+        { kind: 'light', remainingMs: 300_000, light: { level: 6, color: 215, durationMs: 370_000 } },
+        { kind: 'haste', remainingMs: 30_000 },
+      ],
+    };
+    expect(decodeS2C(encodeS2C(msg))).toEqual([msg]);
+  });
+
+  it('rejects a light with a non-positive radius or a non-integer duration (#623)', () => {
+    expect(decodeS2C(encodeS2C({
+      type: 'active-conditions',
+      conditions: [{ kind: 'light', remainingMs: 1, light: { level: 0, color: 215, durationMs: 370_000 } }],
+    } as unknown as S2CMessage))).toBeNull();
+    expect(decodeS2C(encodeS2C({
+      type: 'active-conditions',
+      conditions: [{ kind: 'light', remainingMs: 1, light: { level: 6, color: 215, durationMs: 1.5 } }],
+    } as unknown as S2CMessage))).toBeNull();
   });
 
   it('round trips active-conditions with empty list', () => {

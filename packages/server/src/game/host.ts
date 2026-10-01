@@ -14,7 +14,7 @@
 
 import { performance } from 'node:perf_hooks';
 import type {
-  Aggregates, CombatEvent, EndReason, FollowState, GridPoint, ManualActionResult, MemberLeft,
+  Aggregates, CombatEvent, EndReason, FindResult, FollowState, GridPoint, ManualActionResult, MemberLeft,
   PartyEvent, PresenceEvent, Receipt, Session, SessionSnapshot, SessionType, WorldPoint,
 } from '@draconya/sim';
 import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
@@ -46,6 +46,7 @@ import type { Logger } from '../log.js';
 import type { InitialCharacter, PartyTicket } from '../tickets.js';
 import { AreaOfInterest } from './aoi.js';
 import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
+import { findPersonText } from './find-text.js';
 import { REFUSAL_TEXT, TransitionError, refuseTransition } from './transitions.js';
 import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
 
@@ -358,15 +359,20 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   'not-summonable': 'Você não pode invocar essa criatura agora.',
   // A magia do slot ainda não foi aprendida (#624, ADR 0058 d.1): a tela oferece a compra.
   'not-learned': 'Você ainda não aprendeu essa magia.',
-  // As runas de invocação restantes (#600, M38-03): o `RETURNVALUE_NOTPOSSIBLE` ("Sorry, not
-  // possible.") do Canary para alvo/cadáver que não servem, e o "You cannot control more creatures."
-  // do teto de 2 invocações.
+  // `not-possible` tem duas fontes. As runas de invocação restantes (#600, M38-03): o
+  // `RETURNVALUE_NOTPOSSIBLE` ("Sorry, not possible.") do Canary para alvo/cadáver que não servem.
+  // As utilitárias (#623): Levitate e Magic Rope caem nele por qualquer causa do destino, como o
+  // Canary.
   'not-possible': 'Isso não é possível.',
+  // O teto de 2 invocações (#600): o "You cannot control more creatures." do Canary.
   'too-many-summons': 'Você não pode controlar mais criaturas.',
   // O familiar (#599, M38-02): as duas frases do `CreateFamiliarSpell` do Canary — "You can't have
-  // other summons." e `RETURNVALUE_NOTENOUGHROOM`.
+  // other summons." e `RETURNVALUE_NOTENOUGHROOM` (a mesma do Magic Rope sem onde pousar, #623).
   'has-summons': 'Você não pode ter outras invocações.',
   'not-enough-room': 'Não há espaço suficiente.',
+  // As outras duas do `RETURNVALUE_*` que o `find` dá (#623).
+  'person-not-found': 'Nenhum personagem com esse nome está aqui.',
+  'no-creatures-around': 'Nenhuma criatura por perto.',
 };
 
 /**
@@ -836,7 +842,17 @@ function partyEndVoteRefusalText(decision: Extract<PartyEndVoteResult, { ok: fal
   return 'Você não está nesta party.';
 }
 
-type ConditionsSnapshot = ReadonlyMap<ActiveConditionKind, number>;
+/**
+ * Uma condição ativa como o host a guarda entre ciclos: o fim (instante LÓGICO) e, na luz
+ * (#623), o que o cliente precisa para desenhá-la. Comparada campo a campo — só o instante de fim
+ * não basta, uma luz nova de mesmo fim e outro raio precisa ser reenviada.
+ */
+interface ActiveConditionEntry {
+  readonly expiresAtMs: number;
+  readonly light?: { readonly level: number; readonly color: number; readonly durationMs: number };
+}
+
+type ConditionsSnapshot = ReadonlyMap<ActiveConditionKind, ActiveConditionEntry>;
 
 const ACTIVE_CONDITION_KIND_SET: ReadonlySet<string> = new Set(ACTIVE_CONDITION_KINDS);
 
@@ -846,28 +862,40 @@ const ACTIVE_CONDITION_KIND_SET: ReadonlySet<string> = new Set(ACTIVE_CONDITION_
  * fora aqui — o `z.enum` do protocolo recusaria o frame inteiro, e a barra sumiria com ele.
  */
 function conditionsSnapshotOf(character: CharacterRuntime): ConditionsSnapshot {
-  const snapshot = new Map<ActiveConditionKind, number>();
+  const snapshot = new Map<ActiveConditionKind, ActiveConditionEntry>();
   for (const condition of character.conditions.getState()) {
     if (!ACTIVE_CONDITION_KIND_SET.has(condition.key)) continue;
-    snapshot.set(condition.key as ActiveConditionKind, condition.expiresAtMs);
+    // A luz sem os dados que o cliente desenha (um snapshot que não os carrega) não vira badge.
+    if (condition.key === 'light' && condition.light === undefined) continue;
+    snapshot.set(condition.key as ActiveConditionKind, {
+      expiresAtMs: condition.expiresAtMs,
+      ...(condition.light === undefined ? {} : { light: condition.light }),
+    });
   }
   return snapshot;
 }
 
 function sameConditions(a: ConditionsSnapshot, b: ConditionsSnapshot): boolean {
   if (a.size !== b.size) return false;
-  for (const [key, expiresAtMs] of a) {
-    if (b.get(key) !== expiresAtMs) return false;
+  for (const [key, entry] of a) {
+    const other = b.get(key);
+    if (other === undefined || other.expiresAtMs !== entry.expiresAtMs) return false;
+    if (entry.light?.level !== other.light?.level || entry.light?.color !== other.light?.color
+      || entry.light?.durationMs !== other.light?.durationMs) return false;
   }
   return true;
 }
 
 function activeConditionsOf(snapshot: ConditionsSnapshot, nowMs: number): S2CProps<'active-conditions'> {
-  const conditions: { kind: ActiveConditionKind; remainingMs: number }[] = [];
-  for (const [kind, expiresAtMs] of snapshot) {
+  const conditions: {
+    kind: ActiveConditionKind; remainingMs: number;
+    light?: { level: number; color: number; durationMs: number };
+  }[] = [];
+  for (const [kind, entry] of snapshot) {
     conditions.push({
       kind,
-      remainingMs: Math.max(0, Math.round(expiresAtMs - nowMs)),
+      remainingMs: Math.max(0, Math.round(entry.expiresAtMs - nowMs)),
+      ...(entry.light === undefined ? {} : { light: { ...entry.light } }),
     });
   }
   conditions.sort((a, b) => a.kind.localeCompare(b.kind));
@@ -3181,6 +3209,10 @@ export class SessionHost {
           // `use-item-on` adiado precisa saber que ele, afinal, não coube (#726, ADR 0049 d.6).
           this.#presentManualActionResult(hosted, event);
           continue;
+        case 'find-result':
+          // POR PERSONAGEM, como o Follow: só quem lançou o Find lê a resposta (#623).
+          this.#presentFindResult(hosted, event);
+          continue;
         case 'member-left':
           // Alguém saiu por dentro do `sim` (#193): extrato e volta à Cidade são I/O, e o
           // ciclo é síncrono — fica na fila e sai logo depois dele (#194).
@@ -3860,6 +3892,20 @@ export class SessionHost {
       active: event.active,
       targetId: event.targetId,
       ...(event.reason === undefined ? {} : { reason: event.reason }),
+    });
+  }
+
+  /**
+   * O resultado de um Find Person (#623) como `system-message` só para quem lançou. A frase é
+   * daqui — o `sim` entrega dado (`FindRelation`) —, com o nome que o `sim` não guarda. Sem o
+   * nome (o personagem saiu entre o lançamento e o ciclo), diz "Alguém": a mensagem continua
+   * verdadeira sobre a direção.
+   */
+  #presentFindResult(hosted: HostedSession, event: FindResult): void {
+    const name = event.subjectId === undefined
+      ? 'Alguém' : this.#nameByCharacter.get(event.subjectId) ?? 'Alguém';
+    this.#sendToViewersOf(hosted, event.characterId, {
+      type: 'system-message', level: 'info', text: findPersonText(name, event.relation),
     });
   }
 

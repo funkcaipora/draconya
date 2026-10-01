@@ -291,5 +291,6 @@ export function resetWorld(): void {
   world.instanceId = null;
   world.mapId = null;
   world.ambience = 'surface';
+  world.selfLight = null;
   clearTransients();
 }

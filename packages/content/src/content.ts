@@ -884,6 +884,21 @@ export function buildContent(raw: RawContent): Content {
         );
       }
     }
+    // Food (#623): cada id da lista precisa ser comida DE VERDADE — item consumível com efeito
+    // `food` —, senão o Food criaria na mochila um item que `use-item` recusa como `not-usable`.
+    if (effect.kind === 'food') {
+      for (const itemId of effect.items) {
+        const item = itemDefinitions.get(itemId);
+        if (item === undefined) {
+          problems.push(`${where}: food.items "${itemId}" não existe no catálogo de itens`);
+        } else if (item.kind !== 'consumable' || item.effect?.kind !== 'food') {
+          problems.push(`${where}: food.items "${itemId}" não é comida (consumível com efeito "food")`);
+        }
+      }
+      if (new Set(effect.items).size !== effect.items.length) {
+        problems.push(`${where}: food.items repete um item — o sorteio uniforme pesaria o repetido em dobro`);
+      }
+    }
   }
   // Cada vocação tem UM familiar (#599): duas magias `familiar` para a mesma vocação deixariam
   // ambíguo qual delas o `sim` recria quando o personagem entra na hunt com tempo sobrando.

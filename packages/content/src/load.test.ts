@@ -586,9 +586,11 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     const consumables = [...content.items.values()].filter((item) => item.kind === 'consumable');
     // `blessing-charge` foi REMOVIDO pelo #570: bênção é serviço de Cidade (ADR 0052), nunca
     // item de mochila. Sobra só a comida (#726, ADR 0049 d.5) — cheese, ham, meat, dragon-ham,
-    // green-mushroom —, todas EMPILHÁVEIS.
+    // green-mushroom, e as quatro que a magia Food cria (#623: grapes, red-apple, bread, roll) —,
+    // todas EMPILHÁVEIS.
     expect(consumables.map((item) => item.id).sort()).toEqual(
-      ['cheese', 'dragon-ham', 'green-mushroom', 'ham', 'meat'].sort(),
+      ['bread', 'cheese', 'dragon-ham', 'grapes', 'green-mushroom', 'ham', 'meat', 'red-apple', 'roll']
+        .sort(),
     );
     expect(content.items.has('blessing-charge')).toBe(false);
     const cheese = content.items.get('cheese');
@@ -844,7 +846,8 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
 
 /** As excluídas por nome (ADR 0026 decisão 5) — em kebab-case, como um id seria. */
 const EXCLUDED_SPELLS = [
-  'light', 'great-light', 'ultimate-light', 'find-person', 'find-fiend', 'magic-rope', 'levitate',
+  // Light, Great Light, Ultimate Light, Levitate, Magic Rope, Find Person, Find Fiend e Food
+  // entraram no #623 (M44-05) — saem desta lista; ver o teste dedicado mais abaixo.
   'creature-illusion',
   // agora existe (CMB-07 generalizou a `Condition`). `curse` (#596) é diferente: um DOT
   // multi-estágio (17 valores decrescentes, `Condition:addDamage` chamado 17 vezes) — forma que
@@ -864,7 +867,7 @@ const EXCLUDED_SPELLS = [
   // 'conjure-arrow' saiu daqui na #594 (ADR 0044): a conjuração de munição do Paladin existe
   // agora (`packages/content/data/spells/conjure-arrow.json`), no modelo de estoque abstrato.
   'arrow-call', 'conjure-explosive-arrow', 'enchant-spear', 'conjure-wand-of-darkness',
-  'food', 'summon-creature', 'master-of-decay', 'master-of-flames', 'master-of-thunder',
+  'summon-creature', 'master-of-decay', 'master-of-flames', 'master-of-thunder',
   'light-healing-sorcerer', 'intense-healing-sorcerer',
 ];
 
@@ -896,7 +899,7 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     });
   }
 
-  it('has exactly the catalogue: 21 + 20 + 37 + 40 vocation spells, plus one generic (Cure Poison)', () => {
+  it('has exactly the catalogue: 21 + 20 + 38 + 42 vocation spells, plus eight generic (Cure Poison and the utilities)', () => {
     // #523 acrescentou uma magia por vocação que faltava (Fierce Berserk, Strong Ethereal
     // Spear, Ultimate Energy Strike) — Druid já tinha as 24 (Heal Friend só ganhou fórmula).
     // #590 (cura de condição) acrescentou: Cure Bleeding no Knight (+1) e no Druid (+1), Cure
@@ -921,17 +924,94 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     // metade Sorcerer de Explosion e de Heavy Magic Missile, 31→36), Druid +6 (Avalanche,
     // Intense/Ultimate Healing, Stone Shower, a metade Druid de Explosion e de Heavy Magic
     // Missile, 33→39); Knight não ganhou conjuração nenhuma nesta issue.
-    // #599 (M38-02) acrescentou o familiar de cada vocação (level 200): +1 em cada uma, e os
-    // números abaixo já a contam.
+    // #599 (M38-02) acrescentou o familiar de cada vocação (level 200): +1 em cada uma.
+    // #623 (utilitárias) acrescentou: Ultimate Light no Sorcerer (+1) e no Druid (+1) e a Food só no
+    // Druid (+1), e as SETE genéricas novas (Light, Great Light, Levitate up/down, Magic Rope, Find
+    // Person, Find Fiend) ao lado da Cure Poison: 1→8. Os números abaixo já contam as duas.
     const byVocation = new Map<string | undefined, number>();
     for (const spell of content.spells.values()) {
       byVocation.set(spell.vocationId, (byVocation.get(spell.vocationId) ?? 0) + 1);
     }
     expect(byVocation.get('knight')).toBe(22);
     expect(byVocation.get('paladin')).toBe(21);
-    expect(byVocation.get('sorcerer')).toBe(38);
-    expect(byVocation.get('druid')).toBe(41);
-    expect(byVocation.get(undefined)).toBe(1);
+    expect(byVocation.get('sorcerer')).toBe(39);
+    expect(byVocation.get('druid')).toBe(43);
+    expect(byVocation.get(undefined)).toBe(8);
+  });
+
+  it('as magias utilitárias carregam os números do Canary (#623)', () => {
+    // `data/scripts/spells/support/{light,great_light,ultimate_light,levitate,magic_rope,
+    // find_person,find_fiend,food}.lua` (47dfd51): level, mana, cooldown/groupCooldown de 2000 ms
+    // e grupo `support` em TODAS; a duração da luz é `(m*60+s)*1000`. Mutação que mata: trocar o
+    // `durationMs` de uma luz, o `level` de Ultimate Light (8 no Canary, 9 no TFS) ou o `soulCost`
+    // da Food.
+    const rows: Record<string, {
+      level: number; mana: number; vocationId?: string; soulCost?: number; effect: object;
+    }> = {
+      light: { level: 8, mana: 20, effect: { kind: 'light', level: 6, color: 215, durationMs: 370_000 } },
+      'great-light': {
+        level: 13, mana: 60, effect: { kind: 'light', level: 8, color: 215, durationMs: 695_000 },
+      },
+      'ultimate-light-druid': {
+        level: 26, mana: 140, vocationId: 'druid',
+        effect: { kind: 'light', level: 8, color: 215, durationMs: 1_990_000 },
+      },
+      'ultimate-light-sorcerer': {
+        level: 26, mana: 140, vocationId: 'sorcerer',
+        effect: { kind: 'light', level: 8, color: 215, durationMs: 1_990_000 },
+      },
+      'levitate-up': { level: 12, mana: 50, effect: { kind: 'levitate', direction: 'up' } },
+      'levitate-down': { level: 12, mana: 50, effect: { kind: 'levitate', direction: 'down' } },
+      'magic-rope': { level: 9, mana: 20, effect: { kind: 'magic-rope' } },
+      'find-person': { level: 8, mana: 20, effect: { kind: 'find', target: 'person' } },
+      'find-fiend': { level: 25, mana: 20, effect: { kind: 'find', target: 'fiend' } },
+      food: {
+        level: 14, mana: 120, vocationId: 'druid', soulCost: 1,
+        effect: {
+          kind: 'food', items: ['meat', 'ham', 'grapes', 'red-apple', 'bread', 'roll', 'cheese'],
+        },
+      },
+    };
+    for (const [id, row] of Object.entries(rows)) {
+      const spell = content.spells.get(id);
+      expect(spell, id).toBeDefined();
+      if (spell === undefined) continue;
+      expect(spell.minLevel, id).toBe(row.level);
+      expect(spell.manaCost, id).toBe(row.mana);
+      expect(spell.vocationId, id).toBe(row.vocationId);
+      expect(spell.soulCost, id).toBe(row.soulCost);
+      expect(spell.group, id).toBe('support');
+      expect(spell.groupCooldownMs, id).toBe(2000);
+      expect(spell.cooldownMs, id).toBe(2000);
+      expect(spell.effect, id).toEqual(row.effect);
+      expect(content.appearances?.spells[id]?.effect, id).toBeGreaterThan(0);
+    }
+    // A comida que a Food cria existe no catálogo, com o `value × 12 s` do `foods.lua`.
+    const foodValue: Record<string, number> = {
+      meat: 15, ham: 30, grapes: 9, 'red-apple': 6, bread: 10, roll: 3, cheese: 9,
+    };
+    for (const [id, value] of Object.entries(foodValue)) {
+      expect(content.items.get(id)?.effect, id).toEqual({ kind: 'food', durationMs: value * 12_000 });
+    }
+  });
+
+  it('a Food recusa no boot um item que não é comida, um id que não existe e um id repetido (#623)', () => {
+    // Sem esta conferência a magia subiria muda e criaria na mochila algo que `use-item` recusa.
+    const dir = mkdtempSync(join(tmpdir(), 'content-food-'));
+    try {
+      cpSync(DATA, dir, { recursive: true });
+      const path = join(dir, 'spells', 'food.json');
+      const food = JSON.parse(readFileSync(path, 'utf8')) as { effect: { items: string[] } };
+      food.effect.items = ['meat', 'backpack', 'no-such-food', 'meat'];
+      writeFileSync(path, JSON.stringify(food));
+      let message = '';
+      try { loadContent(dir); } catch (error) { message = (error as Error).message; }
+      expect(message).toMatch(/food\.items "backpack" não é comida/);
+      expect(message).toMatch(/food\.items "no-such-food" não existe/);
+      expect(message).toMatch(/repete um item/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('os quatro familiares de vocação (#599, M38-02): level 200, mana e monstro do Canary, 15 min e 30 min', () => {

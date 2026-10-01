@@ -59,13 +59,17 @@ O preço de `learnPrice` é o MENOR entre os NPCs que ensinam a magia à vocaç�
 | `eternal-winter` | druid | 8000 | `zoltan.lua` | 1 | 8000 |
 | `ethereal-spear` | paladin | 1100 | `dario.lua` | 8 | 1100 |
 | `fierce-berserk` | knight | 7500 | `graham.lua` | 8 | 7500 |
+| `find-fiend` | — | 1000 | `asrak.lua` | 43 | 1000 |
+| `find-person` | — | 80 | `asrak.lua` | 46 | 80 |
 | `fire-wave` | sorcerer | 850 | `barnabas_dee.lua` | 12 | 850 |
 | `flame-strike-druid` | druid | 800 | `azalea.lua` | 15 | 800 |
 | `flame-strike-sorcerer` | sorcerer | 800 | `azalea.lua` | 15 | 800 |
+| `food` | druid | 300 | `azalea.lua` | 12 | 300 |
 | `front-sweep` | knight | 4000 | `graham.lua` | 8 | 4000 |
 | `great-death-beam` | sorcerer | — | sem NPC | 0 | — |
 | `great-energy-beam` | sorcerer | 1800 | `barnabas_dee.lua` | 12 | 1800 |
 | `great-fire-wave` | sorcerer | 25000 | `barnabas_dee.lua` | 8 | 25000 |
+| `great-light` | — | 500 | `asrak.lua` | 46 | 500 |
 | `groundshaker` | knight | 1500 | `graham.lua` | 8 | 1500 |
 | `haste-druid` | druid | 600 | `azalea.lua` | 30 | 600 |
 | `haste-knight` | knight | 600 | `azalea.lua` | 30 | 600 |
@@ -87,11 +91,15 @@ O preço de `learnPrice` é o MENOR entre os NPCs que ensinam a magia à vocaç�
 | `invisibility-sorcerer` | sorcerer | 2000 | `azalea.lua` | 22 | 2000 |
 | `lesser-ethereal-spear` | paladin | 0 | `asrak.lua` | 5 | 0 |
 | `lesser-front-sweep` | knight | 0 | `asrak.lua` | 11 | 0 |
+| `levitate-down` | — | 500 | sem NPC | 0 | — |
+| `levitate-up` | — | 500 | sem NPC | 0 | — |
 | `light-healing-druid` | druid | 0 | `asrak.lua` | 35 | 0 |
 | `light-healing-paladin` | paladin | 0 | `asrak.lua` | 35 | 0 |
+| `light` | — | 0 | `asrak.lua` | 46 | 0 |
 | `lightning` | sorcerer | 5000 | `barnabas_dee.lua` | 8 | 5000 |
 | `magic-patch-druid` | druid | 0 | `asrak.lua` | 32 | 0 |
 | `magic-patch-sorcerer` | sorcerer | 0 | `asrak.lua` | 29 | 0 |
+| `magic-rope` | — | 200 | `azalea.lua` | 32 | 200 |
 | `magic-shield-druid` | druid | 450 | `azalea.lua` | 22 | 450 |
 | `magic-shield-sorcerer` | sorcerer | 450 | `azalea.lua` | 22 | 450 |
 | `mass-healing` | druid | 2200 | `azalea.lua` | 8 | 2200 |
@@ -129,6 +137,8 @@ O preço de `learnPrice` é o MENOR entre os NPCs que ensinam a magia à vocaç�
 | `ultimate-healing-druid` | druid | 1000 | `azalea.lua` | 22 | 1000 |
 | `ultimate-healing-sorcerer` | sorcerer | 1000 | `azalea.lua` | 22 | 1000 |
 | `ultimate-ice-strike` | druid | 15000 | `zoltan.lua` | 1 | 15000 |
+| `ultimate-light-druid` | druid | 1600 | `azalea.lua` | 14 | 1600 |
+| `ultimate-light-sorcerer` | sorcerer | 1600 | `azalea.lua` | 14 | 1600 |
 | `ultimate-terra-strike` | druid | 15000 | `zoltan.lua` | 1 | 15000 |
 | `whirlwind-throw` | knight | 1500 | `graham.lua` | 8 | 1500 |
 | `wound-cleansing` | knight | 0 | `asrak.lua` | 13 | 0 |
@@ -144,6 +154,8 @@ Nenhum NPC importado ensina estas magias (no Canary elas vêm de outro caminho �
 | `conjure-power-bolt` | paladin | 2200 |
 | `conjure-sniper-arrow` | paladin | 800 |
 | `great-death-beam` | sorcerer | AUSENTE |
+| `levitate-down` | — | 500 |
+| `levitate-up` | — | 500 |
 
 ## Mudanças nesta importação
 
