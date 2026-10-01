@@ -4141,6 +4141,11 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "faction": "anuma",
+    "enemyFactions": [
+      "player",
+      "fafnar"
+    ],
     "corpseTtlMs": 670000,
     "corpseAnimatable": [
       {
@@ -6402,6 +6407,11 @@
     },
     "runOnHealth": 10,
     "staticAttack": 0.9,
+    "faction": "anuma",
+    "enemyFactions": [
+      "player",
+      "fafnar"
+    ],
     "corpseTtlMs": 670000,
     "corpseAnimatable": [
       {

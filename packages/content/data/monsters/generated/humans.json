@@ -1413,6 +1413,11 @@
       "random": 0
     },
     "staticAttack": 0.7,
+    "faction": "fafnar",
+    "enemyFactions": [
+      "player",
+      "anuma"
+    ],
     "corpseTtlMs": 670000,
     "corpseAnimatable": [
       {
@@ -3412,6 +3417,11 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "faction": "lion-usurpers",
+    "enemyFactions": [
+      "player",
+      "lion"
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4595,6 +4605,10 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "faction": "lion",
+    "enemyFactions": [
+      "lion-usurpers"
+    ],
     "corpseTtlMs": 1810000,
     "corpseAnimatable": [
       {
@@ -4716,6 +4730,10 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "faction": "lion",
+    "enemyFactions": [
+      "lion-usurpers"
+    ],
     "corpseTtlMs": 1810000,
     "corpseAnimatable": [
       {
@@ -4854,6 +4872,10 @@
       "random": 0
     },
     "staticAttack": 0.7,
+    "faction": "lion",
+    "enemyFactions": [
+      "lion-usurpers"
+    ],
     "corpseTtlMs": 1810000,
     "corpseAnimatable": [
       {
@@ -7615,6 +7637,11 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "faction": "lion-usurpers",
+    "enemyFactions": [
+      "player",
+      "lion"
+    ],
     "corpseTtlMs": 1810000,
     "corpseAnimatable": [
       {
