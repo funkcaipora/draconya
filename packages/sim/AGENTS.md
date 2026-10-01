@@ -105,6 +105,52 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **Loot sorteia com o `Rng` da sessão, gold antes de item, e `chance: 0` não consome
   sorteio.** Ordem e semente são contrato: mudar qualquer um dos dois muda o que toda hunt
   retomada rende. `Math.random` continua proibido, e `grep -rn "Math.random" src` é vazio.
+- **Instante do relógio da sessão NÃO atravessa a troca de sessão como está** (#812, #550). O
+  relógio de cada sessão nasce em zero (ADR 0020), mas o `CharacterRuntime` é o MESMO objeto na
+  transição (Cidade → hunt, hunt → Cidade, saída da party): um instante de 57 700 ms gravado pela
+  hunt anterior é "no futuro" da nova, e o combate passa a depender de por onde o objeto andou, não
+  do estado e da semente. São duas espécies, e cada campo novo que guarde um instante (`…AtMs`,
+  `…Until`, `until`, `expiresAtMs`, `anchorMs`) escolhe UMA:
+  - **Carimbo** ("quando foi a última vez que…": `lastAttackAtMs`, `lastCombatActionAtMs`,
+    `attackLockedUntil`, o banco de bloqueio, a ação manual adiada) **zera** em
+    `CharacterRuntime.resetSessionClockState`, que `Session.enter` chama DEPOIS de o `onEnter`
+    aceitar. A janela é curta e já venceu na saída normal.
+  - **Prazo** ("quanto ainda falta": cooldown de magia/poção, condição, imunidade do Cleanse)
+    **traduz**, nunca zera: `Session.enter` chama `moveToClock` ANTES do `onEnter` e o restante
+    atravessa (`Cooldowns.rebase`, `Conditions.rebase`) — o cooldown de 10 minutos não volta pronto
+    por uma ida à Cidade, como no Canary (condição `CONDITIONID_DEFAULT` persistente) e como o anel
+    de duração (`#parkEquipment`, #689). A Cidade não simula: o prazo fica pausado nela. Zerar um
+    prazo "por segurança" é renovar de graça e é divergência de regra de caça (ADR 0037 d.6). Uma
+    condição trazida não tem evento na fila nova: `HuntRuleset#armConditions` o agenda no `onEnter`,
+    e `onLeave` cancela os eventos sem remover a condição.
+  - A origem da tradução é o instante EXATO da saída: `Session.leave`/`end` o gravam no personagem
+    (`markDeparture`), e o `#runTransition` do host constrói o destino ANTES de encerrar a origem
+    (nesse caso vale o `nowMs` vivo dela). Nunca leia o relógio de uma origem que continuou andando —
+    o restante passaria a depender da frequência do hospedeiro (invariante 2). O vínculo com o relógio
+    é transiente (fora de `getState`) e o restore de snapshot o religa com `bindClock`, SEM traduzir:
+    o relógio é o mesmo, e a janela quente atravessa. A entrada recusada desfaz a tradução.
+  - O teste que força a escolha é a tabela `SESSION_CLOCK_POLICY` de `session.test.ts`, um
+    `Record<keyof CharacterState, 'stamp' | 'duration' | 'none'>`: o campo novo não compila até ser
+    classificado. Duração sem âncora num relógio (`fedMs`, `durationRemainingMs`) é `none` e atravessa.
+  - Um cinto de leitura nunca substitui isto. `attackedRecently` lê carimbo no futuro como "nunca
+    bateu" (`false`), mas só até o relógio novo alcançar o valor velho; `isInFight` lê o MESMO
+    carimbo como "em combate" por até 60 s. Cada um cobre só metade do defeito.
+- **A esfola de cadáver (#626, `skinning.ts`) é o ÚLTIMO sorteio do abate, e só existe com
+  ferramenta.** `#onMonsterDied` rola loot, credita supply/munição e SÓ ENTÃO rola a esfola — um
+  sorteio, no `combat-v4`, quando quem coleta tem a ferramenta do monstro. Sem ferramenta, sem
+  entrada em `content.skinning` ou fora do v4 o `session.rng` não é tocado (`rulesets/skinning.
+  test.ts` prende); pôr qualquer sorteio DEPOIS dele, ou antes dele por um caminho que nem todo
+  abate percorre, desloca a sequência de quem tem faca. A janela é por ESTÁGIO do cadáver
+  (`Skinning.stages`), não a vida inteira (`corpseTtlMs`), e `CorpseState.diedAtMs` é o que dá a
+  idade — um snapshot anterior sem ele não se esfola à mão. O Scavenge encolhe o intervalo, e no tier
+  3 é PIOR que sem charm (a fórmula do Canary, decisão a rever em `docs/product/items.md`). **A
+  tentativa — a do bot e a manual, com ou sem sucesso — reagenda o evento `CORPSE`**
+  (`#retimeCorpse`, `Skinning.stages[].afterTtlMs`): o `transform(skin.after)` do Canary reinicia o
+  decaimento, e o cadáver esfolado vive 360 s da tentativa, não o que faltava dos 670 s. Quem
+  esfola um cadáver por um caminho novo tem que passar por `#retimeCorpse`, senão o loot que
+  sobrou no cadáver vive mais que no Canary. **O alcance manual é o `canUse` adjacente (1×1, sem
+  linha de visão), NÃO o `canUseFar` 7×5**: o `skinning.lua` não chama `allowFarUse`, e herdar o
+  7×5 das runas por ser "um tile" foi o erro que a revisão do #626 pegou (ADR 0049, emenda).
 - **Um evento que se reagenda usa `session.nowMs + intervalo`**, e é exato porque `nowMs` durante
   o despacho É o instante do vencimento. Não há erro a herdar, e por isso não há acumulador.
 - **`pnpm source-policy` reprova nome de contador de tick** (`remainingTicks`, `cooldownTicks`, …)
@@ -137,6 +183,19 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **Skill nunca desce, e `Skills.merge` depende disso.** Ficar com o maior de cada uma é o que
   torna a fusão de extratos comutativa: um extrato antigo processado fora de ordem não rebaixa
   nada, e não é preciso guardar instante como a stamina guarda.
+- **Loyalty é LEITURA do nível, nunca escrita** (`loyalty.ts`, #628, ADR 0052 d.5). O bônus da
+  idade da conta chega no ticket como um percentual inteiro, fica em `CharacterRuntime.
+  loyaltyBonusPercent` (fixado como a versão de conteúdo, e no snapshot) e vira NÍVEIS extras por
+  `LoyaltyLevels.levelOf` — a conta de `getLoyaltySkill`/`getLoyaltyMagicLevel` do Canary, sobre
+  TRIES e na curva real da vocação, não `nível × (1 + p)`. **Toda leitura que ESCALA algo (golpe,
+  magia, defesa, cura, requisito de runa) passa por `HuntRuleset#loyaltyLevelOf` /
+  `#magicLevelOf`; ganhar tries, o estágio de rate, a penalidade de morte, o extrato e o
+  snapshot continuam no nível BASE** (`skills.levelOf`) — misturar os dois faria o bônus
+  acelerar (ou travar) a própria curva. Skill nova que escale algo lê pelo helper, não por
+  `character.skills.levelOf`. Sem bônus o helper devolve o nível base sem custo nenhum. O `sim`
+  nunca conta dias de conta nem lê relógio: quem calcula o percentual é a `api` (`server/src/
+  loyalty.ts`), com `loyaltyPointsOf`/`loyaltyBonusPercentOf` daqui (aritmética pura). O cache de
+  tries acumulados por skill é derivado, por personagem, e nunca vai ao snapshot.
 - **Bestiário é acumulador de ABATE, pelo mesmo argumento** (`bestiary.ts`, FUN-113, §18).
   Abate é a morte que `resolveDeath` resolve no instante em que vence — evento na fila, não
   grandeza por tick —, e o módulo é aritmética pura sobre um `Map`. `CharacterState.bestiary`
@@ -145,6 +204,23 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   não conta abate (§18.6) pela MESMA condição que não paga XP nem loot — duas condições
   divergem na primeira mudança em uma delas. `Bestiary.merge` fica com o maior por monstro,
   pela razão de `Skills.merge`.
+- **O Bosstiary é o irmão do Bestiário, e o boss conta em UM dos dois** (`bosstiary.ts`, #629,
+  ADR 0052 emenda de 2026-09-29). Mesmo evento (`#onMonsterDied`) e mesma fusão por máximo
+  (`Bosstiary.merge`) — mas **NÃO a mesma elegibilidade**: o Bestiário ainda corre dentro do
+  `for (const member of eligible)` de `#grantPartyXp` (vivo e com stamina), e o Bosstiary roda
+  FORA dele, em `#creditBosstiary`, sobre os `killers` do Canary (`#killersOf`: todo jogador com
+  dano no monstro, mais o roster inteiro com a XP compartilhada ativa). `Player::onKilledMonster`
+  não tem portão de stamina nem de vida — só `Player::gainExperience` tem —, então um herói
+  exausto conta o boss, e quem não bateu (sem XP compartilhada) não. Os `killers` saem ANTES da
+  XP do abate: o level up dele não pode mexer na régua de nível de `canShareExperience`. Mover o
+  Bosstiary de volta para dentro do `eligible` "para ficar igual ao Bestiário" reabre a
+  divergência — o que está desalinhado é o Bestiário (ADR 0043 d.1 / 0053 d.1), não o Bosstiary.
+  O contador é chaveado pelo `raceId` do boss (em TEXTO: objeto JSON só tem chave de texto), e não
+  pelo id de conteúdo, porque variantes do mesmo boss compartilham o `raceId` no Canary.
+  **`definition.boss` decide a porta:** boss não soma no `Bestiary` (`Player::addBestiaryKill`
+  devolve cedo para `isBoss()`) — esquecer o `if` faria o boss entrar nos marcos de XP. Os pontos
+  são os do PRÓPRIO nível alcançado, somados ao total; nível fechado é o evento notável
+  `bosstiary-level`.
 - **A party é aritmética pura em `party.ts` (#189, ADR 0027; fórmula e elegibilidade emendadas
   pelo #525 em 2026-09-24/25, fidelidade CANARY do ADR 0037 d.4 — não TFS: as duas engines
   divergem no multiplicador, e é o Canary que manda em fórmula), e o ruleset só chama.**

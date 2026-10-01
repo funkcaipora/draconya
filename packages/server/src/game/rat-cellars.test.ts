@@ -182,7 +182,7 @@ describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)
     it(`a ${vocationId} that has not learned a spell cannot cast it — and nothing is spent (#624)`, () => {
       const content = real();
       // A magia de MENOR level da vocação: a que o personagem alcança primeiro, e a que a
-      // migração 0023 concede a todo mundo que já tinha o level dela.
+      // migração 0024 concede a todo mundo que já tinha o level dela.
       const first = [...content.spells.values()]
         .filter((s) => s.vocationId === vocationId)
         .reduce((a, b) => (a.minLevel < b.minLevel ? a : b));

@@ -463,6 +463,17 @@ export const SERVER_TO_CLIENT = {
    */
   'exit-pending': 45,
   /**
+   * O Bosstiary do personagem (#629, ADR 0052 d.1): os abates por boss (chaveados pelo `raceId`
+   * do Canary, em texto), os pontos de boss e nada mais — o registro cru, como `bestiary` manda
+   * os abates crus. A tabela de níveis e a raridade de cada boss vêm no `catalogue` (fixadas na
+   * sessão, invariante 7); o cliente deriva o nível de cada boss do mesmo jeito que já deriva o
+   * marco do Bestiário (`bosstiary-progress.ts`). Sai no attach e sempre que um abate de boss
+   * muda o registro. Por PERSONAGEM, como `bestiary`: o Bosstiary é do personagem.
+   *
+   * 46: o 45 é do `exit-pending`.
+   */
+  bosstiary: 46,
+  /**
    * As magias que o personagem APRENDEU (#624, ADR 0058 d.1): o registro cru de
    * `CharacterRuntime.learnedSpells` (ids de `content.spells`). O que cada magia custa, exige e
    * faz é do `catalogue` (fixado na sessão, invariante 7); a tela deriva "aprendida / à venda /
@@ -470,9 +481,9 @@ export const SERVER_TO_CLIENT = {
    * servidor (`spell-not-learned`) de qualquer jeito. Só para o DONO, como `blessings`/`charms`.
    * Sai no attach e a cada `learn-spell` aceito.
    *
-   * 46: o 45 é do `exit-pending` (#802).
+   * 47: o 46 é do `bosstiary` (#629), e o 45 é do `exit-pending` (#802).
    */
-  'learned-spells': 46,
+  'learned-spells': 47,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

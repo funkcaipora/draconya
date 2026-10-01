@@ -167,7 +167,14 @@
       "idx": 23,
       "version": "7",
       "when": 1791200000000,
-      "tag": "0023_624-learned-spells",
+      "tag": "0023_629-bosstiary",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791300000000,
+      "tag": "0024_624-learned-spells",
       "breakpoints": true
     }
   ]

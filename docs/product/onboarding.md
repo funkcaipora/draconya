@@ -85,7 +85,7 @@ custa gold. **Isto é atrito novo e é o mesmo do Tibia**: o tutorial (E14) prec
 essa tela cedo, antes da primeira hunt em que ele espera ver a cura disparar. Enquanto o tutorial
 não existe, é o jogador quem descobre a seção — e o slot marcado é a pista.
 
-**Quem já existia antes da #624 não passa por isso**: a migração 0023 concedeu a ele todas as
+**Quem já existia antes da #624 não passa por isso**: a migração 0024 concedeu a ele todas as
 magias da vocação até o level em que estava (ADR 0014; ver `progression.md`).
 
 ## Divergências do PRD

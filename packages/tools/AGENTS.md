@@ -13,7 +13,7 @@ sob o `tsconfig.tooling.json` — ver `docs/asset-library.md`.
 `learnedSpells: learnedSpellsStateOf(content.spells.keys())` (sem isso a rotação de magia REAL do
 `botConfigFor` nunca lança nada, e a semente 18 estourou o limite do líder parado), e
 `dragon-party-seed.ts` grava `characters.learned_spells` com as magias da vocação até o level 200 —
-a mesma regra da migração 0023 —, ou a party semeada para a QA ao vivo entraria sem lançar nada.
+a mesma regra da migração 0024 —, ou a party semeada para a QA ao vivo entraria sem lançar nada.
 
 O importador do CATÁLOGO do Tibia (item, monstro, magia — ADR 0038) mora em `scripts/catalog/`,
 pelo mesmo motivo e ao lado do importador de mapa, e não aqui: `pnpm catalog:import <tipo>

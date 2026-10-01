@@ -258,7 +258,7 @@ describe('CharacterRuntime.learnSpell — a compra numa transação só (#624, A
     const restored = new CharacterRuntime(JSON.parse(JSON.stringify(hero.getState())));
     expect(restored.learnedSpells.size).toBe(0);
     // Passa pelo snapshot de novo e continua sem a chave: reescrevê-la VAZIA apagaria, no fim da
-    // hunt, o que a migração 0023 concedeu no Postgres (ADR 0014).
+    // hunt, o que a migração 0024 concedeu no Postgres (ADR 0014).
     expect(restored.getState()).not.toHaveProperty('learnedSpells');
     // Comprar é o que a faz aparecer.
     restored.learnSpell(berserk);

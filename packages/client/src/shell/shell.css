@@ -1100,6 +1100,12 @@ div.hunt-pill-pending { cursor: default; }
 .cyclopedia-modal-item-stats { display: flex; gap: 6px; align-items: center; font: 8px var(--font-mono); }
 .cyclopedia-modal-item-weight { color: var(--text-muted); min-width: 54px; text-align: right; }
 
+/* ---- Cyclopedia: aba Bosstiary (#629, ADR 0052) -------------------------------------------
+   A mesma linha da lista do Bestiário, com a raridade e o nível no lugar da ficha do Canary — a
+   coluna do meio precisa de mais espaço (raridade + "Nível 3/3" lado a lado). */
+.cyclopedia-modal-boss-row { grid-template-columns: 22px minmax(0, 1fr) 150px 90px 80px; }
+.cyclopedia-modal-boss-list { max-height: 424px; }
+
 /* ---- Cyclopedia: aba Charms (M39-02, #602, ADR 0052/0053) --------------------------------- */
 .cyclopedia-modal-charm-list {
   display: flex; flex-direction: column; gap: 6px; overflow: auto; min-height: 0;

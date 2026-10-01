@@ -99,6 +99,21 @@ ausente de propósito — ver `docs/product/progression.md`, "Aprender magia"). 
 outro lado: toda magia do catálogo real tem preço, exceto a `NOT_TAUGHT` — uma magia nova sem
 `learnPrice` seria uma magia que ninguém consegue lançar.
 
+**`data/skinning/generated/` é a esfola de cadáver** (#626, ADR 0048 d.5/d.6): `pnpm catalog:import
+skinning` lê o `skinning.lua` do Canary (`config[ferramenta][id do cadáver]`) e a cruza com o
+`monster.corpse` e a cadeia de decaimento (`duration`/`decayTo`) de cada monstro do catálogo — uma
+linha por MONSTRO, com a ferramenta, o material, a `chance` (`SKINNING_CHANCE_SCALE = 100000`) e
+os `stages` esfoláveis do cadáver (`canaryItemId` é identidade para o Scavenge, nunca arte;
+`afterTtlMs` é a vida do cadáver DEPOIS da tentativa — o `duration` do `after` do Lua mais a cadeia
+`decayTo` dele no `items.xml`, 360 s em todas as 62 entradas, porque o `transform` do Canary reinicia
+o decaimento). Depende
+de `data/monsters/**` e `data/items/**` já promovidos: monstro, ferramenta ou material fora do
+catálogo saem em `skipped` no relatório, e o boot recusa referência solta. A obsidian knife, a
+blessed wooden stake e o `rabbits-foot` são itens AUTORAIS (o importador de itens não classifica
+`primarytype="tools"`); o pé de coelho vale 50 gp (o preço de compra de `shops.lua`, que o `items.xml`
+não dá) e NÃO leva `creatureProduct`, porque o flag vem do `primarytype="creature products"`.
+Reimportar depois de promover mais monstros recupera o que ficou de fora.
+
 Qualquer `data/<tipo>/` (`items/`, `monsters/`) aceita, além do arquivo autoral direto na pasta,
 duas subpastas que `load.ts` lê sozinho, sem precisar de mudança em `content.ts`:
 
@@ -136,6 +151,18 @@ schema declara `source: catalogSourceSchema.optional()` explicitamente — a MES
 que passar a hospedar entidade gerada precisa do mesmo campo; esquecê-lo só aparece quando a
 primeira entidade de verdade for importada, e o erro (`Unrecognized key: "source"`) não aponta
 para cá.
+
+**O boss é o monstro com bloco `bosstiary`** (#629): `monsterSchema.bosstiary = { rarity, raceId }`
+(`bane`/`archfoe`/`nemesis` e o `bossRaceId` do Canary, a chave do contador de abates) e `boss:
+true` — o `isBoss` do Canary É "tem bloco bosstiary" (`!bosstiaryClass.empty()`). O importador
+(`scripts/catalog/monsters.ts`, `readBosstiary`) escreve os dois juntos, e a promoção os leva a
+`data/monsters/generated/` como estão (é campo do schema, ao contrário de `bestiary`/`outfitId`);
+`buildContent` recusa `bosstiary` sem `boss` e duas raridades para o mesmo `raceId` (variantes do
+mesmo boss compartilham o contador). A tabela de níveis por raridade — abates e pontos de cada um
+dos três níveis, a `IOBosstiary::levelInfos` — é `data/bosstiary/baseline.json`, transcrita à mão
+de UM arquivo do Canary (bloco `source`, sem `_open`: o boot avisa todo `_open` como valor não
+decidido, e este é decidido). Boss não tem `bestiary` no Canary, e não entra em
+`bestiary/baseline.json`.
 
 ## Mapa e rota
 

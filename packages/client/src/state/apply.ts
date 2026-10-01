@@ -28,7 +28,12 @@ function skillsOf(
   if (Object.keys(skills).length === 0) return previous;
   const of = (id: keyof PlayerSkills): SkillProgress => {
     const progress = skills[id];
-    return progress === undefined ? previous[id] : { level: progress.level, percent: progress.percentToNext };
+    if (progress === undefined) return previous[id];
+    // O nível com Loyalty (#628) só vem quando o bônus muda o nível; a ausência é "igual ao base".
+    return {
+      level: progress.level, percent: progress.percentToNext,
+      ...(progress.loyaltyLevel === undefined ? {} : { loyaltyLevel: progress.loyaltyLevel }),
+    };
   };
   return {
     fist: of('fist'), club: of('club'), sword: of('sword'), axe: of('axe'),
@@ -246,6 +251,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         fightMode: message.fightMode,
         speed: message.speed,
         skills: skillsOf(message.skills, state.skills),
+        loyaltyBonusPercent: message.loyaltyBonusPercent ?? 0,
         soul: message.soul,
         soulMax: message.soulMax,
       }));
@@ -330,6 +336,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           // Os 25 Charms (M39-02, #602, ADR 0053 d.3): custo, chance e categoria de cada um,
           // fixados na sessão — a tela do Cyclopedia lê daqui.
           charms: message.charms,
+          // Os níveis do Bosstiary (#629): a tabela por raridade, fixada na sessão. Ausente quando o
+          // servidor não a mandou — a tela decide o que mostrar sem ela, não este `case`.
+          ...(message.bosstiary === undefined ? {} : { bosstiary: message.bosstiary }),
         },
       }));
       return;
@@ -364,6 +373,12 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // servidor manda no attach e sempre que um contador muda (FUN-113), e somar aqui daria
       // um Bestiário que diverge do dele na primeira reconexão — que reenvia o mesmo total.
       hud.set((state) => ({ ...state, bestiary: message.counts }));
+      return;
+
+    case 'bosstiary':
+      // SUBSTITUI, como o Bestiário: são os contadores INTEIROS de cada boss e os pontos, não um
+      // delta — o servidor manda no attach e a cada abate de boss (#629, ADR 0052 d.1).
+      hud.set((state) => ({ ...state, bosstiary: { kills: message.kills, points: message.points } }));
       return;
 
     case 'charms':
@@ -506,6 +521,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         promoted: message.self.promoted,
         speed: message.self.speed,
         skills: skillsOf(message.self.skills, state.skills),
+        loyaltyBonusPercent: message.self.loyaltyBonusPercent ?? 0,
         soul: message.self.soul,
         soulMax: message.self.soulMax,
         // O analisador (§16.1, FUN-83). `elapsedMs` da mensagem é o mesmo

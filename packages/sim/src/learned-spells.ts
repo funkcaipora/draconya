@@ -70,7 +70,7 @@ export class LearnedSpells {
     // `recorded`: este registro é a VERDADE do personagem, e não só o "nada" de quem chegou sem
     // registro nenhum (snapshot anterior a esta issue, ticket de um `api` antigo). A diferença
     // importa no extrato: o ledger funde por UNIÃO (`merge`), então um registro parcial não apaga
-    // mais as magias que a migração 0023 concedeu (ADR 0014) — mas gravar o vazio de quem nunca
+    // mais as magias que a migração 0024 concedeu (ADR 0014) — mas gravar o vazio de quem nunca
     // leu o registro seria inventar `{ spellIds: [] }` onde a linha diz `null`, e afirmar uma
     // verdade que a sessão não tem. O campo só viaja quando ela tem.
     this.#recorded = state !== undefined;

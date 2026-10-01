@@ -646,3 +646,35 @@ describe('conditionImmunityOf — que imunidade de monstro barra esta condição
     expect(conditionImmunityOf({ key: 'mana-shield', expiresAtMs: 1 })).toBeNull();
   });
 });
+
+describe('Conditions.rebase between session clocks (#812)', () => {
+  it('keeps the remaining expiry and the phase of the next tick, on the new clock', () => {
+    const conditions = new Conditions();
+    conditions.apply({
+      key: 'poison', expiresAtMs: 70_000, nextTickAtMs: 12_000,
+      tick: { kind: 'damage', amount: 5, intervalMs: 3_000 },
+    });
+    conditions.rebase(10_000, 500);
+    expect(conditions.get('poison')).toMatchObject({ expiresAtMs: 60_500, nextTickAtMs: 2_500 });
+  });
+
+  it('drops what had already expired and leaves a retired tick without a phantom', () => {
+    const conditions = new Conditions();
+    conditions.apply(haste({ expiresAtMs: 9_000 }));
+    conditions.apply({ key: 'regen', expiresAtMs: 40_000, tick: { kind: 'heal', amount: 1, intervalMs: 1_000 } });
+    conditions.rebase(10_000, 0);
+    expect(conditions.get('haste')).toBeNull();
+    const regen = conditions.get('regen');
+    expect(regen?.expiresAtMs).toBe(30_000);
+    expect(regen).not.toHaveProperty('nextTickAtMs');
+  });
+
+  it('is reversible for everything that crossed (a refused entry undoes it)', () => {
+    const conditions = new Conditions();
+    conditions.apply(haste({ expiresAtMs: 87_700 }));
+    const before = conditions.getState();
+    conditions.rebase(57_700, 3_000);
+    conditions.rebase(3_000, 57_700);
+    expect(conditions.getState()).toEqual(before);
+  });
+});

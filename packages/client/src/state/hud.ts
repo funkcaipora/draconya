@@ -38,6 +38,11 @@ export interface SystemLine {
 export interface SkillProgress {
   level: number;
   percent: number;
+  /**
+   * O nível COM o bônus de Loyalty da conta (#628). Ausente é "igual ao base" — a conta sem
+   * degrau, ou um nó `game` anterior à issue. O `percent` é sempre o do nível BASE.
+   */
+  loyaltyLevel?: number;
 }
 
 /** #568: `melee` virou quatro skills na #567 — cada tipo de arma treina a sua. */
@@ -118,6 +123,15 @@ export type BestiaryConfig = NonNullable<Catalogue['bestiary']>;
  * contador que nunca desce —, então a tela não soma nada: cada mensagem substitui a anterior.
  */
 export type BestiaryCounts = Readonly<S2CProps<'bestiary'>['counts']>;
+/** Os níveis do Bosstiary por raridade (#629). Ausente do catálogo: o servidor não tem Bosstiary. */
+export type BosstiaryConfig = NonNullable<Catalogue['bosstiary']>;
+/**
+ * O Bosstiary do personagem (#629, ADR 0052 d.1): o registro CRU que o servidor manda — abates
+ * por boss (chave = `raceId`, em texto) e os pontos de boss. Derivado do protocolo, como o
+ * Bestiário: um contador que nunca desce, então a tela não soma nada — cada mensagem substitui a
+ * anterior. O nível de cada boss a tela deriva cruzando com `BosstiaryConfig` (`bosstiary-progress.ts`).
+ */
+export type BosstiaryRegister = Readonly<S2CProps<'bosstiary'>>;
 /** Um Charm do catálogo (M39-02, #602, ADR 0053 d.3): custo, chance e categoria por tier. */
 export type CharmDefinition = Catalogue['charms'][number];
 /**
@@ -250,6 +264,12 @@ export interface HudState {
   readonly speed: number;
   readonly skills: PlayerSkills;
   /**
+   * O bônus de Loyalty da conta (#628, ADR 0052 decisão 5), em percentual inteiro; `0` é "sem
+   * degrau". Fixado no ticket, constante pela sessão. Chega em `player-stats` e em
+   * `session-state.self`, como `skills`.
+   */
+  readonly loyaltyBonusPercent: number;
+  /**
    * Pontos de alma (#593): `soulMax` é da vocação — `0` é "sem vocação escolhida", o mesmo
    * "sem teto para mostrar" que `vocationId: null` já significa. Chega em `player-stats` e em
    * `session-state.self`, como `speed`/`skills`.
@@ -334,6 +354,12 @@ export interface HudState {
    */
   readonly charms: CharmsRegister | null;
   /**
+   * O Bosstiary (#629). `null` até chegar — o primeiro segundo de toda conexão, ou um nó anterior a
+   * esta issue —, pela mesma razão do Bestiário: um Bosstiary que abre em zero afirma "nunca
+   * abateu um boss", e o servidor ainda não disse isso. SUBSTITUI: é o registro inteiro.
+   */
+  readonly bosstiary: BosstiaryRegister | null;
+  /**
    * As sete bênçãos PvE (#570, ADR 0052): o BITMASK — um bit por `order` do catálogo
    * (`catalogue.blessings.list`), nunca uma lista de nomes (invariante 6: a tela resolve o
    * nome pelo catálogo, o servidor só manda o número). `0` até o attach/enter responder — é
@@ -411,6 +437,7 @@ export const INITIAL_HUD: HudState = {
     distance: { level: 0, percent: 0 },
     magic: { level: 0, percent: 0 },
   },
+  loyaltyBonusPercent: 0,
   soul: 0,
   soulMax: 0,
   vocationId: null,
@@ -428,6 +455,7 @@ export const INITIAL_HUD: HudState = {
   slotResults: {},
   bestiary: null,
   charms: null,
+  bosstiary: null,
   blessings: 0,
   learnedSpells: null,
   party: null,

@@ -8,9 +8,9 @@
 
 import { randomUUID } from 'node:crypto';
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { Bestiary, LearnedSpells, levelForXp, readItemOverlay } from '@draconya/sim';
+import { Bestiary, Bosstiary, LearnedSpells, levelForXp, readItemOverlay } from '@draconya/sim';
 import type {
-  BestiaryState, CharacterStorageMap, ItemInstanceOverlay,
+  BestiaryState, BosstiaryState, CharacterStorageMap, ItemInstanceOverlay,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { Database } from '../db/client.js';
@@ -162,6 +162,7 @@ async function applyProgression(
       gold: characters.gold,
       skillsUpdatedAt: characters.skillsUpdatedAt,
       bestiary: characters.bestiary,
+      bosstiary: characters.bosstiary,
       learnedSpells: characters.learnedSpells,
       ammo: characters.ammo,
       staminaUpdatedAt: characters.staminaUpdatedAt,
@@ -227,6 +228,18 @@ async function applyProgression(
       ),
     };
 
+  // O Bosstiary funde pelo MAIOR de cada boss e dos pontos (#629, ADR 0052 d.1), pela mesma razão
+  // do Bestiário: abate nunca desce, e os pontos de boss só somam. A coluna é nulável — `null` é
+  // quem nunca abateu um boss — e o extrato SEM o campo (Cidade, nó antigo em deploy) não toca
+  // nela.
+  const bosstiary = receipt.bosstiary === undefined
+    ? {}
+    : {
+      bosstiary: Bosstiary.merge(
+        (current.bosstiary as BosstiaryState | null) ?? undefined, receipt.bosstiary,
+      ),
+    };
+
   // A munição escolhida (#152): preferência, última escrita vence. Extrato SEM o campo não toca
   // na coluna — é a Cidade, ou um nó antigo, e a escolha continua a de antes.
   const ammo = receipt.ammo === undefined ? {} : { ammo: receipt.ammo };
@@ -259,7 +272,7 @@ async function applyProgression(
   // ordem qualquer (o `SCAN` do Redis não ordena), e o mais antigo chegando depois do mais novo
   // derrubaria uma magia já paga (o gold é delta e ficaria debitado); e um extrato que parte de
   // uma base desconhecida (sessão retomada de um snapshot sem registro) carrega só as compras
-  // dela, e escreveria por cima da concessão da migração 0023 (ADR 0014). A coluna é nulável —
+  // dela, e escreveria por cima da concessão da migração 0024 (ADR 0014). A coluna é nulável —
   // `null` é quem nunca aprendeu nada nem foi migrado — e uma linha torta vira ausente, pela
   // mesma régua do ticket. Extrato SEM o campo não toca na coluna.
   const learnedSpells = receipt.learnedSpells === undefined
@@ -350,6 +363,7 @@ async function applyProgression(
       gold,
       ...skills,
       ...bestiary,
+      ...bosstiary,
       ...ammo,
       ...soul,
       ...supplyStock,

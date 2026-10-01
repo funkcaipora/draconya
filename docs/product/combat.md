@@ -1678,6 +1678,14 @@ cooldown:**
 `attack-locked` entra em `SlotRefusal` (`packages/sim/src/rulesets/hunt.ts`, disparo manual de
 slot) e em `host.ts` (`'Você está exausto.'`, a mesma frase do `RETURNVALUE_YOUAREEXHAUSTED`).
 
+**A trava não atravessa a troca de sessão (#812).** `attackLockedUntil` é instante do relógio lógico
+da sessão que o gravou, e o `CharacterRuntime` é o MESMO objeto na transição enquanto o relógio da
+sessão nova nasce em zero: uma trava de 59 700 ms herdada seguraria o golpe e a magia agressiva da
+hunt seguinte por quase um minuto, sem escada nenhuma. `Session.enter` zera o campo (depois de o
+`onEnter` aceitar; o restore de snapshot não passa por `enter` e mantém a trava quente) — o mesmo
+ponto e a mesma razão do carimbo de `lastAttackAtMs` (#550), agrupados em
+`CharacterRuntime.resetSessionClockState`.
+
 **Fora do escopo**: migrar para a condição `pacified` de verdade (M44-04); o `skull`/PvP do
 Canary que também gate a magia agressiva (o Draconya não tem PvP nem sistema de skull ainda);
 qualquer travamento fora de hunt/quest/boss/guild war — a Cidade não simula combate.
@@ -2048,7 +2056,8 @@ por `spell.manaCost`.
 
 ## Charms em combate (#603, M39-03, ADR 0053 d.5 — `combat-v4`)
 
-Os 24 Charms do Canary que agem em combate (todos menos o Scavenge, #626) rolam DENTRO do
+Os 24 Charms do Canary que agem em combate (todos menos o Scavenge, que age na esfola — #626, ver
+`docs/product/items.md`) rolam DENTRO do
 pipeline de dano, na ordem do `Game::combatChangeHealth`/`applyCharmRune`. O que cada um faz, o
 que rola e onde mora cada número está na tabela de estágios de `docs/product/combat-conformance.md`
 (seção "Estágio #603"); o catálogo (id, categoria, tipo, `percent`, `chance[3]`) é

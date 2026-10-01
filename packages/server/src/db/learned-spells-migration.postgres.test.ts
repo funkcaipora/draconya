@@ -1,7 +1,7 @@
-// #624 (M44-06, ADR 0058 d.4, ADR 0014): a migração 0023 acrescenta `character.learned_spells` e
+// #624 (M44-06, ADR 0058 d.4, ADR 0014): a migração 0024 acrescenta `character.learned_spells` e
 // CONCEDE, a quem já existe, todas as magias da vocação com `minLevel` menor ou igual ao level.
-// Este teste aplica as migrações 0000–0022 (o schema como era ANTES da 0023), insere personagens
-// com dado de verdade, roda só a 0023 e confere o que a issue promete: quem já existia NÃO perde
+// Este teste aplica as migrações 0000–0023 (o schema como era ANTES da 0024), insere personagens
+// com dado de verdade, roda só a 0024 e confere o que a issue promete: quem já existia NÃO perde
 // a capacidade de lançar o que lançava ontem, nenhuma outra coluna muda, e quem nasce depois
 // começa sem magia nenhuma — como no Tibia.
 //
@@ -15,9 +15,9 @@ import { describe, expect, it } from 'vitest';
 
 const databaseUrl = process.env['DATABASE_TEST_URL'];
 const migrationsDir = new URL('../../migrations/', import.meta.url);
-const targetMigrationUrl = new URL('../../migrations/0023_624-learned-spells.sql', import.meta.url);
+const targetMigrationUrl = new URL('../../migrations/0024_624-learned-spells.sql', import.meta.url);
 
-/** Tudo do personagem que a 0023 NÃO pode tocar, na ordem em que os testes o comparam. */
+/** Tudo do personagem que a 0024 NÃO pode tocar, na ordem em que os testes o comparam. */
 const UNTOUCHED_COLUMNS = `
   id, account_id, name, vocation, promoted, level, xp, gold, soul, blessings, fed_ms, stamina_ms,
   state, capacity, fight_mode, skills::text as skills, charms::text as charms
@@ -28,9 +28,9 @@ interface LearnedSpellsRow {
   readonly version: number;
 }
 
-describe.runIf(databaseUrl !== undefined)('migração 0023: as magias aprendidas (#624, ADR 0058 d.4)', () => {
+describe.runIf(databaseUrl !== undefined)('migração 0024: as magias aprendidas (#624, ADR 0058 d.4)', () => {
   it('concede ao Knight level 35 o que a vocação dele já lançava — e nada acima do level nem de outra vocação', async () => {
-    const fixture = await schemaBeforeMigration0023(databaseUrl!);
+    const fixture = await schemaBeforeMigration0024(databaseUrl!);
     try {
       await fixture.insertCharacter('c1', 'Knight One', { vocation: 'knight', level: 35 });
       await runSqlFile(fixture.sql, targetMigrationUrl);
@@ -58,7 +58,7 @@ describe.runIf(databaseUrl !== undefined)('migração 0023: as magias aprendidas
   });
 
   it('o level é o limite exato: no level do requisito entra, um abaixo não', async () => {
-    const fixture = await schemaBeforeMigration0023(databaseUrl!);
+    const fixture = await schemaBeforeMigration0024(databaseUrl!);
     try {
       await fixture.insertCharacter('c1', 'Druid Eight', { vocation: 'druid', level: 8 });
       await fixture.insertCharacter('c2', 'Druid Fourteen', { vocation: 'druid', level: 14 });
@@ -78,7 +78,7 @@ describe.runIf(databaseUrl !== undefined)('migração 0023: as magias aprendidas
   });
 
   it('promoção é estado, não outra vocação: o Elite Knight recebe o catálogo do Knight', async () => {
-    const fixture = await schemaBeforeMigration0023(databaseUrl!);
+    const fixture = await schemaBeforeMigration0024(databaseUrl!);
     try {
       await fixture.insertCharacter('c1', 'Elite Knight', { vocation: 'knight', promoted: true, level: 150 });
       await runSqlFile(fixture.sql, targetMigrationUrl);
@@ -90,7 +90,7 @@ describe.runIf(databaseUrl !== undefined)('migração 0023: as magias aprendidas
   });
 
   it('quem ainda não escolheu vocação recebe só o que não exige uma — ou nada, abaixo do level da magia', async () => {
-    const fixture = await schemaBeforeMigration0023(databaseUrl!);
+    const fixture = await schemaBeforeMigration0024(databaseUrl!);
     try {
       await fixture.insertCharacter('c1', 'Rookie Five', { level: 5 });
       await fixture.insertCharacter('c2', 'Rookie Twelve', { level: 12 });
@@ -104,7 +104,7 @@ describe.runIf(databaseUrl !== undefined)('migração 0023: as magias aprendidas
   });
 
   it('não muda NENHUMA outra coluna de quem já existe (ADR 0014)', async () => {
-    const fixture = await schemaBeforeMigration0023(databaseUrl!);
+    const fixture = await schemaBeforeMigration0024(databaseUrl!);
     try {
       await fixture.insertCharacter('c1', 'Paladin One', {
         vocation: 'paladin', promoted: true, level: 210, xp: 12_345_678, gold: 900_000, blessings: 127,
@@ -123,7 +123,7 @@ describe.runIf(databaseUrl !== undefined)('migração 0023: as magias aprendidas
   });
 
   it('quem nasce DEPOIS da migração começa sem magia nenhuma: a coluna é `NULL`, como no Tibia', async () => {
-    const fixture = await schemaBeforeMigration0023(databaseUrl!);
+    const fixture = await schemaBeforeMigration0024(databaseUrl!);
     try {
       await runSqlFile(fixture.sql, targetMigrationUrl);
       await fixture.sql`insert into character (id, account_id, name) values ('c9', 'a1', 'Hero c9')`;
@@ -144,7 +144,7 @@ interface SeedOptions {
   readonly blessings?: number;
 }
 
-async function schemaBeforeMigration0023(url: string) {
+async function schemaBeforeMigration0024(url: string) {
   const schemaName = `test_${randomUUID().replaceAll('-', '')}`;
   const administrator = postgres(url, { max: 1, onnotice: () => {} });
   await administrator.unsafe(`create schema "${schemaName}"`);
@@ -156,10 +156,10 @@ async function schemaBeforeMigration0023(url: string) {
   const sql = postgres(scopedUrl.toString(), { max: 1 });
 
   try {
-    // As migrações como elas eram ANTES da 0023 — em ordem, pelo nome do arquivo, como o
+    // As migrações como elas eram ANTES da 0024 — em ordem, pelo nome do arquivo, como o
     // `drizzle-orm/postgres-js/migrator` aplica de verdade.
     const files = (await readdir(migrationsDir))
-      .filter((name) => name.endsWith('.sql') && name < '0023_')
+      .filter((name) => name.endsWith('.sql') && name < '0024_')
       .sort();
     for (const name of files) await runSqlFile(sql, new URL(name, migrationsDir));
 

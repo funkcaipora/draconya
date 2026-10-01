@@ -90,7 +90,7 @@ A decisão não mudou; a implementação fechou seis pontos que o texto deixava 
    que ela não tem (e, antes do ponto 6, apagava a concessão da migração, o que viola o ADR 0014).
    O campo é OMITIDO e o ledger não toca na coluna. A compra ou a concessão (`grant`) tornam o
    registro a verdade — e o ponto 6 diz por que "verdade parcial" também não apaga nada.
-3. **A migração 0023 é um retrato.** As 119 magias do dia (id, vocação, `minLevel`) estão no SQL,
+3. **A migração 0024 é um retrato.** As 119 magias do dia (id, vocação, `minLevel`) estão no SQL,
    porque a migração descreve o que era verdade na hora dela: uma magia que o conteúdo criar
    depois é COMPRADA, e um teste (`learned-spells-migration.postgres.test.ts`) prende as regras
    (limite exato de level, promoção não é outra vocação, quem não escolheu vocação, quem nasce

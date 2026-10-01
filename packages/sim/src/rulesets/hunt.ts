@@ -25,8 +25,8 @@ import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, BotLoot, Charm, Combat,
   CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, FieldStage, Hunt,
   Item, ItemSlot, Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange,
-  PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina,
-  Supply, Tilemap, Vocation, WeaponFamily, WeaponProfile,
+  PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Skinning, Spell, SpellArea, SpawnPoint,
+  Stamina, Supply, Tilemap, Vocation, WeaponFamily, WeaponProfile,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, FORWARD, isSelfOrigin, tileKey } from '../area.js';
@@ -48,7 +48,7 @@ import { chestStorageKeyOf, isDoorKind, isToggleable, TileOverrides } from '../t
 import type { InteractableKind, InteractableTool, TileOverrideState } from '../tile-overrides.js';
 import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
-import { hasCharmStage } from '../combat/profile.js';
+import { hasCharmStage, hasSkinningStage } from '../combat/profile.js';
 import {
   ADRENALINE_BURST_CONDITION, ActionCritical, CHARM_PARALYZE_CONDITION, CLEANSE_IMMUNITY_MS,
   FATAL_HOLD_MS, carnageCharmDamage, charmAttackBonus, charmChance, cleanseTypeOfCondition,
@@ -85,9 +85,13 @@ import {
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
 import type { KillCredit, Victim } from '../death.js';
 import type { BestiaryConfig } from '../bestiary.js';
+import type { BosstiaryConfig } from '../bosstiary.js';
 import { pickByWeight, Spawner } from '../hunt/spawner.js';
 import type { SpawnArea, SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
+import {
+  SCAVENGE_CHARM_ID, rollSkinning, scavengeChanceFor, skinningChanceRange, skinningStageAt,
+} from '../skinning.js';
 import {
   applyAttackRate, applyRate, creatureRatesFor, experienceRateFor, skillRateFor,
 } from '../rates.js';
@@ -279,6 +283,19 @@ const PENDING_MANUAL_ACTION = 'pending-manual-action';
  * "Ex actions" do Tibia (`playerUseItemEx`), e são elas que essa constante regula.
  */
 const MANUAL_ITEM_EXHAUST_MS = 1_000;
+
+/**
+ * O resultado da esfola do bot no abate (#626). `afterTtlMs` só existe quando HOUVE sorteio — é
+ * ele que diz "tentou": a vida que o cadáver passa a ter (do estágio em que foi esfolado; o
+ * `transform(skin.after)` do Canary reinicia o decaimento). `material` é o que o sorteio rendeu.
+ */
+interface SkinAtDeath {
+  readonly material: LootItem | null;
+  readonly afterTtlMs: number | undefined;
+}
+
+/** O abate sem esfola: sem ferramenta, sem monstro esfolável ou fora do `combat-v4` (#626). */
+const NO_SKIN: SkinAtDeath = { material: null, afterTtlMs: undefined };
 
 /**
  * O vencimento de um item equipado por TEMPO (ADR 0032 d.8): o anel que gasta por duração. É
@@ -1052,11 +1069,23 @@ export interface HuntRulesetOptions {
    */
   readonly bestiary?: BestiaryConfig;
   /**
+   * Os níveis do Bosstiary por raridade (#629). Ausente é uma hunt em que o abate de boss conta,
+   * mas nenhum nível fecha e nenhum ponto de boss é ganho — o conteúdo de teste que não fala de
+   * progressão permanente, como `bestiary` ausente.
+   */
+  readonly bosstiary?: BosstiaryConfig;
+  /**
    * O catálogo dos 25 Charms do Canary (#602/#603, ADR 0053 d.3), por id. Só o `combat-v4`
    * (`hasCharmStage`) os rola; ausente é uma hunt em que nenhum charm dispara — o conteúdo de teste
    * que não fala de Charms, e todo personagem sem atribuição.
    */
   readonly charms?: ReadonlyMap<string, Charm>;
+  /**
+   * Como o cadáver de cada monstro esfolável é esfolado (#626, ADR 0048 d.5/d.6), por `monsterId`.
+   * Só o `combat-v4` (`hasSkinningStage`) esfola; ausente é uma hunt em que nenhuma ferramenta
+   * faz nada — o conteúdo de teste que não fala de esfola.
+   */
+  readonly skinning?: ReadonlyMap<string, Skinning>;
   readonly player: PlayerProfile;
   readonly exitRules?: readonly HuntExitRule[];
   /**
@@ -1119,6 +1148,13 @@ export interface HuntRulesetOptions {
  * `eligible` do abate (`null` em `splitLoot` — a bolsa é dona, e o cadáver não guarda nada).
  * Os quatro são OPCIONAIS na leitura (snapshot anterior a este ADR não os tem — `ausente` é
  * cadáver vazio, sem bump de `SNAPSHOT_FORMAT_VERSION`), mas sempre presentes ao criar.
+ *
+ * `diedAtMs`/`skinned` são da ESFOLA (#626): `diedAtMs` é o relógio lógico da morte — a idade do
+ * cadáver, que diz em que estágio da cadeia de decaimento ele está e, portanto, se a janela de
+ * esfola ainda está aberta —, e `skinned` marca que a esfola já foi tentada (com ou sem sucesso:
+ * o Canary transforma o cadáver no "esfolado" nos dois casos, e ele não é chave de tabela
+ * nenhuma). Opcionais na leitura pela mesma razão: snapshot anterior não os tem, e sem
+ * `diedAtMs` o cadáver não se esfola à mão (a idade é desconhecida — recusa em vez de adivinhar).
  */
 export interface CorpseState {
   readonly id: number;
@@ -1129,6 +1165,12 @@ export interface CorpseState {
   gold?: number;
   readonly ownerId?: string | null;
   readonly eligible?: readonly string[];
+  readonly diedAtMs?: number;
+  /**
+   * MUTÁVEL: vira `true` na primeira tentativa de esfola, do bot ou à mão — e é nela que o fim do
+   * cadáver é reagendado (`#retimeCorpse`): o decaimento recomeça no `after` do Canary.
+   */
+  skinned?: boolean;
 }
 
 /** A recusa comum a `openCorpse`/`takeLoot` (#722, ADR 0048 d.4). */
@@ -1835,6 +1877,13 @@ export class HuntRuleset implements Ruleset {
   readonly #basicAmmo: ReadonlyMap<AmmoFamily, Ammunition>;
 
   /**
+   * Os ids dos itens que esfolam (#626): a `toolId` de cada entrada de `options.skinning`. É o que
+   * `use-item`/`use-item-on` confere para tratar uma instância como ferramenta — resolvido UMA vez,
+   * no boot da instância. Vazio é uma hunt sem esfola.
+   */
+  readonly #skinToolIds: ReadonlySet<string>;
+
+  /**
    * A mira da magia, reaproveitada pela mesma razão que `#botView` (FUN-92).
    *
    * Três vetores que andam juntos e são limpos a cada lançamento: os alvos como `castSpell` os
@@ -1894,6 +1943,7 @@ export class HuntRuleset implements Ruleset {
       if (!basics.has(ammo.family)) basics.set(ammo.family, ammo);
     }
     this.#basicAmmo = basics;
+    this.#skinToolIds = new Set([...(options.skinning?.values() ?? [])].map((entry) => entry.toolId));
   }
 
   get monsters(): readonly MonsterRuntime[] {
@@ -2117,6 +2167,8 @@ export class HuntRuleset implements Ruleset {
     const carried = [...character.inventory.backpack, ...character.inventory.satchel]
       .find((item) => item?.instanceId === instanceId);
     if (carried === undefined || carried === null) return refuseItem('not-carried', 0);
+    // A ferramenta de esfola (#626) age sobre o cadáver do tile apontado, e não é consumida.
+    if (this.#skinToolIds.has(carried.itemId)) return this.#performSkin(session, character, carried, target);
     const item = this.#options.items.get(carried.itemId);
     // `Item.effect` é opcional na forma (só `kind: 'consumable'` o declara — `buildContent`
     // confere isso no boot, não o tipo): o schema não dá o discriminante de graça ao TS.
@@ -2860,6 +2912,9 @@ export class HuntRuleset implements Ruleset {
     // Instala o observer e agenda o vencimento do que já está vestido (ADR 0032 d.8): a
     // entrada fresca não passa por `equip`, e o anel que já vinha do ticket precisa vencer.
     this.#armEquipment(session, character);
+    // As condições que o personagem TRAZ de outra sessão (#812): `Session.enter` já as traduziu
+    // para o relógio desta, mas o vencimento e o próximo tique moravam na fila da anterior.
+    this.#armConditions(session, character);
     // O primeiro entra NO tile inicial da rota; o segundo em diante, no livre mais próximo —
     // tile é exclusivo, e o `rejoinNearest` do primeiro passo o põe na rota (#203).
     const at = runner.walker.current;
@@ -2952,8 +3007,11 @@ export class HuntRuleset implements Ruleset {
     // morre aqui, o restante não.
     this.#parkEquipment(session, character);
     character.inventory.setEquipmentObserver(null);
-    // As condições dele saem com ele (CMB-07): o vencimento de quem já saiu não fica órfão.
-    this.#cancelConditions(session, character);
+    // Os EVENTOS das condições dele saem da fila (CMB-07): o vencimento de quem já saiu não fica
+    // órfão. A condição em si FICA no personagem (#812): ele a leva para a próxima sessão, que a
+    // traduz para o relógio dela e reagenda — a haste de 30 s não some por uma ida à Cidade, e o
+    // veneno também não. Quem morre é outro caso (`#onCharacterDied`): morto não tem condição.
+    this.#cancelConditionEvents(session, character);
     // As invocações dele somem JUNTO (#598, M38-01, ADR 0057 decisão 3 — "some ao sair da
     // hunt"): mesmo `#removeSummon` que o mestre MONSTRO já usa quando morre (#546) — sem
     // golpe, sem cadáver, sem abate; nunca pagou nada enquanto viva. `filter` ANTES de remover
@@ -6181,10 +6239,7 @@ const slots = bot.groups.get(group);
    * no magic level como somam no dano da runa e na cura da poção.
    */
   #runeScaling(character: CharacterRuntime): SpellScaling {
-    const magic = this.#options.skills.get('magic');
-    const magicLevel = (magic === undefined ? 0 : character.skills.levelOf(magic))
-      + character.inventory.skillBonus(this.#options.items, 'magic')
-      + character.conditions.skillBonus('magic');
+    const magicLevel = this.#magicLevelOf(character);
     return {
       skillLevel: magicLevel, powerScale: 1, magicLevel,
       // O ML especializado por elemento (#680): a fórmula da runa soma o do elemento DELA.
@@ -6209,17 +6264,14 @@ const slots = bot.groups.get(group);
     const skillId = spellSkill === SPELL_SKILL_WEAPON
       ? this.#equippedWeaponSkillId(character) : spellSkill;
     const skill = this.#options.skills.get(skillId);
-    const magic = this.#options.skills.get('magic');
     return {
-      skillLevel: (skill === undefined ? 0 : character.skills.levelOf(skill))
+      skillLevel: (skill === undefined ? 0 : this.#loyaltyLevelOf(character, skill))
         + character.inventory.skillBonus(this.#options.items, skillId)
         + character.conditions.skillBonus(skillId),
       // A skill de magia escala o poder FIXO, como a de arma escala o golpe (FUN-75).
       powerScale: this.#scaledPower(character, 'spell-cast', 1),
       // A fórmula canônica de CURA (#475) escala pelo magic level, em toda vocação.
-      magicLevel: (magic === undefined ? 0 : character.skills.levelOf(magic))
-        + character.inventory.skillBonus(this.#options.items, 'magic')
-        + character.conditions.skillBonus('magic'),
+      magicLevel: this.#magicLevelOf(character),
       // O termo de arma da fórmula baseada em `attack` (#523: Groundshaker, Berserk, Fierce
       // Berserk, Front Sweep, Whirlwind Throw). `0` desarmado — a mesma resposta honesta de
       // `weaponAttack`, nunca um número inventado.
@@ -6613,17 +6665,53 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * Cancela os eventos das condições de um alvo (CMB-07). Chamado quando ele morre ou sai: sem
-   * isto, o vencimento de uma condição de quem não existe mais ficaria na fila até vencer, e o
-   * despacho encontraria o vazio — o órfão que o critério da issue proíbe.
+   * Cancela os eventos das condições de um alvo E as remove (CMB-07). Chamado quando ele morre:
+   * sem isto, o vencimento de uma condição de quem não existe mais ficaria na fila até vencer, e o
+   * despacho encontraria o vazio — o órfão que o critério da issue proíbe. Quem apenas SAI da
+   * sessão não passa por aqui: `#cancelConditionEvents` tira os eventos e deixa a condição.
    */
   #cancelConditions(session: Session, target: ConditionTarget): void {
+    this.#cancelConditionEvents(session, target);
+    for (const condition of target.conditions.getState()) target.conditions.remove(condition.key);
+  }
+
+  /**
+   * Tira da fila desta sessão o vencimento e o tique de toda condição do alvo, SEM remover a
+   * condição (#812): é o que quem sai (`onLeave`) faz, porque a condição segue com o personagem.
+   */
+  #cancelConditionEvents(session: Session, target: ConditionTarget): void {
     const id = this.#subjectOf(target);
     for (const condition of target.conditions.getState()) {
       const subject = conditionSubject(id, condition.key);
       session.cancelEvent(CONDITION_EXPIRE, subject);
       session.cancelEvent(CONDITION_TICK, subject);
-      target.conditions.remove(condition.key);
+    }
+  }
+
+  /**
+   * Agenda o vencimento e o próximo tique das condições que o personagem entra TRAZENDO de outra
+   * sessão (#812). `Session.enter` já traduziu `expiresAtMs`/`nextTickAtMs` para o relógio desta
+   * (`CharacterRuntime.moveToClock`), e é daí que sai o prazo que ainda falta. Sem isto uma haste
+   * herdada nunca venceria e um veneno herdado nunca tiquetaria: os dois eventos moravam na fila da
+   * sessão anterior.
+   *
+   * Cancela antes de agendar: o personagem que volta à MESMA instância (sai e entra de novo) não
+   * pode ficar com dois vencimentos. `Math.max(0, …)` cobre o tique que caía no instante da saída e
+   * ainda não tinha rodado — vence agora, como se a fila tivesse seguido.
+   */
+  #armConditions(session: Session, character: CharacterRuntime): void {
+    for (const condition of character.conditions.getState()) {
+      const subject = conditionSubject(character.id, condition.key);
+      session.cancelEvent(CONDITION_EXPIRE, subject);
+      session.cancelEvent(CONDITION_TICK, subject);
+      session.scheduleIn(CONDITION_EXPIRE, Math.max(0, condition.expiresAtMs - session.nowMs), {
+        priority: EXPIRE_PRIORITY, subject,
+      });
+      if (condition.nextTickAtMs !== undefined) {
+        session.scheduleIn(CONDITION_TICK, Math.max(0, condition.nextTickAtMs - session.nowMs), {
+          priority: TICK_PRIORITY, subject,
+        });
+      }
     }
   }
 
@@ -7189,8 +7277,7 @@ const slots = bot.groups.get(group);
       if (supply.requires.level !== undefined && character.level < supply.requires.level) {
         return blocked('not-in-catalog');
       }
-      const magic = this.#options.skills.get('magic');
-      const magicLevel = magic === undefined ? 0 : character.skills.levelOf(magic);
+      const magicLevel = this.#magicLevelOf(character);
       if (supply.requires.magicLevel !== undefined && magicLevel < supply.requires.magicLevel) {
         // Motivo PRÓPRIO (RF-02): o `#perform` devolve `magic-level-too-low`, e o espelho do
         // `slotStates` tem de coincidir com ele (DT-08) — genérico aqui é o cliente sem a
@@ -9511,7 +9598,7 @@ const slots = bot.groups.get(group);
     // O bônus de equipamento da mesma skill (#524) entra aqui — no dano E na chance de acerto à
     // distância (#522), como a skill do Tibia já inclui o `skillDist` do item — MAIS o de
     // condição (#576: Berserk Potion soma 5 em `melee`, Bullseye Potion soma 5 em `distance`).
-    return (skill === undefined ? 0 : character.skills.levelOf(skill))
+    return (skill === undefined ? 0 : this.#loyaltyLevelOf(character, skill))
       + (family === undefined ? 0 : character.inventory.skillBonus(this.#options.items, family.skillId))
       + (family === undefined ? 0 : character.conditions.skillBonus(family.skillId));
   }
@@ -9866,7 +9953,7 @@ const slots = bot.groups.get(group);
     for (let i = 0; i < definitions.length; i += 1) {
       const definition = definitions[i] as Skill;
       if (definition.damagePerLevel === 0) continue;
-      power *= powerMultiplier(definition, character.skills.levelOf(definition));
+      power *= powerMultiplier(definition, this.#loyaltyLevelOf(character, definition));
     }
     // A postura (#155) escala o golpe e o tiro aqui; a magia é escalada dentro de `castSpell`,
     // por alvo — aplicar nos dois lugares contaria a mesma postura duas vezes.
@@ -9955,6 +10042,11 @@ const slots = bot.groups.get(group);
     // direto para ela, "como hoje") e quando não há destinatário nenhum.
     let corpseGold = 0;
     let corpseItems: CarriedItem[] = [];
+    // A esfola do bot (#626, ADR 0048 d.5): tentada no MESMO evento, DEPOIS de todo o sorteio de
+    // loot — a ordem do RNG é contrato (FUN-63), e o estágio novo entra por último para não
+    // deslocar nada do que já saía. `skinAfterTtlMs` só existe quando houve sorteio — é ele que
+    // marca o cadáver como esfolado e que o reagenda (o `transform` do Canary reinicia o decaimento).
+    let skinAfterTtlMs: number | undefined;
     if (!isSummon && definition !== undefined && this.#bag !== null && session.participants.length > 1) {
       // Modo compartilhado (#192): tudo cai na BOLSA — sem destinatário, sem modificador
       // individual, e a ordem do RNG é a de solo (gold, depois itens na ordem da tabela).
@@ -9973,6 +10065,11 @@ const slots = bot.groups.get(group);
         // (`presentAtDrop`, D4/§16.1), não o `eligible` de XP.
         this.#creditSupplies(session, session.participants, loot.supplies);
         this.#creditAmmunition(session, session.participants, loot.ammunition);
+        // Sem dono do cadáver, a esfola é de quem entre os elegíveis tem a ferramenta (na ordem
+        // da sessão) e o material cai na bolsa, como o resto do loot desta modalidade.
+        const skin = this.#skinAtDeath(session, monster, eligible);
+        skinAfterTtlMs = skin.afterTtlMs;
+        if (skin.material !== null) this.#deliverToBag(session, [skin.material]);
       }
     } else if (!isSummon && definition !== undefined && recipient !== null) {
       // O sorteio é IDÊNTICO a antes deste ADR — gold, depois itens na ordem da tabela — e o
@@ -9989,13 +10086,31 @@ const slots = bot.groups.get(group);
       // são abstratos, sem cadáver (ADR 0048 decisão 1).
       this.#creditSupplies(session, [recipient], loot.supplies);
       this.#creditAmmunition(session, [recipient], loot.ammunition);
+      // O material da esfola cai NO CADÁVER, ao lado do loot, e segue o filtro de Quick Loot do
+      // dono no `#collectFromCorpse` logo abaixo (ADR 0048 d.3/d.5) — sobra por filtro ou por
+      // capacidade fica lá, como qualquer item.
+      const skin = this.#skinAtDeath(session, monster, [recipient]);
+      skinAfterTtlMs = skin.afterTtlMs;
+      if (skin.material !== null) {
+        corpseItems = [...corpseItems, ...this.#instantiateCorpseItems(session, recipient, [skin.material])];
+      }
     }
     // A XP é da PARTY (#190, ADR 0027 decisão 3): pool por vocações únicas, dividido por igual
     // entre os elegíveis — e em solo o elegível é o matador, pela mesma condição de sempre.
-    // `#grantPartyXp` também é quem credita o Bestiário (#546: nenhum dos dois vale para quem
+    // `#grantPartyXp` também é quem credita o Bestiário (#546: nenhum dos três vale para quem
     // tem mestre).
+    //
+    // O Bosstiary vem DEPOIS, e fora do `eligible`: o Canary paga a XP e só então chama
+    // `onKilledMonster` de cada matador, sem o portão de stamina e de vida da XP (#629) — um
+    // herói exausto, ou uma party cujos membros estão todos exaustos, continua contando o boss.
+    // Os matadores saem ANTES da XP: o level up deste abate não pode mexer na régua de nível
+    // da XP compartilhada que já valia quando o monstro morreu.
     if (!isSummon && definition !== undefined) {
+      const bosstiaryKillers = definition.boss && definition.bosstiary !== undefined
+        ? this.#killersOf(session, credit)
+        : NO_MEMBERS;
       this.#grantPartyXp(session, monster, definition, eligible, credit);
+      this.#creditBosstiary(session, monster, definition, bosstiaryKillers);
     }
     // Abate comum NÃO vira evento notável. `notableEvents` é a lista curta da tela de retorno
     // (§16.2), e uma hunt de oito horas com uma linha por rato não é lista, é log.
@@ -10039,6 +10154,8 @@ const slots = bot.groups.get(group);
       gold: corpseGold,
       ownerId: recipient?.id ?? null,
       eligible: eligible.map((p) => p.id),
+      diedAtMs: session.nowMs,
+      ...(skinAfterTtlMs !== undefined ? { skinned: true } : {}),
     };
     // O dono coleta AGORA, sem plateia (invariante 3, ADR 0048 decisão 3): o `autoLoot` do
     // Canary, sem trava de Premium. O que o filtro não aceita ou não cabe fica no cadáver.
@@ -10049,7 +10166,10 @@ const slots = bot.groups.get(group);
         kind: 'ground-item-appeared', itemId: corpse.id, monsterId: corpse.monsterId,
         position: corpse.position,
       });
-      session.scheduleIn(CORPSE, corpseTtlMs, {
+      // Esfolado no abate, o cadáver não vive o `corpseTtlMs` inteiro: o Canary o transforma em
+      // `skin.after` (com ou sem sucesso), e o decaimento recomeça dali — a vida passa a ser a do
+      // `after` (`Skinning.stages[].afterTtlMs`), contada a partir do abate.
+      session.scheduleIn(CORPSE, skinAfterTtlMs ?? corpseTtlMs, {
         priority: EventPriority.Housekeeping, subject: String(corpse.id),
       });
     }
@@ -10182,10 +10302,24 @@ const slots = bot.groups.get(group);
       const share = xpShare(experience, eligible, allMembers);
       return new Map(eligible.map((member) => [member.id, share]));
     }
+    if (this.#sharedExperienceActive(session, party)) {
+      const share = xpShare(experience, eligible, allMembers);
+      return new Map(eligible.map((member) => [member.id, share]));
+    }
+    return xpByDamage(experience, eligible, credit.damageByActor);
+  }
+
+  /**
+   * A XP compartilhada está ATIVA neste instante? (`Party::isSharedExperienceActive()` do
+   * TFS/Canary, avaliada no abate — o mesmo `Party::getSharedExperienceStatus` que `#xpShares`
+   * sempre usou.) Tudo ou nada sobre o ROSTER inteiro: nível, alcance do líder e atividade —
+   * ver `canShareExperience`. Sem líder presente, não há de onde medir o alcance: inativa.
+   */
+  #sharedExperienceActive(session: Session, party: PartyOptions): boolean {
     const leader = session.participants.find((p) => p.id === party.leaderId);
     const highestLevel = session.participants.reduce((max, p) => Math.max(max, p.level), 0);
     const rules = this.#options.party.sharedExperience ?? DEFAULT_SHARED_EXPERIENCE_RULES;
-    const canShare = leader !== undefined && canShareExperience(
+    return leader !== undefined && canShareExperience(
       session.participants.map((member) => ({
         id: member.id,
         level: member.level,
@@ -10194,11 +10328,59 @@ const slots = bot.groups.get(group);
       })),
       highestLevel, leader.position, session.nowMs, rules,
     );
-    if (canShare) {
-      const share = xpShare(experience, eligible, allMembers);
-      return new Map(eligible.map((member) => [member.id, share]));
+  }
+
+  /**
+   * Quem o Canary põe no conjunto `killers` de um monstro que morreu (`Creature::onDeath`,
+   * `src/creatures/creature.cpp`) — o conjunto a que `Player::onKilledMonster` chama, e portanto
+   * o que decide o Bosstiary (#629) lá, sem olhar stamina nem vida: só `Player::gainExperience`
+   * tem o portão de stamina, e ele é da XP. (O Bosstiary não existe no TFS.)
+   *
+   * - todo jogador com dano neste monstro no `damageMap` (o dano da invocação já entra no nome
+   *   do mestre, `#applyMonsterHitOnSummon`, como `attacker->getMaster()` no Canary) — quem não
+   *   bateu não é matador, e quem já saiu da sessão não está mais aqui para ser achado
+   *   (`getCreatureByID`);
+   * - e, com a XP compartilhada ATIVA, o roster inteiro da party (líder e todos os membros) —
+   *   mas só se algum deles bateu: o Canary acrescenta a party ao ver UM atacante dela.
+   *
+   * Sem `partyOptions` com 2+ participantes (fixture), cai para o roster inteiro — a mesma
+   * cota igual que `#xpShares` devolve nesse caso. Em ordem de entrada: o conjunto do Canary não
+   * tem ordem, e os eventos notáveis saem na da sessão.
+   */
+  #killersOf(session: Session, credit: KillCredit): readonly CharacterRuntime[] {
+    const dealers = session.participants.filter((p) => (credit.damageByActor[p.id] ?? 0) > 0);
+    if (dealers.length === 0 || session.participants.length === 1) return dealers;
+    const party = this.#party;
+    return party === undefined || this.#sharedExperienceActive(session, party)
+      ? session.participants
+      : dealers;
+  }
+
+  /**
+   * O abate de BOSS conta no Bosstiary de cada matador (#629, `Player::addBosstiaryKill` em
+   * `Player::onKilledMonster`) — e só dele: o Canary chama depois de pagar a XP, em outro laço
+   * do `Creature::onDeath`, e SEM o portão de stamina nem de vida que decide quem recebe a XP
+   * (`#grantPartyXp`). Um herói com stamina zero continua na hunt e o boss que ele ajudou a
+   * matar conta: nível e pontos. Quem chama já excluiu a invocação (`hasBeenSummoned`).
+   *
+   * `killers` é `#killersOf` avaliado ANTES da XP. Boss sem `bosstiary` (fixture de teste com
+   * `boss: true`) não conta, como o Canary faria com um `isBoss` sem `bossRaceId`, e o comum
+   * nunca passa por aqui (`Bestiary`, em `#grantPartyXp`). Fechar um nível é evento notável,
+   * como o marco do Bestiário: três vezes por boss na vida do personagem. Nada aqui consome RNG.
+   */
+  #creditBosstiary(
+    session: Session, monster: MonsterRuntime, definition: Monster, killers: readonly CharacterRuntime[],
+  ): void {
+    const boss = definition.bosstiary;
+    if (!definition.boss || boss === undefined) return;
+    const solo = session.participants.length === 1;
+    for (const member of killers) {
+      const recorded = member.bosstiary.record(boss.raceId, boss.rarity, this.#options.bosstiary);
+      if (recorded.levelReached !== null) {
+        const detail = `${monster.monsterId}/${String(recorded.levelReached)}`;
+        session.record('bosstiary-level', solo ? detail : `${member.id}/${detail}`);
+      }
     }
-    return xpByDamage(experience, eligible, credit.damageByActor);
   }
 
   /**
@@ -10265,10 +10447,17 @@ const slots = bot.groups.get(group);
       // O abate conta no Bestiário de TODO elegível (ADR 0027 decisão 4), pela MESMA condição
       // que paga a XP (§18.6): stamina zero não conta abate. E fechar um marco é evento
       // notável, como o level up: acontece cinco vezes por monstro na vida do personagem.
-      const reached = member.bestiary.record(monster.monsterId, this.#options.bestiary);
-      if (reached.milestoneReached !== null) {
-        const detail = `${monster.monsterId}/${String(reached.milestoneReached)}`;
-        session.record('bestiary-milestone', solo ? detail : `${member.id}/${detail}`);
+      //
+      // BOSS não conta no Bestiário (#629): `Player::addBestiaryKill` devolve cedo para
+      // `isBoss()`. Ele conta no Bosstiary, mas NÃO aqui — o Bosstiary não tem o portão de
+      // stamina e de vida da XP, e `#creditBosstiary` roda depois deste laço, sobre os
+      // `killers` do Canary (`#killersOf`).
+      if (!definition.boss) {
+        const reached = member.bestiary.record(monster.monsterId, this.#options.bestiary);
+        if (reached.milestoneReached !== null) {
+          const detail = `${monster.monsterId}/${String(reached.milestoneReached)}`;
+          session.record('bestiary-milestone', solo ? detail : `${member.id}/${detail}`);
+        }
       }
     }
   }
@@ -10644,7 +10833,21 @@ const slots = bot.groups.get(group);
     }
     const items = corpse.items ?? [];
     if (items.length === 0) return;
+    corpse.items = this.#collectItems(session, character, items);
+    // Gatilho do §13: o loot pessoal mudou o peso da mochila, e com ele a capacidade disponível
+    // e as reservas da party. No-op quando não há bolsa, que é o caso comum.
+    this.#rebalanceBag(session);
+  }
 
+  /**
+   * O miolo do Quick Loot (ADR 0048 decisão 3): aplica o filtro, a autovenda e a capacidade de
+   * `character` a `items` e devolve o que FICOU — o que o filtro recusou e o que não coube. É a
+   * parte de `#collectFromCorpse` que também serve a esfola à mão (#626), onde só o material
+   * novo passa pelo filtro, sem reprocessar o que já esperava no cadáver.
+   */
+  #collectItems(
+    session: Session, character: CharacterRuntime, items: readonly CarriedItem[],
+  ): CarriedItem[] {
     const filter = this.#runnerOf(character.id).botConfig?.loot ?? DEFAULT_LOOT_FILTER;
     const autoSellIds = new Set(filter.autoSell.slice(0, this.#individualAutoSellLimit(character.id)));
     // A capacidade já descontada da reserva que a party fez dele (§11, DT-05) — como
@@ -10683,10 +10886,140 @@ const slots = bot.groups.get(group);
       runner.warnedFullBackpack = true;
       session.record('backpack-full', character.id);
     }
-    corpse.items = remaining;
-    // Gatilho do §13: o loot pessoal mudou o peso da mochila, e com ele a capacidade disponível
-    // e as reservas da party. No-op quando não há bolsa, que é o caso comum.
-    this.#rebalanceBag(session);
+    return remaining;
+  }
+
+  // --- Esfola de cadáver (#626, M44-08, ADR 0048 d.5/d.6, ADR 0053 d.5) -----------------------
+  //
+  // A matemática é `skinning.ts` (a janela por estágio, a chance, o Scavenge); aqui ficam o
+  // QUANDO e o PARA ONDE. Só o `combat-v4` esfola (`hasSkinningStage`): uma sessão fixada em
+  // `combat-v3` não reconhece ferramenta nenhuma (invariante 7). O bot esfola NO ABATE, dentro do
+  // mesmo evento que coleta o loot (`#onMonsterDied`), e o jogador presente esfola à mão com o
+  // `use-item-on` da ferramenta no tile do cadáver (`#performSkin`) — as duas rodam o MESMO
+  // sorteio (`#rollSkin`), e as duas só o consomem com ferramenta e monstro esfolável, que é o
+  // que faz uma hunt sem faca gastar exatamente o `session.rng` de antes.
+
+  /**
+   * A esfola do bot no abate: o primeiro candidato com a ferramenta do monstro na mochila esfola,
+   * com a idade zero do cadáver (a janela abre no primeiro estágio). `afterTtlMs` presente diz que
+   * houve sorteio — o cadáver nasce `skinned` e com a vida do `after` — e `material` é o que o
+   * sorteio rendeu.
+   */
+  #skinAtDeath(
+    session: Session, monster: MonsterRuntime, candidates: readonly CharacterRuntime[],
+  ): SkinAtDeath {
+    const entry = this.#options.skinning?.get(monster.monsterId);
+    if (entry === undefined || !hasSkinningStage(this.#options.combat.compatibilityProfile)) return NO_SKIN;
+    const stage = skinningStageAt(entry, 0);
+    if (stage === null) return NO_SKIN;
+    for (const candidate of candidates) {
+      if (candidate.inventory.findStack(entry.toolId) === null) continue;
+      return { material: this.#rollSkin(session, candidate, entry, stage), afterTtlMs: stage.afterTtlMs };
+    }
+    return NO_SKIN;
+  }
+
+  /**
+   * O sorteio da esfola de `skinner` (UMA rolagem de `session.rng`): o `chanceRange` do Canary,
+   * encolhido pelo Scavenge dele quando o charm vale para o estágio em que o cadáver está agora
+   * (`scavengeChanceFor`). `null` é a tentativa que falhou.
+   */
+  #rollSkin(
+    session: Session, skinner: CharacterRuntime, entry: Skinning, stage: Skinning['stages'][number],
+  ): LootItem | null {
+    const assignedTo = skinner.charms.assignmentOf(SCAVENGE_CHARM_ID);
+    const scavenge = assignedTo === undefined
+      ? undefined
+      : scavengeChanceFor(
+        this.#options.charms?.get(SCAVENGE_CHARM_ID), skinner.charms.tierOf(SCAVENGE_CHARM_ID),
+        this.#options.skinning?.get(assignedTo), stage,
+      );
+    return rollSkinning(session.rng, entry, skinningChanceRange(scavenge))
+      ? { itemId: entry.materialId, quantity: 1 }
+      : null;
+  }
+
+  /**
+   * O cadáver que a ferramenta encontra num tile: o do TOPO da pilha — o Canary usa o
+   * `getTopDownItem` do tile, e o cadáver mais novo entra por cima. `undefined` sem cadáver ali.
+   */
+  #topCorpseAt(position: FloorPoint): CorpseState | undefined {
+    for (let i = this.#corpses.length - 1; i >= 0; i -= 1) {
+      const corpse = this.#corpses[i] as CorpseState;
+      if (corpse.position.x === position.x && corpse.position.y === position.y
+        && sameFloor(position.z, corpse.position.z)) {
+        return corpse;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * A esfola à mão (`use-item-on` da ferramenta com o TILE do cadáver por alvo — ADR 0049
+   * decisão 3): confere alcance (o `Actions::canUse` do Canary — mesmo andar e adjacente,
+   * `|dx| <= 1` e `|dy| <= 1`, SEM linha de visão: o `skinning.lua` não chama `allowFarUse`, então o
+   * `canUseFar` 7×5 das runas não vale aqui, e o jogador longe é recusado e andado até o cadáver),
+   * que a ferramenta é a do monstro, que o cadáver não foi esfolado e que a janela do estágio
+   * ainda está aberta; sorteia; e o material passa pelo filtro de Quick Loot de quem esfolou —
+   * o que não é aceito, ou não cabe, fica no cadáver, como o resto do loot.
+   *
+   * Tudo que o Canary responde com "not possible" (sem cadáver, ferramenta errada, já esfolado,
+   * estágio fora da janela) é `not-usable`; o alcance é `out-of-range`. A tentativa gasta o
+   * cadáver — `skinned` — com ou sem sucesso, REINICIA o decaimento dele (`#retimeCorpse`) e
+   * nenhuma recusa consome sorteio.
+   */
+  #performSkin(
+    session: Session, character: CharacterRuntime, tool: CarriedItem, target: UseSlotTarget | undefined,
+  ): UseItemOutcome {
+    if (!hasSkinningStage(this.#options.combat.compatibilityProfile)) return refuseItem('not-usable', 0);
+    if (target === undefined || target.kind !== 'position') return refuseItem('not-usable', 0);
+    const corpse = this.#topCorpseAt(target.position);
+    if (corpse === undefined) return refuseItem('not-usable', 0);
+
+    // O `canUse` do Canary (`Actions::canUse`): mesmo andar e `areInRange<1, 1>`, sem linha de
+    // visão — a mesma conferência de `useOnMap` e de `open-corpse`/`take-loot`.
+    const from = character.position;
+    if (!sameFloor(from.z, corpse.position.z)
+      || Math.abs(from.x - corpse.position.x) > 1
+      || Math.abs(from.y - corpse.position.y) > 1) {
+      return refuseItem('out-of-range', 0);
+    }
+
+    const entry = this.#options.skinning?.get(corpse.monsterId);
+    if (entry === undefined || entry.toolId !== tool.itemId
+      || corpse.skinned === true || corpse.diedAtMs === undefined) {
+      return refuseItem('not-usable', 0);
+    }
+    const stage = skinningStageAt(entry, session.nowMs - corpse.diedAtMs);
+    if (stage === null) return refuseItem('not-usable', 0);
+
+    corpse.skinned = true;
+    // O `topItem:transform(skin.after)` do Canary roda com sucesso ou sem, e o `Item::setID` do
+    // item novo reinicia o decaimento: o cadáver passa a viver a cadeia do `after` a partir de
+    // AGORA, e não mais o que faltava dos 670 s.
+    this.#retimeCorpse(session, corpse, stage.afterTtlMs);
+    const material = this.#rollSkin(session, character, entry, stage);
+    if (material !== null) {
+      const left = this.#collectItems(session, character, this.#instantiateCorpseItems(session, character, [material]));
+      corpse.items = [...(corpse.items ?? []), ...left];
+      this.#rebalanceBag(session);
+    }
+    session.emit({ kind: 'equipment-changed', characterId: character.id });
+    character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
+    return { ok: true };
+  }
+
+  /**
+   * Reagenda o fim de um cadáver esfolado (#626): o evento `CORPSE` que o abate marcou em
+   * `corpseTtlMs` é cancelado e um novo vence `afterTtlMs` depois de agora — a vida do `after` do
+   * `skinning.lua`. O que ficou no cadáver (o loot que o filtro recusou, ou que não coube) vive
+   * esse prazo e some com ele, como na decisão 6 do ADR 0048: continua sendo "um número só, o do
+   * Tibia", agora o do cadáver esfolado.
+   */
+  #retimeCorpse(session: Session, corpse: CorpseState, afterTtlMs: number): void {
+    const subject = String(corpse.id);
+    session.cancelEvent(CORPSE, subject);
+    session.scheduleIn(CORPSE, afterTtlMs, { priority: EventPriority.Housekeeping, subject });
   }
 
   /** Ache o cadáver por id do item do chão (#722), ou `undefined` — já apodreceu ou nunca existiu. */
@@ -10878,6 +11211,38 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * O nível desta skill COM o bônus de Loyalty (#628, ADR 0052 d.5) — o `Player::getLoyaltySkill`
+   * que `getSkillLevel` do Canary usa no lugar do nível base, e o `getLoyaltyMagicLevel` que
+   * `getMagicLevel` usa para o magic level. É o nível que ESCALA o golpe, a magia, a defesa e a
+   * cura e que confere requisito de runa; as leituras que não são "uso da skill" — ganhar tries,
+   * o estágio de rate (`getBaseMagicLevel`), a penalidade de morte — continuam no nível BASE
+   * (`skills.levelOf`), como no Canary.
+   *
+   * Sem bônus (o normal: menos de 360 dias de conta), é o nível base direto — sem achar a
+   * vocação nem calcular fator nenhum.
+   */
+  #loyaltyLevelOf(character: CharacterRuntime, definition: Skill): number {
+    if (character.loyaltyBonusPercent === 0) return character.skills.levelOf(definition);
+    return character.loyaltyLevelOf(
+      definition, skillFactorFor(definition, this.#vocationOf(character), this.#options.progression),
+    );
+  }
+
+  /**
+   * O magic level EFETIVO (`Player::getMagicLevel` do Canary): o do Loyalty (#628) mais o bônus
+   * de equipamento (#524) e o de condição (#576) — as três fontes somam, como somam no dano da
+   * runa e na cura da poção. É o número que a fórmula de magia lê e o que o requisito de
+   * `magicLevel` de uma runa confere; `#runeScaling`, `#spellScaling` e o espelho de
+   * `slotStates` leem DESTE ponto só, para o "bloqueada" da tela nunca discordar do disparo.
+   */
+  #magicLevelOf(character: CharacterRuntime): number {
+    const magic = this.#options.skills.get('magic');
+    return (magic === undefined ? 0 : this.#loyaltyLevelOf(character, magic))
+      + character.inventory.skillBonus(this.#options.items, 'magic')
+      + character.conditions.skillBonus('magic');
+  }
+
+  /**
    * A regeneração passiva DESTE personagem (#521, ADR 0037): a da vocação escolhida, ou a da
    * tabela base (sem vocação — Canary `vocations.xml`, id 0 "None") para quem ainda não tem
    * uma. Cada vocação regenera num ritmo diferente no Tibia; antes da #521 era um número só
@@ -10981,7 +11346,7 @@ const slots = bot.groups.get(group);
     // skill, sem exceção para `SKILL_SHIELD` (`player.cpp:7480`) — a mesma leitura que
     // `#skillLevelOf` já faz para a skill de arma/punho. Nenhum item do catálogo declara hoje
     // um bônus de `shielding` (#549), mas a fórmula fica correta para o dia em que um declarar.
-    return character.skills.levelOf(skill)
+    return this.#loyaltyLevelOf(character, skill)
       + character.inventory.skillBonus(this.#options.items, skillId);
   }
 
@@ -11137,7 +11502,7 @@ const slots = bot.groups.get(group);
     // O malus de condição (#576: Berserk/Bullseye tiram 10 de `shielding`) entra na MESMA skill
     // que escala a defesa — `powerMultiplier` já pisa em `Math.max(0, …)`, então o malus nunca
     // deixa o nível efetivo negativo, só encosta no piso de `startingLevel`.
-    const level = character.skills.levelOf(skill) + character.conditions.skillBonus(skillId);
+    const level = this.#loyaltyLevelOf(character, skill) + character.conditions.skillBonus(skillId);
     return {
       kind: source.kind,
       defense: Math.round(source.defense * powerMultiplier(skill, level)),
@@ -11702,7 +12067,9 @@ export function createHuntRuleset(
     // `exactOptionalPropertyTypes`.
     party: content.party,
     ...(content.bestiary === undefined ? {} : { bestiary: content.bestiary }),
+    ...(content.bosstiary === undefined ? {} : { bosstiary: content.bosstiary }),
     charms: content.charms,
+    skinning: content.skinning,
     targetSearchRadius: content.bot.targetSearchRadius,
     spells: content.spells,
     supplies: content.supplies,

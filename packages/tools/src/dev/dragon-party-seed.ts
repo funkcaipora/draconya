@@ -70,7 +70,7 @@ export async function seedCharacterStats(
   const equipment = resolveEquipment(content, vocationId);
 
   // As magias que um level 200 desta vocação já lança (#624, ADR 0058 d.4): a mesma regra da
-  // migração 0023 — vocação e `minLevel` —, porque o cast confere o registro e uma party semeada
+  // migração 0024 — vocação e `minLevel` —, porque o cast confere o registro e uma party semeada
   // sem ele entraria na hunt sem lançar nada da rotação que `botConfigFor` acabou de gravar.
   const learnedSpells = learnedSpellsStateOf(
     [...content.spells.values()]

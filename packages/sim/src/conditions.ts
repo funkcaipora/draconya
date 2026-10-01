@@ -458,6 +458,32 @@ export class Conditions {
     return this.#active.get(key) ?? null;
   }
 
+  /**
+   * Traduz TODAS as condições do relógio lógico de uma sessão para o de outra, preservando o que
+   * FALTA (#812) — a mesma conta de `Cooldowns.rebase`, aplicada a `expiresAtMs` e a
+   * `nextTickAtMs`, que são instantes do relógio que os gravou. Quem já venceu em `fromMs` sai; o
+   * resto mantém o restante do prazo e a fase do próximo tique, e é a sessão que ENTRA que reagenda
+   * os eventos (`HuntRuleset#armConditions`): o vencimento morava na fila da sessão anterior, e uma
+   * condição herdada sem evento novo nunca acabaria (a haste, o Mana Shield ficariam para sempre).
+   *
+   * Não cancela evento nenhum — quem chama não tem sessão onde cancelar; os eventos da origem
+   * morrem com ela ou são cancelados pelo `onLeave` do ruleset que os agendou.
+   */
+  rebase(fromMs: number, toMs: number): void {
+    const deltaMs = toMs - fromMs;
+    for (const [key, condition] of this.#active) {
+      if (condition.expiresAtMs <= fromMs) {
+        this.#active.delete(key);
+        continue;
+      }
+      this.#active.set(key, {
+        ...condition,
+        expiresAtMs: condition.expiresAtMs + deltaMs,
+        ...(condition.nextTickAtMs === undefined ? {} : { nextTickAtMs: condition.nextTickAtMs + deltaMs }),
+      });
+    }
+  }
+
   get size(): number {
     return this.#active.size;
   }
