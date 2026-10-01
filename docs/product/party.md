@@ -195,7 +195,9 @@ de cada membro se aplica à **cota** dele, somando-se aos demais bônus numa mul
   (#563, `applyExperienceBonus`), e o abate conta no Bestiário de **todo** elegível (decisão 4),
   não só do matador.
 Level up e marco de Bestiário são eventos notáveis que dizem de quem (`id/level`,
-`id/monstro/marco`).
+`id/monstro/marco`). O abate de BOSS não passa por `eligible`: o Bosstiary (#629) conta para os
+`killers` do Canary — quem bateu no boss, mais o roster inteiro enquanto a XP compartilhada está
+ativa —, sem o portão de stamina e de vida da XP (ver [`bosses.md`](./bosses.md), "O Bosstiary").
 
 O desconto de −10 pontos é gatilhado pelo TAMANHO da party (`n` de personagens), não pela
 contagem de vocações únicas — o comentário do próprio Canary fala em "todas as vocações
@@ -459,6 +461,11 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
   `eligible ∩ presentes`.
 - `autoSellLimit` = `autoSellItemTypes.{free,premium}` = 5/20 do **personagem líder**.
 - `itemSchema.value` é obrigatório; `0` é "não se vende" e vai para o líder.
+- O campo de um membro não fere membro: o fire field (ou qualquer campo de dano) lançado por um
+  personagem — ou pela invocação dele — não pega personagem nem invocação de personagem, o
+  próprio lançador incluso; o monstro no mesmo campo continua levando (OW-05, #826, ver
+  `combat.md`). A parede de um membro (Magic Wall, Wild Growth) cede ao passo de qualquer
+  membro, e segue barrando monstro.
 - Sair e morrer são `leave` com extrato próprio; o último encerra; `party-member-lost` cascateia.
 - Settlement ao sair, no fim e ao desligar `splitLoot`; `reason` no evento.
 - Encerrar para todos exige o sim de todos (`party-end-vote`, C2S 18 / S2C 31): proposta do líder,

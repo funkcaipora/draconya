@@ -162,6 +162,34 @@
       "when": 1791100000000,
       "tag": "0022_550-fight-mode",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791200000000,
+      "tag": "0023_629-bosstiary",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791300000000,
+      "tag": "0024_624-learned-spells",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791400000000,
+      "tag": "0025_599-familiar",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791500000000,
+      "tag": "0026_631-training",
+      "breakpoints": true
     }
   ]
 }

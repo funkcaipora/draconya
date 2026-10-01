@@ -105,6 +105,52 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **Loot sorteia com o `Rng` da sessão, gold antes de item, e `chance: 0` não consome
   sorteio.** Ordem e semente são contrato: mudar qualquer um dos dois muda o que toda hunt
   retomada rende. `Math.random` continua proibido, e `grep -rn "Math.random" src` é vazio.
+- **Instante do relógio da sessão NÃO atravessa a troca de sessão como está** (#812, #550). O
+  relógio de cada sessão nasce em zero (ADR 0020), mas o `CharacterRuntime` é o MESMO objeto na
+  transição (Cidade → hunt, hunt → Cidade, saída da party): um instante de 57 700 ms gravado pela
+  hunt anterior é "no futuro" da nova, e o combate passa a depender de por onde o objeto andou, não
+  do estado e da semente. São duas espécies, e cada campo novo que guarde um instante (`…AtMs`,
+  `…Until`, `until`, `expiresAtMs`, `anchorMs`) escolhe UMA:
+  - **Carimbo** ("quando foi a última vez que…": `lastAttackAtMs`, `lastCombatActionAtMs`,
+    o banco de bloqueio, a ação manual adiada) **zera** em
+    `CharacterRuntime.resetSessionClockState`, que `Session.enter` chama DEPOIS de o `onEnter`
+    aceitar. A janela é curta e já venceu na saída normal.
+  - **Prazo** ("quanto ainda falta": cooldown de magia/poção, condição, imunidade do Cleanse)
+    **traduz**, nunca zera: `Session.enter` chama `moveToClock` ANTES do `onEnter` e o restante
+    atravessa (`Cooldowns.rebase`, `Conditions.rebase`) — o cooldown de 10 minutos não volta pronto
+    por uma ida à Cidade, como no Canary (condição `CONDITIONID_DEFAULT` persistente) e como o anel
+    de duração (`#parkEquipment`, #689). A Cidade não simula: o prazo fica pausado nela. Zerar um
+    prazo "por segurança" é renovar de graça e é divergência de regra de caça (ADR 0037 d.6). Uma
+    condição trazida não tem evento na fila nova: `HuntRuleset#armConditions` o agenda no `onEnter`,
+    e `onLeave` cancela os eventos sem remover a condição.
+  - A origem da tradução é o instante EXATO da saída: `Session.leave`/`end` o gravam no personagem
+    (`markDeparture`), e o `#runTransition` do host constrói o destino ANTES de encerrar a origem
+    (nesse caso vale o `nowMs` vivo dela). Nunca leia o relógio de uma origem que continuou andando —
+    o restante passaria a depender da frequência do hospedeiro (invariante 2). O vínculo com o relógio
+    é transiente (fora de `getState`) e o restore de snapshot o religa com `bindClock`, SEM traduzir:
+    o relógio é o mesmo, e a janela quente atravessa. A entrada recusada desfaz a tradução.
+  - O teste que força a escolha é a tabela `SESSION_CLOCK_POLICY` de `session.test.ts`, um
+    `Record<keyof CharacterState, 'stamp' | 'duration' | 'none'>`: o campo novo não compila até ser
+    classificado. Duração sem âncora num relógio (`fedMs`, `durationRemainingMs`) é `none` e atravessa.
+  - Um cinto de leitura nunca substitui isto. `attackedRecently` lê carimbo no futuro como "nunca
+    bateu" (`false`), mas só até o relógio novo alcançar o valor velho; `isInFight` lê o MESMO
+    carimbo como "em combate" por até 60 s. Cada um cobre só metade do defeito.
+- **A esfola de cadáver (#626, `skinning.ts`) é o ÚLTIMO sorteio do abate, e só existe com
+  ferramenta.** `#onMonsterDied` rola loot, credita supply/munição e SÓ ENTÃO rola a esfola — um
+  sorteio, no `combat-v4`, quando quem coleta tem a ferramenta do monstro. Sem ferramenta, sem
+  entrada em `content.skinning` ou fora do v4 o `session.rng` não é tocado (`rulesets/skinning.
+  test.ts` prende); pôr qualquer sorteio DEPOIS dele, ou antes dele por um caminho que nem todo
+  abate percorre, desloca a sequência de quem tem faca. A janela é por ESTÁGIO do cadáver
+  (`Skinning.stages`), não a vida inteira (`corpseTtlMs`), e `CorpseState.diedAtMs` é o que dá a
+  idade — um snapshot anterior sem ele não se esfola à mão. O Scavenge encolhe o intervalo, e no tier
+  3 é PIOR que sem charm (a fórmula do Canary, decisão a rever em `docs/product/items.md`). **A
+  tentativa — a do bot e a manual, com ou sem sucesso — reagenda o evento `CORPSE`**
+  (`#retimeCorpse`, `Skinning.stages[].afterTtlMs`): o `transform(skin.after)` do Canary reinicia o
+  decaimento, e o cadáver esfolado vive 360 s da tentativa, não o que faltava dos 670 s. Quem
+  esfola um cadáver por um caminho novo tem que passar por `#retimeCorpse`, senão o loot que
+  sobrou no cadáver vive mais que no Canary. **O alcance manual é o `canUse` adjacente (1×1, sem
+  linha de visão), NÃO o `canUseFar` 7×5**: o `skinning.lua` não chama `allowFarUse`, e herdar o
+  7×5 das runas por ser "um tile" foi o erro que a revisão do #626 pegou (ADR 0049, emenda).
 - **Um evento que se reagenda usa `session.nowMs + intervalo`**, e é exato porque `nowMs` durante
   o despacho É o instante do vencimento. Não há erro a herdar, e por isso não há acumulador.
 - **`pnpm source-policy` reprova nome de contador de tick** (`remainingTicks`, `cooldownTicks`, …)
@@ -137,6 +183,19 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **Skill nunca desce, e `Skills.merge` depende disso.** Ficar com o maior de cada uma é o que
   torna a fusão de extratos comutativa: um extrato antigo processado fora de ordem não rebaixa
   nada, e não é preciso guardar instante como a stamina guarda.
+- **Loyalty é LEITURA do nível, nunca escrita** (`loyalty.ts`, #628, ADR 0052 d.5). O bônus da
+  idade da conta chega no ticket como um percentual inteiro, fica em `CharacterRuntime.
+  loyaltyBonusPercent` (fixado como a versão de conteúdo, e no snapshot) e vira NÍVEIS extras por
+  `LoyaltyLevels.levelOf` — a conta de `getLoyaltySkill`/`getLoyaltyMagicLevel` do Canary, sobre
+  TRIES e na curva real da vocação, não `nível × (1 + p)`. **Toda leitura que ESCALA algo (golpe,
+  magia, defesa, cura, requisito de runa) passa por `HuntRuleset#loyaltyLevelOf` /
+  `#magicLevelOf`; ganhar tries, o estágio de rate, a penalidade de morte, o extrato e o
+  snapshot continuam no nível BASE** (`skills.levelOf`) — misturar os dois faria o bônus
+  acelerar (ou travar) a própria curva. Skill nova que escale algo lê pelo helper, não por
+  `character.skills.levelOf`. Sem bônus o helper devolve o nível base sem custo nenhum. O `sim`
+  nunca conta dias de conta nem lê relógio: quem calcula o percentual é a `api` (`server/src/
+  loyalty.ts`), com `loyaltyPointsOf`/`loyaltyBonusPercentOf` daqui (aritmética pura). O cache de
+  tries acumulados por skill é derivado, por personagem, e nunca vai ao snapshot.
 - **Bestiário é acumulador de ABATE, pelo mesmo argumento** (`bestiary.ts`, FUN-113, §18).
   Abate é a morte que `resolveDeath` resolve no instante em que vence — evento na fila, não
   grandeza por tick —, e o módulo é aritmética pura sobre um `Map`. `CharacterState.bestiary`
@@ -145,6 +204,23 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   não conta abate (§18.6) pela MESMA condição que não paga XP nem loot — duas condições
   divergem na primeira mudança em uma delas. `Bestiary.merge` fica com o maior por monstro,
   pela razão de `Skills.merge`.
+- **O Bosstiary é o irmão do Bestiário, e o boss conta em UM dos dois** (`bosstiary.ts`, #629,
+  ADR 0052 emenda de 2026-09-29). Mesmo evento (`#onMonsterDied`) e mesma fusão por máximo
+  (`Bosstiary.merge`) — mas **NÃO a mesma elegibilidade**: o Bestiário ainda corre dentro do
+  `for (const member of eligible)` de `#grantPartyXp` (vivo e com stamina), e o Bosstiary roda
+  FORA dele, em `#creditBosstiary`, sobre os `killers` do Canary (`#killersOf`: todo jogador com
+  dano no monstro, mais o roster inteiro com a XP compartilhada ativa). `Player::onKilledMonster`
+  não tem portão de stamina nem de vida — só `Player::gainExperience` tem —, então um herói
+  exausto conta o boss, e quem não bateu (sem XP compartilhada) não. Os `killers` saem ANTES da
+  XP do abate: o level up dele não pode mexer na régua de nível de `canShareExperience`. Mover o
+  Bosstiary de volta para dentro do `eligible` "para ficar igual ao Bestiário" reabre a
+  divergência — o que está desalinhado é o Bestiário (ADR 0043 d.1 / 0053 d.1), não o Bosstiary.
+  O contador é chaveado pelo `raceId` do boss (em TEXTO: objeto JSON só tem chave de texto), e não
+  pelo id de conteúdo, porque variantes do mesmo boss compartilham o `raceId` no Canary.
+  **`definition.boss` decide a porta:** boss não soma no `Bestiary` (`Player::addBestiaryKill`
+  devolve cedo para `isBoss()`) — esquecer o `if` faria o boss entrar nos marcos de XP. Os pontos
+  são os do PRÓPRIO nível alcançado, somados ao total; nível fechado é o evento notável
+  `bosstiary-level`.
 - **A party é aritmética pura em `party.ts` (#189, ADR 0027; fórmula e elegibilidade emendadas
   pelo #525 em 2026-09-24/25, fidelidade CANARY do ADR 0037 d.4 — não TFS: as duas engines
   divergem no multiplicador, e é o Canary que manda em fórmula), e o ruleset só chama.**
@@ -407,7 +483,8 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
 - **O cadáver é um evento de presença, e é só visual** (`ground-item-appeared` /
   `ground-item-vanished`, FUN-123). O `sim` diz QUAL monstro morreu e ONDE; a arte é da tabela,
   resolvida no hospedeiro (invariante 6). O prazo é o evento `CORPSE` na fila, com
-  `corpseTtlMs` do MONSTRO (#585, era da hunt) — monstro sem o campo não deixa cadáver. Os cadáveres entram no snapshot
+  `corpseTtlMs` do MONSTRO (#585, era da hunt) — monstro sem o campo não deixa cadáver, e **invocação
+  nunca deixa** (#600, `Creature::dropCorpse`). Os cadáveres entram no snapshot
   (`corpses`, `nextGroundItemId`), e o evento de apodrecer volta com a fila. O loot NUNCA passa
   pelo cadáver: já foi para a caixa antes de ele cair.
 - **O ataque do monstro é uma faixa sorteada com o `Rng` da sessão** (`attackRange`, FUN-123):
@@ -492,7 +569,8 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   "congela" um monstro reposicionado à mão**: sem ninguém à vista e fora do `home` ele VOLTA; o
   teste que planta um monstro precisa plantar o `home` junto (`plant` em `hunt.test.ts`) — e o que
   conta `rng.integer` precisa isolar os três sorteios do passo aleatório. (5) Invocação nunca volta
-  nem fica ociosa (`masterId`), e sem alvo continua parada — seguir o mestre não é modelado. (6) **O
+  nem fica ociosa (`masterId`), e sem alvo a de PERSONAGEM segue o mestre (`summonFollowStep`, #599 —
+  a de outro monstro continua parada; sem mestre à vista ou sem caminho a de personagem vagueia). (6) **O
   ocioso CALA defesa, troca de alvo e invocação** (o Canary tira o monstro do `onThink`):
   `MonsterRuntime.idle` é escrito por `#onMonsterStep` a cada decisão (liga no `idle`, desliga em
   qualquer outra) e `#onMonsterDefense`/`#onMonsterTargetChange`/`#onMonsterSummon` REAGENDAM e
@@ -762,18 +840,87 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   escudo (`#shieldSkillLevelOf`) soma o bônus de equipamento** (`Inventory.skillBonus`) como
   `#skillLevelOf` já fazia para arma/punho — `getSkillLevel` do Canary não abre exceção para
   `SKILL_SHIELD`.
-- **Stairhop (#554, M30-07, ADR 0040 decisão 1): `#step` é quem detecta a travessia, não um
-  booleano "é escada?" separado.** Escada e teleporte (#734) são os DOIS únicos jeitos de
-  `move()` pousar num tile que não é o adjacente pedido — `z` diferente, ou distância — e é
-  ESSE sinal, lido do `MoveResult`, que grava `character.attackLockedUntil = session.nowMs +
-  stairhopDelayMs`. Um passo comum nunca bate essa condição. Só sob `combat-v3` (`#isV3`) e com
-  `combat.stairhopDelayMs` declarado (ausente é identidade, como `defense`/`modifiers`); v1/v2
-  nunca escrevem o campo. `#onPlayerAttack` reagenda para o INSTANTE EXATO do destravamento
-  (nunca para o intervalo normal de ataque) e `castSpell` (`casting.ts`) recusa só a magia
-  AGRESSIVA (`damage`/`damage-over-time`) com `attack-locked` — cura e o resto do vocabulário
-  continuam liberados, a mesma exceção do `Spell::aggressive` do Canary. `attackLockedUntil` é
-  campo solto no personagem, não `ConditionState`: migra para a condição `pacified` de verdade
-  quando ela existir (M44-04).
+- **Stairhop (#554, M30-07, ADR 0040 decisão 1; a condição `pacified` desde o #622): `#step` é quem
+  detecta a travessia, não um booleano "é escada?" separado.** Escada e teleporte (#734) são os DOIS
+  únicos jeitos de `move()` pousar num tile que não é o adjacente pedido — `z` diferente, ou
+  distância — e é ESSE sinal, lido do `MoveResult`, que APLICA `pacified` por `stairhopDelayMs`
+  (`#lockAfterJump` → `#applyConditionTo`, `merge: 'longest'`; Levitate e Magic Rope também o
+  chamam, #623). Um passo comum nunca bate essa condição. Só sob
+  `combat-v3` (`#isV3`) e com `combat.stairhopDelayMs` declarado (ausente é identidade, como
+  `defense`/`modifiers`); v1/v2 nunca aplicam a trava de escada. **O portão lê a CONDIÇÃO, em
+  qualquer perfil** (`Conditions.isActive`, o PRAZO — não o evento `condition-expire`, que vence
+  depois do ataque do mesmo instante): `#onPlayerAttack` ESTACIONA o golpe (`#parkAttack`) — o
+  Canary não re-arma o ataque quando `pacified` acaba, e o golpe sai no primeiro gatilho depois: o
+  pensamento do personagem (`ATTACK_THINK`, na grade de 1000 ms dele) ou um passo do personagem ou
+  do alvo (`#releaseParkedAttacks`, o `onCreatureMove` do Canary) — NUNCA no instante exato do
+  vencimento nem no intervalo normal de ataque. E `castSpell`/`useSupply` (`casting.ts`) recusam a
+  magia e a runa AGRESSIVAS com `attack-locked` — dano, DOT, a invocação (`summon_creature.lua` não
+  chama `isAggressive(false)`), as runas de dano/campo, a Paralyze Rune e as duas de invocação
+  (Convince Creature e Animate Dead, #600: `isAggressiveSupply` em `casting.ts` — os scripts
+  também não o desligam); cura e o resto do vocabulário continuam liberados, a mesma exceção do `Spell::aggressive` do Canary.
+  **Enquanto o golpe está estacionado (`Runner.attackParked`), `#armPlayerAttack` o ignora**: um
+  personagem parado não reacende a cadeia por conta própria, e liberar no passo de combate-stop
+  traria o golpe antes do pensamento. `attackLockedUntil` deixou de
+  existir no runtime: o construtor de `CharacterRuntime` converte o campo de um snapshot antigo
+  num `pacified` que vence no mesmo instante, e `getState` nunca mais o escreve.
+- **As condições de controle (#622, M44-04, ADR 0041): `rooted`, `feared` e `pacified`.** Mesmo
+  desenho do drunk — chave RESERVADA, sem campo próprio, lida por `Conditions.isActive(key, nowMs)`
+  — mais `merge: 'longest'` (`Condition::updateCondition`: prazo menor não encurta o que já corre).
+  Nada de `hasRooted()`/`hasFeared()`: seriam três nomes para a mesma leitura.
+  - **`#step` é o portão dos três** (o único lugar que escreve posição). Sem `forced`, recusa a
+    caminhada PRÓPRIA antes de qualquer sorteio (`rooted`/`feared`, razões novas em `MoveRejection`);
+    sob `feared`, o passo de lista do PERSONAGEM (`forced` com `rollDrunk`) para um campo que causa
+    dano volta ANTES do sorteio do drunk (`Player::onWalk`: sem sorteio e sem desvio); depois do
+    desvio, recusa `rooted` sempre e, sob `feared`, o campo que causa dano no tile desviado
+    (`internalMoveCreature`). O parâmetro `forced` marca o que NÃO é a caminhada própria — a fuga do
+    medo, o passo de um `walk-to` já guardado e o empurrão (`#pushAside`). Esquecer `forced` num passo
+    forçado o faria recusar sob `feared`; passá-lo num passo próprio o faria fugir do medo.
+  - **O medo de PERSONAGEM não tem `condition-expire`.** Quem o encerra é o `FEAR_THINK` (o primeiro
+    pensamento DEPOIS do prazo) — porque o Canary só limpa a condição nesse pensamento, e a fuga do
+    último pensamento sai ANTES dele. Um `condition-expire` agendado limparia a condição antes desse
+    pensamento e a lista final nunca sairia; por isso `#applyConditionTo` retorna cedo para o medo
+    de personagem, e monstro (que não foge) segue com o `condition-expire` de sempre. Toda remoção
+    por fora (`#dispelConditions`, o Cleanse) passa por `#endFear`, e a morte/saída por
+    `#cancelConditionEvents` — se uma remoção nova esquecer os dois, o `FEAR_THINK` fica órfão na
+    fila e a `fearWalk` continua andando. **A condição atravessa a troca de sessão** (#812, como todas:
+    `onLeave` só tira os eventos, não a condição) e `#armConditions` a REARMA no `onEnter` — para o
+    medo de personagem agenda um `FEAR_THINK` na grade da sessão nova, nunca um `condition-expire`
+    (que fecharia o medo no instante do prazo, antes da última fuga). `rooted` e `pacified` usam o
+    `condition-expire` genérico; o golpe estacionado (`attackParked`) e a `fearWalk` são do runner e
+    morrem com a sessão — a nova decide de novo, pela condição.
+  - **`Runner.fearWalk` tem prioridade absoluta em `#playerStep`** (acima do `walk-to`, do
+    combate-stop, do follow e da rota) e persiste no snapshot (`RunnerState.fearWalk`). A lista guarda
+    valores do enum `Direction` do Canary (`fear.ts`), não `Direction` do `sim` — a fuga anda em
+    diagonal. `requestMove` a zera (um `startAutoWalk` novo limpa `listWalkDir`) e recusa antes de
+    guardar caminho quando a criatura está presa ou com medo.
+  - **A lista de passos do Canary é UMA, e aqui mora em dois lugares: `Runner.fearWalk` e o
+    `walk-to` distante (`Runner.manualWalkTo`).** Os dois nunca coexistem (`#startFleeWalk` e
+    `requestMove` limpam um ao pôr o outro), e três regras dependem de tratá-los como a mesma lista:
+    o pensamento do medo só foge com `getWalkSize() < 2` (`#onFearThink` soma o comprimento do
+    `walk-to`); o passo de um `walk-to` JÁ guardado é `forced` (continua a lista, o que o
+    `startAutoWalk` recusou foi só o INÍCIO) e portanto segue andando sob `feared`; e sob `rooted`
+    o passo recusado derruba o `walk-to` (`resetMovementState`, `creature.cpp:503`) — sem isso ele
+    retomava sozinho ao fim da raiz.
+  - **A grade de pensamento do personagem (`Runner.thinkPhaseMs`).** `Game::checkCreatures` roda o
+    `onAttacking` e o `executeConditions` de cada criatura a cada 1000 ms numa fase própria; o `sim`
+    a sorteia UMA vez por personagem (`#thinkDelayMs`, preguiçosa, persistida no snapshot) e agenda
+    quem depende do pensamento — o `FEAR_THINK` e o `ATTACK_THINK` — para o próximo instante da
+    grade. Nunca um evento por segundo (invariante 2). O `VISIBILITY_THINK` do #559 ainda sorteia a
+    fase dele por evento, e vale a pena unificar quando alguém mexer ali.
+  - **`fear.ts` é PURO e transcreve números e comportamento, não código** (ADR 0019): as cinco
+    regiões, o vetor de direções, o lado do ponto sintético por direção, as distâncias
+    `{15, 9, 3, 1}`, o raio 7 e o custo 10/35. A BUSCA de caminho é original — uma varredura de
+    custo mínimo na caixa mais a escolha do destino mais distante do ponto —, NÃO o A* do
+    `getPathMatchingCond`: o limite de licença proíbe a tradução linha a linha, e uma versão
+    anterior deste arquivo a tinha feito (retirada na revisão do #622). Os testes fixam o QUE sai,
+    nunca como o Canary chega lá. As esquisitices da fonte estão PRESERVADAS de propósito (o ponto
+    sintético do `SOUTH` cai do lado do `NORTH`; o sorteio grava o valor do enum como índice) e
+    fixadas em `fear.test.ts` — "corrigi" uma delas e o teste que a nomeia falha por desenho. O
+    desempate entre destinos e caminhos de mesmo custo é uma escolha declarada (`STEP_ORDER`), que
+    reproduz o do Canary em campo aberto.
+  - **Nunca `Math.random`/`Date.now` na fuga**: o `Rng` da sessão entra em DOIS lugares só — a
+    fase de pensamento do personagem (`[0, 1000)` ms, uma vez) e o sorteio do tile do próprio
+    lançador.
 - **Campo bloqueante é PAREDE, não desvio de dano** (#560). `Fields.blockedAt`/
   `TileOccupancy.blockedAt` bloqueiam para QUALQUER criatura, e valem em `canOccupy`/`move`
   sem checagem extra em `hunt.ts` — ao contrário do desvio de dano do M29-05
@@ -781,7 +928,36 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   `damageType`. Um campo com `blocksMovement: true` e SEM condição (Magic Wall, Wild Growth)
   ainda passa pelo pipeline de tique normalmente — `#onFieldTick`/`#enterField` só saem cedo
   quando `field.condition === undefined`, o mesmo `undefined` que o estágio mudo de uma cadeia
-  também usa.
+  também usa. **Uma exceção desde a OW-05 (#826): a parede de PERSONAGEM cede a quem é
+  personagem — ver o item do campo com dono, logo abaixo.**
+- **O campo tem DONO, e quem o lançou decide em quem ele pega** (OW-05, #826, ADR 0060 d.8 — o
+  no-pvp do Canary aplicado ao campo, `combat.cpp:1207-1218`/`2594-2640`,
+  `condition.cpp:2015-2020`). `TileFieldState.owner?: { kind: 'character' | 'monster', id }`,
+  gravado por `applyField` (o sexto parâmetro, opcional). Quatro armadilhas. (1) **Sem `owner` é
+  campo de MAPA e pega todo mundo** — é o que todo snapshot anterior restaura, sem subir
+  `SNAPSHOT_FORMAT_VERSION`, e o que o teste que planta campo direto sempre foi; um call site
+  novo de `applyField` que esquecer o `owner` cria campo que fere a party inteira, em silêncio.
+  (2) **Invocação de personagem é PERSONAGEM, dos dois lados**: o campo lançado por ela grava o
+  MESTRE (`#fieldOwnerOf`, `kind: 'character'`), e ela mesma é protegida do campo de personagem
+  (`#fieldHarms` confere `typeof masterId === 'string'`, como o `canDoCombat` do Canary recusa
+  `target->isSummon() && targetMasterPlayer` num mundo no-pvp). Monstro que não é invocação de
+  personagem segue levando o campo de personagem — o que o teste da party confere. (3) **O
+  portão roda ANTES de montar a condição**, no tique (`#onFieldTick`) e na entrada (`#enterField`):
+  `conditionFromSpec` pode consumir `session.rng`, e quem o campo não fere não gasta sorteio
+  (a sequência dos outros alvos é a mesma de antes). (4) **A parede de personagem é a variante
+  SEGURA**: segue barrando monstro e invocação, mas `Movable.dissolvesSafeWalls` (só
+  `CharacterRuntime` declara) faz `canOccupy`/`move` a admitirem, e `HuntRuleset#step` a remove
+  depois do passo aceito (`#dissolveSafeWall` → `#removeField`, que cancela os três eventos do
+  campo) — ANTES de `#enterField`, porque `Fields.at` devolve só o campo mais recente e o que
+  estava embaixo da parede é o que o passo encontra. Qualquer PERSONAGEM a dissolve, não só o
+  lançador (o Canary confere `creature->getPlayer()`, nunca o dono). O BFS do follow passa o
+  quarto argumento de `blockedAt` pelo mesmo motivo; um predicado novo de caminho de PERSONAGEM
+  que chame `blockedAt` de três argumentos trata a parede dele como intransponível, em desacordo
+  com o passo. O dono também atravessa os estágios (`#onFieldStageAdvance` o repassa) e o
+  relançamento do mesmo id o troca. **NÃO muda o crédito do dano do campo**: a condição do
+  campo segue com `sourceId` = id do campo, e o abate por campo de personagem não credita XP ao
+  dono (no Canary o dono vai no `CONDITION_PARAM_OWNER`) — divergência registrada, pendente do
+  crédito do Canary (OW-28).
 - **`isSightClear`'s atalho "sem camada de sight, sempre livre" escondia um bug de LIMITE, e
   isso só apareceu ao tentar ligar o predicado de campo (#560).** Antes, mapa sem `sight`
   devolvia `true` ANTES de percorrer a linha — nunca chegava a conferir `x/y` contra
@@ -820,7 +996,7 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   campo `masterKind` à parte.** `HuntRuleset#chooseMonsterTarget` bifurca por isso: invocação de
   personagem NUNCA roda `chooseTarget` própria — herda o alvo do mestre (`attackTargetOf`) a
   cada passo/ataque/ability; invocação de monstro continua igual ao #546. **O dano dela credita
-  o MESTRE, nunca o `subject` dela** (`#applyMonsterHitOnSummon`, achado da implementação: sem o
+  o MESTRE, nunca o `subject` dela** (`#applyMonsterHitOnMonster`, ex-`...OnSummon`, achado da implementação: sem o
   redirecionamento, `xpByDamage` não reconhece um `m:<id>` como participante e o abate renderia
   ZERO XP para quem invocou). **`#hostileMonsters()` é o outro lado da mesma moeda — proteção
   contra FOGO AMIGO.** Estender a lista de presas de um monstro hostil (`#playerSummonPrey`) para
@@ -834,6 +1010,123 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   subject certo, como cinto e suspensório contra o cliente pedindo por fora do auto-target. Ver
   "Invocação do PERSONAGEM" em `docs/product/combat.md` para o resto do contrato (teto de 2,
   mana do MONSTRO via `manaCostOverride`, `combat-v4`).
+- **Facções de monstro (#619, M44-01) são o `Faction_t` do Canary, e a regra é ANTES de tudo "sem
+  facção na hunt, nada muda".** `monster/faction.ts` (puro) tem os valores (`FACTION_PLAYER` = 1, o
+  peso `× 100` na distância e `× 100 000` na vida/dano) e a tabela; o `HuntRuleset` guarda
+  `#factions`/`#hasFactions` e TODO caminho novo sai por `#hasFactions` falso, devolvendo a MESMA
+  lista de antes — sem alocar e sem sortear. Cinco armadilhas. (1) **A tabela é do ALCANÇÁVEL, não do
+  conteúdo**: `options.monsters` traz o catálogo inteiro em toda hunt, então "existe algum monstro
+  com facção?" seria sempre sim; `reachableMonsterIds` segue os pontos de spawn e, transitivamente,
+  as invocações. (2) **Oponente não é alvo** (`isOpponent` × `isTarget`): `#opponentOthersOf` (mais
+  `session.participants`) é a `targetList` — o que segura a volta ao spawn e impede o ocioso —, e
+  `#targetPreyOf` é o que `chooseTarget` recebe. A Lion tem o herói na lista e não o mira. Trocar
+  uma pela outra some com a Lion ou faz ela caçar o herói. (3) **`Prey.faction` ausente vale PLAYER**
+  (personagem e invocação de personagem não dizem nada) — o desempate `d + faction × 100` é
+  constante para uma lista só deles, e é isso que preserva toda hunt sem facção; o jogador (1) ganha
+  de qualquer monstro inimigo (2+) na aquisição, por mais longe que esteja. Em "mais dano" o
+  Canary inverte (a facção MAIOR ganha) e `rankTarget` reproduz. (4) **`#mayAttack` vale para o alvo
+  principal e para cada criatura da área**, e a área de um monstro de facção soma os inimigos com
+  `#withFactionEnemies` — a lista de área de um monstro comum continua só personagens e
+  invocações de personagem. A invocação de monstro herda facção e inimigas do mestre
+  (`#factionProfileOf` recursivo); a de PERSONAGEM não usa a tabela (`null`). (5) **A morte por
+  monstro é decidida pelo `credit`, não pelo golpe final** (`#onMonsterDied`): `lastHitBy` que é
+  um `m:<id>` sem participante entre os que bateram = sem XP, sem abate (a invocação de monstro
+  também), cadáver sem dono e sem loot; com dano de participante a XP é `floor(dano ÷ total × XP)`
+  (`#experiencePool`, o dano de monstro entra no total) e, havendo dano de monstro no mapa, o dono do
+  cadáver é o maior causador ENTRE OS QUE AINDA EXISTEM (`#corpseOwnerOf`), participante ou monstro
+  vivo — mesmo quando o herói deu o último golpe —, o dano de campo não entra. **O dano de quem saiu
+  NUNCA se apaga do mapa de outro monstro** (o Canary só zera o `damageMap` inteiro, em
+  `onIdleStatus`): `#forgetInMonsters` o funde no balde `DEPARTED_ACTOR` (`m:departed`,
+  `Contribution.fold`), que conta no total, mantém o prefixo `m:` e nunca é dono nem `mostDamageBy`;
+  trocar a fusão por `forget` paga ao jogador a XP que o Deepling morto já tirou. O tique de condição
+  de um dono monstro que já saiu não é atribuído a ninguém. **A invocação de monstro de facção
+  persegue o alvo do MESTRE** (`#followMasterTarget`, `updateSummonTarget`), nunca `chooseTarget`
+  — a lista de alvos dela inclui o jogador por causa do offset de facção, e é isso que ela NÃO usa.
+  **O laço de alvos de `#executeMonsterAbility` pula o monstro que saiu dos índices** no meio dele
+  (a morte do mestre cascateia em `#removeSummon`, que não zera `alive`) — o mesmo guarda de
+  `#applyHits`/`#carnage`; sem ele a invocação leva um golpe fantasma e morre duas vezes. **A "atividade sem jogador" do `updateIdleStatus` do `47dfd51` só
+  alcança a INVOCAÇÃO de um monstro de facção** (`master->totalPlayersOnScreen == 0`, sob um `else if
+  (master)`): `#isFactionSummonIdle` lê a posição dos participantes — estado da sessão, nunca de quem
+  olha — e o monstro de facção comum com inimigo à vista brigando sem jogador NÃO fica ocioso. Testes
+  de facção precisam posicionar o herói ANTES do primeiro `advanceBy`: o monstro retém o alvo que
+  escolheu, e corrigir a posição depois testa a escolha de um herói na rota (`arena` em
+  `rulesets/factions.test.ts`). Ver "Facções de monstro" em `docs/product/combat.md`.
+- **O familiar de vocação (#599, M38-02, ADR 0057 d.3 e a emenda de 2026-09-29) é uma invocação de
+  PERSONAGEM com três coisas a mais, e cada uma tem uma armadilha.** (1) **Os dois carimbos
+  (`CharacterRuntime.familiar`) são de relógio de PAREDE, e o "agora" é `session.createdAtMs +
+  session.nowMs`** (`HuntRuleset#wallNowMs`, fracionário: serve para COMPARAR; o que se GRAVA passa
+  por `#wallStampMs`, que arredonda para cima — os consumidores validam inteiro seguro e trocam o
+  carimbo torto pelo vazio em silêncio — e o piso da morte; o servidor soma o intervalo descartado
+  da retomada ao `createdAtMs`) — nunca o `Cooldowns` do personagem, que guarda instante
+  LÓGICO da sessão que o gravou (o relógio de cada sessão nasce em zero, e o objeto do personagem
+  atravessa as transições): um cooldown de 30 min ali seria lido na hunt seguinte como "daqui a 30
+  min de ZERO", ou, se a hunt anterior durou uma hora, como "daqui a uma hora e meia". O
+  `summonUntilMs` DESCE quando o familiar morre (`#onMonsterDied` grava o agora), por isso o ledger
+  o escreve por última-escrita-vence e nunca por máximo. (2) **A recusa por cooldown de parede
+  devolve `retryInMs: 0`, de propósito**: o bot reagenda o grupo pelo MAIOR prazo entre as recusas, e
+  30 min de sono trancariam a haste, que vive no grupo `support`. Quem precisa do prazo real
+  (`slotStates`, `useSlot`) o lê de `#cooldownWaitOf`, que soma `#familiarWaitOf`. (3) **A ordem da
+  recusa é a do Canary — level/cooldown/mana e SÓ ENTÃO `precondition` (teto de zero invocações,
+  sala), antes de qualquer débito** — por isso `castSpell` ganhou o parâmetro `precondition`; um
+  `castSpell` que debitasse a mana e deixasse a invocação sem tile perderia mana por nada. O
+  tile é escolhido pela `precondition` (10 sorteios do `Rng` da sessão, sempre) e usado depois de
+  `ok`: nada roda evento entre os dois. **A duração é o evento `familiar-expire`** com o subject
+  `m:<id>` do familiar — a morte (`resolveDeath`) e `#removeSummon` já o cancelam por esse subject.
+  **Três lacunas do primitivo do #598 que o familiar expôs**: a ability em ÁREA de uma invocação de
+  personagem usa `#hostileMonsters()` como presas (senão acertaria a party); o alvo herdado é o
+  SELECIONADO do mestre e não o que a arma alcança; e o jogador atravessa o familiar por TROCA de
+  tiles em `#step` (`#moverBlocked` e `#occupiedForPlayer` — o `world.occupied` das buscas de caminho do follow e do `walk-to` — deixam o caminho passar por ele) — sem isso um familiar parado
+  num corredor tranca a party inteira. **O familiar RECOLOCADO** (o teleporte ao mestre e a troca cujo
+  tile de origem fechou — a porta comum fecha no `vacate`) sai como `creature-vanished` +
+  `creature-appeared`, NUNCA como `creature-moved` de duração zero: o hospedeiro descarta duração ≤ 0
+  (`#placeFamiliarNear`). **E `onEnter` remonta a ocupação COM os monstros** — o familiar recriado
+  para o membro anterior de uma party já é um monstro vivo no mundo, e remontar só com os
+  participantes liberava o tile dele. `#familiarIds` (vazio na hunt de sempre) existe para o custo:
+  o teleporte ao mestre e a travessia consultam-no a cada passo. **A invocação de personagem SEM alvo
+  segue o mestre** (`#onMonsterStep` → `summonFollowStep`): a busca é `cheapestPath` (Dijkstra,
+  cardinal 10, diagonal 35 — o A* do Canary), e não o BFS de `boundedPath` nem o guloso — o BFS de
+  custo igual anda de viés na diagonal, e o passo diagonal dura o triplo; o guloso oscila na boca de
+  uma concavidade. Só enxerga quem está a ≤ `aggroRadius` no mesmo andar, e o objetivo é um tile a
+  EXATAMENTE 2 do mestre com linha de visão livre — a 1 tile é só o "melhor até agora" que o Canary
+  guarda enquanto procura (`cheapestPath` aceita um `fallback`): a invocação encostada se afasta até a
+  2 (`getPathSearchParams`, `FrozenPathingConditionCall`). `summonFollowStep` devolve `step`/`stay`/
+  `wander`: sem mestre à vista ou sem caminho é `wander` (o `getNextStep` cai no `doRandomStep`, e
+  `decideUnengagedMove` só deixa a invocação de PERSONAGEM passear), mestre invisível que a comum não
+  enxerga é `stay` (`canFollowMaster`; o familiar segue sempre). Um teste que quer o familiar PARADO ou atrasado precisa de um
+  jeito de o herói deixá-lo para trás (a velocidade do familiar é a do mestre no lançamento: acelere o
+  herói DEPOIS de lançar), porque um familiar que enxerga o mestre o acompanha.
+- **Convince Creature e Animate Dead (#600, M38-03, ADR 0057 d.5–d.6) são supply (`effect.kind`
+  `convince` / `animate-dead`), e o que o script do Canary recusa entra em `useSupply` como a
+  PRECONDIÇÃO `summonRune?.check`** (`HuntRuleset#summonRunePrecondition`) — depois de requisitos, mira e
+  alcance, ANTES do gold: a carga só sai quando o script devolve `true`. Cinco armadilhas. (1)
+  **`MonsterRuntime.masterId` é mutável só pelo Convince** (`#convertToSummon`, o ÚNICO escritor): o
+  monstro do Spawner vira invocação no meio da vida, e o que uma invocação nunca tem precisa ser
+  desarmado ali (lista de invocação própria, alvo antigo, "voltando ao spawn"). (2) **O convencido
+  MANTÉM o lugar no Spawner**: o Canary só o libera quando o monstro é removido, então o respawn NÃO
+  começa ao convencer — `#releaseSpawnSlot` (usado por `#onMonsterDied` E por `#removeSummon`) agenda o
+  respawn quando ele morre ou some com o mestre; esquecer o segundo deixa o ponto vazio para sempre.
+  (3) **`#inSightOf` recusa invocação de personagem** — é o que faz quem tinha o monstro na mira (o
+  mestre, o candidato do bot, um companheiro de party) largá-lo na leitura seguinte; sem isso o
+  convencido herdaria o PRÓPRIO subject como alvo do mestre. (4) **O cadáver animável é uma JANELA da
+  cadeia `decayTo`, não um booleano** (`monster.corpseAnimatable`): o estágio recém-abatido é `unmove`.
+  O tempo desde a morte sai de `session.dueAtOf('corpse', id)` menos `corpseTtlMs` — nunca de um
+  carimbo novo —, e o "topo da pilha" é o cadáver de MAIOR id do tile. (5) **Invocação nunca deixa
+  cadáver** (`#onMonsterDied` zera `corpseTtlMs` para `isSummon`, sem gastar `#nextGroundItemId`):
+  senão o Skeleton animado seria animável de novo. Nos testes (`summon-runes.test.ts`): a rota PRECISA
+  fechar o laço (`buildContent` recusa), `radius` do ponto de spawn é `> 0` (o centro vem primeiro na
+  busca), a capacidade do herói é recomputada da progressão ao entrar (o loot que "não cabe" pede um
+  item mais pesado que ela), e o respawn de quem não é `blockable` leva 4,2 s a mais que o
+  `respawnDelayMs` (o aviso de `SpawnMonster::scheduleSpawn`). **Duas regras do mundo no-pvp que só
+  aparecem com invocação de jogador de verdade** (revisão do #600): (a) **o personagem ATRAVESSA a
+  invocação de jogador** — o passo para o tile dela vira TROCA de lugar (`swapPlaces` em
+  `movement.ts`, chamada pelo `HuntRuleset#step`; a ocupação continua exclusiva), e sem isso a
+  invocação em cima do próximo tile da rota trava o herói pelo resto da hunt; a troca NÃO passa por
+  `vacate`/`occupy` (porta não fecha, placa não solta). **O familiar (#599) NÃO passa por esse
+  `swapPlaces`**: ele é atravessado ANTES do `move`, pelo `vacate` + recolocação descritos no item
+  dele, e o ramo do #600 só enxerga a invocação comum — um passo que o familiar já liberou nunca
+  chega a ser recusado por ocupação; (b) **toda colheita de ÁREA do personagem
+  pula `typeof masterId === 'string'`** — as duas formas de `#aimFor` e o `#cleave` varrem
+  `#monsters` direto, e quem esquecer o corte mata a invocação no primeiro Great Fireball.
 - **Os Charms em combate (#603, M39-03, ADR 0053 d.5) vivem em `combat/charms.ts` (puro) e nos
   métodos `#charm*`/`#roll*` do `HuntRuleset`, e SÓ rolam no `combat-v4` (`hasCharmStage`).** Três
   armadilhas custam caro. (1) **O índice do tier é `tier − 1`**: o Canary guarda um `0` na frente do
@@ -859,3 +1152,79 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   usa esse parâmetro. O Carnage roda também para o monstro invocado (`Monster::death` não confere
   `isSummon()`). Os defeitos do `47dfd51` que ficaram de fora estão listados em
   `docs/product/combat-conformance.md`.
+- **As utilitárias (#623, M44-05: Light, Levitate, Magic Rope, Find, Food) têm UM portão de
+  recusa e UM ponto de aplicação, e quebrar qualquer dos dois desincroniza a barra.**
+  (a) `HuntRuleset#utilityRefusalOf` é PURA e alimenta DOIS lugares — o `preflight` de `castSpell`
+  e o espelho `#naturalStateOf` (`slotStates`): um motivo novo entra nos dois ou o slot promete o
+  que o cast recusa (DT-08). O `preflight` vem DEPOIS de level, cooldown, mana e alma e ANTES de
+  pagar — a ordem do Canary, onde só o `onCastSpell` recusa o destino (sem custo, sem cooldown).
+  **A exceção é `person-not-found` (Find Person):** não é recusa de script, é a de
+  `InstantSpell::playerCastInstant` (`getPlayerByNameWildcard`), que roda `applyCooldownConditions`
+  antes de cancelar — o `castSpell` inicia os livros de cooldown (magia e grupo) nesse caso, sem
+  mana nem alma; as recusas de Levitate, Magic Rope e Find Fiend NÃO iniciam nada. O destino que o
+  `preflight` aprova é o que o salto aplica (`#jumpToApproved` falha alto se o `relocate` recusar),
+  então `ropeDestination` também confere a ocupação — tile é exclusivo, como no Levitate. `rooted`
+  (#622) recusa o Levitate com `not-possible` (o `creature:move` cai em `internalMoveCreature`) e
+  NÃO o Magic Rope (`teleportTo` não confere a condição) — por isso `#utilityRefusalOf` recebe o
+  `nowMs`. Toda utilitária é magia nova e precisa de `learnPrice` (`pnpm catalog:spell-prices`; as que
+  o leitor não liga por NOME, como `levitate-up`/`levitate-down`, têm o preço curado à mão), senão
+  ninguém a compra (`not-for-sale`).
+  (b) O salto (`#relocateCharacter`, `movement.ts#relocate`) é o OUTRO escritor de posição e NÃO vira
+  o personagem (o Canary não passa direção); todo salto novo passa por `#lockAfterJump` (o stairhop
+  de `teleport || oldPos.z != newPos.z`, que `#step` também usa) e emite `creature-moved`. Ele
+  CANCELA a caminhada manual (`manualWalkTo` e `manualWalkHoldUntilMs`, o `stopEventWalk()` do
+  Canary): `#playerStep` dá prioridade máxima ao caminho manual, e o `path[0]` do andar antigo
+  seria recusado para sempre — e o `use-slot` chega entre eventos, por isso `#castSpell` remonta a
+  ocupação se `#occupancyStale` (a mesma guarda de `requestMove`).
+  (c) `levitateDestination` julga a sonda pela grade ESTÁTICA (`isBlocked`), nunca por `blockedAt`:
+  uma porta fechada tem chão por baixo, e o overlay a tomaria por vazio. O mapa não separa "sem
+  chão" de "parede" — a aproximação está marcada `[APROXIMAÇÃO]` no arquivo e em
+  `docs/product/utility-spells.md`. (d) No Find Person o alvo viaja como `recipient`, e
+  `recipient === character` é "ninguém nomeado" (`person-not-found`) — o mesmo canal da cura de
+  amigo, sem campo novo; a mira que não acha ninguém NÃO é recusada em `#resolveManualTarget`
+  (viria antes de level/mana e sem o cooldown), segue até o `castSpell`. No catálogo a mira é o
+  campo `aim: 'character'`, e não `targets: 'friend'` (que abriria o seletor de alvo do editor do
+  bot, e `validateBotConfigV2` recusa salvar esse alvo num efeito que não é cura/mana). (e) A ordem de consumo do `Rng` da Food é contrato, como a do loot: bônus
+  `[0,1]`, índice do extra (se houve), índice do garantido (`rollFoods`). (f) A luz é condição de
+  APRESENTAÇÃO (`ConditionState.light`): nenhuma regra a lê, e o `Condition::updateCondition` a
+  governa — o `castSpell` NÃO devolve condição para uma luz de prazo MAIS CURTO que a vigente, e a
+  mana é gasta do mesmo jeito.
+- **O cast confere o APRENDIZADO (#624, ADR 0058): `castSpell` recusa `spell-not-learned` (sem prazo)
+  logo depois de level e vocação, e SÓ a magia — a runa (`useSupply`) exige level e magic level.**
+  Quatro armadilhas. (1) **Todo teste que lança magia precisa de um herói que a saiba** —
+  `new CharacterRuntime({ ..., learnedSpells: learnedSpellsStateOf(ids) })` ou `hero.learnedSpells
+  .grant(id)`; um `CharacterRuntime` sem o registro não lança nada, como um personagem novo. Foi o
+  que quebrou 160 testes na issue, e por isso o `harness.ts` dos traces concede as magias que a cena
+  lança e o `hunt.test.ts` tem `knowsEverythingIn(hero, content)`. (2) **`getState()` só devolve
+  `learnedSpells` quando `LearnedSpells#recorded`** (veio no estado, ou houve compra/concessão): um
+  snapshot antigo não ganha a chave sozinho, e o extrato do servidor a OMITE — escrever o vazio
+  apagaria a concessão da migração (ADR 0014). (3) **`slotStates` espelha a recusa** (`#naturalStateOf`
+  devolve `not-learned` na MESMA posição de `castSpell`, DT-08), e `refusalOf` traduz
+  `spell-not-learned → not-learned`: um `CastRefusal` novo precisa dos dois lados, e o `switch`
+  exaustivo do `refusalOf` é quem avisa. (4) **`CharacterRuntime.learnSpell` é a compra inteira**
+  (vocação, level, saldo, `goldDelta -= price`, marca aprendida) e é idempotente porque recusa
+  `already-learned` ANTES do débito; o `HuntRuleset#rearmBot` acorda o bot depois, porque a recusa
+  sem prazo o deixou engatilhado e aprender não muda o mundo. `LearnedSpells#grant` (sem preço) é o
+  `learnInstantSpell` puro do Canary — para o dia em que o Wheel of Destiny conceder a Great Death
+  Beam.
+- **O Treino é um ruleset de eventos, e o offline training é PURO (#631, ADR 0059).** `TrainingRuleset`
+  (`rulesets/training.ts`): um evento `TRAIN_STRIKE` por golpe, o primeiro no instante da entrada e
+  os seguintes a cada `combat.player.attackIntervalMs`; cada golpe credita `7 × rate` tries (`600 ×
+  rate` de mana gasta para wand/rod) ANTES de descontar a carga (a última também rende), a arma
+  esgotada é destruída (`removedInstances`) e as cargas restantes vivem no overlay da instância
+  (`ItemInstanceOverlay.charges`, "ausente é cheia"). Nada aqui sorteia, e o resultado é idêntico a
+  10 Hz, a 1 Hz e depois de um snapshot. `settleOfflineTraining` (`offline-training.ts`) é a função
+  PURA do gasto do banco — `min(fora, banco, teto da conta)`, carência de 10 min, melee `/ 2`,
+  distância `/ 4`, magic level pela mana, escudo `/ 4` junto —: recebe o tempo fora COMO DADO
+  (`awayMs`), porque o `sim` não lê relógio; quem sabe a hora é a `api`, no ticket. O banco cresce
+  1:1 com `session.inSessionMsOf(id)` no fim da participação (`onEnd`/`onLeave` de hunt e de treino),
+  nunca por tick — e NÃO com `aggregatesOf(id).durationMs`: `advanceBy` soma a janela INTEIRA ao
+  `durationMs` antes de despachar os eventos, então uma sessão que acaba por evento no meio da janela
+  (arma esgotada, morte) contaria o resto dela e o banco dependeria de como o host fatiou o tempo;
+  `inSessionMsOf` lê o relógio lógico (`nowMs` menos o instante de entrada), exato dentro do evento.
+  O escudo do offline training segue o `sendUpdate` do Canary — `Skill.percent` é um `double` de 2
+  casas comparado com o percentual novo TRUNCADO (`uint8_t`) —, não "o inteiro mudou" (`floor` dos dois
+  lados). O cooldown entre dois Treinos (`training-exhaustion`, 10 s) é um carimbo de parede no
+  registro (`exerciseExhaustedUntilMs`), comparado com o `nowMs` que o servidor passa. `buyItem` (`purchase.ts`) é a compra mínima do `buy-item`: confere
+  TUDO antes de mexer em `goldDelta` ou na mochila. `holdStamina` (`stamina.ts`) avança o marco sem
+  recuperar — o que o Treino faz ao sair (ADR 0060 d.14c).

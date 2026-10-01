@@ -19,15 +19,16 @@ import {
   packSchema,
   blessingSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
-  bestiarySchema, boostedSchema, charmSchema, itemSchema, partySchema, skillSchema, spellSchema,
-  staminaSchema, supplySchema, tilemapSchema, vocationSchema, weaponFamilySchema, worldSchema,
+  bestiarySchema, boostedSchema, bosstiarySchema, charmSchema, itemSchema, loyaltySchema, partySchema, skillSchema,
+  skinningSchema, spellSchema,
+  staminaSchema, supplySchema, tilemapSchema, trainingSchema, vocationSchema, weaponFamilySchema, worldSchema,
 } from './schemas.js';
 import type {
-  Ammunition, AmmunitionDefinition, Appearances, Bestiary, Blessing, Boosted, BotLimits, Charm,
-  Combat, CompiledMitigation,
+  Ammunition, AmmunitionDefinition, Appearances, Bestiary, Blessing, Boosted, BotLimits, Bosstiary, Charm,
+  Combat, Loyalty, CompiledMitigation,
   CompiledReflect, DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
-  MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Spell, Stamina, Supply,
-  Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
+  MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Skinning, Spell, Stamina, Supply,
+  Training, Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
   WeaponPowerFormula, WeaponProfile, World,
 } from './schemas.js';
 import { packProblems } from './pack.js';
@@ -48,6 +49,12 @@ export interface Content {
   readonly combat: Combat;
   /** Teto e taxa de recuperação da stamina (§10). */
   readonly stamina: Stamina;
+  /**
+   * O Treino do Tibia (#631, ADR 0059): o boneco, o que cada golpe rende e o offline training.
+   * Opcional — o conteúdo de teste que não fala de treino não o tem, e o `sim`/o servidor tratam
+   * ausência como "nenhuma sessão de Treino existe". O conteúdo REAL o tem, e `load.test.ts` prende.
+   */
+  readonly training?: Training;
   /** A party de hunt (§15, ADR 0027): teto de membros e pool de XP por vocações únicas. */
   readonly party: PartyConfig;
   /**
@@ -57,6 +64,14 @@ export interface Content {
    */
   readonly bestiary?: Bestiary;
   /**
+   * Os níveis do Bosstiary por raridade (#629): quantos abates levam a cada um dos três níveis e
+   * quantos pontos de boss cada nível rende (`IOBosstiary::levelInfos` do Canary). Opcional, como
+   * `bestiary`: sem ele o abate de boss continua contado no personagem, só não há nível nem
+   * ponto — é o conteúdo de teste que não fala de progressão permanente. O conteúdo REAL o tem,
+   * e `load.test.ts` prende.
+   */
+  readonly bosstiary?: Bosstiary;
+  /**
    * O catálogo dos 25 Charms do Canary (M39-02, #602; ADR 0053 d.3): `content/data/charms/
    * generated/charms.json`, chave `charmId` (o slug). Vazio no conteúdo de teste que não fala
    * de Charms — a economia (`@draconya/sim/charms.ts`) trata catálogo ausente como "nenhum
@@ -64,11 +79,23 @@ export interface Content {
    */
   readonly charms: ReadonlyMap<string, Charm>;
   /**
+   * Como o cadáver de cada monstro esfolável é esfolado (#626, ADR 0048 d.5/d.6; ADR 0053 d.5):
+   * `content/data/skinning/generated/skinning.json`, chave `monsterId`. Vazio no conteúdo de teste
+   * que não fala de esfola — nenhuma ferramenta é reconhecida e o sorteio nunca corre.
+   */
+  readonly skinning: ReadonlyMap<string, Skinning>;
+  /**
    * A Boosted Creature diária (M42, #615, ADR 0054 decisão 7): a hora de virada. Opcional —
    * sem ela o `jobs` não sorteia nada, e nenhuma hunt aplica o bônus. É o conteúdo de teste que
    * não fala de engajamento diário.
    */
   readonly boosted?: Boosted;
+  /**
+   * O Loyalty (M44, #628, ADR 0052 decisão 5): a tabela de degraus da idade da conta. Opcional —
+   * sem ela nenhum ticket carrega bônus, e o conteúdo de teste que não fala de Loyalty continua
+   * valendo o nível BASE de toda skill.
+   */
+  readonly loyalty?: Loyalty;
   /** Vocabulário e limites do bot (§13). Sem ele não há automação, que é o produto. */
   readonly bot: BotLimits;
   /** Catálogo de magias (§4.1). Custo, cooldown e efeito são conteúdo, nunca motor. */
@@ -147,10 +174,16 @@ export interface RawContent {
   readonly progression?: readonly unknown[];
   readonly combat?: readonly unknown[];
   readonly stamina?: readonly unknown[];
+  readonly training?: readonly unknown[];
   readonly party?: readonly unknown[];
   readonly bestiary?: readonly unknown[];
+  /** Os níveis do Bosstiary (#629), `bosstiary/baseline.json`. */
+  readonly bosstiary?: readonly unknown[];
   readonly charms?: readonly unknown[];
+  /** Como o cadáver de cada monstro esfolável é esfolado (#626), `skinning/generated/`. */
+  readonly skinning?: readonly unknown[];
   readonly boosted?: readonly unknown[];
+  readonly loyalty?: readonly unknown[];
   readonly bot?: readonly unknown[];
   readonly spells?: readonly unknown[];
   readonly supplies?: readonly unknown[];
@@ -363,6 +396,8 @@ export function normalizeMonsterAbilities(monster: MonsterDefinition): readonly 
       // quente sem ramificar.
       ...(ability.condition === undefined ? {} : { condition: ability.condition }),
       ...(ability.field === undefined ? {} : { field: ability.field }),
+      // A provocação (#599) passa direto, como a condição e o campo.
+      ...(ability.challenge === undefined ? {} : { challenge: ability.challenge }),
     }));
   }
   return [{
@@ -607,12 +642,20 @@ export function buildContent(raw: RawContent): Content {
   }
   const staminas = parseAll('stamina', raw.stamina ?? [], staminaSchema, problems);
   const stamina = staminas.get('baseline');
+  // O Treino (#631): opcional, como `bestiary` — um conteúdo de teste sem `training/` simplesmente
+  // não tem sessão de Treino. As referências cruzadas (skill do livro, tile do boneco) são
+  // conferidas mais abaixo, quando skills e mapa da Cidade já existem.
+  const training = parseAll('training', raw.training ?? [], trainingSchema, problems).get('baseline');
   const bestiary = parseAll('bestiary', raw.bestiary ?? [], bestiarySchema, problems).get('baseline');
+  // Os níveis do Bosstiary (#629): um documento `baseline` único, como `bestiary` — a tabela de
+  // 3 raridades × 3 níveis é uma coisa só, e o `id` fixo é o que impede duas versões dela.
+  const bosstiary = parseAll('bosstiary', raw.bosstiary ?? [], bosstiarySchema, problems).get('baseline');
   // O catálogo de Charms (M39-02, #602): uma entidade por charm, como `spells`/`items` — não
   // um documento `baseline` único como `bestiary` (aqui não há "marco global", só 25 fichas
   // independentes, cada uma com o próprio id).
   const charms = parseAll('charm', raw.charms ?? [], charmSchema, problems);
   const boosted = parseAll('boosted', raw.boosted ?? [], boostedSchema, problems).get('baseline');
+  const loyalty = parseAll('loyalty', raw.loyalty ?? [], loyaltySchema, problems).get('baseline');
   // Ausente é ERRO pela mesma razão dos outros dois: a stamina é o TETO DE SIMULAÇÃO do
   // projeto (ADR 0001), e um default em código faria o número que sustenta a projeção de
   // custo morar onde ninguém procura por ele.
@@ -670,6 +713,28 @@ export function buildContent(raw: RawContent): Content {
   // O catálogo de MUNIÇÃO (ADR 0026 d.3): flecha e virote abstratos, gold no tiro.
   const ammunitionDefinitions = parseAll('munição', raw.ammunition ?? [], ammunitionSchema,
     problems);
+  // A esfola (#626): uma entrada por MONSTRO. Cada referência é conferida aqui, no boot — um
+  // monstro, uma ferramenta ou um material que não existe deixaria a esfola muda (ou, pior,
+  // sortearia sem entregar nada) no meio de uma hunt.
+  const skinning = parseAll('skinning', raw.skinning ?? [], skinningSchema, problems);
+  for (const entry of skinning.values()) {
+    const where = `skinning/${entry.id}`;
+    const monster = monsterDefinitions.get(entry.id);
+    if (monster === undefined) problems.push(`${where}: o monstro não existe`);
+    // A janela de esfola é um PREFIXO da vida do cadáver (os primeiros estágios da cadeia de
+    // decaimento): passar do `corpseTtlMs` do monstro seria esfolar um cadáver que já sumiu.
+    const window = entry.stages.reduce((sum, stage) => sum + stage.durationMs, 0);
+    if (monster?.corpseTtlMs !== undefined && window > monster.corpseTtlMs) {
+      problems.push(
+        `${where}: a janela de esfola (${String(window)} ms) passa da vida do cadáver `
+          + `(corpseTtlMs ${String(monster.corpseTtlMs)})`,
+      );
+    }
+    if (!itemDefinitions.has(entry.toolId)) problems.push(`${where}: a ferramenta "${entry.toolId}" não existe`);
+    if (!itemDefinitions.has(entry.materialId)) {
+      problems.push(`${where}: o material "${entry.materialId}" não existe`);
+    }
+  }
 
   // A skill de defesa (CMB-04) precisa existir E subir por bloqueio. Uma referência a skill
   // inexistente deixaria o escudo sem treinar nada; uma que sobe por outra fonte escalaria a
@@ -802,6 +867,31 @@ export function buildContent(raw: RawContent): Content {
         problems.push(`${where}: manaCost "party-scaled" precisa de um efeito com target "party"`);
       }
     }
+    // O familiar (#599, ADR 0057 d.3): o monstro precisa existir e ser `familiar` — o flag é o que
+    // liga o teleporte ao mestre e a XP inteira, e uma magia que invocasse um monstro comum
+    // deixaria de ser o familiar do Canary sem ninguém perceber. A vocação é obrigatória: cada
+    // uma tem o SEU familiar (`FAMILIAR_ID`), e o `sim` reencontra o monstro pela vocação do
+    // personagem ao entrar na hunt (o Canary recria o familiar no login).
+    if (effect.kind === 'familiar') {
+      const familiar = monsterDefinitions.get(effect.monsterId);
+      if (familiar === undefined) {
+        problems.push(`${where}: familiar.monsterId "${effect.monsterId}" não existe no catálogo de monstros`);
+      } else if (!familiar.familiar) {
+        problems.push(`${where}: familiar.monsterId "${effect.monsterId}" não é um monstro "familiar"`);
+      } else if (typeof spell.manaCost === 'number' && familiar.manaCost !== undefined
+        && familiar.manaCost !== spell.manaCost) {
+        problems.push(
+          `${where}: manaCost ${String(spell.manaCost)} difere do manaCost ${String(familiar.manaCost)} `
+            + `do monstro "${effect.monsterId}"`,
+        );
+      }
+      if (spell.vocationId === undefined) {
+        problems.push(`${where}: o familiar exige vocationId — cada vocação tem o seu`);
+      }
+      if (effect.cooldownMs < effect.durationMs) {
+        problems.push(`${where}: familiar.cooldownMs é menor que a duração (o Canary usa 2 × a duração)`);
+      }
+    }
     // Conjuração (#594, ADR 0044): o id creditado precisa existir no catálogo correspondente —
     // sem isto, a magia subiria muda, creditando carga que `useSupply`/o tiro nunca reconhecem.
     if (effect.kind === 'conjure') {
@@ -814,6 +904,33 @@ export function buildContent(raw: RawContent): Content {
         );
       }
     }
+    // Food (#623): cada id da lista precisa ser comida DE VERDADE — item consumível com efeito
+    // `food` —, senão o Food criaria na mochila um item que `use-item` recusa como `not-usable`.
+    if (effect.kind === 'food') {
+      for (const itemId of effect.items) {
+        const item = itemDefinitions.get(itemId);
+        if (item === undefined) {
+          problems.push(`${where}: food.items "${itemId}" não existe no catálogo de itens`);
+        } else if (item.kind !== 'consumable' || item.effect?.kind !== 'food') {
+          problems.push(`${where}: food.items "${itemId}" não é comida (consumível com efeito "food")`);
+        }
+      }
+      if (new Set(effect.items).size !== effect.items.length) {
+        problems.push(`${where}: food.items repete um item — o sorteio uniforme pesaria o repetido em dobro`);
+      }
+    }
+  }
+  // Cada vocação tem UM familiar (#599): duas magias `familiar` para a mesma vocação deixariam
+  // ambíguo qual delas o `sim` recria quando o personagem entra na hunt com tempo sobrando.
+  const familiarSpellByVocation = new Map<string, string>();
+  for (const spell of spells.values()) {
+    if (spell.effect.kind !== 'familiar' || spell.vocationId === undefined) continue;
+    const owner = familiarSpellByVocation.get(spell.vocationId);
+    if (owner !== undefined) {
+      problems.push(`spell/${spell.id}: a vocação "${spell.vocationId}" já tem o familiar "${owner}"`);
+      continue;
+    }
+    familiarSpellByVocation.set(spell.vocationId, spell.id);
   }
   // O supply de cura (#475): a runa UH/IH sai de UM mecanismo, como a magia — `amount` fixo
   // (poção) OU `basePower`/`formula` (runa). O `mana` não entra aqui: ele sempre foi fixo.
@@ -858,6 +975,13 @@ export function buildContent(raw: RawContent): Content {
           problems.push(`${where}: requires.vocationId "${vocationId}" não existe`);
         }
       }
+    }
+    // A Animate Dead (#600) nasce um monstro do catálogo: `monsterId` errado subiria mudo e a runa
+    // consumiria o cadáver (e o gold) sem invocar nada. Só quando HÁ monstros (a mesma tolerância
+    // das referências acima, para o conteúdo de teste sem catálogo).
+    if (effect.kind === 'animate-dead' && monsterDefinitions.size > 0
+      && !monsterDefinitions.has(effect.monsterId)) {
+      problems.push(`${where}: animate-dead.monsterId "${effect.monsterId}" não existe no catálogo de monstros`);
     }
     // A poção de buff (#576) aponta skill pelo id do catálogo em `skillDeltas` — como o bônus de
     // equipamento (linha ~890) e a família de arma (abaixo), pela MESMA razão: um id errado
@@ -999,6 +1123,16 @@ export function buildContent(raw: RawContent): Content {
     if (item.extraDefense > 0 && item.kind !== 'weapon') {
       problems.push(`item "${item.id}": extraDefense só faz sentido em arma`);
     }
+    // O bond elemental (#627) é o da ARMA na mão (`casterPlayer->getWeapon(true)`, `combat.cpp:163`)
+    // — a mesma disciplina do `extraDefense`: fora de arma seria um número que nada lê.
+    if (item.elementalBond !== undefined && item.kind !== 'weapon') {
+      problems.push(`item "${item.id}": elementalBond só faz sentido em arma`);
+    }
+    // A capacidade de magic shield (#627) é `Abilities` do Canary: só vale em peça que se veste,
+    // como o `imbuementSlots` — num item sem slot ela nunca seria somada.
+    if (item.bonuses?.magicShieldCapacity !== undefined && item.slot === undefined) {
+      problems.push(`item "${item.id}": bonuses.magicShieldCapacity só vale em item que se veste`);
+    }
     if ((item.spellbook || item.quiver) && item.kind !== 'shield') {
       problems.push(`item "${item.id}": spellbook/quiver só fazem sentido em escudo`);
     }
@@ -1013,6 +1147,11 @@ export function buildContent(raw: RawContent): Content {
     }
     if (item.ringEffect !== undefined && item.kind !== 'ring') {
       problems.push(`item "${item.id}": "ringEffect" só faz sentido em anel`);
+    }
+    // A skill que a exercise weapon treina (#631) tem de existir — como o bônus de skill abaixo:
+    // uma skill que ninguém lê deixaria o golpe rendendo tries para lugar nenhum.
+    if (item.exercise !== undefined && skills.size > 0 && !skills.has(item.exercise.skillId)) {
+      problems.push(`item "${item.id}": exercise.skillId "${item.exercise.skillId}" não existe`);
     }
     // A vocação que o item exige precisa existir (#524, como a magia em #156-159): a Magic
     // Plate Armor pede Knight/Paladin, e um id errado tornaria o item ETERNAMENTE inacessível
@@ -1390,6 +1529,39 @@ export function buildContent(raw: RawContent): Content {
     worlds.set(world.id, world);
   }
 
+  // O Treino (#631, ADR 0059): as skills do livro existem, e o tile em que o personagem fica é
+  // andável no mapa da Cidade — a mesma disciplina do `entryPoint`, reprovando no boot e não na
+  // primeira sessão de Treino. Só com Cidade e skills carregadas: o conteúdo de teste sem elas não
+  // tem contra o que conferir (a mesma tolerância de `spellSkill`).
+  if (training !== undefined) {
+    const offlineSkills = new Set<string>();
+    for (const entry of training.offline.skills) {
+      if (offlineSkills.has(entry.skillId)) {
+        problems.push(`training: offline.skills repete "${entry.skillId}"`);
+      }
+      offlineSkills.add(entry.skillId);
+      if (skills.size > 0 && !skills.has(entry.skillId)) {
+        problems.push(`training: offline.skills "${entry.skillId}" não existe em skills/`);
+      }
+    }
+    if (training.offline.spendCapMs.free > training.offline.bankCapMs
+      || training.offline.spendCapMs.premium > training.offline.bankCapMs) {
+      problems.push('training: offline.spendCapMs não pode passar do teto do banco (bankCapMs)');
+    }
+    if (city !== undefined) {
+      const { stand, dummy } = training.place;
+      if (isBlocked(city, stand.x, stand.y, stand.z)) {
+        problems.push(
+          `training: place.stand (${stand.x},${stand.y},${stand.z}) está fora do mapa da Cidade ` +
+            `"${city.id}", ou em parede — ninguém teria onde treinar`,
+        );
+      }
+      if (Math.max(Math.abs(stand.x - dummy.x), Math.abs(stand.y - dummy.y)) > 1 || stand.z !== dummy.z) {
+        problems.push('training: place.stand tem de ser adjacente ao boneco (place.dummy), no mesmo andar');
+      }
+    }
+  }
+
   const routes = new Map<string, Route>();
   for (const data of routeData.values()) {
     const map = maps.get(data.mapId);
@@ -1455,6 +1627,28 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
+  // As janelas de Animate Dead do cadáver (#600) vivem DENTRO da vida dele: sem `corpseTtlMs` não
+  // há cadáver, e uma janela que passa do prazo (ou que se sobrepõe à anterior) é uma transcrição
+  // errada da cadeia `decayTo` — o `sim` a leria como um cadáver animável depois de sumir.
+  for (const monster of monsterDefinitions.values()) {
+    const windows = monster.corpseAnimatable;
+    if (windows === undefined) continue;
+    if (monster.corpseTtlMs === undefined) {
+      problems.push(`monstro "${monster.id}": corpseAnimatable sem corpseTtlMs`);
+      continue;
+    }
+    let previousEnd = 0;
+    for (const window of windows) {
+      if (window.fromMs < previousEnd || window.untilMs > monster.corpseTtlMs) {
+        problems.push(
+          `monstro "${monster.id}": corpseAnimatable ${window.fromMs}-${window.untilMs} fora de ordem `
+            + `ou além de corpseTtlMs (${monster.corpseTtlMs})`,
+        );
+      }
+      previousEnd = window.untilMs;
+    }
+  }
+
   // A invocação (#546): cada entrada aponta um monstro que precisa existir no catálogo — a
   // mesma referência cruzada de `loot.items` acima, agora contra `monsterDefinitions` (o
   // Slime pode invocar a si mesmo; o boot não recusa self-reference, o TFS também não). E o
@@ -1499,6 +1693,28 @@ export function buildContent(raw: RawContent): Content {
             + `declara "${monster.class}"`,
         );
       }
+    }
+  }
+
+  // O boss (#629): `bosstiary` sem `boss` seria um monstro que conta no Bosstiary e, ao mesmo
+  // tempo, no Bestiário e nos rates de monstro comum — o `isBoss` do Canary é "tem bloco
+  // bosstiary", e a flag existe para o resto do motor não precisar olhar o bloco.
+  // O contador é do `raceId`, e variantes de um boss o compartilham (`monsterSchema.bosstiary`):
+  // o NÍVEL de um contador compartilhado sai de UMA raridade, então duas raridades para o mesmo
+  // `raceId` fariam o nível depender de qual variante foi abatida por último.
+  const rarityByRaceId = new Map<number, string>();
+  for (const monster of monsterDefinitions.values()) {
+    if (monster.bosstiary === undefined) continue;
+    if (!monster.boss) {
+      problems.push(`monstro "${monster.id}": declara bosstiary e não declara boss: true`);
+    }
+    const seen = rarityByRaceId.get(monster.bosstiary.raceId);
+    if (seen === undefined) rarityByRaceId.set(monster.bosstiary.raceId, monster.bosstiary.rarity);
+    else if (seen !== monster.bosstiary.rarity) {
+      problems.push(
+        `monstro "${monster.id}": bosstiary.raceId ${String(monster.bosstiary.raceId)} é compartilhado `
+          + `com um boss de raridade "${seen}", e este declara "${monster.bosstiary.rarity}"`,
+      );
     }
   }
 
@@ -1593,10 +1809,13 @@ export function buildContent(raw: RawContent): Content {
       : [`progression/${progression.id}: ${progression._open}`]),
     ...(combat?._open === undefined ? [] : [`combat/${combat.id}: ${combat._open}`]),
     ...(stamina?._open === undefined ? [] : [`stamina/${stamina.id}: ${stamina._open}`]),
+    ...(training?._open === undefined ? [] : [`training/${training.id}: ${training._open}`]),
     ...(party?._open === undefined ? [] : [`party/${party.id}: ${party._open}`]),
     ...(bestiary?._open === undefined ? [] : [`bestiary/${bestiary.id}: ${bestiary._open}`]),
+    ...(bosstiary?._open === undefined ? [] : [`bosstiary/${bosstiary.id}: ${bosstiary._open}`]),
     // `boosted` não tem `_open`: a hora de virada não é um número disputado do PRD, é
     // configuração de operação — não pede uma seção de `docs/product` para justificar.
+    ...(loyalty?._open === undefined ? [] : [`loyalty/${loyalty.id}: ${loyalty._open}`]),
     ...openOf('spell', spells),
     ...openOf('charm', charms),
     ...openOf('supply', supplies),
@@ -1631,10 +1850,14 @@ export function buildContent(raw: RawContent): Content {
     progression: progression as Progression,
     combat: combat as Combat,
     stamina: stamina as Stamina,
+    ...(training === undefined ? {} : { training }),
     party: party as PartyConfig,
     ...(bestiary === undefined ? {} : { bestiary }),
+    ...(bosstiary === undefined ? {} : { bosstiary }),
     charms,
+    skinning,
     ...(boosted === undefined ? {} : { boosted }),
+    ...(loyalty === undefined ? {} : { loyalty }),
     maps,
     routes,
     worlds,

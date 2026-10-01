@@ -1,7 +1,7 @@
 import type { Stamina } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from './character.js';
-import { drainStamina, isExhausted, materializeStamina, recoveredStaminaMs } from './stamina.js';
+import { drainStamina, holdStamina, isExhausted, materializeStamina, recoveredStaminaMs } from './stamina.js';
 
 const HOUR = 3_600_000;
 const rules: Stamina = { id: 'baseline', maxMs: 24 * HOUR, recoveryRatio: 1 };
@@ -53,6 +53,30 @@ describe('materializar', () => {
     materializeStamina(character, 10 * HOUR, rules);
     expect(character.staminaMs).toBeNull();
     expect(isExhausted(character)).toBe(false);
+  });
+});
+
+describe('segurar o marco (o Treino não recupera stamina — ADR 0060 d.14c, #631)', () => {
+  it('avança o instante SEM devolver o tempo passado como recuperação', () => {
+    // O oposto de `materializar`: o tempo entre o marco e `nowMs` foi passado numa sessão em que a
+    // stamina não anda. Mutação que mata: trocar por `materializeStamina` — a stamina subiria 3 h.
+    const character = hero(10 * HOUR, 0);
+    holdStamina(character, 3 * HOUR);
+    expect(character.staminaMs).toBe(10 * HOUR);
+    expect(character.staminaUpdatedAtMs).toBe(3 * HOUR);
+    // E depois disso a recuperação volta a contar do marco novo.
+    materializeStamina(character, 4 * HOUR, rules);
+    expect(character.staminaMs).toBe(11 * HOUR);
+  });
+
+  it('relógio para trás não recua o marco, e quem não rastreia stamina continua sem', () => {
+    const character = hero(10 * HOUR, 5 * HOUR);
+    holdStamina(character, 2 * HOUR);
+    expect(character.staminaUpdatedAtMs).toBe(5 * HOUR);
+    const untracked = hero(null, 0);
+    holdStamina(untracked, 9 * HOUR);
+    expect(untracked.staminaMs).toBeNull();
+    expect(untracked.staminaUpdatedAtMs).toBe(0);
   });
 });
 

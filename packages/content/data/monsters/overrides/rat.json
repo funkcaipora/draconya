@@ -1,0 +1,14 @@
+{
+  "id": "rat",
+  "reason": "Campos do #600 (Convince Creature e Animate Dead) que o importador de monstros gera para o resto do catálogo (`pnpm catalog:import monsters`, Canary `47dfd51`, `staging/monsters/generated/`) e que `preserveHandAuthored` não propaga para os cinco monstros preservados (`HAND_AUTHORED_MONSTER_IDS`): corpseAnimatable [{\"fromMs\": 10000, \"untilMs\": 670000}] (janela do cadáver movível nas flags do arquivo de aparências do Canary), convinceable: true, manaCost: 200. Um teste em `packages/content/src/load.test.ts` prende estes valores contra o staging.",
+  "patch": {
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 200
+  }
+}

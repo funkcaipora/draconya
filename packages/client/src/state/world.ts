@@ -12,11 +12,14 @@
 //
 // Quem lê isto é o laço de render do canvas (FUN-23), a cada quadro, direto. Nunca por prop.
 
-import type { OutfitColors, S2CProps, DamageType } from '@draconya/protocol';
+import type {
+  CreatureLight, CreatureVoices, DamageType, MonsterRace, OutfitColors, S2CProps,
+} from '@draconya/protocol';
 import type { TileWindow } from '../world/camera.js';
 import {
   FLOATING_TEXT_MERGE_WINDOW_MS, mergeFloatingText,
 } from '../world/effects.js';
+import type { SelfLight } from '../world/light.js';
 
 /** Posição em tiles. Igual à do protocolo. */
 export interface Point {
@@ -47,6 +50,25 @@ export interface Creature {
    * chegarem iguais ao desenho.
    */
   readonly colors?: OutfitColors;
+  /**
+   * A apresentação do MONSTRO (#620), que o servidor manda no `creature-appear` e no
+   * `session-state` e que o cliente só DESENHA — nenhum deles entra em combate. Todos ausentes
+   * quando o servidor não os mandou (um nó `game` anterior, o jogador, o NPC do explorador), e a
+   * ausência é o neutro: sem addon, `blood`, sem luz e mudo. O store não inventa o default, pela
+   * mesma razão de `colors`.
+   *
+   * Os addons do outfit, a máscara do Tibia: 1 = primeiro, 2 = segundo, 3 = os dois.
+   */
+  readonly addons?: number;
+  /** A raça: a cor do número do golpe físico que a atinge (`world/effects.ts`). */
+  readonly race?: MonsterRace;
+  /** A luz que carrega — o viewport abre um clarão dessa cor em volta dela. */
+  readonly light?: CreatureLight;
+  /**
+   * As falas periódicas. **Quem sorteia é o cliente** (`world/speech.ts`), nunca o servidor nem o
+   * `Rng` da sessão: fala não muda resultado nenhum.
+   */
+  readonly voices?: CreatureVoices;
   name: string;
   health: number;
   maxHealth: number;
@@ -112,6 +134,13 @@ export interface FloatingText {
    * diferentes no mesmo tile NÃO se somam — o jogador não pode ler fogo como gelo.
    */
   readonly damageType?: DamageType;
+  /**
+   * A RAÇA de quem levou o golpe (#620), fotografada quando ele chegou — o golpe que mata chega
+   * no mesmo lote que o `creature-disappear`, e a criatura já não existe quando o viewport
+   * desenha. Só o golpe FÍSICO a usa (`floatingTextColor`): o Canary pinta esse número pela raça
+   * do alvo. Ausente é `blood`, e entra na chave do merge como `damageType`.
+   */
+  readonly race?: MonsterRace;
   readonly startedAtMs: number;
   /**
    * Onde o texto está ancorado: o ponto do IMPACTO, fotografado quando o golpe chegou (RF-04).
@@ -127,6 +156,12 @@ export interface World {
   mapId: string | null;
   /** O ambiente da cena (FUN-121): `cavern` escurece o mundo. Superfície até alguém dizer. */
   ambience: 'surface' | 'cavern';
+  /**
+   * A luz do próprio jogador (#623: Light/Great/Ultimate Light), do `active-conditions`. `null` é
+   * sem luz. Só apresentação: o pintor a lê para clarear o `cavern` (`world/light.ts`); nenhuma
+   * regra a usa, e ela vem do servidor — o cliente não decide que há luz (invariante 4).
+   */
+  selfLight: SelfLight | null;
   /**
    * Qual criatura é o próprio jogador. A câmera segue esta; sem ela, não há em quem centrar.
    *
@@ -190,6 +225,7 @@ export const world: World = {
   instanceId: null,
   mapId: null,
   ambience: 'surface',
+  selfLight: null,
   groundItems: new Map(),
   groundItemsVersion: 0,
   tileOverrides: new Map(),
@@ -290,7 +326,10 @@ export function addFloatingText(
   // ponto de IMPACTO ao qual o texto fica ancorado (RF-04): ele não segue a criatura depois.
   const creature = world.creatures.get(creatureId);
   const position = creature === undefined ? null : interpolate(creature, startedAtMs);
-  const merged = mergeTargetAt(position, kind, damageType, startedAtMs);
+  // A raça do alvo (#620): só a apresentação lê, e só o golpe físico a usa. Fotografada aqui
+  // pelo mesmo motivo da posição.
+  const race = creature?.race;
+  const merged = mergeTargetAt(position, kind, damageType, race, startedAtMs);
   if (merged !== null) {
     mergeFloatingText(merged, amount);
     return merged;
@@ -302,6 +341,7 @@ export function addFloatingText(
     amount,
     kind,
     ...(damageType === undefined ? {} : { damageType }),
+    ...(race === undefined ? {} : { race }),
     startedAtMs,
     position,
   };
@@ -314,15 +354,16 @@ export function addFloatingText(
  *
  * Sem posição não há merge: não existe "mesmo tile" de uma criatura que o cliente nunca viu. A
  * varredura é de trás para a frente porque o candidato é o mais RECENTE — e o `kind` e o
- * `damageType` entram na chave porque cores diferentes não podem virar uma soma só.
+ * `damageType` e a raça (#620) entram na chave porque cores diferentes não podem virar uma soma só.
  */
 function mergeTargetAt(
-  position: Point | null, kind: HitKind, damageType: DamageType | undefined, nowMs: number,
+  position: Point | null, kind: HitKind, damageType: DamageType | undefined,
+  race: MonsterRace | undefined, nowMs: number,
 ): FloatingText | null {
   if (position === null) return null;
   for (let i = world.texts.length - 1; i >= 0; i -= 1) {
     const text = world.texts[i] as FloatingText;
-    if (text.kind !== kind || text.damageType !== damageType) continue;
+    if (text.kind !== kind || text.damageType !== damageType || text.race !== race) continue;
     const anchor = text.position;
     if (anchor === null) continue;
     if (anchor.x !== position.x || anchor.y !== position.y || anchor.z !== position.z) continue;
@@ -349,6 +390,9 @@ export function enterInstance(
   world.instanceId = instanceId;
   world.mapId = mapId;
   world.ambience = ambience;
+  // A luz é do personagem, não da instância — mas o `active-conditions` chega logo depois do
+  // `instance-enter` de toda reanexação, e uma luz de antes da troca não deve acender a nova.
+  world.selfLight = null;
   world.groundItems.clear();
   world.groundItemsVersion += 1;
   world.tileOverrides.clear();

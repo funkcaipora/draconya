@@ -149,3 +149,14 @@ alcance, exaustão, gold, estoque e efeito são do servidor. **2** — o adiamen
 `fedMs` são eventos/instantes da fila, nunca tique. **11** — a barra continua sendo primeiro a
 vista do bot; o clique manual é o extra, e o estoque visível serve aos dois. **7** — `requiresFood`
 é conteúdo e fixa na sessão.
+
+## Emenda — 2026-10-01: o alcance de `use-item-on` é o da AÇÃO, não um `canUseFar` geral
+
+A decisão 3 diz que `use-item-on` sobre criatura/tile usa o `canUseFar` do Canary (7×5, com linha
+de visão). Isso vale para quem o Canary registra com `allowFarUse(true)` — as runas
+(`heavy_magic_missile.lua`), que é o caso que a decisão descrevia. O Canary escolhe o alcance PELA
+AÇÃO (`Action::canExecuteAction`: `allowFarUse` falso cai no `Actions::canUse`, o `areInRange<1,
+1>` adjacente, sem linha de visão), e as ferramentas de tile não o pedem: a esfola de cadáver
+(`skinning.lua`, #626) usa o `canUse` adjacente, e a ferramenta de cenário (`useOnMap`, ADR 0050)
+também. Cada alvo novo de `use-item-on` declara o alcance da ação que o Canary registra, e não
+herda o 7×5 por ser "um tile". Ver a emenda do ADR 0048 (esfola).

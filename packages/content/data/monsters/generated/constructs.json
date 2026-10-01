@@ -125,6 +125,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -244,6 +251,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "race": "ink",
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -383,6 +397,13 @@
     },
     "staticAttack": 0.6,
     "corpseTtlMs": 610000,
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 610000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -440,6 +461,13 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -568,6 +596,55 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Klonk klonk klonk",
+          "yell": false
+        },
+        {
+          "text": "Failure! Failure!",
+          "yell": false
+        },
+        {
+          "text": "Good morning citizen. How may I serve you?",
+          "yell": false
+        },
+        {
+          "text": "Target identified: Rat! Termination initiated!",
+          "yell": false
+        },
+        {
+          "text": "Rrrtttarrrttarrrtta",
+          "yell": false
+        },
+        {
+          "text": "Danger will...chrrr! Danger!",
+          "yell": false
+        },
+        {
+          "text": "Self-diagnosis failed.",
+          "yell": false
+        },
+        {
+          "text": "Aw... chhhrrr orders.",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 3,
+      "color": 35
+    },
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -764,6 +841,27 @@
     "runOnHealth": 100,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Error. LOAD 'PROGRAM',8,1",
+          "yell": false
+        },
+        {
+          "text": "Remain. Obedient.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -848,6 +946,23 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Crrrrk! Chhhhr!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -953,6 +1068,27 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 510000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Zzrrkrrch!",
+          "yell": false
+        },
+        {
+          "text": "<crackle>",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 510000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1009,6 +1145,31 @@
     "runOnHealth": 85,
     "staticAttack": 0.9,
     "corpseTtlMs": 15000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I was baked just a few days ago. So much to discover here!",
+          "yell": false
+        },
+        {
+          "text": "Have you seen my truffle baker?",
+          "yell": false
+        },
+        {
+          "text": "I should visit the Candy Carnival.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 15000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1164,6 +1325,32 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 0,
+      "body": 10,
+      "legs": 115,
+      "feet": 54,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Give me your sweets! They are mine to devour!",
+          "yell": false
+        },
+        {
+          "text": "Hm? Where ... where are you now?",
+          "yell": false
+        },
+        {
+          "text": "Hunger!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1351,6 +1538,27 @@
     "runOnHealth": 50,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Error. LOAD 'PROGRAM',8,1",
+          "yell": false
+        },
+        {
+          "text": "Remain. Obedient.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1529,6 +1737,13 @@
     "runOnHealth": 80,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1711,6 +1926,27 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Moooaaan",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 5,
+      "color": 157
+    },
+    "race": "fire",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1858,6 +2094,27 @@
     "runOnHealth": 50,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Error. LOAD 'PROGRAM',8,1",
+          "yell": false
+        },
+        {
+          "text": "Remain. Obedient.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1989,6 +2246,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2106,6 +2370,31 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "*rattle*",
+          "yell": false
+        },
+        {
+          "text": "*tak tak*",
+          "yell": false
+        },
+        {
+          "text": "*tak tak tak*",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2308,6 +2597,23 @@
     "runOnHealth": 1,
     "staticAttack": 0.8,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Rumble!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2411,6 +2717,15 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 590,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2635,6 +2950,27 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Moooaaan",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 5,
+      "color": 157
+    },
+    "race": "fire",
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2793,6 +3129,43 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "INTRUDER ALARM!",
+          "yell": true
+        },
+        {
+          "text": "klonk klonk klonk",
+          "yell": false
+        },
+        {
+          "text": "Rrrtttarrrttarrrtta",
+          "yell": false
+        },
+        {
+          "text": "Awaiting orders.",
+          "yell": false
+        },
+        {
+          "text": "Secret objective complete.",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 3,
+      "color": 35
+    },
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

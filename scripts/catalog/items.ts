@@ -42,6 +42,7 @@ import { slugify } from './monsters.js';
 import { readNpcShopPrices, type ShopPriceObservation } from './npc-prices.js';
 import { registerCatalogType, type CatalogImportContext, type CatalogImportResult } from './registry.js';
 import type { SkippedEntity } from './report.js';
+import { evaluateAssignments } from './lua-table.js';
 import { attrOptional, childrenOf, readXmlFile, type XmlElement } from './xml.js';
 import { repoRootFrom } from './env.js';
 
@@ -75,6 +76,22 @@ function numberValue(attrs: ReadonlyMap<string, XmlElement>, key: string): numbe
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+/**
+ * `numberValue` com a chave casada SEM distinguir caixa. O `Items::parseItemNode` do Canary
+ * minusculiza toda chave antes de despachar (`asLowerCaseString`, `items.cpp:383`, e só então
+ * `ItemParse::initParse`), então o `items.xml` escreve `magicshieldCapacityflat` (caixa mista, nos
+ * 4 itens que o têm) e o parser lê do mesmo jeito que leria `magicshieldcapacityflat` — um
+ * `attrs.get` exato perderia os quatro em silêncio (#627).
+ */
+function numberValueFolded(attrs: ReadonlyMap<string, XmlElement>, lowerKey: string): number | undefined {
+  for (const [key, element] of attrs) {
+    if (key.toLowerCase() !== lowerKey) continue;
+    const parsed = Number(element.attributes['value']);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Vocabulário do Canary → vocabulário do Draconya.
 
@@ -88,6 +105,9 @@ const SLOT_MAP: Readonly<Record<string, string>> = {
   ring: 'finger', necklace: 'neck', shield: 'shield', ammo: 'ammo', backpack: 'back', hand: 'hand',
   'right-hand': 'shield',
 };
+
+/** Os três textos que `ItemParse::parseElementalBond` reconhece (#627) — `ELEMENTAL_BOND_TYPES` do content. */
+const ELEMENTAL_BOND_VALUES: ReadonlySet<string> = new Set(['physical', 'earth', 'energy']);
 
 /** `wandType` (rod/wand) → `DamageType`. Sem `holy`/`physical`: nenhuma wand/rod do Canary os usa. */
 const WAND_TYPE_TO_DAMAGE: Readonly<Record<string, string>> = {
@@ -148,7 +168,7 @@ export function parseVocationRequirement(raw: string | undefined): string | stri
 
 export type ItemSlice =
   | 'weapons' | 'shields' | 'helmets' | 'armors' | 'legs' | 'boots' | 'rings' | 'amulets'
-  | 'valuables' | 'creature-products';
+  | 'valuables' | 'creature-products' | 'exercise-weapons';
 
 export interface Classification {
   readonly slice: ItemSlice;
@@ -170,7 +190,8 @@ function hasBonusAttribute(attrs: ReadonlyMap<string, XmlElement>): boolean {
       || key === 'cleavepercent' || key === 'criticalhitchance' || key === 'criticalhitdamage'
       || key === 'lifeleechamount' || key === 'manaleechamount' || key === 'reflectdamage'
       || MELEE_SKILL_ATTR_TO_SKILL.has(key) || key === 'skilldist' || key === 'skillshield'
-      || key.startsWith('absorbpercent') || SPECIALIZED_MAGIC_ATTR_TO_ELEMENT.has(key)) return true;
+      || key.startsWith('absorbpercent') || SPECIALIZED_MAGIC_ATTR_TO_ELEMENT.has(key)
+      || key.toLowerCase().startsWith('magicshieldcapacity')) return true;
   }
   return false;
 }
@@ -212,6 +233,12 @@ export function classify(
     case 'amulets and necklaces': return { slice: 'amulets', kind: 'amulet', slot: 'neck' };
     case 'valuables': return { slice: 'valuables', kind: 'other' };
     case 'creature products': return { slice: 'creature-products', kind: 'other' };
+    // A exercise weapon (#631, ADR 0059): item de mochila com cargas, usado num boneco — sem slot,
+    // sem arma. O `training weapons` de 50 cargas (o item da Daily Reward, sem NPC que o venda)
+    // fica de fora: o Draconya não tem Daily Reward, então seria um item sem caminho de aquisição.
+    case 'exercise weapons': return { slice: 'exercise-weapons', kind: 'other' };
+    case 'training weapons':
+      return { skip: 'training weapon de 50 cargas: recompensa da Daily Reward, sem NPC vendedor e sem sistema de Daily Reward no Draconya (#631)' };
     default: break;
   }
   if (weaponType === 'fist') return { skip: 'família "fist" não é declarável (fallback do motor, DT-01)' };
@@ -259,6 +286,11 @@ const HANDLED_ATTRS: ReadonlySet<string> = new Set([
   // `containersize` é IGNORADO de propósito — o Draconya não guarda pilha física de munição
   // (ADR 0026 d.3), então o quiver entra como `kind: 'shield'` puro, nunca `kind: 'container'`.
   'perfectshotrange', 'perfectshotdamage', 'containersize',
+  // #627: `elementalbond` vira `elementalBond` (só arma); a capacidade de magic shield vira
+  // `bonuses.magicShieldCapacity`. As duas grafias da capacidade — o XML real escreve a caixa
+  // mista, o `Items::parseItemNode` do Canary minusculiza (ver `numberValueFolded`).
+  'elementalbond', 'magicshieldcapacityflat', 'magicshieldcapacitypercent',
+  'magicshieldCapacityflat', 'magicshieldCapacitypercent',
   ...ELEMENT_ATTR_TO_DAMAGE.keys(), ...ABSORB_ATTR_TO_DAMAGE.keys(), ...SPECIALIZED_MAGIC_ATTR_TO_ELEMENT.keys(),
 ]);
 
@@ -267,13 +299,55 @@ const HANDLED_ATTRS: ReadonlySet<string> = new Set([
  * (o item some da fatia e some no relatório), e atributo lido mas fora do schema vira
  * `ignoredFields` (some só das notas).
  */
-/** `value` do item — `sellMaxByClientId` de `npc-prices.ts`, indexado pelo `id` numérico do Canary. */
+/**
+ * `value` do item — `sellMaxByClientId` de `npc-prices.ts`, indexado pelo `id` numérico do Canary.
+ * `buyMinByClientId` (o MENOR `buy`) só alimenta `buyPrice` das exercise weapons (#631).
+ */
 export interface ItemPriceLookup {
   readonly sellMaxByClientId: ReadonlyMap<number, ShopPriceObservation>;
+  readonly buyMinByClientId?: ReadonlyMap<number, ShopPriceObservation>;
+}
+
+/**
+ * `exerciseWeaponsTable` de `data/scripts/actions/items/exercise_training_weapons.lua` (#631): o
+ * `id` numérico do Canary → o nome `SKILL_*` que aquela exercise weapon treina.
+ */
+export interface ExerciseLookup {
+  readonly skillNameByClientId: ReadonlyMap<number, string>;
+}
+
+/** `data/scripts/actions/items/exercise_training_weapons.lua`, dentro do checkout do Canary. */
+export const CANARY_EXERCISE_LUA = 'data/scripts/actions/items/exercise_training_weapons.lua';
+
+/**
+ * `SKILL_*` do Canary → a skill do Draconya. `SKILL_FIST` fica de fora: as exercise wraps (e a
+ * estátua de fist do offline training) são do Monk, sistema pós-13.32 (ADR 0038 d.5).
+ */
+export const EXERCISE_SKILL_NAME_TO_SKILL: ReadonlyMap<string, string> = new Map([
+  ['SKILL_SWORD', 'sword'], ['SKILL_AXE', 'axe'], ['SKILL_CLUB', 'club'],
+  ['SKILL_DISTANCE', 'distance'], ['SKILL_MAGLEVEL', 'magic'], ['SKILL_SHIELD', 'shielding'],
+]);
+
+/** Lê a tabela do Lua como DADO (`lua-table.ts`, nunca executa Lua): `[id] = { skill = SKILL_X }`. */
+export function readExerciseLookup(canaryDir: string): ExerciseLookup {
+  const source = readFileSync(join(canaryDir, CANARY_EXERCISE_LUA), 'utf8');
+  // Os identificadores `SKILL_*`/`CONST_ANI_*` resolvem para o PRÓPRIO NOME: só o nome importa
+  // aqui, e o valor numérico do enum nunca sai no JSON.
+  const table = evaluateAssignments(source, 'exerciseWeaponsTable', {
+    resolve: (name) => (name.startsWith('SKILL_') || name.startsWith('CONST_ANI_') ? name : undefined),
+  });
+  const skillNameByClientId = new Map<number, string>();
+  for (const [key, entry] of Object.entries(table)) {
+    const id = Number(key);
+    if (!Number.isInteger(id) || entry === null || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const skill = (entry as Readonly<Record<string, unknown>>)['skill'];
+    if (typeof skill === 'string') skillNameByClientId.set(id, skill);
+  }
+  return { skillNameByClientId };
 }
 
 export function convertItem(
-  item: XmlElement, path: string, commit: string, prices?: ItemPriceLookup,
+  item: XmlElement, path: string, commit: string, prices?: ItemPriceLookup, exercise?: ExerciseLookup,
 ): ConvertedItem | undefined {
   const id = attrOptional(item, 'id');
   const name = attrOptional(item, 'name');
@@ -448,6 +522,15 @@ export function convertItem(
   }
   const suppress: string[] = [];
   if (value(attrs, 'suppressdrunk') !== undefined) suppress.push('drunk');
+  // A capacidade de magic shield (#627): dois inteiros de `Abilities` (`item_parse.cpp:944-950`,
+  // `+=` de `pugi::cast<int32_t>`), os 4 spellbooks do `items.xml`. Só dado — ver
+  // `itemSchema.bonuses.magicShieldCapacity` para o que o Canary faz (e não faz) com ele.
+  const shieldCapacityFlat = numberValueFolded(attrs, 'magicshieldcapacityflat');
+  const shieldCapacityPercent = numberValueFolded(attrs, 'magicshieldcapacitypercent');
+  const magicShieldCapacity = {
+    flat: Math.trunc(shieldCapacityFlat ?? 0),
+    percent: Math.trunc(shieldCapacityPercent ?? 0),
+  };
 
   const bonuses: Record<string, unknown> = {};
   if (skills.length > 0) bonuses['skills'] = skills;
@@ -455,7 +538,16 @@ export function convertItem(
   if (Object.keys(specializedMagicLevel).length > 0) bonuses['specializedMagicLevel'] = specializedMagicLevel;
   if (regeneration !== undefined) bonuses['regeneration'] = regeneration;
   if (suppress.length > 0) bonuses['suppress'] = suppress;
+  if (magicShieldCapacity.flat !== 0 || magicShieldCapacity.percent !== 0) {
+    bonuses['magicShieldCapacity'] = magicShieldCapacity;
+  }
   if (Object.keys(bonuses).length > 0) entity['bonuses'] = bonuses;
+
+  // O `elementalBond` só vale em arma (`ItemType::elementalBond` é lido da arma na mão): em
+  // qualquer outro item o dado não tem para onde ir, e o relatório diz em vez de calar.
+  if (value(attrs, 'elementalbond') !== undefined && classification.kind !== 'weapon') {
+    ignoredFields.push('elementalbond em item que não é arma');
+  }
 
   // weapon (#152/#524/#687) — só em kind: 'weapon'.
   if (classification.kind === 'weapon') {
@@ -499,6 +591,14 @@ export function convertItem(
       if (found.length > 1) blockers.push(`mais de um elemento na arma (${found.map((f) => f.type).join(', ')})`);
       else if (found.length === 1 && found[0] !== undefined) weapon['element'] = { type: found[0].type, attack: found[0].amount };
     }
+    // O bond elemental (#627, `ItemParse::parseElementalBond`, `item_parse.cpp:764-778`): o parser
+    // só reconhece `energy`/`earth`/`physical` e deixa qualquer outro texto em `COMBAT_NONE` — o
+    // mesmo filtro aqui, sem valor desconhecido virando campo. Fica no ITEM, não em `weapon`: é
+    // `ItemType::elementalBond`. Hoje nenhum item chega até aqui com ele — os 32 do `items.xml`
+    // são todos `weapontype="fist"`, família que `classify` pula (DT-01) — e o teste usa um
+    // `<item>` sintético para provar o mapeamento.
+    const bond = value(attrs, 'elementalbond')?.trim();
+    if (bond !== undefined && ELEMENTAL_BOND_VALUES.has(bond)) entity['elementalBond'] = bond;
     if ((family === 'wand' || family === 'rod') && (weapon['manaPerHit'] === undefined || weapon['damage'] === undefined)) {
       blockers.push('wand/rod sem mana ou faixa de dano completa (script;weapon incompleto)');
     }
@@ -538,6 +638,29 @@ export function convertItem(
   // ao drop justamente deles. O flag viaja no item porque `sim/loot.ts` não conhece a fatia — só o
   // catálogo de itens.
   if (classification.slice === 'creature-products') entity['creatureProduct'] = true;
+
+  // Exercise weapon (#631, ADR 0059): a skill vem da tabela do `exercise_training_weapons.lua`, e o
+  // preço de compra é o MENOR `buy` de NPC (ADR 0038 d.6) — `purchasable` só aparece com o preço.
+  // Sem entrada na tabela, ou de fist (Monk, pós-13.32), o item sai do corte com o motivo.
+  if (classification.slice === 'exercise-weapons') {
+    const skillName = exercise?.skillNameByClientId.get(canaryId);
+    if (skillName === undefined) {
+      blockers.push('exercise weapon sem entrada na `exerciseWeaponsTable` do exercise_training_weapons.lua');
+    } else {
+      const skillId = EXERCISE_SKILL_NAME_TO_SKILL.get(skillName);
+      if (skillId === undefined) {
+        blockers.push(`exercise weapon de "${skillName}": fist é do Monk (pós-13.32, ADR 0038 d.5) — fora do corte`);
+      } else {
+        entity['exercise'] = { skillId };
+      }
+    }
+    const buyObservation = prices?.buyMinByClientId?.get(canaryId);
+    if (buyObservation !== undefined) {
+      entity['purchasable'] = true;
+      entity['buyPrice'] = buyObservation.amount;
+    }
+    if (charges === undefined || charges <= 0) blockers.push('exercise weapon sem `charges`');
+  }
   entity['source'] = source;
   // Aparência (#748, ADR 0038 decisão 2, o MESMO recurso que `outfitId` já usa em `monsters.ts`):
   // o `id` do `<item>` do Canary É o `appearanceId` (o clientid do OTB) — conferido em
@@ -648,6 +771,8 @@ export interface ItemsReaderOptions {
   readonly authoredDir: string;
   /** Preço de NPC (#574) — omitido, todo `value` sai `0` (o comportamento de antes do #574). */
   readonly prices?: ItemPriceLookup;
+  /** A tabela das exercise weapons (#631) — omitida, toda exercise weapon fica de fora do corte. */
+  readonly exercise?: ExerciseLookup;
 }
 
 /** Lê o `items.xml` inteiro e converte cada `<item>` das categorias de caça. */
@@ -655,7 +780,7 @@ export function readItemCatalog(ctx: CatalogImportContext, options: ItemsReaderO
   const root = readXmlFile(join(ctx.canaryDir, CANARY_ITEMS_XML));
   const converted: ConvertedItem[] = [];
   for (const item of childrenOf(root, 'item')) {
-    const result = convertItem(item, CANARY_ITEMS_XML, ctx.canaryCommit, options.prices);
+    const result = convertItem(item, CANARY_ITEMS_XML, ctx.canaryCommit, options.prices, options.exercise);
     if (result !== undefined) converted.push(result);
   }
 
@@ -693,6 +818,9 @@ export function readItemCatalog(ctx: CatalogImportContext, options: ItemsReaderO
     + `\`${AUTHORED_ITEMS_DIR}/overrides/\` — o id nunca muda, só a correção.`,
     'Preço (\`value\`, M34-03/#574): o maior `sell` de `data-otservbr-global/npc/*.lua` por `id` do Canary '
     + '(exceto o Nah\'Bob, ver `npc-prices.ts`); `0` quando nenhum NPC vende, ou quando o importador rodou sem `prices`.',
+    'Exercise weapons (#631, ADR 0059): a fatia `exercise-weapons` traz `charges` (500/1800/14400), `exercise.skillId` '
+    + '(da `exerciseWeaponsTable` de `exercise_training_weapons.lua`) e, quando algum NPC as vende, `purchasable` + `buyPrice` '
+    + '(o MENOR `buy`, ADR 0038 d.6). As exercise wraps (fist) são do Monk e ficam fora; o `training weapon` de 50 cargas é da Daily Reward.',
     '`stackable` nunca declarado (sempre o default `false`): a pilha é um flag de `items.otb`, binário, que este leitor não abre — só `items.xml`.',
     `Campos lidos e ignorados (sem campo no schema desta base ou fora do escopo): ${countBy(allIgnored) || 'nenhum'}.`,
   ];
@@ -724,7 +852,8 @@ registerCatalogType({
     const repoRoot = repoRootFrom(import.meta.url);
     const authoredDir = join(repoRoot, AUTHORED_ITEMS_DIR);
     const prices = readNpcShopPrices(ctx);
-    const result = readItemCatalog(ctx, { authoredDir, prices });
+    const exercise = readExerciseLookup(ctx.canaryDir);
+    const result = readItemCatalog(ctx, { authoredDir, prices, exercise });
     writeOverrides(join(authoredDir, 'overrides'), result.overrides);
     return result;
   },

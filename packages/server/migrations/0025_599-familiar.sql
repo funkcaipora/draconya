@@ -1,0 +1,13 @@
+-- #599 (M38-02): o familiar de vocação — os dois carimbos de relógio de PAREDE que o personagem
+-- carrega entre hunts: `{ version, summonUntilMs, cooldownUntilMs }` (até quando a invocação vale
+-- e até quando a magia volta; `packages/sim/src/familiar.ts`, ADR 0057 d.3, ADR 0052 d.1/d.6).
+--
+-- Aditiva por construção (ADR 0014): coluna nova, nulável, sem default. `null` é quem nunca
+-- invocou um familiar — o mesmo personagem novo que `charms`/`bestiary` já tratam.
+-- `jsonb`, como o resto do padrão: lido INTEIRO no ticket, escrito INTEIRO no extrato pela
+-- transação do ledger — ÚLTIMA ESCRITA VENCE, NÃO fusão por máximo: o `summonUntilMs` DESCE
+-- quando o familiar morre (o `FamiliarDeath` do Canary zera a recriação), e fundir pelo maior
+-- ressuscitaria o familiar se um extrato antigo chegasse depois de um mais novo já aplicado.
+-- Sem CHECK: os instantes são epoch em ms, e um valor fora do domínio é conferido por forma
+-- (`isFamiliarState`) na leitura do ticket, nunca por uma linha ilegível.
+ALTER TABLE character ADD COLUMN familiar jsonb;

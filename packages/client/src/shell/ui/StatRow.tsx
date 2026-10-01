@@ -17,15 +17,17 @@ export interface StatRowProps {
   onRemove?: () => void;
   bar?: boolean;
   className?: string;
+  /** dica nativa ao passar o mouse — ex. o nível base e o bônus de Loyalty da skill (#628) */
+  title?: string;
 }
 
-export function StatRow({ label, value, percent, tone, onRemove, bar = true, className }: StatRowProps) {
+export function StatRow({ label, value, percent, tone, onRemove, bar = true, className, title }: StatRowProps) {
   const toneStyle = tone !== undefined ? ({ '--stat-tone': `var(--${tone})` } as CSSProperties) : undefined;
   const rootClass = ['ui-stat-row', onRemove !== undefined ? 'ui-stat-row--removable' : null, className ?? null]
     .filter(Boolean).join(' ');
 
   return (
-    <div className={rootClass} style={toneStyle}>
+    <div className={rootClass} style={toneStyle} title={title}>
       <span>{label}</span>
       <b className="ui-stat-row-value">{value}</b>
       {onRemove !== undefined && (

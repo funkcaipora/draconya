@@ -137,6 +137,23 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Garrr...Garrr!",
+          "yell": true
+        }
+      ]
+    },
+    "race": "fire",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -289,6 +306,23 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Mah...Hun Hur...!",
+          "yell": true
+        }
+      ]
+    },
+    "race": "fire",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -569,6 +603,37 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 114,
+      "body": 94,
+      "legs": 78,
+      "feet": 79,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "May the flames consume you!",
+          "yell": false
+        },
+        {
+          "text": "Encounter the flames of destiny!",
+          "yell": false
+        },
+        {
+          "text": "Fire and destruction!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -954,6 +1019,39 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Your soul will be mine!",
+          "yell": false
+        },
+        {
+          "text": "CHAMEK ATH UTHUL ARAK!",
+          "yell": true
+        },
+        {
+          "text": "I SMELL FEEEEAAAAAR!",
+          "yell": true
+        },
+        {
+          "text": "Your resistance is futile!",
+          "yell": false
+        },
+        {
+          "text": "MUHAHAHAHA!",
+          "yell": true
+        }
+      ]
+    },
+    "race": "fire",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1139,6 +1237,31 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "COME HERE AND DIE!",
+          "yell": true
+        },
+        {
+          "text": "Destructiooooon!",
+          "yell": false
+        },
+        {
+          "text": "It's a good day to destroy!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1343,6 +1466,31 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Death!",
+          "yell": false
+        },
+        {
+          "text": "Come a little closer!",
+          "yell": false
+        },
+        {
+          "text": "The end is near!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1487,6 +1635,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hot, eh?",
+          "yell": false
+        },
+        {
+          "text": "Hell, oh, hell!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 530,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1642,6 +1812,34 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 113,
+      "body": 94,
+      "legs": 78,
+      "feet": 78,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "tssooosh tsoooosh tssoooosh!",
+          "yell": false
+        },
+        {
+          "text": "We didn't stop the fire!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1895,6 +2093,19 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 0,
+      "body": 0,
+      "legs": 0,
+      "feet": 86,
+      "addons": 3
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2050,6 +2261,40 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Huhuhuhuuu!",
+          "yell": false
+        },
+        {
+          "text": "Let the fun begin!",
+          "yell": false
+        },
+        {
+          "text": "Yihahaha!",
+          "yell": false
+        },
+        {
+          "text": "I'll bite you! Nyehehehe!",
+          "yell": false
+        },
+        {
+          "text": "Nyarnyarnyarnyar.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "manaCost": 800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2413,6 +2658,26 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "GROOOOWL!",
+          "yell": true
+        }
+      ]
+    },
+    "light": {
+      "level": 3,
+      "color": 206
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2513,6 +2778,21 @@
       "random": 10
     },
     "staticAttack": 0.8,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ardash... El...!",
+          "yell": true
+        },
+        {
+          "text": "Urrrglll!",
+          "yell": true
+        }
+      ]
+    },
+    "race": "fire",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2655,6 +2935,31 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "The powers of light are waning.",
+          "yell": false
+        },
+        {
+          "text": "You will join us in eternal night!",
+          "yell": false
+        },
+        {
+          "text": "The shadows will engulf the world.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2851,6 +3156,30 @@
     },
     "staticAttack": 0.6,
     "corpseTtlMs": 2110000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "RAAARRR!",
+          "yell": true
+        },
+        {
+          "text": "GRRRRRR!",
+          "yell": true
+        },
+        {
+          "text": "WAHHHH!",
+          "yell": true
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 2110000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3195,6 +3524,37 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 0,
+      "body": 114,
+      "legs": 90,
+      "feet": 90,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Death and Darkness!",
+          "yell": false
+        },
+        {
+          "text": "Embrace the night!",
+          "yell": false
+        },
+        {
+          "text": "May night fall upon you!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3323,6 +3683,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3425,6 +3791,22 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grrrr!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3529,6 +3911,21 @@
       "random": 10
     },
     "staticAttack": 0.8,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "CHA..RAK!",
+          "yell": true
+        },
+        {
+          "text": "Garrr!",
+          "yell": true
+        }
+      ]
+    },
+    "race": "fire",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3800,6 +4197,19 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 114,
+      "body": 94,
+      "legs": 79,
+      "feet": 121,
+      "addons": 1
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4108,6 +4518,19 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 9,
+      "body": 0,
+      "legs": 86,
+      "feet": 9,
+      "addons": 0
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4437,6 +4860,19 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 0,
+      "body": 76,
+      "legs": 53,
+      "feet": 0,
+      "addons": 1
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
