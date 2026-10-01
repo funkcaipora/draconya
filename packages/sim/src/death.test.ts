@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from './character.js';
 import {
-  Contribution, creditFor, emptyContribution, forgetActor, recordDamage, resolveDeath,
+  Contribution, DEPARTED_ACTOR, creditFor, emptyContribution, foldActor, forgetActor, recordDamage,
+  resolveDeath,
 } from './death.js';
 import type { KillCredit, Victim } from './death.js';
 import { MonsterRuntime } from './monster/monster.js';
@@ -67,6 +68,33 @@ describe('atribuição de dano', () => {
     expect(state.getState()).toEqual({ damageByActor: { 'm:1': 5 } });
     forgetActor(state, 'm:9');   // desconhecido: nada muda, nada lança
     expect(state.getState()).toEqual({ damageByActor: { 'm:1': 5 } });
+  });
+
+  it('funde um ator que saiu no balde `DEPARTED_ACTOR`: o total do mapa fica (#619, `getDamageRatio`)', () => {
+    const state = emptyContribution();
+    recordDamage(state, 'hero', 40);
+    recordDamage(state, 'm:1', 30);
+    recordDamage(state, 'm:2', 10);
+    foldActor(state, 'm:1');
+    foldActor(state, 'm:2');
+    // Uma chave só, com a soma dos dois — e o último golpe (m:2) passa a ser o balde, não nulo.
+    expect(state.getState()).toEqual({
+      damageByActor: { hero: 40, [DEPARTED_ACTOR]: 40 }, lastHitBy: DEPARTED_ACTOR,
+    });
+    expect(state.actorCount).toBe(2);
+    foldActor(state, 'm:9');   // desconhecido: nada muda, nada lança
+    expect(state.actorCount).toBe(2);
+  });
+
+  it('o balde `DEPARTED_ACTOR` soma ao total mas nunca é o `mostDamageBy`, mesmo sendo o maior', () => {
+    const state = emptyContribution();
+    recordDamage(state, 'm:1', 90);
+    recordDamage(state, 'hero', 10);
+    foldActor(state, 'm:1');
+    // Quem já saiu não existe para o `getCreatureByID` do `Creature::onDeath`: não é dono de nada.
+    expect(creditFor(state)).toEqual({
+      lastHitBy: 'hero', mostDamageBy: 'hero', damageByActor: { [DEPARTED_ACTOR]: 90, hero: 10 },
+    });
   });
 
   it('esquece TUDO ao ficar ocioso (#655, `Creature::onIdleStatus`), inclusive o último golpe', () => {

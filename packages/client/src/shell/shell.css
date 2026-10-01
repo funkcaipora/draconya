@@ -607,6 +607,11 @@ body {
 .action-slot-auto {
   animation: action-slot-auto-pulse 2s ease-in-out infinite;
 }
+/* Magia ainda NÃO aprendida (#624, ADR 0058 d.5): o slot fica na barra — nada é escondido (ADR
+   0032 d.5) —, apagado e com a borda tracejada; o servidor recusa o disparo de qualquer jeito. */
+.action-slot-unlearned {
+  opacity: .5; border-style: dashed; filter: grayscale(.6);
+}
 
 /* ---- O modal de configuração de slot (#437, AB-11, régua da imagem #435, ADR 0033) ---------- */
 .action-config-top {
@@ -888,6 +893,34 @@ div.hunt-pill-pending { cursor: default; }
 .hunts-modal-empty { color: var(--text-faint); margin: 8px 0; font: 11px var(--font-mono); }
 .hunts-modal-footer-note { font: 7px var(--font-mono); color: var(--text-faint); }
 
+/* ---- O Treino (#631, M44-13, ADR 0059) --------------------------------------------------- */
+/* O pill "Treino" na Cidade e o estado do Treino em curso reusam `.hunt-pill`; só o botão de
+   parar (`.hunt-pill-danger` é a METADE ESQUERDA de um botão partido) fecha os 4 cantos aqui, sem
+   o chevron de regras ao lado, e o estado não é clicável. */
+.training-stop { border-radius: 3px; }
+.training-status { cursor: default; white-space: nowrap; }
+/* O modal: três seções empilhadas (livro, armas carregadas, loja) numa coluna que rola. */
+.training-modal-body { display: flex; flex-direction: column; gap: 14px; height: 430px; overflow: auto;
+  padding: 0 2px 0 0; }
+.training-section { display: flex; flex-direction: column; gap: 6px; }
+.training-note { margin: 0; font: 8px var(--font-mono); color: var(--text-muted); line-height: 1.6; }
+.training-note-faint { color: var(--text-faint); }
+.training-bank-bar { height: 6px; border: 1px solid var(--ash-5); border-radius: 3px;
+  background: var(--ash-1); overflow: hidden; }
+.training-bank-fill { display: block; height: 100%; background: var(--gold-4); }
+.training-book { display: flex; align-items: center; gap: 8px; font: 700 8px var(--font-display);
+  letter-spacing: .1em; text-transform: uppercase; color: var(--parchment-2); }
+.training-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.training-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 8px;
+  align-items: center; padding: 6px; border: 1px solid var(--ash-5); border-radius: 3px;
+  background: var(--ash-1); }
+.training-row-text strong { display: block; font: 600 10px var(--font-display); color: var(--parchment-1); }
+.training-row-text > span { display: block; }
+.training-row-text .entry-meta { font: 8px var(--font-mono); color: var(--text-muted); }
+/* `.item-sprite` é `position: absolute; inset: 1px` sobre um ancestral quadrado (a mesma nota de
+   `.hunts-modal-sprite`): este span é esse ancestral, do lado da lista de armas. */
+.training-sprite { position: relative; width: 42px; height: 42px; }
+
 /* ---- A pill permanente "Party" (#503, DT-03 de #499) ------------------------------------- */
 /* Irmã de `.hunt-actions` (D6): sobre o mundo, sempre visível na Cidade e na hunt — mas à
    DIREITA, para não disputar o centro com as pills de caçada. A pill é o `.hunt-pill` do kit,
@@ -1094,6 +1127,12 @@ div.hunt-pill-pending { cursor: default; }
 .cyclopedia-modal-item-category { font: 7.5px var(--font-mono); color: var(--gold-4); }
 .cyclopedia-modal-item-stats { display: flex; gap: 6px; align-items: center; font: 8px var(--font-mono); }
 .cyclopedia-modal-item-weight { color: var(--text-muted); min-width: 54px; text-align: right; }
+
+/* ---- Cyclopedia: aba Bosstiary (#629, ADR 0052) -------------------------------------------
+   A mesma linha da lista do Bestiário, com a raridade e o nível no lugar da ficha do Canary — a
+   coluna do meio precisa de mais espaço (raridade + "Nível 3/3" lado a lado). */
+.cyclopedia-modal-boss-row { grid-template-columns: 22px minmax(0, 1fr) 150px 90px 80px; }
+.cyclopedia-modal-boss-list { max-height: 424px; }
 
 /* ---- Cyclopedia: aba Charms (M39-02, #602, ADR 0052/0053) --------------------------------- */
 .cyclopedia-modal-charm-list {
@@ -1787,6 +1826,27 @@ div.hunt-pill-pending { cursor: default; }
   color: var(--gold-5); font: 8px var(--font-mono); padding: 2px 6px; cursor: pointer;
 }
 .blessing-buy:disabled { opacity: 0.45; cursor: default; }
+
+/* As magias da vocação, dentro do CharacterModal (#624, ADR 0058 d.2): a mesma forma de lista das
+   bênçãos, rolável — são dezenas por vocação. Sem arte (invariante 6). */
+.spell-shop-list {
+  list-style: none; margin: 0; padding: 0 4px 0 0; display: grid; gap: 4px;
+  max-height: 220px; overflow-y: auto;
+}
+.spell-shop-entry {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 4px 6px; background: var(--ash-2); border: 1px solid var(--ash-5); border-radius: 3px;
+  font: 8px var(--font-mono); color: var(--parchment-2);
+}
+.spell-shop-name { flex: 1 1 auto; }
+.spell-shop-meta { color: var(--text-faint); white-space: nowrap; }
+.spell-shop-state { color: var(--text-muted); white-space: nowrap; }
+.spell-shop-entry[data-status="learned"] .spell-shop-state { color: var(--gold-5); }
+.spell-shop-buy {
+  background: var(--ash-3); border: 1px solid var(--gold-4); border-radius: 3px;
+  color: var(--gold-5); font: 8px var(--font-mono); padding: 2px 6px; cursor: pointer;
+}
+.spell-shop-buy:disabled { opacity: 0.45; cursor: default; }
 
 /* ---- Explorador do mundo (#661) ---------------------------------------------------------- */
 /* O mapa inteiro com câmera livre, em /world. O mundo ocupa a tela; o painel flutua no canto. */

@@ -4,6 +4,7 @@
   "description": "Conjura cargas da Heavy Magic Missile Rune, consumindo uma runa em branco.",
   "vocationId": "sorcerer",
   "minLevel": 25,
+  "learnPrice": 1500,
   "manaCost": 350,
   "soulCost": 2,
   "group": "support",

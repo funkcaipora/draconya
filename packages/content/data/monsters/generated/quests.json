@@ -173,7 +173,17 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "faction": "lion",
+    "enemyFactions": [
+      "lion-usurpers"
+    ],
     "corpseTtlMs": 1810000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 1810000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -479,7 +489,18 @@
       "random": 0
     },
     "staticAttack": 0.7,
+    "faction": "lion-usurpers",
+    "enemyFactions": [
+      "player",
+      "lion"
+    ],
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -611,7 +632,17 @@
       "random": 0
     },
     "staticAttack": 0.7,
+    "faction": "lion",
+    "enemyFactions": [
+      "lion-usurpers"
+    ],
     "corpseTtlMs": 1810000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 1810000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -762,10 +793,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/dangerous_depth/bosses/ancient_spawn_of_morgathla.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1551
     }
   },
   {
@@ -1146,6 +1188,12 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1351,6 +1399,12 @@
     "runOnHealth": 300,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1445,6 +1499,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 310000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1666,6 +1726,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1829,6 +1895,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2010,6 +2082,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2150,6 +2228,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2336,6 +2420,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2437,6 +2527,12 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 610000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2524,6 +2620,12 @@
     "runOnHealth": 8,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2626,6 +2728,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "manaCost": 590,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2729,6 +2838,13 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 1260000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 600000,
+        "untilMs": 1260000
+      }
+    ],
+    "manaCost": 290,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3028,10 +3144,21 @@
     },
     "staticAttack": 0.85,
     "corpseTtlMs": 370000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 370000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_inquisition/annihilon.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 418
     }
   },
   {
@@ -3516,6 +3643,12 @@
     "runOnHealth": 30,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3683,6 +3816,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3815,6 +3954,12 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3947,6 +4092,13 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "manaCost": 390,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4001,6 +4153,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4107,6 +4265,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4313,6 +4477,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4328,6 +4498,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1559
     }
   },
   {
@@ -4540,6 +4715,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 510000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 510000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4728,6 +4909,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4743,6 +4930,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1560
     }
   },
   {
@@ -4947,6 +5139,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5212,6 +5410,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5227,6 +5431,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 567
     }
   },
   {
@@ -5406,6 +5615,242 @@
     }
   },
   {
+    "id": "branchy-crawler",
+    "name": "Branchy Crawler",
+    "class": "plant",
+    "health": 27000,
+    "experience": 17860,
+    "attack": {
+      "min": 0,
+      "max": 950
+    },
+    "armor": 100,
+    "defense": 100,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.05,
+        "earth": 0.5,
+        "fire": -0.09,
+        "holy": 0.4,
+        "death": -0.15
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 3.04,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 470,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5548,
+        "min": 10000,
+        "max": 10000
+      },
+      "items": [
+        {
+          "itemId": "gold-ingot",
+          "chance": 0.0909
+        },
+        {
+          "itemId": "roots",
+          "chance": 0.06
+        },
+        {
+          "itemId": "blue-gem",
+          "chance": 0.019
+        },
+        {
+          "itemId": "terra-legs",
+          "chance": 0.0097
+        },
+        {
+          "itemId": "green-gem",
+          "chance": 0.008
+        },
+        {
+          "itemId": "hammer-of-wrath",
+          "chance": 0.0076
+        },
+        {
+          "itemId": "violet-gem",
+          "chance": 0.0065
+        },
+        {
+          "itemId": "crystal-crossbow",
+          "chance": 0.0063
+        },
+        {
+          "itemId": "nightmare-blade",
+          "chance": 0.0054
+        },
+        {
+          "itemId": "twiceslicer",
+          "chance": 0.0042
+        },
+        {
+          "itemId": "crystalline-sword",
+          "chance": 0.0039
+        },
+        {
+          "itemId": "ruthless-axe",
+          "chance": 0.0033
+        },
+        {
+          "itemId": "bag-you-desire",
+          "chance": 0.00015
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 950
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 1100,
+          "max": 1300
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "piercingbolt",
+          "impactKey": "green-rings"
+        }
+      },
+      {
+        "id": "earthball",
+        "cadenceMs": 2000,
+        "chance": 0.22,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 1000,
+          "max": 1280
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "smallplants"
+        }
+      },
+      {
+        "id": "holyburst",
+        "cadenceMs": 2000,
+        "chance": 0.22,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 1100,
+          "max": 1250
+        },
+        "damageType": "holy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "holydamage"
+        }
+      },
+      {
+        "id": "holystrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 1100,
+          "max": 1400
+        },
+        "damageType": "holy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "smallholy",
+          "impactKey": "holyarea"
+        }
+      },
+      {
+        "id": "root",
+        "cadenceMs": 2000,
+        "chance": 0.01,
+        "target": {
+          "range": 11
+        },
+        "power": 0,
+        "damageType": "physical",
+        "condition": {
+          "key": "rooted",
+          "merge": "longest",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "rooted"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 1810000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 1810000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/soul_war/normal_monsters/branchy_crawler.lua"
+    }
+  },
+  {
     "id": "bretzecutioner",
     "name": "Bretzecutioner",
     "health": 5600,
@@ -5573,6 +6018,12 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5841,6 +6292,12 @@
     "runOnHealth": 60,
     "staticAttack": 0.6,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5856,6 +6313,11 @@
           "count": 5
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1645
     }
   },
   {
@@ -5962,6 +6424,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6072,6 +6540,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6217,6 +6691,12 @@
     "runOnHealth": 1,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6319,6 +6799,12 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 470000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 470000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6517,6 +7003,12 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6649,6 +7141,12 @@
     "runOnHealth": 1,
     "staticAttack": 0.85,
     "corpseTtlMs": 510000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 510000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6749,6 +7247,12 @@
     },
     "staticAttack": 0.5,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6947,6 +7451,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7347,6 +7857,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7362,6 +7878,11 @@
           "count": 4
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1753
     }
   },
   {
@@ -7410,6 +7931,10 @@
       },
       "items": [
         {
+          "itemId": "grapes",
+          "chance": 0.154
+        },
+        {
           "itemId": "meat",
           "chance": 0.05
         },
@@ -7477,6 +8002,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7525,6 +8056,10 @@
       },
       "items": [
         {
+          "itemId": "grapes",
+          "chance": 0.154
+        },
+        {
           "itemId": "meat",
           "chance": 0.05
         },
@@ -7592,6 +8127,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7645,6 +8186,10 @@
         "max": 30
       },
       "items": [
+        {
+          "itemId": "grapes",
+          "chance": 0.154
+        },
         {
           "itemId": "meat",
           "chance": 0.05
@@ -7713,6 +8258,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8644,6 +9195,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8757,10 +9314,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/dazed_leaf_golem.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1578
     }
   },
   {
@@ -8937,6 +9505,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1047
     }
   },
   {
@@ -9108,6 +9681,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -9476,10 +10055,21 @@
     "runOnHealth": 2000,
     "staticAttack": 0.5,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/bigfoots_burden/bosses/deathstrike.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 892
     }
   },
   {
@@ -9633,10 +10223,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 910000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 910000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/hero_of_rathleton/deep_terror.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1087
     }
   },
   {
@@ -9904,6 +10505,12 @@
     "runOnHealth": 300,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -10142,6 +10749,12 @@
     "runOnHealth": 15,
     "staticAttack": 0.4,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -10252,6 +10865,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -10502,6 +11121,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -10584,6 +11209,12 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -10801,6 +11432,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -10816,6 +11453,11 @@
           "count": 4
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 87
     }
   },
   {
@@ -10936,6 +11578,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 910000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 910000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -11270,10 +11918,21 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/pits_of_inferno/dracola.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 302
     }
   },
   {
@@ -11674,6 +12333,12 @@
     "runOnHealth": 300,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -11782,6 +12447,12 @@
     "runOnHealth": 366,
     "staticAttack": 0.9,
     "corpseTtlMs": 370000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 370000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -12015,6 +12686,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 570000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 570000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -12277,6 +12954,12 @@
     },
     "staticAttack": 0.85,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -12689,6 +13372,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -12704,6 +13393,11 @@
           "count": 4
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1758
     }
   },
   {
@@ -12870,6 +13564,12 @@
     "runOnHealth": 1,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -13017,6 +13717,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -13811,6 +14517,12 @@
     "runOnHealth": 1,
     "staticAttack": 0.85,
     "corpseTtlMs": 510000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 510000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -13890,6 +14602,12 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -14004,6 +14722,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -14245,6 +14969,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -14455,6 +15185,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -14470,6 +15206,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 569
     }
   },
   {
@@ -14792,10 +15533,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_dream_courts/bosses/faceless_bane.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1727
     }
   },
   {
@@ -14972,6 +15724,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -15115,6 +15873,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -15311,6 +16075,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 70000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 70000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -15545,6 +16315,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 510000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 510000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -15743,6 +16519,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 510000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 510000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -15809,6 +16591,12 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -16077,6 +16865,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -16539,10 +17333,21 @@
     "runOnHealth": 400,
     "staticAttack": 0.9,
     "corpseTtlMs": 570000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 570000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_first_dragon/bosses/gelidrazah_the_frozen.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1379
     }
   },
   {
@@ -16788,10 +17593,21 @@
     },
     "staticAttack": 0.98,
     "corpseTtlMs": 600000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 600000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/bosses/ghulosh.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1608
     }
   },
   {
@@ -17077,6 +17893,12 @@
     "staticAttack": 0.95,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -17280,10 +18102,21 @@
     "runOnHealth": 10000,
     "staticAttack": 0.5,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/bigfoots_burden/bosses/gnomevil.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 893
     }
   },
   {
@@ -17561,6 +18394,12 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 3600000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 3600000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -17898,6 +18737,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_inquisition/golgordan.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 416
     }
   },
   {
@@ -18102,6 +18946,12 @@
     "runOnHealth": 600,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -18316,6 +19166,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/bosses/gorzindel.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1591
     }
   },
   {
@@ -18500,10 +19355,21 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 1810000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 1810000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/soul_war/goshnars_malice.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1901
     }
   },
   {
@@ -18731,10 +19597,21 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/bosses/grand_canon_dominus.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1584
     }
   },
   {
@@ -18973,10 +19850,21 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 610000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 610000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/bosses/grand_chaplain_gaunder.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1579
     }
   },
   {
@@ -19131,10 +20019,21 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/bosses/grand_commander_soeren.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1582
     }
   },
   {
@@ -19345,10 +20244,21 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/bosses/grand_master_oberon.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1576
     }
   },
   {
@@ -19399,6 +20309,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -19511,6 +20427,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 460000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 460000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -19857,6 +20779,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -20179,10 +21107,21 @@
     },
     "staticAttack": 0.85,
     "corpseTtlMs": 370000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 370000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_inquisition/hellgorak.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 403
     }
   },
   {
@@ -20324,6 +21263,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -20573,6 +21518,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -20588,6 +21539,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 713
     }
   },
   {
@@ -20845,6 +21801,12 @@
     "runOnHealth": 350,
     "staticAttack": 0.9,
     "corpseTtlMs": 370000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 370000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -20991,6 +21953,12 @@
     "runOnHealth": 1,
     "staticAttack": 0.85,
     "corpseTtlMs": 510000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 510000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -21101,6 +22069,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -21209,6 +22183,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -21319,6 +22299,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -21529,10 +22515,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 460000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 460000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/feaster_of_souls/irgix_the_flimsy.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1890
     }
   },
   {
@@ -21831,10 +22828,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 370000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 370000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_dream_courts/bosses/izcandar_the_banished.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 1699
     }
   },
   {
@@ -21971,6 +22979,12 @@
     "runOnHealth": 1,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -22086,10 +23100,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/jailer.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1577
     }
   },
   {
@@ -22432,10 +23457,21 @@
     "runOnHealth": 60,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/liquid_black/jaul.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 773
     }
   },
   {
@@ -22723,6 +23759,12 @@
     "runOnHealth": 800,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -22738,6 +23780,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1389
     }
   },
   {
@@ -22976,6 +24023,12 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -23233,10 +24286,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/grave_danger/bosses/king_zelos.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1784
     }
   },
   {
@@ -23430,6 +24494,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -23707,6 +24777,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_inquisition/latrivan.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 417
     }
   },
   {
@@ -23992,6 +25067,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -24104,6 +25185,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 460000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 460000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -24310,6 +25397,12 @@
     "runOnHealth": 600,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -24428,6 +25521,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -24780,6 +25879,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "manaCost": 260,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -24858,6 +25964,13 @@
     "runOnHealth": 5,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "manaCost": 315,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -24950,6 +26063,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 610000,
+        "untilMs": 670000
+      }
+    ],
+    "manaCost": 305,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -25043,6 +26163,13 @@
     "runOnHealth": 5,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "manaCost": 310,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -25130,6 +26257,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
+    "manaCost": 205,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -25387,6 +26521,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -25577,6 +26717,12 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -25871,6 +27017,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_inquisition/madareth.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 414
     }
   },
   {
@@ -26122,6 +27273,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -26513,10 +27670,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_dream_courts/bosses/malofur_mangrinder.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 1696
     }
   },
   {
@@ -26669,10 +27837,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 2110000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 2110000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/pits_of_inferno/massacre.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 305
     }
   },
   {
@@ -26939,6 +28118,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -26995,6 +28180,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -27143,10 +28334,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/isle_of_evil/mephiles.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 566
     }
   },
   {
@@ -27255,6 +28457,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 460000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 460000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -27450,6 +28658,12 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -27677,6 +28891,12 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -27923,6 +29143,7 @@
       "random": 10
     },
     "staticAttack": 0.95,
+    "manaCost": 390,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -28058,6 +29279,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 2110000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 2110000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -28073,6 +29300,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 568
     }
   },
   {
@@ -28311,6 +29543,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -28326,6 +29564,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 84
     }
   },
   {
@@ -28481,10 +29724,21 @@
     "runOnHealth": 10,
     "staticAttack": 1,
     "corpseTtlMs": 610000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 610000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/kilmaresh/mozradek.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1829
     }
   },
   {
@@ -28541,10 +29795,21 @@
     "runOnHealth": 2000,
     "staticAttack": 0.5,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/pits_of_inferno/mr._punish.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 303
     }
   },
   {
@@ -29037,10 +30302,21 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/kilmaresh/neferi_the_spy.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 2105
     }
   },
   {
@@ -29143,6 +30419,12 @@
     "runOnHealth": 30,
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -29268,6 +30550,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -29839,10 +31127,21 @@
     "runOnHealth": 60,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/liquid_black/obujos.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 774
     }
   },
   {
@@ -30055,6 +31354,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -30070,6 +31375,11 @@
           "count": 4
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 90
     }
   },
   {
@@ -30204,6 +31514,12 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -30319,6 +31635,12 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -30426,6 +31748,12 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -30507,6 +31835,12 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -30895,6 +32229,12 @@
     "runOnHealth": 1,
     "staticAttack": 0.85,
     "corpseTtlMs": 510000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 510000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -31113,6 +32453,12 @@
     "runOnHealth": 50,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -31166,6 +32512,12 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -31513,6 +32865,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -31736,6 +33094,12 @@
     "runOnHealth": 5000,
     "staticAttack": 0.98,
     "corpseTtlMs": 960000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 300000,
+        "untilMs": 960000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -32147,10 +33511,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/bosses/preceptor_lazare.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1583
     }
   },
   {
@@ -32301,6 +33676,12 @@
     "runOnHealth": 2000,
     "staticAttack": 0.9,
     "corpseTtlMs": 370000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 370000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -32405,6 +33786,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -32678,6 +34065,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -32693,6 +34086,11 @@
           "count": 1
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 88
     }
   },
   {
@@ -32913,6 +34311,11 @@
           "count": 1
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 2006
     }
   },
   {
@@ -33165,6 +34568,12 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 310000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 310000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -33357,6 +34766,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -33592,6 +35007,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -33744,6 +35165,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "manaCost": 580,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -34204,6 +35626,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -34644,6 +36072,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -34686,6 +36120,12 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -34982,6 +36422,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 370000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 370000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -35311,6 +36757,12 @@
     "runOnHealth": 1,
     "staticAttack": 0.85,
     "corpseTtlMs": 510000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 510000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -35447,6 +36899,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -35518,6 +36976,231 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/svargrond_arena/greenhorn/rocky.lua"
+    }
+  },
+  {
+    "id": "scarlett-etzel",
+    "name": "Scarlett Etzel",
+    "health": 30000,
+    "experience": 20000,
+    "attack": {
+      "min": 0,
+      "max": 1200
+    },
+    "armor": 88,
+    "defense": 88,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 175,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.87,
+        "min": 100,
+        "max": 900
+      },
+      "items": [
+        {
+          "itemId": "green-gem",
+          "chance": 0.85
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.425
+        },
+        {
+          "itemId": "magma-coat",
+          "chance": 0.166
+        },
+        {
+          "itemId": "terra-rod",
+          "chance": 0.011
+        },
+        {
+          "itemId": "violet-gem",
+          "chance": 0.09
+        },
+        {
+          "itemId": "terra-legs",
+          "chance": 0.085
+        },
+        {
+          "itemId": "terra-hood",
+          "chance": 0.074
+        },
+        {
+          "itemId": "terra-mantle",
+          "chance": 0.0725
+        },
+        {
+          "itemId": "magma-amulet",
+          "chance": 0.055
+        },
+        {
+          "itemId": "gold-ingot",
+          "chance": 0.05
+        },
+        {
+          "itemId": "terra-amulet",
+          "chance": 0.048
+        },
+        {
+          "itemId": "giant-sapphire",
+          "chance": 0.048
+        },
+        {
+          "itemId": "magma-monocle",
+          "chance": 0.037
+        },
+        {
+          "itemId": "cobra-crossbow",
+          "chance": 0.006
+        },
+        {
+          "itemId": "cobra-hood",
+          "chance": 0.004
+        },
+        {
+          "itemId": "cobra-rod",
+          "chance": 0.0065
+        },
+        {
+          "itemId": "cobra-wand",
+          "chance": 0.0065
+        },
+        {
+          "itemId": "cobra-amulet",
+          "chance": 0.0035
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 1200
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "suddendeath",
+        "cadenceMs": 2000,
+        "chance": 0.16,
+        "target": {
+          "range": 11
+        },
+        "power": {
+          "min": 400,
+          "max": 600
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "holybeam",
+        "cadenceMs": 2000,
+        "chance": 0.13,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 450,
+          "max": 640
+        },
+        "damageType": "holy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "holyarea"
+        }
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 3,
+          "area": {
+            "shape": "circle",
+            "radius": 5,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 480,
+          "max": 800
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "explosionhit"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/grave_danger/bosses/scarlett_etzel.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1804
     }
   },
   {
@@ -35721,6 +37404,12 @@
     "runOnHealth": 50,
     "staticAttack": 0.9,
     "corpseTtlMs": 60000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 60000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -36030,6 +37719,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -36215,6 +37910,12 @@
     "runOnHealth": 300,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -36230,6 +37931,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1561
     }
   },
   {
@@ -36320,6 +38026,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -36624,6 +38336,12 @@
     },
     "staticAttack": 0.5,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -36840,6 +38558,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -36855,6 +38579,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1755
     }
   },
   {
@@ -37008,6 +38737,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -37023,6 +38758,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1754
     }
   },
   {
@@ -37171,6 +38911,12 @@
     "runOnHealth": 1,
     "staticAttack": 0.85,
     "corpseTtlMs": 510000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 510000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -37691,6 +39437,12 @@
     "runOnHealth": 30,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -37801,6 +39553,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 510000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 510000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -38391,6 +40149,12 @@
     "runOnHealth": 1,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -39562,6 +41326,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -39908,6 +41678,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -40463,10 +42239,21 @@
     "runOnHealth": 60,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/liquid_black/tanjis.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 775
     }
   },
   {
@@ -40769,6 +42556,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/ferumbras_ascension/bosses/tarbaz.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1188
     }
   },
   {
@@ -40980,10 +42772,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 570000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 570000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_first_dragon/bosses/tazhadur.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1390
     }
   },
   {
@@ -41110,6 +42913,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/cults_of_tibia/bosses/the_armored_voidborn.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1406
     }
   },
   {
@@ -41236,6 +43044,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -41561,10 +43375,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/dangerous_depth/bosses/the_baron_from_below.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1518
     }
   },
   {
@@ -41676,10 +43501,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/the_blazing_rose.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1600
     }
   },
   {
@@ -41749,6 +43585,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 370000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 370000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -41946,6 +43788,12 @@
     },
     "staticAttack": 0.6,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -41999,6 +43847,12 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -42131,6 +43985,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -42439,10 +44299,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/dangerous_depth/bosses/the_count_of_the_core.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1519
     }
   },
   {
@@ -42760,6 +44631,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -42872,10 +44749,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 620000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 620000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/the_diamond_blossom.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1598
     }
   },
   {
@@ -42938,6 +44826,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -43230,10 +45124,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/dangerous_depth/bosses/the_duke_of_the_depths.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1520
     }
   },
   {
@@ -43662,10 +45567,21 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 3610000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 3610000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/forgotten_knowledge/bosses/the_enraged_thorn_knight.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1297
     }
   },
   {
@@ -43865,6 +45781,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/cults_of_tibia/bosses/the_false_god.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1409
     }
   },
   {
@@ -44148,10 +46069,21 @@
     "runOnHealth": 1,
     "staticAttack": 0.95,
     "corpseTtlMs": 460000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 460000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/feaster_of_souls/the_fear_feaster.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1873
     }
   },
   {
@@ -44371,6 +46303,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -44755,10 +46693,21 @@
     "runOnHealth": 3100,
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/pits_of_inferno/the_handmaiden.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 301
     }
   },
   {
@@ -44929,6 +46878,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 510000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 510000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -45229,10 +47184,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 620000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 620000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_secret_library/the_lily_of_night.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1602
     }
   },
   {
@@ -45455,6 +47421,12 @@
     "runOnHealth": 300,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -45797,6 +47769,12 @@
     "runOnHealth": 275,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -46190,6 +48168,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -46505,10 +48489,21 @@
     "runOnHealth": 1,
     "staticAttack": 0.95,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/feaster_of_souls/the_pale_worm.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1881
     }
   },
   {
@@ -46944,10 +48939,21 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/cults_of_tibia/bosses/the_sandking.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1444
     }
   },
   {
@@ -47061,6 +49067,12 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -47171,6 +49183,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -47361,10 +49379,21 @@
     "runOnHealth": 2500,
     "staticAttack": 0.9,
     "corpseTtlMs": 370000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 370000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/ferumbras_ascension/bosses/the_shatterer.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1165
     }
   },
   {
@@ -47653,6 +49682,12 @@
     "runOnHealth": 30,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -47763,6 +49798,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 370000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 370000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -47963,10 +50004,21 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 600000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 600000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/cults_of_tibia/bosses/the_unarmored_voidborn.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1406
     }
   },
   {
@@ -48262,6 +50314,12 @@
     "runOnHealth": 1,
     "staticAttack": 0.95,
     "corpseTtlMs": 460000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 460000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -48277,6 +50335,11 @@
           "count": 3
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1868
     }
   },
   {
@@ -48401,6 +50464,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -48916,6 +50985,12 @@
     "runOnHealth": 300,
     "staticAttack": 0.9,
     "corpseTtlMs": 400000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 400000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -48999,6 +51074,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 390,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -49209,6 +51292,12 @@
     "runOnHealth": 1,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -49338,6 +51427,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -49530,10 +51625,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 460000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 460000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/feaster_of_souls/unaz_the_mean.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1891
     }
   },
   {
@@ -49977,6 +52083,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -50160,6 +52272,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -50767,10 +52885,21 @@
     },
     "staticAttack": 0.85,
     "corpseTtlMs": 370000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 370000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_inquisition/ushuriel.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 415
     }
   },
   {
@@ -51050,6 +53179,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -51065,6 +53200,11 @@
           "count": 2
         }
       ]
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 85
     }
   },
   {
@@ -51349,10 +53489,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 460000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 460000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/feaster_of_souls/vok_the_freakish.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1892
     }
   },
   {
@@ -51459,6 +53610,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -51509,6 +53666,12 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 510000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 510000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -51910,6 +54073,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 300000,
+    "manaCost": 100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -52225,6 +54389,13 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 460000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 460000
+      }
+    ],
+    "convinceable": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -52412,6 +54583,217 @@
     }
   },
   {
+    "id": "xogixath",
+    "name": "Xogixath",
+    "health": 28000,
+    "experience": 22000,
+    "attack": {
+      "min": 0,
+      "max": 650
+    },
+    "armor": 86,
+    "defense": 86,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "ice": -0.1,
+        "death": 0.5
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 190,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 100,
+        "max": 900
+      },
+      "items": [
+        {
+          "itemId": "green-crystal-shard",
+          "chance": 0.16
+        },
+        {
+          "itemId": "sea-horse-figurine",
+          "chance": 0.024
+        },
+        {
+          "itemId": "winged-boots",
+          "chance": 0.0012
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.48,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "stone-skin-amulet",
+          "chance": 0.54
+        },
+        {
+          "itemId": "gryphon-mask",
+          "chance": 0.065
+        },
+        {
+          "itemId": "fire-axe",
+          "chance": 0.34
+        },
+        {
+          "itemId": "enchanted-blister-ring",
+          "chance": 0.0052
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 650
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "suddendeath",
+        "cadenceMs": 2000,
+        "chance": 0.16,
+        "target": {
+          "range": 5
+        },
+        "power": {
+          "min": 450,
+          "max": 550
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 2000,
+        "chance": 0.14,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 400,
+          "max": 480
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "firearea"
+        }
+      },
+      {
+        "id": "fireburst",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 400,
+          "max": 550
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "explosionhit"
+        }
+      },
+      {
+        "id": "firewave",
+        "cadenceMs": 2000,
+        "chance": 0.12,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3
+            ]
+          }
+        },
+        "power": {
+          "min": 420,
+          "max": 600
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "hitbyfire"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 610000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 610000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/kilmaresh/xogixath.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 1827
+    }
+  },
+  {
     "id": "yalahari",
     "name": "Yalahari",
     "health": 150,
@@ -52459,6 +54841,12 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -52569,6 +54957,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -52617,6 +55011,12 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 60000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 60000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -52902,10 +55302,21 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/ancient_feud/yirkas_blue_scales.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "archfoe",
+      "raceId": 1982
     }
   },
   {
@@ -53266,6 +55677,12 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -53547,6 +55964,11 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/the_inquisition/zugurosh.lua"
+    },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "bane",
+      "raceId": 434
     }
   }
 ]

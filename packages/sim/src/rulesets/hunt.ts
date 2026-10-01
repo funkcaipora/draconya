@@ -18,25 +18,28 @@
 
 import {
   BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY,
-  INVISIBLE_CONDITION_KEY, ITEM_SLOTS, SPELL_SKILL_WEAPON, fieldStagesOf, floorChangeAt,
+  FEARED_CONDITION_KEY, INVISIBLE_CONDITION_KEY, ITEM_SLOTS, PACIFIED_CONDITION_KEY,
+  ROOTED_CONDITION_KEY, SPELL_SKILL_WEAPON, fieldStagesOf, floorChangeAt,
   floorChangeToward, isBlocked, migrateBotConfigV1,
 } from '@draconya/content';
 import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, BotLoot, Charm, Combat,
   CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, FieldStage, Hunt,
   Item, ItemSlot, Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange,
-  PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina,
-  Supply, Tilemap, Vocation, WeaponFamily, WeaponProfile,
+  PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Skinning, Spell, SpellArea, SpellEffect,
+  SpawnPoint, Stamina, Supply, Tilemap, Training, Vocation, WeaponFamily, WeaponProfile,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, FORWARD, isSelfOrigin, tileKey } from '../area.js';
 import type { AreaSource, Direction } from '../area.js';
 import {
-  NOT_IN_CATALOG, NOT_SUMMONABLE, actionExhaustKey, balanceOf, castSpell, executeHealing,
-  groupCooldownKey, ownPurse, spellCooldownKey, supplyCooldownKey, useSupply,
+  HAS_SUMMONS, NOT_ENOUGH_ROOM, NOT_IN_CATALOG, NOT_POSSIBLE, NOT_SUMMONABLE, TOO_MANY_SUMMONS, actionExhaustKey,
+  balanceOf, castSpell, executeHealing, groupCooldownKey, ownPurse, spellCooldownKey, supplyCooldownKey, useSupply,
 } from '../casting.js';
-import type { CastRefused, CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
-import type { ConditionState } from '../conditions.js';
+import type {
+  CastRefused, CastResult, CastSuccess, Purse, SpellAim, SpellScaling, SpellTarget, UtilityRefusal,
+} from '../casting.js';
+import type { ConditionState, FleeState } from '../conditions.js';
 import {
   advanceTick, conditionFromSpec, conditionImmunityOf, retiredTick, rollDrunkDeviation, sameTick,
   specTickIntervalMs, tickOf,
@@ -44,11 +47,13 @@ import {
 import type { NormalizedTick } from '../conditions.js';
 import { Fields } from '../fields.js';
 import type { TileFieldState } from '../fields.js';
+import { NO_FLEE_INDEX, fleePath, initialFleeIndex, stepFrom } from '../fear.js';
+import type { FleeMap } from '../fear.js';
 import { chestStorageKeyOf, isDoorKind, isToggleable, TileOverrides } from '../tile-overrides.js';
 import type { InteractableKind, InteractableTool, TileOverrideState } from '../tile-overrides.js';
 import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
-import { hasCharmStage } from '../combat/profile.js';
+import { hasCharmStage, hasSkinningStage } from '../combat/profile.js';
 import {
   ADRENALINE_BURST_CONDITION, ActionCritical, CHARM_PARALYZE_CONDITION, CLEANSE_IMMUNITY_MS,
   FATAL_HOLD_MS, carnageCharmDamage, charmAttackBonus, charmChance, cleanseTypeOfCondition,
@@ -82,12 +87,17 @@ import { missShotTile, rollDistanceHit } from '../combat/distance-hit.js';
 import {
   afterAttackBlock, afterShieldBlock, distanceTries, meleeTries,
 } from '../combat/attack-practice.js';
-import { forgetActor, recordDamage, resolveDeath } from '../death.js';
+import { DEPARTED_ACTOR, forgetActor, foldActor, recordDamage, resolveDeath } from '../death.js';
+import { FAMILIAR_TELEPORT_DISTANCE, familiarTileOrder } from '../familiar.js';
 import type { KillCredit, Victim } from '../death.js';
 import type { BestiaryConfig } from '../bestiary.js';
+import type { BosstiaryConfig } from '../bosstiary.js';
 import { pickByWeight, Spawner } from '../hunt/spawner.js';
 import type { SpawnArea, SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
+import {
+  SCAVENGE_CHARM_ID, rollSkinning, scavengeChanceFor, skinningChanceRange, skinningStageAt,
+} from '../skinning.js';
 import {
   applyAttackRate, applyRate, creatureRatesFor, experienceRateFor, skillRateFor,
 } from '../rates.js';
@@ -105,14 +115,18 @@ import { compileAutomations } from '../automation.js';
 import type { AutomationActuator, CompiledAutomations } from '../automation.js';
 import {
   CHALLENGE_CONDITION_KEY, FATAL_HOLD_CONDITION_KEY, MonsterRuntime, canMonsterEnterField, chooseTarget,
-  decideMonsterAction, decideUnengagedMove, isInSpawnRange, isMonsterFleeing, monsterSubject,
-  nearestPrey, seesInvisible,
+  decideMonsterAction, decideUnengagedMove, hasActiveCondition, isInSpawnRange, isMonsterFleeing,
+  monsterSubject, nearestPrey, seesInvisible, summonFollowStep,
 } from '../monster/monster.js';
-import type { MonsterState, Prey } from '../monster/monster.js';
+import type { MonsterState, Prey, SummonFollow } from '../monster/monster.js';
 import { abilityBlockFlags, abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
+import {
+  FACTION_DEFAULT, FACTION_PLAYER, buildFactionTable, reachableMonsterIds,
+} from '../monster/faction.js';
+import type { FactionInfo } from '../monster/faction.js';
 import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
 import {
-  danceStep, distance, fleeStep, greedyStep, sameFloor, shuffledCardinals,
+  canSeePoint, danceStep, distance, fleeStep, greedyStep, sameFloor, shuffledCardinals,
 } from '../monster/step.js';
 import { isSightClear } from '../line-of-sight.js';
 import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from '../targeting.js';
@@ -125,7 +139,8 @@ import {
   containerRulesFor, equipmentAbsorb, equipmentCleavePercent, equipmentReflect, immunitiesOnly,
 } from '../inventory.js';
 import {
-  TileOccupancy, canOccupy, move, movementDuration, place, placeNear, tilesAround,
+  TileOccupancy, canOccupy, move, movementDuration, place, placeNear, relocate, swapPlaces,
+  tilesAround,
 } from '../movement.js';
 import type { Movable, MoveResult, WorldPoint } from '../movement.js';
 import type { RouteState } from '../route/walker.js';
@@ -134,6 +149,7 @@ import type { ScheduledEvent } from '../schedule.js';
 import { powerMultiplier, skillFactorFor } from '../skills.js';
 import { drainStamina, isExhausted } from '../stamina.js';
 import { drainFedMs, feed as feedCharacter, FOOD_CAP_MS } from '../food.js';
+import { findRelation, levitateDestination, ropeDestination } from '../utility-spells.js';
 import { blessingCount } from '../blessings.js';
 import { consumeLossAmulet, loseItemsOnDeath } from '../item-loss.js';
 import type { ItemLossOutcome } from '../item-loss.js';
@@ -205,6 +221,20 @@ const SUMMON_SPAWN_RADIUS = 1;
  * o usa.
  */
 const PLAYER_SUMMON_CAP = 2;
+/**
+ * O fim da vida de um familiar (#599, M38-02, ADR 0057 d.3): `addEvent(RemoveFamiliar, timeLeft *
+ * 1000, …)` do Canary, um evento da FILA da sessão (invariante 2), nunca contagem por tick. O
+ * subject é o `m:<id>` do próprio familiar — a morte dele (`resolveDeath`) e a saída do mestre
+ * (`#removeSummon`) já cancelam por esse subject, sem varrer a fila.
+ */
+const FAMILIAR_EXPIRE = 'familiar-expire';
+
+/** O efeito `familiar` de uma magia (#599) e a magia que o carrega — o que o ruleset indexa por vocação. */
+type FamiliarEffect = Extract<SpellEffect, { readonly kind: 'familiar' }>;
+interface FamiliarSpellRef {
+  readonly spell: Spell;
+  readonly effect: FamiliarEffect;
+}
 /**
  * Os quatro vizinhos ORTOGONAIS que o Carnage atinge, na ordem do Canary
  * (`iobestiary.cpp: offsets = {{-1,0},{1,0},{0,-1},{0,1}}`).
@@ -281,6 +311,19 @@ const PENDING_MANUAL_ACTION = 'pending-manual-action';
 const MANUAL_ITEM_EXHAUST_MS = 1_000;
 
 /**
+ * O resultado da esfola do bot no abate (#626). `afterTtlMs` só existe quando HOUVE sorteio — é
+ * ele que diz "tentou": a vida que o cadáver passa a ter (do estágio em que foi esfolado; o
+ * `transform(skin.after)` do Canary reinicia o decaimento). `material` é o que o sorteio rendeu.
+ */
+interface SkinAtDeath {
+  readonly material: LootItem | null;
+  readonly afterTtlMs: number | undefined;
+}
+
+/** O abate sem esfola: sem ferramenta, sem monstro esfolável ou fora do `combat-v4` (#626). */
+const NO_SKIN: SkinAtDeath = { material: null, afterTtlMs: undefined };
+
+/**
  * O vencimento de um item equipado por TEMPO (ADR 0032 d.8): o anel que gasta por duração. É
  * um evento da fila, agendado no equip e cancelado no desequip (invariante 2) — nunca um
  * `remainingMs -= dtMs`. O subject é `<characterId>:<slot>`, o que permite cancelar por slot.
@@ -352,6 +395,43 @@ const conditionSubject = (targetId: string, key: string): string => `${targetId}
  */
 const VISIBILITY_THINK = 'visibility-think';
 const VISIBILITY_THINK_INTERVAL_MS = 1_000;
+/**
+ * O pensamento do PERSONAGEM (`Game::checkCreatures`, `game.cpp:7726`): o Canary roda `onThink`,
+ * `onAttacking` e `executeConditions` de cada criatura UMA vez por `EVENT_CREATURE_THINK_INTERVAL`
+ * (1000 ms, `creature.hpp:47`), numa fase própria e sorteada ao entrar no jogo
+ * (`Game::addCreatureCheck`). O `sim` não tem um relógio de think por criatura (invariante 2): a
+ * fase é SORTEADA UMA VEZ por personagem, com o `Rng` da sessão, na primeira vez que alguém precisa
+ * dela (`#thinkDelayMs`), e persiste no snapshot (`RunnerState.thinkPhaseMs`) — é a grade de
+ * pensamentos do personagem, a mesma para o medo e para a retomada do golpe. Quem depende do
+ * pensamento é AGENDADO para o próximo instante da grade, nunca um evento por segundo.
+ */
+const CREATURE_THINK_INTERVAL_MS = 1_000;
+/**
+ * O pensamento da condição `feared` do PERSONAGEM (M44-04, #622): o `ConditionFeared::
+ * executeCondition` do Canary, no pensamento do personagem (`CREATURE_THINK_INTERVAL_MS`). É
+ * AGENDADO quando o medo começa, no próximo instante da grade do personagem, e se re-arma a cada
+ * 1000 ms até o primeiro pensamento DEPOIS do prazo — que fecha a condição (o Canary só a limpa
+ * nesse pensamento, e a fuga do último pensamento sai antes de a condição fechar). O `subject` é o
+ * `characterId`. Não há `CONDITION_EXPIRE` para o `feared` de personagem: quem o encerra é este
+ * evento.
+ */
+const FEAR_THINK = 'fear-think';
+/**
+ * O pensamento que RETOMA o golpe depois de `pacified` (M44-04, #622): `Player::doAttacking` volta
+ * antes de qualquer golpe sob a condição (`player.cpp:3982`) e NINGUÉM re-arma o ataque quando ela
+ * acaba — a cadeia de golpes do Canary morre ali, e o próximo golpe sai no primeiro gatilho depois
+ * do prazo: o pensamento seguinte do personagem (`Game::checkCreatures` chama `onAttacking`) ou um
+ * passo dele/do alvo (`Creature::onCreatureMove`, o `#armPlayerAttack` deste motor). Este evento é
+ * o pensamento: agendado UMA vez por pacificação, no primeiro instante da grade do personagem a
+ * partir do vencimento. O `subject` é o `characterId`.
+ */
+const ATTACK_THINK = 'attack-think';
+/**
+ * A imunidade a novo medo depois que um acaba (`Player::setImmuneFear()`, `player.cpp:1930`,
+ * default `10000`): 10 s em que `Combat::checkFearConditionAffected` recusa reaplicar. O Cleanse
+ * dá 11 s (`CLEANSE_IMMUNITY_MS`). Mesma janela do mapa `cleanseImmunity`, chave `feared`.
+ */
+const FEAR_IMMUNITY_MS = 10_000;
 /**
  * A chave e a duração do `CONDITION_SOUL` do Canary (#593, `Player::onGainExperience`,
  * `data/events/scripts/player.lua`): quatro minutos, fixo — não é `_open` porque o Canary não
@@ -472,8 +552,13 @@ export type SlotRefusal =
   | 'empty-slot' | 'wrong-set' | 'disabled' | 'not-in-catalog' | 'magic-level-too-low'
   | 'not-enough-mana' | 'not-enough-soul' | 'not-enough-gold' | 'not-enough-item' | 'no-target' | 'out-of-range'
   | 'on-cooldown' | 'group-cooldown'
-  /** Stairhop (#554, M30-07): a magia é agressiva e a trava de ataque ainda não venceu. */
+  /**
+   * A condição `pacified` (#554 → M44-04, #622 — a trava de escada e qualquer outra fonte): a
+   * magia ou a runa é agressiva e a pacificação ainda não venceu.
+   */
   | 'attack-locked'
+  /** A condição `feared` (M44-04, #622): sob medo nenhuma magia nem runa sai; poção sai. */
+  | 'feared'
   /**
    * Magia AGRESSIVA (`damage`/`damage-over-time`) disparada na Cidade (#792, ADR 0044 d.2): a
    * Cidade é protect zone (ADR 0004, §37) — combate nunca sai dali, só conjuração e o resto do
@@ -484,7 +569,28 @@ export type SlotRefusal =
    * A invocação (#598, M38-01, ADR 0057 decisão 3): sem `monsterId`, monstro fora do catálogo,
    * não `summonable`, ou teto de 2 invocações vivas já atingido.
    */
-  | 'not-summonable';
+  | 'not-summonable'
+  /** O familiar (#599): já há uma invocação viva — o teto dele é zero (`player.lua`). */
+  | 'has-summons'
+  /** O familiar (#599): nenhum tile livre em volta do mestre (`RETURNVALUE_NOTENOUGHROOM`). */
+  | 'not-enough-room'
+  /**
+   * A magia do slot ainda não foi APRENDIDA (#624, ADR 0058 d.1): `learn-spell` a compra. O slot
+   * continua na barra, marcado — nada é escondido (ADR 0032 d.5) —, e o disparo é recusado com
+   * este motivo, próprio para o tooltip dizer "aprenda" em vez de "indisponível".
+   */
+  | 'not-learned'
+  /**
+   * As duas runas de invocação restantes (#600, M38-03): o alvo não serve — Convince num monstro
+   * não `convinceable` ou que já tem mestre, Animate Dead sem cadáver movível no tile (o
+   * `RETURNVALUE_NOTPOSSIBLE` do Canary) — e o teto de 2 invocações vivas contra elas ("You cannot
+   * control more creatures.", `too-many-summons`). `not-possible` é também a recusa de Levitate e
+   * Magic Rope sem destino (#623), e às utilitárias se somam Magic Rope sem onde pousar
+   * (`not-enough-room`), Find Person sem o alvo na sessão (`person-not-found`) e Find Fiend sem
+   * monstro fiendish (`no-creatures-around`) — as do `RETURNVALUE_*` do Canary.
+   */
+  | 'not-possible' | 'too-many-summons'
+  | 'not-enough-room' | 'person-not-found' | 'no-creatures-around';
 
 /** O resultado do disparo manual: sucesso, ou recusa tipada com o prazo quando é cooldown. */
 export type SlotOutcome =
@@ -617,7 +723,16 @@ export function refusalOf(result: CastRefused): SlotRefusal {
     // `not-enough-item` fica reservado ao consumível FÍSICO (a carga de bênção de M22).
     case 'not-enough-gold': return 'not-enough-gold';
     case 'attack-locked': return 'attack-locked';
+    case 'feared': return 'feared';
     case 'not-summonable': return 'not-summonable';
+    case 'has-summons': return 'has-summons';
+    case 'not-enough-room': return 'not-enough-room';
+    case 'spell-not-learned': return 'not-learned';
+    case 'not-possible': return 'not-possible';
+    case 'too-many-summons': return 'too-many-summons';
+    case 'not-enough-room': return 'not-enough-room';
+    case 'person-not-found': return 'person-not-found';
+    case 'no-creatures-around': return 'no-creatures-around';
   }
 }
 
@@ -868,6 +983,9 @@ function runnerState(runner: Runner): RunnerState {
     ...(runner.regroupSinceMs === null ? {} : { regroupSinceMs: runner.regroupSinceMs }),
     ...(runner.manualWalkTo === null ? {} : { manualWalkTo: runner.manualWalkTo }),
     ...(runner.manualWalkHoldUntilMs === null ? {} : { manualWalkHoldUntilMs: runner.manualWalkHoldUntilMs }),
+    ...(runner.fearWalk === null ? {} : { fearWalk: runner.fearWalk }),
+    ...(runner.thinkPhaseMs === null ? {} : { thinkPhaseMs: runner.thinkPhaseMs }),
+    ...(runner.attackParked ? { attackParked: true } : {}),
   };
 }
 
@@ -1013,6 +1131,12 @@ export interface HuntRulesetOptions {
   readonly progression: Progression;
   readonly stamina: Stamina;
   /**
+   * O Treino do Tibia (#631, ADR 0059): aqui só interessa o TETO do banco de offline training
+   * (`offline.bankCapMs`), que cresce 1:1 com o tempo de hunt. Ausente é conteúdo de teste sem
+   * `training/`: o banco não cresce, e nada mais muda.
+   */
+  readonly training?: Training;
+  /**
    * A tabela da party (#190, ADR 0027). Sempre presente: solo é party de um, e `xpShare`
    * devolve a XP inteira sem ler a tabela.
    */
@@ -1045,11 +1169,23 @@ export interface HuntRulesetOptions {
    */
   readonly bestiary?: BestiaryConfig;
   /**
+   * Os níveis do Bosstiary por raridade (#629). Ausente é uma hunt em que o abate de boss conta,
+   * mas nenhum nível fecha e nenhum ponto de boss é ganho — o conteúdo de teste que não fala de
+   * progressão permanente, como `bestiary` ausente.
+   */
+  readonly bosstiary?: BosstiaryConfig;
+  /**
    * O catálogo dos 25 Charms do Canary (#602/#603, ADR 0053 d.3), por id. Só o `combat-v4`
    * (`hasCharmStage`) os rola; ausente é uma hunt em que nenhum charm dispara — o conteúdo de teste
    * que não fala de Charms, e todo personagem sem atribuição.
    */
   readonly charms?: ReadonlyMap<string, Charm>;
+  /**
+   * Como o cadáver de cada monstro esfolável é esfolado (#626, ADR 0048 d.5/d.6), por `monsterId`.
+   * Só o `combat-v4` (`hasSkinningStage`) esfola; ausente é uma hunt em que nenhuma ferramenta
+   * faz nada — o conteúdo de teste que não fala de esfola.
+   */
+  readonly skinning?: ReadonlyMap<string, Skinning>;
   readonly player: PlayerProfile;
   readonly exitRules?: readonly HuntExitRule[];
   /**
@@ -1112,6 +1248,13 @@ export interface HuntRulesetOptions {
  * `eligible` do abate (`null` em `splitLoot` — a bolsa é dona, e o cadáver não guarda nada).
  * Os quatro são OPCIONAIS na leitura (snapshot anterior a este ADR não os tem — `ausente` é
  * cadáver vazio, sem bump de `SNAPSHOT_FORMAT_VERSION`), mas sempre presentes ao criar.
+ *
+ * `diedAtMs`/`skinned` são da ESFOLA (#626): `diedAtMs` é o relógio lógico da morte — a idade do
+ * cadáver, que diz em que estágio da cadeia de decaimento ele está e, portanto, se a janela de
+ * esfola ainda está aberta —, e `skinned` marca que a esfola já foi tentada (com ou sem sucesso:
+ * o Canary transforma o cadáver no "esfolado" nos dois casos, e ele não é chave de tabela
+ * nenhuma). Opcionais na leitura pela mesma razão: snapshot anterior não os tem, e sem
+ * `diedAtMs` o cadáver não se esfola à mão (a idade é desconhecida — recusa em vez de adivinhar).
  */
 export interface CorpseState {
   readonly id: number;
@@ -1122,6 +1265,23 @@ export interface CorpseState {
   gold?: number;
   readonly ownerId?: string | null;
   readonly eligible?: readonly string[];
+  readonly diedAtMs?: number;
+  /**
+   * MUTÁVEL: vira `true` na primeira tentativa de esfola, do bot ou à mão — e é nela que o fim do
+   * cadáver é reagendado (`#retimeCorpse`): o decaimento recomeça no `after` do Canary.
+   */
+  skinned?: boolean;
+}
+
+/**
+ * O que `HuntRuleset#summonRunePrecondition` devolve para as duas runas de invocação (#600): a
+ * conferência que vai para `useSupply`, e o que a mira achou (o monstro do Convince, o cadáver da
+ * Animate Dead) para o efeito depois — capturado antes de `#spellHits` ser reaproveitado.
+ */
+interface SummonRuneCheck {
+  readonly check: () => CastRefused | null;
+  readonly target: MonsterRuntime | null;
+  readonly corpse: CorpseState | null;
 }
 
 /** A recusa comum a `openCorpse`/`takeLoot` (#722, ADR 0048 d.4). */
@@ -1613,6 +1773,33 @@ interface Runner {
    * chegar.
    */
   manualWalkHoldUntilMs: number | null;
+  /**
+   * A caminhada FORÇADA do medo (M44-04, #622): os passos que `ConditionFeared` entregou a
+   * `Game::forcePlayerAutoWalk` e que o personagem ainda não deu, na ORDEM de caminhada e como
+   * valores do enum `Direction` do Canary (`fear.ts`). `null` é "não está fugindo". Consumida um
+   * passo por vencimento de `PLAYER_STEP` (`#advanceFearWalk`) com PRIORIDADE ACIMA de tudo — a
+   * caminhada forçada substitui a lista de passos do próprio jogador (`startAutoWalk` limpa
+   * `listWalkDir`) —, e vazia (`[]`) é o `onWalkComplete` do Canary: o próximo vencimento reavalia
+   * a fuga (se o medo ainda vale) e só então solta. Precisa sobreviver a um snapshot pela mesma
+   * razão de `manualWalkTo`: fechar o navegador no meio da fuga não pode apagá-la (invariante 3).
+   */
+  fearWalk: readonly number[] | null;
+  /**
+   * A fase do pensamento do personagem (`CREATURE_THINK_INTERVAL_MS`), em [0, 1000) ms do relógio
+   * lógico: `Game::addCreatureCheck` sorteia a fase de cada criatura uma vez, e esta é a dela.
+   * Sorteada preguiçosamente por `#thinkDelayMs` e persistida — fechar o navegador no meio de uma
+   * pacificação não pode mover o instante em que o golpe volta (invariante 3). `null` é "ainda não
+   * sorteada".
+   */
+  thinkPhaseMs: number | null;
+  /**
+   * O golpe está ESTACIONADO esperando o primeiro gatilho depois de `pacified` (M44-04, #622,
+   * `#parkAttack`): `playerAttackReady` verdadeiro, nenhum `PLAYER_ATTACK` na fila e um
+   * `ATTACK_THINK` agendado. Só o pensamento (ou um passo do personagem ou do alvo, depois do
+   * vencimento) o solta — os gatilhos genéricos de `#armPlayerAttack` passam a ignorá-lo, porque a
+   * cadeia de golpes do Canary morreu e um personagem parado nunca a reacende por conta própria.
+   */
+  attackParked: boolean;
 }
 
 /**
@@ -1698,6 +1885,18 @@ export interface RunnerState {
   readonly manualWalkTo?: { readonly destination: FloorPoint; readonly path: readonly GridPoint[] };
   /** Até quando o bot fica pausado depois de chegar (#763). Ausente/`null` é fora da janela. */
   readonly manualWalkHoldUntilMs?: number | null;
+  /**
+   * Os passos que faltam da caminhada forçada do medo (M44-04, #622) — ver `Runner.fearWalk`.
+   * Ausente é "não está fugindo", o que todo snapshot anterior a esta issue tem.
+   */
+  readonly fearWalk?: readonly number[];
+  /**
+   * A fase do pensamento do personagem (M44-04, #622) — ver `Runner.thinkPhaseMs`. Ausente é "ainda
+   * não sorteada", o que todo snapshot anterior a esta issue tem.
+   */
+  readonly thinkPhaseMs?: number;
+  /** O golpe está estacionado esperando o pensamento depois de `pacified` (M44-04, #622) — ver `Runner.attackParked`. */
+  readonly attackParked?: boolean;
 }
 
 export class HuntRuleset implements Ruleset {
@@ -1749,6 +1948,13 @@ export class HuntRuleset implements Ruleset {
    */
   readonly #injectedExitRules: readonly HuntExitRule[];
   #spawner: Spawner;
+  /**
+   * A facção dos monstros que PODEM nascer nesta hunt (#619) — só os que têm facção, por
+   * `monsterId`. Vazia é o caso comum (`#hasFactions` falso), e todo caminho novo do #619 sai por
+   * ela: sem facção nenhuma, escolha de alvo, área e morte são as de antes, bit a bit.
+   */
+  readonly #factions: ReadonlyMap<string, FactionInfo>;
+  readonly #hasFactions: boolean;
   #monsters: MonsterRuntime[] = [];
   /**
    * Índice `"m:<id>"` → monstro, para o despacho de evento não varrer a lista.
@@ -1758,6 +1964,20 @@ export class HuntRuleset implements Ruleset {
    * instância é o número que a FUN-46 cobra.
    */
   readonly #monsterBySubject = new Map<string, MonsterRuntime>();
+  /**
+   * Os ids dos familiares VIVOS (#599). Existe para o custo: o teleporte ao mestre confere cada
+   * familiar a cada passo do mestre, e varrer `#monsters` (centenas) por passo, numa hunt onde
+   * ninguém invocou nada, seria pagar por um recurso que quase nunca existe. Vazio é o caso de
+   * sempre; `restore()` o remonta do que voltou no snapshot.
+   */
+  readonly #familiarIds = new Set<number>();
+  /**
+   * A magia de familiar de cada vocação (#599), indexada UMA vez na construção — o `FAMILIAR_ID` do
+   * Canary (`familiar.lua`) é uma tabela por vocação, e `buildContent` recusa duas magias para a
+   * mesma. É o que deixa `onEnter` recriar o familiar sem que o personagem tenha lançado nada nesta
+   * sessão: quem sabe QUAL monstro é o dele é o catálogo, não o estado gravado.
+   */
+  readonly #familiarSpellByVocation = new Map<string, FamiliarSpellRef>();
   #nextCreatureId = 1;
   /** Os cadáveres no chão, e o próximo id de item de chão (FUN-123). */
   #corpses: CorpseState[] = [];
@@ -1828,6 +2048,13 @@ export class HuntRuleset implements Ruleset {
   readonly #basicAmmo: ReadonlyMap<AmmoFamily, Ammunition>;
 
   /**
+   * Os ids dos itens que esfolam (#626): a `toolId` de cada entrada de `options.skinning`. É o que
+   * `use-item`/`use-item-on` confere para tratar uma instância como ferramenta — resolvido UMA vez,
+   * no boot da instância. Vazio é uma hunt sem esfola.
+   */
+  readonly #skinToolIds: ReadonlySet<string>;
+
+  /**
    * A mira da magia, reaproveitada pela mesma razão que `#botView` (FUN-92).
    *
    * Três vetores que andam juntos e são limpos a cada lançamento: os alvos como `castSpell` os
@@ -1877,6 +2104,10 @@ export class HuntRuleset implements Ruleset {
       'shield-block': [...options.skills.values()].filter((sk) => sk.gain.on === 'shield-block'),
     };
     this.#spawner = new Spawner(options.route.spawnPoints.length);
+    this.#factions = buildFactionTable(
+      options.monsters, reachableMonsterIds(options.route.spawnPoints, options.monsters),
+    );
+    this.#hasFactions = this.#factions.size > 0;
     this.#tileOverrides = TileOverrides.fromInteractables(options.map.interactables);
     this.#world = new TileOccupancy(
       options.map, { overrides: this.#tileOverrides, fields: this.#fields },
@@ -1887,6 +2118,11 @@ export class HuntRuleset implements Ruleset {
       if (!basics.has(ammo.family)) basics.set(ammo.family, ammo);
     }
     this.#basicAmmo = basics;
+    for (const spell of options.spells.values()) {
+      if (spell.effect.kind !== 'familiar' || spell.vocationId === undefined) continue;
+      this.#familiarSpellByVocation.set(spell.vocationId, { spell, effect: spell.effect });
+    }
+    this.#skinToolIds = new Set([...(options.skinning?.values() ?? [])].map((entry) => entry.toolId));
   }
 
   get monsters(): readonly MonsterRuntime[] {
@@ -1948,7 +2184,7 @@ export class HuntRuleset implements Ruleset {
     if (entry === null || entry === undefined) return refuse('empty-slot', 0);
     if (entry.enabled === false) return refuse('disabled', 0);
 
-    const wait = this.#cooldownWaitOf(character, entry.do, session.nowMs);
+    const wait = this.#cooldownWaitOf(session, character, entry.do);
     if (wait > 0) return refuse('on-cooldown', wait);
 
     // A mira (ADR 0049 decisão 2): resolve recipiente de aliado OU alvo explícito de
@@ -2110,6 +2346,8 @@ export class HuntRuleset implements Ruleset {
     const carried = [...character.inventory.backpack, ...character.inventory.satchel]
       .find((item) => item?.instanceId === instanceId);
     if (carried === undefined || carried === null) return refuseItem('not-carried', 0);
+    // A ferramenta de esfola (#626) age sobre o cadáver do tile apontado, e não é consumida.
+    if (this.#skinToolIds.has(carried.itemId)) return this.#performSkin(session, character, carried, target);
     const item = this.#options.items.get(carried.itemId);
     // `Item.effect` é opcional na forma (só `kind: 'consumable'` o declara — `buildContent`
     // confere isso no boot, não o tipo): o schema não dá o discriminante de graça ao TS.
@@ -2153,7 +2391,7 @@ export class HuntRuleset implements Ruleset {
         out.push({ set, slot, state: 'blocked', remainingMs: 0, reason: 'disabled' });
         continue;
       }
-      const wait = this.#cooldownWaitOf(character, entry.do, session.nowMs);
+      const wait = this.#cooldownWaitOf(session, character, entry.do);
       if (wait > 0) {
         out.push({ set, slot, state: 'cooldown', remainingMs: wait, reason: 'on-cooldown' });
         continue;
@@ -2836,7 +3074,13 @@ export class HuntRuleset implements Ruleset {
     // entrando não está. A posição que ele traz é da sessão anterior, num mapa que não é
     // este; contá-la aqui marcaria como ocupado um tile da hunt por uma coordenada de
     // cidade. Antes da FUN-72 isso era limpo por acidente, porque `place` liberava a origem.
-    this.#world.reset(session.participants.filter((p) => p !== character));
+    //
+    // E com os MONSTROS que já estão aqui (#599): a ocupação é remontada do zero, e um familiar
+    // recriado na entrada do membro anterior de uma party (`#restoreFamiliar`) já é um monstro
+    // vivo no mundo — deixá-lo de fora liberaria o tile dele, e o membro seguinte (ou o familiar
+    // dele) nasceria em cima. Fora o familiar, só o entrante tardio de uma hunt em andamento tem
+    // monstro aqui; para a primeira entrada a lista é vazia.
+    this.#world.reset([...this.#monsters, ...session.participants.filter((p) => p !== character)]);
     // Velocidade e capacidade vêm da tabela, como `maxHealth` — e são repostas na entrada
     // porque snapshot anterior traz zero: zero é "não carrega nada" e "não anda" (FUN-119).
     // A velocidade soma o bônus de equipamento (#524: boots of haste) — o item já está no
@@ -2853,6 +3097,9 @@ export class HuntRuleset implements Ruleset {
     // Instala o observer e agenda o vencimento do que já está vestido (ADR 0032 d.8): a
     // entrada fresca não passa por `equip`, e o anel que já vinha do ticket precisa vencer.
     this.#armEquipment(session, character);
+    // As condições que o personagem TRAZ de outra sessão (#812): `Session.enter` já as traduziu
+    // para o relógio desta, mas o vencimento e o próximo tique moravam na fila da anterior.
+    this.#armConditions(session, character);
     // O primeiro entra NO tile inicial da rota; o segundo em diante, no livre mais próximo —
     // tile é exclusivo, e o `rejoinNearest` do primeiro passo o põe na rota (#203).
     const at = runner.walker.current;
@@ -2913,6 +3160,9 @@ export class HuntRuleset implements Ruleset {
     this.#armBot(session, character.id);
     // As automações (AB-08) seguem a mesma regra: só quem habilitou alguma entra na fila.
     this.#armAutomations(session, character.id);
+    // O familiar que ainda tem tempo volta com ele (#599, `familiarOnLogin` do Canary): entrar na
+    // hunt é o login do personagem — a Cidade não simula nem tem invocação.
+    this.#restoreFamiliar(session, character);
     // Só depois de tudo pronto (runner armado, posição válida): quem já está OLHANDO a sessão
     // precisa saber que a lotação mudou, e a bolsa precisa recalcular reserva por membro — um
     // join em curso muda `ΣB` (#396) do mesmo jeito que uma saída muda. O aviso é incondicional
@@ -2945,8 +3195,14 @@ export class HuntRuleset implements Ruleset {
     // morre aqui, o restante não.
     this.#parkEquipment(session, character);
     character.inventory.setEquipmentObserver(null);
-    // As condições dele saem com ele (CMB-07): o vencimento de quem já saiu não fica órfão.
-    this.#cancelConditions(session, character);
+    // O tempo que ele passou na hunt enche o banco de offline training (#631, ADR 0059 d.3) — o
+    // `Session.leave` emite o extrato DEPOIS deste hook, e o `durationMs` dele ainda existe aqui.
+    this.#creditOfflineBank(session, character);
+    // Os EVENTOS das condições dele saem da fila (CMB-07): o vencimento de quem já saiu não fica
+    // órfão. A condição em si FICA no personagem (#812): ele a leva para a próxima sessão, que a
+    // traduz para o relógio dela e reagenda — a haste de 30 s não some por uma ida à Cidade, e o
+    // veneno também não. Quem morre é outro caso (`#onCharacterDied`): morto não tem condição.
+    this.#cancelConditionEvents(session, character);
     // As invocações dele somem JUNTO (#598, M38-01, ADR 0057 decisão 3 — "some ao sair da
     // hunt"): mesmo `#removeSummon` que o mestre MONSTRO já usa quando morre (#546) — sem
     // golpe, sem cadáver, sem abate; nunca pagou nada enquanto viva. `filter` ANTES de remover
@@ -3105,6 +3361,9 @@ export class HuntRuleset implements Ruleset {
       lastCombatActionAtMs: state?.lastCombatActionAtMs ?? null,
       manualWalkTo: state?.manualWalkTo ?? null,
       manualWalkHoldUntilMs: state?.manualWalkHoldUntilMs ?? null,
+      fearWalk: state?.fearWalk ?? null,
+      thinkPhaseMs: state?.thinkPhaseMs ?? null,
+      attackParked: state?.attackParked === true,
     };
     // O atuador fecha sobre o PRÓPRIO runner (o `ringReplaced` das automações), então só pode
     // ser montado depois que o objeto existe — e é a razão de ele não entrar no literal.
@@ -3153,6 +3412,7 @@ export class HuntRuleset implements Ruleset {
       case MONSTER_SUMMON: return this.#onMonsterSummon(session, event.subject);
       case MONSTER_TARGET_CHANGE: return this.#onMonsterTargetChange(session, event.subject);
       case MONSTER_DANCE: return this.#onMonsterDance(session, event.subject);
+      case FAMILIAR_EXPIRE: return this.#onFamiliarExpire(session, event.subject);
       case HEALTH_REGEN: return this.#onRegen(session, event.subject, 'health');
       case MANA_REGEN: return this.#onRegen(session, event.subject, 'mana');
       case SPAWN_INITIAL: return this.#onSpawnInitial(session, event.subject);
@@ -3167,6 +3427,8 @@ export class HuntRuleset implements Ruleset {
       case CONDITION_TICK: return this.#onConditionTick(session, event.subject);
       case CONDITION_EXPIRE: return this.#onConditionExpire(session, event.subject);
       case VISIBILITY_THINK: return this.#onVisibilityThink(session, event.subject);
+      case FEAR_THINK: return this.#onFearThink(session, event.subject);
+      case ATTACK_THINK: return this.#onAttackThink(session, event.subject);
       case FIELD_STAGE_ADVANCE: return this.#onFieldStageAdvance(session, event.subject);
       case FIELD_TICK: return this.#onFieldTick(session, event.subject);
       case FIELD_EXPIRE: return this.#onFieldExpire(session, event.subject);
@@ -3455,12 +3717,27 @@ export class HuntRuleset implements Ruleset {
     for (const character of session.participants) {
       this.#parkEquipment(session, character);
       character.inventory.setEquipmentObserver(null);
+      // O tempo de hunt enche o banco de offline training 1:1 (#631, ADR 0059 d.3). O `durationMs`
+      // é o do PARTICIPANTE — o tempo que ele passou aqui, não o da instância —, e `end()` só
+      // roda uma vez: o crédito não dobra.
+      this.#creditOfflineBank(session, character);
     }
     // A bolsa é vendida e dividida entre os presentes (#192); os extratos saem DEPOIS disto,
     // com o gold dentro. Fora isso nada a desfazer: a instância morre com a sessão. Todo
     // encerramento produz extrato, inclusive o que acontece sem ninguém assistindo — e é
     // exatamente por isso que ele não depende de nada feito aqui.
     if (this.#bag !== null) this.#settle(session, session.participants, 'end');
+  }
+
+  /** O banco de offline training cresce com o tempo de hunt do participante (#631, ADR 0059 d.3). */
+  #creditOfflineBank(session: Session, character: CharacterRuntime): void {
+    const training = this.#options.training;
+    if (training === undefined) return;
+    // O tempo EXATO no instante em que a participação acaba (`inSessionMsOf`), e não o
+    // `durationMs` dos agregados: este soma a janela do `advanceBy` inteira antes de despachar os
+    // eventos, e uma hunt que acaba por evento (morte, regra de saída) no meio dela contaria o
+    // resto — o banco dependeria de como o hospedeiro fatiou o tempo (invariante 3).
+    character.training.creditOnline(session.inSessionMsOf(character.id), training.offline.bankCapMs);
   }
 
   getState(): HuntRulesetState {
@@ -3588,8 +3865,14 @@ export class HuntRuleset implements Ruleset {
       monster.speed = this.#options.monsters.get(monster.monsterId)?.speed ?? 0;
     }
     this.#monsterBySubject.clear();
+    this.#familiarIds.clear();
     for (const monster of this.#monsters) {
       this.#monsterBySubject.set(monsterSubject(monster.id), monster);
+      // Os familiares vivos (#599): o índice do teleporte ao mestre não vai no snapshot — deriva do
+      // que voltou, como `#monsterBySubject`.
+      if (typeof monster.masterId === 'string' && this.#options.monsters.get(monster.monsterId)?.familiar) {
+        this.#familiarIds.add(monster.id);
+      }
     }
     this.#nextCreatureId = restored.nextCreatureId;
     // Os cadáveres voltam com o snapshot; o prazo de cada um é o evento `CORPSE`, que a fila
@@ -3856,16 +4139,8 @@ export class HuntRuleset implements Ruleset {
 
     const subjectOf = monsterSubject(monster.id);
     // DEPOIS do `place`: é ele que pode recusar o tile, e anunciar uma posição que ainda pode
-    // ser recusada publicaria um monstro onde ele não está (FUN-103). `#at` lê o andar de FATO
-    // do monstro (#519) — o do mapa só sobra para quem nunca declarou `z` (andar único).
-    session.emit({
-      kind: 'creature-appeared', creatureId: subjectOf, monsterId: definition.id,
-      position: this.#at(monster),
-      health: monster.health, maxHealth: definition.health,
-      // `masterId` (#598) só para invocação de PERSONAGEM — a de MONSTRO (#546, `masterId`
-      // numérico) não marca nada para a apresentação.
-      ...(typeof monster.masterId === 'string' ? { masterId: monster.masterId } : {}),
-    });
+    // ser recusada publicaria um monstro onde ele não está (FUN-103).
+    this.#announceMonster(session, monster, definition.health);
     session.scheduleIn(MONSTER_STEP, 0, {
       priority: EventPriority.Movement, subject: subjectOf,
     });
@@ -4050,6 +4325,188 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
+   * O instante de RELÓGIO DE PAREDE de agora (epoch em ms), como o `sim` o conhece (#599): o
+   * `createdAtMs` que o servidor deu na criação da sessão mais o relógio lógico dela. É o que os
+   * carimbos do familiar (`CharacterRuntime.familiar`, ADR 0052 d.6) comparam — o `sim` nunca lê
+   * relógio (invariante 1), e a soma é a mesma antes e depois de um snapshot (`createdAtMs` e o
+   * relógio lógico voltam juntos).
+   *
+   * **A soma só é "agora" enquanto o relógio lógico anda junto com o de parede.** A retomada de um
+   * snapshot descarta o intervalo em que o nó esteve fora (ADR 0018), e é o HOSPEDEIRO quem
+   * recoloca `createdAtMs` na hora de retomar (`SessionHost#resume`, soma o intervalo descartado)
+   * — dado que ele entrega, como o ADR 0052 d.6 manda, e não relógio que o `sim` leia.
+   *
+   * O valor é FRACIONÁRIO: o relógio lógico para no instante em que o hospedeiro o avança
+   * (`performance.now()`), e esse não é inteiro. Serve para COMPARAR; para GRAVAR use
+   * `#wallStampMs`.
+   */
+  #wallNowMs(session: Session): number {
+    return session.createdAtMs + session.nowMs;
+  }
+
+  /**
+   * O instante de parede de agora mais `offsetMs`, ARREDONDADO PARA CIMA — o que vai para os
+   * carimbos do familiar. Os carimbos persistem (extrato, ticket, `characters.familiar`) e todo
+   * consumidor os valida como inteiro seguro (`isFamiliarState`): um carimbo fracionário seria
+   * trocado em silêncio pelo registro vazio, e o cooldown de 30 min some. Arredondar para CIMA é
+   * o lado que nunca encurta a invocação nem o cooldown (menos de 1 ms a mais).
+   */
+  #wallStampMs(session: Session, offsetMs: number): number {
+    return Math.ceil(this.#wallNowMs(session) + offsetMs);
+  }
+
+  /**
+   * O tile onde o familiar nasce em volta do mestre (#599; `Map::placeCreature` com `extendedPos`,
+   * ver `familiar.ts`): os doze tiles da lista estendida na ordem embaralhada pelo `Rng` da sessão,
+   * e o primeiro que serve — parede e ocupação como toda invocação (`#summonBlockedFor`), sem
+   * escada nem teleporte (o Canary pula teleporte e recusa mudança de andar ao monstro comum) e com
+   * linha de visão livre até o mestre (`isSightClear`, o teste que o Canary só faz com `extendedPos`).
+   * `null` é a falta de sala — a magia recusa ANTES de gastar mana.
+   *
+   * O embaralhamento consome os mesmos 10 sorteios ache ou não um tile: quem lança o familiar move
+   * a sequência do `Rng` da sessão, e quem nunca o lança não a move (zero sorteio novo).
+   */
+  #findFamiliarTile(session: Session, master: { readonly position: FloorPoint }): FloorPoint | null {
+    const blocked = this.#summonBlockedFor();
+    const from = this.#at(master);
+    for (const [dx, dy] of familiarTileOrder(session.rng)) {
+      const x = from.x + dx;
+      const y = from.y + dy;
+      if (blocked(x, y, from.z)) continue;
+      if (this.#world.floorChangeAt(x, y, from.z) !== null || this.#world.teleportAt(x, y, from.z) !== null) continue;
+      if (!isSightClear(this.#world.map, from, { x, y, z: from.z })) continue;
+      return { x, y, z: from.z };
+    }
+    return null;
+  }
+
+  /**
+   * O `creature-appeared` de um monstro (FUN-103): nasce com ele (`#spawnMonster`) e volta a sair
+   * quando o familiar é RECOLOCADO (`#placeFamiliarNear`) — o `creature-moved` só descreve um passo
+   * de duração positiva, e quem olha precisa ver o monstro sumir de onde estava e aparecer onde
+   * ficou. `#at` lê o andar de FATO do monstro (#519) — o do mapa só sobra para quem nunca
+   * declarou `z` (andar único).
+   */
+  #announceMonster(session: Session, monster: MonsterRuntime, maxHealth: number): void {
+    session.emit({
+      kind: 'creature-appeared', creatureId: monster.subject, monsterId: monster.monsterId,
+      position: this.#at(monster),
+      health: monster.health, maxHealth,
+      // `masterId` (#598) só para invocação de PERSONAGEM — a de MONSTRO (#546, `masterId`
+      // numérico) não marca nada para a apresentação.
+      ...(typeof monster.masterId === 'string' ? { masterId: monster.masterId } : {}),
+    });
+  }
+
+  /**
+   * O familiar nasce (#599): a MESMA invocação de personagem do #598 (`#spawnMonster` com o
+   * `characterId` de mestre), mais o que só ele tem — a duração como evento da fila e a velocidade.
+   *
+   * **A velocidade é a MAIOR entre a do mestre e a do monstro, fixada agora** (`myFamiliar:
+   * changeSpeed(math.max(self:getSpeed() - myFamiliar:getBaseSpeed(), 0))`): `Player::getSpeed`
+   * inclui a haste que ele tinha no instante do lançamento, e o Canary NÃO a atualiza depois —
+   * quem lançou hasteado tem um familiar rápido até o fim, e quem lançou parado, um lento.
+   */
+  #spawnFamiliar(
+    session: Session, master: CharacterRuntime, definition: Monster, at: FloorPoint, lifetimeMs: number,
+  ): MonsterRuntime {
+    const monster = this.#spawnMonster(session, definition, at, master.id);
+    monster.speed = Math.max(Math.round(master.speed * master.speedScale), definition.speed);
+    this.#familiarIds.add(monster.id);
+    session.scheduleIn(FAMILIAR_EXPIRE, lifetimeMs, {
+      priority: EventPriority.Upkeep, subject: monster.subject,
+    });
+    return monster;
+  }
+
+  /**
+   * O fim do tempo do familiar (#599, `RemoveFamiliar` do Canary: `creature:remove()`): some sem
+   * golpe, sem cadáver, sem abate — o mesmo `#removeSummon` de quando o mestre sai. O carimbo do
+   * personagem NÃO muda: `summonUntilMs` já era este instante, e o cooldown segue de onde estava.
+   * Evento de um familiar que já morreu ou saiu nunca chega aqui — `#removeSummon` e a morte
+   * cancelam pelo subject.
+   */
+  #onFamiliarExpire(session: Session, subject: string): void {
+    const monster = this.#monsterBySubject.get(subject);
+    if (monster === undefined || !monster.alive) return;
+    this.#removeSummon(session, monster);
+  }
+
+  /**
+   * Recria o familiar de quem entra na hunt com tempo sobrando (#599, `familiarOnLogin`): o
+   * `summonUntilMs` gravado no personagem, menos o agora. Só para quem ainda pode tê-lo — a magia
+   * da vocação existe, o level dela vale e não há invocação viva (a entrada nunca tem uma, mas o
+   * Canary confere) — e sem sala não há nova tentativa (`createFamiliar` devolve `false`). O
+   * carimbo de cooldown não é tocado: recriar não é lançar, e não custa mana.
+   */
+  #restoreFamiliar(session: Session, character: CharacterRuntime): void {
+    // Inteiro, como toda duração do conteúdo: o relógio de parede de agora é fracionário.
+    const remainingMs = Math.ceil(character.familiar.summonUntilMs - this.#wallNowMs(session));
+    if (remainingMs <= 0 || character.vocationId === null) return;
+    const ref = this.#familiarSpellByVocation.get(character.vocationId);
+    if (ref === undefined || character.level < ref.spell.minLevel) return;
+    const definition = this.#options.monsters.get(ref.effect.monsterId);
+    if (definition === undefined || this.#playerSummonCountOf(character.id) > 0) return;
+    const at = this.#findFamiliarTile(session, character);
+    if (at === null) return;
+    this.#spawnFamiliar(session, character, definition, at, remainingMs);
+  }
+
+  /**
+   * O familiar que ficou longe do mestre vai até ele (#599, `Creature::checkSummonMove`, chamado a
+   * cada movimento do mestre): outro andar, OU mais de 15 tiles em x ou em y — `getDistanceZ > 0 ||
+   * max(dx, dy) > 15`. É o que impede o familiar de ficar preso no andar de cima quando a party
+   * desce, e o que o distingue da invocação comum, que só some além de 30 tiles.
+   *
+   * **Divergência de mecanismo, não de regra.** O Canary o põe NO tile do mestre (`internalTeleport`
+   * com `FLAG_NOLIMIT`, que ignora o ocupante), e o tile do `sim` é exclusivo (invariante 8 na
+   * letra: `TileOccupancy`). O familiar vai para o tile livre mais perto do mestre, no anel de até 2
+   * (`#placeFamiliarNear`) — sem nenhum, fica onde está e o próximo passo tenta de novo.
+   */
+  #checkFamiliarMove(session: Session, master: CharacterRuntime): void {
+    for (const id of this.#familiarIds) {
+      const familiar = this.#monsterBySubject.get(monsterSubject(id));
+      if (familiar === undefined || !familiar.alive || familiar.masterId !== master.id) continue;
+      const from = this.#at(familiar);
+      const to = this.#at(master);
+      const far = from.z !== to.z
+        || Math.max(Math.abs(from.x - to.x), Math.abs(from.y - to.y)) > FAMILIAR_TELEPORT_DISTANCE;
+      if (!far) continue;
+      // A origem é liberada ANTES da busca (o tile é do familiar, e a busca é em volta do MESTRE,
+      // longe dela) e devolvida se a busca não achar lugar.
+      this.#world.vacate(from.x, from.y, from.z);
+      if (!this.#placeFamiliarNear(session, familiar, to)) this.#world.occupy(from.x, from.y, from.z);
+    }
+  }
+
+  /**
+   * Põe o familiar no tile livre mais perto de `near`, no anel de até 2 e sem o próprio `near`
+   * (parede, ocupação, escada e teleporte como o nascimento: `#summonBlockedFor`). Devolve se achou.
+   * **A ocupação do tile ANTERIOR é de quem chama**: aqui só o destino é ocupado.
+   *
+   * A colocação é RELOCAÇÃO, não passo: um `creature-moved` de duração zero seria descartado pelo
+   * hospedeiro (o protocolo exige duração positiva, ADR 0001) e o cliente continuaria desenhando o
+   * familiar no tile antigo — muitas vezes em outro andar, que é justamente o caso do teleporte.
+   * Por isso sai o par `creature-vanished` + `creature-appeared`, o mesmo que o nascimento e o fim
+   * da invocação já usam: o cliente o tira de onde estava e o põe onde ficou.
+   */
+  #placeFamiliarNear(session: Session, familiar: MonsterRuntime, near: WorldPoint): boolean {
+    const blocked = this.#summonBlockedFor();
+    for (const tile of tilesAround(near, 2)) {
+      if (tile.x === near.x && tile.y === near.y) continue;
+      if (blocked(tile.x, tile.y, near.z)) continue;
+      if (this.#world.floorChangeAt(tile.x, tile.y, near.z) !== null
+        || this.#world.teleportAt(tile.x, tile.y, near.z) !== null) continue;
+      if (place(this.#world, familiar, { x: tile.x, y: tile.y, z: near.z }) !== null) continue;
+      familiar.lastMoveAtMs = session.nowMs;
+      session.emit({ kind: 'creature-vanished', creatureId: familiar.subject });
+      this.#announceMonster(session, familiar, this.#options.monsters.get(familiar.monsterId)?.health ?? familiar.health);
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * As invocações VIVAS de personagem, as entidades REAIS (#598, ADR 0057 decisão 1 — "monstros
    * a atacam"): quem precisa aplicar dano de verdade (`#executeMonsterAbility`) usa esta;
    * `#playerSummonPrey`, abaixo, é a mesma lista na forma estreita que `chooseTarget` conhece.
@@ -4134,8 +4591,10 @@ export class HuntRuleset implements Ruleset {
    * mecanismos que `masterId` agora cobre:
    *
    * - **Invocação do PERSONAGEM** (`masterId` é `string`, um `characterId`): NUNCA escolhe
-   *   sozinha — herda o alvo do MESTRE (`attackTargetOf`, a mesma resolução que já limpa alvo
-   *   morto/fora de alcance) a cada reavaliação, e troca junto quando ele troca. Sem mestre
+   *   sozinha — herda o alvo SELECIONADO do MESTRE (#599: o do jogador ou o eleito pelo
+   *   auto-target, `#attackTargetOfRunner`/`#botCandidateOf`, a mesma resolução que já limpa alvo
+   *   morto/fora da tela; NÃO o `attackTargetOf`, que só vale dentro do alcance da arma) a cada
+   *   reavaliação, e troca junto quando ele troca. Sem mestre
    *   (saiu/morreu — o cascade de `#removeSummon` ainda não rodou neste instante exato) ou
    *   mestre sem alvo, o resultado é `null`: a invocação fica parada, sem sortear nada.
    * - **Qualquer outro monstro** (hostil do Spawner, ou invocação de OUTRO monstro, #546):
@@ -4143,6 +4602,8 @@ export class HuntRuleset implements Ruleset {
    *   VIVAS (`#playerSummonPrey`) — o Canary trata a invocação como qualquer oponente
    *   (`isOpponent`). Vazio, é a MESMA referência de `session.participants` de antes desta
    *   issue: zero alocação e zero sorteio a mais quando ninguém invocou.
+   * - **Invocação de um monstro de FACÇÃO** (#619): como a de personagem, não escolhe — segue o
+   *   alvo do mestre (`#followMasterTarget`, `Monster::updateSummonTarget`).
    */
   #chooseMonsterTarget(
     session: Session, monster: MonsterRuntime, definition: Monster,
@@ -4151,15 +4612,235 @@ export class HuntRuleset implements Ruleset {
     if (typeof monster.masterId === 'string') {
       const owner = findById(session.participants, monster.masterId);
       if (owner === null || !owner.alive) return null;
-      return this.attackTargetOf(owner)?.subject ?? null;
+      // O alvo SELECIONADO do mestre (`master->getAttackedCreature()`, `Monster::updateSummonTarget`
+      // do Canary): a criatura que ele escolheu atacar — o alvo do jogador ou o eleito pelo
+      // auto-target (#444) —, na tela dele. **Não é `attackTargetOf`** (#599): aquele é o alvo que a
+      // ARMA alcança agora (o desarmado alcança 1, a wand 3), e um mestre que ataca de longe — a
+      // runa a 7 tiles, o Sorcerer e o Druid quase o tempo todo — deixaria o familiar sem alvo
+      // enquanto a luta acontece a três tiles dele.
+      return (this.#attackTargetOfRunner(owner) ?? this.#botCandidateOf(owner))?.subject ?? null;
     }
     // `knownSummons` (#655): quem já calculou a lista (o passo, que a reaproveita para a área de
-    // visão) a entrega em vez de varrer `#monsters` de novo.
+    // visão) a entrega em vez de varrer `#monsters` de novo. Desde o #619 ela é a lista de
+    // OPONENTES que não são personagem (`#opponentOthersOf`) — as invocações de personagem e, para
+    // o monstro de facção, os monstros inimigos.
+    if (this.#hasFactions) {
+      // A invocação de um monstro de facção fica OCIOSA quando o mestre não vê jogador
+      // (`#isFactionSummonIdle`): ela nem tem lista de alvos, e os eventos de ataque dela voltam
+      // aqui sem alvo — engatilham e esperam.
+      if (this.#isFactionSummonIdle(session, monster)) return null;
+      const others = knownSummons ?? this.#opponentOthersOf(monster, definition);
+      const candidates = this.#targetPreyOf(session, monster, others);
+      // A invocação de um monstro de FACÇÃO não procura alvo: persegue o do mestre.
+      if (typeof monster.masterId === 'number' && this.#factionProfileOf(monster) !== null) {
+        return this.#followMasterTarget(monster, definition, candidates);
+      }
+      return chooseTarget(monster, candidates, definition, session.rng, session.nowMs);
+    }
     const summons = knownSummons ?? this.#playerSummonPrey();
     const prey: readonly Prey[] = summons.length === 0
       ? session.participants
       : [...session.participants, ...summons];
     return chooseTarget(monster, prey, definition, session.rng, session.nowMs);
+  }
+
+  /**
+   * O alvo da invocação de um monstro de FACÇÃO (#619, `Monster::updateSummonTarget`,
+   * `monster.cpp:1330-1342`): o `onThink_async` da invocação NÃO procura alvo (`searchTarget` só
+   * roda no ramo `else`, de quem não é invocação — `monster.cpp:1715-1738`); a cada think ela
+   * chama `selectTarget` com o que o MESTRE ataca, e só enquanto o mestre não ataca ninguém
+   * segue o alvo que já tinha. Então a Green Djinn da Efreet briga com quem a Efreet briga, e não
+   * com o jogador mais perto só porque a facção dele tem o menor offset.
+   *
+   * `selectTarget` passa por `isTarget` — que não confere facção para a invocação
+   * (`if (!isSummon())`) — e pela `targetList`, a lista de oponentes à vista: por isso `candidates`
+   * é a lista de `#targetPreyOf`, e o alvo ainda precisa valer para ELA (vivo, visível, mesmo andar,
+   * dentro do `aggroRadius`/`leashRadius` dela, as mesmas conferências de `chooseTarget`). Sem
+   * nenhum dos dois o resultado é `null`: ela só seguiria o mestre (`setFollowCreature(master)`), o
+   * que o sim não modela (não há `followCreature`), e fica parada.
+   */
+  #followMasterTarget(
+    monster: MonsterRuntime, definition: Monster, candidates: readonly Prey[],
+  ): string | null {
+    const master = typeof monster.masterId === 'number'
+      ? this.#monsterBySubject.get(monsterSubject(monster.masterId)) : undefined;
+    const leash = definition.leashRadius;
+    const valid = (id: string | null): string | null => {
+      if (id === null) return null;
+      const prey = candidates.find((candidate) => candidate.id === id);
+      if (prey === undefined || !prey.alive) return null;
+      if (prey.invisible && !seesInvisible(definition)) return null;
+      if (!sameFloor(monster.position.z, prey.position.z)) return null;
+      if (distance(monster.position, prey.position) > definition.aggroRadius) return null;
+      if (leash !== 0 && distance(monster.home, prey.position) > leash) return null;
+      return prey.id;
+    };
+    return valid(master?.targetId ?? null) ?? valid(monster.targetId);
+  }
+
+  // --- facções (#619, Canary `Monster::isOpponent`/`isTarget`/`updateIdleStatus`) ------------------
+
+  /**
+   * A facção de um monstro COM facção, ou `null` — o monstro sem facção (o caso comum) e a
+   * invocação de PERSONAGEM, que tem regra própria (`isSummon() && masterPlayer`, o alvo do
+   * mestre). A INVOCAÇÃO de um monstro herda a do mestre inteira, facção e inimigas
+   * (`Monster::getFaction`/`isEnemyFaction`, `monster.cpp:260-273`): a Green Djinn que a Efreet
+   * invoca é da facção dela, não da própria — daí a recursão pelo mestre.
+   *
+   * Só chamada com `#hasFactions` verdadeiro: sem facção nenhuma na hunt a resposta é sempre
+   * `null`, e quem chama já saiu antes de pagar a busca do mestre.
+   */
+  #factionProfileOf(monster: MonsterRuntime): FactionInfo | null {
+    const master = monster.masterId;
+    if (typeof master === 'string') return null;
+    if (master !== null) {
+      const owner = this.#monsterBySubject.get(monsterSubject(master));
+      // O mestre já saiu (o cascade de `#removeSummon` ainda não rodou neste instante exato):
+      // como no Canary, sem mestre vale o tipo da própria criatura.
+      if (owner !== undefined) return this.#factionProfileOf(owner);
+    }
+    return this.#factions.get(monster.monsterId) ?? null;
+  }
+
+  /** O valor de `Faction_t` do monstro — `FACTION_PLAYER` para a invocação de personagem. */
+  #factionValueOf(monster: MonsterRuntime): number {
+    if (typeof monster.masterId === 'string') return FACTION_PLAYER;
+    return this.#factionProfileOf(monster)?.faction ?? FACTION_DEFAULT;
+  }
+
+  /** `monster` como candidato de OUTRO monstro: a forma `Prey`, com a facção dele. */
+  #factionPreyOf(monster: MonsterRuntime): Prey {
+    return {
+      id: monster.subject, position: monster.position, alive: monster.alive, health: monster.health,
+      invisible: monster.invisible, faction: this.#factionValueOf(monster),
+    };
+  }
+
+  /**
+   * Os OPONENTES de `monster` que não são personagem, à vista dele — a "lista de alvos" do
+   * Canary (`Monster::isOpponent`, `monster.cpp:836-869`) menos os jogadores, que
+   * `session.participants` já traz. O monstro sem facção só enxerga invocações de personagem
+   * (`#playerSummonPrey`) — a lista de sempre, com a MESMA referência e a mesma alocação. O de
+   * FACÇÃO soma os monstros das facções inimigas, e a invocação dele (que herda a facção do
+   * mestre) também.
+   *
+   * "À vista" é `canSeePoint` no `aggroRadius`, o mesmo que esvazia e enche `targetList` no
+   * Canary — e é ele, e não o andar, que filtra: o monstro de outro andar que a perspectiva
+   * deixa ver é oponente (segura a volta ao spawn) sem ser alvo (`chooseTarget` confere o andar).
+   * A ORDEM é contrato, como a de `#monsters` (a de nascimento): invocações de personagem
+   * primeiro, depois os inimigos — é ela que desempata dois inimigos da mesma facção à mesma
+   * distância.
+   */
+  #opponentOthersOf(monster: MonsterRuntime, definition: Monster): readonly Prey[] {
+    const summons = this.#playerSummonPrey();
+    if (!this.#hasFactions) return summons;
+    const profile = this.#factionProfileOf(monster);
+    if (profile === null) return summons;
+    let list: Prey[] | null = null;
+    for (const other of this.#monsters) {
+      // Invocação de personagem já está em `summons` (facção PLAYER, oponente de todo monstro).
+      if (other === monster || !other.alive || typeof other.masterId === 'string') continue;
+      if (!profile.enemies.has(this.#factionValueOf(other))) continue;
+      if (!canSeePoint(monster.position, other.position, definition.aggroRadius)) continue;
+      (list ??= [...summons]).push(this.#factionPreyOf(other));
+    }
+    return list ?? summons;
+  }
+
+  /**
+   * Os candidatos que `chooseTarget` recebe (`Monster::isTarget`, `monster.cpp:1434-1453`): dos
+   * oponentes (`session.participants` + `others`), só os que o monstro pode MIRAR. O monstro sem
+   * facção mira todos — a lista de sempre, sem alocar quando não há invocação. O de facção só mira
+   * a facção inimiga: jogador e invocação de jogador (facção PLAYER) só entram se `player` está
+   * em `enemyFactions`, e é por isso que a Lion, que não o lista, não caça o herói — embora ele
+   * seja oponente dela e a mantenha acordada. A INVOCAÇÃO de um monstro é a exceção do Canary
+   * (`if (!isSummon())` em `isTarget`): o `selectTarget` dela não confere a facção do alvo — que
+   * é sempre o do mestre (`#followMasterTarget`) —, e o golpe que ela não pode dar (`#mayAttack`)
+   * é refutado depois.
+   */
+  #targetPreyOf(
+    session: Session, monster: MonsterRuntime, others: readonly Prey[],
+  ): readonly Prey[] {
+    const profile = typeof monster.masterId === 'string' ? null : this.#factionProfileOf(monster);
+    if (profile === null) {
+      return others.length === 0 ? session.participants : [...session.participants, ...others];
+    }
+    const summon = monster.masterId !== null;
+    const targets: Prey[] = summon || profile.enemies.has(FACTION_PLAYER) ? [...session.participants] : [];
+    for (const other of others) {
+      if (summon || profile.enemies.has(other.faction ?? FACTION_PLAYER)) targets.push(other);
+    }
+    return targets;
+  }
+
+  /**
+   * O golpe de `attacker` pode acertar `target` (`Combat::canDoCombat`, `combat.cpp:497-546` — a
+   * cláusula do monstro sem facção, `FACTION_DEFAULT`, é a última do trecho)?
+   * O monstro sem facção (e a invocação de personagem) segue a regra de sempre — o que chega aqui
+   * já é jogador ou invocação de jogador, ou é o alvo do mestre. O de facção só acerta a facção
+   * inimiga: jogador e invocação de jogador dependem de `player` em `enemyFactions`, outro monstro
+   * de a facção dele estar nela, e o monstro sem facção nunca (facção `default` não é inimiga de
+   * ninguém). Vale para o alvo principal e para cada criatura pega por uma área — a onda de fogo
+   * da Efreet não queima o Green Djinn ao lado.
+   */
+  #mayAttack(attacker: MonsterRuntime, target: CharacterRuntime | MonsterRuntime): boolean {
+    if (!this.#hasFactions) return true;
+    const profile = this.#factionProfileOf(attacker);
+    if (profile === null) return true;
+    if (target instanceof CharacterRuntime) return profile.enemies.has(FACTION_PLAYER);
+    return profile.enemies.has(this.#factionValueOf(target));
+  }
+
+  /**
+   * `prey` (personagens e invocações de personagem, a lista de área de sempre) MAIS os monstros
+   * vivos das facções inimigas de `attacker` — as entidades REAIS, não a forma `Prey`: quem aplica
+   * dano precisa delas. Sem facção (o monstro comum) devolve a MESMA lista. A ordem é a de
+   * nascimento, e é contrato pelo mesmo motivo de `abilityTargets`: cada alvo consome uma rolagem.
+   */
+  #withFactionEnemies(
+    attacker: MonsterRuntime, prey: readonly (CharacterRuntime | MonsterRuntime)[],
+  ): readonly (CharacterRuntime | MonsterRuntime)[] {
+    const profile = this.#factionProfileOf(attacker);
+    if (profile === null) return prey;
+    let list: (CharacterRuntime | MonsterRuntime)[] | null = null;
+    for (const other of this.#monsters) {
+      // A invocação de personagem já está em `prey` (`#livePlayerSummons`).
+      if (other === attacker || !other.alive || typeof other.masterId === 'string') continue;
+      if (!profile.enemies.has(this.#factionValueOf(other))) continue;
+      (list ??= [...prey]).push(other);
+    }
+    return list ?? prey;
+  }
+
+  /** Há jogador vivo à vista de `monster` — o `totalPlayersOnScreen > 0` do Canary. */
+  #playerInView(session: Session, monster: MonsterRuntime, radius: number): boolean {
+    for (const participant of session.participants) {
+      if (participant.alive && canSeePoint(monster.position, participant.position, radius)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * A invocação de um monstro de FACÇÃO fica ociosa enquanto o mestre não vê jogador
+   * (`Monster::updateIdleStatus`, `monster.cpp:1548-1551`): sem condição ativa, com facção
+   * (herdada) e `master->totalPlayersOnScreen == 0`, ela sai da lista de `onThink` — não anda,
+   * não ataca, esquece os alvos (`clearTargetList`) e o dano que levou (`onIdleStatus`). É a
+   * "atividade sem jogador" da issue: a Green Djinn invocada pela Efreet durante uma briga contra
+   * um Marid, sem herói por perto, não entra na briga.
+   *
+   * **Estado da SESSÃO, nunca do visualizador** (invariante 3): o que decide é a posição dos
+   * participantes — quem está dentro da hunt —, não quem tem o navegador aberto. O contador do
+   * mestre só existe para quem não é invocação (`countsAsPlayerOnScreenTarget`): o mestre que é
+   * ele mesmo uma invocação vale zero. Só o caso da invocação de MONSTRO entra aqui — o ramo
+   * `!isSummon()` da mesma cláusula do Canary não é alcançável (fica sob o `else if (master)`).
+   */
+  #isFactionSummonIdle(session: Session, monster: MonsterRuntime): boolean {
+    if (typeof monster.masterId !== 'number' || hasActiveCondition(monster)) return false;
+    const master = this.#monsterBySubject.get(monsterSubject(monster.masterId));
+    if (master === undefined || this.#factionProfileOf(master) === null) return false;
+    if (master.masterId !== null) return true;
+    const radius = this.#options.monsters.get(master.monsterId)?.aggroRadius ?? 0;
+    return !this.#playerInView(session, master, radius);
   }
 
   /**
@@ -4186,6 +4867,9 @@ export class HuntRuleset implements Ruleset {
     // resultado para quem fica e adianta o de quem anda para chão mais lento; por isso o
     // reagendamento fica no fim, com o que de fato aconteceu.
     const stepped = this.#playerStep(session, character);
+    // O familiar acompanha o mestre que se afastou (#599, `checkSummonMove`): outro andar ou mais de
+    // 15 tiles. Vazio (o caso de sempre) é um `Set.size`.
+    if (this.#familiarIds.size > 0) this.#checkFamiliarMove(session, character);
     // Andou (ou parou para lutar): reavalia o alvo na tela da posição nova e acorda o bot —
     // um monstro que entrou no raio de busca pode destravar a runa (#444).
     this.#autoSelectTarget(session, character);
@@ -4202,6 +4886,13 @@ export class HuntRuleset implements Ruleset {
   #playerStep(session: Session, character: CharacterRuntime): MoveResult | null {
 
     const runner = this.#runnerOf(character.id);
+
+    // A caminhada FORÇADA do medo (M44-04, #622): PRIORIDADE MÁXIMA, acima de tudo — de
+    // `forcePlayerAutoWalk`, que substitui a lista de passos do próprio jogador. O personagem
+    // continua batendo em quem estiver ao alcance (`#advanceFearWalk` arma o golpe), só não anda
+    // por conta própria enquanto a lista durar; o resto do passo (rota, combate-stop, follow)
+    // espera a lista esvaziar.
+    if (runner.fearWalk !== null) return this.#advanceFearWalk(session, character, runner);
 
     // `walk-to` distante em curso (#763, achado de QA ao vivo na Darashia Dragon Lair): PRIORIDADE
     // MÁXIMA, ACIMA do combate-stop logo abaixo. Um clique para um cadáver longe, com dragões no
@@ -4830,7 +5521,7 @@ export class HuntRuleset implements Ruleset {
     // ausente) — o `?? this.#world.map.z` é só para o tipo, como em `#followStep`.
     const z = from.z ?? this.#world.map.z;
     const pathBlocked: Blocked = (x, y) => {
-      if (this.#world.occupied(x, y, z)) return true;
+      if (this.#occupiedForPlayer(x, y, z)) return true;
       if (this.#world.floorChangeAt(x, y, z) !== null) return true;
       const override = this.#tileOverrides.at({ x, y, z });
       if (override !== null && override.blocked) return !isDoorKind(override.kind);
@@ -4873,13 +5564,25 @@ export class HuntRuleset implements Ruleset {
         return null;
       }
     }
-    const result = this.#step(session, character, at, character.id);
+    // `forced`: o passo de um caminho JÁ guardado continua a lista de passos do jogador
+    // (`getNextStep`), que o `startAutoWalk` recusou no INÍCIO (`requestMove`, acima) e que nenhuma
+    // condição de controle interrompe por conta própria — sob `feared` ela segue andando
+    // (M44-04, #622: o pensamento do medo só foge quando restam menos de dois passos).
+    const result = this.#step(session, character, at, character.id, true, true);
     if (result.ok) {
       runner.manualWalkTo = { destination: manual.destination, path: manual.path.slice(1) };
+    } else if (result.reason === 'rooted') {
+      // Preso no meio do caminho (M44-04, #622): `Creature::onCreatureMove` zera a lista de passos
+      // de quem está enraizado (`resetMovementState`, `creature.cpp:503`) e cada passo recusado
+      // por `internalMoveCreature` sai dela de qualquer jeito — o caminho NÃO resiste à condição.
+      // Sem isto o personagem retomava sozinho, ao fim da raiz, uma caminhada que ninguém mais
+      // pediu. O bot retoma pelo tile mais próximo, como no abandono da porta trancada.
+      runner.manualWalkTo = null;
     }
-    // Recusado (tile temporariamente ocupado por outra criatura, por exemplo): o caminho
-    // continua de pé, e o vencimento seguinte tenta o MESMO tile de novo — a mesma tolerância a
-    // bloqueio passageiro que a rota autorada já tem, nunca um recálculo a cada tentativa.
+    // Recusado por outro motivo (tile temporariamente ocupado por outra criatura, por exemplo): o
+    // caminho continua de pé, e o vencimento seguinte tenta o MESMO tile de novo — a mesma
+    // tolerância a bloqueio passageiro que a rota autorada já tem, nunca um recálculo a cada
+    // tentativa.
     return result;
   }
 
@@ -4936,7 +5639,7 @@ export class HuntRuleset implements Ruleset {
     // ausente) — o `?? this.#world.map.z` é só para o tipo, nunca alcançado na prática.
     const z = from.z ?? this.#world.map.z;
     const pathBlocked: Blocked = (x, y) => {
-      if (this.#world.blockedAt(x, y, z) || this.#world.occupied(x, y, z)) return true;
+      if (this.#world.blockedAt(x, y, z) || this.#occupiedForPlayer(x, y, z)) return true;
       if (grounded && this.#world.floorChangeAt(x, y, z) !== null) return true;
       if (reserved !== null && x === reserved.x && y === reserved.y && z === reserved.z) return true;
       return false;
@@ -5259,6 +5962,20 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
+   * Acorda o bot de um personagem cuja CAPACIDADE mudou por fora dele (#624): ele aprendeu uma
+   * magia no meio da hunt (`learn-spell` é aceito nela, ADR 0052 d.4), e a regra que o bot vinha
+   * PULANDO — recusa sem prazo, `spell-not-learned` — está engatilhada esperando o mundo mudar.
+   * Sem isto, uma cura recém-aprendida só voltaria a valer no próximo dano recebido, e uma de
+   * suporte talvez nunca. É o mesmo `#armBot` que dano, mana e troca de configuração já chamam:
+   * só toca grupo ENGATILHADO (quem tem evento pendente já vai vencer), e a reavaliação é um
+   * evento na fila no instante lógico atual — nada por tick, e o mesmo a 1 Hz e a 10 Hz.
+   */
+  rearmBot(session: Session, characterId: string): void {
+    if (findById(session.participants, characterId) === null) return;
+    this.#armBot(session, characterId);
+  }
+
+  /**
    * Um jogador pediu para andar (FUN-69). Mesmo caminho do bot, mesma razão de recusa.
    *
    * Não mexe no walker: se o passo tirou o personagem da rota, o vencimento seguinte de
@@ -5281,6 +5998,14 @@ export class HuntRuleset implements Ruleset {
     if (character === null) return { ok: false, reason: 'tile-blocked' };
     if (this.#occupancyStale) this.#rebuildOccupancy(session);
     const runner = this.#runnerOf(characterId);
+    // Preso ou com medo, o jogador não escolhe o caminho (M44-04, #622): `startAutoWalk` recusa
+    // ANTES de guardar qualquer caminho — recusar aqui evita um `walk-to` distante ficar guardado
+    // no runner (`manualWalkTo`) para andar sozinho quando a condição acabar.
+    const refusal = this.#controlRefusal(character, session.nowMs);
+    if (refusal !== null) return { ok: false, reason: refusal };
+    // Uma caminhada forçada que sobrou depois do fim do medo cede ao pedido do jogador: um
+    // `startAutoWalk` novo limpa `listWalkDir` no Canary.
+    runner.fearWalk = null;
     const from = character.position;
     const adjacent = Math.abs(to.x - from.x) <= 1 && Math.abs(to.y - from.y) <= 1;
 
@@ -5339,12 +6064,15 @@ export class HuntRuleset implements Ruleset {
       }
     }
 
-    // Stairhop (#554, M30-07, ADR 0040 decisão 1): reagenda para o INSTANTE do destravamento,
-    // sem golpe — nunca engatilha (o alvo continua ao alcance) e nunca dobra o evento, a mesma
-    // invariante de `#schedulePlayerAttack`. `attackLockedUntil` é sempre `0` fora do
-    // `combat-v3` (só `#step` escreve, e só lá), então v1/v2 nunca entram aqui.
-    if (character.attackLockedUntil > session.nowMs) {
-      this.#schedulePlayerAttack(session, characterId, character.attackLockedUntil - session.nowMs);
+    // `pacified` (#554, M30-07, ADR 0040 decisão 1; a condição de verdade desde o M44-04, #622 —
+    // `Player::doAttacking` volta antes de qualquer golpe, `player.cpp:3982`): sem golpe, e SEM
+    // re-armar — a cadeia de golpes do Canary morre ali, e o golpe volta no primeiro gatilho
+    // depois do vencimento (`#parkAttack`). A trava de escada só existe no `combat-v3`, então
+    // v1/v2 nunca entram aqui — a menos que o CONTEÚDO aplique `pacified` por outro caminho (o
+    // Swift Foot).
+    const pacified = character.conditions.get(PACIFIED_CONDITION_KEY);
+    if (pacified !== null && pacified.expiresAtMs > session.nowMs) {
+      this.#parkAttack(session, character, pacified.expiresAtMs);
       return;
     }
 
@@ -5568,6 +6296,20 @@ const slots = bot.groups.get(group);
     session: Session, character: CharacterRuntime, action: BotAction, target: UseSlotTarget | undefined,
   ): { ok: true; recipient?: CharacterRuntime; explicit?: MonsterRuntime | FloorPoint }
     | { ok: false; reason: SlotRefusal } | null {
+    // Find Person (#623): o "nome" do Canary é o personagem que o jogador MIROU. O alvo vira o
+    // `recipient` — o mesmo canal da cura de amigo —, e qualquer outra mira (monstro, tile, criatura
+    // que já saiu de vista, ninguém) é o nome que `getPlayerByNameWildcard` não acha. Essa recusa
+    // NÃO sai daqui: no Canary ela vem DEPOIS de `playerSpellCheck` (exaustão, level, mana, alma) e
+    // INICIA o cooldown da magia e do grupo (`playerCastInstant` chama `applyCooldownConditions`
+    // antes de cancelar). Sem `recipient`, o `castSpell` recebe "ninguém nomeado" (o próprio
+    // lançador) e `#utilityRefusalOf` devolve `person-not-found` no ponto certo da ordem.
+    const findEffect = action.kind === 'spell' ? this.#options.spells.get(action.spellId)?.effect : undefined;
+    if (findEffect?.kind === 'find' && findEffect.target === 'person') {
+      if (target === undefined || target.kind !== 'character') return { ok: true };
+      const member = findById(session.participants, target.characterId);
+      if (member === null || !member.alive) return { ok: true };
+      return { ok: true, recipient: member };
+    }
     const healRange = this.#healRangeOf(action);
     if (healRange !== null) {
       // Ação de ALIADO: sem `target`, cai no default — `#perform` já assume `recipient =
@@ -5599,9 +6341,15 @@ const slots = bot.groups.get(group);
       // A invocação (#598, ADR 0057) nunca é alvo válido de fogo amigo — nem por
       // auto-target (`#hostileMonsters`), nem por clique explícito: o cliente manda intenção
       // (invariante 4), e a mira num aliado é sempre inválida, o mesmo `no-target` de "sem
-      // alvo" — não "recusado", porque a invocação de outro dono é invisível para este gate
-      // por design (só a masterId string do PRÓPRIO personagem importa aqui).
-      if (monster.masterId === character.id) return { ok: false, reason: 'no-target' };
+      // alvo. Para efeito de DANO vale para a invocação de QUALQUER jogador, não só a do próprio
+      // personagem (#600): no mundo no-pvp o Canary recusa o ataque a `target->isSummon() &&
+      // targetMasterPlayer` (`Combat::canTargetCreature`), e uma área centrada nela acertaria o dono.
+      // A Convince Creature fica de fora: mirar a invocação alheia chega ao script, que recusa
+      // `not-possible` (`target:getMaster()`).
+      const hurts = damageEffect.kind === 'damage' || damageEffect.kind === 'damage-over-time';
+      if (monster.masterId === character.id || (hurts && typeof monster.masterId === 'string')) {
+        return { ok: false, reason: 'no-target' };
+      }
       // Monstro invisível (#559). No Canary o cliente NUNCA recebe a criatura que o jogador não
       // enxerga (`ProtocolGame::canSee` → `Player::canSeeCreature`, `player.cpp:1418`), então não
       // há clique nela; o tile continua clicável, e o que o servidor decide é só o que a mira no
@@ -5687,6 +6435,12 @@ const slots = bot.groups.get(group);
      */
     monsterId?: string,
   ): CastResult {
+    // A ocupação pode estar VAZIA logo depois de restaurar um snapshot (`#occupancyStale`, remontada
+    // no primeiro evento ou em `requestMove`). Levitate e Magic Rope leem (`utilityRefusalOf`) e
+    // ESCREVEM (`relocate`) a posição, e um `use-slot` do espectador chega entre eventos — sem a
+    // remontagem, o salto cairia num tile de outro personagem, e o `#rebuildOccupancy` seguinte
+    // marcaria os dois no mesmo tile (a mesma guarda de `requestMove`).
+    if (this.#occupancyStale) this.#rebuildOccupancy(session);
     const spell = this.#options.spells.get(spellId);
     if (spell === undefined) return NOT_IN_CATALOG;
 
@@ -5698,6 +6452,35 @@ const slots = bot.groups.get(group);
       summonMonster = monsterId === undefined ? undefined : this.#options.monsters.get(monsterId);
       if (summonMonster === undefined || !summonMonster.summonable) return NOT_SUMMONABLE;
       if (this.#playerSummonCountOf(character.id) >= PLAYER_SUMMON_CAP) return NOT_SUMMONABLE;
+    }
+
+    // O familiar (#599, M38-02, ADR 0057 d.3; `Player:CreateFamiliarSpell`): o cooldown de PAREDE é
+    // conferido primeiro — no Canary é a `CONDITION_SPELLCOOLDOWN`, que o framework confere antes
+    // de rodar o script —, e o resto (nenhuma invocação viva, sala para nascer) entra como
+    // `precondition` do `castSpell`: depois de level/vocação/mana, ANTES de qualquer custo.
+    //
+    // **A recusa por cooldown de parede NÃO carrega prazo.** `retryInMs` de 30 min faria o grupo
+    // `support` do bot dormir 30 min — inclusive a haste, que vive no mesmo grupo e volta em 2 s.
+    // A regra engatilha em vez disso (o bot a reavalia a cada evento) e a barra mostra o prazo real
+    // por `#cooldownWaitOf`.
+    let familiar: { readonly definition: Monster; readonly effect: FamiliarEffect; at: FloorPoint | null } | undefined;
+    let precondition: (() => CastRefused | null) | undefined;
+    if (spell.effect.kind === 'familiar') {
+      const effect = spell.effect;
+      const definition = this.#options.monsters.get(effect.monsterId);
+      if (definition === undefined) return NOT_SUMMONABLE;
+      if (this.#wallNowMs(session) < character.familiar.cooldownUntilMs) {
+        return { ok: false, reason: 'on-cooldown', retryInMs: 0 };
+      }
+      const plan = { definition, effect, at: null as FloorPoint | null };
+      familiar = plan;
+      precondition = () => {
+        // O teto do familiar é ZERO invocações vivas (`#self:getSummons() >= 1`), não os 2 da Summon
+        // Creature — e conta a invocação de qualquer nome.
+        if (this.#playerSummonCountOf(character.id) >= 1) return HAS_SUMMONS;
+        plan.at = this.#findFamiliarTile(session, character);
+        return plan.at === null ? NOT_ENOUGH_ROOM : null;
+      };
     }
 
     // Dispel em ÁREA (#592, Cancel Invisibility): a forma sai do LANÇADOR, como a cura em grupo
@@ -5732,7 +6515,9 @@ const slots = bot.groups.get(group);
       character, spell, aim, session.nowMs, this.#options.combat, session.rng,
       this.#spellScaling(character), recipient, this.#attackerModifiers(character), partyAllies,
       // Bolsa default (solo); o `manaCost` REAL da invocação é do MONSTRO (ADR 0057 d.3).
-      undefined, summonMonster?.manaCost,
+      undefined, summonMonster?.manaCost, precondition,
+      // As utilitárias (#623) recusam pelo que só este ruleset vê — mapa, overlay e sessão.
+      this.#utilityRefusalOf(character, spell.effect, recipient, session.nowMs),
     );
     if (!result.ok) return result;
     // A magia SAIU: a mana gasta é o que ela rende de skill (§9.4) — o custo REAL: o do
@@ -5748,6 +6533,22 @@ const slots = bot.groups.get(group);
     if (result.summon === true && summonMonster !== undefined) {
       this.#spawnPlayerSummon(session, character, summonMonster);
     }
+    // O familiar nasce no tile que a `precondition` reservou, e os dois carimbos de PAREDE saem
+    // juntos (`CreateFamiliarSpell`: `createFamiliar` grava `familiar-summon-time`, e só depois de
+    // criado o cooldown de `2 × duração` entra). Nada entre a `precondition` e aqui roda evento —
+    // o tile continua livre.
+    if (result.familiar === true && familiar !== undefined && familiar.at !== null) {
+      this.#spawnFamiliar(session, character, familiar.definition, familiar.at, familiar.effect.durationMs);
+      character.familiar = {
+        ...character.familiar,
+        summonUntilMs: this.#wallStampMs(session, familiar.effect.durationMs),
+        cooldownUntilMs: this.#wallStampMs(session, familiar.effect.cooldownMs),
+      };
+    }
+    // As utilitárias (#623) agem ANTES do `spell-cast`: o Levitate e o Magic Rope desenham o
+    // efeito de teleporte no tile de CHEGADA (`creature:getPosition():sendMagicEffect` roda depois
+    // do `move`), e o `casterPosition` do evento é lido logo abaixo.
+    this.#applyUtilityEffect(session, character, spell.effect, recipient, result);
 
     // UMA vez, ANTES dos golpes (FUN-109): o cliente desenha o efeito no lançador e nos alvos
     // e só depois faz cada número cair. A ordem é contrato.
@@ -5814,6 +6615,12 @@ const slots = bot.groups.get(group);
           targetId: this.#subjectOf(target),
           sourceId: character.id,
         }, true);
+        // As condições extras do mesmo lançamento (o `pacified` do Swift Foot, M44-04, #622).
+        for (const extra of result.alsoConditions ?? []) {
+          this.#applyConditionTo(session, target, {
+            ...extra, targetId: this.#subjectOf(target), sourceId: character.id,
+          });
+        }
       }
       return result;
     }
@@ -5863,6 +6670,125 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * A recusa das magias utilitárias (#623), ou `null` quando a magia pode sair — PURA: não muda
+   * nada e não consome sorteio, porque `slotStates` (a apresentação) a chama pelo espelho
+   * (`#naturalStateOf`) e o `castSpell` a recebe como `preflight`, ANTES de gastar a mana.
+   *
+   * - **Levitate:** sem destino pelas regras de `levitateDestination` → `not-possible`; e `rooted`
+   *   (M44-04, #622) também: o script chama `creature:move`, que cai em `Game::internalMoveCreature`,
+   *   e ele recusa `CONDITION_ROOTED` com o MESMO `RETURNVALUE_NOTPOSSIBLE`. O Magic Rope NÃO — usa
+   *   `teleportTo` (`internalTeleport`), que não confere `rooted`.
+   * - **Magic Rope:** fora de um rope spot → `not-possible` (o `isRopeSpot` do Canary; o overlay
+   *   de cenário é quem sabe onde ele está); sem onde pousar → `not-enough-room`.
+   * - **Find Person:** o alvo é o `recipient` (o personagem que o `use-slot` mirou); sem alvo — o
+   *   `recipient` é o próprio lançador, o valor de "ninguém nomeado" — recusa `person-not-found`,
+   *   o `RETURNVALUE_PLAYERWITHTHISNAMEISNOTONLINE` de `InstantSpell::playerCastInstant`. Esta é a
+   *   ÚNICA recusa da família que INICIA o cooldown (o `castSpell` o faz, sem mana nem alma): no
+   *   Canary o nome sem jogador roda `applyCooldownConditions` antes de cancelar, ao contrário das
+   *   recusas dos scripts de Levitate, Magic Rope e Find Fiend. Procurar a si mesmo não é
+   *   oferecido: a resposta seria sempre "ao lado de você".
+   * - **Find Fiend:** nenhum monstro é fiendish — o Exaltation Forge (#616) está fora do catálogo
+   *   por decisão do dono (2026-09-29) e `ForgeMonster:pickClosestFiendish` devolve `nil` num mundo
+   *   sem ele, então a magia recusa como o Canary ("No creatures around"). Quando o Forge pousar,
+   *   ESTE é o único ponto a ligar: um monstro fiendish achado troca a recusa pela mensagem.
+   */
+  #utilityRefusalOf(
+    character: CharacterRuntime, effect: SpellEffect, recipient: CharacterRuntime, nowMs: number,
+  ): UtilityRefusal | null {
+    switch (effect.kind) {
+      case 'levitate':
+        if (character.conditions.isActive(ROOTED_CONDITION_KEY, nowMs)) return 'not-possible';
+        return levitateDestination(this.#world, this.#at(character), character.direction, effect.direction) === null
+          ? 'not-possible' : null;
+      case 'magic-rope': {
+        const here = this.#at(character);
+        if (this.#tileOverrides.at(here)?.kind !== 'rope-spot') return 'not-possible';
+        return ropeDestination(this.#world, here) === null ? 'not-enough-room' : null;
+      }
+      case 'find':
+        if (effect.target === 'person') return recipient === character ? 'person-not-found' : null;
+        return 'no-creatures-around';
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * O efeito das utilitárias (#623) DEPOIS de `castSpell` ter pago e iniciado o cooldown: mover,
+   * dizer, criar. O que pode recusar já recusou em `#utilityRefusalOf` — o mapa não muda entre as
+   * duas chamadas —, então o destino aqui é o mesmo que a pré-conferência aprovou.
+   */
+  #applyUtilityEffect(
+    session: Session, character: CharacterRuntime, effect: SpellEffect, recipient: CharacterRuntime,
+    result: CastSuccess,
+  ): void {
+    switch (effect.kind) {
+      case 'levitate': {
+        const to = levitateDestination(this.#world, this.#at(character), character.direction, effect.direction);
+        if (to !== null) this.#jumpToApproved(session, character, to);
+        return;
+      }
+      case 'magic-rope': {
+        const to = ropeDestination(this.#world, this.#at(character));
+        if (to !== null) this.#jumpToApproved(session, character, to);
+        return;
+      }
+      case 'find':
+        if (effect.target !== 'person') return;
+        session.emit({
+          kind: 'find-result', characterId: character.id, target: 'person', subjectId: recipient.id,
+          relation: findRelation(this.#at(character), this.#at(recipient)),
+        });
+        return;
+      case 'food':
+        this.#createFood(session, character, result.foods ?? []);
+        return;
+      default:
+    }
+  }
+
+  /**
+   * O salto de uma utilitária cujo destino `#utilityRefusalOf` JÁ aprovou (#623). Recusar aqui é
+   * impossível por construção: as duas chamadas rodam na mesma `#castSpell`, sem nada que mova
+   * criatura, abra campo ou troque o overlay entre elas, e `levitateDestination`/`ropeDestination`
+   * conferem tudo o que `relocate` confere (limites, bloqueio e ocupação). Se um dia recusar, a
+   * magia já PAGOU mana, cooldown e skill por um salto que não aconteceu — calar isso era o defeito
+   * que escondia o Magic Rope sobre tile ocupado —, então é erro de programação e falha alto, em
+   * vez de cobrar do jogador um efeito que ele não recebeu.
+   */
+  #jumpToApproved(session: Session, character: CharacterRuntime, to: WorldPoint): void {
+    if (!this.#relocateCharacter(session, character, to)) {
+      throw new Error(
+        `utility spell: the approved destination (${String(to.x)},${String(to.y)},${String(to.z)}) ` +
+          `was refused for ${character.id}`,
+      );
+    }
+  }
+
+  /**
+   * Instancia a comida da magia Food na mochila do lançador (#623) — o `creature:addItem` do
+   * Canary. O mesmo caminho do prêmio de baú (`#useChest`): `instanceId` de `#newInstanceId`,
+   * `inventory.add` com a capacidade do personagem, e é isso que faz o item atravessar
+   * `SessionReceipt.acquired` até o ledger (invariante 10). O Canary, sem lugar na mochila,
+   * larga o item no chão (`canDropOnMap` é `true` por padrão); este modelo não tem item no chão
+   * além do cadáver (ADR 0048 d.8), então o que não coube SE PERDE — e é registrado, para o
+   * extrato acusar a comida que não coube. O `equipment-changed` é a confirmação visível: o
+   * cliente relê o `inventory`.
+   */
+  #createFood(session: Session, character: CharacterRuntime, foods: readonly string[]): void {
+    const wearer = withReservedCapacity(character, 0);
+    for (const itemId of foods) {
+      const carried: CarriedItem = {
+        instanceId: this.#newInstanceId(session, character), itemId, quantity: 1,
+      };
+      if (!character.inventory.add(carried, this.#options.items, wearer, this.#containerRules(character)).ok) {
+        session.record('food-not-carried', itemId);
+      }
+    }
+    session.emit({ kind: 'equipment-changed', characterId: character.id });
+  }
+
+  /**
    * Aplica Challenge/Chivalrous Challenge (#589, Canary `doChallengeCreature`/
    * `challengeFocusDuration`): força cada monstro atingido (`#spellHits`, já colhido por
    * `#aimFor`) a mirar quem lançou e agenda a condição `'challenge'`, que `isMonsterFleeing`
@@ -5885,6 +6811,29 @@ const slots = bot.groups.get(group);
         key: CHALLENGE_CONDITION_KEY,
         targetId: this.#subjectOf(monster),
         sourceId: character.id,
+        expiresAtMs: session.nowMs + durationMs,
+      });
+    }
+  }
+
+  /**
+   * A provocação de uma ability de MONSTRO (#599, o "summon challenge" dos familiares): o mesmo
+   * `doChallengeCreature` que o Challenge do Knight chama (`#applyChallenge`), com a invocação no
+   * lugar do personagem. Vale só para monstro HOSTIL — `Monster::challengeCreature` devolve
+   * `false` para quem é invocação (`isSummon()`), e a área já vem filtrada para monstros pelo
+   * chamador (`#executeMonsterAbility`), então um personagem nunca é provocado por isto.
+   */
+  #applyMonsterChallenge(
+    session: Session, caster: MonsterRuntime,
+    targets: readonly (CharacterRuntime | MonsterRuntime)[], durationMs: number,
+  ): void {
+    for (const target of targets) {
+      if (!(target instanceof MonsterRuntime) || target.masterId !== null) continue;
+      target.targetId = caster.subject;
+      this.#applyConditionTo(session, target, {
+        key: CHALLENGE_CONDITION_KEY,
+        targetId: this.#subjectOf(target),
+        sourceId: caster.subject,
         expiresAtMs: session.nowMs + durationMs,
       });
     }
@@ -6065,7 +7014,13 @@ const slots = bot.groups.get(group);
       this.#aimTiles = areaTiles(area, character.position, character.direction);
       const keys = new Set(this.#aimTiles.map(tileKey));
       for (const monster of this.#monsters) {
-        if (!monster.alive || !keys.has(tileKey(this.#at(monster)))) continue;
+        // A área de um jogador NUNCA atinge a invocação de jogador — nem a própria, nem a de um
+        // companheiro (#600, Canary `Combat::canTargetCreature`, mundo no-pvp: `target->isSummon() &&
+        // targetMasterPlayer` recusa). Sem este corte, a primeira Great Fireball perto do convencido
+        // o mataria; `#hostileMonsters` já faz o mesmo para a escolha do alvo, mas a colheita da forma
+        // varre `#monsters` direto (e não aloca a lista filtrada a cada lançamento).
+        if (!monster.alive || typeof monster.masterId === 'string') continue;
+        if (!keys.has(tileKey(this.#at(monster)))) continue;
         // Cada alvo da forma precisa da PRÓPRIA visão (#553, RF-05) — a onda cobre um cone
         // inteiro, e alguém atrás de uma parede não é atingido só porque outro, mais à frente,
         // está.
@@ -6112,7 +7067,8 @@ const slots = bot.groups.get(group);
       this.#aimTiles = areaTiles(area, character.position, character.direction, primaryPoint);
       const keys = new Set(this.#aimTiles.map(tileKey));
       for (const monster of this.#monsters) {
-        if (monster === primary || !monster.alive) continue;
+        // Mesmo corte da forma centrada no lançador, logo acima: a invocação de jogador fica de fora.
+        if (monster === primary || !monster.alive || typeof monster.masterId === 'string') continue;
         if (!keys.has(tileKey(this.#at(monster)))) continue;
         if (!isSightClear(this.#world.map, character.position, monster.position)) continue;
         this.#collect(character, monster);
@@ -6160,10 +7116,7 @@ const slots = bot.groups.get(group);
    * no magic level como somam no dano da runa e na cura da poção.
    */
   #runeScaling(character: CharacterRuntime): SpellScaling {
-    const magic = this.#options.skills.get('magic');
-    const magicLevel = (magic === undefined ? 0 : character.skills.levelOf(magic))
-      + character.inventory.skillBonus(this.#options.items, 'magic')
-      + character.conditions.skillBonus('magic');
+    const magicLevel = this.#magicLevelOf(character);
     return {
       skillLevel: magicLevel, powerScale: 1, magicLevel,
       // O ML especializado por elemento (#680): a fórmula da runa soma o do elemento DELA.
@@ -6188,17 +7141,14 @@ const slots = bot.groups.get(group);
     const skillId = spellSkill === SPELL_SKILL_WEAPON
       ? this.#equippedWeaponSkillId(character) : spellSkill;
     const skill = this.#options.skills.get(skillId);
-    const magic = this.#options.skills.get('magic');
     return {
-      skillLevel: (skill === undefined ? 0 : character.skills.levelOf(skill))
+      skillLevel: (skill === undefined ? 0 : this.#loyaltyLevelOf(character, skill))
         + character.inventory.skillBonus(this.#options.items, skillId)
         + character.conditions.skillBonus(skillId),
       // A skill de magia escala o poder FIXO, como a de arma escala o golpe (FUN-75).
       powerScale: this.#scaledPower(character, 'spell-cast', 1),
       // A fórmula canônica de CURA (#475) escala pelo magic level, em toda vocação.
-      magicLevel: (magic === undefined ? 0 : character.skills.levelOf(magic))
-        + character.inventory.skillBonus(this.#options.items, 'magic')
-        + character.conditions.skillBonus('magic'),
+      magicLevel: this.#magicLevelOf(character),
       // O termo de arma da fórmula baseada em `attack` (#523: Groundshaker, Berserk, Fierce
       // Berserk, Front Sweep, Whirlwind Throw). `0` desarmado — a mesma resposta honesta de
       // `weaponAttack`, nunca um número inventado.
@@ -6275,6 +7225,12 @@ const slots = bot.groups.get(group);
     // `Creature::addCondition` do Canary. Só personagem veste item; monstro fica como estava.
     if (condition.key === DRUNK_CONDITION_KEY && target instanceof CharacterRuntime
       && target.inventory.suppresses(this.#options.items, DRUNK_CONDITION_KEY)) return;
+    // O medo de um PERSONAGEM (M44-04, #622) tem o portão próprio do combate e a caminhada forçada
+    // que o `sim` conduz (`#onFearThink`) — os dois só valem para jogador: `forcePlayerAutoWalk`
+    // do Canary ignora qualquer criatura que não seja um `Player`. Em monstro a condição é só o
+    // estado (ninguém no Canary aplica medo a monstro), e o vencimento é o `condition-expire`.
+    const characterFear = condition.key === FEARED_CONDITION_KEY && target instanceof CharacterRuntime;
+    if (characterFear && fromCombat && !this.#fearAffects(session, target)) return;
     // Imunidade de monstro por CONDIÇÃO (#559, ADR 0041 d.2): `Monster::isImmune(ConditionType_t)`
     // do Canary/TFS, consultada por `Combat::CombatConditionFunc` — quem o conteúdo declara imune
     // não recebe a condição de um golpe/magia/runa/ability, ponto de aplicação único, nunca
@@ -6314,12 +7270,29 @@ const slots = bot.groups.get(group);
       : keepTick
         ? previous!.nextTickAtMs
         : session.nowMs + tick.intervalMs;
-    const effective: ConditionState = nextTickAtMs === undefined
+    let effective: ConditionState = nextTickAtMs === undefined
       ? condition
       : { ...condition, nextTickAtMs };
+    if (characterFear) {
+      // `ConditionFeared::addCondition` (relançar com a condição já correndo) só atualiza o prazo:
+      // o `fleeingFromPos` e o `fleeIndx` continuam os de quando o medo começou. Um medo NOVO
+      // (`startCondition`) escolhe a direção de fuga agora, a partir de onde o lançador está.
+      effective = { ...effective, flee: previous?.flee ?? this.#startFlee(session, target, condition) };
+    }
     target.conditions.apply(effective);
-    // `strongest` manteve o anterior: o evento dele continua valendo, e reagendar duplicaria.
+    // `strongest`/`longest` mantiveram o anterior: o evento dele continua valendo, e reagendar
+    // duplicaria.
     if (target.conditions.get(condition.key) !== effective) return;
+    if (characterFear) {
+      // Sem `condition-expire`: o pensamento fecha o medo (ver `FEAR_THINK`). Um medo NOVO arma o
+      // primeiro pensamento no próximo instante da grade do personagem — a fase da criatura.
+      if (previous === null) {
+        session.scheduleIn(FEAR_THINK, this.#thinkDelayMs(session, target.id, session.nowMs), {
+          priority: EventPriority.Movement, subject: target.id,
+        });
+      }
+      return;
+    }
     if (previous !== null) {
       session.cancelEvent(CONDITION_EXPIRE, subject);
       // Relançar no MESMO ritmo NÃO cancela o tique: ele mantém a cadência. Cancelar e
@@ -6562,7 +7535,14 @@ const slots = bot.groups.get(group);
     // de veneno) ganha a passagem temporária pelo campo que o prende, e o invisível que leva
     // dano do campo volta a ser visível (`#drainMonster`).
     const applied = this.#drainMonster(session, target, outcome, null);
-    recordDamage(target.contribution, attacker, applied.healthDamage);
+    // O dano de um tique cujo dono (um MONSTRO, #619) já saiu continua a tirar vida, mas não é
+    // atribuído a ninguém: `Creature::drainHealth` só chama `addDamagePoints` `if (attacker)`, e o
+    // `getCreatureByID` do dono morto devolve nulo. Atribuir de novo a `m:<id>` reabriria a chave
+    // que a fusão em `DEPARTED_ACTOR` acabou de fechar, e inflaria o total do mapa com dano que o
+    // Canary nunca contou.
+    if (!attacker.startsWith('m:') || this.#monsterBySubject.has(attacker)) {
+      recordDamage(target.contribution, attacker, applied.healthDamage);
+    }
     session.emit({
       kind: 'creature-hit', creatureId: target.subject, attackerId: attacker,
       // `manaDamage` (#547): sempre zero aqui — monstro não tem mana —, mas a soma mantém o
@@ -6592,23 +7572,86 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * Cancela os eventos das condições de um alvo (CMB-07). Chamado quando ele morre ou sai: sem
-   * isto, o vencimento de uma condição de quem não existe mais ficaria na fila até vencer, e o
-   * despacho encontraria o vazio — o órfão que o critério da issue proíbe.
+   * Cancela os eventos das condições de um alvo E as remove (CMB-07). Chamado quando ele morre:
+   * sem isto, o vencimento de uma condição de quem não existe mais ficaria na fila até vencer, e o
+   * despacho encontraria o vazio — o órfão que o critério da issue proíbe. Quem apenas SAI da
+   * sessão não passa por aqui: `#cancelConditionEvents` tira os eventos e deixa a condição.
    */
   #cancelConditions(session: Session, target: ConditionTarget): void {
+    this.#cancelConditionEvents(session, target);
+    for (const condition of target.conditions.getState()) target.conditions.remove(condition.key);
+  }
+
+  /**
+   * Tira da fila desta sessão o vencimento e o tique de toda condição do alvo, SEM remover a
+   * condição (#812): é o que quem sai (`onLeave`) faz, porque a condição segue com o personagem.
+   */
+  #cancelConditionEvents(session: Session, target: ConditionTarget): void {
     const id = this.#subjectOf(target);
     for (const condition of target.conditions.getState()) {
       const subject = conditionSubject(id, condition.key);
       session.cancelEvent(CONDITION_EXPIRE, subject);
       session.cancelEvent(CONDITION_TICK, subject);
-      target.conditions.remove(condition.key);
+    }
+    // O pensamento do medo, a retomada do golpe e a caminhada forçada também são dele (M44-04,
+    // #622): quem morreu ou saiu não foge mais nesta sessão, e os eventos de `FEAR_THINK`/
+    // `ATTACK_THINK` não podem ficar órfãos na fila. É a fila e o estado do RUNNER que saem — o
+    // `feared` e o `pacified` em si seguem o personagem, como qualquer condição (#812), e a
+    // sessão que o recebe os rearma (`#armConditions`).
+    if (target instanceof CharacterRuntime) {
+      session.cancelEvent(FEAR_THINK, id);
+      session.cancelEvent(ATTACK_THINK, id);
+      const runner = this.#runners.get(id);
+      if (runner !== undefined) {
+        runner.fearWalk = null;
+        runner.attackParked = false;
+      }
+    }
+  }
+
+  /**
+   * Agenda o vencimento e o próximo tique das condições que o personagem entra TRAZENDO de outra
+   * sessão (#812). `Session.enter` já traduziu `expiresAtMs`/`nextTickAtMs` para o relógio desta
+   * (`CharacterRuntime.moveToClock`), e é daí que sai o prazo que ainda falta. Sem isto uma haste
+   * herdada nunca venceria e um veneno herdado nunca tiquetaria: os dois eventos moravam na fila da
+   * sessão anterior.
+   *
+   * Cancela antes de agendar: o personagem que volta à MESMA instância (sai e entra de novo) não
+   * pode ficar com dois vencimentos. `Math.max(0, …)` cobre o tique que caía no instante da saída e
+   * ainda não tinha rodado — vence agora, como se a fila tivesse seguido.
+   */
+  #armConditions(session: Session, character: CharacterRuntime): void {
+    for (const condition of character.conditions.getState()) {
+      const subject = conditionSubject(character.id, condition.key);
+      session.cancelEvent(CONDITION_EXPIRE, subject);
+      session.cancelEvent(CONDITION_TICK, subject);
+      if (condition.key === FEARED_CONDITION_KEY) {
+        // O medo de um PERSONAGEM não tem `condition-expire` (M44-04, #622, ver `FEAR_THINK`): quem
+        // o fecha é o pensamento depois do prazo, e a fuga do último pensamento sai ANTES de ele
+        // fechar. Um `condition-expire` aqui o removeria no instante do prazo, antes dessa fuga e
+        // sem a imunidade de 10 s. Entrando por transição o medo volta no próximo instante da grade
+        // de pensamento do personagem NESTA sessão — o `flee` viaja na condição, a caminhada
+        // forçada (do runner) não: a próxima fuga é decidida de novo.
+        session.cancelEvent(FEAR_THINK, character.id);
+        session.scheduleIn(FEAR_THINK, this.#thinkDelayMs(session, character.id, session.nowMs), {
+          priority: EventPriority.Movement, subject: character.id,
+        });
+        continue;
+      }
+      session.scheduleIn(CONDITION_EXPIRE, Math.max(0, condition.expiresAtMs - session.nowMs), {
+        priority: EXPIRE_PRIORITY, subject,
+      });
+      if (condition.nextTickAtMs !== undefined) {
+        session.scheduleIn(CONDITION_TICK, Math.max(0, condition.nextTickAtMs - session.nowMs), {
+          priority: TICK_PRIORITY, subject,
+        });
+      }
     }
   }
 
   /**
    * Remove condições ESPECÍFICAS de um alvo por chave (#590: Cure Poison e afins, puras ou
-   * combinadas com cura). Diferente de `#cancelConditions` — que zera TUDO na morte/saída —,
+   * combinadas com cura). Diferente de `#cancelConditions` — que zera TUDO na morte —,
    * aqui só as chaves que o efeito declarou saem; o resto do alvo continua intocado (o critério
    * da issue: Cure Poison remove o poison e NÃO o burning). Chave ausente no alvo não é erro —
    * a magia sai igual, sem nada para remover.
@@ -6621,6 +7664,11 @@ const slots = bot.groups.get(group);
       session.cancelEvent(CONDITION_EXPIRE, subject);
       session.cancelEvent(CONDITION_TICK, subject);
       target.conditions.remove(type);
+      // O `endCondition` do medo (M44-04, #622): a caminhada forçada para e a imunidade de 10 s
+      // começa, seja qual for quem removeu a condição — o Cleanse, uma cura ou uma magia.
+      if (type === FEARED_CONDITION_KEY && target instanceof CharacterRuntime) {
+        this.#endFear(session, target);
+      }
     }
   }
 
@@ -6804,6 +7852,232 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * O que as duas runas de invocação recusam ANTES de gastar a carga (#600, `convince_creature.lua`
+   * e `animate_dead_rune.lua`): a parte do script que só o ruleset sabe conferir, na ordem do
+   * Canary. `check` vai para `useSupply` (depois de requisitos, mira e alcance, antes do gold);
+   * `target`/`corpse` são o que a mira achou, capturados AGORA — `#spellHits` é reaproveitado — para
+   * o efeito depois. `undefined` para todo outro supply: o caminho comum não paga nada.
+   *
+   * - **Convince**: o alvo é `convinceable` e NÃO tem mestre (`target:getMaster()`, de qualquer
+   *   dono — a "carved stone tile" é um NPC de quest fora do catálogo) → senão `not-possible`;
+   *   menos de 2 invocações (`#creature:getSummons() >= 2`) → senão `too-many-summons`; mana >=
+   *   `manaCost` do monstro (ausente = 0) → senão `not-enough-mana`.
+   * - **Animate Dead**: o tile não é SÓLIDO sem criatura visível (`rune:isBlocking(true)`, o
+   *   `NOTENOUGHROOM` de `Spell::playerRuneSpellCheck`, que roda ANTES do script) → senão
+   *   `not-possible`; o item do topo do tile é um cadáver movível NESTE instante
+   *   (`#animatableCorpseAt`) → senão `not-possible`; menos de 2 invocações → senão
+   *   `too-many-summons`; e há um tile livre para o monstro nascer — o tile é exclusivo neste motor
+   *   (invariante 8), então "nasce onde o Canary força a colocação" vira "no tile ou num vizinho".
+   */
+  #summonRunePrecondition(
+    session: Session, character: CharacterRuntime, effect: Supply['effect'], aim: SpellAim | null,
+  ): SummonRuneCheck | undefined {
+    if (effect.kind === 'convince') {
+      const target = aim === null ? null : (this.#spellHits[0] ?? null);
+      return {
+        target,
+        corpse: null,
+        check: () => {
+          if (target === null) return NOT_POSSIBLE;
+          const definition = this.#options.monsters.get(target.monsterId);
+          if (definition?.convinceable !== true || target.masterId !== null) return NOT_POSSIBLE;
+          if (this.#playerSummonCountOf(character.id) >= PLAYER_SUMMON_CAP) return TOO_MANY_SUMMONS;
+          if (character.mana < (definition.manaCost ?? 0)) {
+            return { ok: false, reason: 'not-enough-mana', retryInMs: 0 };
+          }
+          return null;
+        },
+      };
+    }
+    if (effect.kind === 'animate-dead') {
+      const at = aim?.point;
+      const corpse = at === undefined ? null : this.#animatableCorpseAt(session, at);
+      return {
+        target: null,
+        corpse,
+        check: () => {
+          // `rune:isBlocking(true)` (`blockingSolid`): `Spell::playerRuneSpellCheck` recusa o tile
+          // SÓLIDO sem criatura visível ANTES do script rodar (`RETURNVALUE_NOTENOUGHROOM`, "não há
+          // espaço"), e o cadáver, o gold e o cooldown ficam como estavam. Aqui o sólido é o campo
+          // bloqueante (Magic Wall, Wild Growth) sobre o tile do cadáver — a parede e a porta fechada
+          // também contariam, mas nenhum cadáver nasce nelas.
+          if (at !== undefined && this.#world.blockedAt(at.x, at.y, at.z) && !this.#hasVisibleCreatureAt(session, at)) {
+            return NOT_POSSIBLE;
+          }
+          if (corpse === null || at === undefined) return NOT_POSSIBLE;
+          if (this.#playerSummonCountOf(character.id) >= PLAYER_SUMMON_CAP) return TOO_MANY_SUMMONS;
+          if (this.#freeTileNear(at) === null) return NOT_POSSIBLE;
+          return null;
+        },
+      };
+    }
+    return undefined;
+  }
+
+  /**
+   * Há criatura VISÍVEL em `at` (#600)? É o `getBottomVisibleCreature` de `Spell::playerRuneSpellCheck`:
+   * personagem vivo ou monstro vivo e não invisível — o jogador nunca enxerga o invisível
+   * (`Player::canSeeCreature`). Só a precondição da Animate Dead a usa.
+   */
+  #hasVisibleCreatureAt(session: Session, at: WorldPoint): boolean {
+    for (const character of session.participants) {
+      if (character.alive && character.position.x === at.x && character.position.y === at.y
+        && sameFloor(character.position.z, at.z)) return true;
+    }
+    for (const monster of this.#monsters) {
+      if (monster.alive && !monster.invisible && monster.position.x === at.x
+        && monster.position.y === at.y && sameFloor(monster.position.z, at.z)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * O cadáver que a Animate Dead enxerga no tile (#600): o item do TOPO da pilha — o mais RECENTE,
+   * porque `Tile::getTopDownItem` devolve o último item posto (`downItems` insere na frente) —, e só
+   * se ele é movível AGORA. Um cadáver mais velho por baixo de um recente que ainda não é movível
+   * NÃO conta: o script olha uma coisa só. `null` sem cadáver, ou com o do topo ainda na janela
+   * `unmove` da cadeia de decaimento.
+   */
+  #animatableCorpseAt(session: Session, at: WorldPoint): CorpseState | null {
+    let top: CorpseState | null = null;
+    for (const corpse of this.#corpses) {
+      if (corpse.position.x !== at.x || corpse.position.y !== at.y || corpse.position.z !== at.z) continue;
+      if (top === null || corpse.id > top.id) top = corpse;
+    }
+    return top !== null && this.#isCorpseAnimatable(session, top) ? top : null;
+  }
+
+  /**
+   * O cadáver está numa janela movível da própria cadeia `decayTo` (`monster.corpseAnimatable`, #600)?
+   * O tempo desde a morte sai do evento `CORPSE` que a fila já guarda — vencimento menos o prazo
+   * total (`corpseTtlMs`) —, e não de um carimbo novo: é estado que sobrevive ao snapshot sem campo
+   * extra e não depende de haver alguém olhando (invariante 3). `fromMs` inclusive, `untilMs`
+   * exclusivo.
+   */
+  #isCorpseAnimatable(session: Session, corpse: CorpseState): boolean {
+    const definition = this.#options.monsters.get(corpse.monsterId);
+    const windows = definition?.corpseAnimatable;
+    const ttlMs = definition?.corpseTtlMs;
+    if (windows === undefined || ttlMs === undefined) return false;
+    const dueAtMs = session.dueAtOf(CORPSE, String(corpse.id));
+    if (dueAtMs === null) return false;
+    const elapsedMs = ttlMs - (dueAtMs - session.nowMs);
+    return windows.some((window) => elapsedMs >= window.fromMs && elapsedMs < window.untilMs);
+  }
+
+  /**
+   * O cadáver animável mais próximo ao alcance (#600) — a mira do BOT quando ninguém apontou um tile
+   * (a automação é do Draconya, ADR 0037 d.2: o jogador aponta na mão, o bot escolhe). Mesmo andar,
+   * linha de visão livre e o do TOPO da pilha do tile; o mais próximo, e o mais antigo em empate
+   * (id menor). `undefined` sem nenhum.
+   */
+  #nearestAnimatableCorpse(
+    session: Session, character: CharacterRuntime, range: number,
+  ): FloorPoint | undefined {
+    let best: CorpseState | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const corpse of this.#corpses) {
+      if (!sameFloor(character.position.z, corpse.position.z)) continue;
+      const away = distance(character.position, corpse.position);
+      if (away > range || away > bestDistance) continue;
+      if (away === bestDistance && best !== null && corpse.id > best.id) continue;
+      if (this.#animatableCorpseAt(session, corpse.position) !== corpse) continue;
+      if (!isSightClear(this.#world.map, character.position, corpse.position)) continue;
+      best = corpse;
+      bestDistance = away;
+    }
+    return best?.position;
+  }
+
+  /**
+   * O tile onde uma invocação nasce ao redor de `at` (#600): o próprio tile, senão o primeiro
+   * vizinho livre na ordem fixa de `tilesAround` — a mesma regra e o mesmo bloqueio
+   * (`#summonBlockedFor`: só parede e ocupação) de `#spawnPlayerSummon`. `null` sem nenhum.
+   */
+  #freeTileNear(at: WorldPoint): FloorPoint | null {
+    const blocked = this.#summonBlockedFor();
+    for (const tile of tilesAround(at, SUMMON_SPAWN_RADIUS)) {
+      if (blocked(tile.x, tile.y, tile.z)) continue;
+      return tile;
+    }
+    return null;
+  }
+
+  /**
+   * A Convince Creature (#600, `convince_creature.lua`): paga a mana DO MONSTRO (`addMana(-manaCost)`)
+   * e o magic level sobe por ela (`addManaSpent`) — a mesma conta de `#castSpell` —, e o alvo passa a
+   * ser invocação do lançador. A precondição já garantiu mana, teto e alvo válido.
+   */
+  #applyConvince(session: Session, character: CharacterRuntime, target: MonsterRuntime | null): void {
+    if (target === null) return;
+    const manaCost = this.#options.monsters.get(target.monsterId)?.manaCost ?? 0;
+    character.mana -= manaCost;
+    this.#gainSkills(session, character, 'spell-cast', manaCost);
+    this.#convertToSummon(session, target, character);
+  }
+
+  /**
+   * O monstro do Spawner vira invocação do PERSONAGEM (#600, `Creature::setMaster(master, true)` +
+   * `Creature::setSummon`): daqui em diante é a mesma criatura que `#spawnPlayerSummon` cria — segue o
+   * alvo do mestre, credita o dano a ele, nunca paga loot, XP nem Bestiário, some com o mestre.
+   *
+   * O que NÃO muda, de propósito, é o LUGAR NO SPAWNER: no Canary o ponto continua contando o monstro
+   * (`SpawnMonster::spawnedMonsterMap`, só limpo quando o monstro é REMOVIDO — `cleanup`), então o
+   * respawn NÃO começa ao convencer; começa quando ele morre ou sai (`#onMonsterDied` /
+   * `#removeSummon` liberam o lugar). O ADR 0057 d.5 dizia "imediatamente, `spawn->removeMonster`":
+   * essa chamada só existe no ramo `monsterOverspawn` do `Monster::onThink` do TFS (desligado por
+   * padrão, e nada a ver com convencer) — ver a emenda do ADR.
+   *
+   * O que muda: o dono; o alvo antigo (`targetId` — o personagem que o atacava) sai; a lista de
+   * invocação PRÓPRIA não arma mais (`!isSummon()` em `onThinkDefense`) — as invocações que ele já
+   * tinha continuam dele; o estado de "voltando ao spawn"/ocioso desliga (invocação nunca volta nem
+   * fica ociosa); e todo personagem reavalia o alvo, porque o monstro deixou de ser um alvo válido
+   * (`#inSightOf`) — inclusive o do próprio mestre, que o estava atacando.
+   */
+  #convertToSummon(session: Session, monster: MonsterRuntime, master: CharacterRuntime): void {
+    const definition = this.#options.monsters.get(monster.monsterId);
+    monster.masterId = master.id;
+    monster.targetId = null;
+    monster.walkingBack = false;
+    monster.walkBackByPath = false;
+    monster.idle = false;
+    for (const entry of definition?.summons?.entries ?? []) {
+      session.cancelEvent(MONSTER_SUMMON, monsterSummonSubject(monster.id, entry.monsterId));
+    }
+    monster.scheduledSummons.clear();
+    // A apresentação marca "sua invocação": o mesmo evento de nascimento, agora com o mestre — o
+    // cliente aplica `creature-appear` por cima da criatura que já conhece.
+    session.emit({
+      kind: 'creature-appeared', creatureId: monster.subject, monsterId: monster.monsterId,
+      position: this.#at(monster), health: monster.health, maxHealth: this.#maxHealthOf(monster),
+      masterId: master.id,
+    });
+    for (const character of session.participants) this.#autoSelectTarget(session, character);
+  }
+
+  /**
+   * A Animate Dead (#600, `animate_dead_rune.lua`): o cadáver do tile SAI (`corpse:remove()`) — e o
+   * loot que ainda estava nele vai junto, destruído, pela regra do ADR 0048 d.5 (nunca foi instância
+   * no banco: não há linha de ledger a fechar) — e o monstro da runa nasce no lugar como invocação
+   * do lançador. `ground-item-vanished` (o cliente fecha a janela do cadáver, se aberta) e
+   * `creature-appeared` (`#spawnMonster`, com o `masterId`) saem nesta ordem. A precondição já
+   * garantiu o cadáver animável, o teto e o tile livre.
+   */
+  #applyAnimateDead(
+    session: Session, character: CharacterRuntime, at: WorldPoint, monsterId: string,
+    corpse: CorpseState | null,
+  ): void {
+    const definition = this.#options.monsters.get(monsterId);
+    const tile = this.#freeTileNear(at);
+    if (corpse === null || definition === undefined || tile === null) return;
+    const index = this.#corpses.indexOf(corpse);
+    if (index >= 0) this.#corpses.splice(index, 1);
+    session.cancelEvent(CORPSE, String(corpse.id));
+    session.emit({ kind: 'ground-item-vanished', itemId: corpse.id });
+    this.#spawnMonster(session, definition, tile, character.id);
+  }
+
+  /**
    * O campo troca para o PRÓXIMO estágio da cadeia (#560, `decayTo` do Canary). Só existe
    * evento agendado para isto quando `applyField` viu mais de um estágio — o último estágio
    * vence por `FIELD_EXPIRE`, como sempre.
@@ -6917,14 +8191,28 @@ const slots = bot.groups.get(group);
     // distância (#592, Paralyze Rune) mira do MESMO jeito, sem área — só um alvo. A runa de CAMPO/
     // Destroy Field (#591) mira o CHÃO — `#groundAimFor`, que não exige criatura nenhuma no
     // tile. Escala SEMPRE pela skill `magic`: runa é do magic level, em toda vocação.
-    const isGroundSupply = supply.effect.kind === 'field' || supply.effect.kind === 'destroy-field';
+    // A Convince Creature (#600) mira uma CRIATURA, como a runa de alvo único; a Animate Dead mira
+    // um TILE (o cadáver), como a runa de campo — e, sem mira manual (o bot), escolhe o cadáver
+    // animável mais próximo ao alcance: a automação é do Draconya (ADR 0037 d.2), a regra que ela
+    // dispara é a do Canary.
+    const isGroundSupply = supply.effect.kind === 'field' || supply.effect.kind === 'destroy-field'
+      || supply.effect.kind === 'animate-dead';
+    const groundExplicit = supply.effect.kind === 'animate-dead' && explicit === undefined
+      ? this.#nearestAnimatableCorpse(session, character, supply.effect.range)
+      : explicit;
     const aim = supply.effect.kind === 'damage'
       ? this.#aimFor(character, supply.effect.range, supply.effect.area, explicit)
       : (supply.effect.kind === 'condition' && supply.effect.target === 'enemy')
         ? this.#aimFor(character, supply.effect.range, undefined, explicit)
-        : isGroundSupply
-          ? this.#groundAimFor(character, explicit)
-          : null;
+        : supply.effect.kind === 'convince'
+          ? this.#aimFor(character, supply.effect.range, undefined, explicit)
+          : isGroundSupply
+            ? this.#groundAimFor(character, groundExplicit)
+            : null;
+    // O que o script das runas de invocação recusa ANTES de gastar a carga (#600) — conferido em
+    // `useSupply`, depois de requisitos, mira e alcance, e só com estado do ruleset (catálogo de
+    // monstro, cadáveres, teto de invocações, mana). Capturado AGORA: `#spellHits` é reaproveitado.
+    const summonRune = this.#summonRunePrecondition(session, character, supply.effect, aim);
     // Destroy Field (#591): sem campo destrutível no tile mirado, recusa ANTES de gastar gold/
     // carga — o `useSupply` (casting.ts) não tem `Fields` para conferir (invariante 1), então a
     // conferência é daqui, o único lugar com estado de sessão.
@@ -6940,7 +8228,7 @@ const slots = bot.groups.get(group);
     const purse = shared ? this.#sharedPurse(session, character) : ownPurse(character);
     const result = useSupply(
       character, supply, aim, this.#options.combat, session.rng, this.#runeScaling(character), purse,
-      recipient, session.nowMs, this.#attackerModifiers(character),
+      recipient, session.nowMs, this.#attackerModifiers(character), summonRune?.check,
     );
     if (result.ok) {
       // Gold gasto é agregado da SESSÃO, como `goldGained` é no abate: o extrato leva os dois
@@ -6978,6 +8266,28 @@ const slots = bot.groups.get(group);
           kind: 'supply-used', characterId: character.id, supplyId: supply.id,
           position: this.#at(character), targets: NO_SPELL_TARGETS, tiles: [result.destroyFieldAt],
         });
+        return result;
+      }
+
+      // As duas runas de invocação (#600): o efeito é do ruleset (posse, mana do monstro, cadáver).
+      // `supply-used` sai ANTES, como em todo uso — sem alvo nem tile, o efeito é no usuário
+      // (`CONST_ME_MAGIC_BLUE` no lançador, o do Canary).
+      if (result.convince === true) {
+        session.emit({
+          kind: 'supply-used', characterId: character.id, supplyId: supply.id,
+          position: this.#at(character), targets: NO_SPELL_TARGETS, tiles: NO_TILES,
+        });
+        this.#applyConvince(session, character, summonRune?.target ?? null);
+        return result;
+      }
+      if (result.animateDead !== undefined) {
+        session.emit({
+          kind: 'supply-used', characterId: character.id, supplyId: supply.id,
+          position: this.#at(character), targets: NO_SPELL_TARGETS, tiles: [result.animateDead.at],
+        });
+        this.#applyAnimateDead(
+          session, character, result.animateDead.at, result.animateDead.monsterId, summonRune?.corpse ?? null,
+        );
         return result;
       }
 
@@ -7093,7 +8403,8 @@ const slots = bot.groups.get(group);
    * ESPERA, como o `nextPotionAction` do Canary — o uso é adiado pelo `retryInMs`, não perdido.
    * Magia não lê este livro: a falada do Canary usa `nextAction`/`spellCooldown`, outro relógio.
    */
-  #cooldownWaitOf(character: CharacterRuntime, action: BotActionV2, nowMs: number): number {
+  #cooldownWaitOf(session: Session, character: CharacterRuntime, action: BotActionV2): number {
+    const nowMs = session.nowMs;
     const { cooldownKey, group } = this.#cooldownOf(action);
     const individualKey = action.kind === 'spell'
       ? spellCooldownKey(action.spellId)
@@ -7103,7 +8414,19 @@ const slots = bot.groups.get(group);
       character.cooldowns.remainingMs(groupCooldownKey(group), nowMs),
       character.cooldowns.remainingMs(individualKey, nowMs),
       this.#actionExhaustWaitOf(character, action, nowMs),
+      this.#familiarWaitOf(session, character, action),
     );
+  }
+
+  /**
+   * Quanto falta para o familiar voltar (#599), em ms: o carimbo de PAREDE menos o agora — o que
+   * a barra mostra como cooldown e o disparo manual recusa com prazo. Zero para toda ação que não
+   * é a magia de familiar. NÃO entra na recusa do bot (`#castSpell`): ver o comentário lá.
+   */
+  #familiarWaitOf(session: Session, character: CharacterRuntime, action: BotActionV2): number {
+    if (action.kind !== 'spell') return 0;
+    if (this.#options.spells.get(action.spellId)?.effect.kind !== 'familiar') return 0;
+    return Math.max(0, character.familiar.cooldownUntilMs - this.#wallNowMs(session));
   }
 
   /**
@@ -7136,6 +8459,9 @@ const slots = bot.groups.get(group);
       if (spell.vocationId !== undefined && character.vocationId !== spell.vocationId) {
         return blocked('not-in-catalog');
       }
+      // O aprendizado (#624): a MESMA posição que `castSpell` confere — depois de level e
+      // vocação, antes de cooldown/mana/alvo (DT-08: o espelho coincide com o `#perform`).
+      if (!character.learnedSpells.has(spell.id)) return blocked('not-learned');
       // Alvo de party (#588): o mesmo espelho, SEM consumir sorteio nem mutar nada — `<= 1` é a
       // MESMA recusa "No party members in range" que `castSpell` daria, e vem ANTES da mana e da
       // alma, a mesma ordem de `castSpell`.
@@ -7151,6 +8477,13 @@ const slots = bot.groups.get(group);
       }
       if (character.mana < (spell.manaCost as number)) return blocked('not-enough-mana');
       if (character.soul < (spell.soulCost ?? 0)) return blocked('not-enough-soul');
+      // As utilitárias (#623): o mesmo espelho do `preflight` do `castSpell`, DEPOIS da mana e da
+      // alma — a ordem do Canary. Find Person depende de QUEM o jogador mira no clique, que o
+      // espelho não vê: ele diz `person-not-found` só quando NÃO HÁ ninguém mais na sessão.
+      const utility = effect.kind === 'find' && effect.target === 'person'
+        ? (session.participants.length <= 1 ? 'person-not-found' : null)
+        : this.#utilityRefusalOf(character, effect, character, session.nowMs);
+      if (utility !== null) return blocked(utility);
       if (this.#needsTarget(spell.effect)) {
         const range = 'range' in spell.effect ? spell.effect.range : undefined;
         if (this.#targetInRange(character, range) === null) return blocked('no-target');
@@ -7165,8 +8498,7 @@ const slots = bot.groups.get(group);
       if (supply.requires.level !== undefined && character.level < supply.requires.level) {
         return blocked('not-in-catalog');
       }
-      const magic = this.#options.skills.get('magic');
-      const magicLevel = magic === undefined ? 0 : character.skills.levelOf(magic);
+      const magicLevel = this.#magicLevelOf(character);
       if (supply.requires.magicLevel !== undefined && magicLevel < supply.requires.magicLevel) {
         // Motivo PRÓPRIO (RF-02): o `#perform` devolve `magic-level-too-low`, e o espelho do
         // `slotStates` tem de coincidir com ele (DT-08) — genérico aqui é o cliente sem a
@@ -7189,6 +8521,8 @@ const slots = bot.groups.get(group);
    * criatura visível nele (`Spell::playerRuneSpellCheck`, `spells.cpp:704`).
    */
   #isSingleTargetEffect(effect: { readonly kind: string; readonly area?: SpellArea | undefined }): boolean {
+    // A Convince Creature (#600, `needTarget(true)`) também exige criatura VISÍVEL no tile.
+    if (effect.kind === 'convince') return true;
     return (effect.kind === 'damage' || effect.kind === 'damage-over-time') && effect.area === undefined;
   }
 
@@ -7200,6 +8534,9 @@ const slots = bot.groups.get(group);
    */
   #needsTarget(effect: { readonly kind: string; readonly area?: SpellArea | undefined }): boolean {
     if (effect.kind === 'field' || effect.kind === 'destroy-field') return true;
+    // As duas runas de invocação (#600) sempre miram: a Convince, uma criatura; a Animate Dead, o
+    // tile do cadáver — sem alvo o cliente/servidor não têm o que repassar como `explicit`.
+    if (effect.kind === 'convince' || effect.kind === 'animate-dead') return true;
     if (effect.kind !== 'damage' && effect.kind !== 'damage-over-time') return false;
     return effect.area === undefined || !isSelfOrigin(effect.area);
   }
@@ -7724,10 +9061,108 @@ const slots = bot.groups.get(group);
   }
 
   #armPlayerAttack(session: Session, character: CharacterRuntime): void {
-    if (!this.#runnerOf(character.id).playerAttackReady) return;
+    const runner = this.#runnerOf(character.id);
+    if (!runner.playerAttackReady) return;
     if (!character.alive) return;
+    // Estacionado depois de `pacified` (M44-04, #622): só o pensamento ou um passo solta o golpe.
+    if (runner.attackParked) return;
     if (this.#attackTarget(character) === null) return;
+    // `pacified`: o gatilho existe, mas `doAttacking` volta — o golpe fica estacionado até o
+    // primeiro gatilho DEPOIS do vencimento. Sem esta checagem cada passo de monstro agendaria um
+    // golpe que `#onPlayerAttack` só reestacionaria.
+    const pacified = character.conditions.size === 0
+      ? null : character.conditions.get(PACIFIED_CONDITION_KEY);
+    if (pacified !== null && pacified.expiresAtMs > session.nowMs) {
+      this.#parkAttack(session, character, pacified.expiresAtMs);
+      return;
+    }
     this.#schedulePlayerAttack(session, character.id, 0);
+  }
+
+  /**
+   * O que a invocação de PERSONAGEM sem alvo faz para seguir o mestre (#599; `summonFollowStep`).
+   * Reúne o que só o ruleset sabe: o mestre pelo id, e `Creature::canFollowMaster` — a invocação
+   * COMUM não segue o mestre invisível que ela não enxerga (`canSeeInvisibility() ||
+   * !master->isInvisible()`), e o FAMILIAR segue sempre (`!isFamiliar()` faz parte da condição em
+   * `Creature::goToFollowCreature`). O mestre ausente (saiu, e a invocação some junto) é `stay`.
+   */
+  #summonFollowOf(session: Session, monster: MonsterRuntime, definition: Monster): SummonFollow {
+    const master = typeof monster.masterId === 'string' ? findById(session.participants, monster.masterId) : null;
+    if (master === null) return { kind: 'stay' };
+    return summonFollowStep(
+      monster, master, definition.aggroRadius, this.#blockedForWalkBackPath(monster, definition),
+      (from, at) => isSightClear(this.#world.map, from, at),
+      definition.familiar === true || !master.invisible || seesInvisible(definition),
+    );
+  }
+
+  /**
+   * O golpe do personagem ESPERA a `pacified` acabar (M44-04, #622): fica ENGATILHADO — o
+   * `playerAttackReady` que `#armPlayerAttack` já usa para "pronto, sem evento" — e ESTACIONADO
+   * (`Runner.attackParked`): o gatilho que o traz de volta é o pensamento seguinte ao vencimento
+   * (`ATTACK_THINK`), ou um passo do personagem ou do alvo que chegue depois dele
+   * (`#releaseParkedAttacks`, o `onCreatureMove` do Canary). NUNCA o instante exato do
+   * vencimento: o Canary não re-arma o ataque quando a condição acaba, e o golpe sai até 1000 ms
+   * depois, na fase de pensamento do personagem. Um pensamento por estacionamento: ele agenda o
+   * próximo se acordar ainda sob a condição (ela foi estendida).
+   */
+  #parkAttack(session: Session, character: CharacterRuntime, pacifiedUntilMs: number): void {
+    const runner = this.#runnerOf(character.id);
+    runner.playerAttackReady = true;
+    if (runner.attackParked) return;
+    runner.attackParked = true;
+    session.scheduleIn(
+      ATTACK_THINK,
+      pacifiedUntilMs - session.nowMs + this.#thinkDelayMs(session, character.id, pacifiedUntilMs),
+      { priority: EventPriority.Attack, subject: character.id },
+    );
+  }
+
+  /** O pensamento do personagem depois de `pacified`: o primeiro gatilho que traz o golpe de volta. */
+  #onAttackThink(session: Session, characterId: string): void {
+    const character = findById(session.participants, characterId);
+    const runner = this.#runners.get(characterId);
+    if (character === null || runner === undefined || !runner.attackParked) return;
+    runner.attackParked = false;
+    if (!character.alive) return;
+    this.#armPlayerAttack(session, character);
+  }
+
+  /**
+   * Um passo aceito pode soltar o golpe estacionado (`Creature::onCreatureMove` com
+   * `hasExtraSwing`, `creature.cpp:569`): quando é o do PRÓPRIO personagem ou o do alvo dele — o
+   * Canary só olha esses dois —, e a `pacified` já venceu (sob ela `doAttacking` volta). O golpe
+   * estacionado só existe durante e logo depois de uma pacificação, então o caminho quente — um
+   * passo qualquer de um monstro qualquer — paga uma leitura por participante.
+   */
+  #releaseParkedAttacks(session: Session, mover: CharacterRuntime | MonsterRuntime): void {
+    for (const character of session.participants) {
+      const runner = this.#runners.get(character.id);
+      if (runner === undefined || !runner.attackParked) continue;
+      if (character.conditions.isActive(PACIFIED_CONDITION_KEY, session.nowMs)) continue;
+      if (mover !== character && (mover instanceof CharacterRuntime
+        || this.#attackTarget(character) !== mover)) continue;
+      runner.attackParked = false;
+      session.cancelEvent(ATTACK_THINK, character.id);
+      this.#armPlayerAttack(session, character);
+    }
+  }
+
+  /**
+   * Quanto falta, a partir de `fromMs`, para o próximo instante da grade de pensamento do
+   * personagem (`CREATURE_THINK_INTERVAL_MS`): zero se `fromMs` já cai nela. A fase é a do
+   * personagem — sorteada na primeira vez que alguém pergunta (`Runner.thinkPhaseMs`) e igual
+   * daí em diante.
+   */
+  #thinkDelayMs(session: Session, characterId: string, fromMs: number): number {
+    const runner = this.#runners.get(characterId);
+    let phase = runner?.thinkPhaseMs ?? null;
+    if (phase === null) {
+      phase = session.rng.integer(0, CREATURE_THINK_INTERVAL_MS - 1);
+      if (runner !== undefined) runner.thinkPhaseMs = phase;
+    }
+    return (((phase - fromMs) % CREATURE_THINK_INTERVAL_MS) + CREATURE_THINK_INTERVAL_MS)
+      % CREATURE_THINK_INTERVAL_MS;
   }
 
   /**
@@ -7747,10 +9182,12 @@ const slots = bot.groups.get(group);
     // `CharacterRuntime` já satisfaz `Prey` — id, posição e vida. Montar um vetor novo a cada
     // evento era uma alocação por monstro por vencimento, e com 5.000 instâncias isso é o
     // coletor rodando o tempo todo — `#chooseMonsterTarget`/`#preyById` preservam isso quando
-    // não há invocação de personagem (#598): a mesma referência de `session.participants`. As
-    // invocações de personagem são calculadas UMA vez e servem à escolha do alvo E à área de
-    // visão de `decideUnengagedMove` (#655).
-    const summons = typeof monster.masterId === 'string' ? NO_PLAYER_SUMMONS : this.#playerSummonPrey();
+    // não há invocação de personagem (#598): a mesma referência de `session.participants`. Os
+    // oponentes que não são personagem — invocações de personagem e, para o monstro de facção
+    // (#619), os monstros inimigos — são calculados UMA vez e servem à escolha do alvo E à área
+    // de visão de `decideUnengagedMove` (#655).
+    const summons = typeof monster.masterId === 'string'
+      ? NO_PLAYER_SUMMONS : this.#opponentOthersOf(monster, definition);
     monster.targetId = this.#chooseMonsterTarget(session, monster, definition, summons);
     const target = this.#preyById(session, monster.targetId);
     const blocked = this.#blockedForMonster(monster, definition);
@@ -7778,6 +9215,11 @@ const slots = bot.groups.get(group);
     // gasta (abaixo).
     let result: MoveResult | null = null;
     let keepsFieldBypass = false;
+    // A invocação de PERSONAGEM sem alvo SEGUE O MESTRE (#599) — decidido ANTES do encadeamento
+    // porque o `wander` (sem mestre à vista, ou sem caminho até ele) cai no ramo comum abaixo.
+    const follow = (action.kind === 'idle' && liveTarget === null && typeof monster.masterId === 'string')
+      ? this.#summonFollowOf(session, monster, definition)
+      : null;
     if (action.kind === 'step' || action.kind === 'retreat') {
       // `Monster::doFollowCreature` (`monster.cpp:2530`): quem persegue deixa de andar ao acaso.
       monster.randomStepping = false;
@@ -7788,6 +9230,13 @@ const slots = bot.groups.get(group);
       // sem passo a dar, e é ele que roda `doFollowCreature` — e desliga o passo aleatório.
       monster.randomStepping = false;
       monster.idle = false;
+    } else if (follow !== null && follow.kind !== 'wander') {
+      // `Monster::updateSummonTarget`: `master != followCreature` → `setFollowCreature(master)`;
+      // depois `doFollowCreature`. É o ramo de perseguição do Canary (`randomStepping` desliga, o
+      // passo gasta o bypass de campo), só que rumo ao mestre em vez de rumo a um alvo.
+      monster.randomStepping = false;
+      monster.idle = false;
+      if (follow.kind === 'step') result = this.#step(session, monster, follow.to, subject);
     } else {
       // Sem perseguição (#655): `updateIdleStatus` + os ramos `doWalkBack`/`doRandomStep` de
       // `Monster::getNextStep`. Ver `decideUnengagedMove`.
@@ -7799,8 +9248,13 @@ const slots = bot.groups.get(group);
       // `Monster::setIdle`: o flag acompanha a decisão — liga aqui e desliga em qualquer outra,
       // incluindo os ramos de perseguição acima. É ele que cala a defesa, a troca de alvo e a
       // invocação do monstro ocioso (`#onMonsterDefense` e os outros dois timers).
-      monster.idle = move.kind === 'idle';
-      if (move.kind === 'idle') {
+      //
+      // A invocação de um monstro de facção também fica ociosa (#619) — `factionIdle`, quando o
+      // mestre não vê jogador —, e o `chooseTarget` já lhe devolveu `null`: o `still` de cima é só
+      // o movimento (nenhum), e é este flag que a cala.
+      const factionIdle = this.#hasFactions && this.#isFactionSummonIdle(session, monster);
+      monster.idle = move.kind === 'idle' || factionIdle;
+      if (move.kind === 'idle' || factionIdle) {
         // `Monster::setIdle(true)` → `Creature::onIdleStatus`: quem ficou ocioso no spawn esquece
         // quem bateu nele (`damageMap.clear()`, `lastHitCreatureId = 0`).
         if (monster.contribution.actorCount > 0) monster.contribution.clear();
@@ -8010,15 +9464,37 @@ const slots = bot.groups.get(group);
     // O conjunto de presas de uma ability em ÁREA (#598, ADR 0057 decisão 1): estendido pelas
     // invocações de personagem VIVAS, como `#chooseMonsterTarget` — mesma referência de
     // `session.participants` quando não há nenhuma (o caso comum hoje, sempre).
+    //
+    // **Quando o lançador é uma invocação de PERSONAGEM (#599), as presas são outras**: os monstros
+    // HOSTIS, nunca a party nem as outras invocações. No Canary a área de quem tem `master` jogador
+    // passa por `Combat::canDoCombat`, que protege jogador e invocação de jogador (a hunt é PvE) e
+    // deixa o monstro comum de fora do que a protege — e sem isto a onda do familiar acertaria o
+    // próprio mestre. É o que o #598 deixou de fora: a invocação dele só golpeava o alvo único (o
+    // corpo a corpo), e uma ability em área nunca tinha rodado por uma invocação de personagem.
     const summons = this.#livePlayerSummons();
-    const prey: readonly (CharacterRuntime | MonsterRuntime)[] = summons.length === 0
-      ? session.participants
-      : [...session.participants, ...summons];
+    // O monstro de FACÇÃO (#619) também pega, na área, os monstros das facções inimigas: a
+    // Efreet queima o Marid ao lado do alvo. Quem a facção NÃO deixa acertar (`#mayAttack`) sai
+    // do golpe todo — do alvo principal também: o Canary recusa em `Combat::canDoCombat`, antes de
+    // qualquer dano, sem sortear nada. A invocação de PERSONAGEM não tem perfil de facção
+    // (`#factionProfileOf` devolve `null`), então `#withFactionEnemies` devolve as presas dela
+    // como estão: os monstros hostis, de cima.
+    let prey: readonly (CharacterRuntime | MonsterRuntime)[] = typeof monster.masterId === 'string'
+      ? this.#hostileMonsters()
+      : summons.length === 0
+        ? session.participants
+        : [...session.participants, ...summons];
+    if (this.#hasFactions) prey = this.#withFactionEnemies(monster, prey);
     // Alvo secundário da FORMA sem visão livre do lançador não é atingido (#553, RF-05) — o
     // principal já passou pelo portão em `#onMonsterAttack`/`#onMonsterAbility`, mas a onda/
     // círculo pode cobrir alguém atrás de uma parede que o alvo principal não está.
-    const targets = abilityTargets(ability, this.#at(monster), primary, prey)
+    let targets = abilityTargets(ability, this.#at(monster), primary, prey)
       .filter((target) => isSightClear(this.#world.map, this.#at(monster), this.#at(target)));
+    if (this.#hasFactions) {
+      const allowed = targets.filter((target) => this.#mayAttack(monster, target));
+      // Nenhum alvo que a facção permita: o lançamento não acontece (nem evento, nem sorteio).
+      if (allowed.length === 0 && targets.length > 0) return;
+      targets = allowed;
+    }
     const melee = isMeleeAbility(ability);
     const source: 'melee' | 'spell' = melee ? 'melee' : 'spell';
     // A apresentação só sai quando há o que desenhar ou quando a ability NÃO é o corpo a corpo
@@ -8041,6 +9517,15 @@ const slots = bot.groups.get(group);
       });
     }
 
+    // A PROVOCAÇÃO (#599, "summon challenge" dos familiares Druid e Sorcerer): sem dano e sem
+    // sorteio — os monstros atingidos passam a mirar QUEM lançou. Antes do crítico e do sorteio de
+    // dano, que uma ability sem poder nenhum não deve mover (a sequência do `Rng` só anda por
+    // golpe de verdade).
+    if (ability.challenge !== undefined) {
+      this.#applyMonsterChallenge(session, monster, targets, ability.challenge.durationMs);
+      return;
+    }
+
     // O crítico do MONSTRO (M30-04, #551): `Monster::getCriticalChance()`, o mesmo para TODA
     // ability dele — básica ou declarada, corpo a corpo ou à distância, como `applyExtensions`
     // do Canary rola uma vez por `doCombat`, qualquer que seja a origem do golpe e QUALQUER que
@@ -8061,6 +9546,17 @@ const slots = bot.groups.get(group);
       this.#options.progression.rates, monsterDefinition?.boss ?? false,
     ).attack;
     for (const character of targets) {
+      // Um alvo MONSTRO que saiu dos índices neste MESMO laço não é golpeado (#599, #619): `targets` foi
+      // colhido antes de qualquer dano, na ordem de nascimento — o mestre vem antes da invocação
+      // dele —, e a morte do mestre num índice anterior cascateia em `#removeSummon`, que tira a
+      // invocação de `#monsterBySubject`/`#monsters` sem tocar `health`/`alive`. Sem esta
+      // conferência (a de `#applyHits` e `#carnage`, pelo mesmo motivo) o laço sortearia dano para um
+      // id que o cliente já viu sumir, emitiria `creature-hit` fantasma e, se zerasse a vida, faria
+      // `resolveDeath` de novo: outro `creature-vanished`, um cadáver de quem devia sumir sem
+      // cadáver e um tile liberado duas vezes. Vem ANTES da rolagem: o alvo pulado não gasta `rng`.
+      if (character instanceof MonsterRuntime && this.#monsterBySubject.get(character.subject) !== character) {
+        continue;
+      }
       // A faixa sorteada com o `Rng` da sessão, uma rolagem por alvo — o contrato do loot vale
       // para o dano, e a ordem dos alvos é a de entrada (documentada em `abilityTargets`). No
       // `combat-v3` o sorteio é a normal truncada do Canary (#681); antes, uniforme.
@@ -8085,7 +9581,16 @@ const slots = bot.groups.get(group);
           session.rng,
           session.nowMs,
         );
-        this.#applyMonsterHitOnSummon(session, monster, character, result, source);
+        this.#applyMonsterHitOnMonster(session, monster, character, result, source);
+        // A condição da ability (CMB-07, #619) também entra no monstro que ela acertou — o DOT de
+        // veneno do Deepling no Deathling —, com a MESMA imunidade de condição que uma magia do
+        // jogador respeita (`fromCombat`). O dano acima já pode ter matado o alvo.
+        if (ability.condition !== undefined && character.alive) {
+          this.#applyConditionTo(session, character, conditionFromSpec(
+            ability.condition, character.subject, subject, session.nowMs, 'monster-attack',
+            { baseSpeed: character.speed, rng: session.rng },
+          ), true);
+        }
         continue;
       }
       const defender = this.#playerDefender(character, session);
@@ -8137,10 +9642,8 @@ const slots = bot.groups.get(group);
       // A condição da ability (CMB-07), aplicada a CADA alvo vivo que ela acertou. O tique de
       // dano entra no mesmo pipeline do golpe; quem aplicou (o monstro) leva a atribuição.
       //
-      // A invocação de personagem já saiu do laço acima (`continue`) — nunca chega aqui. Uma
-      // condição declarada numa ability que hoje só atinge invocação não seria aplicada; é o
-      // mesmo recorte de `#applyMonsterHitOnSummon` (sem mecanismo exclusivo do jogador), e
-      // fica registrado como divergência conhecida, não como pendência silenciosa.
+      // O monstro-alvo (invocação de personagem, #598, ou monstro inimigo, #619) já saiu do laço
+      // acima (`continue`), com a própria aplicação da condição — nunca chega aqui.
       if (ability.condition !== undefined && character.alive && !conditionBlocked) {
         this.#applyConditionTo(session, character, conditionFromSpec(
           ability.condition, character.id, subject, session.nowMs, 'monster-attack',
@@ -8279,8 +9782,15 @@ const slots = bot.groups.get(group);
    * dano dela entra no mapa de dano em nome de quem a invocou — é o que faz a XP por razão de
    * dano (#523) e o Bestiário renderem para o personagem, não para um `m:<id>` que `xpByDamage`
    * nunca reconheceria como participante.
+   *
+   * O terceiro sentido (#619, facções): um monstro de facção golpeando o de facção inimiga — o
+   * Deepling no Deathling. Aqui `attacker` é um monstro comum (sem `masterId` de personagem) e a
+   * atribuição fica com o `subject` DELE: o `m:<id>` entra no mapa de dano do alvo, e é isso que o
+   * abate lê para saber que NINGUÉM presente causou aquela morte (`#onMonsterDied`) — sem XP, sem
+   * loot com dono —, e que a XP de quem bateu antes é só a fatia dele no dano total. O cano é o
+   * mesmo do dano de jogador (`#drainMonster`), inclusive a cura por elemento do alvo (#683).
    */
-  #applyMonsterHitOnSummon(
+  #applyMonsterHitOnMonster(
     session: Session, attacker: MonsterRuntime, target: MonsterRuntime, outcome: DamageOutcome,
     source: 'melee' | 'spell',
   ): void {
@@ -8295,6 +9805,9 @@ const slots = bot.groups.get(group);
     this.#emitHealth(session, target);
     // O dano da invocação conta para o DPS do MESTRE (#431), como qualquer golpe dele.
     if (typeof attacker.masterId === 'string') session.creditDamage(attacker.masterId, applied.healthDamage);
+    // A cura por elemento do alvo (#683, `monster.heals`): `combatBlockHit` cura por último, depois
+    // do dano — o golpe que mata não cura (`#healMonsterByElement` confere `alive`).
+    this.#healMonsterByElement(session, target, outcome);
     if (target.health > 0) return;
     resolveDeath(session, { kind: 'monster', monster: target });
   }
@@ -8424,10 +9937,14 @@ const slots = bot.groups.get(group);
     // `z` antes da distância, como `chooseTarget` já faz. Estendido pelas invocações de
     // personagem VIVAS (#598), como `#chooseMonsterTarget` — mesma referência de
     // `session.participants` quando não há nenhuma.
-    const summons = this.#playerSummonPrey();
-    const prey: readonly Prey[] = summons.length === 0
-      ? session.participants
-      : [...session.participants, ...summons];
+    // Para o monstro de FACÇÃO (#619) a lista é a de `isTarget`: só a facção inimiga — os
+    // monstros dela entram, e o jogador só se `player` está em `enemyFactions`.
+    const summons = this.#opponentOthersOf(monster, definition);
+    const prey: readonly Prey[] = this.#hasFactions
+      ? this.#targetPreyOf(session, monster, summons)
+      : summons.length === 0
+        ? session.participants
+        : [...session.participants, ...summons];
     // `searchTarget` só olha quem `isTarget` aceita, e `isTarget` exige `canSeeCreature` (Canary
     // `monster.cpp:1435`) — quem não "vê invisível" nunca sorteia um alvo invisível (#559).
     const blind = !seesInvisible(definition);
@@ -8472,6 +9989,17 @@ const slots = bot.groups.get(group);
    * `Creature::getNextStep`/`onWalk` — o sorteio é UM por DECISÃO de movimento, nunca um por
    * tentativa física de chegar lá.
    *
+   * `forced` (M44-04, #622) marca o passo que NÃO é a caminhada própria da criatura: a fuga do
+   * medo, o passo de um `walk-to` já guardado e o empurrão. As condições de controle o tratam
+   * diferente — `feared` recusa o INÍCIO do caminhar do próprio jogador (`Creature::startAutoWalk`,
+   * antes de qualquer sorteio) mas não a lista de passos que já corre nem a fuga que ele mesmo
+   * impõe (`forcePlayerAutoWalk` passa `ignoreConditions`); `rooted` recusa TODO passo, o forçado
+   * inclusive (`Game::internalMoveCreature`, DEPOIS do desvio de drunk — o sorteio de quem está
+   * preso e bêbado ao mesmo tempo acontece igual). Um passo forçado dentro de um campo que causa
+   * dano é recusado sob `feared` (`game.cpp:1975-1980`): a fuga desvia dele, nunca o atravessa — e
+   * para o PERSONAGEM o campo do tile PEDIDO é olhado ANTES do desvio (`Player::onWalk`), sem
+   * sorteio nenhum.
+   *
    * Para um MONSTRO, o DESVIO DE DANO é revalidado aqui, no COMMIT — não só na decisão (M29-05,
    * achado da revisão do #650): `decideMonsterAction` já filtrou os candidatos com
    * `#blockedForMonster`, mas o destino que chega até aqui pode ter sido REESCRITO depois da
@@ -8484,9 +10012,37 @@ const slots = bot.groups.get(group);
    * precisar de uma segunda checagem aqui, e é por isso que só o desvio de dano precisa dela.
    */
   #step<P extends GridPoint>(
-    session: Session, mover: Movable<P>, to: P, creatureId: string, rollDrunk = true,
+    session: Session, mover: Movable<P>, to: P, creatureId: string, rollDrunk = true, forced = false,
   ): MoveResult {
+    // `size > 0`: `#step` é o caminho quente de todo passo de todo monstro, e a criatura sem
+    // NENHUMA condição — o caso comum — nunca paga as leituras de controle abaixo.
+    const controlled = (mover instanceof CharacterRuntime || mover instanceof MonsterRuntime)
+      && mover.conditions.size > 0;
+    if (controlled && !forced) {
+      // `startAutoWalk` recusa a caminhada de quem está preso ou com medo, antes de qualquer
+      // sorteio (M44-04, #622): nem o `walk` do socket, nem a rota do bot, nem o passo do monstro.
+      const refusal = this.#controlRefusal(mover, session.nowMs);
+      if (refusal !== null) return { ok: false, reason: refusal };
+    }
+    // `Player::onWalk` (`player.cpp:2942-2955`) olha o campo de dano do tile PEDIDO antes do
+    // `Creature::onWalk` — que é onde o drunk sorteia: sob `feared`, um passo da lista de passos
+    // para um campo que causa dano volta aí, sem sorteio e sem desvio. O mesmo campo no tile
+    // desviado é recusado mais abaixo, por `internalMoveCreature`.
+    if (rollDrunk && controlled && forced && mover instanceof CharacterRuntime
+      && mover.conditions.isActive(FEARED_CONDITION_KEY, session.nowMs)
+      && this.#harmfulFieldAt(to, this.#floorOf(mover))) {
+      return { ok: false, reason: 'feared' };
+    }
     const target = rollDrunk ? this.#drunkTarget(session, mover, to) : to;
+    if (controlled) {
+      // O que `internalMoveCreature` ainda recusa DEPOIS do desvio: `rooted` sempre, e sob
+      // `feared` o campo que causa dano no destino (só a fuga chega aqui — o resto já voltou).
+      if (mover.conditions.isActive(ROOTED_CONDITION_KEY, session.nowMs)) return { ok: false, reason: 'rooted' };
+      if (mover.conditions.isActive(FEARED_CONDITION_KEY, session.nowMs)
+        && this.#harmfulFieldAt(target, this.#floorOf(mover))) {
+        return { ok: false, reason: 'feared' };
+      }
+    }
     // O campo é conferido no destino FINAL — depois do desvio de drunk, que pode ter trocado o
     // tile aprovado pela decisão (M29-05, achado da revisão do #650).
     if (mover instanceof MonsterRuntime && this.#monsterFieldBlocked(mover, target)) {
@@ -8495,7 +10051,50 @@ const slots = bot.groups.get(group);
     // Empurra quem ocupa o destino FINAL, pela mesma razão do campo acima (M29-08): o destino
     // que chega até aqui pode ter sido reescrito depois da decisão em `#monsterBlocked`.
     if (mover instanceof MonsterRuntime) this.#clearPushableOccupant(session, mover, target);
-    const result = move(this.#world, mover, target);
+    // O jogador atravessa o familiar (#599, `Player::canWalkthrough` — qualquer familiar, de
+    // qualquer dono): o Canary o deixa dividir o tile, e o tile do `sim` é exclusivo, então o
+    // familiar libera o tile POR UM INSTANTE, o passo acontece, e ele ocupa o tile que o jogador
+    // acabou de deixar (a troca). Recusado o passo, o familiar volta a ocupar o dele.
+    const through = mover instanceof CharacterRuntime && this.#familiarIds.size > 0
+      ? this.#familiarAt(target.x, target.y, this.#floorOf(mover))
+      : null;
+    const throughFrom = through === null ? null : this.#at(through);
+    if (throughFrom !== null) this.#world.vacate(throughFrom.x, throughFrom.y, throughFrom.z);
+    let result = move(this.#world, mover, target);
+    if (through !== null && throughFrom !== null) {
+      if (result.ok && place(this.#world, through, result.from) === null) {
+        through.lastMoveAtMs = session.nowMs;
+        session.emit({
+          kind: 'creature-moved', creatureId: through.subject, from: throughFrom,
+          to: this.#at(through), durationMs: result.durationMs,
+        });
+      } else if (!result.ok || !this.#placeFamiliarNear(session, through, result.to)) {
+        // Dois casos distintos. PASSO RECUSADO: o familiar volta a ocupar o tile dele. PASSO
+        // ACEITO e troca recusada: o tile que o jogador deixou não admite mais ninguém — a porta
+        // comum fecha no `vacate` (ADR 0050 d.3) —, e o familiar, que continua na coordenada que o
+        // jogador acabou de pisar, é recolocado perto dele (`#placeFamiliarNear`). Só sem lugar
+        // nenhum em volta ele fica onde estava, dividindo o tile com o jogador como o Canary deixa.
+        this.#world.occupy(throughFrom.x, throughFrom.y, throughFrom.z);
+      }
+    }
+    // O jogador ATRAVESSA a invocação de qualquer jogador (#600, `Player::canWalkthrough`): o
+    // tile ocupado por ela não recusa o passo, troca de lugar com ela. Vale para todo passo de
+    // personagem — a rota do bot, o follow e o `walk` à mão —, que é o que este ponto único cobre.
+    // O familiar (#599) já foi atravessado acima, ANTES do `move` (o tile dele foi liberado, então o
+    // passo não chega a ser recusado por ocupação): sobra aqui a invocação comum.
+    let walkedThrough: MonsterRuntime | null = null;
+    let walkedThroughStep: Extract<MoveResult, { ok: true }> | null = null;
+    if (!result.ok && result.reason === 'tile-occupied' && mover instanceof CharacterRuntime) {
+      const summon = this.#playerSummonAt(target, this.#floorOf(mover));
+      if (summon !== null) {
+        const swapped = swapPlaces(this.#world, mover, summon);
+        if (swapped.ok) {
+          result = swapped.mover;
+          walkedThrough = summon;
+          walkedThroughStep = swapped.other;
+        }
+      }
+    }
     if (result.ok) {
       // O instante do último passo do MONSTRO (#655, `Creature::lastStep`): o passo aleatório o
       // lê para respeitar o intervalo mínimo. É gravado aqui porque `#step` é o único ponto por
@@ -8512,23 +10111,33 @@ const slots = bot.groups.get(group);
         // pelos DOIS mesmos redirecionamentos de `move()` (`packages/sim/src/movement.ts`), e um
         // que pousa fora do tile adjacente pedido É um dos dois — um passo comum nunca é. Só o
         // `combat-v3` lê (`#isV3`); ausente é identidade, e nenhuma sessão v1/v2 grava a trava.
-        const stairhopDelayMs = this.#options.combat.stairhopDelayMs;
-        if (stairhopDelayMs !== undefined && this.#isV3() && (
-          result.to.z !== result.from.z
-          || Math.abs(result.to.x - result.from.x) > 1
-          || Math.abs(result.to.y - result.from.y) > 1
-        )) {
-          mover.attackLockedUntil = session.nowMs + stairhopDelayMs;
-        }
+        this.#lockAfterJump(session, mover, result);
       }
       session.emit({
         kind: 'creature-moved', creatureId,
         from: result.from, to: result.to, durationMs: result.durationMs,
       });
+      // Um passo do personagem ou do alvo dele solta o golpe estacionado depois de `pacified`
+      // (M44-04, #622): `Creature::onCreatureMove`, o "extra swing" do Canary.
+      if (mover instanceof CharacterRuntime || mover instanceof MonsterRuntime) {
+        this.#releaseParkedAttacks(session, mover);
+      }
       // A entrada num campo (CMB-07) é observada SÓ depois de um passo ACEITO: `movement`
       // devolve resultado e nunca infringe dano. Um tile recusado não aplica o campo.
       if (mover instanceof CharacterRuntime || mover instanceof MonsterRuntime) {
         this.#enterField(session, mover);
+      }
+      if (walkedThrough !== null && walkedThroughStep !== null) {
+        // A invocação foi para o tile de ONDE o personagem saiu: o cliente a vê trocar de lugar. Ela
+        // NÃO entra num campo de lá nem aperta placa — no Canary ela nem se mexeu, os dois dividiam
+        // o tile; a troca é só como este motor (ocupação exclusiva) representa isso.
+        session.emit({
+          kind: 'creature-moved', creatureId: walkedThrough.subject,
+          from: walkedThroughStep.from, to: walkedThroughStep.to, durationMs: walkedThroughStep.durationMs,
+        });
+        // Nenhuma placa de pressão: os DOIS tiles continuam ocupados, e a placa só solta quando o
+        // tile esvazia (`#onSteppedOffOf`).
+        return result;
       }
       // Placa de pressão (#734, ADR 0050 d.6 T3): `#step` é o ÚNICO lugar que escreve posição
       // (comentário do topo do arquivo), então é o único choke point que cobre bot, monstro E o
@@ -8540,6 +10149,80 @@ const slots = bot.groups.get(group);
       this.#onSteppedOffOf(session, character, result.from);
     }
     return result;
+  }
+
+  /**
+   * O stairhop (#554, M30-07): um passo que trocou de andar OU pousou fora do tile adjacente
+   * pedido tranca o ataque do personagem por `stairhopDelayMs`. Extraído de `#step` no #623 porque
+   * Levitate e Magic Rope também são saltos — `Player::onCreatureMove` do Canary trata do mesmo
+   * jeito qualquer `teleport || oldPos.z != newPos.z`, sem perguntar se foi escada, magia ou
+   * teleporte de cenário. Só o `combat-v3` lê; ausente é identidade.
+   */
+  #lockAfterJump(session: Session, mover: CharacterRuntime, result: MoveResult & { readonly ok: true }): void {
+    const stairhopDelayMs = this.#options.combat.stairhopDelayMs;
+    if (stairhopDelayMs !== undefined && this.#isV3() && (
+      result.to.z !== result.from.z
+      || Math.abs(result.to.x - result.from.x) > 1
+      || Math.abs(result.to.y - result.from.y) > 1
+    )) {
+      // A condição `pacified` de verdade (M44-04, #622), `createCondition(CONDITIONID_DEFAULT,
+      // CONDITION_PACIFIED, STAIRHOP_DELAY)` — com a fusão de `updateCondition`: uma
+      // pacificação mais longa que já corre (o Swift Foot) não é encurtada pela troca de andar.
+      this.#applyConditionTo(session, mover, {
+        key: PACIFIED_CONDITION_KEY, targetId: mover.id, sourceId: mover.id,
+        expiresAtMs: session.nowMs + stairhopDelayMs, merge: 'longest',
+      });
+    }
+  }
+
+  /**
+   * O SALTO do personagem para `to` (#623: Levitate, Magic Rope) — a mesma cauda de `#step`
+   * (stairhop, `creature-moved`, campo, placa de pressão), sem virar o personagem: o Canary não
+   * troca a direção de quem levita (`creature:move` não passa direção) nem de quem sobe pela corda.
+   * Devolve `false`, sem escrever nada, quando o destino recusa — `relocate` nunca aplica pela
+   * metade. Mora aqui, com `#step`, porque este é o outro único ponto que escreve posição.
+   */
+  #relocateCharacter(session: Session, character: CharacterRuntime, to: WorldPoint): boolean {
+    const result = relocate(this.#world, character, to);
+    if (!result.ok) return false;
+    // O salto CANCELA a caminhada manual em curso (`walk-to`, #763): `Creature::onCreatureMove`
+    // do Canary chama `stopEventWalk()` para todo `teleport || oldPos.z != newPos.z`, e Levitate e
+    // Magic Rope são os dois. Sem isto o `manualWalkTo` ficava de pé com o `path[0]` do ANDAR
+    // ANTIGO, e `#playerStep` — que dá prioridade a ele sobre combate, follow e rota — repetia o
+    // mesmo tile recusado (`same-tile`/`not-adjacent`) para sempre: a hunt idle congelada, com o
+    // navegador fechado, até alguém mandar uma intenção nova. É o mesmo descarte que o ramo
+    // adjacente de `requestMove` faz, e o bot retoma pela rota no vencimento seguinte.
+    const runner = this.#runners.get(character.id);
+    if (runner !== undefined) {
+      runner.manualWalkTo = null;
+      runner.manualWalkHoldUntilMs = null;
+    }
+    this.#lockAfterJump(session, character, result);
+    session.emit({
+      kind: 'creature-moved', creatureId: character.id,
+      from: result.from, to: result.to, durationMs: result.durationMs,
+    });
+    this.#enterField(session, character);
+    this.#onSteppedOnto(session, character, result.to);
+    this.#onSteppedOffOf(session, character, result.from);
+    return true;
+  }
+
+  /**
+   * A invocação de jogador VIVA em `at` (#600) — a que o personagem atravessa em vez de bater nela.
+   * `Player::canWalkthrough` do Canary (`player.cpp`) libera a criatura cujo mestre é um jogador no
+   * mundo no-pvp (ADR 0060), de QUALQUER dono: a do próprio personagem e a de um companheiro de party.
+   * Linear sobre `#monsters`, e só no caminho de um passo recusado por ocupação — o mesmo custo de
+   * `#monsterAt`.
+   */
+  #playerSummonAt(at: GridPoint, z: number): MonsterRuntime | null {
+    for (const candidate of this.#monsters) {
+      if (!candidate.alive || typeof candidate.masterId !== 'string') continue;
+      if (candidate.position.x !== at.x || candidate.position.y !== at.y) continue;
+      if (!sameFloor(candidate.position.z, z)) continue;
+      return candidate;
+    }
+    return null;
   }
 
   /**
@@ -8598,7 +10281,9 @@ const slots = bot.groups.get(group);
       const candidate = {
         ...occupant.position, x: occupant.position.x + direction.x, y: occupant.position.y + direction.y,
       };
-      if (this.#step(session, occupant, candidate, occupant.subject, false).ok) return true;
+      // `forced` (M44-04, #622): o empurrão é força EXTERNA (`internalMoveCreature` direto, sem
+      // `startAutoWalk`) — quem está com medo é empurrado como qualquer um, quem está preso não.
+      if (this.#step(session, occupant, candidate, occupant.subject, false, true).ok) return true;
     }
     return false;
   }
@@ -8659,6 +10344,193 @@ const slots = bot.groups.get(group);
     if (direction === null) return to;
     const offset = FORWARD[direction];
     return { ...to, x: mover.position.x + offset.x, y: mover.position.y + offset.y };
+  }
+
+  // --- as condições de controle: rooted, feared e pacified (M44-04, #622) -----------------------
+
+  /**
+   * Por que a criatura NÃO anda por conta própria agora: `rooted` ou `feared`, nessa ordem, ou
+   * `null` quando nada a prende. É o que `Creature::startAutoWalk` confere (`creature.cpp:329`) —
+   * o portão de toda caminhada que a criatura decide, seja o `walk` do socket, a rota do bot ou o
+   * passo do monstro.
+   */
+  #controlRefusal(mover: ConditionTarget, nowMs: number): 'rooted' | 'feared' | null {
+    if (mover.conditions.isActive(ROOTED_CONDITION_KEY, nowMs)) return 'rooted';
+    if (mover.conditions.isActive(FEARED_CONDITION_KEY, nowMs)) return 'feared';
+    return null;
+  }
+
+  /**
+   * O tile tem um campo que causa dano e NÃO bloqueia (`field && !field->isBlocking() &&
+   * field->getDamage() != 0`, `game.cpp:1975-1980` e `condition.cpp:2214`)? É o campo que a fuga do
+   * medo nunca pisa. "Causa dano" é uma condição de dano ao longo do tempo no estágio VIGENTE do
+   * campo — o estágio mudo do fire field (`decayTo` sem dano) e o campo só de bloqueio não valem.
+   */
+  #harmfulFieldAt(point: GridPoint, z: number): boolean {
+    const field = this.#fields.at({ x: point.x, y: point.y, z });
+    return field !== null && field.blocksMovement !== true
+      && field.condition?.effect.kind === 'damage-over-time';
+  }
+
+  /**
+   * O mundo que a fuga do medo enxerga a partir de um personagem (`FleeMap`, `fear.ts`). O tile é
+   * transitável para a BUSCA como `Tile::queryAdd(FLAG_PATHFINDING)` diz: parede, borda, porta
+   * fechada e campo bloqueante (`blockedAt`), criatura no tile, escada e teleporte (o pathfinding
+   * do Canary os recusa) e nada mais — o campo de dano NÃO barra a busca, só o passo.
+   */
+  #fleeMapFor(character: CharacterRuntime): FleeMap {
+    const z = this.#floorOf(character);
+    return {
+      walkable: (x, y) => !this.#world.blockedAt(x, y, z)
+        && this.#world.floorChangeAt(x, y, z) === null
+        && this.#world.teleportAt(x, y, z) === null
+        && !this.#world.occupied(x, y, z),
+      harmfulField: (x, y) => this.#harmfulFieldAt({ x, y }, z),
+      sightClear: (from, to) => isSightClear(this.#world.map, { ...from, z }, { ...to, z }),
+    };
+  }
+
+  /**
+   * `Combat::checkFearConditionAffected` (`combat.cpp:1003`): o personagem aceita um medo NOVO?
+   * Não, quando está dentro da imunidade de 10 s do medo anterior (11 s depois de um Cleanse,
+   * `Player::isImmuneFear`), quando JÁ está com medo, e quando a party dele já tem gente demais com
+   * medo — `(membros + 5) / 5` de cada vez, em inteiro, contando os membros SEM o líder (o
+   * `memberList` do Canary não o inclui) e descontando os que estão com medo agora (o líder com
+   * medo não desconta: o laço do Canary só olha `getMembers()`). Sozinho, não há party.
+   */
+  #fearAffects(session: Session, character: CharacterRuntime): boolean {
+    if ((character.cleanseImmunity.get(FEARED_CONDITION_KEY) ?? -1) >= session.nowMs) return false;
+    if (character.conditions.isActive(FEARED_CONDITION_KEY, session.nowMs)) return false;
+    const participants = session.participants;
+    if (participants.length <= 1) return true;
+    const leaderId = this.#party?.leaderId ?? participants[0]?.id;
+    const members = participants.filter((member) => member.id !== leaderId);
+    let affectable = Math.floor((members.length + 5) / 5);
+    for (const member of members) {
+      if (member.conditions.isActive(FEARED_CONDITION_KEY, session.nowMs)) affectable -= 1;
+    }
+    return affectable > 0;
+  }
+
+  /**
+   * `ConditionFeared::startCondition` (`condition.cpp:2396`): a direção de fuga inicial, a partir de
+   * ONDE o lançador está agora (`CONDITION_PARAM_CASTER_POSITION`, que `CombatConditionFunc` grava
+   * no clone). Sem lançador conhecido (campo, ou um que já saiu do mundo), o tile do próprio
+   * personagem — o caso do sorteio, o único que consome o `Rng` da sessão.
+   */
+  #startFlee(session: Session, character: CharacterRuntime, condition: ConditionState): FleeState {
+    const caster = condition.sourceId === undefined
+      ? null : this.#conditionTargetOf(session, condition.sourceId);
+    const from = this.#at(caster ?? character);
+    const index = initialFleeIndex(this.#fleeMapFor(character), character.position, from, session.rng);
+    return { from, index };
+  }
+
+  /**
+   * O corpo de `ConditionFeared::executeCondition` que decide a fuga (`condition.cpp:2403-2427`): com
+   * MENOS de dois passos por dar, escolhe a direção (se ainda não escolheu) e busca o caminho.
+   * Devolve a lista a entregar a `forcePlayerAutoWalk` — possivelmente vazia —, ou `null` quando
+   * o Canary devolve `false` (preso: nenhum vizinho aceita o passo). O índice de fuga que a busca
+   * girou volta para o estado da condição: é ele que faz o próximo pensamento tentar outra direção.
+   */
+  #fleeFor(session: Session, character: CharacterRuntime, condition: ConditionState): readonly number[] | null {
+    const flee = condition.flee;
+    if (flee === undefined) return null;
+    const map = this.#fleeMapFor(character);
+    let index = flee.index;
+    if (index === NO_FLEE_INDEX) index = initialFleeIndex(map, character.position, flee.from, session.rng);
+    const result = fleePath(map, character.position, index);
+    if (result.index !== flee.index) {
+      character.conditions.replace({ ...condition, flee: { ...flee, index: result.index } });
+    }
+    return result.ok ? result.path : null;
+  }
+
+  /**
+   * `Game::forcePlayerAutoWalk` (`game.cpp:4548`): a lista de passos do medo SUBSTITUI a
+   * caminhada do próprio jogador (`startAutoWalk` limpa `listWalkDir`) — a de um `walk-to`
+   * distante inclusive. Lista vazia não anda: o Canary devolve antes de agendar passo nenhum.
+   */
+  #startFleeWalk(runner: Runner, path: readonly number[]): void {
+    runner.manualWalkTo = null;
+    runner.fearWalk = path.length === 0 ? null : path;
+  }
+
+  /**
+   * O medo do personagem acabou (`ConditionFeared::endCondition`, `condition.cpp:2429-2438`): a
+   * caminhada forçada para (`stopEventWalk`) e ele ganha 10 s de imunidade a um medo novo
+   * (`Player::setImmuneFear`). Serve o fim natural (o pensamento depois do prazo) e a remoção por
+   * fora (Cleanse, cura) — quem chama já tirou a condição, ou é ela que este método tira.
+   */
+  #endFear(session: Session, character: CharacterRuntime): void {
+    session.cancelEvent(FEAR_THINK, character.id);
+    character.conditions.remove(FEARED_CONDITION_KEY);
+    character.cleanseImmunity.set(FEARED_CONDITION_KEY, session.nowMs + FEAR_IMMUNITY_MS);
+    const runner = this.#runners.get(character.id);
+    if (runner !== undefined) runner.fearWalk = null;
+  }
+
+  /**
+   * O pensamento do medo venceu (`ConditionFeared::executeCondition`, `Game::checkCreatures`).
+   * A ordem é a do Canary: primeiro a fuga (que só ENFILEIRA a caminhada forçada), depois a
+   * checagem de prazo da `Condition` base — que, passado o `endTime`, fecha o medo e para a
+   * caminhada em curso. A caminhada que a fuga acabou de enfileirar roda DEPOIS do fim
+   * (`g_dispatcher().addEvent`), sem depender mais da condição: o jogador ainda foge a lista
+   * inteira depois de o medo acabar, uma vez.
+   */
+  #onFearThink(session: Session, characterId: string): void {
+    const character = findById(session.participants, characterId);
+    const runner = this.#runners.get(characterId);
+    if (character === null || !character.alive || runner === undefined) return;
+    const condition = character.conditions.get(FEARED_CONDITION_KEY);
+    if (condition === null) return;
+    // `creature->getWalkSize() < 2`: a lista de passos é UMA no Canary, e aqui ela mora em dois
+    // lugares — a fuga e o `walk-to` distante que o jogador já tinha guardado (os dois nunca
+    // coexistem: `#startFleeWalk` e `requestMove` limpam um ao pôr o outro). Com dois passos ou
+    // mais por andar, o medo ainda não foge: o jogador termina o caminho dele.
+    const walkSize = runner.fearWalk?.length ?? runner.manualWalkTo?.path.length ?? 0;
+    const path = walkSize < 2 ? this.#fleeFor(session, character, condition) : null;
+    if (condition.expiresAtMs < session.nowMs) {
+      this.#endFear(session, character);
+    } else {
+      session.scheduleIn(FEAR_THINK, CREATURE_THINK_INTERVAL_MS, {
+        priority: EventPriority.Movement, subject: characterId,
+      });
+    }
+    if (path !== null) this.#startFleeWalk(runner, path);
+  }
+
+  /**
+   * Um passo da caminhada forçada (`Creature::onCreatureWalk` com `getNextStep`): tira o
+   * PRIMEIRO da lista e tenta pisar no tile daquela direção A PARTIR DE ONDE O PERSONAGEM ESTÁ
+   * AGORA — o passo recusado (parede, campo de dano, criatura) é descartado, e o seguinte sai da
+   * posição em que ele ficou, sem replanejar: é assim que o Canary consome `listWalkDir`.
+   *
+   * A lista vazia é o `onWalkComplete` (`Player::onWalkComplete`, `player.cpp:6247`): se o medo
+   * AINDA vale, a fuga é reavaliada na hora, em vez de esperar o próximo pensamento; senão a
+   * caminhada acaba e o personagem volta a andar por conta própria.
+   */
+  #advanceFearWalk(session: Session, character: CharacterRuntime, runner: Runner): MoveResult | null {
+    const walk = runner.fearWalk;
+    if (walk === null) return null;
+    const [direction, ...rest] = walk;
+    if (direction === undefined) {
+      runner.fearWalk = null;
+      const condition = character.conditions.get(FEARED_CONDITION_KEY);
+      if (condition !== null && condition.expiresAtMs >= session.nowMs) {
+        const path = this.#fleeFor(session, character, condition);
+        if (path !== null) this.#startFleeWalk(runner, path);
+      }
+      this.#armPlayerAttack(session, character);
+      return null;
+    }
+    runner.fearWalk = rest;
+    const next = stepFrom(character.position, direction);
+    const result = this.#step(
+      session, character, { ...next, z: character.position.z }, character.id, true, true,
+    );
+    this.#armPlayerAttack(session, character);
+    return result;
   }
 
   /**
@@ -9039,7 +10911,8 @@ const slots = bot.groups.get(group);
     const victims: MonsterRuntime[] = [];
     for (const tile of tiles) {
       for (const candidate of this.#monsters) {
-        if (candidate !== target && candidate.alive
+        // O golpe de varredura não acerta a invocação de jogador (#600) — o mesmo corte do `#aimFor`.
+        if (candidate !== target && candidate.alive && typeof candidate.masterId !== 'string'
           && candidate.position.x === tile.x && candidate.position.y === tile.y
           && sameFloor(candidate.position.z, target.position.z)) {
           victims.push(candidate);
@@ -9487,7 +11360,7 @@ const slots = bot.groups.get(group);
     // O bônus de equipamento da mesma skill (#524) entra aqui — no dano E na chance de acerto à
     // distância (#522), como a skill do Tibia já inclui o `skillDist` do item — MAIS o de
     // condição (#576: Berserk Potion soma 5 em `melee`, Bullseye Potion soma 5 em `distance`).
-    return (skill === undefined ? 0 : character.skills.levelOf(skill))
+    return (skill === undefined ? 0 : this.#loyaltyLevelOf(character, skill))
       + (family === undefined ? 0 : character.inventory.skillBonus(this.#options.items, family.skillId))
       + (family === undefined ? 0 : character.conditions.skillBonus(family.skillId));
   }
@@ -9842,7 +11715,7 @@ const slots = bot.groups.get(group);
     for (let i = 0; i < definitions.length; i += 1) {
       const definition = definitions[i] as Skill;
       if (definition.damagePerLevel === 0) continue;
-      power *= powerMultiplier(definition, character.skills.levelOf(definition));
+      power *= powerMultiplier(definition, this.#loyaltyLevelOf(character, definition));
     }
     // A postura (#155) escala o golpe e o tiro aqui; a magia é escalada dentro de `castSpell`,
     // por alvo — aplicar nos dois lugares contaria a mesma postura duas vezes.
@@ -9906,15 +11779,6 @@ const slots = bot.groups.get(group);
    */
   #onMonsterDied(session: Session, monster: MonsterRuntime, credit: KillCredit): void {
     const definition = this.#options.monsters.get(monster.monsterId);
-    const killer = findById(session.participants, credit.lastHitBy);
-    // O abate conta SEMPRE, para todo presente: "matei N" é a pergunta do analisador de cada
-    // um (#190, DT-01), e a party matou junto. Em solo é o de sempre — conta mesmo com a fonte
-    // sumida ou o dono morto; o extrato mentiria se dissesse que não.
-    for (const participant of session.participants) session.credit(participant.id, 'kills', 1);
-
-    const eligible = session.participants.length === 1
-      ? (killer !== null && killer.alive && !isExhausted(killer) ? [killer] : NO_MEMBERS)
-      : session.participants.filter((p) => p.alive && !isExhausted(p));
     // Invocação (#546, TFS `hasBeenSummoned()`/`setDropLoot(false)`/`setSkillLoss(false)`):
     // nunca paga loot, XP nem Bestiário — ela nasceu de outro monstro, não do Spawner, e o
     // abate dela não é o que a hunt existe para pagar (`Player::onKilledMonster` devolve cedo
@@ -9923,15 +11787,58 @@ const slots = bot.groups.get(group);
     // paga nada de mover a sequência de sorteio de toda a hunt (FUN-63) por uma rolagem que o
     // Tibia nem faz.
     const isSummon = monster.masterId !== null;
+    // O participante que deu o último golpe — `null` quando foi monstro, campo ou a fonte sumiu.
+    const lastHitter = findById(session.participants, credit.lastHitBy);
+    // O GOLPE FINAL foi de OUTRO MONSTRO (#619, o Deepling que mata o Deathling)? O `subject` de
+    // um monstro é `m:<id>`, e é ele que `#applyMonsterHitOnMonster`/o tique de condição gravam
+    // (e o balde `DEPARTED_ACTOR`, quando quem bateu por último já saiu). A invocação de
+    // personagem grava o MESTRE (#598), então o golpe dela nunca cai aqui. Vale para a INVOCAÇÃO
+    // de monstro também: o abate dela por um monstro inimigo não é obra de ninguém presente.
+    //
+    // O Canary paga pelo `damageMap`, não pelo golpe final (`Creature::onDeath`): só quem está nele
+    // como jogador (ou mestre de invocação) entra em `killers`, ganha `floor(dano / total × XP)` —
+    // e o dano de OUTRO monstro conta no total, vivo ou morto — e conta o abate no Bestiário.
+    // Monstro que morre só por monstro não tem `killers`: sem XP, sem abate.
+    const diedToMonster = lastHitter === null
+      && credit.lastHitBy !== null && credit.lastHitBy.startsWith('m:');
+    // Alguém presente bateu neste monstro antes do golpe final? Sem isso a morte é só de monstro.
+    const rewarded = !diedToMonster || this.#participantsDealtDamage(session, credit);
+    // O dono do cadáver é o `mostDamageCreature` (`Monster::getCorpse`: `CORPSEOWNER` só para jogador
+    // ou mestre jogador), e não quem deu o último golpe: com dano de monstro no mapa, quem mais
+    // bateu entre as criaturas que AINDA existem decide — e o loot só existe se for um participante.
+    // Sem dano de monstro (toda hunt sem facção) o dono é, como sempre, o último golpe.
+    const monsterDamage = this.#hasMonsterDamage(credit);
+    const killer = monsterDamage ? this.#corpseOwnerOf(session, credit) : lastHitter;
+    const payLoot = !isSummon && rewarded && (!monsterDamage || killer !== null);
+    // O abate conta SEMPRE, para todo presente: "matei N" é a pergunta do analisador de cada
+    // um (#190, DT-01), e a party matou junto. Em solo é o de sempre — conta mesmo com a fonte
+    // sumida ou o dono morto; o extrato mentiria se dissesse que não.
+    if (rewarded) for (const participant of session.participants) session.credit(participant.id, 'kills', 1);
+
+    // Em solo, a XP é de quem está presente — o matador, ou (morte por monstro com dano dele
+    // antes) o único participante, que bateu; em party, dos vivos com stamina, e `#xpShares` decide
+    // a cota de cada um.
+    const solo = session.participants.length === 1;
+    const payee = diedToMonster ? session.participants[0] ?? null : lastHitter;
+    const eligible = !rewarded
+      ? NO_MEMBERS
+      : solo
+        ? (payee !== null && payee.alive && !isExhausted(payee) ? [payee] : NO_MEMBERS)
+        : session.participants.filter((p) => p.alive && !isExhausted(p));
     // Quem recebe o loot (#191): em solo, o matador — se pode receber; sem dono (fonte que
     // sumiu) ou dono morto, ninguém. Em party `split`, UM elegível sorteado; em `shared`,
     // ninguém — a bolsa (#192).
-    const recipient = isSummon ? null : this.#lootRecipient(session, killer, eligible);
+    const recipient = payLoot ? this.#lootRecipient(session, killer, eligible) : null;
     // O que o cadáver nasce carregando (ADR 0048 decisão 1) — vazio no modo bolsa (o loot vai
     // direto para ela, "como hoje") e quando não há destinatário nenhum.
     let corpseGold = 0;
     let corpseItems: CarriedItem[] = [];
-    if (!isSummon && definition !== undefined && this.#bag !== null && session.participants.length > 1) {
+    // A esfola do bot (#626, ADR 0048 d.5): tentada no MESMO evento, DEPOIS de todo o sorteio de
+    // loot — a ordem do RNG é contrato (FUN-63), e o estágio novo entra por último para não
+    // deslocar nada do que já saía. `skinAfterTtlMs` só existe quando houve sorteio — é ele que
+    // marca o cadáver como esfolado e que o reagenda (o `transform` do Canary reinicia o decaimento).
+    let skinAfterTtlMs: number | undefined;
+    if (payLoot && definition !== undefined && this.#bag !== null && session.participants.length > 1) {
       // Modo compartilhado (#192): tudo cai na BOLSA — sem destinatário, sem modificador
       // individual, e a ordem do RNG é a de solo (gold, depois itens na ordem da tabela).
       // Só com alguém elegível: um monstro que morreu com todo mundo morto não paga ninguém.
@@ -9949,8 +11856,13 @@ const slots = bot.groups.get(group);
         // (`presentAtDrop`, D4/§16.1), não o `eligible` de XP.
         this.#creditSupplies(session, session.participants, loot.supplies);
         this.#creditAmmunition(session, session.participants, loot.ammunition);
+        // Sem dono do cadáver, a esfola é de quem entre os elegíveis tem a ferramenta (na ordem
+        // da sessão) e o material cai na bolsa, como o resto do loot desta modalidade.
+        const skin = this.#skinAtDeath(session, monster, eligible);
+        skinAfterTtlMs = skin.afterTtlMs;
+        if (skin.material !== null) this.#deliverToBag(session, [skin.material]);
       }
-    } else if (!isSummon && definition !== undefined && recipient !== null) {
+    } else if (payLoot && definition !== undefined && recipient !== null) {
       // O sorteio é IDÊNTICO a antes deste ADR — gold, depois itens na ordem da tabela — e o
       // destino é o cadáver, não mais direto na mochila (ADR 0048 decisão 1). `corpseGold`/
       // `corpseItems` alimentam o cadáver logo abaixo, e `#collectFromCorpse` roda no MESMO
@@ -9965,13 +11877,31 @@ const slots = bot.groups.get(group);
       // são abstratos, sem cadáver (ADR 0048 decisão 1).
       this.#creditSupplies(session, [recipient], loot.supplies);
       this.#creditAmmunition(session, [recipient], loot.ammunition);
+      // O material da esfola cai NO CADÁVER, ao lado do loot, e segue o filtro de Quick Loot do
+      // dono no `#collectFromCorpse` logo abaixo (ADR 0048 d.3/d.5) — sobra por filtro ou por
+      // capacidade fica lá, como qualquer item.
+      const skin = this.#skinAtDeath(session, monster, [recipient]);
+      skinAfterTtlMs = skin.afterTtlMs;
+      if (skin.material !== null) {
+        corpseItems = [...corpseItems, ...this.#instantiateCorpseItems(session, recipient, [skin.material])];
+      }
     }
     // A XP é da PARTY (#190, ADR 0027 decisão 3): pool por vocações únicas, dividido por igual
     // entre os elegíveis — e em solo o elegível é o matador, pela mesma condição de sempre.
-    // `#grantPartyXp` também é quem credita o Bestiário (#546: nenhum dos dois vale para quem
+    // `#grantPartyXp` também é quem credita o Bestiário (#546: nenhum dos três vale para quem
     // tem mestre).
+    //
+    // O Bosstiary vem DEPOIS, e fora do `eligible`: o Canary paga a XP e só então chama
+    // `onKilledMonster` de cada matador, sem o portão de stamina e de vida da XP (#629) — um
+    // herói exausto, ou uma party cujos membros estão todos exaustos, continua contando o boss.
+    // Os matadores saem ANTES da XP: o level up deste abate não pode mexer na régua de nível
+    // da XP compartilhada que já valia quando o monstro morreu.
     if (!isSummon && definition !== undefined) {
+      const bosstiaryKillers = definition.boss && definition.bosstiary !== undefined
+        ? this.#killersOf(session, credit)
+        : NO_MEMBERS;
       this.#grantPartyXp(session, monster, definition, eligible, credit);
+      this.#creditBosstiary(session, monster, definition, bosstiaryKillers);
     }
     // Abate comum NÃO vira evento notável. `notableEvents` é a lista curta da tela de retorno
     // (§16.2), e uma hunt de oito horas com uma linha por rato não é lista, é log.
@@ -9980,20 +11910,7 @@ const slots = bot.groups.get(group);
     // o spawner não guarda mais instante nenhum. O `spawntime` do PONTO (#519/#583, o `<monster
     // spawntime="...">` do Canary é por posição, não por zona) é OBRIGATÓRIO desde o #583: não
     // há mais dificuldade nenhuma para cair como fallback.
-    const slot = this.#spawner.release(monster.id);
-    if (slot !== null) {
-      const pointIndex = this.#spawner.slots[slot]?.pointIndex;
-      const point = pointIndex === undefined ? undefined : this.#options.route.spawnPoints[pointIndex];
-      if (point !== undefined) {
-        // Metade para a Boosted Creature do dia (#615, ADR 0054 decisão 7, `SpawnMonster::
-        // addMonster`, `spawn_monster.cpp:379-386`): o monstro que acabou de morrer é o mesmo
-        // que vai respawnar neste lugar, então o `monsterId` DELE decide, não o do ponto —
-        // pontos com `monsters` (peso) só sabem qual nasceu depois do sorteio.
-        session.scheduleIn(SPAWN, this.#respawnDelayFor(monster.monsterId, point.respawnDelayMs), {
-          priority: EventPriority.Spawn, subject: String(slot),
-        });
-      }
-    }
+    this.#releaseSpawnSlot(session, monster);
     // O andar de FATO do monstro (#519) — nunca o do mapa: é o que libera o tile certo quando
     // ele morre em z11 num mapa cujo andar padrão é z10.
     this.#world.vacate(monster.position.x, monster.position.y, this.#floorOf(monster));
@@ -10006,7 +11923,13 @@ const slots = bot.groups.get(group);
     // de cadáver. Só a PERSISTÊNCIA do que sobra (o cadáver visível, com prazo próprio) depende
     // de `corpseTtlMs`: sem ele, o que o filtro não aceitou ou não coube não tem onde esperar, e
     // desaparece — o "não deixa nada" de antes deste ADR, agora só para a sobra.
-    const corpseTtlMs = definition?.corpseTtlMs;
+    //
+    // A invocação NUNCA deixa cadáver (#600): `Creature::dropCorpse` do Canary devolve cedo com um
+    // POFF quando `!lootDrop && getMonster()` — e `setMaster(..., true)`/`setDropLoot(false)` é o que
+    // toda invocação recebe (a do jogador, a de monstro, o convencido e o Skeleton da Animate Dead).
+    // Sem esta regra o esqueleto animado morreria e deixaria um cadáver animável: a cadeia infinita
+    // de Animate Dead que o Canary nunca permite.
+    const corpseTtlMs = isSummon ? undefined : definition?.corpseTtlMs;
     const corpse: CorpseState = {
       id: corpseTtlMs === undefined ? 0 : this.#nextGroundItemId++,
       monsterId: monster.monsterId,
@@ -10015,6 +11938,8 @@ const slots = bot.groups.get(group);
       gold: corpseGold,
       ownerId: recipient?.id ?? null,
       eligible: eligible.map((p) => p.id),
+      diedAtMs: session.nowMs,
+      ...(skinAfterTtlMs !== undefined ? { skinned: true } : {}),
     };
     // O dono coleta AGORA, sem plateia (invariante 3, ADR 0048 decisão 3): o `autoLoot` do
     // Canary, sem trava de Premium. O que o filtro não aceita ou não cabe fica no cadáver.
@@ -10025,7 +11950,10 @@ const slots = bot.groups.get(group);
         kind: 'ground-item-appeared', itemId: corpse.id, monsterId: corpse.monsterId,
         position: corpse.position,
       });
-      session.scheduleIn(CORPSE, corpseTtlMs, {
+      // Esfolado no abate, o cadáver não vive o `corpseTtlMs` inteiro: o Canary o transforma em
+      // `skin.after` (com ou sem sucesso), e o decaimento recomeça dali — a vida passa a ser a do
+      // `after` (`Skinning.stages[].afterTtlMs`), contada a partir do abate.
+      session.scheduleIn(CORPSE, skinAfterTtlMs ?? corpseTtlMs, {
         priority: EventPriority.Housekeeping, subject: String(corpse.id),
       });
     }
@@ -10037,6 +11965,7 @@ const slots = bot.groups.get(group);
     // continuaria na fila e venceria contra o vazio. O `resolveDeath` só cancela o `m:<id>`.
     this.#cancelConditions(session, monster);
     for (const character of session.participants) forgetActor(character.contribution, subject);
+    this.#forgetInMonsters(subject);
     // As abilities DECLARADAS têm subject DERIVADO (CMB-06), e o `resolveDeath` só cancelou o
     // `m:<id>`. Cancelar pelos ids que o conteúdo conhece é O(abilities), sem varrer a fila —
     // e é o que impede um monstro morto de acordar uma vez por cadência.
@@ -10057,6 +11986,18 @@ const slots = bot.groups.get(group);
       session.cancelEvent(MONSTER_SUMMON, monsterSummonSubject(monster.id, entry.monsterId));
     }
     this.#monsterBySubject.delete(subject);
+    // O familiar MORREU (#599, `FamiliarDeath` do Canary: `familiar-summon-time = os.time()`): o
+    // tempo que sobrava deixa de valer — nenhuma recriação na próxima entrada —, e o cooldown de
+    // 30 min segue intacto (`CONDITION_SPELLCOOLDOWN` não some com o familiar nem com o jogador).
+    if (this.#familiarIds.delete(monster.id) && typeof monster.masterId === 'string') {
+      const owner = findById(session.participants, monster.masterId);
+      if (owner !== null) {
+        // Arredonda para BAIXO (o inverso do `#wallStampMs`): o carimbo precisa ser inteiro e nunca
+        // maior que agora, senão a entrada seguinte, na mesma fração de ms, o leria como tempo
+        // sobrando e recriaria o familiar que acabou de morrer.
+        owner.familiar = { ...owner.familiar, summonUntilMs: Math.floor(this.#wallNowMs(session)) };
+      }
+    }
     this.#monsters = this.#monsters.filter((m) => m.id !== monster.id);
     // O alvo escolhido morreu: o auto-target reavalia AGORA para o próximo mais próximo na tela
     // (#444, AB-09). O alvo antigo aponta para um subject que acabou de sair do índice, e são
@@ -10086,6 +12027,46 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * Passa o dano do monstro que saiu (`subject`) nos OUTROS monstros para o balde `DEPARTED_ACTOR`
+   * (#619): o de facção apanha do inimigo e guarda `m:<id>` no `Contribution`, e como cada respawn
+   * tem id novo, sem esta fusão o mapa de quem sobrevive ganharia uma chave por inimigo que já o
+   * feriu — a mesma razão de `forgetActor` nos participantes. Mas NÃO se esquece o dano: o Canary
+   * nunca apaga uma entrada do `damageMap` (`Creature::getDamageRatio` soma todas, e só
+   * `onIdleStatus` zera o mapa), então o total do abate continua levando o que o morto causou — é o
+   * que impede o jogador de ser pago pelo dano que o Deepling já tinha feito. Sem facção na hunt (o
+   * caso comum) nenhum monstro apanha de monstro e não há o que fundir: nem varre a lista.
+   */
+  #forgetInMonsters(subject: string): void {
+    if (!this.#hasFactions) return;
+    for (const other of this.#monsters) {
+      if (other.contribution.actorCount > 0) foldActor(other.contribution, subject);
+    }
+  }
+
+  /**
+   * O monstro saiu do mundo (morreu, ou some com o mestre): devolve o lugar dele ao Spawner e
+   * agenda o respawn. Um monstro sem lugar (invocação do jogador, do #598, ou de outro monstro)
+   * devolve `null` e não agenda nada — e um monstro CONVENCIDO (#600) ainda tem o lugar do ponto de
+   * onde saiu, que só volta agora, como no Canary (`SpawnMonster::cleanup` só limpa o que
+   * `isRemoved()`).
+   *
+   * Metade do prazo para a Boosted Creature do dia (#615, ADR 0054 decisão 7, `SpawnMonster::
+   * addMonster`, `spawn_monster.cpp:379-386`): o monstro que acabou de sair é o mesmo que vai
+   * respawnar neste lugar, então o `monsterId` DELE decide, não o do ponto — pontos com `monsters`
+   * (peso) só sabem qual nasceu depois do sorteio.
+   */
+  #releaseSpawnSlot(session: Session, monster: MonsterRuntime): void {
+    const slot = this.#spawner.release(monster.id);
+    if (slot === null) return;
+    const pointIndex = this.#spawner.slots[slot]?.pointIndex;
+    const point = pointIndex === undefined ? undefined : this.#options.route.spawnPoints[pointIndex];
+    if (point === undefined) return;
+    session.scheduleIn(SPAWN, this.#respawnDelayFor(monster.monsterId, point.respawnDelayMs), {
+      priority: EventPriority.Spawn, subject: String(slot),
+    });
+  }
+
+  /**
    * Uma invocação some porque o MESTRE morreu ou foi removido (#546, TFS `Game::removeCreature`:
    * `setSkillLoss(false)` e `removeCreature(summon)` para cada uma, sem passar pelo pipeline de
    * morte). Ela nunca pagou XP, loot nem Bestiário enquanto viva (`#onMonsterDied` já a exclui
@@ -10099,6 +12080,7 @@ const slots = bot.groups.get(group);
     const subject = summon.subject;
     this.#cancelConditions(session, summon);
     for (const character of session.participants) forgetActor(character.contribution, subject);
+    this.#forgetInMonsters(subject);
     for (const ability of definition?.abilities ?? []) {
       if (ability.id === BASIC_ABILITY_ID) continue;
       session.cancelEvent(MONSTER_ABILITY, monsterAbilitySubject(summon.id, ability.id));
@@ -10113,7 +12095,12 @@ const slots = bot.groups.get(group);
     // esta invocação nunca morreu — ela some —, então quem cancela é aqui.
     session.cancelEvents(subject);
     this.#world.vacate(summon.position.x, summon.position.y, this.#floorOf(summon));
+    // O monstro CONVENCIDO (#600) ainda ocupa o lugar do ponto de spawn de onde saiu: sumir com o
+    // mestre o remove do mundo, e o Canary começa o respawn ali (`Monster::onRemoveCreature`, ramo
+    // `creature.get() == this` → `startSpawnMonsterCheck`). Invocação sem lugar (`null`) não agenda nada.
+    this.#releaseSpawnSlot(session, summon);
     this.#monsterBySubject.delete(subject);
+    this.#familiarIds.delete(summon.id);
     this.#monsters = this.#monsters.filter((m) => m.id !== summon.id);
     for (const character of session.participants) this.#autoSelectTarget(session, character);
     session.emit({ kind: 'creature-vanished', creatureId: subject });
@@ -10154,14 +12141,31 @@ const slots = bot.groups.get(group);
   ): ReadonlyMap<string, number> {
     const party = this.#party;
     const allMembers = session.participants.map((p) => ({ id: p.id, vocationId: this.#vocationOf(p)?.id ?? null }));
+    // O pool que a divisão IGUAL reparte encolhe pelo dano de monstro no abate (#619); a divisão
+    // por DANO (`xpByDamage`, abaixo) já lê o total do mapa e não pode encolher duas vezes.
+    const pool = this.#experiencePool(session, experience, credit);
     if (eligible.length <= 1 || party === undefined) {
-      const share = xpShare(experience, eligible, allMembers);
+      const share = xpShare(pool, eligible, allMembers);
       return new Map(eligible.map((member) => [member.id, share]));
     }
+    if (this.#sharedExperienceActive(session, party)) {
+      const share = xpShare(pool, eligible, allMembers);
+      return new Map(eligible.map((member) => [member.id, share]));
+    }
+    return xpByDamage(experience, eligible, credit.damageByActor);
+  }
+
+  /**
+   * A XP compartilhada está ATIVA neste instante? (`Party::isSharedExperienceActive()` do
+   * TFS/Canary, avaliada no abate — o mesmo `Party::getSharedExperienceStatus` que `#xpShares`
+   * sempre usou.) Tudo ou nada sobre o ROSTER inteiro: nível, alcance do líder e atividade —
+   * ver `canShareExperience`. Sem líder presente, não há de onde medir o alcance: inativa.
+   */
+  #sharedExperienceActive(session: Session, party: PartyOptions): boolean {
     const leader = session.participants.find((p) => p.id === party.leaderId);
     const highestLevel = session.participants.reduce((max, p) => Math.max(max, p.level), 0);
     const rules = this.#options.party.sharedExperience ?? DEFAULT_SHARED_EXPERIENCE_RULES;
-    const canShare = leader !== undefined && canShareExperience(
+    return leader !== undefined && canShareExperience(
       session.participants.map((member) => ({
         id: member.id,
         level: member.level,
@@ -10170,11 +12174,59 @@ const slots = bot.groups.get(group);
       })),
       highestLevel, leader.position, session.nowMs, rules,
     );
-    if (canShare) {
-      const share = xpShare(experience, eligible, allMembers);
-      return new Map(eligible.map((member) => [member.id, share]));
+  }
+
+  /**
+   * Quem o Canary põe no conjunto `killers` de um monstro que morreu (`Creature::onDeath`,
+   * `src/creatures/creature.cpp`) — o conjunto a que `Player::onKilledMonster` chama, e portanto
+   * o que decide o Bosstiary (#629) lá, sem olhar stamina nem vida: só `Player::gainExperience`
+   * tem o portão de stamina, e ele é da XP. (O Bosstiary não existe no TFS.)
+   *
+   * - todo jogador com dano neste monstro no `damageMap` (o dano da invocação já entra no nome
+   *   do mestre, `#applyMonsterHitOnSummon`, como `attacker->getMaster()` no Canary) — quem não
+   *   bateu não é matador, e quem já saiu da sessão não está mais aqui para ser achado
+   *   (`getCreatureByID`);
+   * - e, com a XP compartilhada ATIVA, o roster inteiro da party (líder e todos os membros) —
+   *   mas só se algum deles bateu: o Canary acrescenta a party ao ver UM atacante dela.
+   *
+   * Sem `partyOptions` com 2+ participantes (fixture), cai para o roster inteiro — a mesma
+   * cota igual que `#xpShares` devolve nesse caso. Em ordem de entrada: o conjunto do Canary não
+   * tem ordem, e os eventos notáveis saem na da sessão.
+   */
+  #killersOf(session: Session, credit: KillCredit): readonly CharacterRuntime[] {
+    const dealers = session.participants.filter((p) => (credit.damageByActor[p.id] ?? 0) > 0);
+    if (dealers.length === 0 || session.participants.length === 1) return dealers;
+    const party = this.#party;
+    return party === undefined || this.#sharedExperienceActive(session, party)
+      ? session.participants
+      : dealers;
+  }
+
+  /**
+   * O abate de BOSS conta no Bosstiary de cada matador (#629, `Player::addBosstiaryKill` em
+   * `Player::onKilledMonster`) — e só dele: o Canary chama depois de pagar a XP, em outro laço
+   * do `Creature::onDeath`, e SEM o portão de stamina nem de vida que decide quem recebe a XP
+   * (`#grantPartyXp`). Um herói com stamina zero continua na hunt e o boss que ele ajudou a
+   * matar conta: nível e pontos. Quem chama já excluiu a invocação (`hasBeenSummoned`).
+   *
+   * `killers` é `#killersOf` avaliado ANTES da XP. Boss sem `bosstiary` (fixture de teste com
+   * `boss: true`) não conta, como o Canary faria com um `isBoss` sem `bossRaceId`, e o comum
+   * nunca passa por aqui (`Bestiary`, em `#grantPartyXp`). Fechar um nível é evento notável,
+   * como o marco do Bestiário: três vezes por boss na vida do personagem. Nada aqui consome RNG.
+   */
+  #creditBosstiary(
+    session: Session, monster: MonsterRuntime, definition: Monster, killers: readonly CharacterRuntime[],
+  ): void {
+    const boss = definition.bosstiary;
+    if (!definition.boss || boss === undefined) return;
+    const solo = session.participants.length === 1;
+    for (const member of killers) {
+      const recorded = member.bosstiary.record(boss.raceId, boss.rarity, this.#options.bosstiary);
+      if (recorded.levelReached !== null) {
+        const detail = `${monster.monsterId}/${String(recorded.levelReached)}`;
+        session.record('bosstiary-level', solo ? detail : `${member.id}/${detail}`);
+      }
     }
-    return xpByDamage(experience, eligible, credit.damageByActor);
   }
 
   /**
@@ -10241,10 +12293,17 @@ const slots = bot.groups.get(group);
       // O abate conta no Bestiário de TODO elegível (ADR 0027 decisão 4), pela MESMA condição
       // que paga a XP (§18.6): stamina zero não conta abate. E fechar um marco é evento
       // notável, como o level up: acontece cinco vezes por monstro na vida do personagem.
-      const reached = member.bestiary.record(monster.monsterId, this.#options.bestiary);
-      if (reached.milestoneReached !== null) {
-        const detail = `${monster.monsterId}/${String(reached.milestoneReached)}`;
-        session.record('bestiary-milestone', solo ? detail : `${member.id}/${detail}`);
+      //
+      // BOSS não conta no Bestiário (#629): `Player::addBestiaryKill` devolve cedo para
+      // `isBoss()`. Ele conta no Bosstiary, mas NÃO aqui — o Bosstiary não tem o portão de
+      // stamina e de vida da XP, e `#creditBosstiary` roda depois deste laço, sobre os
+      // `killers` do Canary (`#killersOf`).
+      if (!definition.boss) {
+        const reached = member.bestiary.record(monster.monsterId, this.#options.bestiary);
+        if (reached.milestoneReached !== null) {
+          const detail = `${monster.monsterId}/${String(reached.milestoneReached)}`;
+          session.record('bestiary-milestone', solo ? detail : `${member.id}/${detail}`);
+        }
       }
     }
   }
@@ -10513,6 +12572,76 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * Algum participante bateu neste monstro (#619)? É o `killers` de `Creature::onDeath`: quem está
+   * no `damageMap` como jogador. Só a morte por MONSTRO precisa perguntar — em toda outra o golpe
+   * final já é de um participante.
+   */
+  #participantsDealtDamage(session: Session, credit: KillCredit): boolean {
+    for (const participant of session.participants) {
+      if ((credit.damageByActor[participant.id] ?? 0) > 0) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Há dano de MONSTRO no mapa deste abate (#619)? Chave `m:<id>` ou o balde `DEPARTED_ACTOR`.
+   * É o que liga a regra do `damageMap` completo (dono do cadáver, fatia da XP): sem dano de monstro
+   * — toda hunt sem facção — o abate é o de antes do #619, bit a bit.
+   */
+  #hasMonsterDamage(credit: KillCredit): boolean {
+    for (const [actorId, damage] of Object.entries(credit.damageByActor)) {
+      if (damage > 0 && actorId.startsWith('m:')) return true;
+    }
+    return false;
+  }
+
+  /**
+   * O dono do cadáver (#619, `Creature::onDeath` + `Monster::getCorpse`): quem causou MAIS dano
+   * entre as criaturas que AINDA existem — participante ou monstro vivo (`m:<id>`). O laço do
+   * Canary só considera quem `getCreatureByID` acha, então o dano de quem já saiu (o balde
+   * `DEPARTED_ACTOR`) nunca é dono nem tira o posto de ninguém; o dano de campo não tem atacante
+   * (`attackerId == 0`) e o `damageMap` o pula também. É `null` quando o maior causador foi um
+   * monstro: o `CORPSEOWNER` só é gravado para jogador ou mestre jogador. Empate fica com o
+   * primeiro que bateu, a ordem do mapa (`Contribution.credit`).
+   */
+  #corpseOwnerOf(session: Session, credit: KillCredit): CharacterRuntime | null {
+    let owner: string | null = null;
+    let most = 0;
+    for (const [actorId, damage] of Object.entries(credit.damageByActor)) {
+      if (damage <= most || actorId === DEPARTED_ACTOR) continue;
+      if (findById(session.participants, actorId) === null && !actorId.startsWith('m:')) continue;
+      most = damage;
+      owner = actorId;
+    }
+    return findById(session.participants, owner);
+  }
+
+  /**
+   * A XP de um abate ANTES da divisão entre os presentes, encolhida pelo dano de MONSTRO (#619):
+   * `Creature::getGainedExperience` é `floor(dano do atacante / dano TOTAL × XP)`, e o total
+   * soma todo mundo que bateu, VIVO OU MORTO (o balde `DEPARTED_ACTOR` está no mapa) — o Deepling
+   * que já tinha ferido o Deathling leva a fatia dele, e o jogador só a dele. Cada participante
+   * entra com o próprio `floor` (o Canary acumula por atacante e entrega ao líder, na party). Sem
+   * nenhum dano de monstro no mapa — toda hunt sem facção — devolve `experience` intacta: a fatia
+   * do jogador é 1.
+   */
+  #experiencePool(session: Session, experience: number, credit: KillCredit): number {
+    let total = 0;
+    let monsterDamage = 0;
+    for (const [actorId, damage] of Object.entries(credit.damageByActor)) {
+      total += damage;
+      if (actorId.startsWith('m:')) monsterDamage += damage;
+    }
+    if (monsterDamage === 0) return experience;
+    let pool = 0;
+    for (const participant of session.participants) {
+      const damage = credit.damageByActor[participant.id] ?? 0;
+      if (damage > 0) pool += Math.floor((damage / total) * experience);
+    }
+    return pool;
+  }
+
+  /**
    * A tabela de loot COMO o destinatário a vê. Identidade hoje: não há modificador de loot
    * por personagem — o Prey (§19) é quem vai mexer aqui, e o gancho existe para ele entrar
    * DEPOIS do sorteio do destinatário, e não antes.
@@ -10620,7 +12749,21 @@ const slots = bot.groups.get(group);
     }
     const items = corpse.items ?? [];
     if (items.length === 0) return;
+    corpse.items = this.#collectItems(session, character, items);
+    // Gatilho do §13: o loot pessoal mudou o peso da mochila, e com ele a capacidade disponível
+    // e as reservas da party. No-op quando não há bolsa, que é o caso comum.
+    this.#rebalanceBag(session);
+  }
 
+  /**
+   * O miolo do Quick Loot (ADR 0048 decisão 3): aplica o filtro, a autovenda e a capacidade de
+   * `character` a `items` e devolve o que FICOU — o que o filtro recusou e o que não coube. É a
+   * parte de `#collectFromCorpse` que também serve a esfola à mão (#626), onde só o material
+   * novo passa pelo filtro, sem reprocessar o que já esperava no cadáver.
+   */
+  #collectItems(
+    session: Session, character: CharacterRuntime, items: readonly CarriedItem[],
+  ): CarriedItem[] {
     const filter = this.#runnerOf(character.id).botConfig?.loot ?? DEFAULT_LOOT_FILTER;
     const autoSellIds = new Set(filter.autoSell.slice(0, this.#individualAutoSellLimit(character.id)));
     // A capacidade já descontada da reserva que a party fez dele (§11, DT-05) — como
@@ -10659,10 +12802,140 @@ const slots = bot.groups.get(group);
       runner.warnedFullBackpack = true;
       session.record('backpack-full', character.id);
     }
-    corpse.items = remaining;
-    // Gatilho do §13: o loot pessoal mudou o peso da mochila, e com ele a capacidade disponível
-    // e as reservas da party. No-op quando não há bolsa, que é o caso comum.
-    this.#rebalanceBag(session);
+    return remaining;
+  }
+
+  // --- Esfola de cadáver (#626, M44-08, ADR 0048 d.5/d.6, ADR 0053 d.5) -----------------------
+  //
+  // A matemática é `skinning.ts` (a janela por estágio, a chance, o Scavenge); aqui ficam o
+  // QUANDO e o PARA ONDE. Só o `combat-v4` esfola (`hasSkinningStage`): uma sessão fixada em
+  // `combat-v3` não reconhece ferramenta nenhuma (invariante 7). O bot esfola NO ABATE, dentro do
+  // mesmo evento que coleta o loot (`#onMonsterDied`), e o jogador presente esfola à mão com o
+  // `use-item-on` da ferramenta no tile do cadáver (`#performSkin`) — as duas rodam o MESMO
+  // sorteio (`#rollSkin`), e as duas só o consomem com ferramenta e monstro esfolável, que é o
+  // que faz uma hunt sem faca gastar exatamente o `session.rng` de antes.
+
+  /**
+   * A esfola do bot no abate: o primeiro candidato com a ferramenta do monstro na mochila esfola,
+   * com a idade zero do cadáver (a janela abre no primeiro estágio). `afterTtlMs` presente diz que
+   * houve sorteio — o cadáver nasce `skinned` e com a vida do `after` — e `material` é o que o
+   * sorteio rendeu.
+   */
+  #skinAtDeath(
+    session: Session, monster: MonsterRuntime, candidates: readonly CharacterRuntime[],
+  ): SkinAtDeath {
+    const entry = this.#options.skinning?.get(monster.monsterId);
+    if (entry === undefined || !hasSkinningStage(this.#options.combat.compatibilityProfile)) return NO_SKIN;
+    const stage = skinningStageAt(entry, 0);
+    if (stage === null) return NO_SKIN;
+    for (const candidate of candidates) {
+      if (candidate.inventory.findStack(entry.toolId) === null) continue;
+      return { material: this.#rollSkin(session, candidate, entry, stage), afterTtlMs: stage.afterTtlMs };
+    }
+    return NO_SKIN;
+  }
+
+  /**
+   * O sorteio da esfola de `skinner` (UMA rolagem de `session.rng`): o `chanceRange` do Canary,
+   * encolhido pelo Scavenge dele quando o charm vale para o estágio em que o cadáver está agora
+   * (`scavengeChanceFor`). `null` é a tentativa que falhou.
+   */
+  #rollSkin(
+    session: Session, skinner: CharacterRuntime, entry: Skinning, stage: Skinning['stages'][number],
+  ): LootItem | null {
+    const assignedTo = skinner.charms.assignmentOf(SCAVENGE_CHARM_ID);
+    const scavenge = assignedTo === undefined
+      ? undefined
+      : scavengeChanceFor(
+        this.#options.charms?.get(SCAVENGE_CHARM_ID), skinner.charms.tierOf(SCAVENGE_CHARM_ID),
+        this.#options.skinning?.get(assignedTo), stage,
+      );
+    return rollSkinning(session.rng, entry, skinningChanceRange(scavenge))
+      ? { itemId: entry.materialId, quantity: 1 }
+      : null;
+  }
+
+  /**
+   * O cadáver que a ferramenta encontra num tile: o do TOPO da pilha — o Canary usa o
+   * `getTopDownItem` do tile, e o cadáver mais novo entra por cima. `undefined` sem cadáver ali.
+   */
+  #topCorpseAt(position: FloorPoint): CorpseState | undefined {
+    for (let i = this.#corpses.length - 1; i >= 0; i -= 1) {
+      const corpse = this.#corpses[i] as CorpseState;
+      if (corpse.position.x === position.x && corpse.position.y === position.y
+        && sameFloor(position.z, corpse.position.z)) {
+        return corpse;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * A esfola à mão (`use-item-on` da ferramenta com o TILE do cadáver por alvo — ADR 0049
+   * decisão 3): confere alcance (o `Actions::canUse` do Canary — mesmo andar e adjacente,
+   * `|dx| <= 1` e `|dy| <= 1`, SEM linha de visão: o `skinning.lua` não chama `allowFarUse`, então o
+   * `canUseFar` 7×5 das runas não vale aqui, e o jogador longe é recusado e andado até o cadáver),
+   * que a ferramenta é a do monstro, que o cadáver não foi esfolado e que a janela do estágio
+   * ainda está aberta; sorteia; e o material passa pelo filtro de Quick Loot de quem esfolou —
+   * o que não é aceito, ou não cabe, fica no cadáver, como o resto do loot.
+   *
+   * Tudo que o Canary responde com "not possible" (sem cadáver, ferramenta errada, já esfolado,
+   * estágio fora da janela) é `not-usable`; o alcance é `out-of-range`. A tentativa gasta o
+   * cadáver — `skinned` — com ou sem sucesso, REINICIA o decaimento dele (`#retimeCorpse`) e
+   * nenhuma recusa consome sorteio.
+   */
+  #performSkin(
+    session: Session, character: CharacterRuntime, tool: CarriedItem, target: UseSlotTarget | undefined,
+  ): UseItemOutcome {
+    if (!hasSkinningStage(this.#options.combat.compatibilityProfile)) return refuseItem('not-usable', 0);
+    if (target === undefined || target.kind !== 'position') return refuseItem('not-usable', 0);
+    const corpse = this.#topCorpseAt(target.position);
+    if (corpse === undefined) return refuseItem('not-usable', 0);
+
+    // O `canUse` do Canary (`Actions::canUse`): mesmo andar e `areInRange<1, 1>`, sem linha de
+    // visão — a mesma conferência de `useOnMap` e de `open-corpse`/`take-loot`.
+    const from = character.position;
+    if (!sameFloor(from.z, corpse.position.z)
+      || Math.abs(from.x - corpse.position.x) > 1
+      || Math.abs(from.y - corpse.position.y) > 1) {
+      return refuseItem('out-of-range', 0);
+    }
+
+    const entry = this.#options.skinning?.get(corpse.monsterId);
+    if (entry === undefined || entry.toolId !== tool.itemId
+      || corpse.skinned === true || corpse.diedAtMs === undefined) {
+      return refuseItem('not-usable', 0);
+    }
+    const stage = skinningStageAt(entry, session.nowMs - corpse.diedAtMs);
+    if (stage === null) return refuseItem('not-usable', 0);
+
+    corpse.skinned = true;
+    // O `topItem:transform(skin.after)` do Canary roda com sucesso ou sem, e o `Item::setID` do
+    // item novo reinicia o decaimento: o cadáver passa a viver a cadeia do `after` a partir de
+    // AGORA, e não mais o que faltava dos 670 s.
+    this.#retimeCorpse(session, corpse, stage.afterTtlMs);
+    const material = this.#rollSkin(session, character, entry, stage);
+    if (material !== null) {
+      const left = this.#collectItems(session, character, this.#instantiateCorpseItems(session, character, [material]));
+      corpse.items = [...(corpse.items ?? []), ...left];
+      this.#rebalanceBag(session);
+    }
+    session.emit({ kind: 'equipment-changed', characterId: character.id });
+    character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
+    return { ok: true };
+  }
+
+  /**
+   * Reagenda o fim de um cadáver esfolado (#626): o evento `CORPSE` que o abate marcou em
+   * `corpseTtlMs` é cancelado e um novo vence `afterTtlMs` depois de agora — a vida do `after` do
+   * `skinning.lua`. O que ficou no cadáver (o loot que o filtro recusou, ou que não coube) vive
+   * esse prazo e some com ele, como na decisão 6 do ADR 0048: continua sendo "um número só, o do
+   * Tibia", agora o do cadáver esfolado.
+   */
+  #retimeCorpse(session: Session, corpse: CorpseState, afterTtlMs: number): void {
+    const subject = String(corpse.id);
+    session.cancelEvent(CORPSE, subject);
+    session.scheduleIn(CORPSE, afterTtlMs, { priority: EventPriority.Housekeeping, subject });
   }
 
   /** Ache o cadáver por id do item do chão (#722), ou `undefined` — já apodreceu ou nunca existiu. */
@@ -10854,6 +13127,38 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * O nível desta skill COM o bônus de Loyalty (#628, ADR 0052 d.5) — o `Player::getLoyaltySkill`
+   * que `getSkillLevel` do Canary usa no lugar do nível base, e o `getLoyaltyMagicLevel` que
+   * `getMagicLevel` usa para o magic level. É o nível que ESCALA o golpe, a magia, a defesa e a
+   * cura e que confere requisito de runa; as leituras que não são "uso da skill" — ganhar tries,
+   * o estágio de rate (`getBaseMagicLevel`), a penalidade de morte — continuam no nível BASE
+   * (`skills.levelOf`), como no Canary.
+   *
+   * Sem bônus (o normal: menos de 360 dias de conta), é o nível base direto — sem achar a
+   * vocação nem calcular fator nenhum.
+   */
+  #loyaltyLevelOf(character: CharacterRuntime, definition: Skill): number {
+    if (character.loyaltyBonusPercent === 0) return character.skills.levelOf(definition);
+    return character.loyaltyLevelOf(
+      definition, skillFactorFor(definition, this.#vocationOf(character), this.#options.progression),
+    );
+  }
+
+  /**
+   * O magic level EFETIVO (`Player::getMagicLevel` do Canary): o do Loyalty (#628) mais o bônus
+   * de equipamento (#524) e o de condição (#576) — as três fontes somam, como somam no dano da
+   * runa e na cura da poção. É o número que a fórmula de magia lê e o que o requisito de
+   * `magicLevel` de uma runa confere; `#runeScaling`, `#spellScaling` e o espelho de
+   * `slotStates` leem DESTE ponto só, para o "bloqueada" da tela nunca discordar do disparo.
+   */
+  #magicLevelOf(character: CharacterRuntime): number {
+    const magic = this.#options.skills.get('magic');
+    return (magic === undefined ? 0 : this.#loyaltyLevelOf(character, magic))
+      + character.inventory.skillBonus(this.#options.items, 'magic')
+      + character.conditions.skillBonus('magic');
+  }
+
+  /**
    * A regeneração passiva DESTE personagem (#521, ADR 0037): a da vocação escolhida, ou a da
    * tabela base (sem vocação — Canary `vocations.xml`, id 0 "None") para quem ainda não tem
    * uma. Cada vocação regenera num ritmo diferente no Tibia; antes da #521 era um número só
@@ -10957,7 +13262,7 @@ const slots = bot.groups.get(group);
     // skill, sem exceção para `SKILL_SHIELD` (`player.cpp:7480`) — a mesma leitura que
     // `#skillLevelOf` já faz para a skill de arma/punho. Nenhum item do catálogo declara hoje
     // um bônus de `shielding` (#549), mas a fórmula fica correta para o dia em que um declarar.
-    return character.skills.levelOf(skill)
+    return this.#loyaltyLevelOf(character, skill)
       + character.inventory.skillBonus(this.#options.items, skillId);
   }
 
@@ -11113,7 +13418,7 @@ const slots = bot.groups.get(group);
     // O malus de condição (#576: Berserk/Bullseye tiram 10 de `shielding`) entra na MESMA skill
     // que escala a defesa — `powerMultiplier` já pisa em `Math.max(0, …)`, então o malus nunca
     // deixa o nível efetivo negativo, só encosta no piso de `startingLevel`.
-    const level = character.skills.levelOf(skill) + character.conditions.skillBonus(skillId);
+    const level = this.#loyaltyLevelOf(character, skill) + character.conditions.skillBonus(skillId);
     return {
       kind: source.kind,
       defense: Math.round(source.defense * powerMultiplier(skill, level)),
@@ -11170,6 +13475,10 @@ const slots = bot.groups.get(group);
     if (subject === null) return null;
     const monster = this.#monsterBySubject.get(subject);
     if (monster === undefined || !monster.alive) return null;
+    // A invocação de personagem nunca é alvo de ataque de ninguém (#598) — e um monstro do Spawner
+    // pode virar uma no meio da vida, pela Convince Creature (#600): quem o tinha na mira (o próprio
+    // mestre, o candidato do bot, um companheiro de party) o larga na leitura seguinte.
+    if (typeof monster.masterId === 'string') return null;
     // Andar diferente é tela diferente (#519): um alvo pinado antes de trocar de andar — o dele
     // ou o do personagem — não continua "na tela" só porque o (x, y) ainda está perto.
     if (!sameFloor(this.#floorOf(character), this.#floorOf(monster))) return null;
@@ -11318,8 +13627,36 @@ const slots = bot.groups.get(group);
   readonly #moverBlocked: Blocked = (x, y) => {
     this.#probe.x = x;
     this.#probe.y = y;
-    return canOccupy(this.#world, this.#mover as Movable<GridPoint>, this.#probe) !== null;
+    const rejection = canOccupy(this.#world, this.#mover as Movable<GridPoint>, this.#probe);
+    if (rejection === null) return false;
+    // O JOGADOR atravessa o familiar (#599, `Player::canWalkthrough`: `monster->isFamiliar()`): o
+    // tile ocupado só por ele não bloqueia o caminho de um personagem — o passo troca os dois de
+    // lugar (`#step`). Só o `tile-occupied`, e só quando há familiar vivo (`Set.size`).
+    return !(rejection === 'tile-occupied' && this.#mover instanceof CharacterRuntime
+      && this.#familiarIds.size > 0
+      && this.#familiarAt(x, y, this.#floorOf(this.#mover)) !== null);
   };
+
+  /**
+   * O tile está ocupado para um PERSONAGEM que anda (#599)? O familiar não conta: o jogador o
+   * atravessa (`Player::canWalkthrough`), e o passo troca os dois de lugar (`#step`). É o
+   * `world.occupied` das buscas de caminho do personagem (follow, `walk-to`) — o mesmo critério de
+   * `#moverBlocked`, que o passo guloso e o commit já usam.
+   */
+  #occupiedForPlayer(x: number, y: number, z: number): boolean {
+    return this.#world.occupied(x, y, z)
+      && !(this.#familiarIds.size > 0 && this.#familiarAt(x, y, z) !== null);
+  }
+
+  /** O familiar VIVO (de qualquer personagem) que ocupa (x, y, z), ou `null` (#599). */
+  #familiarAt(x: number, y: number, z: number): MonsterRuntime | null {
+    for (const id of this.#familiarIds) {
+      const familiar = this.#monsterBySubject.get(monsterSubject(id));
+      if (familiar === undefined || !familiar.alive) continue;
+      if (familiar.position.x === x && familiar.position.y === y && this.#floorOf(familiar) === z) return familiar;
+    }
+    return null;
+  }
 
   #blockedFor(mover: Movable<GridPoint>): Blocked {
     this.#mover = mover;
@@ -11669,6 +14006,7 @@ export function createHuntRuleset(
     combat: content.combat,
     progression: content.progression,
     stamina: content.stamina,
+    ...(content.training === undefined ? {} : { training: content.training }),
     vocations: content.vocations,
     skills: content.skills,
     items: content.items,
@@ -11678,7 +14016,9 @@ export function createHuntRuleset(
     // `exactOptionalPropertyTypes`.
     party: content.party,
     ...(content.bestiary === undefined ? {} : { bestiary: content.bestiary }),
+    ...(content.bosstiary === undefined ? {} : { bosstiary: content.bosstiary }),
     charms: content.charms,
+    skinning: content.skinning,
     targetSearchRadius: content.bot.targetSearchRadius,
     spells: content.spells,
     supplies: content.supplies,

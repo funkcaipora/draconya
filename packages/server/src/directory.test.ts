@@ -27,6 +27,58 @@ describe.runIf(available)('session directory', () => {
     expect(await directory.lookup('p1')).toBeNull();
   });
 
+  describe('o carimbo de repouso do offline training (#631, ADR 0059 d.3)', () => {
+    const location = { sessionId: 's1', nodeId: 'n1', type: 'city' };
+
+    it('`release` deixa o instante em que o personagem ficou sem sessão, e `restedSince` o devolve', async () => {
+      let now = 1_700_000_000_000;
+      const directory = new SessionDirectory(redis, { now: () => now });
+      await directory.register('p1', location);
+      expect(await directory.restedSince('p1')).toBeNull();
+
+      now += 5_000;
+      await directory.release('p1');
+
+      expect(await directory.restedSince('p1')).toBe(1_700_000_005_000);
+      expect(await directory.lookup('p1')).toBeNull();
+      // O carimbo morre sozinho depois de 22 dias — o "fora" do offline training nunca conta mais
+      // que 21 (`os.time() - lastLogout`, `math.min(…, 86400 * 21)`), então não sobra o que informar.
+      const ttl = await redis.pttl('char:p1:rest');
+      expect(ttl).toBeGreaterThan(21 * 24 * 3_600_000);
+      expect(ttl).toBeLessThanOrEqual(22 * 24 * 3_600_000);
+    });
+
+    it('registrar uma sessão nova apaga o carimbo: quem voltou a jogar não está em repouso', async () => {
+      const directory = new SessionDirectory(redis, { now: () => 1_000 });
+      await directory.register('p1', location);
+      await directory.release('p1');
+      expect(await directory.restedSince('p1')).toBe(1_000);
+
+      await directory.register('p1', { ...location, sessionId: 's2' });
+      expect(await directory.restedSince('p1')).toBeNull();
+    });
+
+    it('registrar com a conta (o caminho do handshake) também apaga o carimbo, e a tomada de um nó morto idem', async () => {
+      const directory = new SessionDirectory(redis, { leaseMs: SHORT_MS, now: () => 2_000 });
+      await directory.register('p1', location);
+      await directory.release('p1');
+      expect(await directory.restedSince('p1')).toBe(2_000);
+
+      expect(await directory.reserveSlot('a1', 'p1')).toBe(true);
+      expect(await directory.register('p1', { ...location, sessionId: 's2' }, 'a1')).toBe(true);
+      expect(await directory.restedSince('p1')).toBeNull();
+    });
+
+    it('um valor que não é um instante vale como ausente, e quem nunca saiu não tem carimbo', async () => {
+      const directory = new SessionDirectory(redis);
+      expect(await directory.restedSince('nunca-saiu')).toBeNull();
+      await redis.set('char:p1:rest', 'ontem');
+      expect(await directory.restedSince('p1')).toBeNull();
+      await redis.set('char:p1:rest', '-5');
+      expect(await directory.restedSince('p1')).toBeNull();
+    });
+  });
+
   it.each([
     ['hunt', 'hunt'],
     ['cidade', 'city'],
