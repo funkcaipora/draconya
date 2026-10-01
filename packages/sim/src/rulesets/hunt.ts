@@ -3480,9 +3480,11 @@ export class HuntRuleset implements Ruleset {
   #creditOfflineBank(session: Session, character: CharacterRuntime): void {
     const training = this.#options.training;
     if (training === undefined) return;
-    character.training.creditOnline(
-      session.aggregatesOf(character.id).durationMs, training.offline.bankCapMs,
-    );
+    // O tempo EXATO no instante em que a participação acaba (`inSessionMsOf`), e não o
+    // `durationMs` dos agregados: este soma a janela do `advanceBy` inteira antes de despachar os
+    // eventos, e uma hunt que acaba por evento (morte, regra de saída) no meio dela contaria o
+    // resto — o banco dependeria de como o hospedeiro fatiou o tempo (invariante 3).
+    character.training.creditOnline(session.inSessionMsOf(character.id), training.offline.bankCapMs);
   }
 
   getState(): HuntRulesetState {

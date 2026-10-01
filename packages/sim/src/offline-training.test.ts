@@ -55,6 +55,7 @@ const training = {
   id: 'baseline',
   dummy: { id: 'exercise-dummy', rate: 100 },
   strike: { triesPerCharge: 7, manaSpentPerCharge: 600 },
+  startCooldownMs: 10_000,
   place: { stand: { x: 2, y: 1, z: 7 }, dummy: { x: 1, y: 1, z: 7 } },
   offline: {
     bankCapMs: 12 * HOUR, graceMs: 600_000, maxAwayMs: 21 * 24 * HOUR,
@@ -159,6 +160,46 @@ describe('o registro do banco (ADR 0059 d.3)', () => {
     expect(bank.getState()).toEqual(emptyOfflineTrainingState());
   });
 
+  it('o cooldown entre dois Treinos é um carimbo de parede (`training-exhaustion`, 10 s): recusa dentro, libera depois', () => {
+    const bank = OfflineTraining.fromState();
+    // Nunca treinou: livre, e o estado continua o vazio (a chave só existe com carimbo).
+    expect(bank.exerciseCooldownLeftMs(1_000_000, 10_000)).toBe(0);
+    expect(bank.getState()).toEqual(emptyOfflineTrainingState());
+    bank.beginExerciseCooldown(1_000_000, 10_000);
+    expect(bank.exerciseCooldownLeftMs(1_000_000, 10_000)).toBe(10_000);
+    expect(bank.exerciseCooldownLeftMs(1_004_000, 10_000)).toBe(6_000);
+    expect(bank.exerciseCooldownLeftMs(1_009_999, 10_000)).toBe(1);
+    // Exatamente no vencimento já está livre (`getExhaustion` do Lua: `max(until - now, 0)`).
+    expect(bank.exerciseCooldownLeftMs(1_010_000, 10_000)).toBe(0);
+    expect(bank.getState()).toEqual({ ...emptyOfflineTrainingState(), exerciseExhaustedUntilMs: 1_010_000 });
+  });
+
+  it('o carimbo sobrevive ao registro gravado e lido, e o torto vira "livre" sem derrubar o banco', () => {
+    const stamped = OfflineTraining.fromState({
+      offlineBankMs: 5_000, offlineSkill: 'sword', version: 1, exerciseExhaustedUntilMs: 2_000_000,
+    });
+    expect(stamped.exerciseCooldownLeftMs(1_995_000, 10_000)).toBe(5_000);
+    expect(OfflineTraining.fromState(stamped.getState()).getState()).toEqual(stamped.getState());
+    for (const torto of [-1, 0, 'x', Number.NaN, Number.POSITIVE_INFINITY, null]) {
+      expect(readOfflineTrainingState({ offlineBankMs: 5_000, exerciseExhaustedUntilMs: torto }))
+        .toEqual({ offlineBankMs: 5_000, offlineSkill: null, version: 1 });
+    }
+  });
+
+  it('um relógio que andou para trás (ou um carimbo adulterado) nunca tranca por mais que a própria espera', () => {
+    const bank = OfflineTraining.fromState({
+      offlineBankMs: 0, offlineSkill: null, version: 1, exerciseExhaustedUntilMs: 9_999_999_999_999,
+    });
+    expect(bank.exerciseCooldownLeftMs(1_000, 10_000)).toBe(10_000);
+  });
+
+  it('o gasto do banco na emissão do ticket preserva o carimbo do cooldown', () => {
+    const result = settleOfflineTraining(away(HOUR, {
+      training: { ...chosen('sword', 3 * HOUR), exerciseExhaustedUntilMs: 77_000 },
+    }), rulesOf());
+    expect(result.training).toMatchObject({ offlineSkill: null, exerciseExhaustedUntilMs: 77_000 });
+  });
+
   it('`getState` é uma cópia e o estado vazio é o de todo personagem novo', () => {
     const bank = OfflineTraining.fromState({ offlineBankMs: 7, offlineSkill: null, version: 1 });
     const copy = bank.getState();
@@ -261,14 +302,63 @@ describe('gastar o banco — as fórmulas de offline_training.lua', () => {
     expect(result.training.offlineBankMs).toBe(1_999);
   });
 
-  it('o escudo só treina junto se a skill principal avançou de nível OU de percentual', () => {
-    // Level 40 custa 50 × 2^30 tries: 150 tries não movem o percentual, então o escudo fica.
+  it('o escudo só treina junto se a skill principal avançou de nível OU mudou de percentual', () => {
+    // Level 40 custa 50 × 2^30 tries: 150 tries não movem o percentual (0,00% antes e depois, um
+    // inteiro exato), então o escudo fica.
     const parado = settleOfflineTraining(away(600_000, {
       skills: { sword: { level: 40, points: 0 } },
     }), rules);
     expect(parado.settlement).toMatchObject({ tries: 150, shieldingTries: 0 });
     expect(parado.skills['shielding']).toBeUndefined();
     expect(parado.skills['sword']).toEqual({ level: 40, points: 150 });
+  });
+
+  it('o escudo treina com percentual FRACIONÁRIO guardado: o Canary compara double contra inteiro (`percent != newPercent`)', () => {
+    // Level 40 custa 50 × 2^30 = 53 687 091 200 tries. 24 bilhões guardados são ~44,70%: os 150
+    // tries não movem o inteiro (44 antes, 44 depois), MAS o `Skill.percent` do Canary é um
+    // `double` com 2 casas (44,70) e o novo é um `uint8_t` (44) — `44.70 != 44` é verdadeiro, e
+    // `offline_training.lua` treina o escudo. Comparar `floor` com `floor` o pulava.
+    const result = settleOfflineTraining(away(600_000, {
+      skills: { sword: { level: 40, points: 24_000_000_000 } },
+    }), rules);
+    expect(result.settlement).toMatchObject({ tries: 150, shieldingTries: 150 });
+    expect(result.skills['sword']).toEqual({ level: 40, points: 24_000_000_150 });
+    expect(result.skills['shielding']).toBeDefined();
+  });
+
+  it('o escudo fica quando o percentual guardado JÁ era um inteiro exato e o inteiro novo é o mesmo', () => {
+    // Metade exata do custo: 50,00% antes; +150 tries dão 50,0000003% → 50,00 → 50. `50 != 50` é
+    // falso: é o único caso em que o Canary NÃO treina o escudo sem subir de nível.
+    const half = 26_843_545_600;
+    const result = settleOfflineTraining(away(600_000, {
+      skills: { sword: { level: 40, points: half } },
+    }), rules);
+    expect(result.settlement).toMatchObject({ tries: 150, shieldingTries: 0 });
+    expect(result.skills['shielding']).toBeUndefined();
+  });
+
+  it('o magic level segue a mesma comparação: percentual fracionário treina o escudo', () => {
+    // ML 10 custa 1600 × 4^10 = 1 677 721 600; 1 bilhão guardado é ~59,60%, e 3 600 de mana não
+    // movem o inteiro — mas 59,60 != 59 (o `magLevelPercent` do Canary é `double_t`).
+    const result = settleOfflineTraining(away(HOUR, {
+      training: chosen('magic', 3 * HOUR), skills: { magic: { level: 10, points: 1_000_000_000 } },
+    }), rules);
+    expect(result.settlement).toMatchObject({ tries: 3_600, shieldingTries: 900 });
+  });
+
+  it('skill que parou de crescer (`currReq >= nextReq`) não treina nem arrasta o escudo — o Canary devolve falso', () => {
+    const custom = rulesOf();
+    const flat: OfflineTrainingRules = {
+      ...custom,
+      vocations: new Map([['sorcerer', { ...(custom.vocations.get('sorcerer') as Vocation), skillMultipliers: { sword: 1 } }]]),
+    };
+    // Fator 1: o level 11 custa 50, e o 12 também — não há mais crescimento a treinar.
+    const result = settleOfflineTraining(away(600_000, {
+      vocationId: 'sorcerer', skills: { sword: { level: 12, points: 10 } },
+    }), flat);
+    expect(result.settlement).toMatchObject({ tries: 0, shieldingTries: 0 });
+    expect(result.skills['sword']).toEqual({ level: 12, points: 10 });
+    expect(result.skills['shielding']).toBeUndefined();
   });
 
   it('parte do que a skill JÁ tinha, e não muta a entrada', () => {

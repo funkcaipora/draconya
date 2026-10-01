@@ -8,7 +8,8 @@
 // repouso (ADR 0052 d.5), o mesmo momento e a mesma razão da recuperação de stamina. A função de
 // gasto é PURA: mesma entrada, mesma saída, sem sorteio.
 //
-// **Registro `jsonb` por sistema** (ADR 0052 d.1): `{ offlineBankMs, offlineSkill, version }`, lido
+// **Registro `jsonb` por sistema** (ADR 0052 d.1): `{ offlineBankMs, offlineSkill, version }` (mais o
+// carimbo `exerciseExhaustedUntilMs` do cooldown entre dois Treinos, opcional), lido
 // inteiro no ticket, mutado só pela sessão dona (`CharacterRuntime.training`) e escrito inteiro
 // pela transação do ledger — última escrita vence, como `charms`/`ammo`. `offlineSkill` é a
 // escolha do livro (`set-offline-training-skill`, um serviço de Cidade); a `api` a consome e a
@@ -28,6 +29,13 @@ export interface OfflineTrainingState {
   /** A skill escolhida no livro, ou `null` (nenhuma). Consumida na próxima emissão de ticket. */
   readonly offlineSkill: string | null;
   readonly version: number;
+  /**
+   * O `training-exhaustion` do Canary (`exercise_training_weapons.lua`): o instante de RELÓGIO (epoch,
+   * ms) até o qual um novo Treino é recusado — o carimbo de parede do ADR 0052 d.6, gravado quando um
+   * Treino começa. Ausente é "livre" (personagem anterior a esta chave, ou que nunca treinou); campo
+   * ADITIVO do registro, então não há migração (ADR 0014): a leitura o descarta se vier torto.
+   */
+  readonly exerciseExhaustedUntilMs?: number;
 }
 
 export function emptyOfflineTrainingState(): OfflineTrainingState {
@@ -47,10 +55,15 @@ export function readOfflineTrainingState(stored: unknown): OfflineTrainingState 
   if (typeof bank !== 'number' || !Number.isFinite(bank) || bank < 0) return undefined;
   const skill = value['offlineSkill'];
   if (skill !== null && skill !== undefined && (typeof skill !== 'string' || skill.length === 0)) return undefined;
+  // O carimbo do cooldown é um campo à parte: torto vira "livre", sem derrubar o banco que está certo.
+  const exhaustedUntil = value['exerciseExhaustedUntilMs'];
+  const stamp = typeof exhaustedUntil === 'number' && Number.isFinite(exhaustedUntil) && exhaustedUntil > 0
+    ? { exerciseExhaustedUntilMs: Math.floor(exhaustedUntil) } : {};
   return {
     offlineBankMs: Math.floor(bank),
     offlineSkill: typeof skill === 'string' ? skill : null,
     version: OFFLINE_TRAINING_STATE_VERSION,
+    ...stamp,
   };
 }
 
@@ -63,10 +76,13 @@ export type ChooseOfflineSkillResult =
 export class OfflineTraining {
   #bankMs: number;
   #skill: string | null;
+  /** O fim do `training-exhaustion`, em epoch ms; `0` é livre. Ver `OfflineTrainingState`. */
+  #exhaustedUntilMs: number;
 
   private constructor(state: OfflineTrainingState) {
     this.#bankMs = state.offlineBankMs;
     this.#skill = state.offlineSkill;
+    this.#exhaustedUntilMs = state.exerciseExhaustedUntilMs ?? 0;
   }
 
   static fromState(state?: OfflineTrainingState): OfflineTraining {
@@ -77,6 +93,8 @@ export class OfflineTraining {
   getState(): OfflineTrainingState {
     return {
       offlineBankMs: this.#bankMs, offlineSkill: this.#skill, version: OFFLINE_TRAINING_STATE_VERSION,
+      // Só quando há carimbo: o estado de quem nunca treinou continua o `emptyOfflineTrainingState()`.
+      ...(this.#exhaustedUntilMs > 0 ? { exerciseExhaustedUntilMs: this.#exhaustedUntilMs } : {}),
     };
   }
 
@@ -97,6 +115,26 @@ export class OfflineTraining {
   creditOnline(onlineMs: number, capMs: number): void {
     if (!(onlineMs > 0)) return;
     this.#bankMs = Math.min(capMs, this.#bankMs + Math.floor(onlineMs));
+  }
+
+  /**
+   * Quanto falta, em ms, para um novo Treino poder começar — o `hasExhaustion("training-exhaustion")`
+   * do Canary, comparado com o relógio de parede que o SERVIDOR passa (`nowMs`: o `sim` não lê
+   * relógio, invariante 1; ADR 0052 d.6). `0` é livre. Limitado por `cooldownMs`: o carimbo é gravado
+   * como `agora + cooldownMs`, então nada legítimo passa disso, e um relógio que andou para trás (ou
+   * um registro adulterado) não trancaria o Treino por mais que a própria espera.
+   */
+  exerciseCooldownLeftMs(nowMs: number, cooldownMs: number): number {
+    return Math.min(cooldownMs, Math.max(0, this.#exhaustedUntilMs - nowMs));
+  }
+
+  /**
+   * Um Treino começou em `nowMs`: carimba o fim da espera (`player:setExhaustion("training-exhaustion",
+   * 10)`). Quem chama já conferiu `exerciseCooldownLeftMs` — o Canary só chega aqui depois de
+   * `hasExhaustion` ser falso.
+   */
+  beginExerciseCooldown(nowMs: number, cooldownMs: number): void {
+    this.#exhaustedUntilMs = cooldownMs > 0 ? Math.floor(nowMs) + cooldownMs : 0;
   }
 
   /**
@@ -184,10 +222,27 @@ export interface OfflineTrainingResult {
 /** Menos que isto o Canary devolve sem treinar (`if trainingTime < 60 then return true`). */
 const MIN_TRAINED_SECONDS = 60;
 
-/** O percentual inteiro rumo ao próximo nível — o `getPercentLevel` do Canary, sem o teto de HUD. */
-function percentOf(skills: Skills, definition: Skill, factor: number): number {
-  const needed = pointsForLevel(definition, skills.levelOf(definition), factor);
-  return needed > 0 ? Math.floor((skills.pointsOf(definition) * 100) / needed) : 0;
+/**
+ * O `Player::getPercentLevel` do Canary: `round(count × 100 / next × 100) / 100` — o percentual com
+ * DUAS casas decimais, e 0 se passar de 100. É assim que o login o carrega (`skills[i].percent`,
+ * `iologindata_load_player.cpp`), e `Skill.percent` é um `double`.
+ */
+function percentWithDecimals(points: number, needed: number): number {
+  if (needed <= 0) return 0;
+  const result = Math.round(((points * 100) / needed) * 100) / 100;
+  return result > 100 ? 0 : result;
+}
+
+/**
+ * Os pontos que custa sair de `level`, e o que custava chegar nele — o `nextReqTries` e o
+ * `currReqTries` de `addOfflineTrainingTries`. Abaixo do nível inicial (e nele) o Canary devolve 0
+ * (`level <= minSkillLevel`).
+ */
+function requirementsAt(definition: Skill, level: number, factor: number): { curr: number; next: number } {
+  return {
+    curr: level <= definition.startingLevel ? 0 : pointsForLevel(definition, level - 1, factor),
+    next: pointsForLevel(definition, level, factor),
+  };
 }
 
 /**
@@ -272,7 +327,18 @@ export function settleOfflineTraining(
 
 /**
  * Credita tries a UMA skill: trunca (o `uint64_t` do Canary), aplica o rate de skill do conteúdo e
- * devolve se a skill avançou de nível ou de percentual (o `sendUpdate` que o Lua lê).
+ * devolve o que o `return sendUpdate` de `Player::addOfflineTrainingTries` devolveria, que o Lua
+ * (`offline_training.lua`) lê para treinar o escudo junto.
+ *
+ * **O `sendUpdate` do Canary NÃO é "o percentual inteiro mudou".** `Skill.percent` é um `double`
+ * (2 casas decimais, carregado pelo login), e o percentual NOVO é truncado para `uint8_t`
+ * (`newPercent`); a comparação `percent != newPercent` é double contra inteiro. Só é falsa quando o
+ * percentual guardado JÁ era um inteiro exato (0 de um nível recém-aberto, por exemplo) igual ao
+ * novo — um personagem com 45,67% e 45,96% depois compara 45,67 contra 45 e treina o escudo. O
+ * `floor` dos dois lados, que esta função fazia antes, não bate com o Canary nem com o TFS (que
+ * compara pontos-base de percentual).
+ *
+ * Skill sem teto de crescimento (`currReq >= nextReq`) devolve falso sem treinar, como o Canary.
  */
 function creditTries(
   skills: Skills, definition: Skill, exactTries: number, vocation: Vocation | null,
@@ -281,12 +347,18 @@ function creditTries(
   const truncated = Math.floor(exactTries);
   if (truncated <= 0) return { tries: 0, changed: false };
   const factor = skillFactorFor(definition, vocation, rules.progression);
-  const rate = skillRateFor(rules.progression.rates, definition.id, skills.levelOf(definition));
+  const levelBefore = skills.levelOf(definition);
+  const before = requirementsAt(definition, levelBefore, factor);
+  if (before.curr >= before.next) return { tries: 0, changed: false };
+  const rate = skillRateFor(rules.progression.rates, definition.id, levelBefore);
   const tries = rate === 1 ? truncated : Math.floor(truncated * rate);
   if (tries <= 0) return { tries: 0, changed: false };
-  const levelBefore = skills.levelOf(definition);
-  const percentBefore = percentOf(skills, definition, factor);
+  const percentBefore = percentWithDecimals(skills.pointsOf(definition), before.next);
   skills.gain(definition, tries, factor);
-  const changed = skills.levelOf(definition) !== levelBefore || percentOf(skills, definition, factor) !== percentBefore;
-  return { tries, changed };
+  const levelAfter = skills.levelOf(definition);
+  const after = requirementsAt(definition, levelAfter, factor);
+  // `newPercent` do Canary: `uint8_t`, então a parte inteira; 0 quando a skill parou de crescer.
+  const percentAfter = after.next > after.curr
+    ? Math.trunc(percentWithDecimals(skills.pointsOf(definition), after.next)) : 0;
+  return { tries, changed: levelAfter !== levelBefore || percentBefore !== percentAfter };
 }

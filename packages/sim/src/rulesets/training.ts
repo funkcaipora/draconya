@@ -137,18 +137,21 @@ export class TrainingRuleset implements Ruleset {
 
   onEnd(session: Session, _reason: EndReason): void {
     // O banco de offline training cresce 1:1 com o tempo de sessão de hunt OU de treino (ADR 0059
-    // d.3): o `durationMs` que a sessão já conta, sem relógio à parte. Uma vez por participante,
-    // aqui — `end()` é idempotente, então o crédito não dobra.
+    // d.3), sem relógio à parte. Uma vez por participante, aqui — `end()` é idempotente, então o
+    // crédito não dobra. O tempo é o EXATO no instante em que a sessão acaba (`inSessionMsOf`), e
+    // não o `durationMs` dos agregados: este soma a janela do `advanceBy` inteira antes dos eventos,
+    // e o treino que acaba por evento (arma esgotada) no meio dela contaria o resto — o banco
+    // dependeria de como o hospedeiro fatiou o tempo (invariante 3).
     for (const character of session.participants) {
       character.training.creditOnline(
-        session.aggregatesOf(character.id).durationMs, this.#options.training.offline.bankCapMs,
+        session.inSessionMsOf(character.id), this.#options.training.offline.bankCapMs,
       );
     }
   }
 
   onLeave(session: Session, character: CharacterRuntime): void {
     character.training.creditOnline(
-      session.aggregatesOf(character.id).durationMs, this.#options.training.offline.bankCapMs,
+      session.inSessionMsOf(character.id), this.#options.training.offline.bankCapMs,
     );
   }
 

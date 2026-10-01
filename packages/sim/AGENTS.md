@@ -851,7 +851,14 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   PURA do gasto do banco — `min(fora, banco, teto da conta)`, carência de 10 min, melee `/ 2`,
   distância `/ 4`, magic level pela mana, escudo `/ 4` junto —: recebe o tempo fora COMO DADO
   (`awayMs`), porque o `sim` não lê relógio; quem sabe a hora é a `api`, no ticket. O banco cresce
-  1:1 com `session.aggregatesOf(id).durationMs` no fim da participação (`onEnd`/`onLeave` de hunt e
-  de treino), nunca por tick. `buyItem` (`purchase.ts`) é a compra mínima do `buy-item`: confere
+  1:1 com `session.inSessionMsOf(id)` no fim da participação (`onEnd`/`onLeave` de hunt e de treino),
+  nunca por tick — e NÃO com `aggregatesOf(id).durationMs`: `advanceBy` soma a janela INTEIRA ao
+  `durationMs` antes de despachar os eventos, então uma sessão que acaba por evento no meio da janela
+  (arma esgotada, morte) contaria o resto dela e o banco dependeria de como o host fatiou o tempo;
+  `inSessionMsOf` lê o relógio lógico (`nowMs` menos o instante de entrada), exato dentro do evento.
+  O escudo do offline training segue o `sendUpdate` do Canary — `Skill.percent` é um `double` de 2
+  casas comparado com o percentual novo TRUNCADO (`uint8_t`) —, não "o inteiro mudou" (`floor` dos dois
+  lados). O cooldown entre dois Treinos (`training-exhaustion`, 10 s) é um carimbo de parede no
+  registro (`exerciseExhaustedUntilMs`), comparado com o `nowMs` que o servidor passa. `buyItem` (`purchase.ts`) é a compra mínima do `buy-item`: confere
   TUDO antes de mexer em `goldDelta` ou na mochila. `holdStamina` (`stamina.ts`) avança o marco sem
   recuperar — o que o Treino faz ao sair (ADR 0060 d.14c).

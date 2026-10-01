@@ -79,6 +79,7 @@ const training = (over: Record<string, unknown> = {}) => ({
   id: 'baseline',
   dummy: { id: 'exercise-dummy', rate: 100 },
   strike: { triesPerCharge: 7, manaSpentPerCharge: 600 },
+  startCooldownMs: 10_000,
   place: { stand: { x: 2, y: 1, z: 7 }, dummy: { x: 1, y: 1, z: 7 } },
   offline: {
     bankCapMs: 43_200_000, graceMs: 600_000, maxAwayMs: 1_814_400_000,
@@ -269,6 +270,19 @@ describe('o resultado não depende de quem assiste (invariantes 2 e 3)', () => {
     }
   });
 
+  it('o banco de offline training NÃO depende de como o tempo foi fatiado: a arma acaba em 8 000 e é isso que entra', () => {
+    // 5 cargas: o último golpe vence no instante lógico 8 000, no MEIO da janela de 3 000 / 5 000 /
+    // 10 000. O `durationMs` dos agregados somaria a janela inteira antes dos eventos; o banco lê o
+    // tempo exato do instante em que a sessão acaba.
+    const bankAfter = (stepMs: number): number => {
+      const { session, character } = enter();
+      for (let elapsed = 0; elapsed < 10_000 && session.ended === null; elapsed += stepMs) session.advanceBy(stepMs);
+      expect(session.ended).toBe('completed');
+      return character.training.bankMs;
+    };
+    for (const stepMs of [100, 500, 1_000, 3_000, 5_000, 10_000]) expect(bankAfter(stepMs)).toBe(8_000);
+  });
+
   it('um snapshot no meio devolve a mesma sessão: mesma fila, mesma arma, mesmo fim', () => {
     const c = content();
     const { session } = enter(hero(), WEAPON, c);
@@ -344,6 +358,28 @@ describe('o tempo de HUNT também enche o banco (ADR 0059 d.3, o "online" do ADR
     session.end('manual-exit');
     expect(character.training.bankMs).toBe(5_500);
     expect(character.training.skill).toBe('sword');
+  });
+
+  it('uma hunt que acaba por EVENTO no meio da janela (a morte) soma o tempo exato, em qualquer fatia', () => {
+    // O rato bate forte e o personagem tem 10 de vida: ele cai no meio de uma janela larga. O banco
+    // é o instante da morte, e não a janela inteira — o resultado não depende do Hz do hospedeiro.
+    const lethal = content({ monsters: [{ ...rat, health: 100_000, attack: 200, speed: 300, aggroRadius: 6 }] });
+    const bankAfter = (stepMs: number): { bank: number; diedAtMs: number } => {
+      const session = createHuntSession({
+        id: 'hunt-1', content: lethal, huntId: 'gym-hunt', difficulty: DEFAULT_DIFFICULTY_NAME, createdAtMs: 0,
+      });
+      const character = hero({ health: 250, training: { offlineBankMs: 0, offlineSkill: null, version: 1 } });
+      session.enter(character);
+      for (let elapsed = 0; elapsed < 60_000 && session.ended === null; elapsed += stepMs) session.advanceBy(stepMs);
+      expect(session.ended).toBe('death');
+      const died = session.notableEvents.find((event) => event.type === 'death');
+      return { bank: character.training.bankMs, diedAtMs: died?.atMs ?? -1 };
+    };
+    const fine = bankAfter(100);
+    expect(fine.diedAtMs).toBeGreaterThan(0);
+    expect(fine.bank).toBe(fine.diedAtMs);
+    // Fatias que NÃO alinham com o instante da morte: o resultado é o mesmo.
+    for (const stepMs of [1_000, 7_000, 30_000]) expect(bankAfter(stepMs)).toEqual(fine);
   });
 
   it('quem enche o banco é o TEMPO NA HUNT, não a hunt inteira: a Cidade (que não avança) não soma nada', () => {
