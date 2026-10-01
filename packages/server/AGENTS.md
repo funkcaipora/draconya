@@ -888,9 +888,23 @@ frequência o host AVANÇA a fila — o resultado é o dos eventos). Contrato de
   `CharacterWriter` que `withOwnedCharacter` passa à operação — preso à `tx` da trava, porque um
   método do repositório abriria outra conexão e esperaria pela linha travada — e só acontece com o
   ticket EMITIDO (`active-limit` não gasta). Quem não escolheu skill no livro não tem a linha tocada.
-- **A stamina não anda no Treino:** `createSessionBuilder` chama `holdStamina` (não
-  `materializeStamina`) ao SAIR do Treino — o marco avança sem recuperar o tempo treinado (ADR 0060
-  d.14c). A entrada materializa como qualquer transição.
+- **A stamina não anda no Treino, em NENHUMA saída:** `createSessionBuilder` chama `holdStamina` (não
+  `materializeStamina`) ao SAIR do Treino pela transição — o marco avança sem recuperar o tempo
+  treinado (ADR 0060 d.14c). Mas o construtor só roda ANTES do extrato no `leave-hunt`
+  (`#runTransition` constrói antes de gravar); a arma que acaba sozinha (`#settleOne` grava o extrato
+  e SÓ DEPOIS constrói a Cidade), o logout dentro do Treino e a drenagem gravam o extrato sem passar
+  por ele, e o ledger guardaria o marco da ENTRADA — o próximo ticket recuperaria o tempo treinado
+  inteiro. Por isso `#persistReceipt` também segura o marco (`holdStamina(owner, wallNow)`) quando a
+  sessão é `training`, e `settleSnapshotAsReceipt` (`nowMs`) faz o mesmo para o snapshot
+  irrestaurável. **`wallNow` é OUTRO relógio que `now`:** `now` é o monotônico do processo
+  (`performance.now`, só para o ciclo) e não grava instante que sobrevive a restart; o marco de
+  stamina é epoch (`Date.now`). A entrada materializa como qualquer transição.
+- **O `training-exhaustion` do Canary (10 s entre dois Treinos) é cooldown de PAREDE, e mora no
+  registro `training`** (ADR 0052 d.6): `exerciseExhaustedUntilMs`, epoch ms, comparado com o relógio
+  que o servidor passa (`OfflineTraining.exerciseCooldownLeftMs(nowMs, cooldownMs)`; `sim` não lê
+  relógio). O host recusa em palavras (`#requestEnterTraining`) e `trainingFor` recusa de novo e
+  CARIMBA ao construir (`beginExerciseCooldown`); o carimbo viaja no extrato do Treino (`training` é
+  ABSOLUTO) e no snapshot. O valor é `training.startCooldownMs` do conteúdo (10 000).
 - **Achado fora do escopo, sem correção aqui:** o `materializeStamina` de TODA transição também
   roda ao SAIR da hunt, e o marco (`staminaUpdatedAtMs`) é o da ENTRADA — então o tempo de parede
   da hunt inteira volta como recuperação, por cima do que `drainStamina` gastou. Sonda com uma hunt

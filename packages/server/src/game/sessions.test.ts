@@ -508,6 +508,33 @@ describe('o Treino: construtor e retomada (#631, ADR 0059)', () => {
     expect(hero?.position).toEqual({ x: 3, y: 3, z: 7 });
   });
 
+  it('o construtor carimba o início do Treino e recusa um novo dentro de 10 s (`training-exhaustion` do Canary)', () => {
+    let now = 1_000_000;
+    const from = city();
+    const hero = from.participants[0];
+    const build = createSessionBuilder(content, () => now);
+
+    const first = build({ to: 'training', itemInstanceId: WEAPON }, from, 'p1');
+    expect(first?.ruleset.type).toBe('training');
+    // O carimbo é `agora + 10 s`, no registro do personagem — o que o extrato do Treino leva ao banco.
+    expect(hero?.training.getState().exerciseExhaustedUntilMs).toBe(1_010_000);
+
+    // De volta à Cidade (o mesmo personagem), a segunda tentativa dentro da espera é recusada: `null`
+    // deixa o personagem onde está, e o carimbo NÃO se renova (a recusa não é um início).
+    now = 1_004_000;
+    expect(build({ to: 'training', itemInstanceId: WEAPON }, first as Session, 'p1')).toBeNull();
+    const backToCity = build({ to: 'city' }, first as Session, 'p1');
+    expect(backToCity).not.toBeNull();
+    expect(build({ to: 'training', itemInstanceId: WEAPON }, backToCity as Session, 'p1')).toBeNull();
+    expect(hero?.training.getState().exerciseExhaustedUntilMs).toBe(1_010_000);
+
+    // Passados os 10 s, volta a aceitar — e carimba de novo a partir DESTE início.
+    now = 1_010_000;
+    const second = build({ to: 'training', itemInstanceId: WEAPON }, backToCity as Session, 'p1');
+    expect(second?.ruleset.type).toBe('training');
+    expect(hero?.training.getState().exerciseExhaustedUntilMs).toBe(1_020_000);
+  });
+
   it('recusa a instância que o personagem não carrega, e o item que não é exercise weapon', () => {
     expect(createSessionBuilder(content)({ to: 'training', itemInstanceId: 'nao-existe' }, city(), 'p1')).toBeNull();
     const rock: InitialCharacter = {

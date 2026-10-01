@@ -26,6 +26,13 @@ export interface SettleSnapshotOptions {
   readonly characterId: string;
   readonly accountId: string;
   readonly receipts: Pick<ReceiptStore, 'save'>;
+  /**
+   * O relógio de PAREDE de quem liquida (epoch, ms). Só importa para um snapshot de TREINO: a
+   * stamina não anda nele (ADR 0060 d.14c), então o marco que o extrato leva avança até aqui — sem
+   * isso o tempo treinado voltaria como recuperação no próximo ticket. Ausente: o marco fica como o
+   * snapshot o tinha (o de qualquer outra sessão nunca depende disto).
+   */
+  readonly nowMs?: number;
 }
 
 /** O layout de equipamento como o extrato o leva: `slot → instanceId`. */
@@ -110,7 +117,11 @@ export async function settleSnapshotAsReceipt(
       ? {}
       : {
         staminaMs: owner.staminaMs,
-        staminaUpdatedAtMs: owner.staminaUpdatedAtMs ?? 0,
+        // O Treino não recupera nem gasta stamina: o marco anda até o instante da liquidação, como
+        // `holdStamina` — e só para a frente (relógio para trás não recua o marco).
+        staminaUpdatedAtMs: snapshot.type === 'training' && options.nowMs !== undefined
+          ? Math.max(owner.staminaUpdatedAtMs ?? 0, options.nowMs)
+          : owner.staminaUpdatedAtMs ?? 0,
       }),
     // Skills e Bestiário são ABSOLUTOS e monotônicos (o ledger funde pelo maior) — sem eles
     // aqui a progressão da sessão inteira sumia: XP creditada, mas o abate 9 999 voltava a 5 000.

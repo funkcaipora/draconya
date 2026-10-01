@@ -27,8 +27,8 @@ import type {
   Skill, Training, Vocation,
 } from '@draconya/content';
 import {
-  blessingCost, buyItem, containerRulesFor, DEFAULT_FIGHT_MODE, hasBlessing, PartyFullError,
-  shareCostsOf, skillFactorFor, splitLootOf, withBlessing,
+  blessingCost, buyItem, containerRulesFor, DEFAULT_FIGHT_MODE, hasBlessing, holdStamina,
+  PartyFullError, shareCostsOf, skillFactorFor, splitLootOf, withBlessing,
 } from '@draconya/sim';
 import type {
   AmmoRefusal, BuyRefusal, CarriedItem, CharacterRuntime, CharmAssignRefusal, CharmBestiaryEntry,
@@ -128,6 +128,14 @@ export interface SessionHostOptions {
   readonly metrics?: GameMetrics;
   /** Relógio monotônico da simulação. Injetável para o teste não depender de tempo real. */
   readonly now?: () => number;
+  /**
+   * Relógio de PAREDE (epoch, ms) — o mesmo que o construtor de sessões recebe (`nowMs` do `main`)
+   * e que `characters.stamina_updated_at` e os carimbos do ADR 0052 d.6 usam. É OUTRO relógio que
+   * `now`: aquele é o monotônico do processo (`performance.now`) e não serve para gravar um instante
+   * que sobrevive ao restart. Só o que o host grava no extrato com data (o marco da stamina do
+   * Treino) lê daqui. Ausente: `Date.now`.
+   */
+  readonly wallNow?: () => number;
   /**
    * Aceita ou recusa uma configuração de bot (FUN-81). Ausente: `bot-config` é ignorada e o
    * jogador recebe um aviso — um host montado sem conteúdo não tem como julgar vocabulário.
@@ -2751,7 +2759,8 @@ export class SessionHost {
     const hosted = this.#hostedSession(viewer.characterId);
     const character = this.#ownerOf(viewer.characterId);
     if (hosted === undefined || character === undefined) return;
-    if (this.#options.training === undefined) {
+    const training = this.#options.training;
+    if (training === undefined) {
       viewer.send({ type: 'system-message', level: 'warning', text: 'Este servidor não tem Treino.' });
       return;
     }
@@ -2766,6 +2775,16 @@ export class SessionHost {
     if (carried === null || definition?.exercise === undefined || definition.charges === undefined) {
       viewer.send({
         type: 'system-message', level: 'warning', text: 'Você não tem essa exercise weapon.',
+      });
+      return;
+    }
+    // O `training-exhaustion` do Canary (`exercise_training_weapons.lua`, `exhaustionTime = 10`): um
+    // novo início só passados 10 s do anterior. O mesmo cooldown de parede que o construtor de
+    // sessões confere de novo e CARIMBA ao construir (`trainingFor`); aqui só se responde em palavras.
+    if (character.training.exerciseCooldownLeftMs(this.#wallNow(), training.startCooldownMs) > 0) {
+      viewer.send({
+        type: 'system-message', level: 'warning',
+        text: `O boneco de treino só pode ser usado depois de ${String(training.startCooldownMs / 1000)} segundos de espera.`,
       });
       return;
     }
@@ -4721,6 +4740,15 @@ export class SessionHost {
     // A stamina do dono da sessão vai junto (FUN-54): sem ela, o tempo de hunt gasto nunca
     // chegaria ao banco, e reconectar devolveria a stamina de antes da hunt.
     const owner = departed ?? hosted.session.participants.find((p) => p.id === characterId);
+    // A stamina não anda no Treino (ADR 0060 d.14c): o marco que o extrato leva tem de estar no
+    // instante em que o Treino ACABOU, e não no da entrada — senão o tempo treinado volta como
+    // recuperação no próximo ticket. É AQUI, e não só na fronteira do construtor (`holdStamina` em
+    // `game/sessions.ts`), porque o extrato é lido ANTES de o construtor rodar quando a sessão acaba
+    // sozinha (arma esgotada, `#settleOne`), e porque o logout, a drenagem e o crash nunca passam por
+    // ele. Idempotente: o marco só anda para a frente.
+    if (owner !== undefined && hosted.session.ruleset.type === 'training') {
+      holdStamina(owner, this.#wallNow());
+    }
     await receipts.save({
       sessionId: receipt.sessionId,
       characterId,
@@ -5237,7 +5265,7 @@ export class SessionHost {
     const receipts = this.#options.receipts;
     if (receipts === undefined || accountId === undefined) return;
     try {
-      await settleSnapshotAsReceipt(snapshot, { characterId, accountId, receipts });
+      await settleSnapshotAsReceipt(snapshot, { characterId, accountId, receipts, nowMs: this.#wallNow() });
     } catch (error) {
       // Falhar aqui perde o crédito, e é por isso que o snapshot NÃO é apagado em seguida
       // quando isto lança: a próxima conexão tenta de novo.
@@ -5402,5 +5430,10 @@ export class SessionHost {
 
   #now(): number {
     return this.#options.now?.() ?? performance.now();
+  }
+
+  /** O relógio de parede (epoch ms) — ver `SessionHostOptions.wallNow`. */
+  #wallNow(): number {
+    return this.#options.wallNow?.() ?? Date.now();
   }
 }

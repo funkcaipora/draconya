@@ -151,6 +151,29 @@ describe('settleSnapshotAsReceipt (#527)', () => {
     expect(saved[0]).not.toHaveProperty('removedInstances');
   });
 
+  it('holds the stamina marker of a Training snapshot at the settlement time — Training time is not recovery (#631, ADR 0060 d.14c)', async () => {
+    // A stamina não anda no Treino: o marco que o extrato leva avança até a liquidação, senão o tempo
+    // treinado voltaria como recuperação no próximo ticket. Só o Treino, e só para a frente.
+    const { receipts, saved } = fakeReceipts();
+    const participant = { ...baseSnapshot.participants[0]!, staminaMs: 6_000, staminaUpdatedAtMs: 1_000 };
+    const settle = (type: SessionSnapshot['type'], nowMs?: number) => settleSnapshotAsReceipt(
+      { ...baseSnapshot, type, participants: [participant] },
+      { characterId: 'a', accountId: 'acc-a', receipts, ...(nowMs === undefined ? {} : { nowMs }) },
+    );
+
+    await settle('training', 9_000);
+    expect(saved.at(-1)).toMatchObject({ staminaMs: 6_000, staminaUpdatedAtMs: 9_000 });
+    // Relógio para trás não recua o marco.
+    await settle('training', 500);
+    expect(saved.at(-1)).toMatchObject({ staminaUpdatedAtMs: 1_000 });
+    // Sem o relógio de quem liquida, o marco fica como o snapshot o tinha.
+    await settle('training');
+    expect(saved.at(-1)).toMatchObject({ staminaUpdatedAtMs: 1_000 });
+    // E uma hunt nunca o segura: o marco é o de sempre, qualquer que seja o relógio.
+    await settle('hunt', 9_000);
+    expect(saved.at(-1)).toMatchObject({ staminaUpdatedAtMs: 1_000 });
+  });
+
   it('omits every optional field when the participant record has none of them', async () => {
     const { receipts, saved } = fakeReceipts();
     await settleSnapshotAsReceipt(baseSnapshot, { characterId: 'a', accountId: 'acc-a', receipts });

@@ -343,7 +343,29 @@ function trainingCatalogueOf(content: Content, training: Training): NonNullable<
       const skill = content.skills.get(entry.skillId);
       return skill === undefined ? [] : [{ skillId: entry.skillId, name: skill.name, kind: entry.kind }];
     }),
+    skills: trainedSkillsOf(content, training),
   };
+}
+
+/**
+ * Toda skill que o Treino toca, com nome e tipo de ganho: as do livro, na ordem dele, e depois as
+ * que só uma exercise weapon treina (o `shielding` do exercise shield), em ordem de id. O tipo é o
+ * do GOLPE — `mana` quando a skill sobe por mana gasta (`gain.on === 'spell-cast'`, o que o
+ * ruleset do Treino lê), `attacks` quando sobe por tries —, não o do livro: o livro pode deixar de
+ * oferecer o magic level sem que a wand e a rod deixem de render mana.
+ */
+function trainedSkillsOf(content: Content, training: Training): NonNullable<Catalogue['training']>['skills'] {
+  const ids: string[] = training.offline.skills.map((entry) => entry.skillId);
+  const fromWeapons = new Set<string>();
+  for (const item of content.items.values()) {
+    if (item.exercise !== undefined && !ids.includes(item.exercise.skillId)) fromWeapons.add(item.exercise.skillId);
+  }
+  ids.push(...[...fromWeapons].sort());
+  return ids.flatMap((skillId) => {
+    const skill = content.skills.get(skillId);
+    return skill === undefined
+      ? [] : [{ skillId, name: skill.name, kind: skill.gain.on === 'spell-cast' ? 'mana' as const : 'attacks' as const }];
+  });
 }
 
 /**

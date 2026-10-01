@@ -490,10 +490,21 @@ function trainingFor(
 ): Session | null {
   if (request.itemInstanceId === undefined) return null;
   try {
+    // O `training-exhaustion` do Canary (ADR 0052 d.6, cooldown de parede): um novo início só
+    // passados `startCooldownMs` (10 s) do anterior. Recusar aqui é a segunda linha — o host já
+    // respondeu em palavras —, e é a que carimba: o instante entra no registro do personagem, que o
+    // extrato do Treino leva ao banco. Sem ele, entrar/sair/entrar a cada ciclo creditaria um golpe
+    // por entrada (o primeiro vence em t = 0) e esgotaria a arma bem mais depressa que 1 carga / 2 s.
+    const rules = content.training;
+    const startedAtMs = now();
+    if (rules !== undefined && character.training.exerciseCooldownLeftMs(startedAtMs, rules.startCooldownMs) > 0) {
+      return null;
+    }
     const session = createTrainingSession({
-      id: randomUUID(), content, itemInstanceId: request.itemInstanceId, createdAtMs: now(),
+      id: randomUUID(), content, itemInstanceId: request.itemInstanceId, createdAtMs: startedAtMs,
     });
     session.enter(character);
+    if (rules !== undefined) character.training.beginExerciseCooldown(startedAtMs, rules.startCooldownMs);
     return session;
   } catch {
     // Sem Treino no conteúdo, sem a arma, sem onde ficar (`TrainingUnavailableError`): recusar é a

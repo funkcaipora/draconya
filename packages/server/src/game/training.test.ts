@@ -25,7 +25,7 @@ const logger = createLogger('silent', 'test');
 const ofType = <T extends S2CMessage['type']>(messages: readonly S2CMessage[], type: T) =>
   messages.filter((m): m is Extract<S2CMessage, { type: T }> => m.type === type);
 
-function fixture(options: { gold?: number } = {}) {
+function fixture(options: { gold?: number; staminaMs?: number } = {}) {
   const content = trainingTestContent();
 
   let now = 0;
@@ -54,7 +54,7 @@ function fixture(options: { gold?: number } = {}) {
   const shard = new CityShard(content, () => now);
   const catalogue = buildCatalogue(content);
   const host = new SessionHost({
-    nodeId: 'n1', contentVersion: content.version, logger, now: () => now, receipts, directory,
+    nodeId: 'n1', contentVersion: content.version, logger, now: () => now, wallNow: () => now, receipts, directory,
     skillCatalog: content.skills, itemCatalog: content.items, progression: content.progression,
     ...(content.training === undefined ? {} : { training: content.training }),
     catalogue: () => catalogue,
@@ -63,6 +63,9 @@ function fixture(options: { gold?: number } = {}) {
   });
   const initial: InitialCharacter = {
     level: 20, xp: 0, gold: options.gold ?? 1_000,
+    // A stamina só é rastreada quando o ticket a traz (`null` roda sem teto): o marco nasce no
+    // instante 0 do relógio injetado, e o login materializa a partir dele.
+    ...(options.staminaMs === undefined ? {} : { staminaMs: options.staminaMs, staminaUpdatedAtMs: 0 }),
     inventory: {
       backpack: [], satchel: [],
       equipped: {},
@@ -73,12 +76,14 @@ function fixture(options: { gold?: number } = {}) {
     for (let t = 0; t < ms; t += step) { now += step; host.cycle(); }
     host.flush();
   };
+  /** Anda o relógio sem ciclo nenhum — a Cidade não simula, e o que passa é tempo de parede. */
+  const advanceClock = (ms: number) => { now += ms; };
   const settle = async () => {
     for (let i = 0; i < 6; i += 1) await new Promise((resolve) => { setTimeout(resolve, 0); });
   };
   const typeOf = (characterId: string) => host.sessionFor(characterId)?.ruleset.type;
   const hero = (): CharacterRuntime => host.sessionFor('hero')?.participants.find((p) => p.id === 'hero') as CharacterRuntime;
-  return { host, saved, runFor, settle, typeOf, hero, content, initial };
+  return { host, saved, runFor, advanceClock, settle, typeOf, hero, content, initial, now: () => now };
 }
 
 /** Prepara e anexa o personagem; devolve o socket e o viewer, já com a fila limpa. */
@@ -196,6 +201,11 @@ describe('o livro do offline training (#631, ADR 0059 d.3)', () => {
       bankCapMs: 43_200_000, graceMs: 600_000,
       spendCapMs: { free: 21_600_000, premium: 43_200_000 },
       offlineSkills: [
+        { skillId: 'sword', name: 'sword', kind: 'attacks' },
+        { skillId: 'magic', name: 'magic', kind: 'mana' },
+      ],
+      // Toda skill que o Treino toca: as do livro, na ordem dele — e o tipo é o do GOLPE.
+      skills: [
         { skillId: 'sword', name: 'sword', kind: 'attacks' },
         { skillId: 'magic', name: 'magic', kind: 'mana' },
       ],
@@ -340,5 +350,184 @@ describe('a sessão de Treino, do socket ao extrato (#631, ADR 0059 d.1)', () =>
     f.host.flush();
     expect(ofType(socket.received(), 'system-message').at(-1)?.text)
       .toBe('O livro do offline training só se lê na Cidade.');
+  });
+});
+
+describe('a stamina não anda no Treino, em NENHUMA saída (ADR 0060 d.14c)', () => {
+  const HOUR = 3_600_000;
+
+  /** 5 h de stamina no ticket; 1 h na Cidade (recuperação normal); entra no Treino com a arma de 3 cargas. */
+  async function training() {
+    const f = fixture({ gold: 1_000, staminaMs: 5 * HOUR });
+    const { viewer } = await attach(f);
+    f.advanceClock(HOUR);
+    const instanceId = buySword(f, viewer as NonNullable<typeof viewer>);
+    f.host.handle(viewer as NonNullable<typeof viewer>, { type: 'enter-training', itemInstanceId: instanceId });
+    await f.settle();
+    expect(f.typeOf('hero')).toBe('training');
+    // A ENTRADA materializou: a 1 h antes do treino é recuperação, e o marco é o instante da entrada.
+    expect(f.hero().staminaMs).toBe(6 * HOUR);
+    expect(f.hero().staminaUpdatedAtMs).toBe(HOUR);
+    return { f, viewer, instanceId };
+  }
+
+  /** O que o ticket do login seguinte faria com o extrato: `materializeStamina` a partir do marco gravado. */
+  const staminaAtNextLogin = (f: ReturnType<typeof fixture>, receipt: SessionReceipt, atMs: number): number | null => {
+    // Uma praça NOVA: a do fixture já tem o herói, e o `participants[0]` seria ele.
+    const session = createCitySessionFactory(f.content, () => atMs, new CityShard(f.content, () => atMs))('hero-2', {
+      ...f.initial, staminaMs: receipt.staminaMs as number, staminaUpdatedAtMs: receipt.staminaUpdatedAtMs as number,
+    });
+    return session.participants[0]?.staminaMs ?? null;
+  };
+
+  it('arma esgotada (a sessão acaba SOZINHA): o extrato leva o marco do FIM do treino, e o login seguinte não o recupera', async () => {
+    const { f } = await training();
+    // Golpes em t = 0, 2 s e 4 s: a terceira carga é a última, e o Treino conclui sozinho.
+    f.runFor(5_000);
+    await f.settle();
+    expect(f.typeOf('hero')).toBe('city');
+
+    const receipt = f.saved.at(-1) as SessionReceipt;
+    expect(receipt.reason).toBe('completed');
+    // Nem recuperou nem gastou: a stamina é a da entrada. E o marco acompanhou o treino — o
+    // extrato lido ANTES de o construtor segurar o marco na memória carregava o da entrada.
+    expect(receipt.staminaMs).toBe(6 * HOUR);
+    expect(receipt.staminaUpdatedAtMs).toBeGreaterThanOrEqual(HOUR + 4_000);
+
+    // Uma hora depois, ele volta: só a hora fora do jogo recupera, e não os 4 s que treinou.
+    const later = 2 * HOUR;
+    const stamina = staminaAtNextLogin(f, receipt, later) as number;
+    expect(stamina).toBe(6 * HOUR + (later - (receipt.staminaUpdatedAtMs as number)));
+    expect(stamina).toBeLessThan(7 * HOUR);
+  });
+
+  it('logout DENTRO do Treino: o extrato leva o marco do instante da saída', async () => {
+    const { f } = await training();
+    f.runFor(1_000);
+    expect(f.typeOf('hero')).toBe('training');
+
+    await f.host.release('hero', 1000, 'logout');
+
+    const receipt = f.saved.at(-1) as SessionReceipt;
+    expect(receipt.reason).toBe('manual-exit');
+    expect(receipt.staminaMs).toBe(6 * HOUR);
+    expect(receipt.staminaUpdatedAtMs).toBe(f.now());
+    expect(receipt.staminaUpdatedAtMs).toBeGreaterThan(HOUR);
+    expect(staminaAtNextLogin(f, receipt, f.now() + HOUR)).toBe(7 * HOUR);
+  });
+
+  it('drenagem (a janela de deploy) no meio do Treino: mesmo marco', async () => {
+    const { f } = await training();
+    f.runFor(1_000);
+
+    expect(await f.host.drainAll()).toBe(1);
+
+    const receipt = f.saved.at(-1) as SessionReceipt;
+    expect(receipt.reason).toBe('drain');
+    expect(receipt.staminaMs).toBe(6 * HOUR);
+    expect(receipt.staminaUpdatedAtMs).toBe(f.now());
+    expect(staminaAtNextLogin(f, receipt, f.now() + HOUR)).toBe(7 * HOUR);
+  });
+
+  it('sair pelo `leave-hunt` continua certo (o construtor segura o marco ANTES de gravar)', async () => {
+    const { f, viewer } = await training();
+    f.runFor(2_500);
+    f.host.handle(viewer as NonNullable<typeof viewer>, { type: 'leave-hunt' });
+    await f.settle();
+
+    const receipt = f.saved.at(-1) as SessionReceipt;
+    expect(receipt.staminaMs).toBe(6 * HOUR);
+    expect(receipt.staminaUpdatedAtMs).toBe(f.now());
+  });
+
+  it('só o Treino segura o marco: o extrato da Cidade não leva stamina nenhuma', async () => {
+    // Trava a condição `type === 'training'` contra generalizar o `holdStamina` para toda sessão.
+    const f = fixture({ gold: 1_000, staminaMs: 5 * HOUR });
+    const { viewer } = await attach(f);
+    f.advanceClock(HOUR);
+    buySword(f, viewer as NonNullable<typeof viewer>);
+    await f.host.release('hero', 1000, 'logout');
+    const receipt = f.saved.at(-1) as SessionReceipt;
+    expect(receipt.staminaUpdatedAtMs).toBeUndefined();
+  });
+});
+
+describe('o cooldown de 10 s entre dois Treinos (`training-exhaustion` do Canary)', () => {
+  const refusal = 'O boneco de treino só pode ser usado depois de 10 segundos de espera.';
+
+  it('entrar, sair e entrar de novo dentro de 10 s é recusado — cada entrada creditaria um golpe em t = 0', async () => {
+    const f = fixture({ gold: 1_000 });
+    const { socket, viewer } = await attach(f);
+    const instanceId = buySword(f, viewer as NonNullable<typeof viewer>);
+    const enterTraining = async () => {
+      socket.frames.length = 0;
+      f.host.handle(viewer as NonNullable<typeof viewer>, { type: 'enter-training', itemInstanceId: instanceId });
+      await f.settle();
+      f.host.flush();
+      return ofType(socket.received(), 'system-message').map((m) => m.text);
+    };
+
+    expect(await enterTraining()).toEqual([]);
+    expect(f.typeOf('hero')).toBe('training');
+    f.runFor(500);
+    f.host.handle(viewer as NonNullable<typeof viewer>, { type: 'leave-hunt' });
+    await f.settle();
+    expect(f.typeOf('hero')).toBe('city');
+    // Um golpe (o de t = 0): 7 tries, uma carga.
+    expect(f.hero().skills.getState()['sword']?.points).toBe(7);
+
+    // Dentro dos 10 s: recusado, na Cidade, sem golpe nenhum.
+    expect(await enterTraining()).toEqual([refusal]);
+    expect(f.typeOf('hero')).toBe('city');
+    f.advanceClock(4_000);
+    expect(await enterTraining()).toEqual([refusal]);
+    expect(f.hero().skills.getState()['sword']?.points).toBe(7);
+    expect(f.hero().inventory.carried(instanceId)?.overlay).toEqual({ charges: 2 });
+  });
+
+  it('libera exatamente 10 s depois do INÍCIO do treino anterior (não da saída dele)', async () => {
+    const f = fixture({ gold: 1_000 });
+    const { socket, viewer } = await attach(f);
+    const instanceId = buySword(f, viewer as NonNullable<typeof viewer>);
+    const intent = { type: 'enter-training' as const, itemInstanceId: instanceId };
+    f.host.handle(viewer as NonNullable<typeof viewer>, intent);
+    await f.settle();
+    f.runFor(500);
+    f.host.handle(viewer as NonNullable<typeof viewer>, { type: 'leave-hunt' });
+    await f.settle();
+
+    // Iniciado em t = 0: livre em t = 10 000, e ainda preso em t = 9 999.
+    f.advanceClock(9_999 - f.now());
+    socket.frames.length = 0;
+    f.host.handle(viewer as NonNullable<typeof viewer>, intent);
+    await f.settle();
+    f.host.flush();
+    expect(f.typeOf('hero')).toBe('city');
+    expect(ofType(socket.received(), 'system-message').at(-1)?.text).toBe(refusal);
+
+    f.advanceClock(1);
+    f.host.handle(viewer as NonNullable<typeof viewer>, intent);
+    await f.settle();
+    expect(f.typeOf('hero')).toBe('training');
+  });
+
+  it('o carimbo vai para o registro gravado no extrato do Treino — sobrevive ao logout e ao relogin', async () => {
+    const f = fixture({ gold: 1_000 });
+    const { viewer } = await attach(f);
+    const instanceId = buySword(f, viewer as NonNullable<typeof viewer>);
+    f.host.handle(viewer as NonNullable<typeof viewer>, { type: 'enter-training', itemInstanceId: instanceId });
+    await f.settle();
+    f.runFor(500);
+    await f.host.release('hero', 1000, 'logout');
+
+    const receipt = f.saved.at(-1) as SessionReceipt;
+    expect(receipt.training?.exerciseExhaustedUntilMs).toBe(10_000);
+    // O ticket seguinte traz o registro: o carimbo ainda vale e a entrada seria recusada.
+    const session = createCitySessionFactory(f.content, f.now, new CityShard(f.content, f.now))('hero-2', {
+      ...f.initial, training: receipt.training as NonNullable<typeof receipt.training>,
+    });
+    const hero = session.participants[0] as CharacterRuntime;
+    expect(hero.training.exerciseCooldownLeftMs(f.now() + 4_500, 10_000)).toBe(5_000);
+    expect(hero.training.exerciseCooldownLeftMs(f.now() + 9_500, 10_000)).toBe(0);
   });
 });
