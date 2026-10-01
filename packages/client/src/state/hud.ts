@@ -38,6 +38,11 @@ export interface SystemLine {
 export interface SkillProgress {
   level: number;
   percent: number;
+  /**
+   * O nível COM o bônus de Loyalty da conta (#628). Ausente é "igual ao base" — a conta sem
+   * degrau, ou um nó `game` anterior à issue. O `percent` é sempre o do nível BASE.
+   */
+  loyaltyLevel?: number;
 }
 
 /** #568: `melee` virou quatro skills na #567 — cada tipo de arma treina a sua. */
@@ -257,6 +262,12 @@ export interface HudState {
   readonly speed: number;
   readonly skills: PlayerSkills;
   /**
+   * O bônus de Loyalty da conta (#628, ADR 0052 decisão 5), em percentual inteiro; `0` é "sem
+   * degrau". Fixado no ticket, constante pela sessão. Chega em `player-stats` e em
+   * `session-state.self`, como `skills`.
+   */
+  readonly loyaltyBonusPercent: number;
+  /**
    * Pontos de alma (#593): `soulMax` é da vocação — `0` é "sem vocação escolhida", o mesmo
    * "sem teto para mostrar" que `vocationId: null` já significa. Chega em `player-stats` e em
    * `session-state.self`, como `speed`/`skills`.
@@ -417,6 +428,7 @@ export const INITIAL_HUD: HudState = {
     distance: { level: 0, percent: 0 },
     magic: { level: 0, percent: 0 },
   },
+  loyaltyBonusPercent: 0,
   soul: 0,
   soulMax: 0,
   vocationId: null,

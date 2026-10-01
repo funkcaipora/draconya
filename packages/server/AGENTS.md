@@ -608,6 +608,28 @@ sobe e desce (alocação, gasto) copia os `charms`. Nos dois a lista de PERMISS�
 (`#saveDurableReceipt`) NÃO leva o `bosstiary`: só a hunt abate boss, e omitir o campo é "não
 toca na coluna".
 
+## Loyalty viaja no ticket e não é persistido (#628, ADR 0052 d.5)
+
+O bônus de Loyalty é da IDADE DA CONTA — dado de banco e de relógio de parede, que o `sim` nunca
+lê (invariante 1). A `api` o calcula na EMISSÃO do ticket, o ÚNICO momento em que a linha não tem
+dono quente, e o resto é o caminho da boosted (#615): `loyaltyBonusPercentOf(accountId)`
+(`loyalty.ts`, montado no `main.ts` a partir de `content.loyalty`) → `initialCharacterOf(...,
+loyaltyBonusPercent)` → `InitialCharacter.loyaltyBonusPercent` (`parseInitialCharacter` valida:
+inteiro de 1 a 65 535 ou AUSENTE, nunca ticket recusado) → `characterFromTicket` → `CharacterState.
+loyaltyBonusPercent`, fixado pela sessão. Duas armadilhas:
+
+- **É por CONTA, não por personagem, e a party não o nivela**: `/start` chama o resolver com o
+  `accountId` de CADA membro, e `/join` com o de quem entra. Um resolver por sessão (o do líder)
+  daria a todos o bônus dele.
+- **Não há coluna, migração, extrato nem ledger.** Deriva de `account.created_at`
+  (`GameRepository.getAccountCreatedAt`) a cada ticket. Persistir o percentual congelaria o
+  degrau de quem entrou véspera do dia 360; recalcular no `game` traria relógio e conta para
+  dentro do processo que não fala com o Postgres.
+
+`player-stats` e `session-state.self` levam `loyaltyBonusPercent` (ausente = zero) e cada skill
+leva `loyaltyLevel` (ausente = igual ao base); o `sameStats` do host compara os dois, senão o HUD
+não recebe o nível efetivo quando só ele muda.
+
 ## A munição é abstrata e escolhida por família (#152, #420)
 
 A munição é **abstrata** (ADR 0032 decisão 7): a escolha é por família, pelo opcode 14
