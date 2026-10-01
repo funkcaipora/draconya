@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ELEMENT_COLORS, FALLBACK_EFFECT_PHASES, FLOATING_TEXT_LIFETIME_MS, MISSILE_MIN_MS,
   MISSILE_MS_PER_TILE, effectPhaseAt, elementColor, floatingTextColor, floatingTextOffset,
-  mergeFloatingText, missileDuration, missileProgress,
+  mergeFloatingText, missileDuration, missileProgress, raceHitColor,
 } from './effects.js';
 import type { FloatingText } from '../state/world.js';
 
@@ -176,5 +176,41 @@ describe('mergeFloatingText (#479)', () => {
     mergeFloatingText(text, 12);
     mergeFloatingText(text, 5);
     expect(text.amount).toBe(47);
+  });
+});
+
+describe('o número do golpe físico segue a RAÇA do alvo (#620)', () => {
+  // `Game::combatGetTypeInfo` do Canary: sangue vermelho, veneno verde, morto-vivo/tinta/chocolate
+  // cinza, doce vermelho-escuro, fogo laranja e energia roxa — índices `TextColor_t` na paleta de 216.
+  const RACES = {
+    blood: 0xff0000, venom: 0x00ff00, undead: 0x999999, ink: 0x999999, chocolate: 0x999999,
+    candy: 0x990000, fire: 0xff9900, energy: 0xcc33cc,
+  } as const;
+
+  it('cada raça tem a cor do Canary, e `blood` é o vermelho de sempre', () => {
+    for (const [race, color] of Object.entries(RACES)) {
+      expect(raceHitColor(race as keyof typeof RACES), race).toBe(color);
+    }
+    expect(raceHitColor('blood')).toBe(floatingTextColor('melee'));
+  });
+
+  it('o golpe `physical` (ou o `melee` sem elemento, de um nó anterior) usa a cor da raça', () => {
+    // Mutação que mata: ignorar a raça, ou aplicá-la a TODO golpe — o fogo de uma magia não
+    // vira verde só porque o alvo é venenoso.
+    expect(floatingTextColor('melee', 'physical', 'venom')).toBe(RACES.venom);
+    expect(floatingTextColor('melee', undefined, 'undead')).toBe(RACES.undead);
+    expect(floatingTextColor('spell', 'physical', 'candy')).toBe(RACES.candy);
+  });
+
+  it('elemento e cura NÃO mudam de cor pela raça', () => {
+    expect(floatingTextColor('spell', 'fire', 'venom')).toBe(elementColor('fire'));
+    expect(floatingTextColor('melee', 'energy', 'undead')).toBe(elementColor('energy'));
+    expect(floatingTextColor('heal', undefined, 'venom')).toBe(0x00ff00);
+    expect(floatingTextColor('spell', undefined, 'undead')).toBe(0xcc33ff);
+  });
+
+  it('sem raça é o vermelho do físico — o herói e todo monstro comum', () => {
+    expect(floatingTextColor('melee', 'physical')).toBe(0xff0000);
+    expect(floatingTextColor('melee', 'physical', undefined)).toBe(0xff0000);
   });
 });

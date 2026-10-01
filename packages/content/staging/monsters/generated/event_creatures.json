@@ -168,6 +168,29 @@
     "runOnHealth": 1,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Your new name is breakfast.",
+          "yell": false
+        },
+        {
+          "text": "Keep that dog away!",
+          "yell": false
+        },
+        {
+          "text": "Out Fluffy! Out! Bad dog!",
+          "yell": false
+        },
+        {
+          "text": "Ahh, my old bones ...",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -237,6 +260,7 @@
     },
     "staticAttack": 0.85,
     "corpseTtlMs": 60000,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -450,6 +474,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Wooof!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -677,6 +711,112 @@
     "staticAttack": 0,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "T'was not me hand in your pocket!",
+          "yell": false
+        },
+        {
+          "text": "Look! Cool stuff in house. Let's get it!",
+          "yell": false
+        },
+        {
+          "text": "Uhh! Nobody home! <chuckle>",
+          "yell": false
+        },
+        {
+          "text": "Me just borrowed it!",
+          "yell": false
+        },
+        {
+          "text": "Me no steal! Me found it!",
+          "yell": false
+        },
+        {
+          "text": "Me had it for five minutes. It's family heirloom now!",
+          "yell": false
+        },
+        {
+          "text": "Nice human won't hurt little, good goblin?",
+          "yell": false
+        },
+        {
+          "text": "Gimmegimme!",
+          "yell": false
+        },
+        {
+          "text": "Invite me in you lovely house plx!",
+          "yell": false
+        },
+        {
+          "text": "Other Goblin stole it!",
+          "yell": false
+        },
+        {
+          "text": "All presents mine!",
+          "yell": false
+        },
+        {
+          "text": "Me got ugly ones purse",
+          "yell": false
+        },
+        {
+          "text": "Free itans plz!",
+          "yell": false
+        },
+        {
+          "text": "Not me! Not me!",
+          "yell": false
+        },
+        {
+          "text": "Guys, help me here! Guys? Guys???",
+          "yell": false
+        },
+        {
+          "text": "That only much dust in me pocket! Honest!",
+          "yell": false
+        },
+        {
+          "text": "Can me have your stuff?",
+          "yell": false
+        },
+        {
+          "text": "Halp, Big dumb one is after me!",
+          "yell": false
+        },
+        {
+          "text": "Uh, So many shiny things!",
+          "yell": false
+        },
+        {
+          "text": "Utani hur hur hur!",
+          "yell": false
+        },
+        {
+          "text": "Mee? Stealing? Never!!!",
+          "yell": false
+        },
+        {
+          "text": "Oh what fun it is to steal a one-horse open sleigh!",
+          "yell": false
+        },
+        {
+          "text": "Must have it! Must have it!",
+          "yell": false
+        },
+        {
+          "text": "Where me put me lockpick?",
+          "yell": false
+        },
+        {
+          "text": "Catch me if you can!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -804,6 +944,52 @@
     "runOnHealth": 429,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Feel the wrath of me dos attack!",
+          "yell": false
+        },
+        {
+          "text": "You're next!",
+          "yell": false
+        },
+        {
+          "text": "Gimme free gold!",
+          "yell": false
+        },
+        {
+          "text": "Me sooo smart!",
+          "yell": false
+        },
+        {
+          "text": "Me have a cheating link for you!",
+          "yell": false
+        },
+        {
+          "text": "Me is GM!",
+          "yell": false
+        },
+        {
+          "text": "Gimme your password!",
+          "yell": false
+        },
+        {
+          "text": "Me just need the code!",
+          "yell": false
+        },
+        {
+          "text": "Me not stink!",
+          "yell": false
+        },
+        {
+          "text": "Me other char is highlevel!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -981,6 +1167,7 @@
     "runOnHealth": 500,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1102,6 +1289,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1253,6 +1441,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 23,
+      "body": 98,
+      "legs": 22,
+      "feet": 61,
+      "addons": 1
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1567,6 +1762,13 @@
     "runOnHealth": 20,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 81,
+      "body": 115,
+      "legs": 114,
+      "feet": 81,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2351,6 +2553,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 116,
+      "body": 97,
+      "legs": 113,
+      "feet": 20,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2696,6 +2905,13 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 68,
+      "body": 0,
+      "legs": 0,
+      "feet": 94,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3142,6 +3358,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 113,
+      "body": 120,
+      "legs": 95,
+      "feet": 115,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3429,6 +3652,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3713,6 +3937,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3864,6 +4089,99 @@
     "runOnHealth": 5,
     "staticAttack": 0.9,
     "corpseTtlMs": 3610000,
+    "outfit": {
+      "head": 1,
+      "body": 1,
+      "legs": 1,
+      "feet": 1,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "We don't need a future!",
+          "yell": false
+        },
+        {
+          "text": "I'll rook you all!",
+          "yell": false
+        },
+        {
+          "text": "They thought they'd beaten us!",
+          "yell": false
+        },
+        {
+          "text": "You are history!",
+          "yell": false
+        },
+        {
+          "text": "There can only be one world!",
+          "yell": false
+        },
+        {
+          "text": "Guido who?",
+          "yell": false
+        },
+        {
+          "text": "Die noob!",
+          "yell": false
+        },
+        {
+          "text": "There are no dragons!",
+          "yell": false
+        },
+        {
+          "text": "I'll quit forever! Again ...",
+          "yell": false
+        },
+        {
+          "text": "You all are noobs!",
+          "yell": false
+        },
+        {
+          "text": "Beware of the cyclops!",
+          "yell": false
+        },
+        {
+          "text": "Just had a disconnect.",
+          "yell": false
+        },
+        {
+          "text": "Magic is only good for girls!",
+          "yell": false
+        },
+        {
+          "text": "We'll be back!",
+          "yell": false
+        },
+        {
+          "text": "I need some vitamins!",
+          "yell": false
+        },
+        {
+          "text": "Uh, I can't hear anymore. I am deaf!",
+          "yell": false
+        },
+        {
+          "text": "They've ruined it! I can't cheat anymore!",
+          "yell": false
+        },
+        {
+          "text": "This world is ours!",
+          "yell": false
+        },
+        {
+          "text": "Back to the roots!",
+          "yell": false
+        },
+        {
+          "text": "Kill all magic users!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3967,6 +4285,41 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 70000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Booze! More booze!",
+          "yell": false
+        },
+        {
+          "text": "Harrr! Harrr!",
+          "yell": false
+        },
+        {
+          "text": "<Burp>",
+          "yell": false
+        },
+        {
+          "text": "<Fart>",
+          "yell": false
+        },
+        {
+          "text": "Nothing better than plundering and getting plastered!",
+          "yell": false
+        },
+        {
+          "text": "Yarrr!",
+          "yell": false
+        },
+        {
+          "text": "A pirate's unlife for me!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4327,6 +4680,57 @@
     },
     "staticAttack": 0.85,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I had the Halloween Hare for breakfast!",
+          "yell": false
+        },
+        {
+          "text": "Your soul will be mine...wait, wrong line",
+          "yell": false
+        },
+        {
+          "text": "Trick or treat? I saw death!",
+          "yell": false
+        },
+        {
+          "text": "No wait! Don't kill me! It's me, your friend!",
+          "yell": false
+        },
+        {
+          "text": "Bunnies, bah! I'm the real thing!",
+          "yell": false
+        },
+        {
+          "text": "Muahahahaha!",
+          "yell": false
+        },
+        {
+          "text": "I've come to avenge all those mutilated pumpkins!",
+          "yell": false
+        },
+        {
+          "text": "Wait until I get you!",
+          "yell": false
+        },
+        {
+          "text": "Fear the spirit of Halloween!",
+          "yell": false
+        },
+        {
+          "text": "You, my little mouse, are doomed.",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 6,
+      "color": 198
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4451,6 +4855,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,

@@ -45,17 +45,19 @@ entidade (a forma do `monsterSchema` mais `bestiary` e `outfitId`) em três dest
 (`entries`) e `appearances/baseline.json` (`monsters`). De caminho, valida `loot.items` contra o
 catálogo de itens REAL (`data/items` — o que `load.ts` de fato carrega hoje) e remove a linha cujo
 item não existe, ou que pede pilha de item que não empilha — contada, nunca em silêncio, em
-`docs/reference/catalog/monsters-promotion-report.md`. Rat, Rotworm, Dragon e Dragon Lord nunca
-são promovidos POR ESTE SCRIPT (`HAND_AUTHORED_MONSTER_IDS`, `scripts/catalog/promote-monsters.ts`)
+`docs/reference/catalog/monsters-promotion-report.md`. Rat, Rotworm, Dragon, Dragon Lord e Dragon Lord
+Hatchling nunca são promovidos POR ESTE SCRIPT (`HAND_AUTHORED_MONSTER_IDS`, `scripts/catalog/promote-monsters.ts`)
 — o #581 os regenerou uma única vez, direto em `generated/<fatia>.json` (Rat em `mammals.json`,
-Rotworm em `vermins.json`, Dragon e Dragon Lord em `dragons.json`). O #581 tinha dado aos dois um
+Rotworm em `vermins.json`, os três dragões em `dragons.json`). O #581 tinha dado aos dois um
 override próprio (`data/monsters/overrides/rat.json`/`rotworm.json`) para o `blockable: true`
 temporário que Rat Cellars e Rotworm Caves ainda exigiam com o modelo antigo de pull; o #586
 (M36-05) converteu as duas hunts para os spawns reais do Canary e apagou os dois arquivos — Rat e
 Rotworm caem no `blockable: false` do próprio Canary, como o resto do bestiário. `pnpm
-catalog:promote-monsters` (`preserveHandAuthored`) NUNCA sobrescreve essas quatro entradas numa
-reimportação futura — elas só mudam de novo por decisão deliberada, como o #581. `load.ts` não lê
-`staging/`, e nada do jogo deve ler.
+catalog:promote-monsters` (`preserveHandAuthored`) NUNCA sobrescreve essas cinco entradas numa
+reimportação futura — elas só mudam de novo por decisão deliberada, como o #581. **A apresentação
+(`outfit`, `voices`, `light`, `race`, #620) é a exceção:** o `promote-monsters` a renova nas
+cinco entradas hand-authored também (`PRESENTATION_FIELDS`, `withPresentation`) — a regra do #581 protege os números de
+combate, não a fala do rato. `load.ts` não lê `staging/`, e nada do jogo deve ler.
 
 **Os familiares de vocação (#599)**: `familiars/` deixou de ser pulada — o leitor gera os quatro
 (`data/monsters/generated/familiars.json`; o do Monk sai pela linha explícita `OUT_OF_CUT_MONSTERS`,
@@ -315,6 +317,14 @@ MUDA, e muda é válida: exigir o outro lado obrigaria cada magia nova a nascer 
 nascer com número, que é a ordem errada. Por isso o placeholder emite as três seções vazias, e
 por isso `load.test.ts` — e não `buildContent` — é quem prende que todo spell do repositório
 tem efeito hoje.
+
+**`hits.byRace` é o efeito do golpe FÍSICO por raça do alvo** (#620, `Game::combatGetTypeInfo`):
+uma linha por `MonsterRace` (`blood`/`venom`/`undead`/`fire`/`energy`/`ink`/`chocolate`/`candy`),
+cada uma um id de efeito que o pacote tem. É opcional e o host cai em `hits.melee` para a raça sem
+linha — a tabela de antes da #620 (só `melee`) continua válida. O `monster.race`, o
+`monster.outfit` (cores e addons), as `voices` e a `light` do monstro são campos do `monsterSchema`,
+todos opcionais, todos APRESENTAÇÃO: `sim` e combate não os leem, e o que não é arte neles são
+índices (cor 0–132, luz 0–215, máscara de addons 0–3), nunca um id de desenho (invariante 6).
 
 **`appearances.abilities` é a única seção sem conferência dos dois lados** (CMB-06). As chaves
 dela são SEMÂNTICAS e compartilhadas (`spit`, `fire-impact`) — a ability de monstro aponta

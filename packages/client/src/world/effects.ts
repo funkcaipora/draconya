@@ -11,7 +11,9 @@
 // elemento do golpe. Continuam ajustáveis aqui num lugar só, e continuam sendo apresentação —
 // o `sim` não sabe de cor nem de px.
 
+import type { MonsterRace } from '@draconya/protocol';
 import type { FloatingText, HitKind, Point } from '../state/world.js';
+import { tibiaRgb } from './minimap.js';
 
 /**
  * Qual fase de um efeito está tocando em `elapsedMs`, ou `null` quando ele acabou.
@@ -159,10 +161,41 @@ export function elementColor(type: string): number {
 }
 
 /**
+ * A cor do número do golpe FÍSICO por RAÇA do alvo (#620, `Game::combatGetTypeInfo` do Canary):
+ * sangue vermelho, veneno verde, morto-vivo / tinta / chocolate cinza, doce vermelho-escuro, fogo
+ * laranja e energia roxa. Os valores são os índices `TextColor_t` do Canary na paleta de 216 cores
+ * do Tibia (`tibiaRgb`, a mesma do automapa): `TEXTCOLOR_RED` 180, `LIGHTGREEN` 30, `LIGHTGREY` 129,
+ * `DARKRED` 108, `ORANGE` 198, `PURPLE` 154. **Só o físico**: o elemento tem a cor dele, e a raça
+ * do alvo não a muda.
+ */
+const RACE_PHYSICAL_TEXT_COLOR: Readonly<Record<MonsterRace, number>> = {
+  blood: 180,
+  venom: 30,
+  undead: 129,
+  ink: 129,
+  chocolate: 129,
+  candy: 108,
+  fire: 198,
+  energy: 154,
+};
+
+/** A cor do golpe físico num alvo de raça `race`, como `0xRRGGBB`. */
+export function raceHitColor(race: MonsterRace): number {
+  const [r, g, b] = tibiaRgb(RACE_PHYSICAL_TEXT_COLOR[race]);
+  return (r << 16) | (g << 8) | b;
+}
+
+/**
  * A cor do número: o ELEMENTO quando o servidor o mandou, senão o `kind` (RF-02). A ausência é
  * a degradação para um nó `game` anterior — a mesma leitura de antes da #479.
+ *
+ * **O golpe físico segue a RAÇA do alvo** (#620), quando o servidor a mandou: o golpe é `physical`
+ * pelo elemento, ou `melee` sem elemento (o nó anterior). Sem raça é `blood`, o vermelho de
+ * sempre — o herói e todo monstro comum.
  */
-export function floatingTextColor(kind: HitKind, damageType?: string): number {
+export function floatingTextColor(kind: HitKind, damageType?: string, race?: MonsterRace): number {
+  const physical = damageType === 'physical' || (damageType === undefined && kind === 'melee');
+  if (physical && race !== undefined) return raceHitColor(race);
   return damageType === undefined ? FLOATING_TEXT_COLORS[kind] : elementColor(damageType);
 }
 

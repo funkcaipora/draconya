@@ -266,7 +266,11 @@ produto. "Registro" é sempre no sentido do ADR 0052 d.1; "intenção de Cidade"
 - **#620 — Apresentação.** Campos opcionais `outfit.{head,body,legs,feet,addons,mount}`,
   `voices`, `light`, `race` (índices, não arte — invariante 6) no monstro; protocolo leva no
   `creature-appear`; fala periódica sorteada **no cliente** (nunca no RNG da sessão); luz e cor do
-  sangue no render. Sem efeito em combate.
+  sangue no render. Sem efeito em combate. **Entregue (#620)** — ver
+  [`docs/product/combat.md`](product/combat.md), "Apresentação do monstro". Dois desvios do texto
+  acima, ambos de apresentação: `mount` não entrou (só `mounted-thorn-knight` declara
+  `lookMount` no Canary, e ele está fora do corte de caça — o campo não teria quem o usasse), e a
+  luz é um clarão aditivo porque o viewport da hunt não escurece o ambiente.
 - **#621 — Condição de outfit.** Condição `outfit` (ADR 0041) referenciando `outfitId`/
   `appearanceId` da tabela (invariante 6); Creature Illusion, Chameleon e ataque `outfit` de
   monstro; imunidade `outfit`; `creature-update` transmite a troca; expira na fila. Base do Avatar
