@@ -681,23 +681,43 @@ esperando. Sem isso, as duas leriam a mesma sessão de origem e a segunda tentar
 registro que a primeira já trocou — e o caminho de recusa da troca solta o personagem, ou seja,
 perder a corrida derrubaria o jogador do jogo.
 
-**O personagem chega sem nenhum instante da sessão anterior (#812).** O `CharacterRuntime` atravessa
-a transição como o MESMO objeto, mas o relógio lógico de cada sessão nasce em zero (ADR 0020) — e
-um instante gravado por uma sessão e lido pela seguinte vira "agora mesmo" ou "no futuro". Por isso
-`Session.enter` (depois de o `onEnter` do ruleset aceitar) manda o personagem esquecer tudo o que ele
-guarda como instante daquele relógio: `resetSessionClockState`. Saem o carimbo do último golpe de
-arma (`lastAttackAtMs`, #550), o do último ataque dado ou recebido (`lastCombatActionAtMs`, #625 —
-sem isto a saída da hunt nova ficava travada 60 s por um combate que ela não viu), a trava de stairhop
-(`attackLockedUntil`, #554), a imunidade do charm Cleanse, o banco de cargas de bloqueio (volta cheio,
-o estado de quem nunca bloqueou), os cooldowns, as condições (o vencimento delas morava na fila da
-sessão anterior — na nova a haste nunca acabaria) e a ação manual adiada. Entre uma sessão e a outra
-passa tempo real sem simulação nenhuma (a Cidade não simula, ADR 0023), então "tudo vencido, nada em
-curso" é o único estado de entrada coerente; a **entrada recusada** (party cheia) não toca quem
-continua na origem, e o **restore de snapshot não passa por `enter`** — o relógio é o mesmo, e a
-janela quente atravessa. O que é duração restante (a comida, o `durationRemainingMs` do item) e não
-instante atravessa como sempre. Um teste de `session.test.ts` classifica cada campo de
-`CharacterState` como "instante do relógio" ou "dado que atravessa": um campo novo não compila até
-ser classificado.
+**O relógio da sessão anterior não atravessa a transição: os carimbos zeram e os prazos são
+traduzidos (#812).** O `CharacterRuntime` atravessa a transição como o MESMO objeto, mas o relógio
+lógico de cada sessão nasce em zero (ADR 0020) — e um instante gravado por uma sessão e lido pela
+seguinte vira "agora mesmo" ou "no futuro". São duas espécies de grandeza, e a entrada trata cada uma
+de um jeito (ADR 0020, emenda de 2026-09-29):
+
+- **Carimbo** ("quando foi a última vez que…") **zera.** `Session.enter` (depois de o `onEnter` do
+  ruleset aceitar) chama `resetSessionClockState`: o último golpe de arma (`lastAttackAtMs`, #550), o
+  último ataque dado ou recebido (`lastCombatActionAtMs`, #625 — sem isto a saída da hunt nova ficava
+  travada 60 s por um combate que ela não viu), a trava de stairhop (`attackLockedUntil`, #554), o
+  banco de cargas de bloqueio (volta cheio: o contador do Canary sobe uma carga por segundo até duas) e
+  a ação manual adiada (o evento dela morava na fila da sessão anterior).
+- **Prazo** ("quanto ainda falta") **atravessa com o que faltava.** O cooldown de magia e de poção
+  (inclusive o `exhaust:action`), as condições (haste, Utamo Vita, veneno, paralisia, regeneração de
+  alma) e a imunidade do charm Cleanse são traduzidos para o relógio da sessão que entra
+  (`CharacterRuntime.moveToClock`, antes do `onEnter`): o Intense Wound Cleansing de 10 minutos conjurado
+  numa hunt continua com o restante dele depois de uma ida à Cidade, como no Canary (a condição de
+  cooldown de magia, `CONDITIONID_DEFAULT`, é persistente e a morte não a remove). O que já venceu na
+  saída não vai. **A Cidade não simula (ADR 0023): o prazo fica PAUSADO nela**, a mesma convenção do anel
+  de duração (#689) e da comida (`fedMs`). A hunt reagenda o vencimento e o próximo tique das condições
+  que o personagem traz (`HuntRuleset#armConditions`, no `onEnter`); `onLeave` tira os eventos da fila e
+  deixa a condição no personagem. A **morte** continua removendo as condições (morto não tem condição),
+  e o cooldown de magia segue.
+
+O instante da saída é o EXATO (`Session.leave`/`end` o gravam no personagem): o servidor constrói o
+destino antes de encerrar a origem, e a sessão que acaba no meio de um `advanceBy` ainda empurra o
+relógio até o alvo — ler o relógio da origem depois daria um restante que depende da frequência do
+hospedeiro. A **entrada recusada** (party cheia) desfaz a tradução e não toca quem continua na origem,
+e o **restore de snapshot não passa por `enter`** — o relógio é o mesmo, e a janela quente atravessa. O
+que é duração sem âncora num relógio (a comida, o `durationRemainingMs` do item) atravessa como sempre.
+Um teste de `session.test.ts` classifica cada campo de `CharacterState` como carimbo, prazo ou nenhum
+dos dois: um campo novo não compila até ser classificado.
+
+**Em aberto:** o prazo atravessa a Cidade **viva**, com o mesmo objeto em memória. Quando a sessão de
+repouso é recolhida (ADR 0024) ou o nó cai, o personagem volta do ticket sem cooldown nem condição — o
+Canary os salva no logout. Persisti-los pede coluna em `characters`, campo no ticket e no extrato e
+migração (ADR 0014).
 
 **Recusa é produto.** "Você não pode fazer isso" é a mensagem que faz alguém achar que o jogo
 travou; cada recusa diz o que fazer em seguida, e o socket não cai — o cliente pediu algo
