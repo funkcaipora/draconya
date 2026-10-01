@@ -6,7 +6,7 @@ import {
 
 describe('a luz que o monstro carrega (#620)', () => {
   it('o alcance é `level` tiles, e o teto protege o desenho de um valor absurdo', () => {
-    // O protocolo aceita até 255; os monstros do Canary vão de 1 a 6.
+    // O protocolo aceita até 255; os monstros gerados vão de 1 a 6 (o Canary tem um de 10, o Lava Golem).
     expect(lightRadiusPx(1)).toBe(TILE);
     expect(lightRadiusPx(4)).toBe(4 * TILE);
     expect(lightRadiusPx(255)).toBe(LIGHT_MAX_TILES * TILE);

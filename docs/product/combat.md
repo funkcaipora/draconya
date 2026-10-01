@@ -2884,15 +2884,15 @@ só o que o cliente desenha, e por isso cabe inteiro na regra de sempre: **índi
 O importador de monstros (`scripts/catalog/monsters.ts`, `pnpm catalog:import monsters`) lê os
 quatro e os escreve no monstro, **só quando diferem do default** — o monstro comum não ganha linha
 nenhuma. `pnpm catalog:promote-monsters` os leva para `data/monsters/generated/<fatia>.json`;
-Rat, Rotworm, Dragon e Dragon Lord (`HAND_AUTHORED_MONSTER_IDS`) continuam hand-authored, mas a
-apresentação deles é renovada a cada promoção (`withPresentation`) — a regra do #581 protege os
+As cinco entradas hand-authored (`HAND_AUTHORED_MONSTER_IDS`: Rat, Rotworm, Dragon, Dragon Lord e
+Dragon Lord Hatchling) continuam hand-authored, mas a apresentação delas é renovada a cada promoção (`withPresentation`) — a regra do #581 protege os
 números de combate, não a fala do rato.
 
 | Campo de `monsterSchema` | Canary | Default (ausente) | Faixa |
 |---|---|---|---|
 | `outfit` `{ head, body, legs, feet, addons }` | `outfit.lookHead/Body/Legs/Feet/lookAddons` | tudo 0, sem addon (o `Outfit_t` zerado) | cor 0–132 (a paleta de 133 cores do outfit); addons é a máscara do Tibia, 0–3 |
 | `voices` `{ intervalMs, chance, lines[{ text, yell }] }` | `voices.interval/chance` + uma tabela posicional por linha (`register_monster_type.lua`, `registerMonsterType.voices`) | mudo | `chance` inteiro 1–100 (a escala do Lua) |
-| `light` `{ level, color }` | `light.level/color` (`registerMonsterType.light`) | sem luz | `level` 1–255 (alcance em tiles; os monstros vão de 1 a 6), `color` 0–215 (paleta de 216 cores) |
+| `light` `{ level, color }` | `light.level/color` (`registerMonsterType.light`) | sem luz | `level` 1–255 (alcance em tiles; os 59 monstros gerados vão de 1 a 6, e o Canary tem um de 10, o Lava Golem, fora do corte), `color` 0–215 (paleta de 216 cores) |
 | `race` | `monster.race` (`RaceType_t`) | `blood` (`RACE_BLOOD`, `monsters.hpp`) | `venom`, `blood`, `undead`, `fire`, `energy`, `ink`, `chocolate`, `candy` |
 
 No conteúdo de hoje (1028 monstros gerados): **235** com cores/addons de outfit (109 deles com
@@ -2923,7 +2923,7 @@ corte, é este o lugar de acrescentá-la.
   tem (`patternHeight` menor), ou um outfit de uma camada só, fica sem o addon — o desenho base
   aparece, e o monstro não some.
 - **A cor do número e o efeito do golpe físico seguem a raça** (`Game::combatGetTypeInfo`,
-  `game.cpp`). O **efeito** (`creature-hit` físico corpo a corpo → `effect`) sai da tabela
+  `game.cpp`). O **efeito** (`creature-hit` FÍSICO → `effect`, de corpo a corpo ou de magia: o gatilho é o elemento do golpe, e não a origem, como o `Game::sendEffects`) sai da tabela
   `appearances.hits.byRace`: sangue (1) para `blood` e `fire`, `CONST_ME_HITBYPOISON` (17) para
   `venom`, `CONST_ME_HITAREA` (10) para `undead` e `ink`, `CONST_ME_ENERGYHIT` (12) para `energy`,
   `CONST_ME_CACAO` (270) para `chocolate` e `CONST_ME_SIRUP` (269) para `candy`; a raça sem linha cai
@@ -2940,14 +2940,30 @@ corte, é este o lugar de acrescentá-la.
   alcance (teto de 12), centrado no tile dele e que anda junto — `world/creature-light.ts`,
   `paintLight` no viewport. É a mesma informação (quanto e de que cor) que o escurecimento do
   explorador do mundo (#666) usa. Não há escurecimento de ambiente na hunt, e isto não o cria.
-- **Fala.** `Monster::onThinkYell` acumula um relógio por monstro até `interval`, zera, rola
-  `chance >= uniform_random(1, 100)` e diz UMA linha sorteada por igual. O **cliente** faz tudo
-  isso (`world/speech.ts`): o relógio nasce quando o monstro é visto, a rolagem é uma por
-  intervalo (um quadro atrasado rola uma vez, não uma por intervalo perdido — o `yellTicks = 0`
-  do Canary) e o sorteio é o `random` do cliente, **nunca o `Rng` da sessão** nem o servidor. O
-  texto aparece em laranja (`TEXTCOLOR_ORANGE`) sobre o nome por `2500 ms + 50 ms por caractere`
-  — os dois números são apresentação nossa, o Canary não os tem. O grito (`yell`) viaja e fica no
-  conteúdo, mas se desenha como a fala: a diferença no Canary é o alcance de quem a ouve.
+- **Fala.** `Monster::onThinkYell` acumula um relógio por monstro (`yellTicks`) até `interval`,
+  zera, rola `chance >= uniform_random(1, 100)` e diz UMA linha sorteada por igual. O **cliente**
+  faz tudo isso (`world/speech.ts`, `rollCreatureSpeech` no viewport): o relógio nasce quando o
+  monstro é visto, a rolagem é uma por intervalo (um quadro atrasado rola uma vez, não uma por
+  intervalo perdido — o `yellTicks = 0` do Canary) e o sorteio é o `random` do cliente, **nunca o
+  `Rng` da sessão** nem o servidor. O relógio roda para toda criatura da lista, desenhada ou não —
+  o do Canary não depende de quem olha.
+  **Dois portões, como no Canary.** (1) **O relógio só anda com o monstro acordado:**
+  `Monster::onThink_async` devolve no topo quando `isIdle` (`monster.cpp:1709`) e o `onThinkYell`
+  só é alcançado depois (`monster.cpp:1747`) — o monstro parado no spawn, sem ninguém à vista, não
+  acumula `yellTicks` nem fala; acordar não zera o relógio, só o deixa andar de novo. Em hunt todo
+  monstro vai ao cliente (não há interesse gerenciado), então o "acordado" é calculado ali, com o
+  herói de quem olha: ele está no quadrado de **11 tiles** que o monstro enxerga
+  (`Creature::canSee`, `canSeePoint` no `sim`; `monsterAwake`), com as regras de andar do Canary.
+  (2) **A fala só chega a quem está perto:** `Game::internalCreatureSay` (`game.cpp:7634-7637`)
+  manda o `say` aos jogadores a até **8 colunas e 6 linhas** do monstro, no mesmo andar
+  (`MAP_MAX_CLIENT_VIEW_PORT_X`/`_Y`), e o `yell` a **18 × 14** (`(8+1)*2` × `(6+1)*2`), em vários
+  andares (`speechHeard`). Fora do alcance a rolagem acontece e gasta o sorteio, e ninguém vê o
+  texto — como o monstro que grita para ninguém. O texto aparece em laranja sobre o nome por
+  `2500 ms + 50 ms por caractere`: os dois números e a cor (o índice 198 da paleta de 216 cores)
+  são **escolha do cliente**, e não valor do Canary — o servidor manda só o tipo de fala
+  (`TALKTYPE_MONSTER_SAY` 36 / `_YELL` 37), a posição e o texto (`ProtocolGame::sendCreatureSay`),
+  e a cor sai do cliente do Tibia a partir do tipo. O grito se desenha como a fala; o que o
+  distingue é o alcance, acima.
 
 ### Invariantes
 
@@ -2962,8 +2978,13 @@ corte, é este o lugar de acrescentá-la.
 - Sem escurecimento de ambiente na hunt: a luz é um clarão aditivo (acima).
 - O splash de sangue no chão (`ITEM_SMALLSPLASH`, `FLUID_*`) que o Canary põe sob o alvo não é
   modelado: é item de chão decorativo, e o efeito do golpe (acima) cobre o que o jogador lê.
-- O efeito por raça só sai no golpe corpo a corpo (`kind: melee`), como o de sangue já era; o
-  físico de magia/ability ainda não tem efeito de raça.
+- **O monstro ocioso é aproximado no cliente** (a fala, acima): o protocolo não carrega o estado
+  `idle` do `sim`, e mandá-lo seria um evento novo só para uma fala. O monstro está "acordado"
+  quando o herói de quem olha está no quadrado de 11 tiles dele. O Canary diz outra coisa só em
+  dois casos: o monstro fora do spawn ou com condição ativa NÃO fica ocioso mesmo sem alvo (e
+  fala), e um alvo que seja outro membro da party o acorda para quem está longe. Como o `say` só
+  chega a 8 × 6 tiles, dentro dos 11, o que se perde é o grito de quem está entre 12 e 18 tiles
+  do herói nesses dois casos.
 - Sem montaria (acima).
 
 ## O que o jogador vê (FUN-106, FUN-109)

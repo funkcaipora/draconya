@@ -36,18 +36,18 @@ entidade (a forma do `monsterSchema` mais `bestiary` e `outfitId`) em três dest
 (`entries`) e `appearances/baseline.json` (`monsters`). De caminho, valida `loot.items` contra o
 catálogo de itens REAL (`data/items` — o que `load.ts` de fato carrega hoje) e remove a linha cujo
 item não existe, ou que pede pilha de item que não empilha — contada, nunca em silêncio, em
-`docs/reference/catalog/monsters-promotion-report.md`. Rat, Rotworm, Dragon e Dragon Lord nunca
-são promovidos POR ESTE SCRIPT (`HAND_AUTHORED_MONSTER_IDS`, `scripts/catalog/promote-monsters.ts`)
+`docs/reference/catalog/monsters-promotion-report.md`. Rat, Rotworm, Dragon, Dragon Lord e Dragon Lord
+Hatchling nunca são promovidos POR ESTE SCRIPT (`HAND_AUTHORED_MONSTER_IDS`, `scripts/catalog/promote-monsters.ts`)
 — o #581 os regenerou uma única vez, direto em `generated/<fatia>.json` (Rat em `mammals.json`,
-Rotworm em `vermins.json`, Dragon e Dragon Lord em `dragons.json`). O #581 tinha dado aos dois um
+Rotworm em `vermins.json`, os três dragões em `dragons.json`). O #581 tinha dado aos dois um
 override próprio (`data/monsters/overrides/rat.json`/`rotworm.json`) para o `blockable: true`
 temporário que Rat Cellars e Rotworm Caves ainda exigiam com o modelo antigo de pull; o #586
 (M36-05) converteu as duas hunts para os spawns reais do Canary e apagou os dois arquivos — Rat e
 Rotworm caem no `blockable: false` do próprio Canary, como o resto do bestiário. `pnpm
-catalog:promote-monsters` (`preserveHandAuthored`) NUNCA sobrescreve essas quatro entradas numa
+catalog:promote-monsters` (`preserveHandAuthored`) NUNCA sobrescreve essas cinco entradas numa
 reimportação futura — elas só mudam de novo por decisão deliberada, como o #581. **A apresentação
-(`outfit`, `voices`, `light`, `race`, #620) é a exceção:** o `promote-monsters` a renova nessas
-quatro também (`PRESENTATION_FIELDS`, `withPresentation`) — a regra do #581 protege os números de
+(`outfit`, `voices`, `light`, `race`, #620) é a exceção:** o `promote-monsters` a renova nas
+cinco entradas hand-authored também (`PRESENTATION_FIELDS`, `withPresentation`) — a regra do #581 protege os números de
 combate, não a fala do rato. `load.ts` não lê `staging/`, e nada do jogo deve ler.
 
 **`staging/items/` também não é conteúdo carregado** (#573/#574): `pnpm catalog:import items`

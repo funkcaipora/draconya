@@ -23,8 +23,9 @@ export const LIGHT_RINGS = 6;
 export const LIGHT_RING_ALPHA = 0.05;
 
 /**
- * O teto do alcance, em tiles. Os monstros do Canary vão de 1 a 6; o teto protege o desenho de
- * um valor absurdo (o protocolo aceita até 255), que cobriria a tela inteira.
+ * O teto do alcance, em tiles. Os monstros GERADOS da caça vão de 1 a 6, e o Canary tem um de 10
+ * (o Lava Golem, fora do corte); o teto protege o desenho de um valor absurdo (o protocolo aceita
+ * até 255), que cobriria a tela inteira, e deixa o de 10 caber.
  */
 export const LIGHT_MAX_TILES = 12;
 

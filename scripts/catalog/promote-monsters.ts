@@ -21,16 +21,17 @@
 // `packages/content/src/load.ts` para qualquer `data/<tipo>/`. Uma linha de `loot.items` cujo
 // `itemId` não existe nesse catálogo, ou que pede `max > 1` de um item que não empilha
 // (`rollModel: "canary"`, a mesma regra de `content.ts`), é removida e contada no relatório —
-// nunca falha o boot em silêncio. Rat, Rotworm, Dragon e Dragon Lord nunca são promovidos POR
-// ESTE SCRIPT — o #581 é quem os regenerou, uma única vez, direto em `generated/<fatia>.json`
-// (Rat em `mammals.json`, Rotworm em `vermins.json`, Dragon e Dragon Lord em `dragons.json`),
+// nunca falha o boot em silêncio. Rat, Rotworm, Dragon, Dragon Lord e Dragon Lord Hatchling nunca
+// são promovidos POR ESTE SCRIPT — o #581 é quem os regenerou, uma única vez, direto em
+// `generated/<fatia>.json` (Rat em `mammals.json`, Rotworm em `vermins.json`, os três dragões em
+// `dragons.json`),
 // com override próprio (`data/monsters/overrides/`) para o que o Draconya ainda precisa manter
 // diferente do Canary puro (`blockable`, até o #582+/M36-05 converter as duas hunts). Rodar este
-// script de novo NUNCA sobrescreve essas quatro entradas — `preserveHandAuthored` as reconduz de
+// script de novo NUNCA sobrescreve essas cinco entradas — `preserveHandAuthored` as reconduz de
 // volta à fatia a cada escrita, e `--check` as trata como parte do "em dia" pela mesma função.
 //
-// **A apresentação dos quatro é a exceção (#620).** `outfit` (cores e addons), `voices`, `light` e
-// `race` são dado do Canary sem nenhuma decisão de balanceamento em cima — o Rat fala "Squeak!" e o
+// **A apresentação das cinco é a exceção (#620).** `outfit` (cores e addons), `voices`, `light` e
+// `race` são dado do Canary sem nenhuma decisão de balanceamento em cima — o Rat fala "Meep!" e o
 // Dragon grita como no Tibia, e ninguém os editou à mão. `preserveHandAuthored` reconduz a entidade
 // commitada e SOBREPÕE esses quatro campos com o que o `staging/` diz hoje (`PRESENTATION_FIELDS`),
 // sem tocar em mais nada: o resto do monstro continua sendo o ato deliberado do #581.
