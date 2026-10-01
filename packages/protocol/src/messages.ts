@@ -449,6 +449,26 @@ export const SERVER_TO_CLIENT = {
    * 45: o 44 é do `charms`.
    */
   'exit-pending': 45,
+  /**
+   * O mundo recusou o logout do jogador (OW-11, #832, ADR 0060 d.7): o `logout` passou por
+   * `canLogout` e a resposta é não, com o motivo do Canary — tile de no-logout
+   * (`RETURNVALUE_YOUCANNOTLOGOUTHERE`) ou personagem em luta fora da PZ
+   * (`RETURNVALUE_YOUMAYNOTLOGOUTDURINGAFIGHT`), `canary/src/server/network/protocol/
+   * protocolgame.cpp:1151-1162`. Só S2C, só para quem pediu: a saída que dá certo não tem
+   * mensagem própria (é o fim da conexão, ou a `session-ended` da transição para a hunt).
+   *
+   * 46: o 45 é do `exit-pending` (#802).
+   */
+  'logout-refused': 46,
+  /**
+   * O mundo está cheio (OW-11, #832, ADR 0060 d.2b): a entrada vinda do repouso bateu no
+   * `capacity` do mundo. Responde como a fila do Canary — a posição e o tempo para tentar de
+   * novo (`protocolgame.cpp:1005-1008`) — e diz se a hunt idle está ao alcance, que é a saída
+   * que o ADR 0060 oferece no lugar de um "Thais 2" (d.6b). Só S2C.
+   *
+   * 47: o 46 é do `logout-refused`.
+   */
+  'world-full': 47,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */
