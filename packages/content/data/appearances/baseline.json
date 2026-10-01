@@ -1200,6 +1200,7 @@
     "brass-helmet": 3354,
     "brass-legs": 3372,
     "brass-shield": 3411,
+    "bread": 3600,
     "bridal-wreath": 37336,
     "bright-bell": 30324,
     "bright-sword": 3295,
@@ -1839,6 +1840,7 @@
     "grand-sanguine-hatchet": 43869,
     "grand-sanguine-razor": 43871,
     "grand-sanguine-rod": 43886,
+    "grapes": 3592,
     "grappling-hook": 5800,
     "grasshopper-legs": 14087,
     "greasy-wool": 31725,
@@ -2388,6 +2390,7 @@
     "raw-watermelon-tourmaline": 33778,
     "reality-splinter": 51259,
     "reapers-axe": 7420,
+    "red-apple": 3585,
     "red-crystal-fragment": 16126,
     "red-dragon-leather": 5948,
     "red-dragon-scale": 5882,
@@ -2433,6 +2436,7 @@
     "robe-of-the-underworld": 8062,
     "rod-of-destruction": 27458,
     "rogue-naga-scales": 39416,
+    "roll": 3601,
     "ron-the-rippers-sabre": 6101,
     "roots": 33938,
     "rope-belt": 11492,
@@ -3392,6 +3396,36 @@
     },
     "cancel-magic-shield-druid": {
       "effect": 13
+    },
+    "light": {
+      "effect": 13
+    },
+    "great-light": {
+      "effect": 13
+    },
+    "ultimate-light-druid": {
+      "effect": 13
+    },
+    "ultimate-light-sorcerer": {
+      "effect": 13
+    },
+    "levitate-up": {
+      "effect": 11
+    },
+    "levitate-down": {
+      "effect": 11
+    },
+    "magic-rope": {
+      "effect": 11
+    },
+    "find-person": {
+      "effect": 13
+    },
+    "find-fiend": {
+      "effect": 13
+    },
+    "food": {
+      "effect": 15
     }
   },
   "supplies": {

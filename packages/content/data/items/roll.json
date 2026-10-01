@@ -1,0 +1,10 @@
+{
+  "id": "roll",
+  "name": "Roll",
+  "kind": "consumable",
+  "weight": 1,
+  "value": 0,
+  "stackable": true,
+  "effect": { "kind": "food", "durationMs": 36000 },
+  "_open": "Comida que a magia Food cria na mochila (#623, M44-05). durationMs = 3 × 12 s (foods.lua do Canary, item 3601, valor 3) em ms; peso de items.xml (100 de weight ÷ 100). value 0: comida não tem preço de venda no NPC; a bolsa da party a devolve ao líder em vez de vender (ADR 0027)."
+}

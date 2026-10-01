@@ -843,7 +843,8 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   detecta a travessia, não um booleano "é escada?" separado.** Escada e teleporte (#734) são os DOIS
   únicos jeitos de `move()` pousar num tile que não é o adjacente pedido — `z` diferente, ou
   distância — e é ESSE sinal, lido do `MoveResult`, que APLICA `pacified` por `stairhopDelayMs`
-  (`#applyConditionTo`, `merge: 'longest'`). Um passo comum nunca bate essa condição. Só sob
+  (`#lockAfterJump` → `#applyConditionTo`, `merge: 'longest'`; Levitate e Magic Rope também o
+  chamam, #623). Um passo comum nunca bate essa condição. Só sob
   `combat-v3` (`#isV3`) e com `combat.stairhopDelayMs` declarado (ausente é identidade, como
   `defense`/`modifiers`); v1/v2 nunca aplicam a trava de escada. **O portão lê a CONDIÇÃO, em
   qualquer perfil** (`Conditions.isActive`, o PRAZO — não o evento `condition-expire`, que vence
@@ -1033,6 +1034,43 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   usa esse parâmetro. O Carnage roda também para o monstro invocado (`Monster::death` não confere
   `isSummon()`). Os defeitos do `47dfd51` que ficaram de fora estão listados em
   `docs/product/combat-conformance.md`.
+- **As utilitárias (#623, M44-05: Light, Levitate, Magic Rope, Find, Food) têm UM portão de
+  recusa e UM ponto de aplicação, e quebrar qualquer dos dois desincroniza a barra.**
+  (a) `HuntRuleset#utilityRefusalOf` é PURA e alimenta DOIS lugares — o `preflight` de `castSpell`
+  e o espelho `#naturalStateOf` (`slotStates`): um motivo novo entra nos dois ou o slot promete o
+  que o cast recusa (DT-08). O `preflight` vem DEPOIS de level, cooldown, mana e alma e ANTES de
+  pagar — a ordem do Canary, onde só o `onCastSpell` recusa o destino (sem custo, sem cooldown).
+  **A exceção é `person-not-found` (Find Person):** não é recusa de script, é a de
+  `InstantSpell::playerCastInstant` (`getPlayerByNameWildcard`), que roda `applyCooldownConditions`
+  antes de cancelar — o `castSpell` inicia os livros de cooldown (magia e grupo) nesse caso, sem
+  mana nem alma; as recusas de Levitate, Magic Rope e Find Fiend NÃO iniciam nada. O destino que o
+  `preflight` aprova é o que o salto aplica (`#jumpToApproved` falha alto se o `relocate` recusar),
+  então `ropeDestination` também confere a ocupação — tile é exclusivo, como no Levitate. `rooted`
+  (#622) recusa o Levitate com `not-possible` (o `creature:move` cai em `internalMoveCreature`) e
+  NÃO o Magic Rope (`teleportTo` não confere a condição) — por isso `#utilityRefusalOf` recebe o
+  `nowMs`. Toda utilitária é magia nova e precisa de `learnPrice` (`pnpm catalog:spell-prices`; as que
+  o leitor não liga por NOME, como `levitate-up`/`levitate-down`, têm o preço curado à mão), senão
+  ninguém a compra (`not-for-sale`).
+  (b) O salto (`#relocateCharacter`, `movement.ts#relocate`) é o OUTRO escritor de posição e NÃO vira
+  o personagem (o Canary não passa direção); todo salto novo passa por `#lockAfterJump` (o stairhop
+  de `teleport || oldPos.z != newPos.z`, que `#step` também usa) e emite `creature-moved`. Ele
+  CANCELA a caminhada manual (`manualWalkTo` e `manualWalkHoldUntilMs`, o `stopEventWalk()` do
+  Canary): `#playerStep` dá prioridade máxima ao caminho manual, e o `path[0]` do andar antigo
+  seria recusado para sempre — e o `use-slot` chega entre eventos, por isso `#castSpell` remonta a
+  ocupação se `#occupancyStale` (a mesma guarda de `requestMove`).
+  (c) `levitateDestination` julga a sonda pela grade ESTÁTICA (`isBlocked`), nunca por `blockedAt`:
+  uma porta fechada tem chão por baixo, e o overlay a tomaria por vazio. O mapa não separa "sem
+  chão" de "parede" — a aproximação está marcada `[APROXIMAÇÃO]` no arquivo e em
+  `docs/product/utility-spells.md`. (d) No Find Person o alvo viaja como `recipient`, e
+  `recipient === character` é "ninguém nomeado" (`person-not-found`) — o mesmo canal da cura de
+  amigo, sem campo novo; a mira que não acha ninguém NÃO é recusada em `#resolveManualTarget`
+  (viria antes de level/mana e sem o cooldown), segue até o `castSpell`. No catálogo a mira é o
+  campo `aim: 'character'`, e não `targets: 'friend'` (que abriria o seletor de alvo do editor do
+  bot, e `validateBotConfigV2` recusa salvar esse alvo num efeito que não é cura/mana). (e) A ordem de consumo do `Rng` da Food é contrato, como a do loot: bônus
+  `[0,1]`, índice do extra (se houve), índice do garantido (`rollFoods`). (f) A luz é condição de
+  APRESENTAÇÃO (`ConditionState.light`): nenhuma regra a lê, e o `Condition::updateCondition` a
+  governa — o `castSpell` NÃO devolve condição para uma luz de prazo MAIS CURTO que a vigente, e a
+  mana é gasta do mesmo jeito.
 - **O cast confere o APRENDIZADO (#624, ADR 0058): `castSpell` recusa `spell-not-learned` (sem prazo)
   logo depois de level e vocação, e SÓ a magia — a runa (`useSupply`) exige level e magic level.**
   Quatro armadilhas. (1) **Todo teste que lança magia precisa de um herói que a saiba** —

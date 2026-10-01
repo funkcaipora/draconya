@@ -457,6 +457,12 @@
           "chance": 0.04
         },
         {
+          "itemId": "red-apple",
+          "chance": 0.007,
+          "min": 1,
+          "max": 3
+        },
+        {
           "itemId": "honeycomb",
           "chance": 0.04
         }
@@ -1348,6 +1354,10 @@
           "chance": 0.082,
           "min": 1,
           "max": 3
+        },
+        {
+          "itemId": "grapes",
+          "chance": 0.1985
         }
       ]
     },
@@ -2733,6 +2743,10 @@
         "max": 70
       },
       "items": [
+        {
+          "itemId": "bread",
+          "chance": 0.14
+        },
         {
           "itemId": "green-tunic",
           "chance": 0.07

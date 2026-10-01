@@ -43,11 +43,11 @@ Separa `packages/content/staging/monsters/generated/*.json` (a transcrição pur
 | rat | hand-authored — regenerado só pelo #581, nunca por esta promoção |
 | rotworm | hand-authored — regenerado só pelo #581, nunca por esta promoção |
 
-## Linhas de loot removidas (2790)
+## Linhas de loot removidas (2766)
 
 Item referenciado por `loot.items` que não existe no catálogo real, ou que excede a pilha de um item que não empilha. A linha inteira é removida — nunca creditada como item fantasma (§"Loot" de `packages/content/CLAUDE.md`).
 
-602 item(ns) distinto(s) referenciado(s) e ausente(s) do catálogo real.
+598 item(ns) distinto(s) referenciado(s) e ausente(s) do catálogo real.
 
 | item | ocorrências | motivo (da primeira ocorrência) |
 |---|---|---|
@@ -108,7 +108,6 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | brainstealers-brain | 1 | item ausente do catálogo (packages/content/data/items) |
 | brainstealers-brainwave | 1 | item ausente do catálogo (packages/content/data/items) |
 | brainstealers-tissue | 1 | item ausente do catálogo (packages/content/data/items) |
-| bread | 7 | item ausente do catálogo (packages/content/data/items) |
 | brigadeiro | 2 | item ausente do catálogo (packages/content/data/items) |
 | broccoli | 1 | item ausente do catálogo (packages/content/data/items) |
 | broken-bell | 2 | item ausente do catálogo (packages/content/data/items) |
@@ -281,7 +280,6 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | golden-mask | 1 | item ausente do catálogo (packages/content/data/items) |
 | gore-horn | 1 | item ausente do catálogo (packages/content/data/items) |
 | grant-of-arms | 1 | item ausente do catálogo (packages/content/data/items) |
-| grapes | 11 | item ausente do catálogo (packages/content/data/items) |
 | grave-flower | 5 | item ausente do catálogo (packages/content/data/items) |
 | great-health-potion | 95 | item ausente do catálogo (packages/content/data/items) |
 | great-mana-potion | 95 | item ausente do catálogo (packages/content/data/items) |
@@ -471,7 +469,6 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | rat-cheese | 3 | item ausente do catálogo (packages/content/data/items) |
 | rat-god-doll | 1 | item ausente do catálogo (packages/content/data/items) |
 | ratmirals-hat | 1 | item ausente do catálogo (packages/content/data/items) |
-| red-apple | 3 | item ausente do catálogo (packages/content/data/items) |
 | red-crystal-fragment | 4 | max 2 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | red-ectoplasm | 1 | item ausente do catálogo (packages/content/data/items) |
 | red-gem | 7 | max 3 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
@@ -484,7 +481,6 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | reinvigorating-seeds | 1 | item ausente do catálogo (packages/content/data/items) |
 | ring-of-the-count | 2 | item ausente do catálogo (packages/content/data/items) |
 | ring-of-the-sky | 8 | item ausente do catálogo (packages/content/data/items) |
-| roll | 3 | item ausente do catálogo (packages/content/data/items) |
 | rolling-pin | 1 | item ausente do catálogo (packages/content/data/items) |
 | root-tentacle | 1 | item ausente do catálogo (packages/content/data/items) |
 | rope | 19 | item ausente do catálogo (packages/content/data/items) |

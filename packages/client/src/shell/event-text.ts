@@ -105,6 +105,9 @@ export function describeEvent(event: NotableEvent, names: EventNames = {}): stri
     case 'death': return 'Morreu';
     case 'stamina-exhausted': return 'Stamina esgotada';
     case 'backpack-full': return 'Mochila cheia';
+    // A Food (#623) sem lugar na mochila: o Canary a largaria no chão, e este modelo não tem item
+    // no chão fora do cadáver — o que não coube se perde, e o extrato diz QUAL comida.
+    case 'food-not-carried': return `Comida perdida, sem espaço · ${names.items?.get(detail) ?? detail}`;
     case 'supply-unaffordable': return `Gold acabou para ${names.supplies?.get(detail) ?? detail}`;
     case 'exit-rule': return `Saiu por regra · ${detail}`;
     case 'ring-equipped': return 'Equipou o anel';

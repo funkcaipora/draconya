@@ -117,6 +117,29 @@ describe('world deltas', () => {
     expect(world.ambience).toBe('cavern');
   });
 
+  it('active-conditions com luz (#623) põe a luz do jogador no mundo; sem ela, tira; a troca de instância a apaga', () => {
+    // O pintor lê `world.selfLight` sem assinatura: o servidor manda raio, cor e prazo, e o
+    // decaimento é conta local (`world/light.ts`). Mutação que mata: guardar `remainingMs` sem o
+    // instante de chegada — o nível não decairia.
+    applyMessage({
+      type: 'active-conditions',
+      conditions: [{ kind: 'light', remainingMs: 300_000, light: { level: 6, color: 215, durationMs: 370_000 } }],
+    }, 1_000);
+    expect(world.selfLight).toEqual({
+      level: 6, color: 215, durationMs: 370_000, remainingMs: 300_000, receivedAtMs: 1_000,
+    });
+
+    applyMessage({ type: 'active-conditions', conditions: [{ kind: 'haste', remainingMs: 10_000 }] }, 2_000);
+    expect(world.selfLight).toBeNull();
+
+    applyMessage({
+      type: 'active-conditions',
+      conditions: [{ kind: 'light', remainingMs: 300_000, light: { level: 6, color: 215, durationMs: 370_000 } }],
+    }, 3_000);
+    applyMessage({ type: 'instance-enter', instanceId: 'i9', map: 'rat-cellars', ambience: 'cavern' }, 3_500);
+    expect(world.selfLight).toBeNull();
+  });
+
   it('ground items: appear, disappear, and the session-state replaces them (FUN-123)', () => {
     // O cadáver é um item do chão com id próprio; some pelo id, e o estado completo o
     // substitui como substitui as criaturas — o que apodreceu sem ninguém olhar não fica.

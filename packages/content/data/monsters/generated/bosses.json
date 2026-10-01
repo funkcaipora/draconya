@@ -2013,6 +2013,10 @@
           "chance": 0.4179
         },
         {
+          "itemId": "bread",
+          "chance": 0.1642
+        },
+        {
           "itemId": "elven-amulet",
           "chance": 0.1493
         },

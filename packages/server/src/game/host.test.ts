@@ -7179,6 +7179,56 @@ describe('targetId, active conditions and hunt identity (#341, SV-05)', () => {
     expect(ofType(received(), 'active-conditions')).toHaveLength(3);
   });
 
+  it('a luz (#623) vai em `active-conditions` com o raio, a cor e o prazo; muda o nível → reenvia', () => {
+    const { hero, runFor, received } = createHuntFixture({ monsters: false, regen: false });
+
+    hero().conditions.apply({
+      key: 'light', spellId: 'light', expiresAtMs: 370_000,
+      light: { level: 6, color: 215, durationMs: 370_000 },
+    });
+    runFor(100);
+    const first = ofType(received(), 'active-conditions').at(-1);
+    expect(first?.conditions).toEqual([{
+      kind: 'light', remainingMs: expect.any(Number), light: { level: 6, color: 215, durationMs: 370_000 },
+    }]);
+
+    // Mesmo instante de fim, OUTRO nível (uma luz que sobrescreveu a outra): a assinatura não pode
+    // ser só o fim — o cliente desenharia o raio errado até a próxima mudança.
+    const count = ofType(received(), 'active-conditions').length;
+    hero().conditions.apply({
+      key: 'light', spellId: 'great-light', expiresAtMs: 370_000,
+      light: { level: 8, color: 215, durationMs: 370_000 },
+    });
+    runFor(100);
+    const after = ofType(received(), 'active-conditions');
+    expect(after).toHaveLength(count + 1);
+    expect(after.at(-1)?.conditions[0]?.light?.level).toBe(8);
+
+    // Sem os dados de luz (um snapshot que não os carrega) NÃO vira badge: a luz sem o que
+    // desenhar é ruído.
+    hero().conditions.remove('light');
+    hero().conditions.apply({ key: 'light', spellId: 'light', expiresAtMs: 370_000 });
+    runFor(100);
+    expect(ofType(received(), 'active-conditions').at(-1)?.conditions).toEqual([]);
+  });
+
+  it('um Find Person (#623) vira `system-message` só para quem lançou, com a frase em português', () => {
+    const { host, runFor, received } = createHuntFixture({ monsters: false, regen: false });
+    const before = ofType(received(), 'system-message').length;
+    host.sessionFor('hero')?.emit({
+      kind: 'find-result', characterId: 'hero', target: 'person', subjectId: 'hero',
+      relation: { distance: 'close', level: 'lower', direction: 'north-east' },
+    });
+    runFor(100);
+
+    const messages = ofType(received(), 'system-message');
+    expect(messages).toHaveLength(before + 1);
+    // O nome de quem foi achado vem do host (`#nameByCharacter`); sem ele, "Alguém".
+    expect(messages.at(-1)).toMatchObject({
+      level: 'info', text: expect.stringMatching(/está em um andar inferior, a nordeste\.$/),
+    });
+  });
+
   it('instance-enter and session-state carry huntId and difficulty when in a hunt, but not in City', () => {
     // 1. In hunt:
     const { received: huntReceived } = createHuntFixture();

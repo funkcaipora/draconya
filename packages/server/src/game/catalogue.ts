@@ -104,6 +104,13 @@ export function buildCatalogue(content: Content): Catalogue {
         effect: spell.effect.kind,
         // O grupo (#155): a tela mostra ao lado do nome.
         group: spell.group ?? 'attack',
+        // Find Person (#623) precisa de MIRA: o "nome" do Canary é o personagem clicado, e o
+        // servidor não tem como adivinhar quem. É o campo `aim`, e NÃO `targets: 'friend'`: este
+        // também abre o seletor de alvo do editor de slot do bot (`acceptsFriend`), e a validação
+        // do bot recusa salvar alvo que não seja de cura/mana. Só a barra de ação lê `aim`, para
+        // armar a mira do `use-slot` (ADR 0049 d.2). Só ela declara.
+        ...(spell.effect.kind === 'find' && spell.effect.target === 'person'
+          ? { aim: 'character' as const } : {}),
         // Os números de EXIBIÇÃO (ADR 0033): cooldown, grupo, descrição e o detalhe do efeito.
         cooldownMs: spell.cooldownMs,
         ...(spell.groupCooldownMs === undefined ? {} : { groupCooldownMs: spell.groupCooldownMs }),

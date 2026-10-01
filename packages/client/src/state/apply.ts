@@ -584,13 +584,20 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       hud.set((state) => ({ ...state, lastSettlement: message }));
       return;
 
-    case 'active-conditions':
+    case 'active-conditions': {
       hud.set((state) => ({
         ...state,
         conditions: message.conditions,
         conditionsReceivedAtMs: nowMs,
       }));
+      // A luz (#623) mora também no mundo, que o pintor lê sem assinatura: o servidor manda o
+      // raio, a cor e o prazo, e o pintor calcula o decaimento a cada quadro.
+      const light = message.conditions.find((condition) => condition.kind === 'light');
+      world.selfLight = light?.light === undefined
+        ? null
+        : { ...light.light, remainingMs: light.remainingMs, receivedAtMs: nowMs };
       return;
+    }
 
     case 'player-count':
       // Sem `sameX`/comparação (a #343 documenta por quê: republicado a cada 30 s sem checar

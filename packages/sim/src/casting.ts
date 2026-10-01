@@ -35,6 +35,7 @@ import { conditionFromSpec } from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import type { WorldPoint } from './movement.js';
 import type { Rng } from './rng.js';
+import { rollFoods } from './utility-spells.js';
 
 /** Por que a ação não aconteceu. Tipada porque o jogador merece saber qual das sete foi. */
 export type CastRefusal =
@@ -77,10 +78,14 @@ export type CastRefusal =
    */
   | 'not-summonable'
   /**
-   * As duas runas de invocação restantes (#600, M38-03, ADR 0057 d.5–d.6): o alvo não serve
-   * (Convince: não é `convinceable`, ou já tem mestre; Animate Dead: sem cadáver movível no tile) —
-   * o `RETURNVALUE_NOTPOSSIBLE` ("Sorry, not possible.") do Canary. Quem confere é o RULESET, pelo
-   * mesmo motivo de `not-summonable`: `casting.ts` não conhece monstro nem cadáver.
+   * O alvo ou o destino não serve — o `RETURNVALUE_NOTPOSSIBLE` ("Sorry, not possible.") do
+   * Canary, com duas fontes. As duas runas de invocação restantes (#600, M38-03, ADR 0057
+   * d.5–d.6): Convince não é `convinceable` ou o alvo já tem mestre; Animate Dead sem cadáver
+   * movível no tile. E Levitate/Magic Rope sem destino (#623): fronteira de andar, sonda ocupada,
+   * destino sem chão, com escada, ocupado, ou Magic Rope fora de um rope spot. Quem decide é o
+   * RULESET (`HuntRuleset#castSpell` e `HuntRuleset#utilityRefusalOf`), pelo mesmo motivo de
+   * `not-summonable`: `casting.ts` não conhece monstro, cadáver nem mapa. A das utilitárias
+   * entra pelo `preflight`, depois dos requisitos e antes de pagar.
    */
   | 'not-possible'
   /**
@@ -108,7 +113,24 @@ export type CastRefusal =
    * poção não passa por esse checklist e continua liberada. Carrega o prazo do medo, como
    * `attack-locked`: o bot volta no instante em que a condição deixa de valer.
    */
-  | 'feared';
+  | 'feared'
+  /** Magic Rope sem onde pousar no andar de cima (#623): o `RETURNVALUE_NOTENOUGHROOM` ("There is not enough room"). */
+  | 'not-enough-room'
+  /**
+   * Find Person sem o alvo na sessão (#623): o `RETURNVALUE_PLAYERWITHTHISNAMEISNOTONLINE` do
+   * Canary. A hunt hospeda só os personagens da própria sessão, então "online" é "está nesta
+   * sessão" — ver `docs/product/utility-spells.md`. **É a única destas recusas que INICIA o
+   * cooldown** (sem mana nem alma): sai de `InstantSpell::playerCastInstant`, que roda
+   * `applyCooldownConditions` antes de cancelar, e não de um script.
+   */
+  | 'person-not-found'
+  /** Find Fiend sem nenhum monstro fiendish na sessão (#623): o "No creatures around" do Canary. */
+  | 'no-creatures-around';
+
+/** As quatro recusas que só o RULESET dá às magias utilitárias (#623) — o `preflight` de `castSpell`. */
+export type UtilityRefusal = Extract<
+  CastRefusal, 'not-possible' | 'not-enough-room' | 'person-not-found' | 'no-creatures-around'
+>;
 
 export interface CastSuccess {
   readonly ok: true;
@@ -195,6 +217,12 @@ export interface CastSuccess {
   readonly field?: { readonly spec: FieldSpec; readonly at: WorldPoint };
   /** Destroy Field (#591): o tile onde remover um campo — ver `field` acima. */
   readonly destroyFieldAt?: WorldPoint;
+  /**
+   * As comidas que a Food criou (#623), na ORDEM do sorteio — ids de item do conteúdo. Devolvidas,
+   * não creditadas, como `condition`/`dispel`: quem tem a mochila e a capacidade (o ruleset) é
+   * quem as instancia; o sorteio é daqui porque o `Rng` é.
+   */
+  readonly foods?: readonly string[];
 }
 
 export interface CastRefused {
@@ -538,6 +566,25 @@ export function controlRemainingMs(caster: CharacterRuntime, key: string, nowMs:
 }
 
 /**
+ * Os três livros de cooldown de uma vez: a magia, o grupo e, se houver, o secundário. É o
+ * `applyCooldownConditions` do Canary — chamado pelo `postCastSpell` de toda magia que sai e
+ * também pela única recusa de utilitária que o dispara (Find Person sem jogador com o nome, #623).
+ * Função de módulo, e não closure em `castSpell`: nada aqui aloca por lançamento.
+ */
+function startCooldowns(
+  caster: CharacterRuntime, spell: Spell, nowMs: number,
+  key: string, groupKey: string | null, secondaryKey: string | null,
+): void {
+  caster.cooldowns.start(key, nowMs, spell.cooldownMs);
+  if (groupKey !== null && spell.groupCooldownMs !== undefined) {
+    caster.cooldowns.start(groupKey, nowMs, spell.groupCooldownMs);
+  }
+  if (secondaryKey !== null && spell.secondaryGroup !== undefined) {
+    caster.cooldowns.start(secondaryKey, nowMs, spell.secondaryGroup.cooldownMs);
+  }
+}
+
+/**
  * Lança a magia, se puder.
  *
  * A ordem das recusas é deliberada: level, cooldown, alvo, alcance e só então mana. **A mana
@@ -599,6 +646,16 @@ export function castSpell(
    * vocabulário; só quando este parâmetro é passado ele substitui a conferência e o débito.
    */
   manaCostOverride?: number,
+  /**
+   * A recusa que só o RULESET sabe dar às magias utilitárias (#623: Levitate, Magic Rope, Find) —
+   * o destino, o rope spot, o alvo do Find dependem de mapa, overlay e sessão, que este arquivo não
+   * conhece (invariante 1). Entra DEPOIS de level, cooldown, mana e alma e ANTES de pagar, o que
+   * preserva a ordem do Canary: `Spell::playerSpellCheck` confere os requisitos e só o
+   * `onCastSpell` do script recusa o destino — sem custo, sem cooldown. `null` é "nada a
+   * recusar" (e o único valor de toda magia que não é utilitária). A exceção é `person-not-found`
+   * (Find Person sem jogador com o nome): o cooldown corre, sem mana nem alma.
+   */
+  preflight: UtilityRefusal | null = null,
 ): CastResult {
   // O medo (M44-04, #622): recusa QUALQUER magia, e vem antes de tudo — é a primeira coisa que
   // `Spell::playerSpellCheck` confere depois das flags de grupo (`spells.cpp:503`).
@@ -696,18 +753,27 @@ export function castSpell(
   if (blankPrice > 0 && !purse.canAfford(blankPrice)) {
     return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
   }
+  // As utilitárias (#623) recusam pelo que o ruleset viu no mundo — DEPOIS de level, cooldown, mana
+  // e alma, e ANTES de pagar: é a ordem do Canary, onde `Spell::playerSpellCheck` confere os
+  // requisitos e só o `onCastSpell` do script recusa o destino (`RETURNVALUE_NOTPOSSIBLE`), sem
+  // custo e sem cooldown — `postCastSpell` só roda quando o script devolve `true`.
+  //
+  // A EXCEÇÃO é o Find Person sem jogador com o nome: não é recusa de script, é a do
+  // `InstantSpell::playerCastInstant` (`hasPlayerNameParam` → `getPlayerByNameWildcard`), que chama
+  // `applyCooldownConditions` ANTES de cancelar — sem mana, sem alma e sem evento, mas com o
+  // cooldown da magia e o do grupo de suporte correndo (Light, Haste e Levitate travam 2 s).
+  if (
+    preflight !== null
+    && (effect.kind === 'levitate' || effect.kind === 'magic-rope' || effect.kind === 'find')
+  ) {
+    if (preflight === 'person-not-found') startCooldowns(caster, spell, nowMs, key, groupKey, secondaryKey);
+    return { ok: false, reason: preflight, retryInMs: NOT_WAITING };
+  }
 
   caster.mana -= manaCost;
   caster.soul -= soulCost;
   if (blankPrice > 0) purse.pay(blankPrice);
-  // Os três livros de uma vez: a magia, o grupo e, se houver, o secundário.
-  caster.cooldowns.start(key, nowMs, spell.cooldownMs);
-  if (groupKey !== null && spell.groupCooldownMs !== undefined) {
-    caster.cooldowns.start(groupKey, nowMs, spell.groupCooldownMs);
-  }
-  if (secondaryKey !== null && spell.secondaryGroup !== undefined) {
-    caster.cooldowns.start(secondaryKey, nowMs, spell.secondaryGroup.cooldownMs);
-  }
+  startCooldowns(caster, spell, nowMs, key, groupKey, secondaryKey);
 
   switch (effect.kind) {
     case 'damage': {
@@ -819,6 +885,35 @@ export function castSpell(
       return {
         ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0,
         removeConditionKey: effect.key,
+      };
+    /**
+     * Luz (#623): condição de APRESENTAÇÃO do lançador. O `Condition::updateCondition` do Canary
+     * NÃO deixa uma luz de prazo MAIS CURTO substituir a que ainda dura mais (`getEndTime() >
+     * now + ticks` recusa): um Light lançado com um Great Light ativo gasta a mana, e a luz
+     * maior segue. Prazo igual ou maior renova — e a nova (nível, cor, total) vale por inteiro.
+     */
+    case 'light': {
+      const expiresAtMs = nowMs + effect.durationMs;
+      const current = caster.conditions.get('light');
+      if (current !== null && current.expiresAtMs > expiresAtMs) {
+        return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0 };
+      }
+      return cast({
+        key: 'light', spellId: spell.id, expiresAtMs,
+        light: { level: effect.level, color: effect.color, durationMs: effect.durationMs },
+      });
+    }
+    // Levitate, Magic Rope e Find (#623) saem AQUI só para pagar e iniciar cooldown: o efeito é
+    // do ruleset (mover, dizer), que já conferiu o destino/alvo em `preflight`.
+    case 'levitate':
+    case 'magic-rope':
+    case 'find':
+      return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0 };
+    // Food (#623): o sorteio é daqui (o `Rng` é), a criação do item é do ruleset.
+    case 'food':
+      return {
+        ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0,
+        foods: rollFoods(rng, effect.items),
       };
     /**
      * Dano ao longo do tempo (CMB-07): a magia NÃO bate agora — devolve a condição, e quem a

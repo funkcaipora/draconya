@@ -697,6 +697,35 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(rotworm?.lootDrops).toBe(10); // 9 itens + gold (lootDropsOf, catalogue.ts:301-315)
   });
 
+  it('as utilitárias (#623) chegam ao catálogo como Suporte; só o Find Person pede MIRA', () => {
+    // O cliente separa a categoria pelo `effect` e arma a mira do `use-slot` pelo `aim`
+    // (ADR 0049 d.2): o Find Person nomeia o personagem por clique, e nenhuma outra utilitária
+    // (nem o Levitate, nem a Food) declara `aim`. Mutação que mata: publicar `aim` em todo
+    // `find` — o Find Fiend armaria uma mira que não tem alvo nenhum.
+    const { bot } = buildCatalogue(loadContent(DATA));
+    const byId = new Map(bot.spells.map((spell) => [spell.id, spell]));
+    const kinds: Record<string, string> = {
+      light: 'light', 'great-light': 'light', 'ultimate-light-druid': 'light',
+      'ultimate-light-sorcerer': 'light', 'levitate-up': 'levitate', 'levitate-down': 'levitate',
+      'magic-rope': 'magic-rope', 'find-person': 'find', 'find-fiend': 'find', food: 'food',
+    };
+    for (const [id, kind] of Object.entries(kinds)) {
+      expect(byId.get(id)?.effect, id).toBe(kind);
+      expect(byId.get(id)?.group, id).toBe('support');
+    }
+    // A mira vai em `aim`, e NÃO em `targets: 'friend'`: este abriria o seletor de alvo do editor
+    // de slot do bot (`acceptsFriend`), e `validateBotConfigV2` recusa salvar esse alvo num efeito
+    // que não é cura/mana — o editor prometeria o que o servidor nega.
+    expect(byId.get('find-person')?.aim).toBe('character');
+    expect(byId.get('find-person')?.targets).toBeUndefined();
+    for (const id of Object.keys(kinds).filter((k) => k !== 'find-person')) {
+      expect(byId.get(id)?.aim, id).toBeUndefined();
+      expect(byId.get(id)?.targets, id).toBeUndefined();
+    }
+    // A duração da luz é `detail.durationMs` — o que o painel da magia mostra.
+    expect(byId.get('light')?.detail?.durationMs).toBe(370_000);
+  });
+
   it('buildCatalogue includes progression matching content.progression (SV-25, #361)', () => {
     const { progression } = buildCatalogue(content);
     expect(progression).toEqual({
