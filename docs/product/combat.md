@@ -1807,8 +1807,9 @@ daria haste sozinho (`doom_deer.lua`: defesa de velocidade, 30 % a cada 3 s, 8 s
 impediria o ocioso e ele passearia pelo spawn para sempre. O reverso vale igual: um monstro ferido
 que voltou e ficou ocioso NÃO se cura pela defesa enquanto ninguém o acorda. Invocação (`masterId`) nunca fica
 ociosa nem volta ao spawn (`spawnMonster.expired()` no Canary devolve "no spawn"); sem alvo, a de
-PERSONAGEM segue o mestre (#599, `updateSummonTarget` — ver "O familiar de vocação"), e a invocação de
-outro MONSTRO (#546) continua parada — o que este motor não modela para ela.
+PERSONAGEM segue o mestre (#599, `updateSummonTarget` — ver "O familiar de vocação"; sem mestre à vista
+ou sem caminho até ele ela vagueia pelo `doRandomStep`), e a invocação de outro MONSTRO (#546) continua
+parada — o que este motor não modela para ela.
 
 A retenção do alvo (`chooseTarget`) passou a exigir a mesma área de visão: o alvo que sai do
 `aggroRadius` é largado (`Creature::onCreatureMove` → `onCreatureDisappear`), mesmo com o
@@ -1998,11 +1999,24 @@ por `spell.manaCost`.
     `HuntRuleset#onMonsterStep` reproduz isso com `summonFollowStep` (`monster/monster.ts`): só
     segue quem ENXERGA o mestre (mesmo andar, dentro da visão de 11 — a condição do
     `setFollowCreature`), anda por uma BUSCA de caminho de menor custo (`cheapestPath`, cardinal 10 e
-    diagonal 35 como o A* do Canary, raio 12) até um tile a 1–2 do mestre COM linha de visão livre
-    até ele (`getPathSearchParams`: `maxTargetDist = 2` para o mestre, `clearSight`), e para lá.
-    Vale para a Summon Creature comum e para o familiar, que são a mesma invocação de personagem.
-    Não é o passo guloso: numa concavidade ele faria a invocação oscilar. A invocação de outro
-    MONSTRO (#546) sem alvo continua parada.
+    diagonal 35 como o A* do Canary, raio 12) até um tile a EXATAMENTE 2 do mestre COM linha de
+    visão livre até ele (`getPathSearchParams`: `minTargetDist = 1`, `maxTargetDist = 2`,
+    `clearSight`), e para lá. O objetivo é de DUAS camadas, como `FrozenPathingConditionCall`: só um
+    tile a 2 encerra a busca — um a 1 é só o "melhor até agora", e a invocação encostada no mestre se
+    afasta até a 2; sem nenhum tile a 2 alcançável (beco, mestre cercado) ela fica a 1. Vale para a
+    Summon Creature comum e para o familiar, que são a mesma invocação de personagem. Não é o passo
+    guloso: numa concavidade ele faria a invocação oscilar. A invocação de outro MONSTRO (#546) sem
+    alvo continua parada.
+  - **O que a invocação faz quando NÃO consegue seguir** (`Creature::goToFollowCreature`,
+    `Monster::getNextStep`): **(a)** sem mestre à vista (outro andar ou além da visão de 11) o Canary
+    não tem `followCreature` (`setFollowCreature` recusa), e **sem caminho** até um tile bom
+    (`getPathTo` falso) `hasFollowPath` é falso — nos dois casos o `getNextStep` cai no
+    `doRandomStep`, e a invocação VAGUEIA (um passo aleatório por segundo, no máximo, como todo
+    monstro sem perseguição: `decideUnengagedMove`); **(b)** a Summon Creature COMUM não segue o
+    mestre INVISÍVEL que ela não enxerga (`canFollowMaster`: `canSeeInvisibility() ||
+    !master->isInvisible()`) e fica parada — o FAMILIAR segue sempre (`!isFamiliar()` faz parte da
+    condição). A parte do tile de proteção (`TILESTATE_PROTECTIONZONE`) da mesma checagem não se
+    aplica: a hunt não tem zona de proteção.
 - **Monstros HOSTIS a atacam** (`isOpponent` do Canary): a lista de presas de um monstro
   hostil (`masterId === null`, ou invocado por OUTRO monstro) é estendida pelas invocações de
   personagem VIVAS (`HuntRuleset#playerSummonPrey`/`#livePlayerSummons`) — devolve a MESMA
@@ -2100,7 +2114,14 @@ do script; o `spell:cooldown(0)` do Canary diz que quem cobra é a `CreateFamili
   gravados no lançamento e persistidos na coluna `character.familiar` (`jsonb`, migração `0023`):
   lidos inteiros no ticket, escritos inteiros pelo extrato, última escrita vence (NUNCA fundidos
   pelo maior — o `summonUntilMs` desce quando o familiar morre). O `sim` não lê relógio nenhum
-  (invariante 1): o "agora" é `Session.createdAtMs + Session.nowMs`, dados pelo servidor. **O fim da
+  (invariante 1): o "agora" é `Session.createdAtMs + Session.nowMs`, dados pelo servidor — e é o
+  SERVIDOR quem mantém a soma verdadeira: na retomada de um snapshot o intervalo descartado (ADR
+  0018) é somado ao `createdAtMs` (`SessionHost#resume`), senão o relógio de parede do `sim` ficaria
+  atrasado pela queda inteira e o cooldown gravado numa sessão retomada nasceria já curto. **Os
+  carimbos são sempre INTEIROS**: o relógio lógico do hospedeiro é `performance.now()`, fracionário,
+  e todo consumidor (estado do personagem, extrato, ticket) valida inteiro seguro e troca o torto
+  pelo vazio em silêncio — o lançamento grava o teto (`Math.ceil`, nunca encurta o cooldown) e a morte
+  grava o piso (nunca recria o que acabou de morrer). **O fim da
   vida é um evento da fila** (`familiar-expire`, subject `m:<id>`; invariante 2) — mesmo estado a 1
   Hz e a 10 Hz, e o evento volta no snapshot. Um `Cooldowns` de sessão não serviria: ele guarda
   instante LÓGICO, que nasce em zero a cada sessão.
@@ -2114,12 +2135,16 @@ do script; o `spell:cooldown(0)` do Canary diz que quem cobra é a `CreateFamili
   houver sala. **A morte do familiar zera a recriação** (`FamiliarDeath`: `familiar-summon-time =
   os.time()`) e deixa o cooldown de pé. O mestre que sai da hunt leva o familiar junto (#598) e os
   carimbos ficam; a Cidade não simula nem tem invocação (`City#useSlot` recusa o efeito).
-- **Segue o mestre** (`Monster::updateSummonTarget`): sem alvo, o familiar anda até um tile a 1–2 do
-  mestre, se o enxerga (visão de 11), por uma busca de menor custo (cardinal 10, diagonal 35) — e
-  para lá; com alvo, luta. Além da visão ele fica onde está, e o teleporte abaixo o traz.
+- **Segue o mestre** (`Monster::updateSummonTarget`): sem alvo, o familiar anda até um tile a 2 do
+  mestre (a 1 só se não houver tile a 2 alcançável), se o enxerga (visão de 11), por uma busca de
+  menor custo (cardinal 10, diagonal 35) — e para lá; com alvo, luta. Sem o mestre à vista ou sem
+  caminho até ele, vagueia como todo monstro sem perseguição, e o teleporte abaixo o traz de volta.
 - **Teleporte ao mestre** (`Creature::checkSummonMove`, a cada passo dele): outro andar OU mais de
   15 tiles em x/y (`FAMILIAR_TELEPORT_DISTANCE`) — a invocação comum só some além de 30 tiles/2
-  andares, o familiar nunca.
+  andares, o familiar nunca. **Sai como RELOCAÇÃO para quem olha**: o par `creature-vanished` +
+  `creature-appeared` do mesmo subject (com id numérico novo no cliente), nunca um `creature-moved`
+  de duração zero — o protocolo exige duração positiva e o hospedeiro descartaria o evento, deixando
+  o familiar desenhado no tile (e no andar) antigos.
 - **O jogador atravessa o familiar** (`Player::canWalkthrough`: `monster->isFamiliar()`, qualquer
   familiar de qualquer dono): o tile ocupado só por ele não bloqueia o caminho do personagem
   (`#moverBlocked` no passo guloso, `#occupiedForPlayer` nas buscas de caminho do follow e do `walk-to`), e o passo TROCA os dois de lugar (`#step`: o familiar ocupa o tile que o
@@ -2157,7 +2182,9 @@ do script; o `spell:cooldown(0)` do Canary diz que quem cobra é a `CreateFamili
 3. **O teleporte cai no tile livre mais perto do mestre, não NO tile dele** (`internalTeleport` com
    `FLAG_NOLIMIT`): o tile do `sim` é exclusivo (`TileOccupancy`).
 4. **Atravessar o familiar é uma TROCA de tiles, não dividir o tile** (mesma razão): o Canary deixa
-   o jogador e o familiar no mesmo tile. O familiar sem alvo SEGUE o mestre (`summonFollowStep`,
+   o jogador e o familiar no mesmo tile. Quando o tile que o jogador deixou não admite mais o familiar
+   (uma porta comum que fecha no `vacate`), o familiar é recolocado no tile livre mais perto do
+   jogador — como no teleporte, e com o mesmo par de eventos de relocação. O familiar sem alvo SEGUE o mestre (`summonFollowStep`,
    acima), e o teleporte ao mestre cobre o que a visão de 11 não alcança (> 15 tiles/outro andar).
 5. **Sem as mensagens "Your summon will disappear in less than one minute / 10 seconds"** (texto
    privado ao mestre, `MESSAGE_LOOT`): apresentação, sem canal no protocolo.

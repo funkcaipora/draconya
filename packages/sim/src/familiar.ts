@@ -19,7 +19,10 @@
 // min gravado na hunt A seria lido na hunt B como "daqui a 30 min de B" — ou, pior, como "daqui a
 // quatro horas" se A durou uma. O carimbo de parede atravessa a sessão porque não pertence a
 // nenhuma (ADR 0052 d.6). O `sim` não lê relógio nenhum (invariante 1): o instante de agora é
-// `Session.createdAtMs + Session.nowMs`, os dois já dados pelo servidor na criação da sessão.
+// `Session.createdAtMs + Session.nowMs`, os dois já dados pelo servidor na criação da sessão — e,
+// na retomada de um snapshot, com o intervalo descartado (ADR 0018) somado ao `createdAtMs` pelo
+// hospedeiro, para a soma continuar sendo "agora". Os carimbos que o `sim` GRAVA são sempre
+// inteiros (o relógio lógico do hospedeiro é fracionário, e `isFamiliarState` recusa o resto).
 //
 // **Divergência registrada.** No Canary o tempo do cooldown só corre com o jogador ONLINE (a
 // condição é gravada com os `ticks` restantes), e o Draconya o conta em relógio de parede também

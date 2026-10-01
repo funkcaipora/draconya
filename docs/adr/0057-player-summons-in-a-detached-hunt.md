@@ -105,7 +105,11 @@ divergências, está em `docs/product/combat.md` ("O familiar de vocação").
    cooldownUntilMs }`), o registro `jsonb` `character.familiar` (ADR 0052 d.1) os persiste por
    última escrita vence — nunca por máximo, porque o `summonUntilMs` desce na morte —, e a
    recriação acontece ao ENTRAR NA HUNT, o login do personagem (a Cidade não tem invocação, d.3).
-   O `sim` não lê relógio: o "agora" é `Session.createdAtMs + Session.nowMs`, que o servidor já dá.
+   O `sim` não lê relógio: o "agora" é `Session.createdAtMs + Session.nowMs`, que o servidor já dá —
+   e que ele mantém verdadeiro: na retomada de um snapshot o intervalo descartado (ADR 0018) é
+   somado ao `createdAtMs` (`SessionHost#resume`), e os carimbos que o `sim` grava são sempre inteiros
+   (teto no lançamento, piso na morte), porque o relógio lógico do hospedeiro é fracionário e todo
+   consumidor valida inteiro seguro.
 3. **Divergência aceita, herdada do ADR 0052 d.6:** o cooldown corre também na Cidade e offline. No
    Canary a condição só anda com o jogador online. Dentro da hunt são idênticos; fora, a decisão
    deste ADR (d.3, "cooldown de parede") vale.
@@ -120,6 +124,10 @@ divergências, está em `docs/product/combat.md` ("O familiar de vocação").
    Canary: `master != followCreature` → `setFollowCreature(master)`), o que o #598 deixara como
    divergência aceita e a regra da caça idêntica ao Canary (ADR 0037 d.6) não admite. Só segue quem
    enxerga o mestre (mesmo andar, visão de 11), pela busca de menor custo do A* do Canary
-   (cardinal 10, diagonal 35, `cheapestPath`), até um tile a 1–2 do mestre com linha de visão
-   livre (`getPathSearchParams`: `maxTargetDist = 2` para o mestre); a de outro monstro (#546)
-   continua parada. Vale para a Summon Creature e para o familiar.
+   (cardinal 10, diagonal 35, `cheapestPath`), até um tile a EXATAMENTE 2 do mestre com linha de
+   visão livre (`getPathSearchParams`: `minTargetDist = 1`, `maxTargetDist = 2`; um tile a 1 é só o
+   "melhor até agora" de `FrozenPathingConditionCall`, a que ela recorre se nenhum a 2 for
+   alcançável); a de outro monstro (#546) continua parada. Sem mestre à vista ou sem caminho, a
+   invocação vagueia (`getNextStep` cai no `doRandomStep`); a Summon Creature comum não segue o
+   mestre invisível que ela não enxerga (`canFollowMaster`), e o familiar segue sempre. Vale para a
+   Summon Creature e para o familiar.

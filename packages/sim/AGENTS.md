@@ -475,7 +475,7 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   teste que planta um monstro precisa plantar o `home` junto (`plant` em `hunt.test.ts`) — e o que
   conta `rng.integer` precisa isolar os três sorteios do passo aleatório. (5) Invocação nunca volta
   nem fica ociosa (`masterId`), e sem alvo a de PERSONAGEM segue o mestre (`summonFollowStep`, #599 —
-  a de outro monstro continua parada). (6) **O
+  a de outro monstro continua parada; sem mestre à vista ou sem caminho a de personagem vagueia). (6) **O
   ocioso CALA defesa, troca de alvo e invocação** (o Canary tira o monstro do `onThink`):
   `MonsterRuntime.idle` é escrito por `#onMonsterStep` a cada decisão (liga no `idle`, desliga em
   qualquer outra) e `#onMonsterDefense`/`#onMonsterTargetChange`/`#onMonsterSummon` REAGENDAM e
@@ -820,7 +820,10 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
 - **O familiar de vocação (#599, M38-02, ADR 0057 d.3 e a emenda de 2026-09-29) é uma invocação de
   PERSONAGEM com três coisas a mais, e cada uma tem uma armadilha.** (1) **Os dois carimbos
   (`CharacterRuntime.familiar`) são de relógio de PAREDE, e o "agora" é `session.createdAtMs +
-  session.nowMs`** (`HuntRuleset#wallNowMs`) — nunca o `Cooldowns` do personagem, que guarda instante
+  session.nowMs`** (`HuntRuleset#wallNowMs`, fracionário: serve para COMPARAR; o que se GRAVA passa
+  por `#wallStampMs`, que arredonda para cima — os consumidores validam inteiro seguro e trocam o
+  carimbo torto pelo vazio em silêncio — e o piso da morte; o servidor soma o intervalo descartado
+  da retomada ao `createdAtMs`) — nunca o `Cooldowns` do personagem, que guarda instante
   LÓGICO da sessão que o gravou (o relógio de cada sessão nasce em zero, e o objeto do personagem
   atravessa as transições): um cooldown de 30 min ali seria lido na hunt seguinte como "daqui a 30
   min de ZERO", ou, se a hunt anterior durou uma hora, como "daqui a uma hora e meia". O
@@ -839,13 +842,23 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   personagem usa `#hostileMonsters()` como presas (senão acertaria a party); o alvo herdado é o
   SELECIONADO do mestre e não o que a arma alcança; e o jogador atravessa o familiar por TROCA de
   tiles em `#step` (`#moverBlocked` e `#occupiedForPlayer` — o `world.occupied` das buscas de caminho do follow e do `walk-to` — deixam o caminho passar por ele) — sem isso um familiar parado
-  num corredor tranca a party inteira. `#familiarIds` (vazio na hunt de sempre) existe para o custo:
+  num corredor tranca a party inteira. **O familiar RECOLOCADO** (o teleporte ao mestre e a troca cujo
+  tile de origem fechou — a porta comum fecha no `vacate`) sai como `creature-vanished` +
+  `creature-appeared`, NUNCA como `creature-moved` de duração zero: o hospedeiro descarta duração ≤ 0
+  (`#placeFamiliarNear`). **E `onEnter` remonta a ocupação COM os monstros** — o familiar recriado
+  para o membro anterior de uma party já é um monstro vivo no mundo, e remontar só com os
+  participantes liberava o tile dele. `#familiarIds` (vazio na hunt de sempre) existe para o custo:
   o teleporte ao mestre e a travessia consultam-no a cada passo. **A invocação de personagem SEM alvo
   segue o mestre** (`#onMonsterStep` → `summonFollowStep`): a busca é `cheapestPath` (Dijkstra,
   cardinal 10, diagonal 35 — o A* do Canary), e não o BFS de `boundedPath` nem o guloso — o BFS de
   custo igual anda de viés na diagonal, e o passo diagonal dura o triplo; o guloso oscila na boca de
-  uma concavidade. Só enxerga quem está a ≤ `aggroRadius` no mesmo andar, e para a 1–2 tiles com linha
-  de visão livre (`getPathSearchParams`). Um teste que quer o familiar PARADO ou atrasado precisa de um
+  uma concavidade. Só enxerga quem está a ≤ `aggroRadius` no mesmo andar, e o objetivo é um tile a
+  EXATAMENTE 2 do mestre com linha de visão livre — a 1 tile é só o "melhor até agora" que o Canary
+  guarda enquanto procura (`cheapestPath` aceita um `fallback`): a invocação encostada se afasta até a
+  2 (`getPathSearchParams`, `FrozenPathingConditionCall`). `summonFollowStep` devolve `step`/`stay`/
+  `wander`: sem mestre à vista ou sem caminho é `wander` (o `getNextStep` cai no `doRandomStep`, e
+  `decideUnengagedMove` só deixa a invocação de PERSONAGEM passear), mestre invisível que a comum não
+  enxerga é `stay` (`canFollowMaster`; o familiar segue sempre). Um teste que quer o familiar PARADO ou atrasado precisa de um
   jeito de o herói deixá-lo para trás (a velocidade do familiar é a do mestre no lançamento: acelere o
   herói DEPOIS de lançar), porque um familiar que enxerga o mestre o acompanha.
 - **Os Charms em combate (#603, M39-03, ADR 0053 d.5) vivem em `combat/charms.ts` (puro) e nos
