@@ -742,6 +742,52 @@ describe('TileOccupancy.fields — campo bloqueante (#560, Magic Wall/Wild Growt
     expect(w.blockedAt(2, 2, 7)).toBe(true); // a parede do meio da sala
     expect(w.blockedAt(3, 1, 7)).toBe(false);
   });
+  // A parede com dono (OW-05, #826): a variante segura do Canary. Quem é personagem a atravessa
+  // (o passo dele a desfaz, no ruleset); monstro e invocação seguem barrados como por qualquer parede.
+  describe('a parede de personagem (OW-05, #826): cede a quem dissolve, barra o resto', () => {
+    const wall = (owner?: { kind: 'character' | 'monster'; id: string }) => {
+      const fields = new Fields();
+      fields.apply({
+        id: 'wall', tiles: [{ x: 3, y: 1, z: 7 }], expiresAtMs: 20_000, blocksMovement: true,
+        ...(owner === undefined ? {} : { owner }),
+      });
+      return new TileOccupancy(map, { fields });
+    };
+    /** Quem pisa como o personagem: `dissolvesSafeWalls` é o que `CharacterRuntime` declara. */
+    const walker = (): Movable<Ponto> & { alive: boolean } => ({ ...at(2, 1), dissolvesSafeWalls: true });
+
+    it('o personagem passa pela parede de personagem; o monstro (sem a flag) segue barrado', () => {
+      const w = wall({ kind: 'character', id: 'hero' });
+      const hero = walker();
+      const monster = at(2, 1);
+      w.reset([]);
+      expect(canOccupy(w, hero, to(3, 1))).toBeNull();
+      expect(canOccupy(w, monster, to(3, 1))).toBe('tile-blocked');
+      // `blockedAt` responde as duas perguntas, e a padrão é a de sempre.
+      expect(w.blockedAt(3, 1, 7)).toBe(true);
+      expect(w.blockedAt(3, 1, 7, true)).toBe(false);
+      expect(move(w, hero, to(3, 1))).toMatchObject({ ok: true, to: { x: 3, y: 1, z: 7 } });
+    });
+
+    it('a parede SEM dono (de mapa) e a de MONSTRO barram o personagem como sempre', () => {
+      for (const owner of [undefined, { kind: 'monster' as const, id: 'm:1' }]) {
+        const w = wall(owner);
+        const hero = walker();
+        w.reset([]);
+        expect(canOccupy(w, hero, to(3, 1))).toBe('tile-blocked');
+        expect(w.blockedAt(3, 1, 7, true)).toBe(true);
+      }
+    });
+
+    it('a flag só abre a parede: geometria e ocupação continuam barrando o personagem', () => {
+      const w = wall({ kind: 'character', id: 'hero' });
+      const hero = { ...at(1, 1), dissolvesSafeWalls: true as const };
+      w.reset([at(1, 2)]);
+      expect(canOccupy(w, hero, to(1, 2))).toBe('tile-occupied');
+      const beside = { ...at(1, 2), dissolvesSafeWalls: true as const };
+      expect(canOccupy(w, beside, to(2, 2))).toBe('tile-blocked'); // a parede FIXA do mapa
+    });
+  });
 });
 
 describe('troca de lugar com quem se atravessa (#600)', () => {

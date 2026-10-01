@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { decodeC2S, decodeS2C, encodeC2S, encodeS2C } from './codec.js';
+import { decodeC2S, decodeS2C, encodeC2S, encodeS2C, packBatch } from './codec.js';
 import {
   CLIENT_TO_SERVER, BURNED_OPCODES_C2S, BURNED_OPCODES_S2C,
   OPCODE_TO_NAME_C2S, OPCODE_TO_NAME_S2C, SERVER_TO_CLIENT,
 } from './messages.js';
-import { C2S_SCHEMAS, FIGHT_MODES, MonsterRace, S2C_SCHEMAS } from './types.js';
+import {
+  C2S_SCHEMAS, FIGHT_MODES, LOGOUT_REFUSED_REASONS, MonsterRace, S2C_SCHEMAS, TARGET_CANCEL_REASONS,
+  ZONE_KINDS,
+} from './types.js';
 import type { C2SMessage, S2CMessage } from './types.js';
 
 describe('English payload contract', () => {
@@ -2093,6 +2096,159 @@ describe('Bosstiary (#629, ADR 0052 d.1)', () => {
   });
 });
 
+describe('o mundo no protocolo: logout-refused, world-full, zona, em luta e motivo de recusa (OW-11, #832)', () => {
+  const stats = {
+    type: 'player-stats' as const,
+    health: 100, maxHealth: 100, mana: 50, maxMana: 50,
+    level: 5, xp: 1000, capacity: 300, gold: 50, staminaMs: 50_000,
+    ammo: { arrow: null, bolt: null }, vocationId: 'knight', promoted: false,
+    fightMode: 'attack' as const, speed: 250,
+    skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+  };
+
+  it('logout-refused is S2C only, opcode 49, and round trips both Canary reasons', () => {
+    // Invariante 5: o número vive só em `messages.ts`. Mutação que mata: reutilizar um número já
+    // tomado (45 `exit-pending`, 46 `bosstiary`, 47 `learned-spells`, 48 `training-state`),
+    // apagar `'logout-refused': 49` (`decodeS2C` devolve `null`) ou deixar o cliente mandá-la (o
+    // servidor é quem recusa).
+    expect(SERVER_TO_CLIENT['logout-refused']).toBe(49);
+    expect('logout-refused' in C2S_SCHEMAS).toBe(false);
+    expect([...LOGOUT_REFUSED_REASONS]).toEqual(['no-logout-tile', 'in-fight']);
+    for (const reason of LOGOUT_REFUSED_REASONS) {
+      const message: S2CMessage = { type: 'logout-refused', reason };
+      expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+    }
+  });
+
+  it('logout-refused rejects a missing or unknown reason', () => {
+    // Sem o motivo o cliente não sabe qual texto mostrar; e uma lista aberta deixaria um
+    // motivo que nenhum cliente conhece passar calado.
+    expect(decodeS2C(encodeS2C({ type: 'logout-refused' } as unknown as S2CMessage))).toBeNull();
+    expect(decodeS2C(encodeS2C({ type: 'logout-refused', reason: 'pz-locked' } as unknown as S2CMessage)))
+      .toBeNull();
+  });
+
+  it('the C2S logout stays the empty intention', () => {
+    // A recusa é uma mensagem NOVA do servidor; o pedido não ganhou campo nenhum (invariante 4).
+    expect(CLIENT_TO_SERVER.logout).toBe(8);
+    const message: C2SMessage = { type: 'logout' };
+    expect(decodeC2S(encodeC2S(message))).toEqual([message]);
+  });
+
+  it('world-full is S2C only, opcode 50, and round trips with and without a hunt to offer', () => {
+    // Mutação que mata: trocar o 50 pelo 49 (colisão com `logout-refused`), tornar
+    // `huntAvailable` opcional (o cliente não sabe se oferece a hunt idle) ou apagar a entrada.
+    expect(SERVER_TO_CLIENT['world-full']).toBe(50);
+    expect('world-full' in C2S_SCHEMAS).toBe(false);
+    const withHunt: S2CMessage = { type: 'world-full', position: 12, retryAfterMs: 20_000, huntAvailable: true };
+    const withoutHunt: S2CMessage = { type: 'world-full', position: 1, retryAfterMs: 0, huntAvailable: false };
+    for (const message of [withHunt, withoutHunt]) {
+      expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+    }
+  });
+
+  it('world-full rejects position 0, fractions, a negative wait and missing fields', () => {
+    // A fila do Canary começa em 1 (`getClientSlot`); o 0 seria "não está na fila", que não é
+    // uma resposta de mundo cheio.
+    const base = { type: 'world-full', position: 3, retryAfterMs: 5_000, huntAvailable: true };
+    for (const patch of [
+      { position: 0 }, { position: -1 }, { position: 2.5 },
+      { retryAfterMs: -1 }, { retryAfterMs: 1.5 }, { huntAvailable: 'yes' },
+    ]) {
+      expect(decodeS2C(encodeS2C({ ...base, ...patch } as unknown as S2CMessage))).toBeNull();
+    }
+    for (const missing of ['position', 'retryAfterMs', 'huntAvailable']) {
+      const { [missing]: _removed, ...rest } = base as Record<string, unknown>;
+      expect(decodeS2C(encodeS2C(rest as unknown as S2CMessage))).toBeNull();
+    }
+  });
+
+  it('player-stats without zone and inFight is still valid, and stays without them', () => {
+    // O ponto da opcionalidade (types.ts, regra de nó `game` anterior): a mensagem de hoje passa,
+    // e NÃO ganha `zone: 'normal'` nem `inFight: false` por default — o cliente distingue
+    // "o servidor não informa" de "o servidor disse normal". Mutação que mata: trocar
+    // `.optional()` por `.default(...)`.
+    const parsed = S2C_SCHEMAS['player-stats'].parse(stats);
+    expect('zone' in parsed).toBe(false);
+    expect('inFight' in parsed).toBe(false);
+    expect(decodeS2C(encodeS2C(stats))).toEqual([stats]);
+  });
+
+  it('player-stats round trips every zone and both fight states', () => {
+    expect([...ZONE_KINDS]).toEqual(['normal', 'protection', 'no-pvp', 'pvp', 'no-logout']);
+    for (const zone of ZONE_KINDS) {
+      const message: S2CMessage = { ...stats, zone, inFight: zone !== 'protection' };
+      expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+    }
+    const onlyZone: S2CMessage = { ...stats, zone: 'protection' };
+    const onlyFight: S2CMessage = { ...stats, inFight: true };
+    for (const message of [onlyZone, onlyFight]) {
+      expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+    }
+  });
+
+  it('player-stats rejects an unknown zone and a non-boolean inFight', () => {
+    expect(S2C_SCHEMAS['player-stats'].safeParse({ ...stats, zone: 'arena' }).success).toBe(false);
+    expect(S2C_SCHEMAS['player-stats'].safeParse({ ...stats, zone: 'PROTECTION' }).success).toBe(false);
+    expect(S2C_SCHEMAS['player-stats'].safeParse({ ...stats, inFight: 1 }).success).toBe(false);
+    expect(S2C_SCHEMAS['player-stats'].safeParse({ ...stats, inFight: null }).success).toBe(false);
+  });
+
+  it('target-cancel carries the world-rule reason, and without it stays the old refusal', () => {
+    // Opcode inalterado (35); o motivo é um campo novo e opcional.
+    expect(SERVER_TO_CLIENT['target-cancel']).toBe(35);
+    expect([...TARGET_CANCEL_REASONS]).toEqual(['player-protected', 'protection-zone']);
+    for (const reason of TARGET_CANCEL_REASONS) {
+      const withReason: S2CMessage = { type: 'target-cancel', seq: 9, reason };
+      const reasonOnly: S2CMessage = { type: 'target-cancel', reason };
+      expect(decodeS2C(encodeS2C(withReason))).toEqual([withReason]);
+      expect(decodeS2C(encodeS2C(reasonOnly))).toEqual([reasonOnly]);
+    }
+    const legacy: S2CMessage = { type: 'target-cancel', seq: 9 };
+    expect(decodeS2C(encodeS2C(legacy))).toEqual([legacy]);
+    expect('reason' in S2C_SCHEMAS['target-cancel'].parse({ seq: 9 })).toBe(false);
+  });
+
+  it('target-cancel rejects an unknown reason', () => {
+    expect(decodeS2C(encodeS2C({ type: 'target-cancel', reason: 'no-pvp' } as unknown as S2CMessage))).toBeNull();
+  });
+
+  it('the world reuses session-state and session-ended, death included, with no new fields', () => {
+    // `sessionType` é `z.string()` (types.ts), então `'world'` passa; e a morte no mundo é a
+    // `session-ended` de sempre com `reason: 'death'` (ADR 0060 d.9). O que se prende aqui é que
+    // nenhum dos dois contratos mudou — uma `session-ended` de morte sem campo novo é válida.
+    const worldSession: S2CMessage = {
+      type: 'session-state', sessionType: 'world', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'c1', health: 100, maxHealth: 100, mana: 50, maxMana: 50,
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 200, skills: {},
+        magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+      },
+      world: { mapId: 'thais', creatures: [], groundItems: [], tileUpdates: [], fields: [] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    };
+    expect(decodeS2C(encodeS2C(worldSession))).toEqual([worldSession]);
+    const death: S2CMessage = {
+      type: 'session-ended', reason: 'death',
+      aggregates: { durationMs: 60_000, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 1 },
+      notableEvents: [],
+    };
+    expect(decodeS2C(encodeS2C(death))).toEqual([death]);
+  });
+
+  it('batches the new messages with the old ones in one frame', () => {
+    // O lote é o caso de uso real: o servidor manda a recusa junto com o resto do ciclo.
+    const frame: S2CMessage[] = [
+      { ...stats, zone: 'protection', inFight: false },
+      { type: 'logout-refused', reason: 'in-fight' },
+      { type: 'world-full', position: 2, retryAfterMs: 10_000, huntAvailable: true },
+      { type: 'target-cancel', reason: 'protection-zone' },
+    ];
+    expect(decodeS2C(packBatch(frame.map(encodeS2C)))).toEqual(frame);
+  });
+});
+
 describe('Treino: enter-training, set-offline-training-skill, buy-item, training-state (#631, ADR 0059)', () => {
   it('the three intents are C2S only and take the next opcodes after learn-spell (36)', () => {
     // Mutação que mata: reutilizar o 36 (`learn-spell`) ou o 35 (`set-fight-mode`).
@@ -2177,5 +2333,53 @@ describe('Treino: enter-training, set-offline-training-skill, buy-item, training
     });
     expect(rules.offlineSkills[0]?.kind).toBe('attacks');
     expect(rules.skills.map((entry) => entry.skillId)).toEqual(['sword', 'shielding']);
+  });
+});
+
+describe('a aparência emprestada: creature-update e a mira num item (#621, M44-03)', () => {
+  it('creature-update is S2C only, opcode 51, and round trips an outfit, an object and a return with colours', () => {
+    // Mutação que mata: reutilizar o 45 (`exit-pending`), o 46, o 47, o 48, o 49 ou o 50, apagar `creature-update: 51` de
+    // SERVER_TO_CLIENT (`decodeS2C` devolve `null`) ou tornar `object` obrigatório.
+    expect(SERVER_TO_CLIENT['creature-update']).toBe(51);
+    expect('creature-update' in C2S_SCHEMAS).toBe(false);
+    const outfit: S2CMessage = { type: 'creature-update', id: 7, appearanceId: 21 };
+    const object: S2CMessage = { type: 'creature-update', id: 7, appearanceId: 3976, object: true };
+    const back: S2CMessage = {
+      type: 'creature-update', id: 1, appearanceId: 128,
+      colors: { head: 78, body: 69, legs: 58, feet: 76 },
+    };
+    // As cores e os addons do outfit (#620) viajam juntos: a ilusão de monstro leva os do monstro.
+    const monster: S2CMessage = {
+      type: 'creature-update', id: 7, appearanceId: 21,
+      colors: { head: 78, body: 69, legs: 58, feet: 76 }, addons: 2,
+    };
+    for (const message of [outfit, object, back, monster]) {
+      expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+    }
+  });
+
+  it('rejects an update without an appearance, with a non-positive one, or with a bad colour index', () => {
+    const base = { type: 'creature-update', id: 7, appearanceId: 21 };
+    for (const patch of [{ appearanceId: 0 }, { appearanceId: -3 }, { appearanceId: 1.5 }, { id: 1.5 },
+      { colors: { head: 133, body: 0, legs: 0, feet: 0 } }, { addons: 4 }, { addons: -1 }]) {
+      expect(decodeS2C(encodeS2C({ ...base, ...patch } as unknown as S2CMessage))).toBeNull();
+    }
+  });
+
+  it('use-slot, use-item and use-item-on accept an item the character carries as the target', () => {
+    // A Chameleon Rune aponta um item do inventário: só a instância viaja — a aparência é do
+    // servidor (invariante 4). Mutação que mata: tirar a terceira variante de `manualTargetSchema`.
+    const slot: C2SMessage = { type: 'use-slot', set: 0, slot: 3, target: { instanceId: 'i-42' } };
+    const useItem: C2SMessage = {
+      type: 'use-item', ref: { supplyId: 'chameleon-rune' }, seq: 1, target: { instanceId: 'i-42' },
+    };
+    const useItemOn: C2SMessage = {
+      type: 'use-item-on', ref: { supplyId: 'chameleon-rune' }, seq: 2, target: { instanceId: 'i-42' },
+    };
+    for (const message of [slot, useItem, useItemOn]) {
+      expect(decodeC2S(encodeC2S(message))).toEqual([message]);
+    }
+    const empty = { type: 'use-item-on', ref: { supplyId: 'chameleon-rune' }, seq: 2, target: { instanceId: '' } };
+    expect(decodeC2S(encodeC2S(empty as unknown as C2SMessage))).toBeNull();
   });
 });

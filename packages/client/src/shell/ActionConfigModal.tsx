@@ -92,6 +92,27 @@ export function withDo(draft: SlotDraft, action: BotActionV2 | null, friend: boo
   };
 }
 
+/**
+ * A ação é uma magia que IMITA um monstro (#621, Creature Illusion — `effect: 'illusion'`)? O
+ * monstro é o parâmetro dela, o `monsterId` da ação do slot; a tela só oferece o seletor quando
+ * o catálogo diz que o efeito é esse — nada é inventado (DT-02).
+ */
+export function needsIllusionMonster(entry: ActionEntry | null): boolean {
+  return entry !== null && entry.kind === 'spell' && entry.spell.effect === 'illusion';
+}
+
+/**
+ * Os monstros que o servidor marcou como imitáveis (`illusionable`), por nome — a lista do
+ * seletor. O servidor é quem recusa de verdade (invariante 4): um monstro que escapasse daqui
+ * continuaria sendo recusado na configuração (`validateBotConfigV2`) e no lançamento.
+ */
+export function illusionMonsters(catalogue: Catalogue): readonly { id: string; name: string }[] {
+  return catalogue.monsters
+    .filter((monster) => monster.illusionable === true)
+    .map((monster) => ({ id: monster.id, name: monster.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /** O rascunho sem tecla — a opção "sem tecla" do ATALHO (22 teclas para 24 slots). */
 function withoutHotkey(draft: SlotDraft): SlotDraft {
   return { do: draft.do, when: draft.when, auto: draft.auto, target: draft.target };
@@ -125,8 +146,14 @@ export function ActionConfigModal({ set, index, onClose }: ActionConfigModalProp
   }
 
   const currentSet: BotSet = storedSet ?? { slots: [] };
-  const problem = draftProblem(draft, currentSet, index);
   const selectedEntry = entryOfAction(draft.do, catalogue);
+  // A Creature Illusion sem monstro escolhido é um slot morto que o servidor recusaria ao salvar
+  // (`validateBotConfigV2`): a tela o diz antes, no lugar do botão Salvar.
+  const illusionMonster = draft.do?.kind === 'spell' ? (draft.do.monsterId ?? null) : null;
+  const problem = draftProblem(draft, currentSet, index)
+    ?? (needsIllusionMonster(selectedEntry) && illusionMonster === null
+      ? 'Escolha o monstro que a magia vai imitar.'
+      : null);
   const tab = pickedTab ?? (selectedEntry === null ? 'Magias' : actionTab(selectedEntry));
   const entries = entriesOf(catalogue, tab, vocationId);
   const hotkeys = catalogue.bot.hotkeys ?? BOT_HOTKEYS;
@@ -246,6 +273,25 @@ export function ActionConfigModal({ set, index, onClose }: ActionConfigModalProp
         </section>
       </div>
 
+      {needsIllusionMonster(selectedEntry) && draft.do?.kind === 'spell' && (
+        <div className="action-config-target">
+          <Select
+            label="Monstro"
+            size="sm"
+            options={[
+              { value: '', label: '— escolha o monstro' },
+              ...illusionMonsters(catalogue).map((monster) => ({ value: monster.id, label: monster.name })),
+            ]}
+            value={illusionMonster ?? ''}
+            onChange={(monsterId) => {
+              const action = draft.do;
+              if (action === null || action.kind !== 'spell') return;
+              const { monsterId: _previous, ...rest } = action;
+              setDraft({ ...draft, do: monsterId === '' ? rest : { ...rest, monsterId } });
+            }}
+          />
+        </div>
+      )}
       <div className="action-config-conditions-head"><Kicker tone="muted">Condições</Kicker></div>
       {selectedEntry !== null && acceptsFriend(selectedEntry) && (
         <div className="action-config-target">

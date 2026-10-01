@@ -20,6 +20,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -2437,6 +2438,30 @@
         }
       },
       {
+        "id": "outfit",
+        "cadenceMs": 2000,
+        "chance": 0.08,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 4000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "chicken"
+            }
+          }
+        }
+      },
+      {
         "id": "earthwave",
         "cadenceMs": 2000,
         "chance": 0.2,
@@ -3395,6 +3420,24 @@
         }
       }
     ],
+    "defenses": [
+      {
+        "id": "outfit",
+        "cadenceMs": 4000,
+        "chance": 0.3,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 4000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "goshnars-malice"
+            }
+          }
+        }
+      }
+    ],
     "targetChange": {
       "intervalMs": 5000,
       "chance": 0.08
@@ -3438,6 +3481,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -3598,7 +3642,8 @@
       "immunities": []
     },
     "conditionImmunities": [
-      "invisible"
+      "invisible",
+      "outfit"
     ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
@@ -4760,6 +4805,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 190,
     "aggroRadius": 11,
@@ -5196,6 +5242,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -5859,6 +5906,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -5914,6 +5962,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 3.04,
@@ -7367,6 +7416,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 270,
     "aggroRadius": 11,
@@ -8692,6 +8742,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -9446,6 +9497,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 160,
     "aggroRadius": 11,
@@ -10232,6 +10284,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -13384,6 +13437,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -15278,6 +15332,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 175,
     "aggroRadius": 11,
@@ -15369,6 +15424,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 160,
     "aggroRadius": 11,
@@ -17137,6 +17193,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 190,
     "aggroRadius": 11,
@@ -17411,6 +17468,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -19834,6 +19892,27 @@
             "delta": 0
           }
         }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 2000,
+        "chance": 0.01,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "clay-guardian"
+            }
+          }
+        }
       }
     ],
     "defenses": [
@@ -21038,6 +21117,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -21275,6 +21355,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 150,
     "aggroRadius": 11,
@@ -21556,6 +21637,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 250,
     "aggroRadius": 11,
@@ -23439,6 +23521,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 284,
     "aggroRadius": 11,
@@ -26007,6 +26090,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 2,
@@ -29113,6 +29197,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -29292,6 +29377,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -31528,6 +31614,63 @@
         "presentation": {
           "impactKey": "blueshimmer"
         }
+      },
+      {
+        "id": "outfit-2",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "lizard-abomination"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "energyhit"
+        }
+      },
+      {
+        "id": "outfit-3",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "serpent-spawn"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "energyhit"
+        }
+      },
+      {
+        "id": "outfit-5",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "mutated-zalamon"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "energyhit"
+        }
       }
     ],
     "targetChange": {
@@ -31723,6 +31866,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -33561,6 +33705,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -34221,6 +34366,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -34879,6 +35025,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -35332,6 +35479,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -35653,6 +35801,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 320,
     "aggroRadius": 11,
@@ -35875,6 +36024,30 @@
             "kind": "drunk"
           }
         }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 1000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 12000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "pig"
+            }
+          }
+        }
       }
     ],
     "defenses": [
@@ -35885,6 +36058,25 @@
         "heal": {
           "min": 200,
           "max": 500
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 1000,
+        "chance": 0.05,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 4000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "demon"
+            }
+          }
         },
         "presentation": {
           "impactKey": "blueshimmer"
@@ -35980,6 +36172,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -36379,6 +36572,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 140,
     "aggroRadius": 11,
@@ -36944,6 +37138,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 320,
     "aggroRadius": 11,
@@ -38033,6 +38228,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 160,
     "aggroRadius": 11,
@@ -38892,6 +39088,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -39868,6 +40065,32 @@
         "kind": "combat",
         "presentation": {
           "impactKey": "explosionarea"
+        }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 1000,
+        "chance": 0.01,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 2000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "werebear"
+            }
+          }
         }
       },
       {
@@ -40856,6 +41079,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 280,
     "aggroRadius": 11,
@@ -41506,6 +41730,25 @@
     ],
     "defenses": [
       {
+        "id": "outfit",
+        "cadenceMs": 4000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "bat"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "groundshaker"
+        }
+      },
+      {
         "id": "heal",
         "cadenceMs": 2000,
         "chance": 0.35,
@@ -41681,6 +41924,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -42505,6 +42749,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -46685,6 +46930,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -49502,6 +49748,30 @@
         }
       },
       {
+        "id": "outfit",
+        "cadenceMs": 2000,
+        "chance": 0.01,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "objectKey": "fallen-tree"
+            }
+          }
+        }
+      },
+      {
         "id": "earthwave",
         "cadenceMs": 2000,
         "chance": 0.1,
@@ -50259,6 +50529,30 @@
         "presentation": {
           "missileKey": "poison",
           "impactKey": "poisonarea"
+        }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 2000,
+        "chance": 0.11,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 4000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "objectKey": "fallen-tree"
+            }
+          }
         }
       }
     ],
@@ -53733,6 +54027,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 172,
     "aggroRadius": 11,
@@ -54112,6 +54407,30 @@
         "kind": "melee"
       },
       {
+        "id": "outfit",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 5
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "earth"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "ugly-monster"
+            }
+          }
+        }
+      },
+      {
         "id": "drunk",
         "cadenceMs": 2000,
         "chance": 0.1,
@@ -54200,6 +54519,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 300,
     "aggroRadius": 11,
@@ -54414,6 +54734,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 200,
     "aggroRadius": 11,
@@ -56152,6 +56473,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 284,
     "aggroRadius": 11,
@@ -56744,6 +57066,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -56957,7 +57280,8 @@
       ]
     },
     "conditionImmunities": [
-      "invisible"
+      "invisible",
+      "outfit"
     ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
@@ -57136,6 +57460,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0.28,

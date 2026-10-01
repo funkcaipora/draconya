@@ -209,6 +209,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 160,
     "aggroRadius": 11,
@@ -739,6 +740,82 @@
         "heal": {
           "min": 250,
           "max": 350
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 5000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "rat"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "outfit-2",
+        "cadenceMs": 5000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "larva"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "outfit-3",
+        "cadenceMs": 5000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "scorpion"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "outfit-4",
+        "cadenceMs": 5000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "slime"
+            }
+          }
         },
         "presentation": {
           "impactKey": "blueshimmer"

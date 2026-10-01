@@ -508,6 +508,10 @@
       ],
       "specializedMagicLevel": {
         "fire": 1
+      },
+      "magicShieldCapacity": {
+        "flat": 150,
+        "percent": 3
       }
     },
     "source": {
@@ -562,6 +566,10 @@
       ],
       "specializedMagicLevel": {
         "healing": 1
+      },
+      "magicShieldCapacity": {
+        "flat": 150,
+        "percent": 3
       }
     },
     "spellbook": true,
@@ -841,6 +849,10 @@
       ],
       "specializedMagicLevel": {
         "death": 1
+      },
+      "magicShieldCapacity": {
+        "flat": 80,
+        "percent": 8
       }
     },
     "spellbook": true,
@@ -931,6 +943,10 @@
       ],
       "specializedMagicLevel": {
         "earth": 1
+      },
+      "magicShieldCapacity": {
+        "flat": 80,
+        "percent": 8
       }
     },
     "spellbook": true,

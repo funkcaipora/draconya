@@ -928,7 +928,36 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   `damageType`. Um campo com `blocksMovement: true` e SEM condição (Magic Wall, Wild Growth)
   ainda passa pelo pipeline de tique normalmente — `#onFieldTick`/`#enterField` só saem cedo
   quando `field.condition === undefined`, o mesmo `undefined` que o estágio mudo de uma cadeia
-  também usa.
+  também usa. **Uma exceção desde a OW-05 (#826): a parede de PERSONAGEM cede a quem é
+  personagem — ver o item do campo com dono, logo abaixo.**
+- **O campo tem DONO, e quem o lançou decide em quem ele pega** (OW-05, #826, ADR 0060 d.8 — o
+  no-pvp do Canary aplicado ao campo, `combat.cpp:1207-1218`/`2594-2640`,
+  `condition.cpp:2015-2020`). `TileFieldState.owner?: { kind: 'character' | 'monster', id }`,
+  gravado por `applyField` (o sexto parâmetro, opcional). Quatro armadilhas. (1) **Sem `owner` é
+  campo de MAPA e pega todo mundo** — é o que todo snapshot anterior restaura, sem subir
+  `SNAPSHOT_FORMAT_VERSION`, e o que o teste que planta campo direto sempre foi; um call site
+  novo de `applyField` que esquecer o `owner` cria campo que fere a party inteira, em silêncio.
+  (2) **Invocação de personagem é PERSONAGEM, dos dois lados**: o campo lançado por ela grava o
+  MESTRE (`#fieldOwnerOf`, `kind: 'character'`), e ela mesma é protegida do campo de personagem
+  (`#fieldHarms` confere `typeof masterId === 'string'`, como o `canDoCombat` do Canary recusa
+  `target->isSummon() && targetMasterPlayer` num mundo no-pvp). Monstro que não é invocação de
+  personagem segue levando o campo de personagem — o que o teste da party confere. (3) **O
+  portão roda ANTES de montar a condição**, no tique (`#onFieldTick`) e na entrada (`#enterField`):
+  `conditionFromSpec` pode consumir `session.rng`, e quem o campo não fere não gasta sorteio
+  (a sequência dos outros alvos é a mesma de antes). (4) **A parede de personagem é a variante
+  SEGURA**: segue barrando monstro e invocação, mas `Movable.dissolvesSafeWalls` (só
+  `CharacterRuntime` declara) faz `canOccupy`/`move` a admitirem, e `HuntRuleset#step` a remove
+  depois do passo aceito (`#dissolveSafeWall` → `#removeField`, que cancela os três eventos do
+  campo) — ANTES de `#enterField`, porque `Fields.at` devolve só o campo mais recente e o que
+  estava embaixo da parede é o que o passo encontra. Qualquer PERSONAGEM a dissolve, não só o
+  lançador (o Canary confere `creature->getPlayer()`, nunca o dono). O BFS do follow passa o
+  quarto argumento de `blockedAt` pelo mesmo motivo; um predicado novo de caminho de PERSONAGEM
+  que chame `blockedAt` de três argumentos trata a parede dele como intransponível, em desacordo
+  com o passo. O dono também atravessa os estágios (`#onFieldStageAdvance` o repassa) e o
+  relançamento do mesmo id o troca. **NÃO muda o crédito do dano do campo**: a condição do
+  campo segue com `sourceId` = id do campo, e o abate por campo de personagem não credita XP ao
+  dono (no Canary o dono vai no `CONDITION_PARAM_OWNER`) — divergência registrada, pendente do
+  crédito do Canary (OW-28).
 - **`isSightClear`'s atalho "sem camada de sight, sempre livre" escondia um bug de LIMITE, e
   isso só apareceu ao tentar ligar o predicado de campo (#560).** Antes, mapa sem `sight`
   devolvia `true` ANTES de percorrer a linha — nunca chegava a conferir `x/y` contra
@@ -1225,4 +1254,26 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   recompensa (`MonsterDefinition.rewardBoss`, o `flags.rewardBoss` do Canary) não rola casulo nem
   Plunder** — o próprio Plunder Patriarch é um —, mas a subida de nível não confere a flag (é outro
   script).
-
+- **A aparência emprestada é a condição `outfit` (#621, M44-03, ADR 0041 d.1), e o `sim` só diz
+  QUEM vestiu o quê.** `ConditionState.look` (`{ monsterId } | { itemId } | { objectKey }`) nunca
+  é arte; o evento `creature-look-changed { creatureId, look | null }` (`presence.ts`) sai em TODA
+  aplicação que vence (`#applyConditionTo`, inclusive a que substitui) e na volta (`null`) por
+  vencimento (`#onConditionExpire`), dispel ou morte do personagem (a saída para outra sessão, #812, deixa a condição com ele) — a apresentação nunca guarda a
+  aparência (`HuntRuleset#lookOf(session, id)` a lê da condição, para `creature-appear`/
+  `session-state`; invariante 3). **A fusão é a do Canary, por PRAZO**: `strengthOf` devolve
+  `expiresAtMs` para a condição com `look`, e `merge: 'strongest'` só mantém a anterior quando ela
+  acaba ESTRITAMENTE depois — a recusa não emite nada. **O ataque `outfit` de monstro não é golpe**
+  (`#executeOutfitAbility`, desvio no topo de `#executeMonsterAbility`): é condição NÃO agressiva,
+  então sem área vai no alvo e COM área pega todos os personagens E monstros na forma, o lançador
+  inclusive (`CombatFunc` só o exclui quando `aggressive`); nenhum `resolveDamage`, e o único
+  sorteio além do `chance` do vencimento é o do **Cleanse** (#603): `CombatConditionFunc` o rola
+  para toda condição de monstro num jogador — `#executeOutfitAbility` chama
+  `#cleanseBeforeCondition` por personagem atingido no `combat-v4` e NÃO veste a aparência se ele
+  limpou algo. A imunidade (`conditionImmunityOf` → `outfit`) só vale com
+  `fromCombat` e `caster != target`: o monstro imune ainda se disfarça (defesa) e a Creature
+  Illusion/Chameleon do jogador nunca é barrada. **Creature Illusion** recebe o `monsterId` do slot
+  (como a invocação), o ruleset confere `illusionable` e passa `illusionLook` a `castSpell`, que
+  recusa `not-illusionable` ANTES da mana; **Chameleon** recebe `UseSlotTarget { kind: 'item',
+  instanceId }`, resolvido por `Inventory.itemIdOf` (mochila, bolsa e corpo). `not-illusionable` é
+  o `RETURNVALUE_NOTPOSSIBLE` dos dois scripts. Toda condição `outfit` aplicada fora dessas portas
+  (um teste que faz `conditions.apply` direto) não emite o evento — use a magia ou a ability.

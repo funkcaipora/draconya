@@ -1,0 +1,17 @@
+{
+  "id": "creature-illusion-sorcerer",
+  "name": "Creature Illusion",
+  "description": "Veste o aspecto de outro monstro por 180 segundos.",
+  "vocationId": "sorcerer",
+  "minLevel": 23,
+  "learnPrice": 1000,
+  "manaCost": 100,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "illusion",
+    "durationMs": 180000
+  },
+  "_open": "A mesma magia de `creature-illusion-druid.json` (DT-02), duplicada por vocação (Canary `spell:vocation(\"druid;true\", \"elder druid;true\", \"sorcerer;true\", \"master sorcerer;true\")`) — ver o `_open` dela para a fonte completa."
+}

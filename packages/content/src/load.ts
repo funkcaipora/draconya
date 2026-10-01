@@ -70,6 +70,10 @@ export function loadContent(dir: string): Content {
     packs: readJsonDir(join(dir, 'packs')),
     maps: readJsonDir(join(dir, 'maps')),
     routes: readJsonDir(join(dir, 'routes')),
+    // Os mundos (#829, ADR 0060): `worlds/<id>.json`, um por arquivo. Opcional no `buildContent`
+    // (a fixture que só fala de hunt não tem mundo), mas o conteúdo REAL tem o `main`, e
+    // `load.test.ts` o prende — apagar esta linha deixaria o servidor sem mundo e sem aviso.
+    worlds: readJsonDir(join(dir, 'worlds')),
     // `city/city.json`, uma pasta como as outras — é a convenção que o loader e a varredura
     // do invariante 6 esperam. Obrigatório no conteúdo real: sem Cidade ninguém tem onde
     // nascer (FUN-60); o `buildContent` é quem reclama se faltar.

@@ -627,6 +627,30 @@
           "missileKey": "death",
           "impactKey": "smallclouds"
         }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 3
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "explosion"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 4000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "skeleton"
+            }
+          }
+        }
       }
     ],
     "defenses": [
@@ -791,6 +815,25 @@
         },
         "presentation": {
           "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "outfit-2",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "chayenne"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "energyhit"
         }
       }
     ],
@@ -1377,6 +1420,25 @@
         },
         "presentation": {
           "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 1000,
+        "chance": 0.05,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 14000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "war-wolf"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
         }
       }
     ],
@@ -5342,6 +5404,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 180,
     "aggroRadius": 11,

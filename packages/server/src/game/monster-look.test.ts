@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { monsterSchema } from '@draconya/content';
 import type { Monster } from '@draconya/content';
 import { CreatureVoices, MonsterRace } from '@draconya/protocol';
-import { hitEffectOf, isPhysicalHit, monsterLookOf } from './monster-look.js';
+import { hitEffectOf, isPhysicalHit, monsterLookOf, monsterOutfitOf, monsterPresentationOf } from './monster-look.js';
 
 /** Um monstro na forma que o catálogo entrega: `outfitId` resolvido, o resto do schema. */
 function monsterWith(patch: Record<string, unknown>): Monster {
@@ -12,6 +12,28 @@ function monsterWith(patch: Record<string, unknown>): Monster {
   });
   return { ...parsed, outfitId: 34, mitigation: {}, abilities: [], defenses: [] } as unknown as Monster;
 }
+
+describe('monsterOutfitOf e monsterPresentationOf (#620, #621)', () => {
+  const dragon = monsterWith({
+    race: 'venom', light: { level: 4, color: 208 },
+    outfit: { head: 113, body: 120, legs: 95, feet: 115, addons: 3 },
+  });
+
+  it('o outfit é só cores e addons; a apresentação é só raça, luz e falas — e juntos dão o `monsterLookOf`', () => {
+    // Mutação que mata: deixar `race`/`light` no outfit — o monstro ilusionado levaria a luz e a
+    // raça do outfit que veste, ou o `session-state` repetiria as cores do dono sobre as do emprestado.
+    expect(monsterOutfitOf(dragon)).toEqual({ colors: { head: 113, body: 120, legs: 95, feet: 115 }, addons: 3 });
+    expect(monsterPresentationOf(dragon)).toEqual({ race: 'venom', light: { level: 4, color: 208 } });
+    expect(monsterLookOf(dragon)).toEqual({ ...monsterOutfitOf(dragon), ...monsterPresentationOf(dragon) });
+  });
+
+  it('sem definição não dizem nada, e o monstro comum só traz as cores neutras', () => {
+    expect(monsterOutfitOf(undefined)).toEqual({});
+    expect(monsterPresentationOf(undefined)).toEqual({});
+    expect(monsterOutfitOf(monsterWith({}))).toEqual({ colors: { head: 0, body: 0, legs: 0, feet: 0 } });
+    expect(monsterPresentationOf(monsterWith({}))).toEqual({});
+  });
+});
 
 describe('monsterLookOf (#620)', () => {
   it('sem definição no catálogo, o monstro continua sem apresentação nenhuma', () => {

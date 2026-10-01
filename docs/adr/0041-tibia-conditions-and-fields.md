@@ -172,4 +172,75 @@ três escolhas merecem registro porque não são as que o plano do endgame supun
 (`rooted`, `feared`, `pacified`). É vocabulário autoral: a ponte do Lua
 (`luaMonsterTypeConditionImmunities`) não os nomeia, e nenhum monstro do bestiário os declara.
 
+## Emenda — 2026-09-30 (#826, ADR 0060 d.8): o campo tem dono
+
+O campo de tile desta decisão atingia todo participante sobre ele, e a parede (Magic Wall, Wild
+Growth) bloqueava toda criatura. Isso ficou diferente do Canary no que o no-pvp muda: o campo
+lançado por jogador, num mundo no-pvp, vira a variante que não fere jogador, e a parede vira a
+variante segura (`canary/src/creatures/combat/combat.cpp:1207-1218`, `2594-2640`;
+`condition.cpp:2015-2020`; `tile.cpp:864-876`). Como o Draconya é no-pvp em toda sessão, a
+correção vale já, inclusive para a hunt de party — onde o fire field de um membro queimava a
+própria party.
+
+`TileFieldState.owner` (`{ kind: 'character' | 'monster', id }`) registra quem lançou; sem ele o
+campo é de mapa e segue pegando todo mundo, e o snapshot de antes restaura assim. O campo de
+personagem — ou de invocação de personagem, que o Canary trata como o jogador — não fere
+personagem nem invocação de personagem (o lançador incluso); a parede de personagem segue
+barrando monstro, mas cede ao passo de qualquer personagem, que a remove. Fica de fora o crédito
+do dano do campo ao dono (a condição do campo segue com o id do campo como origem), que é o
+crédito do Canary do ADR 0060 (OW-28).
+
 Nenhum invariante muda de texto.
+
+## Emenda — 2026-09-30 (#621): a condição `outfit` — referência por conteúdo, fusão por prazo, ataque não agressivo
+
+A decisão 1 listou `outfit` entre os cinco tipos que entrariam no M44. A implementação (#621,
+M44-03) fixou o **como**, e cinco escolhas merecem registro porque não são óbvias:
+
+1. **A condição referencia CONTEÚDO, nunca arte (invariante 6).** O efeito `{ kind: 'outfit', look }`
+   carrega `look` como `{ monsterId }` (o outfit de um monstro, o `lookType`), `{ itemId }` (o objeto
+   de um item do catálogo, o `lookTypeEx` da Chameleon Rune) ou `{ objectKey }` (o objeto que um
+   monstro veste, o `outfitItem` do Lua). O `sim` não conhece id de arte; o hospedeiro resolve na
+   tabela de aparências (`monsters`/`items`/`looks`), e uma aparência sem linha na tabela é MUDA — a
+   condição e o prazo valem igual. `looks` é uma seção nova (`chave → appearanceId`, conferida
+   contra o inventário do pacote) porque só um dos seis itens do `outfitItem` do Canary está no
+   catálogo de caça, e `appearances.items` é conferida dos dois lados.
+2. **A fusão é a de `Condition::updateCondition`, medida pelo PRAZO.** Uma criatura tem no máximo um
+   outfit emprestado (chave reservada `outfit`); o segundo só entra se acabar DEPOIS do ativo
+   (`getEndTime() > now + novo.ticks` recusa) — `merge: 'strongest'` com a força igual a
+   `expiresAtMs`, e o schema exige `strongest` explícito: é o mecanismo da classe, não parâmetro da
+   fonte. A recusa não emite evento. (O #622 acrescentou depois `merge: 'longest'`, a MESMA regra de
+   prazo de `Condition::updateCondition` para as condições de controle; o `outfit` segue com
+   `strongest` medido pelo prazo — o resultado é idêntico, e migrá-lo para `longest` é limpeza de
+   vocabulário que não muda regra de caça, deixada fora desta emenda.)
+3. **O ataque `outfit` de monstro é uma condição NÃO agressiva, e por isso não é um golpe.**
+   `COMBAT_PARAM_AGGRESSIVE 0` + `COMBAT_NONE` faz o caminho ser `CombatNullFunc` → só
+   `CombatConditionFunc`: sem bloqueio, esquiva, crítico nem dano — o `sim` o executa antes do
+   pipeline de dano e o único sorteio além do `chance` do vencimento é o do **Cleanse**, o primeiro
+   bloco dessa mesma função (`combat.cpp:1039-1062`), que roda para QUALQUER condição de monstro
+   num jogador: com o charm atribuído ao monstro e uma condição limpável ativa ele rola, limpa
+   uma, dá os 11 s de imunidade e a aparência NÃO entra (`#cleanseBeforeCondition`, na mesma ordem
+   de sorteio do golpe) —, e, com área,
+   `Combat::CombatFunc` só exclui o lançador quando a ability é agressiva: a forma atinge TODOS os
+   personagens e monstros nela, o LANÇADOR inclusive. Sem área, o ataque vai no alvo (o flag `target`
+   do Lua só decide algo com área). A defesa é o próprio monstro.
+4. **A imunidade `outfit` entrou no vocabulário (quinze nomes, com os três de controle do #622) e segue o portão de #559**: só vale
+   quando o chamador é um combate e o alvo não é o próprio lançador (`caster == target` a pula) —
+   então o monstro imune ainda se disfarça, e a Creature Illusion/Chameleon do jogador (`addCondition`
+   direto no Lua) nunca é barrada.
+5. **As duas fontes do jogador têm o parâmetro na INTENÇÃO, e o servidor confere (invariante 4).**
+   Creature Illusion leva o monstro no `monsterId` da ação do slot (o mesmo campo da invocação,
+   conferido contra `Monster.illusionable` — a flag própria, não `summonable`); a Chameleon Rune leva
+   a instância de um item que o personagem carrega em `target: { instanceId }` (terceira forma de
+   `manualTargetSchema`). Sem parâmetro válido, `not-illusionable` ANTES de mana, gold ou cooldown.
+
+A apresentação segue o padrão do ADR 0031 (CMB-07): o `sim` emite `creature-look-changed` (quem
+vestiu o quê), o hospedeiro o resolve em `creature-update` (S2C 51, broadcast como `creature-health`;
+`object: true` separa o registro de objeto) e o mesmo `#lookFor` alimenta `creature-appear` e
+`session-state` — o estado mora na condição, nunca num campo de apresentação (invariante 3).
+
+**Fica de fora, por decisão:** a defesa `outfit` com área (o Feverish Citizen) — o schema de defesa
+não tem área, e atingir só o próprio monstro seria a metade da mecânica; as cores do outfit imitado
+(o `creature-update` de um outfit de monstro vai sem `colors`, até a #620 levá-las no protocolo); a
+Chameleon sobre item do chão, cadáver ou cenário (a mira é um item que o personagem carrega). Nenhuma
+é regra de caça — o outfit não entra em conta nenhuma. Nenhum invariante muda de texto.

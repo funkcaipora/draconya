@@ -162,6 +162,13 @@ const CreatureState = z.object({
   /** As falas periódicas (#620), sorteadas no cliente. Ausente é mudo. */
   voices: CreatureVoices.optional(),
   /**
+   * `true` quando `appearanceId` é de um OBJETO e não de um outfit (#621, M44-03): a criatura está
+   * sob a condição `outfit` de um `lookTypeEx` — a Chameleon Rune, o `outfitItem` de um monstro —
+   * e o cliente a desenha como o objeto que ela virou. **Opcional**, pela mesma razão de `colors`:
+   * um nó `game` anterior manda sem, e ausente é o outfit de sempre.
+   */
+  object: z.boolean().optional(),
+  /**
    * O `characterId` do MESTRE, só para a invocação do JOGADOR (#598, M38-01, ADR 0057 decisão
    * 4). **Opcional**, pela mesma razão de `colors`: um nó `game` anterior manda a criatura sem
    * isto, e um cliente que exigisse recusaria a mensagem inteira em silêncio. Ausente é "não é
@@ -242,6 +249,13 @@ const manualTargetSchema = z.union([
       x: z.number().int(), y: z.number().int(), z: z.number().int().optional(),
     }),
   }),
+  /**
+   * Um item que o PERSONAGEM carrega (#621, M44-03, Chameleon Rune): o "usar com" sobre um item
+   * da mochila, da bolsa ou do corpo. INTENÇÃO (invariante 4): só a instância; se ela existe, se
+   * é do personagem e qual aparência ela dá são do servidor. Só a runa `chameleon` o lê — para
+   * qualquer outra ação é ruído, ignorado como um `creatureId` numa magia de área.
+   */
+  z.object({ instanceId: z.string().min(1) }),
 ]);
 
 /**
@@ -264,6 +278,43 @@ const itemRefSchema = z.union([
  */
 export const FIGHT_MODES = ['attack', 'balanced', 'defense'] as const;
 export type FightModeName = (typeof FIGHT_MODES)[number];
+
+/**
+ * A zona do tile em que o personagem está (OW-11, #832, ADR 0060 d.8): o `ZoneType_t` do Canary,
+ * que `Tile::getZone` resolve pela precedência PZ > no-pvp > pvp > no-logout > normal
+ * (`canary/src/items/tile.hpp:188-199`). É o que o HUD precisa para o ícone de zona de
+ * proteção — a LISTA é fechada, como `DamageType`: um valor fora dela faria o cliente mostrar um
+ * ícone que não existe, e `decodeS2C` recusa a mensagem inteira em vez de deixar passar.
+ *
+ * `'pvp'` (a arena, `PVPZONE`) está no vocabulário por ser parte do `ZoneType_t`, mas o servidor
+ * NÃO o emite no primeiro corte: o mundo é `no-pvp` e o tile de arena é tratado como `'no-pvp'`
+ * (ADR 0060 d.8, divergência registrada).
+ *
+ * **Não diz se pode deslogar.** `NOLOGOUT` soma às demais flags (`canary/src/io/iomap.cpp:
+ * 165-177`), mas a precedência o esconde atrás de PZ e no-pvp — um tile de PZ com no-logout
+ * reporta `'protection'`. Quem responde "posso sair aqui?" é o `logout-refused`.
+ */
+export const ZONE_KINDS = ['normal', 'protection', 'no-pvp', 'pvp', 'no-logout'] as const;
+export type ZoneKind = (typeof ZONE_KINDS)[number];
+
+/**
+ * Por que o logout foi recusado (OW-11): o `canLogout` do Canary tem dois motivos
+ * (`canary/src/server/network/protocol/protocolgame.cpp:1151-1162`), e o cliente mostra um texto
+ * para cada. `'no-logout-tile'` é o `RETURNVALUE_YOUCANNOTLOGOUTHERE` (a flag NOLOGOUT do tile);
+ * `'in-fight'` é o `RETURNVALUE_YOUMAYNOTLOGOUTDURINGAFIGHT` (em luta, fora de PZ).
+ */
+export const LOGOUT_REFUSED_REASONS = ['no-logout-tile', 'in-fight'] as const;
+export type LogoutRefusedReason = (typeof LOGOUT_REFUSED_REASONS)[number];
+
+/**
+ * Por que o `select-target` foi recusado quando o motivo é de regra de mundo (OW-11): o portão
+ * de combate no-pvp (`canary/src/creatures/combat/combat.cpp:551-556`). `'player-protected'` é o
+ * `RETURNVALUE_YOUMAYNOTATTACKTHISPLAYER` (jogador, ou invocação de jogador, contra jogador num
+ * mundo `no-pvp`); `'protection-zone'` é o `RETURNVALUE_ACTIONNOTPERMITTEDINPROTECTIONZONE` (a PZ
+ * recusa combate para dentro e para fora, `combat.cpp:326-345, 398-400`).
+ */
+export const TARGET_CANCEL_REASONS = ['player-protected', 'protection-zone'] as const;
+export type TargetCancelReason = (typeof TARGET_CANCEL_REASONS)[number];
 
 export const C2S_SCHEMAS = {
   authenticate: z.object({ ticket: z.string().min(1), clientVersion: z.string() }),
@@ -1062,6 +1113,13 @@ export const S2C_SCHEMAS = {
       health: z.number().int().positive().optional(),
       experience: z.number().int().nonnegative().optional(),
       /**
+       * O Creature Illusion pode imitar este monstro (#621, `flags.illusionable` do Canary)? A
+       * tela de configurar a ação só oferece quem o servidor marcou — a recusa de verdade é
+       * sempre dele (invariante 4). Opcional SEM `default`, como `class`: ausente é `false`, e um
+       * nó `game` anterior manda sem.
+       */
+      illusionable: z.boolean().optional(),
+      /**
        * A ficha de Bestiário do Canary por monstro (#601, ADR 0053 d.1): estágio, estrelas,
        * ocorrência e pontos de Charm são DERIVADOS no cliente a partir dela e do contador de
        * `bestiary.counts` — nada aqui é calculado no servidor além do que o conteúdo já fixa na
@@ -1173,10 +1231,11 @@ export const S2C_SCHEMAS = {
         /** O grupo do Tibia (#155): `attack`, `healing`, `support`. `default`: nó anterior manda sem. */
         group: z.string().min(1).default('attack'),
         /**
-         * Pode mirar um amigo (#392, #393)? Opcional SEM `default`: um nó `game` anterior manda
-         * sem, e o cliente novo não pode recusar a mensagem — quem não veio é `self`.
+         * Pode mirar um amigo (#392, #393) ou um ITEM do inventário (#621, a Chameleon Rune)?
+         * Opcional SEM `default`: um nó `game` anterior manda sem, e o cliente novo não pode
+         * recusar a mensagem — quem não veio é `self`.
          */
-        targets: z.enum(['self', 'friend']).optional(),
+        targets: z.enum(['self', 'friend', 'item']).optional(),
         /**
          * A magia pede MIRA do jogador no disparo manual (#623: Find Person — o "nome" do Canary é
          * o personagem clicado), sem ser uma ação de aliado. Campo SEPARADO de `targets` de
@@ -1223,7 +1282,7 @@ export const S2C_SCHEMAS = {
          */
         vocationId: z.union([z.string().min(1), z.array(z.string().min(1)).min(2)]).nullable().optional(),
 /** Pode mirar um amigo (#392, #393)? Opcional SEM `default`, como em `spells[]`. */
-        targets: z.enum(['self', 'friend']).optional(),
+        targets: z.enum(['self', 'friend', 'item']).optional(),
         /** Os números de EXIBIÇÃO (#436, ADR 0033), como em `spells[]`. Opcionais SEM `default`. */
         groupCooldownMs: z.number().int().positive().optional(),
         description: z.string().min(1).optional(),
@@ -1529,6 +1588,23 @@ export const S2C_SCHEMAS = {
      */
     soul: z.number().int().nonnegative().default(0),
     soulMax: z.number().int().nonnegative().default(0),
+    /**
+     * A zona do tile do personagem e se ele está em luta (OW-11, #832, ADR 0060 d.8) — os dois
+     * ícones do HUD do mundo (PZ e espadas cruzadas, `PlayerIcon::Pigeon` e `PlayerIcon::Swords`
+     * do Canary, `canary/src/creatures/players/player.cpp:926-934` e
+     * `canary/src/creatures/combat/condition.cpp:590-593`).
+     * **Opcionais, SEM `default`**, ao contrário dos campos acima: ausente quer dizer "este nó
+     * não informa" (um nó `game` anterior, ou uma sessão que não tem zona, como toda hunt), e
+     * um `default` pintaria "normal, sem luta" como se o servidor tivesse dito — o HUD então
+     * esconderia um ícone que talvez devesse estar aceso. Sem `default`, a mensagem também sobrevive
+     * ida e volta idêntica ao que o servidor mandou.
+     *
+     * `inFight` é o `CONDITION_INFIGHT` (`IN_FIGHT_WINDOW_MS`, `sim/src/combat/in-fight.ts`), e é
+     * só apresentação: quem decide se o logout ou a entrada numa hunt passam é o servidor
+     * (invariante 4).
+     */
+    zone: z.enum(ZONE_KINDS).optional(),
+    inFight: z.boolean().optional(),
   }),
   /**
    * O estado de cada slot do conjunto ATIVO (AB-09, UC-BAR-003, RG-003). `remainingMs` é o
@@ -1626,6 +1702,13 @@ export const S2C_SCHEMAS = {
    */
   'target-cancel': z.object({
     seq: z.number().int().nonnegative().optional(),
+    /**
+     * O motivo, quando a recusa é de REGRA DE MUNDO (OW-11, #832, ADR 0060 d.8): o jogador não
+     * ataca jogador no mundo `no-pvp`, e a PZ não admite combate. **Opcional**: criatura
+     * desconhecida ou morta (o caso original) continua sem motivo, e um nó `game` anterior manda
+     * sem. O cliente usa isto só para escolher o texto — o `select-target` já foi recusado.
+     */
+    reason: z.enum(TARGET_CANCEL_REASONS).optional(),
   }),
   /**
    * O conteúdo do cadáver (#722, ADR 0048 d.4): o que ainda está lá depois do Quick Loot
@@ -1740,6 +1823,51 @@ export const S2C_SCHEMAS = {
       charges: z.number().int().positive(),
     })),
     activeInstanceId: z.string().min(1).nullable(),
+  }),
+  /**
+   * O logout do jogador foi recusado pelo mundo (OW-11, #832, ADR 0060 d.7). A resposta ao C2S
+   * `logout` quando `canLogout` diz não; nada mudou no personagem. `reason` tem os dois motivos
+   * do Canary — ver `LOGOUT_REFUSED_REASONS`.
+   */
+  'logout-refused': z.object({ reason: z.enum(LOGOUT_REFUSED_REASONS) }),
+  /**
+   * O mundo está cheio (OW-11, #832, ADR 0060 d.2b): a entrada vinda do repouso não coube.
+   *
+   * - `position`: o lugar na fila, de 1 em diante (`WaitingList::getClientSlot`, `canary/src/
+   *   server/network/protocol/protocolgame.cpp:1005-1008`);
+   * - `retryAfterMs`: quanto esperar antes de tentar de novo — uma DURAÇÃO, medida no instante em
+   *   que o servidor mandou, como `exit-pending.remainingMs`. O Canary manda segundos num byte
+   *   (`WaitingList::getTime`, 5 a 120 s); o Draconya manda milissegundos, como todo o resto;
+   * - `huntAvailable`: a hunt idle está ao alcance de quem não coube no mundo (ADR 0060 d.6b) —
+   *   o cliente oferece "entrar numa hunt" no lugar de só esperar. É `false` quando a hunt idle
+   *   também está fora (manutenção, drenagem).
+   *
+   * Quem volta de uma instância nunca recebe isto: já estava no mundo, e o teto vale só na entrada.
+   */
+  'world-full': z.object({
+    position: z.number().int().min(1),
+    retryAfterMs: z.number().int().nonnegative(),
+    huntAvailable: z.boolean(),
+  }),
+  /**
+   * A criatura `id` passou a ser desenhada com a aparência `appearanceId` (#621, M44-03 — ver o
+   * comentário do opcode). O servidor resolve a arte pela tabela de aparências: o `sim` só diz
+   * QUEM vestiu o quê (monstro, item ou chave de objeto), nunca um id (invariante 6).
+   *
+   * `object` separa os dois registros do pacote: ausente (ou `false`) é um OUTFIT — a folha de
+   * criatura, como em `creature-appear` (`lookType` do Canary) —; `true` é um OBJETO — a criatura
+   * virou uma coisa (`lookTypeEx`, a Chameleon Rune e o `outfitItem` de monstro), e o cliente a
+   * desenha como o objeto que é. `colors` e `addons` são as cores e os addons do outfit, como em
+   * `creature-appear` (#620): fazem parte do que a condição troca, então quem volta a vestir o
+   * próprio outfit os recebe de novo, e quem veste o de um monstro leva os do monstro. Ausentes, o
+   * cliente apaga os que tinha — nunca os mantém sobre a aparência nova.
+   */
+  'creature-update': z.object({
+    id: z.number().int(),
+    appearanceId: z.number().int().positive(),
+    object: z.boolean().optional(),
+    colors: OutfitColors.optional(),
+    addons: z.number().int().min(0).max(3).optional(),
   }),
   /**
    * O Hazard do PRÓPRIO personagem (M44-14, #632, ADR 0052 d.1): o registro CRU — o teto

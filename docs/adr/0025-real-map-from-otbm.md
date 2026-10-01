@@ -385,3 +385,46 @@ observável imediato é que porta, capim, stone pile, rope spot, ladder e alavan
 bloquear na grade estática — inclusive porta trancada, que não tinha como destrancar antes da
 #728 e ficaria impassável para sempre sob a regra antiga. `docs/product/scenery.md` traz os
 números medidos nos quatro mapas.
+
+## Emenda — 2026-09-30 (#830, OW-09): `TILE_FLAGS` viram a camada `zones` por andar
+
+A decisão 9 acima ("`TILE_FLAGS` (PZ, no-logout) são ignorados: a Cidade inteira já é PZ por
+construção") foi revertida pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) d.8: no mundo
+aberto a Cidade deixa de ser PZ por construção, e o servidor precisa saber, tile a tile, o que é
+PZ, no-pvp, no-logout e arena. É a base de `canLogout`, do portão de combate e dos serviços em PZ
+(OW-10, OW-27). Esta emenda registra o que a #830 entregou:
+
+- **A camada.** `floorSchema` ganha `zones`, opcional, na mesma forma de `speed` e `sight`: uma
+  string por linha da grade, um caractere por tile. A paleta é FIXA (`ZONE_PALETTE`,
+  `packages/content/src/map.ts`), não por mapa: `.` normal, `p` PZ, `n` no-pvp, `a` arena
+  (`PVPZONE`), `l` só no-logout, e `P`/`N`/`A` a zona mais no-logout. Em memória,
+  `Floor.zones: Uint8Array | null` guarda a soma dos bits do OTBM (`ZONE_FLAG`: PZ 1, no-pvp 4,
+  no-logout 8, arena 16 — `canary/src/io/io_definitions.hpp:73-76`). Ausente é `null`, tudo é
+  normal, e as hunts não mudam. `zoneFlagsAt(map, x, y, z)` é o acessor.
+- **A normalização é a do Canary, no importador.** PZ, no-pvp e arena são exclusivos entre si, e o
+  primeiro dessa ordem que o arquivo traz vence; no-logout soma por cima de qualquer um
+  (`canary/src/io/iomap.cpp:165-177`). A camada guarda os bits, não um tipo: a precedência de quem
+  CONSULTA — PZ, depois no-pvp, depois arena, depois no-logout, depois normal
+  (`canary/src/items/tile.hpp:188-199`) — é do `sim` (OW-10). O tile de casa é PZ mesmo sem a
+  flag no arquivo (`House::addTile`, `canary/src/map/house/house.cpp:26-28`); em Thais os 5.800
+  tiles de casa do recorte já trazem a flag, então isso não muda nada ali.
+- **Tile a tile, inclusive o bloqueado.** A parede e o degrau sem chão guardam a zona que o
+  arquivo trouxe, como o Canary: a camada de zona não é a de passo. O tile podado por
+  `--keep-from` também a guarda, e é irrelevante — está fora do mapa.
+- **Arena é no-pvp no primeiro corte** (ADR 0060 d.8, divergência registrada): o importador
+  guarda o bit real, `PVPZONE`, e quem decide tratá-lo como no-pvp é o portão de combate (OW-27).
+- **Só `thais.json` é regerado, e a geometria não muda.** O diff do arquivo é só acréscimo —
+  as linhas `zones` de quatro andares —, e `load.test.ts` prende a impressão digital da geometria
+  de antes (bloqueio, velocidade, visão, escadas, interativos). Os outros mapas continuam sem a
+  camada, e `pnpm map:import --check` só a confere onde o arquivo a tem.
+- **A camada independe do pacote de arte.** Ela vem só de `TILE_FLAGS` e de o tile existir, e isso
+  importa na prática: a geometria versionada de Thais foi gerada contra o pacote 15.33, e a
+  máquina que a regenera pode ter só o 13.32, que não tem o id de item 50227 (em
+  (32456, 32290, 7)): ele vira "desconhecido", andável, enquanto o arquivo versionado o tem como
+  parede. Regenerar tudo mudaria esse tile de bloqueio — por isso
+  `pnpm map:import --id thais --zones-only` acrescenta só a camada, direto do OTBM da `source`, sem
+  tocar em mais nada, e `--check` confere as zonas MESMO quando a geometria sai `absent` por falta
+  do pacote.
+- **Conteúdo muda, a versão global muda** (invariante 7). `thais.json` entra em `computeVersion`,
+  então toda hunt em voo no deploy é creditada e descartada pelo caminho de sempre (ADR 0010,
+  ADR 0018).
