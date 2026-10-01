@@ -288,6 +288,9 @@ export function characterFromTicket(
       // (`isCharmsState`); ausente, a sessão parte sem nenhum ponto/tier/atribuição — o mesmo
       // personagem novo que `bestiary` ausente já descreve.
       ...(initialCharacter.charms === undefined ? {} : { charms: initialCharacter.charms }),
+      // O Hazard (M44-14, #632, ADR 0052 d.5): o nível escolhido e o teto, validados na emissão e no
+      // consumo (`isHazardState`); ausente, toda zona vale o `minLevel`.
+      ...(initialCharacter.hazard === undefined ? {} : { hazard: initialCharacter.hazard }),
       // Os storages (#731, ADR 0050 d.6 T2): validados como o Bestiário; ausente, a sessão
       // parte sem storage nenhum setado — a mesma degradação de sempre.
       ...(initialCharacter.storages === undefined ? {} : { storages: initialCharacter.storages }),

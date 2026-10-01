@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
 import { CharacterRuntime, createHuntSession, Inventory, levelForXp } from '@draconya/sim';
-import type { CharmsState, InventoryState } from '@draconya/sim';
+import type { CharmsState, HazardState, InventoryState } from '@draconya/sim';
 import { NEUTRAL_RATES } from '@draconya/content';
 import type { Progression, Vocation } from '@draconya/content';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -110,7 +110,7 @@ const characterRow = async (
 ): Promise<{
   xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
   ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown;
-  charms: unknown; blessings: number;
+  charms: unknown; hazard: unknown; blessings: number;
 }> => {
   const [row] = await database.database.db
     .select({
@@ -124,6 +124,7 @@ const characterRow = async (
       supplyStock: characters.supplyStock,
       ammunitionStock: characters.ammunitionStock,
       charms: characters.charms,
+      hazard: characters.hazard,
       blessings: characters.blessings,
     })
     .from(characters)
@@ -131,7 +132,7 @@ const characterRow = async (
   return row as {
     xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
     ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown;
-    charms: unknown; blessings: number;
+    charms: unknown; hazard: unknown; blessings: number;
   };
 };
 
@@ -773,6 +774,28 @@ describe.runIf(ready)('a economia de Charms chega ao Postgres pelo extrato (M39-
     // O extrato SEM o campo (seq 3, uma sessão de Cidade que não mexeu em Charm) não apaga o
     // que o extrato anterior gravou.
     expect((await characterRow(database, characterId)).charms).toEqual(second);
+  });
+});
+
+describe.runIf(ready)('o Hazard chega ao Postgres pelo extrato (M44-14, #632, ADR 0052 d.1)', () => {
+  it('nasce nulo, a última escrita vence (inclusive para BAIXO), e o extrato sem o campo não toca na coluna', async () => {
+    // ABSOLUTO como `charms`: a escolha do nível desce e sobe por vontade do jogador, então fundir
+    // pelo maior ressuscitaria um nível que ele já tinha trocado.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    expect((await characterRow(database, characterId)).hazard).toBeNull();
+    const receipts = new ReceiptStore(redis);
+    const first: HazardState = { maxLevel: { gardens: 5 }, currentLevel: { gardens: 5 }, version: 1 };
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), hazard: first });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).hazard).toEqual(first);
+
+    const second: HazardState = { maxLevel: { gardens: 5 }, currentLevel: { gardens: 2 }, version: 1 };
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2, hazard: second });
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    // Desceu de 5 para 2, e o extrato SEM o campo (seq 3) não apaga o que o anterior gravou.
+    expect((await characterRow(database, characterId)).hazard).toEqual(second);
   });
 });
 

@@ -230,6 +230,15 @@ export const characters = pgTable(
     charms: jsonb('charms'),
 
     /**
+     * O Hazard (M44-14, #632, ADR 0052 d.1): o nível máximo desbloqueado e o escolhido de cada
+     * zona — `{ maxLevel: { zoneId: n }, currentLevel: { zoneId: n }, version }`. Nulável: `null`
+     * é quem nunca escolheu nem subiu nível nenhum. `jsonb` lido INTEIRO no ticket e escrito
+     * INTEIRO pela transação do ledger a partir do extrato — ÚLTIMA ESCRITA VENCE, como
+     * `charms`: a escolha desce e sobe por vontade do jogador, e fundir pelo maior a desfaria.
+     */
+    hazard: jsonb('hazard'),
+
+    /**
      * Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, em milissegundos — a
      * `CONDITION_REGENERATION` do Tibia. Drenado pelo TEMPO DE HUNT decorrido
      * (`packages/sim/src/food.ts`), não por job — não precisa de um `updatedAt` companheiro

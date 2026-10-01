@@ -22,8 +22,8 @@ import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
 import type {
-  Ammunition, Appearances, Blessing, BotConfigV2, Charm, Item, ItemSlot, Monster, RemovedBotSlot,
-  Skill, Vocation,
+  Ammunition, Appearances, Blessing, BotConfigV2, Charm, Hazard, Item, ItemSlot, Monster,
+  RemovedBotSlot, Skill, Vocation,
 } from '@draconya/content';
 import {
   blessingCost, containerRulesFor, DEFAULT_FIGHT_MODE, hasBlessing, PartyFullError, shareCostsOf,
@@ -32,7 +32,7 @@ import {
 import type {
   AmmoRefusal, CarriedItem, CharacterRuntime, CharmAssignRefusal, CharmBestiaryEntry,
   CharmRemoveRefusal, CharmUnlockRefusal, ConfigurePartyResult, ContainerRules, ExitStatus, FightMode,
-  HuntRuleset,
+  HazardSelectRefusal, HuntRuleset,
   InventoryRefusal, InventoryResult, InventoryState, ItemRef, PartyBagChanged, PartyEndVoteResult,
   PartySettingsPatch, Place, PromoteRefusal, SlotRefusal, SlotState, TakeLootRefusal,
   TileAppearanceChange, UseItemRefusal, UseOnMapRejection, UseSlotTarget, VocationRefusal,
@@ -162,6 +162,12 @@ export interface SessionHostOptions {
    * ponto de Charm é ganho, e nenhum major é atribuível (a mesma degradação honesta de acima).
    */
   readonly charmBestiaryEntries?: ReadonlyMap<string, CharmBestiaryEntry>;
+  /**
+   * O Hazard (M44-14, #632, ADR 0052 d.5): os multiplicadores e as zonas, para `set-hazard-level`
+   * conferir a zona e a faixa. Ausente: a escolha é recusada, e a recusa é honesta — um host sem
+   * conteúdo não sabe o que é uma zona de hazard.
+   */
+  readonly hazard?: Hazard;
   /**
    * As sete bênçãos PvE (#570, ADR 0052), para `buy-blessing`. Ausente: a compra é recusada,
    * e a recusa é honesta — um host sem conteúdo não sabe o que é uma bênção.
@@ -295,6 +301,14 @@ const CHARM_ASSIGN_REFUSAL: Readonly<Record<CharmAssignRefusal, string>> = {
 const CHARM_REMOVE_REFUSAL: Readonly<Record<CharmRemoveRefusal, string>> = {
   'unknown-charm': 'Esse Charm não existe.',
   'not-assigned': 'Esse Charm não está atribuído a nenhuma criatura.',
+};
+
+/** A recusa de `set-hazard-level` (M44-14, #632, ADR 0052 d.5), em palavras. */
+const HAZARD_REFUSAL: Readonly<Record<HazardSelectRefusal, string>> = {
+  'unknown-zone': 'Essa zona não tem nível de hazard.',
+  'below-minimum': 'Esse nível de hazard é menor que o mínimo da zona.',
+  'above-maximum': 'Você ainda não desbloqueou esse nível de hazard.',
+  'invalid-level': 'Esse nível de hazard não é válido.',
 };
 
 /** A recusa de `open-corpse`/`take-loot` (#722, ADR 0048 d.4), em palavras — FUN-73. */
@@ -943,6 +957,13 @@ interface HostedSession {
    * únicas mudanças, e as duas precisam chegar a quem está olhando.
    */
   readonly sentBlessings: Map<string, number>;
+  /**
+   * A última REVISÃO do registro de Hazard ENTREGUE a quem olha cada personagem (#632), por
+   * `characterId` — `HazardProgress.revision`, um inteiro, para o ciclo não serializar o registro.
+   * A escolha (Cidade) já manda a mensagem na hora; isto cobre a SUBIDA de nível que a sessão da
+   * hunt faz sozinha quando o chefe da zona morre.
+   */
+  readonly sentHazard: Map<string, number>;
   /**
    * O último ESTADO de cada interativo ENTREGUE aos viewers da sessão (#734, ADR 0050 d.6 T3),
    * por `interactableId`. Cenário é COMPARTILHADO (DT-01 do #729) — uma entrada por sessão, não
@@ -1643,6 +1664,11 @@ export class SessionHost {
         // mitigação que ela liga são do `sim`, na sessão dona (invariante 9) — Cidade e hunt, como
         // `select-ammo` (#550, M30-03).
         this.#requestSetFightMode(viewer, message.mode);
+        return;
+      case 'set-hazard-level':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL zona e QUAL nível; a faixa e o teto
+        // desbloqueado são daqui — serviço de Cidade, dentro da sessão dona (#632, ADR 0052 d.5).
+        this.#requestSetHazardLevel(viewer, message.zoneId, message.level);
         return;
       case 'buy-blessing':
         // INTENÇÃO (invariante 4): o cliente diz QUAL bênção; preço por level, saldo e "já tem
@@ -2532,6 +2558,54 @@ export class SessionHost {
   }
 
   /**
+   * O registro de Hazard (M44-14, #632), na forma que `hazard` (S2C) manda — o teto e o nível
+   * escolhido de cada zona, crus, como `charms` manda o registro dos Charms.
+   */
+  #hazardMessageFor(character: CharacterRuntime): S2CMessage {
+    const { maxLevel, currentLevel } = character.hazard.getState();
+    return { type: 'hazard', maxLevel, currentLevel };
+  }
+
+  /**
+   * Escolher o nível de Hazard de uma zona (M44-14, #632, ADR 0052 d.2/d.5). INTENÇÃO: o cliente
+   * diz QUAL zona e QUAL nível; a zona, o piso e o teto que o personagem desbloqueou são do
+   * servidor (invariante 4), dentro da sessão dona (invariante 9). **Só na Cidade**: o nível de
+   * uma hunt em curso é FIXO desde a entrada — como a versão de conteúdo (invariante 7) —, e
+   * aceitá-lo lá mudaria o dano do monstro no meio da sessão. No Canary quem muda o nível é o NPC
+   * fora da zona (`gnomadness.lua`); aqui o equivalente é a Cidade, sem rolagem (ADR 0052 d.4).
+   * O sucesso é `hazard` reenviado; a recusa, `system-message`.
+   */
+  #requestSetHazardLevel(viewer: Viewer, zoneId: string, level: number): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    if (hosted.session.ruleset.shared !== true) {
+      viewer.send({
+        type: 'system-message', level: 'warning',
+        text: 'O nível de hazard só muda na Cidade, antes de entrar na hunt.',
+      });
+      return;
+    }
+    const result = character.hazard.select(zoneId, this.#options.hazard?.zones[zoneId], level);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: HAZARD_REFUSAL[result.reason] });
+      return;
+    }
+    this.#markDirty(character.id);
+    hosted.sentHazard.set(character.id, character.hazard.revision);
+    this.#sendToViewersOf(hosted, character.id, this.#hazardMessageFor(character));
+    // DURÁVEL JÁ, e não só no `release`: o ticket de uma party (#195) é emitido pela `api` a partir
+    // da LINHA do banco, e o nível que o membro acabou de escolher na praça só chega lá pelo extrato
+    // — que a `api` liquida antes de emitir (ADR 0028 d.5). Sem este envio o membro entraria na
+    // hunt de hazard com o nível de ANTES, e o "menor da party" seria o de uma escolha que o
+    // jogador já tinha trocado. Um extrato de estado por escolha, idempotente pelo `(session_id,
+    // seq)` — a alternativa que o ADR 0052 deixou registrada para quando a perda incomodasse.
+    void this.#saveDurableReceipt(character.id, hosted, 'manual-exit').catch((error: unknown) => {
+      this.#logger.error({ err: error, characterId: character.id }, 'Failed to save the hazard choice');
+    });
+  }
+
+  /**
    * Comprar UMA bênção (#570, ADR 0052 decisão 2). Serviço de CIDADE, nunca hunt — não existe
    * onde comprar bênção fora do shard, e a `blessing.lua` do Canary trava o santuário em PZ
    * pela mesma razão. INTENÇÃO: o cliente diz QUAL bênção; preço por level
@@ -2979,6 +3053,7 @@ export class SessionHost {
       // ver o marco chegar sem reconectar.
       this.#presentBestiary(hosted);
       this.#presentBlessings(hosted);
+      this.#presentHazard(hosted);
       // E o cenário, se algo mudou de estado PASSIVAMENTE (#734, ADR 0050 d.6 T3) — o walker
       // abrindo uma porta sozinho, uma placa de pressão, um `TILE_REVERT`. `useOnMap` já manda
       // o próprio `tile-update` na hora (`#requestUseOnMap`); isto cobre o resto.
@@ -3563,6 +3638,23 @@ export class SessionHost {
   }
 
   /**
+   * O Hazard do personagem, se a hunt o mudou (#632): o teto sobe quando o chefe da zona morre no
+   * nível máximo, e a tela precisa ver sem reconectar. Só a hunt muda o registro por conta própria
+   * — a escolha da Cidade manda a mensagem na hora —, e a comparação é um inteiro (`revision`),
+   * nunca o registro serializado. Sem visualizador não se compara nada (invariante 3).
+   */
+  #presentHazard(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0 || hosted.session.ruleset.type !== 'hunt') return;
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      const revision = character.hazard.revision;
+      if (hosted.sentHazard.get(character.id) === revision) continue;
+      hosted.sentHazard.set(character.id, revision);
+      this.#sendToViewersOf(hosted, character.id, this.#hazardMessageFor(character));
+    }
+  }
+
+  /**
    * O estado dos slots do conjunto ativo, para quem olha CADA personagem (AB-09, DT-06).
    *
    * O gatilho é o par `(state, reason)`, nunca o `remainingMs`: ele decresce sempre, e compará-lo
@@ -3650,6 +3742,12 @@ export class SessionHost {
     // E a economia de Charms (M39-02, #602), pela mesma razão do Bestiário: sem isto, quem
     // reconecta veria os Charms zerados até a próxima intenção aceita.
     if (participant !== undefined) viewer.send(this.#charmsMessageFor(participant));
+    // E o Hazard (M44-14, #632), pela mesma razão: o seletor de nível da Cidade precisa do teto
+    // que o personagem já desbloqueou, e quem reconecta não espera a próxima escolha para vê-lo.
+    if (participant !== undefined) {
+      hosted.sentHazard.set(characterId, participant.hazard.revision);
+      viewer.send(this.#hazardMessageFor(participant));
+    }
     // E o estado dos slots (AB-09): a barra do conjunto ativo precisa dele ao montar, e a
     // Cidade não tem ciclo para o mandar depois. Ruleset sem slots (a Cidade) não manda nada.
     const slotStates = participant === undefined
@@ -4248,6 +4346,7 @@ export class SessionHost {
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
       sentBlessings: new Map(),
+      sentHazard: new Map(),
       sentTileOverrides: new Map(),
       sentParty: null,
       lastPartyBag: null,
@@ -4533,6 +4632,9 @@ export class SessionHost {
       // E a economia de Charms (M39-02, #602, ADR 0052 d.1): ABSOLUTA como `ammo` — sem ela
       // aqui, um `charm-unlock`/`charm-assign` aceito na Cidade sumiria a cada logout.
       ...(owner === undefined ? {} : { charms: owner.charms.getState() }),
+      // E o Hazard (M44-14, #632, ADR 0052 d.1): o nível escolhido e o teto, ABSOLUTOS como os
+      // Charms. Só quando há o que guardar — quem nunca tocou no hazard não escreve a coluna.
+      ...(owner === undefined || owner.hazard.isEmpty ? {} : { hazard: owner.hazard.getState() }),
       // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
       // login se ficasse só na sessão.
       ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
@@ -4641,6 +4743,9 @@ export class SessionHost {
       // equipamento — sem isto, um `charm-unlock`/`charm-assign`/`charm-remove` feito na praça
       // sumiria no logout, porque a Cidade não gera `Receipt` de progresso (ADR 0023).
       charms: owner.charms.getState(),
+      // O Hazard (#632): a escolha do nível acontece na Cidade, e a Cidade não gera `Receipt` de
+      // progresso — sem isto ela sumiria no logout, como a de um Charm.
+      ...(owner.hazard.isEmpty ? {} : { hazard: owner.hazard.getState() }),
       // O estoque de supply/munição (#792, ADR 0044 d.2): conjurar na Cidade credita
       // `supplyStock`/`ammunitionStock` do mesmo jeito que o loot da hunt credita — ABSOLUTO,
       // como `ammo` (`receipts.ts`). Sem isto, a carga conjurada na praça sumia no logout: o
@@ -5059,6 +5164,7 @@ export class SessionHost {
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
       sentBlessings: new Map(),
+      sentHazard: new Map(),
       sentTileOverrides: new Map(),
       sentParty: null,
       lastPartyBag: null,

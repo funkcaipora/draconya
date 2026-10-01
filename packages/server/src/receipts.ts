@@ -17,9 +17,9 @@
 // índice troca isso por um `SMEMBERS` que quase sempre volta vazio.
 
 import type { ChainableCommander, Redis } from 'ioredis';
-import { isFightMode } from '@draconya/sim';
+import { isFightMode, isHazardState } from '@draconya/sim';
 import type {
-  Aggregates, BestiaryState, CharacterStorageMap, CharmsState, EndReason, FightMode,
+  Aggregates, BestiaryState, CharacterStorageMap, CharmsState, EndReason, FightMode, HazardState,
   ItemInstanceOverlay, NotableEvent, SkillsState,
 } from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
@@ -72,6 +72,12 @@ export interface SessionReceipt {
    * estado final da sessão dona.
    */
   readonly charms?: CharmsState;
+  /**
+   * O Hazard (M44-14, #632, ADR 0052 d.1): o teto desbloqueado e o nível escolhido de cada zona.
+   * ABSOLUTO e ÚLTIMA-ESCRITA-VENCE, como `charms` — a escolha desce e sobe por vontade do
+   * jogador, e fundir pelo maior a desfaria. Ausente é quem nunca tocou no hazard.
+   */
+  readonly hazard?: HazardState;
   /**
    * A munição escolhida por família (#152): `{ arrow: 'sniper-arrow' }`. ABSOLUTA e
    * última-escrita-vence: é preferência do jogador, não progresso — um extrato antigo fora de
@@ -373,6 +379,8 @@ function parseReceipt(raw: string): SessionReceipt | null {
     ...(typeof value['bestiary'] === 'object' && value['bestiary'] !== null
       ? { bestiary: value['bestiary'] as BestiaryState }
       : {}),
+    // O Hazard (#632): lista de PERMISSÃO, pela razão das skills — e só a FORMA, como os Charms.
+    ...(isHazardState(value['hazard']) ? { hazard: value['hazard'] } : {}),
     // A economia de Charms (M39-02, #602): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['charms'] === 'object' && value['charms'] !== null
       ? { charms: value['charms'] as CharmsState }

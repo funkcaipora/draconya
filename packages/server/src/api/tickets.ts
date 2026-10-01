@@ -3,8 +3,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { OutfitColors } from '@draconya/protocol';
-import { isFightMode, readItemOverlay } from '@draconya/sim';
-import type { BestiaryState, CharmsState } from '@draconya/sim';
+import { isFightMode, isHazardState, readItemOverlay } from '@draconya/sim';
+import type { BestiaryState, CharmsState, HazardState } from '@draconya/sim';
 import { isAmmoSelection, isBestiaryState, isCharmsState, isStockMap } from '../tickets.js';
 import type { InitialCharacter, IssueFailure, TicketService } from '../tickets.js';
 import type { CharacterRecord, GameRepository } from '../db/repository.js';
@@ -237,6 +237,8 @@ export function initialCharacterOf(
     ...(isStockMap(character.ammunitionStock) ? { ammunitionStock: character.ammunitionStock } : {}),
     // E a economia de Charms (M39-02, #602), pela mesma régua do Bestiário.
     ...charmsOf(character.charms),
+    // E o Hazard (M44-14, #632): o nível que ele escolheu na Cidade entra na hunt fixado.
+    ...hazardOf(character.hazard),
     // E os storages (#731, ADR 0050 d.6 T2): uma linha por chave, não uma coluna — a montagem é
     // a mesma ideia de `inventoryOf`, reduzindo as linhas do banco a um mapa.
     ...storagesOf(storages),
@@ -297,6 +299,11 @@ function bestiaryOf(stored: unknown): { bestiary?: BestiaryState } {
 /** A economia de Charms (M39-02, #602), pela mesma régua e razão de `bestiaryOf`. */
 function charmsOf(stored: unknown): { charms?: CharmsState } {
   return isCharmsState(stored) ? { charms: stored } : {};
+}
+
+/** O Hazard (M44-14, #632), pela mesma régua e razão de `charmsOf`. */
+function hazardOf(stored: unknown): { hazard?: HazardState } {
+  return isHazardState(stored) ? { hazard: stored } : {};
 }
 
 /**

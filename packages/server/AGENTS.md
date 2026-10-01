@@ -862,3 +862,14 @@ padrão de 16 (0–15) faria `SELECT 16` cair no banco 0 em silêncio.
 `DATABASE_TEST_URL` aponta para Postgres de teste, com um schema exclusivo por suíte. O CI
 fornece os dois. Ver ADR 0017 para a ordem Postgres → Redis e separação entre sessão HTTP,
 `state` e ticket. Nenhum vínculo de conta é decidido somente por e-mail.
+- **O Hazard (#632) segue o padrão dos Charms e tem UMA diferença: a escolha do nível na Cidade grava
+  o extrato de estado NA HORA.** `set-hazard-level` só é aceita na sessão de Cidade (`shared`) e na
+  hunt é recusada — o nível é fixo na entrada. O registro `characters.hazard` (migração `0023`) é
+  `jsonb`, ABSOLUTO e última-escrita-vence (a escolha desce e sobe — fundir pelo maior a desfaria),
+  lido no ticket (`isHazardState`, torto vira AUSENTE) e escrito pelo ledger. A diferença: o ticket
+  de uma party (#195) é emitido pela `api` a partir da LINHA do banco, então um nível que só saísse
+  no `release` não chegaria ao ticket do membro; por isso `#requestSetHazardLevel` chama
+  `#saveDurableReceipt` logo depois da escolha (ADR 0052, emenda 2026-09-30). `#presentHazard`
+  reenvia `hazard` quando a hunt sobe o teto (compara `HazardProgress.revision`, um inteiro). Um
+  serviço de Cidade novo que a party leia pelo ticket precisa da mesma coisa.
+

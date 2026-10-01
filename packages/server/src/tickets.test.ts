@@ -158,6 +158,41 @@ describe.runIf(available)('session ticket', () => {
     }
   });
 
+  it('carries the Hazard registry, and drops one it cannot trust (M44-14, #632)', async () => {
+    // O nível escolhido na Cidade entra na sessão pelo ticket (ADR 0052 d.5) — o de cada membro de
+    // uma party, que começa por tickets (#195). Torto vira AUSENTE, nunca ticket recusado: a linha
+    // é `jsonb` sem CHECK, e um registro corrompido não pode trancar ninguém fora do jogo.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+
+    const hazard = { maxLevel: { gardens: 6 }, currentLevel: { gardens: 4 }, version: 1 };
+    const good = await tickets.issue('a1', 'p1', { level: 1, xp: 0, hazard });
+    if (!good.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(good.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+      initialCharacter: { level: 1, xp: 0, hazard },
+    });
+
+    for (const bad of [
+      { maxLevel: { gardens: 0 }, currentLevel: {}, version: 1 },
+      { maxLevel: { gardens: 1.5 }, currentLevel: {}, version: 1 },
+      { maxLevel: {}, currentLevel: { '': 2 }, version: 1 },
+      { maxLevel: {}, currentLevel: {} },
+      [3, 4],
+      'seis',
+      null,
+    ]) {
+      const issued = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, hazard: bad } as unknown as InitialCharacter,
+      );
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1'), JSON.stringify(bad)).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0 },
+      });
+    }
+  });
+
   it('expires in seconds', async () => {
     const { directory, tickets } = build({ ttlMs: SHORT_MS });
     await directory.heartbeat('n1', NODE);

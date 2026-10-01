@@ -224,6 +224,8 @@ async function main(): Promise<void> {
             ]),
           ),
         }),
+      // O Hazard (M44-14, #632, ADR 0052 d.5): o `set-hazard-level` confere a zona e a faixa daqui.
+      ...(content.hazard === undefined ? {} : { hazard: content.hazard }),
       // As sete bênçãos PvE (#570, ADR 0052): o `buy-blessing` compra daqui, com o preço por
       // level em `progression.blessingPricing`.
       blessingCatalog: content.blessings,
