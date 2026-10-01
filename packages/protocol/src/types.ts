@@ -1286,6 +1286,19 @@ export const S2C_SCHEMAS = {
         name: z.string().min(1),
         kind: z.enum(['attacks', 'mana']),
       })),
+      /**
+       * TODA skill que o Treino toca — as do livro (na ordem dele) e as que só uma exercise weapon
+       * treina (o `shielding` do exercise shield) —, com o nome do conteúdo e o tipo do ganho
+       * (`mana` quando a skill sobe por mana gasta, o `gain.on === 'spell-cast'` que o golpe do
+       * servidor lê; `attacks` quando sobe por tries). O cliente lê o nome, o rendimento e a ordem da
+       * loja daqui, e não de `offlineSkills`, que é só o livro: uma exercise weapon cuja skill o livro
+       * não oferece apareceria com o id cru.
+       */
+      skills: z.array(z.object({
+        skillId: z.string().min(1),
+        name: z.string().min(1),
+        kind: z.enum(['attacks', 'mana']),
+      })),
     }).optional(),
   }),
   'creature-health': z.object({ id: z.number().int(), health: z.number(), maxHealth: z.number() }),

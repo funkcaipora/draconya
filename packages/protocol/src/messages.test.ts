@@ -1881,7 +1881,13 @@ describe('Treino: enter-training, set-offline-training-skill, buy-item, training
       bankCapMs: 43_200_000, graceMs: 600_000,
       spendCapMs: { free: 21_600_000, premium: 43_200_000 },
       offlineSkills: [{ skillId: 'sword', name: 'Espada', kind: 'attacks' }],
+      // Toda skill que o Treino toca — inclusive a que só uma exercise weapon treina (o exercise shield).
+      skills: [
+        { skillId: 'sword', name: 'Espada', kind: 'attacks' },
+        { skillId: 'shielding', name: 'Escudo', kind: 'attacks' },
+      ],
     });
     expect(rules.offlineSkills[0]?.kind).toBe('attacks');
+    expect(rules.skills.map((entry) => entry.skillId)).toEqual(['sword', 'shielding']);
   });
 });
