@@ -2853,6 +2853,9 @@ export class HuntRuleset implements Ruleset {
     // Instala o observer e agenda o vencimento do que já está vestido (ADR 0032 d.8): a
     // entrada fresca não passa por `equip`, e o anel que já vinha do ticket precisa vencer.
     this.#armEquipment(session, character);
+    // As condições que o personagem TRAZ de outra sessão (#812): `Session.enter` já as traduziu
+    // para o relógio desta, mas o vencimento e o próximo tique moravam na fila da anterior.
+    this.#armConditions(session, character);
     // O primeiro entra NO tile inicial da rota; o segundo em diante, no livre mais próximo —
     // tile é exclusivo, e o `rejoinNearest` do primeiro passo o põe na rota (#203).
     const at = runner.walker.current;
@@ -2945,8 +2948,11 @@ export class HuntRuleset implements Ruleset {
     // morre aqui, o restante não.
     this.#parkEquipment(session, character);
     character.inventory.setEquipmentObserver(null);
-    // As condições dele saem com ele (CMB-07): o vencimento de quem já saiu não fica órfão.
-    this.#cancelConditions(session, character);
+    // Os EVENTOS das condições dele saem da fila (CMB-07): o vencimento de quem já saiu não fica
+    // órfão. A condição em si FICA no personagem (#812): ele a leva para a próxima sessão, que a
+    // traduz para o relógio dela e reagenda — a haste de 30 s não some por uma ida à Cidade, e o
+    // veneno também não. Quem morre é outro caso (`#onCharacterDied`): morto não tem condição.
+    this.#cancelConditionEvents(session, character);
     // As invocações dele somem JUNTO (#598, M38-01, ADR 0057 decisão 3 — "some ao sair da
     // hunt"): mesmo `#removeSummon` que o mestre MONSTRO já usa quando morre (#546) — sem
     // golpe, sem cadáver, sem abate; nunca pagou nada enquanto viva. `filter` ANTES de remover
@@ -6592,17 +6598,53 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * Cancela os eventos das condições de um alvo (CMB-07). Chamado quando ele morre ou sai: sem
-   * isto, o vencimento de uma condição de quem não existe mais ficaria na fila até vencer, e o
-   * despacho encontraria o vazio — o órfão que o critério da issue proíbe.
+   * Cancela os eventos das condições de um alvo E as remove (CMB-07). Chamado quando ele morre:
+   * sem isto, o vencimento de uma condição de quem não existe mais ficaria na fila até vencer, e o
+   * despacho encontraria o vazio — o órfão que o critério da issue proíbe. Quem apenas SAI da
+   * sessão não passa por aqui: `#cancelConditionEvents` tira os eventos e deixa a condição.
    */
   #cancelConditions(session: Session, target: ConditionTarget): void {
+    this.#cancelConditionEvents(session, target);
+    for (const condition of target.conditions.getState()) target.conditions.remove(condition.key);
+  }
+
+  /**
+   * Tira da fila desta sessão o vencimento e o tique de toda condição do alvo, SEM remover a
+   * condição (#812): é o que quem sai (`onLeave`) faz, porque a condição segue com o personagem.
+   */
+  #cancelConditionEvents(session: Session, target: ConditionTarget): void {
     const id = this.#subjectOf(target);
     for (const condition of target.conditions.getState()) {
       const subject = conditionSubject(id, condition.key);
       session.cancelEvent(CONDITION_EXPIRE, subject);
       session.cancelEvent(CONDITION_TICK, subject);
-      target.conditions.remove(condition.key);
+    }
+  }
+
+  /**
+   * Agenda o vencimento e o próximo tique das condições que o personagem entra TRAZENDO de outra
+   * sessão (#812). `Session.enter` já traduziu `expiresAtMs`/`nextTickAtMs` para o relógio desta
+   * (`CharacterRuntime.moveToClock`), e é daí que sai o prazo que ainda falta. Sem isto uma haste
+   * herdada nunca venceria e um veneno herdado nunca tiquetaria: os dois eventos moravam na fila da
+   * sessão anterior.
+   *
+   * Cancela antes de agendar: o personagem que volta à MESMA instância (sai e entra de novo) não
+   * pode ficar com dois vencimentos. `Math.max(0, …)` cobre o tique que caía no instante da saída e
+   * ainda não tinha rodado — vence agora, como se a fila tivesse seguido.
+   */
+  #armConditions(session: Session, character: CharacterRuntime): void {
+    for (const condition of character.conditions.getState()) {
+      const subject = conditionSubject(character.id, condition.key);
+      session.cancelEvent(CONDITION_EXPIRE, subject);
+      session.cancelEvent(CONDITION_TICK, subject);
+      session.scheduleIn(CONDITION_EXPIRE, Math.max(0, condition.expiresAtMs - session.nowMs), {
+        priority: EXPIRE_PRIORITY, subject,
+      });
+      if (condition.nextTickAtMs !== undefined) {
+        session.scheduleIn(CONDITION_TICK, Math.max(0, condition.nextTickAtMs - session.nowMs), {
+          priority: TICK_PRIORITY, subject,
+        });
+      }
     }
   }
 

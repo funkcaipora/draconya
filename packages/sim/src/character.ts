@@ -198,7 +198,10 @@ export interface CharacterState {
   /**
    * Haste, postura, magic shield e cura ao longo do tempo (#155), com vencimento LÓGICO. O
    * evento que as faz vencer está na fila da sessão, que também vai no snapshot. Ausente é
-   * nenhuma — sem bump de `SNAPSHOT_FORMAT_VERSION`.
+   * nenhuma — sem bump de `SNAPSHOT_FORMAT_VERSION`. O `expiresAtMs` é do relógio da sessão que o
+   * gravou: na transição `Session.enter` o traduz para o da nova (`moveToClock`, #812) mantendo o
+   * prazo que faltava, e o ruleset que entra reagenda o vencimento; o restore de snapshot não
+   * traduz nada.
    */
   readonly conditions?: readonly ConditionState[];
   /**
@@ -279,7 +282,7 @@ export interface CharacterState {
    * vence`. Só o ruleset da hunt escreve (invariante 9), e só sob `combat-v4`. Ausente é "nenhuma
    * imunidade" — sem bump de `SNAPSHOT_FORMAT_VERSION`, como `attackLockedUntil`. Precisa viajar no
    * snapshot: uma hunt retomada no meio dos 11 s que voltasse sem ela deixaria uma condição que a
-   * sessão original recusaria entrar.
+   * sessão original recusaria entrar. Prazo, como `conditions`: a transição o traduz (#812).
    */
   readonly cleanseImmunity?: Readonly<Record<string, number>>;
   /**
@@ -378,6 +381,15 @@ export interface VocationChoiceOptions {
    * é a arma legada da #154 — `weapon` no argumento.
    */
   readonly kitItems?: ReadonlyArray<{ readonly item: Item }>;
+}
+
+/**
+ * O relógio de uma sessão como o personagem o enxerga (#812): só o instante lógico de agora.
+ * `Session` o implementa — a interface existe para `character.ts` não importar `session.ts`, que
+ * já o importa.
+ */
+export interface SessionClock {
+  readonly nowMs: number;
 }
 
 export class CharacterRuntime {
@@ -480,6 +492,13 @@ export class CharacterRuntime {
    * `Session.enter` zera; `null` é "nunca bateu nesta sessão".
    */
   lastAttackAtMs: number | null;
+  /**
+   * De QUAL relógio de sessão os instantes deste personagem (`until`, `expiresAtMs`, …) são (#812) —
+   * e, quando a sessão já o tirou, o instante exato da saída. TRANSIENTE: não vai no snapshot nem
+   * em `getState`, porque descreve por onde o objeto andou e não o que ele é; uma sessão restaurada
+   * o religa por `bindClock`. `null` é o personagem que nunca entrou numa sessão (o do ticket).
+   */
+  #clockLink: { readonly clock: SessionClock; departedAtMs: number | null } | null = null;
 
   constructor(state: CharacterState) {
     this.id = state.id;
@@ -566,39 +585,103 @@ export class CharacterRuntime {
   }
 
   /**
-   * Esquece tudo o que o personagem guarda como INSTANTE do relógio lógico da sessão anterior
-   * (#812). Só `Session.enter` chama, depois de o `onEnter` do ruleset aceitar a entrada.
+   * Liga o personagem ao relógio da sessão restaurada de um snapshot (#812), SEM traduzir nada: o
+   * relógio é o mesmo que gravou os instantes, e o restore não passa por `enter`. Só
+   * `Session.fromSnapshot` chama. Sem isto, a transição seguinte não saberia de onde o personagem
+   * vem e levaria os instantes crus para o relógio novo.
+   */
+  bindClock(clock: SessionClock): void {
+    this.#clockLink = { clock, departedAtMs: null };
+  }
+
+  /**
+   * A sessão tirou o personagem (`Session.leave`/`end`): guarda o instante EXATO da saída (#812).
+   * Só vale se a sessão ainda for a dona do relógio dele — a transição do servidor constrói o
+   * destino ANTES de encerrar a origem (`#runTransition`), então quando a origem sai o personagem
+   * já está no relógio da nova, e a saída da antiga não pode mexer nisso.
    *
-   * O relógio de uma sessão nasce em zero (ADR 0020), mas o `CharacterRuntime` atravessa
-   * Cidade → hunt, hunt → hunt e a saída da party como o MESMO objeto. Um instante gravado por
-   * uma sessão e lido pela seguinte é lido no relógio errado: um carimbo de 57 700 ms vira
-   * "no futuro" numa sessão que está em 1 000 ms — e o resultado do combate passa a depender
-   * de por onde o objeto andou, e não do estado e da semente (invariante 3). Entre uma sessão e
-   * a outra o tempo real passa sem relógio nenhum (a Cidade não simula, ADR 0023), então "tudo
-   * vencido, nada em curso" é o único estado de entrada coerente — o mesmo que um personagem
-   * recém-criado a partir do ticket já tem.
+   * O instante tem de ser gravado AQUI, e não lido depois: a sessão que o tirou pode continuar
+   * andando (a party) ou, ao acabar no meio de um evento, ainda empurra o relógio até o alvo do
+   * `advanceBy` — e o servidor só constrói o destino no ciclo seguinte. Ler o relógio de origem
+   * então devolveria um restante que depende da frequência do hospedeiro (invariante 2).
+   */
+  markDeparture(clock: SessionClock): void {
+    const link = this.#clockLink;
+    if (link !== null && link.clock === clock) link.departedAtMs = clock.nowMs;
+  }
+
+  /**
+   * Põe o personagem no relógio da sessão que ele ENTRA e devolve como desfazer (#812). Só
+   * `Session.enter` chama, ANTES do `onEnter` — o ruleset precisa enxergar os instantes já no
+   * relógio dele (a hunt reagenda o vencimento das condições que o personagem traz).
    *
-   * **Toda grandeza nova guardada como instante do relógio da sessão entra aqui**, e o que força
-   * isso é a tabela `IS_SESSION_CLOCK` de `session.test.ts`, um `Record<keyof CharacterState,
-   * boolean>`: o campo novo do estado não compila até ser classificado. O que é DURAÇÃO restante (o
-   * `fedMs`, o `durationRemainingMs` do overlay de item) atravessa como sempre — sem âncora
-   * num relógio, não há o que ler errado. O restore de snapshot NÃO passa por aqui: o relógio
-   * é o mesmo, e a janela quente atravessa.
+   * O relógio lógico de cada sessão nasce em zero (ADR 0020), mas o `CharacterRuntime` atravessa
+   * Cidade → hunt, hunt → Cidade e a saída da party como o MESMO objeto. O que ele guarda como
+   * DURAÇÃO — o cooldown de magia, as condições, a imunidade do Cleanse — está no relógio da sessão
+   * anterior e é traduzido para este por `restante = instante − origem`: o prazo que faltava
+   * continua faltando. Não é zerado nem renovado — um Intense Wound Cleansing de 10 minutos não
+   * volta pronto por uma ida à Cidade, e um veneno não some —, como o Canary, que guarda a condição
+   * de cooldown (`CONDITIONID_DEFAULT`) com os ticks que faltavam, e como o anel de duração desta
+   * base (`#parkEquipment`, #689). A Cidade não simula (ADR 0023): o prazo fica PAUSADO nela.
    *
-   * O que sai: o carimbo do último golpe de arma (`lastAttackAtMs`, #550), o do último ataque
-   * dado ou recebido (`lastCombatActionAtMs`, #625), a trava de stairhop (`attackLockedUntil`,
-   * #554), a imunidade do charm Cleanse, o banco de cargas de bloqueio (`blockCharge.anchorMs`,
-   * volta CHEIO — o estado de quem nunca bloqueou), os cooldowns, as condições e a ação manual
-   * adiada (cujo evento morava na fila da sessão anterior).
+   * A origem é o instante em que a sessão anterior o tirou (`markDeparture`) ou, se a saída dela
+   * ainda não aconteceu (o servidor constrói o destino primeiro), o `nowMs` dela agora — que é o
+   * mesmo instante, porque nada avança uma sessão entre as duas chamadas. Sem sessão anterior (o
+   * personagem do ticket), os valores ficam como estão.
+   */
+  moveToClock(clock: SessionClock): () => void {
+    const previous = this.#clockLink;
+    const toMs = clock.nowMs;
+    const fromMs = previous === null ? toMs : (previous.departedAtMs ?? previous.clock.nowMs);
+    if (previous !== null) this.#rebaseClock(fromMs, toMs);
+    this.#clockLink = { clock, departedAtMs: null };
+    return () => {
+      if (previous !== null) this.#rebaseClock(toMs, fromMs);
+      this.#clockLink = previous;
+    };
+  }
+
+  #rebaseClock(fromMs: number, toMs: number): void {
+    this.cooldowns.rebase(fromMs, toMs);
+    this.conditions.rebase(fromMs, toMs);
+    const deltaMs = toMs - fromMs;
+    for (const [type, untilMs] of this.cleanseImmunity) {
+      if (untilMs <= fromMs) this.cleanseImmunity.delete(type);
+      else this.cleanseImmunity.set(type, untilMs + deltaMs);
+    }
+  }
+
+  /**
+   * Esquece o que o personagem guarda como CARIMBO do relógio lógico da sessão anterior (#812).
+   * Só `Session.enter` chama, depois de o `onEnter` do ruleset aceitar a entrada.
+   *
+   * Carimbo é "quando foi a última vez que…": uma janela de combate, de golpe, de trava. Diferente da
+   * duração (`moveToClock`), a janela dele é curta (de 2 s a 60 s) e já venceu na saída normal — a
+   * saída da hunt só conclui fora de combate (`isInFight`, #625) —, então o que sobraria para
+   * traduzir é nada. Lido no relógio novo sem zerar, um carimbo de 57 700 ms fica no FUTURO de uma
+   * sessão que está em 1 000 ms: `isInFight` o lê como "em combate" e trava a saída por até um minuto
+   * que ninguém lutou, a trava de stairhop segura o golpe sem escada nenhuma e `attackedRecently`
+   * erra assim que o relógio novo alcança o valor velho — e o resultado do combate passa a depender
+   * de por onde o objeto andou, e não do estado e da semente (invariante 3). O restore de snapshot
+   * NÃO passa por aqui: o relógio é o mesmo, e a janela quente atravessa.
+   *
+   * **Toda grandeza nova guardada como instante do relógio da sessão entra aqui (se for carimbo) ou
+   * em `#rebaseClock` (se for prazo)**, e o que força isso é a tabela `SESSION_CLOCK_POLICY` de
+   * `session.test.ts`, um `Record<keyof CharacterState, …>`: o campo novo do estado não compila
+   * até ser classificado. O que é duração restante sem âncora num relógio (`fedMs`, o
+   * `durationRemainingMs` do overlay de item) atravessa como sempre.
+   *
+   * O que sai: o último golpe de arma (`lastAttackAtMs`, #550), o último ataque dado ou recebido
+   * (`lastCombatActionAtMs`, #625), a trava de stairhop (`attackLockedUntil`, #554), o banco de
+   * cargas de bloqueio (`blockCharge`, volta CHEIO — o contador do Canary sobe uma carga por
+   * segundo até duas, e qualquer passagem pela Cidade dura mais que isso) e a ação manual adiada
+   * (`pendingManualAction`, cujo evento morava na fila da sessão anterior).
    */
   resetSessionClockState(): void {
     this.lastAttackAtMs = null;
     this.lastCombatActionAtMs = null;
     this.attackLockedUntil = 0;
-    this.cleanseImmunity.clear();
     this.blockCharge = FULL_BLOCK_CHARGE;
-    this.cooldowns.clearAll();
-    this.conditions.clearAll();
     this.pendingManualAction = null;
   }
 

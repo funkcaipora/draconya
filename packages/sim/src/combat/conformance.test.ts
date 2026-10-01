@@ -137,13 +137,7 @@ const pipelineSession = (seed: string, spec: PipelineSpec): Session => {
     id: 'conformance', contentVersion: 'v1', ruleset: pipelineRuleset(spec),
     rng: Rng.fromSeed(seed), createdAtMs: 0,
   });
-  const hero = new CharacterRuntime(heroState(spec));
-  session.enter(hero);
-  // As condições do caso valem NESTA sessão, então entram depois de `enter`: a entrada esquece
-  // o que o personagem trouxe de outra sessão (#812, `resetSessionClockState`) — um
-  // `expiresAtMs` só significa algo no relógio que o gravou. Sem vencimento agendado (o ruleset
-  // sintético não tem fila de condição), a condição dura a sessão inteira, como antes.
-  for (const condition of spec.character?.conditions ?? []) hero.conditions.apply(condition);
+  session.enter(new CharacterRuntime(heroState(spec)));
   return session;
 };
 

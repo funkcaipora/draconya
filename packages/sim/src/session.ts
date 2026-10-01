@@ -8,7 +8,7 @@
 // primeira hunt AFK — que é o modo padrão do jogo.
 
 import { CharacterRuntime } from './character.js';
-import type { CharacterState } from './character.js';
+import type { CharacterState, SessionClock } from './character.js';
 import { resolveDeath } from './death.js';
 import type { KillCredit, Victim } from './death.js';
 import type { Rng, RngState } from './rng.js';
@@ -341,7 +341,7 @@ export interface SessionOptions {
 
 const EMPTY_EVENTS: readonly DomainEvent[] = [];
 
-export class Session {
+export class Session implements SessionClock {
   readonly id: string;
   /** Congelada na criação (invariante 7): a sessão termina na versão em que começou. */
   readonly contentVersion: string;
@@ -420,7 +420,11 @@ export class Session {
     Object.assign(session.aggregates, snapshot.aggregates);
     session.notableEvents.push(...snapshot.notableEvents);
     for (const state of snapshot.participants) {
-      session.participants.push(new CharacterRuntime(state));
+      const character = new CharacterRuntime(state);
+      // Os instantes dele são do relógio DESTA sessão (o snapshot gravou os dois juntos): liga sem
+      // traduzir, para a transição seguinte saber de onde ele vem (#812).
+      character.bindClock(session);
+      session.participants.push(character);
     }
     if (snapshot.aggregatesByCharacter !== undefined) {
       for (const [id, own] of Object.entries(snapshot.aggregatesByCharacter)) {
@@ -478,6 +482,13 @@ export class Session {
     if (this.#endedReason) throw new Error(`session ${this.id} has already ended`);
     this.participants.push(character);
     this.#joinedAtMs.set(character.id, this.#logicalNowMs);
+    // O personagem atravessa a transição como o MESMO objeto (`createSessionBuilder`), mas o
+    // relógio LÓGICO de cada sessão nasce em zero. O que ele guarda como DURAÇÃO (cooldown de
+    // magia, condição, imunidade do Cleanse) está no relógio da sessão que o gravou e é traduzido
+    // para este ANTES do `onEnter` (o prazo que faltava continua faltando — #812, ADR 0020), para o
+    // ruleset que entra enxergar os instantes já no relógio dele e reagendar o que a fila da origem
+    // levava consigo. O `undoClock` desfaz a tradução se a entrada for recusada.
+    const undoClock = character.moveToClock(this);
     try {
       this.ruleset.onEnter(this, character);
     } catch (error) {
@@ -488,21 +499,20 @@ export class Session {
       const index = this.participants.indexOf(character);
       if (index >= 0) this.participants.splice(index, 1);
       this.#joinedAtMs.delete(character.id);
+      undoClock();
       throw error;
     }
-    // Os instantes que o personagem guarda (o carimbo do último golpe de arma, `lastAttackAtMs`,
-    // #550; o do último ataque dado ou recebido, `lastCombatActionAtMs`, #625; a trava de
-    // stairhop, `attackLockedUntil`, #554; e os que `resetSessionClockState` lista) estão no
-    // relógio LÓGICO da sessão que os gravou — e este relógio nasce em zero. O personagem que
-    // atravessa uma transição é o MESMO objeto (`createSessionBuilder`), então sem este zero um
-    // carimbo de 57 700 ms da hunt anterior ficaria no FUTURO da nova: `attackedRecently` o leria
-    // como "bateu há pouco", `isInFight` travaria a saída por um minuto que ninguém lutou, o
-    // stairhop seguraria o golpe. O resultado do combate dependeria de por onde o
-    // `CharacterRuntime` passou, e não do estado e da semente (invariante 3). Aqui, e não no
-    // `onEnter` de cada ruleset, para nenhuma sessão futura (quest, boss) esquecer; DEPOIS do
-    // `onEnter`, para a entrada recusada (party cheia) não apagar o estado de quem continua na
-    // sessão de origem. O restore de snapshot NÃO passa por `enter` — o relógio é o mesmo, e a
-    // janela quente atravessa.
+    // Os CARIMBOS (o último golpe de arma, `lastAttackAtMs`, #550; o último ataque dado ou
+    // recebido, `lastCombatActionAtMs`, #625; a trava de stairhop, `attackLockedUntil`, #554; e os
+    // que `resetSessionClockState` lista) não são prazo e não se traduzem: um carimbo de 57 700 ms da
+    // hunt anterior ficaria no FUTURO da nova — `isInFight` o leria como "em combate" e travaria a
+    // saída por até um minuto que ninguém lutou, a trava de stairhop seguraria o golpe, e
+    // `attackedRecently` erraria assim que o relógio novo alcançasse o valor velho. O resultado do
+    // combate dependeria de por onde o `CharacterRuntime` passou, e não do estado e da semente
+    // (invariante 3). Aqui, e não no `onEnter` de cada ruleset, para nenhuma sessão futura (quest,
+    // boss) esquecer; DEPOIS do `onEnter`, para a entrada recusada (party cheia) não apagar o estado
+    // de quem continua na sessão de origem. O restore de snapshot NÃO passa por `enter` — o relógio
+    // é o mesmo, e a janela quente atravessa.
     character.resetSessionClockState();
   }
 
@@ -523,6 +533,9 @@ export class Session {
     if (index < 0) return null;
     const [character] = this.participants.splice(index, 1);
     if (character === undefined) return null;
+    // O instante EXATO da saída, antes de qualquer outra coisa: é dele que o próximo `enter`
+    // traduz os prazos do personagem (`CharacterRuntime.markDeparture`).
+    character.markDeparture(this);
     this.ruleset.onLeave?.(this, character);
     // O extrato sai DEPOIS do `onLeave`: o settlement da bolsa da party escreve o gold de quem
     // sai, e ele precisa estar no extrato dele. Numa sessão privada, o hospedeiro não chama
@@ -800,6 +813,10 @@ export class Session {
   end(reason: EndReason): readonly Receipt[] {
     if (!this.#endedReason) {
       this.#endedReason = reason;
+      // O instante EXATO do fim, de cada um que está dentro: o `advanceBy` que encerrou no meio de
+      // um evento ainda empurra o relógio até o alvo depois, e é do fim — não do alvo — que o
+      // próximo `enter` traduz os prazos (`CharacterRuntime.markDeparture`).
+      for (const participant of this.participants) participant.markDeparture(this);
       this.ruleset.onEnd(this, reason);
       this.record('ended', reason);
       // Um por participante presente, na ordem de entrada — e emitidos AGORA, depois do
