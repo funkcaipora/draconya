@@ -3317,3 +3317,66 @@ describe('a esfola de cadáver no catálogo (#626, ADR 0048 d.5/d.6)', () => {
     expect(buildContent(withSkinning()).version).not.toBe(buildContent(withSkinning({ chance: 50_000 })).version);
   });
 });
+
+describe('o Treino do Tibia (#631, ADR 0059)', () => {
+  const training = {
+    id: 'baseline',
+    dummy: { id: 'exercise-dummy', rate: 100 },
+    strike: { triesPerCharge: 7, manaSpentPerCharge: 600 },
+    startCooldownMs: 10_000,
+    place: { stand: { x: 3, y: 2, z: 7 }, dummy: { x: 2, y: 2, z: 7 } },
+    offline: {
+      bankCapMs: 43_200_000, graceMs: 600_000, maxAwayMs: 1_814_400_000,
+      spendCapMs: { free: 21_600_000, premium: 43_200_000 }, shieldingDivisor: 4,
+      skills: [
+        { skillId: 'distance', kind: 'attacks', divisor: 4 },
+        { skillId: 'magic', kind: 'mana' },
+      ],
+    },
+  };
+  const exerciseBow = {
+    id: 'exercise-bow', name: 'exercise bow', kind: 'other', weight: 10, value: 0, charges: 500,
+    exercise: { skillId: 'distance' }, purchasable: true, buyPrice: 347_222,
+  };
+
+  it('sem `training/` o conteúdo monta e o campo fica ausente (fixture de teste)', () => {
+    expect(buildContent(base()).training).toBeUndefined();
+  });
+
+  it('monta o Treino válido e o expõe em `content.training`', () => {
+    const content = buildContent(base({ training: [training] }));
+    expect(content.training?.strike.triesPerCharge).toBe(7);
+  });
+
+  it('a skill do livro de offline training tem de existir', () => {
+    const broken = {
+      ...training,
+      offline: { ...training.offline, skills: [{ skillId: 'sabre', kind: 'attacks', divisor: 2 }] },
+    };
+    expect(() => buildContent(base({ training: [broken] }))).toThrow(/offline\.skills "sabre" não existe/);
+  });
+
+  it('o teto de gasto por conta não passa do teto do banco', () => {
+    const broken = {
+      ...training,
+      offline: { ...training.offline, spendCapMs: { free: 21_600_000, premium: 50_000_000 } },
+    };
+    expect(() => buildContent(base({ training: [broken] }))).toThrow(/spendCapMs não pode passar/);
+  });
+
+  it('exercise weapon: skill existente, com `charges`, sem slot — e `purchasable` vai com `buyPrice`', () => {
+    const content = buildContent(base({ items: [exerciseBow] }));
+    expect(content.items.get('exercise-bow')).toMatchObject({ charges: 500, purchasable: true });
+
+    expect(() => buildContent(base({ items: [{ ...exerciseBow, exercise: { skillId: 'sabre' } }] })))
+      .toThrow(/exercise\.skillId "sabre" não existe/);
+    const semCargas = { ...exerciseBow, charges: undefined };
+    expect(() => buildContent(base({ items: [semCargas] }))).toThrow(/exige `charges`/);
+    expect(() => buildContent(base({ items: [{ ...exerciseBow, slot: 'hand' }] })))
+      .toThrow(/não se veste nem é arma/);
+    expect(() => buildContent(base({ items: [{ ...exerciseBow, buyPrice: undefined }] })))
+      .toThrow(/`purchasable` e `buyPrice` vão juntos/);
+    expect(() => buildContent(base({ items: [{ ...exerciseBow, purchasable: undefined }] })))
+      .toThrow(/`purchasable` e `buyPrice` vão juntos/);
+  });
+});

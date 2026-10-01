@@ -27,7 +27,7 @@ import type {
   CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, FieldStage, Hunt,
   Item, ItemSlot, Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange,
   PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Skinning, Spell, SpellArea, SpellEffect,
-  SpawnPoint, Stamina, Supply, Tilemap, Vocation, WeaponFamily, WeaponProfile,
+  SpawnPoint, Stamina, Supply, Tilemap, Training, Vocation, WeaponFamily, WeaponProfile,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, FORWARD, isSelfOrigin, tileKey } from '../area.js';
@@ -1126,6 +1126,12 @@ export interface HuntRulesetOptions {
   readonly combat: Combat;
   readonly progression: Progression;
   readonly stamina: Stamina;
+  /**
+   * O Treino do Tibia (#631, ADR 0059): aqui só interessa o TETO do banco de offline training
+   * (`offline.bankCapMs`), que cresce 1:1 com o tempo de hunt. Ausente é conteúdo de teste sem
+   * `training/`: o banco não cresce, e nada mais muda.
+   */
+  readonly training?: Training;
   /**
    * A tabela da party (#190, ADR 0027). Sempre presente: solo é party de um, e `xpShare`
    * devolve a XP inteira sem ler a tabela.
@@ -3174,6 +3180,9 @@ export class HuntRuleset implements Ruleset {
     // morre aqui, o restante não.
     this.#parkEquipment(session, character);
     character.inventory.setEquipmentObserver(null);
+    // O tempo que ele passou na hunt enche o banco de offline training (#631, ADR 0059 d.3) — o
+    // `Session.leave` emite o extrato DEPOIS deste hook, e o `durationMs` dele ainda existe aqui.
+    this.#creditOfflineBank(session, character);
     // Os EVENTOS das condições dele saem da fila (CMB-07): o vencimento de quem já saiu não fica
     // órfão. A condição em si FICA no personagem (#812): ele a leva para a próxima sessão, que a
     // traduz para o relógio dela e reagenda — a haste de 30 s não some por uma ida à Cidade, e o
@@ -3693,12 +3702,27 @@ export class HuntRuleset implements Ruleset {
     for (const character of session.participants) {
       this.#parkEquipment(session, character);
       character.inventory.setEquipmentObserver(null);
+      // O tempo de hunt enche o banco de offline training 1:1 (#631, ADR 0059 d.3). O `durationMs`
+      // é o do PARTICIPANTE — o tempo que ele passou aqui, não o da instância —, e `end()` só
+      // roda uma vez: o crédito não dobra.
+      this.#creditOfflineBank(session, character);
     }
     // A bolsa é vendida e dividida entre os presentes (#192); os extratos saem DEPOIS disto,
     // com o gold dentro. Fora isso nada a desfazer: a instância morre com a sessão. Todo
     // encerramento produz extrato, inclusive o que acontece sem ninguém assistindo — e é
     // exatamente por isso que ele não depende de nada feito aqui.
     if (this.#bag !== null) this.#settle(session, session.participants, 'end');
+  }
+
+  /** O banco de offline training cresce com o tempo de hunt do participante (#631, ADR 0059 d.3). */
+  #creditOfflineBank(session: Session, character: CharacterRuntime): void {
+    const training = this.#options.training;
+    if (training === undefined) return;
+    // O tempo EXATO no instante em que a participação acaba (`inSessionMsOf`), e não o
+    // `durationMs` dos agregados: este soma a janela do `advanceBy` inteira antes de despachar os
+    // eventos, e uma hunt que acaba por evento (morte, regra de saída) no meio dela contaria o
+    // resto — o banco dependeria de como o hospedeiro fatiou o tempo (invariante 3).
+    character.training.creditOnline(session.inSessionMsOf(character.id), training.offline.bankCapMs);
   }
 
   getState(): HuntRulesetState {
@@ -13576,6 +13600,7 @@ export function createHuntRuleset(
     combat: content.combat,
     progression: content.progression,
     stamina: content.stamina,
+    ...(content.training === undefined ? {} : { training: content.training }),
     vocations: content.vocations,
     skills: content.skills,
     items: content.items,

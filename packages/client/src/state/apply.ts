@@ -54,6 +54,18 @@ const REASON = {
   // O encerramento coletivo (#432, ADR 0032 d.14): todos os presentes aprovaram.
   'party-vote': 'A party encerrou a caçada',
 } as const;
+
+/**
+ * Por que o TREINO acabou. As frases da hunt não servem: "Você saiu da hunt" a quem parou o treino
+ * na Cidade, ou "Concluído" para uma arma que acabou, não dizem o que aconteceu. `manual-exit` é o
+ * `leave-hunt` (o jogador parou) e `completed` é a arma esgotada ou perdida da mochila — as duas
+ * saídas que o ruleset do Treino produz; o resto (manutenção) é o de sempre.
+ */
+const TRAINING_REASON: Partial<Record<keyof typeof REASON, string>> = {
+  'manual-exit': 'Você saiu do treino',
+  completed: 'A exercise weapon acabou',
+  drain: REASON.drain,
+};
 import { missileDuration } from '../world/effects.js';
 import {
   addEffect, addFloatingText, addMissile, applyTileUpdate, clearTransients, enterInstance,
@@ -339,6 +351,10 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           // Os níveis do Bosstiary (#629): a tabela por raridade, fixada na sessão. Ausente quando o
           // servidor não a mandou — a tela decide o que mostrar sem ela, não este `case`.
           ...(message.bosstiary === undefined ? {} : { bosstiary: message.bosstiary }),
+          // O Treino (#631, ADR 0059): o que uma carga rende, os tetos e o livro do offline
+          // training, fixados na sessão — a tela de Treino lê daqui. Ausente quando o servidor não
+          // tem Treino (o pill "Treino" não existe).
+          ...(message.training === undefined ? {} : { training: message.training }),
         },
       }));
       return;
@@ -403,6 +419,21 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       hud.set((state) => ({ ...state, learnedSpells: message.spellIds }));
       return;
 
+    case 'training-state':
+      // SUBSTITUI, como `charms`: o estado INTEIRO do Treino (banco, skill do livro, exercise weapons
+      // com as cargas restantes, e a instância em uso) — o servidor manda no attach, a cada mudança
+      // da mochila e a cada golpe do Treino (#631, ADR 0059).
+      hud.set((state) => ({
+        ...state,
+        training: {
+          offlineBankMs: message.offlineBankMs,
+          offlineSkill: message.offlineSkill,
+          weapons: message.weapons,
+          activeInstanceId: message.activeInstanceId,
+        },
+      }));
+      return;
+
     case 'blessings':
       // O BITMASK inteiro (#570, ADR 0052) — nunca um delta. Compra e consumo na morte chegam
       // pela mesma mensagem, e a tela resolve os nomes pelo catálogo (invariante 6).
@@ -447,9 +478,12 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         exitPending: null,
         systemMessages: appendCapped(state.systemMessages, {
           level: 'warning',
-          text: `${REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
-            + ` · ${aggregates.xpGained} XP · ${aggregates.goldGained - aggregates.goldSpent} gold`
-            + ` · ${aggregates.kills} abate(s)`,
+          // O Treino não rende XP, gold nem abate: o extrato dele é o tempo e o porquê (#631).
+          text: state.analyzer.sessionType === 'training'
+            ? `Treino: ${TRAINING_REASON[message.reason] ?? REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
+            : `${REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
+              + ` · ${aggregates.xpGained} XP · ${aggregates.goldGained - aggregates.goldSpent} gold`
+              + ` · ${aggregates.kills} abate(s)`,
           atMs: nowMs,
         }),
       }));

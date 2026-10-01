@@ -1468,6 +1468,103 @@ describe('as magias aprendidas (#624, ADR 0058)', () => {
   });
 });
 
+describe('o Treino (#631, ADR 0059)', () => {
+  const state: S2CMessage = {
+    type: 'training-state', offlineBankMs: 3_600_000, offlineSkill: 'sword',
+    weapons: [{ instanceId: 'w1', itemId: 'exercise-sword', charges: 431 }], activeInstanceId: 'w1',
+  };
+
+  it('o catálogo leva as regras do Treino e as exercise weapons — e sem elas o pill "Treino" não existe', () => {
+    // Mutação que mata: `apply` copia o catálogo CAMPO A CAMPO, e um campo novo que não entra ali some
+    // no caminho sem erro nenhum (foi o que o QA no navegador pegou: o `training` chegava e sumia).
+    const base = {
+      type: 'catalogue', hunts: [], monsters: [], charms: [], vocations: [], vocationLevel: 8,
+      bot: { vocabularyVersion: 2, spells: [], supplies: [], automations: [] },
+      items: [{
+        id: 'exercise-sword', name: 'exercise sword', appearanceId: 1, weight: 10, slot: null, twoHanded: false,
+        exercise: { skillId: 'sword', charges: 500 }, buyPrice: 347_222,
+      }],
+      ammunition: [],
+    };
+    const training = {
+      perCharge: { tries: 7, manaSpent: 600 }, bankCapMs: 43_200_000, graceMs: 600_000,
+      spendCapMs: { free: 21_600_000, premium: 43_200_000 },
+      offlineSkills: [{ skillId: 'sword', name: 'Espada', kind: 'attacks' }],
+      skills: [
+        { skillId: 'sword', name: 'Espada', kind: 'attacks' },
+        { skillId: 'shielding', name: 'Escudo', kind: 'attacks' },
+      ],
+    };
+    applyMessage({ ...base, training } as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue?.training).toEqual(training);
+    expect(hud.get().catalogue?.items[0]).toMatchObject({ exercise: { skillId: 'sword', charges: 500 }, buyPrice: 347_222 });
+
+    applyMessage(base as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue).not.toHaveProperty('training');
+  });
+
+  it('ausente e vazio são coisas DIFERENTES: `null` até o servidor dizer', () => {
+    // Um nó `game` sem Treino nunca manda — e o primeiro segundo de toda conexão também não mandou.
+    expect(hud.get().training).toBeNull();
+    applyMessage({
+      type: 'training-state', offlineBankMs: 0, offlineSkill: null, weapons: [], activeInstanceId: null,
+    }, 0);
+    expect(hud.get().training).toEqual({ offlineBankMs: 0, offlineSkill: null, weapons: [], activeInstanceId: null });
+  });
+
+  it('SUBSTITUI o estado inteiro a cada mensagem — cada golpe do Treino reenvia as cargas', () => {
+    applyMessage(state, 0);
+    expect(hud.get().training?.weapons).toEqual([{ instanceId: 'w1', itemId: 'exercise-sword', charges: 431 }]);
+    applyMessage({ ...state, weapons: [{ instanceId: 'w1', itemId: 'exercise-sword', charges: 430 }] } as S2CMessage, 2_000);
+    expect(hud.get().training?.weapons).toEqual([{ instanceId: 'w1', itemId: 'exercise-sword', charges: 430 }]);
+    // A arma acabou: some da lista, e a instância ativa some junto.
+    applyMessage({ ...state, weapons: [], activeInstanceId: null } as S2CMessage, 4_000);
+    expect(hud.get().training).toMatchObject({ weapons: [], activeInstanceId: null, offlineBankMs: 3_600_000 });
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    // Chega a cada golpe (a cada ~2 s): não pode redesenhar o inventário nem as barras.
+    const notified = vi.fn();
+    subscribeSlice(hud, (current) => current.inventory, notified);
+    subscribeSlice(hud, (current) => current.health, notified);
+    applyMessage(state, 0);
+    expect(notified).not.toHaveBeenCalled();
+  });
+
+  it('o extrato do Treino diz o porquê e o tempo — não XP, gold nem abate, que ele não rende', () => {
+    applyMessage({
+      type: 'session-state', sessionType: 'training', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'me', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0,
+        vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        soul: 0, soulMax: 0,
+      },
+      world: { mapId: 'city', creatures: [], groundItems: [], tileUpdates: [], fields: [] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    } as unknown as S2CMessage, 0);
+    applyMessage({
+      type: 'session-ended', reason: 'completed',
+      aggregates: { durationMs: 960_000, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+    const line = hud.get().systemMessages.at(-1);
+    // A arma acabou: não é "Concluído" (a frase da hunt), é o que de fato aconteceu.
+    expect(line?.text).toBe('Treino: A exercise weapon acabou · 16 min');
+    expect(line?.text).not.toContain('XP');
+
+    // E parar o treino na Cidade não é "sair da hunt": o jogador está lendo isto em pé na praça.
+    applyMessage({
+      type: 'session-ended', reason: 'manual-exit',
+      aggregates: { durationMs: 180_000, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+    const manual = hud.get().systemMessages.at(-1);
+    expect(manual?.text).toBe('Treino: Você saiu do treino · 3 min');
+    expect(manual?.text).not.toContain('hunt');
+  });
+});
+
 describe('a resposta do bot (FUN-89)', () => {
   beforeEach(() => { bot.set(() => INITIAL_BOT); });
 

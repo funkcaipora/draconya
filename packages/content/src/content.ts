@@ -21,14 +21,14 @@ import {
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
   bestiarySchema, boostedSchema, bosstiarySchema, charmSchema, itemSchema, loyaltySchema, partySchema, skillSchema,
   skinningSchema, spellSchema,
-  staminaSchema, supplySchema, tilemapSchema, vocationSchema, weaponFamilySchema,
+  staminaSchema, supplySchema, tilemapSchema, trainingSchema, vocationSchema, weaponFamilySchema,
 } from './schemas.js';
 import type {
   Ammunition, AmmunitionDefinition, Appearances, Bestiary, Blessing, Boosted, BotLimits, Bosstiary, Charm,
   Combat, Loyalty, CompiledMitigation,
   CompiledReflect, DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
   MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Skinning, Spell, Stamina, Supply,
-  Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
+  Training, Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
   WeaponPowerFormula, WeaponProfile,
 } from './schemas.js';
 import { packProblems } from './pack.js';
@@ -49,6 +49,12 @@ export interface Content {
   readonly combat: Combat;
   /** Teto e taxa de recuperação da stamina (§10). */
   readonly stamina: Stamina;
+  /**
+   * O Treino do Tibia (#631, ADR 0059): o boneco, o que cada golpe rende e o offline training.
+   * Opcional — o conteúdo de teste que não fala de treino não o tem, e o `sim`/o servidor tratam
+   * ausência como "nenhuma sessão de Treino existe". O conteúdo REAL o tem, e `load.test.ts` prende.
+   */
+  readonly training?: Training;
   /** A party de hunt (§15, ADR 0027): teto de membros e pool de XP por vocações únicas. */
   readonly party: PartyConfig;
   /**
@@ -161,6 +167,7 @@ export interface RawContent {
   readonly progression?: readonly unknown[];
   readonly combat?: readonly unknown[];
   readonly stamina?: readonly unknown[];
+  readonly training?: readonly unknown[];
   readonly party?: readonly unknown[];
   readonly bestiary?: readonly unknown[];
   /** Os níveis do Bosstiary (#629), `bosstiary/baseline.json`. */
@@ -626,6 +633,10 @@ export function buildContent(raw: RawContent): Content {
   }
   const staminas = parseAll('stamina', raw.stamina ?? [], staminaSchema, problems);
   const stamina = staminas.get('baseline');
+  // O Treino (#631): opcional, como `bestiary` — um conteúdo de teste sem `training/` simplesmente
+  // não tem sessão de Treino. As referências cruzadas (skill do livro, tile do boneco) são
+  // conferidas mais abaixo, quando skills e mapa da Cidade já existem.
+  const training = parseAll('training', raw.training ?? [], trainingSchema, problems).get('baseline');
   const bestiary = parseAll('bestiary', raw.bestiary ?? [], bestiarySchema, problems).get('baseline');
   // Os níveis do Bosstiary (#629): um documento `baseline` único, como `bestiary` — a tabela de
   // 3 raridades × 3 níveis é uma coisa só, e o `id` fixo é o que impede duas versões dela.
@@ -1118,6 +1129,11 @@ export function buildContent(raw: RawContent): Content {
     if (item.ringEffect !== undefined && item.kind !== 'ring') {
       problems.push(`item "${item.id}": "ringEffect" só faz sentido em anel`);
     }
+    // A skill que a exercise weapon treina (#631) tem de existir — como o bônus de skill abaixo:
+    // uma skill que ninguém lê deixaria o golpe rendendo tries para lugar nenhum.
+    if (item.exercise !== undefined && skills.size > 0 && !skills.has(item.exercise.skillId)) {
+      problems.push(`item "${item.id}": exercise.skillId "${item.exercise.skillId}" não existe`);
+    }
     // A vocação que o item exige precisa existir (#524, como a magia em #156-159): a Magic
     // Plate Armor pede Knight/Paladin, e um id errado tornaria o item ETERNAMENTE inacessível
     // sem nenhuma pista de por quê — ninguém tem a vocação que não existe. Só quando HÁ
@@ -1446,6 +1462,39 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
+  // O Treino (#631, ADR 0059): as skills do livro existem, e o tile em que o personagem fica é
+  // andável no mapa da Cidade — a mesma disciplina do `entryPoint`, reprovando no boot e não na
+  // primeira sessão de Treino. Só com Cidade e skills carregadas: o conteúdo de teste sem elas não
+  // tem contra o que conferir (a mesma tolerância de `spellSkill`).
+  if (training !== undefined) {
+    const offlineSkills = new Set<string>();
+    for (const entry of training.offline.skills) {
+      if (offlineSkills.has(entry.skillId)) {
+        problems.push(`training: offline.skills repete "${entry.skillId}"`);
+      }
+      offlineSkills.add(entry.skillId);
+      if (skills.size > 0 && !skills.has(entry.skillId)) {
+        problems.push(`training: offline.skills "${entry.skillId}" não existe em skills/`);
+      }
+    }
+    if (training.offline.spendCapMs.free > training.offline.bankCapMs
+      || training.offline.spendCapMs.premium > training.offline.bankCapMs) {
+      problems.push('training: offline.spendCapMs não pode passar do teto do banco (bankCapMs)');
+    }
+    if (city !== undefined) {
+      const { stand, dummy } = training.place;
+      if (isBlocked(city, stand.x, stand.y, stand.z)) {
+        problems.push(
+          `training: place.stand (${stand.x},${stand.y},${stand.z}) está fora do mapa da Cidade ` +
+            `"${city.id}", ou em parede — ninguém teria onde treinar`,
+        );
+      }
+      if (Math.max(Math.abs(stand.x - dummy.x), Math.abs(stand.y - dummy.y)) > 1 || stand.z !== dummy.z) {
+        problems.push('training: place.stand tem de ser adjacente ao boneco (place.dummy), no mesmo andar');
+      }
+    }
+  }
+
   const routes = new Map<string, Route>();
   for (const data of routeData.values()) {
     const map = maps.get(data.mapId);
@@ -1693,6 +1742,7 @@ export function buildContent(raw: RawContent): Content {
       : [`progression/${progression.id}: ${progression._open}`]),
     ...(combat?._open === undefined ? [] : [`combat/${combat.id}: ${combat._open}`]),
     ...(stamina?._open === undefined ? [] : [`stamina/${stamina.id}: ${stamina._open}`]),
+    ...(training?._open === undefined ? [] : [`training/${training.id}: ${training._open}`]),
     ...(party?._open === undefined ? [] : [`party/${party.id}: ${party._open}`]),
     ...(bestiary?._open === undefined ? [] : [`bestiary/${bestiary.id}: ${bestiary._open}`]),
     ...(bosstiary?._open === undefined ? [] : [`bosstiary/${bosstiary.id}: ${bosstiary._open}`]),
@@ -1733,6 +1783,7 @@ export function buildContent(raw: RawContent): Content {
     progression: progression as Progression,
     combat: combat as Combat,
     stamina: stamina as Stamina,
+    ...(training === undefined ? {} : { training }),
     party: party as PartyConfig,
     ...(bestiary === undefined ? {} : { bestiary }),
     ...(bosstiary === undefined ? {} : { bosstiary }),

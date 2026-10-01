@@ -21,7 +21,7 @@
 // coisas mudam a cada golpe.
 
 import type { S2CProps } from '@draconya/protocol';
-import type { Content, Spell, Supply } from '@draconya/content';
+import type { Content, Spell, Supply, Training } from '@draconya/content';
 import {
   BOT_AUTOMATION_CATALOGUE, BOT_HOTKEYS, BOT_SET_COUNT, BOT_SET_NAMES, BOT_SLOTS_PER_SET,
   manaCostDisplayOf,
@@ -178,6 +178,13 @@ export function buildCatalogue(content: Content): Catalogue {
       kind: item.kind,
       // O rótulo curto da barra/Mochila (AB-13), só quando o conteúdo o declara.
       ...(item.shortLabel === undefined ? {} : { shortLabel: item.shortLabel }),
+      // A exercise weapon (#631, ADR 0059): a skill que treina e o TOTAL de cargas — as restantes
+      // são da instância e viajam em `training-state`. `buildContent` garante `charges` com `exercise`.
+      ...(item.exercise === undefined || item.charges === undefined
+        ? {}
+        : { exercise: { skillId: item.exercise.skillId, charges: item.charges } }),
+      // O preço do `buy-item` mínimo (#631, ADR 0059 d.2): só quem é `purchasable`.
+      ...(item.purchasable === true && item.buyPrice !== undefined ? { buyPrice: item.buyPrice } : {}),
       // Como a arma bate (#152): tipo, alcance e família — para o tooltip. Mana por golpe e
       // faixa de dano ficam de fora: balanceamento (invariante 4).
       ...(item.weapon === undefined
@@ -264,6 +271,9 @@ export function buildCatalogue(content: Content): Catalogue {
           pricing: content.progression.blessingPricing,
         },
       }),
+    // O Treino (#631, ADR 0059): o que UMA carga rende e o livro do offline training, para a tela
+    // de Treino mostrar o que vale antes de o jogador agir. Ausente sem `training/` no conteúdo.
+    ...(content.training === undefined ? {} : { training: trainingCatalogueOf(content, content.training) }),
     // Os monstros que existem, para a tela do Bestiário ter nome onde o contador tem id
     // (FUN-113). Vida e XP para o detalhe (SV-02, #338). Em ordem de id para a mensagem ser a
     // mesma a cada boot: a arte chega pelo `creature-appear`, e o resto é balanceamento que o
@@ -342,6 +352,52 @@ export function buildCatalogue(content: Content): Catalogue {
       }))
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
   };
+}
+
+/**
+ * O Treino no catálogo (#631, ADR 0059): o que UMA carga rende (`triesPerCharge × rate / 100`,
+ * truncado como o `uint64_t` do Canary — a mesma conta do golpe do ruleset) e o livro do offline
+ * training, com o nome de cada skill do CONTEÚDO (o cliente não tem a lista em código). Uma skill
+ * do livro que saiu de `skills/` cai fora — `buildContent` já a reprova, e o filtro é a rede de
+ * segurança de quem monta o catálogo de um conteúdo de teste.
+ */
+function trainingCatalogueOf(content: Content, training: Training): NonNullable<Catalogue['training']> {
+  const { strike, dummy, offline } = training;
+  return {
+    perCharge: {
+      tries: Math.floor((strike.triesPerCharge * dummy.rate) / 100),
+      manaSpent: Math.floor((strike.manaSpentPerCharge * dummy.rate) / 100),
+    },
+    bankCapMs: offline.bankCapMs,
+    graceMs: offline.graceMs,
+    spendCapMs: { free: offline.spendCapMs.free, premium: offline.spendCapMs.premium },
+    offlineSkills: offline.skills.flatMap((entry) => {
+      const skill = content.skills.get(entry.skillId);
+      return skill === undefined ? [] : [{ skillId: entry.skillId, name: skill.name, kind: entry.kind }];
+    }),
+    skills: trainedSkillsOf(content, training),
+  };
+}
+
+/**
+ * Toda skill que o Treino toca, com nome e tipo de ganho: as do livro, na ordem dele, e depois as
+ * que só uma exercise weapon treina (o `shielding` do exercise shield), em ordem de id. O tipo é o
+ * do GOLPE — `mana` quando a skill sobe por mana gasta (`gain.on === 'spell-cast'`, o que o
+ * ruleset do Treino lê), `attacks` quando sobe por tries —, não o do livro: o livro pode deixar de
+ * oferecer o magic level sem que a wand e a rod deixem de render mana.
+ */
+function trainedSkillsOf(content: Content, training: Training): NonNullable<Catalogue['training']>['skills'] {
+  const ids: string[] = training.offline.skills.map((entry) => entry.skillId);
+  const fromWeapons = new Set<string>();
+  for (const item of content.items.values()) {
+    if (item.exercise !== undefined && !ids.includes(item.exercise.skillId)) fromWeapons.add(item.exercise.skillId);
+  }
+  ids.push(...[...fromWeapons].sort());
+  return ids.flatMap((skillId) => {
+    const skill = content.skills.get(skillId);
+    return skill === undefined
+      ? [] : [{ skillId, name: skill.name, kind: skill.gain.on === 'spell-cast' ? 'mana' as const : 'attacks' as const }];
+  });
 }
 
 /**

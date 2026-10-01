@@ -719,6 +719,20 @@ export class Session implements SessionClock {
   }
 
   /**
+   * Quanto tempo LÓGICO `characterId` passou na sessão ATÉ AGORA: `nowMs` menos o instante em que
+   * ele entrou. Dentro de um evento é exato (o relógio está no vencimento dele); entre `advanceBy`
+   * é o fim da última janela. É a leitura certa para quem credita o tempo de sessão no INSTANTE em
+   * que ela acaba — o `durationMs` dos agregados soma a janela INTEIRA antes de despachar os
+   * eventos, então uma sessão que termina por evento no meio da janela contaria o resto dela e o
+   * resultado dependeria de como o hospedeiro fatiou o tempo (invariante 3). Vale também dentro
+   * de `onLeave`, que roda depois de quem sai ser tirado da lista — o `joinedAtMs` fica. Um
+   * snapshot anterior ao #397 não gravou o instante de entrada: `?? 0`, o mesmo do extrato.
+   */
+  inSessionMsOf(characterId: string): number {
+    return Math.max(0, this.#logicalNowMs - (this.#joinedAtMs.get(characterId) ?? 0));
+  }
+
+  /**
    * Os agregados DESTE participante (#187). Cria zerado na primeira leitura — um personagem que
    * entra numa sessão em curso começa do zero, inclusive em `durationMs`.
    */

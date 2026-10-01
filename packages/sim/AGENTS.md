@@ -1137,3 +1137,24 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   sem prazo o deixou engatilhado e aprender não muda o mundo. `LearnedSpells#grant` (sem preço) é o
   `learnInstantSpell` puro do Canary — para o dia em que o Wheel of Destiny conceder a Great Death
   Beam.
+- **O Treino é um ruleset de eventos, e o offline training é PURO (#631, ADR 0059).** `TrainingRuleset`
+  (`rulesets/training.ts`): um evento `TRAIN_STRIKE` por golpe, o primeiro no instante da entrada e
+  os seguintes a cada `combat.player.attackIntervalMs`; cada golpe credita `7 × rate` tries (`600 ×
+  rate` de mana gasta para wand/rod) ANTES de descontar a carga (a última também rende), a arma
+  esgotada é destruída (`removedInstances`) e as cargas restantes vivem no overlay da instância
+  (`ItemInstanceOverlay.charges`, "ausente é cheia"). Nada aqui sorteia, e o resultado é idêntico a
+  10 Hz, a 1 Hz e depois de um snapshot. `settleOfflineTraining` (`offline-training.ts`) é a função
+  PURA do gasto do banco — `min(fora, banco, teto da conta)`, carência de 10 min, melee `/ 2`,
+  distância `/ 4`, magic level pela mana, escudo `/ 4` junto —: recebe o tempo fora COMO DADO
+  (`awayMs`), porque o `sim` não lê relógio; quem sabe a hora é a `api`, no ticket. O banco cresce
+  1:1 com `session.inSessionMsOf(id)` no fim da participação (`onEnd`/`onLeave` de hunt e de treino),
+  nunca por tick — e NÃO com `aggregatesOf(id).durationMs`: `advanceBy` soma a janela INTEIRA ao
+  `durationMs` antes de despachar os eventos, então uma sessão que acaba por evento no meio da janela
+  (arma esgotada, morte) contaria o resto dela e o banco dependeria de como o host fatiou o tempo;
+  `inSessionMsOf` lê o relógio lógico (`nowMs` menos o instante de entrada), exato dentro do evento.
+  O escudo do offline training segue o `sendUpdate` do Canary — `Skill.percent` é um `double` de 2
+  casas comparado com o percentual novo TRUNCADO (`uint8_t`) —, não "o inteiro mudou" (`floor` dos dois
+  lados). O cooldown entre dois Treinos (`training-exhaustion`, 10 s) é um carimbo de parede no
+  registro (`exerciseExhaustedUntilMs`), comparado com o `nowMs` que o servidor passa. `buyItem` (`purchase.ts`) é a compra mínima do `buy-item`: confere
+  TUDO antes de mexer em `goldDelta` ou na mochila. `holdStamina` (`stamina.ts`) avança o marco sem
+  recuperar — o que o Treino faz ao sair (ADR 0060 d.14c).
