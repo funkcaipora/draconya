@@ -90,7 +90,7 @@ import { pickByWeight, Spawner } from '../hunt/spawner.js';
 import type { SpawnArea, SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
 import {
-  SCAVENGE_CHARM_ID, rollSkinning, scavengeChanceFor, skinningChanceRange, skinningStageAt,
+  SCAVENGE_CHARM_ID, guaranteedStageAt, rollSkinning, scavengeChanceFor, skinningChanceRange, skinningStageAt,
 } from '../skinning.js';
 import {
   applyAttackRate, applyRate, creatureRatesFor, experienceRateFor, skillRateFor,
@@ -10907,7 +10907,9 @@ const slots = bot.groups.get(group);
    * Tudo que o Canary responde com "not possible" (sem cadáver, ferramenta errada, já esfolado,
    * estágio fora da janela) é `not-usable`; o alcance é `out-of-range`. A tentativa gasta o
    * cadáver — `skinned` — com ou sem sucesso, REINICIA o decaimento dele (`#retimeCorpse`) e
-   * nenhuma recusa consome sorteio.
+   * nenhuma recusa consome sorteio. A exceção é o ramo garantido da faca (`Skinning.guaranteed`,
+   * o 2º estágio do coelho): o Lua o confere antes da tabela, e ele rende sem sorteio e SEM gastar
+   * o cadáver nem reiniciar o decaimento.
    */
   #performSkin(
     session: Session, character: CharacterRuntime, tool: CarriedItem, target: UseSlotTarget | undefined,
@@ -10931,7 +10933,21 @@ const slots = bot.groups.get(group);
       || corpse.skinned === true || corpse.diedAtMs === undefined) {
       return refuseItem('not-usable', 0);
     }
-    const stage = skinningStageAt(entry, session.nowMs - corpse.diedAtMs);
+    const ageMs = session.nowMs - corpse.diedAtMs;
+
+    // O ramo garantido da faca (`target.itemid == 4301`) é conferido ANTES da tabela, como no Lua:
+    // o material sai sem sorteio, o cadáver NÃO é gasto (`skinned` fica como está), o decaimento
+    // NÃO reinicia (não há `transform`), e o `session.rng` não é tocado — a ferramenta rende de
+    // novo no uso seguinte, depois da exaustão de 1 s, até o estágio decair.
+    const given = guaranteedStageAt(entry, ageMs);
+    if (given !== null) {
+      this.#deliverSkinMaterial(session, character, corpse, { itemId: given.materialId, quantity: given.quantity });
+      session.emit({ kind: 'equipment-changed', characterId: character.id });
+      character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
+      return { ok: true };
+    }
+
+    const stage = skinningStageAt(entry, ageMs);
     if (stage === null) return refuseItem('not-usable', 0);
 
     corpse.skinned = true;
@@ -10940,14 +10956,21 @@ const slots = bot.groups.get(group);
     // AGORA, e não mais o que faltava dos 670 s.
     this.#retimeCorpse(session, corpse, stage.afterTtlMs);
     const material = this.#rollSkin(session, character, entry, stage);
-    if (material !== null) {
-      const left = this.#collectItems(session, character, this.#instantiateCorpseItems(session, character, [material]));
-      corpse.items = [...(corpse.items ?? []), ...left];
-      this.#rebalanceBag(session);
-    }
+    if (material !== null) this.#deliverSkinMaterial(session, character, corpse, material);
     session.emit({ kind: 'equipment-changed', characterId: character.id });
     character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
     return { ok: true };
+  }
+
+  /**
+   * O material da esfola manual (do sorteio ou do ramo garantido): passa SÓ ele pelo filtro de
+   * Quick Loot de quem esfolou (`#collectItems`) — o que não é aceito, ou não cabe, fica no
+   * cadáver, e o que já esperava lá não é reprocessado.
+   */
+  #deliverSkinMaterial(session: Session, character: CharacterRuntime, corpse: CorpseState, material: LootItem): void {
+    const left = this.#collectItems(session, character, this.#instantiateCorpseItems(session, character, [material]));
+    corpse.items = [...(corpse.items ?? []), ...left];
+    this.#rebalanceBag(session);
   }
 
   /**

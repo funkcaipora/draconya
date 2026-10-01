@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { hasSkinningStage } from './combat/profile.js';
 import { Rng } from './rng.js';
 import {
-  rollSkinning, scavengeChanceFor, skinningChanceRange, skinningStageAt,
+  guaranteedStageAt, rollSkinning, scavengeChanceFor, skinningChanceRange, skinningStageAt,
 } from './skinning.js';
 
 // O Dragon do Canary: `5973` por 10 s, `4025` por 300 s — os dois estágios esfoláveis; o `4026`
@@ -16,10 +16,12 @@ const dragon: Skinning = {
     { canaryItemId: 4025, durationMs: 300_000, afterTtlMs: 360_000 },
   ],
 };
-// O coelho: só o `6017`, 10 s (o `4301` que vem depois não é chave).
+// O coelho: o sorteio é só do `6017` (10 s); o `4301` que vem depois (300 s) não é chave da tabela,
+// mas a faca nele rende o pé de coelho SEM sorteio — o ramo `target.itemid == 4301` do Lua.
 const rabbit: Skinning = {
   id: 'rabbit', toolId: 'obsidian-knife', materialId: 'rabbits-foot', chance: 25_000,
   stages: [{ canaryItemId: 6017, durationMs: 10_000, afterTtlMs: 360_000 }],
+  guaranteed: [{ canaryItemId: 4301, startMs: 10_000, durationMs: 300_000, materialId: 'rabbits-foot', quantity: 1 }],
 };
 const scavenge: Charm = {
   id: 'scavenge', name: 'Scavenge', canaryCharmId: 13, category: 'minor', type: 'passive',
@@ -42,6 +44,26 @@ describe('a janela de esfola é por estágio do cadáver, não pela vida inteira
     expect(skinningStageAt(rabbit, 9_999)?.canaryItemId).toBe(6017);
     expect(skinningStageAt(rabbit, 10_000)).toBeNull();
     expect(skinningStageAt(dragon, -1)).toBeNull();
+  });
+});
+
+describe('o ramo garantido da faca vale só no estágio dele, depois da janela do sorteio', () => {
+  it('o coelho rende sem sorteio de 10 s a 310 s, e a fronteira pertence ao estágio seguinte', () => {
+    expect(guaranteedStageAt(rabbit, 9_999)).toBeNull();
+    expect(guaranteedStageAt(rabbit, 10_000)?.canaryItemId).toBe(4301);
+    expect(guaranteedStageAt(rabbit, 309_999)?.canaryItemId).toBe(4301);
+    expect(guaranteedStageAt(rabbit, 310_000)).toBeNull();
+    expect(guaranteedStageAt(rabbit, -1)).toBeNull();
+  });
+
+  it('a janela do sorteio e a garantida não se sobrepõem em instante nenhum', () => {
+    for (let age = 0; age < 700_000; age += 500) {
+      expect(skinningStageAt(rabbit, age) !== null && guaranteedStageAt(rabbit, age) !== null, String(age)).toBe(false);
+    }
+  });
+
+  it('quem não declara o ramo (o Dragon, quase toda a tabela) nunca o tem', () => {
+    for (const age of [0, 10_000, 100_000, 310_000]) expect(guaranteedStageAt(dragon, age)).toBeNull();
   });
 });
 

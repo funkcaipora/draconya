@@ -48,6 +48,7 @@ const items = [
   { id: 'blessed-wooden-stake', name: 'Blessed Wooden Stake', kind: 'other', weight: 5, value: 0 },
   { id: 'hide', name: 'Hide', kind: 'other', weight: 1, value: 40, creatureProduct: true },
   { id: 'heavy-hide', name: 'Heavy Hide', kind: 'other', weight: 5_000, value: 0 },
+  { id: 'rabbits-foot', name: "Rabbit's Foot", kind: 'other', weight: 1, value: 50 },
 ];
 
 /** O rato do Canary: os dois estágios esfoláveis do Dragon (`5973`, `4025`). */
@@ -611,6 +612,187 @@ describe('a tentativa de esfola reinicia o decaimento do cadáver (o `transform(
     expect(stillThere()).toBe(true);
     advanceTo(resumed, skinnedAt + 360_000);
     expect(stillThere()).toBe(false);
+  });
+});
+
+describe('o ramo garantido da faca: o pé de coelho no 2º estágio, sem sorteio e sem gastar o cadáver', () => {
+  // O coelho do Canary: o sorteio é só do `6017` (10 s); a faca no `4301` (10 s a 310 s de idade)
+  // rende o `12172` SEM sorteio e sem `transform` — o `elseif target.itemid == 4301` que o Lua
+  // confere antes da tabela. O material do sorteio é o `hide` e o do ramo, o `rabbits-foot`, para o
+  // teste saber por qual dos dois caminhos o item veio.
+  const guarded = (over: Partial<Skinning> = {}): Skinning => skinRat({
+    chance: SURE,
+    stages: [{ canaryItemId: 6017, durationMs: 10_000, afterTtlMs: AFTER_TTL_MS }],
+    guaranteed: [{ canaryItemId: 4301, startMs: 10_000, durationMs: 300_000, materialId: 'rabbits-foot', quantity: 1 }],
+    ...over,
+  });
+  const contentOf = (over: Partial<Skinning> = {}) => buildContent(raw({ skinning: [guarded(over)] }));
+  const alive = (ruleset: HuntRuleset, corpse: CorpseState) => ruleset.groundItems.includes(corpse);
+  const advanceTo = (session: Session, atMs: number) => {
+    session.advanceBy(atMs - session.nowMs);
+    session.drainEvents();
+  };
+
+  /** O cadáver ainda não esfolado e a faca na mochila do herói, que está em cima dele. */
+  function ready(options: StartOptions = {}, over: Partial<Skinning> = {}) {
+    const built = start({ content: contentOf(over), ...options });
+    const corpse = killTheRat(built.session, built.ruleset);
+    built.hero.inventory.forceAdd(KNIFE, built.loaded.items, { backpackSlots: 0, satchelSlots: 10, row: 5 });
+    built.hero.position = { ...corpse.position };
+    let seq = 0;
+    const use = (ref = 'kit:knife') => {
+      seq += 1;
+      return built.ruleset.useItemOn(built.session, 'hero', { instanceId: ref }, seq, tileOf(corpse));
+    };
+    return { ...built, corpse, diedAt: corpse.diedAtMs as number, use };
+  }
+
+  it('aos 30 s a faca rende o pé de coelho: sem sorteio, sem gastar o cadáver, sem tocar o `session.rng`', () => {
+    const built = ready();
+    advanceTo(built.session, built.diedAt + 30_000);
+    const rng = built.session.rng.getState();
+    expect(built.use()).toEqual({ ok: true });
+    expect(held(built.hero, 'rabbits-foot')).toBe(1);
+    // O material do SORTEIO não sai: o caminho foi o do ramo, não o da tabela.
+    expect(held(built.hero, 'hide')).toBe(0);
+    expect(held(built.hero, 'obsidian-knife')).toBe(1);
+    expect(built.session.rng.getState()).toEqual(rng);
+    expect(built.corpse.skinned).toBeUndefined();
+  });
+
+  it('rende de novo a cada uso, passada a exaustão de 1 s, enquanto o estágio durar', () => {
+    const built = ready();
+    for (let i = 1; i <= 5; i += 1) {
+      advanceTo(built.session, built.diedAt + 30_000 + i * 2_000);
+      expect(built.use()).toEqual({ ok: true });
+      expect(held(built.hero, 'rabbits-foot')).toBe(i);
+    }
+    expect(built.corpse.skinned).toBeUndefined();
+  });
+
+  it('NÃO reinicia o decaimento: o cadáver continua vivendo os 670 s do abate', () => {
+    const built = ready();
+    advanceTo(built.session, built.diedAt + 100_000);
+    expect(built.use()).toEqual({ ok: true });
+    // Esfolar pelo sorteio o reagendaria para 360 s dali (aos 460 s); aqui nada mudou.
+    advanceTo(built.session, built.diedAt + 460_000);
+    expect(alive(built.ruleset, built.corpse)).toBe(true);
+    advanceTo(built.session, built.diedAt + 669_999);
+    expect(alive(built.ruleset, built.corpse)).toBe(true);
+    advanceTo(built.session, built.diedAt + 670_000);
+    expect(alive(built.ruleset, built.corpse)).toBe(false);
+  });
+
+  it('a janela é de 10 s a 310 s: 10 s já é o estágio do ramo, 310 s não é mais', () => {
+    const early = ready();
+    advanceTo(early.session, early.diedAt + 10_000);
+    expect(early.use()).toEqual({ ok: true });
+    expect(held(early.hero, 'rabbits-foot')).toBe(1);
+    expect(held(early.hero, 'hide')).toBe(0);
+
+    const late = ready();
+    advanceTo(late.session, late.diedAt + 309_999);
+    expect(late.use()).toEqual({ ok: true });
+    expect(held(late.hero, 'rabbits-foot')).toBe(1);
+
+    // 310 s: o cadáver é o `4302`, que o Lua não conhece — "not possible", e nada é sorteado.
+    const over = ready();
+    advanceTo(over.session, over.diedAt + 310_000);
+    const rng = over.session.rng.getState();
+    expect(over.use()).toMatchObject({ ok: false, reason: 'not-usable' });
+    expect(held(over.hero, 'rabbits-foot')).toBe(0);
+    expect(over.session.rng.getState()).toEqual(rng);
+  });
+
+  it('nos 10 s do sorteio o caminho é o da tabela: o `hide`, o cadáver gasto e o decaimento reiniciado', () => {
+    const built = ready();
+    advanceTo(built.session, built.diedAt + 5_000);
+    expect(built.use()).toEqual({ ok: true });
+    expect(held(built.hero, 'hide')).toBe(1);
+    expect(held(built.hero, 'rabbits-foot')).toBe(0);
+    expect(built.corpse.skinned).toBe(true);
+  });
+
+  it('o cadáver já esfolado (o `4302`) não rende o pé de coelho: nem o do sorteio certo, nem o do que errou', () => {
+    for (const chance of [SURE, 1]) {
+      const built = ready({}, { chance });
+      advanceTo(built.session, built.diedAt + 5_000);
+      expect(built.use()).toEqual({ ok: true });
+      expect(built.corpse.skinned).toBe(true);
+      const feet = held(built.hero, 'rabbits-foot');
+      advanceTo(built.session, built.diedAt + 30_000);
+      expect(built.use(), `chance ${String(chance)}`).toMatchObject({ ok: false, reason: 'not-usable' });
+      expect(held(built.hero, 'rabbits-foot')).toBe(feet);
+    }
+  });
+
+  it('o bot que esfola no abate gasta o cadáver nos 10 s: o ramo garantido fica para a mão de quem não esfolou', () => {
+    const built = start({ content: contentOf(), carrying: [KNIFE] });
+    const corpse = killTheRat(built.session, built.ruleset);
+    expect(corpse.skinned).toBe(true);
+    expect(held(built.hero, 'hide')).toBe(1);
+    advanceTo(built.session, (corpse.diedAtMs as number) + 30_000);
+    const outcome = built.ruleset.useItemOn(built.session, 'hero', { instanceId: 'kit:knife' }, 1, tileOf(corpse));
+    expect(outcome).toMatchObject({ ok: false, reason: 'not-usable' });
+    expect(held(built.hero, 'rabbits-foot')).toBe(0);
+  });
+
+  it('a ferramenta errada não rende, e o alcance é o mesmo da esfola: adjacente, sem linha de visão', () => {
+    const built = ready();
+    built.hero.inventory.forceAdd(STAKE, built.loaded.items, { backpackSlots: 0, satchelSlots: 10, row: 5 });
+    advanceTo(built.session, built.diedAt + 30_000);
+    const rng = built.session.rng.getState();
+    expect(built.use('kit:stake')).toMatchObject({ ok: false, reason: 'not-usable' });
+    built.hero.position = { x: built.corpse.position.x, y: built.corpse.position.y + 2, z: MAP_Z };
+    expect(built.use()).toMatchObject({ ok: false, reason: 'out-of-range' });
+    expect(held(built.hero, 'rabbits-foot')).toBe(0);
+    expect(built.session.rng.getState()).toEqual(rng);
+    // Adjacente (na diagonal) vale.
+    built.hero.position = { x: built.corpse.position.x + 1, y: built.corpse.position.y + 1, z: MAP_Z };
+    expect(built.use()).toEqual({ ok: true });
+    expect(held(built.hero, 'rabbits-foot')).toBe(1);
+  });
+
+  it('o material do ramo passa pelo filtro de Quick Loot: o que ele recusa fica NO cadáver', () => {
+    const built = ready({ loot: { filter: 'accept', itemIds: [], autoSell: [] } });
+    advanceTo(built.session, built.diedAt + 30_000);
+    expect(built.use()).toEqual({ ok: true });
+    expect(held(built.hero, 'rabbits-foot')).toBe(0);
+    expect(built.corpse.items?.map((item) => item.itemId)).toEqual(['rabbits-foot']);
+    // Um uso a mais empilha outro no cadáver, com id de instância novo e determinístico.
+    advanceTo(built.session, built.diedAt + 32_000);
+    expect(built.use()).toEqual({ ok: true });
+    expect(built.corpse.items?.map((item) => item.itemId)).toEqual(['rabbits-foot', 'rabbits-foot']);
+    expect(new Set(built.corpse.items?.map((item) => item.instanceId)).size).toBe(2);
+  });
+
+  it('a quantidade do ramo é a do Lua (`addItem(id, n)`)', () => {
+    const built = ready({}, {
+      guaranteed: [{ canaryItemId: 4301, startMs: 10_000, durationMs: 300_000, materialId: 'rabbits-foot', quantity: 3 }],
+    });
+    advanceTo(built.session, built.diedAt + 30_000);
+    expect(built.use()).toEqual({ ok: true });
+    expect(held(built.hero, 'rabbits-foot')).toBe(3);
+  });
+
+  it('sem o ramo na entrada o cadáver de 30 s não se esfola: o sorteio é só dos estágios da tabela', () => {
+    const built = ready({}, { guaranteed: undefined });
+    advanceTo(built.session, built.diedAt + 30_000);
+    expect(built.use()).toMatchObject({ ok: false, reason: 'not-usable' });
+    expect(held(built.hero, 'rabbits-foot')).toBe(0);
+    expect(held(built.hero, 'hide')).toBe(0);
+  });
+
+  it('a sessão fixada em combat-v3 nunca reconhece a faca, ramo garantido inclusive (invariante 7)', () => {
+    const v3 = buildContent(raw({ profile: 'combat-v3', skinning: [guarded()] }));
+    const built = start({ content: v3 });
+    const corpse = killTheRat(built.session, built.ruleset);
+    built.hero.inventory.forceAdd(KNIFE, built.loaded.items, { backpackSlots: 0, satchelSlots: 10, row: 5 });
+    built.hero.position = { ...corpse.position };
+    advanceTo(built.session, (corpse.diedAtMs as number) + 30_000);
+    expect(built.ruleset.useItemOn(built.session, 'hero', { instanceId: 'kit:knife' }, 1, tileOf(corpse)))
+      .toMatchObject({ ok: false, reason: 'not-usable' });
+    expect(held(built.hero, 'rabbits-foot')).toBe(0);
   });
 });
 

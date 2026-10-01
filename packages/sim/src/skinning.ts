@@ -14,8 +14,14 @@
 // **Um sorteio, uma tentativa.** `math.random(1, chanceRange)` e sucesso quando `random <= value`.
 // Com sucesso ou sem ele o cadáver vira o "esfolado" (`topItem:transform(skin.after)`), que não é
 // chave de tabela nenhuma — esfola-se uma vez só. O ruleset guarda isso em `CorpseState.skinned`.
+//
+// **A exceção é o ramo garantido da faca** (`guaranteedStageAt`): o `skinning.lua` confere
+// `target.itemid == 4301` antes da tabela e rende o pé de coelho sem sorteio e sem `transform`, então
+// o cadáver do coelho no 2º estágio (10 s a 310 s) rende a cada uso sem nunca ser gasto.
 
-import { SKINNING_CHANCE_SCALE, type Charm, type Skinning, type SkinningStage } from '@draconya/content';
+import {
+  SKINNING_CHANCE_SCALE, type Charm, type Skinning, type SkinningGuaranteedStage, type SkinningStage,
+} from '@draconya/content';
 import type { Rng } from './rng.js';
 
 /** O id do charm no catálogo importado (`content/data/charms/generated/charms.json`). */
@@ -39,6 +45,23 @@ export function skinningStageAt(entry: Skinning, ageMs: number): SkinningStage |
   for (const stage of entry.stages) {
     end += stage.durationMs;
     if (ageMs < end) return stage;
+  }
+  return null;
+}
+
+/**
+ * O estágio GARANTIDO em que o cadáver está `ageMs` depois da morte, ou `null`. É o ramo
+ * `target.itemid == 4301` da faca, que o `skinning.lua` confere ANTES da tabela: o segundo estágio
+ * do cadáver do coelho rende o pé de coelho sem sorteio, sem quest e sem transformar o cadáver —
+ * quem chama NÃO marca `skinned`, NÃO reinicia o decaimento e NÃO toca o `session.rng`. A
+ * fronteira pertence ao estágio seguinte, como em `skinningStageAt`; o cadáver já esfolado nunca
+ * chega aqui (o `transform(skin.after)` o tirou do id que o ramo confere), e quem decide isso é o
+ * chamador, pelo `CorpseState.skinned`.
+ */
+export function guaranteedStageAt(entry: Skinning, ageMs: number): SkinningGuaranteedStage | null {
+  if (ageMs < 0) return null;
+  for (const stage of entry.guaranteed ?? []) {
+    if (ageMs >= stage.startMs && ageMs < stage.startMs + stage.durationMs) return stage;
   }
   return null;
 }
