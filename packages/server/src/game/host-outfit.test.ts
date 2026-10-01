@@ -45,7 +45,12 @@ interface World {
   readonly runFor: (ms: number, step?: number) => void;
   readonly state: () => {
     self: { creatureId: number };
-    world: { creatures: Array<{ id: number; name: string; appearanceId: number; object?: boolean }> };
+    world: {
+      creatures: Array<{
+        id: number; name: string; appearanceId: number; object?: boolean;
+        colors?: { head: number; body: number; legs: number; feet: number }; addons?: number;
+      }>;
+    };
   };
 }
 
@@ -104,6 +109,17 @@ const ownOutfit = (world: World, id: string): number => world.content.monsters.g
 
 describe('creature-update: o monstro que se disfarça (#621)', () => {
   const monsters = [inert('rat', { illusionable: true }), shapeshifter({ monsterId: 'rat' })];
+  // As cores e os addons do outfit (#620) são parte do que a condição troca: o monstro que imita
+  // o outro veste os DELE, e quem volta ao próprio os recebe de volta.
+  const ratPaint = { head: 78, body: 69, legs: 58, feet: 76 };
+  const ownPaint = { head: 1, body: 2, legs: 3, feet: 4 };
+  const painted = [
+    inert('rat', { illusionable: true, outfit: { ...ratPaint, addons: 2 } }),
+    {
+      ...shapeshifter({ monsterId: 'rat' }),
+      outfit: { ...ownPaint, addons: 1 },
+    },
+  ];
 
   it('veste o outfit do OUTRO monstro e volta ao dele quando o prazo vence — o id do pacote, resolvido aqui', () => {
     const world = build({ monsters, spawn: 'shapeshifter' });
@@ -111,13 +127,38 @@ describe('creature-update: o monstro que se disfarça (#621)', () => {
     const id = world.state().world.creatures.find((creature) => creature.name === 'shapeshifter')?.id ?? -1;
     expect(id).toBeGreaterThan(0);
     // Só chegou a primeira troca: o monstro imitou o rato (`outfitId` do catálogo, nunca do `sim`).
-    expect(updates(world)).toEqual([{ type: 'creature-update', id, appearanceId: ratOutfit(world) }]);
+    // Sem `outfit` declarado os dois vestem o neutro do Canary (tudo 0), que o catálogo manda sempre.
+    const neutral = { head: 0, body: 0, legs: 0, feet: 0 };
+    expect(updates(world)).toEqual([
+      { type: 'creature-update', id, appearanceId: ratOutfit(world), colors: neutral },
+    ]);
 
     world.runFor(1_000);
     expect(updates(world)).toEqual([
-      { type: 'creature-update', id, appearanceId: ratOutfit(world) },
-      { type: 'creature-update', id, appearanceId: ownOutfit(world, 'shapeshifter') },
+      { type: 'creature-update', id, appearanceId: ratOutfit(world), colors: neutral },
+      { type: 'creature-update', id, appearanceId: ownOutfit(world, 'shapeshifter'), colors: neutral },
     ]);
+  });
+
+  it('a ilusão leva as cores e os addons do monstro imitado, e o fim devolve os do próprio', () => {
+    // Mutação que mata: `#lookFor` devolver só o `appearanceId` — o cliente manteria as cores e os
+    // addons do dono sobre o desenho do outro (e, ao voltar, perderia os dele).
+    const world = build({ monsters: painted, spawn: 'shapeshifter' });
+    world.runFor(5_600);
+    const id = world.state().world.creatures.find((creature) => creature.name === 'shapeshifter')?.id ?? -1;
+    expect(updates(world)).toEqual([
+      { type: 'creature-update', id, appearanceId: ratOutfit(world), colors: ratPaint, addons: 2 },
+    ]);
+    // Quem reanexa no meio da ilusão vê as mesmas cores e addons — e NÃO os do dono.
+    expect(world.state().world.creatures.find((creature) => creature.id === id))
+      .toMatchObject({ appearanceId: ratOutfit(world), colors: ratPaint, addons: 2 });
+
+    world.runFor(1_000);
+    expect(updates(world).at(-1)).toEqual({
+      type: 'creature-update', id, appearanceId: ownOutfit(world, 'shapeshifter'), colors: ownPaint, addons: 1,
+    });
+    expect(world.state().world.creatures.find((creature) => creature.id === id))
+      .toMatchObject({ appearanceId: ownOutfit(world, 'shapeshifter'), colors: ownPaint, addons: 1 });
   });
 
   it('quem reanexa no MEIO da ilusão vê o monstro já vestido — o estado mora na condição do sim', () => {

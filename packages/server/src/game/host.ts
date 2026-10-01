@@ -50,7 +50,7 @@ import type { InitialCharacter, PartyTicket } from '../tickets.js';
 import { AreaOfInterest } from './aoi.js';
 import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
 import { findPersonText } from './find-text.js';
-import { hitEffectOf, isPhysicalHit, monsterLookOf } from './monster-look.js';
+import { hitEffectOf, isPhysicalHit, monsterLookOf, monsterOutfitOf, monsterPresentationOf } from './monster-look.js';
 import { REFUSAL_TEXT, TransitionError, refuseTransition } from './transitions.js';
 import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
 
@@ -4430,10 +4430,20 @@ export class SessionHost {
    * diz o id. `object` separa o registro (`lookTypeEx`: a criatura virou uma coisa). `null` é
    * aparência sem linha na tabela — MUDA, como o campo sem arte.
    */
-  #resolveLook(look: OutfitLook): { readonly appearanceId: number; readonly object: boolean } | null {
+  #resolveLook(look: OutfitLook): {
+    readonly appearanceId: number;
+    readonly object: boolean;
+    readonly colors?: OutfitColors;
+    readonly addons?: number;
+  } | null {
     if ('monsterId' in look) {
-      const outfitId = this.#options.monsterCatalog?.get(look.monsterId)?.outfitId;
-      return outfitId === undefined ? null : { appearanceId: outfitId, object: false };
+      const definition = this.#options.monsterCatalog?.get(look.monsterId);
+      // O outfit de monstro leva as cores e os addons dele (#620): são parte do `Outfit_t` que a
+      // condição troca por inteiro, e sem eles o cliente pintaria o outfit emprestado com as cores
+      // do dono — ou com as de personagem novo.
+      return definition === undefined
+        ? null
+        : { appearanceId: definition.outfitId, object: false, ...monsterOutfitOf(definition) };
     }
     const objectId = 'itemId' in look
       ? this.#options.itemCatalog?.get(look.itemId)?.appearanceId
@@ -4443,26 +4453,32 @@ export class SessionHost {
 
   /**
    * A aparência que a criatura `key` (o `subject` do `sim`) mostra AGORA, nos campos do fio
-   * (`appearanceId`, `object`, `colors`): a emprestada, se há uma e ela tem arte; senão a PRÓPRIA —
-   * o outfit do monstro, ou o do personagem com as cores do ticket. É o que `creature-appear`,
+   * (`appearanceId`, `object`, `colors`, `addons`): a emprestada, se há uma e ela tem arte; senão a
+   * PRÓPRIA — o outfit do monstro, com as cores e os addons dele, ou o do personagem com as cores
+   * do ticket. É o que `creature-appear`,
    * `session-state` e `creature-update` compartilham, para o reanexado ver o mesmo que quem nunca
    * saiu (invariante 3: o estado mora na condição do `sim`, nunca num campo daqui).
    */
   #lookFor(
     hosted: HostedSession, key: string,
-  ): { appearanceId: number; object?: true; colors?: OutfitColors } {
+  ): { appearanceId: number; object?: true; colors?: OutfitColors; addons?: number } {
     const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
     const worn = ruleset.lookOf?.(hosted.session, key) ?? null;
     const borrowed = worn === null ? null : this.#resolveLook(worn);
     if (borrowed !== null) {
-      return borrowed.object
-        ? { appearanceId: borrowed.appearanceId, object: true }
-        : { appearanceId: borrowed.appearanceId };
+      if (borrowed.object) return { appearanceId: borrowed.appearanceId, object: true };
+      return {
+        appearanceId: borrowed.appearanceId,
+        ...(borrowed.colors === undefined ? {} : { colors: borrowed.colors }),
+        ...(borrowed.addons === undefined ? {} : { addons: borrowed.addons }),
+      };
     }
     if (key.startsWith('m:')) {
       const monster = ruleset.monsters?.find((candidate) => candidate.subject === key);
       const definition = monster === undefined ? undefined : this.#options.monsterCatalog?.get(monster.monsterId);
-      return { appearanceId: definition?.outfitId ?? 0 };
+      // O outfit PRÓPRIO do monstro — com as cores e os addons (#620): quando a condição acaba, o
+      // `creature-update` os devolve junto do `appearanceId`, e o cliente nunca guarda os "originais".
+      return { appearanceId: definition?.outfitId ?? 0, ...monsterOutfitOf(definition) };
     }
     return { appearanceId: this.#options.playerOutfitId ?? 0, ...this.#colorsOf(key) };
   }
@@ -5331,8 +5347,10 @@ export class SessionHost {
         health: monster.health,
         maxHealth: definition?.health ?? monster.health,
         // A apresentação (#620), pelo MESMO espalhamento do `creature-appear`: quem reanexa no
-        // meio vê o monstro pintado, com luz e falas, sem esperar um segundo aparecimento.
-        ...monsterLookOf(definition),
+        // meio vê o monstro com luz e falas, sem esperar um segundo aparecimento. Só o que NÃO é do
+        // outfit: as cores e os addons já vêm de `#lookFor`, e o monstro ilusionado os tem do
+        // outfit que veste (#621) — espalhar os do monstro de novo os trocaria pelos do dono.
+        ...monsterPresentationOf(definition),
         // A invocação do JOGADOR (#598) — o mesmo espalhamento do `creature-appear`, para quem
         // reanexa no meio ver a invocação já marcada, sem esperar um segundo aparecimento.
         ...(typeof monster.masterId === 'string' ? { masterId: monster.masterId } : {}),
