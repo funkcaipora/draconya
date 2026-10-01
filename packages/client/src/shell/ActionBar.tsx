@@ -33,6 +33,8 @@ import {
 export function ActionBar() {
   const catalogue = useHudSlice((state) => state.catalogue);
   const slotStates = useHudSlice((state) => state.slotStates);
+  // O que o personagem aprendeu (#624): marca o slot cuja magia ainda não foi comprada.
+  const learnedSpells = useHudSlice((state) => state.learnedSpells);
   const slotResults = useHudSlice((state) => state.slotResults);
   const targetId = useHudSlice((state) => state.targetId);
   const save = useStoreSlice(bot, (state) => state.save);
@@ -72,7 +74,7 @@ export function ActionBar() {
             const key = slotKey(activeSet, index);
             const view = catalogue === null
               ? null
-              : slotView(slots[index] ?? null, catalogue, slotStates[key] ?? null);
+              : slotView(slots[index] ?? null, catalogue, slotStates[key] ?? null, learnedSpells);
             if (view === null) {
               return (
                 <Slot
@@ -94,6 +96,8 @@ export function ActionBar() {
             const classNames = [
               view.cooldownMs > 0 ? 'action-slot-cooldown' : null,
               view.auto ? 'action-slot-auto' : null,
+              // Magia ainda não aprendida (#624, ADR 0058 d.5): fica na barra, marcada.
+              view.unlearned ? 'action-slot-unlearned' : null,
             ].filter(Boolean).join(' ');
             const props: SlotProps = {
               size: 36,

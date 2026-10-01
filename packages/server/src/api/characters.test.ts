@@ -7,6 +7,7 @@ import {
   type AccountRecord,
   type CharacterRecord,
   type CharacterStorageRecord,
+  type CharacterWriter,
   type GameRepository,
   type ItemInstanceRecord,
   type StartingKitPiece,
@@ -53,6 +54,10 @@ class MemoryRepository implements GameRepository {
   async ensureAccount(identity: { externalAuthId: string; email: string }): Promise<AccountRecord> {
     return { id: 'a1', email: identity.email, externalAuthId: identity.externalAuthId, coins: 0 };
   }
+  async getAccountCreatedAt(): Promise<Date | null> {
+    // A idade da conta só importa para o ticket (Loyalty, #628), que não passa por este arquivo.
+    return null;
+  }
   async createCharacter(
     accountId: string, name: string,
     initial: { readonly botConfig?: unknown; readonly kit?: readonly StartingKitPiece[] } = {},
@@ -67,6 +72,10 @@ class MemoryRepository implements GameRepository {
       state: 'city', sessionId: null, botConfig: initial.botConfig ?? null, skills: {},
       outfitColors: null, bestiary: null, ammo: null, supplyStock: null, ammunitionStock: null,
       charms: null,
+      bosstiary: null,
+      learnedSpells: null,
+      familiar: null,
+      training: null,
       fedMs: 0,
       blessings: 0,
       fightMode: 'attack',
@@ -105,10 +114,15 @@ class MemoryRepository implements GameRepository {
   async withOwnedCharacter<T>(
     accountId: string,
     characterId: string,
-    operation: (character: CharacterRecord) => Promise<T>,
+    operation: (character: CharacterRecord, writer: CharacterWriter) => Promise<T>,
   ) {
     const character = await this.getCharacter(accountId, characterId);
-    return character === null ? null : operation(character);
+    // O escritor da trava (#631) só existe para o gasto do offline training no ticket, que estes
+    // testes de personagem não exercitam: o fake o recusa em vez de fingir que gravou.
+    const writer: CharacterWriter = {
+      applyOfflineTraining: async () => { throw new Error('not exercised by the character tests'); },
+    };
+    return character === null ? null : operation(character, writer);
   }
   async softDeleteCharacter(
     accountId: string,

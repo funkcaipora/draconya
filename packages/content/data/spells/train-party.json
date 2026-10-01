@@ -4,6 +4,7 @@
   "description": "Aumenta as skills de melee e distance de cada membro da party no alcance, por 2 minutos.",
   "vocationId": "knight",
   "minLevel": 32,
+  "learnPrice": 4000,
   "manaCost": {
     "kind": "party-scaled",
     "base": 60,

@@ -411,6 +411,12 @@ export function runTrace(scenario: TraceScenario): TraceRun {
     ruleset, rng: Rng.fromSeed(scenario.seed), createdAtMs: 0,
   });
   const hero = new CharacterRuntime(heroState(scenario.hero));
+  // O herói da cena JÁ aprendeu toda magia que ela lança (#624): o portão do aprendizado é
+  // assunto de `casting.test.ts`, e o trace dourado prende o COMBATE — dano, ordem de RNG,
+  // eventos —, que o aprendizado não toca.
+  for (const step of scenario.steps) {
+    if (step.action?.kind === 'spell') hero.learnedSpells.grant(step.action.spell.id);
+  }
   session.enter(hero);
   for (const step of scenario.steps) session.advanceBy(step.dtMs);
   return { session, hero, ruleset, events: ruleset.observed };

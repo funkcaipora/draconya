@@ -4,6 +4,7 @@
   "description": "Faz brotar espinhos de pedra devastadores sob o seu alvo atual.",
   "vocationId": "druid",
   "minLevel": 90,
+  "learnPrice": 15000,
   "manaCost": 100,
   "group": "attack",
   "groupCooldownMs": 2000,

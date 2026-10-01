@@ -10,9 +10,10 @@ import { extractEnum } from './enums.js';
 import { readSourceCommit } from './env.js';
 import type { CatalogEntity } from './generated-writer.js';
 import {
-  BESTIARY_CLASS_MAP, CANARY_LOOT_CHANCE_SCALE, convertMonster, corpseTtlMsFromChain, FACTION_CONSTANTS,
-  listMonsterFiles, loadReaderDeps, lootChance, readCorpseDecayChains, readMonsterCatalog,
-  readTfsSpeeds, slugify, type DecayStage, type MonsterReaderDeps,
+  BESTIARY_CLASS_MAP, CANARY_LOOT_CHANCE_SCALE, convertMonster, corpseAnimatableWindows,
+  corpseTtlMsFromChain, FACTION_CONSTANTS, listMonsterFiles, loadReaderDeps, lootChance,
+  readCorpseDecayChains, readCorpseItemFlags, readFamiliarLooktypes, readMonsterCatalog, readTfsSpeeds,
+  slugify, type CorpseItemFlags, type DecayStage, type MonsterReaderDeps,
 } from './monsters.js';
 import type { CatalogImportContext } from './registry.js';
 import { ABILITY_KIND_SUPPORTED } from './monster-abilities.js';
@@ -113,14 +114,65 @@ monster.defenses = { defense = 1, armor = 1, { name = "speed", interval = 2000, 
 mType:register(monster)
 `;
 
+// O familiar (#599): o `lookType` fica COMENTADO no Lua do Canary (quem o define é a magia, por
+// vocação), e as três magias por nome — `summon challenge`, `ice strike` e `sudden death rune` — são
+// as que o leitor precisou aprender. Números inventados, o formato é o do arquivo real.
 const FAMILIAR = `
 local mType = Game.createMonsterType("Test Familiar")
 local monster = {}
-monster.outfit = { lookType = 21 }
-monster.health = 50
-monster.maxHealth = 50
-monster.speed = 80
+monster.description = "a test familiar"
+monster.experience = 0
+monster.outfit = {
+  --lookType = 993,
+  lookHead = 0,
+}
+monster.health = 500
+monster.maxHealth = 500
+monster.corpse = 0
+monster.speed = 154
+monster.manaCost = 300
+monster.flags = {
+  summonable = false, attackable = true, hostile = false, pushable = false, staticAttackChance = 90,
+  targetDistance = 4, runHealth = 0, isBlockable = false, familiar = true,
+}
+monster.attacks = {
+  { name = "melee", interval = 2000, chance = 100, minDamage = 0, maxDamage = -20 },
+  { name = "sudden death rune", interval = 2000, chance = 17, minDamage = -30, maxDamage = -35, range = 7, target = false },
+  { name = "ice strike", interval = 2000, chance = 17, minDamage = -30, maxDamage = -35, range = 5, target = true },
+  { name = "summon challenge", interval = 2000, chance = 40, target = false },
+}
+monster.defenses = {
+  defense = 55, armor = 55,
+  { name = "combat", interval = 2000, chance = 75, type = COMBAT_HEALING, minDamage = 60, maxDamage = 60, effect = CONST_ME_MAGIC_GREEN, target = false },
+}
+monster.immunities = {
+  { type = "paralyze", condition = true },
+  { type = "invisible", condition = true },
+}
 mType:register(monster)
+`;
+
+// O familiar do Monk: converteria sem bloqueio nenhum, e o recorte (ADR 0051) o barra à parte.
+const MONK_FAMILIAR = `
+local mType = Game.createMonsterType("Monk familiar")
+local monster = {}
+monster.outfit = { lookType = 1818, lookHead = 0 }
+monster.health = 500
+monster.maxHealth = 500
+monster.speed = 154
+monster.manaCost = 200
+monster.flags = { familiar = true, hostile = false }
+mType:register(monster)
+`;
+
+// `data/libs/systems/familiar.lua`: as chaves são expressões (`VOCATION.BASE_ID.X`) que o avaliador
+// literal não resolve, então o leitor casa só os pares `{ id = N, name = "…" }`.
+const FAMILIAR_LUA = `
+FAMILIAR_ID = {
+  [VOCATION.BASE_ID.SORCERER] = { id = 994, name = "Sorcerer familiar" },
+  [VOCATION.BASE_ID.DRUID] = { id = 993, name = "Test Familiar" },
+  [VOCATION.BASE_ID.MONK] = { id = 1818, name = "Monk familiar" },
+}
 `;
 
 // Invoca um monstro que não é gerado (o Test Wraith está fora do pacote) — sai junto.
@@ -144,6 +196,36 @@ monster.health = 50
 monster.maxHealth = 50
 monster.speed = 80
 monster.summon = { maxSummons = 1, summons = { { name = "Test Rat", chance = 20, interval = 3000, count = 1 } } }
+mType:register(monster)
+`;
+
+// O que a Convince Creature Rune aceita (#600): `flags.convinceable` e o `manaCost` que ela debita.
+const CONVINCEABLE = `
+local mType = Game.createMonsterType("Test Skeleton")
+local monster = {}
+monster.outfit = { lookType = 21 }
+monster.health = 50
+monster.maxHealth = 50
+monster.corpse = 1
+monster.speed = 80
+monster.manaCost = 300
+monster.flags = { summonable = true, convinceable = true, targetDistance = 1 }
+mType:register(monster)
+`;
+
+// Um boss sintético (#629): o bloco `monster.bosstiary` do Canary, sem `Bestiary` (boss não tem
+// ficha de Bestiário).
+const BOSS = (bosstiary: string) => `
+local mType = Game.createMonsterType("Test Boss")
+local monster = {}
+monster.experience = 900
+monster.outfit = { lookType = 21 }
+${bosstiary}
+monster.health = 5000
+monster.maxHealth = 5000
+monster.speed = 100
+monster.attacks = { { name = "melee", interval = 2000, chance = 100, minDamage = 0, maxDamage = -50 } }
+monster.defenses = { defense = 5, armor = 5 }
 mType:register(monster)
 `;
 
@@ -197,9 +279,12 @@ function fixture(withTfs: boolean): CatalogImportContext {
   write(join(monsters, 'mammals', 'test_rat.lua'), RAT);
   write(join(monsters, 'vermins', 'test_spitter.lua'), SPITTER);
   write(join(monsters, 'familiars', 'test_familiar.lua'), FAMILIAR);
+  write(join(monsters, 'familiars', 'monk_familiar.lua'), MONK_FAMILIAR);
+  write(join(canary, 'data', 'libs', 'systems', 'familiar.lua'), FAMILIAR_LUA);
   write(join(monsters, 'undeads', 'test_wraith.lua'), OUT_OF_PACK);
   write(join(monsters, 'undeads', 'test_summoner.lua'), SUMMONER);
   write(join(monsters, 'mammals', 'test_rat_caller.lua'), RAT_CALLER);
+  write(join(monsters, 'undeads', 'test_skeleton.lua'), CONVINCEABLE);
   write(join(canary, 'data', 'items', 'items.xml'), ITEMS_XML);
   if (withTfs) write(join(tfs, 'data', 'monster', 'monsters', 'test drake.xml'), TFS_DRAKE);
   return {
@@ -482,15 +567,255 @@ describe('convertMonster (fixture sintética)', () => {
   });
 });
 
-describe('readMonsterCatalog (fixture sintética)', () => {
-  it('fatia por pasta do Canary, pula familiars/, e manda o bloqueado ao relatório', () => {
+
+// ---------------------------------------------------------------------------------------------
+// Convince Creature e Animate Dead (#600): `convinceable`, `manaCost` e as janelas do cadáver.
+
+/** Um varint protobuf de até 32 bits. */
+const varint = (value: number): number[] => {
+  const out: number[] = [];
+  let rest = value;
+  while (rest > 0x7f) { out.push((rest & 0x7f) | 0x80); rest = Math.floor(rest / 128); }
+  out.push(rest);
+  return out;
+};
+const pbField = (field: number, wire: number, payload: readonly number[]): number[] =>
+  [...varint(field * 8 + wire), ...payload];
+const pbBytes = (field: number, bytes: readonly number[]): number[] =>
+  pbField(field, 2, [...varint(bytes.length), ...bytes]);
+
+/** Um `Appearance` de objeto (campo 1 do `Appearances`) com as flags que a Animate Dead lê. */
+function appearanceBytes(id: number, flags: { corpse?: boolean; playerCorpse?: boolean; unmove?: boolean }): number[] {
+  const flagBytes = [
+    // Uma submensagem e um varint que o leitor NÃO conhece (`bank`, `clip`): pulados por wire type.
+    ...pbBytes(1, pbField(1, 0, [5])),
+    ...pbField(2, 0, [1]),
+    ...(flags.unmove === true ? pbField(14, 0, [1]) : []),
+    ...(flags.corpse === true ? pbField(42, 0, [1]) : []),
+    ...(flags.playerCorpse === true ? pbField(43, 0, [1]) : []),
+  ];
+  return pbBytes(1, [...pbField(1, 0, varint(id)), ...pbBytes(3, flagBytes)]);
+}
+
+/** O `appearances.dat` sintético: dois cadáveres, um item comum e um OUTFIT (campo 2, ignorado). */
+function writeAppearances(path: string): void {
+  const bytes = [
+    ...appearanceBytes(1, { corpse: true, unmove: true }),
+    ...appearanceBytes(2, { corpse: true }),
+    ...appearanceBytes(3, { playerCorpse: true }),
+    ...appearanceBytes(4, {}),
+    // Um outfit com o mesmo id 1: NÃO pode sobrescrever o objeto 1.
+    ...pbBytes(2, [...pbField(1, 0, [1]), ...pbBytes(3, pbField(42, 0, [1]))]),
+  ];
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, Buffer.from(bytes));
+}
+
+describe('readCorpseItemFlags (#600, `appearances.dat`)', () => {
+  it('lê corpse/player_corpse e unmove só dos OBJETOS, pulando o resto por wire type', () => {
+    workdir = mkdtempSync(join(tmpdir(), 'catalog-appearances-'));
+    const path = join(workdir, 'appearances.dat');
+    writeAppearances(path);
+    expect(readCorpseItemFlags(path)).toEqual(new Map([
+      [1, { movable: false }],
+      [2, { movable: true }],
+      [3, { movable: true }],
+    ]));
+  });
+
+  it('arquivo ausente devolve mapa vazio, nunca lança nem inventa um cadáver movível', () => {
+    expect(readCorpseItemFlags('/nao/existe/appearances.dat')).toEqual(new Map());
+  });
+});
+
+describe('corpseAnimatableWindows (#600)', () => {
+  const chain = (...stages: [number, number | undefined][]): Map<number, DecayStage> =>
+    new Map(stages.map(([seconds, decayTo], index) => [
+      index + 1, decayTo === undefined ? { durationSeconds: seconds } : { durationSeconds: seconds, decayTo },
+    ]));
+  const flags = (movable: readonly boolean[]): Map<number, CorpseItemFlags> =>
+    new Map(movable.map((value, index) => [index + 1, { movable: value }]));
+
+  it('o estágio recém-abatido é `unmove`: a janela abre no primeiro decaimento e vai até o fim da cadeia', () => {
+    // 10 s (unmove) → 300 s → 300 s → 60 s (todos movíveis): o caso de 610 dos 1.028 monstros.
+    const chains = chain([10, 2], [300, 3], [300, 4], [60, 0]);
+    expect(corpseAnimatableWindows(1, chains, flags([false, true, true, true])))
+      .toEqual([{ fromMs: 10_000, untilMs: 670_000 }]);
+    expect(corpseTtlMsFromChain(1, chains)).toBe(670_000);
+  });
+
+  it('o primeiro estágio já movível abre a janela em zero', () => {
+    expect(corpseAnimatableWindows(1, chain([5, 2], [10, 0]), flags([true, true])))
+      .toEqual([{ fromMs: 0, untilMs: 15_000 }]);
+  });
+
+  it('estágios movíveis separados por um imóvel viram DUAS janelas', () => {
+    expect(corpseAnimatableWindows(1, chain([10, 2], [20, 3], [30, 0]), flags([true, false, true])))
+      .toEqual([{ fromMs: 0, untilMs: 10_000 }, { fromMs: 30_000, untilMs: 60_000 }]);
+  });
+
+  it('sem estágio movível, sem flags, sem cadeia ou sem `corpse`: undefined (nunca animável)', () => {
+    expect(corpseAnimatableWindows(1, chain([10, 0]), flags([false]))).toBeUndefined();
+    expect(corpseAnimatableWindows(1, chain([10, 0]), new Map())).toBeUndefined();
+    expect(corpseAnimatableWindows(9, chain([10, 0]), flags([true]))).toBeUndefined();
+    expect(corpseAnimatableWindows(undefined, chain([10, 0]), flags([true]))).toBeUndefined();
+  });
+
+  it('ciclo no decayTo termina sem repetir janela', () => {
+    const cyclic: Map<number, DecayStage> = new Map([
+      [1, { durationSeconds: 10, decayTo: 2 }], [2, { durationSeconds: 10, decayTo: 1 }],
+    ]);
+    expect(corpseAnimatableWindows(1, cyclic, flags([true, true]))).toEqual([{ fromMs: 0, untilMs: 20_000 }]);
+  });
+});
+
+describe('convertMonster: convinceable, manaCost e corpseAnimatable (#600)', () => {
+  it('traz `convinceable`, o `manaCost` do monstro e a janela do cadáver; `summonable` NÃO sai', () => {
     const ctx = fixture(false);
-    expect(listMonsterFiles(ctx.canaryDir)).not.toContain('data-otservbr-global/monster/familiars/test_familiar.lua');
+    writeAppearances(join(ctx.canaryDir, 'data', 'items', 'appearances.dat'));
+    const converted = convertMonster(CONVINCEABLE, 'x/undeads/test_skeleton.lua', 'undeads', COMMIT, deps(ctx));
+
+    expect(converted.blockers).toEqual([]);
+    // `monster.corpse = 1`: 1 (10 s, unmove) → 2 (5 s, movível) → fim.
+    expect(converted.entity).toMatchObject({
+      id: 'test-skeleton', convinceable: true, manaCost: 300, corpseTtlMs: 15_000,
+      corpseAnimatable: [{ fromMs: 10_000, untilMs: 15_000 }],
+    });
+    expect(converted.entity['summonable']).toBeUndefined();
+    expect(() => monsterSchema.parse(asMonster(converted.entity))).not.toThrow();
+  });
+
+  it('monstro sem os campos não ganha nenhum (`manaCost` 0 não é escrito, sem `.dat` não há janela)', () => {
+    const ctx = fixture(false);
+    const text = CONVINCEABLE.replace('monster.manaCost = 300', 'monster.manaCost = 0')
+      .replace('convinceable = true', 'convinceable = false');
+    const converted = convertMonster(text, 'x/undeads/test_skeleton.lua', 'undeads', COMMIT, deps(ctx));
+    expect(converted.entity['convinceable']).toBeUndefined();
+    expect(converted.entity['manaCost']).toBeUndefined();
+    // O fixture não escreveu `appearances.dat`: sem o dado do Canary, nunca animável.
+    expect(converted.entity['corpseAnimatable']).toBeUndefined();
+    expect(converted.entity['corpseTtlMs']).toBe(15_000);
+  });
+});
+
+describe('o Bosstiary do Canary (#629)', () => {
+  const convertBoss = (bosstiary: string) => {
+    const ctx = fixture(false);
+    return convertMonster(BOSS(bosstiary), 'x/bosses/test_boss.lua', 'bosses', COMMIT, deps(ctx));
+  };
+
+  it.each([
+    ['RARITY_BANE', 'bane'], ['RARITY_ARCHFOE', 'archfoe'], ['RARITY_NEMESIS', 'nemesis'],
+  ])('%s vira a raridade %s, com o raceId e a flag boss (o isBoss do Canary)', (constant, rarity) => {
+    const converted = convertBoss(`monster.bosstiary = { bossRaceId = 5555, bossRace = ${constant} }`);
+    expect(converted.blockers).toEqual([]);
+    expect(converted.entity['boss']).toBe(true);
+    expect(converted.entity['bosstiary']).toEqual({ rarity, raceId: 5555 });
+    // O bloco vai para `data/` como está (é campo do `monsterSchema`), e o boss não tem `class`.
+    expect(converted.entity['bestiary']).toBeUndefined();
+    expect(() => monsterSchema.parse(asMonster(converted.entity))).not.toThrow();
+    // Lido, não mais "ignorado por falta de sistema".
+    expect(converted.notes.ignoredFields.some((field) => field.startsWith('bosstiary'))).toBe(false);
+  });
+
+  it('monstro sem bloco bosstiary não é boss, e o schema o aceita sem os dois campos', () => {
+    const converted = convertBoss('');
+    expect(converted.blockers).toEqual([]);
+    expect(converted.entity['boss']).toBeUndefined();
+    expect(converted.entity['bosstiary']).toBeUndefined();
+  });
+
+  it('bloqueia o boss sem raridade conhecida ou sem bossRaceId — o Canary o registra pela metade', () => {
+    // Sem `bossRace` o Canary nem o marca como boss; sem `bossRaceId` o `raceid` fica 0 e
+    // `IOBosstiary::addBosstiaryKill` devolve cedo: o boss nunca contaria abate.
+    expect(convertBoss('monster.bosstiary = { bossRaceId = 5555 }').blockers)
+      .toEqual(['raridade de Bosstiary desconhecida: nil']);
+    expect(convertBoss('monster.bosstiary = { bossRaceId = 5555, bossRace = RARITY_LEGENDARY }').blockers)
+      .toEqual(['raridade de Bosstiary desconhecida: RARITY_LEGENDARY']);
+    expect(convertBoss('monster.bosstiary = { bossRace = RARITY_BANE }').blockers)
+      .toEqual(['bosstiary sem bossRaceId']);
+    expect(convertBoss('monster.bosstiary = 3').blockers).toEqual(['bosstiary não é uma tabela']);
+  });
+});
+
+describe('o familiar de vocação (#599, M38-02, ADR 0057 d.3)', () => {
+  const familiar = () => {
+    const ctx = fixture(false);
+    const text = readFileSync(join(ctx.canaryDir, 'data-otservbr-global/monster/familiars/test_familiar.lua'), 'utf8');
+    return convertMonster(text, 'data-otservbr-global/monster/familiars/test_familiar.lua', 'familiars', COMMIT, deps(ctx));
+  };
+
+  it('readFamiliarLooktypes casa só os pares `{ id, name }` do FAMILIAR_ID, e nunca lança', () => {
+    const ctx = fixture(false);
+    expect(readFamiliarLooktypes(join(ctx.canaryDir, 'data/libs/systems/familiar.lua'))).toEqual(new Map([
+      ['Sorcerer familiar', 994], ['Test Familiar', 993], ['Monk familiar', 1818],
+    ]));
+    expect(readFamiliarLooktypes('/nao/existe')).toEqual(new Map());
+  });
+
+  it('o lookType comentado vem da tabela por nome, e `familiar`/`manaCost` saem; `summonable` NÃO', () => {
+    const converted = familiar();
+    expect(converted.blockers).toEqual([]);
+    expect(converted.entity).toMatchObject({
+      id: 'test-familiar', familiar: true, manaCost: 300, outfitId: 993,
+      // 154 do Canary × 2, porque o fixture não tem o monstro no TFS.
+      speed: 308, targetDistance: 4, staticAttack: 0.9, blockable: false,
+      conditionImmunities: ['invisible', 'paralyze'],
+    });
+    // O Canary declara `summonable = false` nos quatro: a Summon Creature não os invoca.
+    expect(converted.entity['summonable']).toBeUndefined();
+    // Passa no `monsterSchema` (o `.refine` de summonable/manaCost não cobra nada de um familiar).
+    expect(() => monsterSchema.parse(asMonster(converted.entity))).not.toThrow();
+  });
+
+  it('sem a tabela do FAMILIAR_ID o familiar cai no bloqueio de sempre (sem lookType)', () => {
+    const ctx = fixture(false);
+    const text = readFileSync(join(ctx.canaryDir, 'data-otservbr-global/monster/familiars/test_familiar.lua'), 'utf8');
+    const { familiarLooktypes: _unused, ...withoutTable } = deps(ctx);
+    const converted = convertMonster(text, 'x/familiars/test_familiar.lua', 'familiars', COMMIT, withoutTable);
+    expect(converted.blockers).toEqual(['sem aparência (lookType 0)']);
+  });
+
+  it('as três magias por nome viram ability: SD rune e ice strike (dano da entrada) e summon challenge', () => {
+    const abilities = familiar().entity['abilities'] as readonly Record<string, unknown>[];
+    const byId = (id: string) => abilities.find((ability) => ability['id'] === id);
+    // `Monster::getCombatValues`: o dano é o `minDamage`/`maxDamage` da ENTRADA, não a fórmula de
+    // level/magic level da magia registrada.
+    expect(byId('suddendeath')).toMatchObject({
+      cadenceMs: 2000, chance: 0.17, target: { range: 7 }, power: { min: 30, max: 35 }, damageType: 'death',
+      presentation: { missileKey: 'suddendeath', impactKey: 'mortarea' },
+    });
+    // O `spell:range(3)` do `ice_strike.lua` vale por cima do `range = 5` do monstro (`canThrowSpell`).
+    expect(byId('icestrike')).toMatchObject({
+      chance: 0.17, target: { range: 3 }, power: { min: 30, max: 35 }, damageType: 'ice',
+      presentation: { missileKey: 'smallice', impactKey: 'iceattack' },
+    });
+    expect(familiar().notes.spellNotes.some((note) => note.startsWith('ice strike: alcance 5 → 3'))).toBe(true);
+    // `AREA_CIRCLE2X2` centrado no lançador (21 tiles) = o círculo de raio 4 da tabela de anéis de
+    // MONSTRO; 8 s de provocação (`doChallengeCreature(creature, target, 8000)`); sem dano.
+    expect(byId('summon-challenge')).toEqual({
+      id: 'summon-challenge', cadenceMs: 2000, chance: 0.4,
+      target: { range: 11, area: { shape: 'circle', radius: 4, centered: 'caster' } },
+      power: 0, damageType: 'physical', presentation: { impactKey: 'blueshimmer' },
+      challenge: { durationMs: 8000 },
+    });
+  });
+});
+
+describe('readMonsterCatalog (fixture sintética)', () => {
+  it('fatia por pasta do Canary, lê familiars/ (#599), e manda o bloqueado ao relatório', () => {
+    const ctx = fixture(false);
+    expect(listMonsterFiles(ctx.canaryDir)).toContain('data-otservbr-global/monster/familiars/test_familiar.lua');
     const catalog = readMonsterCatalog(ctx, deps(ctx));
 
-    expect([...catalog.slices.keys()].sort()).toEqual(['dragons', 'mammals']);
+    expect([...catalog.slices.keys()].sort()).toEqual(['dragons', 'familiars', 'mammals', 'undeads']);
     expect(catalog.slices.get('dragons')?.map((entity) => entity.id)).toEqual(['test-drake']);
-    expect(catalog.skipped.map((entity) => entity.id).sort()).toEqual(['test-spitter', 'test-summoner', 'test-wraith']);
+    // O familiar do Monk é lido e barrado pelo recorte, com o motivo no relatório.
+    expect(catalog.slices.get('familiars')?.map((entity) => entity.id)).toEqual(['test-familiar']);
+    expect(catalog.skipped.map((entity) => entity.id).sort())
+      .toEqual(['monk-familiar', 'test-spitter', 'test-summoner', 'test-wraith']);
+    expect(catalog.skipped.find((entity) => entity.id === 'monk-familiar')?.reason)
+      .toBe('vocação Monk fora do corte (ADR 0051: sistemas mais novos que o 13.32)');
     // A invocação de monstro não gerado leva o invocador junto; a de monstro gerado fica.
     expect(catalog.skipped.find((entity) => entity.id === 'test-summoner')?.reason).toBe('invoca monstro não gerado: test-wraith');
     expect(catalog.slices.get('mammals')?.find((entity) => entity.id === 'test-rat-caller')?.['summons']).toEqual({
@@ -570,6 +895,21 @@ describe.skipIf(!HAS_CANARY)('leitor contra o Canary real (CANARY_DIR)', () => {
     ] as const) {
       expect(generated[field], field).toEqual(authored[field]);
     }
+  });
+
+  it('Convince e Animate Dead (#600): o Skeleton é convencível (mana 300) e só animável 10 s depois da morte', () => {
+    const skeleton = convertReal('undeads/skeleton.lua');
+    expect(skeleton.blockers).toEqual([]);
+    // `skeleton.lua`: `monster.manaCost = 300`, `flags.convinceable = true`; `monster.corpse = 5972`
+    // (10 s, `unmove` no `appearances.dat`) → 4024 (300 s) → … → 670 s de cadeia inteira.
+    expect(skeleton.entity).toMatchObject({
+      convinceable: true, manaCost: 300, corpseTtlMs: 670_000,
+      corpseAnimatable: [{ fromMs: 10_000, untilMs: 670_000 }],
+    });
+    // O Dragon não é convencível (`dragon.lua` não declara), e o cadáver dele também nasce `unmove`.
+    const dragon = convertReal('dragons/dragon.lua');
+    expect(dragon.entity['convinceable']).toBeUndefined();
+    expect(dragon.entity['corpseAnimatable']).toEqual([{ fromMs: 10_000, untilMs: 670_000 }]);
   });
 
   it('o Slime invoca Slime (maxSummons 3, chance 10, intervalo 2000, até 3)', () => {

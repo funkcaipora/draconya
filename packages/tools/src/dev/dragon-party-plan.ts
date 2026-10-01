@@ -193,6 +193,20 @@ function haste(spellId: string): SlotInput {
   return spell(spellId, [{ kind: 'condition', conditionId: 'haste', present: false }]);
 }
 
+/**
+ * O familiar de vocação (#599, M38-02, ADR 0057 d.4 — "familiar pronto → invocar"): a magia do
+ * Canary da vocação, quando ela existe no conteúdo, com a condição "sem invocação viva". É a
+ * mesma regra do jogador que confere o `Player:CreateFamiliarSpell`: o familiar exige ZERO
+ * invocações vivas, e o cooldown de 30 min NÃO precisa de condição própria — a recusa por
+ * cooldown de parede engatilha sem agendar o grupo (`HuntRuleset#castSpell`), então o bot tenta
+ * a cada evento e lança sozinho no instante em que a magia volta. O nível 200 da party de teste é
+ * o mínimo da magia.
+ */
+function familiar(content: Content, vocationId: DragonPartyVocation): SlotInput[] {
+  const spellId = `summon-${vocationId}-familiar`;
+  return content.spells.has(spellId) ? [spell(spellId, [{ kind: 'summons', op: '<=', count: 0 }])] : [];
+}
+
 function hpBelow(percent: number): BotConditionV2 {
   return { kind: 'hp', op: '<=', percent };
 }
@@ -289,6 +303,7 @@ export function botConfigFor(content: Content, vocationId: DragonPartyVocation):
         // repõe — falso a partir do segundo Fierce Berserk.
         supply('strong-mana-potion', [manaBelow(40)]),
         haste('haste-knight'),
+        ...familiar(content, 'knight'),
         ...spellCascade(
           content, ['fierce-berserk', 'front-sweep', 'berserk', 'whirlwind-throw'],
           [targetsAtLeast(1)],
@@ -298,6 +313,7 @@ export function botConfigFor(content: Content, vocationId: DragonPartyVocation):
       return buildConfig({ kind: 'leader' }, [
         supply('ultimate-spirit-potion', [hpBelow(60)]),
         haste('haste-paladin'),
+        ...familiar(content, 'paladin'),
         // exevo mas san (Divine Caldera, área) quando há gente o bastante para valer o mana;
         // senão, alvo único do mais forte pro mais barato: exori gran con (Strong Ethereal
         // Spear, #523) → exori san (Divine Missile) → exori con (Ethereal Spear).
@@ -312,6 +328,7 @@ export function botConfigFor(content: Content, vocationId: DragonPartyVocation):
         supply('ultimate-mana-potion', [manaBelow(40)]),
         supply('health-potion', [hpBelow(30)]),
         haste('haste-sorcerer'),
+        ...familiar(content, 'sorcerer'),
         spell('ultimate-healing-sorcerer', [hpBelow(60)]),
         // Rage of the Skies (energia) para grupo grande — não Hell's Core: fogo não faz nada no
         // dragão. Avalanche (gelo) é o ataque de base: o Sorcerer não tem magia de gelo própria
@@ -327,6 +344,7 @@ export function botConfigFor(content: Content, vocationId: DragonPartyVocation):
         supply('ultimate-mana-potion', [manaBelow(40)]),
         supply('health-potion', [hpBelow(30)]),
         haste('haste-druid'),
+        ...familiar(content, 'druid'),
         // Eternal Winter (gelo) para grupo grande — a própria fraqueza do dragão, e o único nuke
         // de área do Druid que não é terra (Terra Wave/Wrath of Nature ficam de fora: 80 % de
         // resistência). Avalanche (gelo) é o ataque de base.

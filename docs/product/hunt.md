@@ -96,7 +96,7 @@ A saída da hunt pode ocorrer de duas maneiras principais quando não decorre de
 - **Múltiplos disparos**: Novas solicitações de saída durante uma contagem já em andamento são ignoradas e não reiniciam o timer.
 - **Preservação em snapshot**: Se o estado for serializado no meio da contagem regressiva, o timer agendado e o motivo de saída pendente (`pendingExit`) são preservados na retomada.
 - **Exceção para `party-member-lost`**: A regra de saída em cascata quando um membro do grupo sai ou morre (`party-member-lost`) permanece **imediata**, sem passar pelo atraso de `exitDelayMs`.
-- **Trava de combate (#625, janela do `CONDITION_INFIGHT`/`pzLocked` do Canary, 60 s)**: depois de vencer o `exitDelayMs`, a saída — manual ou por regra do bot, as duas — só **conclui** se o personagem estiver fora de combate: nenhum ataque dado nem recebido nos últimos 60 000 ms. Em combate, o `pendingExit` fica marcado e a saída aguarda; um novo ataque durante a espera empurra o prazo para 60 s depois DELE, como no Tibia. **A definição de "em combate" é uma aproximação por dano aplicado, não o `CONDITION_INFIGHT` inteiro:** o carimbo (`lastCombatActionAtMs`) só é escrito quando um golpe é aplicado, dado ou recebido. O Canary também renova a condição quando um monstro escolhe o jogador como alvo (sem ter batido ainda), em toda magia agressiva conjurada (acertando ou não), no tiro sem linha de visão e no dano de campo/DoT — nesses instantes o Canary recusaria o logout e o Draconya conclui a saída. Alargar os carimbos é acompanhamento do #625 (muda também o decaimento de imbuement, #606), e não foi feito no #802. "Em combate" tem uma definição só no motor (`isInFight`, `packages/sim/src/combat/in-fight.ts`), que também alimenta o decaimento de imbuement fora de combate (#606). A cascata `party-member-lost` continua isenta — ela nunca passa por essa trava.
+- **Trava de combate (#625, janela do `CONDITION_INFIGHT`/`pzLocked` do Canary, 60 s)**: depois de vencer o `exitDelayMs`, a saída — manual ou por regra do bot, as duas — só **conclui** se o personagem estiver fora de combate: nenhum ataque dado nem recebido nos últimos 60 000 ms. Em combate, o `pendingExit` fica marcado e a saída aguarda; um novo ataque durante a espera empurra o prazo para 60 s depois DELE, como no Tibia. **A definição de "em combate" é uma aproximação por dano aplicado, não o `CONDITION_INFIGHT` inteiro:** o carimbo (`lastCombatActionAtMs`) só é escrito quando um golpe é aplicado, dado ou recebido. O Canary também renova a condição quando um monstro escolhe o jogador como alvo (sem ter batido ainda), em toda magia agressiva conjurada (acertando ou não), no tiro sem linha de visão e no dano de campo/DoT — nesses instantes o Canary recusaria o logout e o Draconya conclui a saída. Alargar os carimbos é acompanhamento do #625 (muda também o decaimento de imbuement, #606), e não foi feito no #802. "Em combate" tem uma definição só no motor (`isInFight`, `packages/sim/src/combat/in-fight.ts`), que também alimenta o decaimento de imbuement fora de combate (#606). O carimbo é do relógio da sessão que o gravou e **não atravessa a troca de sessão**: `Session.enter` o zera (#812), então a hunt nova não herda um combate da anterior. A cascata `party-member-lost` continua isenta — ela nunca passa por essa trava.
 - **O `leave-hunt` do jogador pede a saída ao ruleset (#802).** Até o #802 o opcode 10 encerrava a sessão direto no hospedeiro (`session.end`/`session.leave`), e o `exitDelayMs` e a trava de combate só valiam para a saída automática do bot. Agora `SessionHost#requestLeaveHunt` chama `requestExit`, e a sessão termina quando o ruleset conclui (`#finishExit`) — depois do `exitDelayMs` e fora da janela de 60 s. Concluir é o mesmo caminho de sempre: solo encerra a sessão (`manual-exit`, extrato, Cidade); numa party o membro SAI com o extrato dele (`member-left`) e a hunt segue para os outros. **Idle-first (invariante 3):** a espera é um evento da fila do `sim`, então vence com ou sem visualizador — pedir a saída e fechar a aba sai do mesmo jeito, no mesmo instante lógico. **Morte, `party-member-lost` e a drenagem do nó continuam encerrando direto**: nenhuma carrega a intenção de sair.
 - **O cliente vê a espera (`exit-pending`, S2C 45) e pode desistir (`cancel-exit`, C2S 34).** O servidor manda `{ active, reason, phase, remainingMs }` por PERSONAGEM: `phase: 'countdown'` (a contagem do `exitDelayMs`) ou `'in-combat'` (a trava de 60 s — o `remainingMs` é uma previsão que cada golpe novo empurra, e a mensagem é reenviada quando ele muda); `active: false` é o fim da espera. Sai também no `session-attach`, com o que falta AGORA. A pill "Sair da caçada" vira "Saindo em N s · Cancelar" / "Em combate · saindo em N s · Cancelar" (`HuntExitPending.tsx`). **Só a saída MANUAL se cancela** (`ruleset.cancelExit`): a de uma regra do bot reaparece no ciclo seguinte enquanto a condição valer, então a tela só a mostra. Cancelar cancela o `EXIT_COUNTDOWN` agendado — pedir de novo logo depois recomeça a contagem inteira. **Divergência do Canary, que não é regra de caça:** o Canary não tem logout pendente — recusa na hora (`RETURNVALUE_YOUMAYNOTLOGOUTDURINGAFIGHT`) e o jogador tenta de novo; a espera (e o cancelar) são a forma do Draconya de fazer esse "tenta de novo" por um jogo idle-first, no molde do `hunt-leave-pending` do Huntera (`docs/reference/huntera-observed.md`, Parte II §15). Nenhuma regra de combate nem a janela de 60 s mudam.
 - **Sem `exitDelayMs` no conteúdo, o atraso é só a trava.** Nenhuma hunt de `data/hunts/` declara `exitDelayMs` hoje (o campo existe no schema, opcional): fora de combate o `leave-hunt` conclui na hora, como antes do #802; em combate espera os 60 s. O Huntera atrasa 5 s (`hunt-leave-pending { remainingMs: 5000 }`); declarar `exitDelayMs: 5000` nas hunts é uma linha por arquivo, mas muda também a saída por regra do bot em todas elas — decisão de balanceamento, fora do #802.
@@ -702,6 +702,45 @@ esperando. Sem isso, as duas leriam a mesma sessão de origem e a segunda tentar
 registro que a primeira já trocou — e o caminho de recusa da troca solta o personagem, ou seja,
 perder a corrida derrubaria o jogador do jogo.
 
+**O relógio da sessão anterior não atravessa a transição: os carimbos zeram e os prazos são
+traduzidos (#812).** O `CharacterRuntime` atravessa a transição como o MESMO objeto, mas o relógio
+lógico de cada sessão nasce em zero (ADR 0020) — e um instante gravado por uma sessão e lido pela
+seguinte vira "agora mesmo" ou "no futuro". São duas espécies de grandeza, e a entrada trata cada uma
+de um jeito (ADR 0020, emenda de 2026-09-29):
+
+- **Carimbo** ("quando foi a última vez que…") **zera.** `Session.enter` (depois de o `onEnter` do
+  ruleset aceitar) chama `resetSessionClockState`: o último golpe de arma (`lastAttackAtMs`, #550), o
+  último ataque dado ou recebido (`lastCombatActionAtMs`, #625 — sem isto a saída da hunt nova ficava
+  travada 60 s por um combate que ela não viu), o banco de cargas de bloqueio (volta cheio: o contador
+  do Canary sobe uma carga por segundo até duas) e a ação manual adiada (o evento dela morava na fila
+  da sessão anterior). A trava de stairhop (#554) já esteve aqui; desde o #622 ela é a condição
+  `pacified` e atravessa como PRAZO (abaixo).
+- **Prazo** ("quanto ainda falta") **atravessa com o que faltava.** O cooldown de magia e de poção
+  (inclusive o `exhaust:action`), as condições (haste, Utamo Vita, veneno, paralisia, regeneração de
+  alma) e a imunidade do charm Cleanse são traduzidos para o relógio da sessão que entra
+  (`CharacterRuntime.moveToClock`, antes do `onEnter`): o Intense Wound Cleansing de 10 minutos conjurado
+  numa hunt continua com o restante dele depois de uma ida à Cidade, como no Canary (a condição de
+  cooldown de magia, `CONDITIONID_DEFAULT`, é persistente e a morte não a remove). O que já venceu na
+  saída não vai. **A Cidade não simula (ADR 0023): o prazo fica PAUSADO nela**, a mesma convenção do anel
+  de duração (#689) e da comida (`fedMs`). A hunt reagenda o vencimento e o próximo tique das condições
+  que o personagem traz (`HuntRuleset#armConditions`, no `onEnter`); `onLeave` tira os eventos da fila e
+  deixa a condição no personagem. A **morte** continua removendo as condições (morto não tem condição),
+  e o cooldown de magia segue.
+
+O instante da saída é o EXATO (`Session.leave`/`end` o gravam no personagem): o servidor constrói o
+destino antes de encerrar a origem, e a sessão que acaba no meio de um `advanceBy` ainda empurra o
+relógio até o alvo — ler o relógio da origem depois daria um restante que depende da frequência do
+hospedeiro. A **entrada recusada** (party cheia) desfaz a tradução e não toca quem continua na origem,
+e o **restore de snapshot não passa por `enter`** — o relógio é o mesmo, e a janela quente atravessa. O
+que é duração sem âncora num relógio (a comida, o `durationRemainingMs` do item) atravessa como sempre.
+Um teste de `session.test.ts` classifica cada campo de `CharacterState` como carimbo, prazo ou nenhum
+dos dois: um campo novo não compila até ser classificado.
+
+**Em aberto:** o prazo atravessa a Cidade **viva**, com o mesmo objeto em memória. Quando a sessão de
+repouso é recolhida (ADR 0024) ou o nó cai, o personagem volta do ticket sem cooldown nem condição — o
+Canary os salva no logout. Persisti-los pede coluna em `characters`, campo no ticket e no extrato e
+migração (ADR 0014).
+
 **Recusa é produto.** "Você não pode fazer isso" é a mensagem que faz alguém achar que o jogo
 travou; cada recusa diz o que fazer em seguida, e o socket não cai — o cliente pediu algo
 inválido, não algo malicioso.
@@ -785,6 +824,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Monstro espera a vista limpar para respawnar (`blockable`, o `isBlockable` do TFS/Canary) | `false` (não espera) é o default e o comportamento de 1.640/1.656 do bestiário do Canary — a MESMA proporção que Rat e Rotworm seguem desde o #586 (o `rat.lua`/`rotworm.lua` reais já são `isBlockable: false`; só o override de Draconya divergia). Até o #586, Rat e Rotworm declaravam `true` por um override (`data/monsters/overrides/rat.json`/`rotworm.json`), preservando o comportamento observado no Huntera (#519) enquanto as duas hunts dependiam do `spawnClearRadius` antigo; o #586 apagou os dois arquivos ao converter as hunts para os spawns reais | `data/monsters/generated/*.json`, campo `blockable` |
 | Monstro e `spawntime` por ponto de spawn (#519, o formato do Canary) | Obrigatório em todo ponto desde o #583 — Rat Cellars declara `rat`/`spider`/`rabbit`/`bug`/`cave-rat`, Rotworm Caves declara `rotworm`/`terramite`, todos lidos do recorte real (#586); a Darashia Dragon Lair declara os 47 (`dragon`/`dragon-lord`, 90 000 ms cada) | `data/routes/*.json`, campos `monsterId`/`at`/`respawnDelayMs` de `spawnPoints` |
 | Prazo do cadáver no chão | 670 s (670000 ms) em rat, rotworm, spider, rabbit, bug, cave-rat, terramite, dragon e dragon-lord — a soma da cadeia real `duration`/`decayTo` do Canary `items.xml`, campo do MONSTRO desde o #585 (era 30 s em Rat Cellars/Rotworm Caves, cópia do Huntera que só olhava o primeiro estágio da cadeia) | `data/monsters/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
+| Janela em que o cadáver é animável (#600, `corpseAnimatable`) | `[10 000, corpseTtlMs)` ms desde a morte no caso comum (698 dos 1.028 monstros gerados): o primeiro estágio da cadeia `decayTo` é `unmove` no Canary e o cadáver recém-abatido NÃO pode ser animado; 115 monstros têm `[0, corpseTtlMs)` (o primeiro estágio já é movível), 16 têm outra janela, e 199 nunca (sem cadáver, ou sem estágio movível). Gerado a partir de `data/items/appearances.dat` (`corpse`/`unmove`) e do `items.xml` | `data/monsters/generated/*.json`, campo `corpseAnimatable`; a Animate Dead em `data/supplies/animate-dead-rune.json` |
 | Atraso da saída solo (`exitDelayMs`) | ausente — nenhuma hunt declara, saída imediata fora de combate (#802); 5 000 ms é o do Huntera, decisão de balanceamento aberta (SV-24) | `data/hunts/*.json`, campo `exitDelayMs` |
 | Ambiente da cena (só apresentação) | `cavern` em Rat Cellars e em Rotworm Caves — o cliente escurece o mundo; ausente é superfície (FUN-121) | `data/hunts/*.json`, campo `ambience` |
 | Hora de virada da Boosted Creature (#615, `boosted.rolloverHourUtc`) | `0` (meia-noite UTC) — o mesmo instante do server-save do Canary | `data/boosted/baseline.json`, campo `rolloverHourUtc` |

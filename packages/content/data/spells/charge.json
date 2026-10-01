@@ -4,6 +4,7 @@
   "description": "Aumenta a sua velocidade de movimento em 90% por 5 segundos.",
   "vocationId": "knight",
   "minLevel": 25,
+  "learnPrice": 1300,
   "manaCost": 100,
   "group": "support",
   "groupCooldownMs": 2000,

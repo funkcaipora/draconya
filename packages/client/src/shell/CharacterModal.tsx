@@ -8,6 +8,7 @@ import { sendIntent } from '../net/current.js';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
 import { blessingCost, hasBlessing } from './blessing-cost.js';
 import { bonusPercent } from './bestiary-progress.js';
+import { spellShopLabel, spellShopRows } from './spell-shop.js';
 import { Kicker } from './ui/Kicker.js';
 import { Modal } from './ui/Modal.js';
 import { Tabs } from './ui/Tabs.js';
@@ -87,9 +88,17 @@ export function CharacterModal({ onClose }: { onClose: () => void }) {
   const bestiaryCounts = useHudSlice((state) => state.bestiary);
   const blessingsConfig = useHudSlice((state) => state.catalogue?.blessings ?? null);
   const blessingsMask = useHudSlice((state) => state.blessings);
+  // A tela de aprendizado de magia (#624, ADR 0058 d.2): o catálogo diz o que existe e quanto
+  // custa; `learnedSpells` diz o que ele já sabe.
+  const spellCatalogue = useHudSlice((state) => state.catalogue?.bot.spells ?? null);
+  const learnedSpells = useHudSlice((state) => state.learnedSpells);
   const characters = useStoreSlice(account, (state) => state.characters);
   const name = characters.find((character) => character.id === characterId)?.name
     ?? characterId ?? '—';
+  // Sem vocação escolhida ou sem catálogo, a lista é vazia e a caixa nem aparece (#624).
+  const spellRows = spellCatalogue === null || vocationId === null
+    ? []
+    : spellShopRows(spellCatalogue, { vocationId, level, gold, learned: learnedSpells });
 
   // Mesma fórmula de Bestiary.tsx: a tela só apresenta o valor que o servidor já sustenta.
   const bestiaryBonus = bestiaryConfig === null
@@ -187,6 +196,38 @@ export function CharacterModal({ onClose }: { onClose: () => void }) {
                 </li>
               );
             })}
+          </ul>
+        </Box>
+      )}
+      {/*
+       * Aprender magia (#624, ADR 0058 d.2): tela de serviço, sem diálogo de NPC (ADR 0042). O
+       * clique manda só a INTENÇÃO (invariante 4) — vocação, level, "já aprendida", preço e saldo
+       * são conferidos pelo servidor; o botão só se desabilita aqui para não oferecer o que ele
+       * vai recusar. Só aparece com vocação escolhida e com o catálogo na mão.
+       */}
+      {spellRows.length > 0 && (
+        <Box title="Magias">
+          <ul className="spell-shop-list">
+            {spellRows.map((row) => (
+              <li key={row.id} className="spell-shop-entry" data-status={row.status}>
+                <span className="spell-shop-name">{row.name}</span>
+                <span className="spell-shop-meta">
+                  {'LV ' + String(row.minLevel) + ' · ' + String(row.manaCost) + ' mana'}
+                </span>
+                {row.status === 'buyable' || row.status === 'no-gold'
+                  ? (
+                    <button
+                      type="button"
+                      className="spell-shop-buy"
+                      disabled={row.status === 'no-gold'}
+                      onClick={() => { sendIntent({ type: 'learn-spell', spellId: row.id }); }}
+                    >
+                      {spellShopLabel(row)}
+                    </button>
+                  )
+                  : <span className="spell-shop-state">{spellShopLabel(row)}</span>}
+              </li>
+            ))}
           </ul>
         </Box>
       )}
