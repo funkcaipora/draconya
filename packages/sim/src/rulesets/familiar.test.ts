@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
 import { resolveDeath } from '../death.js';
 import { FAMILIAR_TELEPORT_DISTANCE, isFamiliarState } from '../familiar.js';
+import { learnedSpellsStateOf } from '../learned-spells.js';
 import { CHALLENGE_CONDITION_KEY } from '../monster/monster.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
@@ -190,6 +191,9 @@ function makeHero(options: { mana?: number; familiar?: CharacterRuntime['familia
     level: 200, xp: totalXpForLevel(200, progression as Progression), vocationId: 'knight',
     staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0, gold: 0, goldDelta: 0, alive: true,
     cooldowns: {}, capacity: 1_000,
+    // Sabe TODA magia do conteúdo do teste (#624): o portão do aprendizado tem bloco próprio em
+    // `hunt.test.ts`, e aqui o assunto é o familiar, não se o herói comprou a magia.
+    learnedSpells: learnedSpellsStateOf([familiarSpell.id, summonSpell.id, quickHaste.id]),
     ...(options.familiar === undefined ? {} : { familiar: options.familiar }),
   });
 }
