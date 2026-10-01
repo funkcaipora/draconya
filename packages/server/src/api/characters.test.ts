@@ -73,6 +73,7 @@ class MemoryRepository implements GameRepository {
       charms: null,
       bosstiary: null,
       learnedSpells: null,
+      familiar: null,
       fedMs: 0,
       blessings: 0,
       fightMode: 'attack',

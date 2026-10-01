@@ -1084,6 +1084,65 @@ describe('invocação de monstro por monstro (#546, TFS/Canary monster.summon/ma
   });
 });
 
+describe('o familiar de vocação (#599, M38-02, ADR 0057 d.3; Canary `Player:CreateFamiliarSpell`)', () => {
+  // `familiar: true` e `manaCost` do Lua; `summonable` fica ausente (false), como no Canary.
+  const knightFamiliar = { ...rat, id: 'knight-familiar', name: 'Knight familiar', familiar: true, manaCost: 1_000 };
+  const familiarSpell = {
+    id: 'summon-knight-familiar', name: 'Summon Knight Familiar', vocationId: 'knight', minLevel: 200,
+    manaCost: 1_000, cooldownMs: 2_000, group: 'support', groupCooldownMs: 2_000,
+    effect: { kind: 'familiar', monsterId: 'knight-familiar', durationMs: 900_000, cooldownMs: 1_800_000 },
+  };
+  const withFamiliar = (over: { monster?: object; spell?: object; spells?: object[] } = {}) => base({
+    monsters: [rat, { ...knightFamiliar, ...over.monster }],
+    spells: over.spells ?? [{ ...familiarSpell, ...over.spell }],
+  } as Partial<RawContent>);
+
+  it('monta: o monstro é `familiar`, NÃO é `summonable`, e a magia carrega duração e cooldown', () => {
+    const content = buildContent(withFamiliar());
+    expect(content.monsters.get('knight-familiar')).toMatchObject({ familiar: true, summonable: false, manaCost: 1_000 });
+    expect(content.monsters.get('rat')?.familiar).toBe(false);
+    expect(content.spells.get('summon-knight-familiar')?.effect).toEqual({
+      kind: 'familiar', monsterId: 'knight-familiar', durationMs: 900_000, cooldownMs: 1_800_000,
+    });
+  });
+
+  it('recusa o monstro que não existe, o que não é `familiar` e o `manaCost` que não bate', () => {
+    expect(() => buildContent(withFamiliar({ spell: { effect: { ...familiarSpell.effect, monsterId: 'fantasma' } } })))
+      .toThrow(/familiar\.monsterId "fantasma" não existe no catálogo de monstros/);
+    expect(() => buildContent(withFamiliar({ monster: { familiar: false } })))
+      .toThrow(/familiar\.monsterId "knight-familiar" não é um monstro "familiar"/);
+    expect(() => buildContent(withFamiliar({ spell: { manaCost: 2_000 } })))
+      .toThrow(/manaCost 2000 difere do manaCost 1000 do monstro "knight-familiar"/);
+  });
+
+  it('exige vocação, um cooldown que cubra a duração, e UM familiar por vocação', () => {
+    const { vocationId: _semVocacao, ...semVocacao } = familiarSpell;
+    expect(() => buildContent(withFamiliar({ spells: [semVocacao] })))
+      .toThrow(/o familiar exige vocationId/);
+    expect(() => buildContent(withFamiliar({
+      spell: { effect: { ...familiarSpell.effect, cooldownMs: 600_000 } },
+    }))).toThrow(/familiar\.cooldownMs é menor que a duração/);
+    expect(() => buildContent(withFamiliar({
+      spells: [familiarSpell, { ...familiarSpell, id: 'outro-familiar-do-knight' }],
+    }))).toThrow(/a vocação "knight" já tem o familiar "summon-knight-familiar"/);
+  });
+
+  it('a provocação da ability (`challenge`) passa do arquivo para o `sim`, como a condição e o campo', () => {
+    const challenger = {
+      ...knightFamiliar,
+      abilities: [{
+        id: 'summon-challenge', cadenceMs: 2_000, chance: 0.4, power: 0, damageType: 'physical',
+        target: { range: 11, area: { shape: 'circle', radius: 4, centered: 'caster' } },
+        challenge: { durationMs: 8_000 },
+      }],
+    };
+    const content = buildContent(base({ monsters: [rat, challenger] } as Partial<RawContent>));
+    expect(content.monsters.get('knight-familiar')?.abilities[0]?.challenge).toEqual({ durationMs: 8_000 });
+    // E a ability sem provocação continua sem o campo.
+    expect(content.monsters.get('rat')?.abilities[0]?.challenge).toBeUndefined();
+  });
+});
+
 describe('Convince Creature e Animate Dead (#600, ADR 0057 d.5–d.6)', () => {
   const skeleton = {
     id: 'skeleton', name: 'Skeleton', recommendedLevel: 1, health: 50, experience: 0, attack: 0, armor: 0,

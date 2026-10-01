@@ -380,6 +380,8 @@ export function normalizeMonsterAbilities(monster: MonsterDefinition): readonly 
       // quente sem ramificar.
       ...(ability.condition === undefined ? {} : { condition: ability.condition }),
       ...(ability.field === undefined ? {} : { field: ability.field }),
+      // A provocação (#599) passa direto, como a condição e o campo.
+      ...(ability.challenge === undefined ? {} : { challenge: ability.challenge }),
     }));
   }
   return [{
@@ -845,6 +847,31 @@ export function buildContent(raw: RawContent): Content {
         problems.push(`${where}: manaCost "party-scaled" precisa de um efeito com target "party"`);
       }
     }
+    // O familiar (#599, ADR 0057 d.3): o monstro precisa existir e ser `familiar` — o flag é o que
+    // liga o teleporte ao mestre e a XP inteira, e uma magia que invocasse um monstro comum
+    // deixaria de ser o familiar do Canary sem ninguém perceber. A vocação é obrigatória: cada
+    // uma tem o SEU familiar (`FAMILIAR_ID`), e o `sim` reencontra o monstro pela vocação do
+    // personagem ao entrar na hunt (o Canary recria o familiar no login).
+    if (effect.kind === 'familiar') {
+      const familiar = monsterDefinitions.get(effect.monsterId);
+      if (familiar === undefined) {
+        problems.push(`${where}: familiar.monsterId "${effect.monsterId}" não existe no catálogo de monstros`);
+      } else if (!familiar.familiar) {
+        problems.push(`${where}: familiar.monsterId "${effect.monsterId}" não é um monstro "familiar"`);
+      } else if (typeof spell.manaCost === 'number' && familiar.manaCost !== undefined
+        && familiar.manaCost !== spell.manaCost) {
+        problems.push(
+          `${where}: manaCost ${String(spell.manaCost)} difere do manaCost ${String(familiar.manaCost)} `
+            + `do monstro "${effect.monsterId}"`,
+        );
+      }
+      if (spell.vocationId === undefined) {
+        problems.push(`${where}: o familiar exige vocationId — cada vocação tem o seu`);
+      }
+      if (effect.cooldownMs < effect.durationMs) {
+        problems.push(`${where}: familiar.cooldownMs é menor que a duração (o Canary usa 2 × a duração)`);
+      }
+    }
     // Conjuração (#594, ADR 0044): o id creditado precisa existir no catálogo correspondente —
     // sem isto, a magia subiria muda, creditando carga que `useSupply`/o tiro nunca reconhecem.
     if (effect.kind === 'conjure') {
@@ -872,6 +899,18 @@ export function buildContent(raw: RawContent): Content {
         problems.push(`${where}: food.items repete um item — o sorteio uniforme pesaria o repetido em dobro`);
       }
     }
+  }
+  // Cada vocação tem UM familiar (#599): duas magias `familiar` para a mesma vocação deixariam
+  // ambíguo qual delas o `sim` recria quando o personagem entra na hunt com tempo sobrando.
+  const familiarSpellByVocation = new Map<string, string>();
+  for (const spell of spells.values()) {
+    if (spell.effect.kind !== 'familiar' || spell.vocationId === undefined) continue;
+    const owner = familiarSpellByVocation.get(spell.vocationId);
+    if (owner !== undefined) {
+      problems.push(`spell/${spell.id}: a vocação "${spell.vocationId}" já tem o familiar "${owner}"`);
+      continue;
+    }
+    familiarSpellByVocation.set(spell.vocationId, spell.id);
   }
   // O supply de cura (#475): a runa UH/IH sai de UM mecanismo, como a magia — `amount` fixo
   // (poção) OU `basePower`/`formula` (runa). O `mana` não entra aqui: ele sempre foi fixo.

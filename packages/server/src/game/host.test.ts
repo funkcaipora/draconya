@@ -368,6 +368,40 @@ describe('session host', () => {
     expect(sessions).toHaveLength(0);
   });
 
+  it('re-anchors the wall clock of the resumed session by the discarded gap (#599, ADR 0018, ADR 0052 d.6)', async () => {
+    // `createdAtMs + nowMs` é o relógio de PAREDE que o `sim` compara com os carimbos do familiar. A
+    // retomada descarta o intervalo (o relógio lógico continua de onde parou), então sem recolocar
+    // o anchor a soma ficaria atrasada pela queda inteira e o cooldown de 30 min nasceria já curto.
+    const gapMs = 20 * 60_000;
+    const before = Date.now();
+    const snapshots = {
+      load: async () => ({
+        characterId: 'p1', accountId: 'a1', nodeId: 'n0', savedAtMs: before - gapMs,
+        snapshot: { id: 's', type: 'city', createdAtMs: 1_790_000_000_000, logicalNowMs: 5_000 } as unknown as SessionSnapshot,
+      }),
+      save: async () => {},
+      remove: async () => {},
+    } as unknown as SnapshotStore;
+    const restored = new Session({
+      id: 's-retomada', contentVersion: 'v-test',
+      ruleset: countingRuleset().ruleset, rng: Rng.fromSeed('x'), createdAtMs: 0,
+    });
+    let received: SessionSnapshot | undefined;
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, {
+      directory, snapshots, restoreSession: (snapshot) => { received = snapshot; return restored; },
+    });
+    await host.prepare('p1', undefined, 'a1');
+
+    // O intervalo medido na retomada (pelo menos 20 min, e só a folga de execução do teste a mais).
+    const delta = (received?.createdAtMs ?? 0) - 1_790_000_000_000;
+    expect(delta).toBeGreaterThanOrEqual(gapMs);
+    expect(delta).toBeLessThan(gapMs + 5_000);
+    // O relógio lógico NÃO anda: o intervalo é descartado, não simulado.
+    expect((received as { logicalNowMs?: number } | undefined)?.logicalNowMs).toBe(5_000);
+  });
+
   it('tells the player that the session was resumed, and how much was lost', async () => {
     // Silenciar aqui é como o modo idle perde a confiança de quem joga: o extrato não fecha
     // e ninguém explica por quê.
@@ -3004,6 +3038,38 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     expect((appears[0] as { position: { z: number } }).position.z).toBe(7);
   });
 
+  it('o monstro RECOLOCADO (o teleporte do familiar, #599) some e reaparece no tile novo, com id novo', () => {
+    // O `sim` não emite `creature-moved` de duração zero para o teleporte do familiar: o protocolo
+    // exige duração positiva, e o `#presentMoves` descarta o resto — o cliente nunca o veria
+    // chegar. O par `creature-vanished` + `creature-appeared` do MESMO subject é a relocação: o
+    // cliente o tira de onde estava e o desenha onde ficou (o id numérico não se reaproveita).
+    const { host, runFor, received } = hunt({ tanky: true });
+    runFor(300);
+    const session = host.sessionFor('hero');
+    if (session === undefined) throw new Error('sem sessão');
+    const rat = (session.ruleset as HuntRuleset).monsters[0];
+    if (rat === undefined) throw new Error('sem monstro');
+    const firstId = (received().filter((m) => m.type === 'creature-appear') as unknown as Array<{ id: number }>)[0]?.id;
+    expect(firstId).toBeDefined();
+    const before = received().length;
+
+    session.emit({ kind: 'creature-vanished', creatureId: rat.subject });
+    session.emit({
+      kind: 'creature-appeared', creatureId: rat.subject, monsterId: 'rat',
+      position: { x: 5, y: 5, z: 7 }, health: 20, maxHealth: 20, masterId: 'hero',
+    });
+    runFor(100);
+
+    const after = received().slice(before);
+    const gone = after.filter((m) => m.type === 'creature-disappear');
+    const appeared = after.filter((m) => m.type === 'creature-appear') as unknown as Array<{ id: number; position: unknown; masterId?: string }>;
+    expect(gone).toHaveLength(1);
+    expect((gone[0] as unknown as { id: number }).id).toBe(firstId);
+    expect(appeared).toHaveLength(1);
+    expect(appeared[0]).toMatchObject({ position: { x: 5, y: 5, z: 7 }, masterId: 'hero' });
+    expect(appeared[0]?.id).not.toBe(firstId);
+  });
+
   it('NENHUM passo chega com id que não foi anunciado', () => {
     // Era exatamente o defeito: o passo do monstro atravessava o fio com um id que ninguém
     // tinha anunciado, e o cliente descartava em silêncio. Agora todo id de `creature-move`
@@ -4996,6 +5062,32 @@ describe('a postura de luta pelo socket (M30-03, #550, ADR 0040)', () => {
 
     // `attack` no extrato — omitir a chave deixaria uma postura antiga do Postgres voltar.
     expect(saved[0]).toHaveProperty('fightMode', 'attack');
+  });
+
+  it('o extrato de hunt leva os carimbos do familiar do dono, e quem nunca invocou não leva a chave (#599)', async () => {
+    // Sem os carimbos no extrato, o cooldown de 30 min NÃO atravessaria a saída da hunt: o ticket
+    // seguinte leria o personagem como quem nunca invocou. Quem nunca invocou fica sem a chave — o
+    // ledger não toca na coluna (o `receipts.ts` distingue "não veio" de "veio vazio").
+    const run = async (stamp: boolean) => {
+      const saved: Array<Record<string, unknown>> = [];
+      const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+      const directory = { register: async () => true } as unknown as SessionDirectory;
+      const { ruleset } = countingRuleset();
+      const { host, sessions } = buildHost(ruleset, { directory, receipts });
+      await host.prepare('p1', undefined, 'a1');
+      host.attach(new FakeSocket(), 'p1');
+      const hero = sessions[0]?.participants[0] as CharacterRuntime;
+      if (stamp) {
+        hero.familiar = { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 };
+      }
+      await host.drainAll('drain');
+      return saved[0];
+    };
+
+    expect(await run(true)).toMatchObject({
+      familiar: { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 },
+    });
+    expect(await run(false)).not.toHaveProperty('familiar');
   });
 });
 

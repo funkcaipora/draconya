@@ -25,8 +25,8 @@ import type {
   Skill, Spell, Vocation,
 } from '@draconya/content';
 import {
-  blessingCost, containerRulesFor, DEFAULT_FIGHT_MODE, hasBlessing, PartyFullError, shareCostsOf,
-  skillFactorFor, splitLootOf, withBlessing,
+  blessingCost, containerRulesFor, DEFAULT_FIGHT_MODE, hasBlessing, isEmptyFamiliarState,
+  PartyFullError, shareCostsOf, skillFactorFor, splitLootOf, withBlessing,
 } from '@draconya/sim';
 import type {
   AmmoRefusal, CarriedItem, CharacterRuntime, CharmAssignRefusal, CharmBestiaryEntry,
@@ -366,8 +366,11 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   'not-possible': 'Isso não é possível.',
   // O teto de 2 invocações (#600): o "You cannot control more creatures." do Canary.
   'too-many-summons': 'Você não pode controlar mais criaturas.',
-  // As outras três do `RETURNVALUE_*` que o `find`/`magic-rope` dão (#623).
+  // O familiar (#599, M38-02): as duas frases do `CreateFamiliarSpell` do Canary — "You can't have
+  // other summons." e `RETURNVALUE_NOTENOUGHROOM` (a mesma do Magic Rope sem onde pousar, #623).
+  'has-summons': 'Você não pode ter outras invocações.',
   'not-enough-room': 'Não há espaço suficiente.',
+  // As outras duas do `RETURNVALUE_*` que o `find` dá (#623).
   'person-not-found': 'Nenhum personagem com esse nome está aqui.',
   'no-creatures-around': 'Nenhuma criatura por perto.',
 };
@@ -4723,6 +4726,10 @@ export class SessionHost {
       // não sabe o que ele aprendeu, e gravar o vazio apagaria a concessão da migração 0024.
       ...(owner === undefined || !owner.learnedSpells.recorded
         ? {} : { learnedSpells: owner.learnedSpells.getState() }),
+      // O familiar (M38-02, #599, ADR 0057 d.3): ABSOLUTO como `charms`, e omitido quando vazio —
+      // o personagem que nunca invocou não escreve a coluna. Sem isto o cooldown de 30 min não
+      // sobreviveria à saída da hunt: o ticket seguinte o leria como nunca lançado.
+      ...(owner === undefined || isEmptyFamiliarState(owner.familiar) ? {} : { familiar: owner.familiar }),
       // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
       // login se ficasse só na sessão.
       ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
@@ -4835,6 +4842,9 @@ export class SessionHost {
       // ela sumiria no logout — com o gold já debitado no mesmo extrato. ABSOLUTO, como `charms`,
       // e só quando `recorded` (ver `#receiptFor`): quem só mexeu na postura não reescreve o vazio.
       ...(owner.learnedSpells.recorded ? { learnedSpells: owner.learnedSpells.getState() } : {}),
+      // O familiar (M38-02, #599): o mesmo da hunt — o extrato de estado da Cidade o leva, para um
+      // logout depois de uma morte não perder o carimbo que a hunt acabou de gravar.
+      ...(isEmptyFamiliarState(owner.familiar) ? {} : { familiar: owner.familiar }),
       // O estoque de supply/munição (#792, ADR 0044 d.2): conjurar na Cidade credita
       // `supplyStock`/`ammunitionStock` do mesmo jeito que o loot da hunt credita — ABSOLUTO,
       // como `ammo` (`receipts.ts`). Sem isto, a carga conjurada na praça sumia no logout: o
@@ -5177,7 +5187,14 @@ export class SessionHost {
     }
     if (stored === null) return null;
 
-    const session = restore(stored.snapshot);
+    // O intervalo em que o nó esteve fora é DESCARTADO (ADR 0018): o relógio lógico da sessão continua
+    // de onde parou. Mas `createdAtMs + nowMs` é o relógio de PAREDE que o `sim` compara com os
+    // carimbos do familiar (#599, ADR 0052 d.6) — sem recolocar o anchor, ele passaria a ficar
+    // atrasado em relação ao real pelo tempo todo da queda, e o cooldown de 30 min gravado por uma
+    // sessão retomada nasceria já vencido em parte. Somar o intervalo descartado ao anchor devolve a
+    // soma a "agora"; é dado entregue à sessão (como na criação), nunca relógio que o `sim` leia.
+    const gapMs = Math.max(0, Date.now() - stored.savedAtMs);
+    const session = restore({ ...stored.snapshot, createdAtMs: stored.snapshot.createdAtMs + gapMs });
     if (session === null) {
       // Não dá para reconstruir: formato antigo, ruleset desconhecido, ou versão de conteúdo
       // diferente da deste nó (invariante 7).
@@ -5194,7 +5211,7 @@ export class SessionHost {
       await snapshots.remove(characterId).catch(() => undefined);
       return null;
     }
-    return { session, gapMs: Math.max(0, Date.now() - stored.savedAtMs) };
+    return { session, gapMs };
   }
 
   /**

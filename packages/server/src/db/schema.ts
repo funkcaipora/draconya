@@ -252,6 +252,17 @@ export const characters = pgTable(
     learnedSpells: jsonb('learned_spells'),
 
     /**
+     * O familiar de vocação (M38-02, #599, ADR 0057 d.3, ADR 0052 d.1): os dois carimbos de
+     * relógio de PAREDE — `{ version, summonUntilMs, cooldownUntilMs }` — que o personagem
+     * carrega entre hunts (`packages/sim/src/familiar.ts`): até quando a invocação vale
+     * (recriada ao entrar na hunt) e até quando a magia volta. Nulável: `null` é quem nunca
+     * invocou. `jsonb`, como `charms`: lido INTEIRO no ticket, escrito INTEIRO pela transação
+     * do ledger a partir do extrato, ÚLTIMA ESCRITA VENCE — nunca fundido por máximo, porque o
+     * `summonUntilMs` DESCE quando o familiar morre (`FamiliarDeath` zera a recriação).
+     */
+    familiar: jsonb('familiar'),
+
+    /**
      * Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, em milissegundos — a
      * `CONDITION_REGENERATION` do Tibia. Drenado pelo TEMPO DE HUNT decorrido
      * (`packages/sim/src/food.ts`), não por job — não precisa de um `updatedAt` companheiro

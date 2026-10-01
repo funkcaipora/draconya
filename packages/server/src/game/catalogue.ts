@@ -111,8 +111,10 @@ export function buildCatalogue(content: Content): Catalogue {
         // armar a mira do `use-slot` (ADR 0049 d.2). Só ela declara.
         ...(spell.effect.kind === 'find' && spell.effect.target === 'person'
           ? { aim: 'character' as const } : {}),
-        // Os números de EXIBIÇÃO (ADR 0033): cooldown, grupo, descrição e o detalhe do efeito.
-        cooldownMs: spell.cooldownMs,
+        // Os números de EXIBIÇÃO (ADR 0033): cooldown, grupo, descrição e o detalhe do efeito. O
+        // familiar (#599) anuncia o cooldown de VERDADE — os 30 min do efeito —, e não os 2 s da
+        // magia (o `groupCooldown` do script): é o número que o jogador espera ver na tela.
+        cooldownMs: spell.effect.kind === 'familiar' ? spell.effect.cooldownMs : spell.cooldownMs,
         ...(spell.groupCooldownMs === undefined ? {} : { groupCooldownMs: spell.groupCooldownMs }),
         ...(spell.description === undefined ? {} : { description: spell.description }),
         detail: detailOf(spell.effect),
