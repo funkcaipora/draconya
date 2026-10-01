@@ -69,6 +69,13 @@ export interface Creature {
    * `Rng` da sessão: fala não muda resultado nenhum.
    */
   readonly voices?: CreatureVoices;
+  /**
+   * `true` quando `appearanceId` é de um OBJETO, não de um outfit (#621): a criatura está sob a
+   * condição `outfit` de um `lookTypeEx` — a Chameleon Rune, o `outfitItem` de um monstro — e o
+   * viewport a desenha como o objeto que ela virou. Ausente é o outfit de sempre; como `colors`,
+   * nunca `undefined` no store (`exactOptionalPropertyTypes`).
+   */
+  readonly object?: true;
   name: string;
   health: number;
   maxHealth: number;

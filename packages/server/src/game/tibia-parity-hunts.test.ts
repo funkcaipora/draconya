@@ -51,16 +51,26 @@ function run(session: Session, durationMs: number, stepMs: number): void {
 // arbitrário, só para o teste ter uma vitória a verificar.
 const TEST_LEVEL = 3000;
 
-const HUNTS: ReadonlyArray<{ readonly id: string; readonly level: number; readonly minSpawnPoints: number }> = [
+const HUNTS: ReadonlyArray<{
+  readonly id: string;
+  readonly level: number;
+  readonly minSpawnPoints: number;
+  /** `false`: o herói de teste desarmado não mata nada ali — a luta é de `gnomprona-gardens.test.ts`. */
+  readonly fights?: boolean;
+}> = [
   { id: 'dwarf-mines', level: 8, minSpawnPoints: 80 },
   { id: 'cyclopolis', level: 34, minSpawnPoints: 5 },
   { id: 'minotaur-camp', level: 60, minSpawnPoints: 20 },
   { id: 'bone-crypt', level: 100, minSpawnPoints: 20 },
   { id: 'hydra-mountain', level: 150, minSpawnPoints: 18 },
   { id: 'hellhound-den', level: 250, minSpawnPoints: 15 },
+  // A zona de Hazard (#632): o recorte cobre a componente central do jardim com os spawns que o
+  // catálogo resolve hoje (Hulking Prehemoth e Stalking Stalk); as outras 13 espécies do Canary
+  // esperam o #579 e o #622.
+  { id: 'gnomprona-gardens', level: 400, minSpawnPoints: 60, fights: false },
 ];
 
-describe.each(HUNTS)('a hunt real $id (#587, M36-06)', ({ id, level, minSpawnPoints }) => {
+describe.each(HUNTS)('a hunt real $id (#587, M36-06)', ({ id, level, minSpawnPoints, fights }) => {
   it('tem mapa, rota e pontos de spawn reais do Canary (não um recorte vazio)', () => {
     const content = real();
     const hunt = content.hunts.get(id);
@@ -82,7 +92,7 @@ describe.each(HUNTS)('a hunt real $id (#587, M36-06)', ({ id, level, minSpawnPoi
     }
   });
 
-  it('o herói entra, percorre a rota real e mata — kills e XP reais, não zero', () => {
+  it.runIf(fights !== false)('o herói entra, percorre a rota real e mata — kills e XP reais, não zero', () => {
     const { session, ruleset } = enter(real(), id, TEST_LEVEL);
     run(session, 60_000, 100);
     expect(session.aggregates.kills).toBeGreaterThan(0);

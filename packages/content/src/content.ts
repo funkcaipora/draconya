@@ -3,7 +3,7 @@
 // Quem lê arquivo é `@draconya/content/load`, e o lint impede `sim` de importar de lá.
 
 import { z } from 'zod';
-import { buildRoute, buildTilemap, isBlocked } from './map.js';
+import { absoluteToLocal, buildRoute, buildTilemap, isBlocked } from './map.js';
 import type { Route, Tilemap } from './map.js';
 import {
   BOT_VOCABULARY_VERSION,
@@ -19,17 +19,17 @@ import {
   packSchema,
   blessingSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
-  bestiarySchema, boostedSchema, bosstiarySchema, charmSchema, itemSchema, loyaltySchema, partySchema, skillSchema,
+  bestiarySchema, boostedSchema, bosstiarySchema, charmSchema, hazardSchema, itemSchema, loyaltySchema, partySchema, skillSchema,
   skinningSchema, spellSchema,
-  staminaSchema, supplySchema, tilemapSchema, trainingSchema, vocationSchema, weaponFamilySchema,
+  staminaSchema, supplySchema, tilemapSchema, trainingSchema, vocationSchema, weaponFamilySchema, worldSchema,
 } from './schemas.js';
 import type {
   Ammunition, AmmunitionDefinition, Appearances, Bestiary, Blessing, Boosted, BotLimits, Bosstiary, Charm,
-  Combat, Loyalty, CompiledMitigation,
-  CompiledReflect, DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
-  MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Skinning, Spell, Stamina, Supply,
+  Combat, Loyalty, CompiledMitigation, ConditionSpec,
+  CompiledReflect, DamageType, Hazard, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
+  MonsterDefinition, OutfitLook, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Skinning, Spell, Stamina, Supply,
   Training, Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
-  WeaponPowerFormula, WeaponProfile,
+  WeaponPowerFormula, WeaponProfile, World,
 } from './schemas.js';
 import { packProblems } from './pack.js';
 import { validateBotConfig, validateBotConfigV2 } from './bot.js';
@@ -96,6 +96,12 @@ export interface Content {
    * valendo o nível BASE de toda skill.
    */
   readonly loyalty?: Loyalty;
+  /**
+   * O Hazard (M44-14, #632, ADR 0052 d.5): os multiplicadores do Canary e as zonas de hunt com
+   * nível de perigo. Opcional — sem ele nenhuma hunt tem Hazard, e uma hunt que declare
+   * `hazardZoneId` derruba o boot. É o conteúdo de teste que não fala de Hazard.
+   */
+  readonly hazard?: Hazard;
   /** Vocabulário e limites do bot (§13). Sem ele não há automação, que é o produto. */
   readonly bot: BotLimits;
   /** Catálogo de magias (§4.1). Custo, cooldown e efeito são conteúdo, nunca motor. */
@@ -133,6 +139,13 @@ export interface Content {
   readonly unarmed: WeaponProfile;
   readonly maps: ReadonlyMap<string, Tilemap>;
   readonly routes: ReadonlyMap<string, Route>;
+  /**
+   * Os mundos (#829, OW-08, ADR 0060 d.1 e d.2), `data/worlds/<id>.json`: tipo, mapa, cidades com
+   * templo e teto de gente. Vazio no conteúdo de teste que não fala de mundo aberto; o conteúdo
+   * REAL tem o `main`, e `load.test.ts` prende. Cada `map` já foi conferido contra `maps` e cada
+   * templo contra o recorte (em coordenada absoluta, traduzida por `absoluteToLocal`).
+   */
+  readonly worlds: ReadonlyMap<string, World>;
   /**
    * A tabela de aparências (FUN-94), agora com quem a use (FUN-103, FUN-23, FUN-109): o
    * `game` lê o outfit padrão do jogador e os efeitos de magia, supply e golpe que o `sim`
@@ -177,6 +190,8 @@ export interface RawContent {
   readonly skinning?: readonly unknown[];
   readonly boosted?: readonly unknown[];
   readonly loyalty?: readonly unknown[];
+  /** O Hazard (#632), `hazard/baseline.json`. */
+  readonly hazard?: readonly unknown[];
   readonly bot?: readonly unknown[];
   readonly spells?: readonly unknown[];
   readonly supplies?: readonly unknown[];
@@ -193,6 +208,8 @@ export interface RawContent {
   readonly packs?: readonly unknown[];
   readonly maps?: readonly unknown[];
   readonly routes?: readonly unknown[];
+  /** Os mundos (#829, ADR 0060), `worlds/*.json`. Entram em `computeVersion` como tudo aqui. */
+  readonly worlds?: readonly unknown[];
   /** `{ mapId }` — qual dos mapas é a Cidade. Explícito, e não um id mágico `"city"`. */
   readonly city?: unknown;
 }
@@ -647,6 +664,9 @@ export function buildContent(raw: RawContent): Content {
   const charms = parseAll('charm', raw.charms ?? [], charmSchema, problems);
   const boosted = parseAll('boosted', raw.boosted ?? [], boostedSchema, problems).get('baseline');
   const loyalty = parseAll('loyalty', raw.loyalty ?? [], loyaltySchema, problems).get('baseline');
+  // O Hazard (M44-14, #632): um documento `baseline` só, como `boosted`/`bestiary` — os
+  // multiplicadores são globais do servidor no Canary (`config.lua`), e as zonas moram junto.
+  const hazard = parseAll('hazard', raw.hazard ?? [], hazardSchema, problems).get('baseline');
   // Ausente é ERRO pela mesma razão dos outros dois: a stamina é o TETO DE SIMULAÇÃO do
   // projeto (ADR 0001), e um default em código faria o número que sustenta a projeção de
   // custo morar onde ninguém procura por ele.
@@ -1472,6 +1492,54 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
+  // Os mundos (#829, OW-08, ADR 0060): o schema fecha a forma do arquivo; o que ele não vê — o
+  // mapa existir e ser importado, e o templo cair num tile andável do recorte — é conferido aqui,
+  // no boot. O templo é coordenada ABSOLUTA do Tibia, e o chão é local: traduzir pelo
+  // `source.region` é o que `absoluteToLocal` faz. Templo em parede é o personagem que nasce, ou
+  // volta ao morrer, preso — e quebra AQUI, como o `entryPoint` da Cidade, e não no jogador.
+  const worldData = parseAll('world', raw.worlds ?? [], worldSchema, problems);
+  const worlds = new Map<string, World>();
+  for (const world of worldData.values()) {
+    const where = `world "${world.id}"`;
+    // A existência se confere contra a DEFINIÇÃO, como as referências abaixo: um mapa que não
+    // montou já gerou o próprio problema, e repeti-lo aqui como "inexistente" seria ruído.
+    if (!mapData.has(world.map)) {
+      problems.push(`${where}: map "${world.map}" não existe no conteúdo`);
+      continue;
+    }
+    const map = maps.get(world.map);
+    if (map === undefined) continue;
+    if (map.source === undefined) {
+      problems.push(
+        `${where}: o mapa "${map.id}" não tem source.region — só um mapa importado do OTBM tem a ` +
+          'origem que traduz a coordenada absoluta do templo para um tile',
+      );
+      continue;
+    }
+    const townIds = new Set<string>();
+    for (const town of world.towns) {
+      const at = `${where}, cidade "${town.id}"`;
+      if (townIds.has(town.id)) problems.push(`${at}: id de cidade duplicado`);
+      townIds.add(town.id);
+      const { x, y, z } = town.temple;
+      const local = absoluteToLocal(map, town.temple);
+      if (local === undefined) {
+        const region = map.source.region;
+        problems.push(
+          `${at}: templo (${x},${y},${z}) cai fora do recorte do mapa "${map.id}" ` +
+            `(x ${region.x[0]}..${region.x[1]}, y ${region.y[0]}..${region.y[1]}, ` +
+            `z ${region.z[0]}..${region.z[1]})`,
+        );
+      } else if (isBlocked(map, local.x, local.y, local.z)) {
+        problems.push(
+          `${at}: templo (${x},${y},${z}), no tile (${local.x},${local.y},${local.z}) do mapa ` +
+            `"${map.id}", está em parede ou num andar sem chão — ninguém andaria dali`,
+        );
+      }
+    }
+    worlds.set(world.id, world);
+  }
+
   // O Treino (#631, ADR 0059): as skills do livro existem, e o tile em que o personagem fica é
   // andável no mapa da Cidade — a mesma disciplina do `entryPoint`, reprovando no boot e não na
   // primeira sessão de Treino. Só com Cidade e skills carregadas: o conteúdo de teste sem elas não
@@ -1697,6 +1765,39 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
+  // A aparência emprestada de uma condição `outfit` (#621, invariante 6): o `look` nomeia um
+  // monstro ou um item do catálogo, e o nome precisa existir — a mesma referência cruzada de
+  // `summons.entries`. `objectKey` não tem entidade de conteúdo do outro lado (é vocabulário
+  // semântico, como `appearances.abilities`): sem linha em `appearances.looks`, a ilusão é MUDA.
+  const outfitLookProblem = (look: OutfitLook): string | null => {
+    if ('monsterId' in look) {
+      return monsterDefinitions.has(look.monsterId) ? null : `monstro "${look.monsterId}"`;
+    }
+    if ('itemId' in look) {
+      return itemDefinitions.has(look.itemId) ? null : `item "${look.itemId}"`;
+    }
+    return null;
+  };
+  for (const monster of rawMonsterDefinitions.values()) {
+    const conditions: [string, ConditionSpec | undefined][] = [
+      ...(monster.abilities ?? []).map((ability): [string, ConditionSpec | undefined] => [
+        `ability "${ability.id}"`, ability.condition,
+      ]),
+      ...(monster.defenses ?? []).map((defense): [string, ConditionSpec | undefined] => [
+        `defense "${defense.id}"`, defense.condition,
+      ]),
+    ];
+    for (const [where, condition] of conditions) {
+      if (condition?.effect.kind !== 'outfit') continue;
+      const missing = outfitLookProblem(condition.effect.look);
+      if (missing !== null) {
+        problems.push(
+          `monstro "${monster.id}": ${where} veste o outfit de ${missing}, que não existe no catálogo`,
+        );
+      }
+    }
+  }
+
   // Referência cruzada: validar formato não basta. Um ponto de spawn apontando monstro
   // inexistente passa em qualquer schema e só falha quando alguém entra na hunt (#583, ADR
   // 0039 — toda hunt nasce dos pontos de spawn da rota, não de uma composição por dificuldade).
@@ -1735,6 +1836,29 @@ export function buildContent(raw: RawContent): Content {
         `hunt "${hunt.id}" está no mapa "${hunt.mapId}" mas a rota "${hunt.routeId}" é do ` +
           `mapa "${route.mapId}"`,
       );
+    }
+  }
+
+  // O Hazard (M44-14, #632): a zona que a hunt aponta precisa existir — uma hunt com
+  // `hazardZoneId` torto abriria SEM perigo nenhum, e o jogador acharia que escolheu o nível.
+  for (const hunt of hunts.values()) {
+    if (hunt.hazardZoneId === undefined) continue;
+    if (hazard === undefined) {
+      problems.push(
+        `hunt "${hunt.id}" declara hazardZoneId "${hunt.hazardZoneId}" mas não há hazard/baseline.json`,
+      );
+    } else if (!Object.hasOwn(hazard.zones, hunt.hazardZoneId)) {
+      problems.push(`hunt "${hunt.id}" referencia zona de hazard inexistente "${hunt.hazardZoneId}"`);
+    }
+  }
+  for (const [zoneId, zone] of Object.entries(hazard?.zones ?? {})) {
+    if (zone.minLevel > zone.maxLevel) {
+      problems.push(`hazard zona "${zoneId}": minLevel ${String(zone.minLevel)} acima do maxLevel ${String(zone.maxLevel)}`);
+    }
+    // O Plunder Patriarch nasce NESTA hunt: precisa estar no catálogo. O `levelUpMonsterId` não —
+    // ver o schema.
+    if (zone.plunderMonsterId !== undefined && !monsterDefinitions.has(zone.plunderMonsterId)) {
+      problems.push(`hazard zona "${zoneId}": plunderMonsterId "${zone.plunderMonsterId}" inexistente no catálogo`);
     }
   }
 
@@ -1801,8 +1925,10 @@ export function buildContent(raw: RawContent): Content {
     skinning,
     ...(boosted === undefined ? {} : { boosted }),
     ...(loyalty === undefined ? {} : { loyalty }),
+    ...(hazard === undefined ? {} : { hazard }),
     maps,
     routes,
+    worlds,
     openValues,
     ...(city === undefined ? {} : { city }),
     ...(citySettings === undefined ? {} : { citySettings }),
@@ -1873,6 +1999,8 @@ export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
     weapons: {},
     // Sem cadáver: fixture não fala de arte, e monstro sem linha aqui é válido (FUN-123).
     corpses: {},
+    // Sem aparência de objeto emprestada: chave sem linha é MUDA (#621).
+    looks: {},
     // Sem campo: fixture não fala de arte, e campo sem linha aqui é válido (#561, M31-06).
     fields: {},
     // Sem estágio de campo: idem, campo sem cadeia de arte é válido (#560).

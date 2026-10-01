@@ -511,6 +511,34 @@ Três coisas que seguem disso:
   recém-chegado com o id no lugar do nome, e o teste da FUN-71 não via porque usa os dois
   iguais. O da FUN-104 usa nomes diferentes dos ids de propósito.
 
+## A aparência emprestada é resolvida AQUI, pela tabela (#621, M44-03)
+
+O `sim` emite `creature-look-changed { creatureId, look | null }` — QUEM vestiu o quê, como
+`{ monsterId } | { itemId } | { objectKey }`, nunca um id de arte (invariante 6) — e o hospedeiro o
+traduz em `creature-update` (S2C 51): `monsterId` → `outfitId` do `monsterCatalog`, `itemId` →
+`appearanceId` do `itemCatalog`, `objectKey` → `appearances.looks`; `object: true` marca o registro
+de OBJETO (a criatura virou uma coisa). Quem mexe aqui precisa saber quatro coisas:
+
+- **`#lookFor(hosted, key)` é a fonte ÚNICA do que uma criatura mostra agora** — `creature-appear`,
+  a lista do `session-state` (personagens E monstros) e o `creature-update` leem dele, que pergunta
+  a `HuntRuleset#lookOf` e cai na aparência PRÓPRIA (o outfit do monstro, ou `playerOutfitId` com as
+  cores do ticket). Duas montagens divergem na primeira regra nova, e o reanexado no meio da
+  ilusão precisa ver o mesmo que quem nunca saiu — o estado mora na condição do `sim`, nunca num
+  campo daqui (invariante 3).
+- **Aparência SEM linha na tabela é MUDA**, e o silêncio vale nas duas pontas: a troca não sai, e a
+  volta (`look: null`) sai como a aparência própria, redundante e inofensiva. A condição vale no
+  `sim` do mesmo jeito.
+- **A volta manda a aparência própria, não "a original"**: o cliente não guarda a aparência
+  anterior para voltar a ela, e o `creature-update` do personagem que volta leva as `colors` do
+  ticket de novo. **As cores e os addons do monstro (#620) são parte do outfit**: `#lookFor` os
+  devolve do monstro dono (`monsterOutfitOf`) e do monstro imitado (`#resolveLook`), e o
+  `session-state` espalha só a `monsterPresentationOf` (raça, luz e falas) depois dele — o
+  `monsterLookOf` inteiro trocaria as cores do outfit emprestado pelas do dono.
+- **`use-slot`/`use-item`/`use-item-on` aceitam `target: { instanceId }`** (a Chameleon Rune): o
+  host só traduz para `UseSlotTarget { kind: 'item' }` (`#resolveUseSlotTarget`); se a instância
+  existe e é do personagem é do `sim` (`not-illusionable`, "Não é possível."). O catálogo marca o
+  suprimento `chameleon` com `targets: 'item'` e os monstros ilusionáveis com `illusionable`.
+
 ## O Bestiário viaja como as skills: ticket → runtime → extrato → ledger (FUN-113)
 
 `characters.bestiary` é `jsonb` nulável (`{ monsterId: kills }`), e percorre o MESMO caminho
@@ -1004,3 +1032,28 @@ padrão de 16 (0–15) faria `SELECT 16` cair no banco 0 em silêncio.
 `DATABASE_TEST_URL` aponta para Postgres de teste, com um schema exclusivo por suíte. O CI
 fornece os dois. Ver ADR 0017 para a ordem Postgres → Redis e separação entre sessão HTTP,
 `state` e ticket. Nenhum vínculo de conta é decidido somente por e-mail.
+- **O Hazard (#632) segue o padrão dos Charms e tem UMA diferença: a escolha do nível na Cidade grava
+  um extrato SÓ de hazard NA HORA.** `set-hazard-level` só é aceita na sessão de Cidade (`shared`) e
+  na hunt é recusada — o nível é fixo na entrada. O registro `characters.hazard` (migração `0027`) é
+  `jsonb`, ABSOLUTO e última-escrita-vence (a escolha desce e sobe — fundir pelo maior a desfaria),
+  lido no ticket (`isHazardState`, torto vira AUSENTE) e escrito pelo ledger. A diferença: o ticket
+  de uma party (#195) é emitido pela `api` a partir da LINHA do banco, então um nível que só saísse
+  no `release` não chegaria ao ticket do membro; por isso `#requestSetHazardLevel` chama
+  `#saveHazardChoice` logo depois de uma escolha que MUDOU o nível (ADR 0052, emenda 2026-09-30).
+  **Três armadilhas.** (1) **Esse extrato NUNCA é o `#saveDurableReceipt`**: o `ReceiptStore` guarda
+  UM extrato por `(sessionId, characterId)` (a chave não leva o `seq` até o #823 entrar), a Cidade é
+  uma sessão compartilhada, e o extrato de estado inteiro leva valor que só sai uma vez
+  (`goldDelta`, `removedInstances`, zerados por `settleGoldDelta`/`drainRemovedInstances`) — um
+  segundo extrato na mesma chave antes da varredura (até 10 s) o sobrescreveria e a compra de uma
+  bênção sairia de graça. O de hazard leva só o registro, com agregados zerados, e vai no fluxo
+  próprio `<sessionId>:hazard` (`HAZARD_RECEIPT_STREAM`): sobrescrever outro DELE é inofensivo
+  (absoluto, última escrita vence), e ele nunca encosta no extrato do personagem. (2) **Nada se
+  liquida nem se "limpa" nele**: se o Redis falha, `#markDirty` deixa o registro para o extrato do
+  logout; se der certo, o logout não o repete. (3) **A zona resolve por propriedade PRÓPRIA**
+  (`Object.hasOwn`): `zones` é um objeto comum, e `zones['constructor']` não é zona. Escolher o nível
+  em que já estava não grava nada (`HazardProgress.revision`). `#presentHazard` reenvia `hazard`
+  quando a hunt sobe o teto (compara `revision`, um inteiro). Um serviço de Cidade novo que a party
+  leia pelo ticket precisa da mesma coisa — e do mesmo cuidado com a chave. Quando o #823 (extrato
+  por `seq` e versão durável, PR #896) entrar, `hazard` precisa entrar na lista dos campos
+  ABSOLUTOS que ele guarda por versão: `applyProgression` o escreve sem guarda hoje.
+

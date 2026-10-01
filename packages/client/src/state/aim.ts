@@ -41,6 +41,17 @@ interface ItemAim {
   readonly seq: number;
 }
 
+/**
+ * A mira de um slot cujo alvo é um ITEM DO INVENTÁRIO (#621, a Chameleon Rune: `targets: 'item'` no
+ * catálogo). Diferente das duas de cima, quem a completa NÃO é o mundo nem a Batalha, e sim um
+ * clique num item da mochila/bolsa (`ContainerWindow`) — o "usar com" do Tibia sobre um item.
+ */
+interface SlotItemAim {
+  readonly kind: 'slot-item';
+  readonly set: number;
+  readonly slot: number;
+}
+
 export interface AimTracker {
   /** Arma a mira para este slot — o próximo clique no mundo/Batalha a resolve. */
   startAim(set: number, slot: number): void;
@@ -54,9 +65,23 @@ export interface AimTracker {
   /** Há uma mira armada agora? É o que `Viewport`/`BattlePanel` conferem antes de `selectTarget`. */
   isAiming(): boolean;
   /**
+   * Arma a mira de um slot que aponta um ITEM do inventário (#621, Chameleon Rune) — o próximo
+   * clique num item da mochila/bolsa a resolve (`resolveItemAim`); o mundo e a Batalha a ignoram.
+   */
+  startItemAim(set: number, slot: number): void;
+  /** Há uma mira de ITEM armada? É o que `ContainerWindow` confere antes de vestir o item clicado. */
+  isAimingItem(): boolean;
+  /**
+   * O clique num item do inventário resolve a mira de item: manda `use-slot` com `target:
+   * { instanceId }` e desarma. `false` quando não havia mira de item — o clique segue o fluxo de
+   * sempre (vestir).
+   */
+  resolveItemAim(instanceId: string, send: AimSender): boolean;
+  /**
    * O clique seguinte no mundo/Batalha resolve a mira: manda `use-slot`/`use-item-on` com o
    * `creatureId` clicado e desarma. `false` quando não havia mira ativa — quem chama continua
-   * o fluxo de seleção de alvo de sempre (`targetTracker.selectTarget`).
+   * o fluxo de seleção de alvo de sempre (`targetTracker.selectTarget`). Uma mira de ITEM
+   * (#621) não é deste clique: devolve `false` e continua armada.
    */
   resolveAim(creatureId: number, send: AimSender): boolean;
   /** A sessão acabou ou reanexou: a mira da anterior não pode sobreviver nem voltar. */
@@ -65,7 +90,7 @@ export interface AimTracker {
 
 /** O rastreador de uma conexão. Sem I/O e sem relógio — testável sem socket. */
 export function createAimTracker(): AimTracker {
-  let active: SlotAim | ItemAim | null = null;
+  let active: SlotAim | ItemAim | SlotItemAim | null = null;
 
   return {
     startAim(set, slot) {
@@ -74,6 +99,19 @@ export function createAimTracker(): AimTracker {
     startAimForItem(ref, seq) {
       active = { kind: 'item', ref, seq };
     },
+    startItemAim(set, slot) {
+      active = { kind: 'slot-item', set, slot };
+    },
+    isAimingItem() {
+      return active?.kind === 'slot-item';
+    },
+    resolveItemAim(instanceId, send) {
+      if (active === null || active.kind !== 'slot-item') return false;
+      const aim = active;
+      active = null;
+      send({ type: 'use-slot', set: aim.set, slot: aim.slot, target: { instanceId } });
+      return true;
+    },
     cancelAim() {
       active = null;
     },
@@ -81,7 +119,8 @@ export function createAimTracker(): AimTracker {
       return active !== null;
     },
     resolveAim(creatureId, send) {
-      if (active === null) return false;
+      // A mira de ITEM (#621) só sai num clique de item — o mundo não a consome nem a desarma.
+      if (active === null || active.kind === 'slot-item') return false;
       const aim = active;
       active = null;
       if (aim.kind === 'slot') {

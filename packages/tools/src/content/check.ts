@@ -31,6 +31,7 @@ try {
   console.log(`  supplies: ${content.supplies.size}`);
   console.log(`  mapas:    ${content.maps.size}`);
   console.log(`  rotas:    ${content.routes.size}`);
+  console.log(`  mundos:   ${content.worlds.size}`);
   // A tabela de aparências foi conferida contra o inventário deste pacote (FUN-21) — se um id
   // não existisse nele, o `loadContent` acima teria lançado.
   if (content.appearances !== undefined) console.log(`  pacote:   ${content.appearances.pack}`);

@@ -263,6 +263,15 @@ export const appearancesSchema = z.object({
    */
   corpses: z.record(z.string().min(1), appearanceId).default({}),
   /**
+   * `chave de objeto → appearanceId` (#621, M44-03): a aparência de OBJETO que uma criatura veste
+   * na condição `outfit` com `look: { objectKey }` — o `outfitItem` de um monstro do Canary (um
+   * verme, uma pedra). Chave SEMÂNTICA e compartilhada, como `abilities`: não há entidade de
+   * conteúdo de um lado, então chave sem uso é vocabulário à espera e uso sem chave é MUDO (a
+   * condição vale, só não desenha) — as duas válidas. O id é arte, e `packProblems` o confere
+   * contra o inventário do pacote.
+   */
+  looks: z.record(z.string().min(1), appearanceId).default({}),
+  /**
    * `id de campo de tile → appearanceId` (#561, M31-06): fogo, veneno, energia — o `sim` diz
    * QUE campo está ativo e ONDE (`FieldSpec.id`, declarado inline em spell/ability); a arte é
    * daqui (invariante 6). Campo sem linha não aparece — MUDO, não erro, como `spells`: um campo
@@ -1641,6 +1650,17 @@ export const supplySchema = z.object({
       range: z.number().int().positive(),
     }),
     /**
+     * Chameleon Rune (#621, M44-03, Canary `runes/chameleon.lua`: runeId 3178, level 27, magic
+     * level 4, 200 s, `isSelfTarget(true)`/`allowFarUse`): o usuário veste a aparência de OBJETO
+     * do item que apontou — `lookTypeEx = item.itemid`. O alvo é uma instância que o personagem
+     * carrega (`use-item-on`/`use-slot` com `target: { instanceId }`); o `look` sai como
+     * `{ itemId }` e o host o resolve em `appearances.items`. Só o prazo é conteúdo.
+     */
+    z.object({
+      kind: z.literal('chameleon'),
+      durationMs: z.number().int().positive(),
+    }),
+    /**
      * Convince Creature (#600, ADR 0057 d.5, `convince_creature.lua`): transfere a posse de UM
      * monstro `convinceable` da hunt ao usuário. Alvo único, como a runa de dano sem `area`
      * (`needTarget(true)`/`allowFarUse(true)`): mira o monstro selecionado, com `range` até ele —
@@ -1820,6 +1840,40 @@ export const DRUNK_CONDITION_KEY = 'drunk' as const;
 export const INVISIBLE_CONDITION_KEY = 'invisible' as const;
 
 /**
+ * A chave RESERVADA de uma condição `outfit` (#621, M44-03, `CONDITION_OUTFIT`). O que a
+ * distingue de um `buff` vazio é o `look` (`ConditionState.look`, `sim/conditions.ts`), mas a
+ * chave é a MESMA para toda fonte — Creature Illusion, Chameleon Rune, o ataque/defesa `outfit`
+ * de um monstro —, e é isso que faz uma criatura ter no máximo UMA aparência emprestada de cada
+ * vez, como o `Creature::getCondition(type, id, subId)` do Canary: um segundo `outfit` cai em
+ * `ConditionOutfit::addCondition` e se funde ao primeiro, nunca vira uma segunda condição.
+ */
+export const OUTFIT_CONDITION_KEY = 'outfit' as const;
+
+/**
+ * A APARÊNCIA que a condição `outfit` veste (#621, ADR 0041 decisão 1; invariante 6). Nunca um
+ * id de arte: o `look` nomeia uma entidade de CONTEÚDO, e quem a resolve para o `outfitId`/
+ * `appearanceId` do pacote é o host, pela tabela de aparências — trocar de pacote continua sendo
+ * editar `appearances/baseline.json`, e nada aqui.
+ *
+ * Três formas, as mesmas que o `Outfit_t` do Canary distingue (`lookType`/`lookTypeEx`):
+ * - `monsterId`: o OUTFIT de um monstro do catálogo (`lookType` = `monsterType->info.outfit`;
+ *   `appearances.monsters[monsterId]`) — Creature Illusion e o `outfitMonster` dos monstros;
+ * - `itemId`: a aparência de OBJETO de um item do catálogo (`lookTypeEx` = id do item;
+ *   `appearances.items[itemId]`) — a Chameleon Rune, que veste o item que o jogador aponta;
+ * - `objectKey`: a aparência de OBJETO que o monstro veste (`appearances.looks[key]`) — o
+ *   `outfitItem` do Lua (2096, 2324, 2916, 3058, 3976 e 7172 no Canary). Fica fora de `itemId`
+ *   porque o catálogo de caça só tem um desses seis itens, e `appearances.items` é conferida dos
+ *   dois lados contra ele. Chave semântica, como `abilities`: sem linha na tabela é MUDA — a
+ *   condição (e o prazo) valem igual, só não desenha.
+ */
+export const outfitLookSchema = z.union([
+  z.strictObject({ monsterId: z.string().min(1) }),
+  z.strictObject({ itemId: z.string().min(1) }),
+  z.strictObject({ objectKey: z.string().min(1) }),
+]);
+export type OutfitLook = z.infer<typeof outfitLookSchema>;
+
+/**
  * As chaves RESERVADAS das três condições de CONTROLE (M44-04, #622): `CONDITION_ROOTED`,
  * `CONDITION_FEARED` e `CONDITION_PACIFIED` do Canary (`creatures_definitions.hpp:140-144`). Sem
  * campo próprio no estado — a semântica inteira mora no `sim` (`Conditions.isActive`, que lê o prazo
@@ -1835,9 +1889,9 @@ export const PACIFIED_CONDITION_KEY = 'pacified' as const;
 /**
  * As condições a que um monstro pode declarar imunidade (`monster.immunities[].condition` do
  * Canary, ADR 0041 decisão 2): `paralyze` (o sinal NEGATIVO da condição de velocidade), `drunk`,
- * `invisible` (que o Canary reaproveita como "enxerga invisível", ver `monsterSchema`) e as oito
- * DOTs de `DAMAGE_OVER_TIME_CONDITION_IMMUNITY`. `outfit` — 119 monstros o declaram imune, mas o
- * Draconya ainda não tem a condição — entra com o M44-03.
+ * `invisible` (que o Canary reaproveita como "enxerga invisível", ver `monsterSchema`), as oito
+ * DOTs de `DAMAGE_OVER_TIME_CONDITION_IMMUNITY` e `outfit` (#621, M44-03 — 119 monstros o declaram
+ * imune: a ilusão de um ataque de monstro não entra neles).
  *
  * `rooted`, `feared` e `pacified` (M44-04, #622) entram como vocabulário AUTORAL: o
  * `Monster::isImmune(ConditionType_t)` do Canary é um `bitset` sobre TODO `ConditionType_t`, mas a
@@ -1848,6 +1902,7 @@ export const PACIFIED_CONDITION_KEY = 'pacified' as const;
 export const CONDITION_IMMUNITIES = [
   'paralyze', 'drunk', 'invisible',
   'bleeding', 'poison', 'burning', 'electrified', 'cursed', 'drowning', 'freezing', 'dazzled',
+  'outfit',
   'rooted', 'feared', 'pacified',
 ] as const;
 export type ConditionImmunity = (typeof CONDITION_IMMUNITIES)[number];
@@ -1967,6 +2022,15 @@ export const conditionEffectSchema = z.discriminatedUnion('kind', [
    * (`chooseTarget`, `sim/monster/monster.ts`).
    */
   z.object({ kind: z.literal('invisible') }),
+  /**
+   * A aparência emprestada (#621, M44-03, `CONDITION_OUTFIT`/`ConditionOutfit` do Canary): a
+   * criatura passa a ser DESENHADA como `look` até a condição vencer — nada de número de combate
+   * muda (o Canary não lê o outfit em nenhuma conta de dano), só o que o cliente desenha e o
+   * prazo. O `look` nomeia conteúdo, nunca arte (`outfitLookSchema`, invariante 6). A fusão é a
+   * do Canary (`Condition::updateCondition`): o segundo `outfit` só entra se acabar DEPOIS do
+   * primeiro — `conditionSpecSchema` exige `merge: 'strongest'`, que o `sim` mede pelo prazo.
+   */
+  z.object({ kind: z.literal('outfit'), look: outfitLookSchema }),
   /**
    * As três condições de CONTROLE (M44-04, #622 — `CONDITION_ROOTED`/`CONDITION_FEARED`/
    * `CONDITION_PACIFIED`). Sem campo próprio, como `drunk`: só `durationMs` (comum a toda
@@ -2190,6 +2254,18 @@ export const conditionSpecSchema = z.object({
     message: `a condição invisible precisa da chave reservada "${INVISIBLE_CONDITION_KEY}", `
       + 'e só ela',
   },
+).refine(
+  (spec) => (spec.effect.kind === 'outfit') === (spec.key === OUTFIT_CONDITION_KEY),
+  {
+    message: `a condição outfit precisa da chave reservada "${OUTFIT_CONDITION_KEY}", e só ela`,
+  },
+).refine(
+  // `Condition::updateCondition` do Canary (`condition.cpp:543-557`): o `outfit` relançado só
+  // vale se acabar DEPOIS do que já está ativo — `strongest`, medido pelo prazo. Declarado aqui,
+  // e não escolhido por quem escreve o conteúdo, porque é o mecanismo da classe e não um
+  // parâmetro da fonte: Creature Illusion, Chameleon e o ataque de monstro fundem do mesmo jeito.
+  (spec) => spec.effect.kind !== 'outfit' || spec.merge === 'strongest',
+  { message: 'a condição outfit funde como strongest (Condition::updateCondition do Canary)' },
 ).refine(
   (spec) => (spec.effect.kind === 'rooted') === (spec.key === ROOTED_CONDITION_KEY),
   { message: `a condição rooted precisa da chave reservada "${ROOTED_CONDITION_KEY}", e só ela` },
@@ -2475,10 +2551,11 @@ export const bosstiaryRaritySchema = z.enum(BOSSTIARY_RARITIES);
  * sentido vindo de um ATACANTE contra outra criatura — `drunk` (desvio de passo) e
  * `damage-over-time` ficam de fora por isso. `invisible` entrou no #559/#592 (Killer Rabbit e
  * afins, `{ name = "invisible", ... }` em `monster.defenses` — o monstro fica invisível sozinho,
- * o mesmo self-buff que `speed`/`buff` já são).
+ * o mesmo self-buff que `speed`/`buff` já são). `outfit` entrou no #621 (55 defesas do Canary: o
+ * monstro se disfarça de outro — o Aspect of Power vira um dos quatro Goshnar).
  */
 const DEFENSE_SELF_CONDITION_KINDS = new Set<ConditionEffect['kind']>([
-  'speed', 'buff', 'mana-shield', 'heal-over-time', 'invisible',
+  'speed', 'buff', 'mana-shield', 'heal-over-time', 'invisible', 'outfit',
 ]);
 
 /**
@@ -2928,6 +3005,16 @@ export const monsterSchema = z.strictObject({
    */
   boss: z.boolean().default(false),
   /**
+   * É chefe de recompensa (#632)? O `flags.rewardBoss` do Canary (`MonsterType::isRewardBoss`,
+   * `register_monster_type.lua`), que o importador escreve como está. Hoje só uma regra o lê: a
+   * morte de um monstro de zona de Hazard NÃO rola casulo nem Plunder Patriarch quando o morto é
+   * chefe de recompensa (`PrimalHazardDeath`, `hazard_primal.lua`: "don't spawn pods or plunder if
+   * the monster is a reward boss") — o próprio Plunder Patriarch é um, e sem o portão cada morte
+   * dele poderia gerar outro. O que o Canary mais faz com a flag (o baú de recompensa no lugar do
+   * cadáver) ainda não existe aqui. Ausente é `false`.
+   */
+  rewardBoss: z.boolean().default(false),
+  /**
    * O boss no Bosstiary (#629; `monster.bosstiary` do Canary): a raridade — Bane, Archfoe ou
    * Nemesis, que escolhe a linha de `content.bosstiary.levels` (quantos abates levam a cada
    * nível, e quantos pontos cada nível rende) — e o `raceId` (`bossRaceId` do Canary), a CHAVE do
@@ -3077,6 +3164,13 @@ export const monsterSchema = z.strictObject({
    */
   summonable: z.boolean().default(false),
   /**
+   * O monstro pode ser IMITADO pelo Creature Illusion (#621, M44-03; Canary `flags.illusionable`
+   * → `MonsterType::isIllusionable()`, o que `creature_illusion.lua` confere antes de vestir o
+   * outfit). 285 monstros do Canary o declaram. Ausente é `false` — o default do Canary
+   * (`isIllusionable = false`).
+   */
+  illusionable: z.boolean().default(false),
+  /**
    * `manaCost` da invocação (#598, `MonsterType::info.manaCost`, o custo de mana que
    * `summon_creature.lua` debita do mestre por invocação) — 184 monstros do Canary o declaram.
    * Obrigatório quando `summonable` é `true` (`.refine` abaixo). Também é o custo da Convince
@@ -3150,6 +3244,13 @@ export const huntSchema = z.object({
    * escrito. Só apresentação; a simulação não lê isto.
    */
   description: z.string().min(1).optional(),
+  /**
+   * A zona de Hazard desta hunt (M44-14, #632): a chave de `hazard/baseline.json.zones`. Ausente é
+   * uma hunt sem Hazard — todas as que existiam antes da issue. Com ela, todo monstro da hunt é
+   * um monstro de zona de hazard, e o nível é o que cada jogador escolheu na Cidade (fixado na
+   * entrada, ADR 0052 d.5). `buildContent` confere que a zona existe.
+   */
+  hazardZoneId: z.string().min(1).optional(),
 });
 
 /**
@@ -4491,6 +4592,80 @@ export const bosstiarySchema = z.strictObject({
 export type Bosstiary = z.infer<typeof bosstiarySchema>;
 
 /**
+ * Uma zona de Hazard (M44-14, #632, ADR 0052 d.5/d.7): o nível de perigo opcional de uma zona
+ * de hunt. É o `Hazard.new` de `data/libs/systems/hazard.lua` do Canary — `minLevel` (1 por
+ * padrão), `maxLevel` e os quatro efeitos que a zona liga (`crit`, `dodge`, `damageBoost`,
+ * `defenseBoost`). O Canary só registra UMA zona (`hazard.gnomprona-gardens`, em
+ * `data-otservbr-global/scripts/systems/hazard_primal.lua`), e é a única que este conteúdo traz.
+ *
+ * A zona do Canary é uma CAIXA de coordenadas (`from`/`to`); aqui ela é uma HUNT — `hazardZoneId`
+ * no `huntSchema` aponta a chave de `hazardSchema.zones` — porque a sessão é instanciada: todo
+ * monstro da hunt nasce dentro da zona, e o que o `HazardMonster.onSpawn` decide por posição a
+ * instância decide por construção.
+ */
+export const hazardZoneSchema = z.strictObject({
+  /** Nome de exibição (o `name` do `Hazard.new`, sem o prefixo `hazard.`). */
+  name: z.string().min(1),
+  /** O nível mínimo e o de quem nunca escolheu: `prototype.minLevel or 1`. */
+  minLevel: z.number().int().positive(),
+  /** O teto da zona (`maxLevel`): `setPlayerMaxLevel` o clampa, o `levelUp` nunca passa dele. */
+  maxLevel: z.number().int().positive(),
+  /** O monstro da zona dá crítico (`monster:hazardCrit`). */
+  crit: z.boolean(),
+  /** O monstro da zona esquiva golpes do jogador (`monster:hazardDodge`). */
+  dodge: z.boolean(),
+  /** O monstro da zona bate mais forte (`monster:hazardDamageBoost`). */
+  damageBoost: z.boolean(),
+  /** O monstro da zona reduz o dano que leva (`monster:hazardDefenseBoost`). */
+  defenseBoost: z.boolean(),
+  /**
+   * O monstro cuja morte sobe o nível máximo de quem o feriu no nível máximo
+   * (`creaturescripts_the_primal_menace_killed.lua` → `Hazard:levelUp`). NÃO é validado contra
+   * o catálogo de monstros: The Primal Menace é chefe de quest (instância à parte), ainda sem
+   * entrada no catálogo — o id fica declarado para o dia em que ele existir, e o `sim` já o lê.
+   */
+  levelUpMonsterId: z.string().min(1).optional(),
+  /**
+   * O monstro que pode nascer da morte de um monstro da zona (`hazard_primal.lua`, o
+   * "Plunder Patriarch rises from the ashes"). Esse, ao contrário do anterior, TEM de existir no
+   * catálogo: o boot o confere.
+   */
+  plunderMonsterId: z.string().min(1).optional(),
+});
+export type HazardZone = z.infer<typeof hazardZoneSchema>;
+
+/**
+ * O Hazard (M44-14, #632): os multiplicadores do `config.lua.dist` do Canary (`hazard*`, blocos
+ * `loadIntConfig`/`loadFloatConfig` de `configmanager.cpp`) e as zonas. Valores do Canary `47dfd51`,
+ * transcritos — `docs/product/hazard.md` diz onde cada um entra.
+ */
+export const hazardSchema = z.object({
+  id: z.literal('baseline'),
+  /** `hazardCriticalInterval`: o intervalo mínimo entre dois críticos no MESMO jogador, em ms. */
+  criticalIntervalMs: z.number().int().nonnegative(),
+  /** `hazardCriticalChance`: o teto da rolagem `normal_random(1, 10000)` para o crítico. */
+  criticalChance: z.number().int().nonnegative(),
+  /** `hazardCriticalMultiplier`: cada nível acima do 1º soma isto (em 1/10000) aos +50 % do crítico. */
+  criticalMultiplier: z.number().int().nonnegative(),
+  /** `hazardDamageMultiplier`: o dano do monstro sobe `nível × isto` (em 1/10000). */
+  damageMultiplier: z.number().int().nonnegative(),
+  /** `hazardDefenseMultiplier`: o dano do jogador cai `nível × isto` (em 1/10000). Zero no Canary. */
+  defenseMultiplier: z.number().int().nonnegative(),
+  /** `hazardDodgeMultiplier`: a chance de o monstro esquivar é `nível × isto` (em 1/10000). */
+  dodgeMultiplier: z.number().int().nonnegative(),
+  /** `hazardExpBonusMultiplier`: a XP sobe `1,75 × nível × isto` por cento. */
+  expBonusMultiplier: z.number().nonnegative(),
+  /** `hazardLootBonusMultiplier`: as rolagens extras de loot são `2 × nível × isto / 100`. */
+  lootBonusMultiplier: z.number().int().nonnegative(),
+  /** `hazardPodsDropMultiplier`: a chance (em 1/10000 por nível) do casulo — que consome a rolagem do Plunder. */
+  podDropMultiplier: z.number().int().nonnegative(),
+  /** `hazardSpawnPlunderMultiplier`: a chance (em 1/100000 por nível) do Plunder Patriarch. */
+  plunderSpawnMultiplier: z.number().int().nonnegative(),
+  zones: z.record(z.string().min(1), hazardZoneSchema),
+});
+export type Hazard = z.infer<typeof hazardSchema>;
+
+/**
  * Vocabulário do bot (FUN-73, ADR 0002, §13).
  *
  * **Fechado** porque o compilador só transforma em predicado o que conhece: uma linguagem de
@@ -5308,6 +5483,15 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
    */
   z.object({ kind: z.literal('invisible'), durationMs: z.number().int().positive() }),
   /**
+   * Creature Illusion (#621, M44-03, Canary `creature_illusion.lua`: level 23, mana 100, 180 s,
+   * `hasParams(true)`): o lançador veste o outfit de OUTRO monstro, escolhido pelo PARÂMETRO da
+   * magia — `monsterId` da ação do slot (`botActionV2Schema`), o mesmo desenho de `summon`. O
+   * monstro precisa ser `illusionable` (`MonsterType::isIllusionable`; `PlayerFlag_CanIllusionAll`
+   * não existe aqui: nenhum personagem é GM). O efeito só declara o prazo; o `look` nasce no
+   * lançamento, em `HuntRuleset#castSpell`, como a invocação nasce o monstro.
+   */
+  z.object({ kind: z.literal('illusion'), durationMs: z.number().int().positive() }),
+  /**
    * Remove condição do lançador, sem curar (#590, Canary `cure_{poison,burning,curse,
    * electrification,bleeding}.lua`: só `COMBAT_PARAM_DISPEL`, sem `COMBAT_PARAM_TYPE,
    * COMBAT_HEALING`). `types` são as CHAVES de `ConditionState.key` que a magia remove — o
@@ -5630,6 +5814,70 @@ export type LootRoll = NonNullable<LootTable['gold']>;
 export type Hunt = z.infer<typeof huntSchema>;
 export type Vocation = z.infer<typeof vocationSchema>;
 
+// --- mundo (#829, OW-08, ADR 0060) ---------------------------------------------------------
+
+/**
+ * Os tipos de mundo que o motor sabe ser. É o `worldType` do Canary, que aceita "expert-pvp",
+ * "retro-pvp", "pvp", "no-pvp" e "pvp-enforced" (`canary/config.lua.dist:28-33`) — mas o
+ * Draconya só implementa o `no-pvp` (ADR 0060 d.1): não existe dano entre jogadores no `sim`, e
+ * aceitar `retro-pvp` num arquivo de conteúdo seria um mundo que promete o que o motor não faz.
+ * Vocabulário FECHADO, como `COMBAT_PROFILES` (ADR 0031): um tipo novo entra por ADR e por esta
+ * lista, nunca por um valor que passou em silêncio.
+ */
+export const WORLD_TYPES = ['no-pvp'] as const;
+export type WorldType = (typeof WORLD_TYPES)[number];
+
+/**
+ * Uma coordenada ABSOLUTA do mapa do Tibia (a do `otservbr.otbm`), e não a local de um recorte.
+ * É a mesma que `characters.world_x/y/z` guardará (ADR 0060 d.3.b): o que liga as duas é
+ * `source.region` do mapa (`absoluteToLocal`, em `map.ts`). O andar `z` é de 0 (céu) a 15
+ * (subsolo mais fundo), o do protocolo do Tibia.
+ */
+const absolutePoint = z.strictObject({
+  x: z.number().int().nonnegative(),
+  y: z.number().int().nonnegative(),
+  z: z.number().int().min(0).max(15),
+});
+
+/**
+ * Uma cidade do mundo: id, nome e templo (`canary/src/map/town.hpp`, `Town`). O Canary a guarda
+ * com um id numérico; aqui o id é o slug, como todo id de conteúdo. O templo é para onde o
+ * personagem volta ao morrer e onde nasce sem posição salva (ADR 0060 d.4 e d.9).
+ */
+const worldTownSchema = z.strictObject({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  temple: absolutePoint,
+});
+
+/**
+ * Um mundo (`data/worlds/<id>.json`, ADR 0060 d.1 e d.2): o `Game` único do Canary, que no
+ * Draconya é uma sessão compartilhada num processo `game`. É o conteúdo de que a topologia (OW-13)
+ * e as colunas de `characters` (OW-15) precisam antes de existir. Os spawns entram à parte (OW-25).
+ *
+ * Só dado, sem arte (invariante 6): o `strictObject` recusa `appearanceId` e qualquer chave que
+ * ninguém lê. A coerência com o mapa — o templo cair num tile andável do recorte — não cabe a um
+ * schema, que só vê este arquivo: `buildContent` a confere.
+ */
+export const worldSchema = z.strictObject({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** O tipo do mundo, no conteúdo e não no código: `worldType` do Canary. Ver `WORLD_TYPES`. */
+  worldType: z.enum(WORLD_TYPES),
+  /** O mapa sobre o qual o mundo roda — um `data/maps/<id>.json` importado do OTBM. */
+  map: z.string().min(1),
+  /** Ao menos uma: sem cidade não há templo, e sem templo ninguém tem onde nascer nem morrer. */
+  towns: z.array(worldTownSchema).min(1),
+  /**
+   * O teto de gente no mundo (ADR 0060 d.2.b): vale só na entrada, vindo do repouso; quem volta
+   * de uma instância sempre entra. Começa em 200, o `CITY_SHARD_CAPACITY` de hoje.
+   */
+  capacity: z.number().int().positive(),
+});
+
+export type World = z.infer<typeof worldSchema>;
+export type WorldTown = World['towns'][number];
+
 // --- mapa e rota (FUN-9) -------------------------------------------------------------------
 
 const point = z.object({
@@ -5663,6 +5911,15 @@ const floorSchema = z.object({
    * não reimportado com a camada nova).
    */
   sight: z.array(z.string().min(1)).optional(),
+  /**
+   * Zonas do tile (#830, OW-09, ADR 0060 d.8): protect zone, no-pvp, no-logout e arena, lidas do
+   * `OTBM_ATTR_TILE_FLAGS` de cada tile — um caractere por tile, na mesma forma de `speed` e
+   * `sight`, resolvido pela paleta FIXA `ZONE_PALETTE` (`./map.ts`; `.` é o tile normal). Fixa e
+   * não por mapa, como `speedPalette`, porque são só oito estados e o significado é o do Canary,
+   * nunca uma escolha do mapa. Ausente: nenhum tile deste andar tem zona (tudo normal) — o mapa
+   * autorado à mão e o recorte ainda não reimportado com a camada, e as hunts não mudam.
+   */
+  zones: z.array(z.string().min(1)).optional(),
 });
 
 export const tilemapSchema = z.object({

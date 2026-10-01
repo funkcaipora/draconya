@@ -44,6 +44,10 @@ Separa `packages/content/staging/monsters/generated/*.json` (a transcrição pur
 | rat | hand-authored — regenerado só pelo #581, nunca por esta promoção (a apresentação, #620, é renovada) |
 | rotworm | hand-authored — regenerado só pelo #581, nunca por esta promoção (a apresentação, #620, é renovada) |
 
+## Entradas `outfit` removidas (0)
+
+Nenhuma — todo monstro imitado por um `outfit` foi promovido.
+
 ## Linhas de loot removidas (2788)
 
 Item referenciado por `loot.items` que não existe no catálogo real, ou que excede a pilha de um item que não empilha. A linha inteira é removida — nunca creditada como item fantasma (§"Loot" de `packages/content/CLAUDE.md`).

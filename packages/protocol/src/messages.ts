@@ -243,6 +243,16 @@ export const CLIENT_TO_SERVER = {
    * 39: o 38 é do `set-offline-training-skill`.
    */
   'buy-item': 39,
+  /**
+   * Escolher o nível de Hazard de uma zona (M44-14, #632; ADR 0052 d.2/d.5). INTENÇÃO: o cliente
+   * diz QUAL zona e QUAL nível; quem decide se o nível cabe no teto desbloqueado é o servidor
+   * (invariante 4), na sessão dona (invariante 9). Só na Cidade — uma hunt em curso tem o nível
+   * FIXO desde a entrada, como a versão de conteúdo (invariante 7). Sucesso é `hazard`
+   * reenviado; recusa é `system-message`.
+   *
+   * 40: o 39 é do `buy-item` (#631), o 36 do `learn-spell` (#624) e o 35 do `set-fight-mode`.
+   */
+  'set-hazard-level': 40,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -522,6 +532,52 @@ export const SERVER_TO_CLIENT = {
    * 48: o 47 é do `learned-spells` (#624), o 46 é do `bosstiary` (#629) e o 45 é do `exit-pending`.
    */
   'training-state': 48,
+  /**
+   * O mundo recusou o logout do jogador (OW-11, #832, ADR 0060 d.7): o `logout` passou por
+   * `canLogout` e a resposta é não, com o motivo do Canary — tile de no-logout
+   * (`RETURNVALUE_YOUCANNOTLOGOUTHERE`) ou personagem em luta fora da PZ
+   * (`RETURNVALUE_YOUMAYNOTLOGOUTDURINGAFIGHT`), `canary/src/server/network/protocol/
+   * protocolgame.cpp:1151-1162`. Só S2C, só para quem pediu: a saída que dá certo não tem
+   * mensagem própria (é o fim da conexão, ou a `session-ended` da transição para a hunt).
+   *
+   * 49: o 48 é do `training-state` (#631), o 47 do `learned-spells` (#624), o 46 do `bosstiary`
+   * (#629) e o 45 do `exit-pending` (#802).
+   */
+  'logout-refused': 49,
+  /**
+   * O mundo está cheio (OW-11, #832, ADR 0060 d.2b): a entrada vinda do repouso bateu no
+   * `capacity` do mundo. Responde como a fila do Canary — a posição e o tempo para tentar de
+   * novo (`protocolgame.cpp:1005-1008`) — e diz se a hunt idle está ao alcance, que é a saída
+   * que o ADR 0060 oferece no lugar de um "Thais 2" (d.6b). Só S2C.
+   *
+   * 50: o 49 é do `logout-refused`.
+   */
+  'world-full': 50,
+  /**
+   * A criatura trocou de APARÊNCIA (#621, M44-03): a condição `outfit` — Creature Illusion, Chameleon
+   * Rune, o ataque/defesa `outfit` de um monstro — começou, foi renovada ou acabou. Carrega a
+   * aparência que ela veste AGORA, já resolvida pelo servidor em id de pacote (invariante 6); quando a
+   * condição acaba, o servidor manda a aparência PRÓPRIA da criatura (o cliente nunca guarda a
+   * "original" para voltar). Broadcast para todos os viewers da sessão, como `creature-health`: a
+   * aparência é de quem está no mundo, não de um personagem. Só S2C — o cliente não escolhe o que
+   * veste (invariante 4).
+   *
+   * 51: o 45 é do `exit-pending` (#802), o 46 é do `bosstiary` (#629), o 47 é do `learned-spells`
+   * (#624), o 48 é do `training-state` (#631), o 49 é do `logout-refused` (#832) e o 50 é do
+   * `world-full` (#832).
+   */
+  'creature-update': 51,
+  /**
+   * O Hazard do personagem (M44-14, #632, ADR 0052 d.1): o nível máximo desbloqueado e o
+   * escolhido de cada zona — o registro cru, como `charms`. Quais zonas existem, os níveis
+   * mínimo e máximo de cada uma e que hunt pertence a qual vêm do `catalogue` (fixado na sessão,
+   * invariante 7). Sai no attach e sempre que uma escolha ou uma subida de nível muda o registro.
+   *
+   * 52: o 51 é do `creature-update` (#621), o 50 do `world-full` (#832), o 49 do `logout-refused`
+   * (#832), o 48 do `training-state` (#631), o 47 do `learned-spells` (#624), o 46 do `bosstiary`
+   * (#629) e o 45 do `exit-pending`.
+   */
+  hazard: 52,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

@@ -148,7 +148,7 @@ data/items/backpack.json             # autoral, uma entidade por arquivo (de sem
 data/items/generated/weapons.json    # promovido por `pnpm catalog:promote-items` — um ARRAY por fatia
 data/items/overrides/*.json          # correção nossa: { id, reason, patch }
 data/monsters/generated/mammals.json # promovido/regenerado — um ARRAY (Rat mora aqui desde o #581)
-data/monsters/overrides/*.json       # correção nossa: { id, reason, patch } — nenhuma hoje (#586 apagou as duas que existiam)
+data/monsters/overrides/*.json       # correção nossa: { id, reason, patch } — quatro (rat, dragon, dragon-lord, dragon-lord-hatchling: #600 e #621; o #586 apagou as duas de antes)
 ```
 
 Um arquivo — autoral ou gerado — que contém um **array** vira várias entidades; um objeto solto
@@ -212,9 +212,24 @@ nunca aqui.
 Huntera); a hunt anda pela fórmula do Tibia com `progression.startingSpeed`/`speedPerLevel` e
 `monster.speed`.
 
+**Zonas por tile** (#830, OW-09, ADR 0060 d.8, que reverte o ADR 0025 d.9). `floors[z].zones` é a
+quarta camada por andar, na forma de `speed` e `sight` — uma string por linha, um caractere por
+tile —, lida de `TILE_FLAGS` do OTBM. A paleta é FIXA (`ZONE_PALETTE`, em `map.ts`; não por mapa,
+como `speedPalette` é): `.` normal, `p` PZ, `n` no-pvp, `a` arena (`PVPZONE`), `l` só no-logout, e
+`P`/`N`/`A` a zona mais no-logout. Em memória, `Floor.zones` é `Uint8Array | null` com a soma dos
+bits do OTBM (`ZONE_FLAG`: PZ 1, no-pvp 4, no-logout 8, arena 16) e `zoneFlagsAt(map, x, y, z)`
+lê um tile — `0`, normal, quando a camada falta, o tile está fora do mapa ou o andar não existe.
+Ausente é `null` e tudo é normal: **as hunts não mudam**, e hoje só `thais.json` a tem. O valor já
+vem normalizado como o Canary carrega o mapa (PZ, no-pvp e arena exclusivos; no-logout soma; casa é
+PZ), então o `sim` aplica a precedência de `Tile::getZoneType` e nunca precisa re-normalizar. É dado,
+sem regra: o que PZ, no-pvp e no-logout proíbem é do `sim` (OW-10, OW-27). Caractere fora da
+paleta derruba o boot, como velocidade fora de `speedPalette`. `pnpm map:import --id <id>
+--zones-only` acrescenta só a camada a um mapa já importado — sem pacote de arte, geometria
+intacta —, e `--check` a confere mesmo onde a geometria sai `absent`.
+
 **Mapa importado: o que é gerado e o que é autorado** (FUN-118, FUN-120, ADR 0025). Um mapa com
-`source` veio do OTBM real por `pnpm map:import`: `floors` (grade e velocidade), `speedPalette`
-e `source` são GERADOS, e `pnpm map:import --check` — que o `pnpm check` roda — reprova a grade
+`source` veio do OTBM real por `pnpm map:import`: `floors` (grade, velocidade, visão e zonas),
+`speedPalette` e `source` são GERADOS, e `pnpm map:import --check` — que o `pnpm check` roda — reprova a grade
 editada à mão, porque ela é a geometria do arquivo de origem e não uma opinião. O que se autora
 no JSON é `entryPoint` e `floorChanges`; reimportar preserva os dois. Mapa importado NÃO tem
 linha em `appearances.maps`: a arte dele é a pilha por tile em `things/<versão>/maps/<id>.json`,
@@ -244,6 +259,34 @@ Confira antes de subir o servidor:
 ```
 pnpm content:check
 ```
+
+## O mundo (#829, OW-08, ADR 0060)
+
+`data/worlds/<id>.json` — um arquivo por mundo — diz o que um mundo **é**: `{ id, name, worldType,
+map, towns: [{ id, name, temple }], capacity }`. `Content.worlds` é um mapa por id, vazio no
+conteúdo de teste sem mundo aberto; o conteúdo real tem o `main` (tipo `no-pvp`, mapa `thais`,
+teto 200), e `load.test.ts` prende. Quem lê é a topologia do `sim` (OW-13) e as colunas de mundo
+em `characters` (OW-15); os spawns entram à parte (OW-25).
+
+- **`worldType` é um vocabulário FECHADO** (`WORLD_TYPES`), como `COMBAT_PROFILES`: hoje só
+  `no-pvp`. O Canary aceita também `retro-pvp`/`pvp`/`expert-pvp`/`pvp-enforced`
+  (`canary/config.lua.dist:28-33`), mas o `sim` não tem dano entre jogadores — aceitar um deles
+  num arquivo seria subir um mundo que promete o que o motor não faz. Tipo novo entra por ADR.
+- **O templo é coordenada ABSOLUTA do Tibia**, a mesma de `characters.world_x/y/z` (ADR 0060
+  d.3.b), e o mapa do recorte é LOCAL. `absoluteToLocal`/`localToAbsolute` (`map.ts`) traduzem pela
+  origem de `source.region`: `x` e `y` perdem ou ganham a origem, `z` não muda (os andares do
+  recorte são chaveados pelo `z` absoluto). Só mapa IMPORTADO tem `source`, e por isso só ele
+  serve a um mundo. Não compare coordenada de mundo com `entryPoint` ou `floorChanges` sem
+  traduzir: em Thais o erro é de 32275 em x e 32153 em y, e não aparece em teste que usa só o mapa local.
+- **`buildContent` confere o que o schema não vê:** o `map` existe e tem `source`; o templo cai
+  dentro do recorte nos três eixos e num tile que não é parede (`isBlocked`, a regra do
+  `entryPoint` da Cidade); id de cidade e de mundo únicos. Quebra no boot, não no personagem que
+  nasce preso.
+- **Entra em `computeVersion`** como todo o `RawContent` (invariante 7): mudar o teto muda a
+  versão que a sessão congela.
+- **`capacity` só se guarda aqui.** O teto vale só na entrada vinda do repouso (ADR 0060 d.2.b) e
+  quem o aplica é a admissão (OW-18/OW-20); `CITY_SHARD_CAPACITY` continua sendo o da Cidade.
+- Sem arte (invariante 6): `worldSchema` é `strictObject`.
 
 ## Invariantes locais
 
@@ -699,14 +742,16 @@ entre arquivos resolvem.
   PERCENTUAL INTEIRO, como o reflexo de item, e compilam no boot (`compileElementHealing`,
   `compileReflect` com `flat` zero); ausentes no monstro compilado quando nada cura/reflete.
 - **`monster.conditionImmunities` é o `monster.immunities[].condition` do Canary** (#559, ADR 0041
-  d.2) — distinto de `mitigation.immunities` (`combat = true`, DANO). Catorze nomes:
-  `paralyze`, `drunk`, `invisible`, as oito DOTs (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY`, a
+  d.2) — distinto de `mitigation.immunities` (`combat = true`, DANO). Quinze nomes:
+  `paralyze`, `drunk`, `invisible`, `outfit` (#621), as oito DOTs (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY`, a
   `Combat::DamageToConditionType`: `physical` sangra, `earth` envenena, `fire` queima…) e, desde o
   #622, `rooted`, `feared` e `pacified` — o vocabulário do ADR, NÃO os nomes do Lua (`bleed`,
-  `fire`, `earth`…), que o importador traduz. Os três últimos são AUTORAIS: o Lua não os nomeia, e
+  `fire`, `earth`…), que o importador traduz. Os três de controle são AUTORAIS: o Lua não os nomeia, e
   nenhum monstro do bestiário os declara. **`invisible` significa "enxerga o invisível"**
   (`Monster::canSeeInvisibility`), nunca "não pode ficar invisível": é a exceção que não bloqueia a
-  condição. `outfit` (119 monstros) fica fora até o M44-03. Ausente é `[]`, sem imunidade nenhuma.
+  condição. `outfit` (119 monstros no Canary, 42 no catálogo gerado) entrou com o M44-03 (#621): barra
+  o ataque `outfit` de OUTRO monstro, nunca a ilusão do jogador nem a defesa do próprio monstro.
+  Ausente é `[]`, sem imunidade nenhuma.
 - **As condições de controle (#622, M44-04) são chave RESERVADA sem campo próprio, como o drunk:**
   `rooted`, `feared` e `pacified` (`ROOTED_CONDITION_KEY`… em `schemas.ts`), e `conditionSpecSchema`
   confere as duas implicações (a chave só com o efeito dela, e vice-versa). **Exigem
@@ -724,6 +769,20 @@ entre arquivos resolvem.
   identificadores colados do Lua (`FACTION_LIONUSURPERS` → `lion-usurpers`); o importador traduz e
   bloqueia uma constante desconhecida. Nenhum campo tem default preenchido: ausência é o monstro de
   sempre.
+- **A condição `outfit` referencia CONTEÚDO, nunca arte** (#621, M44-03, ADR 0041 d.1):
+  `outfitLookSchema` é `{ monsterId } | { itemId } | { objectKey }` (`strictObject` — um
+  `outfitId`/`appearanceId` escrito ali é recusado no boot), e quem resolve para o id do pacote é o
+  hospedeiro pela tabela de aparências (`appearances.monsters`/`items`/`looks`). `looks` é a seção
+  `chave de objeto → appearanceId` do `outfitItem` do Canary — chave sem linha é MUDA (vocabulário
+  semântico, como `abilities`), e `packProblems` confere os ids contra o inventário do pacote. A
+  chave `outfit` é reservada nos dois sentidos e a fusão é `strongest` DECLARADA (o mecanismo de
+  `ConditionOutfit`): `monsterId`/`itemId` que não existem recusam no boot (`buildContent`), mas
+  o `objectKey` não tem entidade do outro lado. `monster.illusionable` (default `false`, o do Canary)
+  é o que `validateBotConfigV2` confere na Creature Illusion — a ação do slot leva o `monsterId`, o
+  MESMO campo da invocação, conferido contra a flag PRÓPRIA de cada magia (`illusionable` ≠
+  `summonable`). As quatro entradas autorais que o #581 gerou (rat, dragon, dragon-lord,
+  dragon-lord-hatchling) ganharam o `illusionable` por `data/monsters/overrides/`, porque nunca são
+  reescritas pela promoção.
 
 Issue: FUN-8.
 - **Os efeitos utilitários de magia (#623: `light`, `levitate`, `magic-rope`, `find`, `food`)
@@ -736,3 +795,22 @@ Issue: FUN-8.
   verdade (consumível com efeito `food`) e que não repita. `light.color` é o índice da paleta de 216
   cores do Tibia (215 é branco). Ultimate Light é nível 8 no Canary e 9 no TFS: vale o Canary
   (ADR 0037 d.4).
+
+## O Hazard (#632, M44-14)
+
+`data/hazard/baseline.json` é um documento só (`hazardSchema`), como `boosted`/`bestiary`: os dez
+multiplicadores do `config.lua.dist` do Canary e as zonas por id (`zones`, `hazardZoneSchema`
+estrito). A hunt aponta a zona por `hazardZoneId` (opcional); `buildContent` recusa a zona
+inexistente, `minLevel > maxLevel` e `plunderMonsterId` fora do catálogo. **O `levelUpMonsterId`
+NÃO é conferido contra o catálogo**: The Primal Menace é chefe de quest ainda sem entrada, e o id
+fica declarado para o dia em que ele existir. Os valores são transcrição do Canary — nenhum é
+decisão nossa, então não há `_open`; mudar um é mudar a versão de conteúdo (invariante 7). A hunt
+`gnomprona-gardens` é o recorte real (`pnpm map:import` + `route:trace` + `catalog:spawns`, comandos
+no `_open` dela): geometria gerada com o pacote 1332 e idêntica à do 1533 na região medida; o
+`catalog:spawns --check` dela está no `pnpm check` e acusa quando o catálogo ganhar uma espécie.
+**`monster.rewardBoss` é o `flags.rewardBoss` do Canary** (`MonsterType::isRewardBoss`): o importador
+o escreve como está (só quando `true`), e hoje uma regra o lê — a morte de um monstro de zona de
+Hazard não rola casulo nem Plunder Patriarch quando o morto é chefe de recompensa (o próprio
+Patriarch é um). O baú de recompensa no lugar do cadáver, que o Canary também liga a essa flag, não
+existe aqui.
+

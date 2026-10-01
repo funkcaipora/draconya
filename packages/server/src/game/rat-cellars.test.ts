@@ -246,7 +246,14 @@ describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)
         // (#596) também mira o alvo, como dano.
         const needsAim = spell.effect.kind === 'damage' || spell.effect.kind === 'challenge'
           || spell.effect.kind === 'damage-over-time';
-        const result = castSpell(hero, spell, needsAim ? aim : null, now, content.combat, Rng.fromSeed(spell.id));
+        // A Creature Illusion (#621) precisa do monstro a imitar, que o RULESET confere e passa a
+        // `castSpell` como `illusionLook` — sem ele a magia recusa antes da mana (`not-illusionable`),
+        // e o rato é ilusionável no conteúdo real.
+        const illusionLook = spell.effect.kind === 'illusion' ? { monsterId: 'rat' } : undefined;
+        const result = castSpell(
+          hero, spell, needsAim ? aim : null, now, content.combat, Rng.fromSeed(spell.id),
+          undefined, hero, undefined, null, undefined, undefined, undefined, null, illusionLook,
+        );
         expect(result.ok, spell.id).toBe(true);
         // `manaCost` é sempre NÚMERO aqui — o filtro acima já tirou as magias de party, as
         // únicas com `manaCost` escalado (`party-scaled`).

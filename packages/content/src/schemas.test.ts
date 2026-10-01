@@ -4,6 +4,7 @@ import {
   ammunitionSchema, appearancesSchema, botConditionSchema, botConfigV2Schema, botSetSchema,
   botTargetPolicySchema, DEFAULT_MONSTER_RACE, huntSchema, itemSchema, loyaltySchema, MONSTER_RACES,
   monsterSchema, NEUTRAL_MONSTER_OUTFIT, routeSchema, spellAreaSchema, spellFormulaSchema, tilemapSchema,
+  worldSchema, WORLD_TYPES,
 } from './schemas.js';
 
 describe('routeSchema.spawnPoints — `monsters` com peso na mesma posição (#582)', () => {
@@ -473,5 +474,63 @@ describe('a política de alvo `follow` (AB-09, ADR 0032 d.5)', () => {
     expect(botTargetPolicySchema.parse('follow')).toBe('follow');
     expect(botTargetPolicySchema.safeParse('nearest').success).toBe(true);
     expect(botTargetPolicySchema.safeParse('mais-forte').success).toBe(false);
+  });
+});
+
+describe('worldSchema (#829, OW-08, ADR 0060)', () => {
+  const world = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    id: 'main', name: 'Draconya', worldType: 'no-pvp', map: 'thais',
+    towns: [{ id: 'thais', name: 'Thais', temple: { x: 32369, y: 32241, z: 7 } }],
+    capacity: 200, ...over,
+  });
+
+  it('o vocabulário de tipos é só o `no-pvp`: o motor não tem dano entre jogadores', () => {
+    expect(WORLD_TYPES).toEqual(['no-pvp']);
+  });
+
+  it('aceita a forma { id, name, worldType, map, towns, capacity }', () => {
+    expect(worldSchema.parse(world())).toEqual(world());
+  });
+
+  it('recusa um worldType desconhecido', () => {
+    for (const worldType of ['retro-pvp', 'pvp', 'NO-PVP', 'no_pvp', '', 7, undefined]) {
+      expect(worldSchema.safeParse(world({ worldType })).success, String(worldType)).toBe(false);
+    }
+  });
+
+  it('recusa o teto que não é inteiro positivo', () => {
+    for (const capacity of [0, -1, 1.5, '200', undefined]) {
+      expect(worldSchema.safeParse(world({ capacity })).success, String(capacity)).toBe(false);
+    }
+  });
+
+  it('recusa um mundo sem cidade: sem templo ninguém nasce nem volta ao morrer', () => {
+    expect(worldSchema.safeParse(world({ towns: [] })).success).toBe(false);
+  });
+
+  it('recusa cidade sem nome, sem id ou sem templo', () => {
+    const temple = { x: 32369, y: 32241, z: 7 };
+    for (const town of [
+      { id: 'thais', name: '', temple }, { id: '', name: 'Thais', temple }, { id: 'thais', name: 'Thais' },
+    ]) {
+      expect(worldSchema.safeParse(world({ towns: [town] })).success, JSON.stringify(town)).toBe(false);
+    }
+  });
+
+  it('o templo é coordenada do Tibia: inteira, sem negativo, e andar de 0 a 15', () => {
+    for (const temple of [
+      { x: -1, y: 32241, z: 7 }, { x: 32369, y: -1, z: 7 }, { x: 32369.5, y: 32241, z: 7 },
+      { x: 32369, y: 32241, z: 16 }, { x: 32369, y: 32241, z: -1 }, { x: 32369, y: 32241 },
+    ]) {
+      const town = { id: 'thais', name: 'Thais', temple };
+      expect(worldSchema.safeParse(world({ towns: [town] })).success, JSON.stringify(temple)).toBe(false);
+    }
+  });
+
+  it('é só dado, sem arte (invariante 6): chave que ninguém lê é recusada', () => {
+    expect(worldSchema.safeParse(world({ appearanceId: 1 })).success).toBe(false);
+    expect(worldSchema.safeParse(world({ outfitId: 1 })).success).toBe(false);
+    const town = { id: 'thais', name: 'Thais', temple: { x: 32369, y: 32241, z: 7 }, sprite: 'temple.png' };
+    expect(worldSchema.safeParse(world({ towns: [town] })).success).toBe(false);
   });
 });

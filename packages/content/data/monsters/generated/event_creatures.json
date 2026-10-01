@@ -183,7 +183,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/event_creatures/bones.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "essence-of-darkness",
@@ -452,7 +453,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/event_creatures/fluffy.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "grynch-clan-goblin",
@@ -472,6 +474,7 @@
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 200,
     "aggroRadius": 11,
@@ -725,6 +728,25 @@
             "kind": "speed",
             "type": "haste",
             "delta": 290
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 10000,
+        "chance": 0.15,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 500,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "pig"
+            }
           }
         },
         "presentation": {
@@ -2642,6 +2664,25 @@
     ],
     "defenses": [
       {
+        "id": "outfit",
+        "cadenceMs": 4000,
+        "chance": 0.1,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "bat"
+            }
+          }
+        },
+        "presentation": {
+          "impactKey": "groundshaker"
+        }
+      },
+      {
         "id": "haste",
         "cadenceMs": 2000,
         "chance": 0.15,
@@ -3379,6 +3420,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 154,
     "aggroRadius": 11,
@@ -3557,6 +3599,35 @@
         "presentation": {
           "missileKey": "fire",
           "impactKey": "firearea"
+        }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 1000,
+        "chance": 0.02,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "loseenergy"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "primitive"
+            }
+          }
         }
       }
     ],
@@ -3843,6 +3914,7 @@
     },
     "conditionImmunities": [
       "invisible",
+      "outfit",
       "paralyze"
     ],
     "defenseMitigation": 0,
@@ -3859,6 +3931,427 @@
       "rollModel": "canary",
       "items": []
     },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 0
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 2000,
+        "chance": 0.06,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blockhit"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "bat"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-2",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blockhit"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "thornback-tortoise"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-3",
+        "cadenceMs": 2000,
+        "chance": 0.06,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blockhit"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "orc"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-4",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blockhit"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "snake"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-6",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blockhit"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "witch"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-7",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blockhit"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "necromancer"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-8",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blockhit"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "dwarf-geomancer"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-9",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blockhit"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "monk"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-10",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blockhit"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "crab"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-11",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blockhit"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "ghost"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-12",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blockhit"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "minotaur-mage"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-13",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blockhit"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "green-frog"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-14",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blockhit"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "parrot"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-15",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blockhit"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "objectKey": "dried-well"
+            }
+          }
+        }
+      }
+    ],
     "defenses": [
       {
         "id": "heal",
@@ -4078,6 +4571,35 @@
         "presentation": {
           "impactKey": "hitbypoison"
         }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 1000,
+        "chance": 0.02,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 8,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "loseenergy"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "the-mutated-pumpkin"
+            }
+          }
+        }
       }
     ],
     "defenses": [
@@ -4166,7 +4688,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 466
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "undead-minion",

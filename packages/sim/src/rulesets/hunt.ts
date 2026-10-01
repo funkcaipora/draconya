@@ -18,23 +18,24 @@
 
 import {
   BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY,
-  FEARED_CONDITION_KEY, INVISIBLE_CONDITION_KEY, ITEM_SLOTS, PACIFIED_CONDITION_KEY,
+  FEARED_CONDITION_KEY, INVISIBLE_CONDITION_KEY, ITEM_SLOTS, OUTFIT_CONDITION_KEY, PACIFIED_CONDITION_KEY,
   ROOTED_CONDITION_KEY, SPELL_SKILL_WEAPON, fieldStagesOf, floorChangeAt,
   floorChangeToward, isBlocked, migrateBotConfigV1,
 } from '@draconya/content';
 import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, BotLoot, Charm, Combat,
-  CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, FieldStage, Hunt,
+  CompiledWeaponFamily, ConditionSpec, Content, DamageModifiers, DamageType, FieldSpec, FieldStage, Hazard, HazardZone, Hunt,
   Item, ItemSlot, Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange,
-  PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Skinning, Spell, SpellArea, SpellEffect,
-  SpawnPoint, Stamina, Supply, Tilemap, Training, Vocation, WeaponFamily, WeaponProfile,
+  OutfitLook, PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Skinning, Spell, SpellArea,
+  SpellEffect, SpawnPoint, Stamina, Supply, Tilemap, Training, Vocation, WeaponFamily, WeaponProfile,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, FORWARD, isSelfOrigin, tileKey } from '../area.js';
 import type { AreaSource, Direction } from '../area.js';
 import {
-  HAS_SUMMONS, NOT_ENOUGH_ROOM, NOT_IN_CATALOG, NOT_POSSIBLE, NOT_SUMMONABLE, TOO_MANY_SUMMONS, actionExhaustKey,
-  balanceOf, castSpell, executeHealing, groupCooldownKey, ownPurse, spellCooldownKey, supplyCooldownKey, useSupply,
+  HAS_SUMMONS, NOT_ENOUGH_ROOM, NOT_IN_CATALOG, NOT_ILLUSIONABLE, NOT_POSSIBLE, NOT_SUMMONABLE, TOO_MANY_SUMMONS,
+  actionExhaustKey, balanceOf, castSpell, executeHealing, groupCooldownKey, ownPurse, spellCooldownKey,
+  supplyCooldownKey, useSupply,
 } from '../casting.js';
 import type {
   CastRefused, CastResult, CastSuccess, Purse, SpellAim, SpellScaling, SpellTarget, UtilityRefusal,
@@ -53,7 +54,10 @@ import { chestStorageKeyOf, isDoorKind, isToggleable, TileOverrides } from '../t
 import type { InteractableKind, InteractableTool, TileOverrideState } from '../tile-overrides.js';
 import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
-import { hasCharmStage, hasSkinningStage } from '../combat/profile.js';
+import { hasCharmStage, hasHazardStage, hasSkinningStage } from '../combat/profile.js';
+import {
+  applyHazardToMonsterHit, applyHazardToPlayerHit, hazardExperience, hazardLootRolls,
+} from '../combat/hazard.js';
 import {
   ADRENALINE_BURST_CONDITION, ActionCritical, CHARM_PARALYZE_CONDITION, CLEANSE_IMMUNITY_MS,
   FATAL_HOLD_MS, carnageCharmDamage, charmAttackBonus, charmChance, cleanseTypeOfCondition,
@@ -213,6 +217,12 @@ const monsterSummonSubject = (id: number, monsterId: string): string =>
  * desta entrada tenta de novo, como o respawn adiado do Spawner.
  */
 const SUMMON_SPAWN_RADIUS = 1;
+/**
+ * Até onde o Plunder Patriarch procura um tile livre ao nascer da morte de um monstro de hazard:
+ * o `maxRadius` 4 do `player:getClosestFreePosition(monster:getPosition(), 4, true)` de
+ * `hazard_primal.lua` (#632).
+ */
+const PLUNDER_SPAWN_RADIUS = 4;
 /**
  * O teto de invocações VIVAS por PERSONAGEM (#598, M38-01, ADR 0057 decisão 3): "Teto de 2" —
  * `summon_creature.lua` do Canary confere `player:getSummonCount() >= 2` antes de invocar,
@@ -506,6 +516,12 @@ export type UseSlotTarget =
   | { readonly kind: 'character'; readonly characterId: string }
   | { readonly kind: 'position'; readonly position: FloorPoint }
   /**
+   * Um item que o PERSONAGEM carrega, apontado pela instância (#621, Chameleon Rune: o "usar com"
+   * de `chameleon.lua` sobre um item do container ou do corpo). Só a runa `chameleon` o lê; para
+   * qualquer outra ação é ruído, ignorado como um `character` numa ação de dano (RF-12).
+   */
+  | { readonly kind: 'item'; readonly instanceId: string }
+  /**
    * O `creatureId` do fio não resolveu para NENHUM personagem/monstro conhecido do host
    * (criatura já saiu de vista/sessão). Distinto de "ausente" (`undefined`): o jogador MIROU
    * algo, e isso precisa recusar `no-target` numa ação mirável — não cair em silêncio no
@@ -590,7 +606,13 @@ export type SlotRefusal =
    * monstro fiendish (`no-creatures-around`) — as do `RETURNVALUE_*` do Canary.
    */
   | 'not-possible' | 'too-many-summons'
-  | 'not-enough-room' | 'person-not-found' | 'no-creatures-around';
+  | 'not-enough-room' | 'person-not-found' | 'no-creatures-around'
+  /**
+   * A ilusão (#621, M44-03, Creature Illusion/Chameleon Rune): sem `monsterId`, monstro fora do
+   * catálogo ou não `illusionable`; na runa, sem item apontado (ou item que o personagem não
+   * carrega).
+   */
+  | 'not-illusionable';
 
 /** O resultado do disparo manual: sucesso, ou recusa tipada com o prazo quando é cooldown. */
 export type SlotOutcome =
@@ -725,6 +747,7 @@ export function refusalOf(result: CastRefused): SlotRefusal {
     case 'attack-locked': return 'attack-locked';
     case 'feared': return 'feared';
     case 'not-summonable': return 'not-summonable';
+    case 'not-illusionable': return 'not-illusionable';
     case 'has-summons': return 'has-summons';
     case 'not-enough-room': return 'not-enough-room';
     case 'spell-not-learned': return 'not-learned';
@@ -1186,6 +1209,14 @@ export interface HuntRulesetOptions {
    * faz nada — o conteúdo de teste que não fala de esfola.
    */
   readonly skinning?: ReadonlyMap<string, Skinning>;
+  /**
+   * O Hazard desta hunt (M44-14, #632, ADR 0052 d.7): a zona que `hunt.hazardZoneId` aponta e os
+   * multiplicadores do Canary. Só o `combat-v4` (`hasHazardStage`) o roda; ausente é uma hunt sem
+   * nível de perigo — todas as que existiam antes da issue. O nível de cada jogador vem do
+   * `CharacterRuntime.hazard` (escolhido na Cidade, fixo enquanto a hunt dura), e o da party é o
+   * MENOR entre os membros.
+   */
+  readonly hazard?: { readonly zoneId: string; readonly zone: HazardZone; readonly config: Hazard };
   readonly player: PlayerProfile;
   readonly exitRules?: readonly HuntExitRule[];
   /**
@@ -2195,8 +2226,9 @@ export class HuntRuleset implements Ruleset {
     const recipient = resolved?.ok === true && resolved.recipient !== undefined
       ? resolved.recipient : character;
     const explicit = resolved?.ok === true ? resolved.explicit : undefined;
+    const itemInstanceId = resolved?.ok === true ? resolved.itemInstanceId : undefined;
 
-    const result = this.#perform(session, character, entry.do, recipient, explicit);
+    const result = this.#perform(session, character, entry.do, recipient, explicit, itemInstanceId);
     if (!result.ok) return refuse(refusalOf(result), result.retryInMs);
     // A ação SAIU: o ciclo automático passa a respeitar o cooldown que ela acabou de iniciar.
     this.#armBot(session, characterId);
@@ -2333,8 +2365,9 @@ export class HuntRuleset implements Ruleset {
     const recipient = resolved?.ok === true && resolved.recipient !== undefined
       ? resolved.recipient : character;
     const explicit = resolved?.ok === true ? resolved.explicit : undefined;
+    const itemInstanceId = resolved?.ok === true ? resolved.itemInstanceId : undefined;
 
-    const result = this.#useSupply(session, character, supplyId, recipient, explicit);
+    const result = this.#useSupply(session, character, supplyId, recipient, explicit, itemInstanceId);
     if (!result.ok) return refuseItem(refusalOf(result), result.retryInMs);
     character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
     return { ok: true };
@@ -6249,6 +6282,8 @@ const slots = bot.groups.get(group);
     session: Session, character: CharacterRuntime, action: BotAction | BotActionV2,
     recipient: CharacterRuntime = character,
     explicit?: MonsterRuntime | FloorPoint,
+    /** O item que a Chameleon Rune aponta (#621) — só a runa `chameleon` o lê. */
+    itemInstanceId?: string,
   ): CastResult {
     switch (action.kind) {
       // `monsterId` (#598, M38-01, ADR 0057 decisão 4) só existe no vocabulário v2 — a v1 não
@@ -6257,7 +6292,9 @@ const slots = bot.groups.get(group);
         session, character, action.spellId, recipient, explicit,
         'monsterId' in action ? action.monsterId : undefined,
       );
-      case 'supply': return this.#useSupply(session, character, action.supplyId, recipient, explicit);
+      case 'supply': return this.#useSupply(
+        session, character, action.supplyId, recipient, explicit, itemInstanceId,
+      );
       // O item de slot saiu no vocabulário v2 (AB-03): o consumível abstrato é `supply`, com
       // gold no uso, e o item de equipamento é das automações.
       case 'item': return NOT_IN_CATALOG;
@@ -6297,8 +6334,19 @@ const slots = bot.groups.get(group);
    */
   #resolveManualTarget(
     session: Session, character: CharacterRuntime, action: BotAction, target: UseSlotTarget | undefined,
-  ): { ok: true; recipient?: CharacterRuntime; explicit?: MonsterRuntime | FloorPoint }
-    | { ok: false; reason: SlotRefusal } | null {
+  ): {
+    ok: true; recipient?: CharacterRuntime; explicit?: MonsterRuntime | FloorPoint;
+    itemInstanceId?: string;
+  } | { ok: false; reason: SlotRefusal } | null {
+    // A Chameleon Rune (#621) mira um ITEM do personagem, nunca criatura nem tile: o único alvo que
+    // ela lê é `{ kind: 'item' }`. Qualquer outra mira (ou nenhuma) não a recusa aqui — `useSupply`
+    // devolve `not-illusionable` ("item nenhum apontado"), o `RETURNVALUE_NOTPOSSIBLE` do Lua.
+    if (action.kind === 'supply'
+      && this.#options.supplies.get(action.supplyId)?.effect.kind === 'chameleon') {
+      return target?.kind === 'item' ? { ok: true, itemInstanceId: target.instanceId } : null;
+    }
+    // Um item apontado numa ação que não é a Chameleon é ruído (RF-12), ignorado sem recusa.
+    if (target?.kind === 'item') return null;
     // Find Person (#623): o "nome" do Canary é o personagem que o jogador MIROU. O alvo vira o
     // `recipient` — o mesmo canal da cura de amigo —, e qualquer outra mira (monstro, tile, criatura
     // que já saiu de vista, ninguém) é o nome que `getPlayerByNameWildcard` não acha. Essa recusa
@@ -6456,6 +6504,15 @@ const slots = bot.groups.get(group);
       if (summonMonster === undefined || !summonMonster.summonable) return NOT_SUMMONABLE;
       if (this.#playerSummonCountOf(character.id) >= PLAYER_SUMMON_CAP) return NOT_SUMMONABLE;
     }
+    // A ilusão (#621, Creature Illusion): o PARÂMETRO é o monstro a imitar, e a conferência é a de
+    // `creature_illusion.lua` — o monstro existe (`MonsterType(variant:getString())`) e é
+    // `illusionable` (`monsterType:isIllusionable()`, sem a exceção `PlayerFlag_CanIllusionAll`,
+    // que é do GM). Recusa ANTES da mana, dentro de `castSpell` (`illusionLook` ausente).
+    let illusionLook: OutfitLook | undefined;
+    if (spell.effect.kind === 'illusion') {
+      const illusionMonster = monsterId === undefined ? undefined : this.#options.monsters.get(monsterId);
+      if (illusionMonster?.illusionable === true) illusionLook = { monsterId: illusionMonster.id };
+    }
 
     // O familiar (#599, M38-02, ADR 0057 d.3; `Player:CreateFamiliarSpell`): o cooldown de PAREDE é
     // conferido primeiro — no Canary é a `CONDITION_SPELLCOOLDOWN`, que o framework confere antes
@@ -6521,6 +6578,7 @@ const slots = bot.groups.get(group);
       undefined, summonMonster?.manaCost, precondition,
       // As utilitárias (#623) recusam pelo que só este ruleset vê — mapa, overlay e sessão.
       this.#utilityRefusalOf(character, spell.effect, recipient, session.nowMs),
+      illusionLook,
     );
     if (!result.ok) return result;
     // A magia SAIU: a mana gasta é o que ela rende de skill (§9.4) — o custo REAL: o do
@@ -6938,12 +6996,15 @@ const slots = bot.groups.get(group);
       // comentário acima. Ela nunca zera `alive` ao sumir, então a checagem certa é presença no
       // índice vivo da instância, não `monster.alive`.
       if (this.#monsterBySubject.get(monster.subject) !== monster) continue;
-      const outcome = hitOutcomes[i];
+      const resolved = hitOutcomes[i];
       // Defensivo: `hitOutcomes` nasce do MESMO laço que `hits` em `castSpell`/`useSupply`, os
       // dois sempre do mesmo tamanho — mas um índice sem outcome não aplica nada, em vez de
       // arriscar `undefined` em `applyDamageOutcome`.
-      if (outcome === undefined) continue;
-      const damage = hits[i] ?? 0;
+      if (resolved === undefined) continue;
+      // O Hazard (#632), por alvo: a esquiva do monstro de zona some com o golpe inteiro dele — e o
+      // recorde da magia conta o que de fato saiu, como o `bestSpellHit` já contava o resolvido.
+      const outcome = this.#hazardOnPlayerHit(session, monster, resolved);
+      const damage = outcome === resolved ? hits[i] ?? 0 : outcome.resolvedDamage;
       // Por ALVO, não a soma da área: "maior hit" é o maior golpe que alguém levou, e somar
       // uma área faria uma magia fraca em cinco alvos superar a mais forte do jogo em um.
       session.credit(character.id, 'bestSpellHit', damage);
@@ -7315,6 +7376,33 @@ const slots = bot.groups.get(group);
     if (condition.key === INVISIBLE_CONDITION_KEY && previous === null) {
       this.#scheduleVisibilityThinks(session, target);
     }
+    // A aparência emprestada (#621, `ConditionOutfit::startCondition`/`addCondition`): a criatura
+    // muda de aparência AGORA — na primeira aplicação e em toda que vence a anterior (`strongest`
+    // manteve a dela: a saída acima, sem evento, como `updateCondition` devolvendo `false`).
+    if (condition.key === OUTFIT_CONDITION_KEY && condition.look !== undefined) {
+      this.#emitLook(session, target, condition.look);
+    }
+  }
+
+  /**
+   * A criatura trocou de aparência (#621): `look` é o que ela veste AGORA, ou `null` quando volta
+   * à dela. Só apresentação — nenhuma conta de combate lê o outfit (`ConditionOutfit` não mexe
+   * em número nenhum) —, então nada aqui muda o resultado de quem não assiste (invariante 3).
+   */
+  #emitLook(session: Session, target: ConditionTarget, look: OutfitLook | null): void {
+    session.emit({ kind: 'creature-look-changed', creatureId: this.#subjectOf(target), look });
+  }
+
+  /**
+   * A aparência emprestada de uma criatura agora (#621), ou `null` quando ela veste a dela —
+   * `creatureId` é o `subject` do monstro (`m:<id>`) ou o `characterId`. É a leitura do HOSPEDEIRO
+   * para quem entra na tela no meio de uma ilusão (`creature-appear`/`session-state`): o estado
+   * mora na condição, nunca num campo de apresentação que dependeria de haver alguém olhando.
+   */
+  lookOf(session: Session, creatureId: string): OutfitLook | null {
+    const monster = this.#monsterBySubject.get(creatureId);
+    if (monster !== undefined) return monster.alive ? monster.conditions.look() : null;
+    return findById(session.participants, creatureId)?.conditions.look() ?? null;
   }
 
   /**
@@ -7445,8 +7533,11 @@ const slots = bot.groups.get(group);
   #onConditionExpire(session: Session, subject: string): void {
     const separator = subject.lastIndexOf('/');
     if (separator < 0) return;
-    this.#conditionTargetOf(session, subject.slice(0, separator))
-      ?.conditions.remove(subject.slice(separator + 1));
+    const target = this.#conditionTargetOf(session, subject.slice(0, separator));
+    if (target === null) return;
+    const removed = target.conditions.remove(subject.slice(separator + 1));
+    // A ilusão acabou (#621, `ConditionOutfit::endCondition`): a criatura volta à aparência dela.
+    if (removed?.look !== undefined) this.#emitLook(session, target, null);
   }
 
   /**
@@ -7495,11 +7586,18 @@ const slots = bot.groups.get(group);
       // morreu não tem atacante.
       const owner = condition.sourceId === undefined
         ? undefined : this.#monsterBySubject.get(condition.sourceId);
-      const charmed = owner !== undefined && owner.alive && this.#charmStage()
+      //
+      // O Hazard (#632) também vale no tique de um monstro de hazard VIVO (`ConditionDamage::
+      // doDamage` chama o mesmo `combatChangeHealth`), antes dos charms — e, como no golpe, o que
+      // ele marca como extensão não rola charm defensivo.
+      const hazardTick = owner !== undefined && owner.alive
+        ? this.#hazardOnMonsterHit(session, owner, target, resolved)
+        : { outcome: resolved, extension: false };
+      const charmed = owner !== undefined && owner.alive && this.#charmStage() && !hazardTick.extension
         ? this.#rollDefensiveCharms(
-          session, owner, target, intent.damageType, tick.amount, resolved,
+          session, owner, target, intent.damageType, tick.amount, hazardTick.outcome,
         )
-        : resolved;
+        : hazardTick.outcome;
       // O Parry pode matar o dono do tique: a morte é resolvida DEPOIS do golpe, como em
       // `#executeMonsterAbility`.
       const resolveOwnerDeath = (): void => {
@@ -7529,10 +7627,16 @@ const slots = bot.groups.get(group);
       resolveOwnerDeath();
       return;
     }
-    const outcome = resolveDamage(
+    const resolvedTick = resolveDamage(
       intent, this.#monsterDefender(target), 'pve', this.#options.combat, session.rng,
       session.nowMs,
     );
+    // O Hazard (#632) vale para o tique cujo dono é um PERSONAGEM (`ConditionDamage::doDamage` com o
+    // jogador como atacante): a esquiva do monstro de zona. Tique de campo ou de monstro não.
+    const outcome = condition.sourceId !== undefined
+      && findById(session.participants, condition.sourceId) !== null
+      ? this.#hazardOnPlayerHit(session, target, resolvedTick)
+      : resolvedTick;
     // O tique de condição/campo também passa pelo cano único do dano no monstro — um monstro
     // preso que leva dano de um campo em que PODE pisar (ex.: fogo, enquanto preso atrás de um
     // de veneno) ganha a passagem temporária pelo campo que o prende, e o invisível que leva
@@ -7582,7 +7686,14 @@ const slots = bot.groups.get(group);
    */
   #cancelConditions(session: Session, target: ConditionTarget): void {
     this.#cancelConditionEvents(session, target);
-    for (const condition of target.conditions.getState()) target.conditions.remove(condition.key);
+    for (const condition of target.conditions.getState()) {
+      target.conditions.remove(condition.key);
+      // O personagem que morre disfarçado volta à aparência dele (#621); o monstro que morreu some
+      // da tela de qualquer jeito, e um `creature-update` a mais só sujaria o fio.
+      if (condition.look !== undefined && target instanceof CharacterRuntime) {
+        this.#emitLook(session, target, null);
+      }
+    }
   }
 
   /**
@@ -7666,7 +7777,8 @@ const slots = bot.groups.get(group);
       const subject = conditionSubject(id, type);
       session.cancelEvent(CONDITION_EXPIRE, subject);
       session.cancelEvent(CONDITION_TICK, subject);
-      target.conditions.remove(type);
+      const removed = target.conditions.remove(type);
+      if (removed?.look !== undefined) this.#emitLook(session, target, null);
       // O `endCondition` do medo (M44-04, #622): a caminhada forçada para e a imunidade de 10 s
       // começa, seja qual for quem removeu a condição — o Cleanse, uma cura ou uma magia.
       if (type === FEARED_CONDITION_KEY && target instanceof CharacterRuntime) {
@@ -8259,6 +8371,12 @@ const slots = bot.groups.get(group);
     session: Session, character: CharacterRuntime, supplyId: string,
     recipient: CharacterRuntime = character,
     explicit?: MonsterRuntime | FloorPoint,
+    /**
+     * O item que a Chameleon Rune aponta (#621): a INSTÂNCIA que o personagem carrega, resolvida
+     * aqui em `{ itemId }` — só o ruleset enxerga o inventário (invariante 1). Uma instância que
+     * ele não tem é item nenhum apontado, e `useSupply` recusa `not-illusionable`.
+     */
+    itemInstanceId?: string,
   ): CastResult {
     const supply = this.#options.supplies.get(supplyId);
     if (supply === undefined) return NOT_IN_CATALOG;
@@ -8302,9 +8420,12 @@ const slots = bot.groups.get(group);
     // — e é a bolsa quem credita `goldSpent` a cada um pelo que pagou.
     const shared = this.#party !== undefined && this.#party.shareCosts && session.participants.length > 1;
     const purse = shared ? this.#sharedPurse(session, character) : ownPurse(character);
+    const pointedItemId = itemInstanceId === undefined || supply.effect.kind !== 'chameleon'
+      ? null : character.inventory.itemIdOf(itemInstanceId);
     const result = useSupply(
       character, supply, aim, this.#options.combat, session.rng, this.#runeScaling(character), purse,
       recipient, session.nowMs, this.#attackerModifiers(character), summonRune?.check,
+      pointedItemId === null ? undefined : { itemId: pointedItemId },
     );
     if (result.ok) {
       // Gold gasto é agregado da SESSÃO, como `goldGained` é no abate: o extrato leva os dois
@@ -9539,6 +9660,13 @@ const slots = bot.groups.get(group);
     session: Session, monster: MonsterRuntime, ability: MonsterAbility,
     primary: CharacterRuntime | MonsterRuntime,
   ): void {
+    // O ataque `outfit` (#621) não é um golpe: sem dano, sem defesa, sem sorteio — é uma condição
+    // NÃO agressiva, e o que ela atinge é outro conjunto de criaturas. Sai aqui, antes do
+    // pipeline de dano.
+    if (ability.condition?.effect.kind === 'outfit') {
+      this.#executeOutfitAbility(session, monster, ability, ability.condition, primary);
+      return;
+    }
     const subject = monster.subject;
     // O conjunto de presas de uma ability em ÁREA (#598, ADR 0057 decisão 1): estendido pelas
     // invocações de personagem VIVAS, como `#chooseMonsterTarget` — mesma referência de
@@ -9707,10 +9835,17 @@ const slots = bot.groups.get(group);
       // Os charms defensivos (#603, `combat-v4`): DEPOIS do `blockHit` e do reflexo, ANTES do mana
       // shield que `#applyMonsterHit` aplica. `null` é o Void Inversion (o dreno virou ganho de
       // mana): nenhum golpe a aplicar.
+      //
+      // O Hazard (#632) vem ANTES dos charms, como `handleHazardSystemAttack` em
+      // `Game::combatChangeHealth`: o crítico e o reforço do monstro de zona, e o golpe que eles
+      // marcam como extensão não rola charm defensivo (`!damage.extension`).
+      const hazardHit = this.#hazardOnMonsterHit(session, monster, character, result);
       const charmStage = this.#charmStage();
-      const landed = charmStage
-        ? this.#rollDefensiveCharms(session, monster, character, ability.damageType, rawDamage, result)
-        : result;
+      const landed = charmStage && !hazardHit.extension
+        ? this.#rollDefensiveCharms(
+          session, monster, character, ability.damageType, rawDamage, hazardHit.outcome,
+        )
+        : hazardHit.outcome;
       if (landed !== null) {
         this.#applyMonsterHit(session, subject, character, ability, defender, landed, source);
       }
@@ -9744,6 +9879,65 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * O ataque `outfit` de um monstro (#621, M44-03): veste a aparência de outro monstro (ou de um
+   * objeto) em quem a ability atinge. No Canary é `combat->setParam(COMBAT_PARAM_AGGRESSIVE, 0)` +
+   * `addCondition(ConditionOutfit)` (`Monsters::deserializeSpell`, `monsters.cpp:156-182`) — e o
+   * que isso muda, diante de uma ability agressiva, é QUEM entra:
+   *
+   * - **não agressiva**: `Combat::CombatFunc` só exclui o lançador (`caster != creature`) quando
+   *   `params.aggressive` — aqui todo mundo na forma entra, o LANÇADOR inclusive, e os outros
+   *   MONSTROS também (a ilusão do Halloween Hare vira os bichos em volta dele). Sem forma é o
+   *   alvo principal (`castSpell(creature, target)` sem área → `doCombat(creature, target)`);
+   * - **sem dano nem defesa**: `combatType` é `COMBAT_NONE` → `CombatNullFunc` → só
+   *   `CombatConditionFunc`, que NÃO rola bloqueio, esquiva nem crítico. O único sorteio que sai
+   *   daqui, além do `chance` que quem chamou já rolou, é o do **Cleanse**: o primeiro bloco da
+   *   `CombatConditionFunc` (`combat.cpp:1039-1062`) roda para QUALQUER condição de monstro num
+   *   jogador, o `outfit` inclusive — com o charm atribuído a este monstro e uma condição
+   *   limpável ativa, ele rola, remove uma, dá os 11 s de imunidade e `return`a SEM vestir a
+   *   aparência (`#cleanseBeforeCondition`, a mesma peça e a mesma ordem de sorteio do golpe);
+   * - **a imunidade** é `!target->isImmune(CONDITION_OUTFIT)` — exceto `caster == target`, que a
+   *   pula (`#applyConditionTo` com `fromCombat`, e `sourceId` = o próprio monstro).
+   *
+   * O alvo de uma forma tem visão livre do lançador, como o de toda ability (#553, RF-05).
+   */
+  #executeOutfitAbility(
+    session: Session, monster: MonsterRuntime, ability: MonsterAbility, spec: ConditionSpec,
+    primary: CharacterRuntime | MonsterRuntime,
+  ): void {
+    const subject = monster.subject;
+    const from = this.#at(monster);
+    const candidates: readonly (CharacterRuntime | MonsterRuntime)[] = [
+      ...session.participants, ...this.#monsters,
+    ];
+    const targets = abilityTargets(ability, from, primary, candidates)
+      .filter((target) => target === monster || isSightClear(this.#world.map, from, this.#at(target)));
+    session.emit({
+      kind: 'monster-ability-cast', casterId: subject, abilityId: ability.id, casterPosition: from,
+      targets: targets.map((target) => ({
+        creatureId: target instanceof MonsterRuntime ? target.subject : target.id,
+        position: this.#at(target),
+      })),
+      tiles: abilityTiles(ability, from, this.#at(primary)),
+      ...(ability.presentation?.missileKey === undefined
+        ? {} : { missileKey: ability.presentation.missileKey }),
+      ...(ability.presentation?.impactKey === undefined
+        ? {} : { impactKey: ability.presentation.impactKey }),
+    });
+    const charmStage = this.#charmStage();
+    for (const target of targets) {
+      if (!target.alive) continue;
+      // O Cleanse (#603) é do jogador atingido, nunca de monstro: `targetPlayer && casterMonster`.
+      // Se limpou uma condição dele, a aparência NÃO entra — o `return` do Canary aborta toda a
+      // `conditionList` da ability, e aqui ela só tem o `outfit`.
+      if (charmStage && target instanceof CharacterRuntime
+        && this.#cleanseBeforeCondition(session, monster, target, ability)) continue;
+      this.#applyConditionTo(session, target, conditionFromSpec(
+        spec, this.#subjectOf(target), subject, session.nowMs, 'monster-attack',
+      ), true);
+    }
+  }
+
+  /**
    * A SEGUNDA resolução do reflexo (#552, M30-05): o dano que o equipamento do personagem devolve
    * ao monstro que o atacou. É uma EXTENSÃO (`reflectedDamageIntent`): passa por `resolveDamage`
    * contra a defesa do monstro sem bloqueio por defesa/armadura, nunca reflete de volta, não
@@ -9757,10 +9951,12 @@ const slots = bot.groups.get(group);
   #reflectOntoMonster(
     session: Session, character: CharacterRuntime, monster: MonsterRuntime, reflected: ReflectedDamage,
   ): void {
-    const outcome = resolveDamage(
+    // O reflexo do personagem é um golpe DELE no monstro (`combatChangeHealth` com o jogador como
+    // atacante): a esquiva do Hazard (#632) também o alcança.
+    const outcome = this.#hazardOnPlayerHit(session, monster, resolveDamage(
       reflectedDamageIntent(reflected), this.#monsterDefender(monster), 'pve', this.#options.combat,
       session.rng, session.nowMs,
-    );
+    ));
     const applied = this.#drainMonster(session, monster, outcome, null);
     recordDamage(monster.contribution, character.id, applied.healthDamage);
     session.emit({
@@ -11097,6 +11293,134 @@ const slots = bot.groups.get(group);
     );
   }
 
+  // --- Hazard (#632, M44-14, ADR 0052 d.7) -----------------------------------------------------
+  //
+  // O nível de perigo de uma hunt com `hazardZoneId`: o crítico e o reforço do monstro, a esquiva do
+  // monstro, a XP e as rolagens extras de loot — os estágios do `combat-v4` em
+  // `docs/product/combat-conformance.md` ("Estágio #632"), com a matemática em `combat/hazard.ts`.
+  // A zona do Canary é uma caixa de coordenadas; aqui é a hunt inteira (`HazardZone`), então todo
+  // monstro que nasce nela é um monstro de hazard, como o `HazardMonster.onSpawn` decidiria por
+  // posição. Sem a zona, ou fora do `combat-v4`, o custo é um `undefined` e nenhum sorteio.
+
+  /** O Hazard liga nesta hunt? Há zona E o perfil é o `combat-v4` (invariante 7). */
+  #hazardOn(): boolean {
+    return this.#options.hazard !== undefined
+      && hasHazardStage(this.#options.combat.compatibilityProfile);
+  }
+
+  /**
+   * O nível de hazard que vale para a party: o MENOR entre os membros (`Party:refreshHazard` e os
+   * laços de `parseAttackRecvHazardSystem`/`parseAttackDealtHazardSystem` do Canary). Cada um traz
+   * o que escolheu na Cidade (`CharacterRuntime.hazard`), fixo enquanto a hunt dura — a escolha só
+   * é aceita fora dela (`HostedSession`, ADR 0052 d.5). Sem participante (impossível numa hunt
+   * viva) vale o `minLevel`, como o `getHazardPlayerAndPoints` sem jogador no mapa de dano.
+   */
+  #hazardPoints(session: Session): number {
+    const hazard = this.#options.hazard;
+    if (hazard === undefined) return 0;
+    let points = Number.POSITIVE_INFINITY;
+    for (const member of session.participants) {
+      points = Math.min(points, member.hazard.currentLevelOf(hazard.zoneId, hazard.zone));
+    }
+    return Number.isFinite(points) ? points : hazard.zone.minLevel;
+  }
+
+  /**
+   * O Hazard num golpe de MONSTRO que acertou o jogador (`parseAttackRecvHazardSystem`): o crítico
+   * e o reforço de dano, DEPOIS do `blockHit` e do reflexo, ANTES dos charms defensivos e do mana
+   * shield. `extension` é o que faz o Canary pular os charms defensivos — ver `HazardMonsterHit`.
+   */
+  #hazardOnMonsterHit(
+    session: Session, attacker: MonsterRuntime, character: CharacterRuntime, outcome: DamageOutcome,
+  ): { readonly outcome: DamageOutcome; readonly extension: boolean } {
+    const hazard = this.#options.hazard;
+    if (hazard === undefined || !this.#hazardOn() || !isHazardMonster(attacker)) {
+      return { outcome, extension: false };
+    }
+    const hit = applyHazardToMonsterHit(
+      outcome, this.#hazardPoints(session), hazard.config, hazard.zone, session.rng,
+      session.nowMs, character.hazardCriticalAtMs,
+    );
+    if (hit.criticalAtMs !== null) character.hazardCriticalAtMs = hit.criticalAtMs;
+    return hit;
+  }
+
+  /**
+   * O Hazard num golpe do JOGADOR num monstro de hazard (`parseAttackDealtHazardSystem`): a
+   * esquiva do monstro (o golpe inteiro some, e o `blockHit` já gastou o que tinha de gastar) e a
+   * defesa da zona. DEPOIS do `blockHit`, ANTES de a vida do monstro mudar — `negatedOutcome`
+   * mantém o reflexo e a cura por elemento, que o Canary decide no bloqueio, antes do Hazard.
+   */
+  #hazardOnPlayerHit(session: Session, target: MonsterRuntime, outcome: DamageOutcome): DamageOutcome {
+    const hazard = this.#options.hazard;
+    if (hazard === undefined || !this.#hazardOn() || !isHazardMonster(target)) return outcome;
+    return applyHazardToPlayerHit(
+      outcome, this.#hazardPoints(session), hazard.config, hazard.zone, session.rng,
+    ).outcome;
+  }
+
+  /**
+   * O que a morte de um monstro de hazard faz (#632): a subida de nível (`creaturescripts_the_
+   * primal_menace_killed.lua`) e o que `hazard_primal.lua` rola na morte — o casulo e o Plunder
+   * Patriarch. Chamado no FIM de `#onMonsterDied`, com o morto já fora dos índices (como o Carnage).
+   *
+   * O nível que conta é o dos que FERIRAM o monstro — o `getHazardPlayerAndPoints(damageMap)` do
+   * Canary: o MENOR `current-level` entre eles (sem nenhum, o `minLevel`).
+   *
+   * **A subida** (só quando o monstro é o `levelUpMonsterId` da zona): cada feridor cujo teto
+   * desbloqueado é IGUAL a esse nível sobe o teto em um (`Hazard:levelUp`, que por sua vez só sobe
+   * quando o nível escolhido também é o teto).
+   *
+   * **Casulo e Plunder**, nesta ordem e com duas rolagens: `random(1, 10000) <= nível × podDrop` é o
+   * casulo — e ele ENCERRA a morte, sem Plunder —, e depois `random(1, 100000) <= nível × plunder` faz
+   * nascer o Plunder Patriarch no tile livre mais próximo. **O casulo em si fica de fora**: ele é
+   * um item no chão que vira Fungosaurus em 4 s (ou causa dano a quem o pisa entre 2 e 4 s), e o
+   * Draconya ainda não tem item no chão além do cadáver (ADR 0048 d.8) — a direção da issue o
+   * adia. A rolagem dele continua consumida e continua impedindo o Plunder, porque é ela que dá ao
+   * Plunder a chance que o Canary dá. O portão `isRewardBoss` do Lua vale (`MonsterDefinition.
+   * rewardBoss`): a morte do próprio Plunder Patriarch, que é um chefe de recompensa, não rola nada.
+   */
+  #hazardOnMonsterDeath(
+    session: Session, dead: MonsterRuntime, credit: KillCredit,
+  ): void {
+    const hazard = this.#options.hazard;
+    if (hazard === undefined) return;
+    const { zoneId, zone, config } = hazard;
+    const damagers = session.participants.filter((p) => credit.damageByActor[p.id] !== undefined);
+    let points = Number.POSITIVE_INFINITY;
+    for (const damager of damagers) {
+      points = Math.min(points, damager.hazard.currentLevelOf(zoneId, zone));
+    }
+    if (!Number.isFinite(points)) points = zone.minLevel;
+
+    if (zone.levelUpMonsterId !== undefined && dead.monsterId === zone.levelUpMonsterId) {
+      const solo = session.participants.length === 1;
+      for (const damager of damagers) {
+        if (damager.hazard.maxLevelOf(zoneId, zone) !== points) continue;
+        if (!damager.hazard.levelUp(zoneId, zone)) continue;
+        const detail = `${zoneId}/${String(damager.hazard.maxLevelOf(zoneId, zone))}`;
+        session.record('hazard-level-up', solo ? detail : `${damager.id}/${detail}`);
+      }
+    }
+
+    // O chefe de recompensa NÃO rola casulo nem Plunder (`PrimalHazardDeath`: "don't spawn pods or
+    // plunder if the monster is a reward boss"): sem as duas rolagens e sem gerar outro. O
+    // próprio Plunder Patriarch é um — a flag vem do Canary (`flags.rewardBoss`). Depois da subida
+    // de nível, que é outro script (`the_primal_menace_killed`) e não confere a flag.
+    if (this.#options.monsters.get(dead.monsterId)?.rewardBoss === true) return;
+    if (zone.plunderMonsterId === undefined || points < 1) return;
+    if (session.rng.integer(1, 10_000) <= points * config.podDropMultiplier) return;
+    if (session.rng.integer(1, 100_000) > points * config.plunderSpawnMultiplier) return;
+    const definition = this.#options.monsters.get(zone.plunderMonsterId);
+    if (definition === undefined) return;
+    const blocked = this.#summonBlockedFor();
+    for (const tile of tilesAround(dead.position, PLUNDER_SPAWN_RADIUS)) {
+      if (blocked(tile.x, tile.y, tile.z)) continue;
+      this.#spawnMonster(session, definition, tile, null);
+      return;
+    }
+  }
+
   // --- Charms em combate (#603, M39-03, ADR 0053 d.5) -----------------------------------------
   //
   // As rolagens e a ordem são as do Canary (`Game::combatChangeHealth`/`applyCharmRune`,
@@ -11202,7 +11526,9 @@ const slots = bot.groups.get(group);
   ): void {
     if (amount <= 0 || !monster.alive) return;
     const increase = neutral ? undefined : this.#attackerModifiers(character)?.increase;
-    const outcome = resolveDamage(
+    // O Hazard (#632) também vale para o dano do charm: no Canary ele passa por
+    // `Combat::doCombatHealth` → `combatChangeHealth`, onde a esquiva do monstro de zona roda.
+    const outcome = this.#hazardOnPlayerHit(session, monster, resolveDamage(
       {
         rawDamage: amount, source: 'charm', damageType, blockable: MAGIC_BLOCK_FLAGS,
         extension: true,
@@ -11210,7 +11536,7 @@ const slots = bot.groups.get(group);
         ...(increase === undefined ? {} : { modifiers: { increase } }),
       },
       this.#monsterDefender(monster), 'pve', this.#options.combat, session.rng, session.nowMs,
-    );
+    ));
     // O cano único do dano no monstro (`Monster::drainHealth`): o charm também revela o invisível
     // e arma o bypass de campo, como qualquer outro dano.
     const applied = this.#drainMonster(session, monster, outcome, null);
@@ -11650,8 +11976,11 @@ const slots = bot.groups.get(group);
   /** O fim de todo golpe do personagem: aplicar, atribuir, anunciar e contar o recorde. */
   #land(
     session: Session, character: CharacterRuntime, monster: MonsterRuntime,
-    outcome: DamageOutcome, source: 'melee' | 'spell',
+    resolved: DamageOutcome, source: 'melee' | 'spell',
   ): void {
+    // O Hazard (#632): a esquiva do monstro de zona e a defesa dela, DEPOIS do `blockHit` (que
+    // `resolved` já traz) e ANTES de a vida do monstro mudar. Sem hazard é o mesmo objeto.
+    const outcome = this.#hazardOnPlayerHit(session, monster, resolved);
     // O CMB-08: aplicar é o estágio explícito que passa pelo mana shield (no alvo), remove HP
     // efetivo e credita o leech clampado no atacante. O `outcome` já traz o resolvido e o
     // crítico; a atribuição e o hit usam o HP APLICADO, nunca a mana absorvida nem o overkill.
@@ -11722,10 +12051,13 @@ const slots = bot.groups.get(group);
   #reflectOntoCharacter(
     session: Session, character: CharacterRuntime, monster: MonsterRuntime, reflected: ReflectedDamage,
   ): void {
-    const outcome = resolveDamage(
+    const resolved = resolveDamage(
       reflectedDamageIntent(reflected), this.#playerDefender(character, session), 'pve',
       this.#options.combat, session.rng, session.nowMs,
     );
+    // O reflexo do monstro de hazard também é um golpe dele no jogador (`combatChangeHealth`):
+    // o Hazard (#632) o reforça como a qualquer outro.
+    const outcome = this.#hazardOnMonsterHit(session, monster, character, resolved).outcome;
     const applied = applyDamageOutcome(
       character, outcome, null, character.conditions.damageTakenScale(),
       this.#hasEnergyShield(character),
@@ -11933,7 +12265,7 @@ const slots = bot.groups.get(group);
       // individual, e a ordem do RNG é a de solo (gold, depois itens na ordem da tabela).
       // Só com alguém elegível: um monstro que morreu com todo mundo morto não paga ninguém.
       if (eligible.length > 0) {
-        const loot = this.#rollLootFor(monster, definition.loot, session.rng, this.#gutOf(session, monster, credit));
+        const loot = this.#rollLootFor(session, monster, definition.loot, this.#gutOf(session, monster, credit));
         // Elegibilidade da bolsa (D4/§16.1): TODOS os presentes no instante do abate — o mesmo
         // conjunto que paga o rateio, não o `eligible` (vivo + stamina) que decide XP.
         const presentAtDrop = session.participants.map((p) => p.id);
@@ -11959,7 +12291,7 @@ const slots = bot.groups.get(group);
       // evento (decisão 3): não há "segunda chance" para quem está olhando ainda em #721/W2 —
       // isso é o W3/#722.
       const loot = this.#rollLootFor(
-        monster, this.#lootTableFor(definition, recipient), session.rng, this.#gutOf(session, monster, credit),
+        session, monster, this.#lootTableFor(definition, recipient), this.#gutOf(session, monster, credit),
       );
       corpseGold = loot.gold;
       corpseItems = this.#instantiateCorpseItems(session, recipient, loot.items);
@@ -12113,6 +12445,12 @@ const slots = bot.groups.get(group);
     // e este não. A invocação de PERSONAGEM nunca chega a um `killer`: quem a mata é monstro.
     if (definition !== undefined && this.#charmStage()) {
       this.#carnage(session, monster, definition, credit);
+    }
+    // O Hazard (#632): a subida de nível e o que a zona rola na morte — depois do Carnage, que
+    // resolve as mortes em cadeia dele primeiro. Só o monstro de hazard (`isHazardMonster`): o
+    // `PrimalHazardDeath` do Canary é registrado na `onSpawn`, que a invocação não passa.
+    if (definition !== undefined && this.#hazardOn() && isHazardMonster(monster)) {
+      this.#hazardOnMonsterDeath(session, monster, credit);
     }
   }
 
@@ -12355,10 +12693,16 @@ const slots = bot.groups.get(group);
       // membro: é no `onGainExperience` de cada um que o Canary o aplica.
       const bonusPercent = member.bestiary.xpBonusPercent(this.#options.bestiary)
         + levelExperienceBonusPercent(member.level, this.#options.progression);
-      const experience = applyRate(
+      const ratedExperience = applyRate(
         applyExperienceBonus(share, bonusPercent),
         experienceRateFor(this.#options.progression.rates, member.level),
       );
+      // O bônus de Hazard (#632, `Player::addExperience`): DEPOIS do rate — o `onGainExperience` do
+      // Lua — e antes de a XP entrar. O nível é o da party, como em todo estágio do Hazard.
+      const hazard = this.#options.hazard;
+      const experience = hazard !== undefined && this.#hazardOn()
+        ? hazardExperience(ratedExperience, this.#hazardPoints(session), hazard.config)
+        : ratedExperience;
       // O level de ANTES do ganho é o que o Canary compara (`onGainExperience`, DEPOIS do
       // `grantXp` o level já teria subido, e o portão perderia o "esta XP foi grande o
       // bastante para o level que eu TINHA" — o mesmo cuidado do bônus de Bestiário logo acima.
@@ -12768,20 +13112,28 @@ const slots = bot.groups.get(group);
    * maior — é por quê o roll extra é uma tabela INTEIRA a mais, não uma chance melhorada na
    * mesma tabela: dobra a EXPECTATIVA de drop, não a chance de cada linha.
    */
-  #rollLootFor(monster: MonsterRuntime, table: Monster['loot'], rng: Rng, gut?: LootGut): LootResult {
+  #rollLootFor(
+    session: Session, monster: MonsterRuntime, table: Monster['loot'], gut?: LootGut,
+  ): LootResult {
+    const rng = session.rng;
     // O Gut (#603) só entra no sorteio NORMAL: o roll extra da boosted (`ondroploot_boosted.lua`)
     // passa `gut = false`.
-    const first = rollLoot(table, rng, this.#options.progression.rates.loot, gut);
-    if (monster.monsterId !== this.#options.boostedMonsterId) return first;
-    const second = rollLoot(table, rng, this.#options.progression.rates.loot);
-    return {
-      gold: first.gold + second.gold,
-      items: second.items.length === 0 ? first.items : [...first.items, ...second.items],
-      supplies: second.supplies.length === 0 ? first.supplies : [...first.supplies, ...second.supplies],
-      ammunition: second.ammunition.length === 0
-        ? first.ammunition
-        : [...first.ammunition, ...second.ammunition],
-    };
+    let loot = rollLoot(table, rng, this.#options.progression.rates.loot, gut);
+    if (monster.monsterId === this.#options.boostedMonsterId) {
+      loot = mergeLoot(loot, rollLoot(table, rng, this.#options.progression.rates.loot));
+    }
+    // As rolagens extras do Hazard (#632, `ondroploot_hazard.lua`, `factor 1.0`, `gut = false`):
+    // DEPOIS da boosted — a ordem em que o Canary carrega os callbacks de `eventcallbacks/monster/`
+    // —, cada uma uma tabela INTEIRA a mais. A rolagem que decide quantas (a parte fracionária de
+    // `rolls`) é sempre consumida; o nível é o da party, como em todo estágio do Hazard.
+    const hazard = this.#options.hazard;
+    if (hazard !== undefined && this.#hazardOn()) {
+      const rolls = hazardLootRolls(rng, this.#hazardPoints(session), hazard.config);
+      for (let roll = 0; roll < rolls; roll += 1) {
+        loot = mergeLoot(loot, rollLoot(table, rng, this.#options.progression.rates.loot));
+      }
+    }
+    return loot;
   }
 
   /**
@@ -14001,6 +14353,34 @@ function findById<T extends { readonly id: string }>(
   return null;
 }
 
+/**
+ * Este monstro é um monstro de hazard? Só o que nasce do spawner da zona (ou é criado por script —
+ * o Plunder Patriarch): o `HazardMonster.onSpawn` do Canary roda em `SpawnMonster::spawnMonster`
+ * e em `Game.createMonster`, e a invocação de um monstro (`masterId` numérico) ou de um personagem
+ * (`masterId` de personagem) não passa por nenhuma das duas — `Monster::createMonster` a cria
+ * direto, sem `onSpawn` (#632).
+ */
+function isHazardMonster(monster: MonsterRuntime): boolean {
+  return monster.masterId === null;
+}
+
+/**
+ * Soma dois sorteios de loot do MESMO monstro (a boosted e o Hazard rolam a tabela de novo): o
+ * gold soma, e cada lista concatena na ordem — o primeiro sorteio primeiro, como o cadáver do
+ * Canary recebe `addLoot` depois do loot base. Devolve a MESMA referência de lista quando a nova
+ * está vazia, para não alocar no caso comum.
+ */
+function mergeLoot(first: LootResult, second: LootResult): LootResult {
+  return {
+    gold: first.gold + second.gold,
+    items: second.items.length === 0 ? first.items : [...first.items, ...second.items],
+    supplies: second.supplies.length === 0 ? first.supplies : [...first.supplies, ...second.supplies],
+    ammunition: second.ammunition.length === 0
+      ? first.ammunition
+      : [...first.ammunition, ...second.ammunition],
+  };
+}
+
 // --- montagem a partir de `content` ----------------------------------------------------------
 
 export interface HuntSessionOptions {
@@ -14067,6 +14447,19 @@ export interface HuntRulesetExtras {
   readonly boostedMonsterId?: string;
 }
 
+/**
+ * A zona de Hazard da hunt (#632): `hunt.hazardZoneId` resolvido contra `content.hazard`. Vazio
+ * para toda hunt sem a declaração — a chave nem existe em `HuntRulesetOptions`, por causa do
+ * `exactOptionalPropertyTypes`. `buildContent` já recusou a zona inexistente; o `undefined` aqui
+ * é o resto defensivo de quem monta um `Content` à mão num teste.
+ */
+function hazardOptionOf(content: Content, hunt: Hunt): Pick<HuntRulesetOptions, 'hazard'> {
+  if (hunt.hazardZoneId === undefined || content.hazard === undefined) return {};
+  const zone = content.hazard.zones[hunt.hazardZoneId];
+  if (zone === undefined) return {};
+  return { hazard: { zoneId: hunt.hazardZoneId, zone, config: content.hazard } };
+}
+
 export function createHuntRuleset(
   content: Content,
   huntId: string,
@@ -14109,6 +14502,7 @@ export function createHuntRuleset(
     ...(content.bosstiary === undefined ? {} : { bosstiary: content.bosstiary }),
     charms: content.charms,
     skinning: content.skinning,
+    ...hazardOptionOf(content, hunt),
     targetSearchRadius: content.bot.targetSearchRadius,
     spells: content.spells,
     supplies: content.supplies,
