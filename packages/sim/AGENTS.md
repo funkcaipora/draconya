@@ -338,7 +338,25 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   era do jogador e termina com o dedo vazio.
 - **`Session.leave` vale em qualquer sessão com mais de um dono** (FUN-71, ADR 0023; #187, ADR
   0027): o shard da Cidade e a party de hunt. Numa sessão de um dono só sair é encerrar.
-  `Ruleset.shared` continua dizendo se é shard — o que muda é ter extrato e snapshot.
+  `Ruleset.shared` diz SÓ "sair é `leave`"; quem diz se a sessão credita é `Ruleset.progress`
+  (`'none' | 'checkpointed'`, OW-03, ADR 0060 d.10b), e `progressOf(ruleset)` o resolve — ausente,
+  a privada é `'at-end'` (credita no `end`) e a compartilhada é `'none'`. Cidade e hunt NÃO
+  declaram o campo, de propósito: declarar mudaria o que o hospedeiro lê.
+- **`Session.checkpoint(id, reason)` é o extrato parcial, com a semântica de delta de `leave`**
+  (OW-03): emite o extrato (`seq` novo), zera os agregados DAQUELE personagem e o deixa na sessão.
+  Três armadilhas. (1) A SOMA `session.aggregates` NÃO é zerada — segue o acumulado da sessão,
+  como depois de um `leave` —, então `Σ aggregatesOf(p) ≠ aggregates` numa sessão que já
+  checkpointou. (2) O marco dos eventos notáveis é uma POSIÇÃO na lista (`#notableCursor`), e
+  não só `joinedAtMs` (que o checkpoint também move): o tempo sozinho repete ou perde os eventos
+  do instante exato do checkpoint, e os de instante lógico igual chegam depois dele quando uma
+  intenção cai entre dois `advanceBy`. O cursor não entra no snapshot — a sessão `checkpointed`
+  não tem snapshot (ADR 0060 d.10a). (3) Depois do `end` devolve `null`: os agregados dele
+  continuam na sessão e um extrato novo os creditaria de novo.
+- **Os tetos são por sessão** (OW-03): `SessionOptions` (e o 4º argumento de `fromSnapshot`)
+  aceita `maxPendingDomainEvents`, `maxEventsPerAdvance` — com as constantes de sempre como
+  default — e `maxNotableEventsPerCharacter`, sem default. O evento notável não tem dono, então o
+  teto é da LISTA (`× max(1, participantes)`), e quem indexa `notableEvents` por posição — o
+  analisador do hospedeiro — precisa somar `session.notableEventsDropped`.
 - **A hunt hospeda N participantes, e o que é de um vive num `Runner`** (#203). Caminhante da
   rota, bot compilado, grupos engatilhados, lure, anel, golpe engatilhado e os três avisos
   são POR PARTICIPANTE, num `Map` por id; todo evento de personagem já carrega `subject`, e
