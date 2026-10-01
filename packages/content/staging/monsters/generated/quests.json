@@ -6068,6 +6068,258 @@
     "outfitId": 25
   },
   {
+    "id": "branchy-crawler",
+    "name": "Branchy Crawler",
+    "class": "plant",
+    "health": 27000,
+    "experience": 17860,
+    "attack": {
+      "min": 0,
+      "max": 950
+    },
+    "armor": 100,
+    "defense": 100,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.05,
+        "earth": 0.5,
+        "fire": -0.09,
+        "holy": 0.4,
+        "death": -0.15
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 3.04,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 470,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5548,
+        "min": 10000,
+        "max": 10000
+      },
+      "items": [
+        {
+          "itemId": "gold-ingot",
+          "chance": 0.0909
+        },
+        {
+          "itemId": "ultimate-health-potion",
+          "chance": 0.0881,
+          "min": 1,
+          "max": 8
+        },
+        {
+          "itemId": "roots",
+          "chance": 0.06
+        },
+        {
+          "itemId": "blue-gem",
+          "chance": 0.019
+        },
+        {
+          "itemId": "crawlers-essence",
+          "chance": 0.0145
+        },
+        {
+          "itemId": "terra-legs",
+          "chance": 0.0097
+        },
+        {
+          "itemId": "green-gem",
+          "chance": 0.008
+        },
+        {
+          "itemId": "hammer-of-wrath",
+          "chance": 0.0076
+        },
+        {
+          "itemId": "violet-gem",
+          "chance": 0.0065
+        },
+        {
+          "itemId": "crystal-crossbow",
+          "chance": 0.0063
+        },
+        {
+          "itemId": "nightmare-blade",
+          "chance": 0.0054
+        },
+        {
+          "itemId": "twiceslicer",
+          "chance": 0.0042
+        },
+        {
+          "itemId": "crystalline-sword",
+          "chance": 0.0039
+        },
+        {
+          "itemId": "ruthless-axe",
+          "chance": 0.0033
+        },
+        {
+          "itemId": "bag-you-desire",
+          "chance": 0.00015
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 950
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 1100,
+          "max": 1300
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "piercingbolt",
+          "impactKey": "green-rings"
+        }
+      },
+      {
+        "id": "earthball",
+        "cadenceMs": 2000,
+        "chance": 0.22,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 1000,
+          "max": 1280
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "smallplants"
+        }
+      },
+      {
+        "id": "holyburst",
+        "cadenceMs": 2000,
+        "chance": 0.22,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 1100,
+          "max": 1250
+        },
+        "damageType": "holy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "holydamage"
+        }
+      },
+      {
+        "id": "holystrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 1100,
+          "max": 1400
+        },
+        "damageType": "holy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "smallholy",
+          "impactKey": "holyarea"
+        }
+      },
+      {
+        "id": "root",
+        "cadenceMs": 2000,
+        "chance": 0.01,
+        "target": {
+          "range": 11
+        },
+        "power": 0,
+        "damageType": "physical",
+        "condition": {
+          "key": "rooted",
+          "merge": "longest",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "rooted"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 1810000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/soul_war/normal_monsters/branchy_crawler.lua"
+    },
+    "bestiary": {
+      "class": "plant",
+      "race": "plant",
+      "raceId": 1931,
+      "toKill": 5000,
+      "firstUnlock": 200,
+      "secondUnlock": 2000,
+      "charmsPoints": 100,
+      "stars": 5,
+      "occurrence": 0
+    },
+    "outfitId": 1297
+  },
+  {
     "id": "bretzecutioner",
     "name": "Bretzecutioner",
     "health": 5600,

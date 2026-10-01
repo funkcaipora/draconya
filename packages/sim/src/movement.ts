@@ -37,7 +37,20 @@ export type MoveRejection =
    * genuína, fora do raio, ou um interativo bloqueante que não é porta. NUNCA de `canOccupy`:
    * ele só compara tile ADJACENTE, e não sabe o que é "inalcançável" — só "não é vizinho".
    */
-  | 'unreachable';
+  | 'unreachable'
+  /**
+   * Só de `HuntRuleset#step` (M44-04, #622): quem anda está sob `rooted` — nenhum passo sai, de
+   * nenhuma origem (`Game::internalMoveCreature`, `game.cpp:1965`). Nunca de `canOccupy`: a
+   * condição é do criatura, não do tile.
+   */
+  | 'rooted'
+  /**
+   * Só de `HuntRuleset#step` (M44-04, #622): quem anda está sob `feared` e o passo NÃO é o da
+   * fuga forçada (`Creature::startAutoWalk` recusa o caminhar do próprio jogador, do bot e do
+   * `walk` do socket), OU a própria fuga pisaria num campo que causa dano
+   * (`Game::internalMoveCreature`, `game.cpp:1975-1980`).
+   */
+  | 'feared';
 
 /** Ponto de mundo, com o andar. O `z` vem do MAPA — é a única fonte de verdade sobre ele. */
 export interface WorldPoint {

@@ -11283,6 +11283,25 @@ describe('Invocação do PERSONAGEM (#598, M38-01, ADR 0057)', () => {
     expect(hero.mana).toBe(180);
   });
 
+  it('`pacified` recusa a invocação: Summon Creature é AGRESSIVA por padrão no Canary (#622)', () => {
+    // `summon_creature.lua` não chama `isAggressive(false)` — ao contrário de toda cura, condição
+    // própria e conjuração —, então `Spell::playerSpellCheck` a recusa sob `CONDITION_PACIFIED`
+    // (`spells.cpp:517`): um Druid que sobe uma escada (2 s de `pacified`) não invoca nesse prazo.
+    const config = botConfigV2([{ do: summonAction('minion') }]);
+    const { session, hero, ruleset } = withSpells(config, {
+      monsters: false, spells: [...spells, summonSpell], monstersRaw: [rat, passiveMinion], mana: 200,
+    });
+    hero.conditions.apply({ key: 'pacified', expiresAtMs: 1_500, merge: 'longest' });
+    expect(ruleset.useSlot(session, hero.id, 0, 0)).toEqual({ ok: false, reason: 'attack-locked', retryInMs: 1_500 });
+    run(session, 1_400, 100);
+    expect(ruleset.monsters.filter((m) => m.masterId === hero.id)).toHaveLength(0);
+    expect(hero.mana).toBe(200);
+    // Vencida, a mesma invocação sai.
+    run(session, 3_000, 100);
+    expect(ruleset.monsters.filter((m) => m.masterId === hero.id).length).toBeGreaterThan(0);
+    expect(hero.mana).toBeLessThan(200);
+  });
+
   it('teto de 2 invocações vivas por personagem, contando qualquer nome (ADR 0057 decisão 3)', () => {
     const config = botConfigV2([{ do: summonAction('minion') }]);
     const { session, hero, ruleset } = withSpells(config, {
@@ -15673,13 +15692,14 @@ describe('stairhop: trava de ataque ao trocar de andar (#554, M30-07, ADR 0040 d
     maps: [stairsMap], routes: [stairsRoute], hunts: [stairsHunt], combat: [combatV3],
   });
 
-  it('descer a escada trava o golpe por 2 s: nada antes, sai no instante exato do destravamento', () => {
+  it('descer a escada trava o golpe por 2 s: nada antes, e o golpe volta no PENSAMENTO seguinte ao destravamento', () => {
     const { session, hero, ruleset } = start({ loaded: stairsContent() });
     // t=0: SPAWN e o primeiro PLAYER_STEP vencem no mesmo instante (a hunt entra pronta) — o
     // rato já nasceu no degrau de subida, adjacente ao pouso da descida, e o walker já desceu.
     session.advanceBy(1);
     expect(hero.position).toEqual({ x: 3, y: 1, z: 6 });
-    expect(hero.attackLockedUntil).toBe(2_000);
+    // A trava é a condição `pacified` de verdade (M44-04, #622), com o prazo de 2 s.
+    expect(hero.conditions.get('pacified')).toMatchObject({ key: 'pacified', expiresAtMs: 2_000, merge: 'longest' });
     const monster = ruleset.monsters[0];
     if (monster === undefined) throw new Error('faltou rato');
     const fullHealth = monster.health;
@@ -15688,9 +15708,13 @@ describe('stairhop: trava de ataque ao trocar de andar (#554, M30-07, ADR 0040 d
     session.advanceBy(1_998);
     expect(monster.health).toBe(fullHealth);
 
-    // Destravado: o golpe engatilhado sai no PRÓXIMO evento — o instante exato do
-    // destravamento, sem esperar o intervalo normal de ataque nem o mundo mudar de novo.
-    session.advanceBy(2);
+    // Destravado: o Canary NÃO re-arma o ataque quando `pacified` acaba (`Player::doAttacking`
+    // volta e a cadeia morre) — o golpe sai no primeiro gatilho depois, o pensamento do
+    // personagem (1 Hz, numa fase própria), até 1000 ms depois do vencimento.
+    for (let waited = 0; monster.health === fullHealth && waited < 1_100; waited += 1) session.advanceBy(1);
+    const phase = ruleset.getState().runners?.[hero.id]?.thinkPhaseMs;
+    if (phase === undefined) throw new Error('o personagem devia ter uma fase de pensamento');
+    expect(session.nowMs).toBe(2_000 + ((((phase - 2_000) % 1_000) + 1_000) % 1_000));
     expect(monster.health).toBeLessThan(fullHealth);
   });
 
@@ -15705,18 +15729,19 @@ describe('stairhop: trava de ataque ao trocar de andar (#554, M30-07, ADR 0040 d
     // CHEIA do conteúdo (`rat.health`), não com uma leitura de DEPOIS do golpe já ter saído.
     session.advanceBy(1);
     expect(hero.position).toEqual({ x: 3, y: 1, z: 6 });
-    expect(hero.attackLockedUntil).toBe(0);
+    expect(hero.conditions.get('pacified')).toBeNull();
     const monster = ruleset.monsters[0];
     if (monster === undefined) throw new Error('faltou rato');
     expect(monster.health).toBeLessThan(rat.health);
   });
 
-  it('a trava de uma hunt NÃO atravessa para a seguinte: o mesmo herói, sessão nova, bate no ato (#812)', () => {
-    // O `CharacterRuntime` é o MESMO objeto na transição e o relógio da sessão nova nasce em
-    // zero: uma trava de 90 000 ms gravada na primeira segurava o golpe da segunda por um minuto e
-    // meio — um ataque bloqueado herdado de uma escada que esta sessão nunca viu. O atraso é
-    // exagerado (90 s, não os 2 s do conteúdo real) só para o teste não confundir a trava herdada
-    // com a janela de uma travessia legítima.
+  it('a trava de uma hunt atravessa para a seguinte como PRAZO — o que faltava, nunca o instante cru do relógio velho (#812, #622)', () => {
+    // O `CharacterRuntime` é o MESMO objeto na transição e o relógio da sessão nova nasce em zero.
+    // Uma trava de 90 000 ms (exagerada, não os 2 s do conteúdo real, para o teste não confundir a
+    // trava herdada com a janela de uma travessia legítima) gravada como instante absoluto
+    // seguraria o golpe da segunda por 90 s — mais do que faltava. Desde o #622 a trava é a
+    // condição `pacified`, que é PRAZO: a transição a traduz (`moveToClock`), e o que faltava
+    // continua faltando, como o Canary (a condição é persistente) e como qualquer outra condição.
     const first = start({
       loaded: content({
         maps: [stairsMap], routes: [stairsRoute], hunts: [stairsHunt],
@@ -15725,7 +15750,8 @@ describe('stairhop: trava de ataque ao trocar de andar (#554, M30-07, ADR 0040 d
     });
     first.session.advanceBy(1);
     expect(first.hero.position).toEqual({ x: 3, y: 1, z: 6 });
-    expect(first.hero.attackLockedUntil).toBe(90_000);
+    expect(first.hero.conditions.get('pacified')).toMatchObject({ expiresAtMs: 90_000 });
+    first.session.advanceBy(29_999);
 
     // Transição: sai da primeira e entra numa sessão NOVA, sem escada, com o mesmo objeto.
     first.session.leave('hero');
@@ -15735,12 +15761,17 @@ describe('stairhop: trava de ataque ao trocar de andar (#554, M30-07, ADR 0040 d
     });
     second.enter(first.hero);
     expect(second.nowMs).toBe(0);
-    expect(first.hero.attackLockedUntil).toBe(0);
+    // Faltavam 60 000 ms (90 000 − 30 000), e é isso que a sessão nova enxerga — o vencimento foi
+    // reagendado nela (`#armConditions`), porque o evento morava na fila da primeira.
+    expect(first.hero.conditions.get('pacified')).toMatchObject({ expiresAtMs: 60_000 });
+    expect(second.dueAtOf('condition-expire', 'hero/pacified')).toBe(60_000);
 
-    run(second, 5_000, 100);
-    // O golpe de arma saiu (`lastAttackAtMs` só é escrito quando ele sai) muito antes dos 90 s.
+    // Pacificado, o golpe de arma não sai...
+    run(second, 55_000, 100);
+    expect(first.hero.lastAttackAtMs).toBeNull();
+    // ...e sai logo depois do vencimento (o pensamento seguinte do personagem, até 1 s depois).
+    run(second, 7_000, 100);
     expect(first.hero.lastAttackAtMs).not.toBeNull();
-    expect(first.hero.attackLockedUntil).toBe(0);
   });
 
   it('sob combat-v1/v2, a travessia não trava nada mesmo com `stairhopDelayMs` no conteúdo', () => {
@@ -15753,7 +15784,7 @@ describe('stairhop: trava de ataque ao trocar de andar (#554, M30-07, ADR 0040 d
       }),
     });
     session.advanceBy(1);
-    expect(hero.attackLockedUntil).toBe(0);
+    expect(hero.conditions.get('pacified')).toBeNull();
     const monster = ruleset.monsters[0];
     if (monster === undefined) throw new Error('faltou rato');
     expect(monster.health).toBeLessThan(rat.health);
@@ -15773,7 +15804,7 @@ describe('stairhop: magia agressiva recusa, cura não (#554, M30-07)', () => {
       botConfigV2([{ do: { kind: 'spell', spellId: 'strike' }, auto: false }]),
       { mana: 200, monsters: false, combat: [combatV3] },
     );
-    hero.attackLockedUntil = 1_500;
+    hero.conditions.apply({ key: 'pacified', expiresAtMs: 1_500, merge: 'longest' });
 
     expect(ruleset.useSlot(session, 'hero', 0, 0))
       .toEqual({ ok: false, reason: 'attack-locked', retryInMs: 1_500 });
@@ -15785,25 +15816,26 @@ describe('stairhop: magia agressiva recusa, cura não (#554, M30-07)', () => {
       botConfigV2([{ do: { kind: 'spell', spellId: 'heal' }, auto: false }]),
       { health: 100, mana: 200, monsters: false, combat: [combatV3] },
     );
-    hero.attackLockedUntil = 1_500;
+    hero.conditions.apply({ key: 'pacified', expiresAtMs: 1_500, merge: 'longest' });
 
     expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
     expect(hero.health).toBe(160);
     expect(hero.mana).toBe(180);
   });
 
-  it('sob combat-v1/v2, `attackLockedUntil` não bloqueia a magia agressiva (só o combat-v3 lê)', () => {
-    // Sem monstro (`monsters: false`), `strike` recusa por falta de alvo — e é EXATAMENTE essa
-    // recusa, não `attack-locked`, que prova que o portão do stairhop nunca chegou a ser
-    // conferido fora do `combat-v3`: se conferisse, a recusa seria `attack-locked` primeiro.
+  it('sob combat-v1/v2 a MESMA condição também bloqueia — a trava de escada é que só existe no v3', () => {
+    // O portão é a condição, em qualquer perfil (#622): um `pacified` que o conteúdo aplica (o
+    // Swift Foot) vale numa sessão v1/v2. O que continua exclusivo do `combat-v3` é a trava de
+    // ESCADA (`#step` só a aplica lá) — coberto pelo teste "sob combat-v1/v2, a travessia não
+    // trava nada", acima.
     const { session, hero, ruleset } = withSpells(
       botConfigV2([{ do: { kind: 'spell', spellId: 'strike' }, auto: false }]),
       { mana: 200, monsters: false },
     );
-    hero.attackLockedUntil = 1_500;
+    hero.conditions.apply({ key: 'pacified', expiresAtMs: 1_500, merge: 'longest' });
 
     expect(ruleset.useSlot(session, 'hero', 0, 0))
-      .toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+      .toEqual({ ok: false, reason: 'attack-locked', retryInMs: 1_500 });
     expect(hero.mana).toBe(200);
   });
 });
@@ -17691,6 +17723,786 @@ describe('volta ao spawn, ocioso e passo aleatório (#655, Canary `Monster::getN
     expect(monster.conditions.get(CHALLENGE_CONDITION_KEY)).not.toBeNull();
     session.drainEvents();
     expect(movesOf(session, monster.subject, 20_000, 1_000)).toHaveLength(0);
+  });
+});
+
+describe('condições de controle: rooted, feared e pacified (M44-04, #622, ADR 0041)', () => {
+  // Uma arena ABERTA de 40x40: a fuga do medo precisa de chão (a sala de `map` tem 4x3) e a
+  // caixa de busca dela é de sete tiles em volta de quem foge.
+  const openMap = {
+    id: 'open-622', z: 7,
+    grid: [
+      '#'.repeat(40),
+      ...Array.from({ length: 38 }, () => `#${'.'.repeat(38)}#`),
+      '#'.repeat(40),
+    ],
+  };
+  const openRoute = (spawn: { x: number; y: number }, tiles: readonly { x: number; y: number }[] = [
+    { x: 20, y: 20 }, { x: 21, y: 20 },
+  ]) => ({
+    id: 'open-622-route', mapId: 'open-622',
+    tiles: tiles.map((tile) => ({ ...tile, z: 7 })),
+    spawnPoints: [{
+      routeIndex: 0, radius: 1, at: { ...spawn, z: 7 }, monsterId: 'caster', respawnDelayMs: 300_000,
+    }],
+  });
+  const openHunt = {
+    id: 'arena', name: 'Aberta', recommendedLevel: 1, mapId: 'open-622', routeId: 'open-622-route',
+  };
+  /** `fear`/`root` do Canary (`data-otservbr-global/scripts/spells/monster/`): alvo único, 3000 ms. */
+  const controlAbility = (kind: 'rooted' | 'feared' | 'pacified', over: Record<string, unknown> = {}) => ({
+    id: kind, cadenceMs: 1_000, chance: 1, target: { range: 20 }, power: 0, damageType: 'physical',
+    condition: { key: kind, merge: 'longest', durationMs: 3_000, effect: { kind } },
+    ...over,
+  });
+  /**
+   * O lançador fica PARADO (`attackRange: 20`: já está ao alcance do herói e não persegue), sem
+   * dano nenhum (`attack: 0`) e sem morrer — o que se mede é a condição, nunca o combate.
+   */
+  const casterOf = (abilities: readonly unknown[], over: Record<string, unknown> = {}) => ({
+    ...rat, id: 'caster', name: 'Caster', health: 1_000_000, attack: 0, aggroRadius: 20,
+    attackRange: 20, abilities, ...over,
+  });
+  const arena = (
+    monsters: readonly unknown[], spawn = { x: 16, y: 20 },
+    tiles?: readonly { x: number; y: number }[],
+  ): Content => content({
+    monsters, maps: [openMap], routes: [openRoute(spawn, tiles)], hunts: [openHunt],
+  });
+  /** Um herói só, parado no início da rota, e o tempo avançado em passos de 100 ms. */
+  const advance = (session: Session, ms: number): void => {
+    for (let elapsed = 0; elapsed < ms && session.ended === null; elapsed += 100) session.advanceBy(100);
+  };
+
+  describe('rooted', () => {
+    it('recusa o `walk` do jogador com `rooted`, sem mover, e solta no instante exato do vencimento', () => {
+      const { session, hero, ruleset } = start({ loaded: arena([casterOf([])]) });
+      hero.conditions.apply({ key: 'rooted', expiresAtMs: 3_000, merge: 'longest' });
+      const from = { ...hero.position };
+      expect(ruleset.requestMove(session, hero.id, { x: from.x + 1, y: from.y }))
+        .toEqual({ ok: false, reason: 'rooted' });
+      // O `walk-to` distante também: nenhum caminho fica guardado para andar sozinho depois.
+      expect(ruleset.requestMove(session, hero.id, { x: from.x + 6, y: from.y }))
+        .toEqual({ ok: false, reason: 'rooted' });
+      expect(hero.position).toEqual(from);
+      session.advanceBy(2_999);
+      expect(ruleset.requestMove(session, hero.id, { x: from.x + 1, y: from.y }))
+        .toEqual({ ok: false, reason: 'rooted' });
+      session.advanceBy(1);
+      // O bot também solta no instante exato — o pedido é relativo ao tile ONDE O HERÓI ESTÁ.
+      const now = hero.position;
+      const freed = ruleset.requestMove(session, hero.id, { x: now.x, y: now.y + 1 });
+      expect(freed.ok).toBe(true);
+    });
+
+    it('um `walk-to` distante guardado ANTES da raiz cai quando ela prende: nada anda sozinho depois', () => {
+      // `Creature::onCreatureMove` zera a lista de passos de quem está enraizado
+      // (`resetMovementState`, `creature.cpp:503`), e cada passo recusado por
+      // `internalMoveCreature` sai dela de qualquer jeito: o caminho NÃO resiste à condição. Sem
+      // isto o herói retomava, ao fim da raiz, o clique que ninguém repetiu.
+      const { session, hero, ruleset } = start({ loaded: arena([casterOf([])]) });
+      const from = { ...hero.position };
+      const destination = { x: from.x, y: from.y - 8 };
+      expect(ruleset.requestMove(session, hero.id, destination).ok).toBe(true);
+      expect(ruleset.getState().runners?.[hero.id]?.manualWalkTo?.path.length).toBeGreaterThan(2);
+      hero.conditions.apply({ key: 'rooted', expiresAtMs: session.nowMs + 3_000, merge: 'longest' });
+      // O primeiro passo que a raiz recusa derruba o caminho guardado.
+      advance(session, 1_500);
+      expect(ruleset.getState().runners?.[hero.id]?.manualWalkTo).toBeUndefined();
+      // E ao fim da raiz o herói NÃO retoma o caminho: o bot volta pela rota dele.
+      advance(session, 12_000);
+      expect(hero.position.y).toBeGreaterThan(destination.y + 3);
+    });
+
+    it('o bot fica parado enquanto dura, e a rota retoma quando vence', () => {
+      const { session, hero } = start({ loaded: arena([casterOf([])]) });
+      hero.conditions.apply({ key: 'rooted', expiresAtMs: 2_000, merge: 'longest' });
+      advance(session, 1_900);
+      expect(hero.position).toEqual({ x: 20, y: 20, z: 7 });
+      // A rota é de dois tiles e o herói vai e volta: o que importa é que ANDOU, não onde está.
+      let moved = false;
+      for (let elapsed = 0; elapsed < 2_000; elapsed += 50) {
+        session.advanceBy(50);
+        if (hero.position.x !== 20 || hero.position.y !== 20) moved = true;
+      }
+      expect(moved).toBe(true);
+    });
+
+    it('prende o MONSTRO também: ele não persegue enquanto dura', () => {
+      // `Game::internalMoveCreature` recusa o passo de QUALQUER criatura sob rooted. Um monstro
+      // que persegue de longe (o `chase` abaixo) não sai do tile.
+      const chaser = casterOf([], { attackRange: 1, speed: 300 });
+      const { session, hero, ruleset } = start({ loaded: arena([chaser], { x: 30, y: 20 }) });
+      session.advanceBy(1);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou o monstro');
+      hero.conditions.apply({ key: 'pacified', expiresAtMs: 60_000, merge: 'longest' });
+      const at = { x: 30, y: 20, z: 7 };
+      plant(monster, at);
+      monster.conditions.apply({ key: 'rooted', expiresAtMs: 2_000, merge: 'longest' });
+      advance(session, 1_900);
+      expect(monster.position).toEqual(at);
+      advance(session, 2_000);
+      expect(distance(monster.position, hero.position)).toBeLessThan(distance(at, hero.position));
+    });
+
+    it('a ability de um monstro prende o herói por 3 s, e o vencimento é um evento da fila', () => {
+      const { session, hero } = start({ loaded: arena([casterOf([controlAbility('rooted')])]) });
+      advance(session, 1_100);
+      const rooted = hero.conditions.get('rooted');
+      expect(rooted).toMatchObject({ key: 'rooted', merge: 'longest' });
+      expect(rooted?.expiresAtMs).toBeGreaterThan(3_000);
+      // Enquanto dura, o bot não anda. Fica ancorado no tile: a ability relança a cada 1 s com
+      // `longest` — o prazo só cresce, nunca encurta.
+      const anchored = { ...hero.position };
+      advance(session, 1_500);
+      expect(hero.position).toEqual(anchored);
+      expect(hero.conditions.get('rooted')?.expiresAtMs ?? 0).toBeGreaterThanOrEqual(rooted?.expiresAtMs ?? 0);
+    });
+
+    it('um monstro IMUNE (`conditionImmunities: ["rooted"]`) não é preso pela runa; o outro é', () => {
+      const rootRune = {
+        id: 'root-rune-test', name: 'Root', price: 10, group: 'support', groupCooldownMs: 2_000,
+        requires: {},
+        effect: {
+          kind: 'condition' as const, target: 'enemy' as const, range: 4,
+          condition: { key: 'rooted', merge: 'longest' as const, durationMs: 6_000, effect: { kind: 'rooted' as const } },
+        },
+      };
+      const cast = (conditionImmunities: readonly string[]) => {
+        const { session, ruleset } = withSpells(botConfig({}), {
+          supplies: [rootRune], monstersRaw: [{ ...rat, conditionImmunities }],
+        });
+        session.advanceBy(1);
+        const monster = ruleset.monsters[0];
+        if (monster === undefined) throw new Error('faltou rato');
+        const target = { kind: 'monster' as const, subject: monsterSubject(monster.id) };
+        expect(ruleset.useItemOn(session, 'hero', { supplyId: 'root-rune-test' }, 1, target)).toEqual({ ok: true });
+        return monster.conditions.get('rooted');
+      };
+      expect(cast([])).toMatchObject({ key: 'rooted', expiresAtMs: 6_001 });
+      expect(cast(['rooted'])).toBeNull();
+    });
+  });
+
+  describe('pacified', () => {
+    /**
+     * Um herói colado num alvo PARADO (o rato de dano zero), `pacified` até `expiresAtMs`: o
+     * instante em que o primeiro golpe sai e a fase de pensamento do herói. Nada anda — o único
+     * gatilho que sobra é o pensamento.
+     */
+    const swingAfter = (expiresAtMs: number): { at: number; phase: number } => {
+      const dummy = casterOf([], { attackRange: 1 });
+      const { session, hero, ruleset } = start({ loaded: arena([dummy], { x: 22, y: 20 }) });
+      session.advanceBy(1);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou o monstro');
+      plant(monster, { x: hero.position.x + 1, y: hero.position.y, z: 7 });
+      const full = monster.health;
+      hero.conditions.apply({ key: 'pacified', expiresAtMs, merge: 'longest' });
+      while (monster.health === full && session.nowMs < expiresAtMs + 2_000) session.advanceBy(1);
+      const phase = ruleset.getState().runners?.[hero.id]?.thinkPhaseMs;
+      if (phase === undefined) throw new Error('o personagem devia ter uma fase de pensamento');
+      return { at: session.nowMs, phase };
+    };
+    const thinkAfter = (instantMs: number, phase: number): number =>
+      instantMs + ((((phase - instantMs) % 1_000) + 1_000) % 1_000);
+
+    it('sem golpe enquanto vale, e o golpe volta no PENSAMENTO seguinte ao vencimento — não no instante exato', () => {
+      // `Player::doAttacking` volta sob `pacified` (`player.cpp:3982`) e NINGUÉM re-arma o ataque
+      // quando ela acaba: o próximo golpe é o primeiro gatilho depois do prazo — o pensamento do
+      // personagem (`Game::checkCreatures`, 1 Hz, fase própria sorteada UMA vez). Duas
+      // pacificações 500 ms distantes não podem as duas cair na grade: ao menos uma volta DEPOIS.
+      const first = swingAfter(6_000);
+      const second = swingAfter(6_500);
+      expect(second.phase).toBe(first.phase);
+      expect(first.at).toBe(thinkAfter(6_000, first.phase));
+      expect(second.at).toBe(thinkAfter(6_500, second.phase));
+      expect(first.at >= 6_000 && first.at < 7_000).toBe(true);
+      expect(second.at >= 6_500 && second.at < 7_500).toBe(true);
+      expect(first.at > 6_000 || second.at > 6_500).toBe(true);
+    });
+
+    it('um passo do personagem DEPOIS do vencimento e antes do pensamento solta o golpe (`onCreatureMove`); antes do vencimento, não', () => {
+      // O `extra swing` do Canary (`creature.cpp:569`): quem anda — ou o alvo dele — e já passou
+      // um intervalo de ataque, bate na hora. Escolhe o vencimento para o pensamento cair 700 ms
+      // depois dele, e dá um passo (que mantém o rato ao alcance) 99 ms depois do vencimento.
+      const { phase } = swingAfter(6_000);
+      const expiresAtMs = 6_000 + ((((phase - 700 - 6_000) % 1_000) + 1_000) % 1_000);
+      const dummy = casterOf([], { attackRange: 1 });
+      const { session, hero, ruleset } = start({ loaded: arena([dummy], { x: 22, y: 20 }) });
+      session.advanceBy(1);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou o monstro');
+      plant(monster, { x: hero.position.x + 1, y: hero.position.y, z: 7 });
+      const full = monster.health;
+      const home = { x: hero.position.x, y: hero.position.y };
+      hero.conditions.apply({ key: 'pacified', expiresAtMs, merge: 'longest' });
+      session.advanceBy(expiresAtMs - 300 - session.nowMs);
+      // Sob a condição o passo não solta nada: `doAttacking` volta.
+      expect(ruleset.requestMove(session, hero.id, { x: home.x, y: home.y + 1 }).ok).toBe(true);
+      session.advanceBy(299);
+      expect(session.nowMs).toBe(expiresAtMs - 1);
+      expect(monster.health).toBe(full);
+      session.advanceBy(100);
+      expect(session.nowMs).toBe(expiresAtMs + 99);
+      expect(monster.health).toBe(full);
+      // Vencida, e 600 ms antes do pensamento: o passo traz o golpe de volta NA HORA.
+      expect(ruleset.requestMove(session, hero.id, home).ok).toBe(true);
+      session.advanceBy(1);
+      expect(monster.health).toBeLessThan(full);
+      expect(session.nowMs).toBeLessThan(expiresAtMs + 700);
+    });
+
+    it('a retomada do golpe vale IGUAL a 1 Hz, 4 Hz e 20 Hz e depois de um snapshot (invariantes 2 e 3)', () => {
+      // O estacionamento (`attackParked`), a fase de pensamento e o `ATTACK_THINK` na fila são
+      // estado como qualquer outro: o rastro inteiro — vida do alvo, condições, Rng, runner,
+      // monstros — não pode depender de quem avança nem de um corte no meio.
+      const scene = () => {
+        const dummy = casterOf([], { attackRange: 1 });
+        const { session, hero, ruleset } = start({ loaded: arena([dummy], { x: 22, y: 20 }) });
+        session.advanceBy(1);
+        const monster = ruleset.monsters[0];
+        if (monster === undefined) throw new Error('faltou o monstro');
+        plant(monster, { x: hero.position.x + 1, y: hero.position.y, z: 7 });
+        hero.conditions.apply({ key: 'pacified', expiresAtMs: 6_300, merge: 'longest' });
+        return session;
+      };
+      const print = (session: Session): unknown => {
+        const hero = session.participants[0] as CharacterRuntime;
+        const ruleset = session.ruleset as HuntRuleset;
+        return {
+          at: session.nowMs,
+          position: { ...hero.position },
+          conditions: hero.conditions.getState(),
+          rng: session.snapshot().rng,
+          runner: ruleset.getState().runners?.[hero.id],
+          monsters: ruleset.monsters.map((monster) => monster.getState()),
+        };
+      };
+      const trace = (stepMs: number): unknown[] => {
+        const session = scene();
+        const out: unknown[] = [];
+        for (let elapsed = 0; elapsed < 10_000; elapsed += stepMs) {
+          session.advanceBy(stepMs);
+          if ((session.nowMs - 1) % 1_000 === 0) out.push(print(session));
+        }
+        return out;
+      };
+      const oneHz = trace(1_000);
+      expect(trace(250)).toEqual(oneHz);
+      expect(trace(50)).toEqual(oneHz);
+
+      // Corte NO MEIO do estacionamento: pacificado, golpe parado, `ATTACK_THINK` na fila.
+      const session = scene();
+      session.advanceBy(5_000);
+      const parked = (session.ruleset as HuntRuleset).getState().runners?.hero;
+      expect(parked?.attackParked).toBe(true);
+      const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+      const restored = Session.fromSnapshot(
+        snapshot, huntRulesetFromSnapshot(snapshot, arena([casterOf([], { attackRange: 1 })], { x: 22, y: 20 })) as HuntRuleset,
+        new Rng(snapshot.rng),
+      );
+      for (let elapsed = 0; elapsed < 5_000; elapsed += 100) {
+        session.advanceBy(100);
+        restored.advanceBy(100);
+        expect(print(restored)).toEqual(print(session));
+      }
+      expect((session.ruleset as HuntRuleset).getState().runners?.hero?.attackParked).toBeUndefined();
+    });
+
+    it('a trava de escada NÃO encurta uma pacificação mais longa que já corre (`Condition::updateCondition`)', () => {
+      // O mesmo mapa e a mesma escada do describe "stairhop", acima.
+      const stairsMap = {
+        id: 'casa-622', z: 7,
+        floors: {
+          '7': { grid: ['######', '#....#', '#....#', '######'] },
+          '6': { grid: ['######', '#....#', '#....#', '######'] },
+        },
+        floorChanges: [
+          { from: { x: 2, y: 1, z: 7 }, to: { x: 3, y: 1, z: 6 } },
+          { from: { x: 3, y: 2, z: 6 }, to: { x: 2, y: 2, z: 7 } },
+        ],
+      };
+      const stairsRoute = {
+        id: 'casa-622-loop', mapId: 'casa-622',
+        tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 3, y: 2, z: 6 }],
+        spawnPoints: [{
+          routeIndex: 2, radius: 1, at: { x: 3, y: 2, z: 6 }, monsterId: 'rat', respawnDelayMs: 300_000,
+        }],
+      };
+      const stairsHunt = {
+        id: 'arena', name: 'Casa', recommendedLevel: 1, mapId: 'casa-622', routeId: 'casa-622-loop',
+      };
+      const combatV3 = {
+        ...combat, compatibilityProfile: 'combat-v3',
+        weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09 },
+        distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+        stairhopDelayMs: 2_000,
+      };
+      const loaded = content({
+        maps: [stairsMap], routes: [stairsRoute], hunts: [stairsHunt], combat: [combatV3],
+      });
+      const { session, hero } = start({ loaded });
+      // Uma pacificação de 10 s já correndo quando a escada é descida (2 s).
+      hero.conditions.apply({ key: 'pacified', expiresAtMs: 10_000, merge: 'longest' });
+      session.advanceBy(1);
+      expect(hero.position).toEqual({ x: 3, y: 1, z: 6 });
+      expect(hero.conditions.get('pacified')?.expiresAtMs).toBe(10_000);
+    });
+
+    it('Swift Foot (#622, `swift_foot.lua`): acelera e pacifica por 10 s — sem golpe e sem magia agressiva', () => {
+      const swiftFoot = {
+        id: 'swift-foot', name: 'Swift Foot', manaCost: 20, cooldownMs: 10_000,
+        effect: { kind: 'haste' as const, speedPercent: 80, durationMs: 10_000, pacifies: true },
+      };
+      const { session, hero, ruleset } = withSpells(
+        botConfigV2([
+          { do: { kind: 'spell', spellId: 'swift-foot' }, auto: false },
+          { do: { kind: 'spell', spellId: 'strike' }, auto: false },
+        ]),
+        { mana: 200, spells: [...spells, swiftFoot] },
+      );
+      session.advanceBy(1);
+      expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+      expect(hero.conditions.get('haste')?.speedPercent).toBe(80);
+      const pacified = hero.conditions.get('pacified');
+      expect(pacified).toMatchObject({ key: 'pacified', merge: 'longest', expiresAtMs: session.nowMs + 10_000 });
+      // A magia agressiva recusa enquanto a haste dura, com o prazo exato...
+      expect(ruleset.useSlot(session, 'hero', 0, 1)).toMatchObject({ ok: false, reason: 'attack-locked' });
+      // ...e o herói não bate no rato: a vida dele não cai em 9,9 s.
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou rato');
+      const full = monster.health;
+      run(session, 9_900, 100);
+      expect(monster.health).toBe(full);
+      // Vencida a pacificação, o herói volta a atacar.
+      run(session, 1_100, 100);
+      expect(hero.conditions.get('pacified')).toBeNull();
+      run(session, 5_000, 100);
+      expect(monster.health).toBeLessThan(full);
+    });
+
+    it('nunca para o MONSTRO: a condição só existe para o jogador (o monstro não conhece `doAttacking`)', () => {
+      const biter = casterOf([], { attackRange: 1, attack: 10, attackIntervalMs: 500 });
+      const { session, hero, ruleset } = start({ loaded: arena([biter], { x: 21, y: 21 }) });
+      advance(session, 200);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou o monstro');
+      monster.conditions.apply({ key: 'pacified', expiresAtMs: 60_000, merge: 'longest' });
+      const before = hero.health;
+      advance(session, 3_000);
+      expect(hero.health).toBeLessThan(before);
+    });
+
+    it('um monstro IMUNE (`conditionImmunities: ["pacified"]`) recusa a condição da runa', () => {
+      const calmRune = {
+        id: 'calm-rune-test', name: 'Calm', price: 10, group: 'support', groupCooldownMs: 2_000,
+        requires: {},
+        effect: {
+          kind: 'condition' as const, target: 'enemy' as const, range: 4,
+          condition: { key: 'pacified', merge: 'longest' as const, durationMs: 6_000, effect: { kind: 'pacified' as const } },
+        },
+      };
+      const cast = (conditionImmunities: readonly string[]) => {
+        const { session, ruleset } = withSpells(botConfig({}), {
+          supplies: [calmRune], monstersRaw: [{ ...rat, conditionImmunities }],
+        });
+        session.advanceBy(1);
+        const monster = ruleset.monsters[0];
+        if (monster === undefined) throw new Error('faltou rato');
+        const target = { kind: 'monster' as const, subject: monsterSubject(monster.id) };
+        ruleset.useItemOn(session, 'hero', { supplyId: 'calm-rune-test' }, 1, target);
+        return monster.conditions.get('pacified');
+      };
+      expect(cast([])).not.toBeNull();
+      expect(cast(['pacified'])).toBeNull();
+    });
+  });
+
+  describe('feared', () => {
+    // A cadência de 4 s (e não 1 s) é para o medo poder ACABAR entre duas ofertas: o Canary deixa
+    // relançar o medo no intervalo entre o prazo e o pensamento final (a condição ainda existe, e
+    // `hasCondition` já é falso) — com uma oferta por segundo ele se renovaria para sempre.
+    const fearedContent = () => arena([casterOf([controlAbility('feared', { cadenceMs: 4_000 })])]);
+
+    /** O herói foge do lançador: os tiles por onde ele passou, um por passo. */
+    function trace(session: Session, hero: CharacterRuntime, ms: number): { x: number; y: number }[] {
+      const path: { x: number; y: number }[] = [];
+      for (let elapsed = 0; elapsed < ms && session.ended === null; elapsed += 50) {
+        session.advanceBy(50);
+        const last = path[path.length - 1];
+        if (last === undefined || last.x !== hero.position.x || last.y !== hero.position.y) {
+          path.push({ x: hero.position.x, y: hero.position.y });
+        }
+      }
+      return path;
+    }
+
+    it('a ability de medo faz o herói FUGIR do lançador: a condição guarda de onde e para onde', () => {
+      const { session, hero, ruleset } = start({ loaded: fearedContent() });
+      session.advanceBy(1);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou o lançador');
+      plant(monster, { x: 16, y: 20, z: 7 });
+      advance(session, 1_200);
+      const feared = hero.conditions.get('feared');
+      expect(feared).toMatchObject({ key: 'feared', merge: 'longest' });
+      // O lançador a oeste (offset do herói: x ≥ 1, y = 0): a região do Canary manda fugir para
+      // o LESTE — `fleeIndx` 2.
+      expect(feared?.flee).toEqual({ from: { x: 16, y: 20, z: 7 }, index: 2 });
+      expect(feared?.expiresAtMs).toBe(3_000);
+    });
+
+    it('foge por ~3 s para o lado oposto ao lançador, para ao acabar, e ganha 10 s de imunidade', () => {
+      const { session, hero, ruleset } = start({ loaded: fearedContent() });
+      session.advanceBy(1);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou o lançador');
+      plant(monster, { x: 16, y: 20, z: 7 });
+      const startX = hero.position.x;
+      const path = trace(session, hero, 9_000);
+      // Fugiu para o leste (longe do lançador a oeste) — vários tiles, nunca voltando para ele.
+      expect(Math.max(...path.map((tile) => tile.x))).toBeGreaterThanOrEqual(startX + 5);
+      // Acabou (a condição saiu) e a imunidade foi gravada.
+      expect(hero.conditions.get('feared')).toBeNull();
+      expect(hero.cleanseImmunity.get('feared')).toBeGreaterThan(0);
+    });
+
+    it('não anda pelo próprio caminho enquanto foge: o `walk` do jogador é recusado com `feared`', () => {
+      const { session, hero, ruleset } = start({ loaded: fearedContent() });
+      hero.conditions.apply({ key: 'feared', expiresAtMs: 3_000, merge: 'longest' });
+      expect(ruleset.requestMove(session, hero.id, { x: hero.position.x + 1, y: hero.position.y }))
+        .toEqual({ ok: false, reason: 'feared' });
+    });
+
+    it('nenhuma magia nem runa sai sob medo — a poção sai', () => {
+      const { session, hero, ruleset } = withSpells(
+        botConfigV2([
+          { do: { kind: 'spell', spellId: 'heal' }, auto: false },
+          { do: { kind: 'supply', supplyId: 'health-potion' }, auto: false },
+        ]),
+        { health: 100, mana: 200, monsters: false },
+      );
+      hero.conditions.apply({ key: 'feared', expiresAtMs: 5_000, merge: 'longest' });
+      expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: false, reason: 'feared', retryInMs: 5_000 });
+      expect(hero.mana).toBe(200);
+      expect(ruleset.useSlot(session, 'hero', 0, 1)).toEqual({ ok: true });
+    });
+
+    it('a fuga forçada recusa o campo de dano ANTES de rolar o drunk (`Player::onWalk`): sem sorteio e sem desvio', () => {
+      // `Player::onWalk` (`player.cpp:2942-2955`) olha o campo de dano do tile PEDIDO antes do
+      // `Creature::onWalk`, que é onde o drunk sorteia: o passo volta ali, e o desvio nunca tem
+      // chance de carregar o fugitivo para outro tile. Mede o sorteio por diferença — a MESMA
+      // cena com e sem o campo no tile do passo: o campo tira exatamente UM sorteio.
+      class CountingRng extends Rng {
+        integerCalls = 0;
+
+        override integer(min: number, max: number): number {
+          this.integerCalls += 1;
+          return super.integer(min, max);
+        }
+      }
+      const fire: FieldSpec = {
+        id: 'fire-622', durationMs: 60_000,
+        shape: { shape: 'circle', radius: 1, centered: 'caster' },
+        condition: {
+          key: 'fire', merge: 'refresh', durationMs: 60_000,
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 100, intervalMs: 500, damage: 1 }], damageType: 'fire',
+          },
+        },
+      };
+      const firstStep = (withField: boolean): { rolls: number; position: { x: number; y: number } } => {
+        const loaded = arena([casterOf([], { aggroRadius: 0 })]);
+        const ruleset = createHuntRuleset(loaded, 'arena', 'cautious');
+        const first = new Session({
+          id: 'fear-622-field', contentVersion: loaded.version, ruleset,
+          rng: Rng.fromSeed('fear-622-field'), createdAtMs: 0,
+        });
+        const hero = character();
+        first.enter(hero);
+        hero.conditions.apply({ key: 'drunk', expiresAtMs: 1_000_000_000 });
+        hero.conditions.apply({
+          key: 'feared', expiresAtMs: 60_000, merge: 'longest',
+          flee: { from: { x: 16, y: 20, z: 7 }, index: 2 },
+        });
+        // O campo cobre (21,20) — o tile do passo — e NÃO o tile do herói, em (20,20).
+        if (withField) ruleset.applyField(first, fire, { x: 22, y: 20, z: 7 });
+        // Uma caminhada forçada de um passo para o leste (valor 1 do enum `Direction`).
+        const snapshot = JSON.parse(JSON.stringify(first.snapshot())) as SessionSnapshot;
+        const runners = (snapshot.ruleset as { runners: Record<string, { fearWalk?: number[] }> }).runners;
+        (runners[hero.id] as { fearWalk?: number[] }).fearWalk = [1];
+        const rng = new CountingRng(snapshot.rng);
+        const restored = Session.fromSnapshot(snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, rng);
+        const restoredHero = restored.participants[0] as CharacterRuntime;
+        const before = rng.integerCalls;
+        restored.advanceBy(1);
+        return {
+          rolls: rng.integerCalls - before,
+          position: { x: restoredHero.position.x, y: restoredHero.position.y },
+        };
+      };
+      const open = firstStep(false);
+      const blocked = firstStep(true);
+      // Sem o campo o passo rola o drunk; com ele, nenhum sorteio sai e o fugitivo não anda.
+      expect(open.rolls).toBeGreaterThan(0);
+      expect(blocked.rolls).toBe(open.rolls - 1);
+      expect(blocked.position).toEqual({ x: 20, y: 20 });
+    });
+
+    it('um `walk-to` distante guardado ANTES do medo continua: a fuga só começa com menos de dois passos por dar (`getWalkSize() < 2`)', () => {
+      // `ConditionFeared::executeCondition` só procura fuga com `getWalkSize() < 2`, e a lista de
+      // passos do jogador é a MESMA da fuga: o `walk-to` em curso segue (nenhuma condição o
+      // interrompe, e o passo dele não é o "começar a andar" que `startAutoWalk` recusa). Pedido
+      // antes de qualquer tempo, o lançador ainda nem nasceu: o medo cai com o herói a meio caminho.
+      const { session, hero, ruleset } = start({ loaded: fearedContent() });
+      const from = { ...hero.position };
+      const destination = { x: from.x, y: from.y - 7 };
+      expect(ruleset.requestMove(session, hero.id, destination).ok).toBe(true);
+      let fleeingAtY: number | null = null;
+      let feared = false;
+      for (let elapsed = 0; elapsed < 6_000 && fleeingAtY === null; elapsed += 50) {
+        session.advanceBy(50);
+        feared ||= hero.conditions.get('feared') !== null;
+        if (feared && ruleset.getState().runners?.[hero.id]?.fearWalk !== undefined) fleeingAtY = hero.position.y;
+      }
+      expect(feared).toBe(true);
+      // A fuga começou quando o caminho do jogador já estava quase no fim: o destino é 7 tiles
+      // ao norte e restavam menos de dois passos (o herói perto de y = 14).
+      expect(fleeingAtY).not.toBeNull();
+      expect(fleeingAtY ?? 99).toBeLessThanOrEqual(destination.y + 1);
+    });
+
+    /**
+     * Tudo que a fuga decide, num instante: posição, condições, imunidade, estado do Rng, o
+     * runner (a fase de pensamento e a caminhada forçada) e os monstros. Se um evento novo
+     * dependesse de quem assiste, de quando se pergunta ou de ter passado por um snapshot,
+     * ALGUM destes campos divergiria — a posição final sozinha esconderia a divergência.
+     */
+    const fingerprint = (session: Session): unknown => {
+      const hero = session.participants[0] as CharacterRuntime;
+      const ruleset = session.ruleset as HuntRuleset;
+      return {
+        at: session.nowMs,
+        position: { ...hero.position },
+        conditions: hero.conditions.getState(),
+        immunity: [...hero.cleanseImmunity],
+        rng: session.snapshot().rng,
+        runner: ruleset.getState().runners?.[hero.id],
+        monsters: ruleset.monsters.map((monster) => monster.getState()),
+      };
+    };
+
+    it('retomar de um snapshot no meio da fuga dá a MESMA fuga (invariante 3) — o rastro inteiro coincide', () => {
+      const { session, ruleset } = start({ loaded: fearedContent() });
+      session.advanceBy(1);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou o lançador');
+      plant(monster, { x: 16, y: 20, z: 7 });
+      // O corte cai no meio da fuga, com o medo corrente, a lista de passos por dar e o
+      // pensamento seguinte na fila.
+      advance(session, 2_500);
+      const hero = session.participants[0] as CharacterRuntime;
+      expect(hero.conditions.get('feared')).not.toBeNull();
+      expect(ruleset.getState().runners?.[hero.id]?.thinkPhaseMs).toBeDefined();
+
+      const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+      const restored = Session.fromSnapshot(
+        snapshot,
+        huntRulesetFromSnapshot(snapshot, fearedContent()) as HuntRuleset,
+        new Rng(snapshot.rng),
+      );
+      // A impressão de cada segundo DEPOIS do corte — e a dos 100 ms entre eles —, até a fuga
+      // acabar, a imunidade correr e um segundo medo entrar.
+      for (let elapsed = 0; elapsed < 14_000; elapsed += 100) {
+        session.advanceBy(100);
+        restored.advanceBy(100);
+        expect(fingerprint(restored)).toEqual(fingerprint(session));
+      }
+      expect((restored.participants[0] as CharacterRuntime).cleanseImmunity.get('feared')).toBeGreaterThan(0);
+    });
+
+    it('a mesma semente dá a MESMA fuga, e a frequência de avanço não muda NADA (invariante 2) — posição, condições, Rng e runner', () => {
+      // O rastro de cada segundo (posição, condições, estado do Rng, runner, monstros) a 1 Hz,
+      // 4 Hz e 20 Hz: a fuga e a retomada de pensamento são eventos da fila, não acumuladores.
+      const run = (stepMs: number): unknown[] => {
+        const { session, ruleset } = start({ loaded: fearedContent() });
+        session.advanceBy(1);
+        const monster = ruleset.monsters[0];
+        if (monster === undefined) throw new Error('faltou o lançador');
+        plant(monster, { x: 16, y: 20, z: 7 });
+        const trace: unknown[] = [];
+        for (let elapsed = 0; elapsed < 14_000 && session.ended === null; elapsed += stepMs) {
+          session.advanceBy(stepMs);
+          if ((session.nowMs - 1) % 1_000 === 0) trace.push(fingerprint(session));
+        }
+        return trace;
+      };
+      const oneHz = run(1_000);
+      expect(oneHz).toHaveLength(14);
+      expect(run(250)).toEqual(oneHz);
+      expect(run(50)).toEqual(oneHz);
+      // E o rastro tem fuga de verdade: o herói saiu do tile de partida e o medo acabou.
+      const positions = oneHz.map((print) => (print as { position: { x: number } }).position.x);
+      expect(Math.max(...positions)).toBeGreaterThanOrEqual(25);
+    });
+
+    it('um segundo medo DENTRO dos 10 s de imunidade não entra; depois deles, entra', () => {
+      const { session, hero, ruleset } = start({ loaded: fearedContent() });
+      session.advanceBy(1);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou o lançador');
+      plant(monster, { x: 16, y: 20, z: 7 });
+      let firstEnd = -1;
+      let secondStart = -1;
+      let hadFear = false;
+      for (let t = 0; t < 30_000 && session.ended === null; t += 100) {
+        session.advanceBy(100);
+        const active = hero.conditions.get('feared') !== null;
+        if (hadFear && !active && firstEnd < 0) firstEnd = session.nowMs;
+        if (firstEnd >= 0 && active && secondStart < 0) secondStart = session.nowMs;
+        if (active) hadFear = true;
+      }
+      expect(firstEnd).toBeGreaterThan(0);
+      // O segundo medo só começa DEPOIS da janela de 10 s do primeiro (a ability o oferece a
+      // cada 1 s e `checkFearConditionAffected` recusa dentro da janela).
+      expect(secondStart).toBeGreaterThanOrEqual(firstEnd + 10_000);
+    });
+
+    it('a party aceita `(membros + 5) / 5` de medos ao mesmo tempo, sem contar o líder', () => {
+      // Uma área que pega os três: o líder (o primeiro a entrar) e dois membros. O Canary:
+      // `memberList` sem o líder → 2 membros → `(2 + 5) / 5 = 1` medo por vez entre os MEMBROS. O
+      // líder entra primeiro e é atingido; o primeiro membro entra (o orçamento é 1, nenhum
+      // membro com medo ainda); o segundo membro é recusado.
+      const areaFear = controlAbility('feared', {
+        target: { range: 20, area: { shape: 'circle', radius: 8, centered: 'caster' } },
+      });
+      const loaded = arena([casterOf([areaFear])]);
+      const { session, hero, ruleset } = start({ loaded });
+      const second = new CharacterRuntime({ ...character().getState(), id: 'second' });
+      const third = new CharacterRuntime({ ...character().getState(), id: 'third' });
+      session.enter(second);
+      session.enter(third);
+      session.advanceBy(1);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou o lançador');
+      plant(monster, { x: 20, y: 22, z: 7 });
+      advance(session, 1_500);
+      const feared = [hero, second, third].filter((member) => member.conditions.get('feared') !== null);
+      expect(feared.map((member) => member.id)).toEqual(['hero', 'second']);
+    });
+  });
+
+  // A transição entre sessões (#812) leva as condições de controle como qualquer condição: o prazo
+  // é traduzido para o relógio da sessão que entra, e a hunt que entra rearma o que a fila da
+  // anterior levava. O medo de personagem é o caso especial — não tem `condition-expire`, e quem o
+  // fecha é o pensamento (`FEAR_THINK`).
+  describe('a transição entre sessões (#812)', () => {
+    /** O mesmo herói, de uma sessão que andou `elapsedMs` para uma NOVA arena, como o servidor faz. */
+    function crossOver(
+      before: { readonly session: Session; readonly hero: CharacterRuntime },
+      elapsedMs: number,
+    ): { readonly session: Session; readonly ruleset: HuntRuleset } {
+      advance(before.session, elapsedMs);
+      before.session.leave(before.hero.id);
+      const session = createHuntSession({
+        id: 'session-2', content: arena([casterOf([])]), huntId: 'arena', difficulty: 'cautious',
+        createdAtMs: 0,
+      });
+      session.enter(before.hero);
+      return { session, ruleset: session.ruleset as HuntRuleset };
+    }
+
+    it('rooted: o prazo atravessa traduzido, o herói segue preso e solta no instante exato', () => {
+      const first = start({ loaded: arena([casterOf([])]) });
+      first.hero.conditions.apply({ key: 'rooted', expiresAtMs: 3_000, merge: 'longest' });
+      const { session, ruleset } = crossOver(first, 1_000);
+      // Faltavam 2 000 ms e é isso que a sessão nova enxerga.
+      expect(first.hero.conditions.get('rooted')?.expiresAtMs).toBe(2_000);
+      expect(session.dueAtOf('condition-expire', 'hero/rooted')).toBe(2_000);
+      const from = { ...first.hero.position };
+      session.advanceBy(1_999);
+      expect(first.hero.position).toEqual(from);
+      expect(ruleset.requestMove(session, first.hero.id, { x: from.x + 1, y: from.y }))
+        .toEqual({ ok: false, reason: 'rooted' });
+      session.advanceBy(1);
+      expect(first.hero.conditions.get('rooted')).toBeNull();
+      // O pedido é relativo ao tile ONDE O HERÓI ESTÁ: o bot solta no mesmo instante e já pode ter andado.
+      const now = first.hero.position;
+      expect(ruleset.requestMove(session, first.hero.id, { x: now.x, y: now.y + 1 }).ok).toBe(true);
+    });
+
+    it('pacified: o golpe fica estacionado até o pensamento seguinte ao prazo traduzido', () => {
+      const dummy = casterOf([], { attackRange: 1 });
+      const first = start({ loaded: arena([dummy], { x: 22, y: 20 }) });
+      first.hero.conditions.apply({ key: 'pacified', expiresAtMs: 10_000, merge: 'longest' });
+      advance(first.session, 4_000);
+      first.session.leave(first.hero.id);
+      const session = createHuntSession({
+        id: 'session-2', content: arena([dummy], { x: 22, y: 20 }), huntId: 'arena',
+        difficulty: 'cautious', createdAtMs: 0,
+      });
+      session.enter(first.hero);
+      const ruleset = session.ruleset as HuntRuleset;
+      // Faltavam 6 000 ms.
+      expect(first.hero.conditions.get('pacified')?.expiresAtMs).toBe(6_000);
+      session.advanceBy(1);
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou o alvo');
+      plant(monster, { x: first.hero.position.x + 1, y: first.hero.position.y, z: 7 });
+      const full = monster.health;
+      session.advanceBy(5_500 - session.nowMs);
+      expect(monster.health).toBe(full);
+      // O golpe volta no PENSAMENTO seguinte ao prazo traduzido (6 000 ms), nunca antes dele — e
+      // não no instante cru que a hunt anterior guardava (10 000 ms).
+      while (monster.health === full && session.nowMs < 9_000) session.advanceBy(1);
+      expect(monster.health).toBeLessThan(full);
+      expect(session.nowMs).toBeGreaterThanOrEqual(6_000);
+      expect(session.nowMs).toBeLessThan(7_000);
+    });
+
+    it('feared: o medo NÃO ganha `condition-expire` na entrada — o pensamento o fecha, com a imunidade de 10 s', () => {
+      const first = start({ loaded: arena([casterOf([])]) });
+      first.hero.conditions.apply({
+        key: 'feared', expiresAtMs: 3_000, merge: 'longest', flee: { from: { x: 16, y: 20, z: 7 }, index: 2 },
+      });
+      const { session } = crossOver(first, 1_000);
+      const fear = first.hero.conditions.get('feared');
+      // O prazo e o `flee` atravessaram: faltavam 2 000 ms, e a direção de fuga é a mesma.
+      expect(fear).toMatchObject({ expiresAtMs: 2_000, flee: { from: { x: 16, y: 20, z: 7 }, index: 2 } });
+      // Quem fecha é o pensamento, agendado na grade da sessão nova — e nunca o vencimento, que o
+      // removeria no instante do prazo, antes da última fuga e sem a imunidade.
+      expect(session.dueAtOf('condition-expire', 'hero/feared')).toBeNull();
+      const thinkAt = session.dueAtOf('fear-think', 'hero');
+      expect(thinkAt).not.toBeNull();
+      expect(thinkAt ?? -1).toBeLessThan(1_000);
+      // O medo continua valendo até o PRIMEIRO pensamento depois do prazo, que o fecha.
+      advance(session, 1_900);
+      expect(first.hero.conditions.get('feared')).not.toBeNull();
+      advance(session, 1_200);
+      expect(first.hero.conditions.get('feared')).toBeNull();
+      expect(first.hero.cleanseImmunity.get('feared')).toBeGreaterThan(session.nowMs);
+      expect(session.dueAtOf('fear-think', 'hero')).toBeNull();
+    });
+
+    it('feared: sair da hunt tira o pensamento e a fuga da fila, e deixa a condição no personagem', () => {
+      const first = start({
+        loaded: arena([casterOf([controlAbility('feared', { cadenceMs: 4_000 })])]),
+      });
+      first.session.advanceBy(1);
+      const monster = first.ruleset.monsters[0];
+      if (monster === undefined) throw new Error('faltou o lançador');
+      plant(monster, { x: 16, y: 20, z: 7 });
+      advance(first.session, 1_200);
+      // Com medo de verdade (a ability o aplicou): o pensamento está na fila.
+      expect(first.hero.conditions.get('feared')).not.toBeNull();
+      expect(first.session.dueAtOf('fear-think', 'hero')).not.toBeNull();
+      first.session.leave(first.hero.id);
+      expect(first.session.dueAtOf('fear-think', 'hero')).toBeNull();
+      expect(first.hero.conditions.get('feared')).not.toBeNull();
+    });
   });
 });
 

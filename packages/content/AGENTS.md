@@ -624,12 +624,21 @@ entre arquivos resolvem.
   PERCENTUAL INTEIRO, como o reflexo de item, e compilam no boot (`compileElementHealing`,
   `compileReflect` com `flat` zero); ausentes no monstro compilado quando nada cura/reflete.
 - **`monster.conditionImmunities` é o `monster.immunities[].condition` do Canary** (#559, ADR 0041
-  d.2) — distinto de `mitigation.immunities` (`combat = true`, DANO). Onze nomes:
-  `paralyze`, `drunk`, `invisible` e as oito DOTs (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY`, a
-  `Combat::DamageToConditionType`: `physical` sangra, `earth` envenena, `fire` queima…) — o
-  vocabulário do ADR, NÃO os nomes do Lua (`bleed`, `fire`, `earth`…), que o importador traduz.
-  **`invisible` significa "enxerga o invisível"** (`Monster::canSeeInvisibility`), nunca "não pode
-  ficar invisível": é a exceção que não bloqueia a condição. `outfit` (119 monstros) fica fora até
-  o M44-03. Ausente é `[]`, sem imunidade nenhuma.
+  d.2) — distinto de `mitigation.immunities` (`combat = true`, DANO). Catorze nomes:
+  `paralyze`, `drunk`, `invisible`, as oito DOTs (`DAMAGE_OVER_TIME_CONDITION_IMMUNITY`, a
+  `Combat::DamageToConditionType`: `physical` sangra, `earth` envenena, `fire` queima…) e, desde o
+  #622, `rooted`, `feared` e `pacified` — o vocabulário do ADR, NÃO os nomes do Lua (`bleed`,
+  `fire`, `earth`…), que o importador traduz. Os três últimos são AUTORAIS: o Lua não os nomeia, e
+  nenhum monstro do bestiário os declara. **`invisible` significa "enxerga o invisível"**
+  (`Monster::canSeeInvisibility`), nunca "não pode ficar invisível": é a exceção que não bloqueia a
+  condição. `outfit` (119 monstros) fica fora até o M44-03. Ausente é `[]`, sem imunidade nenhuma.
+- **As condições de controle (#622, M44-04) são chave RESERVADA sem campo próprio, como o drunk:**
+  `rooted`, `feared` e `pacified` (`ROOTED_CONDITION_KEY`… em `schemas.ts`), e `conditionSpecSchema`
+  confere as duas implicações (a chave só com o efeito dela, e vice-versa). **Exigem
+  `merge: 'longest'`** — o quarto valor de `conditionMergeSchema`, a regra de
+  `Condition::updateCondition` do Canary (prazo menor não encurta o que já corre) —, e o schema
+  recusa qualquer outro valor: não é escolha do conteúdo. Nunca como self-buff de defesa
+  (`DEFENSE_SELF_CONDITION_KINDS`). O `haste` de magia ganhou `pacifies: true` (Swift Foot,
+  `swift_foot.lua`: acelera e pacifica pelos mesmos 10 s).
 
 Issue: FUN-8.

@@ -690,9 +690,10 @@ de um jeito (ADR 0020, emenda de 2026-09-29):
 - **Carimbo** ("quando foi a última vez que…") **zera.** `Session.enter` (depois de o `onEnter` do
   ruleset aceitar) chama `resetSessionClockState`: o último golpe de arma (`lastAttackAtMs`, #550), o
   último ataque dado ou recebido (`lastCombatActionAtMs`, #625 — sem isto a saída da hunt nova ficava
-  travada 60 s por um combate que ela não viu), a trava de stairhop (`attackLockedUntil`, #554), o
-  banco de cargas de bloqueio (volta cheio: o contador do Canary sobe uma carga por segundo até duas) e
-  a ação manual adiada (o evento dela morava na fila da sessão anterior).
+  travada 60 s por um combate que ela não viu), o banco de cargas de bloqueio (volta cheio: o contador
+  do Canary sobe uma carga por segundo até duas) e a ação manual adiada (o evento dela morava na fila
+  da sessão anterior). A trava de stairhop (#554) já esteve aqui; desde o #622 ela é a condição
+  `pacified` e atravessa como PRAZO (abaixo).
 - **Prazo** ("quanto ainda falta") **atravessa com o que faltava.** O cooldown de magia e de poção
   (inclusive o `exhaust:action`), as condições (haste, Utamo Vita, veneno, paralisia, regeneração de
   alma) e a imunidade do charm Cleanse são traduzidos para o relógio da sessão que entra
