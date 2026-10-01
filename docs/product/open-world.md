@@ -93,11 +93,14 @@ combate no-pvp (OW-27).
   `'nologout'` ou `'normal'` — com a precedência de `Tile::getZoneType`: PZ, depois no-pvp, depois
   arena, depois no-logout (`canary/src/items/tile.hpp:188-199`). `'pvp'` é o tile de arena como o
   Canary o chama; tratá-lo como no-pvp (ADR 0060 d.8) é do portão de combate, e `zoneAt` só diz o
-  que o mapa diz.
+  que o mapa diz. O vocabulário é o do `sim`, sem hífen: o `ZoneKind` do protocolo (`'no-pvp'`,
+  `'no-logout'`, OW-11) é o do fio, e quem emite `player-stats.zone` traduz de um para o outro.
 - **`hasZoneFlag(map, point, flag)`** lê UMA marca (`protection`, `noPvp`, `pvpZone` ou
   `noLogout`), sem a precedência: os bits somam, e o no-logout vale por cima de qualquer zona.
-- **`canLogout(character, map, nowMs)`** devolve `{ ok: true }` ou `{ ok: false, reason }`. É
-  `Player::canLogout` (`canary/src/creatures/players/player.cpp:6960-6979`), na ordem do Canary:
+- **`canLogout(character, map, nowMs)`** devolve `{ ok: true }` ou `{ ok: false, reason }`, com os
+  motivos do `logout-refused` do protocolo (OW-11) — um teste prende a igualdade dos dois
+  vocabulários. É `Player::canLogout` (`canary/src/creatures/players/player.cpp:6960-6979`), na
+  ordem do Canary:
 
   | Tile em que o personagem pisa | Resultado |
   |---|---|

@@ -1245,4 +1245,7 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   a camada `zones` no andar (todo recorte de hunt de hoje), andar ausente e ponto fora da grade são
   tile NORMAL, e a Cidade segue protect zone por construção (ADR 0004), sem consultar nada daqui.
   `'pvp'` (arena) sai como o Canary o chama; tratá-la como no-pvp é do portão de combate (OW-27, ADR
-  0060 d.8), não desta consulta.
+  0060 d.8), não desta consulta. O vocabulário de zona é sem hífen (`'nopvp'`, `'nologout'`) e o
+  `ZoneKind` do protocolo tem hífen: quem emite `player-stats.zone` traduz. Os motivos de recusa do
+  `canLogout` são os de `LogoutRefusedReason` (OW-11), com um teste de compilação que prende a
+  igualdade — o `sim` não importa o protocolo para isso.

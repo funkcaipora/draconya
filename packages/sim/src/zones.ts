@@ -35,6 +35,10 @@ import type { FloorPoint } from './monster/step.js';
  * Os tipos de zona do Canary (`ZoneType_t`, `canary/src/items/items_definitions.hpp:479-485`),
  * em ordem de PRECEDÊNCIA — a de `Tile::getZoneType` (`canary/src/items/tile.hpp:188-199`).
  *
+ * O vocabulário é o da OW-10, sem hífen
+ * (`'nopvp'`, `'nologout'`); o `ZoneKind` do protocolo (`'no-pvp'`, `'no-logout'`, OW-11) é o do
+ * fio, e quem emite `player-stats.zone` traduz de um para o outro.
+ *
  * `'pvp'` é o tile de arena (`PVPZONE`) como o Canary o chama. O ADR 0060 d.8 trata arena como
  * no-pvp no primeiro corte (o dono pediu mundo sem PvP), e essa divergência é do portão de
  * combate (OW-27), que lê `'pvp'` e o recusa como o `'nopvp'` — `zoneAt` continua dizendo o que o
@@ -70,7 +74,12 @@ export function hasZoneFlag(map: Tilemap, point: FloorPoint, flag: ZoneFlagName)
   return (zoneFlagsAt(map, point.x, point.y, point.z) & ZONE_FLAG[flag]) !== 0;
 }
 
-/** Por que o Tibia recusa a saída: `YOUCANNOTLOGOUTHERE` e `YOUMAYNOTLOGOUTDURINGAFIGHT`. */
+/**
+ * Por que o Tibia recusa a saída: `YOUCANNOTLOGOUTHERE` e `YOUMAYNOTLOGOUTDURINGAFIGHT`. É o
+ * mesmo vocabulário do `logout-refused` do protocolo (OW-11, `LogoutRefusedReason`), para o
+ * hospedeiro repassar o motivo como está. O `sim` não importa o protocolo para isso — define o
+ * seu —, e `zones.test.ts` prende a igualdade dos dois em tempo de compilação.
+ */
 export type LogoutRefusal = 'no-logout-tile' | 'in-fight';
 
 export type LogoutVerdict =

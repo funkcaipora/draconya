@@ -1,9 +1,11 @@
 import { ZONE_FLAG, ZONE_PALETTE, buildTilemap } from '@draconya/content';
+import { LOGOUT_REFUSED_REASONS } from '@draconya/protocol';
+import type { LogoutRefusedReason } from '@draconya/protocol';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from './character.js';
 import { IN_FIGHT_WINDOW_MS } from './combat/in-fight.js';
 import { canLogout, hasZoneFlag, zoneAt } from './zones.js';
-import type { LogoutSubject, ZoneType } from './zones.js';
+import type { LogoutRefusal, LogoutSubject, ZoneType } from './zones.js';
 
 // Uma tira com UM tile de cada valor da paleta (`ZONE_PALETTE`), mais um de chão normal no
 // começo. O andar de cima (z6) não declara a camada: serve para provar que "sem `zones`" é por
@@ -193,6 +195,20 @@ describe('canLogout (#831, OW-10)', () => {
     const verdict = canLogout(subject(ROW.indexOf('.'), RECENT), map, NOW);
     expect(Object.isFrozen(verdict)).toBe(true);
     expect(Object.isFrozen(canLogout(subject(ROW.indexOf('p'), null), map, NOW))).toBe(true);
+  });
+
+  it('os motivos de recusa são os do `logout-refused` do protocolo (OW-11), nos dois sentidos', () => {
+    // Em tempo de compilação: um motivo novo, ou removido, de qualquer dos lados deixa de compilar.
+    type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+    const sameVocabulary: Same<LogoutRefusal, LogoutRefusedReason> = true;
+    expect(sameVocabulary).toBe(true);
+    // Em tempo de execução: os dois motivos aparecem de fato, e não há outro.
+    const seen = new Set<string>();
+    for (const [x, last] of [[ROW.indexOf('l'), null], [ROW.indexOf('.'), RECENT]] as const) {
+      const verdict = canLogout(subject(x, last), map, NOW);
+      if (!verdict.ok) seen.add(verdict.reason);
+    }
+    expect([...seen].sort()).toEqual([...LOGOUT_REFUSED_REASONS].sort());
   });
 
   it('aceita um `CharacterRuntime` de verdade: o carimbo é o de `lastCombatActionAtMs`', () => {
