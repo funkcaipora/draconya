@@ -225,6 +225,9 @@ export const SUPPLY_CANARY_IDS: Readonly<Record<string, number>> = {
   'fire-bomb-rune': 3192,
   'poison-bomb-rune': 3173,
   'energy-bomb-rune': 3149,
+  // As duas runas de invocação (#600) — `runeId` de `convince_creature.lua`/`animate_dead_rune.lua`.
+  'convince-creature-rune': 3177,
+  'animate-dead-rune': 3203,
 };
 
 /** slug do arquivo autoral em `data/ammunition/` → `clientId` do Canary. */

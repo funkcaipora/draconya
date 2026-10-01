@@ -339,6 +339,11 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   // teto de 2 invocações vivas já atingido — as três causas caem na mesma frase, como
   // `not-in-catalog` já faz para magia/supply/level/vocação.
   'not-summonable': 'Você não pode invocar essa criatura agora.',
+  // As runas de invocação restantes (#600, M38-03): o `RETURNVALUE_NOTPOSSIBLE` ("Sorry, not
+  // possible.") do Canary para alvo/cadáver que não servem, e o "You cannot control more creatures."
+  // do teto de 2 invocações.
+  'not-possible': 'Isso não é possível.',
+  'too-many-summons': 'Você não pode controlar mais criaturas.',
 };
 
 /**

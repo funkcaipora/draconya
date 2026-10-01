@@ -3548,6 +3548,12 @@
     },
     "destroy-field-rune": {
       "effect": 10
+    },
+    "convince-creature-rune": {
+      "effect": 13
+    },
+    "animate-dead-rune": {
+      "effect": 13
     }
   },
   "hits": {

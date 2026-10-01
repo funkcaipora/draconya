@@ -69,6 +69,20 @@ export type CastRefusal =
    */
   | 'not-summonable'
   /**
+   * As duas runas de invocação restantes (#600, M38-03, ADR 0057 d.5–d.6): o alvo não serve
+   * (Convince: não é `convinceable`, ou já tem mestre; Animate Dead: sem cadáver movível no tile) —
+   * o `RETURNVALUE_NOTPOSSIBLE` ("Sorry, not possible.") do Canary. Quem confere é o RULESET, pelo
+   * mesmo motivo de `not-summonable`: `casting.ts` não conhece monstro nem cadáver.
+   */
+  | 'not-possible'
+  /**
+   * O teto de 2 invocações vivas contra a Convince Creature / Animate Dead (#600): o "You cannot
+   * control more creatures." que as duas runas do Canary devolvem (`#creature:getSummons() >= 2`).
+   * Motivo próprio, e não `not-summonable`: o texto do Canary é outro, e o jogador precisa ler que
+   * o problema é o teto, não o alvo.
+   */
+  | 'too-many-summons'
+  /**
    * Stairhop (#554, M30-07, ADR 0040 decisão 1): o lançador trocou de andar ou foi
    * redirecionado por teleporte há pouco, e a magia é AGRESSIVA (`damage`/`damage-over-time`/
    * `summon` — `Spell::getAggressive` do Canary é `true` por padrão, e só os scripts que o
@@ -147,6 +161,17 @@ export interface CastSuccess {
    * `condition`/`dispel` acima.
    */
   readonly summon?: true;
+  /**
+   * A Convince Creature Rune (#600, ADR 0057 d.5) SAIU — gold debitado, cooldown iniciado.
+   * Devolvido, não aplicado: quem transfere a posse do monstro (e debita a mana DELE) é o ruleset,
+   * a mesma divisão de `summon` acima.
+   */
+  readonly convince?: true;
+  /**
+   * A Animate Dead Rune (#600, ADR 0057 d.6) SAIU: o tile do cadáver que o ruleset consome e o
+   * monstro que nasce ali. Devolvido, não aplicado, como `field`/`destroyFieldAt`.
+   */
+  readonly animateDead?: { readonly at: WorldPoint; readonly monsterId: string };
   /**
    * A chave de condição a REMOVER do lançador, agora, sem evento (#596: `kind: 'remove-condition'`
    * — Cancel Magic Shield). Mutuamente exclusivo com `condition`: uma magia ou agenda algo, ou
@@ -468,13 +493,29 @@ export const NOT_SUMMONABLE: CastRefused = {
 };
 
 /**
+ * As recusas das duas runas de invocação (#600, ADR 0057 d.5–d.6): o alvo não serve
+ * (`RETURNVALUE_NOTPOSSIBLE`) e o teto de 2 invocações vivas. Congeladas, como as de cima.
+ */
+export const NOT_POSSIBLE: CastRefused = {
+  ok: false, reason: 'not-possible', retryInMs: NOT_WAITING,
+};
+export const TOO_MANY_SUMMONS: CastRefused = {
+  ok: false, reason: 'too-many-summons', retryInMs: NOT_WAITING,
+};
+
+/**
  * A runa é AGRESSIVA (`Spell::aggressive`, `true` por padrão no Canary)? Todas, exceto as que o
  * script marca `isAggressive(false)`: as de cura, o antídoto, o Destroy Field e o Chameleon. Aqui:
- * dano, campo e a condição contra INIMIGO (a Paralyze Rune).
+ * dano, campo, a condição contra INIMIGO (a Paralyze Rune) e as duas runas de invocação — a
+ * Convince Creature e a Animate Dead (#600) são do grupo `support`, mas nem `convince_creature.lua`
+ * nem `animate_dead_rune.lua` chamam `isAggressive(false)`, então sob `pacified` o Canary as recusa
+ * como a qualquer runa de dano (`Spell::playerSpellCheck`, `spells.cpp:517`) — o mesmo critério que
+ * `castSpell` já aplica à `summon` (`summon_creature.lua` também não o desliga).
  */
 function isAggressiveSupply(supply: Supply): boolean {
   const effect = supply.effect;
   return effect.kind === 'damage' || effect.kind === 'field'
+    || effect.kind === 'convince' || effect.kind === 'animate-dead'
     || (effect.kind === 'condition' && effect.target === 'enemy');
 }
 
@@ -545,7 +586,7 @@ export function castSpell(
   /**
    * O custo de mana REAL, quando ele não é `spell.manaCost` (#598, M38-01, ADR 0057 decisão 3):
    * a Summon Creature custa o `manaCost` do MONSTRO invocado — o mesmo mecanismo do Canary
-   * (`MonsterType::getManaCost()`), variável por monstro, não um número fixo do catálogo de
+   * (`MonsterType::info.manaCost`), variável por monstro, não um número fixo do catálogo de
    * magia. `spell.manaCost` continua sendo o número de EXIBIÇÃO/ADR 0033 para o resto do
    * vocabulário; só quando este parâmetro é passado ele substitui a conferência e o débito.
    */
@@ -875,6 +916,13 @@ export function useSupply(
    * ver o comentário do mesmo parâmetro em `castSpell`.
    */
   modifiers?: DamageModifiers,
+  /**
+   * O que SÓ o ruleset sabe conferir e o script do Canary confere DEPOIS dos requisitos e da mira
+   * mas ANTES de gastar a carga (#600: Convince — `convinceable`, sem mestre, teto, mana;
+   * Animate Dead — cadáver movível no tile, teto). `null` deixa passar. Só as duas runas de
+   * invocação leem; `casting.ts` não conhece monstro nem cadáver (invariante 1).
+   */
+  precondition?: () => CastRefused | null,
 ): CastResult {
   // O medo e a pacificação alcançam a RUNA, não a poção (M44-04, #622): `Spell::playerSpellCheck`
   // é o checklist de magia e de runa (`RuneSpell` chama `playerRuneSpellCheck`, que começa nele),
@@ -1180,6 +1228,47 @@ export function useSupply(
       ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS,
       goldSpent: paidFromStockDestroy ? 0 : supply.price,
       destroyFieldAt: aim.point,
+    };
+  }
+
+  // As duas runas de invocação (#600, `convince_creature.lua`/`animate_dead_rune.lua`): a ordem é a
+  // de `Spell::playerRuneSpellCheck` seguida do script — requisitos, mira, alcance, o que o
+  // script recusa (`precondition`), e SÓ ENTÃO o gold: a carga só é consumida quando o script
+  // devolve `true`. O resto do efeito (mana do monstro, posse, cadáver) é do ruleset.
+  if (supply.effect.kind === 'convince' || supply.effect.kind === 'animate-dead') {
+    const effect = supply.effect;
+    if (supply.requires.level !== undefined && user.level < supply.requires.level) {
+      return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
+      return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
+    }
+    if (supply.requires.magicLevel !== undefined
+      && (scaling?.magicLevel ?? scaling?.skillLevel ?? 0) < supply.requires.magicLevel) {
+      return { ok: false, reason: 'magic-level-too-low', retryInMs: NOT_WAITING };
+    }
+    // Convince mira uma CRIATURA (`needTarget`); Animate Dead mira um TILE (sem criatura exigida).
+    const aimed = effect.kind === 'convince'
+      ? aim !== null && aim.targets.length > 0
+      : aim !== null && aim.point !== undefined;
+    if (aim === null || !aimed) return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
+    if (aim.distance > effect.range) return { ok: false, reason: 'out-of-range', retryInMs: NOT_WAITING };
+    const refused = precondition?.() ?? null;
+    if (refused !== null) return refused;
+    const hasStockSummon = (user.supplyStock.get(supply.id) ?? 0) > 0;
+    if (!hasStockSummon && !purse.canAfford(supply.price)) {
+      return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    }
+    const paidFromStockSummon = hasStockSummon && spendStock(user, supply.id);
+    if (!paidFromStockSummon) purse.pay(supply.price);
+    startSupplyCooldown(user, supply, nowMs);
+    const paid = paidFromStockSummon ? 0 : supply.price;
+    if (effect.kind === 'convince') {
+      return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: paid, convince: true };
+    }
+    return {
+      ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: paid,
+      animateDead: { at: aim.point as WorldPoint, monsterId: effect.monsterId },
     };
   }
 

@@ -13960,6 +13960,40 @@ describe('reflexo e cleave do equipamento (#552, M30-05)', () => {
     expect(hitRats).toEqual(new Set([a.subject, b.subject]));
   });
 
+  it('o cleave NÃO acerta a invocação de jogador no tile que flanqueia o alvo (#600, mundo no-pvp)', () => {
+    const cleaveSword = {
+      id: 'cleave-sword', name: 'Cleave Sword', kind: 'weapon', slot: 'hand',
+      weight: 1, value: 0, attack: 200, cleavePercent: 50,
+    };
+    const withSword: InventoryState = {
+      backpack: [], equipped: { hand: { instanceId: 's1', itemId: 'cleave-sword', quantity: 1 } },
+    };
+    const { session, hero, ruleset } = withSpells(botConfig(), {
+      health: 10_000, items: [...items, cleaveSword], inventory: withSword,
+      combat: [combatV3],
+      monstersRaw: [{ ...rat, attack: 0, aggroRadius: 0, health: 1_000_000 }],
+    }, 'bold');
+    session.advanceBy(50);
+    const [a, b, c] = ruleset.monsters;
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    // A mesma cena do teste de cima — mas `b`, o do tile ao SUL do alvo, é a invocação do herói (o
+    // que o Convince Creature faz com um monstro do spawner).
+    hero.position = { x: 1, y: 1, z: hero.position.z };
+    plant(a, { x: 2, y: 1 });
+    plant(b, { x: 2, y: 2 });
+    plant(c, { x: 4, y: 3 });
+    b.masterId = hero.id;
+    const healthBefore = b.health;
+    session.drainEvents();
+    run(session, 4_000, 100);
+
+    const hitRats = new Set(ofKind(session.drainEvents(), 'creature-hit')
+      .filter((e) => e.attackerId === 'hero').map((e) => e.creatureId));
+    expect(hitRats).toEqual(new Set([a.subject]));
+    expect(b.health).toBe(healthBefore);
+    expect(b.alive).toBe(true);
+  });
+
   it('o cleave de arma com elemento (#687) leva o secundário na mesma fração (integração)', () => {
     // `internalUseWeapon` do Canary: a fração do cleave corta o físico E o elemento, e o
     // elemento vai como secundário sem escudo nem armadura, como no golpe principal.
