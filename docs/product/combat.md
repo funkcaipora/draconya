@@ -2056,7 +2056,8 @@ por `spell.manaCost`.
 
 ## Charms em combate (#603, M39-03, ADR 0053 d.5 — `combat-v4`)
 
-Os 24 Charms do Canary que agem em combate (todos menos o Scavenge, #626) rolam DENTRO do
+Os 24 Charms do Canary que agem em combate (todos menos o Scavenge, que age na esfola — #626, ver
+`docs/product/items.md`) rolam DENTRO do
 pipeline de dano, na ordem do `Game::combatChangeHealth`/`applyCharmRune`. O que cada um faz, o
 que rola e onde mora cada número está na tabela de estágios de `docs/product/combat-conformance.md`
 (seção "Estágio #603"); o catálogo (id, categoria, tipo, `percent`, `chance[3]`) é

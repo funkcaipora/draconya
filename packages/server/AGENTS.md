@@ -596,6 +596,18 @@ branch vai reivindicar o mesmo número até alguém mesclar — o merge é quem 
 Issues seguintes (Imbuements #605–#607, Wheel #608–#611, Prey #612–#615, Forja #616–#618, …):
 copie esta seção trocando `charms` pelo nome do sistema, e as seis regras continuam valendo.
 
+**A regra 1 tem UMA exceção de fusão, e o #629 (Bosstiary) é quem a usa: contador monotônico é
+fundido por MÁXIMO no ledger, não última-escrita-vence.** "Última escrita vence" serve ao registro
+de ESTADO (Charms, Roda, Prey), cujo valor final pode descer. O `bosstiary` (`{ kills, points,
+version }`, `kills` chaveado pelo `raceId` do boss em texto) só sobe — a natureza do Bestiário —, e
+recebe a mesma fusão: `Bosstiary.merge` em `jobs/ledger.ts`, que lê a coluna sob a trava de linha
+e funde com o extrato. Um registro novo que só cresce (contagem, pontos) copia o `bosstiary`; um que
+sobe e desce (alocação, gasto) copia os `charms`. Nos dois a lista de PERMISSÃO de `parseReceipt`,
+`snapshot-settlement.ts` e o extrato do `#persistReceipt` precisam do campo — `receipts.test.ts`,
+`snapshot-settlement.test.ts` e `host.test.ts` são quem pega a omissão. O extrato de Cidade
+(`#saveDurableReceipt`) NÃO leva o `bosstiary`: só a hunt abate boss, e omitir o campo é "não
+toca na coluna".
+
 ## A munição é abstrata e escolhida por família (#152, #420)
 
 A munição é **abstrata** (ADR 0032 decisão 7): a escolha é por família, pelo opcode 14

@@ -1375,6 +1375,87 @@ describe('o Bestiário (FUN-113, §18)', () => {
   });
 });
 
+describe('o Bosstiary (#629, IOBosstiary do Canary)', () => {
+  const bosstiary = {
+    id: 'baseline',
+    levels: {
+      bane: [{ kills: 25, points: 5 }, { kills: 100, points: 15 }, { kills: 300, points: 30 }],
+      archfoe: [{ kills: 5, points: 10 }, { kills: 20, points: 30 }, { kills: 60, points: 60 }],
+      nemesis: [{ kills: 1, points: 10 }, { kills: 3, points: 30 }, { kills: 5, points: 60 }],
+    },
+  };
+  const boss = {
+    ...rat, id: 'urmahlullu', name: 'Urmahlullu', boss: true,
+    bosstiary: { rarity: 'archfoe', raceId: 1811 },
+  };
+
+  it('é OPCIONAL: a fixture de combate não fala de progressão permanente', () => {
+    expect(buildContent(base()).bosstiary).toBeUndefined();
+  });
+
+  it('monta a tabela de níveis por raridade, para o sim ler', () => {
+    const content = buildContent(base({ bosstiary: [bosstiary] }));
+    expect(content.bosstiary?.levels.nemesis).toEqual([
+      { kills: 1, points: 10 }, { kills: 3, points: 30 }, { kills: 5, points: 60 },
+    ]);
+  });
+
+  it('recusa abates de nível fora de ordem: "próximo nível" apontaria para trás', () => {
+    const disordered = { ...bosstiary, levels: { ...bosstiary.levels, bane: [
+      { kills: 25, points: 5 }, { kills: 25, points: 15 }, { kills: 300, points: 30 },
+    ] } };
+    expect(() => buildContent(base({ bosstiary: [disordered] }))).toThrow(/crescentes/);
+  });
+
+  it('recusa tabela com raridade faltando ou com número de níveis errado', () => {
+    const { nemesis: _nemesis, ...semNemesis } = bosstiary.levels;
+    expect(() => buildContent(base({ bosstiary: [{ ...bosstiary, levels: semNemesis }] }))).toThrow(/bosstiary/);
+    const doisNiveis = { ...bosstiary, levels: { ...bosstiary.levels, bane: bosstiary.levels.bane.slice(0, 2) } };
+    expect(() => buildContent(base({ bosstiary: [doisNiveis] }))).toThrow(/bosstiary/);
+  });
+
+  it('o monstro declara a raridade e o raceId do contador; monstro comum fica sem o bloco', () => {
+    const content = buildContent(base({ monsters: [rat, boss], bosstiary: [bosstiary] }));
+    expect(content.monsters.get('urmahlullu')?.bosstiary).toEqual({ rarity: 'archfoe', raceId: 1811 });
+    expect(content.monsters.get('urmahlullu')?.boss).toBe(true);
+    expect(content.monsters.get('rat')?.bosstiary).toBeUndefined();
+  });
+
+  it('recusa raridade fora do vocabulário do Canary, raceId inválido e campo estranho', () => {
+    for (const bosstiaryBlock of [
+      { rarity: 'legendary', raceId: 1 }, { rarity: 'bane', raceId: 0 }, { rarity: 'bane' },
+      { rarity: 'bane', raceId: 1, extra: 1 },
+    ]) {
+      expect(() => buildContent(base({ monsters: [{ ...boss, bosstiary: bosstiaryBlock }] })), JSON.stringify(bosstiaryBlock))
+        .toThrow(/bosstiary/);
+    }
+  });
+
+  it('recusa bosstiary sem boss: é o `isBoss` do Canary, e a flag existe para o resto do motor', () => {
+    expect(() => buildContent(base({ monsters: [{ ...boss, boss: undefined }] })))
+      .toThrow(/declara bosstiary e não declara boss: true/);
+  });
+
+  it('variantes do mesmo raceId precisam da MESMA raridade — o nível sai de UMA tabela', () => {
+    const variant = { ...boss, id: 'urmahlullu-tamed', name: 'Urmahlullu the Tamed' };
+    expect(() => buildContent(base({ monsters: [boss, variant] }))).not.toThrow();
+    const wrong = { ...variant, bosstiary: { rarity: 'nemesis', raceId: 1811 } };
+    expect(() => buildContent(base({ monsters: [boss, wrong] })))
+      .toThrow(/raceId 1811 é compartilhado com um boss de raridade "archfoe"/);
+  });
+
+  it('o boss compilado leva o bloco adiante, e a versão do conteúdo muda com a tabela', () => {
+    const content = buildContent(base({ monsters: [boss], bosstiary: [bosstiary] }));
+    expect(compileMonster(content.monsters.get('urmahlullu') as never).bosstiary)
+      .toEqual({ rarity: 'archfoe', raceId: 1811 });
+    const edited = { ...bosstiary, levels: { ...bosstiary.levels, bane: [
+      { kills: 26, points: 5 }, { kills: 100, points: 15 }, { kills: 300, points: 30 },
+    ] } };
+    expect(buildContent(base({ bosstiary: [edited] })).version)
+      .not.toBe(buildContent(base({ bosstiary: [bosstiary] })).version);
+  });
+});
+
 describe('ponto de entrada da Cidade (FUN-60)', () => {
   const sala = { id: 'city', z: 7, grid: ['####', '#..#', '#..#', '####'] };
 
@@ -2984,5 +3065,60 @@ describe('condição drunk — desvio de passo (M31-03, #558, ADR 0041)', () => 
         abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: chaveReservadaComEfeitoErrado }],
       }],
     }))).toThrow(ContentError);
+  });
+});
+
+describe('a esfola de cadáver no catálogo (#626, ADR 0048 d.5/d.6)', () => {
+  const knife = { id: 'obsidian-knife', name: 'Obsidian Knife', kind: 'other', weight: 1, value: 0 };
+  const leather = { id: 'leather', name: 'Leather', kind: 'other', weight: 1, value: 10 };
+  const skinnableRat = { ...rat, corpseTtlMs: 670_000 };
+  const entry = {
+    id: 'rat', toolId: 'obsidian-knife', materialId: 'leather', chance: 25_000,
+    stages: [
+      { canaryItemId: 5973, durationMs: 10_000, afterTtlMs: 360_000 },
+      { canaryItemId: 4025, durationMs: 300_000, afterTtlMs: 360_000 },
+    ],
+  };
+  const withSkinning = (over: Record<string, unknown> = {}, monsters: readonly object[] = [skinnableRat]) => base({
+    monsters, items: [knife, leather], skinning: [{ ...entry, ...over }],
+  });
+
+  it('monta a esfola indexada pelo id do MONSTRO, com a janela e a chance', () => {
+    const content = buildContent(withSkinning());
+    expect(content.skinning.get('rat')).toMatchObject({
+      toolId: 'obsidian-knife', materialId: 'leather', chance: 25_000, stages: entry.stages,
+    });
+  });
+
+  it('sem `skinning` no conteúdo, o mapa é vazio e nenhuma ferramenta é reconhecida', () => {
+    expect(buildContent(base()).skinning.size).toBe(0);
+  });
+
+  it('recusa monstro, ferramenta ou material que não existem, e diz qual', () => {
+    expect(() => buildContent(withSkinning({ id: 'fantasma' }))).toThrow(/skinning\/fantasma: o monstro não existe/);
+    expect(() => buildContent(withSkinning({ toolId: 'faca' }))).toThrow(/a ferramenta "faca" não existe/);
+    expect(() => buildContent(withSkinning({ materialId: 'ouro' }))).toThrow(/o material "ouro" não existe/);
+  });
+
+  it('recusa janela de esfola que passa da vida do cadáver do monstro', () => {
+    const curto = { ...rat, corpseTtlMs: 100_000 };
+    expect(() => buildContent(withSkinning({}, [curto]))).toThrow(/a janela de esfola \(310000 ms\) passa da vida do cadáver/);
+    // Monstro SEM `corpseTtlMs` (o cadáver não persiste) só esfola no abate: não há vida a comparar.
+    expect(() => buildContent(withSkinning({}, [rat]))).not.toThrow();
+  });
+
+  it('o schema é estrito e exige ao menos um estágio, chance dentro da escala e ids positivos', () => {
+    expect(() => buildContent(withSkinning({ stages: [] }))).toThrow(ContentError);
+    expect(() => buildContent(withSkinning({ chance: 100_001 }))).toThrow(ContentError);
+    expect(() => buildContent(withSkinning({ chance: 0 }))).toThrow(ContentError);
+    expect(() => buildContent(withSkinning({ stages: [{ canaryItemId: 0, durationMs: 1, afterTtlMs: 1 }] }))).toThrow(ContentError);
+    // Sem a vida que o cadáver tem DEPOIS da tentativa o estágio não se reagenda: o campo é obrigatório.
+    expect(() => buildContent(withSkinning({ stages: [{ canaryItemId: 5973, durationMs: 10_000 }] }))).toThrow(ContentError);
+    expect(() => buildContent(withSkinning({ stages: [{ canaryItemId: 5973, durationMs: 10_000, afterTtlMs: 0 }] }))).toThrow(ContentError);
+    expect(() => buildContent(withSkinning({ appearanceId: 5 }))).toThrow(ContentError);
+  });
+
+  it('a esfola entra na versão do conteúdo: mudar a chance muda a versão (invariante 7)', () => {
+    expect(buildContent(withSkinning()).version).not.toBe(buildContent(withSkinning({ chance: 50_000 })).version);
   });
 });

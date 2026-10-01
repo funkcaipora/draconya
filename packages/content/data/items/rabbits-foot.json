@@ -1,0 +1,13 @@
+{
+  "id": "rabbits-foot",
+  "name": "Rabbit's Foot",
+  "kind": "other",
+  "weight": 0.98,
+  "value": 50,
+  "source": {
+    "engine": "canary",
+    "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+    "path": "data/items/items.xml"
+  },
+  "_open": "O material da esfola do coelho (#626). Canary `items.xml` id 12172 (`rabbit's foot`): só `weight` 98 (0,98 oz), sem preço. `value` 50: o preço de compra dos NPCs, fato do Tibia (ADR 0037 d.4) — `data/scripts/lib/shops.lua:638` (lista de creature products: `{ itemName = \"rabbit's foot\", clientId = 12172, sell = 50 }`) e `data-otservbr-global/npc/grizzly_adams.lua:61` (`sell = 50`). NÃO é `creatureProduct`: o flag do Gut vem do `primarytype=\"creature products\"` do `items.xml`, e o 12172 não o declara."
+}

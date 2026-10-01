@@ -2238,6 +2238,17 @@ export const MONSTER_CLASSES = [
 export type MonsterClass = (typeof MONSTER_CLASSES)[number];
 
 /**
+ * As três raridades do Bosstiary do Canary (`BosstiaryRarity_t`, `src/io/io_bosstiary.hpp`, #629):
+ * `RARITY_BANE` (0), `RARITY_ARCHFOE` (1) e `RARITY_NEMESIS` (2) — em ordem crescente de raridade,
+ * a mesma que o `monster.bosstiary.bossRace` de cada boss declara. O vocabulário é FECHADO: o
+ * Canary tem um quarto valor (`BOSS_INVALID`, 10) que é só marcador de leitura do servidor, nunca
+ * enviado ao cliente nem declarado por monstro.
+ */
+export const BOSSTIARY_RARITIES = ['bane', 'archfoe', 'nemesis'] as const;
+export type BosstiaryRarity = (typeof BOSSTIARY_RARITIES)[number];
+export const bosstiaryRaritySchema = z.enum(BOSSTIARY_RARITIES);
+
+/**
  * Os `ConditionEffect.kind` que uma DEFESA de monstro pode aplicar a SI MESMA (#651): todo
  * self-buff que o bestiário do Canary/TFS usa em defesa própria, nunca um efeito que só faz
  * sentido vindo de um ATACANTE contra outra criatura — `drunk` (desvio de passo) e
@@ -2631,10 +2642,26 @@ export const monsterSchema = z.strictObject({
   canPushItems: z.boolean().default(false),
   /**
    * É boss (#691)? O `MonsterType::isBoss` do Canary (`!bosstiaryClass.empty()`), que decide
-   * se os rates de `progression.rates.boss` valem no lugar dos de `monster`. Só a flag: a
-   * raridade e os pontos do Bosstiary são o #629. Ausente é `false`.
+   * se os rates de `progression.rates.boss` valem no lugar dos de `monster` — e, desde o #629,
+   * também quem NÃO conta no Bestiário (`Player::addBestiaryKill` devolve cedo para boss) e conta
+   * no Bosstiary. O importador escreve `boss: true` junto com `bosstiary` (o `isBoss` do Canary É
+   * "tem bloco bosstiary"), e `buildContent` recusa `bosstiary` sem `boss`. Ausente é `false`.
    */
   boss: z.boolean().default(false),
+  /**
+   * O boss no Bosstiary (#629; `monster.bosstiary` do Canary): a raridade — Bane, Archfoe ou
+   * Nemesis, que escolhe a linha de `content.bosstiary.levels` (quantos abates levam a cada
+   * nível, e quantos pontos cada nível rende) — e o `raceId` (`bossRaceId` do Canary), a CHAVE do
+   * contador de abates. É a chave do Canary (`STORAGEVALUE_BESTIARYKILLCOUNT + raceid`), e não o
+   * id de conteúdo, porque quatro `raceId` são compartilhados por variantes do mesmo boss (as
+   * cinco formas de Urmahlullu, as duas Goshnar's Megalomania, os dois Voidborn, Rupture e
+   * Eradicator2): abater qualquer uma soma no MESMO contador. Só o boss declara; monstro comum
+   * fica sem o campo e conta no Bestiário.
+   */
+  bosstiary: z.strictObject({
+    rarity: bosstiaryRaritySchema,
+    raceId: z.number().int().positive(),
+  }).optional(),
   loot: lootTableSchema.default({ items: [] }),
   /**
    * Quanto tempo o cadáver deste monstro fica no chão, em milissegundos (#585; ADR 0037 d.6):
@@ -3324,6 +3351,13 @@ export const COMBAT_V3: CombatCompatibilityProfile = {
  * Charms só roda neste perfil (`hasCharmStage`): a sessão ainda fixada em `combat-v3` não rola
  * charm nenhum, mesmo com o registro do personagem cheio (invariante 7). Muda resultado e ordem
  * de sorteio: a política passa a ser `breaking`.
+ *
+ * **Estágio #626** (M44-08, esfola de cadáver e Scavenge — ADR 0048 d.5/d.6, ADR 0053 d.5): o
+ * abate rola UM sorteio a mais, depois de todo o de loot, quando quem coleta tem a ferramenta do
+ * monstro (`hasSkinningStage`) — e o `use-item-on` da ferramenta no cadáver rola o mesmo. Sem
+ * ferramenta, ou num monstro sem entrada em `content.skinning`, o `session.rng` não é tocado. O
+ * Scavenge (o 25º charm, que o estágio #603 deixou de fora) muda o `chanceRange`, não a quantidade
+ * de sorteios. Os detalhes e a tabela do estágio estão em `docs/product/combat-conformance.md`.
  */
 export const COMBAT_V4: CombatCompatibilityProfile = {
   id: 'combat-v4',
@@ -3839,6 +3873,68 @@ export const charmSchema = z.strictObject({
 export type Charm = z.infer<typeof charmSchema>;
 
 /**
+ * A escala das chances do `skinning.lua` do Canary (#626, `data-otservbr-global/scripts/actions/
+ * tools/skinning.lua`): `math.random(1, chanceRange)` com `chanceRange = 100000` e sucesso
+ * quando `random <= value`. `Skinning.chance` (`value` do Lua) é lido nesta escala — 25 000 é
+ * 25 %. O Scavenge mexe no `chanceRange`, não no `value` (ver `sim/skinning.ts`).
+ */
+export const SKINNING_CHANCE_SCALE = 100_000;
+
+/**
+ * Um estágio esfolável do cadáver (#626). O Canary decide "posso esfolar?" pelo id do ITEM que
+ * o cadáver é naquele instante — a chave de `config[ferramenta][id]` do `skinning.lua` — e o
+ * cadáver troca de id ao decair (`items.xml`: `decayTo`/`duration`). Por isso a janela de esfola
+ * de um monstro não é a vida inteira do cadáver: o Dragon (`5973` 10 s → `4025` 300 s → `4026`
+ * 300 s → `4027` 60 s) só é esfolável nos dois primeiros estágios, 310 s dos 670 s.
+ *
+ * `canaryItemId` é a IDENTIDADE do estágio no Canary — o que o Scavenge compara
+ * (`charmCorpse == target.itemid or ItemType(charmCorpse):getDecayId() == target.itemid`), e
+ * por isso também vale entre monstros que compartilham o mesmo cadáver (o Minotaur, o Minotaur
+ * Bruiser e o Depowered Minotaur são todos `5969`). É um número de PROVENIÊNCIA e de identidade,
+ * nunca arte (invariante 6): a arte do cadáver é `appearances.corpses`, pelo monstro.
+ *
+ * `afterTtlMs` é a vida que o cadáver TEM DEPOIS da tentativa: o Canary roda
+ * `topItem:transform(skin.after)` com ou sem sucesso, e o `Item::setID` do item novo reinicia o
+ * decaimento — `duration` do `after` e a cadeia `decayTo` dele (o Dragon esfolado vira `4026`:
+ * 300 s + o `4027` de 60 s = 360 s, qualquer que seja a idade em que se esfolou). É a soma que o
+ * importador tira do `items.xml` a partir do `after` DESTE estágio (`corpseTtlMsFromChain`), e é
+ * o que reagenda o fim do cadáver: ele deixa de viver os 670 s de `corpseTtlMs`.
+ */
+export const skinningStageSchema = z.strictObject({
+  canaryItemId: z.number().int().positive(),
+  durationMs: z.number().int().positive(),
+  afterTtlMs: z.number().int().positive(),
+});
+export type SkinningStage = z.infer<typeof skinningStageSchema>;
+
+/**
+ * Como o cadáver de UM monstro é esfolado (#626, ADR 0048 d.5/d.6, ADR 0053 d.5):
+ * `content/data/skinning/generated/skinning.json` (`scripts/catalog/skinning.ts`), lido do
+ * `skinning.lua` do Canary e cruzado com o `monster.corpse` e a cadeia de decaimento de cada
+ * monstro do catálogo. O `id` é o id do MONSTRO (um por monstro: a chave do Lua é o id do
+ * cadáver, e um id de cadáver só aparece sob uma ferramenta).
+ */
+export const skinningSchema = z.strictObject({
+  /** O id do monstro esfolado. */
+  id: z.string().min(1),
+  /** O item que esfola (o `itemid` do `config` do Lua: obsidian knife 5908, blessed wooden stake 5942). */
+  toolId: z.string().min(1),
+  /** O que a esfola rende (`newItem`). Uma unidade — o `amount` do Lua só existe no boss da abóbora. */
+  materialId: z.string().min(1),
+  /** O `value` do Lua, em `SKINNING_CHANCE_SCALE` (25 000 = 25 %). */
+  chance: z.number().int().positive().max(SKINNING_CHANCE_SCALE),
+  /**
+   * Os estágios ESFOLÁVEIS do cadáver, em ordem, desde a morte: o cadáver só pode ser esfolado
+   * enquanto o item dele é um destes. A soma das durações é o fim da janela.
+   */
+  stages: z.array(skinningStageSchema).min(1),
+  /** Proveniência (ADR 0038 d.2) — toda entidade GERADA carrega este bloco. */
+  source: catalogSourceSchema.optional(),
+  _open: z.string().optional(),
+});
+export type Skinning = z.infer<typeof skinningSchema>;
+
+/**
  * A Boosted Creature diária (M42, #615, ADR 0054 decisão 7): quando o dia troca no relógio de
  * parede. `rolloverHourUtc` é a hora UTC (0–23) em que o `jobs` sorteia o monstro do próximo
  * dia — o mesmo instante em que o Canary vira o server-save (`SpawnMonster::addMonster`,
@@ -3852,6 +3948,44 @@ export const boostedSchema = z.object({
   rolloverHourUtc: z.number().int().min(0).max(23),
 });
 export type Boosted = z.infer<typeof boostedSchema>;
+
+/**
+ * Os níveis do Bosstiary por raridade (#629): quantos abates levam a cada um dos três níveis e
+ * quantos pontos de boss o nível rende — a tabela `IOBosstiary::levelInfos` do Canary
+ * (`src/io/io_bosstiary.hpp`, 47dfd51: Bane 25/100/300 abates → 5/15/30 pontos, Archfoe 5/20/60 →
+ * 10/30/60, Nemesis 1/3/5 → 10/30/60). Os abates são CRESCENTES por definição — o nível 2 não
+ * pode pedir menos que o 1 —, e o schema o exige.
+ */
+export const bosstiaryLevelInfoSchema = z.strictObject({
+  /** Abates do boss para alcançar este nível (`LevelInfo::kills`). */
+  kills: z.number().int().positive(),
+  /** Pontos de boss que alcançar este nível rende (`LevelInfo::points`). */
+  points: z.number().int().positive(),
+});
+export type BosstiaryLevelInfo = z.infer<typeof bosstiaryLevelInfoSchema>;
+
+const bosstiaryLevelsSchema = z.tuple([bosstiaryLevelInfoSchema, bosstiaryLevelInfoSchema, bosstiaryLevelInfoSchema])
+  .refine(
+    ([first, second, third]) => first.kills < second.kills && second.kills < third.kills,
+    { message: 'bosstiary: os abates de cada nível são crescentes' },
+  );
+
+export const bosstiarySchema = z.strictObject({
+  id: z.literal('baseline'),
+  levels: z.strictObject({
+    bane: bosstiaryLevelsSchema,
+    archfoe: bosstiaryLevelsSchema,
+    nemesis: bosstiaryLevelsSchema,
+  }),
+  /**
+   * De onde a tabela saiu (ADR 0038 d.2) — a tabela é transcrita à mão de UM arquivo do Canary
+   * (`IOBosstiary::levelInfos`), sem importador, então o bloco de proveniência é gravado no JSON
+   * em vez de virar `_open` (o boot avisa todo `_open` como valor não decidido, e este é decidido).
+   */
+  source: catalogSourceSchema.optional(),
+  _open: z.string().optional(),
+});
+export type Bosstiary = z.infer<typeof bosstiarySchema>;
 
 /**
  * Vocabulário do bot (FUN-73, ADR 0002, §13).

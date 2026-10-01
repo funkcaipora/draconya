@@ -1804,3 +1804,72 @@ describe('saída pendente: cancel-exit, exit-pending (#802)', () => {
     }
   });
 });
+
+describe('Bosstiary (#629, ADR 0052 d.1)', () => {
+  it('bosstiary is S2C only, opcode 46, and round trips the raw register', () => {
+    // Mutação que mata: apagar `bosstiary: 46` de SERVER_TO_CLIENT (`decodeS2C` devolve `null`),
+    // ou reusar o 45 (`exit-pending`).
+    expect(SERVER_TO_CLIENT['bosstiary']).toBe(46);
+    expect('bosstiary' in C2S_SCHEMAS).toBe(false);
+    const message: S2CMessage = { type: 'bosstiary', kills: { '639': 3, '1811': 20 }, points: 70 };
+    expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+    const empty: S2CMessage = { type: 'bosstiary', kills: {}, points: 0 };
+    expect(decodeS2C(encodeS2C(empty))).toEqual([empty]);
+  });
+
+  it('rejects a negative or fractional count and negative points', () => {
+    for (const patch of [{ kills: { '639': -1 } }, { kills: { '639': 1.5 } }, { points: -5 }, { kills: { '': 1 } }]) {
+      expect(decodeS2C(encodeS2C({ type: 'bosstiary', kills: {}, points: 0, ...patch } as unknown as S2CMessage))).toBeNull();
+    }
+  });
+
+  it('the catalogue carries the boss rarity per monster and the level table, and an older node decodes without them', () => {
+    const base = {
+      type: 'catalogue' as const,
+      hunts: [],
+      vocations: [],
+      vocationLevel: 0,
+      bot: {
+        vocabularyVersion: 2, setCount: 4, slotsPerSet: 24,
+        setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'], hotkeys: ['1'], groups: [],
+        spells: [], automations: [], supplies: [],
+      },
+      items: [], ammunition: [],
+      charms: [],
+    };
+    const withBosstiary = {
+      ...base,
+      monsters: [{ id: 'dreadmaw', name: 'Dreadmaw', bosstiary: { rarity: 'nemesis' as const, raceId: 639 } }],
+      bosstiary: {
+        levels: {
+          bane: [{ kills: 25, points: 5 }, { kills: 100, points: 15 }, { kills: 300, points: 30 }],
+          archfoe: [{ kills: 5, points: 10 }, { kills: 20, points: 30 }, { kills: 60, points: 60 }],
+          nemesis: [{ kills: 1, points: 10 }, { kills: 3, points: 30 }, { kills: 5, points: 60 }],
+        },
+      },
+    } as unknown as S2CMessage;
+    expect(decodeS2C(encodeS2C(withBosstiary))).toEqual([withBosstiary]);
+
+    // Nó anterior: nem `bosstiary` no catálogo nem no monstro — o catálogo ainda decodifica.
+    const older = { ...base, monsters: [{ id: 'rat', name: 'Rat' }] } as unknown as S2CMessage;
+    const decoded = decodeS2C(encodeS2C(older)) as Array<Record<string, unknown>> | null;
+    expect(decoded?.[0]).not.toHaveProperty('bosstiary');
+    expect((decoded?.[0]?.['monsters'] as Array<Record<string, unknown>>)[0]).not.toHaveProperty('bosstiary');
+  });
+
+  it('rejects an unknown rarity or a non-positive raceId on a catalogue monster', () => {
+    const catalogue = (bosstiary: unknown) => ({
+      type: 'catalogue', hunts: [], vocations: [], vocationLevel: 0,
+      bot: {
+        vocabularyVersion: 2, setCount: 4, slotsPerSet: 24,
+        setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'], hotkeys: ['1'], groups: [],
+        spells: [], automations: [], supplies: [],
+      },
+      items: [], ammunition: [], charms: [],
+      monsters: [{ id: 'boss', name: 'Boss', bosstiary }],
+    } as unknown as S2CMessage);
+    expect(decodeS2C(encodeS2C(catalogue({ rarity: 'legendary', raceId: 1 })))).toBeNull();
+    expect(decodeS2C(encodeS2C(catalogue({ rarity: 'bane', raceId: 0 })))).toBeNull();
+    expect(decodeS2C(encodeS2C(catalogue({ rarity: 'bane', raceId: 1 })))).not.toBeNull();
+  });
+});
