@@ -105,6 +105,22 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **Loot sorteia com o `Rng` da sessão, gold antes de item, e `chance: 0` não consome
   sorteio.** Ordem e semente são contrato: mudar qualquer um dos dois muda o que toda hunt
   retomada rende. `Math.random` continua proibido, e `grep -rn "Math.random" src` é vazio.
+- **A esfola de cadáver (#626, `skinning.ts`) é o ÚLTIMO sorteio do abate, e só existe com
+  ferramenta.** `#onMonsterDied` rola loot, credita supply/munição e SÓ ENTÃO rola a esfola — um
+  sorteio, no `combat-v4`, quando quem coleta tem a ferramenta do monstro. Sem ferramenta, sem
+  entrada em `content.skinning` ou fora do v4 o `session.rng` não é tocado (`rulesets/skinning.
+  test.ts` prende); pôr qualquer sorteio DEPOIS dele, ou antes dele por um caminho que nem todo
+  abate percorre, desloca a sequência de quem tem faca. A janela é por ESTÁGIO do cadáver
+  (`Skinning.stages`), não a vida inteira (`corpseTtlMs`), e `CorpseState.diedAtMs` é o que dá a
+  idade — um snapshot anterior sem ele não se esfola à mão. O Scavenge encolhe o intervalo, e no tier
+  3 é PIOR que sem charm (a fórmula do Canary, decisão a rever em `docs/product/items.md`). **A
+  tentativa — a do bot e a manual, com ou sem sucesso — reagenda o evento `CORPSE`**
+  (`#retimeCorpse`, `Skinning.stages[].afterTtlMs`): o `transform(skin.after)` do Canary reinicia o
+  decaimento, e o cadáver esfolado vive 360 s da tentativa, não o que faltava dos 670 s. Quem
+  esfola um cadáver por um caminho novo tem que passar por `#retimeCorpse`, senão o loot que
+  sobrou no cadáver vive mais que no Canary. **O alcance manual é o `canUse` adjacente (1×1, sem
+  linha de visão), NÃO o `canUseFar` 7×5**: o `skinning.lua` não chama `allowFarUse`, e herdar o
+  7×5 das runas por ser "um tile" foi o erro que a revisão do #626 pegou (ADR 0049, emenda).
 - **Um evento que se reagenda usa `session.nowMs + intervalo`**, e é exato porque `nowMs` durante
   o despacho É o instante do vencimento. Não há erro a herdar, e por isso não há acumulador.
 - **`pnpm source-policy` reprova nome de contador de tick** (`remainingTicks`, `cooldownTicks`, …)

@@ -19,14 +19,15 @@ import {
   packSchema,
   blessingSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
-  bestiarySchema, boostedSchema, bosstiarySchema, charmSchema, itemSchema, partySchema, skillSchema, spellSchema,
+  bestiarySchema, boostedSchema, bosstiarySchema, charmSchema, itemSchema, partySchema, skillSchema, skinningSchema,
+  spellSchema,
   staminaSchema, supplySchema, tilemapSchema, vocationSchema, weaponFamilySchema,
 } from './schemas.js';
 import type {
   Ammunition, AmmunitionDefinition, Appearances, Bestiary, Blessing, Boosted, BotLimits, Bosstiary, Charm,
   Combat, CompiledMitigation,
   CompiledReflect, DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
-  MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Spell, Stamina, Supply,
+  MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Skinning, Spell, Stamina, Supply,
   Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
   WeaponPowerFormula, WeaponProfile,
 } from './schemas.js';
@@ -71,6 +72,12 @@ export interface Content {
    * charm existe", igual a `bestiary` ausente.
    */
   readonly charms: ReadonlyMap<string, Charm>;
+  /**
+   * Como o cadáver de cada monstro esfolável é esfolado (#626, ADR 0048 d.5/d.6; ADR 0053 d.5):
+   * `content/data/skinning/generated/skinning.json`, chave `monsterId`. Vazio no conteúdo de teste
+   * que não fala de esfola — nenhuma ferramenta é reconhecida e o sorteio nunca corre.
+   */
+  readonly skinning: ReadonlyMap<string, Skinning>;
   /**
    * A Boosted Creature diária (M42, #615, ADR 0054 decisão 7): a hora de virada. Opcional —
    * sem ela o `jobs` não sorteia nada, e nenhuma hunt aplica o bônus. É o conteúdo de teste que
@@ -153,6 +160,8 @@ export interface RawContent {
   /** Os níveis do Bosstiary (#629), `bosstiary/baseline.json`. */
   readonly bosstiary?: readonly unknown[];
   readonly charms?: readonly unknown[];
+  /** Como o cadáver de cada monstro esfolável é esfolado (#626), `skinning/generated/`. */
+  readonly skinning?: readonly unknown[];
   readonly boosted?: readonly unknown[];
   readonly bot?: readonly unknown[];
   readonly spells?: readonly unknown[];
@@ -674,6 +683,28 @@ export function buildContent(raw: RawContent): Content {
   // O catálogo de MUNIÇÃO (ADR 0026 d.3): flecha e virote abstratos, gold no tiro.
   const ammunitionDefinitions = parseAll('munição', raw.ammunition ?? [], ammunitionSchema,
     problems);
+  // A esfola (#626): uma entrada por MONSTRO. Cada referência é conferida aqui, no boot — um
+  // monstro, uma ferramenta ou um material que não existe deixaria a esfola muda (ou, pior,
+  // sortearia sem entregar nada) no meio de uma hunt.
+  const skinning = parseAll('skinning', raw.skinning ?? [], skinningSchema, problems);
+  for (const entry of skinning.values()) {
+    const where = `skinning/${entry.id}`;
+    const monster = monsterDefinitions.get(entry.id);
+    if (monster === undefined) problems.push(`${where}: o monstro não existe`);
+    // A janela de esfola é um PREFIXO da vida do cadáver (os primeiros estágios da cadeia de
+    // decaimento): passar do `corpseTtlMs` do monstro seria esfolar um cadáver que já sumiu.
+    const window = entry.stages.reduce((sum, stage) => sum + stage.durationMs, 0);
+    if (monster?.corpseTtlMs !== undefined && window > monster.corpseTtlMs) {
+      problems.push(
+        `${where}: a janela de esfola (${String(window)} ms) passa da vida do cadáver `
+          + `(corpseTtlMs ${String(monster.corpseTtlMs)})`,
+      );
+    }
+    if (!itemDefinitions.has(entry.toolId)) problems.push(`${where}: a ferramenta "${entry.toolId}" não existe`);
+    if (!itemDefinitions.has(entry.materialId)) {
+      problems.push(`${where}: o material "${entry.materialId}" não existe`);
+    }
+  }
 
   // A skill de defesa (CMB-04) precisa existir E subir por bloqueio. Uma referência a skill
   // inexistente deixaria o escudo sem treinar nada; uma que sobe por outra fonte escalaria a
@@ -1614,6 +1645,7 @@ export function buildContent(raw: RawContent): Content {
     ...(bestiary === undefined ? {} : { bestiary }),
     ...(bosstiary === undefined ? {} : { bosstiary }),
     charms,
+    skinning,
     ...(boosted === undefined ? {} : { boosted }),
     maps,
     routes,

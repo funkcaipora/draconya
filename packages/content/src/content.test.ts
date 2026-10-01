@@ -3067,3 +3067,58 @@ describe('condição drunk — desvio de passo (M31-03, #558, ADR 0041)', () => 
     }))).toThrow(ContentError);
   });
 });
+
+describe('a esfola de cadáver no catálogo (#626, ADR 0048 d.5/d.6)', () => {
+  const knife = { id: 'obsidian-knife', name: 'Obsidian Knife', kind: 'other', weight: 1, value: 0 };
+  const leather = { id: 'leather', name: 'Leather', kind: 'other', weight: 1, value: 10 };
+  const skinnableRat = { ...rat, corpseTtlMs: 670_000 };
+  const entry = {
+    id: 'rat', toolId: 'obsidian-knife', materialId: 'leather', chance: 25_000,
+    stages: [
+      { canaryItemId: 5973, durationMs: 10_000, afterTtlMs: 360_000 },
+      { canaryItemId: 4025, durationMs: 300_000, afterTtlMs: 360_000 },
+    ],
+  };
+  const withSkinning = (over: Record<string, unknown> = {}, monsters: readonly object[] = [skinnableRat]) => base({
+    monsters, items: [knife, leather], skinning: [{ ...entry, ...over }],
+  });
+
+  it('monta a esfola indexada pelo id do MONSTRO, com a janela e a chance', () => {
+    const content = buildContent(withSkinning());
+    expect(content.skinning.get('rat')).toMatchObject({
+      toolId: 'obsidian-knife', materialId: 'leather', chance: 25_000, stages: entry.stages,
+    });
+  });
+
+  it('sem `skinning` no conteúdo, o mapa é vazio e nenhuma ferramenta é reconhecida', () => {
+    expect(buildContent(base()).skinning.size).toBe(0);
+  });
+
+  it('recusa monstro, ferramenta ou material que não existem, e diz qual', () => {
+    expect(() => buildContent(withSkinning({ id: 'fantasma' }))).toThrow(/skinning\/fantasma: o monstro não existe/);
+    expect(() => buildContent(withSkinning({ toolId: 'faca' }))).toThrow(/a ferramenta "faca" não existe/);
+    expect(() => buildContent(withSkinning({ materialId: 'ouro' }))).toThrow(/o material "ouro" não existe/);
+  });
+
+  it('recusa janela de esfola que passa da vida do cadáver do monstro', () => {
+    const curto = { ...rat, corpseTtlMs: 100_000 };
+    expect(() => buildContent(withSkinning({}, [curto]))).toThrow(/a janela de esfola \(310000 ms\) passa da vida do cadáver/);
+    // Monstro SEM `corpseTtlMs` (o cadáver não persiste) só esfola no abate: não há vida a comparar.
+    expect(() => buildContent(withSkinning({}, [rat]))).not.toThrow();
+  });
+
+  it('o schema é estrito e exige ao menos um estágio, chance dentro da escala e ids positivos', () => {
+    expect(() => buildContent(withSkinning({ stages: [] }))).toThrow(ContentError);
+    expect(() => buildContent(withSkinning({ chance: 100_001 }))).toThrow(ContentError);
+    expect(() => buildContent(withSkinning({ chance: 0 }))).toThrow(ContentError);
+    expect(() => buildContent(withSkinning({ stages: [{ canaryItemId: 0, durationMs: 1, afterTtlMs: 1 }] }))).toThrow(ContentError);
+    // Sem a vida que o cadáver tem DEPOIS da tentativa o estágio não se reagenda: o campo é obrigatório.
+    expect(() => buildContent(withSkinning({ stages: [{ canaryItemId: 5973, durationMs: 10_000 }] }))).toThrow(ContentError);
+    expect(() => buildContent(withSkinning({ stages: [{ canaryItemId: 5973, durationMs: 10_000, afterTtlMs: 0 }] }))).toThrow(ContentError);
+    expect(() => buildContent(withSkinning({ appearanceId: 5 }))).toThrow(ContentError);
+  });
+
+  it('a esfola entra na versão do conteúdo: mudar a chance muda a versão (invariante 7)', () => {
+    expect(buildContent(withSkinning()).version).not.toBe(buildContent(withSkinning({ chance: 50_000 })).version);
+  });
+});
