@@ -141,6 +141,8 @@ export type CharmDefinition = Catalogue['charms'][number];
  * que já deriva o bônus de XP do Bestiário (`bestiary-progress.ts`).
  */
 export type CharmsRegister = Readonly<S2CProps<'charms'>>;
+/** Uma magia do catálogo (#624): o que a tela de aprendizado lista, com `learnPrice` e requisitos. */
+export type SpellDefinition = Catalogue['bot']['spells'][number];
 /** As sete bênçãos e o preço por level (#570). Ausente do catálogo: este servidor não as tem. */
 export type BlessingsConfig = NonNullable<Catalogue['blessings']>;
 export type BlessingDefinition = BlessingsConfig['list'][number];
@@ -365,6 +367,13 @@ export interface HudState {
    */
   readonly blessings: number;
   /**
+   * As magias que o personagem APRENDEU (#624, ADR 0058): ids de `catalogue.bot.spells`. `null`
+   * até chegar — o primeiro segundo de toda conexão, ou um nó anterior a esta issue —, e é o que
+   * impede a barra de marcar TODO slot como "não aprendida" antes de o servidor dizer o que ele
+   * sabe. SUBSTITUI: é o registro inteiro, não um delta.
+   */
+  readonly learnedSpells: readonly string[] | null;
+  /**
    * A party desta sessão (#196). `null` é solo — e é o que todo `session-state` sem o bloco
    * diz. A bolsa só existe no modo compartilhado; o último settlement fica até o próximo
    * `session-state` limpar, para a tela dizer "vendeu N, você levou M" depois de alguém sair.
@@ -448,6 +457,7 @@ export const INITIAL_HUD: HudState = {
   charms: null,
   bosstiary: null,
   blessings: 0,
+  learnedSpells: null,
   party: null,
   partyBag: null,
   lastSettlement: null,

@@ -292,6 +292,11 @@ export function characterFromTicket(
       // ausente, a sessão parte sem nenhum abate de boss — o mesmo personagem novo que `bestiary`
       // ausente já descreve.
       ...(initialCharacter.bosstiary === undefined ? {} : { bosstiary: initialCharacter.bosstiary }),
+      // As magias aprendidas (#624, ADR 0058 d.1): validadas na emissão e no consumo
+      // (`isLearnedSpellsState`); ausente, a sessão parte sem nenhuma — personagem novo, que
+      // não lança nada até comprar (quem já existia ganhou o registro pela migração 0024).
+      ...(initialCharacter.learnedSpells === undefined
+        ? {} : { learnedSpells: initialCharacter.learnedSpells }),
       // Os storages (#731, ADR 0050 d.6 T2): validados como o Bestiário; ausente, a sessão
       // parte sem storage nenhum setado — a mesma degradação de sempre.
       ...(initialCharacter.storages === undefined ? {} : { storages: initialCharacter.storages }),

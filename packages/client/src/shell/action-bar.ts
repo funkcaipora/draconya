@@ -10,6 +10,7 @@ import type { BotConfigV2, BotSlot, BotTargetPolicy, BotTargeting } from '@draco
 import type { Catalogue, SlotState } from '../state/hud.js';
 import { slotKey } from '../state/hud.js';
 import type { SlotProps } from './ui/Slot.js';
+import { isSpellLearned } from './spell-shop.js';
 
 /** A chave canônica `${set}:${slot}` — definida no estado e reexportada para a barra e o teste. */
 export { slotKey };
@@ -76,6 +77,13 @@ export interface SlotView {
    * ação dispara na hora, com o alvo default de sempre (fixado, senão o candidato do bot).
    */
   readonly needsAim: boolean;
+  /**
+   * A magia deste slot ainda NÃO foi aprendida (#624, ADR 0058 d.5): o slot continua na barra —
+   * nada é escondido (ADR 0032 d.5) —, marcado, e o disparo é recusado pelo servidor. Só magia:
+   * suprimento (poção, runa) não exige aprendizado. `false` também quando a tela ainda não sabe
+   * o que o personagem aprendeu (`learned-spells` não chegou).
+   */
+  readonly unlearned: boolean;
 }
 
 /**
@@ -88,6 +96,7 @@ export function slotView(
   slot: BotSlot | null,
   catalogue: Catalogue,
   state: SlotState | null,
+  learnedSpells: readonly string[] | null = null,
 ): SlotView | null {
   if (slot === null) return null;
   const action = slot.do;
@@ -109,6 +118,7 @@ export function slotView(
     // Ação de aliado (`targets: 'friend'`) OU magia de mira manual (`aim: 'character'`, o Find
     // Person, #623) — dois campos porque só o primeiro abre o seletor de alvo do editor do bot.
     needsAim: catalogued?.targets === 'friend' || spell?.aim === 'character',
+    unlearned: action.kind === 'spell' && !isSpellLearned(action.spellId, learnedSpells),
   };
 }
 
@@ -118,6 +128,7 @@ export function slotTitle(view: SlotView, reason: string | null): string {
   if (view.hotkey !== undefined) parts.push(view.hotkey);
   if (view.cooldownMs > 0) parts.push(`${String(Math.ceil(view.cooldownMs / 1000))}s`);
   if (view.blocked) parts.push('bloqueado');
+  if (view.unlearned) parts.push('não aprendida');
   if (reason !== null && reason !== '') parts.push(reason);
   return parts.join(' · ');
 }

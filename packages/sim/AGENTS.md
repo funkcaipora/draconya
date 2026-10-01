@@ -1066,3 +1066,21 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   APRESENTAÇÃO (`ConditionState.light`): nenhuma regra a lê, e o `Condition::updateCondition` a
   governa — o `castSpell` NÃO devolve condição para uma luz de prazo MAIS CURTO que a vigente, e a
   mana é gasta do mesmo jeito.
+- **O cast confere o APRENDIZADO (#624, ADR 0058): `castSpell` recusa `spell-not-learned` (sem prazo)
+  logo depois de level e vocação, e SÓ a magia — a runa (`useSupply`) exige level e magic level.**
+  Quatro armadilhas. (1) **Todo teste que lança magia precisa de um herói que a saiba** —
+  `new CharacterRuntime({ ..., learnedSpells: learnedSpellsStateOf(ids) })` ou `hero.learnedSpells
+  .grant(id)`; um `CharacterRuntime` sem o registro não lança nada, como um personagem novo. Foi o
+  que quebrou 160 testes na issue, e por isso o `harness.ts` dos traces concede as magias que a cena
+  lança e o `hunt.test.ts` tem `knowsEverythingIn(hero, content)`. (2) **`getState()` só devolve
+  `learnedSpells` quando `LearnedSpells#recorded`** (veio no estado, ou houve compra/concessão): um
+  snapshot antigo não ganha a chave sozinho, e o extrato do servidor a OMITE — escrever o vazio
+  apagaria a concessão da migração (ADR 0014). (3) **`slotStates` espelha a recusa** (`#naturalStateOf`
+  devolve `not-learned` na MESMA posição de `castSpell`, DT-08), e `refusalOf` traduz
+  `spell-not-learned → not-learned`: um `CastRefusal` novo precisa dos dois lados, e o `switch`
+  exaustivo do `refusalOf` é quem avisa. (4) **`CharacterRuntime.learnSpell` é a compra inteira**
+  (vocação, level, saldo, `goldDelta -= price`, marca aprendida) e é idempotente porque recusa
+  `already-learned` ANTES do débito; o `HuntRuleset#rearmBot` acorda o bot depois, porque a recusa
+  sem prazo o deixou engatilhado e aprender não muda o mundo. `LearnedSpells#grant` (sem preço) é o
+  `learnInstantSpell` puro do Canary — para o dia em que o Wheel of Destiny conceder a Great Death
+  Beam.

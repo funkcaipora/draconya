@@ -8,7 +8,8 @@ const CHARACTER: CharacterRecord = {
   id: 'p1', accountId: 'a1', name: 'Hero', vocation: null, promoted: false, level: 1, xp: 0, soul: 0, gold: 0,
   capacity: 400, premiumUntil: null, staminaMs: 86400000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
-  ammo: null, supplyStock: null, ammunitionStock: null, charms: null, bosstiary: null, fedMs: 0, blessings: 0, fightMode: 'attack',
+  ammo: null, supplyStock: null, ammunitionStock: null, charms: null, bosstiary: null, learnedSpells: null,
+  fedMs: 0, blessings: 0, fightMode: 'attack',
   createdAt: new Date(),
 };
 
@@ -269,6 +270,32 @@ describe('POST /api/tickets', () => {
     expect(await issuedWith(null)).not.toHaveProperty('ammo');
     expect(await issuedWith({ arrow: 7 })).not.toHaveProperty('ammo');
     expect(await issuedWith(['arrow'])).not.toHaveProperty('ammo');
+  });
+
+  it('as magias aprendidas da linha entram no ticket; nulas ou tortas, ficam de fora (#624, ADR 0058)', async () => {
+    // Sem elas na sessão o CAST recusa toda magia (`spell-not-learned`) — quem comprou ontem
+    // entraria hoje sem lançar nada. O `null` do personagem novo NÃO vira chave, e a linha é
+    // `jsonb` sem CHECK: um registro torto cai fora aqui, sem trancar o login por causa dele.
+    const issuedWith = async (learnedSpells: unknown) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, learnedSpells })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    const record = { spellIds: ['berserk', 'wound-cleansing'], version: 1 };
+    expect(await issuedWith(record)).toMatchObject({ learnedSpells: record });
+    expect(await issuedWith({ spellIds: [], version: 1 })).toMatchObject({ learnedSpells: { spellIds: [] } });
+    expect(await issuedWith(null)).not.toHaveProperty('learnedSpells');
+    expect(await issuedWith({ spellIds: ['berserk', 'berserk'], version: 1 })).not.toHaveProperty('learnedSpells');
+    expect(await issuedWith(['berserk'])).not.toHaveProperty('learnedSpells');
   });
 
   it('leva a vocação da linha, e a ausência quando ainda não há uma (#154)', async () => {

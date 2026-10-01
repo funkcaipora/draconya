@@ -211,6 +211,9 @@ function board(options: {
       ? {}
       : { skills: { magic: { level: options.magicLevel, points: 0 } } }),
   });
+  // Sabe todas as magias do conteúdo do cenário (#624): o portão do aprendizado é assunto de
+  // `casting.test.ts`, e este arquivo prende a paridade do COMBATE.
+  for (const id of loaded.spells.keys()) hero.learnedSpells.grant(id);
   session.enter(hero);
   if (options.level !== undefined) {
     hero.level = options.level;

@@ -4,6 +4,7 @@
   "description": "Lança um raio de terra no seu alvo atual.",
   "vocationId": "sorcerer",
   "minLevel": 13,
+  "learnPrice": 800,
   "manaCost": 20,
   "group": "attack",
   "groupCooldownMs": 2000,

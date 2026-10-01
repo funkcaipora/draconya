@@ -4,6 +4,7 @@
   "description": "Lança um raio de energia numa linha reta à sua frente.",
   "vocationId": "sorcerer",
   "minLevel": 29,
+  "learnPrice": 1800,
   "manaCost": 110,
   "group": "attack",
   "groupCooldownMs": 2000,

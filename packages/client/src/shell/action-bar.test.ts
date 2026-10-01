@@ -149,6 +149,29 @@ describe('slotView', () => {
     expect(slotView(slot, catalogue(), null)?.label).toBe('gone-potion');
   });
 
+  it('magia NÃO aprendida é marcada (#624, ADR 0058 d.5) — o slot continua na barra, nada é escondido', () => {
+    // `heal` não está no registro de aprendidas: marcado, mas a view existe e o rótulo é o de sempre.
+    const view = slotView(spellSlot(), catalogue(), null, ['berserk']);
+    expect(view).toMatchObject({ label: 'Cura', unlearned: true });
+    expect(slotTitle(view!, null)).toContain('não aprendida');
+  });
+
+  it('magia aprendida não é marcada', () => {
+    const view = slotView(spellSlot(), catalogue(), null, ['heal']);
+    expect(view?.unlearned).toBe(false);
+    expect(slotTitle(view!, null)).not.toContain('não aprendida');
+  });
+
+  it('"ainda não sei" nunca vira "não aprendeu": sem o registro, nenhum slot é marcado', () => {
+    // O primeiro segundo de toda conexão, ou um nó anterior à #624: `learned-spells` não chegou.
+    expect(slotView(spellSlot(), catalogue(), null, null)?.unlearned).toBe(false);
+    expect(slotView(spellSlot(), catalogue(), null)?.unlearned).toBe(false);
+  });
+
+  it('suprimento (poção, runa) nunca é marcado: só a MAGIA exige aprendizado', () => {
+    expect(slotView(supplySlot(), catalogue(), null, [])?.unlearned).toBe(false);
+  });
+
   it('cooldown e bloqueio vêm do slot-state', () => {
     const state: SlotState = { set: 0, slot: 0, state: 'cooldown', remainingMs: 1500 };
     const view = slotView(spellSlot(), catalogue(), state);

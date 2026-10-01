@@ -4,6 +4,7 @@
   "description": "Torna você invisível por 200 segundos.",
   "vocationId": "sorcerer",
   "minLevel": 35,
+  "learnPrice": 2000,
   "manaCost": 440,
   "group": "support",
   "groupCooldownMs": 2000,

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Combat, Spell, Supply } from '@draconya/content';
 import { evaluateSpellPower } from '@draconya/content';
 import { CharacterRuntime } from './character.js';
+import { learnedSpellsStateOf } from './learned-spells.js';
 import { actionExhaustKey, balanceOf, castSpell, executeHealing, spellCooldownKey, useSupply } from './casting.js';
 import type { SpellScaling } from './casting.js';
 import { normalRandomInt } from './combat/weapon-power.js';
@@ -39,8 +40,23 @@ const manaPotion: Supply = {
   effect: { kind: 'mana', amount: 100 },
 };
 
+// O herói sabe TODA magia que este arquivo declara: o portão do aprendizado (#624) é o assunto de
+// um bloco só (`castSpell — o aprendizado`), e o resto dos testes é sobre o que vem depois dele —
+// level, cooldown, alcance, mana. Quem quer o herói que NÃO aprendeu passa `learned`.
+const KNOWN_SPELLS = [
+  'antidote-rune', 'avalanche-rune', 'base-healing', 'blast', 'blood-rage', 'cancel-magic-shield',
+  'challenge', 'conjure-arrow', 'conjure-avalanche-rune', 'cure-poison', 'destroy-field-rune',
+  'divine-caldera', 'ethereal-spear', 'fair-wound-cleansing', 'fire-field-rune', 'fire-wave',
+  'flame-strike', 'great-death-beam', 'great-energy-beam', 'great-fireball-rune', 'haste', 'heal',
+  'heal-party', 'ice-strike', 'intense-healing', 'intense-healing-rune', 'invisibility-druid',
+  'light-healing', 'long', 'magic-shield', 'nature-heal', 'paralyze-rune', 'player-fire-field',
+  'protect-party', 'recovery', 'short', 'strike', 'sudden-death-rune', 'summon-creature', 'swift-foot',
+  'ultimate-healing-rune',
+];
+
 const hero = (over: Partial<{
   health: number; mana: number; soul: number; level: number; gold: number; goldDelta: number;
+  learned: readonly string[];
 }> = {}): CharacterRuntime => new CharacterRuntime({
   id: 'hero', position: { x: 1, y: 1, z: 7 },
   health: over.health ?? 100, maxHealth: 100,
@@ -50,6 +66,7 @@ const hero = (over: Partial<{
   staminaMs: null, staminaUpdatedAtMs: 0,
   gold: over.gold ?? 0, goldDelta: over.goldDelta ?? 0,
   alive: true, cooldowns: {},
+  learnedSpells: learnedSpellsStateOf(over.learned ?? KNOWN_SPELLS),
 });
 
 /** Uma mira de alvo único, que é o caso mais comum. */
@@ -2029,6 +2046,7 @@ describe('a normal truncada do Canary no `combat-v3` (#681)', () => {
       level, xp: 0, vocationId: null,
       staminaMs: null, staminaUpdatedAtMs: 0,
       gold: 10_000, goldDelta: 0, alive: true, cooldowns: {},
+      learnedSpells: learnedSpellsStateOf(KNOWN_SPELLS),
     });
 
   it('poção `amountRange` 250–350 sorteia `normalRandomInt` — e o v1 continua `rng.integer`', () => {
@@ -2299,5 +2317,84 @@ describe('useSupply — runa de campo e Destroy Field (#591)', () => {
     if (!result.ok) throw new Error('esperava usar a runa');
     expect(result.destroyFieldAt).toEqual({ x: 4, y: 4, z: 7 });
     expect(result.goldSpent).toBe(10);
+  });
+});
+
+describe('castSpell — o aprendizado (#624, ADR 0058 d.1)', () => {
+  // No Canary o `toggleLearnSpells` vem ligado, e `Spell::playerSpellCheck` recusa toda magia
+  // instantânea que `hasLearnedInstantSpell` não reconhece. A runa é item: exige só level e magic
+  // level. A CONJURAÇÃO da runa é magia, e exige o aprendizado como qualquer outra.
+  const untaught = (over: Partial<Parameters<typeof hero>[0]> = {}): CharacterRuntime =>
+    hero({ learned: [], ...over });
+
+  it('recusa a magia NÃO aprendida com `spell-not-learned`, sem prazo — esperar não a ensina', () => {
+    const caster = untaught({ health: 10 });
+    expect(castSpell(caster, heal, null, 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'spell-not-learned', retryInMs: 0 });
+  });
+
+  it('a recusa não gasta NADA: nem mana, nem alma, nem cooldown, nem gold', () => {
+    const caster = untaught({ health: 10, gold: 50 });
+    castSpell(caster, heal, null, 0, combat, rng());
+    expect(caster.mana).toBe(100);
+    expect(caster.soul).toBe(100);
+    expect(caster.goldDelta).toBe(0);
+    expect(caster.health).toBe(10);
+    expect(caster.cooldowns.isReady(spellCooldownKey('heal'), 0)).toBe(true);
+  });
+
+  it('depois de aprender, a MESMA magia sai — o aprendizado é o único portão que mudou', () => {
+    const caster = untaught({ health: 10 });
+    expect(castSpell(caster, heal, null, 0, combat, rng()).ok).toBe(false);
+    caster.learnedSpells.grant('heal');
+    expect(castSpell(caster, heal, null, 0, combat, rng()).ok).toBe(true);
+    expect(caster.health).toBe(70);
+  });
+
+  it('é POR magia: aprender uma não ensina a outra', () => {
+    const caster = untaught({ health: 10 });
+    caster.learnedSpells.grant('heal');
+    expect(castSpell(caster, strike, near(), 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'spell-not-learned', retryInMs: 0 });
+  });
+
+  it('vem DEPOIS de level e vocação — que também nunca melhoram esperando —, e ANTES de cooldown e mana', () => {
+    // Level baixo vence: o jogador que não tem o level ouve "level", não "aprenda" (a magia
+    // sequer está à venda para ele).
+    expect(castSpell(untaught({ level: 1 }), { ...heal, minLevel: 50 }, null, 0, combat, rng()))
+      .toMatchObject({ reason: 'level-too-low' });
+    expect(castSpell(untaught(), { ...heal, vocationId: 'knight' }, null, 0, combat, rng()))
+      .toMatchObject({ reason: 'wrong-vocation' });
+    // E antes de cooldown e mana: sem mana e sem aprender, a resposta é o aprendizado.
+    expect(castSpell(untaught({ mana: 0 }), heal, null, 0, combat, rng()))
+      .toMatchObject({ reason: 'spell-not-learned' });
+  });
+
+  it('vale para TODO efeito de magia: dano, cura, condição e conjuração', () => {
+    const haste: Spell = {
+      id: 'haste', name: 'Haste', manaCost: 60, cooldownMs: 2_000, minLevel: 1,
+      effect: { kind: 'haste', speedPercent: 30, durationMs: 10_000 },
+    };
+    const conjure: Spell = {
+      id: 'conjure-avalanche-rune', name: 'Avalanche Rune', manaCost: 530, soulCost: 3, cooldownMs: 2_000,
+      minLevel: 1, effect: { kind: 'conjure', supplyId: 'avalanche-rune', charges: 4, blankPrice: 10 },
+    };
+    for (const spell of [strike, heal, haste, conjure]) {
+      expect(castSpell(untaught({ gold: 100 }), spell, near(), 0, combat, rng()), spell.id)
+        .toEqual({ ok: false, reason: 'spell-not-learned', retryInMs: 0 });
+    }
+  });
+
+  it('a RUNA (supply) NÃO exige aprendizado: só level e magic level, como no Tibia', () => {
+    const rune: Supply = {
+      id: 'ultimate-healing-rune', name: 'Ultimate Healing Rune', price: 40, group: 'healing',
+      groupCooldownMs: 2_000, requires: { level: 24, magicLevel: 4 },
+      effect: { kind: 'heal', amount: 100 },
+    };
+    // Não aprendeu NENHUMA magia, inclusive a que conjura a runa — e a usa do mesmo jeito.
+    const caster = untaught({ level: 30, health: 10, gold: 100 });
+    const scaling: SpellScaling = { skillLevel: 4, powerScale: 1, magicLevel: 4 };
+    expect(useSupply(caster, rune, null, combat, rng(), scaling).ok).toBe(true);
+    expect(caster.learnedSpells.size).toBe(0);
   });
 });

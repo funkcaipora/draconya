@@ -89,6 +89,25 @@ cobrem o resto das ~120 magias e as runas fora das duas formas de fórmula que e
 reconhece (`docs/reference/catalog/spells-report.md`/`runes-report.md` listam o que ficou de
 fora, com o motivo).
 
+**`learnPrice` da magia (#624, ADR 0058 d.3) é importado dos NPCs, sem `staging/`:** a magia continua
+autoral em `data/spells/*.json`, e `pnpm catalog:spell-prices` (`scripts/catalog/spell-prices.ts`,
+o irmão de `catalog:npc-prices`) lê as ~1 800 chamadas `StdModule.learnSpell` dos 51 NPCs de
+`data-otservbr-global/npc/` com `luaparse` — nunca executa Lua, e um preço/nome/vocação que não é
+literal vai para o relatório em vez de virar `0` — e regrava SÓ a linha `"learnPrice"` do arquivo
+(insere antes de `"manaCost"`, preserva a formatação). Regras: o **MENOR** preço entre os NPCs que
+ensinam a magia à vocação dela (ADR 0038 d.6); a ligação é o NOME sem diferenciar caixa (o
+`hasLearnedInstantSpell` do Canary é `strcasecmp`), não o id do arquivo — `haste-druid` e
+`haste-sorcerer` têm o mesmo nome, e é a vocação do NPC (normalizada para a base: Master Sorcerer →
+Sorcerer; Monk fica de fora) que separa; `premium` não entra. **`learnPrice: 0` é magia grátis** (as
+básicas), e AUSENTE é "ninguém a ensina" — nunca confunda os dois (`!== undefined`, jamais truthy).
+Magia sem NPC (`challenge`, `conjure-power-bolt`, `conjure-sniper-arrow`, `great-death-beam`) NUNCA
+é tocada pelo script: o preço dela é curado à mão com a fonte no `_open` (três provisórios, um
+ausente de propósito — ver `docs/product/progression.md`, "Aprender magia"). `pnpm check` roda
+`catalog:spell-prices --check`: um arquivo de magia divergente do Canary, ou o relatório
+(`docs/reference/catalog/spell-prices-report.md`) desatualizado, reprova. `load.test.ts` fecha o
+outro lado: toda magia do catálogo real tem preço, exceto a `NOT_TAUGHT` — uma magia nova sem
+`learnPrice` seria uma magia que ninguém consegue lançar.
+
 **`data/skinning/generated/` é a esfola de cadáver** (#626, ADR 0048 d.5/d.6): `pnpm catalog:import
 skinning` lê o `skinning.lua` do Canary (`config[ferramenta][id do cadáver]`) e a cruza com o
 `monster.corpse` e a cadeia de decaimento (`duration`/`decayTo`) de cada monstro do catálogo — uma

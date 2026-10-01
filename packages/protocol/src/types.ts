@@ -427,6 +427,12 @@ export const C2S_SCHEMAS = {
    * defesa e de mitigação que ele liga são do servidor (invariante 4).
    */
   'set-fight-mode': z.object({ mode: z.enum(FIGHT_MODES) }),
+  /**
+   * Aprender UMA magia por gold (#624, ADR 0058 d.2). INTENÇÃO: só o id do catálogo
+   * (`content.spells`); vocação, level, "já aprendida", preço e saldo são do servidor
+   * (invariante 4).
+   */
+  'learn-spell': z.object({ spellId: z.string().min(1) }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */
@@ -1058,6 +1064,12 @@ export const S2C_SCHEMAS = {
         manaCost: z.number().int().nonnegative(),
         minLevel: z.number().int().positive(),
         vocationId: z.string().nullable(),
+        /**
+         * O preço de APRENDER a magia (#624, ADR 0058 d.3), em gold — `0` é de graça. Opcional SEM
+         * `default`: um nó `game` anterior manda sem, e o cliente novo não pode recusar a
+         * mensagem; AUSENTE é "não há quem ensine" (a tela não oferece a compra).
+         */
+        learnPrice: z.number().int().nonnegative().optional(),
         /** `heal`, `mana` ou `damage`: é o que separa a categoria em que ela cabe. */
         effect: z.string().min(1),
         /** O grupo do Tibia (#155): `attack`, `healing`, `support`. `default`: nó anterior manda sem. */
@@ -1552,6 +1564,13 @@ export const S2C_SCHEMAS = {
     phase: z.enum(['countdown', 'in-combat']).optional(),
     remainingMs: z.number().int().nonnegative().optional(),
   }),
+  /**
+   * As magias que o personagem APRENDEU (#624, ADR 0058 d.1): os ids de `content.spells` — o
+   * registro cru, como `charms`. Preço, level e vocação de cada uma são do `catalogue`
+   * (`bot.spells[]`); a tela deriva "aprendida / à venda / bloqueada" cruzando os dois. Só para o
+   * dono. Ausente da lista é "não aprendida": o slot da barra que aponta para ela fica marcado.
+   */
+  'learned-spells': z.object({ spellIds: z.array(z.string().min(1)) }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;

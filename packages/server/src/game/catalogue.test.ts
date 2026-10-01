@@ -639,6 +639,23 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect('bestiary' in (withoutEntry ?? {})).toBe(false);
   });
 
+  it('leva o preço de aprender de cada magia, `0` incluso, e omite a chave da magia que ninguém ensina (#624, ADR 0058 d.3)', () => {
+    const realContent = loadContent(DATA);
+    const { bot } = buildCatalogue(realContent);
+    const price = (id: string) => bot.spells.find((spell) => spell.id === id);
+    expect(price('berserk')?.learnPrice).toBe(2_500);
+    expect(price('ultimate-flame-strike')?.learnPrice).toBe(15_000);
+    // `0` é magia grátis, e NÃO "sem preço": a checagem no catálogo é `undefined`, nunca truthy.
+    expect(price('wound-cleansing')).toHaveProperty('learnPrice', 0);
+    // A Great Death Beam só a Wheel concede: a chave fica AUSENTE, e a tela não oferece a compra.
+    expect(price('great-death-beam')).toBeDefined();
+    expect('learnPrice' in (price('great-death-beam') ?? {})).toBe(false);
+    // Toda magia com preço no conteúdo chega com o MESMO preço ao cliente.
+    for (const spell of realContent.spells.values()) {
+      expect(price(spell.id)?.learnPrice, spell.id).toBe(spell.learnPrice);
+    }
+  });
+
   it('leva description quando a hunt a define (como a rat-cellars do conteúdo real) e omite a chave quando ausente (SV-21, #357)', () => {
     const realContent = loadContent(DATA);
     const { hunts } = buildCatalogue(realContent);

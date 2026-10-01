@@ -201,7 +201,12 @@ function start(options: StartOptions = {}) {
     ...(options.gold === undefined ? {} : { gold: options.gold }),
     ...(options.capacity === undefined ? {} : { capacity: options.capacity }),
   }));
-  for (const hero of heroes) session.enter(hero);
+  for (const hero of heroes) {
+    // O herói sabe TODA magia do conteúdo do teste (#624): o portão do aprendizado tem bloco próprio
+    // em `hunt.test.ts`, e aqui o assunto é a runa de invocação, não se o herói comprou a magia.
+    for (const id of loaded.spells.keys()) hero.learnedSpells.grant(id);
+    session.enter(hero);
+  }
   const hero = heroes[0] as CharacterRuntime;
   return { session, hero, heroes, ruleset: session.ruleset as HuntRuleset, loaded };
 }

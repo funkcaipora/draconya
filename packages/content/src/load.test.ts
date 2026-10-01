@@ -1662,3 +1662,31 @@ describe('regeneração de item do catálogo em milissegundos do Canary (#804)',
     expect(slow).toEqual([]);
   });
 });
+
+describe('o preço de aprender magia do conteúdo real (#624, ADR 0058 d.3)', () => {
+  const content = loadContent(DATA);
+
+  // Só a magia que o Canary concede FORA do NPC fica sem preço: a Great Death Beam é da Wheel of
+  // Destiny (`player_wheel.cpp`), que o dono deixou fora em 2026-09-29. Qualquer outra magia sem
+  // `learnPrice` seria uma magia que ninguém nunca consegue lançar — o teste a barra.
+  const NOT_TAUGHT = ['great-death-beam'];
+
+  it('toda magia do catálogo é vendida, exceto as que só a Wheel concede', () => {
+    const unpriced = [...content.spells.values()]
+      .filter((spell) => spell.learnPrice === undefined)
+      .map((spell) => spell.id);
+    expect(unpriced).toEqual(NOT_TAUGHT);
+  });
+
+  it('os preços vêm do menor valor dos NPCs do Canary (`pnpm catalog:spell-prices`)', () => {
+    const price = (id: string): number | undefined => content.spells.get(id)?.learnPrice;
+    // `graham.lua`, `azalea.lua`, `zoltan.lua`: o mesmo nome em vários NPCs, o menor vence.
+    expect(price('berserk')).toBe(2500);
+    expect(price('ultimate-healing-druid')).toBe(1000);
+    expect(price('ultimate-flame-strike')).toBe(15_000);
+    expect(price('chivalrous-challenge')).toBe(250_000);
+    // As básicas de cada vocação são de graça no Canary (`price = 0`), e `0` não é "sem preço".
+    expect(price('wound-cleansing')).toBe(0);
+    expect(price('apprentices-strike-druid')).toBe(0);
+  });
+});
