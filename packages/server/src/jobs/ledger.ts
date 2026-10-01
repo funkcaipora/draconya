@@ -8,7 +8,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { Bestiary, levelForXp, readItemOverlay } from '@draconya/sim';
+import { Bestiary, LearnedSpells, levelForXp, readItemOverlay } from '@draconya/sim';
 import type {
   BestiaryState, CharacterStorageMap, ItemInstanceOverlay,
 } from '@draconya/sim';
@@ -19,6 +19,7 @@ import {
 } from '../db/schema.js';
 import type { Logger } from '../log.js';
 import type { ItemPlace, ReceiptStore, SessionReceipt } from '../receipts.js';
+import { isLearnedSpellsState } from '../tickets.js';
 
 export interface LedgerSweepOptions {
   readonly database: Database;
@@ -161,6 +162,7 @@ async function applyProgression(
       gold: characters.gold,
       skillsUpdatedAt: characters.skillsUpdatedAt,
       bestiary: characters.bestiary,
+      learnedSpells: characters.learnedSpells,
       ammo: characters.ammo,
       staminaUpdatedAt: characters.staminaUpdatedAt,
     })
@@ -250,12 +252,24 @@ async function applyProgression(
   // externo monotônico a fundir, é o estado final da sessão dona. Extrato SEM o campo (Cidade
   // ou nó antigo em deploy) não toca na coluna.
   const charms = receipt.charms === undefined ? {} : { charms: receipt.charms };
-  // As magias aprendidas (#624, ADR 0058 d.1): ABSOLUTAS e última-escrita-vence, como `charms`. O
-  // registro só CRESCE (não existe esquecer magia), mas o valor que vale é o da sessão dona no fim
-  // dela — e é por isso que ele NÃO é fundido: uma migração de dado futura que revogue uma magia
-  // seria desfeita por uma fusão por união. Extrato SEM o campo não toca na coluna.
+  // As magias aprendidas (#624, ADR 0058 d.1): fundidas pela UNIÃO, como o Bestiário é fundido
+  // pelo maior — e NÃO última-escrita-vence, como `charms`. O registro só CRESCE (não existe
+  // esquecer magia, só a Wheel, que está fora do jogo), então a união é a fusão certa, e ela
+  // fecha duas janelas que a última-escrita deixava abertas: extratos pendentes se aplicam em
+  // ordem qualquer (o `SCAN` do Redis não ordena), e o mais antigo chegando depois do mais novo
+  // derrubaria uma magia já paga (o gold é delta e ficaria debitado); e um extrato que parte de
+  // uma base desconhecida (sessão retomada de um snapshot sem registro) carrega só as compras
+  // dela, e escreveria por cima da concessão da migração 0023 (ADR 0014). A coluna é nulável —
+  // `null` é quem nunca aprendeu nada nem foi migrado — e uma linha torta vira ausente, pela
+  // mesma régua do ticket. Extrato SEM o campo não toca na coluna.
   const learnedSpells = receipt.learnedSpells === undefined
-    ? {} : { learnedSpells: receipt.learnedSpells };
+    ? {}
+    : {
+      learnedSpells: LearnedSpells.merge(
+        isLearnedSpellsState(current.learnedSpells) ? current.learnedSpells : undefined,
+        receipt.learnedSpells,
+      ),
+    };
   // As bênçãos (#570, ADR 0052): ABSOLUTAS e última-escrita-vence, NUNCA fundidas pelo maior
   // (ao contrário do Bestiário/skills-antes-do-#569) — bênção DESCE na morte, e "ficar com o
   // maior de cada extrato" ressuscitaria uma bênção recém-consumida se um extrato antigo, fora

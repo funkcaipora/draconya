@@ -74,10 +74,13 @@ export interface SessionReceipt {
   readonly charms?: CharmsState;
   /**
    * As magias aprendidas (#624, ADR 0058 d.1, ADR 0052 d.1): os ids de `content.spells` que o
-   * personagem comprou. ABSOLUTA e ÚLTIMA-ESCRITA-VENCE, como `charms`/`ammo` — não fundida pelo
-   * maior: o registro é o estado final da sessão dona, e o extrato que o carrega é o mais novo
-   * (a Cidade e a hunt aceitam `learn-spell`, mas só uma sessão hospeda o personagem por vez,
-   * invariante 8). Extrato SEM o campo (nó antigo em deploy) não toca na coluna.
+   * personagem comprou. Ao contrário de `charms`/`ammo`, NÃO é última-escrita-vence: o ledger
+   * FUNDE pela UNIÃO dos ids (`LearnedSpells.merge`), como o Bestiário funde pelo maior. O
+   * registro só CRESCE, e dois extratos pendentes se aplicam em ordem qualquer (o `SCAN` de
+   * `pending()` não ordena) — o mais antigo chegando depois do mais novo não pode derrubar uma
+   * magia já paga —, e um extrato de base desconhecida (sessão retomada sem registro) carrega só
+   * as compras dela e não pode apagar a concessão da migração (ADR 0014). Extrato SEM o campo (nó
+   * antigo em deploy) não toca na coluna.
    */
   readonly learnedSpells?: LearnedSpellsState;
   /**
