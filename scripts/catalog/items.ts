@@ -76,10 +76,11 @@ function numberValue(attrs: ReadonlyMap<string, XmlElement>, key: string): numbe
 }
 
 /**
- * `numberValue` com a chave casada SEM distinguir caixa. O `ItemParse` do Canary minusculiza toda
- * chave antes de despachar (`asLowerCaseString`, `item_parse.cpp`), então o `items.xml` escreve
- * `magicshieldCapacityflat` (caixa mista, nos 4 itens que o têm) e o parser lê do mesmo jeito que
- * leria `magicshieldcapacityflat` — um `attrs.get` exato perderia os quatro em silêncio (#627).
+ * `numberValue` com a chave casada SEM distinguir caixa. O `Items::parseItemNode` do Canary
+ * minusculiza toda chave antes de despachar (`asLowerCaseString`, `items.cpp:383`, e só então
+ * `ItemParse::initParse`), então o `items.xml` escreve `magicshieldCapacityflat` (caixa mista, nos
+ * 4 itens que o têm) e o parser lê do mesmo jeito que leria `magicshieldcapacityflat` — um
+ * `attrs.get` exato perderia os quatro em silêncio (#627).
  */
 function numberValueFolded(attrs: ReadonlyMap<string, XmlElement>, lowerKey: string): number | undefined {
   for (const [key, element] of attrs) {
@@ -280,7 +281,7 @@ const HANDLED_ATTRS: ReadonlySet<string> = new Set([
   'perfectshotrange', 'perfectshotdamage', 'containersize',
   // #627: `elementalbond` vira `elementalBond` (só arma); a capacidade de magic shield vira
   // `bonuses.magicShieldCapacity`. As duas grafias da capacidade — o XML real escreve a caixa
-  // mista, o parser do Canary minusculiza (ver `numberValueFolded`).
+  // mista, o `Items::parseItemNode` do Canary minusculiza (ver `numberValueFolded`).
   'elementalbond', 'magicshieldcapacityflat', 'magicshieldcapacitypercent',
   'magicshieldCapacityflat', 'magicshieldCapacitypercent',
   ...ELEMENT_ATTR_TO_DAMAGE.keys(), ...ABSORB_ATTR_TO_DAMAGE.keys(), ...SPECIALIZED_MAGIC_ATTR_TO_ELEMENT.keys(),

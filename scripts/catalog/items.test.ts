@@ -653,7 +653,8 @@ describe('convertItem', () => {
   });
 
   it('capacidade de magic shield (#627): só um dos dois atributos, em minúsculas, completa o outro com zero; zero não vira campo', () => {
-    // O `ItemParse` do Canary minusculiza a chave — a grafia do XML não muda o que ele lê.
+    // O `Items::parseItemNode` do Canary minusculiza a chave (`items.cpp:383`) — a grafia do XML
+    // não muda o que ele lê.
     expect(convert('90051')?.entity['bonuses']).toEqual({ magicShieldCapacity: { flat: 40, percent: 0 } });
     expect(convert('90052')?.entity['bonuses']).toBeUndefined();
   });

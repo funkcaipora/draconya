@@ -1051,15 +1051,18 @@ export const itemSchema = z.strictObject({
   cleavePercent: z.number().int().positive().max(100).optional(),
   /**
    * O `elementalbond` do Canary (#627, M44-09; `ItemType::elementalBond`, `items.hpp:296`) — 32
-   * itens em `items.xml`, e TODOS são arma `weapontype="fist"` (sais, katars, bôs e nunchakus; 30
-   * pedem Monk, e os dois que não pedem — `traditional sai`, Knight, e `transcendent bo`, sem
-   * vocação — também não mudam nada, porque o bond só dispara para o Monk). É o tipo de dano que
-   * TROCA o da magia do Monk quando a arma está na mão: `Combat::getCombatDamage`
-   * (`combat.cpp:159-174`) só o lê para `VOCATION_MONK_CIP`, magia instantânea e que não cure,
-   * e para qualquer outra vocação o bond é um atributo mudo. O Monk está fora do corte (ADR 0038
-   * d.5) e a família `fist` não é declarável (DT-01), então nenhum item do catálogo o carrega hoje
-   * e nenhuma vocação o lê: o campo existe para o importador não perder o dado e para o dia em
-   * que o corte mudar. Só em `kind: 'weapon'` (`buildContent`).
+   * itens em `items.xml`, e TODOS são arma `weapontype="fist"` (sais, katars, bôs e nunchakus).
+   * 30 pedem Monk; `traditional sai` pede Knight (e para o Knight o bond é mudo); e
+   * `transcendent bo` (`items.xml:84976-84998`) não tem script nem vocação, então um Monk o
+   * equipa e o bond dele dispara. É o tipo de dano que TROCA o da magia do Monk quando a arma
+   * está na mão, e são DOIS pontos de leitura com portões diferentes: `Combat::getCombatDamage`
+   * (`combat.cpp:159-174`) só troca o tipo para `VOCATION_MONK_CIP`, magia INSTANTÂNEA e que não
+   * cure; `Combat::sendCombatEffect` (`combat.cpp:1143-1159`) recolore o efeito visual só com o
+   * Monk e uma arma de bond na mão — sem o portão de instantânea/cura. Para qualquer outra
+   * vocação o bond é um atributo mudo. O Monk está fora do corte (ADR 0038 d.5) e a família
+   * `fist` não é declarável (DT-01), então nenhum item do catálogo o carrega hoje e nenhuma
+   * vocação o lê: o campo existe para o importador não perder o dado e para o dia em que o corte
+   * mudar. Só em `kind: 'weapon'` (`buildContent`).
    */
   elementalBond: z.enum(ELEMENTAL_BOND_TYPES).optional(),
   /**
