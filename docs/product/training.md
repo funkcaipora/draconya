@@ -38,9 +38,22 @@ horas — por isso o Treino é uma sessão, e não uma conta feita na hora do us
   treino, como o "the training has stopped" do Canary.
 - Sem monstro, sem dano, sem RNG, sem suprimento consumido, sem gold gasto.
 - **A stamina não anda**: o exercise training do Canary é online, e o Canary só regenera stamina
-  deslogado (emenda do ADR 0060 d.14c ao ADR 0059 d.1). O Treino não a drena, e a saída dele só
-  avança o marco (`holdStamina`) — o tempo de treino não vira recuperação.
-- Tempo de treino **enche o banco** de offline training, 1:1.
+  deslogado (emenda do ADR 0060 d.14c ao ADR 0059 d.1). O Treino não a drena, e **toda** saída dele
+  só avança o marco (`holdStamina`) — o tempo de treino não vira recuperação. "Toda" é o
+  `leave-hunt`, a arma que acaba sozinha, o logout dentro do Treino, a drenagem de deploy e o
+  snapshot irrestaurável liquidado como extrato: o extrato que vai ao banco leva o marco do FIM do
+  treino (`#persistReceipt`, `game/host.ts`; `settleSnapshotAsReceipt`), e não o da entrada.
+- **Dez segundos entre dois Treinos** (`training-exhaustion` do Canary, `exhaustionTime = 10` em
+  `exercise_training_weapons.lua`): ao começar, o Canary carimba a espera e recusa um novo início
+  enquanto ela vale — "This exercise dummy can only be used after a 10 seconds cooldown.". Aqui o
+  carimbo é o `exerciseExhaustedUntilMs` do registro `training` do personagem (epoch, relógio de
+  parede, ADR 0052 d.6), gravado pelo construtor de sessões ao iniciar o Treino e levado ao banco pelo
+  extrato dele; o host recusa em palavras (`#requestEnterTraining`) e o construtor recusa de novo
+  (`trainingFor`). Sem ele, entrar/sair/entrar a cada ciclo creditaria um golpe por entrada (o primeiro
+  vence em t = 0) e esgotaria a arma bem mais depressa que uma carga a cada 2 s.
+- Tempo de treino **enche o banco** de offline training, 1:1 — o tempo EXATO no instante em que a
+  participação acaba (`Session.inSessionMsOf`), e não a janela inteira do `advanceBy` em que a sessão
+  acabou por evento: o banco gravado não depende de como o host fatiou o tempo (1 Hz, 2 Hz ou 10 Hz).
 
 ### Offline training: um banco gasto na volta
 
@@ -63,7 +76,13 @@ hospedada — o único momento em que a linha não tem dono quente, ADR 0052 d.5
 7. tries: melee `(s / ataqueBase) / 2`, distância `/ 4`, magic level `s × manaGain / manaTicks`
    (o `manaGain` da vocação, os ticks da vocação PROMOVIDA), truncados como o `uint64_t` do Canary,
    passando pelo rate de skill do conteúdo;
-8. o escudo treina junto (`s / 4`) — só se a skill principal avançou de nível ou de percentual.
+8. o escudo treina junto (`s / 4`) quando `addOfflineTrainingTries` devolve verdadeiro. **Não é
+   "o percentual inteiro mudou"**: no Canary `Skill.percent` é um `double` de 2 casas (carregado pelo
+   login, `getPercentLevel`), o percentual novo é truncado para `uint8_t` e a comparação
+   `percent != newPercent` é double contra inteiro — só é falsa quando o percentual guardado JÁ era um
+   inteiro exato igual ao novo (0 de um nível recém-aberto, p. ex.) e o nível não subiu. Um
+   personagem com 45,67% que vai a 45,96% treina o escudo. O mesmo vale para o magic level
+   (`magLevelPercent`, `double_t`). Skill sem crescimento (`currReq >= nextReq`) devolve falso.
 
 O "fora" é `agora − o fim da última sessão`: o `game` grava um **carimbo de repouso** no Redis
 (`char:{id}:rest`, no `release` do diretório) e a `api` o lê no ticket. Registrar uma sessão nova
@@ -92,7 +111,9 @@ e as weapons de 50 cargas de treino ficam fora do corte (ADR 0038 d.5).
 O pill "Treino" (só na Cidade, só em servidor com `catalogue.training`) abre o `TrainingModal`: o
 **banco** (barra e tempo, os tetos e a carência), o **livro** (um select com as skills do conteúdo),
 as **exercise weapons carregadas** (cargas restantes, o que rendem, "Treinar") e a **loja** (preço,
-o que a arma rende, "Comprar" desabilitado sem gold). Em treino, o pill vira o estado —
+o que a arma rende, "Comprar" desabilitado sem gold). O nome e o tipo de rendimento (tries ou mana
+gasta) de cada skill vêm de `catalogue.training.skills` — TODA skill que o Treino toca, inclusive o
+`shielding` do exercise shield, que o livro não oferece —, e não do livro (`offlineSkills`). Em treino, o pill vira o estado —
 "Treinando Espada · 431/500 cargas" — e "Parar treino". A tela é apresentação: cada botão manda só
 QUAL id (invariante 4).
 
@@ -107,7 +128,9 @@ QUAL id (invariante 4).
   com o personagem em repouso e carimbo de repouso presente.
 - Carência de 10 min; `min(fora, banco, teto da conta)`; Free 6 h, Premium 12 h.
 - A escolha do livro é consumida em todo login que a lê, com ou sem treino.
-- A stamina não recupera nem gasta no Treino; o tempo dele não conta como "fora de hunt".
+- A stamina não recupera nem gasta no Treino, em nenhuma saída; o tempo dele não conta como "fora de
+  hunt".
+- Um novo Treino só começa 10 s depois do início do anterior (carimbo de parede no registro).
 - Sair do Treino cedo não perde nada: as cargas restantes ficam na arma, e o tempo treinado já
   entrou no banco.
 - A compra é só na Cidade; a escolha do livro também.
@@ -119,6 +142,7 @@ QUAL id (invariante 4).
 | Rate do boneco (`exercise dummy`) | 100 (1×) — os bonecos de casa valem 110 e ficam fora | `data/training/baseline.json`, `dummy.rate` |
 | Tries por carga | 7 | `data/training/baseline.json`, `strike.triesPerCharge` |
 | Mana gasta por carga (wand/rod) | 600 | `data/training/baseline.json`, `strike.manaSpentPerCharge` |
+| Espera entre dois inícios de Treino | 10 s (`exhaustionTime = 10`) | `data/training/baseline.json`, `startCooldownMs` |
 | Onde o personagem fica e onde está o boneco | (73, 87, 7) e (72, 87, 7) no mapa da Cidade | `data/training/baseline.json`, `place` |
 | Intervalo entre golpes | 2 000 ms | `data/combat/baseline.json`, `player.attackIntervalMs` |
 | Teto do banco | 12 h | `data/training/baseline.json`, `offline.bankCapMs` |

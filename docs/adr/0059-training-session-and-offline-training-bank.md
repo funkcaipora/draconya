@@ -124,3 +124,30 @@ O que a implementação decidiu onde o ADR era genérico, e o que ela alinhou ao
    tile do personagem é conferido no boot (`buildContent`).
 
 **Status:** implementado na #631.
+
+## Emenda — 2026-10-01: correções da revisão (#631)
+
+A revisão da PR achou onde a implementação divergia do Canary e deste ADR; o que ela corrigiu:
+
+1. **A stamina é segurada em TODA saída do Treino**, e não só no `leave-hunt` (emenda de 2026-09-30,
+   item 3). A saída pela transição constrói a Cidade ANTES de gravar o extrato, mas a arma que acaba
+   sozinha (`#settleOne` grava e só depois constrói), o logout dentro do Treino, a drenagem e o
+   snapshot irrestaurável gravavam o marco da ENTRADA — e o ticket seguinte devolvia como recuperação
+   o tempo de treino inteiro (uma arma de 14 400 cargas são oito horas). Agora o extrato carrega o
+   marco do fim: `#persistReceipt` segura o marco (`holdStamina` com o relógio de parede `wallNow` do
+   host) quando a sessão é `training`, e `settleSnapshotAsReceipt` o faz com o `nowMs` de quem liquida.
+2. **O `training-exhaustion` do Canary entra** (`exerciseExhaustedUntilMs`, `startCooldownMs` = 10 s):
+   o Canary recusa um novo início de Treino por 10 s ("This exercise dummy can only be used after a
+   10 seconds cooldown."), e sem isso entrar/sair/entrar a cada ciclo creditava um golpe por entrada.
+   É cooldown de PAREDE do ADR 0052 d.6: carimbo no registro `training` (campo aditivo, sem migração),
+   comparado com o relógio que o servidor passa. Nenhuma divergência: o jogo recusa quando e como o
+   Canary recusa.
+3. **O banco de offline training lê o tempo EXATO da participação** (`Session.inSessionMsOf`), e não o
+   `durationMs` dos agregados, que soma a janela do `advanceBy` inteira antes dos eventos: uma sessão
+   que acaba por evento no meio da janela (arma esgotada, morte) gravava um banco que dependia do Hz
+   do host (invariante 3).
+4. **O escudo do offline training segue o `sendUpdate` do Canary**: `Skill.percent` é um `double` de 2
+   casas comparado com o percentual novo truncado, e não "o inteiro mudou" — para quem tem decimais
+   guardados o escudo treina quase sempre (d.3, item 8 de `docs/product/training.md`).
+5. **O catálogo leva o nome e o tipo de TODA skill que o Treino toca** (`catalogue.training.skills`), e
+   não só as do livro: o exercise shield treina o `shielding`, que o livro não oferece.

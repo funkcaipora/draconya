@@ -18,9 +18,13 @@ Quando a stamina chega a zero, a hunt não é interrompida: o personagem continu
 - Stamina máxima: 12 horas (43.200.000 ms) — o teto que o Huntera mostra cheio na Cidade
   (M32-01, #562). Eram 24 horas antes desta issue, um número nosso sem fonte no Tibia.
 - Recuperação fora de hunt: 1 minuto de tempo real recupera 1 minuto de stamina (proporção 1:1).
-- O Treino não recupera nem gasta stamina (#631): a saída dele só avança o marco
-  (`holdStamina`, `game/sessions.ts`), e o tempo de treino não vira recuperação na próxima
-  materialização. Antes desta emenda o PRD e o ADR 0059 d.1 diziam o contrário.
+- O Treino não recupera nem gasta stamina (#631): TODA saída dele só avança o marco
+  (`holdStamina`), e o tempo de treino não vira recuperação na próxima materialização. O `leave-hunt`
+  o faz na fronteira do construtor de sessões (`game/sessions.ts`); a arma que acaba sozinha, o
+  logout dentro do Treino e a drenagem de deploy, onde o construtor não roda antes de o extrato ser
+  lido, o fazem ao gravar o extrato (`#persistReceipt`, `game/host.ts`, com o relógio de parede
+  `wallNow`), e o snapshot irrestaurável de Treino o faz ao ser liquidado
+  (`settleSnapshotAsReceipt`, `nowMs`). Antes desta emenda o PRD e o ADR 0059 d.1 diziam o contrário.
 - Em stamina zero, dentro da hunt: personagem continua se movendo, atacando, consumindo supplies/gold e pode morrer; não recebe XP; não recebe loot; abates não contam para a Bestiário.
 - Stamina zero, por si só, nunca encerra a hunt automaticamente.
 
