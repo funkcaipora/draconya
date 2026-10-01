@@ -52,6 +52,18 @@ export const DamageType = z.enum([
 export type DamageType = z.infer<typeof DamageType>;
 
 /**
+ * A raça do monstro (#620), que decide a COR do número e o EFEITO do golpe físico que o atinge —
+ * sangue vermelho, veneno verde, morto-vivo cinza… Espelha `MONSTER_RACES` do conteúdo (o
+ * `Game::combatGetTypeInfo` do Canary), pela mesma razão do `DamageType` acima: o protocolo é a
+ * base da pilha e não importa `content`; `content/schemas.test.ts` prende as duas listas juntas.
+ * Fechada de propósito — uma raça que o cliente não conhece faria `decodeS2C` recusar a mensagem.
+ */
+export const MonsterRace = z.enum([
+  'venom', 'blood', 'undead', 'fire', 'energy', 'ink', 'chocolate', 'candy',
+]);
+export type MonsterRace = z.infer<typeof MonsterRace>;
+
+/**
  * Um lugar do inventário (#160): posição num container, ou um slot do corpo. O slot vem como
  * string e é conferido pelo CONTEÚDO no servidor, como em `unequip`.
  */
@@ -80,12 +92,37 @@ export type SkillProgress = z.infer<typeof SkillProgress>;
 
 /**
  * As cores com que um outfit de duas camadas é pintado (FUN-104): cabeça, corpo, pernas e
- * pés, cada um um índice da paleta. Do personagem, não do monstro — o rato é uma camada só.
+ * pés, cada um um índice da paleta. Do personagem e, desde o #620, do monstro que declara cor
+ * (`monster.outfit.look*`) — o rato é uma camada só, e nele a cor não muda nada.
  */
 export const OutfitColors = z.object({
   head: PaletteIndex, body: PaletteIndex, legs: PaletteIndex, feet: PaletteIndex,
 });
 export type OutfitColors = z.infer<typeof OutfitColors>;
+
+/**
+ * A luz que uma criatura carrega (#620): `level` é o alcance em tiles e `color` o índice na paleta
+ * de 216 cores do Tibia (`c = r·36 + g·6 + b`). Só o cliente a desenha.
+ */
+export const CreatureLight = z.object({
+  level: z.number().int().min(1).max(255),
+  color: z.number().int().min(0).max(215),
+});
+export type CreatureLight = z.infer<typeof CreatureLight>;
+
+/**
+ * As falas periódicas de um monstro (#620, `monster.voices` do Canary): a cada `intervalMs` o
+ * CLIENTE rola `chance` (percentual inteiro, o `chance >= uniform_random(1, 100)` do Canary) e, se
+ * passar, mostra UMA das `lines` sorteada sobre a criatura. **Quem sorteia é o cliente, e nunca o
+ * `Rng` da sessão** — a fala não muda resultado nenhum (invariante 3), então nem o servidor nem o
+ * `sim` sabem dela. `yell` é o grito (`TALKTYPE_MONSTER_YELL`); ausente é fala.
+ */
+export const CreatureVoices = z.object({
+  intervalMs: z.number().int().positive(),
+  chance: z.number().int().min(1).max(100),
+  lines: z.array(z.object({ text: z.string().min(1), yell: z.boolean().optional() })).min(1),
+});
+export type CreatureVoices = z.infer<typeof CreatureVoices>;
 
 /**
  * Uma criatura como ela chega no estado completo. O MESMO schema do `creature-appear`, de
@@ -102,9 +139,28 @@ const CreatureState = z.object({
   /**
    * **Opcional**, pela mesma razão dos agregados do analisador: um nó `game` anterior manda a
    * criatura sem cores, e um cliente que as exigisse recusaria a mensagem inteira — em
-   * silêncio. Ausente, o cliente pinta com as cores de personagem novo. Monstro nunca traz.
+   * silêncio. Ausente, o cliente pinta com as cores de personagem novo. O monstro as traz desde
+   * o #620 (`monster.outfit.look*` do Canary, neutro = tudo 0); o monstro de um nó anterior, ou
+   * o de teste sem conteúdo, continua sem elas.
    */
   colors: OutfitColors.optional(),
+  /**
+   * **A apresentação do MONSTRO** (#620) — os quatro campos abaixo saem do conteúdo fixado na
+   * sessão, sem efeito algum em combate, e são **opcionais** pela mesma razão de `colors`: um nó
+   * `game` anterior manda a criatura sem eles, e um cliente que os exigisse recusaria a mensagem
+   * inteira em silêncio. Ausentes são o neutro (sem addon, sem luz, mudo, `blood`).
+   *
+   * Os addons do outfit, a máscara de bits do Tibia: 1 = primeiro addon, 2 = segundo, 3 = os
+   * dois. As cores deles são as de `colors`, que o monstro passa a trazer — o neutro do Canary é
+   * tudo 0, e não as de personagem novo.
+   */
+  addons: z.number().int().min(0).max(3).optional(),
+  /** A raça (#620): a cor do número e o efeito do golpe físico. Ausente é `blood`. */
+  race: MonsterRace.optional(),
+  /** A luz que ele carrega (#620). Ausente é sem luz. */
+  light: CreatureLight.optional(),
+  /** As falas periódicas (#620), sorteadas no cliente. Ausente é mudo. */
+  voices: CreatureVoices.optional(),
   /**
    * O `characterId` do MESTRE, só para a invocação do JOGADOR (#598, M38-01, ADR 0057 decisão
    * 4). **Opcional**, pela mesma razão de `colors`: um nó `game` anterior manda a criatura sem
@@ -433,6 +489,22 @@ export const C2S_SCHEMAS = {
    * (invariante 4).
    */
   'learn-spell': z.object({ spellId: z.string().min(1) }),
+  /**
+   * Entrar numa sessão de Treino com uma exercise weapon da mochila (#631, ADR 0059 d.1).
+   * INTENÇÃO: só a instância; que ela é uma exercise weapon com cargas e que o personagem está
+   * na Cidade é do servidor (invariante 4).
+   */
+  'enter-training': z.object({ itemInstanceId: z.string().min(1) }),
+  /**
+   * Escolher a skill do offline training (o livro do Tibia; #631, ADR 0059 d.3). `null` desmarca.
+   * INTENÇÃO: quais skills existem é do conteúdo, conferido pelo servidor (invariante 4).
+   */
+  'set-offline-training-skill': z.object({ skillId: z.string().min(1).nullable() }),
+  /**
+   * Comprar um item por gold na Cidade (#631, ADR 0059 d.2). INTENÇÃO: só o id do catálogo;
+   * `purchasable`, preço, saldo e capacidade são do servidor (invariante 4).
+   */
+  'buy-item': z.object({ itemId: z.string().min(1) }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */
@@ -1192,6 +1264,20 @@ export const S2C_SCHEMAS = {
        */
       shortLabel: z.string().min(1).optional(),
       /**
+       * A exercise weapon (#631, ADR 0059): a skill que ela treina e o TOTAL de cargas da
+       * definição (as restantes são da instância, em `training-state.weapons`). Opcional sem
+       * default: um nó anterior manda sem, e item nenhum é exercise weapon.
+       */
+      exercise: z.object({
+        skillId: z.string().min(1),
+        charges: z.number().int().positive(),
+      }).optional(),
+      /**
+       * O preço de compra (`buy-item`, #631, ADR 0059 d.2), só nos itens `purchasable` — a loja
+       * mínima que a exercise weapon precisa até a loja geral (E5). Opcional sem default.
+       */
+      buyPrice: z.number().int().positive().optional(),
+      /**
        * Como a arma bate (#152): o tipo e o alcance, para o tooltip. `ammoFamily` diz de que
        * família é a munição que a arma dispara — o seletor de munição a usa. Mana por golpe e
        * faixa de dano ficam de fora — são balanceamento que o cliente não simula (invariante 4).
@@ -1290,6 +1376,47 @@ export const S2C_SCHEMAS = {
         highMultiplier: z.number().int().positive(),
         highEnhancedMultiplier: z.number().int().positive(),
       }),
+    }).optional(),
+    /**
+     * O Treino (#631, ADR 0059), para a tela do livro e da loja de exercise weapons mostrar o que
+     * vale ANTES de o jogador agir — o gasto e a rolagem são do servidor (invariante 4).
+     * `.optional()`, como `blessings`: conteúdo sem `training/` manda `catalogue` sem a chave, e a
+     * tela de Treino não aparece.
+     *
+     * `perCharge` é o que UMA carga rende no boneco (`triesPerCharge × rate / 100`, e o análogo
+     * de mana gasta para wand/rod). `offlineSkills` é o livro: a skill, o nome para exibir e o
+     * tipo da conta (`attacks`: por ataque; `mana`: por mana). Os tetos são o do banco, o gasto
+     * por conta Free/Premium (ADR 0059 d.4) e a carência.
+     */
+    training: z.object({
+      perCharge: z.object({
+        tries: z.number().int().nonnegative(),
+        manaSpent: z.number().int().nonnegative(),
+      }),
+      bankCapMs: z.number().int().positive(),
+      graceMs: z.number().int().nonnegative(),
+      spendCapMs: z.object({
+        free: z.number().int().positive(),
+        premium: z.number().int().positive(),
+      }),
+      offlineSkills: z.array(z.object({
+        skillId: z.string().min(1),
+        name: z.string().min(1),
+        kind: z.enum(['attacks', 'mana']),
+      })),
+      /**
+       * TODA skill que o Treino toca — as do livro (na ordem dele) e as que só uma exercise weapon
+       * treina (o `shielding` do exercise shield) —, com o nome do conteúdo e o tipo do ganho
+       * (`mana` quando a skill sobe por mana gasta, o `gain.on === 'spell-cast'` que o golpe do
+       * servidor lê; `attacks` quando sobe por tries). O cliente lê o nome, o rendimento e a ordem da
+       * loja daqui, e não de `offlineSkills`, que é só o livro: uma exercise weapon cuja skill o livro
+       * não oferece apareceria com o id cru.
+       */
+      skills: z.array(z.object({
+        skillId: z.string().min(1),
+        name: z.string().min(1),
+        kind: z.enum(['attacks', 'mana']),
+      })),
     }).optional(),
   }),
   'creature-health': z.object({ id: z.number().int(), health: z.number(), maxHealth: z.number() }),
@@ -1571,6 +1698,23 @@ export const S2C_SCHEMAS = {
    * dono. Ausente da lista é "não aprendida": o slot da barra que aponta para ela fica marcado.
    */
   'learned-spells': z.object({ spellIds: z.array(z.string().min(1)) }),
+  /**
+   * O estado do Treino do PRÓPRIO personagem (#631, ADR 0059): o banco de offline training (ms) e
+   * a skill escolhida no livro (`null`: nenhuma), as exercise weapons carregadas com as cargas
+   * RESTANTES — o overlay da instância não viaja em `inventory` — e a instância que o Treino em
+   * curso está gastando (`null` fora do Treino). O que cada arma rende e custa é do `catalogue`
+   * (fixado na sessão, invariante 7).
+   */
+  'training-state': z.object({
+    offlineBankMs: z.number().int().nonnegative(),
+    offlineSkill: z.string().min(1).nullable(),
+    weapons: z.array(z.object({
+      instanceId: z.string().min(1),
+      itemId: z.string().min(1),
+      charges: z.number().int().positive(),
+    })),
+    activeInstanceId: z.string().min(1).nullable(),
+  }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;

@@ -12,7 +12,11 @@ import { useHudSlice } from '../state/useSlice.js';
 import { battleRows } from './BattlePanel.js';
 import { HEALTH_POLL_MS } from './PartyMembers.js';
 
-export function WorldOverlay({ hunting }: { hunting: boolean }) {
+export function WorldOverlay({ hunting, training = false }: {
+  hunting: boolean;
+  /** O personagem está numa sessão de Treino (#631): a área é a mesma da Cidade, mas o texto não. */
+  training?: boolean;
+}) {
   const partyView = useHudSlice((state) => state.party);
   const catalogue = useHudSlice((state) => state.catalogue);
   const huntId = useHudSlice((state) => state.huntId);
@@ -25,6 +29,16 @@ export function WorldOverlay({ hunting }: { hunting: boolean }) {
     return () => { clearInterval(id); };
   }, [hunting]);
 
+  if (training) {
+    // A sessão de Treino roda no mapa da Cidade (protect zone), mas a praça "não credita nada" seria
+    // mentira: cada golpe credita tries e gasta uma carga (#631, ADR 0059).
+    return (
+      <div className="world-overlay" aria-label="área">
+        <span className="world-overlay-line">Treino · zona protegida</span>
+        <span className="world-overlay-line">cada golpe gasta uma carga</span>
+      </div>
+    );
+  }
   if (!hunting) {
     return (
       <div className="world-overlay" aria-label="área">

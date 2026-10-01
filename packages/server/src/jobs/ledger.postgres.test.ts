@@ -110,7 +110,8 @@ const characterRow = async (
 ): Promise<{
   xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
   ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown;
-  charms: unknown; bosstiary: unknown; learnedSpells: unknown; blessings: number;
+  charms: unknown; bosstiary: unknown; learnedSpells: unknown; familiar: unknown; training: unknown;
+  blessings: number;
 }> => {
   const [row] = await database.database.db
     .select({
@@ -126,6 +127,8 @@ const characterRow = async (
       charms: characters.charms,
       bosstiary: characters.bosstiary,
       learnedSpells: characters.learnedSpells,
+      familiar: characters.familiar,
+      training: characters.training,
       blessings: characters.blessings,
     })
     .from(characters)
@@ -133,7 +136,8 @@ const characterRow = async (
   return row as {
     xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
     ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown;
-    charms: unknown; bosstiary: unknown; learnedSpells: unknown; blessings: number;
+    charms: unknown; bosstiary: unknown; learnedSpells: unknown; familiar: unknown; training: unknown;
+    blessings: number;
   };
 };
 
@@ -920,6 +924,53 @@ describe.runIf(ready)('as magias aprendidas chegam ao Postgres pelo extrato (#62
     const row = await characterRow(database, characterId);
     expect(row.gold).toBe(before - 2_500);
     expect(row.learnedSpells).toEqual({ spellIds: ['berserk'], version: 1 });
+  });
+});
+
+describe.runIf(ready)('o familiar chega ao Postgres pelo extrato (M38-02, #599, ADR 0057 d.3)', () => {
+  it('grava os carimbos, a última escrita vence — inclusive DESCENDO —, e o extrato sem o campo não toca na coluna', async () => {
+    // ABSOLUTO como `charms`, e NUNCA fundido pelo maior: o `summonUntilMs` DESCE quando o familiar
+    // morre (`FamiliarDeath` zera a recriação). É a segunda gravação abaixo que prova isso — com
+    // um `GREATEST` no ledger, o familiar morto voltaria na próxima entrada.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    expect((await characterRow(database, characterId)).familiar).toBeNull();
+    const receipts = new ReceiptStore(redis);
+    const first = { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 };
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), familiar: first });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).familiar).toEqual(first);
+
+    // O familiar morreu: o tempo que sobrava cai para o instante da morte, o cooldown segue.
+    const second = { ...first, summonUntilMs: 1_790_000_100_000 };
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2, familiar: second });
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    // O extrato SEM o campo (seq 3, uma sessão que não mexeu no familiar) não apaga o gravado.
+    expect((await characterRow(database, characterId)).familiar).toEqual(second);
+  });
+});
+
+describe.runIf(ready)('o registro do Treino chega ao Postgres pelo extrato (#631, ADR 0059 d.3, ADR 0052 d.1)', () => {
+  it('grava o registro, a última escrita vence — o banco DESCE quando a `api` o gasta —, e o extrato sem o campo não toca na coluna', async () => {
+    // ABSOLUTO como `charms`, NUNCA fundido pelo maior: o banco de offline training sobe por tempo
+    // de hunt e DESCE quando a `api` o gasta, e é a segunda gravação abaixo (menor que a primeira)
+    // que prova a régua — fundir pelo maior ressuscitaria o tempo já gasto.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    expect((await characterRow(database, characterId)).training).toBeNull();
+    const receipts = new ReceiptStore(redis);
+    const first = { offlineBankMs: 7_200_000, offlineSkill: 'sword', version: 1 };
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), training: first });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).training).toEqual(first);
+
+    const spent = { offlineBankMs: 3_600_000, offlineSkill: null, version: 1 };
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2, training: spent });
+    // Extrato de sessão que não mexeu no Treino (um nó anterior, ou o de Cidade sem o campo).
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).training).toEqual(spent);
   });
 });
 

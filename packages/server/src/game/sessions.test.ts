@@ -2,8 +2,9 @@ import { buildContent } from '@draconya/content';
 import { CharacterRuntime, createHuntSession, totalXpForLevel } from '@draconya/sim';
 import {
   TEST_COMBAT, TEST_HUNT, TEST_PARTY, TEST_PROGRESSION, TEST_ROUTE, TEST_STAMINA,
-  rawTestContent, testContent,
+  rawTestContent, testContent, trainingTestContent,
 } from '../testing/content.js';
+import type { InitialCharacter } from '../tickets.js';
 import { BOT_SET_COUNT, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigV2Schema } from '@draconya/content';
 import type { Progression } from '@draconya/content';
 import type { HuntRuleset, Session, SessionSnapshot } from '@draconya/sim';
@@ -429,6 +430,23 @@ describe('a postura de luta de entrada vem do TICKET, nunca do cliente (#550)', 
   });
 });
 
+describe('os carimbos do familiar de entrada vêm do TICKET, nunca do cliente (#599)', () => {
+  const content = testContent();
+
+  it('os carimbos persistidos chegam ao personagem da sessão — o cooldown de 30 min atravessa a saída', () => {
+    // Invariante 4: o cooldown vem do ticket (lido de `characters.familiar`), pela mesma razão do
+    // gold e da postura — um valor vindo do socket na criação seria um familiar sem cooldown.
+    const familiar = { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 };
+    const session = createCitySessionFactory(content)('p1', { level: 1, xp: 0, familiar });
+    expect(session.participants[0]?.familiar).toEqual(familiar);
+  });
+
+  it('ticket sem carimbo entra como quem nunca invocou', () => {
+    const session = createCitySessionFactory(content)('p1', { level: 1, xp: 0 });
+    expect(session.participants[0]?.familiar).toEqual({ version: 1, summonUntilMs: 0, cooldownUntilMs: 0 });
+  });
+});
+
 describe('stamina nas fronteiras da sessão (FUN-39)', () => {
   const content = testContent();
   const HOUR = 3_600_000;
@@ -521,11 +539,13 @@ describe('construtor de sessão de destino (FUN-30)', () => {
   });
 
   it('recusa os destinos que ainda não têm ruleset', () => {
-    // Treino, quest, boss e guild war. `null` recusa com erro claro, que é melhor que
-    // construir uma sessão que mente sobre o que é.
+    // Quest, boss e guild war. `null` recusa com erro claro, que é melhor que construir uma
+    // sessão que mente sobre o que é. O Treino tem ruleset desde a #631 — mas sem a exercise
+    // weapon (ou num conteúdo sem `training/`, como este) também é `null`.
     for (const to of ['training', 'quest', 'boss', 'guild-war'] as const) {
       expect(build({ to }, cityWith(), 'p1')).toBeNull();
     }
+    expect(build({ to: 'training', itemInstanceId: 'w1' }, cityWith(), 'p1')).toBeNull();
   });
 
   it('materializa a stamina em TODA transição, não só na volta da hunt', () => {
@@ -543,6 +563,112 @@ describe('construtor de sessão de destino (FUN-30)', () => {
 
     expect(hero?.staminaMs).toBe(8 * HOUR);
     expect(hero?.staminaUpdatedAtMs).toBe(3 * HOUR);
+  });
+});
+
+describe('o Treino: construtor e retomada (#631, ADR 0059)', () => {
+  const content = trainingTestContent();
+  const WEAPON = 'w1';
+  const withWeapon: InitialCharacter = {
+    level: 20, xp: 0,
+    inventory: { backpack: [{ instanceId: WEAPON, itemId: 'exercise-sword', quantity: 1 }], equipped: {} },
+  } as InitialCharacter;
+  const city = (initial: InitialCharacter = withWeapon): Session => createCitySessionFactory(content)('p1', initial);
+
+  it('constrói a sessão de Treino com o personagem que já existia, ao lado do boneco', () => {
+    const from = city();
+    const hero = from.participants[0];
+
+    const training = createSessionBuilder(content)({ to: 'training', itemInstanceId: WEAPON }, from, 'p1');
+
+    expect(training?.ruleset.type).toBe('training');
+    expect(training?.participants[0]).toBe(hero);
+    expect(hero?.position).toEqual({ x: 3, y: 3, z: 7 });
+  });
+
+  it('o construtor carimba o início do Treino e recusa um novo dentro de 10 s (`training-exhaustion` do Canary)', () => {
+    let now = 1_000_000;
+    const from = city();
+    const hero = from.participants[0];
+    const build = createSessionBuilder(content, () => now);
+
+    const first = build({ to: 'training', itemInstanceId: WEAPON }, from, 'p1');
+    expect(first?.ruleset.type).toBe('training');
+    // O carimbo é `agora + 10 s`, no registro do personagem — o que o extrato do Treino leva ao banco.
+    expect(hero?.training.getState().exerciseExhaustedUntilMs).toBe(1_010_000);
+
+    // De volta à Cidade (o mesmo personagem), a segunda tentativa dentro da espera é recusada: `null`
+    // deixa o personagem onde está, e o carimbo NÃO se renova (a recusa não é um início).
+    now = 1_004_000;
+    expect(build({ to: 'training', itemInstanceId: WEAPON }, first as Session, 'p1')).toBeNull();
+    const backToCity = build({ to: 'city' }, first as Session, 'p1');
+    expect(backToCity).not.toBeNull();
+    expect(build({ to: 'training', itemInstanceId: WEAPON }, backToCity as Session, 'p1')).toBeNull();
+    expect(hero?.training.getState().exerciseExhaustedUntilMs).toBe(1_010_000);
+
+    // Passados os 10 s, volta a aceitar — e carimba de novo a partir DESTE início.
+    now = 1_010_000;
+    const second = build({ to: 'training', itemInstanceId: WEAPON }, backToCity as Session, 'p1');
+    expect(second?.ruleset.type).toBe('training');
+    expect(hero?.training.getState().exerciseExhaustedUntilMs).toBe(1_020_000);
+  });
+
+  it('recusa a instância que o personagem não carrega, e o item que não é exercise weapon', () => {
+    expect(createSessionBuilder(content)({ to: 'training', itemInstanceId: 'nao-existe' }, city(), 'p1')).toBeNull();
+    const rock: InitialCharacter = {
+      level: 20, xp: 0,
+      inventory: { backpack: [{ instanceId: 'r1', itemId: 'rock', quantity: 1 }], equipped: {} },
+    } as InitialCharacter;
+    expect(createSessionBuilder(content)({ to: 'training', itemInstanceId: 'r1' }, city(rock), 'p1')).toBeNull();
+  });
+
+  it('retoma um snapshot de Treino: a arma é a identidade da sessão, e o resultado é o de quem nunca parou (invariante 3)', () => {
+    const run = (restore: boolean): { points: number | undefined; ended: unknown } => {
+      let training = createSessionBuilder(content)({ to: 'training', itemInstanceId: WEAPON }, city(), 'p1') as Session;
+      training.advanceBy(3_000);
+      if (restore) {
+        // O nó caiu no meio: o snapshot volta pelo restaurador de produção, com os participantes.
+        const restored = createSessionRestorer(content)(training.snapshot());
+        expect(restored?.ruleset.type).toBe('training');
+        training = restored as Session;
+      }
+      training.advanceBy(10_000);
+      return { points: training.participants[0]?.skills.getState()['sword']?.points, ended: training.ended };
+    };
+    expect(run(true)).toEqual(run(false));
+    expect(run(true)).toEqual({ points: 21, ended: 'completed' });
+  });
+
+  it('sair do Treino NÃO recupera stamina — o marco avança e o tempo de treino não vira recuperação (ADR 0060 d.14c)', () => {
+    // O exercise training do Canary é online, e o Canary só regenera stamina deslogado. A ENTRADA
+    // no Treino ainda materializa (o tempo antes dele é recuperação); a SAÍDA só move o marco.
+    const HOUR = 3_600_000;
+    let now = 0;
+    const from = createCitySessionFactory(content, () => now)('p1', {
+      level: 20, xp: 0, staminaMs: 5 * HOUR, staminaUpdatedAtMs: 0,
+      inventory: { backpack: [{ instanceId: WEAPON, itemId: 'exercise-sword', quantity: 1 }], equipped: {} },
+    } as InitialCharacter);
+    const hero = from.participants[0];
+    const build = createSessionBuilder(content, () => now);
+
+    now = 2 * HOUR;
+    const training = build({ to: 'training', itemInstanceId: WEAPON }, from, 'p1') as Session;
+    // 2 h na Cidade antes de entrar: recuperação normal.
+    expect(hero?.staminaMs).toBe(7 * HOUR);
+    expect(hero?.staminaUpdatedAtMs).toBe(2 * HOUR);
+
+    now = 6 * HOUR;
+    training.end('manual-exit');
+    build({ to: 'city' }, training, 'p1');
+    // 4 h de treino: nem 4 h de recuperação, nem gasto — a stamina ficou onde estava.
+    expect(hero?.staminaMs).toBe(7 * HOUR);
+    expect(hero?.staminaUpdatedAtMs).toBe(6 * HOUR);
+  });
+
+  it('um snapshot de Treino num conteúdo que perdeu o Treino não se retoma — credita em vez de retomar errado', () => {
+    const training = createSessionBuilder(content)({ to: 'training', itemInstanceId: WEAPON }, city(), 'p1') as Session;
+    training.advanceBy(1_000);
+    expect(createSessionRestorer(testContent())(training.snapshot())).toBeNull();
   });
 });
 

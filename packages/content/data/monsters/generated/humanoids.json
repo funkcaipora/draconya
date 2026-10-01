@@ -196,6 +196,27 @@
     },
     "staticAttack": 0.98,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 94,
+      "body": 76,
+      "legs": 0,
+      "feet": 82,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "<grunt>",
+          "yell": false
+        },
+        {
+          "text": "Raar!!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -313,6 +334,28 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Chikuva!",
+          "yell": false
+        },
+        {
+          "text": "Jinuma jamjam!",
+          "yell": false
+        },
+        {
+          "text": "Suvituka siq chuqua!",
+          "yell": false
+        },
+        {
+          "text": "Kiyosa sipaju!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -395,6 +438,28 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Quisavu tukavi!",
+          "yell": false
+        },
+        {
+          "text": "Si siyoqua jamjam!",
+          "yell": false
+        },
+        {
+          "text": "Achuq! jinuma!",
+          "yell": false
+        },
+        {
+          "text": "Si ji jusipa!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -470,6 +535,13 @@
     "runOnHealth": 50,
     "staticAttack": 0.7,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 101,
+      "body": 0,
+      "legs": 101,
+      "feet": 0,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -572,6 +644,27 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 0,
+      "body": 78,
+      "legs": 59,
+      "feet": 0,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Mehehe!",
+          "yell": false
+        },
+        {
+          "text": "Beware! Me hexing you!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -708,6 +801,27 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 0,
+      "body": 76,
+      "legs": 83,
+      "feet": 0,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Squeak! Squeak!",
+          "yell": false
+        },
+        {
+          "text": "<sniff> <sniff> <sniff>",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -882,6 +996,27 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 114,
+      "body": 94,
+      "legs": 3,
+      "feet": 121,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Is this real life?",
+          "yell": false
+        },
+        {
+          "text": "Weeeuuu weeeuuu!!!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1098,6 +1233,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 47,
+      "body": 7,
+      "legs": 0,
+      "feet": 85,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -1191,6 +1333,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hail Durin!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1334,6 +1486,24 @@
     "runOnHealth": 110,
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hail Durin!",
+          "yell": false
+        },
+        {
+          "text": "Earth is the strongest element.",
+          "yell": false
+        },
+        {
+          "text": "Dust to dust.",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1443,6 +1613,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hail Durin!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1504,6 +1684,35 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 115,
+      "body": 77,
+      "legs": 93,
+      "feet": 114,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "This place is for our eyes only!",
+          "yell": false
+        },
+        {
+          "text": "We will live and let you die!",
+          "yell": false
+        },
+        {
+          "text": "I will die another day!",
+          "yell": false
+        },
+        {
+          "text": "We have license to kill!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1584,6 +1793,31 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 77,
+      "body": 101,
+      "legs": 97,
+      "feet": 115,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Work, work!",
+          "yell": false
+        },
+        {
+          "text": "Intruders in the mines!",
+          "yell": false
+        },
+        {
+          "text": "Mine, all mine!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1711,6 +1945,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hail Durin!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1845,6 +2089,24 @@
     "runOnHealth": 8,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grow truk grrrrr.",
+          "yell": false
+        },
+        {
+          "text": "Brak brrretz!",
+          "yell": false
+        },
+        {
+          "text": "Prek tars, dekklep zurk.",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2125,6 +2387,24 @@
     "runOnHealth": 15,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grow truk grrrrr.",
+          "yell": false
+        },
+        {
+          "text": "Brak brrretz!",
+          "yell": false
+        },
+        {
+          "text": "Prek tars, dekklep zurk.",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2252,6 +2532,32 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Death to the Defilers!",
+          "yell": false
+        },
+        {
+          "text": "You are not welcome here.",
+          "yell": false
+        },
+        {
+          "text": "Flee as long as you can.",
+          "yell": false
+        },
+        {
+          "text": "Bahaha aka!",
+          "yell": false
+        },
+        {
+          "text": "Ulathil beia Thratha!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2445,6 +2751,32 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I'll bring balance upon you!",
+          "yell": false
+        },
+        {
+          "text": "Vihil Ealuel!",
+          "yell": false
+        },
+        {
+          "text": "For the Daughter of the Stars!",
+          "yell": false
+        },
+        {
+          "text": "Tha'shi Cenath!",
+          "yell": false
+        },
+        {
+          "text": "Feel my wrath!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2636,6 +2968,39 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 57,
+      "body": 95,
+      "legs": 114,
+      "feet": 116,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I'll bring balance upon you!",
+          "yell": false
+        },
+        {
+          "text": "Vihil Ealuel!",
+          "yell": false
+        },
+        {
+          "text": "For the Daughter of the Stars!",
+          "yell": false
+        },
+        {
+          "text": "Tha'shi Cenath!",
+          "yell": false
+        },
+        {
+          "text": "Feel my wrath!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2763,6 +3128,32 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Tha'shi Ab'Dendriel!",
+          "yell": false
+        },
+        {
+          "text": "Evicor guide my arrow!",
+          "yell": false
+        },
+        {
+          "text": "Your existence will end here!",
+          "yell": false
+        },
+        {
+          "text": "Feel the sting of my arrows!",
+          "yell": false
+        },
+        {
+          "text": "Thy blood will quench the soil's thirst!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2903,6 +3294,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 79,
+      "body": 79,
+      "legs": 94,
+      "feet": 0,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3066,6 +3464,36 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I'm the one who puts the cute into execute!",
+          "yell": false
+        },
+        {
+          "text": "I'm here to punish!",
+          "yell": false
+        },
+        {
+          "text": "Justice is swift and unavoidable!",
+          "yell": false
+        },
+        {
+          "text": "I'll bring justice!",
+          "yell": false
+        },
+        {
+          "text": "There is excellence in execution!",
+          "yell": false
+        },
+        {
+          "text": "Your sentence is death!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3292,6 +3720,47 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 94,
+      "body": 77,
+      "legs": 78,
+      "feet": 79,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "FIRE!",
+          "yell": true
+        },
+        {
+          "text": "BURN!",
+          "yell": true
+        },
+        {
+          "text": "DEATH to the FALSE GOD!!",
+          "yell": false
+        },
+        {
+          "text": "You shall burn in the thornfires!!",
+          "yell": false
+        },
+        {
+          "text": "DOWN with the followers of the bog!!",
+          "yell": false
+        },
+        {
+          "text": "Hey, what's that burnt stench... isn't that... YOU?",
+          "yell": false
+        },
+        {
+          "text": "Set everything on fire!!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3376,6 +3845,20 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Brrr",
+          "yell": false
+        },
+        {
+          "text": "Broar!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3446,6 +3929,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "KRAK ORRRRRRK!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3585,6 +4078,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "POOOWEEER!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3708,6 +4211,32 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Zig Zag! Gobo attack!",
+          "yell": false
+        },
+        {
+          "text": "Me green, me mean!",
+          "yell": false
+        },
+        {
+          "text": "Bugga! Bugga!",
+          "yell": false
+        },
+        {
+          "text": "Help! Goblinkiller!",
+          "yell": false
+        },
+        {
+          "text": "Me have him!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3881,6 +4410,32 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Goblin Powahhh!",
+          "yell": false
+        },
+        {
+          "text": "Me kill you!",
+          "yell": false
+        },
+        {
+          "text": "Me green menace!",
+          "yell": false
+        },
+        {
+          "text": "Gobabunga!",
+          "yell": false
+        },
+        {
+          "text": "Gooobliiiins!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3997,6 +4552,28 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Go go, Gobo attack!!",
+          "yell": false
+        },
+        {
+          "text": "Me the greenest and the meanest!",
+          "yell": false
+        },
+        {
+          "text": "Me have power to crush you!",
+          "yell": false
+        },
+        {
+          "text": "Goblinkiller! Catch him !!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4166,6 +4743,32 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Shiny, shiny!",
+          "yell": false
+        },
+        {
+          "text": "You mean!",
+          "yell": false
+        },
+        {
+          "text": "All mine!",
+          "yell": false
+        },
+        {
+          "text": "Uhh!",
+          "yell": false
+        },
+        {
+          "text": "Gimme gimme!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4262,6 +4865,32 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hmmm, turtles",
+          "yell": false
+        },
+        {
+          "text": "Hmmm, dogs",
+          "yell": false
+        },
+        {
+          "text": "Hmmm, worms",
+          "yell": false
+        },
+        {
+          "text": "Groar",
+          "yell": false
+        },
+        {
+          "text": "Gruntz!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4322,6 +4951,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 360000,
+    "outfit": {
+      "head": 0,
+      "body": 79,
+      "legs": 80,
+      "feet": 0,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -4563,6 +5199,16 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Yhouuuu!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4804,6 +5450,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Kill! Kiill! Kill!",
+          "yell": false
+        },
+        {
+          "text": "Death! Death! Death!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4814,6 +5474,318 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/humanoids/lost_berserker.lua"
+    }
+  },
+  {
+    "id": "lost-exile",
+    "name": "Lost Exile",
+    "class": "humanoid",
+    "health": 1600,
+    "experience": 1800,
+    "attack": {
+      "min": 0,
+      "max": 120
+    },
+    "armor": 20,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.05,
+        "energy": 0.1,
+        "fire": 0.25,
+        "ice": 0.15,
+        "holy": -0.1,
+        "death": 0.2
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 250,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 200
+      },
+      "items": [
+        {
+          "itemId": "coal",
+          "chance": 0.131
+        },
+        {
+          "itemId": "holy-ash",
+          "chance": 0.131
+        },
+        {
+          "itemId": "small-topaz",
+          "chance": 0.1024
+        },
+        {
+          "itemId": "skull-shatterer",
+          "chance": 0.0762
+        },
+        {
+          "itemId": "wimp-tooth-chain",
+          "chance": 0.119
+        },
+        {
+          "itemId": "red-hair-dye",
+          "chance": 0.1262
+        },
+        {
+          "itemId": "basalt-fetish",
+          "chance": 0.081
+        },
+        {
+          "itemId": "bonecarving-knife",
+          "chance": 0.081
+        },
+        {
+          "itemId": "basalt-figurine",
+          "chance": 0.081
+        },
+        {
+          "itemId": "bone-fetish",
+          "chance": 0.08881
+        },
+        {
+          "itemId": "dwarven-ring",
+          "chance": 0.01043
+        },
+        {
+          "itemId": "guardian-shield",
+          "chance": 0.0143
+        },
+        {
+          "itemId": "buckle",
+          "chance": 0.019
+        },
+        {
+          "itemId": "knight-axe",
+          "chance": 0.0095
+        },
+        {
+          "itemId": "terra-boots",
+          "chance": 0.0024
+        },
+        {
+          "itemId": "suspicious-device",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "tower-shield",
+          "chance": 0.0024
+        },
+        {
+          "itemId": "terra-legs",
+          "chance": 0.0024
+        },
+        {
+          "itemId": "fire-axe",
+          "chance": 0.0071
+        },
+        {
+          "itemId": "skull-staff",
+          "chance": 0.0048
+        },
+        {
+          "itemId": "spiked-squelcher",
+          "chance": 0.0024
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 120
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "suddendeath",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 3
+        },
+        "power": {
+          "min": 150,
+          "max": 350
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "manadrainwave",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 3,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              3,
+              3,
+              3,
+              3,
+              3
+            ]
+          }
+        },
+        "power": {
+          "min": 150,
+          "max": 250
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "smoke"
+        }
+      },
+      {
+        "id": "lifedrainwave",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 3,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              3,
+              3,
+              3,
+              3,
+              3
+            ]
+          }
+        },
+        "power": {
+          "min": 150,
+          "max": 290
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "largerock",
+          "impactKey": "poisonarea"
+        }
+      },
+      {
+        "id": "suddendeath-2",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 70,
+          "max": 250
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "energy"
+        },
+        "condition": {
+          "key": "drunk",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "heal": {
+          "min": 0,
+          "max": 160
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "**",
+          "yell": false
+        },
+        {
+          "text": "**",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/lost_exile.lua"
     }
   },
   {
@@ -5059,6 +6031,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Arr far zwar!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -5405,6 +6387,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Kaplar!",
+          "yell": false
+        },
+        {
+          "text": "Hurr",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -5530,6 +6526,20 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ruan Wihmpy!",
+          "yell": false
+        },
+        {
+          "text": "Kaplar!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -5804,6 +6814,16 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "We will rule!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -6031,6 +7051,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Kirrl Karrrl!",
+          "yell": false
+        },
+        {
+          "text": "Kaplar",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -6107,6 +7141,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "For the victory!",
+          "yell": false
+        },
+        {
+          "text": "We will crush the enemy!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -6314,6 +7362,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Learrn tha secrret uf deathhh!",
+          "yell": false
+        },
+        {
+          "text": "Kaplar!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -6977,6 +8039,24 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grow truk grrrrr.",
+          "yell": false
+        },
+        {
+          "text": "Prek tars, dekklep zurk.",
+          "yell": false
+        },
+        {
+          "text": "Grak brrretz!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -7097,6 +8177,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "KRAK ORRRRRRK!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -7254,6 +8344,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ulderek futgyr human!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -7417,6 +8517,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grrrrrr",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -7543,6 +8653,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Orc arga Huummmak!",
+          "yell": false
+        },
+        {
+          "text": "Grrrrrrr",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -7711,6 +8835,20 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Huumans stinkk!",
+          "yell": false
+        },
+        {
+          "text": "Grak brrretz gulu.",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -7849,6 +8987,16 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ugaar!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -8039,6 +9187,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ikem rambo zambo!",
+          "yell": false
+        },
+        {
+          "text": "Orc buta bana!",
+          "yell": false
+        },
+        {
+          "text": "Ranat Ulderek!",
+          "yell": false
+        },
+        {
+          "text": "Futchi maruk buta!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -8138,6 +9308,24 @@
     "runOnHealth": 11,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Alk!",
+          "yell": false
+        },
+        {
+          "text": "Trak grrrr brik.",
+          "yell": false
+        },
+        {
+          "text": "Grow truk grrrr.",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -8295,6 +9483,13 @@
     "runOnHealth": 1,
     "staticAttack": 0.9,
     "corpseTtlMs": 910000,
+    "outfit": {
+      "head": 2,
+      "body": 96,
+      "legs": 78,
+      "feet": 96,
+      "addons": 1
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -8461,6 +9656,13 @@
     "runOnHealth": 1,
     "staticAttack": 0.9,
     "corpseTtlMs": 910000,
+    "outfit": {
+      "head": 97,
+      "body": 119,
+      "legs": 80,
+      "feet": 80,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -8531,6 +9733,16 @@
     "runOnHealth": 950,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "UAAAAH FETCHI!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -8753,6 +9965,16 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Tar Marra Zik Tazz!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -8970,6 +10192,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 60000,
+    "outfit": {
+      "head": 85,
+      "body": 10,
+      "legs": 16,
+      "feet": 83,
+      "addons": 3
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -9078,6 +10307,25 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Me strong! Me ate spinach!",
+          "yell": false
+        },
+        {
+          "text": "Groar!",
+          "yell": false
+        },
+        {
+          "text": "Grrrr",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -9178,6 +10426,32 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hmmm, bugs",
+          "yell": false
+        },
+        {
+          "text": "Hmmm, dogs",
+          "yell": false
+        },
+        {
+          "text": "Grrr",
+          "yell": false
+        },
+        {
+          "text": "Groar",
+          "yell": false
+        },
+        {
+          "text": "Gruntz!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -9275,6 +10549,32 @@
     "runOnHealth": 15,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Meee maity!",
+          "yell": false
+        },
+        {
+          "text": "Grrrr",
+          "yell": false
+        },
+        {
+          "text": "Whaaaz up!?",
+          "yell": false
+        },
+        {
+          "text": "Gruntz!",
+          "yell": false
+        },
+        {
+          "text": "Groar",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -9482,6 +10782,20 @@
     "runOnHealth": 30,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Attack!",
+          "yell": false
+        },
+        {
+          "text": "Graaaaar!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -9709,6 +11023,23 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 105,
+      "body": 0,
+      "legs": 0,
+      "feet": 94,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ti Jezz Kur Tar!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -9779,6 +11110,20 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hmmm, dogs",
+          "yell": false
+        },
+        {
+          "text": "Gruntz!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,

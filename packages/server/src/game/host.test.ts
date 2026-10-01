@@ -368,6 +368,40 @@ describe('session host', () => {
     expect(sessions).toHaveLength(0);
   });
 
+  it('re-anchors the wall clock of the resumed session by the discarded gap (#599, ADR 0018, ADR 0052 d.6)', async () => {
+    // `createdAtMs + nowMs` é o relógio de PAREDE que o `sim` compara com os carimbos do familiar. A
+    // retomada descarta o intervalo (o relógio lógico continua de onde parou), então sem recolocar
+    // o anchor a soma ficaria atrasada pela queda inteira e o cooldown de 30 min nasceria já curto.
+    const gapMs = 20 * 60_000;
+    const before = Date.now();
+    const snapshots = {
+      load: async () => ({
+        characterId: 'p1', accountId: 'a1', nodeId: 'n0', savedAtMs: before - gapMs,
+        snapshot: { id: 's', type: 'city', createdAtMs: 1_790_000_000_000, logicalNowMs: 5_000 } as unknown as SessionSnapshot,
+      }),
+      save: async () => {},
+      remove: async () => {},
+    } as unknown as SnapshotStore;
+    const restored = new Session({
+      id: 's-retomada', contentVersion: 'v-test',
+      ruleset: countingRuleset().ruleset, rng: Rng.fromSeed('x'), createdAtMs: 0,
+    });
+    let received: SessionSnapshot | undefined;
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, {
+      directory, snapshots, restoreSession: (snapshot) => { received = snapshot; return restored; },
+    });
+    await host.prepare('p1', undefined, 'a1');
+
+    // O intervalo medido na retomada (pelo menos 20 min, e só a folga de execução do teste a mais).
+    const delta = (received?.createdAtMs ?? 0) - 1_790_000_000_000;
+    expect(delta).toBeGreaterThanOrEqual(gapMs);
+    expect(delta).toBeLessThan(gapMs + 5_000);
+    // O relógio lógico NÃO anda: o intervalo é descartado, não simulado.
+    expect((received as { logicalNowMs?: number } | undefined)?.logicalNowMs).toBe(5_000);
+  });
+
   it('tells the player that the session was resumed, and how much was lost', async () => {
     // Silenciar aqui é como o modo idle perde a confiança de quem joga: o extrato não fecha
     // e ninguém explica por quê.
@@ -3004,6 +3038,38 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     expect((appears[0] as { position: { z: number } }).position.z).toBe(7);
   });
 
+  it('o monstro RECOLOCADO (o teleporte do familiar, #599) some e reaparece no tile novo, com id novo', () => {
+    // O `sim` não emite `creature-moved` de duração zero para o teleporte do familiar: o protocolo
+    // exige duração positiva, e o `#presentMoves` descarta o resto — o cliente nunca o veria
+    // chegar. O par `creature-vanished` + `creature-appeared` do MESMO subject é a relocação: o
+    // cliente o tira de onde estava e o desenha onde ficou (o id numérico não se reaproveita).
+    const { host, runFor, received } = hunt({ tanky: true });
+    runFor(300);
+    const session = host.sessionFor('hero');
+    if (session === undefined) throw new Error('sem sessão');
+    const rat = (session.ruleset as HuntRuleset).monsters[0];
+    if (rat === undefined) throw new Error('sem monstro');
+    const firstId = (received().filter((m) => m.type === 'creature-appear') as unknown as Array<{ id: number }>)[0]?.id;
+    expect(firstId).toBeDefined();
+    const before = received().length;
+
+    session.emit({ kind: 'creature-vanished', creatureId: rat.subject });
+    session.emit({
+      kind: 'creature-appeared', creatureId: rat.subject, monsterId: 'rat',
+      position: { x: 5, y: 5, z: 7 }, health: 20, maxHealth: 20, masterId: 'hero',
+    });
+    runFor(100);
+
+    const after = received().slice(before);
+    const gone = after.filter((m) => m.type === 'creature-disappear');
+    const appeared = after.filter((m) => m.type === 'creature-appear') as unknown as Array<{ id: number; position: unknown; masterId?: string }>;
+    expect(gone).toHaveLength(1);
+    expect((gone[0] as unknown as { id: number }).id).toBe(firstId);
+    expect(appeared).toHaveLength(1);
+    expect(appeared[0]).toMatchObject({ position: { x: 5, y: 5, z: 7 }, masterId: 'hero' });
+    expect(appeared[0]?.id).not.toBe(firstId);
+  });
+
   it('NENHUM passo chega com id que não foi anunciado', () => {
     // Era exatamente o defeito: o passo do monstro atravessava o fio com um id que ninguém
     // tinha anunciado, e o cliente descartava em silêncio. Agora todo id de `creature-move`
@@ -3551,10 +3617,11 @@ describe('as cores do outfit chegam ao cliente (FUN-104)', () => {
     expect(appears[0]).not.toHaveProperty('colors');
   });
 
-  it('o monstro NUNCA traz cores, mesmo ao lado de um herói pintado', async () => {
-    // O rato é uma camada só: o campo é de personagem, e a tabela é indexada por
-    // `characterId`. Mandar `colors` num monstro faria o cliente tentar pintar o que não
-    // tem máscara — e o herói pintado ao lado prova que a tabela estava povoada.
+  it('o monstro traz as cores do CONTEÚDO, e nunca as do herói pintado ao lado', async () => {
+    // O campo `colors` era só de personagem: a tabela do host é indexada por `characterId`. Desde
+    // o #620 o monstro também o traz — mas das cores do CONTEÚDO (`monster.outfit`, o neutro
+    // 0/0/0/0 do rato), e jamais as do ticket do jogador: o herói pintado ao lado prova que a
+    // tabela de personagens estava povoada, e o rato não a herda.
     // Um rato que AGUENTA, como no fixture da FUN-109: o herói de teste mata o comum num
     // golpe, e o `session-state` só lista monstro vivo — com o rato comum a lista vinha
     // vazia e o laço abaixo não afirmava nada (a mutação que sobreviveu na revisão).
@@ -3587,15 +3654,16 @@ describe('as cores do outfit chegam ao cliente (FUN-104)', () => {
     for (let t = 0; t < 300; t += 100) { now += 100; host.cycle(); }
     host.flush();
 
+    const NEUTRAL = { head: 0, body: 0, legs: 0, feet: 0 };
     const ratos = appearsOn(socket).filter((c) => c.name === 'Rat');
     expect(ratos.length).toBeGreaterThan(0);
-    for (const rato of ratos) expect(rato).not.toHaveProperty('colors');
+    for (const rato of ratos) expect(rato.colors).toEqual(NEUTRAL);
 
     const visto = stateOf(host, socket, viewer);
     expect(visto?.world.creatures.find((c) => c.name === 'hero')?.colors).toEqual(COLORS);
     const vivos = visto?.world.creatures.filter((c) => c.name === 'Rat') ?? [];
     expect(vivos.length).toBeGreaterThan(0);
-    for (const rato of vivos) expect(rato).not.toHaveProperty('colors');
+    for (const rato of vivos) expect(rato.colors).toEqual(NEUTRAL);
   });
 
   it('quem já está hospedado continua com as cores com que entrou, mesmo com ticket novo', async () => {
@@ -3741,6 +3809,10 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     weapon: 'bow' | 'wand';
     /** Skills do conteúdo de teste (#340, SV-04). */
     skills: readonly unknown[];
+    /** O `hits` da tabela de aparências, trocado por cima do de teste (#620: o efeito por raça). */
+    hits: Record<string, unknown>;
+    /** Magias a mais no conteúdo, além de `strike` e `blast` (#620: o golpe FÍSICO de magia). */
+    spells: readonly unknown[];
     /** As skills com que o herói nasce e o bônus de Loyalty que o ticket lhe deu (#628). */
     heroSkills: SkillsState;
     loyaltyBonusPercent: number;
@@ -3777,7 +3849,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
       }),
       ...armory,
       appearances: [placeholderAppearances({ ...raw, ...armory })],
-      spells: [...(raw.spells ?? []), STRIKE, BLAST],
+      spells: [...(raw.spells ?? []), STRIKE, BLAST, ...(over.spells ?? [])],
       progression: [{
         ...TEST_PROGRESSION, startingMana: 200,
         ...(over.regen === false ? { regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } } : {}),
@@ -3806,7 +3878,10 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
         }
         : {}),
     });
-    const appearances = { ...(content.appearances as Appearances), ...TABLE };
+    const appearances = {
+      ...(content.appearances as Appearances), ...TABLE,
+      ...(over.hits === undefined ? {} : { hits: over.hits as Appearances['hits'] }),
+    };
     const stats = statsForLevel(1, null, content.progression);
     let now = 0;
     const host = new SessionHost({
@@ -4509,6 +4584,130 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     for (const effect of effects) expect(effect.effectId).toBe(1);
   });
 
+  it('o golpe físico sangra com o efeito da RAÇA de quem o levou: veneno no rato venenoso, sangue no herói (#620)', () => {
+    // O `combatGetTypeInfo` do Canary: o efeito do golpe físico depende da raça do alvo. O rato
+    // desta hunt é `venom` (efeito 17) e o herói é `blood` (efeito 1, o default). Cada `effect`
+    // vem logo depois do `creature-hit` que o causou, e é o alvo daquele golpe que escolhe o id.
+    //
+    // Mutação que mata: ler a raça do ATACANTE, ou esquecer o `byRace` e mandar sempre `melee` —
+    // o golpe no rato sai com 1, e não 17.
+    const { runFor, received, heroId } = hunt({
+      rat: { race: 'venom' }, hits: { melee: 1, byRace: { blood: 1, venom: 17 } },
+    });
+    runFor(10_000);
+
+    const all = received();
+    let onRat = 0;
+    let onHero = 0;
+    all.forEach((message, index) => {
+      if (message.type !== 'creature-hit' || message.kind !== 'melee' || message.amount <= 0) return;
+      const effect = all[index + 1];
+      expect(effect?.type).toBe('effect');
+      const expected = message.id === heroId ? 1 : 17;
+      expect((effect as { effectId: number }).effectId).toBe(expected);
+      if (message.id === heroId) onHero += 1;
+      else onRat += 1;
+    });
+    // Os dois lados aconteceram: sem isso o teste só provaria um deles.
+    expect(onRat).toBeGreaterThan(0);
+    expect(onHero).toBeGreaterThan(0);
+  });
+
+  it('o golpe físico de MAGIA também segue a raça — o gatilho é o elemento, e não a origem (#620)', () => {
+    // `Game::sendEffects` roda em todo dano com valor, de corpo a corpo ou de magia, e só o tipo
+    // `COMBAT_PHYSICALDAMAGE` cai no `switch` da raça. A magia física (Explosion, Inflict Wound…)
+    // num rato venenoso solta a gota de veneno (17) logo depois do `creature-hit`; a de
+    // elemento — o `strike` de teste é `arcane` — não solta efeito de raça nenhum.
+    //
+    // Mutação que mata: voltar a guarda para `event.source === 'melee'` — o golpe `spell`
+    // físico fica sem o efeito 17; ou tirar a guarda do elemento — o `strike` arcano passa a
+    // soltar 17 também.
+    const physical = {
+      id: 'wound', name: 'Ferida', manaCost: 15, cooldownMs: 2_000,
+      effect: { kind: 'damage', power: 40, range: 3, damageType: 'physical' },
+    };
+    const run = (spellId: string) => {
+      const { runFor, received, heroId } = hunt({
+        rat: { race: 'venom', health: 200 }, hits: { melee: 1, byRace: { venom: 17 } },
+        spells: [physical],
+        bot: rules({ attack: [{
+          when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId },
+        }] }),
+      });
+      runFor(5_000);
+      const all = received();
+      return all
+        .map((message, index) => ({ message, next: all[index + 1] }))
+        .filter(({ message }) => message.type === 'creature-hit' && message.kind === 'spell'
+          && message.id !== heroId && message.amount > 0);
+    };
+
+    const physicalHits = run('wound');
+    expect(physicalHits.length).toBeGreaterThan(0);
+    for (const { message, next } of physicalHits) {
+      expect(message).toMatchObject({ damageType: 'physical' });
+      expect(next).toMatchObject({ type: 'effect', effectId: 17 });
+    }
+    const arcaneHits = run('strike');
+    expect(arcaneHits.length).toBeGreaterThan(0);
+    for (const { message, next } of arcaneHits) {
+      expect(message).toMatchObject({ damageType: 'arcane' });
+      expect(next?.type === 'effect' && next.effectId === 17).toBe(false);
+    }
+  });
+
+  it('sem `byRace` na tabela, todo golpe físico sangra com hits.melee como antes (#620)', () => {
+    // A tabela de antes desta issue continua valendo: raça é apresentação, e a ausência dela
+    // nunca apaga o efeito. O rato é `venom`, e mesmo assim o efeito é o 1 do `melee`.
+    const { runFor, received } = hunt({ rat: { race: 'venom' } });
+    runFor(10_000);
+    const effects = ofType(received(), 'effect');
+    expect(effects.length).toBeGreaterThan(0);
+    for (const effect of effects) expect(effect.effectId).toBe(1);
+  });
+
+  it('o monstro nasce com a apresentação do conteúdo: cores, addons, raça, luz e falas (#620)', () => {
+    // O `sim` não conhece nada disto: o host lê da definição do catálogo, e o cliente desenha.
+    // Mutação que mata: espalhar `monsterLookOf` só no `creature-appear` e não no `session-state`
+    // (o segundo caso abaixo), ou o inverso.
+    const look = {
+      outfit: { head: 113, body: 120, legs: 95, feet: 115, addons: 3 },
+      light: { level: 4, color: 208 },
+      race: 'fire',
+      voices: { intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!', yell: false }, { text: 'GRR', yell: true }] },
+    };
+    const { runFor, received, host, viewer, heroId } = hunt({ rat: look, tanky: true });
+    runFor(500);
+
+    const appears = ofType(received(), 'creature-appear').filter((m) => m.id !== heroId);
+    expect(appears.length).toBeGreaterThan(0);
+    const expected = {
+      colors: { head: 113, body: 120, legs: 95, feet: 115 }, addons: 3, race: 'fire',
+      light: { level: 4, color: 208 },
+      voices: { intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!' }, { text: 'GRR', yell: true }] },
+    };
+    expect(appears[0]).toMatchObject(expected);
+
+    // Quem reanexa no meio vê o mesmo monstro, pintado igual.
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = ofType(received(), 'session-state').at(-1);
+    const rats = (state?.world.creatures ?? []).filter((c) => c.id !== heroId);
+    expect(rats.length).toBeGreaterThan(0);
+    expect(rats[0]).toMatchObject(expected);
+  });
+
+  it('o monstro comum manda cores neutras e nada mais: sem addon, sem raça, sem luz e sem falas (#620)', () => {
+    const { runFor, received, heroId } = hunt();
+    runFor(500);
+    const rat = ofType(received(), 'creature-appear').find((m) => m.id !== heroId);
+    expect(rat?.colors).toEqual({ head: 0, body: 0, legs: 0, feet: 0 });
+    for (const key of ['addons', 'race', 'light', 'voices'] as const) expect(key in (rat ?? {})).toBe(false);
+    // O herói é outra coisa: não ganha a apresentação de monstro.
+    const hero = ofType(received(), 'session-state').at(-1)?.world.creatures.find((c) => c.id === heroId);
+    expect(hero?.colors).toBeUndefined();
+  });
+
   it('a cura vira creature-hit com kind heal, e o efeito dela sai no tile do conjurador', () => {
     // O número em verde é o que a cura REPÔS (60), com o id do herói; o efeito 13 não vem do
     // `creature-healed`, vem do `spell-cast` sem alvo — é por isso que ele estoura no
@@ -4996,6 +5195,32 @@ describe('a postura de luta pelo socket (M30-03, #550, ADR 0040)', () => {
 
     // `attack` no extrato — omitir a chave deixaria uma postura antiga do Postgres voltar.
     expect(saved[0]).toHaveProperty('fightMode', 'attack');
+  });
+
+  it('o extrato de hunt leva os carimbos do familiar do dono, e quem nunca invocou não leva a chave (#599)', async () => {
+    // Sem os carimbos no extrato, o cooldown de 30 min NÃO atravessaria a saída da hunt: o ticket
+    // seguinte leria o personagem como quem nunca invocou. Quem nunca invocou fica sem a chave — o
+    // ledger não toca na coluna (o `receipts.ts` distingue "não veio" de "veio vazio").
+    const run = async (stamp: boolean) => {
+      const saved: Array<Record<string, unknown>> = [];
+      const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+      const directory = { register: async () => true } as unknown as SessionDirectory;
+      const { ruleset } = countingRuleset();
+      const { host, sessions } = buildHost(ruleset, { directory, receipts });
+      await host.prepare('p1', undefined, 'a1');
+      host.attach(new FakeSocket(), 'p1');
+      const hero = sessions[0]?.participants[0] as CharacterRuntime;
+      if (stamp) {
+        hero.familiar = { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 };
+      }
+      await host.drainAll('drain');
+      return saved[0];
+    };
+
+    expect(await run(true)).toMatchObject({
+      familiar: { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 },
+    });
+    expect(await run(false)).not.toHaveProperty('familiar');
   });
 });
 

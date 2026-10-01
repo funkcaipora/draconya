@@ -347,6 +347,93 @@ describe('as cores de outfit (FUN-104)', () => {
   });
 });
 
+describe('a apresentação do monstro: addons, raça, luz e falas (#620)', () => {
+  const look = {
+    addons: 3,
+    race: 'venom' as const,
+    light: { level: 4, color: 208 },
+    voices: { intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!' }, { text: 'GRR', yell: true }] },
+  };
+
+  it('uma criatura que aparece COM a apresentação a guarda inteira', () => {
+    // Mutação que mata: tirar `...presentationOf(message)` do `case 'creature-appear'` — o monstro
+    // perderia addon, luz e fala sem nada acusar, porque continuaria aparecendo.
+    applyMessage({ ...spawn(1), ...look } as S2CMessage, 0);
+    const creature = world.creatures.get(1);
+    expect(creature?.addons).toBe(3);
+    expect(creature?.race).toBe('venom');
+    expect(creature?.light).toEqual({ level: 4, color: 208 });
+    expect(creature?.voices).toEqual(look.voices);
+  });
+
+  it('SEM ela, os quatro campos ficam AUSENTES (não `undefined`): ausência é o neutro', () => {
+    // O viewport aplica o neutro — sem addon, `blood`, sem luz, mudo — e o store não o inventa.
+    // Mutação que mata: copiar `message.addons` etc. direto no literal.
+    applyMessage(spawn(1), 0);
+    const creature = world.creatures.get(1) ?? {};
+    for (const key of ['addons', 'race', 'light', 'voices']) expect(Object.hasOwn(creature, key), key).toBe(false);
+  });
+
+  it('o session-state a carrega por criatura, para quem reanexa ver o monstro pintado e falante', () => {
+    // Mutação que mata: tirar `...presentationOf(creature)` do laço do `session-state`.
+    applyMessage({
+      type: 'session-state',
+      sessionType: 'hunt',
+      elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'char-1',
+        health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
+        promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+      },
+      world: { groundItems: [], tileUpdates: [], fields: [],
+        mapId: 'rat-cellars',
+        creatures: [
+          { id: 1, position: at(0, 0), appearanceId: 128, name: 'me', health: 1, maxHealth: 1 },
+          { id: 2, position: at(1, 0), appearanceId: 21, name: 'elemental', health: 1, maxHealth: 1, ...look },
+        ],
+      },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+
+    expect(world.creatures.get(2)?.light).toEqual({ level: 4, color: 208 });
+    expect(world.creatures.get(2)?.voices).toEqual(look.voices);
+    expect(world.creatures.get(2)?.addons).toBe(3);
+    expect(world.creatures.get(2)?.race).toBe('venom');
+    expect(world.creatures.get(1)?.light).toBeUndefined();
+  });
+
+  it('o golpe fotografa a RAÇA do alvo — inclusive o que mata, que chega junto do `creature-disappear`', () => {
+    // A criatura já não existe quando o viewport desenha o número, então a cor tem que estar no
+    // texto. Mutação que mata: ler a raça no viewport, em vez de fotografá-la em `addFloatingText`.
+    applyMessage({ ...spawn(1, at(2, 2)), race: 'venom' } as S2CMessage, 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 40, kind: 'melee', damageType: 'physical' }, 100);
+    applyMessage({ type: 'creature-disappear', id: 1 }, 100);
+    const text = world.texts[0];
+    expect(text?.race).toBe('venom');
+    expect(floatingTextColor(text!.kind, text!.damageType, text!.race)).toBe(0x00ff00);
+  });
+
+  it('o monstro comum e o herói não trazem raça: o número é vermelho, como sempre', () => {
+    applyMessage(spawn(1, at(2, 2)), 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 40, kind: 'melee', damageType: 'physical' }, 100);
+    expect(Object.hasOwn(world.texts[0] ?? {}, 'race')).toBe(false);
+    expect(floatingTextColor('melee', 'physical', world.texts[0]?.race)).toBe(0xff0000);
+  });
+
+  it('raças diferentes no mesmo tile não se somam: o jogador leria veneno como sangue', () => {
+    applyMessage({ ...spawn(1, at(2, 2)), race: 'venom' } as S2CMessage, 0);
+    applyMessage({ ...spawn(2, at(2, 2)), race: 'undead' } as S2CMessage, 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 10, kind: 'melee', damageType: 'physical' }, 0);
+    applyMessage({ type: 'creature-hit', id: 2, amount: 20, kind: 'melee', damageType: 'physical' }, 10);
+    expect(world.texts).toHaveLength(2);
+    // E a mesma raça, no mesmo tile e na mesma janela, SOMA como sempre.
+    applyMessage({ type: 'creature-hit', id: 2, amount: 5, kind: 'melee', damageType: 'physical' }, 20);
+    expect(world.texts).toHaveLength(2);
+    expect(world.texts[1]?.amount).toBe(25);
+  });
+});
+
 describe('combat transients (FUN-106)', () => {
   // Efeito, projétil e número flutuante NÃO são HUD: chegam dezenas por segundo numa hunt, e o
   // caminho deles termina no `world`, que o viewport lê direto e expira sozinho.
@@ -1465,6 +1552,103 @@ describe('as magias aprendidas (#624, ADR 0058)', () => {
     applyMessage({ type: 'learned-spells', spellIds: ['berserk'] }, 0);
 
     expect(notified).not.toHaveBeenCalled();
+  });
+});
+
+describe('o Treino (#631, ADR 0059)', () => {
+  const state: S2CMessage = {
+    type: 'training-state', offlineBankMs: 3_600_000, offlineSkill: 'sword',
+    weapons: [{ instanceId: 'w1', itemId: 'exercise-sword', charges: 431 }], activeInstanceId: 'w1',
+  };
+
+  it('o catálogo leva as regras do Treino e as exercise weapons — e sem elas o pill "Treino" não existe', () => {
+    // Mutação que mata: `apply` copia o catálogo CAMPO A CAMPO, e um campo novo que não entra ali some
+    // no caminho sem erro nenhum (foi o que o QA no navegador pegou: o `training` chegava e sumia).
+    const base = {
+      type: 'catalogue', hunts: [], monsters: [], charms: [], vocations: [], vocationLevel: 8,
+      bot: { vocabularyVersion: 2, spells: [], supplies: [], automations: [] },
+      items: [{
+        id: 'exercise-sword', name: 'exercise sword', appearanceId: 1, weight: 10, slot: null, twoHanded: false,
+        exercise: { skillId: 'sword', charges: 500 }, buyPrice: 347_222,
+      }],
+      ammunition: [],
+    };
+    const training = {
+      perCharge: { tries: 7, manaSpent: 600 }, bankCapMs: 43_200_000, graceMs: 600_000,
+      spendCapMs: { free: 21_600_000, premium: 43_200_000 },
+      offlineSkills: [{ skillId: 'sword', name: 'Espada', kind: 'attacks' }],
+      skills: [
+        { skillId: 'sword', name: 'Espada', kind: 'attacks' },
+        { skillId: 'shielding', name: 'Escudo', kind: 'attacks' },
+      ],
+    };
+    applyMessage({ ...base, training } as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue?.training).toEqual(training);
+    expect(hud.get().catalogue?.items[0]).toMatchObject({ exercise: { skillId: 'sword', charges: 500 }, buyPrice: 347_222 });
+
+    applyMessage(base as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue).not.toHaveProperty('training');
+  });
+
+  it('ausente e vazio são coisas DIFERENTES: `null` até o servidor dizer', () => {
+    // Um nó `game` sem Treino nunca manda — e o primeiro segundo de toda conexão também não mandou.
+    expect(hud.get().training).toBeNull();
+    applyMessage({
+      type: 'training-state', offlineBankMs: 0, offlineSkill: null, weapons: [], activeInstanceId: null,
+    }, 0);
+    expect(hud.get().training).toEqual({ offlineBankMs: 0, offlineSkill: null, weapons: [], activeInstanceId: null });
+  });
+
+  it('SUBSTITUI o estado inteiro a cada mensagem — cada golpe do Treino reenvia as cargas', () => {
+    applyMessage(state, 0);
+    expect(hud.get().training?.weapons).toEqual([{ instanceId: 'w1', itemId: 'exercise-sword', charges: 431 }]);
+    applyMessage({ ...state, weapons: [{ instanceId: 'w1', itemId: 'exercise-sword', charges: 430 }] } as S2CMessage, 2_000);
+    expect(hud.get().training?.weapons).toEqual([{ instanceId: 'w1', itemId: 'exercise-sword', charges: 430 }]);
+    // A arma acabou: some da lista, e a instância ativa some junto.
+    applyMessage({ ...state, weapons: [], activeInstanceId: null } as S2CMessage, 4_000);
+    expect(hud.get().training).toMatchObject({ weapons: [], activeInstanceId: null, offlineBankMs: 3_600_000 });
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    // Chega a cada golpe (a cada ~2 s): não pode redesenhar o inventário nem as barras.
+    const notified = vi.fn();
+    subscribeSlice(hud, (current) => current.inventory, notified);
+    subscribeSlice(hud, (current) => current.health, notified);
+    applyMessage(state, 0);
+    expect(notified).not.toHaveBeenCalled();
+  });
+
+  it('o extrato do Treino diz o porquê e o tempo — não XP, gold nem abate, que ele não rende', () => {
+    applyMessage({
+      type: 'session-state', sessionType: 'training', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'me', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0,
+        vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        soul: 0, soulMax: 0,
+      },
+      world: { mapId: 'city', creatures: [], groundItems: [], tileUpdates: [], fields: [] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    } as unknown as S2CMessage, 0);
+    applyMessage({
+      type: 'session-ended', reason: 'completed',
+      aggregates: { durationMs: 960_000, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+    const line = hud.get().systemMessages.at(-1);
+    // A arma acabou: não é "Concluído" (a frase da hunt), é o que de fato aconteceu.
+    expect(line?.text).toBe('Treino: A exercise weapon acabou · 16 min');
+    expect(line?.text).not.toContain('XP');
+
+    // E parar o treino na Cidade não é "sair da hunt": o jogador está lendo isto em pé na praça.
+    applyMessage({
+      type: 'session-ended', reason: 'manual-exit',
+      aggregates: { durationMs: 180_000, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+    const manual = hud.get().systemMessages.at(-1);
+    expect(manual?.text).toBe('Treino: Você saiu do treino · 3 min');
+    expect(manual?.text).not.toContain('hunt');
   });
 });
 

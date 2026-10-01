@@ -289,6 +289,37 @@ export function buildTilemap(data: TilemapInput): Tilemap {
   };
 }
 
+/**
+ * Coordenada ABSOLUTA do Tibia (a do `otservbr.otbm`) → coordenada LOCAL do mapa importado, pelo
+ * `source.region` (#829, ADR 0060 d.3.b): `x` e `y` perdem a origem do recorte, e `z` não muda —
+ * os andares do mapa são chaveados pelo `z` absoluto (`scripts/import-map.ts`, `importRegion`).
+ * É o inverso do que o importador faz com o `entryPoint`.
+ *
+ * `undefined` quando o mapa não foi importado (sem `source`, portanto sem origem) ou quando a
+ * coordenada cai fora da região em qualquer dos três eixos: o chamador decide o que é isso, e
+ * não existe um ponto "mais perto" que se possa adivinhar.
+ */
+export function absoluteToLocal(map: Pick<Tilemap, 'source'>, at: Point): Point | undefined {
+  const region = map.source?.region;
+  if (region === undefined) return undefined;
+  if (at.x < region.x[0] || at.x > region.x[1]) return undefined;
+  if (at.y < region.y[0] || at.y > region.y[1]) return undefined;
+  if (at.z < region.z[0] || at.z > region.z[1]) return undefined;
+  return { x: at.x - region.x[0], y: at.y - region.y[0], z: at.z };
+}
+
+/**
+ * O inverso de `absoluteToLocal`: coordenada local do mapa importado → absoluta do Tibia. É o que
+ * se persiste (`characters.world_x/y/z`, ADR 0060 d.3.b) e o que o protocolo do mundo carrega.
+ * `undefined` sem `source`; não confere se o ponto cabe na grade — quem pergunta por um tile
+ * andável usa `isBlocked`.
+ */
+export function localToAbsolute(map: Pick<Tilemap, 'source'>, at: Point): Point | undefined {
+  const region = map.source?.region;
+  if (region === undefined) return undefined;
+  return { x: at.x + region.x[0], y: at.y + region.y[0], z: at.z };
+}
+
 /** Bloqueado, fora do mapa, ou num andar que o mapa não tem. `z` ausente é o andar padrão. */
 export function isBlocked(map: Tilemap, x: number, y: number, z: number = map.z): boolean {
   if (x < 0 || y < 0 || x >= map.width || y >= map.height) return true;

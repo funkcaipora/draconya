@@ -233,7 +233,7 @@ describe('readSkinningCatalog (fixture sintética)', () => {
     'mammals/test_noafter.lua': monster('Test Noafter', 250),
     'mammals/test_open.lua': monster('Test Open', 260),
     // Pasta que o catálogo pula.
-    'familiars/test_familiar.lua': monster('Test Familiar', 100),
+    'traps/test_trap.lua': monster('Test Trap', 100),
   });
 
   it('gera uma entidade por monstro esfolável do catálogo, com a janela, o material e a chance', () => {
@@ -273,8 +273,8 @@ describe('readSkinningCatalog (fixture sintética)', () => {
     // O `test-drake` duplicado não vira uma segunda entidade.
     expect(skipped.filter((entry) => entry.id === 'test-drake')).toHaveLength(1);
     expect(reasonOf('test-drake')).toContain('duplicado');
-    // A pasta que o catálogo pula (`familiars/`) nunca é lida.
-    expect(skipped.some((entry) => entry.id === 'test-familiar')).toBe(false);
+    // A pasta que o catálogo pula (`traps/`; a `familiars/` entrou no #599) nunca é lida.
+    expect(skipped.some((entry) => entry.id === 'test-trap')).toBe(false);
   });
 
   it('as notas dizem o que a tabela declara e o que nenhum monstro alcança', () => {

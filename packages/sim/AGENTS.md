@@ -569,7 +569,8 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   "congela" um monstro reposicionado à mão**: sem ninguém à vista e fora do `home` ele VOLTA; o
   teste que planta um monstro precisa plantar o `home` junto (`plant` em `hunt.test.ts`) — e o que
   conta `rng.integer` precisa isolar os três sorteios do passo aleatório. (5) Invocação nunca volta
-  nem fica ociosa (`masterId`), e sem alvo continua parada — seguir o mestre não é modelado. (6) **O
+  nem fica ociosa (`masterId`), e sem alvo a de PERSONAGEM segue o mestre (`summonFollowStep`, #599 —
+  a de outro monstro continua parada; sem mestre à vista ou sem caminho a de personagem vagueia). (6) **O
   ocioso CALA defesa, troca de alvo e invocação** (o Canary tira o monstro do `onThink`):
   `MonsterRuntime.idle` é escrito por `#onMonsterStep` a cada decisão (liga no `idle`, desliga em
   qualquer outra) e `#onMonsterDefense`/`#onMonsterTargetChange`/`#onMonsterSummon` REAGENDAM e
@@ -927,7 +928,36 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   `damageType`. Um campo com `blocksMovement: true` e SEM condição (Magic Wall, Wild Growth)
   ainda passa pelo pipeline de tique normalmente — `#onFieldTick`/`#enterField` só saem cedo
   quando `field.condition === undefined`, o mesmo `undefined` que o estágio mudo de uma cadeia
-  também usa.
+  também usa. **Uma exceção desde a OW-05 (#826): a parede de PERSONAGEM cede a quem é
+  personagem — ver o item do campo com dono, logo abaixo.**
+- **O campo tem DONO, e quem o lançou decide em quem ele pega** (OW-05, #826, ADR 0060 d.8 — o
+  no-pvp do Canary aplicado ao campo, `combat.cpp:1207-1218`/`2594-2640`,
+  `condition.cpp:2015-2020`). `TileFieldState.owner?: { kind: 'character' | 'monster', id }`,
+  gravado por `applyField` (o sexto parâmetro, opcional). Quatro armadilhas. (1) **Sem `owner` é
+  campo de MAPA e pega todo mundo** — é o que todo snapshot anterior restaura, sem subir
+  `SNAPSHOT_FORMAT_VERSION`, e o que o teste que planta campo direto sempre foi; um call site
+  novo de `applyField` que esquecer o `owner` cria campo que fere a party inteira, em silêncio.
+  (2) **Invocação de personagem é PERSONAGEM, dos dois lados**: o campo lançado por ela grava o
+  MESTRE (`#fieldOwnerOf`, `kind: 'character'`), e ela mesma é protegida do campo de personagem
+  (`#fieldHarms` confere `typeof masterId === 'string'`, como o `canDoCombat` do Canary recusa
+  `target->isSummon() && targetMasterPlayer` num mundo no-pvp). Monstro que não é invocação de
+  personagem segue levando o campo de personagem — o que o teste da party confere. (3) **O
+  portão roda ANTES de montar a condição**, no tique (`#onFieldTick`) e na entrada (`#enterField`):
+  `conditionFromSpec` pode consumir `session.rng`, e quem o campo não fere não gasta sorteio
+  (a sequência dos outros alvos é a mesma de antes). (4) **A parede de personagem é a variante
+  SEGURA**: segue barrando monstro e invocação, mas `Movable.dissolvesSafeWalls` (só
+  `CharacterRuntime` declara) faz `canOccupy`/`move` a admitirem, e `HuntRuleset#step` a remove
+  depois do passo aceito (`#dissolveSafeWall` → `#removeField`, que cancela os três eventos do
+  campo) — ANTES de `#enterField`, porque `Fields.at` devolve só o campo mais recente e o que
+  estava embaixo da parede é o que o passo encontra. Qualquer PERSONAGEM a dissolve, não só o
+  lançador (o Canary confere `creature->getPlayer()`, nunca o dono). O BFS do follow passa o
+  quarto argumento de `blockedAt` pelo mesmo motivo; um predicado novo de caminho de PERSONAGEM
+  que chame `blockedAt` de três argumentos trata a parede dele como intransponível, em desacordo
+  com o passo. O dono também atravessa os estágios (`#onFieldStageAdvance` o repassa) e o
+  relançamento do mesmo id o troca. **NÃO muda o crédito do dano do campo**: a condição do
+  campo segue com `sourceId` = id do campo, e o abate por campo de personagem não credita XP ao
+  dono (no Canary o dono vai no `CONDITION_PARAM_OWNER`) — divergência registrada, pendente do
+  crédito do Canary (OW-28).
 - **`isSightClear`'s atalho "sem camada de sight, sempre livre" escondia um bug de LIMITE, e
   isso só apareceu ao tentar ligar o predicado de campo (#560).** Antes, mapa sem `sight`
   devolvia `true` ANTES de percorrer a linha — nunca chegava a conferir `x/y` contra
@@ -966,7 +996,7 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   campo `masterKind` à parte.** `HuntRuleset#chooseMonsterTarget` bifurca por isso: invocação de
   personagem NUNCA roda `chooseTarget` própria — herda o alvo do mestre (`attackTargetOf`) a
   cada passo/ataque/ability; invocação de monstro continua igual ao #546. **O dano dela credita
-  o MESTRE, nunca o `subject` dela** (`#applyMonsterHitOnSummon`, achado da implementação: sem o
+  o MESTRE, nunca o `subject` dela** (`#applyMonsterHitOnMonster`, ex-`...OnSummon`, achado da implementação: sem o
   redirecionamento, `xpByDamage` não reconhece um `m:<id>` como participante e o abate renderia
   ZERO XP para quem invocou). **`#hostileMonsters()` é o outro lado da mesma moeda — proteção
   contra FOGO AMIGO.** Estender a lista de presas de um monstro hostil (`#playerSummonPrey`) para
@@ -980,6 +1010,91 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   subject certo, como cinto e suspensório contra o cliente pedindo por fora do auto-target. Ver
   "Invocação do PERSONAGEM" em `docs/product/combat.md` para o resto do contrato (teto de 2,
   mana do MONSTRO via `manaCostOverride`, `combat-v4`).
+- **Facções de monstro (#619, M44-01) são o `Faction_t` do Canary, e a regra é ANTES de tudo "sem
+  facção na hunt, nada muda".** `monster/faction.ts` (puro) tem os valores (`FACTION_PLAYER` = 1, o
+  peso `× 100` na distância e `× 100 000` na vida/dano) e a tabela; o `HuntRuleset` guarda
+  `#factions`/`#hasFactions` e TODO caminho novo sai por `#hasFactions` falso, devolvendo a MESMA
+  lista de antes — sem alocar e sem sortear. Cinco armadilhas. (1) **A tabela é do ALCANÇÁVEL, não do
+  conteúdo**: `options.monsters` traz o catálogo inteiro em toda hunt, então "existe algum monstro
+  com facção?" seria sempre sim; `reachableMonsterIds` segue os pontos de spawn e, transitivamente,
+  as invocações. (2) **Oponente não é alvo** (`isOpponent` × `isTarget`): `#opponentOthersOf` (mais
+  `session.participants`) é a `targetList` — o que segura a volta ao spawn e impede o ocioso —, e
+  `#targetPreyOf` é o que `chooseTarget` recebe. A Lion tem o herói na lista e não o mira. Trocar
+  uma pela outra some com a Lion ou faz ela caçar o herói. (3) **`Prey.faction` ausente vale PLAYER**
+  (personagem e invocação de personagem não dizem nada) — o desempate `d + faction × 100` é
+  constante para uma lista só deles, e é isso que preserva toda hunt sem facção; o jogador (1) ganha
+  de qualquer monstro inimigo (2+) na aquisição, por mais longe que esteja. Em "mais dano" o
+  Canary inverte (a facção MAIOR ganha) e `rankTarget` reproduz. (4) **`#mayAttack` vale para o alvo
+  principal e para cada criatura da área**, e a área de um monstro de facção soma os inimigos com
+  `#withFactionEnemies` — a lista de área de um monstro comum continua só personagens e
+  invocações de personagem. A invocação de monstro herda facção e inimigas do mestre
+  (`#factionProfileOf` recursivo); a de PERSONAGEM não usa a tabela (`null`). (5) **A morte por
+  monstro é decidida pelo `credit`, não pelo golpe final** (`#onMonsterDied`): `lastHitBy` que é
+  um `m:<id>` sem participante entre os que bateram = sem XP, sem abate (a invocação de monstro
+  também), cadáver sem dono e sem loot; com dano de participante a XP é `floor(dano ÷ total × XP)`
+  (`#experiencePool`, o dano de monstro entra no total) e, havendo dano de monstro no mapa, o dono do
+  cadáver é o maior causador ENTRE OS QUE AINDA EXISTEM (`#corpseOwnerOf`), participante ou monstro
+  vivo — mesmo quando o herói deu o último golpe —, o dano de campo não entra. **O dano de quem saiu
+  NUNCA se apaga do mapa de outro monstro** (o Canary só zera o `damageMap` inteiro, em
+  `onIdleStatus`): `#forgetInMonsters` o funde no balde `DEPARTED_ACTOR` (`m:departed`,
+  `Contribution.fold`), que conta no total, mantém o prefixo `m:` e nunca é dono nem `mostDamageBy`;
+  trocar a fusão por `forget` paga ao jogador a XP que o Deepling morto já tirou. O tique de condição
+  de um dono monstro que já saiu não é atribuído a ninguém. **A invocação de monstro de facção
+  persegue o alvo do MESTRE** (`#followMasterTarget`, `updateSummonTarget`), nunca `chooseTarget`
+  — a lista de alvos dela inclui o jogador por causa do offset de facção, e é isso que ela NÃO usa.
+  **O laço de alvos de `#executeMonsterAbility` pula o monstro que saiu dos índices** no meio dele
+  (a morte do mestre cascateia em `#removeSummon`, que não zera `alive`) — o mesmo guarda de
+  `#applyHits`/`#carnage`; sem ele a invocação leva um golpe fantasma e morre duas vezes. **A "atividade sem jogador" do `updateIdleStatus` do `47dfd51` só
+  alcança a INVOCAÇÃO de um monstro de facção** (`master->totalPlayersOnScreen == 0`, sob um `else if
+  (master)`): `#isFactionSummonIdle` lê a posição dos participantes — estado da sessão, nunca de quem
+  olha — e o monstro de facção comum com inimigo à vista brigando sem jogador NÃO fica ocioso. Testes
+  de facção precisam posicionar o herói ANTES do primeiro `advanceBy`: o monstro retém o alvo que
+  escolheu, e corrigir a posição depois testa a escolha de um herói na rota (`arena` em
+  `rulesets/factions.test.ts`). Ver "Facções de monstro" em `docs/product/combat.md`.
+- **O familiar de vocação (#599, M38-02, ADR 0057 d.3 e a emenda de 2026-09-29) é uma invocação de
+  PERSONAGEM com três coisas a mais, e cada uma tem uma armadilha.** (1) **Os dois carimbos
+  (`CharacterRuntime.familiar`) são de relógio de PAREDE, e o "agora" é `session.createdAtMs +
+  session.nowMs`** (`HuntRuleset#wallNowMs`, fracionário: serve para COMPARAR; o que se GRAVA passa
+  por `#wallStampMs`, que arredonda para cima — os consumidores validam inteiro seguro e trocam o
+  carimbo torto pelo vazio em silêncio — e o piso da morte; o servidor soma o intervalo descartado
+  da retomada ao `createdAtMs`) — nunca o `Cooldowns` do personagem, que guarda instante
+  LÓGICO da sessão que o gravou (o relógio de cada sessão nasce em zero, e o objeto do personagem
+  atravessa as transições): um cooldown de 30 min ali seria lido na hunt seguinte como "daqui a 30
+  min de ZERO", ou, se a hunt anterior durou uma hora, como "daqui a uma hora e meia". O
+  `summonUntilMs` DESCE quando o familiar morre (`#onMonsterDied` grava o agora), por isso o ledger
+  o escreve por última-escrita-vence e nunca por máximo. (2) **A recusa por cooldown de parede
+  devolve `retryInMs: 0`, de propósito**: o bot reagenda o grupo pelo MAIOR prazo entre as recusas, e
+  30 min de sono trancariam a haste, que vive no grupo `support`. Quem precisa do prazo real
+  (`slotStates`, `useSlot`) o lê de `#cooldownWaitOf`, que soma `#familiarWaitOf`. (3) **A ordem da
+  recusa é a do Canary — level/cooldown/mana e SÓ ENTÃO `precondition` (teto de zero invocações,
+  sala), antes de qualquer débito** — por isso `castSpell` ganhou o parâmetro `precondition`; um
+  `castSpell` que debitasse a mana e deixasse a invocação sem tile perderia mana por nada. O
+  tile é escolhido pela `precondition` (10 sorteios do `Rng` da sessão, sempre) e usado depois de
+  `ok`: nada roda evento entre os dois. **A duração é o evento `familiar-expire`** com o subject
+  `m:<id>` do familiar — a morte (`resolveDeath`) e `#removeSummon` já o cancelam por esse subject.
+  **Três lacunas do primitivo do #598 que o familiar expôs**: a ability em ÁREA de uma invocação de
+  personagem usa `#hostileMonsters()` como presas (senão acertaria a party); o alvo herdado é o
+  SELECIONADO do mestre e não o que a arma alcança; e o jogador atravessa o familiar por TROCA de
+  tiles em `#step` (`#moverBlocked` e `#occupiedForPlayer` — o `world.occupied` das buscas de caminho do follow e do `walk-to` — deixam o caminho passar por ele) — sem isso um familiar parado
+  num corredor tranca a party inteira. **O familiar RECOLOCADO** (o teleporte ao mestre e a troca cujo
+  tile de origem fechou — a porta comum fecha no `vacate`) sai como `creature-vanished` +
+  `creature-appeared`, NUNCA como `creature-moved` de duração zero: o hospedeiro descarta duração ≤ 0
+  (`#placeFamiliarNear`). **E `onEnter` remonta a ocupação COM os monstros** — o familiar recriado
+  para o membro anterior de uma party já é um monstro vivo no mundo, e remontar só com os
+  participantes liberava o tile dele. `#familiarIds` (vazio na hunt de sempre) existe para o custo:
+  o teleporte ao mestre e a travessia consultam-no a cada passo. **A invocação de personagem SEM alvo
+  segue o mestre** (`#onMonsterStep` → `summonFollowStep`): a busca é `cheapestPath` (Dijkstra,
+  cardinal 10, diagonal 35 — o A* do Canary), e não o BFS de `boundedPath` nem o guloso — o BFS de
+  custo igual anda de viés na diagonal, e o passo diagonal dura o triplo; o guloso oscila na boca de
+  uma concavidade. Só enxerga quem está a ≤ `aggroRadius` no mesmo andar, e o objetivo é um tile a
+  EXATAMENTE 2 do mestre com linha de visão livre — a 1 tile é só o "melhor até agora" que o Canary
+  guarda enquanto procura (`cheapestPath` aceita um `fallback`): a invocação encostada se afasta até a
+  2 (`getPathSearchParams`, `FrozenPathingConditionCall`). `summonFollowStep` devolve `step`/`stay`/
+  `wander`: sem mestre à vista ou sem caminho é `wander` (o `getNextStep` cai no `doRandomStep`, e
+  `decideUnengagedMove` só deixa a invocação de PERSONAGEM passear), mestre invisível que a comum não
+  enxerga é `stay` (`canFollowMaster`; o familiar segue sempre). Um teste que quer o familiar PARADO ou atrasado precisa de um
+  jeito de o herói deixá-lo para trás (a velocidade do familiar é a do mestre no lançamento: acelere o
+  herói DEPOIS de lançar), porque um familiar que enxerga o mestre o acompanha.
 - **Convince Creature e Animate Dead (#600, M38-03, ADR 0057 d.5–d.6) são supply (`effect.kind`
   `convince` / `animate-dead`), e o que o script do Canary recusa entra em `useSupply` como a
   PRECONDIÇÃO `summonRune?.check`** (`HuntRuleset#summonRunePrecondition`) — depois de requisitos, mira e
@@ -1006,7 +1121,10 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   invocação de jogador** — o passo para o tile dela vira TROCA de lugar (`swapPlaces` em
   `movement.ts`, chamada pelo `HuntRuleset#step`; a ocupação continua exclusiva), e sem isso a
   invocação em cima do próximo tile da rota trava o herói pelo resto da hunt; a troca NÃO passa por
-  `vacate`/`occupy` (porta não fecha, placa não solta); (b) **toda colheita de ÁREA do personagem
+  `vacate`/`occupy` (porta não fecha, placa não solta). **O familiar (#599) NÃO passa por esse
+  `swapPlaces`**: ele é atravessado ANTES do `move`, pelo `vacate` + recolocação descritos no item
+  dele, e o ramo do #600 só enxerga a invocação comum — um passo que o familiar já liberou nunca
+  chega a ser recusado por ocupação; (b) **toda colheita de ÁREA do personagem
   pula `typeof masterId === 'string'`** — as duas formas de `#aimFor` e o `#cleave` varrem
   `#monsters` direto, e quem esquecer o corte mata a invocação no primeiro Great Fireball.
 - **Os Charms em combate (#603, M39-03, ADR 0053 d.5) vivem em `combat/charms.ts` (puro) e nos
@@ -1089,3 +1207,24 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   sem prazo o deixou engatilhado e aprender não muda o mundo. `LearnedSpells#grant` (sem preço) é o
   `learnInstantSpell` puro do Canary — para o dia em que o Wheel of Destiny conceder a Great Death
   Beam.
+- **O Treino é um ruleset de eventos, e o offline training é PURO (#631, ADR 0059).** `TrainingRuleset`
+  (`rulesets/training.ts`): um evento `TRAIN_STRIKE` por golpe, o primeiro no instante da entrada e
+  os seguintes a cada `combat.player.attackIntervalMs`; cada golpe credita `7 × rate` tries (`600 ×
+  rate` de mana gasta para wand/rod) ANTES de descontar a carga (a última também rende), a arma
+  esgotada é destruída (`removedInstances`) e as cargas restantes vivem no overlay da instância
+  (`ItemInstanceOverlay.charges`, "ausente é cheia"). Nada aqui sorteia, e o resultado é idêntico a
+  10 Hz, a 1 Hz e depois de um snapshot. `settleOfflineTraining` (`offline-training.ts`) é a função
+  PURA do gasto do banco — `min(fora, banco, teto da conta)`, carência de 10 min, melee `/ 2`,
+  distância `/ 4`, magic level pela mana, escudo `/ 4` junto —: recebe o tempo fora COMO DADO
+  (`awayMs`), porque o `sim` não lê relógio; quem sabe a hora é a `api`, no ticket. O banco cresce
+  1:1 com `session.inSessionMsOf(id)` no fim da participação (`onEnd`/`onLeave` de hunt e de treino),
+  nunca por tick — e NÃO com `aggregatesOf(id).durationMs`: `advanceBy` soma a janela INTEIRA ao
+  `durationMs` antes de despachar os eventos, então uma sessão que acaba por evento no meio da janela
+  (arma esgotada, morte) contaria o resto dela e o banco dependeria de como o host fatiou o tempo;
+  `inSessionMsOf` lê o relógio lógico (`nowMs` menos o instante de entrada), exato dentro do evento.
+  O escudo do offline training segue o `sendUpdate` do Canary — `Skill.percent` é um `double` de 2
+  casas comparado com o percentual novo TRUNCADO (`uint8_t`) —, não "o inteiro mudou" (`floor` dos dois
+  lados). O cooldown entre dois Treinos (`training-exhaustion`, 10 s) é um carimbo de parede no
+  registro (`exerciseExhaustedUntilMs`), comparado com o `nowMs` que o servidor passa. `buyItem` (`purchase.ts`) é a compra mínima do `buy-item`: confere
+  TUDO antes de mexer em `goldDelta` ou na mochila. `holdStamina` (`stamina.ts`) avança o marco sem
+  recuperar — o que o Treino faz ao sair (ADR 0060 d.14c).

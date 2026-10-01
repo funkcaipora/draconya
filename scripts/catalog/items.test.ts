@@ -7,6 +7,7 @@ import { readSourceCommit } from './env.js';
 import {
   classify, convertItem, parseVocationRequirement, readItemCatalog, reconcileAuthored, writeOverrides,
 } from './items.js';
+import type { ExerciseLookup, ItemPriceLookup } from './items.js';
 import type { CatalogImportContext } from './registry.js';
 import { childrenOf, parseXml } from './xml.js';
 
@@ -314,11 +315,96 @@ const ITEMS_XML = `<?xml version="1.0" encoding="ISO-8859-1"?>
 		<attribute key="weight" value="3000"/>
 		<attribute key="imbuementslot" value="1"/>
 	</item>
+	<item id="90060" article="an" name="test exercise sword">
+		<attribute key="primarytype" value="exercise weapons"/>
+		<attribute key="showCharges" value="1"/>
+		<attribute key="charges" value="500"/>
+		<attribute key="weight" value="1000"/>
+	</item>
+	<item id="90061" article="an" name="test exercise wraps">
+		<attribute key="primarytype" value="exercise weapons"/>
+		<attribute key="charges" value="500"/>
+		<attribute key="weight" value="1000"/>
+	</item>
+	<item id="90062" article="a" name="test training sword">
+		<attribute key="primarytype" value="training weapons"/>
+		<attribute key="charges" value="50"/>
+		<attribute key="weight" value="1000"/>
+	</item>
 	<item id="90047" article="a" name="test power ring">
 		<attribute key="skillfist" value="6"/>
 		<attribute key="weight" value="10"/>
 		<attribute key="script" value="moveevent">
 			<attribute key="slot" value="ring"/>
+		</attribute>
+	</item>
+	<item id="90050" article="a" name="test ward tome">
+		<attribute key="primarytype" value="spellbooks"/>
+		<attribute key="weaponType" value="spellbook"/>
+		<attribute key="magiclevelpoints" value="2"/>
+		<attribute key="magicshieldCapacityflat" value="70"/>
+		<attribute key="magicshieldCapacitypercent" value="6"/>
+		<attribute key="defense" value="18"/>
+		<attribute key="weight" value="1500"/>
+		<attribute key="script" value="moveevent">
+			<attribute key="level" value="100"/>
+			<attribute key="slot" value="shield"/>
+		</attribute>
+	</item>
+	<item id="90051" article="a" name="test lowercase ward grimoire">
+		<attribute key="primarytype" value="spellbooks"/>
+		<attribute key="weaponType" value="spellbook"/>
+		<attribute key="magicshieldcapacityflat" value="40"/>
+		<attribute key="defense" value="14"/>
+		<attribute key="weight" value="1200"/>
+		<attribute key="script" value="moveevent">
+			<attribute key="slot" value="shield"/>
+		</attribute>
+	</item>
+	<item id="90052" article="a" name="test zero ward tome">
+		<attribute key="primarytype" value="spellbooks"/>
+		<attribute key="weaponType" value="spellbook"/>
+		<attribute key="magicshieldCapacityflat" value="0"/>
+		<attribute key="defense" value="14"/>
+		<attribute key="weight" value="1200"/>
+		<attribute key="script" value="moveevent">
+			<attribute key="slot" value="shield"/>
+		</attribute>
+	</item>
+	<item id="90055" article="a" name="test bonded club">
+		<attribute key="primarytype" value="club weapons"/>
+		<attribute key="weaponType" value="club"/>
+		<attribute key="attack" value="30"/>
+		<attribute key="elementalbond" value="energy"/>
+		<attribute key="weight" value="4000"/>
+		<attribute key="script" value="moveevent;weapon">
+			<attribute key="weaponType" value="club"/>
+		</attribute>
+	</item>
+	<item id="90056" article="a" name="test unbonded club">
+		<attribute key="primarytype" value="club weapons"/>
+		<attribute key="weaponType" value="club"/>
+		<attribute key="attack" value="30"/>
+		<attribute key="elementalbond" value="fire"/>
+		<attribute key="weight" value="4000"/>
+		<attribute key="script" value="moveevent;weapon">
+			<attribute key="weaponType" value="club"/>
+		</attribute>
+	</item>
+	<item id="90057" article="a" name="test bonded fist">
+		<attribute key="primarytype" value="fist weapons"/>
+		<attribute key="weaponType" value="fist"/>
+		<attribute key="attack" value="30"/>
+		<attribute key="elementalbond" value="earth"/>
+		<attribute key="weight" value="2000"/>
+	</item>
+	<item id="90058" article="a" name="test bonded helmet">
+		<attribute key="primarytype" value="helmets"/>
+		<attribute key="armor" value="5"/>
+		<attribute key="elementalbond" value="physical"/>
+		<attribute key="weight" value="2000"/>
+		<attribute key="script" value="moveevent">
+			<attribute key="slot" value="head"/>
 		</attribute>
 	</item>
 </items>
@@ -364,6 +450,52 @@ describe('classify', () => {
     expect(classify(undefined, undefined, undefined, 'necklace', false)).toEqual({ slice: 'amulets', kind: 'amulet', slot: 'neck' });
     expect(classify(undefined, undefined, undefined, 'ring', false)).toEqual({ slice: 'rings', kind: 'ring', slot: 'finger' });
     expect(classify(undefined, undefined, undefined, undefined, false)).toMatchObject({ skip: expect.stringMatching(/sem categoria/) });
+  });
+});
+
+describe('exercise weapons (#631, ADR 0059)', () => {
+  const exercise: ExerciseLookup = {
+    skillNameByClientId: new Map([[90060, 'SKILL_SWORD'], [90061, 'SKILL_FIST']]),
+  };
+  const prices: ItemPriceLookup = {
+    sellMaxByClientId: new Map(),
+    buyMinByClientId: new Map([[90060, { amount: 347_222, itemName: 'test exercise sword', npcFile: 'test.lua' }]]),
+  };
+  const convertWith = (id: string, lookups: { prices?: ItemPriceLookup; exercise?: ExerciseLookup }) => {
+    const item = itemsOf(ITEMS_XML).find((el) => el.attributes['id'] === id);
+    if (item === undefined) throw new Error(`fixture sem item id ${id}`);
+    return convertItem(item, PATH, COMMIT, lookups.prices, lookups.exercise);
+  };
+
+  it('classifica `exercise weapons` na fatia própria e `training weapons` fica fora (Daily Reward)', () => {
+    expect(classify('exercise weapons', undefined, undefined, undefined, false))
+      .toEqual({ slice: 'exercise-weapons', kind: 'other' });
+    const skipped = classify('training weapons', undefined, undefined, undefined, false);
+    expect('skip' in skipped && skipped.skip).toMatch(/Daily Reward/);
+  });
+
+  it('converte cargas, skill e preço de compra — sem slot, sem arma, e o schema real aceita', () => {
+    const converted = convertWith('90060', { prices, exercise });
+    expect(converted?.blockers).toEqual([]);
+    expect(converted?.slice).toBe('exercise-weapons');
+    expect(converted?.entity).toMatchObject({
+      id: 'test-exercise-sword', kind: 'other', weight: 10, value: 0, charges: 500,
+      exercise: { skillId: 'sword' }, purchasable: true, buyPrice: 347_222,
+    });
+    expect(converted?.entity).not.toHaveProperty('slot');
+    expect(converted?.entity).not.toHaveProperty('weapon');
+    expect(itemSchema.parse(asItem(converted?.entity))).toBeTruthy();
+  });
+
+  it('sem NPC que a venda não há `purchasable` nem `buyPrice`', () => {
+    const converted = convertWith('90060', { prices: { sellMaxByClientId: new Map() }, exercise });
+    expect(converted?.entity).not.toHaveProperty('purchasable');
+    expect(converted?.entity).not.toHaveProperty('buyPrice');
+  });
+
+  it('wraps de fist (Monk) e item fora da tabela do Lua saem do corte com o motivo', () => {
+    expect(convertWith('90061', { prices, exercise })?.blockers[0]).toMatch(/fist é do Monk/);
+    expect(convertWith('90060', { prices })?.blockers[0]).toMatch(/exerciseWeaponsTable/);
   });
 });
 
@@ -571,6 +703,43 @@ describe('convertItem', () => {
     expect(item?.entity['reflect']).toEqual({ physical: { flat: 10 } });
     expect(item?.entity['cleavePercent']).toBe(20);
     expect(itemSchema.parse(asItem(item?.entity))).toBeTruthy();
+  });
+
+  it('capacidade de magic shield (#627): flat e percent viram bonuses.magicShieldCapacity, na caixa mista do XML real', () => {
+    const tome = convert('90050');
+    expect(tome?.ignoredFields).toEqual([]);
+    expect(tome?.entity['bonuses']).toEqual({
+      skills: [{ skillId: 'magic', amount: 2 }],
+      magicShieldCapacity: { flat: 70, percent: 6 },
+    });
+    expect(itemSchema.parse(asItem(tome?.entity))).toBeTruthy();
+  });
+
+  it('capacidade de magic shield (#627): só um dos dois atributos, em minúsculas, completa o outro com zero; zero não vira campo', () => {
+    // O `Items::parseItemNode` do Canary minusculiza a chave (`items.cpp:383`) — a grafia do XML
+    // não muda o que ele lê.
+    expect(convert('90051')?.entity['bonuses']).toEqual({ magicShieldCapacity: { flat: 40, percent: 0 } });
+    expect(convert('90052')?.entity['bonuses']).toBeUndefined();
+  });
+
+  it('elementalbond (#627): energy/earth/physical viram item.elementalBond; texto desconhecido fica sem o campo', () => {
+    const bonded = convert('90055');
+    expect(bonded?.blockers).toEqual([]);
+    expect(bonded?.ignoredFields).toEqual([]);
+    expect(bonded?.entity['elementalBond']).toBe('energy');
+    expect(itemSchema.parse(asItem(bonded?.entity))).toMatchObject({ elementalBond: 'energy' });
+    // `ItemParse::parseElementalBond` deixa `fire` (e qualquer outro) em `COMBAT_NONE`.
+    expect(convert('90056')?.entity).not.toHaveProperty('elementalBond');
+  });
+
+  it('elementalbond (#627): arma fist continua fora do corte (DT-01) — é onde estão os 32 itens reais', () => {
+    expect(convert('90057')?.blockers[0]).toMatch(/fist/);
+  });
+
+  it('elementalbond (#627): em item que não é arma o dado não tem para onde ir, e o relatório diz', () => {
+    const helmet = convert('90058');
+    expect(helmet?.entity).not.toHaveProperty('elementalBond');
+    expect(helmet?.ignoredFields).toContain('elementalbond em item que não é arma');
   });
 
   it('regeneração incompleta (sem o par de ticks) é descartada e registrada', () => {
@@ -820,6 +989,27 @@ describe.skipIf(!HAS_REAL_CANARY)('leitor contra o Canary real (CANARY_DIR) — 
     expect(quiver?.entity).toMatchObject({
       kind: 'shield', slot: 'shield', quiver: true, perfectShot: { range: 4, damage: 20 },
     });
+  });
+
+  it('os 4 spellbooks com capacidade de magic shield (#627): eldritch folio/tome 80/8 %, cocoa/creamy grimoire 150/3 %', () => {
+    const expected: [string, number, number][] = [
+      ['36672', 80, 8], ['36673', 80, 8], ['45639', 150, 3], ['45640', 150, 3],
+    ];
+    for (const [id, flat, percent] of expected) {
+      const book = byId(id);
+      expect(book?.blockers, id).toEqual([]);
+      expect(book?.entity['bonuses'], id).toMatchObject({ magicShieldCapacity: { flat, percent } });
+    }
+  });
+
+  it('nenhum dos 32 itens com elementalbond entra no catálogo (#627): todos são weapontype fist', () => {
+    const bonded = childrenOf(root!, 'item').filter((el) => childrenOf(el, 'attribute')
+      .some((a) => a.attributes['key']?.toLowerCase() === 'elementalbond'));
+    expect(bonded).toHaveLength(32);
+    for (const item of bonded) {
+      const converted = convertItem(item, 'data/items/items.xml', commit);
+      expect(converted?.blockers[0], item.attributes['id']).toMatch(/fist/);
+    }
   });
 
   it('jungle quiver (35524, #575): kind shield, quiver true, sem perfectShot (a maioria dos quivers)', () => {

@@ -45,17 +45,34 @@ entidade (a forma do `monsterSchema` mais `bestiary` e `outfitId`) em três dest
 (`entries`) e `appearances/baseline.json` (`monsters`). De caminho, valida `loot.items` contra o
 catálogo de itens REAL (`data/items` — o que `load.ts` de fato carrega hoje) e remove a linha cujo
 item não existe, ou que pede pilha de item que não empilha — contada, nunca em silêncio, em
-`docs/reference/catalog/monsters-promotion-report.md`. Rat, Rotworm, Dragon e Dragon Lord nunca
-são promovidos POR ESTE SCRIPT (`HAND_AUTHORED_MONSTER_IDS`, `scripts/catalog/promote-monsters.ts`)
+`docs/reference/catalog/monsters-promotion-report.md`. Rat, Rotworm, Dragon, Dragon Lord e Dragon Lord
+Hatchling nunca são promovidos POR ESTE SCRIPT (`HAND_AUTHORED_MONSTER_IDS`, `scripts/catalog/promote-monsters.ts`)
 — o #581 os regenerou uma única vez, direto em `generated/<fatia>.json` (Rat em `mammals.json`,
-Rotworm em `vermins.json`, Dragon e Dragon Lord em `dragons.json`). O #581 tinha dado aos dois um
+Rotworm em `vermins.json`, os três dragões em `dragons.json`). O #581 tinha dado aos dois um
 override próprio (`data/monsters/overrides/rat.json`/`rotworm.json`) para o `blockable: true`
 temporário que Rat Cellars e Rotworm Caves ainda exigiam com o modelo antigo de pull; o #586
 (M36-05) converteu as duas hunts para os spawns reais do Canary e apagou os dois arquivos — Rat e
 Rotworm caem no `blockable: false` do próprio Canary, como o resto do bestiário. `pnpm
-catalog:promote-monsters` (`preserveHandAuthored`) NUNCA sobrescreve essas quatro entradas numa
-reimportação futura — elas só mudam de novo por decisão deliberada, como o #581. `load.ts` não lê
-`staging/`, e nada do jogo deve ler.
+catalog:promote-monsters` (`preserveHandAuthored`) NUNCA sobrescreve essas cinco entradas numa
+reimportação futura — elas só mudam de novo por decisão deliberada, como o #581. **A apresentação
+(`outfit`, `voices`, `light`, `race`, #620) é a exceção:** o `promote-monsters` a renova nas
+cinco entradas hand-authored também (`PRESENTATION_FIELDS`, `withPresentation`) — a regra do #581 protege os números de
+combate, não a fala do rato. `load.ts` não lê `staging/`, e nada do jogo deve ler.
+
+**Os familiares de vocação (#599)**: `familiars/` deixou de ser pulada — o leitor gera os quatro
+(`data/monsters/generated/familiars.json`; o do Monk sai pela linha explícita `OUT_OF_CUT_MONSTERS`,
+com o motivo no relatório), com o `lookType` de `FAMILIAR_ID` (`data/libs/systems/familiar.lua`, o
+`.lua` do monstro o deixa comentado). Entram `familiar: true` e o `manaCost` — **nunca `summonable`**:
+o Canary o declara `false` nos quatro, e é isso que impede a Summon Creature de invocá-los. As
+três magias por NOME que eles lançam ganharam mapeador (`scripts/catalog/monster-abilities.ts`):
+`ice strike` e `sudden death rune` (dano da PRÓPRIA entrada — `Monster::getCombatValues` —, tipo e
+alvo único do script da magia registrada, e o `spell:range(3)` do Ice Strike por cima do `range` do
+monstro) e `summon challenge` (a ability `challenge`, 8 s, `circle` de raio 4 de MONSTRO centrado
+no lançador = os 21 tiles da `AREA_CIRCLE2X2`). Efeito colateral do mapeador do Sudden Death Rune:
+os monstros que o usam e antes ficavam fora por isso (lost exile, scarlett etzel, xogixath) passaram
+a ser gerados. A magia `familiar` (`spellEffectSchema`) carrega `durationMs`/`cooldownMs`, e o
+`cooldownMs` da própria magia fica em 2 s (o `groupCooldown` do script) — ver `docs/product/
+combat.md`, "O familiar de vocação".
 
 **`staging/items/` também não é conteúdo carregado** (#573/#574): `pnpm catalog:import items`
 escreve lá — 1946 itens de caça. `items.ts` já resolve `slot: 'hand'` por default em TODA arma
@@ -243,6 +260,34 @@ Confira antes de subir o servidor:
 pnpm content:check
 ```
 
+## O mundo (#829, OW-08, ADR 0060)
+
+`data/worlds/<id>.json` — um arquivo por mundo — diz o que um mundo **é**: `{ id, name, worldType,
+map, towns: [{ id, name, temple }], capacity }`. `Content.worlds` é um mapa por id, vazio no
+conteúdo de teste sem mundo aberto; o conteúdo real tem o `main` (tipo `no-pvp`, mapa `thais`,
+teto 200), e `load.test.ts` prende. Quem lê é a topologia do `sim` (OW-13) e as colunas de mundo
+em `characters` (OW-15); os spawns entram à parte (OW-25).
+
+- **`worldType` é um vocabulário FECHADO** (`WORLD_TYPES`), como `COMBAT_PROFILES`: hoje só
+  `no-pvp`. O Canary aceita também `retro-pvp`/`pvp`/`expert-pvp`/`pvp-enforced`
+  (`canary/config.lua.dist:28-33`), mas o `sim` não tem dano entre jogadores — aceitar um deles
+  num arquivo seria subir um mundo que promete o que o motor não faz. Tipo novo entra por ADR.
+- **O templo é coordenada ABSOLUTA do Tibia**, a mesma de `characters.world_x/y/z` (ADR 0060
+  d.3.b), e o mapa do recorte é LOCAL. `absoluteToLocal`/`localToAbsolute` (`map.ts`) traduzem pela
+  origem de `source.region`: `x` e `y` perdem ou ganham a origem, `z` não muda (os andares do
+  recorte são chaveados pelo `z` absoluto). Só mapa IMPORTADO tem `source`, e por isso só ele
+  serve a um mundo. Não compare coordenada de mundo com `entryPoint` ou `floorChanges` sem
+  traduzir: em Thais o erro é de 32275 em x e 32153 em y, e não aparece em teste que usa só o mapa local.
+- **`buildContent` confere o que o schema não vê:** o `map` existe e tem `source`; o templo cai
+  dentro do recorte nos três eixos e num tile que não é parede (`isBlocked`, a regra do
+  `entryPoint` da Cidade); id de cidade e de mundo únicos. Quebra no boot, não no personagem que
+  nasce preso.
+- **Entra em `computeVersion`** como todo o `RawContent` (invariante 7): mudar o teto muda a
+  versão que a sessão congela.
+- **`capacity` só se guarda aqui.** O teto vale só na entrada vinda do repouso (ADR 0060 d.2.b) e
+  quem o aplica é a admissão (OW-18/OW-20); `CITY_SHARD_CAPACITY` continua sendo o da Cidade.
+- Sem arte (invariante 6): `worldSchema` é `strictObject`.
+
 ## Invariantes locais
 
 - **Nunca contém arte** (invariante 6), e o id de aparência **não mora na entidade** (FUN-94):
@@ -315,6 +360,14 @@ MUDA, e muda é válida: exigir o outro lado obrigaria cada magia nova a nascer 
 nascer com número, que é a ordem errada. Por isso o placeholder emite as três seções vazias, e
 por isso `load.test.ts` — e não `buildContent` — é quem prende que todo spell do repositório
 tem efeito hoje.
+
+**`hits.byRace` é o efeito do golpe FÍSICO por raça do alvo** (#620, `Game::combatGetTypeInfo`):
+uma linha por `MonsterRace` (`blood`/`venom`/`undead`/`fire`/`energy`/`ink`/`chocolate`/`candy`),
+cada uma um id de efeito que o pacote tem. É opcional e o host cai em `hits.melee` para a raça sem
+linha — a tabela de antes da #620 (só `melee`) continua válida. O `monster.race`, o
+`monster.outfit` (cores e addons), as `voices` e a `light` do monstro são campos do `monsterSchema`,
+todos opcionais, todos APRESENTAÇÃO: `sim` e combate não os leem, e o que não é arte neles são
+índices (cor 0–132, luz 0–215, máscara de addons 0–3), nunca um id de desenho (invariante 6).
 
 **`appearances.abilities` é a única seção sem conferência dos dois lados** (CMB-06). As chaves
 dela são SEMÂNTICAS e compartilhadas (`spit`, `fire-impact`) — a ability de monstro aponta
@@ -572,6 +625,19 @@ família (a primeira em ordem de id), que também é paga. O primeiro colar (`gl
 (`wooden-shield`, `kind: 'shield'`, `slot: 'shield'`, `defense`) entram como itens; o consumo da
 carga é a AB-06 (#421).
 
+## O Treino (#631, ADR 0059)
+
+`data/training/baseline.json` (`trainingSchema`, `Content.training` opcional) guarda o boneco (`rate`
+100), o que cada golpe rende (`7` tries, `600` de mana gasta), onde ele está no mapa da Cidade
+(`place.stand`/`place.dummy`, conferidos no boot: o tile do personagem é andável e adjacente ao
+boneco) e o offline training (banco 12 h, carência 10 min, teto do "fora" 21 dias, teto de gasto
+Free 6 h / Premium 12 h, o livro). Todo número do Canary cita a fonte no `_open`. O item ganha três
+campos: `exercise: { skillId }` (só `kind: 'other'` com `charges`, e a skill tem de existir),
+`purchasable: true` e `buyPrice` — sempre JUNTOS. As 21 exercise weapons vêm do importador de itens
+(`scripts/catalog/items.ts`, fatia `exercise-weapons`): cargas e skill da tabela Lua, preço = o MENOR
+`buy` de NPC do Canary; as exercise wraps de fist (Monk) e as de 50 cargas ficam fora do corte.
+`ITEM_ORIGINS` ganhou `purchase` (a compra do NPC; `market` é o comércio entre jogadores).
+
 ## Como testar
 
 ```
@@ -660,6 +726,15 @@ entre arquivos resolvem.
   o MESMO `absorbpercent*`: o schema recusa os dois no mesmo tipo. O reflexo compila no boot
   (`compileReflect`, tabela completa por tipo, ausente quando nada reflete) — é a forma que o
   reflexo de monstro (#683) reusa.
+- **`item.elementalBond` e `item.bonuses.magicShieldCapacity` são DADO sem consumidor no `sim`**
+  (#627, M44-09) — de propósito, e não por esquecimento. No Canary (47dfd51) o bond só troca o
+  tipo de dano da magia de `VOCATION_MONK_CIP` (`combat.cpp:159-174`) e os 32 itens são todos
+  arma `fist` (fora do corte: Monk e DT-01); a capacidade só aparece na descrição do item e na
+  Cyclopedia, e `magic_shield.lua` monta o balde sem consultá-la. Ligar qualquer um dos dois ao
+  combate seria comportamento que o Canary não tem (ADR 0037 d.6). O bond é só `kind: 'weapon'`
+  (`buildContent` recusa o resto) e a capacidade só em item com `slot`; o catálogo real tem zero
+  itens com bond e exatamente quatro com capacidade (`load.test.ts` prende as duas contagens).
+  Ver `docs/product/items.md`, "Atributos raros".
 - **O monstro tem schema de mitigação PRÓPRIO** (#683): `monsterMitigationSchema` aceita
   resistência em `[-2, 1)` (o `minElementalResistance` do Canary); o `mitigationSchema` do item
   continua `[-1, 1)`. Os dois são `mitigationSchemaWith(piso)` — alargar o compartilhado mudaria o
@@ -683,6 +758,15 @@ entre arquivos resolvem.
   recusa qualquer outro valor: não é escolha do conteúdo. Nunca como self-buff de defesa
   (`DEFENSE_SELF_CONDITION_KINDS`). O `haste` de magia ganhou `pacifies: true` (Swift Foot,
   `swift_foot.lua`: acelera e pacifica pelos mesmos 10 s).
+- **`monster.faction`/`enemyFactions` são o `Faction_t` do Canary** (#619, M44-01): dez nomes em
+  `MONSTER_FACTIONS`, **na ordem do enum — o índice É o valor numérico** (`factionValue`), porque o
+  `sim` soma `valor × 100` à distância no desempate de alvo (o jogador = 1 antes de qualquer monstro
+  inimigo). `faction` ausente é `default`; `enemyFactions` só vale para quem tem facção
+  (`isEnemyFaction` só é consultado com `getFaction() != FACTION_DEFAULT`), e `player` na lista é o
+  que faz o monstro caçar o jogador — as três da Lion não o listam e o ignoram. Os nomes não são os
+  identificadores colados do Lua (`FACTION_LIONUSURPERS` → `lion-usurpers`); o importador traduz e
+  bloqueia uma constante desconhecida. Nenhum campo tem default preenchido: ausência é o monstro de
+  sempre.
 
 Issue: FUN-8.
 - **Os efeitos utilitários de magia (#623: `light`, `levitate`, `magic-rope`, `find`, `food`)

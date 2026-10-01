@@ -16,12 +16,16 @@ import { Bosstiary } from './bosstiary.js';
 import type { BosstiaryState } from './bosstiary.js';
 import { Charms } from './charms.js';
 import type { CharmsState } from './charms.js';
+import { OfflineTraining } from './offline-training.js';
+import type { OfflineTrainingState } from './offline-training.js';
 import { Conditions } from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import { Cooldowns } from './cooldown.js';
 import type { CooldownState } from './cooldown.js';
 import { Contribution } from './death.js';
 import type { ContributionState } from './death.js';
+import { EMPTY_FAMILIAR_STATE, isEmptyFamiliarState, isFamiliarState } from './familiar.js';
+import type { FamiliarState } from './familiar.js';
 import { Inventory } from './inventory.js';
 import type { CarriedItem, ContainerRules, InventoryState } from './inventory.js';
 import { LearnedSpells } from './learned-spells.js';
@@ -154,6 +158,12 @@ export interface CharacterState {
    */
   readonly learnedSpells?: LearnedSpellsState;
   /**
+   * O banco de offline training e a skill escolhida no livro (#631, ADR 0059 d.3, ADR 0052 d.1).
+   * Ausente é personagem anterior a esta issue, ou que nunca caçou: banco zerado e nenhuma skill
+   * escolhida — a mesma degradação de `charms`.
+   */
+  readonly training?: OfflineTrainingState;
+  /**
    * Quanto ele aguenta carregar (§21.5). Vem da tabela de progressão, como `maxHealth`.
    *
    * Opcional: personagem e snapshot anteriores ao inventário não têm a chave, e zero seria
@@ -270,6 +280,14 @@ export interface CharacterState {
    * depois. Ausente é `0`, sem bump de `SNAPSHOT_FORMAT_VERSION`, como `fedMs`.
    */
   readonly blessings?: number;
+  /**
+   * O familiar de vocação (#599, M38-02, ADR 0057 d.3, ADR 0052 d.1): os dois instantes de
+   * relógio de PAREDE que o personagem carrega entre hunts — até quando a invocação vale e até
+   * quando a magia volta (ver `familiar.ts`). Registro `jsonb` por sistema, lido inteiro no
+   * ticket e escrito inteiro pelo extrato (última escrita vence, como `charms`). Ausente é o
+   * personagem que nunca invocou, sem bump de `SNAPSHOT_FORMAT_VERSION`, como `fedMs`.
+   */
+  readonly familiar?: FamiliarState;
   /**
    * Um `use-item`/`use-item-on` ACEITO mas ADIADO pela exaustão de ação compartilhada (#726,
    * ADR 0049 decisão 6 — o `setNextActionTask` do Canary): agendado para o vencimento do livro
@@ -448,6 +466,12 @@ export class CharacterRuntime {
   goldDelta: number;
   alive: boolean;
   speed: number;
+  /**
+   * O personagem dissolve a parede de personagem ao pisar (OW-05, #826) — ver
+   * `Movable.dissolvesSafeWalls`. Sempre `true`, e é o que a distingue do monstro, que não tem
+   * o campo.
+   */
+  readonly dissolvesSafeWalls = true;
   /** Mutadas no lugar a cada uso — ver `Skills.gain`. */
   readonly skills: Skills;
   /** Mutado no lugar a cada abate recompensado — ver `Bestiary.record`. */
@@ -458,6 +482,12 @@ export class CharacterRuntime {
   readonly charms: Charms;
   /** Mutado no lugar a cada `learn-spell` aceito — ver `learnSpell`. O cast confere `has`. */
   readonly learnedSpells: LearnedSpells;
+  /**
+   * O banco de offline training e a escolha do livro (#631). Só a sessão dona escreve (invariante
+   * 9): o ruleset soma o tempo de hunt/treino no fim da participação, e o host aplica a intenção
+   * `set-offline-training-skill` — ver `OfflineTraining`.
+   */
+  readonly training: OfflineTraining;
   capacity: number;
   /** Mutado ao equipar e ao receber item. Só a sessão dona escreve (invariante 9). */
   readonly inventory: Inventory;
@@ -499,6 +529,12 @@ export class CharacterRuntime {
   fedMs: number;
   /** Bitmask de bênçãos (#570). Só o ruleset de Cidade (compra) e a morte (consumo) escrevem. */
   blessings: number;
+  /**
+   * O familiar (#599): instantes de relógio de PAREDE, ver `familiar.ts`. Só o ruleset da hunt
+   * escreve (invariante 9) — no lançamento e na morte do familiar. Trocado por objeto novo, nunca
+   * mutado no lugar: o extrato e o snapshot leem a referência.
+   */
+  familiar: FamiliarState;
   /** A ação manual adiada (#726). `null` é nenhuma. Só o ruleset escreve. */
   pendingManualAction: PendingManualActionState | null;
   /**
@@ -564,6 +600,7 @@ export class CharacterRuntime {
     this.bosstiary = Bosstiary.fromState(state.bosstiary);
     this.charms = Charms.fromState(state.charms);
     this.learnedSpells = LearnedSpells.fromState(state.learnedSpells);
+    this.training = OfflineTraining.fromState(state.training);
     this.capacity = state.capacity ?? 0;
     this.inventory = Inventory.fromState(state.inventory);
     this.lootSeq = state.lootSeq ?? 0;
@@ -591,6 +628,9 @@ export class CharacterRuntime {
     this.attackPractice = state.attackPractice ?? INITIAL_ATTACK_PRACTICE;
     this.fedMs = state.fedMs ?? 0;
     this.blessings = state.blessings ?? 0;
+    // Defensivo, como `readCharacterStorage`: um registro torto (ticket de outro formato) vira
+    // "nunca invocou" em vez de travar a sessão.
+    this.familiar = isFamiliarState(state.familiar) ? state.familiar : EMPTY_FAMILIAR_STATE;
     this.pendingManualAction = state.pendingManualAction ?? null;
     this.lastCombatActionAtMs = state.lastCombatActionAtMs ?? null;
     for (const [type, untilMs] of Object.entries(state.cleanseImmunity ?? {})) {
@@ -947,6 +987,7 @@ export class CharacterRuntime {
       // Só quando o registro é a verdade do personagem (`recorded`): um snapshot restaurado de antes
       // da #624 não tem a chave, e reescrevê-la vazia apagaria a concessão da migração 0024.
       ...(this.learnedSpells.recorded ? { learnedSpells: this.learnedSpells.getState() } : {}),
+      training: this.training.getState(),
       capacity: this.capacity,
       inventory: this.inventory.getState(),
       lootSeq: this.lootSeq,
@@ -979,6 +1020,7 @@ export class CharacterRuntime {
       // Mesmo padrão: omitido em zero, o de quem nunca comeu/nunca consumiu carga (#726).
       ...(this.fedMs === 0 ? {} : { fedMs: this.fedMs }),
       ...(this.blessings === 0 ? {} : { blessings: this.blessings }),
+      ...(isEmptyFamiliarState(this.familiar) ? {} : { familiar: this.familiar }),
       ...(this.pendingManualAction === null ? {} : { pendingManualAction: this.pendingManualAction }),
       ...(this.lastCombatActionAtMs === null
         ? {} : { lastCombatActionAtMs: this.lastCombatActionAtMs }),

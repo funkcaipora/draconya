@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { BosstiaryState, CharmsState, LearnedSpellsState } from '@draconya/sim';
+import type {
+  BosstiaryState, CharmsState, FamiliarState, LearnedSpellsState, OfflineTrainingState,
+} from '@draconya/sim';
 import { ReceiptStore, type SessionReceipt } from './receipts.js';
 import { connectTestRedis } from './testing/redis.js';
 
@@ -199,6 +201,56 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
 
     expect(found.find((receipt) => receipt.seq === 1)?.learnedSpells).toEqual(learnedSpells);
     expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('learnedSpells');
+  });
+
+  it('carries the familiar stamps through Redis and back, and drops a malformed record (#599)', async () => {
+    // Os carimbos de relógio de PAREDE do familiar: ABSOLUTOS e última-escrita-vence (ADR 0052 d.1).
+    // A ida e volta pelo Redis é a mesma conferência de `charms`: campo que não entra em
+    // `parseReceipt` some no caminho de volta sem erro — e aqui um registro torto também some.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const familiar: FamiliarState = { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 };
+    await store.save(receiptOf(randomUUID(), characterId, { familiar }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+    await store.save(receiptOf(randomUUID(), characterId, {
+      seq: 3, familiar: { version: 1, summonUntilMs: -5, cooldownUntilMs: 'x' } as unknown as FamiliarState,
+    }));
+    // Instante fracionário: a forma é INTEIRO SEGURO, e é o `sim` quem arredonda ao gravar o carimbo
+    // (`#wallStampMs`) — o relógio lógico do hospedeiro é `performance.now()`, nunca inteiro. Este é o
+    // lado que recusa: um carimbo fracionário que chegasse aqui some em silêncio, e o cooldown junto.
+    await store.save(receiptOf(randomUUID(), characterId, {
+      seq: 4, familiar: { version: 1, summonUntilMs: 1_790_000_900_000.4, cooldownUntilMs: 1_790_001_800_000 },
+    }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.familiar).toEqual(familiar);
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('familiar');
+    expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('familiar');
+    expect(found.find((receipt) => receipt.seq === 4)).not.toHaveProperty('familiar');
+  });
+
+  it('carries the offline training record through Redis and back, and a receipt without one stays without (#631)', async () => {
+    // A mesma lista de PERMISSÃO dos registros logo acima — e este é ABSOLUTO (ADR 0052 d.1): o banco
+    // sobe por tempo de sessão e desce quando a `api` o gasta, então nada de fusão por máximo. Além
+    // da ida e volta, a leitura é a defensiva do `sim`: o ledger grava o registro direto numa coluna
+    // `jsonb`, e um banco negativo ou uma skill torta não pode chegar lá.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const training: OfflineTrainingState = { offlineBankMs: 7_200_000, offlineSkill: 'sword', version: 1 };
+    await store.save(receiptOf(randomUUID(), characterId, { training }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+    await store.save(receiptOf(
+      randomUUID(), characterId,
+      { seq: 3, training: { offlineBankMs: -5, offlineSkill: 7, version: 1 } as unknown as OfflineTrainingState },
+    ));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.training).toEqual(training);
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('training');
+    // O torto some — o ledger não toca na coluna —, e o extrato em si continua valendo.
+    expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('training');
   });
 
   it('carries the ammo selection through Redis and back, and a receipt without one stays without (#152)', async () => {

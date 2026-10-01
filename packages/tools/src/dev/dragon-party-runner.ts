@@ -211,7 +211,7 @@ export async function settleStaleSnapshot(
   const stored = await options.snapshots.load(characterId);
   if (stored === null) return { settled: false };
   await settleSnapshotAsReceipt(stored.snapshot, {
-    characterId, accountId: stored.accountId, receipts: options.receipts,
+    characterId, accountId: stored.accountId, receipts: options.receipts, nowMs: Date.now(),
   });
   await options.snapshots.remove(characterId);
   return { settled: true, sessionId: stored.snapshot.id };

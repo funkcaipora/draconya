@@ -3,7 +3,7 @@
 // Quem lê arquivo é `@draconya/content/load`, e o lint impede `sim` de importar de lá.
 
 import { z } from 'zod';
-import { buildRoute, buildTilemap, isBlocked } from './map.js';
+import { absoluteToLocal, buildRoute, buildTilemap, isBlocked } from './map.js';
 import type { Route, Tilemap } from './map.js';
 import {
   BOT_VOCABULARY_VERSION,
@@ -21,15 +21,15 @@ import {
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
   bestiarySchema, boostedSchema, bosstiarySchema, charmSchema, itemSchema, loyaltySchema, partySchema, skillSchema,
   skinningSchema, spellSchema,
-  staminaSchema, supplySchema, tilemapSchema, vocationSchema, weaponFamilySchema,
+  staminaSchema, supplySchema, tilemapSchema, trainingSchema, vocationSchema, weaponFamilySchema, worldSchema,
 } from './schemas.js';
 import type {
   Ammunition, AmmunitionDefinition, Appearances, Bestiary, Blessing, Boosted, BotLimits, Bosstiary, Charm,
   Combat, Loyalty, CompiledMitigation,
   CompiledReflect, DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
   MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Skinning, Spell, Stamina, Supply,
-  Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
-  WeaponPowerFormula, WeaponProfile,
+  Training, Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
+  WeaponPowerFormula, WeaponProfile, World,
 } from './schemas.js';
 import { packProblems } from './pack.js';
 import { validateBotConfig, validateBotConfigV2 } from './bot.js';
@@ -49,6 +49,12 @@ export interface Content {
   readonly combat: Combat;
   /** Teto e taxa de recuperação da stamina (§10). */
   readonly stamina: Stamina;
+  /**
+   * O Treino do Tibia (#631, ADR 0059): o boneco, o que cada golpe rende e o offline training.
+   * Opcional — o conteúdo de teste que não fala de treino não o tem, e o `sim`/o servidor tratam
+   * ausência como "nenhuma sessão de Treino existe". O conteúdo REAL o tem, e `load.test.ts` prende.
+   */
+  readonly training?: Training;
   /** A party de hunt (§15, ADR 0027): teto de membros e pool de XP por vocações únicas. */
   readonly party: PartyConfig;
   /**
@@ -128,6 +134,13 @@ export interface Content {
   readonly maps: ReadonlyMap<string, Tilemap>;
   readonly routes: ReadonlyMap<string, Route>;
   /**
+   * Os mundos (#829, OW-08, ADR 0060 d.1 e d.2), `data/worlds/<id>.json`: tipo, mapa, cidades com
+   * templo e teto de gente. Vazio no conteúdo de teste que não fala de mundo aberto; o conteúdo
+   * REAL tem o `main`, e `load.test.ts` prende. Cada `map` já foi conferido contra `maps` e cada
+   * templo contra o recorte (em coordenada absoluta, traduzida por `absoluteToLocal`).
+   */
+  readonly worlds: ReadonlyMap<string, World>;
+  /**
    * A tabela de aparências (FUN-94), agora com quem a use (FUN-103, FUN-23, FUN-109): o
    * `game` lê o outfit padrão do jogador e os efeitos de magia, supply e golpe que o `sim`
    * emite; o cliente lê chão e parede por mapa. Monstro e item NÃO se consultam por aqui —
@@ -161,6 +174,7 @@ export interface RawContent {
   readonly progression?: readonly unknown[];
   readonly combat?: readonly unknown[];
   readonly stamina?: readonly unknown[];
+  readonly training?: readonly unknown[];
   readonly party?: readonly unknown[];
   readonly bestiary?: readonly unknown[];
   /** Os níveis do Bosstiary (#629), `bosstiary/baseline.json`. */
@@ -186,6 +200,8 @@ export interface RawContent {
   readonly packs?: readonly unknown[];
   readonly maps?: readonly unknown[];
   readonly routes?: readonly unknown[];
+  /** Os mundos (#829, ADR 0060), `worlds/*.json`. Entram em `computeVersion` como tudo aqui. */
+  readonly worlds?: readonly unknown[];
   /** `{ mapId }` — qual dos mapas é a Cidade. Explícito, e não um id mágico `"city"`. */
   readonly city?: unknown;
 }
@@ -380,6 +396,8 @@ export function normalizeMonsterAbilities(monster: MonsterDefinition): readonly 
       // quente sem ramificar.
       ...(ability.condition === undefined ? {} : { condition: ability.condition }),
       ...(ability.field === undefined ? {} : { field: ability.field }),
+      // A provocação (#599) passa direto, como a condição e o campo.
+      ...(ability.challenge === undefined ? {} : { challenge: ability.challenge }),
     }));
   }
   return [{
@@ -624,6 +642,10 @@ export function buildContent(raw: RawContent): Content {
   }
   const staminas = parseAll('stamina', raw.stamina ?? [], staminaSchema, problems);
   const stamina = staminas.get('baseline');
+  // O Treino (#631): opcional, como `bestiary` — um conteúdo de teste sem `training/` simplesmente
+  // não tem sessão de Treino. As referências cruzadas (skill do livro, tile do boneco) são
+  // conferidas mais abaixo, quando skills e mapa da Cidade já existem.
+  const training = parseAll('training', raw.training ?? [], trainingSchema, problems).get('baseline');
   const bestiary = parseAll('bestiary', raw.bestiary ?? [], bestiarySchema, problems).get('baseline');
   // Os níveis do Bosstiary (#629): um documento `baseline` único, como `bestiary` — a tabela de
   // 3 raridades × 3 níveis é uma coisa só, e o `id` fixo é o que impede duas versões dela.
@@ -845,6 +867,31 @@ export function buildContent(raw: RawContent): Content {
         problems.push(`${where}: manaCost "party-scaled" precisa de um efeito com target "party"`);
       }
     }
+    // O familiar (#599, ADR 0057 d.3): o monstro precisa existir e ser `familiar` — o flag é o que
+    // liga o teleporte ao mestre e a XP inteira, e uma magia que invocasse um monstro comum
+    // deixaria de ser o familiar do Canary sem ninguém perceber. A vocação é obrigatória: cada
+    // uma tem o SEU familiar (`FAMILIAR_ID`), e o `sim` reencontra o monstro pela vocação do
+    // personagem ao entrar na hunt (o Canary recria o familiar no login).
+    if (effect.kind === 'familiar') {
+      const familiar = monsterDefinitions.get(effect.monsterId);
+      if (familiar === undefined) {
+        problems.push(`${where}: familiar.monsterId "${effect.monsterId}" não existe no catálogo de monstros`);
+      } else if (!familiar.familiar) {
+        problems.push(`${where}: familiar.monsterId "${effect.monsterId}" não é um monstro "familiar"`);
+      } else if (typeof spell.manaCost === 'number' && familiar.manaCost !== undefined
+        && familiar.manaCost !== spell.manaCost) {
+        problems.push(
+          `${where}: manaCost ${String(spell.manaCost)} difere do manaCost ${String(familiar.manaCost)} `
+            + `do monstro "${effect.monsterId}"`,
+        );
+      }
+      if (spell.vocationId === undefined) {
+        problems.push(`${where}: o familiar exige vocationId — cada vocação tem o seu`);
+      }
+      if (effect.cooldownMs < effect.durationMs) {
+        problems.push(`${where}: familiar.cooldownMs é menor que a duração (o Canary usa 2 × a duração)`);
+      }
+    }
     // Conjuração (#594, ADR 0044): o id creditado precisa existir no catálogo correspondente —
     // sem isto, a magia subiria muda, creditando carga que `useSupply`/o tiro nunca reconhecem.
     if (effect.kind === 'conjure') {
@@ -872,6 +919,18 @@ export function buildContent(raw: RawContent): Content {
         problems.push(`${where}: food.items repete um item — o sorteio uniforme pesaria o repetido em dobro`);
       }
     }
+  }
+  // Cada vocação tem UM familiar (#599): duas magias `familiar` para a mesma vocação deixariam
+  // ambíguo qual delas o `sim` recria quando o personagem entra na hunt com tempo sobrando.
+  const familiarSpellByVocation = new Map<string, string>();
+  for (const spell of spells.values()) {
+    if (spell.effect.kind !== 'familiar' || spell.vocationId === undefined) continue;
+    const owner = familiarSpellByVocation.get(spell.vocationId);
+    if (owner !== undefined) {
+      problems.push(`spell/${spell.id}: a vocação "${spell.vocationId}" já tem o familiar "${owner}"`);
+      continue;
+    }
+    familiarSpellByVocation.set(spell.vocationId, spell.id);
   }
   // O supply de cura (#475): a runa UH/IH sai de UM mecanismo, como a magia — `amount` fixo
   // (poção) OU `basePower`/`formula` (runa). O `mana` não entra aqui: ele sempre foi fixo.
@@ -1064,6 +1123,16 @@ export function buildContent(raw: RawContent): Content {
     if (item.extraDefense > 0 && item.kind !== 'weapon') {
       problems.push(`item "${item.id}": extraDefense só faz sentido em arma`);
     }
+    // O bond elemental (#627) é o da ARMA na mão (`casterPlayer->getWeapon(true)`, `combat.cpp:163`)
+    // — a mesma disciplina do `extraDefense`: fora de arma seria um número que nada lê.
+    if (item.elementalBond !== undefined && item.kind !== 'weapon') {
+      problems.push(`item "${item.id}": elementalBond só faz sentido em arma`);
+    }
+    // A capacidade de magic shield (#627) é `Abilities` do Canary: só vale em peça que se veste,
+    // como o `imbuementSlots` — num item sem slot ela nunca seria somada.
+    if (item.bonuses?.magicShieldCapacity !== undefined && item.slot === undefined) {
+      problems.push(`item "${item.id}": bonuses.magicShieldCapacity só vale em item que se veste`);
+    }
     if ((item.spellbook || item.quiver) && item.kind !== 'shield') {
       problems.push(`item "${item.id}": spellbook/quiver só fazem sentido em escudo`);
     }
@@ -1078,6 +1147,11 @@ export function buildContent(raw: RawContent): Content {
     }
     if (item.ringEffect !== undefined && item.kind !== 'ring') {
       problems.push(`item "${item.id}": "ringEffect" só faz sentido em anel`);
+    }
+    // A skill que a exercise weapon treina (#631) tem de existir — como o bônus de skill abaixo:
+    // uma skill que ninguém lê deixaria o golpe rendendo tries para lugar nenhum.
+    if (item.exercise !== undefined && skills.size > 0 && !skills.has(item.exercise.skillId)) {
+      problems.push(`item "${item.id}": exercise.skillId "${item.exercise.skillId}" não existe`);
     }
     // A vocação que o item exige precisa existir (#524, como a magia em #156-159): a Magic
     // Plate Armor pede Knight/Paladin, e um id errado tornaria o item ETERNAMENTE inacessível
@@ -1407,6 +1481,87 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
+  // Os mundos (#829, OW-08, ADR 0060): o schema fecha a forma do arquivo; o que ele não vê — o
+  // mapa existir e ser importado, e o templo cair num tile andável do recorte — é conferido aqui,
+  // no boot. O templo é coordenada ABSOLUTA do Tibia, e o chão é local: traduzir pelo
+  // `source.region` é o que `absoluteToLocal` faz. Templo em parede é o personagem que nasce, ou
+  // volta ao morrer, preso — e quebra AQUI, como o `entryPoint` da Cidade, e não no jogador.
+  const worldData = parseAll('world', raw.worlds ?? [], worldSchema, problems);
+  const worlds = new Map<string, World>();
+  for (const world of worldData.values()) {
+    const where = `world "${world.id}"`;
+    // A existência se confere contra a DEFINIÇÃO, como as referências abaixo: um mapa que não
+    // montou já gerou o próprio problema, e repeti-lo aqui como "inexistente" seria ruído.
+    if (!mapData.has(world.map)) {
+      problems.push(`${where}: map "${world.map}" não existe no conteúdo`);
+      continue;
+    }
+    const map = maps.get(world.map);
+    if (map === undefined) continue;
+    if (map.source === undefined) {
+      problems.push(
+        `${where}: o mapa "${map.id}" não tem source.region — só um mapa importado do OTBM tem a ` +
+          'origem que traduz a coordenada absoluta do templo para um tile',
+      );
+      continue;
+    }
+    const townIds = new Set<string>();
+    for (const town of world.towns) {
+      const at = `${where}, cidade "${town.id}"`;
+      if (townIds.has(town.id)) problems.push(`${at}: id de cidade duplicado`);
+      townIds.add(town.id);
+      const { x, y, z } = town.temple;
+      const local = absoluteToLocal(map, town.temple);
+      if (local === undefined) {
+        const region = map.source.region;
+        problems.push(
+          `${at}: templo (${x},${y},${z}) cai fora do recorte do mapa "${map.id}" ` +
+            `(x ${region.x[0]}..${region.x[1]}, y ${region.y[0]}..${region.y[1]}, ` +
+            `z ${region.z[0]}..${region.z[1]})`,
+        );
+      } else if (isBlocked(map, local.x, local.y, local.z)) {
+        problems.push(
+          `${at}: templo (${x},${y},${z}), no tile (${local.x},${local.y},${local.z}) do mapa ` +
+            `"${map.id}", está em parede ou num andar sem chão — ninguém andaria dali`,
+        );
+      }
+    }
+    worlds.set(world.id, world);
+  }
+
+  // O Treino (#631, ADR 0059): as skills do livro existem, e o tile em que o personagem fica é
+  // andável no mapa da Cidade — a mesma disciplina do `entryPoint`, reprovando no boot e não na
+  // primeira sessão de Treino. Só com Cidade e skills carregadas: o conteúdo de teste sem elas não
+  // tem contra o que conferir (a mesma tolerância de `spellSkill`).
+  if (training !== undefined) {
+    const offlineSkills = new Set<string>();
+    for (const entry of training.offline.skills) {
+      if (offlineSkills.has(entry.skillId)) {
+        problems.push(`training: offline.skills repete "${entry.skillId}"`);
+      }
+      offlineSkills.add(entry.skillId);
+      if (skills.size > 0 && !skills.has(entry.skillId)) {
+        problems.push(`training: offline.skills "${entry.skillId}" não existe em skills/`);
+      }
+    }
+    if (training.offline.spendCapMs.free > training.offline.bankCapMs
+      || training.offline.spendCapMs.premium > training.offline.bankCapMs) {
+      problems.push('training: offline.spendCapMs não pode passar do teto do banco (bankCapMs)');
+    }
+    if (city !== undefined) {
+      const { stand, dummy } = training.place;
+      if (isBlocked(city, stand.x, stand.y, stand.z)) {
+        problems.push(
+          `training: place.stand (${stand.x},${stand.y},${stand.z}) está fora do mapa da Cidade ` +
+            `"${city.id}", ou em parede — ninguém teria onde treinar`,
+        );
+      }
+      if (Math.max(Math.abs(stand.x - dummy.x), Math.abs(stand.y - dummy.y)) > 1 || stand.z !== dummy.z) {
+        problems.push('training: place.stand tem de ser adjacente ao boneco (place.dummy), no mesmo andar');
+      }
+    }
+  }
+
   const routes = new Map<string, Route>();
   for (const data of routeData.values()) {
     const map = maps.get(data.mapId);
@@ -1654,6 +1809,7 @@ export function buildContent(raw: RawContent): Content {
       : [`progression/${progression.id}: ${progression._open}`]),
     ...(combat?._open === undefined ? [] : [`combat/${combat.id}: ${combat._open}`]),
     ...(stamina?._open === undefined ? [] : [`stamina/${stamina.id}: ${stamina._open}`]),
+    ...(training?._open === undefined ? [] : [`training/${training.id}: ${training._open}`]),
     ...(party?._open === undefined ? [] : [`party/${party.id}: ${party._open}`]),
     ...(bestiary?._open === undefined ? [] : [`bestiary/${bestiary.id}: ${bestiary._open}`]),
     ...(bosstiary?._open === undefined ? [] : [`bosstiary/${bosstiary.id}: ${bosstiary._open}`]),
@@ -1694,6 +1850,7 @@ export function buildContent(raw: RawContent): Content {
     progression: progression as Progression,
     combat: combat as Combat,
     stamina: stamina as Stamina,
+    ...(training === undefined ? {} : { training }),
     party: party as PartyConfig,
     ...(bestiary === undefined ? {} : { bestiary }),
     ...(bosstiary === undefined ? {} : { bosstiary }),
@@ -1703,6 +1860,7 @@ export function buildContent(raw: RawContent): Content {
     ...(loyalty === undefined ? {} : { loyalty }),
     maps,
     routes,
+    worlds,
     openValues,
     ...(city === undefined ? {} : { city }),
     ...(citySettings === undefined ? {} : { citySettings }),

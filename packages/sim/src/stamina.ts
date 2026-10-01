@@ -54,6 +54,20 @@ export function materializeStamina(
 }
 
 /**
+ * Move o marco da stamina para `nowMs` SEM recuperar nada: o tempo entre o marco antigo e `nowMs`
+ * foi passado numa sessão em que a stamina não anda — nem se gasta, nem se recupera. É o que o
+ * Treino faz (ADR 0060 d.14c, emenda ao ADR 0059 d.1: "o Treino de exercise é online, e a stamina
+ * não recupera nele" — o Canary só regenera stamina deslogado, e o exercise training é online).
+ * Sem isto, a próxima materialização devolveria como recuperação o tempo inteiro de treino.
+ */
+export function holdStamina(character: CharacterRuntime, nowMs: number): void {
+  if (character.staminaMs === null) return;
+  // Relógio para trás não recua o marco: recuperar menos que o devido é o lado seguro, e a
+  // subtração de `recoveredStaminaMs` já é limitada por zero.
+  character.staminaUpdatedAtMs = Math.max(character.staminaUpdatedAtMs, nowMs);
+}
+
+/**
  * Consome o tempo decorrido de hunt. Devolve `true` quando ESTA chamada zerou a stamina.
  *
  * Por `dtMs`, nunca por tick (invariante 2), e por isso não toca em `staminaUpdatedAtMs`:

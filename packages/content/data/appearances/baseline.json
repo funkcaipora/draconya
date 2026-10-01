@@ -252,6 +252,7 @@
     "dreadmaw": 358,
     "drillworm": 527,
     "dromedary": 404,
+    "druid-familiar": 993,
     "dryad": 137,
     "duke-krule": 1221,
     "duskbringer": 300,
@@ -469,6 +470,7 @@
     "killer-caiman": 358,
     "killer-rabbit": 74,
     "king-zelos": 1224,
+    "knight-familiar": 991,
     "knowledge-raider": 878,
     "kollos": 458,
     "kongra": 116,
@@ -507,6 +509,7 @@
     "lizard-zaogun": 343,
     "lost-basher": 538,
     "lost-berserker": 496,
+    "lost-exile": 537,
     "lost-gnome": 493,
     "lost-husher": 537,
     "lost-soul": 232,
@@ -668,6 +671,7 @@
     "orshabaal": 201,
     "overcharge": 290,
     "overcharged-energy-elemental": 290,
+    "paladin-familiar": 992,
     "panda": 123,
     "parasite": 82,
     "parder": 1533,
@@ -764,6 +768,7 @@
     "sandstone-scorpion": 398,
     "scar-tribe-shaman": 6,
     "scar-tribe-warrior": 7,
+    "scarlett-etzel": 1201,
     "schiach": 1162,
     "scorn-of-the-emperor": 351,
     "scorpion": 43,
@@ -799,6 +804,7 @@
     "snake-god-essence": 356,
     "somewhat-beatable": 34,
     "son-of-verminor": 19,
+    "sorcerer-familiar": 994,
     "soul-broken-harbinger": 1137,
     "soul-scourge": 300,
     "soulless-minion": 68,
@@ -1015,6 +1021,7 @@
     "wrath-of-the-emperor": 351,
     "wyvern": 239,
     "xenia": 137,
+    "xogixath": 842,
     "yalahari": 309,
     "yalahari-despoiler": 309,
     "yellow-butterfly": 10,
@@ -1512,6 +1519,13 @@
     "dream-warden-mask": 20276,
     "drome-cube": 36827,
     "dung-ball": 14225,
+    "durable-exercise-axe": 35280,
+    "durable-exercise-bow": 35282,
+    "durable-exercise-club": 35281,
+    "durable-exercise-rod": 35283,
+    "durable-exercise-shield": 44066,
+    "durable-exercise-sword": 35279,
+    "durable-exercise-wand": 35284,
     "dwarven-armor": 3397,
     "dwarven-axe": 3323,
     "dwarven-beard": 5900,
@@ -1620,6 +1634,13 @@
     "execowtioner-axe": 21176,
     "execowtioner-mask": 21201,
     "executioner": 7453,
+    "exercise-axe": 28553,
+    "exercise-bow": 28555,
+    "exercise-club": 28554,
+    "exercise-rod": 28556,
+    "exercise-shield": 44065,
+    "exercise-sword": 28552,
+    "exercise-wand": 28557,
     "exotic-amulet": 35523,
     "exotic-legs": 35516,
     "eye-embroidered-veil": 37003,
@@ -2028,6 +2049,13 @@
     "lamassu-horn": 31442,
     "lancer-beetle-shell": 10455,
     "lancet": 18925,
+    "lasting-exercise-axe": 35286,
+    "lasting-exercise-bow": 35288,
+    "lasting-exercise-club": 35287,
+    "lasting-exercise-rod": 35289,
+    "lasting-exercise-shield": 44067,
+    "lasting-exercise-sword": 35285,
+    "lasting-exercise-wand": 35290,
     "laurel-wreath": 9221,
     "lavafungus-head": 36785,
     "lavafungus-ring": 36786,
@@ -3296,6 +3324,18 @@
     "summon-creature-druid": {
       "effect": 14
     },
+    "summon-knight-familiar": {
+      "effect": 13
+    },
+    "summon-paladin-familiar": {
+      "effect": 13
+    },
+    "summon-sorcerer-familiar": {
+      "effect": 13
+    },
+    "summon-druid-familiar": {
+      "effect": 13
+    },
     "physical-strike": {
       "effect": 10,
       "missile": 10
@@ -3591,7 +3631,17 @@
     }
   },
   "hits": {
-    "melee": 1
+    "melee": 1,
+    "byRace": {
+      "blood": 1,
+      "venom": 17,
+      "undead": 10,
+      "fire": 1,
+      "energy": 12,
+      "ink": 10,
+      "chocolate": 270,
+      "candy": 269
+    }
   },
   "abilities": {
     "fire": {

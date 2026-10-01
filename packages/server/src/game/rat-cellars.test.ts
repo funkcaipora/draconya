@@ -198,12 +198,13 @@ describe('Convince Creature e Animate Dead com o conteúdo REAL da Rat Cellars (
 });
 
 describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)', () => {
-  // Um personagem de level 150 de cada vocação lança UMA magia de cada tipo da vocação dele:
+  // Um personagem de level 200 de cada vocação lança UMA magia de cada tipo da vocação dele:
   // sai com `ok`, paga a mana e tranca os livros de cooldown certos. Outra vocação leva
   // `wrong-vocation`; um level abaixo, `level-too-low`. São os NÚMEROS reais passando pelo
-  // motor — `casting.test.ts` testa o motor com magias sintéticas. Level 150 (não mais 100,
-  // #589): Strong Ethereal Spear e Fierce Berserk pedem 90, Ultimate Energy Strike pede 100,
-  // Chivalrous Challenge pede 150 — o novo teto do Knight.
+  // motor — `casting.test.ts` testa o motor com magias sintéticas. Level 200 (não mais 100,
+  // #589, nem 150): Strong Ethereal Spear e Fierce Berserk pedem 90, Ultimate Energy Strike pede
+  // 100, Chivalrous Challenge pede 150 e o familiar de vocação (#599) pede 200 — o novo teto de
+  // TODAS as quatro vocações.
   const caster = (
     content: Content, vocationId: string, level: number, learnsEverything = true,
   ): CharacterRuntime => {
@@ -238,7 +239,7 @@ describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)
       const oneOfEach = new Map(mine.map((s) => [s.effect.kind, s]));
       let now = 0;
       for (const spell of oneOfEach.values()) {
-        const hero = caster(content, vocationId, 150);
+        const hero = caster(content, vocationId, 200);
         // Self-origin ou no alvo: a mira sintética serve às duas — `distance` 1 cabe em todo
         // alcance, e a forma que sai do lançador ignora a distância. Challenge (#589) mira
         // como dano — precisa de alvo — mas não tem `formula`/`basePower`/`power` nenhum. DOT

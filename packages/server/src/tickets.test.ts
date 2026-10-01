@@ -205,6 +205,41 @@ describe.runIf(available)('session ticket', () => {
     }
   });
 
+  it('carries the familiar stamps, and drops a record it cannot trust (#599)', async () => {
+    // Os dois carimbos de relógio de PAREDE do familiar entram na sessão pelo ticket: é ELA quem os
+    // compara com o relógio, e o cooldown de 30 min tem de atravessar a saída da hunt. Um registro
+    // torto vira AUSENTE, nunca ticket recusado — a linha é `jsonb` sem CHECK. Mutação que mata:
+    // aceitar qualquer objeto (o `-1` e o texto passariam), ou recusar o registro vazio.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+
+    const familiar = { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 };
+    const bom = await tickets.issue('a1', 'p1', { level: 1, xp: 0, familiar });
+    if (!bom.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(bom.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+      initialCharacter: { level: 1, xp: 0, familiar },
+    });
+
+    for (const ruim of [
+      { version: 1, summonUntilMs: -1, cooldownUntilMs: 0 },
+      { version: 1, summonUntilMs: 0, cooldownUntilMs: 1.5 },
+      { version: 1, summonUntilMs: '0', cooldownUntilMs: 0 },
+      { version: 1, summonUntilMs: 0 },
+      { summonUntilMs: 0, cooldownUntilMs: 0 },
+      [1, 2], 'nunca', null,
+    ]) {
+      const issued = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, familiar: ruim } as unknown as InitialCharacter,
+      );
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1'), JSON.stringify(ruim)).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0 },
+      });
+    }
+  });
+
   it('carries the bestiary, and drops a map it cannot trust (FUN-113)', async () => {
     // Os abates entram na sessão pelo ticket porque o bônus dos marcos escala a XP DURANTE a
     // hunt (DT-01) — um personagem que entrasse em `{}` perderia o marco que já cruzou. E um
@@ -476,6 +511,48 @@ describe.runIf(available)('session ticket', () => {
       });
       await tickets.revoke(issued.value.ticket, 'a1', 'p1');
     }
+  });
+
+  it('carries the offline training record, and drops one it cannot trust (#631, ADR 0059 d.3)', async () => {
+    // O banco e a skill do livro entram na sessão: o banco CRESCE com o tempo de hunt, e sem o
+    // registro de entrada a primeira hunt do dia sobrescreveria a linha com um banco zerado. A
+    // leitura é a defensiva do `sim` — torto vira AUSENTE, nunca ticket recusado.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+    const training = { offlineBankMs: 3_600_000, offlineSkill: 'sword', version: 1 };
+    const issued = await tickets.issue('a1', 'p1', { level: 1, xp: 0, training });
+    if (!issued.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(issued.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1', initialCharacter: { level: 1, xp: 0, training },
+    });
+    await tickets.revoke(issued.value.ticket, 'a1', 'p1');
+
+    for (const torto of [{ offlineBankMs: -1, offlineSkill: null }, { offlineBankMs: 5, offlineSkill: 7 }, 'x', []]) {
+      const bad = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, training: torto } as unknown as InitialCharacter,
+      );
+      if (!bad.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(bad.value.ticket, 'n1')).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1', initialCharacter: { level: 1, xp: 0 },
+      });
+      await tickets.revoke(bad.value.ticket, 'a1', 'p1');
+    }
+  });
+
+  it('resolveNode says the character is RESTING only when the directory has no session for it (#631, ADR 0052 d.5)', async () => {
+    // É o único momento em que a linha do Postgres não tem dono quente — e por isso o único em que a
+    // `api` pode escrever nela. Sessão hospedada (mesmo em nó que morreu) NÃO é repouso.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+    expect(await tickets.resolveNode('p1')).toMatchObject({ ok: true, resting: true });
+
+    await directory.register('p1', { sessionId: 's1', nodeId: 'n1', type: 'city' });
+    const hosted = await tickets.resolveNode('p1');
+    expect(hosted.ok).toBe(true);
+    expect(hosted).not.toHaveProperty('resting', true);
+
+    await directory.release('p1');
+    expect(await tickets.resolveNode('p1')).toMatchObject({ ok: true, resting: true });
   });
 
   it('revoke frees the slot, the ticket and the reservation (#195)', async () => {

@@ -116,6 +116,7 @@ errado em vez de dizer "nenhuma variante casou".
 | `targets` | `op`, `count` (≥ 0) | Quantos alvos estão dentro do alcance do grupo (#152, #216, #444): o da arma, ou o da ação de dano à distância do grupo (uma runa de alcance 8 conta a 8) |
 | `target-hp` | `op`, `percent` (0–100) | Vida do alvo atual. Sem alvo, a condição é falsa — nunca erro |
 | `condition` | `conditionId`, `present` (padrão `true`) | Efeito ativo/ausente no personagem, por chave semântica (`haste`, `mana-shield`, `buff`) — "castar haste só sem haste" |
+| `summons` | `op`, `count` (≥ 0) | Quantas invocações VIVAS o personagem tem (#598) — "sem invocação viva → invocar" é `summons <= 0` |
 
 **Operadores:** `<`, `<=`, `>`, `>=`. **Sem `==`** — comparar percentual exato quase nunca
 dispara, e é a armadilha que faz o jogador achar que configurou cura e não ter cura nenhuma.
@@ -124,8 +125,14 @@ dispara, e é a armadilha que faz o jogador achar que configurou cura e não ter
 
 | `kind` | Campo | Catálogo |
 |---|---|---|
-| `spell` | `spellId` | `packages/content/data/spells/*.json` (FUN-74) |
+| `spell` | `spellId`, `monsterId?` | `packages/content/data/spells/*.json` (FUN-74). `monsterId` só existe para a Summon Creature (#598): QUAL `summonable` nascer |
 | `supply` | `supplyId` | `packages/content/data/supplies/*.json` (FUN-77) — poção e runa |
+
+**O familiar de vocação (#599)** é uma ação `spell` comum (`summon-<vocação>-familiar`, level 200), sem
+`monsterId`. Regra de preset: `spell` do familiar com `summons <= 0`. O cooldown de 30 min NÃO precisa
+de condição própria: a recusa por cooldown de parede engatilha sem agendar o grupo, então o bot a
+reavalia a cada evento e lança no instante em que a magia volta — e a barra mostra o cooldown real.
+Ver `combat.md`, "O familiar de vocação".
 
 O token `item` da v1 saiu com o AB-03 (ADR 0032 d.6): poção e runa voltaram a ser **suprimento
 abstrato**, com `price`, `effect`, `requires` e `group` em `data/supplies/`, e o gold é debitado

@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Redis } from 'ioredis';
 import { loadContent } from '@draconya/content/load';
-import { DEFAULT_DIFFICULTY_NAME } from '@draconya/sim';
+import { DEFAULT_DIFFICULTY_NAME, offlineTrainingRulesOf } from '@draconya/sim';
 import { servedPackProblem } from './served-pack.js';
 import { loadConfiguration, type RoleName } from './config.js';
 import { createLogger } from './log.js';
@@ -115,6 +115,8 @@ async function main(): Promise<void> {
   // O catálogo do que existe (FUN-79, FUN-89), montado UMA vez: a versão de conteúdo é fixada
   // e não muda enquanto o processo vive.
   const catalogue = buildCatalogue(content);
+  // O que o gasto do offline training lê do conteúdo (#631), ou `null` sem `training/`.
+  const offlineTrainingRules = offlineTrainingRulesOf(content);
 
   const factories: Record<RoleName, () => Role> = {
     api: () => {
@@ -124,6 +126,15 @@ async function main(): Promise<void> {
         // A Boosted Creature do dia (#615): só Redis, nunca Postgres (ADR 0054 decisão 7) —
         // é a cópia que o `jobs` publica para a `api` ler barato a cada ticket emitido.
         currentBoostedMonsterId: () => readCachedBoostedMonsterId(redis),
+        // O gasto do banco de offline training na emissão do ticket (#631, ADR 0059 d.3): as
+        // regras do conteúdo fixado no boot e o carimbo de repouso do diretório — a `api` é quem
+        // sabe que horas são, e só escreve com o personagem sem sessão (ADR 0052 d.5).
+        ...(offlineTrainingRules === null ? {} : {
+          offlineTraining: {
+            rules: offlineTrainingRules,
+            restedSince: (characterId: string) => directory.restedSince(characterId),
+          },
+        }),
         // O bot com que o personagem nasce (FUN-114), do conteúdo fixado no boot.
         ...(content.bot.defaultConfig === undefined
           ? {}
@@ -226,6 +237,9 @@ async function main(): Promise<void> {
       // `toKill`/`charmsPoints`, ADR 0053 d.1) — o que `charm-unlock`/`charm-assign` precisam
       // para derivar pontos ganhos e completude, sem o host conhecer o `Content` inteiro.
       charmCatalog: content.charms,
+      // O Treino (#631, ADR 0059): as regras do livro do offline training — `set-offline-training-
+      // skill` só aceita skill que o conteúdo oferece, e `enter-training` só existe com ele.
+      ...(content.training === undefined ? {} : { training: content.training }),
       ...(content.bestiary === undefined
         ? {}
         : {

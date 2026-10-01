@@ -42,12 +42,13 @@ a pergunta vai ser "onde fica esse número", não "qual era a regra".
 | Onboarding e tutorial | [`onboarding.md`](./onboarding.md) | parcial | E14 | §7.4, §8 |
 | Progressão, vocações e level | [`progression.md`](./progression.md) | parcial | E2, E7 | §4.1, §9, §43.1 |
 | Stamina | [`stamina.md`](./stamina.md) | implementado | E2, E3 | §10 |
-| Treino | [`training.md`](./training.md) | não implementado | E8 | §11 |
+| Treino | [`training.md`](./training.md) | implementado (#631) — exercise weapons e offline training | E7 | §11 |
 | Combate | [`combat.md`](./combat.md) | parcial | E2 | §12 |
 | Magias utilitárias | [`utility-spells.md`](./utility-spells.md) | implementado | E2 | M44-05 |
 | Bot | [`bot.md`](./bot.md) | parcial | E4 | §13, §43.3 |
 | Hunt | [`hunt.md`](./hunt.md) | parcial | E3 | §14 |
 | Cidade | [`city.md`](./city.md) | parcial | E1 | §6, §37 |
+| Mundo aberto | [`open-world.md`](./open-world.md) | parcial | E19 | — |
 | Chat | [`chat.md`](./chat.md) | parcial | E1 | — |
 | Party e matchmaking | [`party.md`](./party.md) | implementado | E9 | §15, §43.2 |
 | Analisador de hunt | [`analyzer.md`](./analyzer.md) | parcial | E6 | §16, §43.10 |

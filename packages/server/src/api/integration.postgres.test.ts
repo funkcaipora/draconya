@@ -7,7 +7,9 @@ import { buildContent, placeholderAppearances } from '@draconya/content';
 import type { Content } from '@draconya/content';
 import { decodeS2C, encodeC2S } from '@draconya/protocol';
 import type { S2CMessage } from '@draconya/protocol';
-import { CharacterRuntime, createHuntSession, statsForLevel } from '@draconya/sim';
+import {
+  CharacterRuntime, createHuntSession, offlineTrainingRulesOf, settleOfflineTraining, statsForLevel,
+} from '@draconya/sim';
 import { AuthService } from '../auth/service.js';
 import { RedisAuthSessionStore } from '../auth/sessions.js';
 import { loadConfiguration } from '../config.js';
@@ -24,7 +26,7 @@ import { ReceiptStore } from '../receipts.js';
 import type { Role } from '../role.js';
 import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
 import { connectTestRedis } from '../testing/redis.js';
-import { TEST_PROGRESSION, rawTestContent } from '../testing/content.js';
+import { TEST_PROGRESSION, rawTestContent, trainingTestContent } from '../testing/content.js';
 import { TicketService } from '../tickets.js';
 import { buildApi } from './server.js';
 
@@ -197,8 +199,14 @@ beforeAll(async () => {
   receipts = new ReceiptStore(redis);
   botConfigs = new BotConfigStore(redis);
   const content = integrationContent();
+  // O Treino (#631): as regras do gasto do banco na `api` e as do livro no `game`, do MESMO conteúdo
+  // de teste com Treino — o `main.ts` liga os dois do conteúdo carregado no boot.
+  const training = trainingTestContent();
+  const offlineRules = offlineTrainingRulesOf(training);
+  if (offlineRules === null) throw new Error('the training fixture has a training block');
   app = buildApi(configuration, logger, {
     auth, repository, tickets,
+    offlineTraining: { rules: offlineRules, restedSince: (characterId) => directory.restedSince(characterId) },
     // O kit e a mochila de verdade (#153): o `main.ts` liga os dois do mesmo jeito.
     startingKit: content.progression.startingKit,
     listItemInstances: (characterId) => repository.listItemInstances(characterId),
@@ -224,6 +232,7 @@ beforeAll(async () => {
     receipts, vocations: content.vocations, vocationLevel: content.progression.vocationLevel,
     saveBotConfig: (characterId, config) => botConfigs.save(characterId, config),
     createSession: createCitySessionFactory(content),
+    ...(training.training === undefined ? {} : { training: training.training }),
   });
   await game.start();
   await directory.heartbeat('integration-node', { sessions: 0, url: configuration.GAME_PUBLIC_URL });
@@ -455,6 +464,93 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     reconnected.binaryType = 'arraybuffer';
     await receive(reconnected);
     expect(await directory.lookup(character.id)).toEqual(location);
+  });
+
+  it('o offline training de ponta a ponta: o livro na Cidade, o logout, o carimbo de repouso e o gasto no ticket (#631, ADR 0059)', async () => {
+    // O caminho inteiro, com o socket, o Redis e o Postgres de verdade: escolher a skill do livro na
+    // Cidade → o logout grava o extrato de estado durável e o carimbo de repouso do diretório → o
+    // próximo `POST /api/tickets` liquida o extrato, lê o carimbo e GASTA o banco na mesma
+    // transação da trava, sem o `game` escrever a linha (invariante 9). O tempo fora é adiantado
+    // pelo carimbo — o teste não dorme duas horas.
+    const HOUR = 3_600_000;
+    const owner = await login();
+    const character = await createCharacter(owner.cookie);
+    await database.database.db.update(characters)
+      .set({ training: { offlineBankMs: 3 * HOUR, offlineSkill: null, version: 1 } })
+      .where(eq(characters.id, character.id));
+
+    const ticket = await (await request('/api/tickets', 'POST', owner.cookie, { characterId: character.id })).json();
+    const socket = new WebSocket(ticket.wsUrl);
+    sockets.add(socket);
+    socket.binaryType = 'arraybuffer';
+    await receive(socket);
+    // O `training-state` do attach traz o banco que o ticket carregou da linha.
+    const attach = awaitMessage(socket, 'training-state');
+    socket.send(encodeC2S({ type: 'session-attach' }));
+    expect(await attach).toMatchObject({ offlineBankMs: 3 * HOUR, offlineSkill: null });
+
+    const chosen = awaitMessage(socket, 'training-state');
+    socket.send(encodeC2S({ type: 'set-offline-training-skill', skillId: 'sword' }));
+    expect(await chosen).toMatchObject({ offlineBankMs: 3 * HOUR, offlineSkill: 'sword' });
+
+    socket.send(encodeC2S({ type: 'logout' }));
+    await vi.waitFor(async () => {
+      expect(await directory.lookup(character.id)).toBeNull();
+      expect(await directory.restedSince(character.id)).not.toBeNull();
+    }, { timeout: 3000 });
+    // Duas horas fora: o carimbo do `release` recua duas horas, e nada mais.
+    const now = Date.now();
+    await redis.set(`char:${character.id}:rest`, String(now - 2 * HOUR));
+
+    const next = await request('/api/tickets', 'POST', owner.cookie, { characterId: character.id });
+    expect(next.status).toBe(200);
+
+    // A `api` gastou: 2 h de um banco de 3 h (o teto Free é 6 h), a escolha do livro CONSUMIDA, e as
+    // skills creditadas pela mesma fórmula do `sim` — na linha, escrita sob a trava do ticket.
+    const rules = offlineTrainingRulesOf(trainingTestContent());
+    if (rules === null) throw new Error('missing training rules');
+    const expected = settleOfflineTraining({
+      training: { offlineBankMs: 3 * HOUR, offlineSkill: 'sword', version: 1 },
+      skills: undefined, awayMs: 2 * HOUR, premium: false, vocationId: null,
+    }, rules);
+    const [row] = await database.database.db
+      .select({ training: characters.training, skills: characters.skills })
+      .from(characters).where(eq(characters.id, character.id));
+    expect(row?.training).toEqual({ offlineBankMs: 1 * HOUR, offlineSkill: null, version: 1 });
+    expect(row?.skills).toEqual(expected.skills);
+    expect(expected.settlement?.tries).toBe(1_800);
+
+    // E gasta UMA vez: o mesmo ticket pedido de novo (mesmo carimbo) não devolve nada ao banco nem
+    // rende de novo — a escolha já foi consumida.
+    expect((await request('/api/tickets', 'POST', owner.cookie, { characterId: character.id })).status).toBe(200);
+    const [again] = await database.database.db
+      .select({ training: characters.training, skills: characters.skills })
+      .from(characters).where(eq(characters.id, character.id));
+    expect(again).toEqual(row);
+  });
+
+  it('um personagem com sessão hospedada NÃO tem o banco gasto no ticket: a linha não tem dono frio (#631, ADR 0052 d.5)', async () => {
+    const HOUR = 3_600_000;
+    const owner = await login();
+    const character = await createCharacter(owner.cookie);
+    await database.database.db.update(characters)
+      .set({ training: { offlineBankMs: 3 * HOUR, offlineSkill: 'sword', version: 1 } })
+      .where(eq(characters.id, character.id));
+    // Um carimbo velho de um logout anterior, e uma sessão hospedada no diretório: o `resolveNode` vê
+    // o registro, então o personagem NÃO está em repouso — o carimbo nem é lido.
+    await redis.set(`char:${character.id}:rest`, String(Date.now() - 5 * HOUR));
+    await directory.register(character.id, { sessionId: 'hosted', nodeId: 'integration-node', type: 'city' });
+    try {
+      const response = await request('/api/tickets', 'POST', owner.cookie, { characterId: character.id });
+      expect(response.status).toBe(200);
+      const [row] = await database.database.db
+        .select({ training: characters.training, skills: characters.skills })
+        .from(characters).where(eq(characters.id, character.id));
+      expect(row?.training).toEqual({ offlineBankMs: 3 * HOUR, offlineSkill: 'sword', version: 1 });
+      expect(row?.skills).toEqual({});
+    } finally {
+      await directory.release(character.id);
+    }
   });
 
   it('a new character is born wearing the kit, and the inventory on attach shows it (#153)', async () => {

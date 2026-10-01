@@ -7,7 +7,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from './load.js';
-import { floorChangeAt, isBlocked, ZONE_FLAG, zoneFlagsAt } from './map.js';
+import {
+  absoluteToLocal, floorChangeAt, isBlocked, localToAbsolute, ZONE_FLAG, zoneFlagsAt,
+} from './map.js';
 import { BOT_CATEGORIES, manaCostDisplayOf, NEUTRAL_RATES } from './schemas.js';
 
 const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
@@ -488,6 +490,68 @@ describe('loadContent', () => {
   });
 });
 
+describe('o Treino do Tibia (#631, ADR 0059)', () => {
+  const content = loadContent(DATA);
+
+  it('o boneco, o golpe e o offline training são os números do Canary', () => {
+    const training = content.training;
+    expect(training).toBeDefined();
+    // `exercise_training_weapons.lua`: 7 tries e 600 de mana gasta por carga, no rate 100 do boneco.
+    expect(training?.dummy.rate).toBe(100);
+    expect(training?.strike).toEqual({ triesPerCharge: 7, manaSpentPerCharge: 600 });
+    // `exhaustionTime = 10` do mesmo script: o `training-exhaustion` entre dois inícios.
+    expect(training?.startCooldownMs).toBe(10_000);
+    // `player.cpp` (banco 12 h) e `offline_training.lua` (carência 600 s, 21 dias, escudo /4).
+    expect(training?.offline).toMatchObject({
+      bankCapMs: 12 * 3_600_000, graceMs: 600_000, maxAwayMs: 21 * 86_400_000, shieldingDivisor: 4,
+      // ADR 0059 d.4 — a forma do PRD, não do Canary.
+      spendCapMs: { free: 6 * 3_600_000, premium: 12 * 3_600_000 },
+    });
+    expect(training?.offline.skills.map((entry) => entry.skillId).sort())
+      .toEqual(['axe', 'club', 'distance', 'magic', 'sword']);
+  });
+
+  it('o personagem treina num tile andável da Cidade, ao lado do boneco', () => {
+    const { stand, dummy } = content.training!.place;
+    expect(content.city).toBeDefined();
+    expect(isBlocked(content.city!, stand.x, stand.y, stand.z)).toBe(false);
+    // O boneco é uma estátua: bloqueia, como no OTBM (`exercise dummy`, item 28565).
+    expect(isBlocked(content.city!, dummy.x, dummy.y, dummy.z)).toBe(true);
+  });
+
+  it('as exercise weapons têm 500/1 800/14 400 cargas, skill de treino e preço de NPC', () => {
+    const weapons = [...content.items.values()].filter((item) => item.exercise !== undefined);
+    // 7 tipos (sword, axe, club, bow, rod, wand, shield) × 3 níveis; as exercise wraps de fist
+    // (Monk, pós-13.32) e o training weapon de 50 cargas (Daily Reward) ficam de fora.
+    expect(weapons).toHaveLength(21);
+    expect(new Set(weapons.map((item) => item.charges))).toEqual(new Set([500, 1_800, 14_400]));
+    expect(new Set(weapons.map((item) => item.exercise?.skillId)))
+      .toEqual(new Set(['sword', 'axe', 'club', 'distance', 'magic', 'shielding']));
+    // Preço do Canary (`npc/*.lua`): 347 222 / 1 250 000 / 10 000 000 por nível de carga.
+    const priceOf = (charges: number): Set<number | undefined> =>
+      new Set(weapons.filter((item) => item.charges === charges).map((item) => item.buyPrice));
+    expect(priceOf(500)).toEqual(new Set([347_222]));
+    expect(priceOf(1_800)).toEqual(new Set([1_250_000]));
+    expect(priceOf(14_400)).toEqual(new Set([10_000_000]));
+    for (const item of weapons) {
+      expect(item.purchasable).toBe(true);
+      // Nunca se veste, nunca é arma, e ninguém a compra de volta.
+      expect(item.slot).toBeUndefined();
+      expect(item.weapon).toBeUndefined();
+      expect(item.value).toBe(0);
+      expect(content.appearances?.items[item.id]).toBeGreaterThan(0);
+    }
+    expect(content.items.get('exercise-sword')).toMatchObject({
+      charges: 500, exercise: { skillId: 'sword' }, buyPrice: 347_222,
+    });
+  });
+
+  it('nenhum item comum é `purchasable` — a loja geral (E5) ainda não existe', () => {
+    const buyable = [...content.items.values()].filter((item) => item.purchasable === true);
+    expect(buyable.every((item) => item.exercise !== undefined)).toBe(true);
+  });
+});
+
 describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
   it('carrega a tabela real e resolve as entidades do repositório com ela', () => {
     const content = loadContent(DATA);
@@ -709,6 +773,26 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     }
   });
 
+  it('os 4 spellbooks do Canary com capacidade de magic shield a carregam no catálogo real (#627, M44-09)', () => {
+    // `magicshieldCapacityflat`/`percent` do items.xml (47dfd51) — o dado declarado, sem consumidor
+    // no `sim` (o Canary só o lê para descrição de item e Cyclopedia; ver `itemSchema`).
+    const { items } = loadContent(DATA);
+    const capacity = (id: string) => items.get(id)?.bonuses?.magicShieldCapacity;
+    expect(capacity('eldritch-folio')).toEqual({ flat: 80, percent: 8 });
+    expect(capacity('eldritch-tome')).toEqual({ flat: 80, percent: 8 });
+    expect(capacity('cocoa-grimoire')).toEqual({ flat: 150, percent: 3 });
+    expect(capacity('creamy-grimoire')).toEqual({ flat: 150, percent: 3 });
+    // E só esses quatro: mais um item com o campo seria um importador lendo o que não devia.
+    const withCapacity = [...items.values()].filter((item) => item.bonuses?.magicShieldCapacity !== undefined);
+    expect(withCapacity.map((item) => item.id).sort())
+      .toEqual(['cocoa-grimoire', 'creamy-grimoire', 'eldritch-folio', 'eldritch-tome']);
+  });
+
+  it('nenhum item do catálogo real carrega elementalBond: os 32 do Canary são arma fist, fora do corte (#627)', () => {
+    const { items } = loadContent(DATA);
+    expect([...items.values()].filter((item) => item.elementalBond !== undefined)).toEqual([]);
+  });
+
   it('data/supplies voltou a existir, e a poção não é mais item (ADR 0026 d.3)', () => {
     expect(existsSync(join(DATA, 'supplies'))).toBe(true);
     const content = loadContent(DATA);
@@ -760,6 +844,83 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     // Se este teste reprovou: o id saiu do arquivo da entidade na FUN-94 e vive em
     // `data/appearances/baseline.json`, uma linha por id de conteúdo.
     expect(ofensores).toEqual([]);
+  });
+});
+
+describe('o mundo do conteúdo real (#829, OW-08, ADR 0060)', () => {
+  it('o `main` é Thais pacífica: no-pvp, mapa thais, uma cidade, templo no tile andável e teto 200', () => {
+    // Apagar `worlds/` de `load.ts` deixa o servidor sem mundo e sem aviso — esta é a mutação que
+    // o teste mata. O formato é o do issue: { id, name, worldType, map, towns, capacity }.
+    const content = loadContent(DATA);
+    const world = content.worlds.get('main');
+    if (world === undefined) throw new Error('o conteúdo real não tem o mundo "main"');
+    expect(world).toEqual({
+      id: 'main', name: 'Draconya', worldType: 'no-pvp', map: 'thais',
+      towns: [{ id: 'thais', name: 'Thais', temple: { x: 32369, y: 32241, z: 7 } }],
+      capacity: 200,
+    });
+    expect(content.worlds.size).toBe(1);
+  });
+
+  it('o templo de Thais cai num tile andável do recorte, traduzido pelo `source.region`', () => {
+    const content = loadContent(DATA);
+    const world = content.worlds.get('main');
+    const map = content.maps.get(world?.map ?? '');
+    const temple = world?.towns[0]?.temple;
+    if (map === undefined || temple === undefined) throw new Error('mundo sem mapa ou sem templo');
+    // x 32275 + 94 = 32369 e y 32153 + 88 = 32241: o templo é o `entryPoint` que a Cidade já usa.
+    const local = absoluteToLocal(map, temple);
+    expect(local).toEqual({ x: 94, y: 88, z: 7 });
+    expect(local).toEqual(map.entryPoint);
+    expect(isBlocked(map, 94, 88, 7)).toBe(false);
+    // O que o recorte diz de si é o que traduz: a origem é a de `source.region`, e a volta fecha.
+    expect(map.source?.region.x[0]).toBe(32275);
+    expect(map.source?.region.y[0]).toBe(32153);
+    expect(localToAbsolute(map, { x: 94, y: 88, z: 7 })).toEqual(temple);
+  });
+
+  it('o mundo roda sobre o mesmo mapa da Cidade, que hoje é o do primeiro mundo (ADR 0060 d.3.a)', () => {
+    const content = loadContent(DATA);
+    expect(content.worlds.get('main')?.map).toBe(content.city?.id);
+  });
+
+  it('o mundo não leva arte: só ids de conteúdo, e `worlds/` passa nas varreduras de arte', () => {
+    // As duas varreduras abaixo já percorrem `data/` inteiro, `worlds/` incluso; aqui se prende
+    // que o arquivo existe e só tem as chaves do schema, sem `appearanceId` nem caminho de imagem.
+    const text = readFileSync(join(DATA, 'worlds', 'main.json'), 'utf8');
+    expect(Object.keys(JSON.parse(text) as object).sort())
+      .toEqual(['capacity', 'id', 'map', 'name', 'towns', 'worldType']);
+    expect(text).not.toMatch(/appearanceId|outfitId|\.(png|jpe?g|gif|webp|bmp|spr|dat)\b/i);
+  });
+
+  it('um worldType desconhecido no arquivo derruba o boot', () => {
+    // `retro-pvp` é um valor real do Canary (`config.lua.dist:33`) que o motor não implementa.
+    const copy = mkdtempSync(join(tmpdir(), 'draconya-content-'));
+    try {
+      cpSync(DATA, copy, { recursive: true });
+      const file = join(copy, 'worlds', 'main.json');
+      const text = readFileSync(file, 'utf8');
+      expect(text).toMatch(/"worldType": "no-pvp"/);
+      writeFileSync(file, text.replace('"worldType": "no-pvp"', '"worldType": "retro-pvp"'));
+      expect(() => loadContent(copy)).toThrow(/world "main": worldType/);
+    } finally {
+      rmSync(copy, { recursive: true, force: true });
+    }
+  });
+
+  it('o templo em parede, no arquivo, derruba o boot: quebra no servidor e não no personagem', () => {
+    const copy = mkdtempSync(join(tmpdir(), 'draconya-content-'));
+    try {
+      cpSync(DATA, copy, { recursive: true });
+      const file = join(copy, 'worlds', 'main.json');
+      const text = readFileSync(file, 'utf8');
+      // (32283, 32153, 7) é o tile local (8,0) do andar 7 de Thais: parede, na borda de cima.
+      expect(text).toContain('"x": 32369, "y": 32241');
+      writeFileSync(file, text.replace('"x": 32369, "y": 32241', '"x": 32283, "y": 32153'));
+      expect(() => loadContent(copy)).toThrow(/templo \(32283,32153,7\), no tile \(8,0,7\) do mapa "thais"/);
+    } finally {
+      rmSync(copy, { recursive: true, force: true });
+    }
   });
 });
 
@@ -969,17 +1130,18 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     // metade Sorcerer de Explosion e de Heavy Magic Missile, 31→36), Druid +6 (Avalanche,
     // Intense/Ultimate Healing, Stone Shower, a metade Druid de Explosion e de Heavy Magic
     // Missile, 33→39); Knight não ganhou conjuração nenhuma nesta issue.
-    // #623 (utilitárias) acrescentou: Ultimate Light no Sorcerer (+1, 37→38) e no Druid (+1) e a
-    // Food só no Druid (+1) — Druid 40→42 —, e as SETE genéricas novas (Light, Great Light,
-    // Levitate up/down, Magic Rope, Find Person, Find Fiend) ao lado da Cure Poison: 1→8.
+    // #599 (M38-02) acrescentou o familiar de cada vocação (level 200): +1 em cada uma.
+    // #623 (utilitárias) acrescentou: Ultimate Light no Sorcerer (+1) e no Druid (+1) e a Food só no
+    // Druid (+1), e as SETE genéricas novas (Light, Great Light, Levitate up/down, Magic Rope, Find
+    // Person, Find Fiend) ao lado da Cure Poison: 1→8. Os números abaixo já contam as duas.
     const byVocation = new Map<string | undefined, number>();
     for (const spell of content.spells.values()) {
       byVocation.set(spell.vocationId, (byVocation.get(spell.vocationId) ?? 0) + 1);
     }
-    expect(byVocation.get('knight')).toBe(21);
-    expect(byVocation.get('paladin')).toBe(20);
-    expect(byVocation.get('sorcerer')).toBe(38);
-    expect(byVocation.get('druid')).toBe(42);
+    expect(byVocation.get('knight')).toBe(22);
+    expect(byVocation.get('paladin')).toBe(21);
+    expect(byVocation.get('sorcerer')).toBe(39);
+    expect(byVocation.get('druid')).toBe(43);
     expect(byVocation.get(undefined)).toBe(8);
   });
 
@@ -1056,6 +1218,42 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('os quatro familiares de vocação (#599, M38-02): level 200, mana e monstro do Canary, 15 min e 30 min', () => {
+    // `data/scripts/spells/familiar/*.lua` (level 200, mana 3000/1000/2000/3000) e
+    // `data-otservbr-global/monster/familiars/*.lua` (vida, manaCost, `familiar = true`), conferidos
+    // no `47dfd51`; a velocidade é a do TFS (309, ADR 0037 d.4) e o outfit, o do `FAMILIAR_ID`.
+    const expected = {
+      knight: { mana: 1_000, health: 10_000, outfitId: 991, targetDistance: 4 },
+      paladin: { mana: 2_000, health: 15_000, outfitId: 992, targetDistance: 2 },
+      sorcerer: { mana: 3_000, health: 20_000, outfitId: 994, targetDistance: 1 },
+      druid: { mana: 3_000, health: 20_000, outfitId: 993, targetDistance: 1 },
+    } as const;
+    for (const [vocationId, row] of Object.entries(expected)) {
+      const spell = content.spells.get(`summon-${vocationId}-familiar`);
+      expect(spell, vocationId).toMatchObject({
+        vocationId, minLevel: 200, manaCost: row.mana, group: 'support', groupCooldownMs: 2_000,
+        // `spell:cooldown(0)`: o cooldown real (30 min) mora no efeito.
+        cooldownMs: 2_000,
+        effect: { kind: 'familiar', monsterId: `${vocationId}-familiar`, durationMs: 900_000, cooldownMs: 1_800_000 },
+      });
+      const familiar = content.monsters.get(`${vocationId}-familiar`);
+      expect(familiar, vocationId).toMatchObject({
+        familiar: true, manaCost: row.mana, health: row.health, speed: 309, outfitId: row.outfitId,
+        targetDistance: row.targetDistance, blockable: false, experience: 0, staticAttack: 0.9,
+        conditionImmunities: ['invisible', 'paralyze'],
+      });
+      // O Canary declara `summonable = false`: a Summon Creature não invoca familiar.
+      expect(familiar?.summonable).toBe(false);
+      expect(familiar?.loot.items).toEqual([]);
+    }
+    // A provocação de 8 s (`summon challenge`) é dos dois familiares de magia; o do Monk não entra.
+    const challenges = (id: string) => content.monsters.get(id)?.abilities.find((a) => a.id === 'summon-challenge');
+    expect(challenges('druid-familiar')?.challenge).toEqual({ durationMs: 8_000 });
+    expect(challenges('sorcerer-familiar')?.challenge).toEqual({ durationMs: 8_000 });
+    expect(challenges('knight-familiar')).toBeUndefined();
+    expect(content.monsters.has('monk-familiar')).toBe(false);
   });
 
   it('Cancel Invisibility usa o `AREA_CIRCLE3X3` do Canary — o círculo de RAIO 3, o mesmo do Mass Healing (#559)', () => {
@@ -1670,6 +1868,61 @@ describe('a perda de item na morte do conteúdo real (#571, ADR 0042 decisão 4)
     // E é o ÚNICO colar que protege: qualquer outro com a flag seria uma proteção não declarada.
     const protectors = [...items.values()].filter((item) => item.protectsOnDeath).map((item) => item.id);
     expect(protectors).toEqual(['amulet-of-loss']);
+  });
+});
+
+describe('a apresentação do monstro no conteúdo real (#620, M44-02)', () => {
+  // Números do Canary (`data-otservbr-global/monster/*`, conferidos em 2026-09-30): os campos
+  // `monster.outfit.look*`, `monster.voices`, `monster.light` e `monster.race` são apresentação —
+  // nenhum deles entra em combate, e nenhum é arte.
+  const content = loadContent(DATA);
+  const { monsters } = content;
+  const { appearances } = content;
+  if (appearances === undefined) throw new Error('o conteúdo real não carregou a tabela de aparências');
+
+  it('o Rat fala, e o Dragon grita — `voices` do Canary, com intervalo 5000 ms e chance 10', () => {
+    expect(monsters.get('rat')?.voices).toEqual({
+      intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!', yell: false }],
+    });
+    const dragon = monsters.get('dragon')?.voices;
+    expect(dragon?.lines.map((line) => line.text)).toEqual(['FCHHHHH', 'GROOAAARRR']);
+    expect(dragon?.lines.every((line) => line.yell)).toBe(true);
+    // O Rotworm não declara fala com linha: mudo.
+    expect(monsters.get('rotworm')?.voices).toBeUndefined();
+  });
+
+  it('o Fire Elemental brilha (nível 4, cor 208) e queima; o Dark Magician traz as cores e o addon do Canary', () => {
+    expect(monsters.get('fire-elemental')).toMatchObject({ light: { level: 4, color: 208 }, race: 'fire' });
+    expect(monsters.get('dark-magician')?.outfit).toEqual({ head: 58, body: 95, legs: 51, feet: 131, addons: 2 });
+    // O `lookType` é o `outfitId` da tabela de aparências, nunca um campo do monstro (invariante 6).
+    expect(monsters.get('dark-magician')?.outfitId).toBe(appearances.monsters['dark-magician']);
+  });
+
+  it('o monstro comum não paga nada: sem `outfit`, `light`, `race` — o default do Canary é `blood` e cor 0', () => {
+    const rotworm = monsters.get('rotworm');
+    for (const field of ['outfit', 'light', 'race'] as const) expect(rotworm?.[field], field).toBeUndefined();
+  });
+
+  it('as contagens do catálogo: 238 com cores/addons, 567 com falas, 59 com luz e 412 com raça que não é `blood`', () => {
+    // Uma reimportação que mude isto sem querer (um leitor que passou a ler outra coisa) reprova
+    // aqui — `pnpm catalog:import monsters` é o único que as muda, e o relatório as conta.
+    const all = [...monsters.values()];
+    expect(all.filter((monster) => monster.outfit !== undefined)).toHaveLength(238);
+    expect(all.filter((monster) => monster.voices !== undefined)).toHaveLength(567);
+    expect(all.filter((monster) => monster.light !== undefined)).toHaveLength(59);
+    const races = new Map<string, number>();
+    for (const monster of all) if (monster.race !== undefined) races.set(monster.race, (races.get(monster.race) ?? 0) + 1);
+    expect(Object.fromEntries(races)).toEqual({ undead: 232, venom: 127, fire: 42, ink: 9, candy: 1, chocolate: 1 });
+  });
+
+  it('o efeito do golpe físico tem uma linha por raça, com os ids do Canary (`CONST_ME_*`)', () => {
+    // `Game::combatGetTypeInfo`: sangue 1, veneno 17, hit area 10 (morto-vivo e tinta), energia 12,
+    // cacau 270 e xarope 269; fogo reusa o sangue. Mutação que mata: uma raça sem linha — o golpe
+    // nela cairia em `hits.melee` sem ninguém notar.
+    expect(appearances.hits.byRace).toEqual({
+      blood: 1, venom: 17, undead: 10, fire: 1, energy: 12, ink: 10, chocolate: 270, candy: 269,
+    });
+    expect(appearances.hits.melee).toBe(1);
   });
 });
 

@@ -647,6 +647,13 @@ describe('entrada em curso: reversão e joinedAtMs (#397, ADR 0035 decisão 6)',
       direction: 'none', blessings: 'none', promoted: 'none', fightMode: 'none',
       // Relógio de PAREDE (epoch), materializado na fronteira da transição (`materializeStamina`).
       staminaMs: 'none', staminaUpdatedAtMs: 'none',
+      // Os dois carimbos do familiar (#599) também são de relógio de PAREDE (epoch em ms, comparados
+      // com `createdAtMs + nowMs`), nunca do relógio lógico da sessão: atravessam a transição.
+      familiar: 'none',
+      // O banco do treino offline e o carimbo `exerciseExhaustedUntilMs` do cooldown entre dois
+      // Treinos (#631) também são de relógio de PAREDE — o servidor passa o `nowMs` de parede, o `sim`
+      // não lê relógio —, e o banco é um saldo em ms sem âncora nenhuma: atravessam a transição.
+      training: 'none',
       // DURAÇÃO restante sem âncora num relógio: a comida que sobra, os contadores de prática
       // (golpes que ainda treinam, sem instante nenhum).
       fedMs: 'none', attackPractice: 'none',
