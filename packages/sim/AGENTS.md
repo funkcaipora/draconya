@@ -836,11 +836,21 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   invocações de personagem. A invocação de monstro herda facção e inimigas do mestre
   (`#factionProfileOf` recursivo); a de PERSONAGEM não usa a tabela (`null`). (5) **A morte por
   monstro é decidida pelo `credit`, não pelo golpe final** (`#onMonsterDied`): `lastHitBy` que é
-  um `m:<id>` sem participante entre os que bateram = sem XP, sem abate, cadáver sem dono e sem loot;
-  com dano de participante a XP é `floor(dano ÷ total × XP)` (`#experiencePool`, o dano de monstro
-  entra no total) e o dono do cadáver é o maior causador (`#corpseOwnerOf`), participante ou não —
-  o dano de campo não entra. `#forgetInMonsters` poda o `m:<id>` que morreu do `Contribution` dos
-  outros monstros (só com facção). **A "atividade sem jogador" do `updateIdleStatus` do `47dfd51` só
+  um `m:<id>` sem participante entre os que bateram = sem XP, sem abate (a invocação de monstro
+  também), cadáver sem dono e sem loot; com dano de participante a XP é `floor(dano ÷ total × XP)`
+  (`#experiencePool`, o dano de monstro entra no total) e, havendo dano de monstro no mapa, o dono do
+  cadáver é o maior causador ENTRE OS QUE AINDA EXISTEM (`#corpseOwnerOf`), participante ou monstro
+  vivo — mesmo quando o herói deu o último golpe —, o dano de campo não entra. **O dano de quem saiu
+  NUNCA se apaga do mapa de outro monstro** (o Canary só zera o `damageMap` inteiro, em
+  `onIdleStatus`): `#forgetInMonsters` o funde no balde `DEPARTED_ACTOR` (`m:departed`,
+  `Contribution.fold`), que conta no total, mantém o prefixo `m:` e nunca é dono nem `mostDamageBy`;
+  trocar a fusão por `forget` paga ao jogador a XP que o Deepling morto já tirou. O tique de condição
+  de um dono monstro que já saiu não é atribuído a ninguém. **A invocação de monstro de facção
+  persegue o alvo do MESTRE** (`#followMasterTarget`, `updateSummonTarget`), nunca `chooseTarget`
+  — a lista de alvos dela inclui o jogador por causa do offset de facção, e é isso que ela NÃO usa.
+  **O laço de alvos de `#executeMonsterAbility` pula o monstro que saiu dos índices** no meio dele
+  (a morte do mestre cascateia em `#removeSummon`, que não zera `alive`) — o mesmo guarda de
+  `#applyHits`/`#carnage`; sem ele a invocação leva um golpe fantasma e morre duas vezes. **A "atividade sem jogador" do `updateIdleStatus` do `47dfd51` só
   alcança a INVOCAÇÃO de um monstro de facção** (`master->totalPlayersOnScreen == 0`, sob um `else if
   (master)`): `#isFactionSummonIdle` lê a posição dos participantes — estado da sessão, nunca de quem
   olha — e o monstro de facção comum com inimigo à vista brigando sem jogador NÃO fica ocioso. Testes

@@ -11,6 +11,7 @@ import { buildContent, placeholderAppearances } from '@draconya/content';
 import type { Content, Progression, RawContent } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
+import { DEPARTED_ACTOR, resolveDeath } from '../death.js';
 import { MonsterRuntime } from '../monster/monster.js';
 import { statsForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
@@ -361,6 +362,248 @@ describe('a morte por monstro não paga o jogador (`Creature::onDeath`, `Monster
   });
 });
 
+describe('o dano de quem já saiu continua no total do abate (`Creature::getDamageRatio`)', () => {
+  // O Canary nunca apaga uma entrada do `damageMap`: o Deepling que feriu o Deathling e morreu ANTES
+  // do abate ainda leva a fatia dele do total, e o jogador só a dele. Os golpes entram à mão
+  // (`contribution.record`) — o herói nunca bate (`attackPower` 0) — e a morte passa pelo mesmo
+  // `resolveDeath` de sempre, sem avançar o relógio: nada mais acontece entre uma e outra.
+  const victim = { ...deathling, experience: 1000 };
+  const points = [point('deepling', 14), point('deathling', 20)];
+
+  /** Mata o Deepling pela mão do Deathling — morte só de monstro, sem abate para o herói. */
+  const killDeepling = (
+    session: Session, attacker: MonsterRuntime, killer: MonsterRuntime,
+  ): void => {
+    attacker.contribution.record(killer.subject, 5);
+    attacker.health = 0;
+    resolveDeath(session, { kind: 'monster', monster: attacker });
+  };
+
+  it('o atacante que morreu antes vira o balde `DEPARTED_ACTOR`: o total fica, só a chave some', () => {
+    const { session, hero, byId } = arena([deepling, victim], points);
+    const a = byId('deepling');
+    const x = byId('deathling');
+    x.contribution.record(hero.id, 400);
+    x.contribution.record(a.subject, 300);
+    killDeepling(session, a, x);
+
+    expect(x.contribution.getState()).toEqual({
+      damageByActor: { [hero.id]: 400, [DEPARTED_ACTOR]: 300 }, lastHitBy: DEPARTED_ACTOR,
+    });
+  });
+
+  it('o herói que termina o abate depois leva `floor(dano ÷ total × XP)` com o dano do morto no total', () => {
+    const { session, hero, byId } = arena([deepling, victim], points);
+    const a = byId('deepling');
+    const x = byId('deathling');
+    x.contribution.record(hero.id, 400);
+    x.contribution.record(a.subject, 300);
+    killDeepling(session, a, x);
+    // O herói dá os 300 finais: 700 dele de 1000 no total — e NÃO 700 de 700 (o jogador pago a
+    // mais, 1000 XP, que era o que a poda do atacante morto produzia).
+    x.contribution.record(hero.id, 300);
+    x.health = 0;
+    resolveDeath(session, { kind: 'monster', monster: x });
+
+    expect(hero.xp).toBe(700);
+    expect(session.aggregates.xpGained).toBe(700);
+    expect(session.aggregates.kills).toBe(1);
+  });
+
+  it('o morto que bateu o MAIOR dano não é dono do cadáver nem tira o posto de quem ficou', () => {
+    const { session, hero, ruleset, byId } = arena([deepling, victim], points);
+    const a = byId('deepling');
+    const x = byId('deathling');
+    x.contribution.record(hero.id, 300);
+    x.contribution.record(a.subject, 500);
+    killDeepling(session, a, x);
+    x.contribution.record(hero.id, 200);
+    x.health = 0;
+    resolveDeath(session, { kind: 'monster', monster: x });
+
+    // O herói tem 500 de 1000 (o morto tinha os outros 500): a XP é a fatia dele — e o dono é ele,
+    // o maior causador entre as criaturas que AINDA existem (`getCreatureByID` pula o morto).
+    expect(hero.xp).toBe(500);
+    const corpse = ruleset.groundItems.find((c) => c.monsterId === 'deathling');
+    expect(corpse?.ownerId).toBe(hero.id);
+    expect(hero.goldDelta).toBe(5);
+  });
+
+  it('o mapa do monstro fica limitado: vários atacantes que saíram viram UMA chave', () => {
+    const { session, hero, ruleset, byId } = arena(
+      [deepling, victim],
+      [point('deepling', 14), point('deepling', 16), point('deepling', 18), point('deathling', 22)],
+    );
+    const x = byId('deathling');
+    const attackers = ruleset.monsters.filter((m) => m.monsterId === 'deepling');
+    expect(attackers).toHaveLength(3);
+    x.contribution.record(hero.id, 10);
+    for (const attacker of attackers) {
+      x.contribution.record(attacker.subject, 20);
+      killDeepling(session, attacker, x);
+    }
+    expect(x.contribution.getState().damageByActor).toEqual({ [hero.id]: 10, [DEPARTED_ACTOR]: 60 });
+  });
+
+  it('o veneno de um Deepling que já saiu continua tirando vida, mas não vira dano atribuído', () => {
+    // Canary: `Creature::drainHealth` só atribui `if (attacker)`, e o dono morto não é achado.
+    const venomous = {
+      ...deepling, attack: 0,
+      abilities: [{
+        id: 'venom', cadenceMs: 60_000, target: { range: 6 }, power: 0, damageType: 'physical',
+        condition: {
+          key: 'venom', merge: 'refresh', durationMs: 4_000,
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 4, intervalMs: 500, damage: 15 }], damageType: 'earth',
+          },
+        },
+      }],
+    };
+    const { session, byId } = arena(
+      [venomous, { ...victim, speed: 1 }], [point('deepling', 20), point('deathling', 23)],
+    );
+    const a = byId('deepling');
+    const x = byId('deathling');
+    plant(a, 20);
+    plant(x, 23);
+    for (let t = 0; t < 10_000 && x.contribution.damageBy(a.subject) === 0; t += 100) session.advanceBy(100);
+    expect(x.contribution.damageBy(a.subject)).toBeGreaterThan(0);
+
+    killDeepling(session, a, x);
+    const attributed = x.contribution.getState().damageByActor[DEPARTED_ACTOR] ?? 0;
+    const healthAfterDeath = x.health;
+    run(session, 4_000, 100);
+
+    expect(x.health).toBeLessThan(healthAfterDeath);
+    expect(x.contribution.getState().damageByActor).toEqual({ [DEPARTED_ACTOR]: attributed });
+  });
+});
+
+describe('o abate de monstro por monstro: kills, dono do cadáver e a invocação', () => {
+  const victim = { ...deathling, experience: 1000 };
+  const points = [point('deepling', 14), point('deathling', 20)];
+
+  it('o herói dá o ÚLTIMO golpe mas um monstro causou mais dano: XP é a fatia dele, o cadáver não tem dono', () => {
+    const { session, hero, ruleset, byId } = arena([deepling, victim], points);
+    const a = byId('deepling');
+    const x = byId('deathling');
+    x.contribution.record(hero.id, 100);
+    x.contribution.record(a.subject, 700);
+    x.contribution.record(hero.id, 200);
+    x.health = 0;
+    resolveDeath(session, { kind: 'monster', monster: x });
+
+    // `Monster::getCorpse` grava o dono pelo `mostDamageCreature`, não pelo último golpe: o Deepling
+    // (700) é o maior causador e não é jogador — sem dono, sem loot. A XP é `floor(300 ÷ 1000)`.
+    expect(hero.xp).toBe(300);
+    expect(session.aggregates.kills).toBe(1);
+    const corpse = ruleset.groundItems.find((c) => c.monsterId === 'deathling');
+    expect(corpse).toBeDefined();
+    expect(corpse?.ownerId ?? null).toBeNull();
+    expect(hero.goldDelta).toBe(0);
+  });
+
+  it('CONTROLE: o herói dá o último golpe E causou mais dano que o monstro: o cadáver e o loot são dele', () => {
+    const { session, hero, ruleset, byId } = arena([deepling, victim], points);
+    const a = byId('deepling');
+    const x = byId('deathling');
+    x.contribution.record(a.subject, 200);
+    x.contribution.record(hero.id, 500);
+    x.health = 0;
+    resolveDeath(session, { kind: 'monster', monster: x });
+
+    // 500 de 700 no total — o Deepling ainda está vivo, e o dano dele é o que falta.
+    expect(hero.xp).toBe(Math.floor((500 / 700) * 1000));
+    const corpse = ruleset.groundItems.find((c) => c.monsterId === 'deathling');
+    expect(corpse?.ownerId).toBe(hero.id);
+    expect(hero.goldDelta).toBe(5);
+  });
+
+  describe('a invocação de um monstro de facção morta só por monstro', () => {
+    const efreet = {
+      ...base, id: 'efreet', name: 'Efreet', faction: 'efreet', enemyFactions: ['player', 'marid'],
+      summons: { max: 1, entries: [{ monsterId: 'djinn', chance: 1, intervalMs: 500, count: 1 }] },
+    };
+    const djinn = { ...base, id: 'djinn', name: 'Djinn', attack: 10, health: 1_000_000 };
+    const marid = {
+      ...base, id: 'marid', name: 'Marid', faction: 'marid', enemyFactions: ['player', 'efreet'], speed: 1,
+    };
+    const build = () => {
+      const started = arena([efreet, djinn, marid], [point('efreet', 20), point('marid', 23)], 1);
+      plant(started.byId('efreet'), 20);
+      plant(started.byId('marid'), 23);
+      run(started.session, 3_000, 100);
+      return started;
+    };
+
+    it('não conta abate: ninguém presente tocou nela', () => {
+      const { session, byId } = build();
+      const summon = byId('djinn');
+      summon.contribution.record(byId('marid').subject, 10);
+      summon.health = 0;
+      resolveDeath(session, { kind: 'monster', monster: summon });
+
+      expect(session.aggregates.kills).toBe(0);
+      expect(session.aggregates.xpGained).toBe(0);
+    });
+
+    it('CONTROLE: se o herói bateu nela antes de o Marid terminar, o abate conta como sempre', () => {
+      const { session, hero, byId } = build();
+      const summon = byId('djinn');
+      summon.contribution.record(hero.id, 3);
+      summon.contribution.record(byId('marid').subject, 10);
+      summon.health = 0;
+      resolveDeath(session, { kind: 'monster', monster: summon });
+
+      expect(session.aggregates.kills).toBe(1);
+      // Invocação nunca paga XP, nem para quem bateu nela.
+      expect(session.aggregates.xpGained).toBe(0);
+    });
+  });
+});
+
+describe('a ÁREA de um monstro de facção não golpeia a invocação que o mestre morto levou embora', () => {
+  // A onda do Deepling (raio 3) pega o mestre E a invocação dele. O mestre nasceu antes, então vem
+  // primeiro na lista de alvos colhida; quando ele morre, `#removeSummon` tira a invocação dos
+  // índices SEM zerar a vida dela. Sem a conferência no laço a invocação seria golpeada de novo
+  // (um `creature-hit` fantasma), morreria uma SEGUNDA vez e deixaria um cadáver que ela nunca teve.
+  // A primeira onda sai no instante em que o Deepling vê o mestre (150 de vida, 100 de dano: ele
+  // sobrevive, e a invocação ainda nem existe); a segunda, 4 s depois, mata o mestre E a invocação.
+  const caster = {
+    ...deepling, attack: 0,
+    abilities: [{
+      id: 'blast', cadenceMs: 4_000, target: { range: 6, area: { shape: 'circle', radius: 3, centered: 'target' } },
+      power: 100, damageType: 'fire',
+    }],
+  };
+  const master = {
+    ...deathling, id: 'master', name: 'Master', health: 150, attack: 0, speed: 1,
+    summons: { max: 1, entries: [{ monsterId: 'minion', chance: 1, intervalMs: 500, count: 1 }] },
+  };
+  const minion = { ...base, id: 'minion', name: 'Minion', health: 80, attack: 0, speed: 1 };
+
+  it('uma morte, um `creature-vanished`, nenhum golpe depois dele e nenhum cadáver da invocação', () => {
+    const { session, byId } = arena(
+      [caster, master, minion], [point('deepling', 20), point('master', 23)],
+    );
+    plant(byId('deepling'), 20);
+    plant(byId('master'), 23);
+    const events = run(session, 8_000, 100);
+
+    const appeared = events.find((e) => e.kind === 'creature-appeared' && e.monsterId === 'minion');
+    if (appeared === undefined || appeared.kind !== 'creature-appeared') throw new Error('a invocação não nasceu');
+    const summonSubject = appeared.creatureId;
+    // O mestre morreu da onda, a invocação saiu junto, e a onda não a golpeou nem a matou de novo.
+    expect(events.filter((e) => e.kind === 'creature-vanished' && e.creatureId === summonSubject)).toHaveLength(1);
+    expect(events.filter((e) => e.kind === 'creature-hit' && e.creatureId === summonSubject)).toHaveLength(0);
+    // O mestre deixou o cadáver (sem dono); a invocação "some sem cadáver".
+    expect(events.filter((e) => e.kind === 'ground-item-appeared' && e.monsterId === 'master')).toHaveLength(1);
+    expect(events.filter((e) => e.kind === 'ground-item-appeared' && e.monsterId === 'minion')).toHaveLength(0);
+    expect(session.aggregates.kills).toBe(0);
+  });
+});
+
 describe('Lion × Usurpers — quem cada um enxerga como oponente e como alvo', () => {
   const monsters = [
     { ...lion, attack: 10 }, { ...usurper, attack: 10 },
@@ -549,6 +792,45 @@ describe('a invocação de um monstro de facção herda a facção — e fica oc
     hero.position = { x: 14, y: 2, z: 7 };
     run(session, 1_000, 100);
     expect(summon.idle).toBe(false);
+  });
+});
+
+describe('a invocação de um monstro de facção persegue o alvo do MESTRE (`Monster::updateSummonTarget`)', () => {
+  // A Lion-mestra só lista os Usurpers: o herói está à vista dela (a invocação não fica ociosa) mas
+  // não é alvo dela. A invocação, que pelo desempate de facção preferiria o herói (1 antes de 3),
+  // não escolhe sozinha — o `onThink_async` dela só chama `selectTarget(master->getAttackedCreature())`.
+  const mistress = {
+    ...lion, id: 'mistress', name: 'Mistress', attack: 0, speed: 1,
+    summons: { max: 1, entries: [{ monsterId: 'cub', chance: 1, intervalMs: 500, count: 1 }] },
+  };
+  const cub = { ...base, id: 'cub', name: 'Cub', attack: 10 };
+  const rival = { ...usurper, attack: 0, speed: 1 };
+  const points = [point('mistress', 20), point('usurper', 25)];
+
+  const build = (stepMs: number) => {
+    const started = arena([mistress, cub, rival], points, 21);
+    plant(started.byId('mistress'), 20);
+    plant(started.byId('usurper'), 25);
+    const events = run(started.session, 10_000, stepMs);
+    return { ...started, events };
+  };
+
+  it('o filhote mira o Usurper que a mestra ataca, e não o herói que está ao lado dele', () => {
+    const { hero, byId, events } = build(100);
+    const summon = byId('cub');
+    expect(summon.masterId).toBe(byId('mistress').id);
+    expect(byId('mistress').targetId).toBe(byId('usurper').subject);
+    expect(summon.targetId).toBe(byId('usurper').subject);
+    expect(hitsOf(events, summon.subject, byId('usurper').subject).length).toBeGreaterThan(0);
+    expect(hitsOf(events, summon.subject, hero.id)).toHaveLength(0);
+    expect(hero.health).toBe(hero.maxHealth);
+  });
+
+  it('1 Hz == 20 Hz: o alvo e o estado da invocação são os mesmos (invariante 2)', () => {
+    const twentyHz = build(50);
+    const oneHz = build(1_000);
+    expect(oneHz.byId('cub').getState()).toEqual(twentyHz.byId('cub').getState());
+    expect(oneHz.byId('mistress').getState()).toEqual(twentyHz.byId('mistress').getState());
   });
 });
 
