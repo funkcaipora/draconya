@@ -91,6 +91,61 @@ describe('mana shield é um estágio visível (DT-02)', () => {
   });
 });
 
+describe('o teto do Hazard na mana shield (#632, `healthChange` do Canary)', () => {
+  const shielded = (over: Partial<CharacterState> = {}): CharacterRuntime =>
+    character({
+      conditions: [{ key: 'mana-shield', spellId: 'magic-shield', expiresAtMs: 180_000 }],
+      ...over,
+    });
+  /** Um golpe reforçado pelo Hazard: `resolvedDamage` já com o reforço, `preHazardDamage` o de antes. */
+  const boostedOutcome = (resolved: number, preHazardDamage: number): DamageOutcome =>
+    ({ ...outcome(resolved), preHazardDamage });
+
+  it('absorve só o dano de ANTES do reforço, e o excedente do Hazard cai inteiro na vida', () => {
+    // 100 de golpe, +24 do Hazard: o Canary soma `healthChange` ANTES do estágio e o usa velho. Com
+    // mana de sobra (200) o escudo ainda assim para nos 100.
+    const hero = shielded({ mana: 200 });
+    const applied = applyDamageOutcome(hero, boostedOutcome(124, 100), null);
+    expect(applied.absorbedByMana).toBe(100);
+    expect(applied.healthDamage).toBe(24);
+    expect(hero.mana).toBe(100);
+    expect(hero.health).toBe(76);
+  });
+
+  it('com a mana curta vale o menor: `min(mana, dano de antes)`', () => {
+    const hero = shielded({ mana: 30 });
+    const applied = applyDamageOutcome(hero, boostedOutcome(124, 100), null);
+    expect(applied.absorbedByMana).toBe(30);
+    expect(applied.healthDamage).toBe(94);
+    expect(hero.mana).toBe(0);
+  });
+
+  it('a postura do defensor escala o teto junto com o golpe', () => {
+    // Postura de defesa: o dano tomado é 50 %. Golpe 124 → 62 na entrada do escudo; teto 100 → 50.
+    const hero = shielded({ mana: 100 });
+    const applied = applyDamageOutcome(hero, boostedOutcome(124, 100), null, 0.5);
+    expect(applied.absorbedByMana).toBe(50);
+    expect(applied.healthDamage).toBe(12);
+  });
+
+  it('o Energy Ring (`extraManaShield`) tem o mesmo teto: é a mesma leitura de escudo', () => {
+    const hero = character({ mana: 200 });
+    const applied = applyDamageOutcome(hero, boostedOutcome(124, 100), null, 1, true);
+    expect(applied.absorbedByMana).toBe(100);
+    expect(applied.healthDamage).toBe(24);
+  });
+
+  it('sem `preHazardDamage` (todo golpe que o Hazard não reforçou) o escudo absorve o golpe todo', () => {
+    const hero = shielded({ mana: 100 });
+    const applied = applyDamageOutcome(hero, outcome(124), null);
+    expect(applied.absorbedByMana).toBe(100);
+    expect(applied.healthDamage).toBe(24);
+    // E sem mana para o excedente a conta é a de sempre: o teto nunca ABSORVE mais que o golpe.
+    const poor = shielded({ mana: 500 });
+    expect(applyDamageOutcome(poor, boostedOutcome(80, 100), null).absorbedByMana).toBe(80);
+  });
+});
+
 describe('HP efetivamente removido e overkill', () => {
   it('a barra recebe `min(resolvido, vida)` — nunca o overkill', () => {
     const rat = monster(10);

@@ -61,6 +61,9 @@ const weak = {
 // O chefe que sobe o nível de hazard (The Primal Menace do Canary): morre no primeiro golpe.
 const boss = { ...weak, id: 'the-primal-menace', name: 'The Primal Menace', experience: 0 };
 const patriarch = { ...rat, id: 'plunder-patriarch', name: 'Plunder Patriarch', experience: 0 };
+// Um chefe de recompensa que morre no primeiro golpe: a flag que o Plunder Patriarch carrega no Canary
+// (`flags.rewardBoss`), num monstro que dá para matar no teste.
+const rewardWeak = { ...weak, id: 'reward-weak', name: 'Reward Weak', rewardBoss: true };
 
 const progression = {
   id: 'baseline', startingHealth: 1_000, startingMana: 10, startingCapacity: 1_000,
@@ -125,7 +128,7 @@ interface RawOptions {
 const raw = (options: RawOptions = {}): RawContent => {
   const spawns = options.spawns ?? [{ id: 'rat', at: NEXT_TO_HERO }];
   const base: RawContent = {
-    monsters: [rat, biter, weak, boss, patriarch],
+    monsters: [rat, biter, weak, rewardWeak, boss, patriarch],
     hunts: [{
       id: 'pit', name: 'Pit', recommendedLevel: 1, mapId: 'pit', routeId: 'pit',
       ...(options.hazardZoneId === null ? {} : { hazardZoneId: options.hazardZoneId ?? ZONE_ID }),
@@ -152,6 +155,8 @@ interface HeroOptions {
   readonly level?: number;
   /** O registro de Hazard do personagem (nível escolhido e teto), não o conteúdo. */
   readonly registry?: HazardState;
+  /** Com o mana shield ligado e mana de sobra: o golpe que passa dele sai da VIDA. */
+  readonly manaShield?: boolean;
 }
 
 function newHero(options: HeroOptions = {}): CharacterRuntime {
@@ -165,6 +170,10 @@ function newHero(options: HeroOptions = {}): CharacterRuntime {
     vocationId: null, staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
     gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
     ...(options.registry === undefined ? {} : { hazard: options.registry }),
+    ...(options.manaShield !== true ? {} : {
+      mana: 1_000_000, maxMana: 1_000_000,
+      conditions: [{ key: 'mana-shield', spellId: 'magic-shield', expiresAtMs: 100_000_000 }],
+    }),
   });
 }
 
@@ -351,6 +360,34 @@ describe('o golpe do monstro de hazard é EXTENSÃO: os charms defensivos nunca 
     const taken = fightWithDodge(ZONE_ID);
     expect(taken.length).toBeGreaterThan(0);
     expect(taken.map((e) => e.amount)).toEqual(monsterHitBases().map((base) => boosted(base, 1)));
+  });
+});
+
+describe('a mana shield e o Hazard: o escudo absorve o golpe de ANTES do reforço (`healthChange` do Canary)', () => {
+  // `Game::combatChangeHealth` soma `healthChange` ANTES de `handleHazardSystemAttack` e não o
+  // recalcula: a mana shield absorve `min(mana, healthChange)` com o valor velho, e o excedente do
+  // reforço (e do crítico) cai INTEIRO na vida.
+  it.each([1, 5, 12])('nível %i: a vida perde só o reforço, e a mana perde o golpe de antes', (level) => {
+    const { session, hero } = withBiter({ registry: hazardAt(level), manaShield: true });
+    const manaBefore = hero.mana;
+    const taken = takenByHero(run(session, 7_000));
+    const bases = monsterHitBases();
+    expect(taken.length).toBeGreaterThanOrEqual(3);
+    expect(taken.map((e) => e.amount)).toEqual(bases.map((base) => boosted(base, level) - base));
+    // A vida desceu o que os golpes mostram: o reforço, não o golpe todo.
+    expect(hero.maxHealth - hero.health).toBe(taken.reduce((sum, e) => sum + e.amount, 0));
+    // E a mana desceu o golpe de antes do reforço, de cada um.
+    expect(manaBefore - hero.mana).toBe(bases.reduce((sum, base) => sum + base, 0));
+  });
+
+  it('sem hazard a mana shield absorve o golpe INTEIRO, como sempre: a vida não muda', () => {
+    const { session, hero } = withBiter({ registry: hazardAt(12), manaShield: true, hazardZoneId: null });
+    const manaBefore = hero.mana;
+    const taken = takenByHero(run(session, 7_000));
+    expect(taken.length).toBeGreaterThanOrEqual(3);
+    expect(taken.every((e) => e.amount === 0)).toBe(true);
+    expect(hero.health).toBe(hero.maxHealth);
+    expect(manaBefore - hero.mana).toBe(monsterHitBases().reduce((sum, base) => sum + base, 0));
   });
 });
 
@@ -544,6 +581,43 @@ describe('o Plunder Patriarch: a morte de um monstro da zona pode fazê-lo nasce
       Math.abs((patriarchMonster?.position.x ?? 0) - NEXT_TO_HERO.x),
       Math.abs((patriarchMonster?.position.y ?? 0) - NEXT_TO_HERO.y),
     )).toBeLessThanOrEqual(4);
+  });
+
+  describe('o chefe de recompensa não rola casulo nem Plunder (`PrimalHazardDeath`, `isRewardBoss`)', () => {
+    /** Mata `monsterId` e conta as rolagens do casulo (`1..10000`) e do Plunder (`1..100000`) do abate. */
+    const killAndCountDraws = (monsterId: string) => {
+      const content = buildContent(raw({
+        hazard: hazardBaseline({ plunderSpawnMultiplier: 100_000 }),
+        spawns: [{ id: monsterId, at: NEXT_TO_HERO }],
+      }));
+      const started = start({ content, registry: hazardAt(1) });
+      const integer = vi.spyOn(started.session.rng, 'integer');
+      run(started.session, 3_000);
+      const drawsOf = (max: number) => integer.mock.calls.filter(([low, high]) => low === 1 && high === max).length;
+      return {
+        podDraws: drawsOf(10_000),
+        plunderDraws: drawsOf(100_000),
+        patriarchs: started.ruleset.monsters.filter((m) => m.monsterId === 'plunder-patriarch').length,
+      };
+    };
+
+    it('o monstro comum rola as duas, e o chefe de recompensa não rola NENHUMA', () => {
+      const common = killAndCountDraws('weak');
+      const reward = killAndCountDraws('reward-weak');
+      expect(common).toMatchObject({ podDraws: 1, plunderDraws: 1, patriarchs: 1 });
+      expect(reward).toMatchObject({ podDraws: 0, plunderDraws: 0, patriarchs: 0 });
+    });
+
+    it('a subida de nível NÃO confere a flag: é outro script (`the_primal_menace_killed`)', () => {
+      const content = buildContent(raw({
+        hazard: hazardBaseline({}, { levelUpMonsterId: 'reward-weak' }),
+        spawns: [{ id: 'reward-weak', at: NEXT_TO_HERO }],
+      }));
+      const started = start({ content, registry: hazardAt(3, 3) });
+      run(started.session, 3_000);
+      const zone = content.hazard?.zones[ZONE_ID] as NonNullable<Content['hazard']>['zones'][string];
+      expect(started.hero.hazard.maxLevelOf(ZONE_ID, zone)).toBe(4);
+    });
   });
 
   it('a hunt sem zona de hazard nunca o faz nascer', () => {

@@ -107,6 +107,17 @@ describe('o golpe de monstro de hazard no jogador (parseAttackRecvHazardSystem)'
     expect(hit(outcomeOf(7), 1, 751).outcome.resolvedDamage).toBe(8);
   });
 
+  it('leva o dano de ANTES do reforço, que é o teto da mana shield (`healthChange` do Canary, #632)', () => {
+    const boosted = hit(outcomeOf(100), 12, 751);
+    expect(boosted.outcome.resolvedDamage).toBe(124);
+    expect(boosted.outcome.preHazardDamage).toBe(100);
+    // Com crítico o de antes continua sendo o valor ANTES de tudo (o crítico também é do Hazard).
+    expect(hit(outcomeOf(100), 12, 750).outcome.preHazardDamage).toBe(100);
+    // Sem o estágio ter mexido no golpe, o outcome sai o MESMO objeto e sem o campo.
+    const untouched = hit(outcomeOf(100), 12, 751, { zone: { ...ZONE, crit: false, damageBoost: false } });
+    expect(untouched.outcome).not.toHaveProperty('preHazardDamage');
+  });
+
   it('o componente secundário também cresce, e o secundário zero continua zero', () => {
     const both = hit(outcomeOf(100, 40), 1, 751);
     expect(both.outcome.resolvedDamage).toBe(102);

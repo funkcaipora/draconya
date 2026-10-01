@@ -95,8 +95,14 @@ export function applyHazardToMonsterHit(
     }
   }
   if (!extension) return { outcome, extension: false, criticalAtMs: null };
+  // O `healthChange` do Canary é somado ANTES deste estágio e o mana shield o usa velho: o dano de
+  // antes do reforço vai junto, e é o teto do que o escudo absorve (`applyDamageOutcome`).
   return {
-    outcome: withDamage(outcome, primary, secondary, critical), extension, criticalAtMs,
+    outcome: {
+      ...withDamage(outcome, primary, secondary, critical), preHazardDamage: outcome.resolvedDamage,
+    },
+    extension,
+    criticalAtMs,
   };
 }
 

@@ -55,6 +55,18 @@ describe('escolher o nível (Hazard:setPlayerCurrentLevel)', () => {
     progress.select(ID, GARDENS, 9);
     expect(progress.isEmpty).toBe(true);
   });
+
+  it('o que um objeto comum herda NÃO é zona: quem resolve a zona por `zones[zoneId]` pode passar isso', () => {
+    // `zones` vem de um `z.record` — um objeto comum —, então `zones['constructor']` é uma função e
+    // `zones['__proto__']` é `Object.prototype`. Nenhum dos dois tem `minLevel`/`maxLevel`.
+    const zones: Record<string, HazardZone> = { [ID]: GARDENS };
+    const progress = HazardProgress.fromState();
+    for (const zoneId of ['constructor', '__proto__', 'toString', 'valueOf', 'hasOwnProperty']) {
+      expect(progress.select(zoneId, zones[zoneId], 999), zoneId).toEqual({ ok: false, reason: 'unknown-zone' });
+    }
+    expect(progress.isEmpty).toBe(true);
+    expect(progress.getState().currentLevel).toEqual({});
+  });
 });
 
 describe('subir o teto (Hazard:levelUp)', () => {

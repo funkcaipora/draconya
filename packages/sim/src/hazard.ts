@@ -104,7 +104,9 @@ export class HazardProgress {
    * false`). Escolher o nível em que já está é válido e não escreve nada de novo.
    */
   select(zoneId: string, zone: HazardZone | undefined, level: number): HazardSelectResult {
-    if (zone === undefined) return { ok: false, reason: 'unknown-zone' };
+    // `isZone`, e não só `=== undefined`: quem resolve a zona por um `zoneId` que o cliente escolhe
+    // pode devolver o que um objeto comum tem por herança (`zones['constructor']`).
+    if (!isZone(zone)) return { ok: false, reason: 'unknown-zone' };
     if (!Number.isSafeInteger(level)) return { ok: false, reason: 'invalid-level' };
     if (level < zone.minLevel) return { ok: false, reason: 'below-minimum' };
     if (level > this.maxLevelOf(zoneId, zone)) return { ok: false, reason: 'above-maximum' };
@@ -127,6 +129,13 @@ export class HazardProgress {
     this.#revision += 1;
     return true;
   }
+}
+
+/** Uma zona de verdade: o piso e o teto são números. A segunda trava da resolução por `zoneId`. */
+function isZone(value: unknown): value is HazardZone {
+  if (typeof value !== 'object' || value === null) return false;
+  const zone = value as Record<string, unknown>;
+  return typeof zone['minLevel'] === 'number' && typeof zone['maxLevel'] === 'number';
 }
 
 /**
