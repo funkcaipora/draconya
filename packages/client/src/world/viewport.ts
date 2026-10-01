@@ -50,7 +50,9 @@ import {
 import { paintOf } from './outfit-colors.js';
 import { pickCreature, pickGroundItem } from './pick.js';
 import type { Scene, StackedItem, TileStack } from './scene.js';
-import { SPEECH_COLOR, rollSpeech, speechDurationMs, startSpeech, type SpeechState } from './speech.js';
+import {
+  SPEECH_COLOR, monsterAwake, rollSpeech, speechDurationMs, speechHeard, startSpeech, type SpeechState,
+} from './speech.js';
 import { TextureBook } from './textures.js';
 import { drawTile, type DrawLayer, type ObjectInfo } from './tile-stack.js';
 import {
@@ -987,38 +989,65 @@ export async function mountViewport(
   }
 
   /**
+   * O tile em que a criatura ESTÁ para as regras de alcance da fala (#620): o destino do passo em
+   * curso, que é onde o Canary já a põe — e não o ponto interpolado do desenho.
+   */
+  function logicalPosition(creature: Creature): { x: number; y: number; z: number } {
+    const to = creature.step?.to ?? creature.position;
+    return { x: to.x, y: to.y, z: to.z };
+  }
+
+  /**
    * A fala periódica do monstro (#620, `monster.voices`): o relógio é do CLIENTE e o sorteio
-   * também (`random`) — o servidor só mandou as falas. Quando o relógio vence e a chance passa, o
-   * texto aparece sobre o nome por `speechDurationMs`. O relógio nasce quando o monstro é visto
-   * pela primeira vez, e anda só enquanto ele é desenhado.
+   * também (`random`) — o servidor só mandou as falas. Roda para TODA criatura da lista, desenhada
+   * ou não, porque o relógio do Canary não depende de quem olha: o que aparece na tela é só a
+   * última etapa.
+   *
+   * **Dois portões, como no Canary** (`world/speech.ts`): o relógio só anda com o monstro ACORDADO
+   * (o herói no quadrado de 11 tiles que ele enxerga — o `isIdle` que corta o `onThinkYell`), e a
+   * fala só aparece se CHEGOU ao herói (`say` a 8 × 6 no mesmo andar, `yell` a 18 × 14). Sem herói
+   * no mundo (antes do `session-state`) ninguém acorda o monstro e ninguém o ouve.
+   *
+   * O relógio nasce quando o monstro é visto pela primeira vez.
+   */
+  function rollCreatureSpeech(
+    creature: Creature, hero: { x: number; y: number; z: number } | null, nowMs: number,
+  ): void {
+    const voices = creature.voices;
+    if (voices === undefined) return;
+    let entry = speeches.get(creature.id);
+    if (entry === undefined || entry.voices !== voices) {
+      // As falas trocaram (ou é a primeira vez): relógio novo, e o texto que estava no ar fica.
+      entry = { voices, clock: startSpeech(nowMs), label: entry?.label ?? null, shownUntilMs: entry?.shownUntilMs ?? 0 };
+      speeches.set(creature.id, entry);
+    }
+    const at = logicalPosition(creature);
+    const said = rollSpeech(voices, entry.clock, nowMs, hero !== null && monsterAwake(at, hero), random);
+    if (said === null || hero === null || !speechHeard(at, hero, said.yell)) return;
+    if (entry.label === null) {
+      // Âncora embaixo, como o nome: a fala termina onde o nome começa.
+      entry.label = createLabel(said.text, SPEECH_COLOR, 1);
+      overlay.addChild(entry.label);
+    } else {
+      entry.label.text = said.text;
+    }
+    entry.shownUntilMs = nowMs + speechDurationMs(said.text);
+  }
+
+  /**
+   * Põe a fala no ar sobre o nome da criatura DESENHADA: o texto que `rollCreatureSpeech` deixou
+   * aparece até `shownUntilMs`, e some depois.
    */
   function paintSpeech(
     creature: Creature, screen: { x: number; y: number }, alpha: number, nowMs: number,
   ): void {
-    const voices = creature.voices;
-    let entry = speeches.get(creature.id);
-    if (voices === undefined) {
+    const entry = speeches.get(creature.id);
+    if (creature.voices === undefined) {
       if (entry?.label != null) entry.label.visible = false;
       return;
     }
-    if (entry === undefined || entry.voices !== voices) {
-      // As falas trocaram (ou é a primeira vez): relógio novo, e o texto que estava no ar fica.
-      entry = { voices, clock: startSpeech(voices, nowMs), label: entry?.label ?? null, shownUntilMs: entry?.shownUntilMs ?? 0 };
-      speeches.set(creature.id, entry);
-    }
-    const said = rollSpeech(voices, entry.clock, nowMs, random);
-    if (said !== null) {
-      if (entry.label === null) {
-        // Âncora embaixo, como o nome: a fala termina onde o nome começa.
-        entry.label = createLabel(said.text, SPEECH_COLOR, 1);
-        overlay.addChild(entry.label);
-      } else {
-        entry.label.text = said.text;
-      }
-      entry.shownUntilMs = nowMs + speechDurationMs(said.text);
-    }
-    const label = entry.label;
-    if (label === null) return;
+    const label = entry?.label;
+    if (entry === undefined || label === null || label === undefined) return;
     if (nowMs >= entry.shownUntilMs) {
       label.visible = false;
       return;
@@ -1051,8 +1080,13 @@ export async function mountViewport(
     /** O retângulo de tela do alvo neste quadro, se ele estiver desenhado (#428). */
     let targetRect: string | null = null;
 
+    // O herói de quem olha: é ele quem acorda o monstro e quem ouve a fala (#620).
+    const self = world.selfId === null ? undefined : world.creatures.get(world.selfId);
+    const hero = self === undefined ? null : logicalPosition(self);
+
     for (const creature of creatureList()) {
       seen.add(creature.id);
+      rollCreatureSpeech(creature, hero, nowMs);
       const position = interpolate(creature, nowMs);
       const offset = position.z - floor;
       let sprite = sprites.get(creature.id);

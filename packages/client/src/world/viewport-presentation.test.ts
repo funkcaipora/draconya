@@ -205,7 +205,7 @@ describe('a fala periódica do monstro (#620)', () => {
     expect(speaking(viewport.layers().overlay, 'Meep!')).toBeUndefined();
   });
 
-  it('o monstro mudo nunca fala, e o que está fora da janela não roda o relógio', async () => {
+  it('o monstro mudo nunca fala, e o que está longe do herói (ocioso) não roda o relógio', async () => {
     const random = vi.fn(() => 0);
     const { viewport } = await mount(random);
     monster(2, { x: 12, y: 10 });
@@ -214,6 +214,105 @@ describe('a fala periódica do monstro (#620)', () => {
     await viewport.tick(60_000);
     expect(random).not.toHaveBeenCalled();
     expect(speaking(viewport.layers().overlay, 'Meep!')).toBeUndefined();
+  });
+
+  describe('os portões do Canary: o ocioso não fala, e a fala só chega a quem está perto', () => {
+    // O herói está em (10, 10). O monstro acorda com o herói a até 11 tiles (`canSee`), e a fala
+    // (`say`) só chega a 8 colunas × 6 linhas; o grito, a 18 × 14.
+    const shout = { intervalMs: 5000, chance: 10, lines: [{ text: 'GRR', yell: true }] };
+
+    it('o monstro a 12 tiles do herói está OCIOSO: o relógio não anda, nem em 60 s, e não gasta sorteio', async () => {
+      // Antes: o relógio nascia no primeiro desenho e rolava a cada 5 s, ocioso ou não — o
+      // Rotworm parado no spawn "falava" para quem estava do outro lado da tela.
+      // Mutação que mata: chamar `rollSpeech` com `awake` fixo em `true`.
+      const random = vi.fn(() => 0);
+      const { viewport } = await mount(random);
+      monster(2, { x: 22, y: 10 }, { voices: shout });
+      for (let t = 0; t <= 60_000; t += 1000) await viewport.tick(t);
+      expect(random).not.toHaveBeenCalled();
+      expect(speaking(viewport.layers().overlay, 'GRR')).toBeUndefined();
+    });
+
+    it('o monstro a 11 tiles está ACORDADO: o grito chega a ele, e o relógio roda', async () => {
+      const random = vi.fn(() => 0);
+      const { viewport } = await mount(random);
+      monster(2, { x: 21, y: 10 }, { voices: shout });
+      await viewport.tick(0);
+      await viewport.tick(5000);
+      expect(random).toHaveBeenCalled();
+      expect(speaking(viewport.layers().overlay, 'GRR')).toBeDefined();
+    });
+
+    it('o `say` de quem está a 9 colunas é rolado mas NÃO ouvido; a 8, é ouvido', async () => {
+      // O monstro está acordado nas duas distâncias (11 tiles), e o relógio roda e gasta o sorteio
+      // nas duas. O que muda é o alcance do `say` — `MAP_MAX_CLIENT_VIEW_PORT_X` = 8.
+      // Mutação que mata: tirar o `speechHeard`, ou usar o quadrado de 11 para o `say`.
+      const random = vi.fn(() => 0);
+      const { viewport } = await mount(random);
+      monster(2, { x: 19, y: 10 }, { voices });
+      monster(3, { x: 18, y: 10 }, { voices: { ...voices, lines: [{ text: 'perto' }] } });
+      await viewport.tick(0);
+      await viewport.tick(5000);
+      expect(random).toHaveBeenCalled();
+      expect(speaking(viewport.layers().overlay, 'Meep!')).toBeUndefined();
+      expect(speaking(viewport.layers().overlay, 'GRR')).toBeUndefined();
+      expect(speaking(viewport.layers().overlay, 'perto')?.visible).toBe(true);
+    });
+
+    it('a 7 linhas o `say` não chega, e a 6 chega', async () => {
+      const { viewport } = await mount(() => 0);
+      monster(2, { x: 10, y: 17 }, { voices: { ...voices, lines: [{ text: 'longe' }] } });
+      monster(3, { x: 10, y: 16 }, { voices: { ...voices, lines: [{ text: 'perto' }] } });
+      await viewport.tick(0);
+      await viewport.tick(5000);
+      expect(speaking(viewport.layers().overlay, 'longe')).toBeUndefined();
+      expect(speaking(viewport.layers().overlay, 'perto')?.visible).toBe(true);
+    });
+
+    it('o relógio roda mesmo com o monstro FORA da janela de desenho: o Canary não depende de quem olha', async () => {
+      // A 11 linhas o monstro está acordado, mas fora da janela de render (±8): o grito (14
+      // linhas) chega, e o relógio já rolou quando ele entra na tela.
+      const random = vi.fn(() => 0);
+      const { viewport } = await mount(random);
+      monster(2, { x: 10, y: 21 }, { voices: shout });
+      await viewport.tick(0);
+      await viewport.tick(5000);
+      expect(viewport.creatureSprite(2)?.visible).toBe(false);
+      expect(random).toHaveBeenCalled();
+    });
+
+    it('o herói que se afasta pausa o relógio, e ao voltar ele segue de onde parou', async () => {
+      // 3 s acordado, 20 s longe, 2 s acordado: 5 s de monstro acordado, e fala. Mutação que mata:
+      // somar o tempo ocioso (falaria já ao voltar) ou zerar o relógio ao dormir (não falaria).
+      const random = vi.fn(() => 0);
+      const { viewport } = await mount(random);
+      monster(2, { x: 12, y: 10 }, { voices });
+      await viewport.tick(0);
+      await viewport.tick(3000);
+      expect(random).not.toHaveBeenCalled();
+
+      viewport.moveSelfTo({ x: 38, y: 38, z: 7 });
+      await viewport.tick(4000);
+      await viewport.tick(23_000);
+      expect(random).not.toHaveBeenCalled();
+
+      viewport.moveSelfTo({ x: 10, y: 10, z: 7 });
+      await viewport.tick(24_000);
+      expect(random).not.toHaveBeenCalled();
+      await viewport.tick(25_000);
+      expect(random).toHaveBeenCalled();
+      expect(speaking(viewport.layers().overlay, 'Meep!')).toBeDefined();
+    });
+
+    it('sem herói no mundo ninguém acorda o monstro e ninguém o ouve', async () => {
+      const random = vi.fn(() => 0);
+      const { viewport } = await mount(random);
+      world.selfId = null;
+      monster(2, { x: 12, y: 10 }, { voices });
+      await viewport.tick(0);
+      await viewport.tick(60_000);
+      expect(random).not.toHaveBeenCalled();
+    });
   });
 
   it('o monstro que some leva a fala dele junto', async () => {

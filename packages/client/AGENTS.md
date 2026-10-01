@@ -260,7 +260,9 @@ pnpm tsx scripts/make-sheet-fixture.ts
   desenho: os **addons** são linhas do padrão do outfit compostas por cima do base no
   `OutfitComposer` (`compositeOver`, `AssetPack.outfit(…, addons)`); a **luz** é um clarão aditivo
   (`world/creature-light.ts`, no `effects`); a **fala** é sorteada AQUI, por um relógio por monstro
-  (`world/speech.ts`), com o `random` do cliente e nunca o `Rng` da sessão; a **raça** é
+  (`world/speech.ts`), com o `random` do cliente e nunca o `Rng` da sessão — e que só anda com o
+  monstro ACORDADO (o herói no quadrado de 11 tiles dele) e só aparece a quem a fala CHEGA (`say` a
+  8 × 6 no mesmo andar, `yell` a 18 × 14), os dois portões do Canary; a **raça** é
   fotografada no número flutuante quando o golpe chega e escolhe a cor do físico
   (`floatingTextColor`). O que era de antes continua: câmera do tamanho
   do canvas, camadas, ordem de desenho por `y`, pool e interpolação, e três janelas de câmera em
