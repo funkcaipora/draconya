@@ -3617,10 +3617,11 @@ describe('as cores do outfit chegam ao cliente (FUN-104)', () => {
     expect(appears[0]).not.toHaveProperty('colors');
   });
 
-  it('o monstro NUNCA traz cores, mesmo ao lado de um herói pintado', async () => {
-    // O rato é uma camada só: o campo é de personagem, e a tabela é indexada por
-    // `characterId`. Mandar `colors` num monstro faria o cliente tentar pintar o que não
-    // tem máscara — e o herói pintado ao lado prova que a tabela estava povoada.
+  it('o monstro traz as cores do CONTEÚDO, e nunca as do herói pintado ao lado', async () => {
+    // O campo `colors` era só de personagem: a tabela do host é indexada por `characterId`. Desde
+    // o #620 o monstro também o traz — mas das cores do CONTEÚDO (`monster.outfit`, o neutro
+    // 0/0/0/0 do rato), e jamais as do ticket do jogador: o herói pintado ao lado prova que a
+    // tabela de personagens estava povoada, e o rato não a herda.
     // Um rato que AGUENTA, como no fixture da FUN-109: o herói de teste mata o comum num
     // golpe, e o `session-state` só lista monstro vivo — com o rato comum a lista vinha
     // vazia e o laço abaixo não afirmava nada (a mutação que sobreviveu na revisão).
@@ -3653,15 +3654,16 @@ describe('as cores do outfit chegam ao cliente (FUN-104)', () => {
     for (let t = 0; t < 300; t += 100) { now += 100; host.cycle(); }
     host.flush();
 
+    const NEUTRAL = { head: 0, body: 0, legs: 0, feet: 0 };
     const ratos = appearsOn(socket).filter((c) => c.name === 'Rat');
     expect(ratos.length).toBeGreaterThan(0);
-    for (const rato of ratos) expect(rato).not.toHaveProperty('colors');
+    for (const rato of ratos) expect(rato.colors).toEqual(NEUTRAL);
 
     const visto = stateOf(host, socket, viewer);
     expect(visto?.world.creatures.find((c) => c.name === 'hero')?.colors).toEqual(COLORS);
     const vivos = visto?.world.creatures.filter((c) => c.name === 'Rat') ?? [];
     expect(vivos.length).toBeGreaterThan(0);
-    for (const rato of vivos) expect(rato).not.toHaveProperty('colors');
+    for (const rato of vivos) expect(rato.colors).toEqual(NEUTRAL);
   });
 
   it('quem já está hospedado continua com as cores com que entrou, mesmo com ticket novo', async () => {
@@ -3807,6 +3809,10 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     weapon: 'bow' | 'wand';
     /** Skills do conteúdo de teste (#340, SV-04). */
     skills: readonly unknown[];
+    /** O `hits` da tabela de aparências, trocado por cima do de teste (#620: o efeito por raça). */
+    hits: Record<string, unknown>;
+    /** Magias a mais no conteúdo, além de `strike` e `blast` (#620: o golpe FÍSICO de magia). */
+    spells: readonly unknown[];
     /** As skills com que o herói nasce e o bônus de Loyalty que o ticket lhe deu (#628). */
     heroSkills: SkillsState;
     loyaltyBonusPercent: number;
@@ -3843,7 +3849,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
       }),
       ...armory,
       appearances: [placeholderAppearances({ ...raw, ...armory })],
-      spells: [...(raw.spells ?? []), STRIKE, BLAST],
+      spells: [...(raw.spells ?? []), STRIKE, BLAST, ...(over.spells ?? [])],
       progression: [{
         ...TEST_PROGRESSION, startingMana: 200,
         ...(over.regen === false ? { regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } } : {}),
@@ -3872,7 +3878,10 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
         }
         : {}),
     });
-    const appearances = { ...(content.appearances as Appearances), ...TABLE };
+    const appearances = {
+      ...(content.appearances as Appearances), ...TABLE,
+      ...(over.hits === undefined ? {} : { hits: over.hits as Appearances['hits'] }),
+    };
     const stats = statsForLevel(1, null, content.progression);
     let now = 0;
     const host = new SessionHost({
@@ -4573,6 +4582,130 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(golpes.length).toBeGreaterThan(0);
     expect(effects).toHaveLength(golpes.length);
     for (const effect of effects) expect(effect.effectId).toBe(1);
+  });
+
+  it('o golpe físico sangra com o efeito da RAÇA de quem o levou: veneno no rato venenoso, sangue no herói (#620)', () => {
+    // O `combatGetTypeInfo` do Canary: o efeito do golpe físico depende da raça do alvo. O rato
+    // desta hunt é `venom` (efeito 17) e o herói é `blood` (efeito 1, o default). Cada `effect`
+    // vem logo depois do `creature-hit` que o causou, e é o alvo daquele golpe que escolhe o id.
+    //
+    // Mutação que mata: ler a raça do ATACANTE, ou esquecer o `byRace` e mandar sempre `melee` —
+    // o golpe no rato sai com 1, e não 17.
+    const { runFor, received, heroId } = hunt({
+      rat: { race: 'venom' }, hits: { melee: 1, byRace: { blood: 1, venom: 17 } },
+    });
+    runFor(10_000);
+
+    const all = received();
+    let onRat = 0;
+    let onHero = 0;
+    all.forEach((message, index) => {
+      if (message.type !== 'creature-hit' || message.kind !== 'melee' || message.amount <= 0) return;
+      const effect = all[index + 1];
+      expect(effect?.type).toBe('effect');
+      const expected = message.id === heroId ? 1 : 17;
+      expect((effect as { effectId: number }).effectId).toBe(expected);
+      if (message.id === heroId) onHero += 1;
+      else onRat += 1;
+    });
+    // Os dois lados aconteceram: sem isso o teste só provaria um deles.
+    expect(onRat).toBeGreaterThan(0);
+    expect(onHero).toBeGreaterThan(0);
+  });
+
+  it('o golpe físico de MAGIA também segue a raça — o gatilho é o elemento, e não a origem (#620)', () => {
+    // `Game::sendEffects` roda em todo dano com valor, de corpo a corpo ou de magia, e só o tipo
+    // `COMBAT_PHYSICALDAMAGE` cai no `switch` da raça. A magia física (Explosion, Inflict Wound…)
+    // num rato venenoso solta a gota de veneno (17) logo depois do `creature-hit`; a de
+    // elemento — o `strike` de teste é `arcane` — não solta efeito de raça nenhum.
+    //
+    // Mutação que mata: voltar a guarda para `event.source === 'melee'` — o golpe `spell`
+    // físico fica sem o efeito 17; ou tirar a guarda do elemento — o `strike` arcano passa a
+    // soltar 17 também.
+    const physical = {
+      id: 'wound', name: 'Ferida', manaCost: 15, cooldownMs: 2_000,
+      effect: { kind: 'damage', power: 40, range: 3, damageType: 'physical' },
+    };
+    const run = (spellId: string) => {
+      const { runFor, received, heroId } = hunt({
+        rat: { race: 'venom', health: 200 }, hits: { melee: 1, byRace: { venom: 17 } },
+        spells: [physical],
+        bot: rules({ attack: [{
+          when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId },
+        }] }),
+      });
+      runFor(5_000);
+      const all = received();
+      return all
+        .map((message, index) => ({ message, next: all[index + 1] }))
+        .filter(({ message }) => message.type === 'creature-hit' && message.kind === 'spell'
+          && message.id !== heroId && message.amount > 0);
+    };
+
+    const physicalHits = run('wound');
+    expect(physicalHits.length).toBeGreaterThan(0);
+    for (const { message, next } of physicalHits) {
+      expect(message).toMatchObject({ damageType: 'physical' });
+      expect(next).toMatchObject({ type: 'effect', effectId: 17 });
+    }
+    const arcaneHits = run('strike');
+    expect(arcaneHits.length).toBeGreaterThan(0);
+    for (const { message, next } of arcaneHits) {
+      expect(message).toMatchObject({ damageType: 'arcane' });
+      expect(next?.type === 'effect' && next.effectId === 17).toBe(false);
+    }
+  });
+
+  it('sem `byRace` na tabela, todo golpe físico sangra com hits.melee como antes (#620)', () => {
+    // A tabela de antes desta issue continua valendo: raça é apresentação, e a ausência dela
+    // nunca apaga o efeito. O rato é `venom`, e mesmo assim o efeito é o 1 do `melee`.
+    const { runFor, received } = hunt({ rat: { race: 'venom' } });
+    runFor(10_000);
+    const effects = ofType(received(), 'effect');
+    expect(effects.length).toBeGreaterThan(0);
+    for (const effect of effects) expect(effect.effectId).toBe(1);
+  });
+
+  it('o monstro nasce com a apresentação do conteúdo: cores, addons, raça, luz e falas (#620)', () => {
+    // O `sim` não conhece nada disto: o host lê da definição do catálogo, e o cliente desenha.
+    // Mutação que mata: espalhar `monsterLookOf` só no `creature-appear` e não no `session-state`
+    // (o segundo caso abaixo), ou o inverso.
+    const look = {
+      outfit: { head: 113, body: 120, legs: 95, feet: 115, addons: 3 },
+      light: { level: 4, color: 208 },
+      race: 'fire',
+      voices: { intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!', yell: false }, { text: 'GRR', yell: true }] },
+    };
+    const { runFor, received, host, viewer, heroId } = hunt({ rat: look, tanky: true });
+    runFor(500);
+
+    const appears = ofType(received(), 'creature-appear').filter((m) => m.id !== heroId);
+    expect(appears.length).toBeGreaterThan(0);
+    const expected = {
+      colors: { head: 113, body: 120, legs: 95, feet: 115 }, addons: 3, race: 'fire',
+      light: { level: 4, color: 208 },
+      voices: { intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!' }, { text: 'GRR', yell: true }] },
+    };
+    expect(appears[0]).toMatchObject(expected);
+
+    // Quem reanexa no meio vê o mesmo monstro, pintado igual.
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = ofType(received(), 'session-state').at(-1);
+    const rats = (state?.world.creatures ?? []).filter((c) => c.id !== heroId);
+    expect(rats.length).toBeGreaterThan(0);
+    expect(rats[0]).toMatchObject(expected);
+  });
+
+  it('o monstro comum manda cores neutras e nada mais: sem addon, sem raça, sem luz e sem falas (#620)', () => {
+    const { runFor, received, heroId } = hunt();
+    runFor(500);
+    const rat = ofType(received(), 'creature-appear').find((m) => m.id !== heroId);
+    expect(rat?.colors).toEqual({ head: 0, body: 0, legs: 0, feet: 0 });
+    for (const key of ['addons', 'race', 'light', 'voices'] as const) expect(key in (rat ?? {})).toBe(false);
+    // O herói é outra coisa: não ganha a apresentação de monstro.
+    const hero = ofType(received(), 'session-state').at(-1)?.world.creatures.find((c) => c.id === heroId);
+    expect(hero?.colors).toBeUndefined();
   });
 
   it('a cura vira creature-hit com kind heal, e o efeito dela sai no tile do conjurador', () => {

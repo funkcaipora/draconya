@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildRoute, buildTilemap, isBlocked, validateRoute } from './map.js';
+import {
+  absoluteToLocal, buildRoute, buildTilemap, isBlocked, localToAbsolute, validateRoute, ZONE_FLAG, ZONE_PALETTE,
+  zoneChar, zoneFlagsAt,
+} from './map.js';
+import { tilemapSchema } from './schemas.js';
 import type { RouteData, TilemapInput } from './schemas.js';
 
 const mapData: TilemapInput = {
@@ -52,6 +56,51 @@ describe('tilemap', () => {
   });
 });
 
+describe('coordenada absoluta do Tibia ↔ local do recorte (#829, ADR 0060 d.3.b)', () => {
+  // x 32275–32281, y 32153–32156, z 6–7: um recorte pequeno no canto de Thais.
+  const imported = buildTilemap({
+    id: 'recorte', z: 7,
+    floors: {
+      '6': { grid: ['.......', '.......', '.......', '.......'] },
+      '7': { grid: ['.......', '.......', '.......', '.......'] },
+    },
+    source: {
+      file: 'otservbr.otbm', sha256: 'a'.repeat(64),
+      region: { x: [32275, 32281], y: [32153, 32156], z: [6, 7] },
+    },
+  });
+
+  it('perde a origem do recorte em x e y e mantém o andar', () => {
+    expect(absoluteToLocal(imported, { x: 32277, y: 32155, z: 7 })).toEqual({ x: 2, y: 2, z: 7 });
+  });
+
+  it('as bordas de dentro valem e um passo além não', () => {
+    expect(absoluteToLocal(imported, { x: 32275, y: 32153, z: 6 })).toEqual({ x: 0, y: 0, z: 6 });
+    expect(absoluteToLocal(imported, { x: 32281, y: 32156, z: 7 })).toEqual({ x: 6, y: 3, z: 7 });
+    for (const outside of [
+      { x: 32274, y: 32155, z: 7 }, { x: 32282, y: 32155, z: 7 },
+      { x: 32277, y: 32152, z: 7 }, { x: 32277, y: 32157, z: 7 },
+      { x: 32277, y: 32155, z: 5 }, { x: 32277, y: 32155, z: 8 },
+    ]) {
+      expect(absoluteToLocal(imported, outside), JSON.stringify(outside)).toBeUndefined();
+    }
+  });
+
+  it('o inverso devolve a coordenada absoluta, e a ida e a volta fecham', () => {
+    expect(localToAbsolute(imported, { x: 2, y: 2, z: 7 })).toEqual({ x: 32277, y: 32155, z: 7 });
+    const at = { x: 32279, y: 32154, z: 6 };
+    const local = absoluteToLocal(imported, at);
+    if (local === undefined) throw new Error('o ponto cabe no recorte');
+    expect(localToAbsolute(imported, local)).toEqual(at);
+  });
+
+  it('mapa sem `source` não tem origem: nenhuma das duas traduz', () => {
+    // Um mapa autorado à mão não é um pedaço do mapa do Tibia — "absoluto" não quer dizer nada nele.
+    expect(absoluteToLocal(map, { x: 1, y: 1, z: 7 })).toBeUndefined();
+    expect(localToAbsolute(map, { x: 1, y: 1, z: 7 })).toBeUndefined();
+  });
+});
+
 describe('camada de bloqueio de visão (#553)', () => {
   it('sem `sight` declarado, `blocksSight` é `null` — nenhum tile bloqueia', () => {
     const floor = map.floors.get(7);
@@ -74,6 +123,75 @@ describe('camada de bloqueio de visão (#553)', () => {
     expect(floor?.blocksSight?.[2 * withSight.width + 2]).toBe(1);
     expect(floor?.blocksSight?.[1 * withSight.width + 1]).toBe(0);
     expect(isBlocked(withSight, 2, 2)).toBe(false); // passo continua livre
+  });
+});
+
+describe('camada de zonas (#830, OW-09)', () => {
+  // `.` normal, `p` PZ, `n` no-pvp, `a` arena, `l` só no-logout, `P`/`N`/`A` a zona mais no-logout.
+  const zoned = buildTilemap({
+    id: 'z', z: 7,
+    floors: {
+      7: {
+        grid: ['#####', '#...#', '#...#', '#...#', '#####'],
+        zones: ['ppppp', 'p.nPa', '.lN.A', 'pp', 'p'],
+      },
+      6: { grid: ['###', '#.#', '###'] },
+    },
+  });
+
+  it('sem `zones` declarado, `zones` é `null` e todo tile é normal — a hunt não muda', () => {
+    expect(map.floors.get(7)?.zones).toBeNull();
+    expect(zoneFlagsAt(map, 1, 1)).toBe(0);
+    // O andar sem a camada, num mapa que a declara em outro andar, é igual.
+    expect(zoned.floors.get(6)?.zones).toBeNull();
+    expect(zoneFlagsAt(zoned, 1, 1, 6)).toBe(0);
+  });
+
+  it('cada caractere da paleta vira a soma de bits do OTBM', () => {
+    expect(zoneFlagsAt(zoned, 0, 0)).toBe(ZONE_FLAG.protection);
+    expect(zoneFlagsAt(zoned, 1, 1)).toBe(0);
+    expect(zoneFlagsAt(zoned, 2, 1)).toBe(ZONE_FLAG.noPvp);
+    expect(zoneFlagsAt(zoned, 3, 1)).toBe(ZONE_FLAG.protection | ZONE_FLAG.noLogout);
+    expect(zoneFlagsAt(zoned, 4, 1)).toBe(ZONE_FLAG.pvpZone);
+    expect(zoneFlagsAt(zoned, 1, 2)).toBe(ZONE_FLAG.noLogout);
+    expect(zoneFlagsAt(zoned, 2, 2)).toBe(ZONE_FLAG.noPvp | ZONE_FLAG.noLogout);
+    expect(zoneFlagsAt(zoned, 4, 2)).toBe(ZONE_FLAG.pvpZone | ZONE_FLAG.noLogout);
+  });
+
+  it('os valores são os bits de `TILE_FLAGS` do Canary: 1, 4, 8 e 16', () => {
+    // `canary/src/io/io_definitions.hpp:73-76`. O bit 2 (valor 2) não existe: o Canary pulou.
+    expect(ZONE_FLAG).toEqual({ protection: 1, noPvp: 4, noLogout: 8, pvpZone: 16 });
+    // Cada valor da paleta é distinto, e `zoneChar` é o inverso exato dela.
+    const values = Object.values(ZONE_PALETTE);
+    expect(new Set(values).size).toBe(values.length);
+    for (const [char, value] of Object.entries(ZONE_PALETTE)) expect(zoneChar(value)).toBe(char);
+  });
+
+  it('linha mais curta que a largura é normal no resto — o inverso de `grid`, que bloqueia', () => {
+    expect(zoneFlagsAt(zoned, 1, 3)).toBe(ZONE_FLAG.protection); // dentro do que a linha diz
+    expect(zoneFlagsAt(zoned, 4, 3)).toBe(0); // depois do fim da linha
+    expect(zoneFlagsAt(zoned, 0, 4)).toBe(ZONE_FLAG.protection);
+    expect(zoneFlagsAt(zoned, 1, 4)).toBe(0);
+  });
+
+  it('fora do mapa, ou andar que o mapa não tem, é normal — bloqueio é de `isBlocked`', () => {
+    expect(zoneFlagsAt(zoned, -1, 0)).toBe(0);
+    expect(zoneFlagsAt(zoned, 99, 0)).toBe(0);
+    expect(zoneFlagsAt(zoned, 0, 0, 3)).toBe(0);
+  });
+
+  it('o schema aceita `zones` e o formato de arquivo sem a camada continua válido', () => {
+    expect(tilemapSchema.parse({ id: 'a', z: 7, floors: { 7: { grid: ['.'], zones: ['p'] } } }).floors?.['7']?.zones)
+      .toEqual(['p']);
+    expect(tilemapSchema.parse({ id: 'a', z: 7, floors: { 7: { grid: ['.'] } } }).floors?.['7']?.zones).toBeUndefined();
+  });
+
+  it('caractere fora da paleta derruba a montagem — nunca vira "normal" em silêncio', () => {
+    expect(() => buildTilemap({ id: 'x', z: 7, floors: { 7: { grid: ['...'], zones: ['p?p'] } } }))
+      .toThrow(/zona "\?" em \(1,0\) não está em ZONE_PALETTE/);
+    expect(() => zoneChar(3)).toThrow(/não está em ZONE_PALETTE/); // PZ + bit 1, que o Canary não tem
+    // PZ e no-pvp juntos (5) são exclusivos: o importador normaliza, e a paleta não os tem.
+    expect(() => zoneChar(ZONE_FLAG.protection | ZONE_FLAG.noPvp)).toThrow(/não está em ZONE_PALETTE/);
   });
 });
 

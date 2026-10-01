@@ -188,8 +188,8 @@ export class AssetPack {
       maxBytes: OUTFIT_BUDGET_BYTES,
       createBitmap: options.createBitmap,
       ...(options.onEvict === undefined ? {} : { onEvict: options.onEvict }),
-      layersOf: (outfitId, group, direction, phase) => this.#layersOf(
-        outfitId, group, direction, phase,
+      layersOf: (outfitId, group, direction, phase, addonRow) => this.#layersOf(
+        outfitId, group, direction, phase, addonRow,
       ),
     });
   }
@@ -348,9 +348,16 @@ export class AssetPack {
    * guarda a composição por (outfit, cores, grupo, direção, fase). Sem `colors`, ou quando o
    * outfit tem uma camada só e não há o que pintar, sai a base como está: monstro não tem
    * cor de jogador, e um outfit de uma camada pintado seria a base multiplicada por nada.
+   *
+   * **`addons` é a máscara do Tibia** (#620; 1 = primeiro, 2 = segundo, 3 = os dois) e só vale no
+   * caminho pintado: cada addon é a linha `y = 1` e `y = 2` do padrão do outfit, pintada com as
+   * mesmas cores e desenhada por cima do base. O bit de uma linha que o outfit não tem
+   * (`patternHeight` menor) é ignorado — o monstro aparece sem aquele addon, como o cliente do
+   * Tibia. Um outfit de uma camada só não tem template para pintar o addon, e fica sem ele.
    */
   async outfit(
     outfitId: number, direction: Direction, phase: number, moving = false, colors?: OutfitColors,
+    addons = 0,
   ): Promise<Sprite | null> {
     const appearance = this.#appearances.outfit.get(outfitId);
     const groupIndex = moving && appearance?.frameGroups[1] !== undefined ? 1 : 0;
@@ -363,7 +370,10 @@ export class AssetPack {
       const frames = framesIn(group);
       const step = frames <= 1 ? 0 : phase % frames;
       const column = wrap(DIRECTIONS.indexOf(direction), group.patternWidth);
-      return this.#composer.get(outfitId, colors, groupIndex, column, step);
+      // Só as linhas que o outfit TEM: `patternHeight` 3 são o base e os dois addons.
+      const rows = Math.max(0, Math.min(2, group.patternHeight - 1));
+      const available = addons & ((1 << rows) - 1);
+      return this.#composer.get(outfitId, colors, groupIndex, column, step, available);
     }
     return this.#frame(group, {
       x: DIRECTIONS.indexOf(direction), y: 0, z: 0, phase, layer: LAYER_BASE,
@@ -379,7 +389,7 @@ export class AssetPack {
    * quando o primeiro quadro dela era desenhado. O `Shell` chama isto na Cidade, para os
    * outfits que o catálogo diz que as hunts têm — tempo em que o jogador está configurando
    * o bot e nada mais pede folha. Só a BASE e o TEMPLATE do padrão sem addon nem montaria: é
-   * o que `outfit()` desenha hoje. Outfit desconhecido não pede nada; folha que não abre
+   * o que `outfit()` desenha hoje (os addons do monstro, #620, vêm sob demanda). Outfit desconhecido não pede nada; folha que não abre
    * não derruba o aquecimento — o quadro dela cai no fallback como cairia sem aquecer.
    */
   async warmOutfit(outfitId: number): Promise<void> {
@@ -508,12 +518,13 @@ export class AssetPack {
    * primeiro soltar a folha e a decodificaria de novo.
    */
   async #layersOf(
-    outfitId: number, groupIndex: number, direction: number, phase: number,
+    outfitId: number, groupIndex: number, direction: number, phase: number, addonRow = 0,
   ): Promise<{ base: Uint8ClampedArray; template: Uint8ClampedArray;
     width: number; height: number } | null> {
     const group = this.#appearances.outfit.get(outfitId)?.frameGroups[groupIndex];
     if (group === undefined || group.layers < 2) return null;
-    const at = { x: direction, y: 0, z: 0, phase };
+    // `y` é a linha de addon do padrão: 0 o desenho base, 1 e 2 os addons (#620).
+    const at = { x: direction, y: addonRow, z: 0, phase };
     const baseId = this.#spriteIdAt(group, { ...at, layer: LAYER_BASE });
     const templateId = this.#spriteIdAt(group, { ...at, layer: LAYER_TEMPLATE });
     if (baseId === undefined || templateId === undefined) return null;

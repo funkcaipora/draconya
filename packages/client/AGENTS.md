@@ -252,10 +252,19 @@ pnpm tsx scripts/make-sheet-fixture.ts
   protocolo carrega em `creature-appear` e em cada criatura do `session-state`; o store guarda
   o campo só quando ele veio, tipado pelo PROTOCOLO e não por `assets/outfit.ts` — o store não
   depende da camada de arte. `DEFAULT_OUTFIT_COLORS` (`world/outfit-colors.ts`) é a RESERVA
-  para quem chegou sem: um nó `game` anterior num deploy em rolagem, um personagem que nunca
-  escolheu, ou monstro, que nunca traz. Reserva e não "sem pintar" porque um template que sobra
-  sem multiplicar é um boneco de cores primárias na tela; e para monstro passar cores é
-  inofensivo, o pacote devolve a base como está. O que era de antes continua: câmera do tamanho
+  para quem chegou sem: um nó `game` anterior num deploy em rolagem, ou um personagem que nunca
+  escolheu — o monstro traz as dele desde o #620. Reserva e não "sem pintar" porque um template
+  que sobra sem multiplicar é um boneco de cores primárias na tela; e para um monstro de uma
+  camada passar cores é inofensivo, o pacote devolve a base como está. **A apresentação do
+  monstro (#620)** — `Creature.addons`/`race`/`light`/`voices`, todos opcionais e todos só
+  desenho: os **addons** são linhas do padrão do outfit compostas por cima do base no
+  `OutfitComposer` (`compositeOver`, `AssetPack.outfit(…, addons)`); a **luz** é um clarão aditivo
+  (`world/creature-light.ts`, no `effects`); a **fala** é sorteada AQUI, por um relógio por monstro
+  (`world/speech.ts`), com o `random` do cliente e nunca o `Rng` da sessão — e que só anda com o
+  monstro ACORDADO (o herói no quadrado de 11 tiles dele) e só aparece a quem a fala CHEGA (`say` a
+  8 × 6 no mesmo andar, `yell` a 18 × 14), os dois portões do Canary; a **raça** é
+  fotografada no número flutuante quando o golpe chega e escolhe a cor do físico
+  (`floatingTextColor`). O que era de antes continua: câmera do tamanho
   do canvas, camadas, ordem de desenho por `y`, pool e interpolação, e três janelas de câmera em
   `camera.ts` — visível (0), render (`RENDER_OVERSCAN_TILES` = 3, o que o viewport pinta) e
   prefetch (`PREFETCH_TILES` = 5, o que o viewport aquece) — porque a textura de uma coluna
@@ -447,6 +456,21 @@ pnpm tsx scripts/make-sheet-fixture.ts
   volta, e falha de qualquer tipo cai no default (todas as dez visíveis), nunca num painel
   vazio. A RC-06 (#319) substituiu o painel fixo pelo `CharacterModal` tabulado, aberto por
   `open.character` — o antigo `CharacterPanel.tsx` saiu do repositório no mesmo commit.
+
+## O Treino (#631, ADR 0059)
+
+O pill "Treino" (ao lado de "Escolher caçada", só na Cidade e só com `catalogue.training`) abre o
+`TrainingModal`: o banco de offline training, o livro (um select com as skills do CONTEÚDO), as
+exercise weapons carregadas com as cargas RESTANTES e a loja mínima. **Tudo é intenção**
+(`training-view.ts`: `enterTrainingMessage`/`buyItemMessage`/`offlineSkillMessage` dizem só QUAL id),
+e o que se mostra vem do `training-state` (o overlay da instância não viaja em `inventory`, então as
+cargas só chegam por ali) e do catálogo fixado na sessão — nenhum nome de skill nem preço em código
+(invariante 6/7). `hud.training` é `null` até o servidor dizer, e SUBSTITUI a cada mensagem: cada
+golpe do Treino reenvia as cargas. **`isHunting('training')` é `false`**: o Treino é uma sessão
+privada que não caça, então não tem analisador, "Sair da caçada" nem party — a casca mostra
+`TrainingStatus` (a arma, a skill, as cargas e "Parar treino", o `leave-hunt` de sempre) no lugar das
+pills de caçada. Um novo tipo de sessão que também não caça entra na mesma função, e não num `!==`
+espalhado.
 
 ## Como testar
 

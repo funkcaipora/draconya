@@ -111,6 +111,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -377,6 +378,7 @@
     "runOnHealth": 5,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -516,6 +518,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1887,6 +1890,7 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 660000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 0,

@@ -7,6 +7,7 @@ import {
   type AccountRecord,
   type CharacterRecord,
   type CharacterStorageRecord,
+  type CharacterWriter,
   type GameRepository,
   type ItemInstanceRecord,
   type StartingKitPiece,
@@ -74,6 +75,7 @@ class MemoryRepository implements GameRepository {
       bosstiary: null,
       learnedSpells: null,
       familiar: null,
+      training: null,
       fedMs: 0,
       blessings: 0,
       fightMode: 'attack',
@@ -112,10 +114,15 @@ class MemoryRepository implements GameRepository {
   async withOwnedCharacter<T>(
     accountId: string,
     characterId: string,
-    operation: (character: CharacterRecord) => Promise<T>,
+    operation: (character: CharacterRecord, writer: CharacterWriter) => Promise<T>,
   ) {
     const character = await this.getCharacter(accountId, characterId);
-    return character === null ? null : operation(character);
+    // O escritor da trava (#631) só existe para o gasto do offline training no ticket, que estes
+    // testes de personagem não exercitam: o fake o recusa em vez de fingir que gravou.
+    const writer: CharacterWriter = {
+      applyOfflineTraining: async () => { throw new Error('not exercised by the character tests'); },
+    };
+    return character === null ? null : operation(character, writer);
   }
   async softDeleteCharacter(
     accountId: string,

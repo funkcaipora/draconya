@@ -176,6 +176,54 @@ describe('settleSnapshotAsReceipt (#527)', () => {
     expect(otherSaved[0]).not.toHaveProperty('familiar');
   });
 
+  it('carries the offline training record and the exercise weapon charges of a Training snapshot (#631)', async () => {
+    // A sessão de Treino que caiu: o banco que ela já tinha acumulado (ABSOLUTO, como `charms`) e as
+    // cargas RESTANTES da arma — que moram no overlay da instância — voltam ao banco pelo extrato, e a
+    // arma não é destruída (`removedInstances` só sai quando a última carga foi gasta).
+    const { receipts, saved } = fakeReceipts();
+    const training = { offlineBankMs: 4_000, offlineSkill: 'sword', version: 1 };
+    const snapshot: SessionSnapshot = {
+      ...baseSnapshot,
+      id: 's-train',
+      type: 'training',
+      participants: [{
+        ...baseSnapshot.participants[0]!,
+        training,
+        inventory: {
+          backpack: [{ instanceId: 'w1', itemId: 'exercise-sword', quantity: 1, overlay: { charges: 2 } }],
+          equipped: {},
+        },
+      }],
+    };
+    await settleSnapshotAsReceipt(snapshot, { characterId: 'a', accountId: 'acc-a', receipts });
+    expect(saved[0]?.training).toEqual(training);
+    expect(saved[0]?.overlays).toEqual({ w1: { charges: 2 } });
+    expect(saved[0]).not.toHaveProperty('removedInstances');
+  });
+
+  it('holds the stamina marker of a Training snapshot at the settlement time — Training time is not recovery (#631, ADR 0060 d.14c)', async () => {
+    // A stamina não anda no Treino: o marco que o extrato leva avança até a liquidação, senão o tempo
+    // treinado voltaria como recuperação no próximo ticket. Só o Treino, e só para a frente.
+    const { receipts, saved } = fakeReceipts();
+    const participant = { ...baseSnapshot.participants[0]!, staminaMs: 6_000, staminaUpdatedAtMs: 1_000 };
+    const settle = (type: SessionSnapshot['type'], nowMs?: number) => settleSnapshotAsReceipt(
+      { ...baseSnapshot, type, participants: [participant] },
+      { characterId: 'a', accountId: 'acc-a', receipts, ...(nowMs === undefined ? {} : { nowMs }) },
+    );
+
+    await settle('training', 9_000);
+    expect(saved.at(-1)).toMatchObject({ staminaMs: 6_000, staminaUpdatedAtMs: 9_000 });
+    // Relógio para trás não recua o marco.
+    await settle('training', 500);
+    expect(saved.at(-1)).toMatchObject({ staminaUpdatedAtMs: 1_000 });
+    // Sem o relógio de quem liquida, o marco fica como o snapshot o tinha.
+    await settle('training');
+    expect(saved.at(-1)).toMatchObject({ staminaUpdatedAtMs: 1_000 });
+    // E uma hunt nunca o segura: o marco é o de sempre, qualquer que seja o relógio.
+    await settle('hunt', 9_000);
+    expect(saved.at(-1)).toMatchObject({ staminaUpdatedAtMs: 1_000 });
+  });
+
   it('omits every optional field when the participant record has none of them', async () => {
     const { receipts, saved } = fakeReceipts();
     await settleSnapshotAsReceipt(baseSnapshot, { characterId: 'a', accountId: 'acc-a', receipts });
@@ -186,6 +234,7 @@ describe('settleSnapshotAsReceipt (#527)', () => {
     expect(receipt).not.toHaveProperty('ammo');
     expect(receipt).not.toHaveProperty('vocation');
     expect(receipt).not.toHaveProperty('equipment');
+    expect(receipt).not.toHaveProperty('training');
   });
 
   it('rejects when the character never participated in that session, leaving no receipt saved', async () => {

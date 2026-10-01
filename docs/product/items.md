@@ -375,6 +375,16 @@ origem nova desde `market`) entra pelo caminho de sempre — `acquired` + `equip
 DESLIGADA no conteúdo real** (`deathPenalty.itemLoss.enabled: false`) até o dono decidir entre
 destruir e manter "nunca perde item": ver `docs/product/death.md`, "Perda de item na morte".
 
+**A exercise weapon é o único item COMPRADO do NPC por gold (#631, ADR 0059 d.2).** O `buy-item { itemId }` mínimo só aceita `purchasable:
+true`, ao `buyPrice`, uma unidade por pedido; a instância nasce de origem **`purchase`** (nova em
+`ITEM_ORIGINS`: `market` é o comércio entre jogadores, e o NPC do Canary é outra proveniência) e
+entra pelo caminho de sempre — `goldDelta` para o gold e `acquired` para o item, gravados pelo
+extrato de estado durável da Cidade. O id da instância leva o do personagem e um UUID por compra:
+a mesma cópia da Cidade é reaberta em outro dia, e um id derivado do `lootSeq` (que recomeça em
+zero) colidiria na chave primária. As cargas restantes vivem no **overlay** da instância
+(`ItemInstanceOverlay.charges`, "ausente é cheia") e a arma esgotada é destruída por
+`removedInstances`, o mesmo caminho de vender, descartar e morrer — ver `docs/product/training.md`.
+
 ### A tela (#161, ADR 0026 decisão 7)
 
 A coluna da DIREITA do OTClient: o **painel do set** (`EquipmentPanel`) com os dez slots no
@@ -888,6 +898,93 @@ concordam em peso, `hitChance`, alcance e `attack`.
 | escudo | Mastermind Shield | — (besta de duas mãos) | Spellbook of Mind Control | Spellbook of Mind Control |
 | amuleto | Dragon Necklace | Dragon Necklace | Dragon Necklace | Dragon Necklace |
 | anel | Might Ring | Might Ring | Might Ring | Might Ring |
+
+## Atributos raros: elemental bond e capacidade de Magic Shield (#627, M44-09)
+
+Os dois últimos atributos de item do Canary que faltavam no schema. **Os dois entraram como DADO e
+nenhum dos dois move o combate** — porque o Canary (47dfd51) também não os move para nenhuma vocação
+ou item que o Draconya tenha. A issue e o `docs/endgame-plan.md` §3 descreviam os dois como efeitos
+("soma dano no elemento", "entram no cálculo do escudo"); a leitura do código dá outra coisa, e a
+regra do ADR 0037 d.6 (mecânica de caça IDÊNTICA à do Canary, inclusive QUANDO dispara) manda ficar
+com o código.
+
+**Capacidade de Magic Shield** — `item.bonuses.magicShieldCapacity: { flat, percent }`, inteiros,
+o `magicshieldCapacityflat`/`magicshieldCapacitypercent` do `items.xml` (`Abilities`,
+`items.hpp:50-51`). São 4 itens, todos spellbooks: eldritch folio e eldritch tome (`flat 80`,
+`percent 8`), cocoa grimoire e creamy grimoire (`flat 150`, `percent 3`) — o importador os lê
+(`numberValueFolded`: o XML real escreve a chave em caixa mista, e o `Items::parseItemNode` do
+Canary a minusculiza — `items.cpp:383` — antes de chamar o `ItemParse::initParse`) e o catálogo
+real os carrega.
+
+O que o Canary FAZ com o número, verificado por `grep` no checkout inteiro (`src/`, `data/`,
+`data-otservbr-global/`):
+
+- soma os equipados (`Player::getMagicShieldCapacityFlat`/`Percent`, `player.cpp:7633-7681`);
+- mostra na descrição do item (`item.cpp:134-141`, `:2727-2735`) e no pacote de defesa da
+  Cyclopedia (`protocolgame.cpp:5661-5663`);
+- expõe o getter ao Lua — e **nenhum script de `data/` o chama**.
+
+O que o Canary NÃO faz: aplicá-lo ao escudo. A Magic Shield (`magic_shield.lua`) monta o balde com
+`300 + 7.6 × level + 7 × ML` (× 1,25 na Roda, que está fora), e o `ConditionManaShield`
+(`condition.cpp:1630-1669`) só copia o parâmetro para `Creature::manaShield`; o estágio de dano
+(`game.cpp:8592-8625`) só consulta esse balde. Por isso o `sim` NÃO lê `magicShieldCapacity`:
+aplicá-lo ao escudo seria comportamento que o Canary não tem.
+
+**Divergência já existente, NÃO tocada por esta issue:** o Draconya não tem o balde. O mana shield
+absorve da própria mana até o prazo vencer (CMB-08, `docs/product/combat.md` "Mana shield como
+estágio visível"): nenhum tamanho o esgota, e ele continua ativo mesmo com a mana em zero. No
+Canary o balde da magia/poção esvazia e derruba a condição, que também cai quando a mana zera
+(`game.cpp:8592-8625`); só o Energy Ring (`CONDITION_MANASHIELD` sem parâmetro, balde zero)
+absorve até a mana acabar, que é o que o Draconya faz hoje para os dois. Enquanto não houver
+balde não há onde a capacidade entrar, mesmo que um dia se decida aplicá-la — é assunto de outra
+issue, e de uma decisão do dono: aplicar a capacidade ao balde seria ir além do Canary.
+
+**Elemental bond** — `item.elementalBond: 'physical' | 'earth' | 'energy'` (`ELEMENTAL_BOND_TYPES`),
+só em `kind: 'weapon'` (o boot recusa o resto). São os três textos que
+`ItemParse::parseElementalBond` (`item_parse.cpp:764-778`) reconhece; qualquer outro deixa o bond
+em `COMBAT_NONE`, e o importador faz o mesmo. É **`ItemType::elementalBond`**, o tipo de dano que
+TROCA o da magia quando a arma está na mão — não um dano somado. Dois pontos leem o bond, e **os
+portões deles não são os mesmos**; os dois leem a arma por `Player::getWeapon(true)`
+(`player.cpp:405-464`: mão esquerda, depois a direita), que não confere vocação nem registro de
+arma:
+
+- `Combat::getCombatDamage` (`combat.cpp:159-174`) substitui `damage.primary.type` pelo bond da
+  arma equipada. Aqui o portão é triplo (`combat.cpp:162`): `VOCATION_MONK_CIP`, **magia
+  instantânea** (o `instantSpellName` do próprio `Combat`, que só `setInstantSpellName` preenche —
+  `combat.cpp:1866`, `combat_functions.cpp:189` —, então runa fica de fora) e tipo de dano **que
+  não seja cura**.
+- `Combat::sendCombatEffect` (`combat.cpp:1143-1159`) recolore o efeito visual. Aqui o portão é
+  só **o Monk com uma arma de bond na mão** — sem checar instantânea nem cura, então passa por ele
+  todo efeito de impacto de `Combat`, de magia instantânea ou de runa: o do tile (`:1255`), o da
+  corrente (`:1332-1335`) e o dos `doCombatHealth`/`Mana`/`Condition`/`Dispel` com alvo (`:1654`,
+  `:1727`, `:1769`, `:1804`). Quem recolore é `monkEffectByElementalBond` (`combat.cpp:1105-1141`),
+  e só nos cinco efeitos brancos do Monk (whirlwind blow, pulse, claw, outburst e blow): `earth`
+  dá verde, `fire` rosa e `ice` azul (este só no blow); `physical` e `energy` ficam no branco.
+
+Os 32 itens do `items.xml` são todos `weapontype="fist"`, e a vocação é o que separa o que o bond
+faz de fato (varredura de `elementalbond` em `data/items/items.xml`, 32 ocorrências):
+
+- 30 pedem `vocation="Monk;true, Exalted Monk"` — quem os equipa é Monk, que é a única vocação
+  para a qual o Canary lê o bond;
+- `traditional sai` (`items.xml:27190-27211`) pede Knight: o Knight o equipa, mas o bond fica mudo
+  porque nenhum dos dois pontos o lê para quem não é Monk;
+- **`transcendent bo`** (`items.xml:84976-84998`, bond `energy`) **não é mudo para o Monk**: não
+  tem `script`, nem vocação, e nenhum `moveevent` o restringe (grep em `data/` e em
+  `data-otservbr-global/`), então o Monk pode equipá-lo e o bond dele dispara como o dos outros 30.
+  Só deixa de valer para as demais vocações.
+
+Nada disso é alcançável no Draconya hoje, **e a razão é o corte, não o dado**: o Monk está fora do
+corte (ADR 0038 d.5, e o pacote 15.33 não o move — `docs/endgame-plan.md` §1.3), a família `fist`
+não é declarável (DT-01, o importador a pula) e o `promote-items` exclui o que exige Monk. Quando o
+Monk entrar, o `transcendent bo` entra com ele, e o bond tem de ser lido nos dois pontos acima,
+cada um com o seu portão. O catálogo real tem ZERO itens com `elementalBond`, e um teste
+(`load.test.ts`) prende isso; o campo existe para o importador não perder o dado e para o dia em
+que o corte mudar. Ligar o estágio exigiria uma vocação que o Draconya não tem — e fazê-lo para
+outra seria a divergência que o ADR 0037 proíbe.
+
+Parâmetros: o schema em `packages/content/src/schemas.ts` (`itemSchema.bonuses.magicShieldCapacity`,
+`itemSchema.elementalBond`); os quatro valores em
+`packages/content/data/items/generated/shields.json`.
 
 ## O importador de itens do Canary (M34-02, #573)
 

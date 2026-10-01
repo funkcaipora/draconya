@@ -3,6 +3,7 @@
 // Duas responsabilidades, ambas em Redis:
 //
 //   char:{id}:session     onde o personagem está       TTL, renovado pelo nó dono
+//   char:{id}:rest        desde quando está sem sessão  carimbo do `release` (#631), TTL de 22 dias
 //   node:{id}:heartbeat   quais nós estão vivos         TTL
 //   account:{id}:active   quantos personagens ativos    teto de 2, script atômico
 //
@@ -48,10 +49,23 @@ export interface SessionDirectoryOptions {
   readonly leaseMs?: number;
   /** Teto de personagens ativos por conta (§7.1). */
   readonly activeLimit?: number;
+  /**
+   * Relógio de parede do carimbo de repouso (#631). Mesma razão de `TicketServiceOptions.now`: o
+   * carimbo é gravado por um processo (`game`) e lido por outro (`api`), então o relógio é o de
+   * parede, e é injetável para o teste não dormir.
+   */
+  readonly now?: () => number;
 }
 
 const DEFAULT_LEASE_MS = 30_000;
 const DEFAULT_ACTIVE_LIMIT = 2;
+
+/**
+ * Quanto tempo o carimbo de repouso vive (#631): o "fora" do offline training nunca conta mais que
+ * 21 dias (`os.time() - lastLogout`, `math.min(…, 86400 * 21)` de `offline_training.lua`), então um
+ * carimbo mais velho que isso não tem o que informar — e o `PX` o apaga sozinho, sem varredura.
+ */
+const REST_STAMP_TTL_MS = 22 * 24 * 60 * 60 * 1000;
 
 /** Registra a sessão somente enquanto a reserva autenticada ainda existe. */
 const REGISTER_SESSION = `
@@ -137,11 +151,13 @@ export class SessionDirectory {
   readonly #redis: Redis;
   readonly #leaseMs: number;
   readonly #activeLimit: number;
+  readonly #now: () => number;
 
   constructor(redis: Redis, options: SessionDirectoryOptions = {}) {
     this.#redis = redis;
     this.#leaseMs = options.leaseMs ?? DEFAULT_LEASE_MS;
     this.#activeLimit = options.activeLimit ?? DEFAULT_ACTIVE_LIMIT;
+    this.#now = options.now ?? Date.now;
     this.#redis.defineCommand('reserveSlot', { numberOfKeys: 1, lua: RESERVE_SLOT });
     this.#redis.defineCommand('registerReservedSession', {
       numberOfKeys: 2,
@@ -174,6 +190,7 @@ export class SessionDirectory {
       await this.#redis.set(
         sessionKey(characterId), JSON.stringify(location), 'PX', this.#leaseMs,
       );
+      await this.#redis.del(restKey(characterId));
       return true;
     }
 
@@ -194,12 +211,27 @@ export class SessionDirectory {
       payload,
       String(this.#leaseMs),
     );
-    if (registered === 1) return true;
+    if (registered === 1) {
+      await this.#endRest(characterId);
+      return true;
+    }
 
     // Recusado porque já existe um registro DIFERENTE. Se o nó dele morreu, o registro é um
     // ponteiro para lugar nenhum, e insistir deixaria o personagem inalcançável até o lease
     // expirar sozinho — que é exatamente o que travava a retomada depois de um `kill -9`.
-    return this.#takeOver(characterId, accountId, payload);
+    const tookOver = await this.#takeOver(characterId, accountId, payload);
+    if (tookOver) await this.#endRest(characterId);
+    return tookOver;
+  }
+
+  /**
+   * O personagem voltou a ter sessão: o carimbo de repouso deixa de valer (#631). Sem isto, uma
+   * sessão que caísse sem `release` (o `kill -9` da retomada acima) deixaria o carimbo de um logout
+   * ANTIGO de pé, e o próximo ticket contaria como "fora" tempo que o personagem passou jogando.
+   * Sem carimbo, a `api` não gasta o banco — o lado seguro: o tempo continua no banco.
+   */
+  async #endRest(characterId: string): Promise<void> {
+    await this.#redis.del(restKey(characterId));
   }
 
   async #takeOver(characterId: string, accountId: string, payload: string): Promise<boolean> {
@@ -310,7 +342,31 @@ export class SessionDirectory {
   }
 
   async release(characterId: string): Promise<void> {
-    await this.#redis.del(sessionKey(characterId));
+    // O registro some E o carimbo de repouso nasce, juntos (#631, ADR 0059 d.3): "fora" é o tempo
+    // desde o fim da última sessão, e o diretório é quem sabe o instante em que ela acabou — a
+    // linha do Postgres não o guarda, e o `sim` não lê relógio. Redis, e não coluna: é dado de
+    // duração curta (o offline training conta no máximo 21 dias) e de leitura barata na emissão
+    // do ticket; perdê-lo (Redis reiniciado) só faz a `api` não gastar o banco naquele login.
+    await this.#redis
+      .multi()
+      .del(sessionKey(characterId))
+      .set(restKey(characterId), String(this.#now()), 'PX', REST_STAMP_TTL_MS)
+      .exec();
+  }
+
+  /**
+   * Desde quando o personagem está em repouso (sem sessão hospedada), em ms de relógio de parede —
+   * o instante do último `release` —, ou `null` quando não há carimbo: nunca saiu, Redis
+   * reiniciado, ou a sessão caiu sem `release` (um `kill -9`). Quem pergunta (`api`, na emissão do
+   * ticket) só gasta o offline training com um carimbo em mãos — e só o pergunta a quem o
+   * `resolveNode` viu SEM registro: quem ainda tem sessão hospedada não está em repouso, e o
+   * `register` (`#endRest`) apaga o carimbo assim que uma sessão nova nasce.
+   */
+  async restedSince(characterId: string): Promise<number | null> {
+    const raw = await this.#redis.get(restKey(characterId));
+    if (raw === null) return null;
+    const since = Number(raw);
+    return Number.isSafeInteger(since) && since >= 0 ? since : null;
   }
 
   // --- nós vivos --------------------------------------------------------------------------
@@ -406,6 +462,7 @@ export class SessionDirectory {
 }
 
 const sessionKey = (characterId: string): string => `char:${characterId}:session`;
+const restKey = (characterId: string): string => `char:${characterId}:rest`;
 const activeCharactersKey = (accountId: string): string => `account:${accountId}:active`;
 const nodeKey = (nodeId: string): string => `node:${nodeId}:heartbeat`;
 const nodeIdFromKey = (key: string): string => key.slice('node:'.length, -':heartbeat'.length);

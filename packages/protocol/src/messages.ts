@@ -215,6 +215,34 @@ export const CLIENT_TO_SERVER = {
    * 36: o 35 é do `set-fight-mode` (#550).
    */
   'learn-spell': 36,
+  /**
+   * Entrar numa sessão de Treino com uma exercise weapon (#631, M44-13; ADR 0059 d.1). INTENÇÃO:
+   * o cliente diz QUAL instância da mochila; existir, ser uma exercise weapon com cargas e o
+   * personagem estar na Cidade são conferidos pelo servidor (invariante 4). Sucesso é a troca de
+   * cena de sempre (`instance-enter` + `session-state` com `sessionType: 'training'`); recusa é
+   * `system-message`. Sair do treino é o `leave-hunt` (10), como sair de qualquer sessão privada.
+   *
+   * 37: o 36 é do `learn-spell` (#624), e o 35 é do `set-fight-mode`.
+   */
+  'enter-training': 37,
+  /**
+   * Escolher a skill do offline training — o "livro" do Tibia (#631, ADR 0059 d.3, ADR 0052 d.2).
+   * INTENÇÃO de Cidade: `skillId: null` desmarca. Só as skills que o conteúdo oferece
+   * (`catalogue.training.offlineSkills`) são aceitas; o gasto do banco é da `api`, na próxima
+   * emissão de ticket, nunca deste pedido. Sucesso é `training-state` reenviado.
+   *
+   * 38: o 37 é do `enter-training`.
+   */
+  'set-offline-training-skill': 38,
+  /**
+   * Comprar UM item por gold na Cidade (#631, ADR 0059 d.2) — o mínimo que a exercise weapon
+   * precisa enquanto a loja geral (E5) não existe. INTENÇÃO: só o id; `purchasable`, preço, saldo
+   * e capacidade são do servidor (invariante 4), e o gold sai pelo ledger (invariante 10). Sucesso
+   * é `inventory` (+ `player-stats` com o saldo novo); recusa é `system-message`.
+   *
+   * 39: o 38 é do `set-offline-training-skill`.
+   */
+  'buy-item': 39,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -485,6 +513,16 @@ export const SERVER_TO_CLIENT = {
    */
   'learned-spells': 47,
   /**
+   * O estado do Treino do personagem (#631, ADR 0059): o banco de offline training e a skill
+   * escolhida no livro, as exercise weapons que ele carrega (com as cargas RESTANTES — que moram
+   * no overlay da instância e não viajam em `inventory`) e qual delas o Treino em curso está
+   * gastando. Só para o dono, como `charms`. Sai no attach e a cada mudança: escolha do livro,
+   * compra, e a cada golpe do Treino (cada carga gasta é uma mudança).
+   *
+   * 48: o 47 é do `learned-spells` (#624), o 46 é do `bosstiary` (#629) e o 45 é do `exit-pending`.
+   */
+  'training-state': 48,
+  /**
    * O mundo recusou o logout do jogador (OW-11, #832, ADR 0060 d.7): o `logout` passou por
    * `canLogout` e a resposta é não, com o motivo do Canary — tile de no-logout
    * (`RETURNVALUE_YOUCANNOTLOGOUTHERE`) ou personagem em luta fora da PZ
@@ -492,19 +530,19 @@ export const SERVER_TO_CLIENT = {
    * protocolgame.cpp:1151-1162`. Só S2C, só para quem pediu: a saída que dá certo não tem
    * mensagem própria (é o fim da conexão, ou a `session-ended` da transição para a hunt).
    *
-   * 48: o 47 é do `learned-spells` (#624), o 46 do `bosstiary` (#629) e o 45 do `exit-pending`
-   * (#802).
+   * 49: o 48 é do `training-state` (#631), o 47 do `learned-spells` (#624), o 46 do `bosstiary`
+   * (#629) e o 45 do `exit-pending` (#802).
    */
-  'logout-refused': 48,
+  'logout-refused': 49,
   /**
    * O mundo está cheio (OW-11, #832, ADR 0060 d.2b): a entrada vinda do repouso bateu no
    * `capacity` do mundo. Responde como a fila do Canary — a posição e o tempo para tentar de
    * novo (`protocolgame.cpp:1005-1008`) — e diz se a hunt idle está ao alcance, que é a saída
    * que o ADR 0060 oferece no lugar de um "Thais 2" (d.6b). Só S2C.
    *
-   * 49: o 48 é do `logout-refused`.
+   * 50: o 49 é do `logout-refused`.
    */
-  'world-full': 49,
+  'world-full': 50,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

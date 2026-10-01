@@ -5,7 +5,8 @@ import {
   OPCODE_TO_NAME_C2S, OPCODE_TO_NAME_S2C, SERVER_TO_CLIENT,
 } from './messages.js';
 import {
-  C2S_SCHEMAS, FIGHT_MODES, LOGOUT_REFUSED_REASONS, S2C_SCHEMAS, TARGET_CANCEL_REASONS, ZONE_KINDS,
+  C2S_SCHEMAS, FIGHT_MODES, LOGOUT_REFUSED_REASONS, MonsterRace, S2C_SCHEMAS, TARGET_CANCEL_REASONS,
+  ZONE_KINDS,
 } from './types.js';
 import type { C2SMessage, S2CMessage } from './types.js';
 
@@ -213,6 +214,71 @@ describe('outfit colours on the creature (FUN-104)', () => {
     // um `.max(131)` passaria por toda a suíte.
     expect(decodeS2C(encodeS2C({ ...appear, colors: { ...colors, head: 0, feet: 132 } })))
       .toEqual([{ ...appear, colors: { ...colors, head: 0, feet: 132 } }]);
+  });
+});
+
+describe('the monster presentation on the creature (#620)', () => {
+  const appear: S2CMessage = {
+    type: 'creature-appear', id: 9, position: { x: 4, y: 5, z: 7 }, appearanceId: 34,
+    name: 'Dragon', health: 1000, maxHealth: 1000,
+  };
+  const look = {
+    colors: { head: 113, body: 120, legs: 95, feet: 115 },
+    addons: 3,
+    race: 'fire' as const,
+    light: { level: 4, color: 208 },
+    voices: {
+      intervalMs: 5000, chance: 10,
+      lines: [{ text: 'FCHHHHH', yell: true }, { text: 'Meep!' }],
+    },
+  };
+
+  it('round trips colours, addons, race, light and voices — and a creature without any: the old node still speaks', () => {
+    // Mutação que mata: tirar o `.optional()` de qualquer um dos quatro (o segundo caso devolve `null`).
+    expect(decodeS2C(encodeS2C({ ...appear, ...look }))).toEqual([{ ...appear, ...look }]);
+    expect(decodeS2C(encodeS2C(appear))).toEqual([appear]);
+  });
+
+  it('the session state carries the same creature shape, presentation included', () => {
+    const state: S2CMessage = {
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: {
+        creatureId: 7, characterId: 'c1', health: 150, maxHealth: 150, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        soul: 0, soulMax: 0,
+      },
+      world: {
+        groundItems: [], tileUpdates: [], fields: [], mapId: 'cave',
+        creatures: [{ ...appear, ...look }].map(({ type: _type, ...rest }) => rest),
+      },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    };
+    expect(decodeS2C(encodeS2C(state))).toEqual([state]);
+  });
+
+  it('every race the game knows crosses the wire, and one it does not is refused', () => {
+    // O cliente tem uma cor e um efeito por raça: uma raça fora da lista viraria um número sem cor.
+    for (const race of MonsterRace.options) {
+      expect(decodeS2C(encodeS2C({ ...appear, race }))).toEqual([{ ...appear, race }]);
+    }
+    expect(decodeS2C(encodeS2C({ ...appear, race: 'plasma' as 'blood' }))).toBeNull();
+  });
+
+  it('bounds addons to the 0–3 bitmask, the light to the 216-colour palette and the voices to a real roll', () => {
+    expect(decodeS2C(encodeS2C({ ...appear, addons: 4 }))).toBeNull();
+    expect(decodeS2C(encodeS2C({ ...appear, addons: -1 }))).toBeNull();
+    expect(decodeS2C(encodeS2C({ ...appear, addons: 0 }))).toEqual([{ ...appear, addons: 0 }]);
+    expect(decodeS2C(encodeS2C({ ...appear, light: { level: 0, color: 10 } }))).toBeNull();
+    expect(decodeS2C(encodeS2C({ ...appear, light: { level: 3, color: 216 } }))).toBeNull();
+    expect(decodeS2C(encodeS2C({ ...appear, light: { level: 255, color: 215 } })))
+      .toEqual([{ ...appear, light: { level: 255, color: 215 } }]);
+    const voices = look.voices;
+    expect(decodeS2C(encodeS2C({ ...appear, voices: { ...voices, chance: 0 } }))).toBeNull();
+    expect(decodeS2C(encodeS2C({ ...appear, voices: { ...voices, chance: 101 } }))).toBeNull();
+    expect(decodeS2C(encodeS2C({ ...appear, voices: { ...voices, intervalMs: 0 } }))).toBeNull();
+    expect(decodeS2C(encodeS2C({ ...appear, voices: { ...voices, lines: [] } }))).toBeNull();
+    expect(decodeS2C(encodeS2C({ ...appear, voices: { ...voices, lines: [{ text: '' }] } }))).toBeNull();
   });
 });
 
@@ -2040,12 +2106,12 @@ describe('o mundo no protocolo: logout-refused, world-full, zona, em luta e moti
     skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
   };
 
-  it('logout-refused is S2C only, opcode 48, and round trips both Canary reasons', () => {
+  it('logout-refused is S2C only, opcode 49, and round trips both Canary reasons', () => {
     // Invariante 5: o número vive só em `messages.ts`. Mutação que mata: reutilizar um número já
-    // tomado (45 `exit-pending`, 46 `bosstiary`, 47 `learned-spells`), apagar
-    // `'logout-refused': 48` (`decodeS2C` devolve `null`) ou deixar o cliente mandá-la (o
+    // tomado (45 `exit-pending`, 46 `bosstiary`, 47 `learned-spells`, 48 `training-state`),
+    // apagar `'logout-refused': 49` (`decodeS2C` devolve `null`) ou deixar o cliente mandá-la (o
     // servidor é quem recusa).
-    expect(SERVER_TO_CLIENT['logout-refused']).toBe(48);
+    expect(SERVER_TO_CLIENT['logout-refused']).toBe(49);
     expect('logout-refused' in C2S_SCHEMAS).toBe(false);
     expect([...LOGOUT_REFUSED_REASONS]).toEqual(['no-logout-tile', 'in-fight']);
     for (const reason of LOGOUT_REFUSED_REASONS) {
@@ -2069,10 +2135,10 @@ describe('o mundo no protocolo: logout-refused, world-full, zona, em luta e moti
     expect(decodeC2S(encodeC2S(message))).toEqual([message]);
   });
 
-  it('world-full is S2C only, opcode 49, and round trips with and without a hunt to offer', () => {
-    // Mutação que mata: trocar o 49 pelo 48 (colisão com `logout-refused`), tornar
+  it('world-full is S2C only, opcode 50, and round trips with and without a hunt to offer', () => {
+    // Mutação que mata: trocar o 50 pelo 49 (colisão com `logout-refused`), tornar
     // `huntAvailable` opcional (o cliente não sabe se oferece a hunt idle) ou apagar a entrada.
-    expect(SERVER_TO_CLIENT['world-full']).toBe(49);
+    expect(SERVER_TO_CLIENT['world-full']).toBe(50);
     expect('world-full' in C2S_SCHEMAS).toBe(false);
     const withHunt: S2CMessage = { type: 'world-full', position: 12, retryAfterMs: 20_000, huntAvailable: true };
     const withoutHunt: S2CMessage = { type: 'world-full', position: 1, retryAfterMs: 0, huntAvailable: false };
@@ -2180,5 +2246,92 @@ describe('o mundo no protocolo: logout-refused, world-full, zona, em luta e moti
       { type: 'target-cancel', reason: 'protection-zone' },
     ];
     expect(decodeS2C(packBatch(frame.map(encodeS2C)))).toEqual(frame);
+  });
+});
+
+describe('Treino: enter-training, set-offline-training-skill, buy-item, training-state (#631, ADR 0059)', () => {
+  it('the three intents are C2S only and take the next opcodes after learn-spell (36)', () => {
+    // Mutação que mata: reutilizar o 36 (`learn-spell`) ou o 35 (`set-fight-mode`).
+    expect(CLIENT_TO_SERVER['enter-training']).toBe(37);
+    expect(CLIENT_TO_SERVER['set-offline-training-skill']).toBe(38);
+    expect(CLIENT_TO_SERVER['buy-item']).toBe(39);
+    for (const name of ['enter-training', 'set-offline-training-skill', 'buy-item'] as const) {
+      expect(name in C2S_SCHEMAS).toBe(true);
+      expect(name in S2C_SCHEMAS).toBe(false);
+    }
+  });
+
+  it('round trips the three intents, with the skill choice nullable (unmark)', () => {
+    const messages: C2SMessage[] = [
+      { type: 'enter-training', itemInstanceId: 'city-1:hero:buy:1' },
+      { type: 'set-offline-training-skill', skillId: 'sword' },
+      { type: 'set-offline-training-skill', skillId: null },
+      { type: 'buy-item', itemId: 'exercise-sword' },
+    ];
+    for (const message of messages) expect(decodeC2S(encodeC2S(message))).toEqual([message]);
+  });
+
+  it('refuses an empty id and an omitted skill choice, and ignores anything the client should not decide', () => {
+    expect(C2S_SCHEMAS['enter-training'].safeParse({ itemInstanceId: '' }).success).toBe(false);
+    expect(C2S_SCHEMAS['buy-item'].safeParse({ itemId: '' }).success).toBe(false);
+    // `null` desmarca; AUSENTE é pedido malformado, não "desmarcar".
+    expect(C2S_SCHEMAS['set-offline-training-skill'].safeParse({}).success).toBe(false);
+    expect(C2S_SCHEMAS['set-offline-training-skill'].safeParse({ skillId: '' }).success).toBe(false);
+    // O cliente só manda intenção: preço e cargas não passam por aqui (invariante 4).
+    const parsed = C2S_SCHEMAS['buy-item'].parse({ itemId: 'exercise-sword', price: 0, charges: 99_999 });
+    expect(parsed).toEqual({ itemId: 'exercise-sword' });
+  });
+
+  it('training-state is S2C only, opcode 48, and round trips the bank, the skill and the weapons', () => {
+    expect(SERVER_TO_CLIENT['training-state']).toBe(48);
+    expect('training-state' in C2S_SCHEMAS).toBe(false);
+    const message: S2CMessage = {
+      type: 'training-state',
+      offlineBankMs: 3_600_000,
+      offlineSkill: 'sword',
+      weapons: [{ instanceId: 'w1', itemId: 'exercise-sword', charges: 431 }],
+      activeInstanceId: 'w1',
+    };
+    expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+    const idle: S2CMessage = {
+      type: 'training-state', offlineBankMs: 0, offlineSkill: null, weapons: [], activeInstanceId: null,
+    };
+    expect(decodeS2C(encodeS2C(idle))).toEqual([idle]);
+  });
+
+  it('rejects a weapon with zero charges (a spent weapon is destroyed) and a negative bank', () => {
+    const base = {
+      type: 'training-state', offlineBankMs: 0, offlineSkill: null,
+      weapons: [{ instanceId: 'w1', itemId: 'exercise-sword', charges: 1 }], activeInstanceId: null,
+    };
+    expect(decodeS2C(encodeS2C(base as unknown as S2CMessage))).not.toBeNull();
+    for (const patch of [
+      { weapons: [{ instanceId: 'w1', itemId: 'exercise-sword', charges: 0 }] },
+      { offlineBankMs: -1 },
+      { offlineBankMs: 1.5 },
+    ]) {
+      expect(decodeS2C(encodeS2C({ ...base, ...patch } as unknown as S2CMessage))).toBeNull();
+    }
+  });
+
+  it('the catalogue carries the training rules and the exercise weapon fields as optional (an older node sends none)', () => {
+    const shape = S2C_SCHEMAS.catalogue.shape;
+    expect(shape.training.isOptional()).toBe(true);
+    const itemShape = shape.items.element.shape;
+    expect(itemShape.exercise.isOptional()).toBe(true);
+    expect(itemShape.buyPrice.isOptional()).toBe(true);
+    const rules = shape.training.unwrap().parse({
+      perCharge: { tries: 7, manaSpent: 600 },
+      bankCapMs: 43_200_000, graceMs: 600_000,
+      spendCapMs: { free: 21_600_000, premium: 43_200_000 },
+      offlineSkills: [{ skillId: 'sword', name: 'Espada', kind: 'attacks' }],
+      // Toda skill que o Treino toca — inclusive a que só uma exercise weapon treina (o exercise shield).
+      skills: [
+        { skillId: 'sword', name: 'Espada', kind: 'attacks' },
+        { skillId: 'shielding', name: 'Escudo', kind: 'attacks' },
+      ],
+    });
+    expect(rules.offlineSkills[0]?.kind).toBe('attacks');
+    expect(rules.skills.map((entry) => entry.skillId)).toEqual(['sword', 'shielding']);
   });
 });

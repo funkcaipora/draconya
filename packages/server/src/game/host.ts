@@ -12,26 +12,29 @@
 // (invariante 1). Os objetos ficam aqui. A ponte entre os dois é `session.attached`, que é o
 // que decide a taxa de tick — a sessão sabe SE alguém olha, nunca QUEM.
 
+import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import type {
   Aggregates, CombatEvent, EndReason, FindResult, FollowState, GridPoint, ManualActionResult, MemberLeft,
   PartyEvent, PresenceEvent, Receipt, Session, SessionSnapshot, SessionType, WorldPoint,
 } from '@draconya/sim';
 import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
-import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
-import { ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
+import type {
+  ActiveConditionKind, C2SMessage, MonsterRace, OutfitColors, S2CMessage, S2CProps,
+} from '@draconya/protocol';
+import { DEFAULT_MONSTER_RACE, ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
 import type {
   Ammunition, Appearances, Blessing, BotConfigV2, Charm, Item, ItemSlot, Monster, RemovedBotSlot,
-  Skill, Spell, Vocation,
+  Skill, Spell, Training, Vocation,
 } from '@draconya/content';
 import {
-  blessingCost, containerRulesFor, DEFAULT_FIGHT_MODE, hasBlessing, isEmptyFamiliarState,
+  blessingCost, buyItem, containerRulesFor, DEFAULT_FIGHT_MODE, hasBlessing, holdStamina, isEmptyFamiliarState,
   PartyFullError, shareCostsOf, skillFactorFor, splitLootOf, withBlessing,
 } from '@draconya/sim';
 import type {
-  AmmoRefusal, CarriedItem, CharacterRuntime, CharmAssignRefusal, CharmBestiaryEntry,
+  AmmoRefusal, BuyRefusal, CarriedItem, CharacterRuntime, CharmAssignRefusal, CharmBestiaryEntry,
   CharmRemoveRefusal, CharmUnlockRefusal, ConfigurePartyResult, ContainerRules, ExitStatus, FightMode,
-  HuntRuleset,
+  HuntRuleset, TrainingRuleset,
   InventoryRefusal, InventoryResult, InventoryState, ItemRef, PartyBagChanged, PartyEndVoteResult,
   LearnSpellRefusal, PartySettingsPatch, Place, PromoteRefusal, SlotRefusal, SlotState, TakeLootRefusal,
   TileAppearanceChange, UseItemRefusal, UseOnMapRejection, UseSlotTarget, VocationRefusal,
@@ -47,6 +50,7 @@ import type { InitialCharacter, PartyTicket } from '../tickets.js';
 import { AreaOfInterest } from './aoi.js';
 import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
 import { findPersonText } from './find-text.js';
+import { hitEffectOf, isPhysicalHit, monsterLookOf } from './monster-look.js';
 import { REFUSAL_TEXT, TransitionError, refuseTransition } from './transitions.js';
 import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
 
@@ -58,11 +62,15 @@ export type SessionFactory = (
 /** Reconstrói uma sessão a partir de um snapshot. `null` = não dá para retomar (FUN-28). */
 export type SessionRestorer = (snapshot: SessionSnapshot) => Session | null;
 
-/** Para onde o personagem quer ir. `huntId` e `difficulty` só valem para `to: 'hunt'`. */
+/**
+ * Para onde o personagem quer ir. `huntId` e `difficulty` só valem para `to: 'hunt'`;
+ * `itemInstanceId` (a exercise weapon) só para `to: 'training'` (#631).
+ */
 export interface TransitionRequest {
   readonly to: SessionType;
   readonly huntId?: string;
   readonly difficulty?: string;
+  readonly itemInstanceId?: string;
   /**
    * A configuração do bot deste personagem, JÁ VALIDADA (FUN-81). Preenchida pelo host, nunca
    * pelo cliente — o cliente manda a configuração numa mensagem própria, e o que chega aqui é
@@ -124,6 +132,14 @@ export interface SessionHostOptions {
   /** Relógio monotônico da simulação. Injetável para o teste não depender de tempo real. */
   readonly now?: () => number;
   /**
+   * Relógio de PAREDE (epoch, ms) — o mesmo que o construtor de sessões recebe (`nowMs` do `main`)
+   * e que `characters.stamina_updated_at` e os carimbos do ADR 0052 d.6 usam. É OUTRO relógio que
+   * `now`: aquele é o monotônico do processo (`performance.now`) e não serve para gravar um instante
+   * que sobrevive ao restart. Só o que o host grava no extrato com data (o marco da stamina do
+   * Treino) lê daqui. Ausente: `Date.now`.
+   */
+  readonly wallNow?: () => number;
+  /**
    * Aceita ou recusa uma configuração de bot (FUN-81). Ausente: `bot-config` é ignorada e o
    * jogador recebe um aviso — um host montado sem conteúdo não tem como julgar vocabulário.
    */
@@ -173,6 +189,12 @@ export interface SessionHostOptions {
    * conteúdo não sabe o que é uma magia.
    */
   readonly spellCatalog?: ReadonlyMap<string, Spell>;
+  /**
+   * O Treino (#631, ADR 0059): as regras que `set-offline-training-skill` confere — as skills do
+   * livro — e que decidem se o servidor tem Treino. Ausente: nenhuma escolha é aceita e
+   * `enter-training` é recusado, com a recusa honesta de um host sem conteúdo.
+   */
+  readonly training?: Training;
   /**
    * As vocações e o level da escolha (#154, ADR 0026 decisão 1), para `choose-vocation`.
    * Ausentes: nada se escolhe, e a recusa é honesta — como os itens.
@@ -312,6 +334,14 @@ const CHARM_ASSIGN_REFUSAL: Readonly<Record<CharmAssignRefusal, string>> = {
 const CHARM_REMOVE_REFUSAL: Readonly<Record<CharmRemoveRefusal, string>> = {
   'unknown-charm': 'Esse Charm não existe.',
   'not-assigned': 'Esse Charm não está atribuído a nenhuma criatura.',
+};
+
+/** A recusa de `buy-item` (#631, ADR 0059 d.2), em palavras. */
+const BUY_REFUSAL: Readonly<Record<BuyRefusal, string>> = {
+  'not-for-sale': 'Esse item não está à venda.',
+  'not-enough-gold': 'Você não tem gold suficiente.',
+  'over-capacity': 'Você não tem capacidade para carregar isso.',
+  'stack-too-large': 'Você não pode carregar tantos.',
 };
 
 /** A recusa de `open-corpse`/`take-loot` (#722, ADR 0048 d.4), em palavras — FUN-73. */
@@ -1029,6 +1059,13 @@ interface HostedSession {
    */
   readonly sentBlessings: Map<string, number>;
   /**
+   * A assinatura do último `training-state` ENTREGUE a quem olha cada personagem (#631), por
+   * `characterId` — o mesmo mecanismo de `sentExit`. O banco só muda no fim da sessão, mas as
+   * cargas da exercise weapon mudam a cada golpe do Treino, e compará-las é o que evita mandar de
+   * novo o que já foi. Entrada ausente é "ninguém recebeu ainda".
+   */
+  readonly sentTraining: Map<string, string>;
+  /**
    * O último ESTADO de cada interativo ENTREGUE aos viewers da sessão (#734, ADR 0050 d.6 T3),
    * por `interactableId`. Cenário é COMPARTILHADO (DT-01 do #729) — uma entrada por sessão, não
    * por personagem, como `sentParty`. É o gatilho de `#presentTileOverrides`: fecha a lacuna que
@@ -1085,6 +1122,15 @@ interface HostedSession {
    * é do servidor — o `sim` não conhece protocolo, e o cliente não pode inventar número.
    */
   readonly creatureIds: Map<string, number>;
+  /**
+   * A raça (#620) de cada MONSTRO que não é `blood`, pela mesma chave de `creatureIds` (o
+   * `subject`). Só a apresentação lê — a cor e o efeito do golpe físico que o atinge. Guardada
+   * aqui, e não consultada no ruleset na hora do golpe, porque o abate REMOVE o monstro do
+   * ruleset antes de o golpe que o matou ser apresentado, e é justamente o golpe mais comum de
+   * uma hunt. Só entra quem difere do default: o monstro comum e o jogador não pagam entrada, e
+   * a ausência é `blood`. Sai junto de `creatureIds`, no `creature-disappear`.
+   */
+  readonly raceBySubject: Map<string, MonsterRace>;
   /**
    * O próximo id numérico a distribuir. MONOTÔNICO, nunca `size + 1` (FUN-103).
    *
@@ -1766,6 +1812,21 @@ export class SessionHost {
         // INTENÇÃO (invariante 4): o cliente diz QUAL posição; o texto vem do conteúdo, nunca
         // do cliente (#729, ADR 0050 d.7).
         this.#requestLook(viewer, message.position);
+        return;
+      case 'buy-item':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL item; `purchasable`, preço, saldo e capacidade
+        // são do servidor — serviço de Cidade, dentro da sessão dona (#631, ADR 0059 d.2).
+        this.#requestBuyItem(viewer, message.itemId);
+        return;
+      case 'set-offline-training-skill':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL skill do livro (ou `null`); quais existem é do
+        // conteúdo, e o gasto do banco é da `api` na próxima emissão de ticket (#631, ADR 0059 d.3).
+        this.#requestSetOfflineSkill(viewer, message.skillId);
+        return;
+      case 'enter-training':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL instância da mochila; que ela é uma exercise
+        // weapon com cargas e que o personagem está na Cidade é do servidor (#631, ADR 0059 d.1).
+        this.#requestEnterTraining(viewer, message.itemInstanceId);
         return;
       case 'promote-vocation':
         // INTENÇÃO (invariante 4): sem payload. Vocação, level, gold e "já promovido" são do
@@ -2717,6 +2778,168 @@ export class SessionHost {
   }
 
   /**
+   * O `training-state` do personagem, na forma que o fio manda (#631): o banco e a skill do livro,
+   * as exercise weapons que ele carrega com as cargas RESTANTES — o overlay da instância não viaja
+   * em `inventory` — e a instância que o Treino em curso gasta. Só quando o host TEM Treino
+   * (`options.training`): sem ele, nenhuma mensagem sai e o cliente não desenha a tela.
+   */
+  #trainingMessageFor(hosted: HostedSession, character: CharacterRuntime): S2CMessage {
+    const catalog = this.#options.itemCatalog ?? EMPTY_ITEMS;
+    const state = character.inventory.getState();
+    const carried: CarriedItem[] = [
+      ...state.backpack, ...(state.satchel ?? []), ...Object.values(state.equipped),
+    ].filter((item): item is CarriedItem => item !== null && item !== undefined);
+    const weapons = carried.flatMap((item) => {
+      const definition = catalog.get(item.itemId);
+      if (definition?.exercise === undefined || definition.charges === undefined) return [];
+      const charges = item.overlay?.charges ?? definition.charges;
+      return charges > 0 ? [{ instanceId: item.instanceId, itemId: item.itemId, charges }] : [];
+    });
+    const ruleset = hosted.session.ruleset as Partial<TrainingRuleset>;
+    return {
+      type: 'training-state',
+      offlineBankMs: character.training.bankMs,
+      offlineSkill: character.training.skill,
+      weapons,
+      activeInstanceId: hosted.session.ruleset.type === 'training' ? ruleset.itemInstanceId ?? null : null,
+    };
+  }
+
+  /**
+   * Manda o `training-state` a quem olha o personagem — só quando mudou desde o último entregue
+   * (`force` o manda sempre: é o `session-attach` e a chegada de uma sessão nova, em que a tela
+   * ainda não tem nada). Host sem Treino não manda nada.
+   */
+  #syncTraining(hosted: HostedSession, characterId: string, force = false): void {
+    if (this.#options.training === undefined) return;
+    const character = this.#participantOf(hosted, characterId);
+    if (character === undefined) return;
+    const message = this.#trainingMessageFor(hosted, character);
+    const signature = JSON.stringify(message);
+    if (!force && hosted.sentTraining.get(characterId) === signature) return;
+    hosted.sentTraining.set(characterId, signature);
+    this.#sendToViewersOf(hosted, characterId, message);
+  }
+
+  /**
+   * As cargas do Treino em curso, ao ritmo dos golpes (#631): cada golpe muda o overlay da arma, e
+   * a tela mostra o que resta. Só a sessão de Treino, e só com visualizador (a apresentação é o
+   * que se perde quando ninguém olha — nunca o resultado, invariante 3).
+   */
+  #presentTraining(hosted: HostedSession): void {
+    if (hosted.session.ruleset.type !== 'training' || hosted.viewers.size === 0) return;
+    for (const character of hosted.session.participants) this.#syncTraining(hosted, character.id);
+  }
+
+  /**
+   * Comprar UM item por gold na Cidade (#631, ADR 0059 d.2) — o mínimo que a exercise weapon
+   * precisa enquanto a loja geral (E5) não existe. Serviço de Cidade: só a sessão de Cidade aceita
+   * (ADR 0052 d.2), e o gold sai por `goldDelta`, liquidado pelo `#saveDurableReceipt` que já debita
+   * `sell-items` e `buy-blessing` na praça (invariante 10). O item nasce como instância NOVA de
+   * origem `purchase`, e o mesmo extrato a leva por `acquired` — o id carrega o do PERSONAGEM e um
+   * UUID por compra, porque a mesma cópia da Cidade é reaberta em outro dia e um `lootSeq` que
+   * recomeça em zero colidiria na chave primária de `item_instance`.
+   */
+  #requestBuyItem(viewer: Viewer, itemId: string): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    if (hosted.session.ruleset.type !== 'city') {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Só se compra na Cidade.' });
+      return;
+    }
+    const catalog = this.#options.itemCatalog ?? EMPTY_ITEMS;
+    const result = buyItem(character, catalog.get(itemId), {
+      catalog,
+      rules: this.#containerRules(character),
+      instanceId: `${hosted.session.id}:${character.id}:buy:${randomUUID()}`,
+    });
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: BUY_REFUSAL[result.reason] });
+      return;
+    }
+    this.#markDirty(character.id);
+    const stats = this.#statsOf(character);
+    hosted.sentStats.set(character.id, stats);
+    this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
+    // O inventário leva junto o `training-state` (`#sendInventory`): a arma comprada já aparece na
+    // tela de Treino, com as cargas cheias.
+    this.#sendInventory(character.id);
+  }
+
+  /**
+   * O livro do offline training (#631, ADR 0059 d.3, ADR 0052 d.2): a skill que a `api` vai treinar
+   * quando o personagem voltar. Serviço de Cidade, sem rolagem — o gasto do banco NÃO acontece
+   * aqui: é da `api`, na emissão do próximo ticket, com o personagem em repouso. `skillId: null`
+   * desmarca. Só as skills que o conteúdo oferece são aceitas (invariante 4).
+   */
+  #requestSetOfflineSkill(viewer: Viewer, skillId: string | null): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    const training = this.#options.training;
+    if (training === undefined) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Este servidor não tem Treino.' });
+      return;
+    }
+    if (hosted.session.ruleset.type !== 'city') {
+      viewer.send({
+        type: 'system-message', level: 'warning', text: 'O livro do offline training só se lê na Cidade.',
+      });
+      return;
+    }
+    const result = character.training.choose(skillId, training);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Essa skill não está no livro.' });
+      return;
+    }
+    this.#markDirty(character.id);
+    this.#syncTraining(hosted, character.id);
+  }
+
+  /**
+   * Entrar na sessão de Treino com uma exercise weapon da mochila (#631, ADR 0059 d.1). O host
+   * confere e responde em palavras o que o jogador precisa ler — sem Treino, fora da Cidade,
+   * instância que ele não carrega ou que não é exercise weapon —, e a transição em si é a de
+   * sempre (`#requestTransition`): o construtor de sessões a recusa de novo se algo não bater.
+   */
+  #requestEnterTraining(viewer: Viewer, itemInstanceId: string): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    const training = this.#options.training;
+    if (training === undefined) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Este servidor não tem Treino.' });
+      return;
+    }
+    if (hosted.session.ruleset.type !== 'city') {
+      viewer.send({
+        type: 'system-message', level: 'warning', text: 'Você precisa estar na Cidade para treinar.',
+      });
+      return;
+    }
+    const carried = character.inventory.carried(itemInstanceId);
+    const definition = carried === null ? undefined : this.#options.itemCatalog?.get(carried.itemId);
+    if (carried === null || definition?.exercise === undefined || definition.charges === undefined) {
+      viewer.send({
+        type: 'system-message', level: 'warning', text: 'Você não tem essa exercise weapon.',
+      });
+      return;
+    }
+    // O `training-exhaustion` do Canary (`exercise_training_weapons.lua`, `exhaustionTime = 10`): um
+    // novo início só passados 10 s do anterior. O mesmo cooldown de parede que o construtor de
+    // sessões confere de novo e CARIMBA ao construir (`trainingFor`); aqui só se responde em palavras.
+    if (character.training.exerciseCooldownLeftMs(this.#wallNow(), training.startCooldownMs) > 0) {
+      viewer.send({
+        type: 'system-message', level: 'warning',
+        text: `O boneco de treino só pode ser usado depois de ${String(training.startCooldownMs / 1000)} segundos de espera.`,
+      });
+      return;
+    }
+    void this.#requestTransition(viewer, { to: 'training', itemInstanceId });
+  }
+
+  /**
    * Traduz a recusa do `sim` em algo que o jogador entenda, ou manda o inventário novo.
    *
    * O sucesso NÃO vira mensagem de sistema — vira o estado. "Equipado com sucesso" é ruído; o
@@ -2773,6 +2996,9 @@ export class SessionHost {
       supplies: [...character.supplyStock].map(([id, quantity]) => ({ id, quantity })),
       ammunition: [...character.ammunitionStock].map(([id, quantity]) => ({ id, quantity })),
     });
+    // As exercise weapons e as cargas dela vivem no overlay, que o `inventory` não leva (#631): o
+    // `training-state` acompanha toda mudança de mochila — só quando a assinatura mudou.
+    this.#syncTraining(hosted, characterId);
   }
 
   /**
@@ -3118,6 +3344,8 @@ export class SessionHost {
       // ver o número chegar sem reconectar.
       this.#presentBosstiary(hosted);
       this.#presentBlessings(hosted);
+      // E as cargas da exercise weapon, se o Treino gastou uma (#631).
+      this.#presentTraining(hosted);
       // E o cenário, se algo mudou de estado PASSIVAMENTE (#734, ADR 0050 d.6 T3) — o walker
       // abrindo uma porta sozinho, uma placa de pressão, um `TILE_REVERT`. `useOnMap` já manda
       // o próprio `tile-update` na hora (`#requestUseOnMap`); isto cobre o resto.
@@ -3341,6 +3569,7 @@ export class SessionHost {
     let message: S2CMessage;
     if (event.kind === 'creature-appeared') {
       const definition = this.#options.monsterCatalog?.get(event.monsterId);
+      this.#rememberRace(hosted, key, definition);
       message = {
         type: 'creature-appear',
         id: this.#creatureId(hosted, key),
@@ -3349,6 +3578,9 @@ export class SessionHost {
         name: definition?.name ?? event.monsterId,
         health: event.health,
         maxHealth: event.maxHealth,
+        // A apresentação (#620): cores e addons, raça, luz e falas — só o que o cliente desenha, e
+        // nada que o `sim` leia.
+        ...monsterLookOf(definition),
         // A invocação do JOGADOR (#598, M38-01, ADR 0057 decisão 4): o cliente marca "sua
         // invocação". Ausente para todo o resto, inclusive invocação de MONSTRO (#546).
         ...(event.masterId === undefined ? {} : { masterId: event.masterId }),
@@ -3361,12 +3593,24 @@ export class SessionHost {
       // O número NÃO é reaproveitado (ver `nextCreatureId`); só a chave sai do mapa, senão
       // ele cresce um item por respawn até o fim da hunt.
       hosted.creatureIds.delete(key);
+      hosted.raceBySubject.delete(key);
     } else {
       const id = hosted.creatureIds.get(key);
       if (id === undefined) return;
       message = { type: 'creature-health', id, health: event.health, maxHealth: event.maxHealth };
     }
     for (const viewer of hosted.viewers) viewer.send(message);
+  }
+
+  /**
+   * Guarda a raça do monstro `key` (#620) quando ela difere de `blood` — ver `raceBySubject`. Chamado
+   * nos dois lugares em que o host aprende que um monstro existe: o `creature-appeared` e o
+   * `session-state` de quem reanexa (uma hunt retomada de snapshot nunca emitiu o primeiro).
+   */
+  #rememberRace(hosted: HostedSession, key: string, definition: Monster | undefined): void {
+    const race = definition?.race;
+    if (race === undefined || race === DEFAULT_MONSTER_RACE) hosted.raceBySubject.delete(key);
+    else hosted.raceBySubject.set(key, race);
   }
 
   /**
@@ -3379,7 +3623,8 @@ export class SessionHost {
    *
    * O `sim` diz O QUE aconteceu; a tabela de aparências diz o que DESENHAR (invariante 6):
    *
-   *   creature-hit     → o número, e o sangue do corpo a corpo (`hits.melee`) — só quando
+   *   creature-hit     → o número, e o efeito do golpe FÍSICO (`hits.byRace` pela raça do alvo,
+   *                      `hits.melee` sem ela; #620) — de corpo a corpo OU de magia, e só quando
    *                      saiu vida: golpe absorvido inteiro mostra "0", como no Tibia, mas não
    *                      sangra, porque sangue é o que a armadura acabou de impedir;
    *   creature-healed  → o número em verde. O efeito da cura NÃO sai daqui: ele é do
@@ -3418,8 +3663,16 @@ export class SessionHost {
           type: 'creature-hit', id, amount: event.amount, kind: event.source,
           ...(event.damageType === undefined ? {} : { damageType: event.damageType }),
         });
-        const blood = appearances?.hits.melee;
-        if (event.source === 'melee' && event.amount > 0 && blood !== undefined) {
+        // O efeito do golpe físico segue a RAÇA de quem o levou (#620, `combatGetTypeInfo` do
+        // Canary): sangue, gota de veneno, "hit area" cinza… Só a apresentação lê a raça.
+        // O gatilho é o ELEMENTO do golpe, e não a origem: `Game::sendEffects` roda em todo dano
+        // com valor, de corpo a corpo, de magia ou de runa, e só `COMBAT_PHYSICALDAMAGE` cai no
+        // `switch` da raça — o mesmo critério que colore o número no cliente (`isPhysicalHit`).
+        const blood = appearances === undefined || event.amount <= 0
+          || !isPhysicalHit(event.source, event.damageType)
+          ? undefined
+          : hitEffectOf(appearances.hits, hosted.raceBySubject.get(String(event.creatureId)));
+        if (blood !== undefined) {
           messages.push({ type: 'effect', position: event.position, effectId: blood });
         }
         break;
@@ -3818,6 +4071,10 @@ export class SessionHost {
     // E as magias aprendidas (#624, ADR 0058), pela mesma razão: sem isto, quem reconecta veria
     // toda a barra marcada como "não aprendida" até a próxima compra.
     if (participant !== undefined) viewer.send(this.#learnedSpellsMessageFor(participant));
+    // E o Treino (#631, ADR 0059): o banco, a skill do livro e as exercise weapons com as cargas.
+    // Sempre (`force`): quem reanexa PERDEU a tela, e comparar com o último entregue a deixaria
+    // vazia. Host sem Treino não manda nada.
+    if (participant !== undefined) this.#syncTraining(hosted, characterId, true);
     // E o estado dos slots (AB-09): a barra do conjunto ativo precisa dele ao montar, e a
     // Cidade não tem ciclo para o mandar depois. Ruleset sem slots (a Cidade) não manda nada.
     const slotStates = participant === undefined
@@ -4338,6 +4595,15 @@ export class SessionHost {
     // Sair de um SHARD não encerra nada e não credita nada (FUN-71, ADR 0023): a praça fica
     // de pé com quem ficou, e a Cidade não gera progresso (§37). Encerrar aqui mandaria um
     // extrato de Cidade — zerado — para todo mundo que estivesse lá dentro.
+    //
+    // O que a praça MUDOU, porém, é gravado antes de o personagem sair para uma sessão privada
+    // (#631): `#leaveForParty` já fazia o mesmo para a party, e sem isto a exercise weapon comprada
+    // aqui — uma instância NOVA, com o prefixo da sessão da praça — nunca chegaria ao banco, porque
+    // o extrato do Treino só leva o `acquired` que nasceu NELE; e o gold gasto sumiria junto, já que
+    // o `goldDelta` da praça não entra nos agregados da sessão de destino.
+    if (hosted.session.ruleset.shared === true && hosted.dirty.has(characterId)) {
+      await this.#saveDurableReceipt(characterId, hosted, 'manual-exit');
+    }
     if (hosted.session.ruleset.shared !== true) {
       // Party (#194, ADR 0027): com mais de um dono, sair é SAIR — o extrato é o dele, a hunt
       // continua para os outros, e a cascata do §13.9 roda no próximo evento do `sim`.
@@ -4416,7 +4682,7 @@ export class SessionHost {
     // ids de criatura de quem já estava lá.
     const existing = this.#sessions.get(next.id);
     const successor: HostedSession = existing ?? {
-      session: next, viewers: new Set(), creatureIds: new Map(), nextCreatureId: 1,
+      session: next, viewers: new Set(), creatureIds: new Map(), raceBySubject: new Map(), nextCreatureId: 1,
       aoi: this.#interestManaged(next) ? new AreaOfInterest() : null,
       lastAdvancedAtMs: this.#now(),
       credited: new Set(),
@@ -4431,6 +4697,7 @@ export class SessionHost {
       sentBestiary: new Map(),
       sentBosstiary: new Map(),
       sentBlessings: new Map(),
+      sentTraining: new Map(),
       sentTileOverrides: new Map(),
       sentParty: null,
       lastPartyBag: null,
@@ -4693,6 +4960,15 @@ export class SessionHost {
     // A stamina do dono da sessão vai junto (FUN-54): sem ela, o tempo de hunt gasto nunca
     // chegaria ao banco, e reconectar devolveria a stamina de antes da hunt.
     const owner = departed ?? hosted.session.participants.find((p) => p.id === characterId);
+    // A stamina não anda no Treino (ADR 0060 d.14c): o marco que o extrato leva tem de estar no
+    // instante em que o Treino ACABOU, e não no da entrada — senão o tempo treinado volta como
+    // recuperação no próximo ticket. É AQUI, e não só na fronteira do construtor (`holdStamina` em
+    // `game/sessions.ts`), porque o extrato é lido ANTES de o construtor rodar quando a sessão acaba
+    // sozinha (arma esgotada, `#settleOne`), e porque o logout, a drenagem e o crash nunca passam por
+    // ele. Idempotente: o marco só anda para a frente.
+    if (owner !== undefined && hosted.session.ruleset.type === 'training') {
+      holdStamina(owner, this.#wallNow());
+    }
     await receipts.save({
       sessionId: receipt.sessionId,
       characterId,
@@ -4730,6 +5006,9 @@ export class SessionHost {
       // o personagem que nunca invocou não escreve a coluna. Sem isto o cooldown de 30 min não
       // sobreviveria à saída da hunt: o ticket seguinte o leria como nunca lançado.
       ...(owner === undefined || isEmptyFamiliarState(owner.familiar) ? {} : { familiar: owner.familiar }),
+      // E o registro do Treino (#631, ADR 0059 d.3): ABSOLUTO como `charms` — o banco que a sessão
+      // acabou de encher (`onEnd` de hunt e de treino) e a skill do livro.
+      ...(owner === undefined ? {} : { training: owner.training.getState() }),
       // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
       // login se ficasse só na sessão.
       ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
@@ -4845,6 +5124,9 @@ export class SessionHost {
       // O familiar (M38-02, #599): o mesmo da hunt — o extrato de estado da Cidade o leva, para um
       // logout depois de uma morte não perder o carimbo que a hunt acabou de gravar.
       ...(isEmptyFamiliarState(owner.familiar) ? {} : { familiar: owner.familiar }),
+      // O registro do Treino (#631, ADR 0059 d.3): escolher a skill do livro na praça marca
+      // `dirty`, e sem este campo a escolha sumiria no logout. ABSOLUTO, como `charms`.
+      training: owner.training.getState(),
       // O estoque de supply/munição (#792, ADR 0044 d.2): conjurar na Cidade credita
       // `supplyStock`/`ammunitionStock` do mesmo jeito que o loot da hunt credita — ABSOLUTO,
       // como `ammo` (`receipts.ts`). Sem isto, a carga conjurada na praça sumia no logout: o
@@ -4976,6 +5258,7 @@ export class SessionHost {
     for (const monster of ruleset.monsters ?? []) {
       if (!monster.alive) continue;
       const definition = this.#options.monsterCatalog?.get(monster.monsterId);
+      this.#rememberRace(hosted, monster.subject, definition);
       creatures.push({
         id: this.#creatureId(hosted, monster.subject),
         // O andar do MONSTRO (#519, hunt multiandar), nunca o padrão da instância: numa hunt de
@@ -4987,6 +5270,9 @@ export class SessionHost {
         name: definition?.name ?? monster.monsterId,
         health: monster.health,
         maxHealth: definition?.health ?? monster.health,
+        // A apresentação (#620), pelo MESMO espalhamento do `creature-appear`: quem reanexa no
+        // meio vê o monstro pintado, com luz e falas, sem esperar um segundo aparecimento.
+        ...monsterLookOf(definition),
         // A invocação do JOGADOR (#598) — o mesmo espalhamento do `creature-appear`, para quem
         // reanexa no meio ver a invocação já marcada, sem esperar um segundo aparecimento.
         ...(typeof monster.masterId === 'string' ? { masterId: monster.masterId } : {}),
@@ -5232,7 +5518,7 @@ export class SessionHost {
     const receipts = this.#options.receipts;
     if (receipts === undefined || accountId === undefined) return;
     try {
-      await settleSnapshotAsReceipt(snapshot, { characterId, accountId, receipts });
+      await settleSnapshotAsReceipt(snapshot, { characterId, accountId, receipts, nowMs: this.#wallNow() });
     } catch (error) {
       // Falhar aqui perde o crédito, e é por isso que o snapshot NÃO é apagado em seguida
       // quando isto lança: a próxima conexão tenta de novo.
@@ -5254,6 +5540,7 @@ export class SessionHost {
       session,
       viewers: new Set(),
       creatureIds: new Map(),
+      raceBySubject: new Map(),
       nextCreatureId: 1,
       // Só o shard tem AOI (FUN-33): numa hunt de um personagem ela seria índice para nada.
       aoi: this.#interestManaged(session) ? new AreaOfInterest() : null,
@@ -5272,6 +5559,7 @@ export class SessionHost {
       sentBestiary: new Map(),
       sentBosstiary: new Map(),
       sentBlessings: new Map(),
+      sentTraining: new Map(),
       sentTileOverrides: new Map(),
       sentParty: null,
       lastPartyBag: null,
@@ -5397,5 +5685,10 @@ export class SessionHost {
 
   #now(): number {
     return this.#options.now?.() ?? performance.now();
+  }
+
+  /** O relógio de parede (epoch ms) — ver `SessionHostOptions.wallNow`. */
+  #wallNow(): number {
+    return this.#options.wallNow?.() ?? Date.now();
   }
 }

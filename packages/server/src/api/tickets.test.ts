@@ -1,6 +1,8 @@
 import Fastify from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
+import { offlineTrainingRulesOf } from '@draconya/sim';
 import { createTicketHandler, type TicketRouteDependencies } from './tickets.js';
+import { trainingTestContent } from '../testing/content.js';
 import type { IssueResult } from '../tickets.js';
 import type { CharacterRecord } from '../db/repository.js';
 
@@ -9,7 +11,7 @@ const CHARACTER: CharacterRecord = {
   capacity: 400, premiumUntil: null, staminaMs: 86400000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
   ammo: null, supplyStock: null, ammunitionStock: null, charms: null, bosstiary: null, learnedSpells: null,
-  familiar: null, fedMs: 0, blessings: 0, fightMode: 'attack',
+  familiar: null, training: null, fedMs: 0, blessings: 0, fightMode: 'attack',
   createdAt: new Date(),
 };
 
@@ -529,5 +531,136 @@ describe('POST /api/tickets', () => {
     const response = await post(app, { characterId: 'p1' });
     expect(response.statusCode).toBe(status);
     expect(response.json()).toEqual({ error: reason });
+  });
+});
+
+describe('POST /api/tickets: o gasto do banco de offline training (#631, ADR 0059 d.3-d.4)', () => {
+  const HOUR = 3_600_000;
+  const NOW = 1_000 * HOUR;
+  const rules = offlineTrainingRulesOf(trainingTestContent()) as NonNullable<ReturnType<typeof offlineTrainingRulesOf>>;
+  const bank = (offlineBankMs: number, offlineSkill: string | null = 'sword') =>
+    ({ offlineBankMs, offlineSkill, version: 1 });
+
+  /**
+   * A rota com Treino: o personagem VEM da linha (`row`), o carimbo de repouso é `restedSince`, e o
+   * `writer` grava o que a rota mandou escrever — a mesma forma de `withOwnedCharacter` de verdade.
+   */
+  function scenario(options: {
+    row?: Partial<CharacterRecord>;
+    restedSinceMs?: number | null;
+    resting?: boolean;
+    issued?: IssueResult;
+  } = {}) {
+    const writes: Array<{ training: unknown; skills?: unknown; at: Date }> = [];
+    const issue = vi.fn(async (..._args: unknown[]) => options.issued ?? ISSUED);
+    const restedSince = vi.fn(async () => options.restedSinceMs === undefined ? null : options.restedSinceMs);
+    const app = build({
+      tickets: {
+        issue,
+        resolveNode: async () => ({ ok: true, node: NODE, resting: options.resting ?? true }),
+      } as never,
+      withOwnedCharacter: (async (
+        _accountId: string,
+        _characterId: string,
+        operation: (character: CharacterRecord, writer: unknown) => unknown,
+      ) => operation({ ...CHARACTER, ...options.row }, {
+        applyOfflineTraining: async (update: { training: unknown; skills?: unknown; at: Date }) => { writes.push(update); },
+      })) as never,
+      offlineTraining: { rules, restedSince, now: () => NOW },
+    });
+    const ticketOf = () => issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    return { app, writes, issue, restedSince, ticketOf };
+  }
+
+  it('gasta o banco com o personagem em repouso: o ticket leva as skills e o banco novos, e a MESMA transação os grava', async () => {
+    // 2 h fora, banco de 3 h, skill sword: treina `min(2 h, 3 h, 6 h do Free)` = 2 h. O golpe é a
+    // cada 2 s e a melee rende `/ 2`: 7 200 s / 2 s / 2 = 1 800 tries de sword.
+    const s = scenario({ row: { training: bank(3 * HOUR) }, restedSinceMs: NOW - 2 * HOUR });
+    const response = await post(s.app, { characterId: 'p1' });
+
+    expect(response.statusCode).toBe(200);
+    const ticket = s.ticketOf() as { skills: Record<string, { level: number; points: number }>; training: unknown };
+    expect(ticket.training).toEqual(bank(1 * HOUR, null));
+    // A escolha do livro é CONSUMIDA (`null`): o mesmo ticket reemitido não gasta de novo.
+    expect(ticket.skills['sword']?.level).toBeGreaterThan(10);
+    expect(s.writes).toHaveLength(1);
+    expect(s.writes[0]?.training).toEqual(bank(1 * HOUR, null));
+    expect(s.writes[0]?.skills).toEqual(ticket.skills);
+    expect(s.writes[0]?.at).toEqual(new Date(NOW));
+  });
+
+  it('o teto é o da CONTA: Free 6 h, Premium 12 h (ADR 0059 d.4), mesmo com banco e ausência maiores', async () => {
+    const tempoTreinado = async (premiumUntil: Date | null) => {
+      const s = scenario({
+        row: { training: bank(12 * HOUR), premiumUntil }, restedSinceMs: NOW - 20 * HOUR,
+      });
+      await post(s.app, { characterId: 'p1' });
+      return (s.ticketOf() as { training: { offlineBankMs: number } }).training.offlineBankMs;
+    };
+    // Free: gasta 6 h de 12 h; sobram 6 h. Premium (válido em NOW): gasta 12 h; sobra 0.
+    expect(await tempoTreinado(null)).toBe(6 * HOUR);
+    expect(await tempoTreinado(new Date(NOW + HOUR))).toBe(0);
+    // Premium VENCIDO é Free.
+    expect(await tempoTreinado(new Date(NOW - HOUR))).toBe(6 * HOUR);
+  });
+
+  it('dentro da carência (menos de 10 min fora) a escolha é consumida, o banco fica e nenhuma skill sobe', async () => {
+    const s = scenario({ row: { training: bank(3 * HOUR) }, restedSinceMs: NOW - 5 * 60_000 });
+    await post(s.app, { characterId: 'p1' });
+
+    expect(s.writes).toHaveLength(1);
+    expect(s.writes[0]?.training).toEqual(bank(3 * HOUR, null));
+    // Nada rendeu: as skills e o instante delas NÃO são reescritos.
+    expect(s.writes[0]).not.toHaveProperty('skills');
+  });
+
+  it('sem carimbo de repouso — Redis reiniciado, sessão que caiu sem `release` — o banco NÃO é gasto e nada é escrito', async () => {
+    const s = scenario({ row: { training: bank(3 * HOUR) }, restedSinceMs: null });
+    await post(s.app, { characterId: 'p1' });
+
+    expect(s.writes).toEqual([]);
+    // O ticket leva o registro como está: o tempo continua no banco, e a escolha do livro também.
+    expect(s.ticketOf()).toMatchObject({ training: bank(3 * HOUR) });
+  });
+
+  it('personagem que ainda tem sessão hospedada não está em repouso: nem consulta o carimbo, nem escreve (invariante 9)', async () => {
+    const s = scenario({ row: { training: bank(3 * HOUR) }, restedSinceMs: NOW - 2 * HOUR, resting: false });
+    await post(s.app, { characterId: 'p1' });
+
+    expect(s.restedSince).not.toHaveBeenCalled();
+    expect(s.writes).toEqual([]);
+    expect(s.ticketOf()).toMatchObject({ training: bank(3 * HOUR) });
+  });
+
+  it('sem skill escolhida no livro não há o que gastar — e a linha não é tocada', async () => {
+    const s = scenario({ row: { training: bank(3 * HOUR, null) }, restedSinceMs: NOW - 2 * HOUR });
+    await post(s.app, { characterId: 'p1' });
+    expect(s.writes).toEqual([]);
+  });
+
+  it('personagem que nunca caçou (sem registro) segue como sempre', async () => {
+    const s = scenario({ row: { training: null }, restedSinceMs: NOW - 2 * HOUR });
+    const response = await post(s.app, { characterId: 'p1' });
+    expect(response.statusCode).toBe(200);
+    expect(s.writes).toEqual([]);
+    expect(s.ticketOf()).not.toHaveProperty('training');
+  });
+
+  it('ticket recusado (active-limit) não gasta o banco: a escolha do livro fica para o próximo login', async () => {
+    const s = scenario({
+      row: { training: bank(3 * HOUR) }, restedSinceMs: NOW - 2 * HOUR,
+      issued: { ok: false, reason: 'active-limit' },
+    });
+    const response = await post(s.app, { characterId: 'p1' });
+    expect(response.statusCode).toBe(409);
+    expect(s.writes).toEqual([]);
+  });
+
+  it('um registro torto na linha vira ausente no ticket e não trava o login', async () => {
+    const s = scenario({ row: { training: { offlineBankMs: -5, offlineSkill: 7 } }, restedSinceMs: NOW - HOUR });
+    const response = await post(s.app, { characterId: 'p1' });
+    expect(response.statusCode).toBe(200);
+    expect(s.ticketOf()).not.toHaveProperty('training');
+    expect(s.writes).toEqual([]);
   });
 });
