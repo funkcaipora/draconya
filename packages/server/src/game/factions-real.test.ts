@@ -23,17 +23,19 @@ const real = (): Content => {
 const wall = '#'.repeat(30);
 const row = `#${'.'.repeat(28)}#`;
 
-/** O conteúdo real com UMA hunt de corredor por cima — o mesmo catálogo, a mesma versão de regras. */
-function corridorContent(monsterIds: readonly [string, string]): Content {
+/**
+ * O conteúdo real com UMA hunt de corredor por cima — o mesmo catálogo, a mesma versão de regras.
+ * Os monstros nascem nos tiles `xs` (o padrão são os dois da briga Deepling × Deathling).
+ */
+function corridorContent(monsterIds: readonly string[], xs: readonly number[] = [16, 21]): Content {
   const content = real();
   const tilemap = buildTilemap({ id: 'corridor', z: 7, grid: [wall, row, row, row, wall] });
   const route = buildRoute({
     id: 'corridor', mapId: 'corridor',
     tiles: [{ x: 1, y: 2, z: 7 }, { x: 2, y: 2, z: 7 }],
-    spawnPoints: [
-      { routeIndex: 0, radius: 1, at: { x: 16, y: 2, z: 7 }, monsterId: monsterIds[0], respawnDelayMs: 600_000 },
-      { routeIndex: 0, radius: 1, at: { x: 21, y: 2, z: 7 }, monsterId: monsterIds[1], respawnDelayMs: 600_000 },
-    ],
+    spawnPoints: monsterIds.map((monsterId, index) => ({
+      routeIndex: 0, radius: 1, at: { x: xs[index] ?? 16, y: 2, z: 7 }, monsterId, respawnDelayMs: 600_000,
+    })),
   }, tilemap);
   const hunt = {
     id: 'corridor', name: 'Corridor', recommendedLevel: 1, mapId: 'corridor', routeId: 'corridor',
@@ -46,9 +48,9 @@ function corridorContent(monsterIds: readonly [string, string]): Content {
   };
 }
 
-function skirmish(content: Content, stepMs: number, durationMs: number) {
+function skirmish(content: Content, stepMs: number, durationMs: number, id = 'factions-real') {
   const session = createHuntSession({
-    id: 'factions-real', content, huntId: 'corridor', difficulty: 'default', createdAtMs: 0,
+    id, content, huntId: 'corridor', difficulty: 'default', createdAtMs: 0,
   });
   const stats = statsForLevel(1, null, content.progression);
   const hero = new CharacterRuntime({
@@ -148,4 +150,39 @@ describe('o Lion × Usurper do catálogo REAL: a Lion ignora o jogador que o Can
     expect(ruleset.monsters.every((m) => m.targetId === null || m.targetId !== hero.id)).toBe(true);
     expect(events.some((e) => e.kind === 'creature-hit' && e.creatureId === hero.id)).toBe(false);
   });
+});
+
+describe('uma onda de área do catálogo REAL que pega o mestre e a invocação dele (#619)', () => {
+  // O Black Sphinx Acolyte (fafnar) invoca o Skeleton Elite Warrior e o Ogre Sage (anuma) invoca o Young
+  // Goanna; as duas facções se caçam e as abilities de ÁREA (earthburst, deathball) pegam o mestre
+  // inimigo junto da invocação. Sem o guarda no laço de alvos, a morte do mestre removia a invocação
+  // dos índices, e a mesma onda ainda a golpeava (`creature-hit` para um id que o cliente já viu
+  // sumir) e a matava de novo, creditando um abate que ninguém presente causou. O herói fica longe
+  // da vista, congelado: tudo no extrato abaixo é briga de monstro.
+  const layouts: readonly (readonly [string, string])[] = [
+    ['ogre-sage', 'black-sphinx-acolyte'],
+    ['black-sphinx-acolyte', 'ogre-sage'],
+  ];
+
+  for (const [first, second] of layouts) {
+    it(`${first} × ${second} por cinco minutos: nenhum golpe fantasma, nenhuma morte repetida, nenhum abate`, () => {
+      const { events, session } = skirmish(corridorContent([first, second], [16, 20]), 100, 300_000, 'seed-1');
+      const vanished = new Set<string>();
+      const hitAfterVanish: string[] = [];
+      const vanishedTwice: string[] = [];
+      for (const event of events) {
+        if (event.kind === 'creature-vanished') {
+          const id = String(event.creatureId);
+          if (vanished.has(id)) vanishedTwice.push(id);
+          vanished.add(id);
+        } else if (event.kind === 'creature-hit' && vanished.has(String(event.creatureId))) {
+          hitAfterVanish.push(String(event.creatureId));
+        }
+      }
+      expect(hitAfterVanish).toEqual([]);
+      expect(vanishedTwice).toEqual([]);
+      expect(session.aggregates.kills).toBe(0);
+      expect(session.aggregates.xpGained).toBe(0);
+    }, 60_000);
+  }
 });
