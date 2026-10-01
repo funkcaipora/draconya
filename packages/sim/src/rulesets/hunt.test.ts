@@ -5289,16 +5289,35 @@ describe('Loyalty: o nível efetivo escala golpe e requisito de runa, e o dado p
     expect(hero.loyaltyBonusPercent).toBe(50);
     const loaded = content({ skills: realSkills });
     const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    // `bestBasicHit` é um MAX que o snapshot carrega: com o recorde dos primeiros 20 s intacto, a
+    // asserção abaixo passaria mesmo se todo golpe pós-restauração saísse no nível base. Zerar o
+    // recorde (na soma e no do participante) obriga o número a vir de um golpe NOVO.
+    const semRecorde = {
+      ...snapshot,
+      aggregates: { ...snapshot.aggregates, bestBasicHit: 0 },
+      aggregatesByCharacter: Object.fromEntries(
+        Object.entries(snapshot.aggregatesByCharacter ?? {}).map(
+          ([id, own]) => [id, { ...own, bestBasicHit: 0 }],
+        ),
+      ),
+    } as SessionSnapshot;
+    expect(semRecorde.aggregates.bestBasicHit).toBe(0);
     const retomado = Session.fromSnapshot(
-      snapshot,
-      huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset,
-      Rng.fromSeed(snapshot.id),
+      semRecorde,
+      huntRulesetFromSnapshot(semRecorde, loaded) as HuntRuleset,
+      Rng.fromSeed(semRecorde.id),
     );
     const heroRetomado = retomado.participants[0] as CharacterRuntime;
     expect(heroRetomado.loyaltyBonusPercent).toBe(50);
-    // O golpe seguinte usa o nível efetivo 33, e não volta ao 30 por a sessão ter sido retomada.
+    expect(retomado.aggregates.bestBasicHit).toBe(0);
+    // O golpe seguinte usa o nível efetivo 33, e não volta ao 30 por a sessão ter sido retomada:
+    // o recorde que sobra é de um golpe pós-restauração, e é o do nível 33 (2.500), não o do 30
+    // (2.200) que uma restauração que perdesse o bônus produziria.
     run(retomado, 20_000, 100);
-    expect(retomado.aggregates.bestBasicHit).toBeGreaterThanOrEqual(Math.round(200 * (1 + 0.5 * (33 - 10))));
+    const efetivo = Math.round(200 * (1 + 0.5 * (33 - 10)));
+    const base = Math.round(200 * (1 + 0.5 * (30 - 10)));
+    expect(retomado.aggregates.bestBasicHit).toBe(efetivo);
+    expect(retomado.aggregates.bestBasicHit).toBeGreaterThan(base);
   });
 
   it('requisito de magic level de runa confere o ML COM Loyalty — e o espelho do slot coincide', () => {
