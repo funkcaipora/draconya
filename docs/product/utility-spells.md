@@ -33,12 +33,18 @@ o cooldown, e o `HuntRuleset#castSpell` aplica o efeito —, do bot ou do dispar
 - **Magic Rope.** Quem está sobre um rope spot (`interactables` `kind: 'rope-spot'`, ADR 0050
   d.1) sobe um andar pela `Position:moveUpstairs`: o tile ao SUL do rope spot no andar de cima; se
   ele não for andável, o primeiro andável de norte, leste, oeste, sudoeste, sudeste, noroeste e
-  nordeste (o `WEST` do script é tentado duas vezes — inócuo). Fora de um rope spot: `not-possible`;
-  sem onde pousar: `not-enough-room`; nos dois casos sem custo.
+  nordeste (o `WEST` do script é tentado duas vezes — inócuo). Tile ocupado por outra criatura é
+  PULADO, como inandável (ver "Divergências": tile é exclusivo). Fora de um rope spot:
+  `not-possible`; sem onde pousar (nenhum andável livre): `not-enough-room`; nos dois casos sem
+  custo — a pré-conferência e o salto escolhem o MESMO destino, então o que a magia aprova ela
+  aplica, e o salto recusado depois de pagar é erro de programação (falha alto).
 - **Find Person.** Diz distância e direção de um personagem da sessão. O NOME do Canary é o
-  personagem que o jogador MIRA no `use-slot` (o catálogo publica `targets: 'friend'` só para ela,
-  e o cliente arma a mira); qualquer outra mira, ou nenhuma, é `person-not-found` ("A player with
-  this name is not online"). O `sim` emite o evento `find-result` com a relação em DADO
+  personagem que o jogador MIRA no `use-slot` (o catálogo publica `aim: 'character'` só para ela —
+  campo SEPARADO de `targets`, que também abriria o seletor de alvo do editor de slot do bot, e a
+  validação do bot recusa alvo que não seja de cura/mana —, e a barra de ação arma a mira);
+  qualquer outra mira, ou nenhuma, é `person-not-found` ("A player with this name is not online"),
+  que no Canary é a recusa de `InstantSpell::playerCastInstant` e **inicia o cooldown da magia e o
+  do grupo `support`** (2 s), sem mana nem alma. O `sim` emite o evento `find-result` com a relação em DADO
   (`distance`, `level`, `direction` — a bússola inteira do `find_person.lua`, tangentes 0,4142 e
   2,4142, faixas 5/101/275) e o host escreve a frase em português como `system-message` só para
   quem lançou (`packages/server/src/game/find-text.ts`).
@@ -64,11 +70,23 @@ o cooldown, e o `HuntRuleset#castSpell` aplica o efeito —, do bot ou do dispar
 lado de `#step`, que escreve posição (`movement.ts#relocate`): libera a origem, ocupa o destino,
 emite `creature-moved`, aplica campo e placa de pressão, e tranca o ataque por `stairhopDelayMs` sob
 o `combat-v3` (o `Player::onCreatureMove` do Canary trata `teleport || oldPos.z != newPos.z` do
-mesmo jeito para escada, magia e teleporte). NÃO vira o personagem: o Canary não passa direção.
+mesmo jeito para escada, magia e teleporte). NÃO vira o personagem: o Canary não passa direção. O
+salto também CANCELA a caminhada manual em curso (`walk-to`, #763) e a janela de espera dela — o
+`stopEventWalk()` que o `Creature::onCreatureMove` chama nesses mesmos casos —; sem isso o
+`path[0]` do andar antigo era tentado para sempre e a hunt idle congelava.
 
-**A ordem das recusas** é a do Canary (`Spell::playerSpellCheck`, depois o script): cooldown e
-grupo, level, mana, alma — e só então o destino/alvo do script, ANTES de pagar. Uma magia que o
-script recusa não gasta mana nem inicia cooldown (`postCastSpell` só roda com `true`).
+**A ordem das recusas** é a do Canary (`Spell::playerSpellCheck`, depois o nome e o script):
+cooldown e grupo, level, mana, alma — e só então o destino/alvo, ANTES de pagar. São DUAS famílias
+de recusa, com custo diferente:
+
+- **O script recusa** (Levitate sem destino, Magic Rope fora do rope spot ou sem onde pousar, Find
+  Fiend sem fiendish): não gasta mana e NÃO inicia cooldown — o `postCastSpell` só roda com `true`.
+- **O nome não acha ninguém** (Find Person: `hasPlayerNameParam` → `getPlayerByNameWildcard`, em
+  `InstantSpell::playerCastInstant`): também não gasta mana nem alma, mas roda
+  `applyCooldownConditions` ANTES de cancelar — o cooldown da magia e o do grupo `support` correm
+  (Light, Haste e Levitate travam 2 s). O `if not target` do `find_person.lua` é inalcançável,
+  porque o `playerCastInstant` já resolveu o jogador. No `sim` é `castSpell` quem inicia os livros
+  nesse caso (`preflight === 'person-not-found'`).
 
 ## Regras
 
@@ -116,8 +134,12 @@ modelo de mapa, a estrutura de sessão ou o escopo que o dono fixou.
   — a correção é uma camada `ground` no importador (`scripts/import-map.ts`), que só se regera com o
   pacote de arte 1533 na máquina (`pnpm map:import --check` pula sem ele).
 - **Tile é exclusivo neste motor.** O `FLAG_IGNOREBLOCKCREATURE` do Levitate deixaria o jogador
-  pousar em cima de outra criatura; aqui o destino ocupado recusa. É a estrutura de
-  `TileOccupancy`, não uma regra escrita para esta magia.
+  pousar em cima de outra criatura; aqui o destino ocupado recusa. O mesmo vale para o Magic Rope:
+  o `moveUpstairs` ignora criatura e o `internalTeleport` pousa com `FLAG_NOLIMIT` (empilharia o
+  lançador no ocupante), e aqui o tile ocupado é pulado na ordem do `moveUpstairs` — sem nenhum
+  livre, `not-enough-room` antes de pagar. É a estrutura de `TileOccupancy`, não uma regra escrita
+  para estas magias. A ocupação é remontada na entrada do cast (`#occupancyStale`), para o
+  `use-slot` que chega entre a retomada de um snapshot e o primeiro evento ver a ocupação real.
 - **O Magic Rope hoje não sobe em nenhum rope spot do catálogo.** Os três da Rotworm Caves estão no
   andar 8 e o recorte só tem o 8 — o andar de cima não existe no mapa, então a magia reconhece o rope
   spot e recusa `not-enough-room` (teste com o conteúdo real em `utility-spells-real.test.ts`).
@@ -127,7 +149,7 @@ modelo de mapa, a estrutura de sessão ou o escopo que o dono fixou.
   (invariante 8); o `Player(name)` do Canary acha qualquer um online. Procurar a si mesmo não é
   oferecido. Find Fiend: ver acima (Forge).
 - **Food larga no chão o que não cabe** no Canary (`canDropOnMap`); aqui não há item no chão além do
-  cadáver, e o que não coube por peso SE PERDE, registrado como `food-not-carried` no extrato.
+  cadáver, e o que não coube por peso SE PERDE, registrado como `food-not-carried` no extrato (o cliente o escreve em palavras, "Comida perdida, sem espaço", em `shell/event-text.ts`).
 - **Premium.** `isPremium(true)` de Ultimate Light, Levitate e Magic Rope não é modelado — nenhuma
   magia do catálogo o modela (o mesmo que as de party e as de conjuração).
 - **Rooted.** O `internalMoveCreature` do Canary recusa o Levitate de quem está `CONDITION_ROOTED`; a
