@@ -3,6 +3,7 @@
   "name": "Cure Burning",
   "description": "Remove a queimadura.",
   "vocationId": "druid",
+  "learnPrice": 2000,
   "manaCost": 30,
   "cooldownMs": 6000,
   "group": "healing",

@@ -19,8 +19,8 @@
 import type { ChainableCommander, Redis } from 'ioredis';
 import { isFightMode } from '@draconya/sim';
 import type {
-  Aggregates, BestiaryState, CharacterStorageMap, CharmsState, EndReason, FightMode,
-  ItemInstanceOverlay, NotableEvent, SkillsState,
+  Aggregates, BestiaryState, BosstiaryState, CharacterStorageMap, CharmsState, EndReason, FightMode,
+  ItemInstanceOverlay, LearnedSpellsState, NotableEvent, SkillsState,
 } from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
 
@@ -66,12 +66,30 @@ export interface SessionReceipt {
    */
   readonly bestiary?: BestiaryState;
   /**
+   * O Bosstiary (#629, ADR 0052 d.1): abates por boss (chave = `raceId`), pontos de boss e a
+   * versão. Valor ABSOLUTO, como o Bestiário, e pela mesma razão: abate e ponto só sobem, então o
+   * ledger funde pelo MAIOR de cada boss e dos pontos — um extrato antigo processado fora de
+   * ordem não tem como rebaixar nada, sem guarda de instante.
+   */
+  readonly bosstiary?: BosstiaryState;
+  /**
    * A economia de Charms (M39-02, #602, ADR 0052 d.1): pontos/echoes gastos, tier de cada
    * charm e as atribuições. ABSOLUTA e ÚLTIMA-ESCRITA-VENCE, como `ammo`/`equipment` — NÃO
    * fundida pelo maior como o Bestiário: não há aqui um contador externo monotônico, é o
    * estado final da sessão dona.
    */
   readonly charms?: CharmsState;
+  /**
+   * As magias aprendidas (#624, ADR 0058 d.1, ADR 0052 d.1): os ids de `content.spells` que o
+   * personagem comprou. Ao contrário de `charms`/`ammo`, NÃO é última-escrita-vence: o ledger
+   * FUNDE pela UNIÃO dos ids (`LearnedSpells.merge`), como o Bestiário funde pelo maior. O
+   * registro só CRESCE, e dois extratos pendentes se aplicam em ordem qualquer (o `SCAN` de
+   * `pending()` não ordena) — o mais antigo chegando depois do mais novo não pode derrubar uma
+   * magia já paga —, e um extrato de base desconhecida (sessão retomada sem registro) carrega só
+   * as compras dela e não pode apagar a concessão da migração (ADR 0014). Extrato SEM o campo (nó
+   * antigo em deploy) não toca na coluna.
+   */
+  readonly learnedSpells?: LearnedSpellsState;
   /**
    * A munição escolhida por família (#152): `{ arrow: 'sniper-arrow' }`. ABSOLUTA e
    * última-escrita-vence: é preferência do jogador, não progresso — um extrato antigo fora de
@@ -373,9 +391,17 @@ function parseReceipt(raw: string): SessionReceipt | null {
     ...(typeof value['bestiary'] === 'object' && value['bestiary'] !== null
       ? { bestiary: value['bestiary'] as BestiaryState }
       : {}),
+    // O Bosstiary (#629): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['bosstiary'] === 'object' && value['bosstiary'] !== null
+      ? { bosstiary: value['bosstiary'] as BosstiaryState }
+      : {}),
     // A economia de Charms (M39-02, #602): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['charms'] === 'object' && value['charms'] !== null
       ? { charms: value['charms'] as CharmsState }
+      : {}),
+    // As magias aprendidas (#624): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['learnedSpells'] === 'object' && value['learnedSpells'] !== null
+      ? { learnedSpells: value['learnedSpells'] as LearnedSpellsState }
       : {}),
     // A munição (#152): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['ammo'] === 'object' && value['ammo'] !== null

@@ -212,6 +212,16 @@ invocação, nada muda" porque a suíte de regressão inteira (4.000+ casos, inc
 conformance do v3 acima) já roda sob o conteúdo real sem NENHUM monstro `summonable` — e continua
 batendo os mesmos números depois da mudança, o que é a prova por ausência de qualquer perturbação.
 
+### Estágio #600 (M38-03, Convince Creature e Animate Dead — ADR 0057 d.5–d.6)
+
+As duas runas só agem quando usadas, e nenhum sorteio novo entra no caminho de quem não as usa
+(`useSupply` roda a precondição só nos dois efeitos novos; a mira do bot para Animate Dead não
+consome `session.rng`). **`additive`**: os oráculos do v3 e do v4 acima seguem batendo os mesmos
+números. Uma regra do estágio vale para toda sessão, de qualquer perfil e com ou sem as runas: **a
+invocação que morre não deixa cadáver** (`Creature::dropCorpse`) — o cadáver não paga XP, loot nem sorteio, e
+o `nextGroundItemId` só avança para quem deixa cadáver. O detalhe está em "Convince Creature e Animate
+Dead" em `docs/product/combat.md`.
+
 ### Estágio #603 (M39-03, Charms em combate — ADR 0053 d.5): `breaking`
 
 O primeiro estágio do `combat-v4` que MUDA resultado e ordem de sorteio — por isso o perfil passa
@@ -247,7 +257,7 @@ o perfil é da versão de conteúdo (invariante 7). São três mudanças declara
 | 9 | `generateLootRoll` (`#gutOf`) | loot do cadáver do monstro do Gut do MAIOR causador de dano | sem sorteio: `+ ceil(chance × charm / 100)` nos creature products |
 
 Vampiric Embrace e Void's Call somam ao leech por alvo (`ActionCritical.forTarget`, `combat/charms.ts`, sem sorteio; a fórmula do leech continua em `combat/modifiers.ts`). O Scavenge é a
-esfola do #626 e não entra aqui.
+esfola do #626 e não entra aqui — ver o estágio seguinte.
 
 **As probabilidades reais NÃO são as nominais.** `normal_random` centra em 0,5 (desvio 0,25) e
 rejeita fora de `[0, 1]`, então um charm defensivo de "5 %" dispara em ~1,4 % dos golpes (10 % →
@@ -307,6 +317,31 @@ Dodge, Parry (só o segundo ponto), Adrenaline Burst, Numb (idem imune), a ORDEM
 (`progression.test.ts` e o vetor de morte) e Gut (`loot.test.ts`, o vetor de abates e, em
 `charms-combat.test.ts`, as tabelas REAIS de Dragon, Dragon Lord, Rotworm e Cave Rat com o flag
 `creatureProduct` de cada creature product do Canary conferido contra o conteúdo carregado).
+
+### Estágio #626 (M44-08, esfola de cadáver e Scavenge — ADR 0048 d.5/d.6, ADR 0053 d.5): `breaking`
+
+O segundo estágio que muda a ordem de sorteio, no mesmo perfil `combat-v4` (`hasSkinningStage`,
+`combat/profile.ts`; a sessão fixada em `combat-v3` nunca esfola — invariante 7). Um sorteio novo,
+ao FIM do abate:
+
+| # | Onde | Quando | Rolagem |
+|---|---|---|---|
+| 1 | `#onMonsterDied` → `#skinAtDeath`/`#rollSkin`, DEPOIS de todo o sorteio de loot (gold, itens, o resto de supply/munição da party) e antes da XP | abate de monstro não invocado, com um elegível/dono que tenha a ferramenta DO MONSTRO na mochila ou na bolsa, e o monstro tenha entrada em `content.skinning` | `rng.integer(1, range) <= chance`, `chance` 25 000 e `range` 100 000 — ou `100 000 × charm / 100` com o Scavenge que vale para o estágio do cadáver |
+| 2 | `#performSkin` (`use-item-on` da ferramenta com o tile do cadáver) | à mão, com alcance `canUse` (adjacente, sem linha de visão), ferramenta certa, cadáver não esfolado e estágio esfolável | a mesma rolagem, no `session.rng` da sessão |
+
+**A regra que faz do estágio "declarado":** com a ferramenta ausente, com a ferramenta errada,
+num monstro sem entrada de esfola ou fora do `combat-v4`, o `session.rng` NÃO é tocado — uma hunt de
+quem nunca teve faca consome exatamente o que consumia (`rulesets/skinning.test.ts`, "sem
+ferramenta não consome RNG", e `server/src/game/skinning-real.test.ts` contra a Minotaur Camp real).
+O Scavenge muda o INTERVALO, nunca a quantidade de sorteios (mesmo estado final do gerador com e sem
+charm). 1 Hz == 10 Hz e a retomada de snapshot (`skinned`/`diedAtMs` viajam no `CorpseState`) estão
+prendidos nos mesmos arquivos.
+
+**O que o Canary tem de estranho e este estágio reproduz**: o Scavenge ENCOLHE o intervalo em
+vez de somar à chance, e como o charm é 60/90/120 o intervalo CRESCE com o tier — tier 1 = 41,7 %,
+tier 2 = 27,8 %, tier 3 = 20,8 %, abaixo dos 25 % sem charm (`skinningChanceRange`, testado por
+frequência com 200 mil sorteios por caso). A PR do #626 lista essa decisão para o dono rever; é uma
+função de uma linha em `sim/skinning.ts`.
 
 ## Benchmark: o cenário misto
 

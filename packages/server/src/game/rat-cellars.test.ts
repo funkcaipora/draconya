@@ -2,10 +2,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from '../../../content/src/load.js';
-import type { Content } from '@draconya/content';
+import { BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, botConfigV2Schema, botSlotSchema } from '@draconya/content';
+import type { BotConfigV2, Content } from '@draconya/content';
 import {
-  CharacterRuntime, Rng, castSpell, createHuntSession, groupCooldownKey, secondaryCooldownKey,
-  spellCooldownKey, statsForLevel,
+  CharacterRuntime, Rng, castSpell, createHuntSession, groupCooldownKey, learnedSpellsStateOf,
+  secondaryCooldownKey, spellCooldownKey, statsForLevel, totalXpForLevel,
 } from '@draconya/sim';
 import type { HuntRuleset, Session } from '@draconya/sim';
 
@@ -103,6 +104,99 @@ describe('a Rat Cellars real (FUN-123, #583, #586)', () => {
   });
 });
 
+describe('Convince Creature e Animate Dead com o conteúdo REAL da Rat Cellars (#600)', () => {
+  const runeConfig = (supplyId: string, auto: boolean): BotConfigV2 => {
+    const slots: (ReturnType<typeof botSlotSchema.parse> | null)[] = [
+      botSlotSchema.parse({ do: { kind: 'supply', supplyId }, auto }),
+    ];
+    while (slots.length < BOT_SLOTS_PER_SET) slots.push(null);
+    const empty = { slots: Array.from({ length: BOT_SLOTS_PER_SET }, () => null) };
+    return botConfigV2Schema.parse({
+      version: BOT_VOCABULARY_VERSION, activeSet: 0, sets: [{ slots }, empty, empty, empty],
+    });
+  };
+  // Level 30, magic level 10 (as runas pedem 5 e 4), com mana e gold de sobra — o herói não morre nem
+  // fica sem nada no meio do teste.
+  const enterWithRune = (content: Content, config: BotConfigV2): { session: Session; ruleset: HuntRuleset; hero: CharacterRuntime } => {
+    const session = createHuntSession({
+      id: 'runes', content, huntId: 'rat-cellars', difficulty: 'default', createdAtMs: 0, botConfig: config,
+    });
+    const stats = statsForLevel(30, null, content.progression);
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 8 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth, mana: 5_000, maxMana: 5_000,
+      // O XP do level 30: o level é derivado do XP, e o primeiro rato morto o recalcularia para baixo.
+      level: 30, xp: totalXpForLevel(30, content.progression), goldDelta: 0, gold: 100_000, alive: true,
+      cooldowns: {}, skills: { magic: { level: 10, points: 0 } },
+    });
+    session.enter(hero);
+    return { session, ruleset: session.ruleset as HuntRuleset, hero };
+  };
+
+  it('convence um Rat de verdade (mana 200 do rat.lua), e o ponto de spawn dele NÃO respawna enquanto ele vive', () => {
+    const content = real();
+    const { session, ruleset, hero } = enterWithRune(content, runeConfig('convince-creature-rune', false));
+    session.advanceBy(200);
+    const rat = ruleset.monsters.find((m) => m.alive && m.monsterId === 'rat');
+    if (rat === undefined) throw new Error('sem rato');
+    const before = ruleset.monsters.filter((m) => m.alive).length;
+
+    expect(ruleset.useSlot(session, 'hero', 0, 0, { kind: 'monster', subject: rat.subject })).toEqual({ ok: true });
+    expect(rat.masterId).toBe('hero');
+    expect(hero.mana).toBe(5_000 - 200);
+    // O preço real da runa (80, o menor `buy` dos NPCs do Canary).
+    expect(hero.goldDelta).toBe(-80);
+
+    // Um minuto depois nada respawnou no lugar dele (o respawn é de 90 s por ponto): a população
+    // vinda do Spawner só cai — nunca sobe — e o convencido continua sendo do herói.
+    run(session, 60_000, 100);
+    expect(rat.masterId).toBe('hero');
+    expect(ruleset.monsters.filter((m) => m.alive).length).toBeLessThanOrEqual(before);
+  });
+
+  it('o bot ergue Skeletons dos cadáveres da Rat Cellars, só depois da janela `unmove`, e o gold é o preço real (375)', () => {
+    const content = real();
+    const { session, ruleset, hero } = enterWithRune(content, runeConfig('animate-dead-rune', true));
+    // O herói mata os ratos sozinho pelo caminho de sempre; os cadáveres vivem 670 s.
+    run(session, 180_000, 100);
+    const skeletons = ruleset.monsters.filter((m) => m.alive && m.masterId === 'hero');
+    expect(skeletons.length).toBeGreaterThan(0);
+    expect(skeletons.length).toBeLessThanOrEqual(2);
+    expect(skeletons.every((m) => m.monsterId === 'skeleton')).toBe(true);
+    // Cada Skeleton custou UMA runa (375, o preço real) — e a mana nunca sai. Um Skeleton que já
+    // morreu em combate também custou a dele, então o total só tem piso.
+    expect(session.aggregates.goldSpent % 375).toBe(0);
+    expect(session.aggregates.goldSpent).toBeGreaterThanOrEqual(375 * skeletons.length);
+    expect(hero.mana).toBe(5_000);
+  });
+
+  // A invocação nunca morre pela mão do mestre e o bot não a ataca: parada em cima do próximo tile da
+  // rota, ela travava o passo do herói para sempre (o herói de level 30 dava 14 abates em 900 s contra
+  // 102 sem a runa). No Canary o jogador ATRAVESSA a invocação de jogador no mundo no-pvp
+  // (`Player::canWalkthrough`), então o laço continua girando com o convencido ou o Skeleton no caminho.
+  it.each(['convince-creature-rune', 'animate-dead-rune'])(
+    'o herói continua andando a rota com a invocação (%s) no caminho — não trava',
+    (supplyId) => {
+      const content = real();
+      const { session, ruleset, hero } = enterWithRune(content, runeConfig(supplyId, true));
+      run(session, 240_000, 100);
+      expect(ruleset.monsters.some((m) => m.alive && m.masterId === 'hero')).toBe(true);
+
+      // Dali em diante, a posição do herói muda ao longo dos 300 s seguintes (travado, quase nunca mudaria: 0 e 80 sem a travessia, 256 e 248 com ela).
+      let changes = 0;
+      let last = `${hero.position.x},${hero.position.y}`;
+      for (let second = 0; second < 300; second += 1) {
+        run(session, 1_000, 100);
+        const now = `${hero.position.x},${hero.position.y}`;
+        if (now !== last) changes += 1;
+        last = now;
+      }
+      expect(changes).toBeGreaterThan(150);
+      expect(hero.alive).toBe(true);
+    },
+  );
+});
+
 describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)', () => {
   // Um personagem de level 150 de cada vocação lança UMA magia de cada tipo da vocação dele:
   // sai com `ok`, paga a mana e tranca os livros de cooldown certos. Outra vocação leva
@@ -110,7 +204,9 @@ describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)
   // motor — `casting.test.ts` testa o motor com magias sintéticas. Level 150 (não mais 100,
   // #589): Strong Ethereal Spear e Fierce Berserk pedem 90, Ultimate Energy Strike pede 100,
   // Chivalrous Challenge pede 150 — o novo teto do Knight.
-  const caster = (content: Content, vocationId: string, level: number): CharacterRuntime => {
+  const caster = (
+    content: Content, vocationId: string, level: number, learnsEverything = true,
+  ): CharacterRuntime => {
     const vocation = content.vocations.get(vocationId) ?? null;
     const stats = statsForLevel(level, vocation, content.progression);
     return new CharacterRuntime({
@@ -120,6 +216,9 @@ describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)
       // da mana — o mesmo motivo de `mana: 100_000` acima, só que para os dois custos novos.
       soul: 100, gold: 100_000,
       level, xp: 0, vocationId, goldDelta: 0, alive: true, cooldowns: {},
+      // Sabe TODA magia do catálogo real (#624): o que se prende aqui é o número passando pelo
+      // motor, e o portão do aprendizado tem o teste dele logo abaixo.
+      ...(learnsEverything ? { learnedSpells: learnedSpellsStateOf(content.spells.keys()) } : {}),
     });
   };
   const aim = { distance: 1, targets: [{ armor: 0, dodgeChance: 0 }] };
@@ -172,6 +271,25 @@ describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)
       const highest = mine.reduce((a, b) => (a.minLevel > b.minLevel ? a : b));
       expect(castSpell(caster(content, vocationId, highest.minLevel - 1), highest, aim, 0, content.combat, Rng.fromSeed('x')))
         .toMatchObject({ ok: false, reason: 'level-too-low' });
+    });
+
+    it(`a ${vocationId} that has not learned a spell cannot cast it — and nothing is spent (#624)`, () => {
+      const content = real();
+      // A magia de MENOR level da vocação: a que o personagem alcança primeiro, e a que a
+      // migração 0024 concede a todo mundo que já tinha o level dela.
+      const first = [...content.spells.values()]
+        .filter((s) => s.vocationId === vocationId)
+        .reduce((a, b) => (a.minLevel < b.minLevel ? a : b));
+      const hero = caster(content, vocationId, 150, false);
+      const aimAt = first.effect.kind === 'damage' || first.effect.kind === 'challenge'
+        || first.effect.kind === 'damage-over-time' ? aim : null;
+      expect(castSpell(hero, first, aimAt, 0, content.combat, Rng.fromSeed('x')))
+        .toEqual({ ok: false, reason: 'spell-not-learned', retryInMs: 0 });
+      expect(hero.mana).toBe(100_000);
+      expect(hero.cooldowns.isReady(spellCooldownKey(first.id), 0)).toBe(true);
+      // Aprendida, a MESMA magia sai.
+      hero.learnedSpells.grant(first.id);
+      expect(castSpell(hero, first, aimAt, 0, content.combat, Rng.fromSeed('x')).ok).toBe(true);
     });
   }
 });

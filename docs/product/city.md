@@ -105,8 +105,8 @@ inverso também.
 
 | Mensagem | Opcode | O que diz |
 |---|---|---|
-| `logout-refused { reason }` (S2C) | 46 | O `logout` passou por `canLogout` e a resposta é não. `reason`: `'no-logout-tile'` (`RETURNVALUE_YOUCANNOTLOGOUTHERE`) ou `'in-fight'` (`RETURNVALUE_YOUMAYNOTLOGOUTDURINGAFIGHT`, só fora da PZ) — `canary/src/server/network/protocol/protocolgame.cpp:1151-1162`. O pedido (`logout`, C2S 8) não mudou. |
-| `world-full { position, retryAfterMs, huntAvailable }` (S2C) | 47 | A entrada vinda do repouso bateu no teto do mundo. `position` é o lugar na fila, de 1 em diante; `retryAfterMs`, uma DURAÇÃO medida no instante do envio (o Canary manda segundos num byte, 5 a 120 s, `waitlist.cpp:53-67`); `huntAvailable` diz se a hunt idle está ao alcance (d.6b). Quem volta de uma instância nunca a recebe. |
+| `logout-refused { reason }` (S2C) | 48 | O `logout` passou por `canLogout` e a resposta é não. `reason`: `'no-logout-tile'` (`RETURNVALUE_YOUCANNOTLOGOUTHERE`) ou `'in-fight'` (`RETURNVALUE_YOUMAYNOTLOGOUTDURINGAFIGHT`, só fora da PZ) — `canary/src/server/network/protocol/protocolgame.cpp:1151-1162`. O pedido (`logout`, C2S 8) não mudou. |
+| `world-full { position, retryAfterMs, huntAvailable }` (S2C) | 49 | A entrada vinda do repouso bateu no teto do mundo. `position` é o lugar na fila, de 1 em diante; `retryAfterMs`, uma DURAÇÃO medida no instante do envio (o Canary manda segundos num byte, 5 a 120 s, `waitlist.cpp:53-67`); `huntAvailable` diz se a hunt idle está ao alcance (d.6b). Quem volta de uma instância nunca a recebe. |
 | `player-stats.zone` e `player-stats.inFight` | — | A zona do tile (`'normal' \| 'protection' \| 'no-pvp' \| 'pvp' \| 'no-logout'`, o `ZoneType_t` do Canary) e o `CONDITION_INFIGHT`, para os ícones de PZ e de luta do HUD. |
 | `target-cancel.reason` | — | `'player-protected'` (`RETURNVALUE_YOUMAYNOTATTACKTHISPLAYER`, `combat.cpp:551-556`) ou `'protection-zone'` (`RETURNVALUE_ACTIONNOTPERMITTEDINPROTECTIONZONE`, `combat.cpp:326-345`). |
 
@@ -267,7 +267,17 @@ espalha — o corte aparece quando a Cidade tiver loja, depósito e ruas.
 - Teto de 200 por cópia; encheu, abre a próxima. Ninguém é recusado.
 - `say` de canal `local` alcança o campo de visão.
 
+## Serviço de Cidade: aprender magia (#624, ADR 0058)
+
+O modal Personagem tem a seção **Magias**: lista as magias da vocação e vende cada uma por
+`learnPrice` (`learn-spell`, sem diálogo de NPC — tela de serviço, ADR 0042). É intenção C2S
+tratada pela sessão dona (ADR 0052 d.2), nunca endpoint `api`, e o gold sai pelo ledger. **Vale
+também na hunt** (não rola nada, ADR 0052 d.4). Ver `progression.md`, "Aprender magia".
+
 ## Conjurar na Cidade (#792, ADR 0044 d.2)
+
+A conjuração é MAGIA, então exige o aprendizado como qualquer outra (`spell-not-learned` /
+`not-learned` no slot) — só a runa em si, o item, dispensa (#624).
 
 A Cidade tem `useSlot`: a barra de ações funciona ali, mas só para **conjuração**
 (`effect.kind === 'conjure'`) — o resto do vocabulário fica de fora, e por duas razões

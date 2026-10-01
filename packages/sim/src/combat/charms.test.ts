@@ -336,6 +336,18 @@ describe('Cleanse enxerga as condições negativas do Canary', () => {
     expect(cleanseTypeOfCondition({ key: 'buff', expiresAtMs: 1 })).toBeNull();
   });
 
+  it('rooted e feared são limpáveis (`getCleansableConditions`); pacified não é (M44-04, #622)', () => {
+    expect(cleanseTypeOfCondition({ key: 'rooted', expiresAtMs: 1 })).toBe('rooted');
+    expect(cleanseTypeOfCondition({ key: 'feared', expiresAtMs: 1 })).toBe('feared');
+    expect(cleanseTypeOfCondition({ key: 'pacified', expiresAtMs: 1 })).toBeNull();
+    for (const kind of ['rooted', 'feared'] as const) {
+      expect(cleanseTypeOfSpec({ key: kind, merge: 'longest', durationMs: 3_000, effect: { kind } })).toBe(kind);
+    }
+    expect(cleanseTypeOfSpec({
+      key: 'pacified', merge: 'longest', durationMs: 3_000, effect: { kind: 'pacified' },
+    })).toBeNull();
+  });
+
   it('a condição AINDA NÃO aplicada da ability tem o mesmo tipo (para a imunidade)', () => {
     const poison: ConditionSpec = {
       key: 'poison', merge: 'refresh', durationMs: 5_000,

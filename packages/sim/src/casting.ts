@@ -14,7 +14,9 @@
 // `AGENTS.md` deste pacote é explícito sobre não pagar a atribuição duas vezes. Este arquivo
 // cuida do LANÇADOR: portão, custo e cooldown.
 
-import { matchesVocationRequirement, SPECIALIZED_MAGIC_ELEMENTS } from '@draconya/content';
+import {
+  FEARED_CONDITION_KEY, PACIFIED_CONDITION_KEY, matchesVocationRequirement, SPECIALIZED_MAGIC_ELEMENTS,
+} from '@draconya/content';
 import type {
   Combat, CompiledMitigation, DamageModifiers, DamageType, FieldSpec, SpecializedMagicElement,
   Spell, SpellFormula, Supply,
@@ -29,11 +31,11 @@ import { MAGIC_BLOCK_FLAGS } from './combat/blockhit.js';
 import { rollCombatValue } from './combat/combat-value.js';
 import { ActionCritical } from './combat/charms.js';
 import type { CharmAttackBonus } from './combat/charms.js';
-import { isV3OrLater } from './combat/profile.js';
 import { conditionFromSpec } from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import type { WorldPoint } from './movement.js';
 import type { Rng } from './rng.js';
+import { rollFoods } from './utility-spells.js';
 
 /** Por que a ação não aconteceu. Tipada porque o jogador merece saber qual das sete foi. */
 export type CastRefusal =
@@ -55,6 +57,14 @@ export type CastRefusal =
   | 'not-enough-gold'
   /** A magia pede uma vocação que este personagem não tem (§9.2, FUN-92). */
   | 'wrong-vocation'
+  /**
+   * O personagem não APRENDEU a magia (#624, ADR 0058 d.1): no Canary o `toggleLearnSpells` vem
+   * ligado e `Spell::playerSpellCheck` recusa toda magia instantânea que `hasLearnedInstantSpell`
+   * não reconhece (`RETURNVALUE_YOUNEEDTOLEARNTHISSPELL`). Sem prazo, como `wrong-vocation`:
+   * esperar não a ensina — só `learn-spell`. O bot PULA o slot, como pula uma magia sem mana, e
+   * nunca encerra a hunt por isso.
+   */
+  | 'spell-not-learned'
   /** O grupo (ou o secundário) da magia ainda está trancado (#155). Carrega prazo, como `on-cooldown`. */
   | 'group-cooldown'
   /** A runa pede magic level que este personagem não tem (#165). */
@@ -68,12 +78,59 @@ export type CastRefusal =
    */
   | 'not-summonable'
   /**
-   * Stairhop (#554, M30-07, ADR 0040 decisão 1): o lançador trocou de andar ou foi
-   * redirecionado por teleporte há pouco, e a magia é AGRESSIVA (`damage`/`damage-over-time` —
-   * `Spell::getAggressive` do Canary é `true` por padrão). Carrega prazo, como `on-cooldown`: o
-   * bot volta sozinho no instante do destravamento, sem reagendar no vazio (FUN-84).
+   * O alvo ou o destino não serve — o `RETURNVALUE_NOTPOSSIBLE` ("Sorry, not possible.") do
+   * Canary, com duas fontes. As duas runas de invocação restantes (#600, M38-03, ADR 0057
+   * d.5–d.6): Convince não é `convinceable` ou o alvo já tem mestre; Animate Dead sem cadáver
+   * movível no tile. E Levitate/Magic Rope sem destino (#623): fronteira de andar, sonda ocupada,
+   * destino sem chão, com escada, ocupado, ou Magic Rope fora de um rope spot. Quem decide é o
+   * RULESET (`HuntRuleset#castSpell` e `HuntRuleset#utilityRefusalOf`), pelo mesmo motivo de
+   * `not-summonable`: `casting.ts` não conhece monstro, cadáver nem mapa. A das utilitárias
+   * entra pelo `preflight`, depois dos requisitos e antes de pagar.
    */
-  | 'attack-locked';
+  | 'not-possible'
+  /**
+   * O teto de 2 invocações vivas contra a Convince Creature / Animate Dead (#600): o "You cannot
+   * control more creatures." que as duas runas do Canary devolvem (`#creature:getSummons() >= 2`).
+   * Motivo próprio, e não `not-summonable`: o texto do Canary é outro, e o jogador precisa ler que
+   * o problema é o teto, não o alvo.
+   */
+  | 'too-many-summons'
+  /**
+   * Stairhop (#554, M30-07, ADR 0040 decisão 1): o lançador trocou de andar ou foi
+   * redirecionado por teleporte há pouco, e a magia é AGRESSIVA (`damage`/`damage-over-time`/
+   * `summon` — `Spell::getAggressive` do Canary é `true` por padrão, e só os scripts que o
+   * desligam com `isAggressive(false)` passam). Carrega prazo, como `on-cooldown`: o bot volta
+   * sozinho no instante do destravamento, sem reagendar no vazio (FUN-84).
+   *
+   * Desde o M44-04 (#622) é a recusa da condição `pacified` em GERAL — a trava de escada é só uma
+   * das fontes dela: `Spell::playerSpellCheck` recusa toda magia/runa agressiva sob
+   * `CONDITION_PACIFIED` com o mesmo `RETURNVALUE_YOUAREEXHAUSTED` (`spells.cpp:517`).
+   */
+  | 'attack-locked'
+  /**
+   * O lançador está sob a condição `feared` (M44-04, #622): `Spell::playerSpellCheck` recusa
+   * QUALQUER magia e QUALQUER runa — cura inclusive — com "You are feared" (`spells.cpp:503`);
+   * poção não passa por esse checklist e continua liberada. Carrega o prazo do medo, como
+   * `attack-locked`: o bot volta no instante em que a condição deixa de valer.
+   */
+  | 'feared'
+  /** Magic Rope sem onde pousar no andar de cima (#623): o `RETURNVALUE_NOTENOUGHROOM` ("There is not enough room"). */
+  | 'not-enough-room'
+  /**
+   * Find Person sem o alvo na sessão (#623): o `RETURNVALUE_PLAYERWITHTHISNAMEISNOTONLINE` do
+   * Canary. A hunt hospeda só os personagens da própria sessão, então "online" é "está nesta
+   * sessão" — ver `docs/product/utility-spells.md`. **É a única destas recusas que INICIA o
+   * cooldown** (sem mana nem alma): sai de `InstantSpell::playerCastInstant`, que roda
+   * `applyCooldownConditions` antes de cancelar, e não de um script.
+   */
+  | 'person-not-found'
+  /** Find Fiend sem nenhum monstro fiendish na sessão (#623): o "No creatures around" do Canary. */
+  | 'no-creatures-around';
+
+/** As quatro recusas que só o RULESET dá às magias utilitárias (#623) — o `preflight` de `castSpell`. */
+export type UtilityRefusal = Extract<
+  CastRefusal, 'not-possible' | 'not-enough-room' | 'person-not-found' | 'no-creatures-around'
+>;
 
 export interface CastSuccess {
   readonly ok: true;
@@ -115,6 +172,12 @@ export interface CastSuccess {
    */
   readonly condition?: ConditionState;
   /**
+   * Condições EXTRAS que o mesmo lançamento aplica ao mesmo alvo de `condition` (M44-04, #622): o
+   * Swift Foot acelera E pacifica (`swift_foot.lua`: `CONDITION_HASTE` + `CONDITION_PACIFIED`).
+   * Devolvidas, não aplicadas, pela mesma divisão de `condition`.
+   */
+  readonly alsoConditions?: readonly ConditionState[];
+  /**
    * As CHAVES de condição que este efeito remove do recipiente (#590: Cure Poison e afins, puras
    * ou combinadas com cura — Fair Wound Cleansing). Devolvida, não removida: só o ruleset tem a
    * fila de eventos, e cancelar `condition-expire`/`condition-tick` do que foi removido é dele —
@@ -128,6 +191,17 @@ export interface CastSuccess {
    * `condition`/`dispel` acima.
    */
   readonly summon?: true;
+  /**
+   * A Convince Creature Rune (#600, ADR 0057 d.5) SAIU — gold debitado, cooldown iniciado.
+   * Devolvido, não aplicado: quem transfere a posse do monstro (e debita a mana DELE) é o ruleset,
+   * a mesma divisão de `summon` acima.
+   */
+  readonly convince?: true;
+  /**
+   * A Animate Dead Rune (#600, ADR 0057 d.6) SAIU: o tile do cadáver que o ruleset consome e o
+   * monstro que nasce ali. Devolvido, não aplicado, como `field`/`destroyFieldAt`.
+   */
+  readonly animateDead?: { readonly at: WorldPoint; readonly monsterId: string };
   /**
    * A chave de condição a REMOVER do lançador, agora, sem evento (#596: `kind: 'remove-condition'`
    * — Cancel Magic Shield). Mutuamente exclusivo com `condition`: uma magia ou agenda algo, ou
@@ -143,6 +217,12 @@ export interface CastSuccess {
   readonly field?: { readonly spec: FieldSpec; readonly at: WorldPoint };
   /** Destroy Field (#591): o tile onde remover um campo — ver `field` acima. */
   readonly destroyFieldAt?: WorldPoint;
+  /**
+   * As comidas que a Food criou (#623), na ORDEM do sorteio — ids de item do conteúdo. Devolvidas,
+   * não creditadas, como `condition`/`dispel`: quem tem a mochila e a capacidade (o ruleset) é
+   * quem as instancia; o sorteio é daqui porque o `Rng` é.
+   */
+  readonly foods?: readonly string[];
 }
 
 export interface CastRefused {
@@ -449,6 +529,62 @@ export const NOT_SUMMONABLE: CastRefused = {
 };
 
 /**
+ * As recusas das duas runas de invocação (#600, ADR 0057 d.5–d.6): o alvo não serve
+ * (`RETURNVALUE_NOTPOSSIBLE`) e o teto de 2 invocações vivas. Congeladas, como as de cima.
+ */
+export const NOT_POSSIBLE: CastRefused = {
+  ok: false, reason: 'not-possible', retryInMs: NOT_WAITING,
+};
+export const TOO_MANY_SUMMONS: CastRefused = {
+  ok: false, reason: 'too-many-summons', retryInMs: NOT_WAITING,
+};
+
+/**
+ * A runa é AGRESSIVA (`Spell::aggressive`, `true` por padrão no Canary)? Todas, exceto as que o
+ * script marca `isAggressive(false)`: as de cura, o antídoto, o Destroy Field e o Chameleon. Aqui:
+ * dano, campo, a condição contra INIMIGO (a Paralyze Rune) e as duas runas de invocação — a
+ * Convince Creature e a Animate Dead (#600) são do grupo `support`, mas nem `convince_creature.lua`
+ * nem `animate_dead_rune.lua` chamam `isAggressive(false)`, então sob `pacified` o Canary as recusa
+ * como a qualquer runa de dano (`Spell::playerSpellCheck`, `spells.cpp:517`) — o mesmo critério que
+ * `castSpell` já aplica à `summon` (`summon_creature.lua` também não o desliga).
+ */
+function isAggressiveSupply(supply: Supply): boolean {
+  const effect = supply.effect;
+  return effect.kind === 'damage' || effect.kind === 'field'
+    || effect.kind === 'convince' || effect.kind === 'animate-dead'
+    || (effect.kind === 'condition' && effect.target === 'enemy');
+}
+
+/**
+ * Quanto falta para a condição de controle `key` (`feared`/`pacified`) do personagem deixar de
+ * valer em `nowMs` — zero quando ela não vale. O prazo é absoluto e o vencimento exclusivo
+ * (`Conditions.isActive`), então `retryInMs` cai exatamente no instante em que a checagem passa.
+ */
+export function controlRemainingMs(caster: CharacterRuntime, key: string, nowMs: number): number {
+  if (!caster.conditions.isActive(key, nowMs)) return 0;
+  return (caster.conditions.get(key)?.expiresAtMs ?? nowMs) - nowMs;
+}
+
+/**
+ * Os três livros de cooldown de uma vez: a magia, o grupo e, se houver, o secundário. É o
+ * `applyCooldownConditions` do Canary — chamado pelo `postCastSpell` de toda magia que sai e
+ * também pela única recusa de utilitária que o dispara (Find Person sem jogador com o nome, #623).
+ * Função de módulo, e não closure em `castSpell`: nada aqui aloca por lançamento.
+ */
+function startCooldowns(
+  caster: CharacterRuntime, spell: Spell, nowMs: number,
+  key: string, groupKey: string | null, secondaryKey: string | null,
+): void {
+  caster.cooldowns.start(key, nowMs, spell.cooldownMs);
+  if (groupKey !== null && spell.groupCooldownMs !== undefined) {
+    caster.cooldowns.start(groupKey, nowMs, spell.groupCooldownMs);
+  }
+  if (secondaryKey !== null && spell.secondaryGroup !== undefined) {
+    caster.cooldowns.start(secondaryKey, nowMs, spell.secondaryGroup.cooldownMs);
+  }
+}
+
+/**
  * Lança a magia, se puder.
  *
  * A ordem das recusas é deliberada: level, cooldown, alvo, alcance e só então mana. **A mana
@@ -505,12 +641,26 @@ export function castSpell(
   /**
    * O custo de mana REAL, quando ele não é `spell.manaCost` (#598, M38-01, ADR 0057 decisão 3):
    * a Summon Creature custa o `manaCost` do MONSTRO invocado — o mesmo mecanismo do Canary
-   * (`MonsterType::getManaCost()`), variável por monstro, não um número fixo do catálogo de
+   * (`MonsterType::info.manaCost`), variável por monstro, não um número fixo do catálogo de
    * magia. `spell.manaCost` continua sendo o número de EXIBIÇÃO/ADR 0033 para o resto do
    * vocabulário; só quando este parâmetro é passado ele substitui a conferência e o débito.
    */
   manaCostOverride?: number,
+  /**
+   * A recusa que só o RULESET sabe dar às magias utilitárias (#623: Levitate, Magic Rope, Find) —
+   * o destino, o rope spot, o alvo do Find dependem de mapa, overlay e sessão, que este arquivo não
+   * conhece (invariante 1). Entra DEPOIS de level, cooldown, mana e alma e ANTES de pagar, o que
+   * preserva a ordem do Canary: `Spell::playerSpellCheck` confere os requisitos e só o
+   * `onCastSpell` do script recusa o destino — sem custo, sem cooldown. `null` é "nada a
+   * recusar" (e o único valor de toda magia que não é utilitária). A exceção é `person-not-found`
+   * (Find Person sem jogador com o nome): o cooldown corre, sem mana nem alma.
+   */
+  preflight: UtilityRefusal | null = null,
 ): CastResult {
+  // O medo (M44-04, #622): recusa QUALQUER magia, e vem antes de tudo — é a primeira coisa que
+  // `Spell::playerSpellCheck` confere depois das flags de grupo (`spells.cpp:503`).
+  const fearedFor = controlRemainingMs(caster, FEARED_CONDITION_KEY, nowMs);
+  if (fearedFor > 0) return { ok: false, reason: 'feared', retryInMs: fearedFor };
   if (caster.level < spell.minLevel) {
     return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
   }
@@ -519,6 +669,11 @@ export function castSpell(
   // redescobrir a mesma coisa.
   if (spell.vocationId !== undefined && caster.vocationId !== spell.vocationId) {
     return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
+  }
+  // O aprendizado (#624, ADR 0058 d.1), pela MESMA razão da vocação: nunca melhora esperando.
+  // Só a magia — a runa (`useSupply`) é item e exige level e magic level, como no Tibia.
+  if (!caster.learnedSpells.has(spell.id)) {
+    return { ok: false, reason: 'spell-not-learned', retryInMs: NOT_WAITING };
   }
 
   const key = spellCooldownKey(spell.id);
@@ -537,18 +692,17 @@ export function castSpell(
   }
 
   const effect = spell.effect;
-  // Stairhop (#554, M30-07, ADR 0040 decisão 1): magia AGRESSIVA recusa enquanto a trava do
-  // lançador não vencer — cura, condição e o resto do vocabulário continuam liberados, como o
-  // Canary libera tudo que não é `aggressive` sob `CONDITION_PACIFIED` (`spells.cpp:517`). Antes
-  // do alcance/mana, pela mesma posição relativa do checklist do Canary (`playerSpellCheck`,
-  // antes de `CastSpell`). Só o `combat-v3` lê — `caster.attackLockedUntil` é sempre `0` fora
-  // dele, e a checagem nunca dispara.
-  if (
-    (effect.kind === 'damage' || effect.kind === 'damage-over-time')
-    && isV3OrLater(combat.compatibilityProfile)
-    && caster.attackLockedUntil > nowMs
-  ) {
-    return { ok: false, reason: 'attack-locked', retryInMs: caster.attackLockedUntil - nowMs };
+  // `pacified` (M44-04, #622 — a trava de escada de 2 s do #554 e qualquer outra fonte): magia
+  // AGRESSIVA recusa enquanto a condição valer — dano, dano ao longo do tempo e a invocação
+  // (`Spell::aggressive` é `true` por padrão, e o `summon_creature.lua` não o desliga), como o
+  // Canary recusa sob `CONDITION_PACIFIED` (`spells.cpp:517`). Cura, condição própria, haste,
+  // postura e o resto do vocabulário continuam liberados: são os scripts que marcam
+  // `isAggressive(false)`. Antes do alcance/mana, pela mesma posição relativa do checklist do
+  // Canary (`playerSpellCheck`, antes de `CastSpell`). A condição só existe onde alguém a aplicou
+  // (o stairhop só no `combat-v3`), então nenhuma sessão v1/v2 a enxerga por acidente.
+  if (effect.kind === 'damage' || effect.kind === 'damage-over-time' || effect.kind === 'summon') {
+    const pacifiedFor = controlRemainingMs(caster, PACIFIED_CONDITION_KEY, nowMs);
+    if (pacifiedFor > 0) return { ok: false, reason: 'attack-locked', retryInMs: pacifiedFor };
   }
   // Dano precisa de alvo ao alcance — ANTES da mana, que sai por último. Forma que sai do
   // lançador (onda, feixe, explosão em volta) não tem alcance: `aim.distance` vem zero da mira,
@@ -599,18 +753,27 @@ export function castSpell(
   if (blankPrice > 0 && !purse.canAfford(blankPrice)) {
     return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
   }
+  // As utilitárias (#623) recusam pelo que o ruleset viu no mundo — DEPOIS de level, cooldown, mana
+  // e alma, e ANTES de pagar: é a ordem do Canary, onde `Spell::playerSpellCheck` confere os
+  // requisitos e só o `onCastSpell` do script recusa o destino (`RETURNVALUE_NOTPOSSIBLE`), sem
+  // custo e sem cooldown — `postCastSpell` só roda quando o script devolve `true`.
+  //
+  // A EXCEÇÃO é o Find Person sem jogador com o nome: não é recusa de script, é a do
+  // `InstantSpell::playerCastInstant` (`hasPlayerNameParam` → `getPlayerByNameWildcard`), que chama
+  // `applyCooldownConditions` ANTES de cancelar — sem mana, sem alma e sem evento, mas com o
+  // cooldown da magia e o do grupo de suporte correndo (Light, Haste e Levitate travam 2 s).
+  if (
+    preflight !== null
+    && (effect.kind === 'levitate' || effect.kind === 'magic-rope' || effect.kind === 'find')
+  ) {
+    if (preflight === 'person-not-found') startCooldowns(caster, spell, nowMs, key, groupKey, secondaryKey);
+    return { ok: false, reason: preflight, retryInMs: NOT_WAITING };
+  }
 
   caster.mana -= manaCost;
   caster.soul -= soulCost;
   if (blankPrice > 0) purse.pay(blankPrice);
-  // Os três livros de uma vez: a magia, o grupo e, se houver, o secundário.
-  caster.cooldowns.start(key, nowMs, spell.cooldownMs);
-  if (groupKey !== null && spell.groupCooldownMs !== undefined) {
-    caster.cooldowns.start(groupKey, nowMs, spell.groupCooldownMs);
-  }
-  if (secondaryKey !== null && spell.secondaryGroup !== undefined) {
-    caster.cooldowns.start(secondaryKey, nowMs, spell.secondaryGroup.cooldownMs);
-  }
+  startCooldowns(caster, spell, nowMs, key, groupKey, secondaryKey);
 
   switch (effect.kind) {
     case 'damage': {
@@ -681,12 +844,23 @@ export function castSpell(
         key: 'heal-over-time', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
         tick: { amount: effect.amount, intervalMs: effect.intervalMs },
       });
-    case 'haste':
-      return cast({
+    case 'haste': {
+      const hasted = cast({
         key: 'haste', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
         speedPercent: effect.speedPercent,
         ...(effect.damageDealtPercent === undefined ? {} : { damageDealtPercent: effect.damageDealtPercent }),
       });
+      // Swift Foot (M44-04, #622): a haste vem com `pacified` pelo MESMO prazo — `merge: 'longest'`,
+      // como toda pacificação (`Condition::updateCondition`).
+      if (effect.pacifies !== true) return hasted;
+      return {
+        ...hasted,
+        alsoConditions: [{
+          key: PACIFIED_CONDITION_KEY, spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
+          merge: 'longest',
+        }],
+      };
+    }
     case 'buff':
       return cast({
         key: 'buff', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
@@ -711,6 +885,35 @@ export function castSpell(
       return {
         ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0,
         removeConditionKey: effect.key,
+      };
+    /**
+     * Luz (#623): condição de APRESENTAÇÃO do lançador. O `Condition::updateCondition` do Canary
+     * NÃO deixa uma luz de prazo MAIS CURTO substituir a que ainda dura mais (`getEndTime() >
+     * now + ticks` recusa): um Light lançado com um Great Light ativo gasta a mana, e a luz
+     * maior segue. Prazo igual ou maior renova — e a nova (nível, cor, total) vale por inteiro.
+     */
+    case 'light': {
+      const expiresAtMs = nowMs + effect.durationMs;
+      const current = caster.conditions.get('light');
+      if (current !== null && current.expiresAtMs > expiresAtMs) {
+        return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0 };
+      }
+      return cast({
+        key: 'light', spellId: spell.id, expiresAtMs,
+        light: { level: effect.level, color: effect.color, durationMs: effect.durationMs },
+      });
+    }
+    // Levitate, Magic Rope e Find (#623) saem AQUI só para pagar e iniciar cooldown: o efeito é
+    // do ruleset (mover, dizer), que já conferiu o destino/alvo em `preflight`.
+    case 'levitate':
+    case 'magic-rope':
+    case 'find':
+      return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0 };
+    // Food (#623): o sorteio é daqui (o `Rng` é), a criação do item é do ruleset.
+    case 'food':
+      return {
+        ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0,
+        foods: rollFoods(rng, effect.items),
       };
     /**
      * Dano ao longo do tempo (CMB-07): a magia NÃO bate agora — devolve a condição, e quem a
@@ -821,7 +1024,28 @@ export function useSupply(
    * ver o comentário do mesmo parâmetro em `castSpell`.
    */
   modifiers?: DamageModifiers,
+  /**
+   * O que SÓ o ruleset sabe conferir e o script do Canary confere DEPOIS dos requisitos e da mira
+   * mas ANTES de gastar a carga (#600: Convince — `convinceable`, sem mestre, teto, mana;
+   * Animate Dead — cadáver movível no tile, teto). `null` deixa passar. Só as duas runas de
+   * invocação leem; `casting.ts` não conhece monstro nem cadáver (invariante 1).
+   */
+  precondition?: () => CastRefused | null,
 ): CastResult {
+  // O medo e a pacificação alcançam a RUNA, não a poção (M44-04, #622): `Spell::playerSpellCheck`
+  // é o checklist de magia e de runa (`RuneSpell` chama `playerRuneSpellCheck`, que começa nele),
+  // e a poção é uma ação de item que não passa por ele. `feared` recusa toda runa; `pacified` só
+  // as agressivas — as que o Canary não marca com `isAggressive(false)`: dano, campo (a Magic Wall
+  // e a Wild Growth inclusive) e a Paralyze Rune. Cura, antídoto e destruir campo passam. Sem
+  // `nowMs` (fixture) o relógio lógico não existe e a checagem é pulada, como a do cooldown.
+  if (nowMs !== undefined && supply.group !== 'potion') {
+    const fearedFor = controlRemainingMs(user, FEARED_CONDITION_KEY, nowMs);
+    if (fearedFor > 0) return { ok: false, reason: 'feared', retryInMs: fearedFor };
+    if (isAggressiveSupply(supply)) {
+      const pacifiedFor = controlRemainingMs(user, PACIFIED_CONDITION_KEY, nowMs);
+      if (pacifiedFor > 0) return { ok: false, reason: 'attack-locked', retryInMs: pacifiedFor };
+    }
+  }
   // O cooldown PRÓPRIO do supply (#592, Paralyze Rune: 6 s ao lado do grupo de 2 s) — ANTES de
   // qualquer outra recusa, como o `spellCooldownKey` de `castSpell`: sem `nowMs` (fixture) o
   // relógio lógico não existe, e a checagem é pulada — a mesma degradação de `startSupplyCooldown`.
@@ -1112,6 +1336,47 @@ export function useSupply(
       ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS,
       goldSpent: paidFromStockDestroy ? 0 : supply.price,
       destroyFieldAt: aim.point,
+    };
+  }
+
+  // As duas runas de invocação (#600, `convince_creature.lua`/`animate_dead_rune.lua`): a ordem é a
+  // de `Spell::playerRuneSpellCheck` seguida do script — requisitos, mira, alcance, o que o
+  // script recusa (`precondition`), e SÓ ENTÃO o gold: a carga só é consumida quando o script
+  // devolve `true`. O resto do efeito (mana do monstro, posse, cadáver) é do ruleset.
+  if (supply.effect.kind === 'convince' || supply.effect.kind === 'animate-dead') {
+    const effect = supply.effect;
+    if (supply.requires.level !== undefined && user.level < supply.requires.level) {
+      return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
+      return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
+    }
+    if (supply.requires.magicLevel !== undefined
+      && (scaling?.magicLevel ?? scaling?.skillLevel ?? 0) < supply.requires.magicLevel) {
+      return { ok: false, reason: 'magic-level-too-low', retryInMs: NOT_WAITING };
+    }
+    // Convince mira uma CRIATURA (`needTarget`); Animate Dead mira um TILE (sem criatura exigida).
+    const aimed = effect.kind === 'convince'
+      ? aim !== null && aim.targets.length > 0
+      : aim !== null && aim.point !== undefined;
+    if (aim === null || !aimed) return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
+    if (aim.distance > effect.range) return { ok: false, reason: 'out-of-range', retryInMs: NOT_WAITING };
+    const refused = precondition?.() ?? null;
+    if (refused !== null) return refused;
+    const hasStockSummon = (user.supplyStock.get(supply.id) ?? 0) > 0;
+    if (!hasStockSummon && !purse.canAfford(supply.price)) {
+      return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    }
+    const paidFromStockSummon = hasStockSummon && spendStock(user, supply.id);
+    if (!paidFromStockSummon) purse.pay(supply.price);
+    startSupplyCooldown(user, supply, nowMs);
+    const paid = paidFromStockSummon ? 0 : supply.price;
+    if (effect.kind === 'convince') {
+      return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: paid, convince: true };
+    }
+    return {
+      ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: paid,
+      animateDead: { at: aim.point as WorldPoint, monsterId: effect.monsterId },
     };
   }
 

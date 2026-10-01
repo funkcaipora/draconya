@@ -62,6 +62,10 @@ class MemoryRepository implements GameRepository {
   async saveBotConfig(): Promise<void> {
     // Este arquivo é sobre autenticação. A configuração do bot não passa por aqui.
   }
+  async getAccountCreatedAt(): Promise<Date | null> {
+    // A idade da conta só importa para o ticket (Loyalty, #628), que não passa por este arquivo.
+    return null;
+  }
   async ensureAccount(identity: { externalAuthId: string; email: string }) {
     const existing = [...this.accounts.values()].find(
       (account) => account.externalAuthId === identity.externalAuthId,

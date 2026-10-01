@@ -155,6 +155,17 @@ forma (`circle` raio 3), a QA é **por tile**, não de um efeito só: a pergunta
 por tile sem artefato. Sem PNG não dá para responder, e o id fica **mantido** com o bloqueio
 registrado em [`product/combat.md`](product/combat.md) e no `_open` da runa.
 
+### Magias utilitárias (#623) — ids das constantes do Canary, sem PNG para conferir
+
+Light, Great Light, Ultimate Light, Find Person e Find Fiend usam o **effect 13**
+(`CONST_ME_MAGIC_BLUE`, o mesmo de `light-healing`); Levitate e Magic Rope o **effect 11**
+(`CONST_ME_TELEPORT`); Food o **effect 15** (`CONST_ME_MAGIC_GREEN`). São os ids das constantes que
+o script de cada magia manda (`data/scripts/spells/support/*.lua`), na numeração de
+`MagicEffectClasses` que o resto da tabela já usa — não foram conferidos contra um PNG (a biblioteca
+é parcial, sem a folha de efeito), e ficam **mantidos** com a incerteza registrada, como os
+divinos. O efeito de POFF que o Canary manda na recusa (`CONST_ME_POFF`) e o do início do Magic Rope
+não têm desenho aqui: recusa não emite `spell-cast`.
+
 ### Abilities de monstro (CMB-06) — nenhuma chave usada nesta versão
 
 O único monstro do conteúdo é o rato, que **não declara `abilities`**: o boot o normaliza para a

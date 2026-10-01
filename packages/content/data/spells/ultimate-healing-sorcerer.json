@@ -4,6 +4,7 @@
   "description": "Cura você.",
   "vocationId": "sorcerer",
   "minLevel": 30,
+  "learnPrice": 1000,
   "manaCost": 160,
   "group": "healing",
   "groupCooldownMs": 1000,

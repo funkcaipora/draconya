@@ -4,6 +4,7 @@
   "description": "Causa dano sagrado numa área de 7x7 ao seu redor.",
   "vocationId": "paladin",
   "minLevel": 50,
+  "learnPrice": 3000,
   "manaCost": 160,
   "group": "attack",
   "groupCooldownMs": 2000,

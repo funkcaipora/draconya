@@ -288,6 +288,15 @@ export function characterFromTicket(
       // (`isCharmsState`); ausente, a sessão parte sem nenhum ponto/tier/atribuição — o mesmo
       // personagem novo que `bestiary` ausente já descreve.
       ...(initialCharacter.charms === undefined ? {} : { charms: initialCharacter.charms }),
+      // O Bosstiary (#629, ADR 0052 d.1): validado na emissão e no consumo (`isBosstiaryState`);
+      // ausente, a sessão parte sem nenhum abate de boss — o mesmo personagem novo que `bestiary`
+      // ausente já descreve.
+      ...(initialCharacter.bosstiary === undefined ? {} : { bosstiary: initialCharacter.bosstiary }),
+      // As magias aprendidas (#624, ADR 0058 d.1): validadas na emissão e no consumo
+      // (`isLearnedSpellsState`); ausente, a sessão parte sem nenhuma — personagem novo, que
+      // não lança nada até comprar (quem já existia ganhou o registro pela migração 0024).
+      ...(initialCharacter.learnedSpells === undefined
+        ? {} : { learnedSpells: initialCharacter.learnedSpells }),
       // Os storages (#731, ADR 0050 d.6 T2): validados como o Bestiário; ausente, a sessão
       // parte sem storage nenhum setado — a mesma degradação de sempre.
       ...(initialCharacter.storages === undefined ? {} : { storages: initialCharacter.storages }),
@@ -312,6 +321,12 @@ export function characterFromTicket(
       ...(initialCharacter.boostedMonsterId === undefined
         ? {}
         : { boostedMonsterId: initialCharacter.boostedMonsterId }),
+      // O bônus de Loyalty (#628, ADR 0052 decisão 5): calculado pela `api` na emissão e fixado
+      // AGORA, como a boosted — a sessão nunca relê conta nem relógio, e o valor atravessa toda
+      // transição Cidade↔hunt e toda retomada de snapshot (vive no `CharacterState`).
+      ...(initialCharacter.loyaltyBonusPercent === undefined
+        ? {}
+        : { loyaltyBonusPercent: initialCharacter.loyaltyBonusPercent }),
     });
     // Materializa na ENTRADA (§10): o personagem esteve fora de hunt desde a última vez, e
     // esse tempo é recuperação. Fazer a conta aqui, e não na leitura de cada consulta, é o

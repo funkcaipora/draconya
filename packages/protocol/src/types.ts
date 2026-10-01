@@ -65,10 +65,16 @@ const PaletteIndex = z.number().int().min(0).max(132);
 
 /**
  * Progresso até o próximo nível de uma skill (#340, SV-04): nível atual e percentual acumulado.
+ *
+ * `loyaltyLevel` (#628): o nível COM o bônus de Loyalty da conta — o `getLoyaltySkill` que o
+ * Canary manda ao lado do nível base. AUSENTE quando o bônus não muda o nível (a conta sem
+ * degrau, ou tries de bônus que ainda não fecham um nível): quem lê o trata como `level`. Um nó
+ * `game` anterior à issue nunca o manda, e o HUD mostra o nível base.
  */
 export const SkillProgress = z.object({
   level: z.number().int().nonnegative(),
   percentToNext: z.number().int().min(0).max(99),
+  loyaltyLevel: z.number().int().nonnegative().optional(),
 });
 export type SkillProgress = z.infer<typeof SkillProgress>;
 
@@ -458,6 +464,12 @@ export const C2S_SCHEMAS = {
    * defesa e de mitigação que ele liga são do servidor (invariante 4).
    */
   'set-fight-mode': z.object({ mode: z.enum(FIGHT_MODES) }),
+  /**
+   * Aprender UMA magia por gold (#624, ADR 0058 d.2). INTENÇÃO: só o id do catálogo
+   * (`content.spells`); vocação, level, "já aprendida", preço e saldo são do servidor
+   * (invariante 4).
+   */
+  'learn-spell': z.object({ spellId: z.string().min(1) }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */
@@ -611,7 +623,7 @@ export const PartySummary = z.object({
  * As condições que a barra de buffs do cliente sabe desenhar (#341, SV-05). Vocabulário FECHADO
  * do contrato: o host só envia estas, e uma badge nova entra aqui e no cliente na mesma PR.
  */
-export const ACTIVE_CONDITION_KINDS = ['haste', 'buff', 'mana-shield', 'heal-over-time'] as const;
+export const ACTIVE_CONDITION_KINDS = ['haste', 'buff', 'mana-shield', 'heal-over-time', 'light'] as const;
 export type ActiveConditionKind = (typeof ACTIVE_CONDITION_KINDS)[number];
 
 /**
@@ -727,6 +739,8 @@ export const S2C_SCHEMAS = {
       speed: z.number().int().nonnegative().default(0),
       skills: z.record(z.string().min(1), SkillProgress).default({}),
       magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
+      /** O bônus de Loyalty (#628), como em `player-stats` — para quem reanexa ver sem esperar. */
+      loyaltyBonusPercent: z.number().int().nonnegative().optional(),
       /** Pontos de alma (#593), como em `player-stats` — para quem reanexa ver sem esperar. */
       soul: z.number().int().nonnegative().default(0),
       soulMax: z.number().int().nonnegative().default(0),
@@ -850,6 +864,17 @@ export const S2C_SCHEMAS = {
    */
   bestiary: z.object({
     counts: z.record(z.string().min(1), z.number().int().nonnegative()),
+  }),
+  /**
+   * O Bosstiary do personagem (#629, ADR 0052 d.1): o registro CRU — abates por boss e pontos de
+   * boss —, como `bestiary` manda os abates crus. A chave de `kills` é o `raceId` do Canary em
+   * texto (`catalogue.monsters[].bosstiary.raceId`): o contador é compartilhado entre variantes
+   * do mesmo boss. Os níveis e a raridade vêm no `catalogue`, fixados na sessão (invariante 7).
+   * SUBSTITUI o anterior, não soma: é um contador permanente e a tela mostra o total.
+   */
+  bosstiary: z.object({
+    kills: z.record(z.string().min(1), z.number().int().nonnegative()),
+    points: z.number().int().nonnegative(),
   }),
   /**
    * O que o servidor decidiu sobre a configuração de bot que chegou (FUN-89).
@@ -1001,6 +1026,16 @@ export const S2C_SCHEMAS = {
         toKill: z.number().int().positive(),
         charmsPoints: z.number().int().nonnegative(),
       }).optional(),
+      /**
+       * O boss no Bosstiary (#629): a raridade (Bane/Archfoe/Nemesis, que escolhe a linha de
+       * `catalogue.bosstiary.levels`) e o `raceId` que CHAVEIA o contador de abates em
+       * `bosstiary.kills` — variantes do mesmo boss compartilham o `raceId`. Ausente: monstro
+       * comum (conta no Bestiário) ou nó `game` anterior a esta issue.
+       */
+      bosstiary: z.object({
+        rarity: z.enum(['bane', 'archfoe', 'nemesis']),
+        raceId: z.number().int().positive(),
+      }).optional(),
     })).default([]),
     /**
      * Os marcos do Bestiário e o bônus de XP por marco (§18, FUN-113), do conteúdo fixado na
@@ -1009,6 +1044,18 @@ export const S2C_SCHEMAS = {
     bestiary: z.object({
       milestones: z.array(z.number().int().positive()),
       xpBonusPercentPerMilestone: z.number().nonnegative(),
+    }).optional(),
+    /**
+     * Os níveis do Bosstiary por raridade (#629; `IOBosstiary::levelInfos` do Canary), do conteúdo
+     * fixado na sessão: quantos abates levam a cada nível e quantos pontos ele rende. Ausente: o
+     * servidor não tem Bosstiary configurado, e a tela mostra só a contagem de abates.
+     */
+    bosstiary: z.object({
+      levels: z.object({
+        bane: z.array(z.object({ kills: z.number().int().positive(), points: z.number().int().positive() })),
+        archfoe: z.array(z.object({ kills: z.number().int().positive(), points: z.number().int().positive() })),
+        nemesis: z.array(z.object({ kills: z.number().int().positive(), points: z.number().int().positive() })),
+      }),
     }).optional(),
     /**
      * Os 25 Charms do Canary (M39-02, #602, ADR 0053 d.3): nome, categoria, tipo, elemento e o
@@ -1054,6 +1101,12 @@ export const S2C_SCHEMAS = {
         manaCost: z.number().int().nonnegative(),
         minLevel: z.number().int().positive(),
         vocationId: z.string().nullable(),
+        /**
+         * O preço de APRENDER a magia (#624, ADR 0058 d.3), em gold — `0` é de graça. Opcional SEM
+         * `default`: um nó `game` anterior manda sem, e o cliente novo não pode recusar a
+         * mensagem; AUSENTE é "não há quem ensine" (a tela não oferece a compra).
+         */
+        learnPrice: z.number().int().nonnegative().optional(),
         /** `heal`, `mana` ou `damage`: é o que separa a categoria em que ela cabe. */
         effect: z.string().min(1),
         /** O grupo do Tibia (#155): `attack`, `healing`, `support`. `default`: nó anterior manda sem. */
@@ -1063,6 +1116,15 @@ export const S2C_SCHEMAS = {
          * sem, e o cliente novo não pode recusar a mensagem — quem não veio é `self`.
          */
         targets: z.enum(['self', 'friend']).optional(),
+        /**
+         * A magia pede MIRA do jogador no disparo manual (#623: Find Person — o "nome" do Canary é
+         * o personagem clicado), sem ser uma ação de aliado. Campo SEPARADO de `targets` de
+         * propósito: `targets: 'friend'` também abre o seletor de alvo do editor de slot do bot, e
+         * o servidor recusa salvar esse alvo em qualquer efeito que não seja cura/mana — uma
+         * magia de mira manual não pode prometer ao editor o que a validação nega. Só a barra de
+         * ação lê (`needsAim`). Opcional SEM `default`: um nó `game` anterior manda sem.
+         */
+        aim: z.enum(['character']).optional(),
         /**
          * Os números de EXIBIÇÃO (#436, ADR 0033), para o `ActionConfigModal`. Opcionais SEM
          * `default`: um nó `game` anterior manda sem, e o cliente novo não pode recusar a
@@ -1336,6 +1398,14 @@ export const S2C_SCHEMAS = {
     skills: z.record(z.string().min(1), SkillProgress).default({}),
     magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
     /**
+     * O bônus de Loyalty da CONTA (#628, ADR 0052 decisão 5), em percentual inteiro: fixado no
+     * ticket e constante pela sessão — o HUD o mostra ao lado das skills, e `loyaltyLevel` de
+     * cada uma diz quanto ele vale. Opcional, e não `default(0)`: ausente é zero para quem lê, e
+     * um nó `game` anterior (ou uma conta sem degrau) manda sem — o HUD não mostra bônus que não
+     * existiu.
+     */
+    loyaltyBonusPercent: z.number().int().nonnegative().optional(),
+    /**
      * Pontos de alma (#593). `soulMax` é da VOCAÇÃO — zero é "sem vocação escolhida", o mesmo
      * "sem teto para mostrar" que `vocationId: null` já significa. `default(0)` nos dois: um
      * nó `game` anterior a esta issue manda sem, e o HUD mostra "0/0" em vez de recusar o
@@ -1408,6 +1478,19 @@ export const S2C_SCHEMAS = {
     conditions: z.array(z.object({
       kind: z.enum(ACTIVE_CONDITION_KINDS),
       remainingMs: z.number().int().nonnegative(),
+      /**
+       * Só em `kind: 'light'` (#623: Light, Great Light, Ultimate Light): o que o cliente precisa
+       * para ajustar a escuridão — o raio inicial em tiles, o índice de cor da paleta de 216 do
+       * Tibia e o prazo TOTAL da (re)aplicação. O raio decai 1 a cada `durationMs / level` (o
+       * `ConditionLight` do Canary), então o nível de agora é `ceil(level × remainingMs /
+       * durationMs)` — o cliente calcula, e o servidor não manda um tique de luz. Apresentação
+       * pura: nenhuma regra de jogo lê luz (invariante 3).
+       */
+      light: z.object({
+        level: z.number().int().positive(),
+        color: z.number().int().nonnegative(),
+        durationMs: z.number().int().positive(),
+      }).optional(),
     })),
   }),
   /**
@@ -1542,6 +1625,13 @@ export const S2C_SCHEMAS = {
     phase: z.enum(['countdown', 'in-combat']).optional(),
     remainingMs: z.number().int().nonnegative().optional(),
   }),
+  /**
+   * As magias que o personagem APRENDEU (#624, ADR 0058 d.1): os ids de `content.spells` — o
+   * registro cru, como `charms`. Preço, level e vocação de cada uma são do `catalogue`
+   * (`bot.spells[]`); a tela deriva "aprendida / à venda / bloqueada" cruzando os dois. Só para o
+   * dono. Ausente da lista é "não aprendida": o slot da barra que aponta para ela fica marcado.
+   */
+  'learned-spells': z.object({ spellIds: z.array(z.string().min(1)) }),
   /**
    * O logout do jogador foi recusado pelo mundo (OW-11, #832, ADR 0060 d.7). A resposta ao C2S
    * `logout` quando `canLogout` diz não; nada mudou no personagem. `reason` tem os dois motivos

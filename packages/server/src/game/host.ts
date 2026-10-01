@@ -14,16 +14,15 @@
 
 import { performance } from 'node:perf_hooks';
 import type {
-  Aggregates, CombatEvent, EndReason, FollowState, GridPoint, ManualActionResult, MemberLeft,
-  PartyEvent, PresenceEvent, Receipt, Session, SessionSnapshot, SessionType, SkillProgress,
-  WorldPoint,
+  Aggregates, CombatEvent, EndReason, FindResult, FollowState, GridPoint, ManualActionResult, MemberLeft,
+  PartyEvent, PresenceEvent, Receipt, Session, SessionSnapshot, SessionType, WorldPoint,
 } from '@draconya/sim';
 import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
 import type {
   Ammunition, Appearances, Blessing, BotConfigV2, Charm, Item, ItemSlot, Monster, RemovedBotSlot,
-  Skill, Vocation,
+  Skill, Spell, Vocation,
 } from '@draconya/content';
 import {
   blessingCost, containerRulesFor, DEFAULT_FIGHT_MODE, hasBlessing, PartyFullError, shareCostsOf,
@@ -34,7 +33,7 @@ import type {
   CharmRemoveRefusal, CharmUnlockRefusal, ConfigurePartyResult, ContainerRules, ExitStatus, FightMode,
   HuntRuleset,
   InventoryRefusal, InventoryResult, InventoryState, ItemRef, PartyBagChanged, PartyEndVoteResult,
-  PartySettingsPatch, Place, PromoteRefusal, SlotRefusal, SlotState, TakeLootRefusal,
+  LearnSpellRefusal, PartySettingsPatch, Place, PromoteRefusal, SlotRefusal, SlotState, TakeLootRefusal,
   TileAppearanceChange, UseItemRefusal, UseOnMapRejection, UseSlotTarget, VocationRefusal,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
@@ -47,6 +46,7 @@ import type { Logger } from '../log.js';
 import type { InitialCharacter, PartyTicket } from '../tickets.js';
 import { AreaOfInterest } from './aoi.js';
 import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
+import { findPersonText } from './find-text.js';
 import { REFUSAL_TEXT, TransitionError, refuseTransition } from './transitions.js';
 import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
 
@@ -168,6 +168,12 @@ export interface SessionHostOptions {
    */
   readonly blessingCatalog?: ReadonlyMap<string, Blessing>;
   /**
+   * O catálogo de magias (#624, ADR 0058 d.2), para `learn-spell`: vocação, level e preço
+   * (`learnPrice`) de cada uma. Ausente: nada se aprende, e a recusa é honesta — um host sem
+   * conteúdo não sabe o que é uma magia.
+   */
+  readonly spellCatalog?: ReadonlyMap<string, Spell>;
+  /**
    * As vocações e o level da escolha (#154, ADR 0026 decisão 1), para `choose-vocation`.
    * Ausentes: nada se escolhe, e a recusa é honesta — como os itens.
    */
@@ -234,6 +240,7 @@ export interface SessionHostOptions {
 const EMPTY_ITEMS: ReadonlyMap<string, Item> = new Map();
 const EMPTY_CHARMS: ReadonlyMap<string, Charm> = new Map();
 const EMPTY_CHARM_ENTRIES: ReadonlyMap<string, CharmBestiaryEntry> = new Map();
+const EMPTY_SPELLS: ReadonlyMap<string, Spell> = new Map();
 
 /**
  * Por que o item não entrou, em português e para o jogador.
@@ -272,6 +279,16 @@ const PROMOTE_REFUSAL: Readonly<Record<PromoteRefusal, string>> = {
 /** A recusa da seleção de munição (#152, ADR 0026 d.3), em palavras. */
 const AMMO_REFUSAL: Readonly<Record<AmmoRefusal, string>> = {
   'level-too-low': 'Você ainda não tem o level dessa munição.',
+};
+
+/** A recusa de `learn-spell` (#624, ADR 0058 d.2), em palavras. */
+const LEARN_SPELL_REFUSAL: Readonly<Record<LearnSpellRefusal, string>> = {
+  'unknown-spell': 'Essa magia não existe.',
+  'not-for-sale': 'Ninguém ensina essa magia.',
+  'already-learned': 'Você já aprendeu essa magia.',
+  'wrong-vocation': 'Essa magia não é da sua vocação.',
+  'level-too-low': 'Você ainda não tem o level dessa magia.',
+  'insufficient-gold': 'Você não tem gold suficiente para aprender essa magia.',
 };
 
 /** A recusa de `charm-unlock` (M39-02, #602, ADR 0053 d.3), em palavras. */
@@ -329,15 +346,30 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   'out-of-range': 'O alvo está fora de alcance.',
   'on-cooldown': 'Ainda em cooldown.',
   'group-cooldown': 'O grupo ainda está em cooldown.',
-  // Stairhop (#554, M30-07): trocou de andar ou foi teleportado há pouco — a mesma frase que o
-  // Canary usa (`RETURNVALUE_YOUAREEXHAUSTED`).
+  // Pacificação (#554, M30-07 → M44-04, #622): trocou de andar, foi teleportado ou está sob
+  // `pacified` — a mesma frase que o Canary usa (`RETURNVALUE_YOUAREEXHAUSTED`).
   'attack-locked': 'Você está exausto.',
+  // Medo (M44-04, #622): nenhuma magia nem runa sai — o "You are feared." do Canary.
+  'feared': 'Você está com medo.',
   // Magia agressiva disparada na Cidade (#792, ADR 0044 d.2): protect zone não aceita combate.
   'protection-zone': 'Você está em uma zona de proteção.',
   // A invocação (#598, M38-01, ADR 0057 decisão 3): monstro fora do catálogo, não invocável, ou
   // teto de 2 invocações vivas já atingido — as três causas caem na mesma frase, como
   // `not-in-catalog` já faz para magia/supply/level/vocação.
   'not-summonable': 'Você não pode invocar essa criatura agora.',
+  // A magia do slot ainda não foi aprendida (#624, ADR 0058 d.1): a tela oferece a compra.
+  'not-learned': 'Você ainda não aprendeu essa magia.',
+  // `not-possible` tem duas fontes. As runas de invocação restantes (#600, M38-03): o
+  // `RETURNVALUE_NOTPOSSIBLE` ("Sorry, not possible.") do Canary para alvo/cadáver que não servem.
+  // As utilitárias (#623): Levitate e Magic Rope caem nele por qualquer causa do destino, como o
+  // Canary.
+  'not-possible': 'Isso não é possível.',
+  // O teto de 2 invocações (#600): o "You cannot control more creatures." do Canary.
+  'too-many-summons': 'Você não pode controlar mais criaturas.',
+  // As outras três do `RETURNVALUE_*` que o `find`/`magic-rope` dão (#623).
+  'not-enough-room': 'Não há espaço suficiente.',
+  'person-not-found': 'Nenhum personagem com esse nome está aqui.',
+  'no-creatures-around': 'Nenhuma criatura por perto.',
 };
 
 /**
@@ -464,6 +496,8 @@ function equipmentOfState(inventory: InventoryState): Record<string, string> {
 
 /** Os vitais do jogador como o HUD os lê. */
 type PlayerStats = S2CProps<'player-stats'>;
+/** O progresso de UMA skill como o HUD o lê: nível, percentual e, com Loyalty (#628), o nível efetivo. */
+type SkillProgress = PlayerStats['skills'][string];
 
 /**
  * Os vitais do jogador, montados UMA vez para os dois caminhos (FUN-109): o `session-state`
@@ -486,7 +520,12 @@ function skillProgressOf(
 ): SkillProgress {
   if (character === undefined || definition === undefined) return { level: 0, percentToNext: 0 };
   const factor = progression === undefined ? undefined : skillFactorFor(definition, vocation, progression);
-  return character.skills.progressOf(definition, factor);
+  const progress = character.skills.progressOf(definition, factor);
+  // O nível COM Loyalty (#628) só viaja quando o bônus muda o nível — o caso comum (conta sem
+  // degrau, ou tries de bônus que ainda não fecham um nível) manda a mesma forma de antes, e o
+  // HUD lê a ausência como "igual ao base". O percentual continua o do nível BASE, como no Canary.
+  const loyaltyLevel = character.loyaltyLevelOf(definition, factor);
+  return loyaltyLevel > progress.level ? { ...progress, loyaltyLevel } : progress;
 }
 
 function playerStatsOf(
@@ -526,6 +565,10 @@ function playerStatsOf(
     speed: character === undefined ? 0 : Math.round(character.speed * character.speedScale),
     skills,
     magicLevel: skillProgressOf(character, skillCatalog?.get('magic'), vocation, progression),
+    // O bônus de Loyalty da conta (#628): fixado no ticket, constante pela sessão. Ausente quando
+    // é zero — o `player-stats` do caso comum continua idêntico ao de antes.
+    ...(character === undefined || character.loyaltyBonusPercent === 0
+      ? {} : { loyaltyBonusPercent: character.loyaltyBonusPercent }),
     // Alma (#593): `soulMax` é da VOCAÇÃO — zero sem uma escolhida, o "sem teto" do HUD. A
     // vocação PROMOVIDA (#566) reescreve o teto quando o conteúdo declara `promotion.soulMax`.
     soul: character?.soul ?? 0,
@@ -534,7 +577,7 @@ function playerStatsOf(
 }
 
 function sameSkillProgress(a: SkillProgress, b: SkillProgress): boolean {
-  return a.level === b.level && a.percentToNext === b.percentToNext;
+  return a.level === b.level && a.percentToNext === b.percentToNext && a.loyaltyLevel === b.loyaltyLevel;
 }
 
 function sameSkills(a: Record<string, SkillProgress>, b: Record<string, SkillProgress>): boolean {
@@ -576,6 +619,7 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
     && a.speed === b.speed
     && sameSkills(a.skills, b.skills)
     && sameSkillProgress(a.magicLevel, b.magicLevel)
+    && a.loyaltyBonusPercent === b.loyaltyBonusPercent
     && a.soul === b.soul
     && a.soulMax === b.soulMax;
 }
@@ -719,6 +763,17 @@ function bestiaryTotal(counts: Readonly<Record<string, number>>): number {
   return total;
 }
 
+/**
+ * A soma dos abates de boss do Bosstiary (#629): o gatilho da mensagem `bosstiary` ao vivo. Um
+ * número só, pela razão de `bestiaryTotal`: abate nunca desce, então a soma muda se, e só se,
+ * algum contador mudou (e os pontos só mudam com um abate).
+ */
+function bosstiaryTotal(kills: Readonly<Record<string, number>>): number {
+  let total = 0;
+  for (const count of Object.values(kills)) total += count;
+  return total;
+}
+
 /** Igualdade de lista de ids de item, com `null` = coletar tudo (§6, D2). */
 function sameIdList(a: readonly string[] | null, b: readonly string[] | null): boolean {
   if (a === null || b === null) return a === b;
@@ -784,7 +839,17 @@ function partyEndVoteRefusalText(decision: Extract<PartyEndVoteResult, { ok: fal
   return 'Você não está nesta party.';
 }
 
-type ConditionsSnapshot = ReadonlyMap<ActiveConditionKind, number>;
+/**
+ * Uma condição ativa como o host a guarda entre ciclos: o fim (instante LÓGICO) e, na luz
+ * (#623), o que o cliente precisa para desenhá-la. Comparada campo a campo — só o instante de fim
+ * não basta, uma luz nova de mesmo fim e outro raio precisa ser reenviada.
+ */
+interface ActiveConditionEntry {
+  readonly expiresAtMs: number;
+  readonly light?: { readonly level: number; readonly color: number; readonly durationMs: number };
+}
+
+type ConditionsSnapshot = ReadonlyMap<ActiveConditionKind, ActiveConditionEntry>;
 
 const ACTIVE_CONDITION_KIND_SET: ReadonlySet<string> = new Set(ACTIVE_CONDITION_KINDS);
 
@@ -794,28 +859,40 @@ const ACTIVE_CONDITION_KIND_SET: ReadonlySet<string> = new Set(ACTIVE_CONDITION_
  * fora aqui — o `z.enum` do protocolo recusaria o frame inteiro, e a barra sumiria com ele.
  */
 function conditionsSnapshotOf(character: CharacterRuntime): ConditionsSnapshot {
-  const snapshot = new Map<ActiveConditionKind, number>();
+  const snapshot = new Map<ActiveConditionKind, ActiveConditionEntry>();
   for (const condition of character.conditions.getState()) {
     if (!ACTIVE_CONDITION_KIND_SET.has(condition.key)) continue;
-    snapshot.set(condition.key as ActiveConditionKind, condition.expiresAtMs);
+    // A luz sem os dados que o cliente desenha (um snapshot que não os carrega) não vira badge.
+    if (condition.key === 'light' && condition.light === undefined) continue;
+    snapshot.set(condition.key as ActiveConditionKind, {
+      expiresAtMs: condition.expiresAtMs,
+      ...(condition.light === undefined ? {} : { light: condition.light }),
+    });
   }
   return snapshot;
 }
 
 function sameConditions(a: ConditionsSnapshot, b: ConditionsSnapshot): boolean {
   if (a.size !== b.size) return false;
-  for (const [key, expiresAtMs] of a) {
-    if (b.get(key) !== expiresAtMs) return false;
+  for (const [key, entry] of a) {
+    const other = b.get(key);
+    if (other === undefined || other.expiresAtMs !== entry.expiresAtMs) return false;
+    if (entry.light?.level !== other.light?.level || entry.light?.color !== other.light?.color
+      || entry.light?.durationMs !== other.light?.durationMs) return false;
   }
   return true;
 }
 
 function activeConditionsOf(snapshot: ConditionsSnapshot, nowMs: number): S2CProps<'active-conditions'> {
-  const conditions: { kind: ActiveConditionKind; remainingMs: number }[] = [];
-  for (const [kind, expiresAtMs] of snapshot) {
+  const conditions: {
+    kind: ActiveConditionKind; remainingMs: number;
+    light?: { level: number; color: number; durationMs: number };
+  }[] = [];
+  for (const [kind, entry] of snapshot) {
     conditions.push({
       kind,
-      remainingMs: Math.max(0, Math.round(expiresAtMs - nowMs)),
+      remainingMs: Math.max(0, Math.round(entry.expiresAtMs - nowMs)),
+      ...(entry.light === undefined ? {} : { light: { ...entry.light } }),
     });
   }
   conditions.sort((a, b) => a.kind.localeCompare(b.kind));
@@ -937,6 +1014,11 @@ interface HostedSession {
    * e no ciclo com visualizador, pela razão registrada em `sentStats`.
    */
   readonly sentBestiary: Map<string, number>;
+  /**
+   * A soma dos abates do Bosstiary ENTREGUE a quem olha cada personagem (#629), por `characterId`
+   * — o mesmo mecanismo de `sentBestiary`, para outra grandeza que só sobe.
+   */
+  readonly sentBosstiary: Map<string, number>;
   /**
    * O último BITMASK de bênçãos ENTREGUE a quem olha cada personagem (#570, ADR 0052), por
    * `characterId` — o mesmo mecanismo de `sentBestiary`: compra (sobe) e morte (zera) são as
@@ -1686,6 +1768,12 @@ export class SessionHost {
         // INTENÇÃO (invariante 4): sem payload. Vocação, level, gold e "já promovido" são do
         // servidor. Só na Cidade (#566, ADR 0042 decisão 1 — serviço de Cidade).
         this.#requestPromoteVocation(viewer);
+        return;
+      case 'learn-spell':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL magia; vocação, level, "já aprendida",
+        // preço e saldo são do servidor. Aceita na Cidade E na hunt, sem rolagem (ADR 0058 d.2,
+        // ADR 0052 d.4) — como `charm-unlock`, processada na chegada, sem passar pelo ruleset.
+        this.#requestLearnSpell(viewer, message.spellId);
         return;
       case 'charm-unlock':
         // INTENÇÃO (invariante 4): o cliente diz QUAL charm; o custo (derivado do Bestiário) e
@@ -2447,6 +2535,51 @@ export class SessionHost {
     this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
   }
 
+  /** O registro cru de magias aprendidas (#624), na forma que `learned-spells` (S2C) manda. */
+  #learnedSpellsMessageFor(character: CharacterRuntime): S2CMessage {
+    return { type: 'learned-spells', spellIds: [...character.learnedSpells.getState().spellIds] };
+  }
+
+  /**
+   * Aprender UMA magia por gold (#624, ADR 0058 d.2). INTENÇÃO: o cliente diz QUAL magia; a
+   * vocação, o level, "já aprendida", o preço (`learnPrice`) e o saldo são do servidor, e a
+   * decisão inteira é do `sim` (`CharacterRuntime.learnSpell`) — este método só traduz a recusa e
+   * cuida do gold. Aceita em QUALQUER sessão, Cidade e hunt: não há rolagem (ADR 0052 d.4), e o
+   * Tibia também não exige protect zone para o NPC ensinar.
+   *
+   * O gold sai do MESMO jeito que `charm-remove`: `goldDelta` (o `sim` já debitou), e o agregado
+   * `goldSpent` só quando a sessão é PRIVADA (hunt) — o extrato de fim de sessão soma
+   * `aggregatesOf`. Na Cidade (shard, `ruleset.shared`) o agregado é cumulativo entre extratos e
+   * nunca zerado por flush, então somar ali re-creditaria a compra no próximo logout; lá o gold
+   * vai só por `goldDelta`, que `#saveDurableReceipt` drena e liquida (invariante 10). Aprender
+   * de novo é recusado ANTES de qualquer débito, então repetir a intenção nunca cobra duas vezes.
+   */
+  #requestLearnSpell(viewer: Viewer, spellId: string): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    const spell = (this.#options.spellCatalog ?? EMPTY_SPELLS).get(spellId);
+    const result = character.learnSpell(spell);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: LEARN_SPELL_REFUSAL[result.reason] });
+      return;
+    }
+    if (result.price > 0 && hosted.session.ruleset.shared !== true) {
+      hosted.session.credit(viewer.characterId, 'goldSpent', result.price);
+    }
+    this.#markDirty(character.id);
+    // No meio de uma hunt, a magia recém-aprendida destrava a regra do bot que vinha sendo
+    // pulada (`spell-not-learned` não tem prazo): sem acordá-lo, ela só voltaria a valer no
+    // próximo dano recebido. Um evento na fila (ADR 0058 emenda 5), nada por tick; a Cidade não
+    // tem bot, e o ruleset dela não tem o método.
+    (hosted.session.ruleset as Partial<HuntRuleset>).rearmBot?.(hosted.session, character.id);
+    // O gold gasto muda o `player-stats` (saldo) de quem olha — a mesma razão da compra de bênção.
+    const stats = this.#statsOf(character);
+    hosted.sentStats.set(character.id, stats);
+    this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
+    this.#sendToViewersOf(hosted, character.id, this.#learnedSpellsMessageFor(character));
+  }
+
   /** O registro cru de Charms (M39-02, #602), na forma que `charms` (S2C) manda. */
   #charmsMessageFor(character: CharacterRuntime): S2CMessage {
     return { type: 'charms', ...character.charms.getState() };
@@ -2978,6 +3111,9 @@ export class SessionHost {
       // E o Bestiário, se um abate contou (FUN-113): é progressão permanente, e a tela precisa
       // ver o marco chegar sem reconectar.
       this.#presentBestiary(hosted);
+      // E o Bosstiary (#629), pela mesma razão: o nível de um boss fecha no abate, e a tela precisa
+      // ver o número chegar sem reconectar.
+      this.#presentBosstiary(hosted);
       this.#presentBlessings(hosted);
       // E o cenário, se algo mudou de estado PASSIVAMENTE (#734, ADR 0050 d.6 T3) — o walker
       // abrindo uma porta sozinho, uma placa de pressão, um `TILE_REVERT`. `useOnMap` já manda
@@ -3069,6 +3205,10 @@ export class SessionHost {
           // POR PERSONAGEM, pela mesma razão do Follow acima: só quem mandou o `use-item`/
           // `use-item-on` adiado precisa saber que ele, afinal, não coube (#726, ADR 0049 d.6).
           this.#presentManualActionResult(hosted, event);
+          continue;
+        case 'find-result':
+          // POR PERSONAGEM, como o Follow: só quem lançou o Find lê a resposta (#623).
+          this.#presentFindResult(hosted, event);
           continue;
         case 'member-left':
           // Alguém saiu por dentro do `sim` (#193): extrato e volta à Cidade são I/O, e o
@@ -3547,6 +3687,23 @@ export class SessionHost {
   }
 
   /**
+   * O Bosstiary ao vivo (#629): os abates de boss e os pontos, para quem olha CADA personagem,
+   * quando a soma dos abates mudou desde a última entrega — a MESMA regra de `#presentBestiary`
+   * (por personagem, só com visualizador; sem ele o `sim` conta do mesmo jeito, invariante 3).
+   */
+  #presentBosstiary(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      const { kills, points } = character.bosstiary.getState();
+      const total = bosstiaryTotal(kills);
+      if (hosted.sentBosstiary.get(character.id) === total) continue;
+      hosted.sentBosstiary.set(character.id, total);
+      this.#sendToViewersOf(hosted, character.id, { type: 'bosstiary', kills, points });
+    }
+  }
+
+  /**
    * As bênçãos ao vivo (#570, ADR 0052), pela MESMA regra do Bestiário: só quem está olhando,
    * só quando o bitmask mudou desde a última entrega. A compra (`#requestBuyBlessing`) já manda
    * direto a quem comprou; isto cobre quem só está OLHANDO — e o consumo na morte, que a hunt
@@ -3643,6 +3800,11 @@ export class SessionHost {
     const counts = participant?.bestiary.getState() ?? {};
     hosted.sentBestiary.set(characterId, bestiaryTotal(counts));
     viewer.send({ type: 'bestiary', counts });
+    // E o Bosstiary (#629), pela mesma razão do Bestiário: sem isto, quem reconecta veria os
+    // abates de boss zerados até o próximo — na Cidade, que não tem ciclo, para sempre.
+    const bosstiary = participant?.bosstiary.getState() ?? { kills: {}, points: 0 };
+    hosted.sentBosstiary.set(characterId, bosstiaryTotal(bosstiary.kills));
+    viewer.send({ type: 'bosstiary', kills: bosstiary.kills, points: bosstiary.points });
     // E as bênçãos (#570, ADR 0052), pela mesma razão: quem reconecta precisa ver o que já
     // comprou, sem esperar a próxima compra/morte para descobrir.
     hosted.sentBlessings.set(characterId, participant?.blessings ?? 0);
@@ -3650,6 +3812,9 @@ export class SessionHost {
     // E a economia de Charms (M39-02, #602), pela mesma razão do Bestiário: sem isto, quem
     // reconecta veria os Charms zerados até a próxima intenção aceita.
     if (participant !== undefined) viewer.send(this.#charmsMessageFor(participant));
+    // E as magias aprendidas (#624, ADR 0058), pela mesma razão: sem isto, quem reconecta veria
+    // toda a barra marcada como "não aprendida" até a próxima compra.
+    if (participant !== undefined) viewer.send(this.#learnedSpellsMessageFor(participant));
     // E o estado dos slots (AB-09): a barra do conjunto ativo precisa dele ao montar, e a
     // Cidade não tem ciclo para o mandar depois. Ruleset sem slots (a Cidade) não manda nada.
     const slotStates = participant === undefined
@@ -3724,6 +3889,20 @@ export class SessionHost {
       active: event.active,
       targetId: event.targetId,
       ...(event.reason === undefined ? {} : { reason: event.reason }),
+    });
+  }
+
+  /**
+   * O resultado de um Find Person (#623) como `system-message` só para quem lançou. A frase é
+   * daqui — o `sim` entrega dado (`FindRelation`) —, com o nome que o `sim` não guarda. Sem o
+   * nome (o personagem saiu entre o lançamento e o ciclo), diz "Alguém": a mensagem continua
+   * verdadeira sobre a direção.
+   */
+  #presentFindResult(hosted: HostedSession, event: FindResult): void {
+    const name = event.subjectId === undefined
+      ? 'Alguém' : this.#nameByCharacter.get(event.subjectId) ?? 'Alguém';
+    this.#sendToViewersOf(hosted, event.characterId, {
+      type: 'system-message', level: 'info', text: findPersonText(name, event.relation),
     });
   }
 
@@ -4247,6 +4426,7 @@ export class SessionHost {
       lastTargetSeq: new Map(),
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
+      sentBosstiary: new Map(),
       sentBlessings: new Map(),
       sentTileOverrides: new Map(),
       sentParty: null,
@@ -4530,9 +4710,19 @@ export class SessionHost {
       // E o Bestiário (FUN-113), pela mesma razão: abate que não chega ao banco é abate que
       // some no próximo logout, e o marco 10 000 nunca chegaria.
       ...(owner === undefined ? {} : { bestiary: owner.bestiary.getState() }),
+      // E o Bosstiary (#629, ADR 0052 d.1), pela mesma razão: abate de boss que não chega ao
+      // banco é abate que some no próximo logout, e o nível 3 nunca fecharia.
+      ...(owner === undefined ? {} : { bosstiary: owner.bosstiary.getState() }),
       // E a economia de Charms (M39-02, #602, ADR 0052 d.1): ABSOLUTA como `ammo` — sem ela
       // aqui, um `charm-unlock`/`charm-assign` aceito na Cidade sumiria a cada logout.
       ...(owner === undefined ? {} : { charms: owner.charms.getState() }),
+      // E as magias aprendidas (#624, ADR 0058 d.1, ADR 0052 d.1): ABSOLUTAS como `charms`, e a
+      // hunt também as leva porque `learn-spell` é aceito nela — sem o campo aqui, uma magia
+      // comprada no meio da hunt sumiria no fim dela, e o gold gasto não. SÓ quando o registro é
+      // a verdade do personagem (`recorded`): uma sessão retomada de um snapshot anterior à issue
+      // não sabe o que ele aprendeu, e gravar o vazio apagaria a concessão da migração 0024.
+      ...(owner === undefined || !owner.learnedSpells.recorded
+        ? {} : { learnedSpells: owner.learnedSpells.getState() }),
       // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
       // login se ficasse só na sessão.
       ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
@@ -4641,6 +4831,10 @@ export class SessionHost {
       // equipamento — sem isto, um `charm-unlock`/`charm-assign`/`charm-remove` feito na praça
       // sumiria no logout, porque a Cidade não gera `Receipt` de progresso (ADR 0023).
       charms: owner.charms.getState(),
+      // As magias aprendidas (#624, ADR 0058): a Cidade marca `dirty` na compra, e sem este campo
+      // ela sumiria no logout — com o gold já debitado no mesmo extrato. ABSOLUTO, como `charms`,
+      // e só quando `recorded` (ver `#receiptFor`): quem só mexeu na postura não reescreve o vazio.
+      ...(owner.learnedSpells.recorded ? { learnedSpells: owner.learnedSpells.getState() } : {}),
       // O estoque de supply/munição (#792, ADR 0044 d.2): conjurar na Cidade credita
       // `supplyStock`/`ammunitionStock` do mesmo jeito que o loot da hunt credita — ABSOLUTO,
       // como `ammo` (`receipts.ts`). Sem isto, a carga conjurada na praça sumia no logout: o
@@ -4813,6 +5007,7 @@ export class SessionHost {
         speed: self.speed,
         skills: self.skills,
         magicLevel: self.magicLevel,
+        ...(self.loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent: self.loyaltyBonusPercent }),
         soul: self.soul,
         soulMax: self.soulMax,
       },
@@ -5058,6 +5253,7 @@ export class SessionHost {
       lastTargetSeq: new Map(),
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
+      sentBosstiary: new Map(),
       sentBlessings: new Map(),
       sentTileOverrides: new Map(),
       sentParty: null,

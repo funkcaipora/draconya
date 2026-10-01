@@ -4,6 +4,7 @@
   "description": "Causa dano mágico nos três tiles à sua frente.",
   "vocationId": "knight",
   "minLevel": 70,
+  "learnPrice": 4000,
   "manaCost": 200,
   "group": "attack",
   "groupCooldownMs": 2000,

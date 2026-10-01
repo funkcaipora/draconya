@@ -644,6 +644,8 @@ describe('oráculos de área e magia (M24-01, #469)', () => {
     id: 'hero', position: { x: 0, y: 0, z: 7 },
     health: 100, maxHealth: 100, mana, maxMana: 1_000,
     level: 30, xp: 0, gold, goldDelta: 0, alive: true, cooldowns: {},
+    // Sabe a magia da cena (#624): o assunto aqui é a rolagem por alvo, não o aprendizado.
+    learnedSpells: { spellIds: [areaSpell.id], version: 1 },
   });
   const targets = [
     { armor: 0, dodgeChance: 0 }, { armor: 0, dodgeChance: 0 }, { armor: 0, dodgeChance: 0 },

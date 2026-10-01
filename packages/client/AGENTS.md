@@ -597,6 +597,19 @@ suba o `pnpm dev` e olhe cada cenário na tela do mundo:
   sem nada acontecer. Sem marcos no
   catálogo, "—" e não "0/0" — a regra do "—" de sempre. O `bestiary-milestone` do extrato só
   escreve o "+n %" quando o catálogo trouxe o percentual (`EventNames.percentPerMilestone`).
+- **O Bosstiary é a aba ao lado do Bestiary no Cyclopedia, e o cliente NÃO conta abate nem soma
+  ponto** (`shell/CyclopediaModal.tsx` + `shell/bosstiary-progress.ts`, #629). O registro chega
+  INTEIRO em `bosstiary` (`{ kills, points }`, `kills` chaveado pelo `raceId` do boss em TEXTO) —
+  no attach e a cada abate de boss — e SUBSTITUI (`hud.bosstiary`, `null` até chegar, pela regra do
+  Bestiário: zero afirmaria "nunca abateu um boss"); a tabela de níveis por raridade e a raridade e
+  o `raceId` de cada boss vêm no `catalogue` (`bosstiary`, `monsters[].bosstiary`). O que a tela
+  calcula é apresentação: nível (`>=`, como o `getBossCurrentLevel`) e "quanto falta"; os PONTOS vêm
+  do servidor. **A lista tem UM boss por `raceId`** (`bossesOf`): variantes do mesmo boss
+  compartilham o contador, e listá-las todas mostraria o mesmo número em várias linhas. **Boss não
+  aparece na aba Bestiary nem como alvo de Charm** — o cliente filtra `monsters[].bosstiary`, como o
+  Canary tira boss do Bestiário. Sem boss no catálogo a aba diz "Este servidor não tem Bosstiary."
+  O nível fechado chega como o evento notável `bosstiary-level` (`shell/event-text.ts`, detalhe
+  `monsterId/n` em solo e `personagem/monsterId/n` em party — a linha lê os dois últimos campos).
 - **A entrada (`account/`) é HTTP puro, e vem ANTES do socket** (FUN-97). Escolher personagem
   acontece quando ainda não existe sessão de jogo; o socket só abre depois, com o ticket que a
   escolha rende. `credentials: 'include'` em toda chamada — a sessão é cookie httpOnly (ADR 0012),
@@ -753,4 +766,28 @@ suba o `pnpm dev` e olhe cada cenário na tela do mundo:
   stamina, magic level, corpo a corpo, distância) seguem a preferência de `localStorage` acima;
   `magic`, `melee` e `distance` exibem a barra de progresso sob o valor, `magic` ganha o tom
   `vital-mp`, e `speed` não tem barra.
+- **A luz do jogador (#623) mora em `world.selfLight`, sem assinatura, e o pintor a lê a cada
+  quadro** (`world/light.ts`, `viewport.ts#paintTerrain`). O servidor manda raio, cor e prazo total
+  no `active-conditions`; o decaimento (`ceil(level × restante / total)`, o `ConditionLight` do
+  Canary) é conta LOCAL contra `receivedAtMs` — nada é mandado por tique. Só clareia o `cavern`; na
+  superfície não muda nada. É apresentação: o cliente não decide que há luz (invariante 4), e
+  `enterInstance` a zera porque o `active-conditions` a repõe logo depois em toda reanexação.
+
+## Aprender magia é tela de serviço, e a barra marca o que falta aprender (#624, ADR 0058)
+
+A seção **Magias** do `CharacterModal` lista as magias da vocação (`catalogue.bot.spells`, filtradas
+por `vocationId`) com preço (`learnPrice`), level e o estado de cada uma; o botão manda
+`learn-spell { spellId }` — só a INTENÇÃO (invariante 4). A regra que decide o estado de cada linha
+mora em `shell/spell-shop.ts` (PURO): é o ESPELHO de `LearnedSpells#check` do `sim`, refeito aqui
+porque o cliente não importa `sim`, e existe só para a tela não oferecer o que o servidor vai
+recusar — se as duas divergirem, a compra é recusada com o motivo, nunca o contrário (a mesma razão
+de `blessing-cost.ts`). `learnPrice` ausente é "Indisponível"; `0` é "Grátis".
+
+`hud.learnedSpells` é `readonly string[] | null` (`learned-spells`, S2C 47, SUBSTITUI o registro
+inteiro). **`null` é "o servidor ainda não disse", e NUNCA marca slot nenhum**: `isSpellLearned`
+devolve `true` sem o registro, senão o primeiro segundo de toda conexão (ou um nó anterior à #624)
+mostraria a barra inteira como "não aprendida". `slotView` recebe o registro e devolve
+`unlearned` — só para MAGIA; poção e runa não exigem aprendizado —, e a `ActionBar` põe a classe
+`action-slot-unlearned` (apagado, borda tracejada) e "não aprendida" no tooltip. O slot continua na
+barra e continua disparável: quem recusa é o servidor (`not-learned` no `slot-result`).
 

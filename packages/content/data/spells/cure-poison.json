@@ -2,6 +2,7 @@
   "id": "cure-poison",
   "name": "Cure Poison",
   "description": "Remove o veneno.",
+  "learnPrice": 150,
   "manaCost": 30,
   "cooldownMs": 6000,
   "group": "healing",

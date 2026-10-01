@@ -93,6 +93,9 @@ export function buildCatalogue(content: Content): Catalogue {
         // 7) e mostra o `base`, como o grimório do Tibia sempre mostrou.
         manaCost: manaCostDisplayOf(spell.manaCost),
         minLevel: spell.minLevel,
+        // O preço de aprender (#624, ADR 0058 d.3): ausente é "ninguém a ensina" — a tela não
+        // oferece a compra. `0` é de graça, e por isso a checagem é `undefined`, nunca truthy.
+        ...(spell.learnPrice === undefined ? {} : { learnPrice: spell.learnPrice }),
         // `null` e não ausente: a tela precisa distinguir "qualquer um lança" de "o servidor
         // não disse", e campo opcional colapsa os dois no mesmo `undefined`.
         vocationId: spell.vocationId ?? null,
@@ -101,6 +104,13 @@ export function buildCatalogue(content: Content): Catalogue {
         effect: spell.effect.kind,
         // O grupo (#155): a tela mostra ao lado do nome.
         group: spell.group ?? 'attack',
+        // Find Person (#623) precisa de MIRA: o "nome" do Canary é o personagem clicado, e o
+        // servidor não tem como adivinhar quem. É o campo `aim`, e NÃO `targets: 'friend'`: este
+        // também abre o seletor de alvo do editor de slot do bot (`acceptsFriend`), e a validação
+        // do bot recusa salvar alvo que não seja de cura/mana. Só a barra de ação lê `aim`, para
+        // armar a mira do `use-slot` (ADR 0049 d.2). Só ela declara.
+        ...(spell.effect.kind === 'find' && spell.effect.target === 'person'
+          ? { aim: 'character' as const } : {}),
         // Os números de EXIBIÇÃO (ADR 0033): cooldown, grupo, descrição e o detalhe do efeito.
         cooldownMs: spell.cooldownMs,
         ...(spell.groupCooldownMs === undefined ? {} : { groupCooldownMs: spell.groupCooldownMs }),
@@ -279,6 +289,11 @@ export function buildCatalogue(content: Content): Catalogue {
                 charmsPoints: bestiaryEntry.charmsPoints,
               },
             }),
+          // O boss no Bosstiary (#629): a raridade escolhe a linha da tabela de níveis abaixo, e o
+          // `raceId` é a chave do contador de abates — nível e pontos são DERIVADOS no cliente.
+          ...(monster.bosstiary === undefined
+            ? {}
+            : { bosstiary: { rarity: monster.bosstiary.rarity, raceId: monster.bosstiary.raceId } }),
         };
       })
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
@@ -292,6 +307,21 @@ export function buildCatalogue(content: Content): Catalogue {
         bestiary: {
           milestones: [...content.bestiary.milestones],
           xpBonusPercentPerMilestone: content.bestiary.xpBonusPercentPerMilestone,
+        },
+      }),
+    // Os níveis do Bosstiary por raridade (#629), do conteúdo fixado na sessão (invariante 7). A
+    // chave só existe quando o conteúdo tem a tabela: ausente, a tela mostra só a contagem de
+    // abates — o conteúdo de teste, que não fala de progressão permanente. Só `levels`: `id`,
+    // `source` e `_open` são assunto do carregador.
+    ...(content.bosstiary === undefined
+      ? {}
+      : {
+        bosstiary: {
+          levels: {
+            bane: content.bosstiary.levels.bane.map((level) => ({ ...level })),
+            archfoe: content.bosstiary.levels.archfoe.map((level) => ({ ...level })),
+            nemesis: content.bosstiary.levels.nemesis.map((level) => ({ ...level })),
+          },
         },
       }),
     // Os 25 Charms do Canary (M39-02, #602, ADR 0053 d.3), do conteúdo fixado na sessão

@@ -117,6 +117,29 @@ describe('world deltas', () => {
     expect(world.ambience).toBe('cavern');
   });
 
+  it('active-conditions com luz (#623) põe a luz do jogador no mundo; sem ela, tira; a troca de instância a apaga', () => {
+    // O pintor lê `world.selfLight` sem assinatura: o servidor manda raio, cor e prazo, e o
+    // decaimento é conta local (`world/light.ts`). Mutação que mata: guardar `remainingMs` sem o
+    // instante de chegada — o nível não decairia.
+    applyMessage({
+      type: 'active-conditions',
+      conditions: [{ kind: 'light', remainingMs: 300_000, light: { level: 6, color: 215, durationMs: 370_000 } }],
+    }, 1_000);
+    expect(world.selfLight).toEqual({
+      level: 6, color: 215, durationMs: 370_000, remainingMs: 300_000, receivedAtMs: 1_000,
+    });
+
+    applyMessage({ type: 'active-conditions', conditions: [{ kind: 'haste', remainingMs: 10_000 }] }, 2_000);
+    expect(world.selfLight).toBeNull();
+
+    applyMessage({
+      type: 'active-conditions',
+      conditions: [{ kind: 'light', remainingMs: 300_000, light: { level: 6, color: 215, durationMs: 370_000 } }],
+    }, 3_000);
+    applyMessage({ type: 'instance-enter', instanceId: 'i9', map: 'rat-cellars', ambience: 'cavern' }, 3_500);
+    expect(world.selfLight).toBeNull();
+  });
+
   it('ground items: appear, disappear, and the session-state replaces them (FUN-123)', () => {
     // O cadáver é um item do chão com id próprio; some pelo id, e o estado completo o
     // substitui como substitui as criaturas — o que apodreceu sem ninguém olhar não fica.
@@ -575,6 +598,79 @@ describe('HUD deltas', () => {
       distance: { level: 14, percent: 75 },
       magic: { level: 4, percent: 20 },
     });
+  });
+
+  it('applies the Loyalty bonus and each skill\'s effective level from player-stats (#628)', () => {
+    applyMessage(
+      {
+        type: 'player-stats',
+        health: 150, maxHealth: 185, mana: 30, maxMana: 35,
+        level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+        ammo: { arrow: null, bolt: null },
+        vocationId: null,
+        promoted: false, fightMode: 'attack',
+        speed: 125,
+        skills: {
+          fist: { level: 11, percentToNext: 60 },
+          club: { level: 9, percentToNext: 10 },
+          sword: { level: 100, percentToNext: 40, loyaltyLevel: 104 },
+          axe: { level: 13, percentToNext: 5 },
+          distance: { level: 14, percentToNext: 75 },
+          magic: { level: 20, percentToNext: 20, loyaltyLevel: 22 },
+        },
+        magicLevel: { level: 20, percentToNext: 20, loyaltyLevel: 22 },
+        loyaltyBonusPercent: 50,
+        soul: 0,
+        soulMax: 0,
+      },
+      0,
+    );
+
+    expect(hud.get().loyaltyBonusPercent).toBe(50);
+    // O nível efetivo só existe onde o servidor o mandou; o resto fica sem a chave.
+    expect(hud.get().skills.sword).toEqual({ level: 100, percent: 40, loyaltyLevel: 104 });
+    expect(hud.get().skills.magic).toEqual({ level: 20, percent: 20, loyaltyLevel: 22 });
+    expect(hud.get().skills.fist).toEqual({ level: 11, percent: 60 });
+
+    // Um `player-stats` sem o bônus (conta sem degrau, ou nó anterior) volta a zero — e o nível
+    // efetivo some junto, em vez de ficar preso ao valor anterior.
+    applyMessage(
+      {
+        type: 'player-stats',
+        health: 150, maxHealth: 185, mana: 30, maxMana: 35,
+        level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+        ammo: { arrow: null, bolt: null },
+        vocationId: null,
+        promoted: false, fightMode: 'attack',
+        speed: 125,
+        skills: { sword: { level: 100, percentToNext: 40 }, magic: { level: 20, percentToNext: 20 } },
+        magicLevel: { level: 20, percentToNext: 20 },
+        soul: 0,
+        soulMax: 0,
+      },
+      0,
+    );
+    expect(hud.get().loyaltyBonusPercent).toBe(0);
+    expect(hud.get().skills.sword).toEqual({ level: 100, percent: 40 });
+  });
+
+  it('applies the Loyalty bonus from session-state.self too, for whoever reattaches (#628)', () => {
+    applyMessage({
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0,
+        skills: { sword: { level: 100, percentToNext: 0, loyaltyLevel: 104 } },
+        magicLevel: { level: 0, percentToNext: 0 },
+        loyaltyBonusPercent: 50,
+        soul: 0, soulMax: 0,
+      },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    } as S2CMessage, 0);
+    expect(hud.get().loyaltyBonusPercent).toBe(50);
+    expect(hud.get().skills.sword).toEqual({ level: 100, percent: 0, loyaltyLevel: 104 });
   });
 
   it('keeps the skills a node older than SV-04 does not send, but takes its speed', () => {
@@ -1280,6 +1376,50 @@ describe('o catálogo (FUN-79, FUN-89)', () => {
   });
 });
 
+describe('o Bosstiary (#629, ADR 0052 d.1)', () => {
+  const vocabulary = { vocabularyVersion: 1, slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } };
+  it('ausente e vazio são coisas DIFERENTES, como no Bestiário', () => {
+    expect(hud.get().bosstiary).toBeNull();
+    applyMessage({ type: 'bosstiary', kills: {}, points: 0 }, 0);
+    expect(hud.get().bosstiary).toEqual({ kills: {}, points: 0 });
+  });
+
+  it('guarda o registro como veio, e SUBSTITUI em vez de somar', () => {
+    applyMessage({ type: 'bosstiary', kills: { '639': 3 }, points: 40 }, 0);
+    expect(hud.get().bosstiary).toEqual({ kills: { '639': 3 }, points: 40 });
+
+    applyMessage({ type: 'bosstiary', kills: { '639': 5, '100': 1 }, points: 110 }, 1_000);
+    expect(hud.get().bosstiary).toEqual({ kills: { '639': 5, '100': 1 }, points: 110 });
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state.inventory, notified);
+    subscribeSlice(hud, (state) => state.bestiary, notified);
+
+    applyMessage({ type: 'bosstiary', kills: { '639': 1 }, points: 10 }, 0);
+
+    expect(notified).not.toHaveBeenCalled();
+  });
+
+  it('o catálogo leva a tabela de níveis e a raridade de cada boss, e sem tabela a chave fica AUSENTE', () => {
+    const bosstiary = { levels: {
+      bane: [{ kills: 25, points: 5 }], archfoe: [{ kills: 5, points: 10 }], nemesis: [{ kills: 1, points: 10 }],
+    } };
+    const monsters = [{ id: 'dreadmaw', name: 'Dreadmaw', bosstiary: { rarity: 'nemesis', raceId: 639 } }];
+    applyMessage({
+      type: 'catalogue', hunts: [], monsters, bosstiary, bot: vocabulary, items: [],
+    } as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue?.bosstiary).toEqual(bosstiary);
+    expect(hud.get().catalogue?.monsters).toEqual(monsters);
+
+    applyMessage({
+      type: 'catalogue', hunts: [], monsters: [], bot: vocabulary, items: [],
+    } as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue).not.toHaveProperty('bosstiary');
+  });
+});
+
 describe('o bestiário (FUN-113, §18)', () => {
   it('ausente e vazio são coisas DIFERENTES', () => {
     // `null` é "ainda não chegou": um nó anterior à FUN-113 nunca manda, e o primeiro
@@ -1307,6 +1447,34 @@ describe('o bestiário (FUN-113, §18)', () => {
     subscribeSlice(hud, (state) => state.health, notified);
 
     applyMessage({ type: 'bestiary', counts: { rat: 1 } }, 0);
+
+    expect(notified).not.toHaveBeenCalled();
+  });
+});
+
+describe('as magias aprendidas (#624, ADR 0058)', () => {
+  it('ausente e vazio são coisas DIFERENTES: `null` é "o servidor ainda não disse"', () => {
+    // Um nó anterior à #624 nunca manda, e o primeiro segundo de toda conexão também não mandou.
+    // Tratar "não sei" como "não aprendeu nada" marcaria TODO slot da barra antes da hora.
+    expect(hud.get().learnedSpells).toBeNull();
+    applyMessage({ type: 'learned-spells', spellIds: [] }, 0);
+    expect(hud.get().learnedSpells).toEqual([]);
+  });
+
+  it('SUBSTITUI o registro inteiro, em vez de somar — a reconexão reenvia o mesmo total', () => {
+    applyMessage({ type: 'learned-spells', spellIds: ['wound-cleansing'] }, 0);
+    applyMessage({ type: 'learned-spells', spellIds: ['wound-cleansing', 'berserk'] }, 1_000);
+    expect(hud.get().learnedSpells).toEqual(['wound-cleansing', 'berserk']);
+    applyMessage({ type: 'learned-spells', spellIds: ['wound-cleansing', 'berserk'] }, 2_000);
+    expect(hud.get().learnedSpells).toEqual(['wound-cleansing', 'berserk']);
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state.inventory, notified);
+    subscribeSlice(hud, (state) => state.health, notified);
+
+    applyMessage({ type: 'learned-spells', spellIds: ['berserk'] }, 0);
 
     expect(notified).not.toHaveBeenCalled();
   });
