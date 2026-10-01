@@ -170,8 +170,16 @@ não fixava:
 
 Também registra o que o #629 fixa sem exigir decisão nova: o boss conta no Bosstiary e NÃO no
 Bestiário (`Player::addBestiaryKill` devolve cedo para `isBoss()`, e `Player::addBosstiaryKill`
-para o contrário), no MESMO evento de abate e com a MESMA elegibilidade — `#grantPartyXp`; o
-`boss: true` do #691 passa a ser escrito pelo importador junto com o bloco `bosstiary` (o
-`isBoss` do Canary É "tem bloco bosstiary"); e não há intenção C2S — o Bosstiary é só leitura, com
-a mensagem S2C `bosstiary` no attach e a cada abate. Boss Slot, boss boosted e o Podium of Vigour
-ficam fora, por dependerem do sistema de bosses (`docs/product/bosses.md`).
+para o contrário) e no MESMO evento de abate, mas **pelos `killers` do Canary, não pela
+elegibilidade da XP**: `Creature::onDeath` põe em `killers` todo jogador com dano no monstro e,
+com a XP compartilhada ativa, o roster inteiro da party, e `Player::onKilledMonster` chama
+`addBosstiaryKill` de cada um sem portão de stamina nem de vida (só `Player::gainExperience` tem o
+de stamina). Em solo, ou numa party sem XP compartilhada, quem não bateu no boss não conta; com
+stamina zero o boss conta (a hunt continua, só a XP e o loot param). É a regra idêntica do ADR
+0037 d.6, e é a razão de o Bosstiary NÃO herdar o portão de `#grantPartyXp` que o Bestiário
+ainda tem — e que diverge do Canary e do ADR 0043 d.1 / ADR 0053 d.1, uma divergência anterior
+ao #629 que fica para decisão de produto à parte. O `boss: true` do #691 passa a ser escrito pelo
+importador junto com o bloco `bosstiary` (o `isBoss` do Canary É "tem bloco bosstiary"); e não há
+intenção C2S — o Bosstiary é só leitura, com a mensagem S2C `bosstiary` no attach e a cada abate.
+Boss Slot, boss boosted e o Podium of Vigour ficam fora, por dependerem do sistema de bosses
+(`docs/product/bosses.md`).

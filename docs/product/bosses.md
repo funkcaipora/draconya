@@ -56,12 +56,34 @@ nível alcançado soma **pontos de boss**. Segue `IOBosstiary::addBosstiaryKill`
 (`src/io/io_bosstiary.cpp`) chamado por `Player::addBosstiaryKill` em `Player::onKilledMonster`,
 do Canary 47dfd51.
 
-**Onde o abate conta.** No MESMO evento e pela MESMA elegibilidade do Bestiário: em
-`#grantPartyXp` (`packages/sim/src/rulesets/hunt.ts`), para todo elegível (vivo e com stamina —
-abate com stamina zero não conta), e nunca para invocação (`hasBeenSummoned`). Um monstro conta em
-UM dos dois registros, como no Canary: `Player::addBestiaryKill` devolve cedo para `isBoss()` e
-`Player::addBosstiaryKill` devolve cedo para o contrário. Boss não soma no Bestiário, então não
-entra nos marcos de XP nem nos pontos de Charm.
+**Onde o abate conta.** No MESMO evento do abate do Bestiário (`#onMonsterDied`,
+`packages/sim/src/rulesets/hunt.ts`), mas **pelos matadores do Canary, e não pela elegibilidade da
+XP**: `Creature::onDeath` monta o conjunto `killers` e chama `Player::onKilledMonster` de cada um
+— e é lá que `addBosstiaryKill` roda, sem nenhum portão de stamina ou de vida (só
+`Player::gainExperience` tem o de stamina). São matadores (`#killersOf`):
+
+- todo personagem com dano neste monstro (o dano da invocação entra no nome do mestre, como
+  `attacker->getMaster()` no Canary) — quem não bateu não conta, e quem já saiu da sessão não está
+  mais lá para contar;
+- e, com a XP compartilhada **ativa** na hora da morte (`Party::isSharedExperienceActive()`: nível,
+  alcance do líder e atividade, os mesmos de `party.md`), o roster inteiro da party, líder e todos
+  os membros — desde que algum deles tenha batido.
+
+Consequências, todas as do Canary: um herói com **stamina zero** (a hunt continua, só a XP e o loot
+param) conta o boss — abate, nível e pontos —; uma party cujos membros estão todos exaustos conta;
+e, sem XP compartilhada, um membro parado na party (sem bater, fora de alcance ou inativo) **não**
+conta, o que impede um alt AFK de farmar ponto de boss. Os matadores são avaliados ANTES da XP do
+mesmo abate (um level up dele não mexe na régua de nível). Nunca para invocação
+(`hasBeenSummoned`). Um monstro conta em UM dos dois registros, como no Canary:
+`Player::addBestiaryKill` devolve cedo para `isBoss()` e `Player::addBosstiaryKill` devolve cedo
+para o contrário. Boss não soma no Bestiário, então não entra nos marcos de XP nem nos pontos de
+Charm.
+
+O Bestiário continua com a elegibilidade da XP (vivo e com stamina — `bestiary.md`). Isso é
+anterior ao #629 e **diverge do Canary** (onde o Bestiário conta pelos mesmos `killers` e sem
+portão de stamina) e do próprio ADR 0043 d.1 / ADR 0053 d.1 ("o Bestiário conta sempre, mesmo com
+stamina baixa"); alinhá-lo é decisão de produto à parte (muda `stamina.md` e a regra 4 do ADR
+0027), fora do #629 — o Bosstiary não herda a divergência.
 
 **A chave do contador é o `raceId` do Canary**, não o id de conteúdo: o Canary guarda o abate em
 `STORAGEVALUE_BESTIARYKILLCOUNT + raceid`, e quatro `raceId` são compartilhados por variantes do
