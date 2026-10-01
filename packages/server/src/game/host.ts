@@ -987,6 +987,13 @@ interface HostedSession {
   /** Tentativa em voo por membro: concorrentes aguardam inclusive a falha, sem soltar antes. */
   readonly receiptSaves: Map<string, Promise<void>>;
   /**
+   * Extratos de SAÍDA em voo, por personagem — o `receiptSaves` de quem sai por personagem
+   * (`leavesOnExit`), que não cabe na vaga única dele: o mesmo personagem sai da mesma sessão
+   * mais de uma vez, e cada saída tem o extrato (e o `seq`) próprio. Quem acha o personagem já
+   * fora (`leave` devolve `null`) espera estes antes de soltar o que é dele (`#awaitExitSaves`).
+   */
+  readonly exitSaves: Map<string, Set<Promise<void>>>;
+  /**
    * Quem saiu por DENTRO do `sim` — morte ou regra de saída numa party (#193) — e ainda não
    * foi gravado nem devolvido à Cidade. `#presentMoves` enfileira; `#settleDepartures` drena
    * fora do ciclo, porque gravar é I/O.
@@ -4703,6 +4710,7 @@ export class SessionHost {
       lastAdvancedAtMs: this.#now(),
       credited: new Set(),
       receiptSaves: new Map(),
+      exitSaves: new Map(),
       departures: [],
       dirty: new Set(),
       sentItemsLooted: next.aggregates.itemsLooted,
@@ -4956,8 +4964,24 @@ export class SessionHost {
     // personagem, e por isso nem `credited` (uma marca por sessão e personagem) nem o voo
     // pendente (que devolveria o de OUTRO extrato) servem aqui. Cada um leva o `seq` que o `sim`
     // lhe deu, e o ledger recusa só o MESMO `(session_id, seq)` — retry continua seguro.
+    //
+    // O voo fica registrado em `exitSaves`: quem sair do mesmo personagem enquanto este extrato
+    // ainda não pousou acha o personagem fora e não tem extrato próprio a gravar, e tem de esperar
+    // este antes de soltar o que é dele — a drenagem não pode contar uma saída que ainda não gravou.
     if (leavesOnExit(hosted.session.ruleset)) {
-      await this.#persistReceipt(characterId, hosted, receipt, receipts, accountId, departed);
+      const saving = this.#persistReceipt(characterId, hosted, receipt, receipts, accountId, departed);
+      const inFlight = hosted.exitSaves.get(characterId) ?? new Set<Promise<void>>();
+      inFlight.add(saving);
+      hosted.exitSaves.set(characterId, inFlight);
+      try {
+        await saving;
+      } finally {
+        // Também na falha: quem espera recebe o mesmo desfecho, e a vaga não pode vazar.
+        inFlight.delete(saving);
+        if (inFlight.size === 0 && hosted.exitSaves.get(characterId) === inFlight) {
+          hosted.exitSaves.delete(characterId);
+        }
+      }
       return;
     }
     if (hosted.credited.has(characterId)) return;
@@ -5128,7 +5152,9 @@ export class SessionHost {
    * `leave` + o extrato de delta que ele emite, gravado (ADR 0060 d.10c) — o ramo da sessão que
    * sai por personagem E credita por agregado. Quem já saiu não é participante: `leave` devolve
    * `null` e não há extrato a gravar, o que torna a saída idempotente (a drenagem sai por aqui
-   * e o `release` que vem logo depois encontra o personagem já fora).
+   * e o `release` que vem logo depois encontra o personagem já fora). Idempotente, mas não
+   * apressada: se a saída que tirou o personagem ainda está gravando o extrato, esta espera por ele
+   * (`#awaitExitSaves`) — senão a drenagem contaria, e o `release` soltaria, o que ainda não pousou.
    *
    * Grava o dono que `leave` devolveu (`departed`): ele já não está em `participants`, como o
    * membro de uma party que sai por dentro do `sim` (#194). O `goldDelta` dele é liquidado por
@@ -5136,11 +5162,26 @@ export class SessionHost {
    */
   async #leaveWithReceipt(characterId: string, hosted: HostedSession, reason: EndReason): Promise<void> {
     const departure = hosted.session.leave(characterId, reason);
-    if (departure === null) return;
+    if (departure === null) {
+      await this.#awaitExitSaves(hosted, characterId);
+      return;
+    }
     // O que estava pendente de estado vai INTEIRO neste extrato (`#persistReceipt` leva todos os
     // campos absolutos): não sobra marca de `dirty` para um extrato de estado que ninguém grava.
     hosted.dirty.delete(characterId);
     await this.#saveReceipt(characterId, hosted, departure.receipt, departure.character);
+  }
+
+  /**
+   * Espera os extratos de saída de `characterId` que ainda estão gravando (`exitSaves`) — o que o
+   * `#saveReceipt` da sessão privada faz devolvendo o voo de `receiptSaves`. A falha também chega
+   * a quem espera: soltar o personagem (diretório, slot, snapshot) depois de um extrato que não
+   * pousou perderia o que ele rendeu, e é o mesmo contrato do `release` concorrente (#267).
+   */
+  async #awaitExitSaves(hosted: HostedSession, characterId: string): Promise<void> {
+    const inFlight = hosted.exitSaves.get(characterId);
+    if (inFlight === undefined) return;
+    await Promise.all([...inFlight]);
   }
 
   /**
@@ -5650,6 +5691,7 @@ export class SessionHost {
       lastAdvancedAtMs: this.#now(),
       credited: new Set(),
       receiptSaves: new Map(),
+      exitSaves: new Map(),
       departures: [],
       dirty: new Set(),
       sentItemsLooted: session.aggregates.itemsLooted,

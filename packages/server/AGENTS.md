@@ -791,6 +791,14 @@ sessão e personagem) servem a quem sai UMA vez. No mundo o personagem volta à 
 novo, e cada saída tem o extrato e o `seq` dela — `#saveReceipt` grava direto, sem deduplicar, para
 `leavesOnExit`. O ledger só recusa o MESMO `(session_id, seq)`.
 
+**Mas quem sai de novo ESPERA o voo.** Sem a vaga única de `receiptSaves`, o voo de cada saída fica
+em `hosted.exitSaves` (um `Set` de promessas por personagem). `leave` tira o personagem de
+`participants` antes de o extrato pousar, então uma segunda saída concorrente — a drenagem, o
+`#collectResting`, um segundo logout — acha o personagem fora (`leave` devolve `null`) e não tem
+extrato próprio: `#leaveWithReceipt` espera `exitSaves` (`#awaitExitSaves`), inclusive a falha, antes
+de o `release` soltar diretório, slot e snapshot. É o contrato do `release` concorrente da sessão
+privada (#267), por outro caminho; `gold-channel.test.ts` o prende nas duas variantes.
+
 **Ainda não é o mundo.** Nenhum ruleset declara `progress`, então os ramos de `creditsAggregates &&
 leavesOnExit` (a coluna "Mundo") só rodam em teste, com um ruleset de mentira
 (`game/gold-channel.test.ts`). O que a OW-16 acrescenta é o timer, o lote num `MULTI` e a

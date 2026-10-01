@@ -5,6 +5,7 @@ import type { Blessing, Charm, Progression, Spell } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { createLogger } from '../log.js';
 import type { ReceiptStore } from '../receipts.js';
+import type { SnapshotStore } from '../snapshots.js';
 import { TEST_PROGRESSION } from '../testing/content.js';
 import { SessionHost } from './host.js';
 import type { SessionHostOptions } from './host.js';
@@ -269,6 +270,75 @@ describe('um canal de gold por sessão (OW-04, ADR 0060 d.10c)', () => {
       expect(netGold(f.saved)).toBe(50);
       expect(f.host.sessionFor('p1')).toBeUndefined();
     });
+
+    it.each([false, true])(
+      'uma segunda saída concorrente espera o extrato em voo antes de soltar, falha=%s',
+      async (fails) => {
+        // `leave` tira o personagem de `participants` ANTES de o extrato pousar. Quem sai de novo
+        // o acha fora e não tem extrato próprio a gravar: sem esperar o voo, a drenagem contaria a
+        // saída e o `release` soltaria o diretório e o snapshot com o extrato ainda sem gravar.
+        let resolveSave: () => void = () => {};
+        let rejectSave: (error: Error) => void = () => {};
+        const gate = new Promise<void>((resolve, reject) => { resolveSave = resolve; rejectSave = reject; });
+        const written: SavedReceipt[] = [];
+        let attempts = 0;
+        const removed: string[] = [];
+        const f = build(WORLD, {
+          receipts: {
+            save: async (receipt: SavedReceipt) => {
+              attempts += 1;
+              await gate;
+              written.push(receipt);
+            },
+          } as unknown as ReceiptStore,
+          snapshots: {
+            load: async () => null, save: async () => {}, remove: async (id: string) => { removed.push(id); },
+          } as unknown as SnapshotStore,
+        });
+        const { viewer, hero } = await f.enter('p1');
+        give(hero, 'g1', 'gem');
+        f.host.handle(viewer, { type: 'sell-items', instanceIds: ['g1'] });
+        f.host.flush();
+
+        const releasing = f.host.release('p1', 1000, 'logout');
+        const draining = f.host.drainAll();
+        const releasingAgain = f.host.release('p1', 1000, 'logout');
+        const settled = Promise.allSettled([releasing, draining, releasingAgain]);
+        let done = false;
+        void settled.then(() => { done = true; });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        // O extrato está em voo: ninguém terminou, e nada foi solto.
+        expect(done).toBe(false);
+        expect(attempts).toBe(1);
+        expect(written).toHaveLength(0);
+        expect(removed).toEqual([]);
+        expect(f.host.sessionFor('p1')).toBeDefined();
+
+        if (fails) rejectSave(new Error('Redis unavailable'));
+        else resolveSave();
+        const [released, drained, releasedAgain] = await settled;
+
+        if (fails) {
+          // A falha chega a quem espera, como no `release` concorrente da sessão privada (#267): a
+          // drenagem não conta a saída, e nenhum deles soltou o que era do personagem.
+          expect(released.status).toBe('rejected');
+          expect(drained).toEqual({ status: 'fulfilled', value: 0 });
+          expect(releasedAgain.status).toBe('rejected');
+          expect(removed).toEqual([]);
+          expect(f.host.sessionFor('p1')).toBeDefined();
+        } else {
+          expect(released.status).toBe('fulfilled');
+          expect(drained).toEqual({ status: 'fulfilled', value: 1 });
+          expect(releasedAgain.status).toBe('fulfilled');
+          // Um extrato só, gravado ANTES de qualquer coisa ser solta.
+          expect(written).toHaveLength(1);
+          expect(netGold(written)).toBe(30);
+          expect(removed).toContain('p1');
+          expect(f.host.sessionFor('p1')).toBeUndefined();
+        }
+      },
+    );
 
     it('a transição para a hunt grava o extrato de delta antes de trocar, e a hunt parte do saldo liquidado', async () => {
       const hunt = new Session({ id: 'hunt-1', contentVersion: 'v-test', ruleset: HUNT, rng: Rng.fromSeed('h'), createdAtMs: 0 });
