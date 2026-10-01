@@ -2238,6 +2238,17 @@ export const MONSTER_CLASSES = [
 export type MonsterClass = (typeof MONSTER_CLASSES)[number];
 
 /**
+ * As três raridades do Bosstiary do Canary (`BosstiaryRarity_t`, `src/io/io_bosstiary.hpp`, #629):
+ * `RARITY_BANE` (0), `RARITY_ARCHFOE` (1) e `RARITY_NEMESIS` (2) — em ordem crescente de raridade,
+ * a mesma que o `monster.bosstiary.bossRace` de cada boss declara. O vocabulário é FECHADO: o
+ * Canary tem um quarto valor (`BOSS_INVALID`, 10) que é só marcador de leitura do servidor, nunca
+ * enviado ao cliente nem declarado por monstro.
+ */
+export const BOSSTIARY_RARITIES = ['bane', 'archfoe', 'nemesis'] as const;
+export type BosstiaryRarity = (typeof BOSSTIARY_RARITIES)[number];
+export const bosstiaryRaritySchema = z.enum(BOSSTIARY_RARITIES);
+
+/**
  * Os `ConditionEffect.kind` que uma DEFESA de monstro pode aplicar a SI MESMA (#651): todo
  * self-buff que o bestiário do Canary/TFS usa em defesa própria, nunca um efeito que só faz
  * sentido vindo de um ATACANTE contra outra criatura — `drunk` (desvio de passo) e
@@ -2631,10 +2642,26 @@ export const monsterSchema = z.strictObject({
   canPushItems: z.boolean().default(false),
   /**
    * É boss (#691)? O `MonsterType::isBoss` do Canary (`!bosstiaryClass.empty()`), que decide
-   * se os rates de `progression.rates.boss` valem no lugar dos de `monster`. Só a flag: a
-   * raridade e os pontos do Bosstiary são o #629. Ausente é `false`.
+   * se os rates de `progression.rates.boss` valem no lugar dos de `monster` — e, desde o #629,
+   * também quem NÃO conta no Bestiário (`Player::addBestiaryKill` devolve cedo para boss) e conta
+   * no Bosstiary. O importador escreve `boss: true` junto com `bosstiary` (o `isBoss` do Canary É
+   * "tem bloco bosstiary"), e `buildContent` recusa `bosstiary` sem `boss`. Ausente é `false`.
    */
   boss: z.boolean().default(false),
+  /**
+   * O boss no Bosstiary (#629; `monster.bosstiary` do Canary): a raridade — Bane, Archfoe ou
+   * Nemesis, que escolhe a linha de `content.bosstiary.levels` (quantos abates levam a cada
+   * nível, e quantos pontos cada nível rende) — e o `raceId` (`bossRaceId` do Canary), a CHAVE do
+   * contador de abates. É a chave do Canary (`STORAGEVALUE_BESTIARYKILLCOUNT + raceid`), e não o
+   * id de conteúdo, porque quatro `raceId` são compartilhados por variantes do mesmo boss (as
+   * cinco formas de Urmahlullu, as duas Goshnar's Megalomania, os dois Voidborn, Rupture e
+   * Eradicator2): abater qualquer uma soma no MESMO contador. Só o boss declara; monstro comum
+   * fica sem o campo e conta no Bestiário.
+   */
+  bosstiary: z.strictObject({
+    rarity: bosstiaryRaritySchema,
+    raceId: z.number().int().positive(),
+  }).optional(),
   loot: lootTableSchema.default({ items: [] }),
   /**
    * Quanto tempo o cadáver deste monstro fica no chão, em milissegundos (#585; ADR 0037 d.6):
@@ -3921,6 +3948,44 @@ export const boostedSchema = z.object({
   rolloverHourUtc: z.number().int().min(0).max(23),
 });
 export type Boosted = z.infer<typeof boostedSchema>;
+
+/**
+ * Os níveis do Bosstiary por raridade (#629): quantos abates levam a cada um dos três níveis e
+ * quantos pontos de boss o nível rende — a tabela `IOBosstiary::levelInfos` do Canary
+ * (`src/io/io_bosstiary.hpp`, 47dfd51: Bane 25/100/300 abates → 5/15/30 pontos, Archfoe 5/20/60 →
+ * 10/30/60, Nemesis 1/3/5 → 10/30/60). Os abates são CRESCENTES por definição — o nível 2 não
+ * pode pedir menos que o 1 —, e o schema o exige.
+ */
+export const bosstiaryLevelInfoSchema = z.strictObject({
+  /** Abates do boss para alcançar este nível (`LevelInfo::kills`). */
+  kills: z.number().int().positive(),
+  /** Pontos de boss que alcançar este nível rende (`LevelInfo::points`). */
+  points: z.number().int().positive(),
+});
+export type BosstiaryLevelInfo = z.infer<typeof bosstiaryLevelInfoSchema>;
+
+const bosstiaryLevelsSchema = z.tuple([bosstiaryLevelInfoSchema, bosstiaryLevelInfoSchema, bosstiaryLevelInfoSchema])
+  .refine(
+    ([first, second, third]) => first.kills < second.kills && second.kills < third.kills,
+    { message: 'bosstiary: os abates de cada nível são crescentes' },
+  );
+
+export const bosstiarySchema = z.strictObject({
+  id: z.literal('baseline'),
+  levels: z.strictObject({
+    bane: bosstiaryLevelsSchema,
+    archfoe: bosstiaryLevelsSchema,
+    nemesis: bosstiaryLevelsSchema,
+  }),
+  /**
+   * De onde a tabela saiu (ADR 0038 d.2) — a tabela é transcrita à mão de UM arquivo do Canary
+   * (`IOBosstiary::levelInfos`), sem importador, então o bloco de proveniência é gravado no JSON
+   * em vez de virar `_open` (o boot avisa todo `_open` como valor não decidido, e este é decidido).
+   */
+  source: catalogSourceSchema.optional(),
+  _open: z.string().optional(),
+});
+export type Bosstiary = z.infer<typeof bosstiarySchema>;
 
 /**
  * Vocabulário do bot (FUN-73, ADR 0002, §13).

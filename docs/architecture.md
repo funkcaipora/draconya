@@ -503,6 +503,8 @@ Esta é a seção que importa para desenhar mecânicas. **O que é barato, o que
 
 ### Não dá sem trocar a arquitetura
 
+> **Revisto em 2026-09-30 ([ADR 0060](adr/0060-tibia-open-world-without-pvp.md)).** O dono decidiu que o Draconya é o mundo aberto do Tibia sem PvP, com a hunt idle como adicional. O mundo compartilhado deixou de ser "não dá sem trocar a arquitetura": a troca é o ADR 0060 (um mundo é uma sessão compartilhada com relógio, nascida da Cidade de Thais). O que segue abaixo é o registro de antes da decisão.
+
 - **Combate ou PvP na cidade.** A cidade é protect zone por decisão de custo; devolver ações
   a ela é reintroduzir o mundo aberto que a arquitetura evita.
 - **Mundo aberto persistente e contínuo**, com jogadores se encontrando fora de instâncias.

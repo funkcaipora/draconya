@@ -29,6 +29,8 @@ export function loadContent(dir: string): Content {
     stamina: readJsonDir(join(dir, 'stamina')),
     party: readJsonDir(join(dir, 'party')),
     bestiary: readJsonDir(join(dir, 'bestiary')),
+    // Os níveis do Bosstiary (#629) — `bosstiary/baseline.json`, a tabela do `io_bosstiary`.
+    bosstiary: readJsonDir(join(dir, 'bosstiary')),
     // Os 25 Charms do Canary (M39-02, #602) — uma entidade por arquivo/fatia, como `spells`.
     charms: readJsonDir(join(dir, 'charms')),
     // A esfola de cadáver (#626): `skinning/generated/skinning.json`, gerado por `pnpm catalog:import

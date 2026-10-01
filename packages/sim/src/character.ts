@@ -11,6 +11,8 @@ import { DEFAULT_FIGHT_MODE, isFightMode } from './combat/fight-mode.js';
 import type { FightMode } from './combat/fight-mode.js';
 import { Bestiary } from './bestiary.js';
 import type { BestiaryState } from './bestiary.js';
+import { Bosstiary } from './bosstiary.js';
+import type { BosstiaryState } from './bosstiary.js';
 import { Charms } from './charms.js';
 import type { CharmsState } from './charms.js';
 import { Conditions } from './conditions.js';
@@ -117,6 +119,12 @@ export interface CharacterState {
    * o `SNAPSHOT_FORMAT_VERSION` não precisou subir (DT-06), exatamente como `skills`.
    */
   readonly bestiary?: BestiaryState;
+  /**
+   * O Bosstiary (#629, ADR 0052 d.1): abates por boss, pontos de boss e a versão do registro.
+   * Ausente é snapshot ou personagem anterior a esta issue, ou que nunca abateu um boss — a
+   * mesma degradação de `bestiary`. Opcional, então o `SNAPSHOT_FORMAT_VERSION` não subiu.
+   */
+  readonly bosstiary?: BosstiaryState;
   /**
    * A economia de Charms (M39-02, #602, ADR 0052 d.1): pontos/echoes gastos, tier de cada
    * charm e as atribuições por monstro. Ausente é personagem anterior a esta issue, ou que
@@ -401,6 +409,8 @@ export class CharacterRuntime {
   readonly skills: Skills;
   /** Mutado no lugar a cada abate recompensado — ver `Bestiary.record`. */
   readonly bestiary: Bestiary;
+  /** Mutado no lugar a cada abate de boss recompensado — ver `Bosstiary.record`. */
+  readonly bosstiary: Bosstiary;
   /** Mutado no lugar a cada intenção de Charm aceita — ver `Charms.unlock`/`assign`/`remove`. */
   readonly charms: Charms;
   capacity: number;
@@ -499,6 +509,7 @@ export class CharacterRuntime {
     this.speed = state.speed ?? 0;
     this.skills = Skills.fromState(state.skills);
     this.bestiary = Bestiary.fromState(state.bestiary);
+    this.bosstiary = Bosstiary.fromState(state.bosstiary);
     this.charms = Charms.fromState(state.charms);
     this.capacity = state.capacity ?? 0;
     this.inventory = Inventory.fromState(state.inventory);
@@ -731,6 +742,7 @@ export class CharacterRuntime {
       alive: this.alive,
       skills: this.skills.getState(),
       bestiary: this.bestiary.getState(),
+      bosstiary: this.bosstiary.getState(),
       charms: this.charms.getState(),
       capacity: this.capacity,
       inventory: this.inventory.getState(),
