@@ -330,6 +330,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           // Os 25 Charms (M39-02, #602, ADR 0053 d.3): custo, chance e categoria de cada um,
           // fixados na sessão — a tela do Cyclopedia lê daqui.
           charms: message.charms,
+          // Os níveis do Bosstiary (#629): a tabela por raridade, fixada na sessão. Ausente quando o
+          // servidor não a mandou — a tela decide o que mostrar sem ela, não este `case`.
+          ...(message.bosstiary === undefined ? {} : { bosstiary: message.bosstiary }),
         },
       }));
       return;
@@ -364,6 +367,12 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // servidor manda no attach e sempre que um contador muda (FUN-113), e somar aqui daria
       // um Bestiário que diverge do dele na primeira reconexão — que reenvia o mesmo total.
       hud.set((state) => ({ ...state, bestiary: message.counts }));
+      return;
+
+    case 'bosstiary':
+      // SUBSTITUI, como o Bestiário: são os contadores INTEIROS de cada boss e os pontos, não um
+      // delta — o servidor manda no attach e a cada abate de boss (#629, ADR 0052 d.1).
+      hud.set((state) => ({ ...state, bosstiary: { kills: message.kills, points: message.points } }));
       return;
 
     case 'charms':

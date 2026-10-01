@@ -224,6 +224,27 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       .toEqual({ milestones: [3, 5], xpBonusPercentPerMilestone: 20 });
   });
 
+  it('leva os níveis do Bosstiary e a raridade de cada boss quando o conteúdo os tem, e a chave some quando não (#629)', () => {
+    // Fixado na sessão (invariante 7): a tela deriva o nível de cada boss da tabela por raridade e
+    // do registro cru. O conteúdo de teste não tem Bosstiary — a chave fica AUSENTE, não `undefined`.
+    expect(buildCatalogue(content)).not.toHaveProperty('bosstiary');
+    expect('bosstiary' in (buildCatalogue(content).monsters[0] ?? {})).toBe(false);
+
+    const real = buildCatalogue(loadContent(DATA));
+    expect(real.bosstiary).toEqual({
+      levels: {
+        bane: [{ kills: 25, points: 5 }, { kills: 100, points: 15 }, { kills: 300, points: 30 }],
+        archfoe: [{ kills: 5, points: 10 }, { kills: 20, points: 30 }, { kills: 60, points: 60 }],
+        nemesis: [{ kills: 1, points: 10 }, { kills: 3, points: 30 }, { kills: 5, points: 60 }],
+      },
+    });
+    // Dreadmaw: Nemesis, raceId 639 — só a raridade e a chave do contador atravessam, o resto do
+    // bloco do conteúdo é assunto do carregador. E monstro comum não ganha a chave.
+    const dreadmaw = real.monsters.find((m) => m.id === 'dreadmaw');
+    expect(dreadmaw?.bosstiary).toEqual({ rarity: 'nemesis', raceId: 639 });
+    expect('bosstiary' in (real.monsters.find((m) => m.id === 'rat') ?? {})).toBe(false);
+  });
+
   it('leva o vocabulário do bot v2, e é ele que a tela oferece (AB-09, RF-10)', () => {
     // A UI do bot não pode ter lista de opções em código: se as duas divergirem, o jogador
     // configura o que o bot recusa — e descobre pelo extrato que não fecha. O v2 substitui o

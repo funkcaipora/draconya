@@ -145,6 +145,23 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   não conta abate (§18.6) pela MESMA condição que não paga XP nem loot — duas condições
   divergem na primeira mudança em uma delas. `Bestiary.merge` fica com o maior por monstro,
   pela razão de `Skills.merge`.
+- **O Bosstiary é o irmão do Bestiário, e o boss conta em UM dos dois** (`bosstiary.ts`, #629,
+  ADR 0052 emenda de 2026-09-29). Mesmo evento (`#onMonsterDied`) e mesma fusão por máximo
+  (`Bosstiary.merge`) — mas **NÃO a mesma elegibilidade**: o Bestiário ainda corre dentro do
+  `for (const member of eligible)` de `#grantPartyXp` (vivo e com stamina), e o Bosstiary roda
+  FORA dele, em `#creditBosstiary`, sobre os `killers` do Canary (`#killersOf`: todo jogador com
+  dano no monstro, mais o roster inteiro com a XP compartilhada ativa). `Player::onKilledMonster`
+  não tem portão de stamina nem de vida — só `Player::gainExperience` tem —, então um herói
+  exausto conta o boss, e quem não bateu (sem XP compartilhada) não. Os `killers` saem ANTES da
+  XP do abate: o level up dele não pode mexer na régua de nível de `canShareExperience`. Mover o
+  Bosstiary de volta para dentro do `eligible` "para ficar igual ao Bestiário" reabre a
+  divergência — o que está desalinhado é o Bestiário (ADR 0043 d.1 / 0053 d.1), não o Bosstiary.
+  O contador é chaveado pelo `raceId` do boss (em TEXTO: objeto JSON só tem chave de texto), e não
+  pelo id de conteúdo, porque variantes do mesmo boss compartilham o `raceId` no Canary.
+  **`definition.boss` decide a porta:** boss não soma no `Bestiary` (`Player::addBestiaryKill`
+  devolve cedo para `isBoss()`) — esquecer o `if` faria o boss entrar nos marcos de XP. Os pontos
+  são os do PRÓPRIO nível alcançado, somados ao total; nível fechado é o evento notável
+  `bosstiary-level`.
 - **A party é aritmética pura em `party.ts` (#189, ADR 0027; fórmula e elegibilidade emendadas
   pelo #525 em 2026-09-24/25, fidelidade CANARY do ADR 0037 d.4 — não TFS: as duas engines
   divergem no multiplicador, e é o Canary que manda em fórmula), e o ruleset só chama.**

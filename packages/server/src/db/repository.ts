@@ -65,6 +65,12 @@ export interface CharacterRecord {
    * escreve é o ledger, na transação do extrato (ADR 0052 d.1).
    */
   readonly charms: unknown;
+  /**
+   * O Bosstiary (#629), como veio do banco. `unknown` pela mesma razão de `bestiary`: a forma
+   * (`BosstiaryState`) é do `sim`, e quem a confere é quem monta o ticket. `null` é personagem
+   * que nunca abateu um boss. Sem método de escrita: quem escreve é o ledger (ADR 0052 d.1).
+   */
+  readonly bosstiary: unknown;
   /** Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, em milissegundos. `0` é ninguém comeu. */
   readonly fedMs: number;
   /** As sete bênçãos PvE (#570, ADR 0052): BITMASK de `CharacterRuntime.blessings`. `0` é nenhuma. */
@@ -589,6 +595,7 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     supplyStock: row.supplyStock,
     ammunitionStock: row.ammunitionStock,
     charms: row.charms,
+    bosstiary: row.bosstiary,
     fedMs: row.fedMs,
     blessings: row.blessings,
     fightMode: row.fightMode,

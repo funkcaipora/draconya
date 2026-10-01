@@ -8,9 +8,9 @@
 
 import { randomUUID } from 'node:crypto';
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { Bestiary, levelForXp, readItemOverlay } from '@draconya/sim';
+import { Bestiary, Bosstiary, levelForXp, readItemOverlay } from '@draconya/sim';
 import type {
-  BestiaryState, CharacterStorageMap, ItemInstanceOverlay,
+  BestiaryState, BosstiaryState, CharacterStorageMap, ItemInstanceOverlay,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { Database } from '../db/client.js';
@@ -161,6 +161,7 @@ async function applyProgression(
       gold: characters.gold,
       skillsUpdatedAt: characters.skillsUpdatedAt,
       bestiary: characters.bestiary,
+      bosstiary: characters.bosstiary,
       ammo: characters.ammo,
       staminaUpdatedAt: characters.staminaUpdatedAt,
     })
@@ -222,6 +223,18 @@ async function applyProgression(
     : {
       bestiary: Bestiary.merge(
         (current.bestiary as BestiaryState | null) ?? undefined, receipt.bestiary,
+      ),
+    };
+
+  // O Bosstiary funde pelo MAIOR de cada boss e dos pontos (#629, ADR 0052 d.1), pela mesma razão
+  // do Bestiário: abate nunca desce, e os pontos de boss só somam. A coluna é nulável — `null` é
+  // quem nunca abateu um boss — e o extrato SEM o campo (Cidade, nó antigo em deploy) não toca
+  // nela.
+  const bosstiary = receipt.bosstiary === undefined
+    ? {}
+    : {
+      bosstiary: Bosstiary.merge(
+        (current.bosstiary as BosstiaryState | null) ?? undefined, receipt.bosstiary,
       ),
     };
 
@@ -330,6 +343,7 @@ async function applyProgression(
       gold,
       ...skills,
       ...bestiary,
+      ...bosstiary,
       ...ammo,
       ...soul,
       ...supplyStock,
