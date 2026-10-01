@@ -798,11 +798,13 @@ export function walkBackPathStep(from: GridPoint, home: GridPoint, blocked: Bloc
 }
 
 /**
- * Até onde a invocação de personagem se aproxima do mestre ao segui-lo
- * (`Monster::getPathSearchParams`, `monster.cpp:3836-3838`: `master == creature` →
- * `fpp.maxTargetDist = 2`, com `minTargetDist = 1`): qualquer tile a 1 ou 2 do mestre serve.
+ * A distância a que a invocação de personagem para ao seguir o mestre (`Monster::
+ * getPathSearchParams`, `monster.cpp:3836-3838`: `master == creature` → `fpp.maxTargetDist = 2`,
+ * com `minTargetDist = 1`). É o ALVO da busca: `FrozenPathingConditionCall`
+ * (`creature.cpp:1819-1847`) só trata `testDist == maxTargetDist` como acerto perfeito — a 1 tile
+ * é "o melhor até agora", e a busca segue procurando um tile a 2 (ver `summonFollowStep`).
  */
-export const SUMMON_FOLLOW_MAX_DISTANCE = 2;
+export const SUMMON_FOLLOW_DISTANCE = 2;
 
 /**
  * O raio da busca de caminho ao mestre (`Creature::getPathSearchParams`, `maxSearchDist = 12`).
@@ -812,19 +814,43 @@ export const SUMMON_FOLLOW_MAX_DISTANCE = 2;
 const SUMMON_FOLLOW_SEARCH_RADIUS = 12;
 
 /**
- * O passo com que a invocação de personagem SEM alvo segue o mestre (#599; `Monster::
+ * O que a invocação de personagem SEM alvo faz a cada vencimento (`Monster::getNextStep` com o
+ * mestre como `followCreature`, `Monster::updateSummonTarget`):
+ * - `step`: o próximo passo do caminho até o tile a `SUMMON_FOLLOW_DISTANCE` do mestre;
+ * - `stay`: segue o mestre e não anda — já está num tile bom, ou não PODE seguir (`Creature::
+ *   goToFollowCreature` esvazia a lista de passos da invocação comum quando `canFollowMaster`
+ *   falha: mestre invisível que ela não enxerga);
+ * - `wander`: não há `followCreature` ou `hasFollowPath` é falso — o mestre fora da área de visão
+ *   (`setFollowCreature` recusa) ou nenhum caminho até um tile bom (`getPathTo` falha) —, e o
+ *   `getNextStep` do Canary cai em `doRandomStep`: quem decide é `decideUnengagedMove`.
+ */
+export type SummonFollow =
+  | { readonly kind: 'step'; readonly to: GridPoint }
+  | { readonly kind: 'stay' }
+  | { readonly kind: 'wander' };
+
+/**
+ * O que a invocação de personagem SEM alvo faz para seguir o mestre (#599; `Monster::
  * updateSummonTarget` — "`master != followCreature` → `setFollowCreature(master)`" — e
- * `doFollowCreature`, que anda o caminho até um tile a `SUMMON_FOLLOW_MAX_DISTANCE` do mestre).
- * `null` é ficar onde está: o mestre não está na área de visão (a mesma condição do
- * `setFollowCreature`: outro andar ou fora do quadrado de `viewRange`), já há um tile bom debaixo
- * dela, ou nenhum caminho leva a um.
+ * `doFollowCreature`, que anda o caminho até o tile a `SUMMON_FOLLOW_DISTANCE` do mestre).
+ *
+ * **O objetivo é DUAS camadas, como `FrozenPathingConditionCall`.** O A* do Canary só encerra a
+ * busca num tile a EXATAMENTE 2 do mestre com linha de visão livre (`clearSight`); um tile a 1 é só
+ * o "melhor até agora" (o primeiro encontrado, o tile atual inclusive), guardado enquanto a busca
+ * continua. Por isso a invocação encostada no mestre se afasta até a 2, e só se nenhum tile a 2 for
+ * alcançável (corredor de uma casa, mestre cercado) ela fica a 1. `currentPositionSatisfiesFollow`
+ * só existe quando `minTargetDist == maxTargetDist`, e aqui são 1 e 2.
  *
  * É a BUSCA de caminho de menor custo (`cheapestPath`: cardinal 10, diagonal 35, o A* do Canary),
  * não o passo guloso: o guloso, numa concavidade, faria a invocação oscilar na boca dela (o mesmo
  * motivo da volta ao spawn, `nextWalkBackStep`), e o BFS de custo igual a faria andar de viés na
- * diagonal — o triplo do tempo por tile. O objetivo é o tile MAIS BARATO a 1–2 do mestre com
- * linha de visão livre até ele (`fpp.clearSight = true`); `blocked` é o predicado da busca de
- * caminho — um tile a qualquer distância, criatura inclusa. Ordem de vizinhos fixa, sem sorteio.
+ * diagonal — o triplo do tempo por tile. `blocked` é o predicado da busca de caminho — um tile a
+ * qualquer distância, criatura inclusa. Ordem de vizinhos fixa, sem sorteio.
+ *
+ * `canFollowMaster` é o `Creature::canFollowMaster` do Canary para a invocação COMUM: falso quando
+ * o mestre está invisível e ela não enxerga invisível (o familiar passa por cima: `!isFamiliar()`
+ * é parte da condição) — o chamador já resolveu, e aqui só vale DEPOIS de o mestre estar à vista,
+ * porque `setFollowCreature` é anterior a `goToFollowCreature`.
  */
 export function summonFollowStep(
   monster: MonsterRuntime,
@@ -832,17 +858,28 @@ export function summonFollowStep(
   viewRange: number,
   blocked: Blocked,
   sightClear: (from: FloorPoint, to: FloorPoint) => boolean = () => true,
-): GridPoint | null {
-  if (!master.alive || !sameFloor(monster.position.z, master.position.z)) return null;
-  if (!canSeePoint(monster.position, master.position, viewRange)) return null;
+  canFollowMaster = true,
+): SummonFollow {
+  // O mestre morto sai da conta antes de tudo: sem ele a invocação some (`Game::removeCreature`),
+  // e até lá fica parada — nunca passeia atrás de um corpo.
+  if (!master.alive) return { kind: 'stay' };
+  if (!sameFloor(monster.position.z, master.position.z)) return { kind: 'wander' };
+  if (!canSeePoint(monster.position, master.position, viewRange)) return { kind: 'wander' };
+  if (!canFollowMaster) return { kind: 'stay' };
   const z = monster.position.z;
-  const inRange = (p: GridPoint): boolean => {
-    const at = Math.max(Math.abs(p.x - master.position.x), Math.abs(p.y - master.position.y));
-    return at >= 1 && at <= SUMMON_FOLLOW_MAX_DISTANCE
-      && sightClear({ x: p.x, y: p.y, ...(z === undefined ? {} : { z }) }, master.position);
-  };
-  const path = cheapestPath(monster.position, inRange, blocked, SUMMON_FOLLOW_SEARCH_RADIUS);
-  return path?.[0] ?? null;
+  const at = (p: GridPoint): number => Math.max(Math.abs(p.x - master.position.x), Math.abs(p.y - master.position.y));
+  const clear = (p: GridPoint): boolean =>
+    sightClear({ x: p.x, y: p.y, ...(z === undefined ? {} : { z }) }, master.position);
+  const path = cheapestPath(
+    monster.position,
+    (p) => at(p) === SUMMON_FOLLOW_DISTANCE && clear(p),
+    blocked,
+    SUMMON_FOLLOW_SEARCH_RADIUS,
+    (p) => at(p) >= 1 && at(p) < SUMMON_FOLLOW_DISTANCE && clear(p),
+  );
+  if (path === null) return { kind: 'wander' };
+  const next = path[0];
+  return next === undefined ? { kind: 'stay' } : { kind: 'step', to: next };
 }
 
 /**
@@ -861,9 +898,10 @@ export function isInSpawnRange(monster: MonsterRuntime, x: number, y: number): b
  *
  * - `idle`: `isIdle` — lista de alvos vazia, no spawn e sem condição nenhuma. O monstro nada faz.
  * - `still`: invocação sem alvo. O Canary a manda seguir o mestre (`updateSummonTarget`); a de
- *   PERSONAGEM o faz antes de chegar aqui (`summonFollowStep`, #599, decidido pelo ruleset), e
- *   esta ação é o que sobra — a invocação de outro MONSTRO (#546), que este motor não modela
- *   seguindo e continua parada onde está.
+ *   PERSONAGEM o faz antes de chegar aqui (`summonFollowStep`, #599, decidido pelo ruleset) — e
+ *   quando ele devolve `wander` (sem mestre à vista, sem caminho) cai no `random-step` abaixo, como
+ *   o `getNextStep` do Canary —, e esta ação é o que sobra: a invocação de outro MONSTRO (#546),
+ *   que este motor não modela seguindo e continua parada onde está.
  * - `walk-back`: `doWalkBack`; `to` é o passo rumo ao `home` — o guloso, ou a busca de caminho
  *   depois que o guloso empacou fora do `home` —, ou `null` quando já chegou ou não há passo
  *   (nos dois casos `walkingBack` desliga).
@@ -948,7 +986,11 @@ export function decideUnengagedMove(
     }
     monster.walkingBack = true;
   }
-  if (isSummon && target === null) return { kind: 'still' };
+  // A invocação de MONSTRO (#546) sem alvo fica parada: este motor não a modela seguindo o mestre.
+  // A de PERSONAGEM (`masterId` de texto, #599) chega aqui só quando NÃO tem `followCreature` ou
+  // caminho até o mestre — o `getNextStep` do Canary cai então em `doRandomStep`, como para
+  // qualquer monstro sem perseguição (e o `walkingBack` nunca liga: a invocação não tem spawn).
+  if (isSummon && target === null && typeof monster.masterId !== 'string') return { kind: 'still' };
 
   if (monster.walkingBack) {
     const to = sameFloor(monster.position.z, monster.home.z)

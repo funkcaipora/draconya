@@ -40,6 +40,29 @@ describe('cheapestPath', () => {
     expect(cheapestPath({ x: 0, y: 0 }, at(9, 0), open, 8)).toBeNull();
   });
 
+  describe('com `fallback` (o "melhor até agora" de `FrozenPathingConditionCall`)', () => {
+    // O objetivo é x = 4; o fallback é x = 1. Sem ele a busca ignora os tiles intermediários.
+    it('o objetivo alcançável vence o fallback, mesmo achando o fallback antes', () => {
+      const path = cheapestPath({ x: 0, y: 0 }, at(4, 0), open, 8, at(1, 0));
+      expect(path?.[path.length - 1]).toEqual({ x: 4, y: 0 });
+    });
+
+    it('sem objetivo alcançável, devolve o caminho até o PRIMEIRO fallback encontrado', () => {
+      const wall = (x: number): boolean => x === 3;
+      expect(cheapestPath({ x: 0, y: 0 }, at(4, 0), wall, 8, at(1, 0))).toEqual([{ x: 1, y: 0 }]);
+    });
+
+    it('o ponto de partida que satisfaz o fallback é o resultado: caminho vazio', () => {
+      const wall = (x: number): boolean => x === 3;
+      expect(cheapestPath({ x: 1, y: 0 }, at(4, 0), wall, 8, at(1, 0))).toEqual([]);
+    });
+
+    it('nem objetivo nem fallback alcançáveis: null', () => {
+      const wall = (x: number): boolean => x === 1;
+      expect(cheapestPath({ x: 0, y: 0 }, at(4, 0), wall, 8, at(2, 0))).toBeNull();
+    });
+  });
+
   it('é determinístico: o mesmo problema devolve o mesmo caminho', () => {
     const goal = (p: { x: number; y: number }): boolean =>
       Math.max(Math.abs(p.x - 6), Math.abs(p.y)) <= 2 && p.x < 6;

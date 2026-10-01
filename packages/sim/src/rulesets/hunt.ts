@@ -109,7 +109,7 @@ import {
   decideMonsterAction, decideUnengagedMove, isInSpawnRange, isMonsterFleeing, monsterSubject,
   nearestPrey, seesInvisible, summonFollowStep,
 } from '../monster/monster.js';
-import type { MonsterState, Prey } from '../monster/monster.js';
+import type { MonsterState, Prey, SummonFollow } from '../monster/monster.js';
 import { abilityBlockFlags, abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
 import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
 import {
@@ -2875,7 +2875,13 @@ export class HuntRuleset implements Ruleset {
     // entrando não está. A posição que ele traz é da sessão anterior, num mapa que não é
     // este; contá-la aqui marcaria como ocupado um tile da hunt por uma coordenada de
     // cidade. Antes da FUN-72 isso era limpo por acidente, porque `place` liberava a origem.
-    this.#world.reset(session.participants.filter((p) => p !== character));
+    //
+    // E com os MONSTROS que já estão aqui (#599): a ocupação é remontada do zero, e um familiar
+    // recriado na entrada do membro anterior de uma party (`#restoreFamiliar`) já é um monstro
+    // vivo no mundo — deixá-lo de fora liberaria o tile dele, e o membro seguinte (ou o familiar
+    // dele) nasceria em cima. Fora o familiar, só o entrante tardio de uma hunt em andamento tem
+    // monstro aqui; para a primeira entrada a lista é vazia.
+    this.#world.reset([...this.#monsters, ...session.participants.filter((p) => p !== character)]);
     // Velocidade e capacidade vêm da tabela, como `maxHealth` — e são repostas na entrada
     // porque snapshot anterior traz zero: zero é "não carrega nada" e "não anda" (FUN-119).
     // A velocidade soma o bônus de equipamento (#524: boots of haste) — o item já está no
@@ -3905,16 +3911,8 @@ export class HuntRuleset implements Ruleset {
 
     const subjectOf = monsterSubject(monster.id);
     // DEPOIS do `place`: é ele que pode recusar o tile, e anunciar uma posição que ainda pode
-    // ser recusada publicaria um monstro onde ele não está (FUN-103). `#at` lê o andar de FATO
-    // do monstro (#519) — o do mapa só sobra para quem nunca declarou `z` (andar único).
-    session.emit({
-      kind: 'creature-appeared', creatureId: subjectOf, monsterId: definition.id,
-      position: this.#at(monster),
-      health: monster.health, maxHealth: definition.health,
-      // `masterId` (#598) só para invocação de PERSONAGEM — a de MONSTRO (#546, `masterId`
-      // numérico) não marca nada para a apresentação.
-      ...(typeof monster.masterId === 'string' ? { masterId: monster.masterId } : {}),
-    });
+    // ser recusada publicaria um monstro onde ele não está (FUN-103).
+    this.#announceMonster(session, monster, definition.health);
     session.scheduleIn(MONSTER_STEP, 0, {
       priority: EventPriority.Movement, subject: subjectOf,
     });
@@ -4103,10 +4101,30 @@ export class HuntRuleset implements Ruleset {
    * `createdAtMs` que o servidor deu na criação da sessão mais o relógio lógico dela. É o que os
    * carimbos do familiar (`CharacterRuntime.familiar`, ADR 0052 d.6) comparam — o `sim` nunca lê
    * relógio (invariante 1), e a soma é a mesma antes e depois de um snapshot (`createdAtMs` e o
-   * relógio lógico voltam juntos), então retomar uma sessão não reinicia nenhum prazo.
+   * relógio lógico voltam juntos).
+   *
+   * **A soma só é "agora" enquanto o relógio lógico anda junto com o de parede.** A retomada de um
+   * snapshot descarta o intervalo em que o nó esteve fora (ADR 0018), e é o HOSPEDEIRO quem
+   * recoloca `createdAtMs` na hora de retomar (`SessionHost#resume`, soma o intervalo descartado)
+   * — dado que ele entrega, como o ADR 0052 d.6 manda, e não relógio que o `sim` leia.
+   *
+   * O valor é FRACIONÁRIO: o relógio lógico para no instante em que o hospedeiro o avança
+   * (`performance.now()`), e esse não é inteiro. Serve para COMPARAR; para GRAVAR use
+   * `#wallStampMs`.
    */
   #wallNowMs(session: Session): number {
     return session.createdAtMs + session.nowMs;
+  }
+
+  /**
+   * O instante de parede de agora mais `offsetMs`, ARREDONDADO PARA CIMA — o que vai para os
+   * carimbos do familiar. Os carimbos persistem (extrato, ticket, `characters.familiar`) e todo
+   * consumidor os valida como inteiro seguro (`isFamiliarState`): um carimbo fracionário seria
+   * trocado em silêncio pelo registro vazio, e o cooldown de 30 min some. Arredondar para CIMA é
+   * o lado que nunca encurta a invocação nem o cooldown (menos de 1 ms a mais).
+   */
+  #wallStampMs(session: Session, offsetMs: number): number {
+    return Math.ceil(this.#wallNowMs(session) + offsetMs);
   }
 
   /**
@@ -4132,6 +4150,24 @@ export class HuntRuleset implements Ruleset {
       return { x, y, z: from.z };
     }
     return null;
+  }
+
+  /**
+   * O `creature-appeared` de um monstro (FUN-103): nasce com ele (`#spawnMonster`) e volta a sair
+   * quando o familiar é RECOLOCADO (`#placeFamiliarNear`) — o `creature-moved` só descreve um passo
+   * de duração positiva, e quem olha precisa ver o monstro sumir de onde estava e aparecer onde
+   * ficou. `#at` lê o andar de FATO do monstro (#519) — o do mapa só sobra para quem nunca
+   * declarou `z` (andar único).
+   */
+  #announceMonster(session: Session, monster: MonsterRuntime, maxHealth: number): void {
+    session.emit({
+      kind: 'creature-appeared', creatureId: monster.subject, monsterId: monster.monsterId,
+      position: this.#at(monster),
+      health: monster.health, maxHealth,
+      // `masterId` (#598) só para invocação de PERSONAGEM — a de MONSTRO (#546, `masterId`
+      // numérico) não marca nada para a apresentação.
+      ...(typeof monster.masterId === 'string' ? { masterId: monster.masterId } : {}),
+    });
   }
 
   /**
@@ -4176,7 +4212,8 @@ export class HuntRuleset implements Ruleset {
    * carimbo de cooldown não é tocado: recriar não é lançar, e não custa mana.
    */
   #restoreFamiliar(session: Session, character: CharacterRuntime): void {
-    const remainingMs = character.familiar.summonUntilMs - this.#wallNowMs(session);
+    // Inteiro, como toda duração do conteúdo: o relógio de parede de agora é fracionário.
+    const remainingMs = Math.ceil(character.familiar.summonUntilMs - this.#wallNowMs(session));
     if (remainingMs <= 0 || character.vocationId === null) return;
     const ref = this.#familiarSpellByVocation.get(character.vocationId);
     if (ref === undefined || character.level < ref.spell.minLevel) return;
@@ -4196,7 +4233,7 @@ export class HuntRuleset implements Ruleset {
    * **Divergência de mecanismo, não de regra.** O Canary o põe NO tile do mestre (`internalTeleport`
    * com `FLAG_NOLIMIT`, que ignora o ocupante), e o tile do `sim` é exclusivo (invariante 8 na
    * letra: `TileOccupancy`). O familiar vai para o tile livre mais perto do mestre, no anel de até 2
-   * — sem nenhum, fica onde está e o próximo passo tenta de novo.
+   * (`#placeFamiliarNear`) — sem nenhum, fica onde está e o próximo passo tenta de novo.
    */
   #checkFamiliarMove(session: Session, master: CharacterRuntime): void {
     for (const id of this.#familiarIds) {
@@ -4207,26 +4244,38 @@ export class HuntRuleset implements Ruleset {
       const far = from.z !== to.z
         || Math.max(Math.abs(from.x - to.x), Math.abs(from.y - to.y)) > FAMILIAR_TELEPORT_DISTANCE;
       if (!far) continue;
-      const blocked = this.#summonBlockedFor();
-      for (const tile of tilesAround(to, 2)) {
-        if (tile.x === to.x && tile.y === to.y) continue;
-        if (blocked(tile.x, tile.y, to.z)) continue;
-        if (this.#world.floorChangeAt(tile.x, tile.y, to.z) !== null
-          || this.#world.teleportAt(tile.x, tile.y, to.z) !== null) continue;
-        this.#world.vacate(from.x, from.y, from.z);
-        if (place(this.#world, familiar, { x: tile.x, y: tile.y, z: to.z }) !== null) {
-          // `place` recusou (não deveria: o tile passou em `blocked` agora mesmo) — devolve o
-          // familiar ao tile de onde saiu, em vez de deixá-lo sem ocupação.
-          place(this.#world, familiar, from);
-          break;
-        }
-        familiar.lastMoveAtMs = session.nowMs;
-        session.emit({
-          kind: 'creature-moved', creatureId: familiar.subject, from, to: this.#at(familiar), durationMs: 0,
-        });
-        break;
-      }
+      // A origem é liberada ANTES da busca (o tile é do familiar, e a busca é em volta do MESTRE,
+      // longe dela) e devolvida se a busca não achar lugar.
+      this.#world.vacate(from.x, from.y, from.z);
+      if (!this.#placeFamiliarNear(session, familiar, to)) this.#world.occupy(from.x, from.y, from.z);
     }
+  }
+
+  /**
+   * Põe o familiar no tile livre mais perto de `near`, no anel de até 2 e sem o próprio `near`
+   * (parede, ocupação, escada e teleporte como o nascimento: `#summonBlockedFor`). Devolve se achou.
+   * **A ocupação do tile ANTERIOR é de quem chama**: aqui só o destino é ocupado.
+   *
+   * A colocação é RELOCAÇÃO, não passo: um `creature-moved` de duração zero seria descartado pelo
+   * hospedeiro (o protocolo exige duração positiva, ADR 0001) e o cliente continuaria desenhando o
+   * familiar no tile antigo — muitas vezes em outro andar, que é justamente o caso do teleporte.
+   * Por isso sai o par `creature-vanished` + `creature-appeared`, o mesmo que o nascimento e o fim
+   * da invocação já usam: o cliente o tira de onde estava e o põe onde ficou.
+   */
+  #placeFamiliarNear(session: Session, familiar: MonsterRuntime, near: WorldPoint): boolean {
+    const blocked = this.#summonBlockedFor();
+    for (const tile of tilesAround(near, 2)) {
+      if (tile.x === near.x && tile.y === near.y) continue;
+      if (blocked(tile.x, tile.y, near.z)) continue;
+      if (this.#world.floorChangeAt(tile.x, tile.y, near.z) !== null
+        || this.#world.teleportAt(tile.x, tile.y, near.z) !== null) continue;
+      if (place(this.#world, familiar, { x: tile.x, y: tile.y, z: near.z }) !== null) continue;
+      familiar.lastMoveAtMs = session.nowMs;
+      session.emit({ kind: 'creature-vanished', creatureId: familiar.subject });
+      this.#announceMonster(session, familiar, this.#options.monsters.get(familiar.monsterId)?.health ?? familiar.health);
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -5974,11 +6023,10 @@ const slots = bot.groups.get(group);
     // o tile continua livre.
     if (result.familiar === true && familiar !== undefined && familiar.at !== null) {
       this.#spawnFamiliar(session, character, familiar.definition, familiar.at, familiar.effect.durationMs);
-      const wallNowMs = this.#wallNowMs(session);
       character.familiar = {
         ...character.familiar,
-        summonUntilMs: wallNowMs + familiar.effect.durationMs,
-        cooldownUntilMs: wallNowMs + familiar.effect.cooldownMs,
+        summonUntilMs: this.#wallStampMs(session, familiar.effect.durationMs),
+        cooldownUntilMs: this.#wallStampMs(session, familiar.effect.cooldownMs),
       };
     }
 
@@ -8000,6 +8048,23 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * O que a invocação de PERSONAGEM sem alvo faz para seguir o mestre (#599; `summonFollowStep`).
+   * Reúne o que só o ruleset sabe: o mestre pelo id, e `Creature::canFollowMaster` — a invocação
+   * COMUM não segue o mestre invisível que ela não enxerga (`canSeeInvisibility() ||
+   * !master->isInvisible()`), e o FAMILIAR segue sempre (`!isFamiliar()` faz parte da condição em
+   * `Creature::goToFollowCreature`). O mestre ausente (saiu, e a invocação some junto) é `stay`.
+   */
+  #summonFollowOf(session: Session, monster: MonsterRuntime, definition: Monster): SummonFollow {
+    const master = typeof monster.masterId === 'string' ? findById(session.participants, monster.masterId) : null;
+    if (master === null) return { kind: 'stay' };
+    return summonFollowStep(
+      monster, master, definition.aggroRadius, this.#blockedForWalkBackPath(monster, definition),
+      (from, at) => isSightClear(this.#world.map, from, at),
+      definition.familiar === true || !master.invisible || seesInvisible(definition),
+    );
+  }
+
+  /**
    * O passo de um monstro venceu (CMB-06).
    *
    * A decisão de andar ou bater continua sendo UMA (`decideMonsterAction`), e o alcance de
@@ -8047,6 +8112,11 @@ const slots = bot.groups.get(group);
     // gasta (abaixo).
     let result: MoveResult | null = null;
     let keepsFieldBypass = false;
+    // A invocação de PERSONAGEM sem alvo SEGUE O MESTRE (#599) — decidido ANTES do encadeamento
+    // porque o `wander` (sem mestre à vista, ou sem caminho até ele) cai no ramo comum abaixo.
+    const follow = (action.kind === 'idle' && liveTarget === null && typeof monster.masterId === 'string')
+      ? this.#summonFollowOf(session, monster, definition)
+      : null;
     if (action.kind === 'step' || action.kind === 'retreat') {
       // `Monster::doFollowCreature` (`monster.cpp:2530`): quem persegue deixa de andar ao acaso.
       monster.randomStepping = false;
@@ -8057,22 +8127,13 @@ const slots = bot.groups.get(group);
       // sem passo a dar, e é ele que roda `doFollowCreature` — e desliga o passo aleatório.
       monster.randomStepping = false;
       monster.idle = false;
-    } else if (liveTarget === null && typeof monster.masterId === 'string') {
-      // A invocação de PERSONAGEM sem alvo SEGUE O MESTRE (#599, `Monster::updateSummonTarget`:
-      // `master != followCreature` → `setFollowCreature(master)`; depois `doFollowCreature`). O
-      // mestre morto/ausente já zerou o alvo em `#chooseMonsterTarget`, e sem ele ela fica parada.
-      // É o ramo de perseguição do Canary (`randomStepping` desliga, o passo gasta o bypass de
-      // campo), só que rumo ao mestre em vez de rumo a um alvo.
+    } else if (follow !== null && follow.kind !== 'wander') {
+      // `Monster::updateSummonTarget`: `master != followCreature` → `setFollowCreature(master)`;
+      // depois `doFollowCreature`. É o ramo de perseguição do Canary (`randomStepping` desliga, o
+      // passo gasta o bypass de campo), só que rumo ao mestre em vez de rumo a um alvo.
       monster.randomStepping = false;
       monster.idle = false;
-      const master = findById(session.participants, monster.masterId);
-      const to = master === null
-        ? null
-        : summonFollowStep(
-          monster, master, definition.aggroRadius, this.#blockedForWalkBackPath(monster, definition),
-          (from, at) => isSightClear(this.#world.map, from, at),
-        );
-      if (to !== null) result = this.#step(session, monster, to, subject);
+      if (follow.kind === 'step') result = this.#step(session, monster, follow.to, subject);
     } else {
       // Sem perseguição (#655): `updateIdleStatus` + os ramos `doWalkBack`/`doRandomStep` de
       // `Monster::getNextStep`. Ver `decideUnengagedMove`.
@@ -8820,7 +8881,12 @@ const slots = bot.groups.get(group);
           kind: 'creature-moved', creatureId: through.subject, from: throughFrom,
           to: this.#at(through), durationMs: result.durationMs,
         });
-      } else {
+      } else if (!result.ok || !this.#placeFamiliarNear(session, through, result.to)) {
+        // Dois casos distintos. PASSO RECUSADO: o familiar volta a ocupar o tile dele. PASSO
+        // ACEITO e troca recusada: o tile que o jogador deixou não admite mais ninguém — a porta
+        // comum fecha no `vacate` (ADR 0050 d.3) —, e o familiar, que continua na coordenada que o
+        // jogador acabou de pisar, é recolocado perto dele (`#placeFamiliarNear`). Só sem lugar
+        // nenhum em volta ele fica onde estava, dividindo o tile com o jogador como o Canary deixa.
         this.#world.occupy(throughFrom.x, throughFrom.y, throughFrom.z);
       }
     }
@@ -10391,7 +10457,10 @@ const slots = bot.groups.get(group);
     if (this.#familiarIds.delete(monster.id) && typeof monster.masterId === 'string') {
       const owner = findById(session.participants, monster.masterId);
       if (owner !== null) {
-        owner.familiar = { ...owner.familiar, summonUntilMs: this.#wallNowMs(session) };
+        // Arredonda para BAIXO (o inverso do `#wallStampMs`): o carimbo precisa ser inteiro e nunca
+        // maior que agora, senão a entrada seguinte, na mesma fração de ms, o leria como tempo
+        // sobrando e recriaria o familiar que acabou de morrer.
+        owner.familiar = { ...owner.familiar, summonUntilMs: Math.floor(this.#wallNowMs(session)) };
       }
     }
     this.#monsters = this.#monsters.filter((m) => m.id !== monster.id);

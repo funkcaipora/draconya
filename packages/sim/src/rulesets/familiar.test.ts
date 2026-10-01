@@ -12,7 +12,7 @@ import type { BotConfigV2, Content, Progression, RawContent } from '@draconya/co
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
 import { resolveDeath } from '../death.js';
-import { FAMILIAR_TELEPORT_DISTANCE } from '../familiar.js';
+import { FAMILIAR_TELEPORT_DISTANCE, isFamiliarState } from '../familiar.js';
 import { CHALLENGE_CONDITION_KEY } from '../monster/monster.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
@@ -128,6 +128,13 @@ const familiarSpell = {
     kind: 'familiar', monsterId: 'knight-familiar', durationMs: DURATION_MS, cooldownMs: COOLDOWN_MS,
   },
 };
+// Uma haste no mesmo grupo `support` do familiar (como a haste real): quem a re-lança quando ela
+// acaba prova que o grupo do bot não dormiu enquanto a regra do familiar era recusada.
+const quickHaste = {
+  id: 'quick-haste', name: 'Quick Haste', vocationId: 'knight', minLevel: 1, manaCost: 1,
+  cooldownMs: 2_000, group: 'support', groupCooldownMs: 2_000,
+  effect: { kind: 'haste', speedPercent: 30, durationMs: 30_000 },
+};
 // A Summon Creature de teste, para o teto: uma invocação comum ocupa um lugar do teto de 2.
 const minion = {
   ...dummy, id: 'minion', name: 'Minion', summonable: true, manaCost: 20, speed: 300, aggroRadius: 11,
@@ -141,7 +148,7 @@ const raw = (over: Partial<RawContent> = {}): RawContent => {
   const base: RawContent = {
     monsters: [familiarMonster, dummy, biter, minion], hunts: [wideHunt], vocations: [knight],
     progression: [progression], combat: [combat], stamina: [stamina], party: [party],
-    spells: [familiarSpell, summonSpell], skills, weaponFamilies, items: [], ammunition: [],
+    spells: [familiarSpell, summonSpell, quickHaste], skills, weaponFamilies, items: [], ammunition: [],
     bot: [{ id: 'baseline', vocabularyVersion: 2, categoryCooldownMs: 1000,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
     maps: [wideMap], routes: [wideRoute], ...over,
@@ -388,19 +395,27 @@ describe('o cooldown de PAREDE atravessa a saída da hunt (ADR 0052 d.6)', () =>
 
   it('a recusa do BOT não agenda o grupo: 30 min de sono trancariam a haste que vive no mesmo grupo', () => {
     // A regra "sem invocação viva → familiar" engatilha (não dorme): passados os 15 min do familiar
-    // e antes dos 30 do cooldown, o bot a tenta a cada evento e é recusado — e o grupo continua
-    // acordado. O que prova é o cooldown de 30 min terminar e o bot lançar sozinho, no mesmo
-    // ciclo, sem ninguém ter reagendado nada.
-    const config = botConfig([{ do: castFamiliar.do, when: [{ kind: 'summons', op: '<=', count: 0 }] }]);
+    // e antes dos 30 do cooldown, o bot a tenta a cada acordar e é recusado. `#onBot` agenda o grupo
+    // para o MAIOR `retryInMs` quando NENHUM slot executa — se a recusa carregasse o prazo do
+    // cooldown (~15 min), o grupo dormiria, `#armBot` só toca grupo engatilhado, e a haste do MESMO
+    // grupo `support` (30 s de duração, na frente do laço só quando está ausente) nunca mais sairia.
+    // Em quatro minutos de recusa, a haste sai a cada ~30 s: vê-la sair é a prova de que o grupo
+    // continua acordado.
+    const hasteRule = { do: { kind: 'spell', spellId: 'quick-haste' }, when: [{ kind: 'condition', conditionId: 'haste', present: false }] };
+    const config = botConfig([{ do: castFamiliar.do, when: [{ kind: 'summons', op: '<=', count: 0 }] }, hasteRule]);
     const { session, hero, ruleset } = start({ config });
     run(session, 2_000);
     expect(familiarsOf(ruleset)).toHaveLength(1); // o bot lançou sozinho
     const firstUntil = hero.familiar.cooldownUntilMs;
-    run(session, 20 * MIN);
+    // Passa dos 15 min: o familiar acabou e o cooldown (30 min) ainda vale — a regra é recusada.
+    run(session, 16 * MIN - 2_000);
     expect(familiarsOf(ruleset)).toHaveLength(0);
-    expect(hero.familiar.cooldownUntilMs).toBe(firstUntil); // nada foi lançado no meio
-    run(session, 10 * MIN + 5_000);
-    // 30 min passados: o bot lançou de novo, sem `retryInMs` nenhum.
+    const hasteCasts = (events: readonly DomainEvent[]) =>
+      events.filter((e) => e.kind === 'spell-cast' && e.spellId === 'quick-haste').length;
+    expect(hasteCasts(run(session, 3 * MIN))).toBeGreaterThanOrEqual(5);
+    expect(hero.familiar.cooldownUntilMs).toBe(firstUntil); // nada de familiar foi lançado no meio
+    run(session, 11 * MIN + 20_000);
+    // 30 min passados: o bot lançou o familiar de novo, sem `retryInMs` nenhum.
     expect(familiarsOf(ruleset)).toHaveLength(1);
     expect(hero.familiar.cooldownUntilMs).toBeGreaterThan(firstUntil);
   });
@@ -426,6 +441,72 @@ describe('o cooldown de PAREDE atravessa a saída da hunt (ADR 0052 d.6)', () =>
     third.session.advanceBy(3_000);
     expect(third.ruleset.useSlot(third.session, 'hero', 0, 0)).toEqual({ ok: true });
     expect(hero.mana).toBe(8_000);
+  });
+});
+
+describe('os carimbos são INTEIROS mesmo com o relógio lógico fracionário (ADR 0052 d.6)', () => {
+  // Em produção o relógio do hospedeiro é `performance.now()`: o relógio lógico para num instante
+  // fracionário, e toda intenção do jogador (`use-slot`) roda nele. Os consumidores dos carimbos
+  // (`CharacterRuntime`, extrato, ticket) validam inteiro seguro e trocam o inválido pelo vazio
+  // EM SILÊNCIO — sem este arredondamento o cooldown de 30 min some.
+  it('lançar depois de um avanço fracionário grava inteiros que o estado do personagem aceita', () => {
+    const { session, hero, ruleset } = start({ config: botConfig([manualFamiliar]) });
+    session.advanceBy(100.4);
+    expect(useCast(session, ruleset)).toEqual({ ok: true });
+    // Para CIMA: nunca encurta a invocação nem o cooldown.
+    expect(hero.familiar).toEqual({
+      version: 1,
+      summonUntilMs: Math.ceil(EPOCH + 100.4 + DURATION_MS),
+      cooldownUntilMs: Math.ceil(EPOCH + 100.4 + COOLDOWN_MS),
+    });
+    expect(isFamiliarState(hero.familiar)).toBe(true);
+    // O mesmo caminho do snapshot e do extrato: o estado do personagem volta idêntico.
+    expect(new CharacterRuntime(hero.getState()).familiar).toEqual(hero.familiar);
+  });
+
+  it('o cooldown de parede continua valendo ao reentrar, mesmo gravado num instante fracionário', () => {
+    const first = start({ config: botConfig([manualFamiliar]) });
+    first.session.advanceBy(100.4);
+    useCast(first.session, first.ruleset);
+    const { hero } = first;
+    first.session.end('manual-exit');
+    // O estado atravessa o personagem como atravessaria o ticket: serializado e relido.
+    const reloaded = new CharacterRuntime(JSON.parse(JSON.stringify(hero.getState())) as ReturnType<CharacterRuntime['getState']>);
+    expect(reloaded.familiar.cooldownUntilMs).toBe(hero.familiar.cooldownUntilMs);
+    const second = start({ hero: reloaded, config: botConfig([manualFamiliar]), createdAtMs: EPOCH + 10 * MIN });
+    second.session.advanceBy(3_000);
+    expect(second.ruleset.useSlot(second.session, 'hero', 0, 0)).toMatchObject({ ok: false, reason: 'on-cooldown' });
+  });
+
+  it('a morte num instante fracionário grava inteiro, para BAIXO, e a entrada seguinte não recria', () => {
+    const first = start({ config: botConfig([manualFamiliar]) });
+    first.session.advanceBy(100.4);
+    useCast(first.session, first.ruleset);
+    const { hero } = first;
+    first.session.advanceBy(5_000.7);
+    const familiar = familiarsOf(first.ruleset)[0];
+    if (familiar === undefined) throw new Error('o familiar não nasceu');
+    familiar.health = 0;
+    resolveDeath(first.session, { kind: 'monster', monster: familiar });
+    expect(Number.isSafeInteger(hero.familiar.summonUntilMs)).toBe(true);
+    expect(hero.familiar.summonUntilMs).toBeLessThanOrEqual(EPOCH + 100.4 + 5_000.7);
+    first.session.end('manual-exit');
+    // Entra no mesmo milissegundo: sem tempo sobrando, nada volta.
+    const second = start({ hero, createdAtMs: EPOCH + 5_101 });
+    expect(familiarsOf(second.ruleset)).toHaveLength(0);
+  });
+
+  it('recriar com tempo sobrando fracionário agenda uma duração INTEIRA', () => {
+    const first = start({ config: botConfig([manualFamiliar]) });
+    first.session.advanceBy(100.4);
+    useCast(first.session, first.ruleset);
+    const { hero } = first;
+    first.session.end('manual-exit');
+    const second = start({ hero, createdAtMs: EPOCH + 8 * MIN + 100 });
+    expect(familiarsOf(second.ruleset)).toHaveLength(1);
+    const queued = second.session.snapshot().schedule.events.find((e) => e.kind === 'familiar-expire');
+    expect(queued).toBeDefined();
+    expect(Number.isInteger(queued?.dueAtMs)).toBe(true);
   });
 });
 
@@ -583,6 +664,73 @@ describe('a invocação sem alvo SEGUE o mestre (`Monster::updateSummonTarget`)'
   });
 });
 
+describe('a invocação que NÃO consegue seguir o mestre (`Creature::goToFollowCreature`, `Monster::getNextStep`)', () => {
+  /** Familiar (slot 0) e Summon Creature (slot 1) lançados; `invisible` liga a invisibilidade do mestre. */
+  function summonBoth(invisible: boolean) {
+    const { session, hero, ruleset } = start({ config: botConfig([manualFamiliar, manualSummon]) });
+    session.advanceBy(100);
+    expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+    session.advanceBy(2_100);
+    expect(ruleset.useSlot(session, 'hero', 0, 1)).toEqual({ ok: true });
+    const minion = ruleset.monsters.find((m) => m.monsterId === 'minion');
+    const familiar = familiarsOf(ruleset)[0];
+    if (minion === undefined || familiar === undefined) throw new Error('faltam as invocações');
+    if (invisible) {
+      hero.conditions.apply({ key: 'invisible', targetId: hero.id, expiresAtMs: session.nowMs + 200_000 });
+      expect(hero.invisible).toBe(true);
+    }
+    return { session, hero, ruleset, minion, familiar, minionAt: { x: minion.position.x, y: minion.position.y }, familiarAt: { x: familiar.position.x, y: familiar.position.y } };
+  }
+  const moved = (creature: { position: { x: number; y: number } }, from: { x: number; y: number }) =>
+    creature.position.x !== from.x || creature.position.y !== from.y;
+
+  it('mestre invisível: a Summon Creature comum fica parada, e o FAMILIAR segue', () => {
+    // `isSummon() && !isFamiliar() && !canFollowMaster()` — o mestre invisível que ela não enxerga
+    // esvazia a lista de passos; o familiar passa por cima da condição. Quatro segundos: o herói
+    // anda 2 tiles por segundo e, passadas as 11 casas de visão, a invocação VAGUEIA (teste abaixo).
+    const invisible = summonBoth(true);
+    run(invisible.session, 4_000, 250);
+    expect(moved(invisible.minion, invisible.minionAt)).toBe(false);
+    expect(moved(invisible.familiar, invisible.familiarAt)).toBe(true);
+    // Controle: com o mestre visível a mesma invocação o segue.
+    const visible = summonBoth(false);
+    run(visible.session, 4_000, 250);
+    expect(moved(visible.minion, visible.minionAt)).toBe(true);
+  });
+
+  it('mestre invisível que a invocação ENXERGA (imune à condição `invisible`): ela segue', () => {
+    const seer = { ...minion, id: 'seer', name: 'Seer', conditionImmunities: ['invisible'] };
+    const content = buildContent(raw({ monsters: [familiarMonster, dummy, biter, minion, seer] }));
+    const config = botConfig([manualFamiliar, manual({ kind: 'spell', spellId: 'summon-test', monsterId: 'seer' })]);
+    const { session, hero, ruleset } = start({ content, config });
+    session.advanceBy(100);
+    expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+    session.advanceBy(2_100);
+    expect(ruleset.useSlot(session, 'hero', 0, 1)).toEqual({ ok: true });
+    const watcher = ruleset.monsters.find((m) => m.monsterId === 'seer');
+    if (watcher === undefined) throw new Error('a invocação não nasceu');
+    const from = { x: watcher.position.x, y: watcher.position.y };
+    hero.conditions.apply({ key: 'invisible', targetId: hero.id, expiresAtMs: session.nowMs + 200_000 });
+    run(session, 4_000, 250);
+    expect(moved(watcher, from)).toBe(true);
+  });
+
+  it('o mestre sai da área de visão: sem `followCreature`, a invocação VAGUEIA (`doRandomStep`) em vez de ficar parada', () => {
+    // O herói é posto na outra ponta da sala, fora das 11 casas: `setFollowCreature` recusa quem
+    // `canSee` não alcança e o `getNextStep` do Canary cai no passo aleatório — a invocação nunca
+    // é ociosa. Seis segundos: o herói caminha para o leste, e só depois de ~11 s voltaria à vista.
+    const { session, hero, minion } = summonBoth(false);
+    hero.position = { x: 38, y: 3, z: MAP_Z };
+    const stepsOf = (events: readonly DomainEvent[]) =>
+      events.filter((e) => e.kind === 'creature-moved' && e.creatureId === minion.subject).length;
+    const steps = stepsOf(run(session, 6_000, 250));
+    expect(steps).toBeGreaterThan(0);
+    // O passo aleatório respeita o intervalo mínimo de 1 s entre passos (`getTimeSinceLastMove`): no
+    // máximo um por segundo, o primeiro sem espera (a invocação nunca andou).
+    expect(steps).toBeLessThanOrEqual(7);
+  });
+});
+
 describe('o teleporte ao mestre (`Creature::checkSummonMove`)', () => {
   it('passou de 15 tiles em x ou em y: o familiar vai até o mestre, num tile livre ao lado', () => {
     // A rota é um laço de 39 tiles por fileira. O familiar SEGUE o mestre enquanto o enxerga (11
@@ -594,15 +742,25 @@ describe('o teleporte ao mestre (`Creature::checkSummonMove`)', () => {
     useCast(session, ruleset);
     hero.speed *= 3;
     const spawnedAt = { ...(familiarsOf(ruleset)[0] as { position: { x: number; y: number } }).position };
+    const familiarSubject = (familiarsOf(ruleset)[0] as { subject: string }).subject;
     const teleports: DomainEvent[] = [];
     let farBefore = false;
     for (let t = 0; t < 120_000; t += 500) {
       session.advanceBy(500);
-      for (const event of session.drainEvents()) {
-        if (event.kind === 'creature-moved' && event.creatureId !== 'hero' && event.durationMs === 0) {
-          teleports.push(event);
-        }
-      }
+      const events = session.drainEvents();
+      // O teleporte é RELOCAÇÃO, não passo: `creature-moved` de duração zero seria descartado pelo
+      // hospedeiro (o protocolo exige duração positiva) e o cliente nunca veria o familiar chegar.
+      // Sai o par `creature-vanished` + `creature-appeared` do MESMO subject, com a posição nova.
+      expect(events.some((e) => e.kind === 'creature-moved' && e.durationMs <= 0)).toBe(false);
+      events.forEach((event, i) => {
+        if (event.kind !== 'creature-vanished' || event.creatureId !== familiarSubject) return;
+        const next = events[i + 1];
+        expect(next).toMatchObject({
+          kind: 'creature-appeared', creatureId: familiarSubject, monsterId: 'knight-familiar', masterId: 'hero',
+          health: 10_000, maxHealth: 10_000,
+        });
+        teleports.push(next as DomainEvent);
+      });
       const familiar = familiarsOf(ruleset)[0];
       if (familiar === undefined) throw new Error('o familiar sumiu');
       // Nunca passa de 15 tiles + o passo que o mestre acabou de dar.
@@ -645,6 +803,82 @@ describe('o jogador atravessa o familiar (`Player::canWalkthrough`)', () => {
     // Nunca dois no mesmo tile.
     expect(`${String(hero.position.x)},${String(hero.position.y)}`)
       .not.toBe(`${String(familiar.position.x)},${String(familiar.position.y)}`);
+  });
+});
+
+describe('a troca com o familiar fora de um tile que fecha (a porta comum, ADR 0050 d.3)', () => {
+  // Um beco de quatro casas com uma porta fechada em x = 3, e uma rota de ida e volta por ele. O
+  // familiar nasce no fundo (x = 4), e sem tile a 2 do herói (o beco acaba) ele fica ali, a 1 do
+  // herói que está na porta. O jogador atravessa o familiar trocando de lugar; o tile que ele deixa
+  // é a PORTA, que fecha no `vacate` — e o familiar não cabe mais ali: a troca não pode deixar os dois
+  // na mesma coordenada.
+  const doorMap = {
+    id: 'door-corridor', z: MAP_Z, grid: ['######', '#....#', '######'],
+    interactables: [{ at: { x: 3, y: 1, z: MAP_Z }, kind: 'door', initialState: 'closed', appearanceKey: 'door-1' }],
+  };
+  const xs = [1, 2, 3, 4, 3, 2];
+  const doorRoute = {
+    id: 'door-corridor', mapId: 'door-corridor', tiles: xs.map((x) => ({ x, y: 1, z: MAP_Z })), spawnPoints: [] as object[],
+  };
+  const doorHunt = { id: 'door-corridor', name: 'Door corridor', recommendedLevel: 1, mapId: 'door-corridor', routeId: 'door-corridor' };
+
+  it('nunca deixa duas criaturas no mesmo tile, e o familiar vai para o lado quando o tile do herói fechou', () => {
+    const content = buildContent(raw({ hunts: [doorHunt], maps: [doorMap], routes: [doorRoute] }));
+    const session = createHuntSession({
+      id: 'door-session', content, huntId: 'door-corridor', difficulty: 'cautious', createdAtMs: EPOCH,
+      botConfig: botConfig([manualFamiliar]),
+    });
+    const hero = makeHero();
+    session.enter(hero);
+    const ruleset = session.ruleset as HuntRuleset;
+    session.advanceBy(100);
+    expect(useCast(session, ruleset)).toEqual({ ok: true });
+    const familiar = familiarsOf(ruleset)[0];
+    if (familiar === undefined) throw new Error('o familiar não nasceu');
+    const door = () => ruleset.tileOverrides.find((o) => o.kind === 'door');
+    let opened = false;
+    let relocated = 0;
+    for (let t = 0; t < 120_000; t += 100) {
+      session.advanceBy(100);
+      for (const event of session.drainEvents()) {
+        if (event.kind === 'creature-vanished' && event.creatureId === familiar.subject) relocated += 1;
+      }
+      if (door()?.state === 'open') opened = true;
+      // Nunca dois no mesmo tile — o defeito era o familiar ficar na coordenada do herói.
+      expect(
+        `${String(hero.position.x)},${String(hero.position.y)}`,
+        `t = ${String(t)} ms: o herói e o familiar dividem o tile`,
+      ).not.toBe(`${String(familiar.position.x)},${String(familiar.position.y)}`);
+    }
+    // O cenário exercitou a porta de verdade (o walker a abriu) e a relocação que a troca recusada pede.
+    expect(opened).toBe(true);
+    expect(relocated).toBeGreaterThan(0);
+  });
+});
+
+describe('a party que recria dois familiares na entrada (`familiarOnLogin`)', () => {
+  it('nunca põe duas criaturas no mesmo tile: o familiar do primeiro membro continua ocupando o dele', () => {
+    // Cada `onEnter` remonta a ocupação do zero. Sem os MONSTROS na conta, a entrada do segundo
+    // membro liberava o tile do familiar do primeiro — e o herói ou o familiar do segundo nascia em
+    // cima dele (12 de 40 sementes).
+    const stamped = { version: 1, summonUntilMs: EPOCH + 10 * MIN, cooldownUntilMs: EPOCH + 20 * MIN };
+    for (let seed = 0; seed < 40; seed += 1) {
+      const session = createHuntSession({
+        id: `party-${String(seed)}`, content: buildContent(raw()), huntId: 'field', difficulty: 'cautious',
+        createdAtMs: EPOCH,
+      });
+      const hero = makeHero({ familiar: stamped });
+      const other = makeHero({ familiar: stamped });
+      Object.assign(other, { id: 'other' });
+      session.enter(hero);
+      session.enter(other);
+      const ruleset = session.ruleset as HuntRuleset;
+      expect(familiarsOf(ruleset, 'hero')).toHaveLength(1);
+      expect(familiarsOf(ruleset, 'other')).toHaveLength(1);
+      const creatures = [hero, other, ...ruleset.monsters];
+      const tiles = creatures.map((c) => `${String(c.position.x)},${String(c.position.y)}`);
+      expect(new Set(tiles).size, `semente ${String(seed)}: ${tiles.join(' | ')}`).toBe(creatures.length);
+    }
   });
 });
 

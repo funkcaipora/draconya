@@ -104,11 +104,18 @@ const DIAGONAL_COST = 35;
  * Dijkstra com fila de prioridade por (custo, ordem de inserção) — o desempate pela ordem em que
  * o nó entrou na fila, e os vizinhos em `DIRECTIONS`, é o que torna o resultado reproduzível, sem
  * sorteio. Devolve o caminho INTEIRO sem `from`, como `boundedPath`; `[]` se `from` já é objetivo.
+ *
+ * `fallback` é o "melhor até agora" de `FrozenPathingConditionCall` (Canary): um tile que serve, mas
+ * não é o que se quer — o PRIMEIRO que a busca encontra (o `from` inclusive) fica guardado, e a
+ * busca continua atrás de `isGoal`; só se nenhum objetivo for alcançável é ele o resultado. Sem
+ * `fallback`, ou sem nenhum tile que o satisfaça, o resultado de uma busca sem objetivo é `null`.
  */
 export function cheapestPath(
   from: GridPoint, isGoal: (p: GridPoint) => boolean, blocked: Blocked, radius: number,
+  fallback?: (p: GridPoint) => boolean,
 ): readonly GridPoint[] | null {
   if (isGoal(from)) return [];
+  let fallbackPoint: GridPoint | null = fallback?.(from) === true ? from : null;
 
   interface Entry { readonly cost: number; readonly seq: number; readonly point: GridPoint }
   const heap: Entry[] = [];
@@ -147,6 +154,19 @@ export function cheapestPath(
   const best = new Map<string, number>([[key(from), 0]]);
   const cameFrom = new Map<string, GridPoint>();
   const settled = new Set<string>();
+  // O caminho de `from` até um nó JÁ FECHADO (o `cameFrom` dele não muda mais), sem o `from`.
+  const pathTo = (end: GridPoint): GridPoint[] => {
+    if (end.x === from.x && end.y === from.y) return [];
+    const path: GridPoint[] = [end];
+    let walk = end;
+    for (;;) {
+      const prev = cameFrom.get(key(walk));
+      if (prev === undefined || (prev.x === from.x && prev.y === from.y)) break;
+      path.unshift(prev);
+      walk = prev;
+    }
+    return path;
+  };
   let seq = 0;
   push({ cost: 0, seq, point: from });
 
@@ -156,17 +176,8 @@ export function cheapestPath(
     if (settled.has(currentKey)) continue;
     settled.add(currentKey);
 
-    if (isGoal(current)) {
-      const path: GridPoint[] = [current];
-      let walk = current;
-      for (;;) {
-        const prev = cameFrom.get(key(walk));
-        if (prev === undefined || (prev.x === from.x && prev.y === from.y)) break;
-        path.unshift(prev);
-        walk = prev;
-      }
-      return path;
-    }
+    if (isGoal(current)) return pathTo(current);
+    if (fallbackPoint === null && fallback !== undefined && fallback(current)) fallbackPoint = current;
 
     for (const direction of DIRECTIONS) {
       const next = { x: current.x + direction.x, y: current.y + direction.y };
@@ -182,7 +193,7 @@ export function cheapestPath(
       push({ cost, seq, point: next });
     }
   }
-  return null;
+  return fallbackPoint === null ? null : pathTo(fallbackPoint);
 }
 
 /** `p` está a exatamente um tile (Chebyshev) de `target`? O "encostado nele" do follow comum. */
