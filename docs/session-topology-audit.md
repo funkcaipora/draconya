@@ -51,18 +51,18 @@ Os 16 usos de classe T estão atrás de 9 perguntas e 2 chaves da `SessionTopolo
 | `placeOnEnter` | — | O primeiro no tile inicial da rota; o segundo no livre mais próximo. |
 | `runsRouteWalker` | — | Sim. |
 
-Dos onze membros que o ADR 0060 d.4 lista, esta issue entrega todos. A auditoria achou **três perguntas a mais** que também decidiam por "quantos estão aqui": `leaderOf` (a outra metade da liderança), `onExitFinished` (a outra porta de saída, irmã da morte) e `namesOwnerInEvents` (o formato do `level-up`, `bestiary-milestone` e `bosstiary-level` do extrato dependia de haver um só presente, e no mundo o número de presentes não pode decidir o que vai para o ledger).
+Dos onze membros que o ADR 0060 d.4 lista, esta issue entrega todos. A auditoria achou **três perguntas a mais** que também decidiam por "quantos estão aqui": `leaderOf` (a outra metade da liderança), `onExitFinished` (a outra porta de saída, irmã da morte) e `namesOwnerInEvents` (o formato do `level-up`, `bestiary-milestone`, `bosstiary-level` e `hazard-level-up` do extrato dependia de haver um só presente, e no mundo o número de presentes não pode decidir o que vai para o ledger).
 
 ## O que ficou aberto, e com quem
 
-São os 9 usos de classe A. Nenhum é alcançável hoje (o mundo ainda não existe), mas todos entregariam algo a estranhos no dia em que ele existir, e por isso têm dono.
+São os 9 usos de classe A da tabela (10 com o acréscimo de `#hazardPoints`, abaixo). Nenhum é alcançável hoje (o mundo ainda não existe), mas todos entregariam algo a estranhos no dia em que ele existir, e por isso têm dono.
 
 **OW-28 — Crédito do Canary** (`#xpShares`, `#killersOf`; usos 12143, 12197, 12198, 12201):
 - `#xpShares` monta `allMembers` com a sessão inteira, e a cota igual divide por esse tamanho. No mundo a XP é `floor(dano dele / dano total × experiência)`, e o roster não entra na conta.
 - `#killersOf` devolve o roster inteiro quando não há `partyOptions` e há 2 ou mais presentes — o mesmo fallback que serve às fixtures. No mundo isso dá o Bosstiary a quem não bateu.
 
-**OW-43 — Party no mundo** (`#resolveRuleTarget`, `#armHealersOf`, `#collectPartyAllies`, `#fearAffects`; usos 6404, 6416, 6417, 6858, 10404):
-- O alvo de cura "party", as magias de party (Heal/Protect/Enchant/Train Party) e o teto de medo da party leem a sessão inteira. O Canary os lê na party do lançador.
+**OW-43 — Party no mundo** (`#resolveRuleTarget`, `#armHealersOf`, `#collectPartyAllies`, `#fearAffects`; usos 6404, 6416, 6417, 6858, 10404 — e `#hazardPoints`, que entrou depois):
+- O alvo de cura "party", as magias de party (Heal/Protect/Enchant/Train Party), o teto de medo da party e o nível de hazard da party (o menor entre os membros) leem a sessão inteira. O Canary os lê na party do lançador.
 - `#armHealersOf` varre todos os presentes a cada golpe sofrido (`custo N por golpe`, ADR 0035). Com 200 no mundo isso é custo, além de comportamento.
 
 ## Armadilhas para quem escrever a topologia de mundo (OW-13)
@@ -73,6 +73,21 @@ São os 9 usos de classe A. Nenhum é alcançável hoje (o mundo ainda não exis
 - **`creditKill` só é perguntada quando o abate paga alguém.** A morte de monstro por monstro sem dano de nenhum presente (#619) não paga ninguém e nunca chega à topologia; quem decide isso é o ruleset (`rewarded`).
 - **`lootRecipient` consome `session.rng`** na instância (party `split`): o número e a ordem dos sorteios são contrato (FUN-63). Uma topologia nova que sorteie precisa decidir isso, e a de mundo não deve sortear.
 - **A topologia não vai no snapshot.** `huntRulesetFromSnapshot` e `changeDifficulty` montam o ruleset com o default (`instanceTopology`). Isto está certo para a instância, e a sessão de mundo é `checkpointed` e não tem snapshot (ADR 0060 d.10a); quem criar uma sessão que retoma com outra topologia passa a opção na própria montagem.
+
+## Acréscimos depois de `00c70359`
+
+A `origin/tibia-parity` andou enquanto a OW-12 estava aberta (o último merge foi em `c3829ae3`), e duas entregas acrescentaram seis usos de código de `session.participants` ao `hunt.ts`: o Hazard (#632) e a condição de forma (outfit). Pela mesma régua:
+
+| Método | Uso | Classe | Destino |
+|---|---|---|---|
+| `lookOf` | `findById(session.participants, creatureId)` | P | busca por id |
+| `#applyConditionTick` | `findById(session.participants, condition.sourceId) !== null` | P | busca por id: a fonte da condição ainda está na sessão |
+| `#executeOutfitAbility` | `[...session.participants, ...this.#monsters]` | P | candidatos da ability de forma |
+| `#hazardOnMonsterDeath` | `session.participants.filter(damageByActor)` | P | quem feriu o monstro (o `damageMap` do Canary) |
+| `#hazardOnMonsterDeath` | `session.participants.length === 1` | T | `namesOwnerInEvents` — o `hazard-level-up` tinha o mesmo formato condicionado ao número de presentes, e foi ligado à topologia nesta PR |
+| `#hazardPoints` | `for (const member of session.participants)` | **A** | **OW-43**: o nível de hazard é o MENOR entre os "membros" (`Party:refreshHazard`), e hoje o membro é a sessão inteira. No mundo, o monstro bateria com o menor nível de todos os presentes |
+
+O total passa a **141** usos de código (P 83, T 17, G 31, A 10), e o item A novo entra na lista da OW-43 acima.
 
 ## A tabela
 
