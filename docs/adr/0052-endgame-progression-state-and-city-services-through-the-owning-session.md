@@ -199,12 +199,19 @@ nenhuma muda a regra:
    cada golpe pela hunt (o menor entre os membros da party). Ele é **fixo** na sessão porque a
    escolha é uma intenção de Cidade (`set-hazard-level`, decisão 2) que a hunt RECUSA — não por um
    campo copiado na entrada.
-2. **A escolha da Cidade grava o extrato de estado na hora**, e não só no `release`. A decisão 3
+2. **A escolha da Cidade grava um extrato SÓ de hazard na hora**, e não só no `release`. A decisão 3
    registrou como alternativa "escrever o extrato da Cidade a cada compra", adiada enquanto a perda
    não incomodasse. O Hazard é o primeiro caso em que ela incomoda: o ticket de uma party é emitido
    pela `api` a partir da LINHA do banco (ADR 0027), e o nível que o membro acabou de escolher na
-   praça só chega lá pelo extrato, que a `api` liquida antes de emitir (ADR 0028 d.5). Os demais
-   serviços de Cidade seguem no `release`.
+   praça só chega lá pelo extrato, que a `api` liquida antes de emitir (ADR 0028 d.5). **O extrato
+   é só do registro** — agregados zerados, sem `goldDelta`, sem instâncias removidas, sem o resto do
+   estado da Cidade — **e vai num fluxo próprio** (`sessionId` com o sufixo `:hazard`), e não é o
+   extrato de estado inteiro: o `ReceiptStore` guarda UM extrato por `(sessionId, characterId)`, a
+   Cidade é uma sessão compartilhada, e o de estado leva valor que só sai uma vez (o gold da bênção
+   comprada, a venda). Gravá-lo a cada escolha deixaria o segundo sobrescrever o primeiro antes da
+   varredura do `jobs` (até 10 s) e a compra sairia de graça — o review do #897 achou o defeito.
+   Escolher o nível em que já estava não grava, e se o Redis falha o registro fica sujo para o
+   extrato do logout. Os demais serviços de Cidade seguem no `release`.
 
 O estágio do `combat-v4` da decisão 7 está declarado em `docs/product/combat-conformance.md`
 ("Estágio #632").

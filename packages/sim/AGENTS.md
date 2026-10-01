@@ -1160,7 +1160,7 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   recuperar — o que o Treino faz ao sair (ADR 0060 d.14c).
 - **O Hazard (#632, M44-14, ADR 0052 d.5/d.7) vive em `hazard.ts` (o registro `HazardProgress`, do
   personagem), `combat/hazard.ts` (puro) e nos métodos `#hazard*` do `HuntRuleset`, e SÓ roda no
-  `combat-v4` (`hasHazardStage`) numa hunt com `hazardZoneId`.** Quatro armadilhas custam caro. (1)
+  `combat-v4` (`hasHazardStage`) numa hunt com `hazardZoneId`.** Seis armadilhas custam caro. (1)
   **Todo golpe de monstro no jogador passa por `#hazardOnMonsterHit` ANTES dos charms defensivos, e
   todo golpe do jogador num monstro por `#hazardOnPlayerHit` ANTES de a vida mudar** — são oito
   pontos (habilidade, tique de condição de monstro VIVO e reflexo do lado do monstro; `#land`,
@@ -1174,6 +1174,14 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   `normal_random` é truncada — as probabilidades reais (~2,3 % o crítico, ~0,2 %–3,4 % a esquiva)
   são o comportamento do Canary, não um defeito deste motor. Invocação (`masterId !== null`) NÃO é
   monstro de hazard (`isHazardMonster`). O carimbo `hazardCriticalAtMs` é do relógio LÓGICO da
-  sessão: viaja no snapshot e `Session.enter` o zera. `HazardProgress.revision` é só para o host
-  comparar um inteiro por ciclo; não é persistido.
+  sessão: viaja no snapshot e `Session.enter` o zera (`resetSessionClockState`). `HazardProgress.revision` é só para o host
+  comparar um inteiro por ciclo; não é persistido. (5) **O mana shield absorve o golpe de ANTES do
+  reforço**: `Game::combatChangeHealth` soma `healthChange` antes de `handleHazardSystemAttack` e não
+  o recalcula, então o crítico e o reforço caem INTEIROS na vida. O estágio carrega o dano de antes
+  em `DamageOutcome.preHazardDamage` e `applyDamageOutcome` o usa como teto da absorção (a mesma
+  leitura vale para o Energy Ring); um caminho novo que aplique o outcome de um golpe de hazard num
+  personagem precisa passar por `applyDamageOutcome`, e não por conta própria. (6) **O chefe de
+  recompensa (`MonsterDefinition.rewardBoss`, o `flags.rewardBoss` do Canary) não rola casulo nem
+  Plunder** — o próprio Plunder Patriarch é um —, mas a subida de nível não confere a flag (é outro
+  script).
 

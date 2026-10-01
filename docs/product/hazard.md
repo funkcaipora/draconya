@@ -1,7 +1,8 @@
 # Hazard
 
 **Status:** parcial — o mecanismo inteiro do Canary existe (nível por zona, crítico e reforço do
-monstro, esquiva do monstro, XP, rolagens extras de loot, subida de nível, Plunder Patriarch) e a
+monstro, esquiva do monstro, XP, rolagens extras de loot, subida de nível, Plunder Patriarch, o
+portão do chefe de recompensa, o teto do mana shield) e a
 Gnomprona Gardens, a única zona que o Canary marca, é jogável com as duas espécies que o catálogo
 resolve hoje. Faltam o casulo (Hazard Pods, sem item no chão), o chefe que sobe o nível (The
 Primal Menace, fora do catálogo) e 13 das 15 espécies do jardim (dependem do #579 e do #622).
@@ -21,9 +22,13 @@ de 1 a 12. **O nível mínimo é 1, e não há "sem hazard" dentro da zona** —
 pelo NPC que o troca (`gnomadness.lua`: `desiredLevel <= 0` recusa). Opcional é ENTRAR na zona.
 
 **Quem escolhe, e quando.** O nível é escolhido NA CIDADE, antes de entrar, no seletor "Hazard"
-do modal "Escolha uma caçada" (só aparece nas hunts de zona de hazard). O Canary o troca falando
-com um NPC fora da zona; o equivalente aqui é a Cidade, serviço sem rolagem tratado pela sessão
-dona (ADR 0052 d.2). A intenção `set-hazard-level { zoneId, level }` só é aceita na sessão de
+do modal "Escolha uma caçada" (só aparece nas hunts de zona de hazard). No Canary quem troca o
+nível é o NPC Gnomadness (`gnomadness.lua`), que fica DENTRO dos jardins, perto da entrada
+(`(33527, 32865, 14)`, dentro da caixa `(33502, 32740, 13)`–`(33796, 32996, 15)` de
+`hazard_primal.lua`), e a troca vale na hora (`Hazard:setPlayerCurrentLevel` chama
+`player:updateHazard()`). O Draconya leva a escolha para a Cidade porque a sessão é instanciada e o
+nível é fixado na entrada (ADR 0052 d.5) — serviço sem rolagem, tratado pela sessão dona (d.2). A
+intenção `set-hazard-level { zoneId, level }` só é aceita na sessão de
 Cidade: dentro da hunt o nível é **FIXO** desde a entrada (ADR 0052 d.5, como a versão de
 conteúdo), e a escolha lá é recusada. O servidor confere a zona, o piso (`minLevel`) e o teto que
 o personagem já desbloqueou — quem escolhe acima do teto leva `system-message`.
@@ -42,7 +47,7 @@ hazard, pela mesma razão do Canary (o `HazardMonster.onSpawn` roda no spawner e
 | **Defesa** | jogador → monstro | `− ceil(dano × nível × defenseMultiplier / 10000)`; o Canary traz `0`, então não faz nada | `defenseMultiplier` 0 |
 | **XP** | abate | `floor(xp + xp × 1,75 × nível × 2 / 100)`, depois do rate e do bônus de level/Bestiário: +3,5 % por nível | `expBonusMultiplier` 2 |
 | **Loot** | abate | `rolls = 2 × nível × 2 / 100` (0,04 a 0,48 no teto do Canary); a parte fracionária decide o arredondamento por UMA rolagem `math.random(0, 100) < frac × 100` (a chance real é 48/101 no nível 12); cada rolagem é uma tabela INTEIRA a mais, depois da boosted, sem Gut | `lootBonusMultiplier` 2 |
-| **Plunder Patriarch** | morte de monstro da zona | pelos feridores: menor nível entre eles; `random(1, 10000) <= nível × 87` é o casulo e ENCERRA; senão `random(1, 100000) <= nível × 25` faz nascer o Plunder Patriarch no tile livre mais próximo (raio 4) | `podDropMultiplier` 87, `plunderSpawnMultiplier` 25 |
+| **Plunder Patriarch** | morte de monstro da zona | pelos feridores: menor nível entre eles; `random(1, 10000) <= nível × 87` é o casulo e ENCERRA; senão `random(1, 100000) <= nível × 25` faz nascer o Plunder Patriarch no tile livre mais próximo (raio 4). **Chefe de recompensa (`rewardBoss`) não rola nenhuma das duas** — o próprio Plunder Patriarch é um | `podDropMultiplier` 87, `plunderSpawnMultiplier` 25 |
 
 **Em party vale o MENOR nível entre os membros** (`Party:refreshHazard` e os laços de
 `parseAttackRecvHazardSystem`/`parseAttackDealtHazardSystem`): o dano, a esquiva, a XP e o loot
@@ -54,6 +59,14 @@ truncada em `[0, 1]`: o crítico de "750/10000" acontece em ~2,3 % dos golpes (e
 esquiva do nível 1 em ~0,2 % e a do nível 12 em ~3,4 %. É o comportamento do Canary — `combat/
 hazard.test.ts` mede as três com 200 mil sorteios — e é o que este motor reproduz: o reforço de
 dano, que é determinístico, é quem carrega o perigo.
+
+**O mana shield absorve o golpe de ANTES do reforço.** `Game::combatChangeHealth` soma
+`healthChange = primário + secundário` ANTES de `handleHazardSystemAttack` e não o recalcula: o
+escudo absorve `min(mana, healthChange)` com esse valor velho, e o excedente do Hazard — o crítico e
+o reforço — cai INTEIRO na vida. Num golpe de 1000 no nível 12 (+240) o escudo com mana de sobra
+absorve 1000 e a vida perde 240. Vale para o `mana-shield` e para o Energy Ring (uma leitura só); o
+estágio carrega o dano de antes em `DamageOutcome.preHazardDamage` e `applyDamageOutcome` o usa de
+teto.
 
 **O golpe reforçado é "extensão", e extensão pula os charms defensivos.** O
 `parseAttackRecvHazardSystem` marca `damage.extension = true` no crítico e no reforço, e o
@@ -82,10 +95,15 @@ fixture.
 Registro `jsonb` `characters.hazard` (migração `0027_632-hazard.sql`):
 `{ maxLevel: { zoneId: n }, currentLevel: { zoneId: n }, version: 1 }`. Lido INTEIRO no ticket,
 escrito INTEIRO pelo ledger a partir do extrato — **última escrita vence** (a escolha desce e
-sobe), nunca fusão por máximo. A escolha na Cidade grava o extrato de estado NA HORA (e não só no
-`release`): o ticket de uma party é emitido pela `api` a partir da linha do banco, e sem isto o
-membro entraria na hunt com o nível de antes. Quem nunca tocou no hazard não gera extrato por
-causa dele. O S2C `hazard` manda o registro cru no attach, a cada escolha e a cada subida de
+sobe), nunca fusão por máximo. A escolha na Cidade grava um extrato SÓ de hazard NA HORA (e não só
+no `release`): o ticket de uma party é emitido pela `api` a partir da linha do banco, e sem isto o
+membro entraria na hunt com o nível de antes. **Não é o extrato de estado da Cidade**: o
+`ReceiptStore` guarda UM extrato por `(sessionId, characterId)` e o de estado leva valor que só sai
+uma vez (o gold de uma bênção comprada, a venda, as instâncias apagadas), então um segundo extrato
+na mesma chave o sobrescreveria antes da varredura do `jobs`. O de hazard leva só o registro
+(agregados zerados), vai num fluxo próprio (`<sessionId>:hazard`) e nunca liquida nada; escolher o
+nível em que já estava não grava. Se o Redis falha, o registro fica sujo e o extrato do logout o
+leva. Quem nunca tocou no hazard não gera extrato por causa dele. O S2C `hazard` manda o registro cru no attach, a cada escolha e a cada subida de
 nível; `catalogue.hazardZones` traz nome e faixa de cada zona e `catalogue.hunts[].hazardZoneId`
 diz qual hunt é de zona.
 
@@ -134,8 +152,10 @@ Só as que NÃO são regra de caçada (ADR 0037 d.6 não admite divergência de 
   A rolagem dele continua consumida e continua impedindo o Plunder, para o Plunder ter a chance que
   o Canary dá. É a exceção que a direção da issue deixou escrita; **fica registrada como não
   feita**, não como divergência aceita.
-- **O portão `isRewardBoss` do Plunder** não existe (não há "chefe de recompensa" no catálogo);
-  nenhum monstro desta zona é um.
+- **O baú de recompensa do chefe de recompensa** não existe: o Canary liga a `flags.rewardBoss` o
+  `monster:setReward(true)` (o loot vai para um baú, não para o cadáver), e aqui o Plunder
+  Patriarch dropa no cadáver como qualquer monstro. O que a flag faz nesta zona — o portão do
+  casulo e do Plunder — vale (`monster.rewardBoss`, escrita pelo importador).
 - **A mensagem "(Hazard)" no texto de dano/XP/loot** é apresentação e não foi desenhada.
 
 ## Em aberto
