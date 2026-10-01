@@ -45,8 +45,8 @@ import {
   specTickIntervalMs, tickOf,
 } from '../conditions.js';
 import type { NormalizedTick } from '../conditions.js';
-import { Fields } from '../fields.js';
-import type { TileFieldState } from '../fields.js';
+import { Fields, isCharacterOwned, isSafeWall } from '../fields.js';
+import type { FieldOwner, TileFieldState } from '../fields.js';
 import { NO_FLEE_INDEX, fleePath, initialFleeIndex, stepFrom } from '../fear.js';
 import type { FleeMap } from '../fear.js';
 import { chestStorageKeyOf, isDoorKind, isToggleable, TileOverrides } from '../tile-overrides.js';
@@ -5639,7 +5639,10 @@ export class HuntRuleset implements Ruleset {
     // ausente) — o `?? this.#world.map.z` é só para o tipo, nunca alcançado na prática.
     const z = from.z ?? this.#world.map.z;
     const pathBlocked: Blocked = (x, y) => {
-      if (this.#world.blockedAt(x, y, z) || this.#occupiedForPlayer(x, y, z)) return true;
+      // `true` no quarto argumento: quem segue é PERSONAGEM, e a parede de personagem não o
+      // bloqueia (OW-05, #826) — é a MESMA pergunta que `canOccupy` faz do personagem. O
+      // familiar não conta como ocupação: o jogador o atravessa (#599).
+      if (this.#world.blockedAt(x, y, z, true) || this.#occupiedForPlayer(x, y, z)) return true;
       if (grounded && this.#world.floorChangeAt(x, y, z) !== null) return true;
       if (reserved !== null && x === reserved.x && y === reserved.y && z === reserved.z) return true;
       return false;
@@ -7721,10 +7724,15 @@ const slots = bot.groups.get(group);
    * `direction` (#591) só importa para a forma `wall` — a fileira perpendicular precisa saber
    * lançador→alvo para se orientar. Default `'south'`, preservando bit a bit o único chamador
    * de antes desta issue (a ability de monstro, sempre `circle`, que ignora direção).
+   *
+   * `owner` (OW-05, #826) é quem lançou: o campo de personagem — ou de invocação de personagem
+   * (`#fieldOwnerOf`) — não fere personagem nem invocação de personagem, e a parede dele cede a
+   * quem é personagem (`fields.ts`). Ausente é campo de MAPA, que pega todo mundo: o que o teste
+   * que planta um campo direto, sem lançador, sempre foi.
    */
   applyField(
     session: Session, spec: FieldSpec, at: WorldPoint, source: AreaSource = 'spell',
-    direction: Direction = 'south',
+    direction: Direction = 'south', owner?: FieldOwner,
   ): TileFieldState {
     const subject = fieldSubject(spec.id);
     const previous = this.#fields.get(spec.id);
@@ -7763,6 +7771,7 @@ const slots = bot.groups.get(group);
       ...(multiStage ? { stageIndex: 0, stages } : {}),
       ...(spec.blocksMovement ? { blocksMovement: true } : {}),
       ...(spec.blocksProjectile ? { blocksProjectile: true } : {}),
+      ...(owner === undefined ? {} : { owner }),
     };
     if (previous !== null) {
       session.cancelEvent(FIELD_EXPIRE, subject);
@@ -7801,6 +7810,10 @@ const slots = bot.groups.get(group);
     // Quem PISA no campo agora. Um evento por campo, e `at` é O(1) por criatura — nenhum passo
     // varre a lista de campos.
     for (const target of this.#occupants(session, field)) {
+      // O no-pvp (OW-05, #826): o campo de personagem não pega personagem nem invocação de
+      // personagem. Sai ANTES de montar a condição — a montagem pode consumir `session.rng`, e
+      // quem o campo não fere não pode gastar um sorteio.
+      if (!this.#fieldHarms(field, target)) continue;
       const condition = conditionFromSpec(
         field.condition, this.#subjectOf(target), field.id, session.nowMs, 'monster-attack',
         { baseSpeed: target.speed, rng: session.rng },
@@ -7842,13 +7855,71 @@ const slots = bot.groups.get(group);
   #destroyFieldAt(session: Session, at: WorldPoint): boolean {
     const field = this.#fields.at(at);
     if (field === null || field.blocksMovement === true) return false;
+    this.#removeField(session, field);
+    return true;
+  }
+
+  /**
+   * Tira o campo ANTES de ele vencer: cancela os três eventos possíveis dele e avisa a tela — a
+   * mesma cancelação que `applyField` faz ao relançar, sem deixar `FIELD_TICK`/`FIELD_EXPIRE`/
+   * `FIELD_STAGE_ADVANCE` órfão disparando contra um campo que já não existe. É o que Destroy
+   * Field (`#destroyFieldAt`) e o passo que dissolve a parede de personagem
+   * (`#dissolveSafeWall`, OW-05) têm em comum.
+   */
+  #removeField(session: Session, field: TileFieldState): void {
     const subject = fieldSubject(field.id);
     session.cancelEvent(FIELD_EXPIRE, subject);
     session.cancelEvent(FIELD_STAGE_ADVANCE, subject);
     session.cancelEvent(FIELD_TICK, subject);
     this.#fields.remove(field.id);
     session.emit({ kind: 'field-vanished', fieldId: field.id });
-    return true;
+  }
+
+  /**
+   * O passo de um personagem chegou a `to`: se ali há a parede de personagem (`isSafeWall`, a
+   * variante segura do Canary), ela some (OW-05, #826). `move()` já a admitiu — `CharacterRuntime`
+   * é `dissolvesSafeWalls` —, e o que falta é tirá-la, como `Tile::queryAdd` faz no Canary
+   * (`tile.cpp:864-876`, `internalRemoveItem`). Só o campo do tile de CHEGADA: escada e teleporte
+   * redirecionam o passo, e é `result.to`, o destino de verdade, que o chamador passa.
+   *
+   * Remove o campo INTEIRO, não só o tile. O conteúdo de hoje só planta parede de UM tile (Magic
+   * Wall e Wild Growth são `point`, como os itens do Canary); uma parede de vários tiles seria
+   * uma entidade só aqui, e cederia toda de uma vez — divergência registrada, sem caso real.
+   */
+  #dissolveSafeWall(session: Session, to: WorldPoint): void {
+    const field = this.#fields.at(to);
+    if (field === null || !isSafeWall(field)) return;
+    this.#removeField(session, field);
+  }
+
+  /**
+   * O campo fere este alvo? É o no-pvp do Canary aplicado ao campo (OW-05, #826): o campo de
+   * personagem — ou de invocação de personagem — não é nocivo a personagem nem a invocação de
+   * personagem (`combat.cpp:2611-2640`; o portão final é `Combat::canDoCombat` dentro da
+   * condição, `condition.cpp:2015-2020`, que num mundo no-pvp recusa jogador e invocação de
+   * jogador contra jogador e invocação de jogador, `combat.cpp:551-565`). Vale para o PRÓPRIO
+   * lançador, que é personagem como os outros (`combat.cpp:2616-2619`).
+   *
+   * Monstro que não é invocação de personagem continua levando o campo de personagem, e o campo
+   * de monstro e o de mapa (sem dono) continuam pegando todo mundo — é o que preserva a hunt de
+   * sempre bit a bit: só o campo de um personagem sobre outro personagem (ou a invocação dele)
+   * muda de resultado, e é a correção de paridade que esta issue pede.
+   */
+  #fieldHarms(field: TileFieldState, target: ConditionTarget): boolean {
+    if (!isCharacterOwned(field)) return true;
+    if (target instanceof CharacterRuntime) return false;
+    return typeof target.masterId !== 'string';
+  }
+
+  /**
+   * O dono de um campo lançado por este monstro (OW-05, #826): invocação de personagem conta como
+   * o personagem — o mestre —, como no Canary (`caster->isSummon()` → `getMaster()->getPlayer()`,
+   * `combat.cpp:1198-1204`); o resto é o próprio monstro, pelo `subject`.
+   */
+  #fieldOwnerOf(monster: MonsterRuntime): FieldOwner {
+    return typeof monster.masterId === 'string'
+      ? { kind: 'character', id: monster.masterId }
+      : { kind: 'monster', id: monster.subject };
   }
 
   /**
@@ -8106,6 +8177,9 @@ const slots = bot.groups.get(group);
       ...(nextTickAtMs === undefined ? {} : { nextTickAtMs }),
       ...(field.blocksMovement === true ? { blocksMovement: true } : {}),
       ...(field.blocksProjectile === true ? { blocksProjectile: true } : {}),
+      // O dono atravessa os estágios (OW-05, #826): o fire field de personagem segue não ferindo
+      // personagem quando decai para o estágio mais fraco.
+      ...(field.owner === undefined ? {} : { owner: field.owner }),
     };
     this.#fields.replace(updated);
     if (nextTickAtMs !== undefined) {
@@ -8143,6 +8217,8 @@ const slots = bot.groups.get(group);
     // Estágio sem condição (#560: Magic Wall, Wild Growth, o último estágio mudo do fire
     // field) não aplica nada a quem entra — só ocupa o tile, e talvez bloqueie.
     if (field === null || field.condition === undefined) return;
+    // O mesmo portão do tique (OW-05, #826): pisar no campo de personagem não fere personagem.
+    if (!this.#fieldHarms(field, target)) return;
     const condition = conditionFromSpec(
       field.condition, this.#subjectOf(target), field.id, session.nowMs, 'monster-attack',
       { baseSpeed: target.speed, rng: session.rng },
@@ -8252,7 +8328,10 @@ const slots = bot.groups.get(group);
       if (result.field !== undefined) {
         const direction = directionOf(character.position, result.field.at) ?? character.direction;
         const instanced: FieldSpec = { ...result.field.spec, id: fieldInstanceId(result.field.spec.id, result.field.at) };
-        this.applyField(session, instanced, result.field.at, 'spell', direction);
+        this.applyField(
+          session, instanced, result.field.at, 'spell', direction,
+          { kind: 'character', id: character.id },
+        );
         session.emit({
           kind: 'supply-used', characterId: character.id, supplyId: supply.id,
           position: this.#at(character), targets: NO_SPELL_TARGETS, tiles: [result.field.at],
@@ -9655,7 +9734,9 @@ const slots = bot.groups.get(group);
     // tabela de anéis de MONSTRO (#523), como a área de dano da própria ability — `source:
     // 'monster'` é o que faz o campo de fogo do Dragon Lord cobrir os mesmos 21 tiles da bola.
     if (ability.field !== undefined) {
-      this.applyField(session, ability.field, this.#at(primary), 'monster');
+      this.applyField(
+        session, ability.field, this.#at(primary), 'monster', 'south', this.#fieldOwnerOf(monster),
+      );
     }
     // O reflexo (#552) pode ter matado o monstro no meio da ability. Quem aplica dano não decide
     // morte: o pipeline resolve depois do golpe inteiro, como faz depois do golpe do personagem.
@@ -10010,6 +10091,8 @@ const slots = bot.groups.get(group);
    * Wall/Wild Growth) é outra checagem, e já mora dentro de `move()`/`canOccupy`
    * (`TileOccupancy.blockedAt` consulta `Fields.blockedAt`) — vale para QUALQUER criatura sem
    * precisar de uma segunda checagem aqui, e é por isso que só o desvio de dano precisa dela.
+   * A única exceção é a parede de PERSONAGEM (OW-05, #826): `move()` a admite para quem é
+   * personagem (`Movable.dissolvesSafeWalls`) e o passo aceito a dissolve, logo abaixo.
    */
   #step<P extends GridPoint>(
     session: Session, mover: Movable<P>, to: P, creatureId: string, rollDrunk = true, forced = false,
@@ -10117,6 +10200,11 @@ const slots = bot.groups.get(group);
         kind: 'creature-moved', creatureId,
         from: result.from, to: result.to, durationMs: result.durationMs,
       });
+      // A parede de personagem cede ao passo de quem é personagem (OW-05, #826): `move()` já a
+      // admitiu (`Movable.dissolvesSafeWalls`), e aqui ela é tirada — ANTES da entrada no campo
+      // abaixo, porque o que fica embaixo dela (`Fields.at` devolve só o mais recente) é o que o
+      // passo encontra. No Canary é `Tile::queryAdd` quem remove e deixa o passo seguir.
+      if (mover instanceof CharacterRuntime) this.#dissolveSafeWall(session, result.to);
       // Um passo do personagem ou do alvo dele solta o golpe estacionado depois de `pacified`
       // (M44-04, #622): `Creature::onCreatureMove`, o "extra swing" do Canary.
       if (mover instanceof CharacterRuntime || mover instanceof MonsterRuntime) {
@@ -10381,7 +10469,9 @@ const slots = bot.groups.get(group);
   #fleeMapFor(character: CharacterRuntime): FleeMap {
     const z = this.#floorOf(character);
     return {
-      walkable: (x, y) => !this.#world.blockedAt(x, y, z)
+      // `true`: quem foge é PERSONAGEM, e a parede de personagem não o bloqueia (OW-05, #826) — a
+      // mesma pergunta que `canOccupy` faz do passo, que a dissolve (`#dissolveSafeWall`).
+      walkable: (x, y) => !this.#world.blockedAt(x, y, z, true)
         && this.#world.floorChangeAt(x, y, z) === null
         && this.#world.teleportAt(x, y, z) === null
         && !this.#world.occupied(x, y, z),
