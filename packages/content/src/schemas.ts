@@ -5630,6 +5630,70 @@ export type LootRoll = NonNullable<LootTable['gold']>;
 export type Hunt = z.infer<typeof huntSchema>;
 export type Vocation = z.infer<typeof vocationSchema>;
 
+// --- mundo (#829, OW-08, ADR 0060) ---------------------------------------------------------
+
+/**
+ * Os tipos de mundo que o motor sabe ser. É o `worldType` do Canary, que aceita "expert-pvp",
+ * "retro-pvp", "pvp", "no-pvp" e "pvp-enforced" (`canary/config.lua.dist:28-33`) — mas o
+ * Draconya só implementa o `no-pvp` (ADR 0060 d.1): não existe dano entre jogadores no `sim`, e
+ * aceitar `retro-pvp` num arquivo de conteúdo seria um mundo que promete o que o motor não faz.
+ * Vocabulário FECHADO, como `COMBAT_PROFILES` (ADR 0031): um tipo novo entra por ADR e por esta
+ * lista, nunca por um valor que passou em silêncio.
+ */
+export const WORLD_TYPES = ['no-pvp'] as const;
+export type WorldType = (typeof WORLD_TYPES)[number];
+
+/**
+ * Uma coordenada ABSOLUTA do mapa do Tibia (a do `otservbr.otbm`), e não a local de um recorte.
+ * É a mesma que `characters.world_x/y/z` guardará (ADR 0060 d.3.b): o que liga as duas é
+ * `source.region` do mapa (`absoluteToLocal`, em `map.ts`). O andar `z` é de 0 (céu) a 15
+ * (subsolo mais fundo), o do protocolo do Tibia.
+ */
+const absolutePoint = z.strictObject({
+  x: z.number().int().nonnegative(),
+  y: z.number().int().nonnegative(),
+  z: z.number().int().min(0).max(15),
+});
+
+/**
+ * Uma cidade do mundo: id, nome e templo (`canary/src/map/town.hpp`, `Town`). O Canary a guarda
+ * com um id numérico; aqui o id é o slug, como todo id de conteúdo. O templo é para onde o
+ * personagem volta ao morrer e onde nasce sem posição salva (ADR 0060 d.4 e d.9).
+ */
+const worldTownSchema = z.strictObject({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  temple: absolutePoint,
+});
+
+/**
+ * Um mundo (`data/worlds/<id>.json`, ADR 0060 d.1 e d.2): o `Game` único do Canary, que no
+ * Draconya é uma sessão compartilhada num processo `game`. É o conteúdo de que a topologia (OW-13)
+ * e as colunas de `characters` (OW-15) precisam antes de existir. Os spawns entram à parte (OW-25).
+ *
+ * Só dado, sem arte (invariante 6): o `strictObject` recusa `appearanceId` e qualquer chave que
+ * ninguém lê. A coerência com o mapa — o templo cair num tile andável do recorte — não cabe a um
+ * schema, que só vê este arquivo: `buildContent` a confere.
+ */
+export const worldSchema = z.strictObject({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** O tipo do mundo, no conteúdo e não no código: `worldType` do Canary. Ver `WORLD_TYPES`. */
+  worldType: z.enum(WORLD_TYPES),
+  /** O mapa sobre o qual o mundo roda — um `data/maps/<id>.json` importado do OTBM. */
+  map: z.string().min(1),
+  /** Ao menos uma: sem cidade não há templo, e sem templo ninguém tem onde nascer nem morrer. */
+  towns: z.array(worldTownSchema).min(1),
+  /**
+   * O teto de gente no mundo (ADR 0060 d.2.b): vale só na entrada, vindo do repouso; quem volta
+   * de uma instância sempre entra. Começa em 200, o `CITY_SHARD_CAPACITY` de hoje.
+   */
+  capacity: z.number().int().positive(),
+});
+
+export type World = z.infer<typeof worldSchema>;
+export type WorldTown = World['towns'][number];
+
 // --- mapa e rota (FUN-9) -------------------------------------------------------------------
 
 const point = z.object({
@@ -5663,6 +5727,15 @@ const floorSchema = z.object({
    * não reimportado com a camada nova).
    */
   sight: z.array(z.string().min(1)).optional(),
+  /**
+   * Zonas do tile (#830, OW-09, ADR 0060 d.8): protect zone, no-pvp, no-logout e arena, lidas do
+   * `OTBM_ATTR_TILE_FLAGS` de cada tile — um caractere por tile, na mesma forma de `speed` e
+   * `sight`, resolvido pela paleta FIXA `ZONE_PALETTE` (`./map.ts`; `.` é o tile normal). Fixa e
+   * não por mapa, como `speedPalette`, porque são só oito estados e o significado é o do Canary,
+   * nunca uma escolha do mapa. Ausente: nenhum tile deste andar tem zona (tudo normal) — o mapa
+   * autorado à mão e o recorte ainda não reimportado com a camada, e as hunts não mudam.
+   */
+  zones: z.array(z.string().min(1)).optional(),
 });
 
 export const tilemapSchema = z.object({

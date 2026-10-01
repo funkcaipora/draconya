@@ -212,9 +212,24 @@ nunca aqui.
 Huntera); a hunt anda pela fórmula do Tibia com `progression.startingSpeed`/`speedPerLevel` e
 `monster.speed`.
 
+**Zonas por tile** (#830, OW-09, ADR 0060 d.8, que reverte o ADR 0025 d.9). `floors[z].zones` é a
+quarta camada por andar, na forma de `speed` e `sight` — uma string por linha, um caractere por
+tile —, lida de `TILE_FLAGS` do OTBM. A paleta é FIXA (`ZONE_PALETTE`, em `map.ts`; não por mapa,
+como `speedPalette` é): `.` normal, `p` PZ, `n` no-pvp, `a` arena (`PVPZONE`), `l` só no-logout, e
+`P`/`N`/`A` a zona mais no-logout. Em memória, `Floor.zones` é `Uint8Array | null` com a soma dos
+bits do OTBM (`ZONE_FLAG`: PZ 1, no-pvp 4, no-logout 8, arena 16) e `zoneFlagsAt(map, x, y, z)`
+lê um tile — `0`, normal, quando a camada falta, o tile está fora do mapa ou o andar não existe.
+Ausente é `null` e tudo é normal: **as hunts não mudam**, e hoje só `thais.json` a tem. O valor já
+vem normalizado como o Canary carrega o mapa (PZ, no-pvp e arena exclusivos; no-logout soma; casa é
+PZ), então o `sim` aplica a precedência de `Tile::getZoneType` e nunca precisa re-normalizar. É dado,
+sem regra: o que PZ, no-pvp e no-logout proíbem é do `sim` (OW-10, OW-27). Caractere fora da
+paleta derruba o boot, como velocidade fora de `speedPalette`. `pnpm map:import --id <id>
+--zones-only` acrescenta só a camada a um mapa já importado — sem pacote de arte, geometria
+intacta —, e `--check` a confere mesmo onde a geometria sai `absent`.
+
 **Mapa importado: o que é gerado e o que é autorado** (FUN-118, FUN-120, ADR 0025). Um mapa com
-`source` veio do OTBM real por `pnpm map:import`: `floors` (grade e velocidade), `speedPalette`
-e `source` são GERADOS, e `pnpm map:import --check` — que o `pnpm check` roda — reprova a grade
+`source` veio do OTBM real por `pnpm map:import`: `floors` (grade, velocidade, visão e zonas),
+`speedPalette` e `source` são GERADOS, e `pnpm map:import --check` — que o `pnpm check` roda — reprova a grade
 editada à mão, porque ela é a geometria do arquivo de origem e não uma opinião. O que se autora
 no JSON é `entryPoint` e `floorChanges`; reimportar preserva os dois. Mapa importado NÃO tem
 linha em `appearances.maps`: a arte dele é a pilha por tile em `things/<versão>/maps/<id>.json`,
@@ -244,6 +259,34 @@ Confira antes de subir o servidor:
 ```
 pnpm content:check
 ```
+
+## O mundo (#829, OW-08, ADR 0060)
+
+`data/worlds/<id>.json` — um arquivo por mundo — diz o que um mundo **é**: `{ id, name, worldType,
+map, towns: [{ id, name, temple }], capacity }`. `Content.worlds` é um mapa por id, vazio no
+conteúdo de teste sem mundo aberto; o conteúdo real tem o `main` (tipo `no-pvp`, mapa `thais`,
+teto 200), e `load.test.ts` prende. Quem lê é a topologia do `sim` (OW-13) e as colunas de mundo
+em `characters` (OW-15); os spawns entram à parte (OW-25).
+
+- **`worldType` é um vocabulário FECHADO** (`WORLD_TYPES`), como `COMBAT_PROFILES`: hoje só
+  `no-pvp`. O Canary aceita também `retro-pvp`/`pvp`/`expert-pvp`/`pvp-enforced`
+  (`canary/config.lua.dist:28-33`), mas o `sim` não tem dano entre jogadores — aceitar um deles
+  num arquivo seria subir um mundo que promete o que o motor não faz. Tipo novo entra por ADR.
+- **O templo é coordenada ABSOLUTA do Tibia**, a mesma de `characters.world_x/y/z` (ADR 0060
+  d.3.b), e o mapa do recorte é LOCAL. `absoluteToLocal`/`localToAbsolute` (`map.ts`) traduzem pela
+  origem de `source.region`: `x` e `y` perdem ou ganham a origem, `z` não muda (os andares do
+  recorte são chaveados pelo `z` absoluto). Só mapa IMPORTADO tem `source`, e por isso só ele
+  serve a um mundo. Não compare coordenada de mundo com `entryPoint` ou `floorChanges` sem
+  traduzir: em Thais o erro é de 32275 em x e 32153 em y, e não aparece em teste que usa só o mapa local.
+- **`buildContent` confere o que o schema não vê:** o `map` existe e tem `source`; o templo cai
+  dentro do recorte nos três eixos e num tile que não é parede (`isBlocked`, a regra do
+  `entryPoint` da Cidade); id de cidade e de mundo únicos. Quebra no boot, não no personagem que
+  nasce preso.
+- **Entra em `computeVersion`** como todo o `RawContent` (invariante 7): mudar o teto muda a
+  versão que a sessão congela.
+- **`capacity` só se guarda aqui.** O teto vale só na entrada vinda do repouso (ADR 0060 d.2.b) e
+  quem o aplica é a admissão (OW-18/OW-20); `CITY_SHARD_CAPACITY` continua sendo o da Cidade.
+- Sem arte (invariante 6): `worldSchema` é `strictObject`.
 
 ## Invariantes locais
 
