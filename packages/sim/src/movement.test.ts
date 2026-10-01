@@ -2,7 +2,9 @@ import { buildTilemap } from '@draconya/content';
 import type { TilemapInteractable } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import {
-  TileOccupancy, canOccupy, move, movementDuration, place, placeNear, placeReachable, tilesAround,
+  TileOccupancy, canOccupy, move, movementDuration, place, placeNear, placeReachable, relocate,
+  swapPlaces,
+  tilesAround,
 } from './movement.js';
 import type { Movable, MoveRejection } from './movement.js';
 import { Fields } from './fields.js';
@@ -328,6 +330,62 @@ describe('andares e escadas (FUN-119)', () => {
     const hero: Movable<Ponto> & { alive: boolean } = { alive: true, position: { x: 1, y: 1, z: 5 }, speed: 300 };
     w.reset([hero]);
     expect(move(w, hero, { x: 2, y: 1, z: 5 })).toEqual({ ok: false, reason: 'tile-blocked' });
+  });
+});
+
+describe('relocate — o salto de quem já está no mundo (#623: Levitate, Magic Rope)', () => {
+  // Dois andares com a MESMA sala; o herói está no 7 e salta para o 8. `relocate` não segue
+  // escada nem exige adjacência: o chamador escolheu o tile.
+  const twoFloors = buildTilemap({
+    id: 'sala2', z: 7,
+    floors: {
+      '7': { grid: ['######', '#....#', '#.#..#', '#....#', '######'] },
+      '8': { grid: ['######', '#....#', '#.#..#', '#....#', '######'] },
+    },
+  });
+  const worldOf = (...creatures: ReturnType<typeof at>[]) => {
+    const w = new TileOccupancy(twoFloors);
+    w.reset(creatures);
+    return w;
+  };
+
+  it('vai a outro andar e a outro tile longe do adjacente: libera a origem e ocupa o destino', () => {
+    const hero = at(1, 1);
+    const w = worldOf(hero);
+    const result = relocate(w, hero, { x: 4, y: 3, z: 8 });
+    expect(result).toMatchObject({ ok: true, from: { x: 1, y: 1, z: 7 }, to: { x: 4, y: 3, z: 8 } });
+    expect(hero.position).toEqual({ x: 4, y: 3, z: 8 });
+    expect(w.occupied(1, 1, 7)).toBe(false);
+    expect(w.occupied(4, 3, 8)).toBe(true);
+    // A duração é a de um passo (positiva, múltiplo do compasso) — o cliente interpola o intervalo.
+    expect((result as { durationMs: number }).durationMs).toBeGreaterThan(0);
+  });
+
+  it('recusa parede, fora do mapa, andar que o mapa não tem, tile ocupado e o próprio tile — sem mexer em nada', () => {
+    const hero = at(1, 1);
+    const other = at(3, 3);
+    const w = worldOf(hero, other);
+    const before = { position: { ...hero.position }, here: w.occupied(1, 1, 7) };
+    const targets: ReadonlyArray<readonly [{ x: number; y: number; z: number }, string]> = [
+      [{ x: 2, y: 2, z: 8 }, 'tile-blocked'],
+      [{ x: 9, y: 9, z: 8 }, 'out-of-bounds'],
+      [{ x: 1, y: 1, z: 6 }, 'tile-blocked'],
+      [{ x: 3, y: 3, z: 7 }, 'tile-occupied'],
+      [{ x: 1, y: 1, z: 7 }, 'same-tile'],
+    ];
+    for (const [target, reason] of targets) {
+      expect(relocate(w, hero, target), reason).toEqual({ ok: false, reason });
+    }
+    expect({ position: { ...hero.position }, here: w.occupied(1, 1, 7) }).toEqual(before);
+  });
+
+  it('o monstro de andar único (sem `z`) salta no plano, mas não troca de andar', () => {
+    const rat: Movable<{ x: number; y: number }> = { position: { x: 1, y: 1 }, speed: 300 };
+    const w = worldOf();
+    w.occupy(1, 1, 7);
+    expect(relocate(w, rat, { x: 4, y: 3, z: 8 })).toEqual({ ok: false, reason: 'tile-blocked' });
+    expect(relocate(w, rat, { x: 4, y: 3, z: 7 })).toMatchObject({ ok: true });
+    expect(rat.position).toEqual({ x: 4, y: 3 });
   });
 });
 
@@ -729,5 +787,93 @@ describe('TileOccupancy.fields — campo bloqueante (#560, Magic Wall/Wild Growt
       const beside = { ...at(1, 2), dissolvesSafeWalls: true as const };
       expect(canOccupy(w, beside, to(2, 2))).toBe('tile-blocked'); // a parede FIXA do mapa
     });
+  });
+});
+
+describe('troca de lugar com quem se atravessa (#600)', () => {
+  // O Canary deixa o jogador pisar no tile da invocação de jogador (`Player::canWalkthrough`); a
+  // ocupação é exclusiva, então vira TROCA — e a troca não pode mexer na ocupação de nenhum dos dois.
+  it('os dois trocam de posição e os dois tiles continuam ocupados', () => {
+    const hero = at(1, 1);
+    const pet = at(2, 1);
+    const w = world(hero, pet);
+
+    const result = swapPlaces(w, hero, pet);
+    expect(result).toMatchObject({
+      ok: true,
+      mover: { ok: true, from: { x: 1, y: 1, z: 7 }, to: { x: 2, y: 1, z: 7 }, durationMs: 500 },
+      other: { ok: true, from: { x: 2, y: 1, z: 7 }, to: { x: 1, y: 1, z: 7 }, durationMs: 500 },
+    });
+    expect(hero.position).toEqual({ x: 2, y: 1, z: 7 });
+    expect(pet.position).toEqual({ x: 1, y: 1, z: 7 });
+    expect(w.occupied(1, 1)).toBe(true);
+    expect(w.occupied(2, 1)).toBe(true);
+  });
+
+  it('cada um paga o PRÓPRIO passo: a duração é a velocidade de quem se mexe', () => {
+    const hero = at(1, 1);
+    const slow = { alive: true, position: { x: 2, y: 1, z: 7 }, speed: 150 };
+    const w = world(hero, slow);
+    const result = swapPlaces(w, hero, slow);
+    expect(result).toMatchObject({ ok: true, mover: { durationMs: 500 }, other: { durationMs: 1_000 } });
+  });
+
+  it('a diagonal é legal, e quem não carrega `z` continua sem ele depois da troca', () => {
+    const walker = at(1, 2);
+    const pet: Movable<{ x: number; y: number }> & { alive: boolean } = {
+      alive: true, position: { x: 2, y: 3 }, speed: 300,
+    };
+    const w = new TileOccupancy(map);
+    w.reset([walker, pet]);
+    expect(swapPlaces(w, walker, pet)).toMatchObject({ ok: true });
+    expect(walker.position).toEqual({ x: 2, y: 3, z: 7 });
+    expect(pet.position).toEqual({ x: 1, y: 2 });
+    expect(Object.keys(pet.position)).toEqual(['x', 'y']);
+  });
+
+  it('não troca com quem não está no tile vizinho, e não mexe em nada', () => {
+    const hero = at(1, 1);
+    const far = at(4, 3);
+    const w = world(hero, far);
+    expect(swapPlaces(w, hero, far)).toEqual({ ok: false, reason: 'not-adjacent' });
+    expect(hero.position).toEqual({ x: 1, y: 1, z: 7 });
+    expect(far.position).toEqual({ x: 4, y: 3, z: 7 });
+  });
+
+  it('recusa o tile bloqueado — um campo bloqueante em cima de quem se atravessaria', () => {
+    const fields = new Fields();
+    fields.apply({
+      id: 'wall', tiles: [{ x: 2, y: 1, z: 7 }], expiresAtMs: 20_000, blocksMovement: true,
+    });
+    const w = new TileOccupancy(map, { fields });
+    const hero = at(1, 1);
+    const pet = at(2, 1);
+    w.reset([hero, pet]);
+    expect(swapPlaces(w, hero, pet)).toEqual({ ok: false, reason: 'tile-blocked' });
+    expect(hero.position).toEqual({ x: 1, y: 1, z: 7 });
+  });
+
+  it('recusa quando o tile do outro não está ocupado: aí é um passo comum, e quem chama pisa', () => {
+    const hero = at(1, 1);
+    const w = world(hero);
+    expect(swapPlaces(w, hero, at(2, 1))).toEqual({ ok: false, reason: 'tile-occupied' });
+  });
+
+  it('recusa trocar num tile de escada: o passo redirecionaria quem pisa', () => {
+    const house = buildTilemap({
+      id: 'casa', z: 7,
+      floors: {
+        '7': { grid: ['######', '#....#', '#....#', '######'] },
+        '6': { grid: ['######', '#....#', '#....#', '######'] },
+      },
+      floorChanges: [{ from: { x: 2, y: 1, z: 7 }, to: { x: 3, y: 1, z: 6 } }],
+    });
+    const w = new TileOccupancy(house);
+    const hero = at(1, 1);
+    const pet = at(2, 1);
+    w.reset([hero, pet]);
+    expect(swapPlaces(w, hero, pet)).toEqual({ ok: false, reason: 'tile-occupied' });
+    expect(hero.position).toEqual({ x: 1, y: 1, z: 7 });
+    expect(pet.position).toEqual({ x: 2, y: 1, z: 7 });
   });
 });

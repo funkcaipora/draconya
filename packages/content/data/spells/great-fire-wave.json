@@ -4,6 +4,7 @@
   "description": "Lança uma onda de fogo à sua frente.",
   "vocationId": "sorcerer",
   "minLevel": 38,
+  "learnPrice": 25000,
   "manaCost": 120,
   "group": "attack",
   "groupCooldownMs": 2000,

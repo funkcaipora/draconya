@@ -4,6 +4,7 @@
   "description": "Eletriza o seu alvo, causando dano de energia ao longo do tempo.",
   "vocationId": "sorcerer",
   "minLevel": 34,
+  "learnPrice": 2500,
   "manaCost": 30,
   "group": "attack",
   "groupCooldownMs": 2000,

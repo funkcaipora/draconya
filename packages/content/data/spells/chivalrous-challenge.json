@@ -4,6 +4,7 @@
   "description": "Força os monstros na área ao seu redor a mirarem você e suspende a fuga deles, por 12 segundos.",
   "vocationId": "knight",
   "minLevel": 150,
+  "learnPrice": 250000,
   "manaCost": 80,
   "group": "support",
   "groupCooldownMs": 2000,

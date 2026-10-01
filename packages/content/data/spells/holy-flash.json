@@ -4,6 +4,7 @@
   "description": "Ofusca o seu alvo com luz sagrada, causando dano ao longo do tempo.",
   "vocationId": "paladin",
   "minLevel": 70,
+  "learnPrice": 7500,
   "manaCost": 30,
   "group": "attack",
   "groupCooldownMs": 2000,

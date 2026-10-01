@@ -157,8 +157,10 @@ por membro. Cada personagem ("Draco Knight", "Draco Paladin", "Draco Sorcerer", 
   ferido com Heal Friend e lança Mass Healing pelo próprio HP (o vocabulário do bot não tem uma
   condição de "N membros feridos" — ver o comentário em `botConfigFor`), ataca com Eternal Winter
   (gelo, a própria fraqueza do dragão) com alvo de sobra e Avalanche como base — nunca Terra Wave/
-  Wrath of Nature, terra é 80% resistida. Todos bebem a poção certa por vocação/level (Supreme
-  Health, Ultimate Spirit, Ultimate Mana) por limiar de HP/mana. Cada degrau da rotação só entra
+  Wrath of Nature, terra é 80% resistida. Todos lançam o familiar de vocação (#599, level 200: Summon
+  Knight/Paladin/Sorcerer/Druid Familiar, mana 1000/2000/3000/3000, 15 min de vida e 30 min de
+  cooldown) quando não têm invocação viva (`summons <= 0`), ao lado da haste. Todos bebem a poção
+  certa por vocação/level (Supreme Health, Ultimate Spirit, Ultimate Mana) por limiar de HP/mana. Cada degrau da rotação só entra
   se a magia existir no conteúdo desta branch (`spellCascade`) — o motor já cai para o próximo
   quando o de cima está em cooldown ou sem mana, então não há limiar de mana escrito à mão. Uma
   regra de saída (`hp-below 10%`) evita que o personagem morra sozinho numa hunt sem ninguém

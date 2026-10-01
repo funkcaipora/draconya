@@ -3,16 +3,20 @@ import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   CyclopediaModal,
+  bossEntryOf,
   categoryOf,
   entryOf,
+  filterBosses,
   filterEntries,
   filterItems,
   itemsFooterNote,
+  sortBosses,
   sortEntries,
 } from './CyclopediaModal.js';
 import type { CyclopediaTab } from './CyclopediaModal.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
-import type { BestiaryConfig, Catalogue, ItemDefinition, MonsterListing } from '../state/hud.js';
+import type { BestiaryConfig, BosstiaryConfig, Catalogue, ItemDefinition, MonsterListing } from '../state/hud.js';
+import type { BossListing } from './bosstiary-progress.js';
 
 const config: BestiaryConfig = {
   milestones: [10_000, 25_000, 50_000, 100_000, 200_000],
@@ -217,13 +221,15 @@ describe('CyclopediaModal', () => {
     expect(text).not.toContain('NaN');
   });
 
-  it('renders a tablist with exactly Itens and Bestiary, Bestiary selected by default', async () => {
+  it('renders a tablist with Itens, Bestiary, Bosstiary and Charms, Bestiary selected by default', async () => {
     hud.set((state) => ({ ...state, catalogue: catalogue() }));
     const html = await render();
     expect(html).toContain('role="tablist"');
     expect(html).toContain('role="tab" aria-selected="false" class="ui-tab">Itens</button>');
     expect(html).toContain('role="tab" aria-selected="true" class="ui-tab ui-tab-active">Bestiary</button>');
-    expect(html).not.toContain('Bosstiary');
+    // O Bosstiary saiu do papel no #629: a aba existe, mas só abre quando o jogador a escolhe.
+    expect(html).toContain('role="tab" aria-selected="false" class="ui-tab">Bosstiary</button>');
+    expect(html).not.toContain('Progresso no Bosstiary');
     expect(html).not.toMatch(/página|pagin/i);
     expect(html).toContain('Todas as entradas do Bestiário');
     expect(html).not.toContain('cyclopedia-modal-items-list');
@@ -290,5 +296,126 @@ describe('CyclopediaModal', () => {
     expect(html).toContain('4 itens no catálogo');
     expect(html).not.toContain('Bônus do Bestiário');
     expect(html).not.toMatch(/1 – 8 de 867/);
+  });
+});
+
+// O Bosstiary (#629, ADR 0052 d.1): registro cru do servidor + tabela do catálogo, nível derivado.
+const bosstiaryConfig: BosstiaryConfig = {
+  levels: {
+    bane: [{ kills: 25, points: 5 }, { kills: 100, points: 15 }, { kills: 300, points: 30 }],
+    archfoe: [{ kills: 5, points: 10 }, { kills: 20, points: 30 }, { kills: 60, points: 60 }],
+    nemesis: [{ kills: 1, points: 10 }, { kills: 3, points: 30 }, { kills: 5, points: 60 }],
+  },
+};
+const dreadmaw: MonsterListing = { id: 'dreadmaw', name: 'Dreadmaw', bosstiary: { rarity: 'nemesis', raceId: 639 } };
+const ghazbaran: MonsterListing = { id: 'ghazbaran', name: 'Ghazbaran', bosstiary: { rarity: 'archfoe', raceId: 100 } };
+const wildness: MonsterListing = { id: 'wildness', name: 'Wildness', bosstiary: { rarity: 'bane', raceId: 200 } };
+const bosses: BossListing[] = [
+  { id: 'dreadmaw', name: 'Dreadmaw', rarity: 'nemesis', raceId: 639 },
+  { id: 'ghazbaran', name: 'Ghazbaran', rarity: 'archfoe', raceId: 100 },
+  { id: 'wildness', name: 'Wildness', rarity: 'bane', raceId: 200 },
+];
+
+describe('Cyclopedia Bosstiary pure functions (#629)', () => {
+  it('derives each boss level and next goal from the raw register and the catalogue table', () => {
+    const kills = { '639': 3, '100': 4 };
+    const [dread, ghaz, wild] = bosses.map((boss) => bossEntryOf(boss, kills, bosstiaryConfig));
+    expect(dread?.progress).toMatchObject({ kills: 3, level: 2, nextKills: 5 });
+    expect(ghaz?.progress).toMatchObject({ kills: 4, level: 0, nextKills: 5 });
+    expect(wild?.progress).toMatchObject({ kills: 0, level: 0, nextKills: 25, percent: 0 });
+  });
+
+  it('filters by a case-insensitive name substring, and sorts by kills, name or rarity', () => {
+    const kills = { '639': 1, '100': 9, '200': 1 };
+    const entries = bosses.map((boss) => bossEntryOf(boss, kills, bosstiaryConfig));
+    expect(filterBosses(entries, 'GHAZ').map((entry) => entry.boss.id)).toEqual(['ghazbaran']);
+    expect(filterBosses(entries, '').map((entry) => entry.boss.id)).toEqual(['dreadmaw', 'ghazbaran', 'wildness']);
+    expect(sortBosses(entries, 'kills').map((entry) => entry.boss.id)).toEqual(['ghazbaran', 'dreadmaw', 'wildness']);
+    expect(sortBosses(entries, 'name').map((entry) => entry.boss.id)).toEqual(['dreadmaw', 'ghazbaran', 'wildness']);
+    expect(sortBosses(entries, 'rarity').map((entry) => entry.boss.id)).toEqual(['dreadmaw', 'ghazbaran', 'wildness']);
+  });
+});
+
+describe('CyclopediaModal Bosstiary tab (#629)', () => {
+  const withBosses = (over: Partial<Catalogue> = {}) =>
+    catalogue({ monsters: [...monsters, dreadmaw, ghazbaran, wildness], bosstiary: bosstiaryConfig, ...over });
+
+  it('lists every boss with rarity, level and kills toward the next level, plus the boss points', async () => {
+    hud.set((state) => ({
+      ...state, catalogue: withBosses(), bosstiary: { kills: { '639': 3, '100': 20 }, points: 70 },
+    }));
+    const html = await render({ initialTab: 'Bosstiary' });
+    const text = visibleText(html);
+
+    expect(html).toContain('role="tab" aria-selected="true" class="ui-tab ui-tab-active">Bosstiary</button>');
+    expect(text).toContain('Progresso no Bosstiary');
+    expect(text).toContain('Todos os bosses do Bosstiary');
+    for (const boss of bosses) expect(text).toContain(boss.name);
+    // Dreadmaw (Nemesis) com 3 abates: nível 2, faltam 2 para os 5 do nível 3.
+    expect(text).toContain('Nível 2/3');
+    expect(text).toContain('3 / 5');
+    // Ghazbaran (Archfoe) com 20 abates: nível 2 (o 2º degrau é 20), próximo é 60.
+    expect(text).toContain('20 / 60');
+    expect(html).toContain('Pontos de boss: <b>70</b>');
+    expect(html).toContain('Bosses abatidos: <b>2 / 3</b>');
+    expect(text).toContain('Nemesis');
+    expect(text).toContain('Archfoe');
+    expect(text).toContain('Bane');
+    expect(text).toContain('3 bosses no Bosstiary');
+  });
+
+  it('a maxed boss shows a check instead of a next goal', async () => {
+    hud.set((state) => ({
+      ...state, catalogue: withBosses(), bosstiary: { kills: { '639': 9 }, points: 100 },
+    }));
+    const html = await render({ initialTab: 'Bosstiary' });
+    const text = visibleText(html);
+    expect(text).toContain('Nível 3/3');
+    expect(text).toContain('✓ 9');
+    expect(html).toContain('Nível máximo: <b>1</b>');
+  });
+
+  it('shows zeros and no NaN before the register arrives or without a level table', async () => {
+    const { bosstiary: _bosstiary, ...withoutTable } = withBosses();
+    hud.set((state) => ({ ...state, catalogue: withoutTable, bosstiary: null }));
+    const html = await render({ initialTab: 'Bosstiary' });
+    const text = visibleText(html);
+    expect(html).toContain('Pontos de boss: <b>0</b>');
+    expect(text).toContain('Nível 0/3');
+    expect(text).not.toContain('Nível máximo');
+    expect(text).not.toContain('NaN');
+  });
+
+  it('boss never appears in the Bestiary tab, and the Bestiary footer counts only common monsters', async () => {
+    hud.set((state) => ({ ...state, catalogue: withBosses() }));
+    const html = await render({ initialTab: 'Bestiary' });
+    const text = visibleText(html);
+    expect(text).toContain('Rat');
+    expect(text).not.toContain('Dreadmaw');
+    expect(text).not.toContain('Ghazbaran');
+    expect(text).toContain('Bônus do Bestiário');
+    expect(text).toContain('/ 15 marcos');
+  });
+
+  it('says so when the server has no boss instead of showing an empty list', async () => {
+    hud.set((state) => ({ ...state, catalogue: catalogue() }));
+    const text = visibleText(await render({ initialTab: 'Bosstiary' }));
+    expect(text).toContain('Este servidor não tem Bosstiary.');
+    expect(text).not.toContain('Progresso no Bosstiary');
+  });
+
+  it('a variant that shares the raceId is listed once, and its kills are the shared counter', async () => {
+    const variant: MonsterListing = {
+      id: 'dreadmaw-tamed', name: 'Dreadmaw Tamed', bosstiary: { rarity: 'nemesis', raceId: 639 },
+    };
+    hud.set((state) => ({
+      ...state,
+      catalogue: withBosses({ monsters: [...monsters, dreadmaw, variant] }),
+      bosstiary: { kills: { '639': 2 }, points: 40 },
+    }));
+    const text = visibleText(await render({ initialTab: 'Bosstiary' }));
+    expect(text).toContain('Dreadmaw');
+    expect(text).not.toContain('Dreadmaw Tamed');
+    expect(text).toContain('1 boss no Bosstiary');
   });
 });

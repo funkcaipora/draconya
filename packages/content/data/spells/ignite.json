@@ -4,6 +4,7 @@
   "description": "Incendeia o seu alvo, causando dano de fogo ao longo do tempo.",
   "vocationId": "sorcerer",
   "minLevel": 26,
+  "learnPrice": 1500,
   "manaCost": 30,
   "group": "attack",
   "groupCooldownMs": 2000,

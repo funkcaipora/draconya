@@ -4,6 +4,7 @@
   "description": "Aumenta a skill de shielding de cada membro da party no alcance, por 2 minutos.",
   "vocationId": "paladin",
   "minLevel": 32,
+  "learnPrice": 4000,
   "manaCost": {
     "kind": "party-scaled",
     "base": 90,

@@ -537,6 +537,18 @@ export class Inventory {
   }
 
   /**
+   * A instância onde quer que esteja — containers OU corpo — sem remover, ou `null`. É a leitura
+   * que o Treino faz da exercise weapon (#631): quem decide se a arma ainda está com o
+   * personagem é o `sim`, e a resposta não depende de ela estar na mochila ou vestida.
+   */
+  carried(instanceId: string): CarriedItem | null {
+    const inContainer = this.#findCarried(instanceId);
+    if (inContainer !== null) return inContainer;
+    for (const item of this.#equipped.values()) if (item.instanceId === instanceId) return item;
+    return null;
+  }
+
+  /**
    * Vende N itens da mochila/bolsa ao `value` do catálogo (#724, ADR 0048 d.8 — a
    * generalização do "Despachar loot" do ADR 0032 d.12). TRANSAÇÃO: confere TODAS as
    * instâncias antes de remover qualquer uma — uma faltando, equipada, ou com `value: 0`

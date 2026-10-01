@@ -1,0 +1,16 @@
+{
+  "id": "levitate-down",
+  "name": "Levitate (down)",
+  "description": "Desce um andar, para o tile à sua frente, quando não há chão ali.",
+  "minLevel": 12,
+  "learnPrice": 500,
+  "manaCost": 50,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "levitate",
+    "direction": "down"
+  },
+  "_open": "A mesma Levitate de `levitate-up.json` com o parâmetro \"down\" — duas magias do catálogo porque o parâmetro de texto do Canary não tem lugar na barra de ações. Ver a nota completa lá (`data/scripts/spells/support/levitate.lua`, words \"exani hur\", id 81, level 12, mana 50, cooldown/groupCooldown 2000). Efeito CONST_ME_TELEPORT (11). learnPrice (#624, ADR 0058 d.3): 500, o preço do `levitate` em TODAS as 32 chamadas de `data-otservbr-global/npc` que o ensinam (`StdModule.learnSpell`, spellName \"levitate\", level 12, todas as vocações). O leitor `catalog:spell-prices` liga por NOME e este arquivo se chama \"Levitate (up)\"/\"Levitate (down)\", então ele aparece em \"sem NPC\" e o número é curado à mão. DIVERGÊNCIA: no Canary uma compra ensina os DOIS parâmetros (`up` e `down`); aqui são duas magias do catálogo e cada uma é comprada — 1000 gold no total em vez de 500: [ABERTO — decidir se `levitate-down` vem junto da compra de `levitate-up`]."
+}

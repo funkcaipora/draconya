@@ -297,6 +297,12 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -521,6 +527,30 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Oink!",
+          "yell": false
+        },
+        {
+          "text": "Hungerrr!",
+          "yell": false
+        },
+        {
+          "text": "Grunt!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -726,6 +756,30 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ungh! Ungh!",
+          "yell": false
+        },
+        {
+          "text": "Klack klack!",
+          "yell": false
+        },
+        {
+          "text": "Hugah!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -812,6 +866,14 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 350,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -898,12 +960,197 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/reptiles/dreadmaw.lua"
     },
+    "boss": true,
+    "bosstiary": {
+      "rarity": "nemesis",
+      "raceId": 639
+    },
     "outfitId": 358
+  },
+  {
+    "id": "fungosaurus",
+    "name": "Fungosaurus",
+    "health": 30000,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 801
+    },
+    "armor": 0,
+    "defense": 110,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.1,
+        "fire": 0.1,
+        "holy": 0.2
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 364,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 801
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 3000,
+        "chance": 0.47,
+        "target": {
+          "range": 11
+        },
+        "power": {
+          "min": 800,
+          "max": 1500
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "yellowsmoke"
+        }
+      },
+      {
+        "id": "lifedrainburst",
+        "cadenceMs": 4000,
+        "chance": 0.31,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 800,
+          "max": 1500
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "root",
+        "cadenceMs": 2000,
+        "chance": 0.03,
+        "target": {
+          "range": 11
+        },
+        "power": 0,
+        "damageType": "physical",
+        "condition": {
+          "key": "rooted",
+          "merge": "longest",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "rooted"
+          }
+        }
+      },
+      {
+        "id": "fear",
+        "cadenceMs": 2000,
+        "chance": 0.03,
+        "target": {
+          "range": 11
+        },
+        "power": 0,
+        "damageType": "physical",
+        "condition": {
+          "key": "feared",
+          "merge": "longest",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "feared"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 85,
+      "body": 1,
+      "legs": 85,
+      "feet": 105,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Rraaaaa!",
+          "yell": false
+        },
+        {
+          "text": "CHEHEHE!!!",
+          "yell": true
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/fungosaurus.lua"
+    },
+    "outfitId": 1555
   },
   {
     "id": "killer-caiman",
@@ -1015,6 +1262,12 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1182,6 +1435,26 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Growl!",
+          "yell": false
+        },
+        {
+          "text": "Meat!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1329,6 +1602,30 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hizzzzzzz!",
+          "yell": false
+        },
+        {
+          "text": "To armzzzz!",
+          "yell": false
+        },
+        {
+          "text": "Engage zze aggrezzor!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1493,6 +1790,22 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Tssss!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1654,6 +1967,22 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Where are zhe guardz when you need zhem!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1809,6 +2138,24 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Tssss!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 560,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1930,6 +2277,22 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hissss!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2112,6 +2475,34 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hissss!",
+          "yell": false
+        },
+        {
+          "text": "Cowardzz!",
+          "yell": false
+        },
+        {
+          "text": "Softzzkinzz from zze zzouzz!",
+          "yell": false
+        },
+        {
+          "text": "Zztand and fight!",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2431,6 +2822,35 @@
     "runOnHealth": 275,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "HISSSS",
+          "yell": true
+        },
+        {
+          "text": "I bring you deathhhh, mortalssss",
+          "yell": false
+        },
+        {
+          "text": "Sssssouls for the one",
+          "yell": false
+        },
+        {
+          "text": "Tsssse one will risssse again",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2524,6 +2944,23 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Zzzzzzt",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 0,
+        "untilMs": 660000
+      }
+    ],
+    "manaCost": 205,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2667,6 +3104,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 490,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2765,6 +3210,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
+    "convinceable": true,
+    "manaCost": 445,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2997,6 +3450,26 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Krk! Krk!",
+          "yell": false
+        },
+        {
+          "text": "BONK!",
+          "yell": true
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3234,6 +3707,22 @@
     "runOnHealth": 300,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Shriiiek",
+          "yell": false
+        }
+      ]
+    },
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3527,6 +4016,12 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "corpseAnimatable": [
+      {
+        "fromMs": 10000,
+        "untilMs": 670000
+      }
+    ],
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

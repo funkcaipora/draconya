@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from '@draconya/content/load';
 import type { Content } from '@draconya/content';
-import { CharacterRuntime, createHuntSession, totalXpForLevel } from '@draconya/sim';
+import { CharacterRuntime, createHuntSession, learnedSpellsStateOf, totalXpForLevel } from '@draconya/sim';
 import type { HuntRuleset, Session } from '@draconya/sim';
 import { botConfigFor, type DragonPartyVocation } from './dragon-party-plan.js';
 
@@ -34,13 +34,16 @@ const VOCATIONS: readonly DragonPartyVocation[] = ['knight', 'paladin', 'sorcere
 
 /** O mesmo personagem-teste de `darashia-dragon-lair.test.ts`: HP absurdo, xp que bate com o
  * level (senão a primeira mordida retargeta para ~nível 1 e a party morre em segundos). */
-function partyMember(id: string, vocationId: string, progression: Content['progression']): CharacterRuntime {
+function partyMember(id: string, vocationId: string, content: Content): CharacterRuntime {
   return new CharacterRuntime({
     id, position: { x: 0, y: 0, z: 10 },
     health: 10_000_000, maxHealth: 10_000_000, mana: 10_000, maxMana: 10_000,
-    level: 200, xp: totalXpForLevel(200, progression), vocationId,
+    level: 200, xp: totalXpForLevel(200, content.progression), vocationId,
     staminaMs: 86_400_000, staminaUpdatedAtMs: 0,
     gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+    // Um level 200 já aprendeu o catálogo da vocação dele (#624, ADR 0058): o cast confere o
+    // registro, e sem ele a rotação de magia REAL deste teste nunca lançaria nada.
+    learnedSpells: learnedSpellsStateOf(content.spells.keys()),
   });
 }
 
@@ -49,7 +52,7 @@ function enter(content: Content, id: string): { session: Session; ruleset: HuntR
     id, content, huntId: 'darashia-dragon-lair', difficulty: 'cautious',
     createdAtMs: 0, partyOptions: { leaderId: 'knight', mode: 'shared' },
   });
-  for (const vocationId of VOCATIONS) session.enter(partyMember(vocationId, vocationId, content.progression));
+  for (const vocationId of VOCATIONS) session.enter(partyMember(vocationId, vocationId, content));
   const ruleset = session.ruleset as HuntRuleset;
   // O MESMO `botConfigFor` que `dragon-party-seed.ts` grava de verdade — sem lure em ninguém
   // (a função não configura `lure` para nenhuma vocação), rotação de magia/suprimento real.

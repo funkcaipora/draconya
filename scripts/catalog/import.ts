@@ -29,6 +29,7 @@ import './ammo.js';
 import './spells.js';
 import './charms.js';
 import './imbuements.js';
+import './skinning.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
