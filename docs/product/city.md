@@ -74,6 +74,27 @@ Isso tem uma obrigação junto: ao voltar de uma hunt, o snapshot **da hunt** é
 deixado de reescrever. Sem isso, quem morre volta para a praça, o snapshot da hunt já creditada
 fica de pé no Redis, e a próxima conexão retoma uma hunt encerrada.
 
+### O que "não credita" quer dizer no `sim` (OW-03, ADR 0060 d.10b)
+
+Até aqui a Cidade não creditar era o mesmo que ser shard (`Ruleset.shared`), e o hospedeiro lia
+um campo para as duas perguntas. O ADR 0060 torna a Cidade o primeiro mundo — um shard que
+**credita** —, e o `sim` já separa as duas coisas, sem mudar o comportamento de ninguém:
+
+- **`Ruleset.shared`** diz só "sair é `leave`".
+- **`Ruleset.progress`** (`'none' | 'checkpointed'`) diz se a sessão credita. `progressOf(ruleset)`
+  devolve o valor resolvido, que o hospedeiro passa a ler na OW-04: ausente, a sessão privada é
+  `'at-end'` (credita no `end`) e a compartilhada é `'none'`. **A Cidade e a hunt não declaram o
+  campo**, então nada muda para elas enquanto `OPEN_WORLD` não existe.
+- **`Session.checkpoint(characterId, reason)`** emite o extrato de quem continua na sessão e
+  recomeça a contar dele, com a semântica de delta do `leave`: o segundo checkpoint leva só o que
+  rendeu desde o primeiro, o `seq` cresce, e o `leave`/`end` seguinte leva só o resto. Não zera a
+  soma da sessão, não toca a janela de DPS, não sorteia nem agenda — o resultado é o mesmo com ou
+  sem checkpoint, a 1 Hz ou a 10 Hz. Nenhum hospedeiro o chama ainda (OW-16).
+- **Tetos por sessão**: `maxPendingDomainEvents` e `maxEventsPerAdvance` (default, as constantes
+  de hoje) e `maxNotableEventsPerCharacter` (sem default — sem ele a lista cresce sem limite, como
+  sempre cresceu). É o que permite ao mundo aparar a lista de eventos notáveis sem que a hunt
+  perceba.
+
 ### Desconectar não tira ninguém da praça na hora
 
 A carência de repouso (FUN-52) vale por **personagem**, não pela sessão: cinco minutos sem ninguém

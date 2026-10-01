@@ -1,6 +1,7 @@
 # 0023 — A Cidade é um shard: uma cópia, muitos personagens
 
 **Status:** aceito
+**Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30):** o shard vira o mundo, com relógio, monstros e checkpoint; 0023:131-133 deixa de valer para ele.
 **Data:** 2026-09-10
 **Contexto técnico:** `sim` (`Session`, ruleset da Cidade), `server` (`SessionHost`, fábrica de
 sessão)

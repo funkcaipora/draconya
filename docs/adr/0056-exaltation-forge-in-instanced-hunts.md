@@ -1,6 +1,7 @@
 # 0056 — Forja da Exaltação em hunts instanciadas: sorteio de stack por spawn com teto por sessão, dust como registro, slivers e cores como item
 
 **Status:** proposto — decorre do [ADR 0046](0046-item-instance-overlay-for-imbuements-and-forge-tier.md)
+**Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30):** o teto por sessão vale na hunt.
 (tier no overlay) e do [ADR 0039](0039-canary-spawn-points-end-of-pull-difficulty.md) (spawn
 por ponto); persiste e cobra pelo [ADR 0052](0052-endgame-progression-state-and-city-services-through-the-owning-session.md)
 **Data:** 2026-09-27

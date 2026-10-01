@@ -6,7 +6,7 @@ import type { BotConfigV2, BotSlot, Combat, Item, Progression, Spell } from '@dr
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
 import { Rng } from '../rng.js';
-import { Session } from '../session.js';
+import { Session, progressOf } from '../session.js';
 import type { SlotOutcome, UseSlotTarget } from './hunt.js';
 import { createCityRuleset } from './city.js';
 
@@ -171,6 +171,12 @@ describe('chegar na Cidade (FUN-120)', () => {
   it('a Cidade diz qual mapa desenhar', () => {
     expect(createCityRuleset({ map: temple }).mapId).toBe('templo');
     expect(createCityRuleset().mapId).toBeUndefined();
+  });
+
+  it('a Cidade não declara `progress`: ausente, ela é shard e não credita, como sempre (OW-03)', () => {
+    const ruleset = createCityRuleset({ map: temple });
+    expect('progress' in ruleset).toBe(false);
+    expect(progressOf(ruleset)).toBe('none');
   });
 });
 

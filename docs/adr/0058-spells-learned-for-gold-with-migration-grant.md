@@ -1,6 +1,7 @@
 # 0058 — Magia é aprendida por gold numa tela de serviço da Cidade; quem já existe recebe o que já podia lançar
 
 **Status:** proposto — resolve a questão 8 de `docs/tibia-parity-plan.md` §5 (bloqueio de #624
+**Emendado pelo [ADR 0060](0060-tibia-open-world-without-pvp.md) (2026-09-30) — d.2:** a tela de aprender magia fica em tile PZ do mundo.
 desde 2026-09-25); persiste e cobra pelo [ADR 0052](0052-endgame-progression-state-and-city-services-through-the-owning-session.md);
 tela de serviço no padrão do [ADR 0042](0042-tibia-death-promotion-blessings-and-item-loss.md)
 **Data:** 2026-09-27
