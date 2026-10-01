@@ -2,6 +2,8 @@ import { compileMitigation, skillSchema } from '@draconya/content';
 import type { Combat } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from './character.js';
+import type { CharacterState } from './character.js';
+import { FULL_BLOCK_CHARGE, isFullBlockCharge } from './combat/block-charge.js';
 import { resolveDamage } from './combat/damage.js';
 import { Rng } from './rng.js';
 import {
@@ -597,6 +599,364 @@ describe('entrada em curso: reversão e joinedAtMs (#397, ADR 0035 decisão 6)',
     stranger.lastAttackAtMs = 300;
     expect(() => session.enter(stranger)).toThrow('party cheia');
     expect(stranger.lastAttackAtMs).toBe(300);
+  });
+
+  describe('o relógio da sessão anterior não atravessa a entrada (#812)', () => {
+    /**
+     * Como cada grandeza de `CharacterState` que guarda um instante do relógio lógico da sessão é
+     * tratada na transição. O relógio de cada sessão nasce em zero e o `CharacterRuntime` é o MESMO
+     * objeto, então um instante lido no relógio errado vira "agora mesmo" ou "no futuro":
+     *
+     * - `stamp` é CARIMBO ("quando foi a última vez que…"): a janela é curta e já venceu na saída
+     *   normal, então a entrada o zera;
+     * - `duration` é PRAZO ("quanto ainda falta"): a entrada o traduz para o relógio novo e o que
+     *   faltava continua faltando — o cooldown de 10 minutos não volta pronto por uma ida à Cidade,
+     *   como no Canary (`CONDITIONID_DEFAULT` é persistente) e como o anel de duração (#689);
+     * - `none` não é instante do relógio da sessão.
+     */
+    type ClockPolicy = 'stamp' | 'duration' | 'none';
+
+    /**
+     * TODO campo de `CharacterState` classificado. É um `Record<keyof CharacterState, …>`, então o
+     * campo NOVO que alguém acrescentar ao estado do personagem não compila até ser classificado
+     * aqui — e quem o classifica como `stamp` ou `duration` precisa dar a ele uma entrada em
+     * `STAMP_FIELDS`/`DURATION_FIELDS`. É o que impede o próximo instante de vazar em silêncio,
+     * como estes vazaram (#550, #812).
+     */
+    const SESSION_CLOCK_POLICY: Readonly<Record<keyof CharacterState, ClockPolicy>> = {
+      lastAttackAtMs: 'stamp',
+      lastCombatActionAtMs: 'stamp',
+      // O contador do Canary sobe uma carga por segundo até duas: qualquer passagem pela Cidade
+      // dura mais que isso, então a entrada devolve o banco CHEIO.
+      blockCharge: 'stamp',
+      // O evento que a dispara morava na fila da sessão anterior: não há o que traduzir.
+      pendingManualAction: 'stamp',
+      cleanseImmunity: 'duration',
+      cooldowns: 'duration',
+      conditions: 'duration',
+      // SÓ LEITURA, de snapshot antigo (#554 → #622): a trava de stairhop é a condição `pacified`
+      // (`conditions`, prazo), e o construtor converte o campo velho nela. O restore de snapshot é o
+      // único caminho que o lê, no MESMO relógio que o gravou — nada a traduzir nem a zerar.
+      attackLockedUntil: 'none',
+      // Identidade e progressão: atravessam a sessão, é para isso que existem.
+      id: 'none', position: 'none', health: 'none', maxHealth: 'none', mana: 'none', maxMana: 'none',
+      level: 'none', xp: 'none', soul: 'none', vocationId: 'none', boostedMonsterId: 'none', speed: 'none',
+      gold: 'none', goldDelta: 'none', alive: 'none', skills: 'none', bestiary: 'none', bosstiary: 'none', charms: 'none',
+      capacity: 'none', inventory: 'none', removedInstances: 'none', lootSeq: 'none',
+      contribution: 'none', ammo: 'none', supplyStock: 'none', ammunitionStock: 'none', storages: 'none',
+      direction: 'none', blessings: 'none', promoted: 'none', fightMode: 'none',
+      // Relógio de PAREDE (epoch), materializado na fronteira da transição (`materializeStamina`).
+      staminaMs: 'none', staminaUpdatedAtMs: 'none',
+      // DURAÇÃO restante sem âncora num relógio: a comida que sobra, os contadores de prática
+      // (golpes que ainda treinam, sem instante nenhum).
+      fedMs: 'none', attackPractice: 'none',
+      // O bônus de Loyalty é um percentual fixado no ticket (#628): não ancora num relógio.
+      loyaltyBonusPercent: 'none',
+    };
+
+    interface StampField {
+      /** Grava um carimbo de uma sessão que já andou 57,7 s. */
+      readonly stale: (hero: CharacterRuntime) => void;
+      readonly cleared: (hero: CharacterRuntime) => boolean;
+    }
+    const STAMP_FIELDS: Readonly<Record<string, StampField>> = {
+      lastAttackAtMs: {
+        stale: (hero) => { hero.lastAttackAtMs = 57_700; },
+        cleared: (hero) => hero.lastAttackAtMs === null,
+      },
+      lastCombatActionAtMs: {
+        stale: (hero) => { hero.lastCombatActionAtMs = 57_700; },
+        cleared: (hero) => hero.lastCombatActionAtMs === null,
+      },
+      blockCharge: {
+        stale: (hero) => { hero.blockCharge = { charges: 0, anchorMs: 57_700 }; },
+        cleared: (hero) => isFullBlockCharge(hero.blockCharge),
+      },
+      pendingManualAction: {
+        stale: (hero) => { hero.pendingManualAction = { kind: 'item', ref: { instanceId: 'i-1' }, seq: 7 }; },
+        cleared: (hero) => hero.pendingManualAction === null,
+      },
+    };
+
+    /** O prazo que cada `seed` grava: sempre um minuto por vir, lido no relógio de quem gravou. */
+    const REMAINING_MS = 60_000;
+    interface DurationField {
+      readonly seed: (hero: CharacterRuntime, nowMs: number) => void;
+      /** Quanto falta em `nowMs`, ou `null` quando o prazo não está mais lá. */
+      readonly remaining: (hero: CharacterRuntime, nowMs: number) => number | null;
+    }
+    const DURATION_FIELDS: Readonly<Record<string, DurationField>> = {
+      cleanseImmunity: {
+        seed: (hero, nowMs) => { hero.cleanseImmunity.set('poison', nowMs + REMAINING_MS); },
+        remaining: (hero, nowMs) => {
+          const untilMs = hero.cleanseImmunity.get('poison');
+          return untilMs === undefined ? null : untilMs - nowMs;
+        },
+      },
+      cooldowns: {
+        seed: (hero, nowMs) => { hero.cooldowns.start('spell:wound', nowMs, REMAINING_MS); },
+        remaining: (hero, nowMs) => (Object.keys(hero.cooldowns.getState().until).length === 0
+          ? null : hero.cooldowns.remainingMs('spell:wound', nowMs)),
+      },
+      conditions: {
+        seed: (hero, nowMs) => {
+          hero.conditions.apply({ key: 'haste', speedPercent: 30, expiresAtMs: nowMs + REMAINING_MS });
+        },
+        remaining: (hero, nowMs) => {
+          const condition = hero.conditions.get('haste');
+          return condition === null ? null : condition.expiresAtMs - nowMs;
+        },
+      },
+    };
+
+    const newSession = (id: string): Session => new Session({
+      id, contentVersion: 'v1', ruleset: joinedRuleset(),
+      rng: Rng.fromSeed(id), createdAtMs: 0,
+    });
+    /** Uma sessão que recusa toda entrada — a party cheia. */
+    const refusingSession = (): Session => new Session({
+      id: 'full', contentVersion: 'v1',
+      ruleset: { ...joinedRuleset(), onEnter: () => { throw new Error('party cheia'); } },
+      rng: Rng.fromSeed('full'), createdAtMs: 0,
+    });
+    /** Uma sessão que se encerra no instante 3 000, no meio de um `advanceBy` maior. */
+    const endingSession = (): Session => new Session({
+      id: 'ending', contentVersion: 'v1',
+      ruleset: {
+        ...joinedRuleset(),
+        onEnter: (session) => { session.scheduleIn('end', 3_000); },
+        onEvent: (session) => { session.end('manual-exit'); },
+      },
+      rng: Rng.fromSeed('ending'), createdAtMs: 0,
+    });
+
+    it('todo campo do estado do personagem está classificado, e todo instante tem o seu teste', () => {
+      const keysOf = (policy: ClockPolicy): string[] => Object.entries(SESSION_CLOCK_POLICY)
+        .filter(([, current]) => current === policy).map(([key]) => key).sort();
+      expect(Object.keys(STAMP_FIELDS).sort()).toEqual(keysOf('stamp'));
+      expect(Object.keys(DURATION_FIELDS).sort()).toEqual(keysOf('duration'));
+    });
+
+    describe('carimbos: a entrada os zera', () => {
+      it.each(Object.entries(STAMP_FIELDS))('%s: entrar numa sessão nova esquece o carimbo da anterior', (_name, field) => {
+        const hero = character('a');
+        field.stale(hero);
+        // A pré-condição: o valor de fato está lá, ou o teste passaria vazio.
+        expect(field.cleared(hero)).toBe(false);
+
+        const session = newSession('fresh');
+        session.enter(hero);
+        expect(session.nowMs).toBe(0);
+        expect(field.cleared(hero)).toBe(true);
+      });
+
+      it.each(Object.entries(STAMP_FIELDS))('%s: o snapshot preserva o carimbo — o relógio é o mesmo, e restaurar não passa por enter', (_name, field) => {
+        const session = newSession('hot');
+        const hero = character('a');
+        session.enter(hero);
+        session.advanceBy(1_000);
+        field.stale(hero);
+        expect(field.cleared(hero)).toBe(false);
+
+        const restored = Session.fromSnapshot(session.snapshot(), joinedRuleset(), Rng.fromSeed('r'));
+        const [again] = restored.participants;
+        if (again === undefined) throw new Error('o snapshot perdeu o participante');
+        expect(field.cleared(again)).toBe(false);
+      });
+
+      it.each(Object.entries(STAMP_FIELDS))('%s: a entrada RECUSADA não toca quem continua na sessão de origem', (_name, field) => {
+        const refused = character('refused');
+        field.stale(refused);
+        expect(() => newSession('full').enter(refused)).toThrow('party cheia');
+        expect(field.cleared(refused)).toBe(false);
+      });
+
+      it('o banco de cargas de bloqueio volta CHEIO — o estado de quem nunca bloqueou, não o zero de quem gastou', () => {
+        const hero = character('a');
+        hero.blockCharge = { charges: 0, anchorMs: 57_700 };
+        newSession('fresh').enter(hero);
+        expect(hero.blockCharge).toBe(FULL_BLOCK_CHARGE);
+      });
+    });
+
+    describe.each(Object.entries(DURATION_FIELDS))('prazos — %s: a entrada traduz, e o que faltava continua faltando', (_name, field) => {
+      it('o servidor constrói o destino ANTES de encerrar a origem: o restante vale no relógio novo, e a saída da origem não o desfaz', () => {
+        const hero = character('a');
+        const first = newSession('first');
+        first.enter(hero);
+        first.advanceBy(57_700);
+        field.seed(hero, first.nowMs);
+        // A pré-condição: o valor de fato está lá, no relógio da primeira.
+        expect(field.remaining(hero, first.nowMs)).toBe(REMAINING_MS);
+
+        // Entrada EM CURSO (a party): o relógio novo não está em zero, e a tradução soma o `nowMs`.
+        const second = newSession('second');
+        second.advanceBy(5_000);
+        second.enter(hero);
+        expect(field.remaining(hero, second.nowMs)).toBe(REMAINING_MS);
+
+        // O `#runTransition` do host encerra a origem DEPOIS: ela não pode traduzir de novo.
+        first.end('manual-exit');
+        expect(field.remaining(hero, second.nowMs)).toBe(REMAINING_MS);
+
+        // O valor vive no relógio da nova: o tempo dela é que o gasta.
+        second.advanceBy(10_000);
+        expect(field.remaining(hero, second.nowMs)).toBe(REMAINING_MS - 10_000);
+      });
+
+      it('a origem JÁ saiu e continua andando (a party): vale o instante da saída, não o que o relógio dela andou depois', () => {
+        // O host só constrói o destino no ciclo seguinte à saída, e a sessão de origem segue viva
+        // para os outros membros. Se o restante fosse lido do relógio dela AGORA, dependeria de
+        // quanto o hospedeiro a avançou nesse meio-tempo — a frequência (invariante 2).
+        const hero = character('a');
+        const first = newSession('first');
+        first.enter(hero);
+        first.enter(character('other'));
+        first.advanceBy(57_700);
+        field.seed(hero, first.nowMs);
+
+        first.leave('a');
+        first.advanceBy(30_000);
+
+        const second = newSession('second');
+        second.enter(hero);
+        expect(field.remaining(hero, second.nowMs)).toBe(REMAINING_MS);
+      });
+
+      it('a sessão que acaba no MEIO de um advanceBy: vale o instante do fim, não o alvo que o relógio alcança depois', () => {
+        const hero = character('a');
+        const first = endingSession();
+        first.enter(hero);
+        field.seed(hero, first.nowMs);
+
+        first.advanceBy(10_000);
+        expect(first.ended).toBe('manual-exit');
+        // O `advanceBy` empurra o relógio até o alvo mesmo depois do fim; o fim foi em 3 000.
+        expect(first.nowMs).toBe(10_000);
+
+        const second = newSession('second');
+        second.enter(hero);
+        expect(field.remaining(hero, second.nowMs)).toBe(REMAINING_MS - 3_000);
+      });
+
+      it('o que já venceu na saída não atravessa — pronto é a ausência do prazo', () => {
+        const hero = character('a');
+        const first = newSession('first');
+        first.enter(hero);
+        field.seed(hero, first.nowMs);
+        first.advanceBy(REMAINING_MS);
+        first.leave('a');
+
+        const second = newSession('second');
+        second.enter(hero);
+        expect(field.remaining(hero, second.nowMs)).toBeNull();
+      });
+
+      it('sai e volta à MESMA sessão: o prazo fica pausado enquanto ele esteve fora', () => {
+        const hero = character('a');
+        const session = newSession('same');
+        session.enter(hero);
+        field.seed(hero, session.nowMs);
+        session.advanceBy(10_000);
+        session.leave('a');
+        session.advanceBy(20_000);
+        session.enter(hero);
+        expect(field.remaining(hero, session.nowMs)).toBe(REMAINING_MS - 10_000);
+      });
+
+      it('o snapshot preserva o prazo (restaurar não traduz), e a transição seguinte parte do relógio restaurado', () => {
+        const hot = newSession('hot');
+        const hero = character('a');
+        hot.enter(hero);
+        hot.advanceBy(1_000);
+        field.seed(hero, hot.nowMs);
+
+        const restored = Session.fromSnapshot(hot.snapshot(), joinedRuleset(), Rng.fromSeed('r'));
+        const [again] = restored.participants;
+        if (again === undefined) throw new Error('o snapshot perdeu o participante');
+        expect(field.remaining(again, restored.nowMs)).toBe(REMAINING_MS);
+
+        // Sem `bindClock` na restauração o personagem não saberia de onde vem, e levaria o instante
+        // cru para a sessão seguinte.
+        restored.advanceBy(20_000);
+        const next = newSession('next');
+        next.enter(again);
+        expect(field.remaining(again, next.nowMs)).toBe(REMAINING_MS - 20_000);
+      });
+
+      it('a entrada RECUSADA não toca quem continua na origem — e a transição seguinte ainda parte dela', () => {
+        const hero = character('a');
+        const first = newSession('first');
+        first.enter(hero);
+        first.advanceBy(57_700);
+        field.seed(hero, first.nowMs);
+
+        const full = refusingSession();
+        full.advanceBy(5_000);
+        expect(() => full.enter(hero)).toThrow('party cheia');
+        expect(field.remaining(hero, first.nowMs)).toBe(REMAINING_MS);
+
+        const second = newSession('second');
+        second.enter(hero);
+        expect(field.remaining(hero, second.nowMs)).toBe(REMAINING_MS);
+      });
+
+      it('sem sessão anterior (o personagem do ticket) o prazo entra como veio', () => {
+        const hero = character('a');
+        field.seed(hero, 0);
+        const session = newSession('fresh');
+        session.advanceBy(5_000);
+        session.enter(hero);
+        expect(field.remaining(hero, 0)).toBe(REMAINING_MS);
+      });
+    });
+
+    it('uma condição com tique leva o vencimento E a fase do próximo tique', () => {
+      const hero = character('a');
+      const first = newSession('first');
+      first.enter(hero);
+      first.advanceBy(10_000);
+      hero.conditions.apply({
+        key: 'poison', expiresAtMs: 70_000, nextTickAtMs: 12_000,
+        tick: { kind: 'damage', amount: 5, intervalMs: 3_000 },
+      });
+
+      const second = newSession('second');
+      second.enter(hero);
+      expect(hero.conditions.get('poison')).toMatchObject({ expiresAtMs: 60_000, nextTickAtMs: 2_000 });
+    });
+
+    it('hunt → hunt com o mesmo objeto: nada da primeira chega à segunda, e o que a segunda grava vale', () => {
+      // Cada `enter` recomeça do zero, e o valor gravado DEPOIS de entrar (com o relógio da
+      // sessão em curso) continua valendo até a próxima entrada: nenhum avanço do relógio o
+      // zera, e o snapshot o leva.
+      const hero = character('a');
+      const first = newSession('first');
+      first.enter(hero);
+      first.advanceBy(57_700);
+      for (const field of Object.values(STAMP_FIELDS)) field.stale(hero);
+      for (const field of Object.values(DURATION_FIELDS)) field.seed(hero, first.nowMs);
+
+      const second = newSession('second');
+      second.enter(hero);
+      for (const field of Object.values(STAMP_FIELDS)) expect(field.cleared(hero)).toBe(true);
+      for (const field of Object.values(DURATION_FIELDS)) {
+        expect(field.remaining(hero, second.nowMs)).toBe(REMAINING_MS);
+      }
+
+      // Gravados na segunda, no relógio dela.
+      second.advanceBy(2_000);
+      hero.lastCombatActionAtMs = second.nowMs;
+      second.advanceBy(1_000);
+      expect(hero.lastCombatActionAtMs).toBe(2_000);
+      const restored = Session.fromSnapshot(second.snapshot(), joinedRuleset(), Rng.fromSeed('r'));
+      expect(restored.participants[0]?.lastCombatActionAtMs).toBe(2_000);
+
+      // E a PRÓXIMA entrada zera de novo o que a segunda gravou.
+      const third = newSession('third');
+      third.enter(hero);
+      expect(hero.lastCombatActionAtMs).toBeNull();
+    });
   });
 
   it('guarda o instante lógico da entrada e filtra o extrato por ele', () => {

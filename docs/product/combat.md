@@ -1700,6 +1700,18 @@ cooldown:**
 `attack-locked` entra em `SlotRefusal` (`packages/sim/src/rulesets/hunt.ts`, disparo manual de
 slot) e em `host.ts` (`'Você está exausto.'`, a mesma frase do `RETURNVALUE_YOUAREEXHAUSTED`).
 
+**A trava atravessa a troca de sessão como PRAZO, não como instante (#812, #622).** O
+`CharacterRuntime` é o MESMO objeto na transição enquanto o relógio lógico da sessão nova nasce em
+zero, e um instante gravado no relógio da anterior (59 700 ms) lido cru seguraria o golpe e a magia
+agressiva da hunt seguinte por quase um minuto, sem escada nenhuma. Quando a trava era
+`attackLockedUntil` ela era um CARIMBO e `Session.enter` o zerava; agora que é a condição `pacified`
+ela é PRAZO como toda condição: `Session.enter` a traduz para o relógio novo
+(`CharacterRuntime.moveToClock` → `Conditions.rebase`), o que faltava continua faltando, e a hunt que
+entra reagenda o vencimento (`#armConditions`) — como o Canary, em que a condição é persistente. Com
+os 2 s reais da baseline isso é, no máximo, o resto de uma janela de 2 s; nunca o instante cru. O
+restore de snapshot não traduz nada (o relógio é o mesmo) e lê um `attackLockedUntil` antigo como
+`pacified` no instante em que ele estava.
+
 **Fora do escopo**: o `skull`/PvP do Canary que também gate a magia agressiva (o Draconya não tem
 PvP nem sistema de skull ainda); qualquer travamento fora de hunt/quest/boss/guild war — a Cidade
 não simula combate.
