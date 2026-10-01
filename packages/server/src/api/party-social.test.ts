@@ -27,7 +27,7 @@ const character = (id: string, accountId: string, over: Partial<Pick<CharacterRe
   capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
   ammo: null, supplyStock: null, ammunitionStock: null, charms: null, fedMs: 0, blessings: 0, fightMode: 'attack',
-  createdAt: new Date(),
+  durableVersion: 0, createdAt: new Date(),
 });
 
 const NODE = { nodeId: 'n1', sessions: 0, url: 'ws://n1:7171' };

@@ -1,7 +1,8 @@
 // Extratos de sessão à espera de virar linha de ledger (FUN-29).
 //
-//   receipt:{sessionId}          extrato de uma sessão encerrada       TTL longo
-//   receipts:char:{characterId}  os extratos pendentes de um personagem TTL longo
+//   receipt:{sessionId}:{characterId}:{seq}   um extrato: UM por (sessão, personagem, seq)   TTL longo
+//   receipts:char:v2:{characterId}            ZSET dos pendentes de um personagem,           TTL longo
+//                                             score = `durableVersion` (0 se sem versão)
 //
 // Existe porque creditar é ESCRITA ECONÔMICA e o nó de jogo não fala com o Postgres: o
 // caminho quente da simulação não pode ter banco no meio (ver AGENTS.md do pacote). O `game`
@@ -14,7 +15,20 @@
 // O índice por personagem existe para a FUN-56: quem emite ticket precisa saber se AQUELE
 // personagem tem crédito esperando, e descobrir isso com `SCAN` seria varrer o keyspace
 // inteiro — dezenas de milhares de chaves com cinco mil sessões de pé — a cada login. O
-// índice troca isso por um `SMEMBERS` que quase sempre volta vazio.
+// índice troca isso por um `ZRANGE` que quase sempre volta vazio.
+//
+// **A chave leva o `seq` e o índice é ordenado por versão (#823, OW-02, ADR 0060 decisão 10e).**
+// Até aqui a chave era `receipt:{sessionId}:{characterId}`, gravada com `SET`: o segundo extrato
+// do mesmo par SOBRESCREVIA o primeiro (Cidade → hunt → Cidade, e o checkpoint do mundo gera
+// vários por par), e o índice era um SET, sem ordem — a varredura aplicava na ordem do `SCAN`, o
+// ticket na do `SMEMBERS`. Agora nenhum extrato apaga outro, e `pendingFor` devolve os mais
+// antigos primeiro.
+//
+// **O formato antigo continua LIDO por um ciclo de deploy (ADR 0014)**: o extrato em voo de um nó
+// `game` anterior não pode se perder. São as chaves `receipt:{sessionId}:{characterId}` (#194) e
+// `receipt:{sessionId}` (FUN-29), achadas pela varredura, e o SET `receipts:char:{characterId}`,
+// que guardava a chave inteira (ou o `sessionId` cru, antes do #194). Um extrato assim não tem
+// versão: o ledger o aplica pela regra de antes. A tolerância sai numa issue de limpeza depois.
 
 import type { ChainableCommander, Redis } from 'ioredis';
 import { isFightMode } from '@draconya/sim';
@@ -31,6 +45,19 @@ export interface SessionReceipt {
   readonly reason: EndReason;
   /** Sequência dentro da sessão. É metade da chave de idempotência do ledger. */
   readonly seq: number;
+  /**
+   * A versão durável do personagem quando este extrato foi gravado (#823, OW-02, ADR 0060 decisão
+   * 10e): um contador POR PERSONAGEM, mantido pelo hospedeiro (`game/host.ts`) — nasce no ticket
+   * e sobe a cada extrato gravado, de qualquer sessão. É a ordem entre os extratos de UM
+   * personagem, que a `seq` não dá (ela é por sessão, e a Cidade → hunt → Cidade cruza sessões).
+   *
+   * O `jobs` liquida os pendentes do personagem em ordem de versão, e só escreve um campo
+   * ABSOLUTO quando `durableVersion > characters.durable_version`, subindo a coluna na MESMA
+   * transação — extrato atrasado nunca desfaz estado mais novo. Os deltas (XP, gold, item) não
+   * olham para ela. AUSENTE é extrato de um nó anterior (ou liquidado por fora do `game`, como
+   * `pnpm dev:dragon-party --reset`): segue a regra de antes e não mexe na coluna.
+   */
+  readonly durableVersion?: number;
   readonly aggregates: Aggregates;
   readonly notableEvents: readonly NotableEvent[];
   readonly endedAtMs: number;
@@ -208,15 +235,59 @@ const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const SETTLE_LIMIT = 50;
 
 /**
- * Um extrato por MEMBRO (#194, ADR 0027): a party é uma sessão com N donos, e quatro extratos
- * da mesma sessão não podem se sobrescrever. A chave antiga (`receipt:{sessionId}`) continua
- * LIDA por um deploy: extrato em voo gravado por um nó anterior não pode se perder.
+ * Um extrato por (sessão, personagem, `seq`) (#823, OW-02): a party é uma sessão com N donos
+ * (#194, ADR 0027), e o mesmo par grava vários extratos — Cidade → hunt → Cidade, checkpoint do
+ * mundo. Sem o `seq` na chave o segundo SOBRESCREVIA o primeiro.
  */
-const key = (sessionId: string, characterId: string): string => `receipt:${sessionId}:${characterId}`;
+const key = (sessionId: string, characterId: string, seq: number): string =>
+  `receipt:${sessionId}:${characterId}:${seq}`;
+/**
+ * As duas chaves ANTIGAS, só para ler e apagar: `receipt:{sessionId}:{characterId}` (#194) e
+ * `receipt:{sessionId}` (FUN-29). Extrato em voo gravado por um nó anterior não pode se perder.
+ */
+const keyV1 = (sessionId: string, characterId: string): string => `receipt:${sessionId}:${characterId}`;
 const legacyKey = (sessionId: string): string => `receipt:${sessionId}`;
-/** Prefixo distinto de `receipt:`, de propósito: o `SCAN` de `pending` não pode pegá-lo. */
+/** O SET ANTIGO do índice por personagem, só lido/limpo. Guardava a chave inteira (ou o `sessionId` cru). */
 const characterKey = (characterId: string): string => `receipts:char:${characterId}`;
+/**
+ * O índice por personagem: um ZSET, score = `durableVersion`, membro = a chave do extrato.
+ *
+ * **Os prefixos são distintos de `receipt:` de propósito:** nomear o índice `receipt:...` o poria
+ * dentro do `MATCH` do `SCAN` da varredura, e um ZSET no lugar de um extrato sai do `MGET` como
+ * nada — a varredura pararia de ver um extrato por ciclo, sem erro em lugar nenhum.
+ */
+const versionIndex = (characterId: string): string => `receipts:char:v2:${characterId}`;
 const RECEIPT_PATTERN = 'receipt:*';
+
+/**
+ * Apaga o extrato e as duas chaves antigas, ATOMICAMENTE e sem apagar o que não é dele: a chave
+ * `receipt:{sessionId}:{characterId}` (#194) guardava UM extrato por par, e apagá-la às cegas
+ * levaria junto um extrato de outro `seq` que ninguém liquidou. Só sai a que carrega o mesmo
+ * `characterId` e o mesmo `seq`.
+ *
+ * KEYS: 1 = chave nova, 2 = ZSET, 3 = chave #194, 4 = chave FUN-29, 5 = SET antigo.
+ * ARGV: 1 = seq, 2 = characterId, 3 = sessionId.
+ */
+const REMOVE_RECEIPT = `
+redis.call('DEL', KEYS[1])
+redis.call('ZREM', KEYS[2], KEYS[1])
+for index = 3, 4 do
+  local raw = redis.call('GET', KEYS[index])
+  if raw then
+    local decoded, receipt = pcall(cjson.decode, raw)
+    if decoded and type(receipt) == 'table'
+      and receipt.characterId == ARGV[2] and receipt.seq == tonumber(ARGV[1]) then
+      redis.call('DEL', KEYS[index])
+      if index == 3 then
+        redis.call('SREM', KEYS[5], KEYS[3])
+      else
+        redis.call('SREM', KEYS[5], ARGV[3])
+      end
+    end
+  end
+end
+return 1
+`;
 
 export class ReceiptStore {
   readonly #redis: Redis;
@@ -227,25 +298,31 @@ export class ReceiptStore {
     this.#redis = redis;
     this.#ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
     this.#now = options.now ?? Date.now;
+    this.#redis.defineCommand('removeSessionReceipt', { numberOfKeys: 5, lua: REMOVE_RECEIPT });
   }
 
   async save(receipt: Omit<SessionReceipt, 'endedAtMs'>): Promise<void> {
     const stored: SessionReceipt = { ...receipt, endedAtMs: this.#now() };
-    const index = characterKey(receipt.characterId);
+    const receiptKey = key(receipt.sessionId, receipt.characterId, receipt.seq);
+    const index = versionIndex(receipt.characterId);
     // O extrato e a entrada de índice entram JUNTOS. O índice sozinho é um ponteiro para
     // lugar nenhum, que `pendingFor` limpa; o extrato sozinho seria pior — invisível para
     // quem emite o ticket, e o jogador voltaria a ver o personagem zerar (FUN-56).
-    // O índice guarda a CHAVE inteira (#194): `pendingFor` tem o `characterId`, mas guardar
-    // só o `sessionId` obrigaria a adivinhar entre a chave nova e a antiga.
+    //
+    // O membro é a CHAVE inteira, e o score é a versão durável (#823): é ele que ordena a
+    // liquidação. Sem versão (extrato de fora do `game`) o score é 0 — o mais antigo. Gravar de
+    // novo a mesma chave (retry de resposta perdida) troca o score e não duplica a entrada.
     await exec(this.#redis
       .multi()
-      .set(key(receipt.sessionId, receipt.characterId), JSON.stringify(stored), 'PX', this.#ttlMs)
-      .sadd(index, key(receipt.sessionId, receipt.characterId))
+      .set(receiptKey, JSON.stringify(stored), 'PX', this.#ttlMs)
+      .zadd(index, receipt.durableVersion ?? 0, receiptKey)
       .pexpire(index, this.#ttlMs));
   }
 
   /**
-   * Os extratos deste personagem que ainda não viraram linha de ledger (FUN-56).
+   * Os extratos deste personagem que ainda não viraram linha de ledger (FUN-56), do MAIS ANTIGO
+   * para o mais novo (#823): o ZSET por versão, com o que um nó anterior deixou no formato
+   * antigo à frente — é sempre mais velho, e não tem versão.
    *
    * Um personagem tem mais de um extrato pendente com facilidade: toda troca de atividade
    * encerra uma sessão, e toda sessão encerrada gera extrato — Cidade → hunt → Cidade já
@@ -254,33 +331,70 @@ export class ReceiptStore {
    * O teto existe porque isto roda no caminho de uma requisição HTTP, e cada extrato custa
    * uma transação no Postgres. Encostar nele significa que a varredura está parada há um
    * bom tempo — e nesse mundo a resposta certa é o login continuar rápido e o resto sair no
-   * próximo, não a emissão de ticket virar o `jobs` de fato.
+   * próximo, não a emissão de ticket virar o `jobs` de fato. Cortar pelos MAIS ANTIGOS é o que
+   * deixa o resto sair no ciclo seguinte sem que um extrato novo passe na frente de um velho.
    *
-   * **Extrato gravado antes desta issue não tem entrada de índice** e não aparece aqui. É
-   * degradação aceitável e temporária: durante um deploy em rolagem, o que um nó antigo
-   * gravou continua sendo creditado pela varredura do `jobs`, com o atraso de sempre.
+   * Uma ida ao Redis, não duas: o ZSET e o SET antigo vão no mesmo pipeline.
+   *
+   * **Extrato gravado antes do #194 (chave `receipt:{sessionId}`, sem entrada de índice) não
+   * aparece aqui**: a varredura do `jobs` o encontra, com o atraso de sempre.
    */
   async pendingFor(characterId: string, limit = SETTLE_LIMIT): Promise<SessionReceipt[]> {
-    const members = (await this.#redis.smembers(characterKey(characterId))).slice(0, limit);
-    if (members.length === 0) return [];
+    const [versionedKeys, legacyMembers] = await execResults(this.#redis
+      .pipeline()
+      .zrange(versionIndex(characterId), '0', String(limit - 1))
+      .smembers(characterKey(characterId))) as [string[], string[]];
 
-    // Entrada de índice de antes do #194 é um `sessionId` cru; a de agora é a chave inteira.
-    const keys = members.map((member) => (member.startsWith('receipt:') ? member : legacyKey(member)));
+    // Entrada do SET antigo de antes do #194 é um `sessionId` cru; a de depois é a chave inteira.
+    const legacyKeys = legacyMembers.map((member) => (member.startsWith('receipt:') ? member : legacyKey(member)));
+    const keys = [...versionedKeys, ...legacyKeys];
+    if (keys.length === 0) return [];
+
     const values = await this.#redis.mget(...keys);
-    const receipts: SessionReceipt[] = [];
-    const stale: string[] = [];
+    const versioned: SessionReceipt[] = [];
+    const legacy: SessionReceipt[] = [];
+    const staleVersioned: string[] = [];
+    const staleLegacy: string[] = [];
     for (const [index, raw] of values.entries()) {
       const parsed = raw === null ? null : parseReceipt(raw);
-      if (parsed === null) stale.push(members[index] as string);
-      else receipts.push(parsed);
+      if (index < versionedKeys.length) {
+        if (parsed === null) staleVersioned.push(versionedKeys[index] as string);
+        else versioned.push(parsed);
+      } else if (parsed === null) {
+        staleLegacy.push(legacyMembers[index - versionedKeys.length] as string);
+      } else {
+        legacy.push(parsed);
+      }
     }
-    // Índice apontando para extrato que não existe mais: ou ele expirou, ou um `remove`
-    // morreu entre apagar o extrato e limpar o índice. Limpar na leitura é o que impede o
-    // conjunto de crescer para sempre num personagem que joga todo dia.
-    if (stale.length > 0) await this.#redis.srem(characterKey(characterId), ...stale);
-    return receipts;
+    // Índice apontando para extrato que não existe mais: ou ele expirou, ou um `remove` morreu
+    // entre apagar o extrato e limpar o índice. Limpar na leitura é o que impede o conjunto de
+    // crescer para sempre num personagem que joga todo dia.
+    if (staleVersioned.length > 0) await this.#redis.zrem(versionIndex(characterId), ...staleVersioned);
+    if (staleLegacy.length > 0) await this.#redis.srem(characterKey(characterId), ...staleLegacy);
+    legacy.sort((a, b) => a.endedAtMs - b.endedAtMs || a.seq - b.seq);
+    return [...legacy, ...versioned].slice(0, limit);
   }
 
+  /**
+   * A MAIOR versão durável ainda pendente deste personagem, ou `0` (#823).
+   *
+   * É o que o ticket soma ao `characters.durable_version` para iniciar o contador do hospedeiro:
+   * a sessão nova tem de gravar versões MAIORES que as de qualquer extrato que ainda espera
+   * liquidação — uma liquidação que passou de `SETTLE_LIMIT`, por exemplo, deixa pendentes
+   * que a coluna ainda não viu. Entrada de índice cujo extrato expirou (TTL) ainda conta: só
+   * sobe o piso, sem custo.
+   */
+  async highestPendingVersion(characterId: string): Promise<number> {
+    const [, score] = await this.#redis.zrange(versionIndex(characterId), '-1', '-1', 'WITHSCORES');
+    const version = Number(score);
+    return Number.isFinite(version) ? version : 0;
+  }
+
+  /**
+   * Toda a fila, em ordem de `SCAN` — o `jobs` (`writeReceipts`) agrupa por personagem e ordena
+   * por versão antes de liquidar. Acha as três formas de chave, e é por isso que a varredura
+   * continua sendo o que apanha o extrato de um nó anterior que não tinha índice.
+   */
   async pending(limit = 200): Promise<SessionReceipt[]> {
     const receipts: SessionReceipt[] = [];
     let cursor = '0';
@@ -302,17 +416,27 @@ export class ReceiptStore {
   }
 
   /**
-   * `characterId` junto porque o índice é por personagem e o extrato já foi lido por quem
-   * chama: derivá-lo aqui custaria um `GET` a mais para saber algo que o chamador tem na mão.
+   * Apaga o extrato liquidado (#823): precisa do `seq` porque a chave o leva, e porque as duas
+   * chaves ANTIGAS guardavam um extrato por par — só sai a que tiver o mesmo `seq`
+   * (`REMOVE_RECEIPT`). `characterId` junto porque o índice é por personagem e o extrato já foi
+   * lido por quem chama: derivá-lo aqui custaria um `GET` a mais para saber algo que o chamador
+   * tem na mão.
+   *
+   * O extrato pode ter sido gravado por um nó anterior, e apagar só a chave nova o deixaria
+   * para a varredura creditar de novo — a chave única do ledger recusaria, mas o Redis ficaria
+   * com lixo até o TTL.
    */
-  async remove(sessionId: string, characterId: string): Promise<void> {
-    // As duas chaves e as duas formas de índice: o extrato pode ter sido gravado por um nó
-    // anterior ao #194, e apagar só a nova o deixaria para a varredura creditar de novo —
-    // a chave única do ledger recusaria, mas o Redis ficaria com lixo até o TTL.
-    await exec(this.#redis.multi()
-      .del(key(sessionId, characterId))
-      .del(legacyKey(sessionId))
-      .srem(characterKey(characterId), key(sessionId, characterId), sessionId));
+  async remove(sessionId: string, characterId: string, seq: number): Promise<void> {
+    const redis = this.#redis as unknown as {
+      removeSessionReceipt(
+        receiptKey: string, index: string, keyV1: string, legacyKey: string, legacyIndex: string,
+        seq: string, characterId: string, sessionId: string,
+      ): Promise<number>;
+    };
+    await redis.removeSessionReceipt(
+      key(sessionId, characterId, seq), versionIndex(characterId), keyV1(sessionId, characterId),
+      legacyKey(sessionId), characterKey(characterId), String(seq), characterId, sessionId,
+    );
   }
 }
 
@@ -322,9 +446,17 @@ export class ReceiptStore {
  * como sucesso, e o extrato ficaria fora do índice sem ninguém saber.
  */
 async function exec(pipeline: ChainableCommander): Promise<void> {
+  await execResults(pipeline);
+}
+
+/** O mesmo, devolvendo o resultado de cada comando (um pipeline que LÊ). */
+async function execResults(pipeline: ChainableCommander): Promise<unknown[]> {
   const results = await pipeline.exec();
   if (results === null) throw new Error('redis transaction was aborted');
-  for (const [error] of results) if (error !== null) throw error;
+  return results.map(([error, value]) => {
+    if (error !== null) throw error;
+    return value;
+  });
 }
 
 function parseReceipt(raw: string): SessionReceipt | null {
@@ -352,6 +484,13 @@ function parseReceipt(raw: string): SessionReceipt | null {
     accountId: value['accountId'],
     reason: value['reason'] as EndReason,
     seq: value['seq'],
+    // A versão durável (#823): lista de PERMISSÃO, pela razão das skills — sem esta linha o campo
+    // some no caminho de volta e o ledger trata todo extrato como sem versão, em silêncio.
+    // Inteiro seguro não negativo, ou AUSENTE (o lado seguro: a regra de antes).
+    ...(typeof value['durableVersion'] === 'number' && Number.isSafeInteger(value['durableVersion'])
+      && value['durableVersion'] >= 0
+      ? { durableVersion: value['durableVersion'] }
+      : {}),
     aggregates: value['aggregates'] as Aggregates,
     notableEvents: Array.isArray(value['notableEvents'])
       ? (value['notableEvents'] as NotableEvent[])

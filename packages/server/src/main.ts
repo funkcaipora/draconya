@@ -172,6 +172,10 @@ async function main(): Promise<void> {
                 difficultiesOf: (huntId: string) =>
                   content.hunts.has(huntId) ? [DEFAULT_DIFFICULTY_NAME] : null,
               },
+              // A maior versão durável ainda pendente (#823, OW-02): o piso do contador do
+              // hospedeiro, somado ao `characters.durable_version` na emissão do ticket.
+              pendingDurableVersion: (characterId: string) =>
+                receipts.highestPendingVersion(characterId),
               settleProgress: (characterId: string) =>
                 settleCharacterState(characterId, {
                   botConfigs,

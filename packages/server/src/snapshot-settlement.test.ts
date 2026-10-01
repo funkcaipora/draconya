@@ -126,6 +126,20 @@ describe('settleSnapshotAsReceipt (#527)', () => {
     expect(otherSaved[0]?.fightMode).toBe('attack');
   });
 
+  it('carries the durable version it is given, and leaves the receipt unversioned without one (#823)', async () => {
+    // O `game` passa a versão do contador do personagem, para o extrato do snapshot entrar em ordem
+    // com os pendentes da sessão morta; quem liquida por fora (`--reset`) não tem contador, e o
+    // extrato segue a regra de antes — sem a chave.
+    const { receipts, saved } = fakeReceipts();
+    await settleSnapshotAsReceipt(baseSnapshot, {
+      characterId: 'a', accountId: 'acc-a', receipts, durableVersion: 12,
+    });
+    await settleSnapshotAsReceipt(baseSnapshot, { characterId: 'a', accountId: 'acc-a', receipts });
+
+    expect(saved[0]?.durableVersion).toBe(12);
+    expect(saved[1]).not.toHaveProperty('durableVersion');
+  });
+
   it('omits every optional field when the participant record has none of them', async () => {
     const { receipts, saved } = fakeReceipts();
     await settleSnapshotAsReceipt(baseSnapshot, { characterId: 'a', accountId: 'acc-a', receipts });

@@ -86,55 +86,111 @@ async function writeReceipts(
   let written = 0;
   let failed = 0;
 
-  for (const receipt of pending) {
-    try {
-      // Uma transação: ou a linha de ledger e a progressão entram juntas, ou nenhuma das
-      // duas. Separadas, uma queda no meio deixaria o gold creditado no ledger sem estar na
-      // linha do personagem — e a reconciliação entre os dois é justamente o que o
-      // invariante 10 existe para não precisar.
-      await options.database.transaction(async (tx) => {
-        const inserted = await tx
-          .insert(ledger)
-          .values({
-            id: randomUUID(),
-            characterId: receipt.characterId,
-            sessionId: receipt.sessionId,
-            seq: receipt.seq,
-            type: `session-${receipt.reason}`,
-            delta: creditOf(receipt),
-            ref: {
-              xpGained: receipt.aggregates.xpGained,
-              kills: receipt.aggregates.kills,
-              deaths: receipt.aggregates.deaths,
-              durationMs: receipt.aggregates.durationMs,
-              notableEvents: receipt.notableEvents,
-            },
-          })
-          // A chave única é a idempotência. `DO NOTHING` transforma o retry em operação nula
-          // em vez de erro, que é o que permite apagar o extrato com segurança logo abaixo.
-          .onConflictDoNothing({ target: [ledger.sessionId, ledger.seq] })
-          .returning({ id: ledger.id });
+  // POR PERSONAGEM, em ordem de versão (#823, OW-02): o que o Redis devolve não tem ordem (o
+  // `SCAN` é por hash; o índice do ticket só a tem dentro de um personagem), e um personagem
+  // com dois ou três extratos pendentes — Cidade → hunt → Cidade — precisa liquidá-los do mais
+  // antigo ao mais novo. Personagens diferentes não disputam nada, então a ordem entre eles é a
+  // de chegada.
+  for (const receipts of groupByCharacter(pending)) {
+    for (const receipt of receipts) {
+      try {
+        // Uma transação: ou a linha de ledger e a progressão entram juntas, ou nenhuma das
+        // duas. Separadas, uma queda no meio deixaria o gold creditado no ledger sem estar na
+        // linha do personagem — e a reconciliação entre os dois é justamente o que o
+        // invariante 10 existe para não precisar.
+        await options.database.transaction(async (tx) => {
+          const inserted = await tx
+            .insert(ledger)
+            .values({
+              id: randomUUID(),
+              characterId: receipt.characterId,
+              sessionId: receipt.sessionId,
+              seq: receipt.seq,
+              type: `session-${receipt.reason}`,
+              delta: creditOf(receipt),
+              ref: {
+                xpGained: receipt.aggregates.xpGained,
+                kills: receipt.aggregates.kills,
+                deaths: receipt.aggregates.deaths,
+                durationMs: receipt.aggregates.durationMs,
+                notableEvents: receipt.notableEvents,
+              },
+            })
+            // A chave única é a idempotência. `DO NOTHING` transforma o retry em operação nula
+            // em vez de erro, que é o que permite apagar o extrato com segurança logo abaixo.
+            .onConflictDoNothing({ target: [ledger.sessionId, ledger.seq] })
+            .returning({ id: ledger.id });
 
-        // Vazio = a linha já existia, este extrato já foi creditado. Aplicar a progressão
-        // agora seria creditar duas vezes um delta que a chave única acabou de recusar.
-        if (inserted.length === 0) return;
-        await applyProgression(tx, receipt, options.progression);
-      });
+          // Vazio = a linha já existia, este extrato já foi creditado. Aplicar a progressão
+          // agora seria creditar duas vezes um delta que a chave única acabou de recusar.
+          if (inserted.length === 0) return;
+          await applyProgression(tx, receipt, options.progression);
+        });
 
-      await options.receipts.remove(receipt.sessionId, receipt.characterId);
-      written += 1;
-    } catch (error) {
-      // O extrato FICA no Redis. Perder o crédito em silêncio é o defeito que este arquivo
-      // existe para não ter; tentar de novo no próximo ciclo não custa nada.
-      failed += 1;
-      options.logger.error(
-        { error, sessionId: receipt.sessionId, characterId: receipt.characterId },
-        'Failed to write a session receipt to the ledger; keeping it for the next cycle',
-      );
+        await options.receipts.remove(receipt.sessionId, receipt.characterId, receipt.seq);
+        written += 1;
+      } catch (error) {
+        // O extrato FICA no Redis. Perder o crédito em silêncio é o defeito que este arquivo
+        // existe para não ter; tentar de novo no próximo ciclo não custa nada.
+        //
+        // Os seguintes do MESMO personagem seguem: a guarda de versão (`applyProgression`) é o
+        // que faz liquidar o mais novo antes do que falhou ser seguro — o que falhou volta no
+        // próximo ciclo, entra os deltas dele e não desfaz nenhum absoluto. Parar no primeiro
+        // que falha teria o defeito oposto: um extrato que nunca liquida (dado torto) travaria
+        // todos os seguintes do personagem. A guarda não cobre item (`acquired` é delta): ver
+        // "Ordem e versão durável" no `AGENTS.md` do pacote.
+        failed += 1;
+        options.logger.error(
+          { error, sessionId: receipt.sessionId, characterId: receipt.characterId },
+          'Failed to write a session receipt to the ledger; keeping it for the next cycle',
+        );
+      }
     }
   }
 
   return { written, failed };
+}
+
+/**
+ * Agrupa os extratos por personagem e ordena cada grupo (#823, OW-02): os VERSIONADOS pela
+ * versão, e os SEM versão — de um nó anterior, ou liquidados por fora do `game` — entre eles,
+ * pelo relógio em que foram gravados. Sem isso um extrato sem versão passaria à frente de um
+ * versionado que já era mais antigo que ele, e o absoluto velho o desfaria.
+ *
+ * Exportada para o teste. Empate de versão (não acontece: o contador é monotônico) desempata
+ * pelo relógio e pelo `seq`, para a ordem ser determinística.
+ */
+export function groupByCharacter(receipts: readonly SessionReceipt[]): SessionReceipt[][] {
+  const groups = new Map<string, SessionReceipt[]>();
+  for (const receipt of receipts) {
+    const group = groups.get(receipt.characterId);
+    if (group === undefined) groups.set(receipt.characterId, [receipt]);
+    else group.push(receipt);
+  }
+  return [...groups.values()].map(inDurableOrder);
+}
+
+function inDurableOrder(receipts: readonly SessionReceipt[]): SessionReceipt[] {
+  const byClock = (a: SessionReceipt, b: SessionReceipt): number =>
+    a.endedAtMs - b.endedAtMs || a.seq - b.seq;
+  const versioned = receipts
+    .filter((receipt) => receipt.durableVersion !== undefined)
+    .sort((a, b) => (a.durableVersion as number) - (b.durableVersion as number) || byClock(a, b));
+  const unversioned = receipts
+    .filter((receipt) => receipt.durableVersion === undefined)
+    .sort(byClock);
+  // Intercala as duas listas já ordenadas: o sem versão entra depois do último versionado que
+  // foi gravado até o instante dele, nunca antes de um que já era mais velho.
+  const ordered: SessionReceipt[] = [];
+  let next = 0;
+  for (const receipt of unversioned) {
+    while (next < versioned.length && (versioned[next] as SessionReceipt).endedAtMs <= receipt.endedAtMs) {
+      ordered.push(versioned[next] as SessionReceipt);
+      next += 1;
+    }
+    ordered.push(receipt);
+  }
+  return [...ordered, ...versioned.slice(next)];
 }
 
 /**
@@ -163,6 +219,7 @@ async function applyProgression(
       bestiary: characters.bestiary,
       ammo: characters.ammo,
       staminaUpdatedAt: characters.staminaUpdatedAt,
+      durableVersion: characters.durableVersion,
     })
     .from(characters)
     .where(eq(characters.id, receipt.characterId))
@@ -175,6 +232,20 @@ async function applyProgression(
   // O gold do personagem é o LÍQUIDO da sessão (`goldGained - goldSpent`): `goldSpent` já é o
   // total debitado no uso (poção, runa e tiro), e a linha de ledger leva o mesmo delta.
   const gold = Math.max(0, current.gold + receipt.aggregates.goldGained - receipt.aggregates.goldSpent);
+
+  // A GUARDA DE VERSÃO (#823, OW-02, ADR 0060 decisão 10e). XP, gold, `acquired` e
+  // `removedInstances` são DELTAS — protegidos por `UNIQUE (session_id, seq)`, valem em qualquer
+  // ordem e entram SEMPRE. Todo campo ABSOLUTO (ammo, alma, estoques, comida, charms, bênçãos,
+  // postura, equipamento, layout, overlays, storages, stamina, skills) é última-escrita-vence, e
+  // "a última" precisa ser a de MAIOR versão, não a que o `SCAN` ou o `SMEMBERS` entregou por
+  // último: só se escreve quando o extrato é mais novo que o que a coluna já viu, e a coluna sobe
+  // na mesma transação. Extrato atrasado entra só com os deltas.
+  //
+  // Extrato SEM versão (nó `game` anterior, ou liquidado por fora dele) segue a regra de antes —
+  // escreve os absolutos — e NÃO mexe na coluna. É degradação de deploy em rolagem, não modo de
+  // operação. O que é monotônico por natureza — Bestiário (máximo), vocação (`coalesce`) e
+  // promoção (`OR`) — não precisa da guarda e também entra sempre: a ordem não os afeta.
+  const absolute = receipt.durableVersion === undefined || receipt.durableVersion > current.durableVersion;
 
   // Stamina é valor absoluto, não soma — e por isso vem com guarda de instante: um extrato
   // atrasado, processado fora de ordem, não pode devolver stamina já gasta.
@@ -189,7 +260,8 @@ async function applyProgression(
   // então vale — mas vale por folga, não por construção. Numa falha de NTP que ponha o banco
   // à frente, o sintoma é stamina que não desce, sem erro em lugar nenhum. Se um dia isso
   // acontecer, a correção é o `game` mandar o instante que LEU da linha, e não o próprio.
-  const stamina = receipt.staminaMs !== undefined
+  const stamina = absolute
+    && receipt.staminaMs !== undefined
     && receipt.staminaUpdatedAtMs !== undefined
     && receipt.staminaUpdatedAtMs >= current.staminaUpdatedAt.getTime()
     ? { staminaMs: receipt.staminaMs, staminaUpdatedAt: new Date(receipt.staminaUpdatedAtMs) }
@@ -209,7 +281,10 @@ async function applyProgression(
   // nasce de `defaultNow()` (Postgres); `receipt.endedAtMs` sai do `Date.now()` do nó `game`
   // (`ReceiptStore.save`). Vale por folga (sessão dura segundos no mínimo, NTP mantém as
   // máquinas a dezenas de milissegundos), não por construção.
-  const skills = receipt.skills !== undefined && receipt.endedAtMs >= current.skillsUpdatedAt.getTime()
+  //
+  // Desde o #823 esta guarda não é mais a única ordem: `absolute` (a versão durável) vem primeiro
+  // e não depende de relógio nenhum. Ela fica por cima, para o extrato SEM versão.
+  const skills = absolute && receipt.skills !== undefined && receipt.endedAtMs >= current.skillsUpdatedAt.getTime()
     ? { skills: receipt.skills, skillsUpdatedAt: new Date(receipt.endedAtMs) }
     : {};
 
@@ -227,38 +302,39 @@ async function applyProgression(
 
   // A munição escolhida (#152): preferência, última escrita vence. Extrato SEM o campo não toca
   // na coluna — é a Cidade, ou um nó antigo, e a escolha continua a de antes.
-  const ammo = receipt.ammo === undefined ? {} : { ammo: receipt.ammo };
+  const ammo = !absolute || receipt.ammo === undefined ? {} : { ammo: receipt.ammo };
 
   // Pontos de alma (#593): ABSOLUTO, última-escrita-vence, como `ammo` — NUNCA fundido por
   // MÁXIMO como skills/Bestiário. Alma DESCE (gasta na conjuração), e ficar com o maior de duas
   // gravações fora de ordem reviveria um saldo que a sessão mais nova já gastou.
-  const soul = receipt.soul === undefined ? {} : { soul: receipt.soul };
+  const soul = !absolute || receipt.soul === undefined ? {} : { soul: receipt.soul };
 
   // O estoque de supply/munição do loot (#520): ABSOLUTO e última-escrita-vence, como `ammo` —
   // sobe por loot e desce por uso na MESMA sessão, então o valor final da sessão é o único que
   // os dois lados podem concordar sobre (não monotônico como o Bestiário, que funde pelo maior).
-  const supplyStock = receipt.supplyStock === undefined ? {} : { supplyStock: receipt.supplyStock };
-  const ammunitionStock = receipt.ammunitionStock === undefined
+  const supplyStock = !absolute || receipt.supplyStock === undefined
+    ? {} : { supplyStock: receipt.supplyStock };
+  const ammunitionStock = !absolute || receipt.ammunitionStock === undefined
     ? {} : { ammunitionStock: receipt.ammunitionStock };
 
   // Comida ativa (#726, ADR 0049 decisão 5): ABSOLUTA e última-escrita-vence, como o estoque
   // acima — drena dentro da sessão, então o valor final é o único que os dois lados concordam.
-  const fedMs = receipt.fedMs === undefined ? {} : { fedMs: receipt.fedMs };
+  const fedMs = !absolute || receipt.fedMs === undefined ? {} : { fedMs: receipt.fedMs };
 
   // A economia de Charms (M39-02, #602, ADR 0052 d.1): ABSOLUTA e última-escrita-vence, como
   // `ammo`/`equipment` — NÃO fundida pelo maior como o Bestiário: não há aqui um contador
   // externo monotônico a fundir, é o estado final da sessão dona. Extrato SEM o campo (Cidade
   // ou nó antigo em deploy) não toca na coluna.
-  const charms = receipt.charms === undefined ? {} : { charms: receipt.charms };
+  const charms = !absolute || receipt.charms === undefined ? {} : { charms: receipt.charms };
   // As bênçãos (#570, ADR 0052): ABSOLUTAS e última-escrita-vence, NUNCA fundidas pelo maior
   // (ao contrário do Bestiário/skills-antes-do-#569) — bênção DESCE na morte, e "ficar com o
   // maior de cada extrato" ressuscitaria uma bênção recém-consumida se um extrato antigo, fora
   // de ordem, chegasse depois de um mais novo já aplicado.
-  const blessings = receipt.blessings === undefined ? {} : { blessings: receipt.blessings };
+  const blessings = !absolute || receipt.blessings === undefined ? {} : { blessings: receipt.blessings };
   // A postura de luta (#550, M30-03): ABSOLUTA e última-escrita-vence, como as bênçãos — o jogador
   // troca para qualquer lado, e não existe ordem entre os três modos que uma fusão por máximo
   // pudesse respeitar. Extrato SEM o campo (nó anterior, ou Cidade que não mexeu) não toca a coluna.
-  const fightMode = receipt.fightMode === undefined ? {} : { fightMode: receipt.fightMode };
+  const fightMode = !absolute || receipt.fightMode === undefined ? {} : { fightMode: receipt.fightMode };
 
   // O que caiu e coube (FUN-88). ANTES do equipamento, porque uma peça que caiu nesta sessão
   // e foi equipada nela precisa existir como linha para o layout ter o que apontar.
@@ -302,24 +378,24 @@ async function applyProgression(
 
   // O layout de equipamento (FUN-82). Escopado por dono dentro do próprio `applyEquipment`:
   // um extrato não move item de outra pessoa nem que traga o id dela.
-  if (receipt.equipment !== undefined) {
+  if (absolute && receipt.equipment !== undefined) {
     await applyEquipment(tx, receipt.characterId, receipt.equipment);
   }
   // E onde cada item está dentro dos containers (#160): último-escrito-vence, como o
   // equipamento — é posição, não valor.
-  if (receipt.layout !== undefined) {
+  if (absolute && receipt.layout !== undefined) {
     await applyLayout(tx, receipt.characterId, receipt.layout);
   }
   // E o estado por instância (#604, ADR 0046): último-escrito-vence, como o layout. Depois do
   // `acquired`, pela mesma razão do equipamento: a peça que caiu e foi imbuída nesta sessão
   // precisa já ser linha.
-  if (receipt.overlays !== undefined) {
+  if (absolute && receipt.overlays !== undefined) {
     await applyOverlays(tx, receipt.characterId, receipt.overlays);
   }
   // E os storages (#731, ADR 0050 d.6 T2): ao contrário do overlay (patch por instância), o
   // extrato manda o mapa INTEIRO — a mesma forma de `supplyStock` — e `applyStorages` o trata
   // como o ESTADO COMPLETO do personagem: toda chave do banco que não aparece nele é apagada.
-  if (receipt.storages !== undefined) {
+  if (absolute && receipt.storages !== undefined) {
     await applyStorages(tx, receipt.characterId, receipt.storages);
   }
 
@@ -353,6 +429,11 @@ async function applyProgression(
       // antigo, processado fora de ordem, rebaixar um personagem que já subiu.
       ...(progression === undefined ? {} : { level: levelForXp(xp, progression) }),
       ...stamina,
+      // A versão sobe na MESMA transação dos absolutos que ela guarda (#823): só quando o extrato
+      // é versionado E foi mais novo — o sem versão não a mexe, e o atrasado nunca a faz descer.
+      ...(receipt.durableVersion !== undefined && absolute
+        ? { durableVersion: receipt.durableVersion }
+        : {}),
     })
     .where(eq(characters.id, receipt.characterId));
 }

@@ -1,0 +1,17 @@
+-- #823, OW-02 (ADR 0060 decisão 10e): a versão do último extrato de estado absoluto que o ledger
+-- aplicou a cada personagem.
+--
+-- Nenhum extrato apaga outro (a chave do extrato passa a levar o `seq`) e nenhum extrato
+-- atrasado desfaz estado mais novo: o hospedeiro numera os extratos de cada personagem
+-- (`SessionReceipt.durableVersion`) e o `jobs` só escreve um campo ABSOLUTO — ammo, alma,
+-- estoques, comida, charms, bênçãos, postura, equipamento, layout, overlays, storages, stamina e
+-- skills — quando a versão do extrato é maior que esta coluna, subindo-a na MESMA transação.
+-- Os deltas (XP, gold, item) não olham para ela: seguem protegidos por `UNIQUE (session_id, seq)`
+-- (invariante 10).
+--
+-- Aditiva por construção (ADR 0014): coluna nova, `NOT NULL DEFAULT 0`. Nenhuma linha é
+-- reescrita e nada muda para quem já existe: zero é "nenhum extrato versionado aplicado ainda", e
+-- o primeiro extrato versionado (versão >= 1) é sempre mais novo. Extrato SEM versão — gravado
+-- por um nó `game` anterior a esta migração, durante um deploy em rolagem — segue a regra de
+-- antes (escreve os absolutos, não toca a coluna).
+ALTER TABLE character ADD COLUMN durable_version bigint NOT NULL DEFAULT 0;

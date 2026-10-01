@@ -76,6 +76,12 @@ export interface CharacterRecord {
    * jogo. A coluna tem CHECK, então na prática é sempre um dos três.
    */
   readonly fightMode: string;
+  /**
+   * A versão do último extrato de estado absoluto que o ledger aplicou (#823, OW-02, ADR 0060
+   * decisão 10e). O ticket a leva como piso do contador do hospedeiro (`initialCharacterOf`);
+   * quem a escreve é só o ledger, na transação do extrato. `0` é nenhum extrato versionado ainda.
+   */
+  readonly durableVersion: number;
   readonly createdAt: Date;
 }
 
@@ -562,7 +568,7 @@ function toAccount(row: typeof accounts.$inferSelect): AccountRecord {
 function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
   // O domínio usa number. Um bigint fora do intervalo seguro não pode virar progresso
   // arredondado silenciosamente ao atravessar a fronteira Postgres → TypeScript.
-  for (const value of [row.xp, row.gold, row.staminaMs, row.fedMs, row.blessings]) {
+  for (const value of [row.xp, row.gold, row.staminaMs, row.fedMs, row.blessings, row.durableVersion]) {
     if (!Number.isSafeInteger(value)) throw new Error('character value exceeds safe integer range');
   }
   return {
@@ -592,6 +598,7 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     fedMs: row.fedMs,
     blessings: row.blessings,
     fightMode: row.fightMode,
+    durableVersion: row.durableVersion,
     createdAt: row.createdAt,
   };
 }

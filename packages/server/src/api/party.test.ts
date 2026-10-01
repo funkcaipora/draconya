@@ -27,7 +27,7 @@ const character = (id: string, accountId: string, over: Partial<CharacterRecord>
   capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
   ammo: null, supplyStock: null, ammunitionStock: null, charms: null, fedMs: 0, blessings: 0, fightMode: 'attack',
-  createdAt: new Date(),
+  durableVersion: 0, createdAt: new Date(),
   ...over,
 });
 
@@ -162,6 +162,26 @@ describe.runIf(available)('as rotas da party (#195, ADR 0027 decisão 8)', () =>
     expect(after.ticket).toBeNull();
     expect(after.party?.state).toBe('hunting');
     expect(after.invites).toEqual([]);
+  });
+
+  it('cada membro leva no ticket a versão durável max(coluna, maior pendente), lida depois de liquidar (#823)', async () => {
+    // O `start` liquida cada membro e só então monta o bloco da party: a versão que o `game`
+    // adota como piso do contador de cada um é a DELE. Mutação que mata: esquecer o parâmetro em
+    // uma das duas chamadas de `initialCharacterOf` (o `start` e o `join`).
+    const { as, issued, characters, deps } = build();
+    characters.set('p2', { ...(characters.get('p2') as CharacterRecord), durableVersion: 6 });
+    (deps as { pendingDurableVersion?: (characterId: string) => Promise<number> }).pendingDurableVersion =
+      async (characterId) => (characterId === 'p1' ? 9 : 2);
+    const id = ((await as('p1').post('/api/party')).json() as { id: string }).id;
+    await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p2' });
+    await as('p2').post(`/api/party/${id}/join`);
+    await as('p1').post(`/api/party/${id}/propose`, { huntId: 'arena', difficulty: 'bold', mode: 'shared' });
+
+    expect((await as('p1').post(`/api/party/${id}/start`)).statusCode).toBe(200);
+
+    expect(issued[1]?.party?.members.map((m) => [m.characterId, m.initialCharacter.durableVersion])).toEqual([
+      ['p1', 9], ['p2', 6],
+    ]);
   });
 
   it('configure patches each axis alone and validates the composition against the catalog and maxMembers (RF-01, RF-02)', async () => {
@@ -461,6 +481,17 @@ describe.runIf(available)('a party em curso, a sala pública e a busca (#402, #5
     }
     expect(((await as('p4').rooms()).json() as { rooms: unknown[] }).rooms).toEqual([]);
     // A busca exige posse: outro dono não vê a sala de ninguém — coberto pelo `whoQuery`.
+  });
+
+  it('o ticket de entrada em curso leva a versão durável max(coluna, maior pendente) de quem chega (#823)', async () => {
+    const { as, issued, id, characters, deps } = await startedParty();
+    characters.set('p3', character('p3', 'a3', { durableVersion: 2 }));
+    (deps as { pendingDurableVersion?: (characterId: string) => Promise<number> }).pendingDurableVersion =
+      async () => 5;
+
+    expect((await as('p3').post(`/api/party/${id}/join`)).statusCode).toBe(200);
+
+    expect(issued[issued.length - 1]?.party?.members[0]?.initialCharacter.durableVersion).toBe(5);
   });
 
   it('joins a hunting party by public room, reserving the vocation slot, and emits a one-member `join: true` ticket (RF-05, RF-06)', async () => {

@@ -61,10 +61,10 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     const sessionId = randomUUID();
     await store.save(receiptOf(sessionId, characterId));
 
-    await store.remove(sessionId, characterId);
+    await store.remove(sessionId, characterId, 1);
 
     expect(await store.pendingFor(characterId)).toEqual([]);
-    expect(await redis.smembers(`receipts:char:${characterId}`)).toEqual([]);
+    expect(await redis.zrange(`receipts:char:v2:${characterId}`, '0', '-1')).toEqual([]);
   });
 
   it('round-trips promoted (#566, ADR 0042 decisão 1) through parseReceipt', async () => {
@@ -97,10 +97,10 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     const characterId = randomUUID();
     const sessionId = randomUUID();
     await store.save(receiptOf(sessionId, characterId));
-    await redis.del(`receipt:${sessionId}:${characterId}`);
+    await redis.del(`receipt:${sessionId}:${characterId}:1`);
 
     expect(await store.pendingFor(characterId)).toEqual([]);
-    expect(await redis.smembers(`receipts:char:${characterId}`)).toEqual([]);
+    expect(await redis.zrange(`receipts:char:v2:${characterId}`, '0', '-1')).toEqual([]);
   });
 
   it('ignores a receipt written before the index existed, and lets the sweep have it', async () => {
@@ -284,7 +284,7 @@ describe.runIf(available)('one receipt per party member (#194, ADR 0027)', () =>
     expect((await store.pendingFor('b')).map((r) => [r.characterId, r.seq])).toEqual([['b', 2]]);
     expect(await store.pending()).toHaveLength(2);
 
-    await store.remove(sessionId, 'a');
+    await store.remove(sessionId, 'a', 1);
     expect(await store.pendingFor('a')).toEqual([]);
     expect((await store.pendingFor('b')).map((r) => r.seq)).toEqual([2]);
     expect(await store.pending()).toHaveLength(1);
@@ -300,8 +300,191 @@ describe.runIf(available)('one receipt per party member (#194, ADR 0027)', () =>
     await redis.sadd(`receipts:char:${characterId}`, sessionId);
 
     expect((await store.pendingFor(characterId)).map((r) => r.sessionId)).toEqual([sessionId]);
-    await store.remove(sessionId, characterId);
+    await store.remove(sessionId, characterId, 1);
     expect(await store.pendingFor(characterId)).toEqual([]);
     expect(await redis.exists(`receipt:${sessionId}`)).toBe(0);
+  });
+});
+
+// O extrato por `seq`, em ordem por versão (#823, OW-02, ADR 0060 decisão 10e). A chave era
+// `receipt:{sessionId}:{characterId}` e o segundo extrato do par SOBRESCREVIA o primeiro; o
+// índice era um SET, sem ordem.
+describe.runIf(available)('one receipt per (session, character, seq), oldest version first (#823)', () => {
+  it('keeps two receipts of the SAME pair apart — the second does not overwrite the first', async () => {
+    // Mutação que mata: a chave sem o `seq`. É a janela que já existe hoje (Cidade → hunt →
+    // Cidade) e a que o checkpoint do mundo abriria de vez.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const sessionId = randomUUID();
+    await store.save(receiptOf(sessionId, characterId, { seq: 1, durableVersion: 1 }));
+    await store.save(receiptOf(sessionId, characterId, { seq: 2, durableVersion: 2 }));
+
+    expect((await store.pendingFor(characterId)).map((receipt) => receipt.seq)).toEqual([1, 2]);
+    expect(await store.pending()).toHaveLength(2);
+    expect(await redis.keys('receipt:*')).toHaveLength(2);
+  });
+
+  it('removes one receipt of the pair without touching the other', async () => {
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const sessionId = randomUUID();
+    await store.save(receiptOf(sessionId, characterId, { seq: 1, durableVersion: 1 }));
+    await store.save(receiptOf(sessionId, characterId, { seq: 2, durableVersion: 2 }));
+
+    await store.remove(sessionId, characterId, 1);
+
+    expect((await store.pendingFor(characterId)).map((receipt) => receipt.seq)).toEqual([2]);
+    await store.remove(sessionId, characterId, 2);
+    expect(await store.pendingFor(characterId)).toEqual([]);
+    expect(await redis.keys('receipt*')).toEqual([]);
+  });
+
+  it('answers oldest version first, whatever order they were saved in', async () => {
+    // Mutação que mata: o índice voltar a ser um SET (`SMEMBERS` não tem ordem).
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 1, durableVersion: 30 }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 1, durableVersion: 10 }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 1, durableVersion: 20 }));
+
+    expect((await store.pendingFor(characterId)).map((receipt) => receipt.durableVersion)).toEqual([10, 20, 30]);
+  });
+
+  it('cuts at the ceiling by the OLDEST, so a newer receipt never jumps ahead of an older one', async () => {
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    for (const durableVersion of [4, 2, 3, 1]) {
+      await store.save(receiptOf(randomUUID(), characterId, { seq: durableVersion, durableVersion }));
+    }
+
+    expect((await store.pendingFor(characterId, 2)).map((receipt) => receipt.durableVersion)).toEqual([1, 2]);
+  });
+
+  it('saving the same receipt again (a lost acknowledgement) does not duplicate it, and moves the score', async () => {
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const sessionId = randomUUID();
+    await store.save(receiptOf(sessionId, characterId, { seq: 1, durableVersion: 5 }));
+    await store.save(receiptOf(sessionId, characterId, { seq: 1, durableVersion: 6 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found).toHaveLength(1);
+    expect(found[0]?.durableVersion).toBe(6);
+  });
+
+  it('round-trips durableVersion through parseReceipt, and a receipt without one stays without', async () => {
+    // `parseReceipt` é lista de PERMISSÃO: sem a linha do campo, todo extrato voltaria "sem
+    // versão" do Redis e o ledger liquidaria tudo pela regra de antes, em silêncio.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 1, durableVersion: 7 }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 3, durableVersion: -4 }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 4, durableVersion: 1.5 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.durableVersion).toBe(7);
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('durableVersion');
+    // Negativo e fracionário são lixo: somem, o lado seguro (a regra de antes).
+    expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('durableVersion');
+    expect(found.find((receipt) => receipt.seq === 4)).not.toHaveProperty('durableVersion');
+  });
+
+  it('highestPendingVersion is the floor the ticket hands to the next session', async () => {
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    expect(await store.highestPendingVersion(characterId)).toBe(0);
+
+    const sessionId = randomUUID();
+    await store.save(receiptOf(sessionId, characterId, { seq: 1, durableVersion: 4 }));
+    await store.save(receiptOf(sessionId, characterId, { seq: 2, durableVersion: 9 }));
+    await store.save(receiptOf(sessionId, characterId, { seq: 3, durableVersion: 6 }));
+    expect(await store.highestPendingVersion(characterId)).toBe(9);
+
+    await store.remove(sessionId, characterId, 2);
+    expect(await store.highestPendingVersion(characterId)).toBe(6);
+    // E é por personagem: o pendente de outro não entra.
+    expect(await store.highestPendingVersion(randomUUID())).toBe(0);
+  });
+});
+
+// O formato ANTIGO continua lido por um ciclo de deploy (ADR 0014): extrato em voo gravado por
+// um nó `game` anterior não pode se perder, e apagar o novo não pode levar junto um antigo de
+// outro `seq`.
+describe.runIf(available)('the previous receipt format is still read, and never erased by another seq (#823)', () => {
+  const writeV1 = async (sessionId: string, characterId: string, seq: number, endedAtMs: number) => {
+    // `receipt:{sessionId}:{characterId}` + o SET `receipts:char:{characterId}` com a chave inteira.
+    const key = `receipt:${sessionId}:${characterId}`;
+    await redis.set(key, JSON.stringify({ ...receiptOf(sessionId, characterId, { seq }), endedAtMs }));
+    await redis.sadd(`receipts:char:${characterId}`, key);
+  };
+
+  it('reads the #194 key through the old SET and the sweep, ahead of the versioned ones', async () => {
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const oldSession = randomUUID();
+    await writeV1(oldSession, characterId, 1, 1_000);
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 1, durableVersion: 3 }));
+
+    const found = await store.pendingFor(characterId);
+
+    // O antigo não tem versão e é sempre mais velho: vem primeiro.
+    expect(found.map((receipt) => receipt.durableVersion)).toEqual([undefined, 3]);
+    expect(found[0]?.sessionId).toBe(oldSession);
+    expect(await store.pending()).toHaveLength(2);
+  });
+
+  it('removes the #194 key and its old index entry when the seq matches', async () => {
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const sessionId = randomUUID();
+    await writeV1(sessionId, characterId, 4, 1_000);
+
+    await store.remove(sessionId, characterId, 4);
+
+    expect(await store.pendingFor(characterId)).toEqual([]);
+    expect(await redis.exists(`receipt:${sessionId}:${characterId}`)).toBe(0);
+    expect(await redis.smembers(`receipts:char:${characterId}`)).toEqual([]);
+  });
+
+  it('leaves the #194 key alone when the seq is another one — it is a DIFFERENT receipt', async () => {
+    // Mutação que mata: apagar a chave antiga às cegas (`DEL receipt:{sessionId}:{characterId}`),
+    // como o `remove` de antes fazia: levaria junto um extrato que ninguém liquidou.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const sessionId = randomUUID();
+    await writeV1(sessionId, characterId, 4, 1_000);
+    await store.save(receiptOf(sessionId, characterId, { seq: 5, durableVersion: 1 }));
+
+    await store.remove(sessionId, characterId, 5);
+
+    const left = await store.pendingFor(characterId);
+    expect(left.map((receipt) => receipt.seq)).toEqual([4]);
+    expect(await redis.smembers(`receipts:char:${characterId}`)).toHaveLength(1);
+  });
+
+  it('does not erase another character’s receipt that shares the original key of the session', async () => {
+    const store = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const owner = randomUUID();
+    await redis.set(`receipt:${sessionId}`, JSON.stringify({ ...receiptOf(sessionId, owner), endedAtMs: 1 }));
+
+    // Mesmo `sessionId` e mesmo `seq`, outro personagem: a chave antiga não é dele.
+    await store.remove(sessionId, randomUUID(), 1);
+
+    expect(await redis.exists(`receipt:${sessionId}`)).toBe(1);
+    await store.remove(sessionId, owner, 1);
+    expect(await redis.exists(`receipt:${sessionId}`)).toBe(0);
+  });
+
+  it('drops a stale entry of the old SET, like the ZSET one', async () => {
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await redis.sadd(`receipts:char:${characterId}`, `receipt:${randomUUID()}:${characterId}`);
+
+    expect(await store.pendingFor(characterId)).toEqual([]);
+    expect(await redis.smembers(`receipts:char:${characterId}`)).toEqual([]);
   });
 });

@@ -26,6 +26,14 @@ export interface SettleSnapshotOptions {
   readonly characterId: string;
   readonly accountId: string;
   readonly receipts: Pick<ReceiptStore, 'save'>;
+  /**
+   * A versão durável do extrato (#823, OW-02): a do contador do hospedeiro, que o `game` já
+   * tem na mão. Sem ela o extrato liquida pela regra de antes (escreve os absolutos e não mexe
+   * na coluna) — o caso de quem liquida por fora do `game`, como `pnpm dev:dragon-party --reset`.
+   * Com ela, o extrato do snapshot entra em ordem com os que a sessão morta já tinha deixado
+   * pendentes (checkpoints), em vez de passar na frente deles e ser desfeito por um mais velho.
+   */
+  readonly durableVersion?: number;
 }
 
 /** O layout de equipamento como o extrato o leva: `slot → instanceId`. */
@@ -103,6 +111,7 @@ export async function settleSnapshotAsReceipt(
     // mesma família de "sua sessão foi encerrada por manutenção".
     reason: 'drain',
     seq: snapshot.ledgerSeq + 1,
+    ...(options.durableVersion === undefined ? {} : { durableVersion: options.durableVersion }),
     // Os agregados DELE (#187); snapshot anterior só tem a soma, que era dele.
     aggregates: snapshot.aggregatesByCharacter?.[options.characterId] ?? snapshot.aggregates,
     notableEvents: snapshot.notableEvents,

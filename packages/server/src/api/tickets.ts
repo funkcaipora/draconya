@@ -63,6 +63,14 @@ export interface TicketRouteDependencies {
    * mesma degradação de `listItemInstances`: ausente é personagem sem storage nenhum setado.
    */
   readonly listCharacterStorages?: GameRepository['listCharacterStorages'];
+  /**
+   * A MAIOR versão durável ainda pendente no Redis para o personagem (#823, OW-02), lida DEPOIS
+   * de liquidar (`ReceiptStore.highestPendingVersion`). O ticket leva
+   * `max(characters.durable_version, isto)` como piso do contador do hospedeiro: a sessão nova
+   * grava versões MAIORES que as de qualquer extrato que ainda espere liquidação. Ausente é
+   * `api` montado sem Redis de extratos: o ticket leva só a coluna.
+   */
+  readonly pendingDurableVersion?: (characterId: string) => Promise<number>;
 }
 
 /**
@@ -158,6 +166,9 @@ export function createTicketHandler(
     // sai da trava, como a resolução de nó (FUN-53): uma lentidão do Redis aqui não segura a
     // linha do personagem.
     const boostedMonsterId = await deps.currentBoostedMonsterId?.();
+    // A versão durável que ainda espera liquidação (#823), lida DEPOIS do `settleProgress` — o que
+    // sobrou pendente (um teto de 50 estourado, por exemplo) é o que a coluna ainda não viu.
+    const pendingDurableVersion = await deps.pendingDurableVersion?.(body.data.characterId) ?? 0;
 
     // 404, e não 403: responder "existe, mas não é seu" transforma este endpoint num
     // verificador de nomes de personagem para qualquer conta autenticada.
@@ -172,6 +183,7 @@ export function createTicketHandler(
           await deps.listItemInstances?.(character.id) ?? [],
           await deps.listCharacterStorages?.(character.id) ?? [],
           boostedMonsterId,
+          pendingDurableVersion,
         ),
         resolution.node,
       ),
@@ -207,6 +219,8 @@ export function initialCharacterOf(
   storages: readonly { readonly storageKey: string; readonly value: number }[] = [],
   /** A Boosted Creature do dia (#615), do cache em Redis. Ver `TicketRouteDependencies`. */
   boostedMonsterId?: string,
+  /** A maior versão durável ainda pendente no Redis (#823). Ver `TicketRouteDependencies`. */
+  pendingDurableVersion = 0,
 ): InitialCharacter {
   return {
     level: character.level,
@@ -215,6 +229,11 @@ export function initialCharacterOf(
     gold: character.gold,
     soul: character.soul,
     ...(boostedMonsterId === undefined ? {} : { boostedMonsterId }),
+    // A versão durável (#823, OW-02): o piso do contador do hospedeiro. Sai SEMPRE, inclusive
+    // `0` — ausente significaria "o `api` não sabe", e o `game` passaria a gravar extratos sem
+    // versão. `max` porque os pendentes que o teto de liquidação deixou para trás ainda não
+    // subiram a coluna.
+    durableVersion: Math.max(character.durableVersion, pendingDurableVersion),
     // A configuração do bot viaja no ticket (FUN-81): é assim que ela chega ao `game`,
     // que não fala com o Postgres. Mesmo caminho de level, XP e gold.
     ...(character.botConfig === null ? {} : { botConfig: character.botConfig }),

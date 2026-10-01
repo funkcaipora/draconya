@@ -1095,6 +1095,23 @@ export class SessionHost {
    */
   readonly #premiumByCharacter = new Map<string, boolean>();
   /**
+   * O contador da versão durável, por personagem (#823, OW-02, ADR 0060 decisão 10e): a ORDEM
+   * entre os extratos de um personagem, que a `seq` (por sessão) não dá — Cidade → hunt → Cidade
+   * cruza três sessões. Nasce do ticket (`InitialCharacter.durableVersion`, que já é maior que
+   * qualquer extrato pendente) e sobe a cada extrato gravado (`#claimDurableVersion`), de
+   * QUALQUER sessão do personagem neste nó: é por isso que mora aqui, e não no `HostedSession`.
+   * Vive até `release`. AUSENTE é ticket de um `api` anterior (deploy em rolagem): o extrato sai
+   * sem versão, e o ledger o liquida pela regra de antes — o lado seguro, já que uma versão
+   * inventada aqui (1, 2…) seria menor que a coluna e descartaria os absolutos em silêncio.
+   */
+  readonly #durableVersionByCharacter = new Map<string, number>();
+  /**
+   * As versões já tomadas por um extrato cuja gravação AINDA NÃO foi confirmada (#823): a
+   * chave é `characterId|sessionId|seq`. Falhou ou a resposta se perdeu, a tentativa seguinte
+   * (#267) encontra aqui a mesma versão. Sai na confirmação, e em `release`.
+   */
+  readonly #claimedVersions = new Map<string, number>();
+  /**
    * As cores do outfit, do ticket (FUN-104). Só `creature-appear` e `session-state` leem; o
    * `sim` não conhece cor, e o snapshot não a carrega — é apresentação, não simulação. Como o
    * nome, entram quando a sessão é preparada e vivem até `release`: uma escolha nova feita no
@@ -1389,6 +1406,8 @@ export class SessionHost {
     this.#premiumByCharacter.set(characterId, member?.initialCharacter.premium ?? false);
     // Registro sob lease ANTES do local: registro recusado não pode deixar rastro.
     await this.#register(characterId, hosted.session, accountId);
+    // A versão durável de quem chega (#823): o piso que o `/join` leu depois de liquidar.
+    this.#adoptDurableVersion(characterId, member?.initialCharacter ?? initialCharacter);
     // Nome e cores ANTES de `#createLocal`, como no caminho da party nova (FUN-104).
     if (initialCharacter?.name !== undefined) this.#nameByCharacter.set(characterId, initialCharacter.name);
     if (initialCharacter?.outfitColors !== undefined) {
@@ -1542,6 +1561,10 @@ export class SessionHost {
     this.#nameByCharacter.delete(characterId);
     this.#colorsByCharacter.delete(characterId);
     this.#premiumByCharacter.delete(characterId);
+    this.#durableVersionByCharacter.delete(characterId);
+    for (const claim of this.#claimedVersions.keys()) {
+      if (claim.startsWith(`${characterId}|`)) this.#claimedVersions.delete(claim);
+    }
     this.#botByCharacter.delete(characterId);
     this.#restingSince.delete(characterId);
 
@@ -4510,12 +4533,19 @@ export class SessionHost {
     // A stamina do dono da sessão vai junto (FUN-54): sem ela, o tempo de hunt gasto nunca
     // chegaria ao banco, e reconectar devolveria a stamina de antes da hunt.
     const owner = departed ?? hosted.session.participants.find((p) => p.id === characterId);
+    // A versão sai ANTES do primeiro `await`, e de forma síncrona: é a ordem das CHAMADAS que
+    // vale, e dois extratos do mesmo personagem em voo ao mesmo tempo não podem pegar o mesmo
+    // número. E a tentativa repetida (#267) leva a MESMA versão da que falhou — é o mesmo extrato,
+    // e "resposta perdida" precisa repetir exatamente o que já pode ter sido gravado (#823).
+    const claim = `${characterId}|${receipt.sessionId}|${receipt.seq}`;
+    const durableVersion = this.#claimDurableVersion(characterId, claim);
     await receipts.save({
       sessionId: receipt.sessionId,
       characterId,
       accountId,
       reason: receipt.reason,
       seq: receipt.seq,
+      ...(durableVersion === undefined ? {} : { durableVersion }),
       aggregates: receipt.aggregates,
       notableEvents: receipt.notableEvents,
       // As instâncias vendidas/descartadas nesta hunt (#724, ADR 0048 d.8): o `jobs` as apaga
@@ -4588,6 +4618,9 @@ export class SessionHost {
       ...(owner === undefined ? {} : { acquired: acquiredBy(owner, receipt.sessionId) }),
     });
 
+    // Gravado: a versão deste extrato não precisa mais ser lembrada para a próxima tentativa.
+    this.#claimedVersions.delete(claim);
+
     // O extrato agora é durável no Redis e será a fonte que o ledger aplica no Postgres.
     // Enquanto ele está pendente, a Cidade continua com o MESMO `CharacterRuntime` da hunt;
     // deixar o delta nele faz o ticket que acabou de liquidar o ledger reencontrar uma base
@@ -4615,12 +4648,15 @@ export class SessionHost {
     if (receipts === undefined || accountId === undefined || owner === undefined) return;
     if (!hosted.dirty.has(characterId)) return;
     hosted.session.ledgerSeq += 1;
+    // Síncrona, antes do `await`, como em `#persistReceipt` (#823).
+    const durableVersion = this.#claimDurableVersion(characterId);
     await receipts.save({
       sessionId: hosted.session.id,
       characterId,
       accountId,
       reason,
       seq: hosted.session.ledgerSeq,
+      ...(durableVersion === undefined ? {} : { durableVersion }),
       // A Cidade não credita progresso (ADR 0023) — mas #724/ADR 0048 d.8 abriu a primeira
       // exceção: vender na praça move gold pelo MESMO ledger que a hunt usa. `goldDelta` é o
       // delta AINDA NÃO liquidado (zero em todo extrato que só mexeu em vocação/equipamento,
@@ -4863,12 +4899,77 @@ export class SessionHost {
     };
   }
 
+  /**
+   * Adota a versão durável do ticket como PISO do contador do personagem (#823). `max` com o que
+   * o nó já tem: a Cidade que ele deixa para a party (`#leaveForParty`) grava um extrato DEPOIS de
+   * o ticket da party ter sido emitido, e adotar só o número do ticket repetiria a versão dele —
+   * o ledger trataria o segundo como atrasado e descartaria os absolutos da hunt. Devolve se o
+   * contador NASCEU agora, para quem falhar poder desfazer (`#createAndRegister`).
+   */
+  #adoptDurableVersion(characterId: string, initial: InitialCharacter | undefined): boolean {
+    const fromTicket = initial?.durableVersion;
+    if (fromTicket === undefined) return false;
+    const current = this.#durableVersionByCharacter.get(characterId);
+    this.#durableVersionByCharacter.set(characterId, Math.max(current ?? 0, fromTicket));
+    return current === undefined;
+  }
+
+  /**
+   * A próxima versão durável do personagem, ou `undefined` se o nó não tem contador dele (ticket
+   * de um `api` anterior — o extrato sai sem versão, ver `#durableVersionByCharacter`).
+   *
+   * SÍNCRONA de propósito: quem chama a usa antes do primeiro `await` do extrato, e é a ordem das
+   * chamadas que a versão preserva. Estado do próprio host, não da simulação (invariante 9): a
+   * versão ordena o que o `jobs` escreve, e nada dela volta para o `sim`.
+   */
+  #claimDurableVersion(characterId: string, claim?: string): number | undefined {
+    const current = this.#durableVersionByCharacter.get(characterId);
+    if (current === undefined) return undefined;
+    // `claim` identifica UM extrato (personagem|sessão|seq): quem já tomou a versão e não
+    // confirmou a gravação a recebe de volta, em vez de gastar outra.
+    const claimed = claim === undefined ? undefined : this.#claimedVersions.get(claim);
+    if (claimed !== undefined) return claimed;
+    const next = current + 1;
+    this.#durableVersionByCharacter.set(characterId, next);
+    if (claim !== undefined) this.#claimedVersions.set(claim, next);
+    return next;
+  }
+
   #hostedSession(characterId: string): HostedSession | undefined {
     const sessionId = this.#sessionIdByCharacter.get(characterId);
     return sessionId === undefined ? undefined : this.#sessions.get(sessionId);
   }
 
+  /**
+   * O contador de versão durável nasce AQUI, antes de tudo (#823, OW-02): `#resume` pode creditar
+   * um snapshot irrestaurável, e esse extrato já é versionado. Se hospedar falhar, o contador
+   * que esta chamada criou some — registro recusado não pode deixar rastro, como nome e cores.
+   * O de quem já estava no nó (a Cidade que `#leaveForParty` esvazia) fica: é dele, e `max` com o
+   * do ticket já o preservou.
+   */
   async #createAndRegister(
+    characterId: string,
+    initialCharacter: InitialCharacter | undefined,
+    accountId: string | undefined,
+    party?: PartyTicket,
+  ): Promise<void> {
+    const born: string[] = [];
+    if (this.#adoptDurableVersion(characterId, initialCharacter)) born.push(characterId);
+    // Cada membro da party traz a versão DELE no bloco do ticket (`/start` a leu depois de
+    // liquidar cada um). Quem chega num ticket de ENTRADA não passa por aqui (`#admitLateJoiner`).
+    for (const member of party?.members ?? []) {
+      if (member.characterId === characterId) continue;
+      if (this.#adoptDurableVersion(member.characterId, member.initialCharacter)) born.push(member.characterId);
+    }
+    try {
+      await this.#createAndRegisterSession(characterId, initialCharacter, accountId, party);
+    } catch (error) {
+      for (const id of born) this.#durableVersionByCharacter.delete(id);
+      throw error;
+    }
+  }
+
+  async #createAndRegisterSession(
     characterId: string,
     initialCharacter: InitialCharacter | undefined,
     accountId: string | undefined,
@@ -5020,7 +5121,14 @@ export class SessionHost {
     const receipts = this.#options.receipts;
     if (receipts === undefined || accountId === undefined) return;
     try {
-      await settleSnapshotAsReceipt(snapshot, { characterId, accountId, receipts });
+      // O extrato do snapshot também é versionado (#823): sem isso ele entraria no ledger À
+      // FRENTE dos checkpoints que a sessão morta já deixou pendentes, e o último deles — mais
+      // velho que o snapshot — desfaria o estado dele.
+      const durableVersion = this.#claimDurableVersion(characterId);
+      await settleSnapshotAsReceipt(snapshot, {
+        characterId, accountId, receipts,
+        ...(durableVersion === undefined ? {} : { durableVersion }),
+      });
     } catch (error) {
       // Falhar aqui perde o crédito, e é por isso que o snapshot NÃO é apagado em seguida
       // quando isto lança: a próxima conexão tenta de novo.

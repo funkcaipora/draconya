@@ -41,6 +41,8 @@ export interface PartyRouteDependencies {
   readonly listCharacterStorages?: GameRepository['listCharacterStorages'];
   /** A Boosted Creature do dia (#615). Ver `TicketRouteDependencies.currentBoostedMonsterId`. */
   readonly currentBoostedMonsterId?: () => Promise<string | undefined>;
+  /** A maior versão durável ainda pendente de cada membro (#823). Ver `TicketRouteDependencies`. */
+  readonly pendingDurableVersion?: (characterId: string) => Promise<number>;
   readonly settleProgress: (characterId: string) => Promise<SettlementResult>;
   /**
    * O snapshot de sessão de CADA personagem (#527, ADR 0010): um nó que reiniciou no meio de
@@ -305,6 +307,8 @@ async function joinRunningParty(
         await deps.listItemInstances?.(me.characterId) ?? [],
         await deps.listCharacterStorages?.(me.characterId) ?? [],
         await deps.currentBoostedMonsterId?.(),
+        // A versão durável (#823): lida DEPOIS do `settleProgress` logo acima.
+        await deps.pendingDurableVersion?.(me.characterId) ?? 0,
       ),
     }],
   };
@@ -848,6 +852,8 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
           await deps.listItemInstances?.(characterId) ?? [],
           await deps.listCharacterStorages?.(characterId) ?? [],
           boostedMonsterId,
+          // A versão durável de CADA membro (#823): lida DEPOIS do `settleProgress` do laço acima.
+          await deps.pendingDurableVersion?.(characterId) ?? 0,
         ),
       });
     }

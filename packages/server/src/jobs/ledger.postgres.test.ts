@@ -18,7 +18,7 @@ import { testContent, TEST_HUNT } from '../testing/content.js';
 import { SessionHost } from '../game/host.js';
 import { createCitySessionFactory } from '../game/sessions.js';
 import {
-  countLedgerRows, creditOf, settleCharacterProgress, writePendingReceipts,
+  countLedgerRows, creditOf, groupByCharacter, settleCharacterProgress, writePendingReceipts,
 } from './ledger.js';
 
 const logger = createLogger('silent', 'test');
@@ -1810,5 +1810,413 @@ describe.runIf(ready)('sell-items/discard-item apagam a instância no ledger (#7
       .from(itemInstances)
       .where(eq(itemInstances.id, instanceId));
     expect(row?.id).toBe(instanceId);
+  });
+});
+
+// A ordem dos extratos de UM personagem (#823, OW-02, ADR 0060 decisão 10e). Três garantias:
+// nenhum extrato apaga outro (a chave leva o `seq`), a liquidação segue a versão (não o `SCAN`),
+// e nenhum extrato atrasado desfaz estado mais novo (a guarda de `durable_version`).
+describe('a ordem dos extratos de um personagem (#823, OW-02)', () => {
+  const orderOf = (...versions: Array<number | undefined>) => versions.map((durableVersion, index) => ({
+    characterId: 'c', sessionId: `s${index}`, seq: index, endedAtMs: index, durableVersion,
+  }) as unknown as SessionReceipt);
+
+  it('agrupa por personagem e ordena cada grupo pela versão', () => {
+    const a = { ...orderOf(3)[0], characterId: 'a', sessionId: 'a3' } as SessionReceipt;
+    const b = { ...orderOf(1)[0], characterId: 'b', sessionId: 'b1' } as SessionReceipt;
+    const a1 = { ...orderOf(1)[0], characterId: 'a', sessionId: 'a1' } as SessionReceipt;
+    const a2 = { ...orderOf(2)[0], characterId: 'a', sessionId: 'a2' } as SessionReceipt;
+
+    const groups = groupByCharacter([a, b, a2, a1]);
+
+    expect(groups.map((group) => group.map((receipt) => receipt.sessionId))).toEqual([
+      ['a1', 'a2', 'a3'], ['b1'],
+    ]);
+  });
+
+  it('põe o extrato SEM versão entre os versionados pelo relógio, nunca à frente de um mais velho', () => {
+    // Mutação que mata: deixar os sem versão sempre primeiro. Um nó anterior gravou o de tempo 5,
+    // depois do versionado de tempo 2 — e o versionado de tempo 9 é mais novo que os dois.
+    const old = { characterId: 'c', sessionId: 'v', seq: 1, endedAtMs: 2, durableVersion: 4 } as SessionReceipt;
+    const legacy = { characterId: 'c', sessionId: 'u', seq: 1, endedAtMs: 5 } as SessionReceipt;
+    const newest = { characterId: 'c', sessionId: 'n', seq: 1, endedAtMs: 9, durableVersion: 6 } as SessionReceipt;
+
+    const [group] = groupByCharacter([newest, legacy, old]);
+
+    expect(group?.map((receipt) => receipt.sessionId)).toEqual(['v', 'u', 'n']);
+  });
+});
+
+describe.runIf(ready)('extrato atrasado não desfaz estado mais novo (#823, OW-02, ADR 0060 decisão 10e)', () => {
+  const sweepOf = (database: NonNullable<typeof db>, receipts: ReceiptStore) => ({
+    database: database.database.db, receipts, logger, progression,
+  });
+  const versionOf = async (database: NonNullable<typeof db>, characterId: string): Promise<number> => {
+    const [row] = await database.database.db
+      .select({ version: characters.durableVersion })
+      .from(characters)
+      .where(eq(characters.id, characterId));
+    if (row === undefined) throw new Error('personagem não encontrado');
+    return row.version;
+  };
+  /** Os campos ABSOLUTOS que a guarda protege, como o banco os tem. */
+  const absolutesOf = async (database: NonNullable<typeof db>, characterId: string) => {
+    const [row] = await database.database.db
+      .select({
+        blessings: characters.blessings, soul: characters.soul, supplyStock: characters.supplyStock,
+        ammunitionStock: characters.ammunitionStock, ammo: characters.ammo, fedMs: characters.fedMs,
+        charms: characters.charms, fightMode: characters.fightMode, skills: characters.skills,
+        staminaMs: characters.staminaMs,
+      })
+      .from(characters)
+      .where(eq(characters.id, characterId));
+    return row;
+  };
+  const seedSword = async (database: NonNullable<typeof db>, characterId: string): Promise<string> => {
+    const created = await new DrizzleGameRepository(database.database.db).createItemInstance({
+      itemId: 'spike-sword', ownerCharacterId: characterId, origin: 'loot',
+    });
+    return created.id;
+  };
+  const storagesOf = async (database: NonNullable<typeof db>, characterId: string) => {
+    const rows = await database.database.db
+      .select({ storageKey: characterStorages.storageKey, value: characterStorages.value })
+      .from(characterStorages)
+      .where(eq(characterStorages.characterId, characterId));
+    return new Map(rows.map((row) => [row.storageKey, row.value]));
+  };
+  const slotOf = async (database: NonNullable<typeof db>, instanceId: string) => {
+    const [row] = await database.database.db
+      .select({ slot: itemInstances.equippedSlot, container: itemInstances.container, index: itemInstances.slotIndex })
+      .from(itemInstances)
+      .where(eq(itemInstances.id, instanceId));
+    return row;
+  };
+
+  it('dois extratos do MESMO par (seq 1 e 2), antes da liquidação: os dois liquidam', async () => {
+    // Mutação que mata: a chave do extrato sem o `seq` — o segundo sobrescrevia o primeiro e
+    // um dos dois créditos se perdia antes de chegar ao ledger.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    await receipts.save(receiptOf(sessionId, characterId, { seq: 1, durableVersion: 1 }));
+    await receipts.save(receiptOf(sessionId, characterId, { seq: 2, durableVersion: 2 }));
+
+    const result = await writePendingReceipts(sweepOf(database, receipts));
+
+    expect(result).toEqual({ written: 2, failed: 0 });
+    expect(await countLedgerRows(database.database.db, sessionId)).toBe(2);
+    // 2 × (500 − 120) de gold e 2 × 900 de XP: nada se perdeu.
+    expect(await characterRow(database, characterId)).toMatchObject({ gold: 760, xp: 1_800 });
+    expect(await versionOf(database, characterId)).toBe(2);
+    expect(await redis.keys('receipt*')).toEqual([]);
+  });
+
+  it('versão 2 e DEPOIS a versão 1: o absoluto NÃO volta; o gold e a XP das duas entram', async () => {
+    // É o teste de ordem inversa da issue. Mutação que mata: tirar a guarda `absolute` do
+    // `applyProgression` — o extrato atrasado devolveria bênçãos, alma, estoque, equipamento,
+    // layout, storages, stamina e skills que o mais novo já tinha mudado.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const sword = await seedSword(database, characterId);
+    const base = Date.now();
+    // O v1 é gravado DEPOIS (relógio maior): a guarda de instante de skills e stamina o deixaria
+    // passar — só a versão o barra.
+    const newerStore = new ReceiptStore(redis, { now: () => base + 1_000 });
+    const olderStore = new ReceiptStore(redis, { now: () => base + 5_000 });
+    const sessionId = randomUUID();
+
+    await newerStore.save(receiptOf(sessionId, characterId, {
+      seq: 2, durableVersion: 2,
+      blessings: 0, soul: 10, supplyStock: { 'health-potion': 1 }, ammunitionStock: {},
+      ammo: { arrow: 'plain-arrow' }, fedMs: 100, charms: { pointsSpent: 1, echoesSpent: 0, tiers: {}, assignments: {}, version: 1 },
+      fightMode: 'defense', skills: { melee: { level: 30, points: 1 } },
+      staminaMs: 5_000, staminaUpdatedAtMs: base + 1_000,
+      equipment: { hand: sword }, layout: {},
+      storages: { 'quest:a': 2 },
+    }));
+    await writePendingReceipts(sweepOf(database, newerStore));
+    const afterNewest = await absolutesOf(database, characterId);
+    expect(afterNewest).toMatchObject({
+      blessings: 0, soul: 10, fedMs: 100, fightMode: 'defense', staminaMs: 5_000,
+      supplyStock: { 'health-potion': 1 }, ammo: { arrow: 'plain-arrow' }, skills: { melee: { level: 30, points: 1 } },
+    });
+
+    await olderStore.save(receiptOf(sessionId, characterId, {
+      seq: 1, durableVersion: 1,
+      blessings: 0b1111111, soul: 90, supplyStock: { 'health-potion': 40 }, ammunitionStock: { 'plain-arrow': 99 },
+      ammo: { arrow: 'sniper-arrow' }, fedMs: 9_000, charms: { pointsSpent: 50, echoesSpent: 9, tiers: {}, assignments: {}, version: 1 },
+      fightMode: 'attack', skills: { melee: { level: 10, points: 0 } },
+      staminaMs: 1, staminaUpdatedAtMs: base + 5_000,
+      equipment: {}, layout: { [sword]: { container: 'backpack', index: 3 } },
+      storages: { 'quest:a': 1, 'quest:b': 1 },
+    }));
+    const late = await writePendingReceipts(sweepOf(database, olderStore));
+
+    expect(late).toEqual({ written: 1, failed: 0 });
+    // O estado absoluto é o do extrato MAIS NOVO, inteiro.
+    expect(await absolutesOf(database, characterId)).toEqual(afterNewest);
+    expect(await slotOf(database, sword)).toMatchObject({ slot: 'hand', container: null, index: null });
+    expect(await storagesOf(database, characterId)).toEqual(new Map([['quest:a', 2]]));
+    // Mas o valor movido das duas sessões entrou: a guarda é só dos absolutos.
+    expect(await characterRow(database, characterId)).toMatchObject({ gold: 760, xp: 1_800 });
+    expect(await countLedgerRows(database.database.db, sessionId)).toBe(2);
+    expect(await versionOf(database, characterId)).toBe(2);
+  });
+
+  it('hunt intercalada com dois extratos de estado da Cidade, liquidados na ordem INVERSA: o final é o do mais novo', async () => {
+    // Cidade (v1) → hunt (v2) → Cidade (v3): três sessões, três `seq` recomeçando, um personagem.
+    // Liquidados do mais novo para o mais velho, um por chamada — o pior caso de uma varredura
+    // que entrega fora de ordem. Mutação que mata: tirar a guarda `absolute` do ledger.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const city1 = randomUUID();
+    const hunt = randomUUID();
+    const city2 = randomUUID();
+
+    for (const [sessionId, durableVersion, blessings, soul] of [
+      [city2, 3, 7, 30], [hunt, 2, 3, 20], [city1, 1, 1, 10],
+    ] as const) {
+      await receipts.save(receiptOf(sessionId, characterId, { seq: 1, durableVersion, blessings, soul }));
+      await writePendingReceipts(sweepOf(database, receipts));
+    }
+
+    expect(await absolutesOf(database, characterId)).toMatchObject({ blessings: 7, soul: 30 });
+    expect(await versionOf(database, characterId)).toBe(3);
+    // O valor movido das três sessões entrou: 3 × 380 de gold e 3 × 900 de XP.
+    expect(await characterRow(database, characterId)).toMatchObject({ gold: 1_140, xp: 2_700 });
+    expect(await redis.keys('receipt*')).toEqual([]);
+  });
+
+  it('a varredura liquida o personagem em ordem de VERSÃO, mesmo que o Redis entregue ao contrário', async () => {
+    // v1 traz o item (`acquired`) e v2 o vende (`removedInstances`). Na ordem certa ele nasce e
+    // morre; na inversa o `DELETE` não acha nada e o `INSERT` o ressuscita — a mesma venda
+    // pagaria o gold e devolveria a peça. É o caso em que a guarda de versão NÃO ajuda (item é
+    // delta) e só a ordem de liquidação salva. Mutação que mata: tirar `groupByCharacter`.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const instanceId = `${sessionId}:0`;
+    await receipts.save(receiptOf(sessionId, characterId, {
+      seq: 1, durableVersion: 1, acquired: [{ instanceId, itemId: 'spike-sword', quantity: 1 }],
+    }));
+    await receipts.save(receiptOf(randomUUID(), characterId, {
+      seq: 1, durableVersion: 2, removedInstances: [instanceId],
+    }));
+    const [first, second] = await receipts.pendingFor(characterId);
+    if (first === undefined || second === undefined) throw new Error('faltou extrato');
+    const reversed = {
+      // O `SCAN` entregaria em qualquer ordem: aqui, a pior.
+      pending: async () => [second, first],
+      remove: (...args: Parameters<ReceiptStore['remove']>) => receipts.remove(...args),
+    } as unknown as ReceiptStore;
+
+    expect(await writePendingReceipts(sweepOf(database, reversed))).toEqual({ written: 2, failed: 0 });
+
+    const left = await database.database.db
+      .select({ id: itemInstances.id })
+      .from(itemInstances)
+      .where(eq(itemInstances.ownerCharacterId, characterId));
+    expect(left).toEqual([]);
+    expect(await versionOf(database, characterId)).toBe(2);
+  });
+
+  it('o ticket liquida em ordem de versão: gravados 3, 1, 2, o que sobra é o do 3', async () => {
+    // `pendingFor` devolve do mais antigo ao mais novo, e a liquidação do ticket é a mesma da
+    // varredura (FUN-56). Mutação que mata: o índice voltar a ser um SET.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const instanceId = `${sessionId}:0`;
+    await receipts.save(receiptOf(sessionId, characterId, {
+      seq: 3, durableVersion: 3, soul: 30, removedInstances: [instanceId],
+    }));
+    await receipts.save(receiptOf(sessionId, characterId, {
+      seq: 1, durableVersion: 1, soul: 10, acquired: [{ instanceId, itemId: 'spike-sword', quantity: 1 }],
+    }));
+    await receipts.save(receiptOf(sessionId, characterId, { seq: 2, durableVersion: 2, soul: 20 }));
+
+    expect(await settleCharacterProgress(characterId, sweepOf(database, receipts))).toEqual({ written: 3, failed: 0 });
+
+    expect((await absolutesOf(database, characterId))?.soul).toBe(30);
+    expect(await versionOf(database, characterId)).toBe(3);
+    const left = await database.database.db
+      .select({ id: itemInstances.id })
+      .from(itemInstances)
+      .where(eq(itemInstances.ownerCharacterId, characterId));
+    expect(left).toEqual([]);
+  });
+
+  it('um extrato gravado na chave ANTIGA ainda liquida, e apaga a chave antiga', async () => {
+    // Deploy em rolagem (ADR 0014): um nó `game` anterior gravou `receipt:{sessionId}:{characterId}`
+    // com o SET de índice, e outro, mais antigo, `receipt:{sessionId}` sem índice nenhum. O
+    // extrato sem versão segue a regra de antes: escreve os absolutos, e não mexe na versão.
+    const database = db as NonNullable<typeof db>;
+    const withIndex = await seedCharacter(database);
+    const withoutIndex = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const indexed = randomUUID();
+    const bare = randomUUID();
+    await redis.set(`receipt:${indexed}:${withIndex}`, JSON.stringify({
+      ...receiptOf(indexed, withIndex, { soul: 55 }), endedAtMs: 1,
+    }));
+    await redis.sadd(`receipts:char:${withIndex}`, `receipt:${indexed}:${withIndex}`);
+    await redis.set(`receipt:${bare}`, JSON.stringify({
+      ...receiptOf(bare, withoutIndex, { soul: 66 }), endedAtMs: 1,
+    }));
+
+    // O ticket acha o primeiro pelo índice antigo; a varredura acha o segundo.
+    expect(await settleCharacterProgress(withIndex, sweepOf(database, receipts))).toEqual({ written: 1, failed: 0 });
+    expect(await writePendingReceipts(sweepOf(database, receipts))).toEqual({ written: 1, failed: 0 });
+
+    expect((await absolutesOf(database, withIndex))?.soul).toBe(55);
+    expect((await absolutesOf(database, withoutIndex))?.soul).toBe(66);
+    expect(await versionOf(database, withIndex)).toBe(0);
+    expect(await countLedgerRows(database.database.db, indexed)).toBe(1);
+    expect(await countLedgerRows(database.database.db, bare)).toBe(1);
+    expect(await redis.keys('receipt*')).toEqual([]);
+  });
+
+  it('reprocessar não duplica — e um reprocesso com versão MAIOR também não escreve absoluto', async () => {
+    // A `UNIQUE (session_id, seq)` faz o segundo processamento inteiro virar operação nula, e o
+    // `return` antes de `applyProgression` é o que impede até a versão de subir.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    await receipts.save(receiptOf(sessionId, characterId, { seq: 1, durableVersion: 1, soul: 10 }));
+    await writePendingReceipts(sweepOf(database, receipts));
+
+    await receipts.save(receiptOf(sessionId, characterId, { seq: 1, durableVersion: 9, soul: 99 }));
+    const again = await writePendingReceipts(sweepOf(database, receipts));
+
+    expect(again).toEqual({ written: 1, failed: 0 });
+    expect(await countLedgerRows(database.database.db, sessionId)).toBe(1);
+    expect(await characterRow(database, characterId)).toMatchObject({ gold: 380, xp: 900, soul: 10 });
+    expect(await versionOf(database, characterId)).toBe(1);
+    expect(await redis.keys('receipt*')).toEqual([]);
+  });
+
+  it('extrato SEM versão segue a regra de antes e não mexe na coluna; o atrasado depois dele não o desfaz', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    await database.database.db.update(characters).set({ durableVersion: 5 }).where(eq(characters.id, characterId));
+    const receipts = new ReceiptStore(redis);
+
+    await receipts.save(receiptOf(randomUUID(), characterId, { blessings: 3 }));
+    await writePendingReceipts(sweepOf(database, receipts));
+    expect((await absolutesOf(database, characterId))?.blessings).toBe(3);
+    expect(await versionOf(database, characterId)).toBe(5);
+
+    // Versionado e ATRASADO (4 ≤ 5): entra o valor movido, não o absoluto, e a versão não desce.
+    await receipts.save(receiptOf(randomUUID(), characterId, { durableVersion: 4, blessings: 127 }));
+    await writePendingReceipts(sweepOf(database, receipts));
+    expect((await absolutesOf(database, characterId))?.blessings).toBe(3);
+    expect(await versionOf(database, characterId)).toBe(5);
+    expect(await characterRow(database, characterId)).toMatchObject({ gold: 760, xp: 1_800 });
+
+    // E um mais NOVO (6 > 5) escreve e sobe.
+    await receipts.save(receiptOf(randomUUID(), characterId, { durableVersion: 6, blessings: 1 }));
+    await writePendingReceipts(sweepOf(database, receipts));
+    expect((await absolutesOf(database, characterId))?.blessings).toBe(1);
+    expect(await versionOf(database, characterId)).toBe(6);
+  });
+
+  it('o que é monotônico por natureza entra mesmo no extrato atrasado: Bestiário, vocação e promoção', async () => {
+    // A guarda é dos campos que dependem de ordem. Bestiário (máximo), vocação (`coalesce`) e
+    // promoção (`OR`) dão o mesmo resultado em qualquer ordem — e um extrato atrasado que traz a
+    // vocação ESCOLHIDA não pode perdê-la só por chegar tarde.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+
+    await receipts.save(receiptOf(randomUUID(), characterId, { durableVersion: 2, bestiary: { rat: 10 } }));
+    await writePendingReceipts(sweepOf(database, receipts));
+    await receipts.save(receiptOf(randomUUID(), characterId, {
+      durableVersion: 1, bestiary: { rat: 5, bat: 3 }, vocation: 'knight', promoted: true,
+    }));
+    await writePendingReceipts(sweepOf(database, receipts));
+
+    expect(await characterRow(database, characterId)).toMatchObject({
+      bestiary: { rat: 10, bat: 3 }, vocation: 'knight', promoted: true,
+    });
+    expect(await versionOf(database, characterId)).toBe(2);
+  });
+
+  it('ponta a ponta: ticket → host → extrato → ledger → coluna → ticket, e a versão só sobe', async () => {
+    // O caminho real das três pontas do #823: o `api` monta o ticket com a coluna, o host adota
+    // o piso e numera o extrato, o `jobs` o aplica e sobe a coluna, e o ticket seguinte parte
+    // dali. Duas sessões do mesmo personagem, em sequência.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const repository = new DrizzleGameRepository(database.database.db);
+    const [owner] = await database.database.db.select({ accountId: characters.accountId })
+      .from(characters).where(eq(characters.id, characterId));
+    if (owner === undefined) throw new Error('Missing test character');
+    const receipts = new ReceiptStore(redis);
+    const content = testContent();
+
+    const sessionOf = async (fightMode: 'defense' | 'balanced') => {
+      const row = await repository.getCharacterById(characterId);
+      if (row === null) throw new Error('personagem não encontrado');
+      const initial = initialCharacterOf(row, [], [], undefined, await receipts.highestPendingVersion(characterId));
+      const session = createHuntSession({
+        id: randomUUID(), content, huntId: TEST_HUNT.id, difficulty: 'cautious', createdAtMs: 0,
+      });
+      const character = createCitySessionFactory(content)(characterId).participants[0];
+      if (character === undefined) throw new Error('Missing test runtime');
+      session.enter(character);
+      const host = new SessionHost({
+        nodeId: 'durable-version-test', contentVersion: content.version, logger, receipts,
+        createSession: () => session,
+      });
+      await host.prepare(characterId, initial, owner.accountId);
+      character.setFightMode(fightMode);
+      return { host, initial };
+    };
+
+    const first = await sessionOf('defense');
+    expect(first.initial.durableVersion).toBe(0);
+    await first.host.drainAll();
+    expect((await receipts.pendingFor(characterId)).map((receipt) => receipt.durableVersion)).toEqual([1]);
+    await writePendingReceipts(sweepOf(database, receipts));
+    expect(await versionOf(database, characterId)).toBe(1);
+
+    const second = await sessionOf('balanced');
+    expect(second.initial.durableVersion).toBe(1);
+    await second.host.drainAll();
+    expect((await receipts.pendingFor(characterId)).map((receipt) => receipt.durableVersion)).toEqual([2]);
+    await writePendingReceipts(sweepOf(database, receipts));
+    expect(await versionOf(database, characterId)).toBe(2);
+    expect((await absolutesOf(database, characterId))?.fightMode).toBe('balanced');
+  });
+
+  it('o ticket começa em max(coluna, maior versão pendente): a sessão nova nunca grava menos que um pendente', async () => {
+    // Um teto de liquidação estourado deixa pendentes que a coluna ainda não viu. Mutação que
+    // mata: o ticket levar só `characters.durable_version`.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const repository = new DrizzleGameRepository(database.database.db);
+    const receipts = new ReceiptStore(redis);
+    await receipts.save(receiptOf(randomUUID(), characterId, { durableVersion: 1, soul: 10 }));
+    await writePendingReceipts(sweepOf(database, receipts));
+    await receipts.save(receiptOf(randomUUID(), characterId, { durableVersion: 4 }));
+
+    const character = await repository.getCharacterById(characterId);
+    if (character === null) throw new Error('personagem não encontrado');
+    expect(character.durableVersion).toBe(1);
+    const initial = initialCharacterOf(character, [], [], undefined, await receipts.highestPendingVersion(characterId));
+
+    expect(initial.durableVersion).toBe(4);
+    // Sem pendência, é a coluna.
+    await writePendingReceipts(sweepOf(database, receipts));
+    const settled = await repository.getCharacterById(characterId);
+    if (settled === null) throw new Error('personagem não encontrado');
+    expect(initialCharacterOf(settled, [], [], undefined, await receipts.highestPendingVersion(characterId)).durableVersion)
+      .toBe(4);
   });
 });
