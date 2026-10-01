@@ -52,4 +52,5 @@ export * from './hunt/spawner.js';
 export * from './hunt/catalogue.js';
 export * from './rulesets/city.js';
 export * from './rulesets/hunt.js';
+export * from './rulesets/topology.js';
 export * from './rulesets/training.js';
