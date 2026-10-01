@@ -144,3 +144,7 @@ Nenhum NPC importado ensina estas magias (no Canary elas vêm de outro caminho �
 | `conjure-power-bolt` | paladin | 2200 |
 | `conjure-sniper-arrow` | paladin | 800 |
 | `great-death-beam` | sorcerer | AUSENTE |
+
+## Mudanças nesta importação
+
+Nenhuma — o dado commitado já confere com o Canary.
