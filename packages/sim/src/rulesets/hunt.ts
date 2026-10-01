@@ -9975,10 +9975,20 @@ const slots = bot.groups.get(group);
     }
     // A XP é da PARTY (#190, ADR 0027 decisão 3): pool por vocações únicas, dividido por igual
     // entre os elegíveis — e em solo o elegível é o matador, pela mesma condição de sempre.
-    // `#grantPartyXp` também é quem credita o Bestiário (#546: nenhum dos dois vale para quem
+    // `#grantPartyXp` também é quem credita o Bestiário (#546: nenhum dos três vale para quem
     // tem mestre).
+    //
+    // O Bosstiary vem DEPOIS, e fora do `eligible`: o Canary paga a XP e só então chama
+    // `onKilledMonster` de cada matador, sem o portão de stamina e de vida da XP (#629) — um
+    // herói exausto, ou uma party cujos membros estão todos exaustos, continua contando o boss.
+    // Os matadores saem ANTES da XP: o level up deste abate não pode mexer na régua de nível
+    // da XP compartilhada que já valia quando o monstro morreu.
     if (!isSummon && definition !== undefined) {
+      const bosstiaryKillers = definition.boss && definition.bosstiary !== undefined
+        ? this.#killersOf(session, credit)
+        : NO_MEMBERS;
       this.#grantPartyXp(session, monster, definition, eligible, credit);
+      this.#creditBosstiary(session, monster, definition, bosstiaryKillers);
     }
     // Abate comum NÃO vira evento notável. `notableEvents` é a lista curta da tela de retorno
     // (§16.2), e uma hunt de oito horas com uma linha por rato não é lista, é log.
@@ -10165,10 +10175,24 @@ const slots = bot.groups.get(group);
       const share = xpShare(experience, eligible, allMembers);
       return new Map(eligible.map((member) => [member.id, share]));
     }
+    if (this.#sharedExperienceActive(session, party)) {
+      const share = xpShare(experience, eligible, allMembers);
+      return new Map(eligible.map((member) => [member.id, share]));
+    }
+    return xpByDamage(experience, eligible, credit.damageByActor);
+  }
+
+  /**
+   * A XP compartilhada está ATIVA neste instante? (`Party::isSharedExperienceActive()` do
+   * TFS/Canary, avaliada no abate — o mesmo `Party::getSharedExperienceStatus` que `#xpShares`
+   * sempre usou.) Tudo ou nada sobre o ROSTER inteiro: nível, alcance do líder e atividade —
+   * ver `canShareExperience`. Sem líder presente, não há de onde medir o alcance: inativa.
+   */
+  #sharedExperienceActive(session: Session, party: PartyOptions): boolean {
     const leader = session.participants.find((p) => p.id === party.leaderId);
     const highestLevel = session.participants.reduce((max, p) => Math.max(max, p.level), 0);
     const rules = this.#options.party.sharedExperience ?? DEFAULT_SHARED_EXPERIENCE_RULES;
-    const canShare = leader !== undefined && canShareExperience(
+    return leader !== undefined && canShareExperience(
       session.participants.map((member) => ({
         id: member.id,
         level: member.level,
@@ -10177,11 +10201,59 @@ const slots = bot.groups.get(group);
       })),
       highestLevel, leader.position, session.nowMs, rules,
     );
-    if (canShare) {
-      const share = xpShare(experience, eligible, allMembers);
-      return new Map(eligible.map((member) => [member.id, share]));
+  }
+
+  /**
+   * Quem o Canary põe no conjunto `killers` de um monstro que morreu (`Creature::onDeath`,
+   * `src/creatures/creature.cpp`) — o conjunto a que `Player::onKilledMonster` chama, e portanto
+   * o que decide o Bosstiary (#629) lá, sem olhar stamina nem vida: só `Player::gainExperience`
+   * tem o portão de stamina, e ele é da XP. (O Bosstiary não existe no TFS.)
+   *
+   * - todo jogador com dano neste monstro no `damageMap` (o dano da invocação já entra no nome
+   *   do mestre, `#applyMonsterHitOnSummon`, como `attacker->getMaster()` no Canary) — quem não
+   *   bateu não é matador, e quem já saiu da sessão não está mais aqui para ser achado
+   *   (`getCreatureByID`);
+   * - e, com a XP compartilhada ATIVA, o roster inteiro da party (líder e todos os membros) —
+   *   mas só se algum deles bateu: o Canary acrescenta a party ao ver UM atacante dela.
+   *
+   * Sem `partyOptions` com 2+ participantes (fixture), cai para o roster inteiro — a mesma
+   * cota igual que `#xpShares` devolve nesse caso. Em ordem de entrada: o conjunto do Canary não
+   * tem ordem, e os eventos notáveis saem na da sessão.
+   */
+  #killersOf(session: Session, credit: KillCredit): readonly CharacterRuntime[] {
+    const dealers = session.participants.filter((p) => (credit.damageByActor[p.id] ?? 0) > 0);
+    if (dealers.length === 0 || session.participants.length === 1) return dealers;
+    const party = this.#party;
+    return party === undefined || this.#sharedExperienceActive(session, party)
+      ? session.participants
+      : dealers;
+  }
+
+  /**
+   * O abate de BOSS conta no Bosstiary de cada matador (#629, `Player::addBosstiaryKill` em
+   * `Player::onKilledMonster`) — e só dele: o Canary chama depois de pagar a XP, em outro laço
+   * do `Creature::onDeath`, e SEM o portão de stamina nem de vida que decide quem recebe a XP
+   * (`#grantPartyXp`). Um herói com stamina zero continua na hunt e o boss que ele ajudou a
+   * matar conta: nível e pontos. Quem chama já excluiu a invocação (`hasBeenSummoned`).
+   *
+   * `killers` é `#killersOf` avaliado ANTES da XP. Boss sem `bosstiary` (fixture de teste com
+   * `boss: true`) não conta, como o Canary faria com um `isBoss` sem `bossRaceId`, e o comum
+   * nunca passa por aqui (`Bestiary`, em `#grantPartyXp`). Fechar um nível é evento notável,
+   * como o marco do Bestiário: três vezes por boss na vida do personagem. Nada aqui consome RNG.
+   */
+  #creditBosstiary(
+    session: Session, monster: MonsterRuntime, definition: Monster, killers: readonly CharacterRuntime[],
+  ): void {
+    const boss = definition.bosstiary;
+    if (!definition.boss || boss === undefined) return;
+    const solo = session.participants.length === 1;
+    for (const member of killers) {
+      const recorded = member.bosstiary.record(boss.raceId, boss.rarity, this.#options.bosstiary);
+      if (recorded.levelReached !== null) {
+        const detail = `${monster.monsterId}/${String(recorded.levelReached)}`;
+        session.record('bosstiary-level', solo ? detail : `${member.id}/${detail}`);
+      }
     }
-    return xpByDamage(experience, eligible, credit.damageByActor);
   }
 
   /**
@@ -10249,25 +10321,15 @@ const slots = bot.groups.get(group);
       // que paga a XP (§18.6): stamina zero não conta abate. E fechar um marco é evento
       // notável, como o level up: acontece cinco vezes por monstro na vida do personagem.
       //
-      // BOSS não conta no Bestiário e conta no Bosstiary (#629): `Player::addBestiaryKill`
-      // devolve cedo para `isBoss()` e `Player::addBosstiaryKill` para o contrário — a ordem do
-      // `onKilledMonster` do Canary, Bestiário e depois Bosstiary, e o mesmo evento e a mesma
-      // elegibilidade. Um boss sem `bosstiary` (fixture de teste com `boss: true`) não conta em
-      // nenhum dos dois, como o Canary faria com um `isBoss` sem `bossRaceId`.
+      // BOSS não conta no Bestiário (#629): `Player::addBestiaryKill` devolve cedo para
+      // `isBoss()`. Ele conta no Bosstiary, mas NÃO aqui — o Bosstiary não tem o portão de
+      // stamina e de vida da XP, e `#creditBosstiary` roda depois deste laço, sobre os
+      // `killers` do Canary (`#killersOf`).
       if (!definition.boss) {
         const reached = member.bestiary.record(monster.monsterId, this.#options.bestiary);
         if (reached.milestoneReached !== null) {
           const detail = `${monster.monsterId}/${String(reached.milestoneReached)}`;
           session.record('bestiary-milestone', solo ? detail : `${member.id}/${detail}`);
-        }
-      } else if (definition.bosstiary !== undefined) {
-        const boss = definition.bosstiary;
-        const recorded = member.bosstiary.record(boss.raceId, boss.rarity, this.#options.bosstiary);
-        // Fechar um nível é evento notável, como o marco do Bestiário: três vezes por boss na
-        // vida do personagem.
-        if (recorded.levelReached !== null) {
-          const detail = `${monster.monsterId}/${String(recorded.levelReached)}`;
-          session.record('bosstiary-level', solo ? detail : `${member.id}/${detail}`);
         }
       }
     }

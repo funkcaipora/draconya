@@ -6093,12 +6093,20 @@ describe('Bosstiary: abates de boss, níveis e pontos (#629)', () => {
     expect(started.session.notableEvents.filter((event) => event.type === 'bosstiary-level')).toHaveLength(0);
   });
 
-  it('abate com stamina zero NÃO conta — é o MESMO `if` que bloqueia a XP e o Bestiário', () => {
+  it('abate com stamina zero CONTA — abate, nível e pontos —, e só a XP continua bloqueada', () => {
+    // Canary: `Player::onKilledMonster` chama `addBosstiaryKill` sem olhar stamina; só
+    // `Player::gainExperience` tem o portão (`staminaMinutes == 0`). Stamina zero não encerra a
+    // hunt (`isExhausted`, stamina.md), então o herói continua matando boss — e o registro sobe.
     const started = start({ staminaMs: 0, loaded: withBoss() });
-    run(started.session, 60_000, 100);
-    expect(started.session.aggregates.kills).toBeGreaterThan(0);
-    expect(started.hero.bosstiary.getState()).toEqual({ kills: {}, points: 0, version: 1 });
-    expect(started.hero.xp).toBe(0);
+    until5Kills(started);
+    const { session, hero } = started;
+    expect(hero.bosstiary.killsOf(9001)).toBe(session.aggregates.kills);
+    expect(hero.bosstiary.points).toBe(100);
+    const events = session.notableEvents.filter((event) => event.type === 'bosstiary-level');
+    expect(events.map((event) => event.detail)).toEqual(['boss-rat/1', 'boss-rat/2', 'boss-rat/3']);
+    // A XP segue bloqueada, e o Bestiário (portão da XP, pré-existente) não ganhou o boss.
+    expect(hero.xp).toBe(0);
+    expect(hero.bestiary.getState()).toEqual({});
   });
 
   it('variantes do mesmo boss (mesmo raceId) somam no MESMO contador', () => {
@@ -6139,6 +6147,91 @@ describe('Bosstiary: abates de boss, níveis e pontos (#629)', () => {
     const events = session.notableEvents.filter((event) => event.type === 'bosstiary-level');
     expect(events.map((event) => event.detail).sort()).toContain('hero/boss-rat/1');
     expect(events.map((event) => event.detail).sort()).toContain('other/boss-rat/1');
+  });
+
+  describe('quem é matador: o conjunto `killers` do Canary, e não a elegibilidade da XP', () => {
+    // O herói B não bate em ninguém: a wand do fixture pede 999 de mana e ele tem zero (a mesma
+    // arma "que nunca atira" do teste do #216). Vivo, na party, no alcance — e sem dano.
+    const idle = (): CharacterRuntime => new CharacterRuntime({
+      ...character().getState(), id: 'b',
+      inventory: { backpack: [], equipped: { hand: { instanceId: 'i-wand', itemId: 'wand', quantity: 1 } } },
+    });
+    const partyOf = (members: readonly CharacterRuntime[], mode: 'split' | 'shared' = 'shared'): Session => {
+      const session = createHuntSession({
+        id: 'boss-killers', content: withBoss(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+        partyOptions: { leaderId: 'hero', mode },
+      });
+      for (const member of members) session.enter(member);
+      return session;
+    };
+    const untilKills = (session: Session, kills: number): void => {
+      for (let i = 0; i < 1_200 && session.aggregates.kills < kills; i += 1) session.advanceBy(1_000);
+      expect(session.aggregates.kills).toBeGreaterThanOrEqual(kills);
+    };
+
+    it('party com TODOS exaustos: ninguém recebe XP, e o boss conta para todos', () => {
+      // `eligible` fica vazio e `#grantPartyXp` devolve cedo — o Bosstiary não depende dele.
+      const first = character({ staminaMs: 0 });
+      const second = new CharacterRuntime({ ...character({ staminaMs: 0 }).getState(), id: 'b' });
+      const session = partyOf([first, second]);
+      untilKills(session, 10);
+      for (const member of [first, second]) {
+        expect(member.bosstiary.killsOf(9001)).toBeGreaterThan(0);
+        expect(member.bosstiary.points).toBeGreaterThan(0);
+        expect(member.xp).toBe(0);
+      }
+    });
+
+    it('membro exausto conta o boss na party, ao lado do que recebe XP', () => {
+      const tired = new CharacterRuntime({ ...character({ staminaMs: 0 }).getState(), id: 'b' });
+      const fresh = character();
+      const session = partyOf([fresh, tired]);
+      untilKills(session, 10);
+      expect(fresh.bosstiary.killsOf(9001)).toBeGreaterThan(0);
+      expect(tired.bosstiary.killsOf(9001)).toBeGreaterThan(0);
+      expect(fresh.xp).toBeGreaterThan(0);
+      expect(tired.xp).toBe(0);
+    });
+
+    it('sem XP compartilhada, quem NÃO bateu no boss não conta (Canary: só o `damageMap`)', () => {
+      // B está vivo e com stamina — o `eligible` antigo o creditava —, mas nunca agiu: a
+      // atividade falha, a XP compartilhada fica inativa (`Party::canUseSharedExperience`), e o
+      // Canary só põe em `killers` quem tem dano. Sem isto, um alt parado na party farmaria ponto
+      // de boss.
+      const hero = character();
+      const loafer = idle();
+      const session = partyOf([hero, loafer]);
+      untilKills(session, 3);
+      expect(loafer.lastCombatActionAtMs).toBeNull();
+      expect(hero.bosstiary.killsOf(9001)).toBe(session.aggregates.kills / 2);
+      expect(loafer.bosstiary.getState()).toEqual({ kills: {}, points: 0, version: 1 });
+      expect(session.aggregatesOf('b').xpGained).toBe(0);
+      expect(session.notableEvents.filter((event) => event.type === 'bosstiary-level')
+        .every((event) => event.detail?.startsWith('hero/') === true)).toBe(true);
+    });
+
+    it('com a XP compartilhada ATIVA, o roster inteiro conta — inclusive quem não bateu', () => {
+      // `Creature::onDeath` acrescenta o líder e todos os membros a `killers` quando
+      // `isSharedExperienceActive()` — ao ver UM atacante da party. B não bate, mas age "agora"
+      // (injetado no snapshot, que é como a atividade sobrevive à retomada): a janela de 2 min
+      // do TFS/Canary vale e os dois dividem o abate e contam o boss.
+      const hero = character();
+      const session = partyOf([hero, idle()]);
+      session.advanceBy(100);
+      const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+      const runners = (snapshot.ruleset as { runners?: Record<string, { lastCombatActionAtMs?: number }> }).runners;
+      expect(runners?.['b']).toBeDefined();
+      (runners?.['b'] as { lastCombatActionAtMs?: number }).lastCombatActionAtMs = snapshot.logicalNowMs;
+      const resumed = Session.fromSnapshot(
+        snapshot, huntRulesetFromSnapshot(snapshot, withBoss()) as HuntRuleset, Rng.fromSeed('boss-killers'),
+      );
+      untilKills(resumed, 4);
+      const loafer = resumed.participants.find((p) => p.id === 'b');
+      const leader = resumed.participants.find((p) => p.id === 'hero');
+      expect(loafer?.lastCombatActionAtMs ?? null).toBeNull();
+      expect(leader?.bosstiary.killsOf(9001)).toBeGreaterThan(0);
+      expect(loafer?.bosstiary.killsOf(9001)).toBe(leader?.bosstiary.killsOf(9001));
+    });
   });
 
   it('o Bosstiary atravessa o snapshot', () => {
