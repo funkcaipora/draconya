@@ -3,7 +3,7 @@ import { asc, eq } from 'drizzle-orm';
 import { CharacterRuntime, createHuntSession, Inventory, levelForXp } from '@draconya/sim';
 import type { BosstiaryState, CharmsState, HazardState, InventoryState, LearnedSpellsState } from '@draconya/sim';
 import { NEUTRAL_RATES } from '@draconya/content';
-import type { Progression, Vocation } from '@draconya/content';
+import type { Hazard, Progression, Vocation } from '@draconya/content';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   accounts, characterStorages, characters, itemInstances, ledger,
@@ -16,6 +16,7 @@ import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
 import { connectTestRedis } from '../testing/redis.js';
 import { testContent, TEST_HUNT } from '../testing/content.js';
 import { SessionHost } from '../game/host.js';
+import { FakeSocket } from '../game/testing.js';
 import { createCitySessionFactory } from '../game/sessions.js';
 import {
   countLedgerRows, creditOf, settleCharacterProgress, writePendingReceipts,
@@ -994,6 +995,102 @@ describe.runIf(ready)('o Hazard chega ao Postgres pelo extrato (M44-14, #632, AD
     await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
     // Desceu de 5 para 2, e o extrato SEM o campo (seq 3) não apaga o que o anterior gravou.
     expect((await characterRow(database, characterId)).hazard).toEqual(second);
+  });
+
+  it('o extrato SÓ de hazard e o de estado da Cidade têm chaves distintas: os dois pendentes chegam ao ledger', async () => {
+    // O `ReceiptStore` guarda um extrato por `(sessionId, characterId)`. O extrato de estado da Cidade
+    // carrega valor que só sai uma vez (o gold de uma compra); o de hazard vai num fluxo próprio
+    // (`<sessionId>:hazard`) para nunca sobrescrevê-lo.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    await database.database.db.update(characters).set({ gold: 10_000 }).where(eq(characters.id, characterId));
+    const receipts = new ReceiptStore(redis);
+    const city = randomUUID();
+    const zero = {
+      durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0,
+      suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0, damageDealt: 0, healingDone: 0,
+    };
+    const choice = (seq: number, level: number) => ({
+      ...receiptOf(`${city}:hazard`, characterId), seq, aggregates: zero, notableEvents: [],
+      hazard: { maxLevel: { gardens: 3 }, currentLevel: { gardens: level }, version: 1 } satisfies HazardState,
+    });
+    // Três escolhas seguidas: a última sobrescreve as anteriores NO FLUXO DELAS (é o que se quer).
+    await receipts.save(choice(2, 2));
+    await receipts.save(choice(3, 3));
+    await receipts.save(choice(4, 1));
+    // E o extrato de estado do logout, com a compra, na chave do personagem.
+    await receipts.save({
+      ...receiptOf(city, characterId), seq: 5, aggregates: { ...zero, goldSpent: 2_500 }, notableEvents: [],
+      blessings: 1, hazard: { maxLevel: { gardens: 3 }, currentLevel: { gardens: 1 }, version: 1 },
+    });
+
+    expect(await receipts.pendingFor(characterId)).toHaveLength(2);
+    expect(await writePendingReceipts({ database: database.database.db, receipts, logger, progression }))
+      .toEqual({ written: 2, failed: 0 });
+
+    expect(await characterRow(database, characterId)).toMatchObject({
+      gold: 7_500, blessings: 1, hazard: { currentLevel: { gardens: 1 } },
+    });
+    expect(await countLedgerRows(database.database.db, city)).toBe(1);
+    expect(await countLedgerRows(database.database.db, `${city}:hazard`)).toBe(1);
+    expect(await receipts.pendingFor(characterId)).toEqual([]);
+  });
+
+  it('ponta a ponta: uma compra pendente e várias escolhas de hazard na Cidade — o gold e o registro chegam inteiros (host → Redis → ledger)', async () => {
+    // O defeito que o review do #897 achou: cada `set-hazard-level` gravava o extrato de estado inteiro
+    // na MESMA chave do `ReceiptStore`, e o segundo apagava o primeiro — e com ele o débito da compra.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const [owner] = await database.database.db.select({ accountId: characters.accountId })
+      .from(characters).where(eq(characters.id, characterId));
+    if (owner === undefined) throw new Error('Missing test character');
+    await database.database.db.update(characters).set({ gold: 10_000 }).where(eq(characters.id, characterId));
+    const receipts = new ReceiptStore(redis);
+    const content = testContent();
+    const hazard: Hazard = {
+      id: 'baseline', criticalIntervalMs: 2000, criticalChance: 750, criticalMultiplier: 25,
+      damageMultiplier: 200, defenseMultiplier: 0, dodgeMultiplier: 85, expBonusMultiplier: 2,
+      lootBonusMultiplier: 2, podDropMultiplier: 87, plunderSpawnMultiplier: 25,
+      zones: {
+        gardens: {
+          name: 'Gnomprona Gardens', minLevel: 1, maxLevel: 12,
+          crit: true, dodge: true, damageBoost: true, defenseBoost: true,
+        },
+      },
+    };
+    const zone = hazard.zones['gardens'] as Hazard['zones'][string];
+    const host = new SessionHost({
+      nodeId: 'hazard-e2e', contentVersion: content.version, logger, receipts, hazard,
+      createSession: createCitySessionFactory(content),
+    });
+    await host.prepare(characterId, undefined, owner.accountId);
+    const hero = host.sessionFor(characterId)?.participants[0] as CharacterRuntime;
+    for (let level = 1; level < 3; level += 1) { // o teto desbloqueado: 3
+      hero.hazard.select('gardens', zone, level);
+      hero.hazard.levelUp('gardens', zone);
+    }
+    const viewer = host.attach(new FakeSocket(), characterId);
+    host.flush();
+
+    // Uma compra feita na praça (o que `buy-blessing` deixa): 2 500 debitados e a bênção marcada,
+    // ainda não liquidados — só o extrato de estado do logout os leva.
+    hero.goldDelta = -2_500;
+    hero.blessings = 1;
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'defense' }); // suja o personagem, como a compra
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 2 });
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 3 });
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 2 });
+    await vi.waitFor(async () => { expect(await receipts.pendingFor(characterId)).toHaveLength(1); });
+    // Antes da varredura (que roda a cada 10 s): o logout grava o extrato de estado.
+    await host.release(characterId, 1_000, 'logout');
+    expect(await receipts.pendingFor(characterId)).toHaveLength(2);
+
+    expect(await writePendingReceipts({ database: database.database.db, receipts, logger, progression }))
+      .toEqual({ written: 2, failed: 0 });
+    expect(await characterRow(database, characterId)).toMatchObject({
+      gold: 7_500, blessings: 1,
+      hazard: { maxLevel: { gardens: 3 }, currentLevel: { gardens: 2 } },
+    });
   });
 });
 

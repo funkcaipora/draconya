@@ -347,6 +347,14 @@ const BUY_REFUSAL: Readonly<Record<BuyRefusal, string>> = {
   'stack-too-large': 'Você não pode carregar tantos.',
 };
 
+/**
+ * O fluxo de extratos da escolha de hazard (#632): o sufixo do `sessionId` com que o extrato só de
+ * hazard é gravado, para NUNCA dividir a chave `(sessionId, characterId)` do `ReceiptStore` com o
+ * extrato do personagem na Cidade — ver `#saveHazardChoice`. O `session_id` do ledger é texto, e
+ * `(session_id, seq)` segue único porque o `seq` é o contador da própria sessão.
+ */
+const HAZARD_RECEIPT_STREAM = ':hazard';
+
 /** A recusa de `set-hazard-level` (M44-14, #632, ADR 0052 d.5), em palavras. */
 const HAZARD_REFUSAL: Readonly<Record<HazardSelectRefusal, string>> = {
   'unknown-zone': 'Essa zona não tem nível de hazard.',
@@ -2757,8 +2765,10 @@ export class SessionHost {
    * servidor (invariante 4), dentro da sessão dona (invariante 9). **Só na Cidade**: o nível de
    * uma hunt em curso é FIXO desde a entrada — como a versão de conteúdo (invariante 7) —, e
    * aceitá-lo lá mudaria o dano do monstro no meio da sessão. No Canary quem muda o nível é o NPC
-   * fora da zona (`gnomadness.lua`); aqui o equivalente é a Cidade, sem rolagem (ADR 0052 d.4).
-   * O sucesso é `hazard` reenviado; a recusa, `system-message`.
+   * Gnomadness (`gnomadness.lua`), que fica DENTRO dos jardins, e a troca vale na hora
+   * (`player:updateHazard()`); o Draconya a leva para a Cidade porque a sessão é instanciada e o
+   * nível é fixado na entrada (ADR 0052 d.5), sem rolagem (d.4). O sucesso é `hazard` reenviado;
+   * a recusa, `system-message`.
    */
   #requestSetHazardLevel(viewer: Viewer, zoneId: string, level: number): void {
     const hosted = this.#hostedSession(viewer.characterId);
@@ -2771,23 +2781,81 @@ export class SessionHost {
       });
       return;
     }
-    const result = character.hazard.select(zoneId, this.#options.hazard?.zones[zoneId], level);
+    // A zona sai por PROPRIEDADE PRÓPRIA: `zones` é um objeto comum, e `zones['constructor']` ou
+    // `zones['__proto__']` seriam uma "zona" para um `zoneId` que o cliente escolhe (invariante 4).
+    const zones = this.#options.hazard?.zones;
+    const zone = zones !== undefined && Object.hasOwn(zones, zoneId) ? zones[zoneId] : undefined;
+    const revision = character.hazard.revision;
+    const result = character.hazard.select(zoneId, zone, level);
     if (!result.ok) {
       viewer.send({ type: 'system-message', level: 'warning', text: HAZARD_REFUSAL[result.reason] });
       return;
     }
-    this.#markDirty(character.id);
     hosted.sentHazard.set(character.id, character.hazard.revision);
     this.#sendToViewersOf(hosted, character.id, this.#hazardMessageFor(character));
+    // Escolher o nível em que já estava não muda nada: nenhum extrato a gravar.
+    if (character.hazard.revision === revision) return;
     // DURÁVEL JÁ, e não só no `release`: o ticket de uma party (#195) é emitido pela `api` a partir
     // da LINHA do banco, e o nível que o membro acabou de escolher na praça só chega lá pelo extrato
     // — que a `api` liquida antes de emitir (ADR 0028 d.5). Sem este envio o membro entraria na
     // hunt de hazard com o nível de ANTES, e o "menor da party" seria o de uma escolha que o
-    // jogador já tinha trocado. Um extrato de estado por escolha, idempotente pelo `(session_id,
-    // seq)` — a alternativa que o ADR 0052 deixou registrada para quando a perda incomodasse.
-    void this.#saveDurableReceipt(character.id, hosted, 'manual-exit').catch((error: unknown) => {
+    // jogador já tinha trocado. O extrato é só do hazard (`#saveHazardChoice`), e nunca o de estado
+    // inteiro: aquele leva o gold e as instâncias vendidas ainda não liquidados, e gravá-lo a cada
+    // escolha os perderia (ver lá).
+    void this.#saveHazardChoice(character.id, hosted).catch((error: unknown) => {
       this.#logger.error({ err: error, characterId: character.id }, 'Failed to save the hazard choice');
     });
+  }
+
+  /**
+   * O extrato da ESCOLHA de hazard (#632): um extrato SÓ de estado, com o registro de hazard e mais
+   * nada — agregados zerados, sem `goldDelta`, sem `removedInstances`, sem equipamento, bênçãos
+   * nem o resto do estado durável da Cidade. Não é o `#saveDurableReceipt`, de propósito, por duas
+   * razões que o review do #897 encontrou:
+   *
+   * - **O `ReceiptStore` guarda UM extrato por `(sessionId, characterId)`** (a chave não leva o
+   *   `seq`; o #823 corrige isso). A Cidade é uma sessão compartilhada, então todo extrato de um
+   *   personagem nela divide a chave — e o de estado inteiro carrega valor (o gold de uma bênção
+   *   comprada, a venda e as instâncias apagadas) que só sai UMA vez, porque `settleGoldDelta` e
+   *   `drainRemovedInstances` o zeram. Um segundo extrato na mesma chave antes da varredura do
+   *   `jobs` (até 10 s) sobrescreveria o primeiro e o valor sumiria: bênção de graça, venda
+   *   revertida. O extrato de hazard é ABSOLUTO e última-escrita-vence, então sobrescrever outro
+   *   DELE é inofensivo — e vai num fluxo próprio (`HAZARD_RECEIPT_STREAM`) para nunca encostar no
+   *   extrato do personagem.
+   * - **Nada é liquidado aqui**, então um pedido que chega durante o `await` do Redis não tem o
+   *   delta absorvido nem a marca de "sujo" apagada sem ter saído.
+   *
+   * O `seq` é o mesmo contador da sessão (`ledgerSeq`), tomado de forma síncrona antes do `await`:
+   * `(session_id, seq)` do ledger continua único. O registro é montado AGORA, e a gravação sai na
+   * ordem das chamadas (uma conexão só), então a última escolha é a última a chegar ao Redis.
+   *
+   * Se o Redis falhar, o personagem fica marcado como sujo: o extrato de estado do `release` leva o
+   * registro, como levava antes desta função existir.
+   */
+  async #saveHazardChoice(characterId: string, hosted: HostedSession): Promise<void> {
+    const receipts = this.#options.receipts;
+    const accountId = this.#accountIdByCharacter.get(characterId);
+    const owner = hosted.session.participants.find((p) => p.id === characterId);
+    if (receipts === undefined || accountId === undefined || owner === undefined) {
+      this.#markDirty(characterId);
+      return;
+    }
+    hosted.session.ledgerSeq += 1;
+    try {
+      await receipts.save({
+        sessionId: `${hosted.session.id}${HAZARD_RECEIPT_STREAM}`,
+        characterId,
+        accountId,
+        reason: 'manual-exit',
+        seq: hosted.session.ledgerSeq,
+        aggregates: EMPTY_AGGREGATES,
+        notableEvents: [],
+        hazard: owner.hazard.getState(),
+      });
+    } catch (error) {
+      this.#markDirty(characterId);
+      throw error;
+    }
   }
 
   /**

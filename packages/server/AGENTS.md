@@ -998,13 +998,27 @@ padrão de 16 (0–15) faria `SELECT 16` cair no banco 0 em silêncio.
 fornece os dois. Ver ADR 0017 para a ordem Postgres → Redis e separação entre sessão HTTP,
 `state` e ticket. Nenhum vínculo de conta é decidido somente por e-mail.
 - **O Hazard (#632) segue o padrão dos Charms e tem UMA diferença: a escolha do nível na Cidade grava
-  o extrato de estado NA HORA.** `set-hazard-level` só é aceita na sessão de Cidade (`shared`) e na
-  hunt é recusada — o nível é fixo na entrada. O registro `characters.hazard` (migração `0023`) é
+  um extrato SÓ de hazard NA HORA.** `set-hazard-level` só é aceita na sessão de Cidade (`shared`) e
+  na hunt é recusada — o nível é fixo na entrada. O registro `characters.hazard` (migração `0027`) é
   `jsonb`, ABSOLUTO e última-escrita-vence (a escolha desce e sobe — fundir pelo maior a desfaria),
   lido no ticket (`isHazardState`, torto vira AUSENTE) e escrito pelo ledger. A diferença: o ticket
   de uma party (#195) é emitido pela `api` a partir da LINHA do banco, então um nível que só saísse
   no `release` não chegaria ao ticket do membro; por isso `#requestSetHazardLevel` chama
-  `#saveDurableReceipt` logo depois da escolha (ADR 0052, emenda 2026-09-30). `#presentHazard`
-  reenvia `hazard` quando a hunt sobe o teto (compara `HazardProgress.revision`, um inteiro). Um
-  serviço de Cidade novo que a party leia pelo ticket precisa da mesma coisa.
+  `#saveHazardChoice` logo depois de uma escolha que MUDOU o nível (ADR 0052, emenda 2026-09-30).
+  **Três armadilhas.** (1) **Esse extrato NUNCA é o `#saveDurableReceipt`**: o `ReceiptStore` guarda
+  UM extrato por `(sessionId, characterId)` (a chave não leva o `seq` até o #823 entrar), a Cidade é
+  uma sessão compartilhada, e o extrato de estado inteiro leva valor que só sai uma vez
+  (`goldDelta`, `removedInstances`, zerados por `settleGoldDelta`/`drainRemovedInstances`) — um
+  segundo extrato na mesma chave antes da varredura (até 10 s) o sobrescreveria e a compra de uma
+  bênção sairia de graça. O de hazard leva só o registro, com agregados zerados, e vai no fluxo
+  próprio `<sessionId>:hazard` (`HAZARD_RECEIPT_STREAM`): sobrescrever outro DELE é inofensivo
+  (absoluto, última escrita vence), e ele nunca encosta no extrato do personagem. (2) **Nada se
+  liquida nem se "limpa" nele**: se o Redis falha, `#markDirty` deixa o registro para o extrato do
+  logout; se der certo, o logout não o repete. (3) **A zona resolve por propriedade PRÓPRIA**
+  (`Object.hasOwn`): `zones` é um objeto comum, e `zones['constructor']` não é zona. Escolher o nível
+  em que já estava não grava nada (`HazardProgress.revision`). `#presentHazard` reenvia `hazard`
+  quando a hunt sobe o teto (compara `revision`, um inteiro). Um serviço de Cidade novo que a party
+  leia pelo ticket precisa da mesma coisa — e do mesmo cuidado com a chave. Quando o #823 (extrato
+  por `seq` e versão durável, PR #896) entrar, `hazard` precisa entrar na lista dos campos
+  ABSOLUTOS que ele guarda por versão: `applyProgression` o escreve sem guarda hoje.
 
