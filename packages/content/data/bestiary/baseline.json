@@ -3045,6 +3045,17 @@
       "stars": 4,
       "occurrence": 0
     },
+    "lost-exile": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 1529,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
     "lost-husher": {
       "class": "humanoid",
       "race": "humanoid",

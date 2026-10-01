@@ -17,10 +17,10 @@
 // índice troca isso por um `SMEMBERS` que quase sempre volta vazio.
 
 import type { ChainableCommander, Redis } from 'ioredis';
-import { isFightMode } from '@draconya/sim';
+import { isFamiliarState, isFightMode } from '@draconya/sim';
 import type {
-  Aggregates, BestiaryState, BosstiaryState, CharacterStorageMap, CharmsState, EndReason, FightMode,
-  ItemInstanceOverlay, LearnedSpellsState, NotableEvent, SkillsState,
+  Aggregates, BestiaryState, BosstiaryState, CharacterStorageMap, CharmsState, EndReason, FamiliarState,
+  FightMode, ItemInstanceOverlay, LearnedSpellsState, NotableEvent, SkillsState,
 } from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
 
@@ -90,6 +90,15 @@ export interface SessionReceipt {
    * antigo em deploy) não toca na coluna.
    */
   readonly learnedSpells?: LearnedSpellsState;
+  /**
+   * O familiar de vocação (M38-02, #599, ADR 0057 d.3, ADR 0052 d.1): os carimbos de relógio de
+   * PAREDE — até quando a invocação vale e até quando a magia volta. ABSOLUTO e ÚLTIMA-ESCRITA-
+   * VENCE, como `charms` — e NUNCA fundido pelo maior: o `summonUntilMs` DESCE quando o familiar
+   * morre (`FamiliarDeath` zera a recriação), e "ficar com o maior" ressuscitaria o familiar se um
+   * extrato antigo, fora de ordem, chegasse depois de um mais novo já aplicado. Ausente é sessão
+   * sem o registro (Cidade ou nó antigo em deploy): não toca na coluna.
+   */
+  readonly familiar?: FamiliarState;
   /**
    * A munição escolhida por família (#152): `{ arrow: 'sniper-arrow' }`. ABSOLUTA e
    * última-escrita-vence: é preferência do jogador, não progresso — um extrato antigo fora de
@@ -403,6 +412,9 @@ function parseReceipt(raw: string): SessionReceipt | null {
     ...(typeof value['learnedSpells'] === 'object' && value['learnedSpells'] !== null
       ? { learnedSpells: value['learnedSpells'] as LearnedSpellsState }
       : {}),
+    // O familiar (M38-02, #599): lista de PERMISSÃO, pela razão das skills — e validado por forma,
+    // porque a coluna é `jsonb` sem CHECK e um registro torto nunca deve chegar ao banco.
+    ...(isFamiliarState(value['familiar']) ? { familiar: value['familiar'] } : {}),
     // A munição (#152): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['ammo'] === 'object' && value['ammo'] !== null
       ? { ammo: value['ammo'] as Record<string, string> }

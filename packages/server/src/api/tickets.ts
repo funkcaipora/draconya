@@ -4,7 +4,10 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { OutfitColors } from '@draconya/protocol';
 import { isFightMode, readItemOverlay } from '@draconya/sim';
-import type { BestiaryState, BosstiaryState, CharmsState, LearnedSpellsState } from '@draconya/sim';
+import { isFamiliarState } from '@draconya/sim';
+import type {
+  BestiaryState, BosstiaryState, CharmsState, FamiliarState, LearnedSpellsState,
+} from '@draconya/sim';
 import {
   isAmmoSelection, isBestiaryState, isBosstiaryState, isCharmsState, isLearnedSpellsState, isStockMap,
 } from '../tickets.js';
@@ -260,6 +263,9 @@ export function initialCharacterOf(
     // E as magias aprendidas (#624, ADR 0058), pela mesma régua: sem isto, quem comprou ontem
     // entraria hoje na hunt sem lançar nada, apesar de ter pago.
     ...learnedSpellsOf(character.learnedSpells),
+    // E o familiar (M38-02, #599, ADR 0057 d.3): os carimbos de parede que o cooldown de 30 min e a
+    // recriação ao entrar consultam — sem eles, sair da hunt zeraria o cooldown.
+    ...familiarOf(character.familiar),
     // E os storages (#731, ADR 0050 d.6 T2): uma linha por chave, não uma coluna — a montagem é
     // a mesma ideia de `inventoryOf`, reduzindo as linhas do banco a um mapa.
     ...storagesOf(storages),
@@ -330,6 +336,11 @@ function learnedSpellsOf(stored: unknown): { learnedSpells?: LearnedSpellsState 
 /** A economia de Charms (M39-02, #602), pela mesma régua e razão de `bestiaryOf`. */
 function charmsOf(stored: unknown): { charms?: CharmsState } {
   return isCharmsState(stored) ? { charms: stored } : {};
+}
+
+/** O familiar (M38-02, #599), pela mesma régua e razão de `charmsOf`. */
+function familiarOf(stored: unknown): { familiar?: FamiliarState } {
+  return isFamiliarState(stored) ? { familiar: stored } : {};
 }
 
 /**

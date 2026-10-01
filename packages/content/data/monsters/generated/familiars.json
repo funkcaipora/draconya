@@ -1,0 +1,678 @@
+[
+  {
+    "id": "druid-familiar",
+    "name": "Druid familiar",
+    "health": 20000,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 300
+    },
+    "armor": 55,
+    "defense": 55,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 309,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 300
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 5
+        },
+        "power": {
+          "min": 230,
+          "max": 260
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "earth",
+          "impactKey": "stones"
+        }
+      },
+      {
+        "id": "earthbeam",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 90,
+          "max": 150
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "groundshaker"
+        }
+      },
+      {
+        "id": "summon-challenge",
+        "cadenceMs": 2000,
+        "chance": 0.4,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "challenge": {
+          "durationMs": 8000
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.75,
+        "heal": {
+          "min": 600,
+          "max": 600
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      }
+    ],
+    "familiar": true,
+    "manaCost": 3000,
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/familiars/druid_familiar.lua"
+    }
+  },
+  {
+    "id": "knight-familiar",
+    "name": "Knight familiar",
+    "health": 10000,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 200
+    },
+    "armor": 55,
+    "defense": 55,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 309,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "suddendeath",
+        "cadenceMs": 2000,
+        "chance": 0.17,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 300,
+          "max": 350
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "deathball",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 6,
+          "area": {
+            "shape": "circle",
+            "radius": 2,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 200,
+          "max": 250
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "deathball-2",
+        "cadenceMs": 3000,
+        "chance": 0.25,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 180,
+          "max": 250
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "iceball",
+        "cadenceMs": 3000,
+        "chance": 0.25,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 180,
+          "max": 250
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "icearea"
+        }
+      },
+      {
+        "id": "iceball-2",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 6,
+          "area": {
+            "shape": "circle",
+            "radius": 2,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 200,
+          "max": 250
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "icetornado"
+        }
+      },
+      {
+        "id": "icestrike",
+        "cadenceMs": 2000,
+        "chance": 0.17,
+        "target": {
+          "range": 3
+        },
+        "power": {
+          "min": 300,
+          "max": 350
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "smallice",
+          "impactKey": "iceattack"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.75,
+        "heal": {
+          "min": 300,
+          "max": 300
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      }
+    ],
+    "familiar": true,
+    "manaCost": 1000,
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/familiars/knight_familiar.lua"
+    }
+  },
+  {
+    "id": "paladin-familiar",
+    "name": "Paladin familiar",
+    "health": 15000,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 200
+    },
+    "armor": 55,
+    "defense": 55,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 309,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 2,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "holyball",
+        "cadenceMs": 2000,
+        "chance": 0.18,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 200,
+          "max": 270
+        },
+        "damageType": "holy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "holy",
+          "impactKey": "holyarea"
+        }
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 2000,
+        "chance": 0.18,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 200,
+          "max": 270
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "fireattack"
+        }
+      },
+      {
+        "id": "fireball-2",
+        "cadenceMs": 2000,
+        "chance": 0.18,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 5,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 170,
+          "max": 230
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "fireattack"
+        }
+      },
+      {
+        "id": "holyball-2",
+        "cadenceMs": 2000,
+        "chance": 0.18,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 5,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 170,
+          "max": 230
+        },
+        "damageType": "holy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "holy",
+          "impactKey": "holyarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.75,
+        "heal": {
+          "min": 450,
+          "max": 450
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      }
+    ],
+    "familiar": true,
+    "manaCost": 2000,
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/familiars/paladin_familiar.lua"
+    }
+  },
+  {
+    "id": "sorcerer-familiar",
+    "name": "Sorcerer familiar",
+    "health": 20000,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 280
+    },
+    "armor": 55,
+    "defense": 55,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 309,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 280
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "lifedrainbeam",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 90,
+          "max": 150
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "energybeam",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 190,
+          "max": 210
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "energyhit"
+        }
+      },
+      {
+        "id": "summon-challenge",
+        "cadenceMs": 2000,
+        "chance": 0.4,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "challenge": {
+          "durationMs": 8000
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.75,
+        "heal": {
+          "min": 600,
+          "max": 600
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      }
+    ],
+    "familiar": true,
+    "manaCost": 3000,
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/familiars/sorcerer_familiar.lua"
+    }
+  }
+]

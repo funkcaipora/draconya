@@ -22,6 +22,8 @@ import { Cooldowns } from './cooldown.js';
 import type { CooldownState } from './cooldown.js';
 import { Contribution } from './death.js';
 import type { ContributionState } from './death.js';
+import { EMPTY_FAMILIAR_STATE, isEmptyFamiliarState, isFamiliarState } from './familiar.js';
+import type { FamiliarState } from './familiar.js';
 import { Inventory } from './inventory.js';
 import type { CarriedItem, ContainerRules, InventoryState } from './inventory.js';
 import { LearnedSpells } from './learned-spells.js';
@@ -271,6 +273,14 @@ export interface CharacterState {
    */
   readonly blessings?: number;
   /**
+   * O familiar de vocação (#599, M38-02, ADR 0057 d.3, ADR 0052 d.1): os dois instantes de
+   * relógio de PAREDE que o personagem carrega entre hunts — até quando a invocação vale e até
+   * quando a magia volta (ver `familiar.ts`). Registro `jsonb` por sistema, lido inteiro no
+   * ticket e escrito inteiro pelo extrato (última escrita vence, como `charms`). Ausente é o
+   * personagem que nunca invocou, sem bump de `SNAPSHOT_FORMAT_VERSION`, como `fedMs`.
+   */
+  readonly familiar?: FamiliarState;
+  /**
    * Um `use-item`/`use-item-on` ACEITO mas ADIADO pela exaustão de ação compartilhada (#726,
    * ADR 0049 decisão 6 — o `setNextActionTask` do Canary): agendado para o vencimento do livro
    * `exhaust:action`, como um evento `pending-manual-action` da fila (invariante 2). Um segundo
@@ -499,6 +509,12 @@ export class CharacterRuntime {
   fedMs: number;
   /** Bitmask de bênçãos (#570). Só o ruleset de Cidade (compra) e a morte (consumo) escrevem. */
   blessings: number;
+  /**
+   * O familiar (#599): instantes de relógio de PAREDE, ver `familiar.ts`. Só o ruleset da hunt
+   * escreve (invariante 9) — no lançamento e na morte do familiar. Trocado por objeto novo, nunca
+   * mutado no lugar: o extrato e o snapshot leem a referência.
+   */
+  familiar: FamiliarState;
   /** A ação manual adiada (#726). `null` é nenhuma. Só o ruleset escreve. */
   pendingManualAction: PendingManualActionState | null;
   /**
@@ -591,6 +607,9 @@ export class CharacterRuntime {
     this.attackPractice = state.attackPractice ?? INITIAL_ATTACK_PRACTICE;
     this.fedMs = state.fedMs ?? 0;
     this.blessings = state.blessings ?? 0;
+    // Defensivo, como `readCharacterStorage`: um registro torto (ticket de outro formato) vira
+    // "nunca invocou" em vez de travar a sessão.
+    this.familiar = isFamiliarState(state.familiar) ? state.familiar : EMPTY_FAMILIAR_STATE;
     this.pendingManualAction = state.pendingManualAction ?? null;
     this.lastCombatActionAtMs = state.lastCombatActionAtMs ?? null;
     for (const [type, untilMs] of Object.entries(state.cleanseImmunity ?? {})) {
@@ -979,6 +998,7 @@ export class CharacterRuntime {
       // Mesmo padrão: omitido em zero, o de quem nunca comeu/nunca consumiu carga (#726).
       ...(this.fedMs === 0 ? {} : { fedMs: this.fedMs }),
       ...(this.blessings === 0 ? {} : { blessings: this.blessings }),
+      ...(isEmptyFamiliarState(this.familiar) ? {} : { familiar: this.familiar }),
       ...(this.pendingManualAction === null ? {} : { pendingManualAction: this.pendingManualAction }),
       ...(this.lastCombatActionAtMs === null
         ? {} : { lastCombatActionAtMs: this.lastCombatActionAtMs }),

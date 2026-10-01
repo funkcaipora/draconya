@@ -297,6 +297,10 @@ export function characterFromTicket(
       // não lança nada até comprar (quem já existia ganhou o registro pela migração 0024).
       ...(initialCharacter.learnedSpells === undefined
         ? {} : { learnedSpells: initialCharacter.learnedSpells }),
+      // O familiar (M38-02, #599, ADR 0057 d.3): os carimbos de parede do cooldown e da recriação
+      // — validados na emissão e no consumo (`isFamiliarState`); ausente, o personagem nunca
+      // invocou, e a sessão parte sem carimbo.
+      ...(initialCharacter.familiar === undefined ? {} : { familiar: initialCharacter.familiar }),
       // Os storages (#731, ADR 0050 d.6 T2): validados como o Bestiário; ausente, a sessão
       // parte sem storage nenhum setado — a mesma degradação de sempre.
       ...(initialCharacter.storages === undefined ? {} : { storages: initialCharacter.storages }),

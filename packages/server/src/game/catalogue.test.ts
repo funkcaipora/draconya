@@ -656,6 +656,19 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     }
   });
 
+  it('o familiar anuncia o cooldown de VERDADE (30 min), e a magia comum o seu (#599)', () => {
+    // O `cooldownMs` da magia do familiar é o `groupCooldown` do script (2 s); os 30 min moram no
+    // efeito, e é o que o jogador espera ver na barra. Mutação que mata: anunciar `spell.cooldownMs`.
+    const { bot } = buildCatalogue(loadContent(DATA));
+    const familiar = bot.spells.find((spell) => spell.id === 'summon-knight-familiar');
+    expect(familiar).toMatchObject({
+      effect: 'familiar', minLevel: 200, manaCost: 1_000, cooldownMs: 1_800_000, groupCooldownMs: 2_000,
+      detail: { durationMs: 900_000 },
+    });
+    // A magia comum continua com o dela.
+    expect(bot.spells.find((spell) => spell.id === 'summon-creature-druid')).toMatchObject({ cooldownMs: 2_000 });
+  });
+
   it('leva description quando a hunt a define (como a rat-cellars do conteúdo real) e omite a chave quando ausente (SV-21, #357)', () => {
     const realContent = loadContent(DATA);
     const { hunts } = buildCatalogue(realContent);

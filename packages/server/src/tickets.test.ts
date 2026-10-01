@@ -205,6 +205,41 @@ describe.runIf(available)('session ticket', () => {
     }
   });
 
+  it('carries the familiar stamps, and drops a record it cannot trust (#599)', async () => {
+    // Os dois carimbos de relógio de PAREDE do familiar entram na sessão pelo ticket: é ELA quem os
+    // compara com o relógio, e o cooldown de 30 min tem de atravessar a saída da hunt. Um registro
+    // torto vira AUSENTE, nunca ticket recusado — a linha é `jsonb` sem CHECK. Mutação que mata:
+    // aceitar qualquer objeto (o `-1` e o texto passariam), ou recusar o registro vazio.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+
+    const familiar = { version: 1, summonUntilMs: 1_790_000_900_000, cooldownUntilMs: 1_790_001_800_000 };
+    const bom = await tickets.issue('a1', 'p1', { level: 1, xp: 0, familiar });
+    if (!bom.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(bom.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+      initialCharacter: { level: 1, xp: 0, familiar },
+    });
+
+    for (const ruim of [
+      { version: 1, summonUntilMs: -1, cooldownUntilMs: 0 },
+      { version: 1, summonUntilMs: 0, cooldownUntilMs: 1.5 },
+      { version: 1, summonUntilMs: '0', cooldownUntilMs: 0 },
+      { version: 1, summonUntilMs: 0 },
+      { summonUntilMs: 0, cooldownUntilMs: 0 },
+      [1, 2], 'nunca', null,
+    ]) {
+      const issued = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, familiar: ruim } as unknown as InitialCharacter,
+      );
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1'), JSON.stringify(ruim)).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0 },
+      });
+    }
+  });
+
   it('carries the bestiary, and drops a map it cannot trust (FUN-113)', async () => {
     // Os abates entram na sessão pelo ticket porque o bônus dos marcos escala a XP DURANTE a
     // hunt (DT-01) — um personagem que entrasse em `{}` perderia o marco que já cruzou. E um

@@ -476,7 +476,7 @@ describe('castSpell — as magias utilitárias (#623)', () => {
     // `Spell::playerSpellCheck` (cooldown, level, mana, alma) vem primeiro; só o `onCastSpell` do
     // script recusa o destino — sem custo e sem cooldown (`postCastSpell` só roda com `true`).
     const caster = hero({ mana: 100, level: 20 });
-    expect(castSpell(caster, levitate, null, 0, combat, rng(), undefined, caster, undefined, null, undefined, undefined, 'not-possible'))
+    expect(castSpell(caster, levitate, null, 0, combat, rng(), undefined, caster, undefined, null, undefined, undefined, undefined, 'not-possible'))
       .toEqual({ ok: false, reason: 'not-possible', retryInMs: 0 });
     expect(caster.mana).toBe(100);
     expect(caster.cooldowns.remainingMs('spell:levitate-up', 0)).toBe(0);
@@ -484,11 +484,11 @@ describe('castSpell — as magias utilitárias (#623)', () => {
 
     // O level vem antes: quem não tem o level ouve o level, não o destino.
     const novice = hero({ level: 1 });
-    expect(castSpell(novice, levitate, null, 0, combat, rng(), undefined, novice, undefined, null, undefined, undefined, 'not-possible'))
+    expect(castSpell(novice, levitate, null, 0, combat, rng(), undefined, novice, undefined, null, undefined, undefined, undefined, 'not-possible'))
       .toEqual({ ok: false, reason: 'level-too-low', retryInMs: 0 });
     // A mana vem antes também: sem mana E sem destino, o jogador ouve a mana.
     const dry = hero({ mana: 10, level: 20 });
-    expect(castSpell(dry, levitate, null, 0, combat, rng(), undefined, dry, undefined, null, undefined, undefined, 'not-possible'))
+    expect(castSpell(dry, levitate, null, 0, combat, rng(), undefined, dry, undefined, null, undefined, undefined, undefined, 'not-possible'))
       .toEqual({ ok: false, reason: 'not-enough-mana', retryInMs: 0 });
   });
 
@@ -503,7 +503,7 @@ describe('castSpell — as magias utilitárias (#623)', () => {
 
   it('a `preflight` é IGNORADA por quem não é utilitária: uma cura não lê a recusa do ruleset', () => {
     const caster = hero({ health: 10 });
-    expect(castSpell(caster, heal, null, 0, combat, rng(), undefined, caster, undefined, null, undefined, undefined, 'not-possible').ok).toBe(true);
+    expect(castSpell(caster, heal, null, 0, combat, rng(), undefined, caster, undefined, null, undefined, undefined, undefined, 'not-possible').ok).toBe(true);
   });
 
   it('Light devolve a condição com o nível, a cor e o prazo TOTAL; sem sorteio', () => {

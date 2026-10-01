@@ -57,6 +57,21 @@ catalog:promote-monsters` (`preserveHandAuthored`) NUNCA sobrescreve essas quatr
 reimportação futura — elas só mudam de novo por decisão deliberada, como o #581. `load.ts` não lê
 `staging/`, e nada do jogo deve ler.
 
+**Os familiares de vocação (#599)**: `familiars/` deixou de ser pulada — o leitor gera os quatro
+(`data/monsters/generated/familiars.json`; o do Monk sai pela linha explícita `OUT_OF_CUT_MONSTERS`,
+com o motivo no relatório), com o `lookType` de `FAMILIAR_ID` (`data/libs/systems/familiar.lua`, o
+`.lua` do monstro o deixa comentado). Entram `familiar: true` e o `manaCost` — **nunca `summonable`**:
+o Canary o declara `false` nos quatro, e é isso que impede a Summon Creature de invocá-los. As
+três magias por NOME que eles lançam ganharam mapeador (`scripts/catalog/monster-abilities.ts`):
+`ice strike` e `sudden death rune` (dano da PRÓPRIA entrada — `Monster::getCombatValues` —, tipo e
+alvo único do script da magia registrada, e o `spell:range(3)` do Ice Strike por cima do `range` do
+monstro) e `summon challenge` (a ability `challenge`, 8 s, `circle` de raio 4 de MONSTRO centrado
+no lançador = os 21 tiles da `AREA_CIRCLE2X2`). Efeito colateral do mapeador do Sudden Death Rune:
+os monstros que o usam e antes ficavam fora por isso (lost exile, scarlett etzel, xogixath) passaram
+a ser gerados. A magia `familiar` (`spellEffectSchema`) carrega `durationMs`/`cooldownMs`, e o
+`cooldownMs` da própria magia fica em 2 s (o `groupCooldown` do script) — ver `docs/product/
+combat.md`, "O familiar de vocação".
+
 **`staging/items/` também não é conteúdo carregado** (#573/#574): `pnpm catalog:import items`
 escreve lá — 1946 itens de caça. `items.ts` já resolve `slot: 'hand'` por default em TODA arma
 sem `<script><attribute key="slot">` (a maioria do Canary não declara — os 22 itens `kind:

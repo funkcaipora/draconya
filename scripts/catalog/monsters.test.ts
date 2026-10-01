@@ -9,8 +9,8 @@ import type { CatalogEntity } from './generated-writer.js';
 import {
   BESTIARY_CLASS_MAP, CANARY_LOOT_CHANCE_SCALE, convertMonster, corpseAnimatableWindows,
   corpseTtlMsFromChain, listMonsterFiles, loadReaderDeps, lootChance, readCorpseDecayChains,
-  readCorpseItemFlags, readMonsterCatalog, readTfsSpeeds, slugify, type CorpseItemFlags, type DecayStage,
-  type MonsterReaderDeps,
+  readCorpseItemFlags, readFamiliarLooktypes, readMonsterCatalog, readTfsSpeeds, slugify,
+  type CorpseItemFlags, type DecayStage, type MonsterReaderDeps,
 } from './monsters.js';
 import type { CatalogImportContext } from './registry.js';
 import { ABILITY_KIND_SUPPORTED } from './monster-abilities.js';
@@ -111,14 +111,65 @@ monster.defenses = { defense = 1, armor = 1, { name = "speed", interval = 2000, 
 mType:register(monster)
 `;
 
+// O familiar (#599): o `lookType` fica COMENTADO no Lua do Canary (quem o define é a magia, por
+// vocação), e as três magias por nome — `summon challenge`, `ice strike` e `sudden death rune` — são
+// as que o leitor precisou aprender. Números inventados, o formato é o do arquivo real.
 const FAMILIAR = `
 local mType = Game.createMonsterType("Test Familiar")
 local monster = {}
-monster.outfit = { lookType = 21 }
-monster.health = 50
-monster.maxHealth = 50
-monster.speed = 80
+monster.description = "a test familiar"
+monster.experience = 0
+monster.outfit = {
+  --lookType = 993,
+  lookHead = 0,
+}
+monster.health = 500
+monster.maxHealth = 500
+monster.corpse = 0
+monster.speed = 154
+monster.manaCost = 300
+monster.flags = {
+  summonable = false, attackable = true, hostile = false, pushable = false, staticAttackChance = 90,
+  targetDistance = 4, runHealth = 0, isBlockable = false, familiar = true,
+}
+monster.attacks = {
+  { name = "melee", interval = 2000, chance = 100, minDamage = 0, maxDamage = -20 },
+  { name = "sudden death rune", interval = 2000, chance = 17, minDamage = -30, maxDamage = -35, range = 7, target = false },
+  { name = "ice strike", interval = 2000, chance = 17, minDamage = -30, maxDamage = -35, range = 5, target = true },
+  { name = "summon challenge", interval = 2000, chance = 40, target = false },
+}
+monster.defenses = {
+  defense = 55, armor = 55,
+  { name = "combat", interval = 2000, chance = 75, type = COMBAT_HEALING, minDamage = 60, maxDamage = 60, effect = CONST_ME_MAGIC_GREEN, target = false },
+}
+monster.immunities = {
+  { type = "paralyze", condition = true },
+  { type = "invisible", condition = true },
+}
 mType:register(monster)
+`;
+
+// O familiar do Monk: converteria sem bloqueio nenhum, e o recorte (ADR 0051) o barra à parte.
+const MONK_FAMILIAR = `
+local mType = Game.createMonsterType("Monk familiar")
+local monster = {}
+monster.outfit = { lookType = 1818, lookHead = 0 }
+monster.health = 500
+monster.maxHealth = 500
+monster.speed = 154
+monster.manaCost = 200
+monster.flags = { familiar = true, hostile = false }
+mType:register(monster)
+`;
+
+// `data/libs/systems/familiar.lua`: as chaves são expressões (`VOCATION.BASE_ID.X`) que o avaliador
+// literal não resolve, então o leitor casa só os pares `{ id = N, name = "…" }`.
+const FAMILIAR_LUA = `
+FAMILIAR_ID = {
+  [VOCATION.BASE_ID.SORCERER] = { id = 994, name = "Sorcerer familiar" },
+  [VOCATION.BASE_ID.DRUID] = { id = 993, name = "Test Familiar" },
+  [VOCATION.BASE_ID.MONK] = { id = 1818, name = "Monk familiar" },
+}
 `;
 
 // Invoca um monstro que não é gerado (o Test Wraith está fora do pacote) — sai junto.
@@ -225,6 +276,8 @@ function fixture(withTfs: boolean): CatalogImportContext {
   write(join(monsters, 'mammals', 'test_rat.lua'), RAT);
   write(join(monsters, 'vermins', 'test_spitter.lua'), SPITTER);
   write(join(monsters, 'familiars', 'test_familiar.lua'), FAMILIAR);
+  write(join(monsters, 'familiars', 'monk_familiar.lua'), MONK_FAMILIAR);
+  write(join(canary, 'data', 'libs', 'systems', 'familiar.lua'), FAMILIAR_LUA);
   write(join(monsters, 'undeads', 'test_wraith.lua'), OUT_OF_PACK);
   write(join(monsters, 'undeads', 'test_summoner.lua'), SUMMONER);
   write(join(monsters, 'mammals', 'test_rat_caller.lua'), RAT_CALLER);
@@ -631,15 +684,84 @@ describe('o Bosstiary do Canary (#629)', () => {
   });
 });
 
-describe('readMonsterCatalog (fixture sintética)', () => {
-  it('fatia por pasta do Canary, pula familiars/, e manda o bloqueado ao relatório', () => {
+describe('o familiar de vocação (#599, M38-02, ADR 0057 d.3)', () => {
+  const familiar = () => {
     const ctx = fixture(false);
-    expect(listMonsterFiles(ctx.canaryDir)).not.toContain('data-otservbr-global/monster/familiars/test_familiar.lua');
+    const text = readFileSync(join(ctx.canaryDir, 'data-otservbr-global/monster/familiars/test_familiar.lua'), 'utf8');
+    return convertMonster(text, 'data-otservbr-global/monster/familiars/test_familiar.lua', 'familiars', COMMIT, deps(ctx));
+  };
+
+  it('readFamiliarLooktypes casa só os pares `{ id, name }` do FAMILIAR_ID, e nunca lança', () => {
+    const ctx = fixture(false);
+    expect(readFamiliarLooktypes(join(ctx.canaryDir, 'data/libs/systems/familiar.lua'))).toEqual(new Map([
+      ['Sorcerer familiar', 994], ['Test Familiar', 993], ['Monk familiar', 1818],
+    ]));
+    expect(readFamiliarLooktypes('/nao/existe')).toEqual(new Map());
+  });
+
+  it('o lookType comentado vem da tabela por nome, e `familiar`/`manaCost` saem; `summonable` NÃO', () => {
+    const converted = familiar();
+    expect(converted.blockers).toEqual([]);
+    expect(converted.entity).toMatchObject({
+      id: 'test-familiar', familiar: true, manaCost: 300, outfitId: 993,
+      // 154 do Canary × 2, porque o fixture não tem o monstro no TFS.
+      speed: 308, targetDistance: 4, staticAttack: 0.9, blockable: false,
+      conditionImmunities: ['invisible', 'paralyze'],
+    });
+    // O Canary declara `summonable = false` nos quatro: a Summon Creature não os invoca.
+    expect(converted.entity['summonable']).toBeUndefined();
+    // Passa no `monsterSchema` (o `.refine` de summonable/manaCost não cobra nada de um familiar).
+    expect(() => monsterSchema.parse(asMonster(converted.entity))).not.toThrow();
+  });
+
+  it('sem a tabela do FAMILIAR_ID o familiar cai no bloqueio de sempre (sem lookType)', () => {
+    const ctx = fixture(false);
+    const text = readFileSync(join(ctx.canaryDir, 'data-otservbr-global/monster/familiars/test_familiar.lua'), 'utf8');
+    const { familiarLooktypes: _unused, ...withoutTable } = deps(ctx);
+    const converted = convertMonster(text, 'x/familiars/test_familiar.lua', 'familiars', COMMIT, withoutTable);
+    expect(converted.blockers).toEqual(['sem aparência (lookType 0)']);
+  });
+
+  it('as três magias por nome viram ability: SD rune e ice strike (dano da entrada) e summon challenge', () => {
+    const abilities = familiar().entity['abilities'] as readonly Record<string, unknown>[];
+    const byId = (id: string) => abilities.find((ability) => ability['id'] === id);
+    // `Monster::getCombatValues`: o dano é o `minDamage`/`maxDamage` da ENTRADA, não a fórmula de
+    // level/magic level da magia registrada.
+    expect(byId('suddendeath')).toMatchObject({
+      cadenceMs: 2000, chance: 0.17, target: { range: 7 }, power: { min: 30, max: 35 }, damageType: 'death',
+      presentation: { missileKey: 'suddendeath', impactKey: 'mortarea' },
+    });
+    // O `spell:range(3)` do `ice_strike.lua` vale por cima do `range = 5` do monstro (`canThrowSpell`).
+    expect(byId('icestrike')).toMatchObject({
+      chance: 0.17, target: { range: 3 }, power: { min: 30, max: 35 }, damageType: 'ice',
+      presentation: { missileKey: 'smallice', impactKey: 'iceattack' },
+    });
+    expect(familiar().notes.spellNotes.some((note) => note.startsWith('ice strike: alcance 5 → 3'))).toBe(true);
+    // `AREA_CIRCLE2X2` centrado no lançador (21 tiles) = o círculo de raio 4 da tabela de anéis de
+    // MONSTRO; 8 s de provocação (`doChallengeCreature(creature, target, 8000)`); sem dano.
+    expect(byId('summon-challenge')).toEqual({
+      id: 'summon-challenge', cadenceMs: 2000, chance: 0.4,
+      target: { range: 11, area: { shape: 'circle', radius: 4, centered: 'caster' } },
+      power: 0, damageType: 'physical', presentation: { impactKey: 'blueshimmer' },
+      challenge: { durationMs: 8000 },
+    });
+  });
+});
+
+describe('readMonsterCatalog (fixture sintética)', () => {
+  it('fatia por pasta do Canary, lê familiars/ (#599), e manda o bloqueado ao relatório', () => {
+    const ctx = fixture(false);
+    expect(listMonsterFiles(ctx.canaryDir)).toContain('data-otservbr-global/monster/familiars/test_familiar.lua');
     const catalog = readMonsterCatalog(ctx, deps(ctx));
 
-    expect([...catalog.slices.keys()].sort()).toEqual(['dragons', 'mammals', 'undeads']);
+    expect([...catalog.slices.keys()].sort()).toEqual(['dragons', 'familiars', 'mammals', 'undeads']);
     expect(catalog.slices.get('dragons')?.map((entity) => entity.id)).toEqual(['test-drake']);
-    expect(catalog.skipped.map((entity) => entity.id).sort()).toEqual(['test-spitter', 'test-summoner', 'test-wraith']);
+    // O familiar do Monk é lido e barrado pelo recorte, com o motivo no relatório.
+    expect(catalog.slices.get('familiars')?.map((entity) => entity.id)).toEqual(['test-familiar']);
+    expect(catalog.skipped.map((entity) => entity.id).sort())
+      .toEqual(['monk-familiar', 'test-spitter', 'test-summoner', 'test-wraith']);
+    expect(catalog.skipped.find((entity) => entity.id === 'monk-familiar')?.reason)
+      .toBe('vocação Monk fora do corte (ADR 0051: sistemas mais novos que o 13.32)');
     // A invocação de monstro não gerado leva o invocador junto; a de monstro gerado fica.
     expect(catalog.skipped.find((entity) => entity.id === 'test-summoner')?.reason).toBe('invoca monstro não gerado: test-wraith');
     expect(catalog.slices.get('mammals')?.find((entity) => entity.id === 'test-rat-caller')?.['summons']).toEqual({

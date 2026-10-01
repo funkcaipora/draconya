@@ -569,7 +569,8 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   "congela" um monstro reposicionado à mão**: sem ninguém à vista e fora do `home` ele VOLTA; o
   teste que planta um monstro precisa plantar o `home` junto (`plant` em `hunt.test.ts`) — e o que
   conta `rng.integer` precisa isolar os três sorteios do passo aleatório. (5) Invocação nunca volta
-  nem fica ociosa (`masterId`), e sem alvo continua parada — seguir o mestre não é modelado. (6) **O
+  nem fica ociosa (`masterId`), e sem alvo a de PERSONAGEM segue o mestre (`summonFollowStep`, #599 —
+  a de outro monstro continua parada; sem mestre à vista ou sem caminho a de personagem vagueia). (6) **O
   ocioso CALA defesa, troca de alvo e invocação** (o Canary tira o monstro do `onThink`):
   `MonsterRuntime.idle` é escrito por `#onMonsterStep` a cada decisão (liga no `idle`, desliga em
   qualquer outra) e `#onMonsterDefense`/`#onMonsterTargetChange`/`#onMonsterSummon` REAGENDAM e
@@ -980,6 +981,50 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   subject certo, como cinto e suspensório contra o cliente pedindo por fora do auto-target. Ver
   "Invocação do PERSONAGEM" em `docs/product/combat.md` para o resto do contrato (teto de 2,
   mana do MONSTRO via `manaCostOverride`, `combat-v4`).
+- **O familiar de vocação (#599, M38-02, ADR 0057 d.3 e a emenda de 2026-09-29) é uma invocação de
+  PERSONAGEM com três coisas a mais, e cada uma tem uma armadilha.** (1) **Os dois carimbos
+  (`CharacterRuntime.familiar`) são de relógio de PAREDE, e o "agora" é `session.createdAtMs +
+  session.nowMs`** (`HuntRuleset#wallNowMs`, fracionário: serve para COMPARAR; o que se GRAVA passa
+  por `#wallStampMs`, que arredonda para cima — os consumidores validam inteiro seguro e trocam o
+  carimbo torto pelo vazio em silêncio — e o piso da morte; o servidor soma o intervalo descartado
+  da retomada ao `createdAtMs`) — nunca o `Cooldowns` do personagem, que guarda instante
+  LÓGICO da sessão que o gravou (o relógio de cada sessão nasce em zero, e o objeto do personagem
+  atravessa as transições): um cooldown de 30 min ali seria lido na hunt seguinte como "daqui a 30
+  min de ZERO", ou, se a hunt anterior durou uma hora, como "daqui a uma hora e meia". O
+  `summonUntilMs` DESCE quando o familiar morre (`#onMonsterDied` grava o agora), por isso o ledger
+  o escreve por última-escrita-vence e nunca por máximo. (2) **A recusa por cooldown de parede
+  devolve `retryInMs: 0`, de propósito**: o bot reagenda o grupo pelo MAIOR prazo entre as recusas, e
+  30 min de sono trancariam a haste, que vive no grupo `support`. Quem precisa do prazo real
+  (`slotStates`, `useSlot`) o lê de `#cooldownWaitOf`, que soma `#familiarWaitOf`. (3) **A ordem da
+  recusa é a do Canary — level/cooldown/mana e SÓ ENTÃO `precondition` (teto de zero invocações,
+  sala), antes de qualquer débito** — por isso `castSpell` ganhou o parâmetro `precondition`; um
+  `castSpell` que debitasse a mana e deixasse a invocação sem tile perderia mana por nada. O
+  tile é escolhido pela `precondition` (10 sorteios do `Rng` da sessão, sempre) e usado depois de
+  `ok`: nada roda evento entre os dois. **A duração é o evento `familiar-expire`** com o subject
+  `m:<id>` do familiar — a morte (`resolveDeath`) e `#removeSummon` já o cancelam por esse subject.
+  **Três lacunas do primitivo do #598 que o familiar expôs**: a ability em ÁREA de uma invocação de
+  personagem usa `#hostileMonsters()` como presas (senão acertaria a party); o alvo herdado é o
+  SELECIONADO do mestre e não o que a arma alcança; e o jogador atravessa o familiar por TROCA de
+  tiles em `#step` (`#moverBlocked` e `#occupiedForPlayer` — o `world.occupied` das buscas de caminho do follow e do `walk-to` — deixam o caminho passar por ele) — sem isso um familiar parado
+  num corredor tranca a party inteira. **O familiar RECOLOCADO** (o teleporte ao mestre e a troca cujo
+  tile de origem fechou — a porta comum fecha no `vacate`) sai como `creature-vanished` +
+  `creature-appeared`, NUNCA como `creature-moved` de duração zero: o hospedeiro descarta duração ≤ 0
+  (`#placeFamiliarNear`). **E `onEnter` remonta a ocupação COM os monstros** — o familiar recriado
+  para o membro anterior de uma party já é um monstro vivo no mundo, e remontar só com os
+  participantes liberava o tile dele. `#familiarIds` (vazio na hunt de sempre) existe para o custo:
+  o teleporte ao mestre e a travessia consultam-no a cada passo. **A invocação de personagem SEM alvo
+  segue o mestre** (`#onMonsterStep` → `summonFollowStep`): a busca é `cheapestPath` (Dijkstra,
+  cardinal 10, diagonal 35 — o A* do Canary), e não o BFS de `boundedPath` nem o guloso — o BFS de
+  custo igual anda de viés na diagonal, e o passo diagonal dura o triplo; o guloso oscila na boca de
+  uma concavidade. Só enxerga quem está a ≤ `aggroRadius` no mesmo andar, e o objetivo é um tile a
+  EXATAMENTE 2 do mestre com linha de visão livre — a 1 tile é só o "melhor até agora" que o Canary
+  guarda enquanto procura (`cheapestPath` aceita um `fallback`): a invocação encostada se afasta até a
+  2 (`getPathSearchParams`, `FrozenPathingConditionCall`). `summonFollowStep` devolve `step`/`stay`/
+  `wander`: sem mestre à vista ou sem caminho é `wander` (o `getNextStep` cai no `doRandomStep`, e
+  `decideUnengagedMove` só deixa a invocação de PERSONAGEM passear), mestre invisível que a comum não
+  enxerga é `stay` (`canFollowMaster`; o familiar segue sempre). Um teste que quer o familiar PARADO ou atrasado precisa de um
+  jeito de o herói deixá-lo para trás (a velocidade do familiar é a do mestre no lançamento: acelere o
+  herói DEPOIS de lançar), porque um familiar que enxerga o mestre o acompanha.
 - **Convince Creature e Animate Dead (#600, M38-03, ADR 0057 d.5–d.6) são supply (`effect.kind`
   `convince` / `animate-dead`), e o que o script do Canary recusa entra em `useSupply` como a
   PRECONDIÇÃO `summonRune?.check`** (`HuntRuleset#summonRunePrecondition`) — depois de requisitos, mira e
@@ -1006,7 +1051,10 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   invocação de jogador** — o passo para o tile dela vira TROCA de lugar (`swapPlaces` em
   `movement.ts`, chamada pelo `HuntRuleset#step`; a ocupação continua exclusiva), e sem isso a
   invocação em cima do próximo tile da rota trava o herói pelo resto da hunt; a troca NÃO passa por
-  `vacate`/`occupy` (porta não fecha, placa não solta); (b) **toda colheita de ÁREA do personagem
+  `vacate`/`occupy` (porta não fecha, placa não solta). **O familiar (#599) NÃO passa por esse
+  `swapPlaces`**: ele é atravessado ANTES do `move`, pelo `vacate` + recolocação descritos no item
+  dele, e o ramo do #600 só enxerga a invocação comum — um passo que o familiar já liberou nunca
+  chega a ser recusado por ocupação; (b) **toda colheita de ÁREA do personagem
   pula `typeof masterId === 'string'`** — as duas formas de `#aimFor` e o `#cleave` varrem
   `#monsters` direto, e quem esquecer o corte mata a invocação no primeiro Great Fireball.
 - **Os Charms em combate (#603, M39-03, ADR 0053 d.5) vivem em `combat/charms.ts` (puro) e nos
