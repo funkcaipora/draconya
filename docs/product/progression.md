@@ -591,7 +591,7 @@ primeiro já contando os tries que o personagem tinha — até acabar. É o **me
 `Skills.gain` cobra, e o mesmo piso vale para skill (10) e para o magic level (0) porque o piso é
 o `startingLevel` do conteúdo. O bônus é sobre TRIES, não sobre o nível: 50 % numa espada de
 Knight nível 100 (2 655 971 tries acumulados) vale **4 níveis** (104), não 50; e 10 % no mesmo
-ponto (265 597 tries) fica um try abaixo do custo de sair do 100 e não vale nada.
+ponto (265 597 tries) fica 54 tries abaixo do custo de sair do 100 (265 651) e não vale nada.
 
 O "nível máximo" do Canary também vale: quando o custo do próximo nível deixa de crescer
 (`currReqTries >= nextReqTries` — a conversão para `uint64` estourou, ou o fator é 1), o nível

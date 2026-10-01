@@ -80,7 +80,7 @@ describe('tries → níveis extras (Player::getLoyaltySkill / getLoyaltyMagicLev
     // Tries totais até o nível 100 da espada de Knight: 2.655.971. 50 % disso são 1.327.985
     // tries gratuitos — na curva real (sair do 100 custa 265.651, e cada nível seguinte 10 % a
     // mais) isso fecha 4 níveis, e não os 50 que "50 % do nível" daria. E 10 % (265.597 tries)
-    // fica UM try abaixo do custo de sair do 100: nenhum nível.
+    // fica 54 tries abaixo do custo de sair do 100 (265.651): nenhum nível.
     const levels = new LoyaltyLevels();
     expect(levels.levelOf(sword, 100, 0, 50, 1.1)).toBe(104);
     expect(levels.levelOf(sword, 100, 0, 10, 1.1)).toBe(100);
