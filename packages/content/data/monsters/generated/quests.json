@@ -173,6 +173,10 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "faction": "lion",
+    "enemyFactions": [
+      "lion-usurpers"
+    ],
     "corpseTtlMs": 1810000,
     "corpseAnimatable": [
       {
@@ -485,6 +489,11 @@
       "random": 0
     },
     "staticAttack": 0.7,
+    "faction": "lion-usurpers",
+    "enemyFactions": [
+      "player",
+      "lion"
+    ],
     "corpseTtlMs": 660000,
     "corpseAnimatable": [
       {
@@ -623,6 +632,10 @@
       "random": 0
     },
     "staticAttack": 0.7,
+    "faction": "lion",
+    "enemyFactions": [
+      "lion-usurpers"
+    ],
     "corpseTtlMs": 1810000,
     "corpseAnimatable": [
       {

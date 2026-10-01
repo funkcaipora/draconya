@@ -751,6 +751,11 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "faction": "deathling",
+    "enemyFactions": [
+      "player",
+      "deepling"
+    ],
     "corpseTtlMs": 660000,
     "corpseAnimatable": [
       {
@@ -993,6 +998,11 @@
     },
     "runOnHealth": 20,
     "staticAttack": 0.6,
+    "faction": "deathling",
+    "enemyFactions": [
+      "player",
+      "deepling"
+    ],
     "corpseTtlMs": 660000,
     "corpseAnimatable": [
       {
@@ -1135,6 +1145,11 @@
     },
     "runOnHealth": 40,
     "staticAttack": 0.95,
+    "faction": "deepling",
+    "enemyFactions": [
+      "player",
+      "deathling"
+    ],
     "corpseTtlMs": 660000,
     "corpseAnimatable": [
       {
@@ -1329,6 +1344,11 @@
     },
     "runOnHealth": 30,
     "staticAttack": 0.9,
+    "faction": "deepling",
+    "enemyFactions": [
+      "player",
+      "deathling"
+    ],
     "corpseTtlMs": 660000,
     "corpseAnimatable": [
       {
@@ -1539,6 +1559,11 @@
     },
     "runOnHealth": 20,
     "staticAttack": 0.7,
+    "faction": "deepling",
+    "enemyFactions": [
+      "player",
+      "deathling"
+    ],
     "corpseTtlMs": 670000,
     "corpseAnimatable": [
       {
@@ -1693,6 +1718,11 @@
     },
     "runOnHealth": 50,
     "staticAttack": 0.9,
+    "faction": "deepling",
+    "enemyFactions": [
+      "player",
+      "deathling"
+    ],
     "corpseTtlMs": 670000,
     "corpseAnimatable": [
       {
@@ -1903,6 +1933,11 @@
     },
     "runOnHealth": 20,
     "staticAttack": 0.7,
+    "faction": "deepling",
+    "enemyFactions": [
+      "player",
+      "deathling"
+    ],
     "corpseTtlMs": 660000,
     "corpseAnimatable": [
       {
@@ -2095,6 +2130,11 @@
     },
     "runOnHealth": 30,
     "staticAttack": 0.7,
+    "faction": "deepling",
+    "enemyFactions": [
+      "player",
+      "deathling"
+    ],
     "corpseTtlMs": 670000,
     "corpseAnimatable": [
       {
@@ -2223,6 +2263,11 @@
     },
     "runOnHealth": 20,
     "staticAttack": 0.95,
+    "faction": "deepling",
+    "enemyFactions": [
+      "player",
+      "deathling"
+    ],
     "corpseTtlMs": 660000,
     "corpseAnimatable": [
       {

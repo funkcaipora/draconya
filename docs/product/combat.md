@@ -2061,7 +2061,7 @@ por `spell.manaCost`.
   invocando não aloca nada a mais e não sorteia nada a mais (garantia que os testes de RNG
   prendem). O golpe de um monstro contra uma invocação usa `#monsterDefender` (o "monstro como
   defensor" que já existia para o reflexo do #552) — nunca o caminho do jogador (sem mana shield,
-  sem carga de colar/anel, sem shielding): `#applyMonsterHitOnSummon` é a metade nova de um par
+  sem carga de colar/anel, sem shielding): `#applyMonsterHitOnMonster` (ex-`...OnSummon`, #619) é a metade nova de um par
   com `#applyMonsterHit`.
 - **O contrário também: `#hostileMonsters()` protege contra fogo amigo.** Achado da implementação
   — sem isto, o auto-target (#444), a mira de área e o clique do próprio jogador (`chooseTarget`,
@@ -2091,7 +2091,7 @@ por `spell.manaCost`.
   ataca.
 - **O dano da invocação credita o MESTRE, nunca ela mesma** (ADR 0057 decisão 2,
   `Creature::getGainedExperience`/`attackerMaster` do Canary): quando o ATACANTE de um golpe
-  monstro-contra-monstro tem `masterId` string, `#applyMonsterHitOnSummon` redireciona o
+  monstro-contra-monstro tem `masterId` string, `#applyMonsterHitOnMonster` redireciona o
   `recordDamage`/`session.creditDamage` para o `characterId` do mestre, não para o `subject` da
   invocação — é o que faz a XP por razão de dano (#523) e o Bestiário renderem para o
   PERSONAGEM: `xpByDamage`/`session.participants` nunca reconheceriam um `m:<id>` como
@@ -2379,6 +2379,139 @@ e `too-many-summons` ("You cannot control more creatures."), ao lado de `not-eno
 - **A invocação sem alvo NÃO segue o mestre** (a divergência do #598): um convencido sem alvo fica
   onde está. O seguir do mestre é do #599 (`Monster::updateSummonTarget`) e vale para toda invocação
   de personagem quando pousar.
+
+## Facções de monstro: monstro contra monstro (#619, M44-01, Canary `monster.faction`/`enemyFactions`)
+
+No Canary um monstro só ataca jogador (e invocação de jogador) — EXCETO os de **facção**: as cidades
+dos deeplings (Deepling × Deathling), a guerra Lion × Usurpers, Efreet × Marid, Anuma × Fafnar. Eles
+se atacam entre si, pelo mesmo pipeline de dano de sempre. Fonte: `Faction_t`
+(`src/game/game_definitions.hpp:44-53`), `MonsterType::info.faction`/`enemyFactions`
+(`monsters.hpp:134-135`), `Monster::isOpponent` (`monster.cpp:836-869`), `isTarget` (`1434-1453`),
+`updateIdleStatus` (`1521-1560`), `searchTargetImmediate` (`906-1050`), `updateSummonTarget`
+(`1330-1342`) e `Combat::canDoCombat` (`combat.cpp:497-546`, a cláusula da facção `default` fica nas
+últimas linhas) — tudo conferido em 47dfd51, em 2026-09-30.
+
+### O conteúdo
+
+`monster.faction` e `monster.enemyFactions` (`packages/content/src/schemas.ts`), opcionais: ausente é
+o monstro **sem facção** (`default`), o bestiário quase inteiro, e nenhuma hunt sem facção muda de
+comportamento nem de sorteio. Os nomes são os dez do enum do Canary, **na ordem dele** —
+`MONSTER_FACTIONS`: `default`, `player`, `lion`, `lion-usurpers`, `marid`, `efreet`, `deepling`,
+`deathling`, `anuma`, `fafnar` — e o **índice é o valor numérico** (`factionValue`), porque o valor
+entra no desempate de alvo (abaixo). `player` (1) é a facção do personagem e de tudo que ele invoca;
+nenhum monstro a DECLARA, mas quase toda lista `enemyFactions` do Canary a cita — é o que faz o
+monstro de facção caçar o jogador. A exceção são as três da Lion (`lion-knight`/`-archer`/`-warlock`):
+só nomeiam `lion-usurpers` e **ignoram o jogador**.
+
+O importador (`scripts/catalog/monsters.ts`) lê os dois campos (`FACTION_*` → nome, com `default`
+omitido); uma constante `FACTION_*` que a tabela não conhece bloqueia o monstro em vez de ser lida em
+silêncio. **23 dos 39 monstros com facção do Canary (32 fora de `quests/`) entram no catálogo hoje**
+(deepling 7, deathling 2, lion 5, lion-usurpers 3, anuma 5, fafnar 1); o resto (Efreet, Marid, os dois
+Djinn, Usurper Knight/Warlock…) depende de magia com script próprio que o importador ainda não
+mapeia — está em `docs/reference/catalog/monsters-report.md`, com o motivo.
+
+### O que o Canary decide, e onde mora aqui
+
+`HuntRuleset` monta, no construtor, a tabela `monsterId → { faction, enemies }` dos monstros que PODEM
+nascer na hunt (`monster/faction.ts`: os pontos de spawn e, transitivamente, o que eles invocam — o
+conteúdo carrega o catálogo inteiro em toda hunt, então perguntar a ele "tem facção?" seria sempre
+sim). **Tabela vazia é o caminho rápido: as três entradas novas do ruleset devolvem a MESMA lista de
+antes e nada é sorteado a mais** — a suíte inteira do `sim`, que roda sob conteúdo sem facção, é a
+prova por ausência.
+
+| Pergunta do Canary | Aqui | Regra |
+|---|---|---|
+| `getFaction()` / `isEnemyFaction()` | `#factionProfileOf` | Sem mestre: a do tipo. **Invocação de monstro herda a do mestre, facção e inimigas** (a Green Djinn da Efreet é da facção dela). Invocação de PERSONAGEM é `player`, com regra própria (o alvo do mestre) |
+| `isOpponent()` — a `targetList` | `#opponentOthersOf` (+ `session.participants`) | O jogador e a invocação de jogador são oponentes de TODO monstro; um monstro de facção soma os monstros das facções inimigas. **À vista**: `canSeePoint` no `aggroRadius`, a mesma pergunta do #655 |
+| `isTarget()` — quem se pode mirar | `#targetPreyOf` | Monstro de facção só mira a facção inimiga: jogador e invocação de jogador SÓ SE `player` está em `enemyFactions` — a Lion tem o herói na `targetList` (não fica ociosa) sem jamais mirá-lo. **A invocação de monstro é a exceção** (`if (!isSummon())`): o `isTarget` dela não confere facção — mas ela nem escolhe alvo (linha seguinte) |
+| `updateSummonTarget()` (`1330-1342`) | `#followMasterTarget` | O `onThink_async` da invocação **não procura alvo**: a cada think ela chama `selectTarget` com o que o MESTRE ataca (e só sem alvo do mestre mantém o que já tinha). A Green Djinn briga com quem a Efreet briga, não com o jogador mais perto; o alvo ainda precisa valer para ela (vivo, visível, mesmo andar, no `aggroRadius` dela). Sem nenhum dos dois ela só seguiria o mestre — não modelado, ver abaixo. Só a invocação de monstro de FACÇÃO: a de monstro sem facção segue `chooseTarget` (#546) |
+| `Combat::canDoCombat()` | `#mayAttack` | Vale para o alvo principal E para cada criatura pega por uma área. Monstro de facção só acerta quem tem facção em `enemyFactions`; monstro sem facção nunca acerta outro monstro (só invocação de jogador). O golpe recusado é recusado ANTES de qualquer dano ou sorteio |
+| `searchTargetImmediate` / `MonsterTargetRanker::rank` | `chooseTarget`, `nearestPrey`, `rankTarget` | **`faction × 100` na distância, `faction × 100 000` na vida e no dano** — o valor de `Faction_t` do candidato, `player` = 1 quando `Prey.faction` está ausente. Com todos os candidatos na mesma facção o somando é constante e a escolha é a de antes |
+| `updateIdleStatus` (1548-1551) | `#isFactionSummonIdle` | A invocação de um monstro de facção fica **ociosa enquanto o mestre não vê jogador** (`master->totalPlayersOnScreen == 0`): não anda, não ataca, esquece alvos e dano |
+| `doWalkBack` (`totalPlayersOnScreen > 0`) | `decideUnengagedMove` | O monstro de facção (que não é invocação) com jogador vivo à vista **desliga a volta ao spawn** e não dá o passo — a Lion, que não caça o herói, fica passeando enquanto ele está por perto |
+
+**Duas consequências que parecem defeito e são o Canary.** (1) O desempate por facção faz o jogador
+(1) ser preferido a QUALQUER monstro inimigo (2+) na aquisição — `d + 100` contra `d' + 200` —, por
+mais longe que esteja: com o herói na vista, o Deepling o caça e ignora o Deathling ao lado; a briga
+de facções só acontece com o herói fora da vista. Em "menos vida" a facção MENOR ganha e em "mais
+dano" a MAIOR (a assimetria do `rank`). (2) A cláusula `totalPlayersOnScreen == 0 → ocioso` do
+`updateIdleStatus` do `47dfd51` está sob um `else if (master)`, então só se aplica à INVOCAÇÃO de um
+monstro de facção — o monstro de facção comum, com inimigo à vista, NÃO fica ocioso sem jogador: os
+dois lados brigam sozinhos (é a briga da issue). Reproduzido como está.
+
+**Estado da sessão, nunca do visualizador (invariante 3).** "Jogador à vista" é a posição dos
+`session.participants` (vivos, dentro do `canSeePoint` do monstro) — quem está DENTRO da hunt —, nunca
+quem tem o navegador aberto. Os testes movem o herói à mão e conferem a invocação acordando; a briga
+inteira é igual a 1 Hz e a 20 Hz e sobrevive a um snapshot no meio (`rulesets/factions.test.ts`).
+
+### O dano, a morte e quem recebe
+
+Monstro contra monstro passa pelo mesmo cano do golpe em invocação de personagem (#598):
+`resolveDamage` com `#monsterDefender` do alvo (armadura, mitigação, `defense`, cargas de bloqueio, cura e
+reflexo por elemento) e `#applyMonsterHitOnMonster` (o antigo `#applyMonsterHitOnSummon`, renomeado — ele
+já servia a qualquer monstro-alvo). Três coisas ficaram completas junto com a facção: a **condição da
+ability** (o veneno do Deepling) entra no monstro que ela acertou, com a MESMA imunidade de condição da
+magia do jogador; a **cura por elemento** do alvo (#683) roda depois do golpe; e o mapa de dano
+(`Contribution`) guarda o `m:<id>` do atacante.
+
+**O dano de quem saiu continua no total.** O Canary nunca apaga uma entrada do `damageMap` (só
+`onIdleStatus` zera o mapa inteiro): `Creature::getDamageRatio` soma todas, vivas ou mortas, então o
+Deepling que feriu o Deathling e morreu antes ainda leva a fatia dele, e o jogador só a dele.
+Esquecer o atacante morto (o que este motor fez no primeiro corte do #619) pagava ao herói a XP que o
+Deepling já tinha tirado do Deathling. Como cada respawn tem id novo e o mapa não pode crescer uma
+chave por inimigo numa hunt de oito horas, quando um monstro morre ou some (invocação cujo mestre
+morreu) o dano dele nos OUTROS monstros é **fundido num balde só**, `m:departed` (`DEPARTED_ACTOR`,
+`Contribution.fold`): o total não muda, o prefixo `m:` continua dizendo "foi monstro" (e o último golpe
+vira o balde, como o `lastHitCreatureId` do Canary sobrevive à morte), e o balde nunca é dono do
+cadáver nem `mostDamageBy` — o `getCreatureByID` do `onDeath` pula quem não existe mais. O tique de
+condição cujo dono (um monstro) já saiu continua tirando vida mas não é atribuído a ninguém
+(`Creature::drainHealth` só chama `addDamagePoints` `if (attacker)`), para não reabrir a chave
+fechada. Isto vale só para o mapa de OUTROS monstros e só com facção na hunt; o dos participantes
+continua podado por `forgetActor`.
+
+O Canary paga o abate pelo **`damageMap`**, não pelo golpe final (`Creature::onDeath`), e este motor
+faz igual. Duas perguntas separadas, ambas sobre o mapa: "houve dano de MONSTRO?" (chave `m:<id>` ou o
+balde `m:departed`) decide o dono do cadáver e o corte da XP; "o GOLPE FINAL foi de monstro e nenhum
+participante bateu?" decide se o abate conta.
+
+| Quem bateu no monstro | Abate no analisador | XP | Cadáver / loot |
+|---|---|---|---|
+| Só monstros (o golpe final também) | **não conta** — vale para a invocação de monstro também | **nenhuma** | existe, **sem dono e sem loot** (ADR 0048: sem dono, sem loot) |
+| O herói e um monstro, golpe final de qualquer um dos dois | conta | `floor(dano do herói ÷ dano total × XP)` — o dano do monstro, **vivo ou já morto**, entra no total | dono é quem causou **mais** dano entre os que AINDA existem (jogador ou monstro vivo), e não quem deu o golpe final; só se for um participante há loot |
+| Só participantes | conta | como sempre | como sempre |
+
+A invocação (de monstro ou de personagem) nunca paga XP, loot nem Bestiário; o abate dela só conta
+se um participante a feriu antes — a invocação de personagem morta por um monstro hostil deixou de
+contar abate no #619 (o Canary só tem `killers` entre os jogadores do `damageMap`).
+
+Em party a XP compartilhada é o pool `Σ floor(dano_i ÷ total × XP)` dividido como antes; sem
+compartilhar, `xpByDamage` já lia o total do mapa. Uma morte só de monstro não paga NENHUM membro — nem
+a XP igual da party, que antes do #619 não tinha como acontecer: o abate só existia com um participante no
+golpe final.
+
+### O que NÃO foi modelado
+
+- **A ordem da `targetList`** (`pushFront` ao entrar na vista, `push_back` no `updateTargetList`) — o
+  desempate dentro da mesma facção e da mesma distância é a ordem de nascimento
+  (jogadores → invocações de jogador → monstros de facção), estável e igual em todas as taxas.
+- **`isFriend`** (a lista de amigos que a cura de área de monstro usaria) — nenhum monstro do catálogo
+  cura o vizinho.
+- **A janela `inFightTicks` do `mostDamageCreature`** — o dono do cadáver é o maior causador de dano de
+  toda a luta, sem o corte de 60 s do Canary.
+- **A invocação de monstro de facção SEM alvo do mestre** só seguiria o mestre
+  (`setFollowCreature(master)`): como a de qualquer invocação (ver acima), ela fica parada — este
+  motor não tem `followCreature`.
+- **Dano de campo no total do `getDamageRatio`**: o Canary o exclui (`attackerId == 0`); `xpByDamage`
+  (party sem compartilhar) e este pool o incluem — divergência antiga, de antes do #619, que só aparece
+  com dano de campo E de monstro no mesmo abate.
+
+Testes: `monster/faction.test.ts` (a tabela, o alcance de cada hunt, o desempate e a volta ao spawn) e
+`rulesets/factions.test.ts` (o Deepling ataca o Deathling sem ninguém por perto; Lion × Usurpers; a área,
+inclusive o mestre e a invocação na mesma onda; a condição; a invocação ociosa e a que persegue o alvo
+do mestre; a morte por monstro, solo e em party — o dano de quem já saiu no total, o dono do cadáver
+quando o herói dá o último golpe e o abate da invocação; 1 Hz == 20 Hz e a retomada) e `death.test.ts`
+(`Contribution.fold`).
+Estágio `additive` do `combat-v4` — ver `combat-conformance.md`.
 
 ## Charms em combate (#603, M39-03, ADR 0053 d.5 — `combat-v4`)
 
