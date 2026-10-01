@@ -75,7 +75,7 @@ Nenhum. **4** (só intenção), **9** e **10** (ADR 0052).
 
 ## Emenda — 2026-09-29: a implementação (#624)
 
-A decisão não mudou; a implementação fechou cinco pontos que o texto deixava abertos.
+A decisão não mudou; a implementação fechou seis pontos que o texto deixava abertos.
 
 1. **`spell-not-learned` fica logo depois de level e vocação e ANTES de cooldown, alvo e mana**
    (`casting.ts`). O Canary confere o aprendizado depois da mana (`playerSpellCheck`), mas a ordem
@@ -84,11 +84,11 @@ A decisão não mudou; a implementação fechou cinco pontos que o texto deixava
    não tem prazo (`retryInMs: 0`), o slot é pulado e o grupo continua; e o slot da barra ganha o
    motivo próprio `not-learned` (o espelho de `slotStates` coincide com `useSlot`, DT-08).
 2. **O registro só viaja no extrato quando é a verdade do personagem** (`LearnedSpells#recorded`).
-   O registro é ABSOLUTO e última-escrita-vence (ADR 0052 d.1), e uma sessão retomada de um
-   snapshot anterior à #624 — ou um ticket de um `api` ainda não atualizado — não sabe o que o
-   personagem aprendeu. Gravar o vazio apagaria a concessão da migração (viola o ADR 0014), então
-   o campo é OMITIDO e o ledger não toca na coluna. A compra ou a concessão (`grant`) tornam o
-   registro a verdade.
+   Uma sessão retomada de um snapshot anterior à #624 — ou um ticket de um `api` ainda não
+   atualizado — não sabe o que o personagem aprendeu, e gravar o vazio seria afirmar uma verdade
+   que ela não tem (e, antes do ponto 6, apagava a concessão da migração, o que viola o ADR 0014).
+   O campo é OMITIDO e o ledger não toca na coluna. A compra ou a concessão (`grant`) tornam o
+   registro a verdade — e o ponto 6 diz por que "verdade parcial" também não apaga nada.
 3. **A migração 0023 é um retrato.** As 119 magias do dia (id, vocação, `minLevel`) estão no SQL,
    porque a migração descreve o que era verdade na hora dela: uma magia que o conteúdo criar
    depois é COMPRADA, e um teste (`learned-spells-migration.postgres.test.ts`) prende as regras
@@ -105,6 +105,18 @@ A decisão não mudou; a implementação fechou cinco pontos que o texto deixava
    o grupo engatilhado até o mundo mudar, e aprender uma magia não muda o mundo. É o mesmo
    `#armBot` que dano e troca de configuração já chamam — um evento na fila, nada por tick, o mesmo
    a 1 Hz e a 10 Hz.
+6. **O ledger funde o registro pela UNIÃO dos ids, não por última-escrita-vence** — a única
+   exceção à regra geral do ADR 0052 d.1 ("sai inteiro, última escrita vence"). O registro só
+   CRESCE (o único caminho que esquece magia no Canary é a Wheel of Destiny, em `player_wheel.cpp`,
+   e a Roda está fora), então a união (`LearnedSpells.merge`, idempotente e comutativa, como o
+   `Bestiary.merge`) é a fusão certa, e fecha duas janelas da última-escrita: (a) extratos
+   pendentes se aplicam em ordem qualquer — `ReceiptStore.pending()` percorre um `SCAN` do Redis,
+   que não ordena —, e o extrato antigo `[A]` chegando depois do novo `[A, B]` derrubava `B` com o
+   gold dele já debitado (o gold é delta); (b) um extrato de base desconhecida — a sessão retomada
+   de um snapshot sem registro que comprou UMA magia — carrega só `[X]` e sobrescrevia a concessão
+   da migração com ele (a perda do ADR 0014 que o `recorded` do ponto 2 só cobria para o vazio, não
+   para o parcial). Se um dia uma magia puder ser revogada, a revogação é uma migração de dado
+   versionada (ADR 0014), nunca um efeito colateral de qual extrato chegou por último.
 
 O que este ADR NÃO cobre e continua igual: o `premium` do NPC é ignorado, e o Draconya tem um saldo
 de gold só (o `removeMoneyBank` do Canary tira do banco ou da mochila). Ver `docs/product/progression.md`,

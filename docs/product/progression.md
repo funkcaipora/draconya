@@ -476,10 +476,13 @@ justifique. É um retrato das 119 magias do dia, escrito no SQL da migração; m
 Magias (ver `onboarding.md`).
 
 **Persistência.** Registro `jsonb` `characters.learned_spells` = `{ spellIds, version: 1 }`, lido
-INTEIRO no ticket, escrito INTEIRO pelo ledger a partir do extrato — **última escrita vence**,
-como `charms`. **Só viaja no extrato quando o registro é a verdade do personagem**
-(`LearnedSpells#recorded`): uma sessão retomada de um snapshot anterior à #624, ou um ticket de um
-`api` antigo, não sabe o que ele aprendeu, e gravar o vazio apagaria a concessão da migração.
+INTEIRO no ticket e gravado pelo ledger a partir do extrato — mas **fundido pela UNIÃO dos ids**
+com o que já está na linha (`LearnedSpells.merge`), e não por última escrita vence como `charms`:
+o registro só cresce, extratos pendentes se aplicam em ordem qualquer (o `SCAN` do Redis não
+ordena) e um extrato de base desconhecida só carrega as compras dele — a última escrita derrubaria
+uma magia paga ou a concessão da migração (ADR 0058, Emenda, ponto 6). **Só viaja no extrato quando
+o registro é a verdade do personagem** (`LearnedSpells#recorded`): uma sessão retomada de um
+snapshot anterior à #624, ou um ticket de um `api` antigo, não sabe o que ele aprendeu.
 
 **Parâmetros:**
 

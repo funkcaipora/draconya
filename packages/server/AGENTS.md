@@ -599,7 +599,7 @@ copie esta seção trocando `charms` pelo nome do sistema, e as seis regras cont
 ### O que o `learnedSpells` (#624) acrescentou ao padrão
 
 `learn-spell` (C2S 36) / `learned-spells` (S2C 46), coluna `characters.learned_spells`
-(migração 0023). Três coisas que os Charms não tinham e o próximo registro provavelmente terá:
+(migração 0023). Quatro coisas que os Charms não tinham e o próximo registro provavelmente terá:
 
 - **O registro que já tinha dado em produção antes da coluna existir precisa de CONCESSÃO na
   própria migração** (ADR 0014). `0023_624-learned-spells.sql` faz `ADD COLUMN` e um `UPDATE` que
@@ -609,9 +609,16 @@ copie esta seção trocando `charms` pelo nome do sistema, e as seis regras cont
   `db/learned-spells-migration.postgres.test.ts` (aplica 0000–0022, semeia, roda só a 0023).
 - **O registro só vai no extrato quando é a verdade do personagem** (`LearnedSpells#recorded`, em
   `#receiptFor` e `#saveDurableReceipt`). Um snapshot retomado de antes da issue, ou um ticket de
-  um `api` ainda antigo, chega SEM registro; gravar o vazio (última-escrita-vence) apagaria a
-  concessão. Registro que herda dado migrado de produção deve seguir a mesma regra — `charms`
-  não precisou porque nasceu vazio em todo lugar.
+  um `api` ainda antigo, chega SEM registro, e afirmar o vazio seria afirmar o que a sessão não
+  sabe. Registro que herda dado migrado de produção deve seguir a mesma regra — `charms` não
+  precisou porque nasceu vazio em todo lugar.
+- **Registro que só cresce o ledger FUNDE, não sobrescreve** (`LearnedSpells.merge`, a união dos
+  ids, lida na MESMA leitura `FOR UPDATE` de `applyProgression`). Última-escrita-vence é a regra
+  geral do ADR 0052 d.1 e vale para o que sobe E desce (`charms`, bênção, soul), mas aqui custava
+  duas perdas: extratos pendentes se aplicam em ordem qualquer (`ReceiptStore.pending()` é um
+  `SCAN`, sem ordem), e um extrato de base desconhecida (só as compras dele) apagava a concessão
+  da migração. Um registro novo com essa propriedade (nunca desce) segue a união, como o
+  Bestiário segue o máximo; revogar é migração de dado versionada, nunca efeito do extrato.
 - **A intenção é aceita em Cidade E hunt, e o gold segue a regra 3** (`goldDelta` mais
   `credit('goldSpent')` só fora do shard). Idempotência é estrutural: `CharacterRuntime
   .learnSpell` recusa `already-learned` ANTES do débito, então um retry nunca cobra duas vezes; o
