@@ -105,7 +105,7 @@ describe('a zona de hazard real, Gnomprona Gardens (#632)', () => {
         const speciesOf = new Map(ruleset.monsters.map((monster) => [monster.subject, monster.monsterId]));
         for (const event of session.drainEvents()) {
           if (event.kind !== 'creature-hit' || event.creatureId !== 'hero' || event.amount <= 0) continue;
-          const species = speciesOf.get(event.attackerId);
+          const species = speciesOf.get(String(event.attackerId));
           if (species === undefined) continue;
           const entry = bySpecies.get(species) ?? { sum: 0, count: 0 };
           entry.sum += event.amount;
