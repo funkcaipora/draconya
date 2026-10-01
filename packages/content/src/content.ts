@@ -3,7 +3,7 @@
 // Quem lê arquivo é `@draconya/content/load`, e o lint impede `sim` de importar de lá.
 
 import { z } from 'zod';
-import { buildRoute, buildTilemap, isBlocked } from './map.js';
+import { absoluteToLocal, buildRoute, buildTilemap, isBlocked } from './map.js';
 import type { Route, Tilemap } from './map.js';
 import {
   BOT_VOCABULARY_VERSION,
@@ -20,7 +20,7 @@ import {
   blessingSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
   bestiarySchema, boostedSchema, charmSchema, itemSchema, partySchema, skillSchema, spellSchema,
-  staminaSchema, supplySchema, tilemapSchema, vocationSchema, weaponFamilySchema,
+  staminaSchema, supplySchema, tilemapSchema, vocationSchema, weaponFamilySchema, worldSchema,
 } from './schemas.js';
 import type {
   Ammunition, AmmunitionDefinition, Appearances, Bestiary, Blessing, Boosted, BotLimits, Charm,
@@ -28,7 +28,7 @@ import type {
   CompiledReflect, DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
   MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Spell, Stamina, Supply,
   Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
-  WeaponPowerFormula, WeaponProfile,
+  WeaponPowerFormula, WeaponProfile, World,
 } from './schemas.js';
 import { packProblems } from './pack.js';
 import { validateBotConfig, validateBotConfigV2 } from './bot.js';
@@ -107,6 +107,13 @@ export interface Content {
   readonly maps: ReadonlyMap<string, Tilemap>;
   readonly routes: ReadonlyMap<string, Route>;
   /**
+   * Os mundos (#829, OW-08, ADR 0060 d.1 e d.2), `data/worlds/<id>.json`: tipo, mapa, cidades com
+   * templo e teto de gente. Vazio no conteúdo de teste que não fala de mundo aberto; o conteúdo
+   * REAL tem o `main`, e `load.test.ts` prende. Cada `map` já foi conferido contra `maps` e cada
+   * templo contra o recorte (em coordenada absoluta, traduzida por `absoluteToLocal`).
+   */
+  readonly worlds: ReadonlyMap<string, World>;
+  /**
    * A tabela de aparências (FUN-94), agora com quem a use (FUN-103, FUN-23, FUN-109): o
    * `game` lê o outfit padrão do jogador e os efeitos de magia, supply e golpe que o `sim`
    * emite; o cliente lê chão e parede por mapa. Monstro e item NÃO se consultam por aqui —
@@ -160,6 +167,8 @@ export interface RawContent {
   readonly packs?: readonly unknown[];
   readonly maps?: readonly unknown[];
   readonly routes?: readonly unknown[];
+  /** Os mundos (#829, ADR 0060), `worlds/*.json`. Entram em `computeVersion` como tudo aqui. */
+  readonly worlds?: readonly unknown[];
   /** `{ mapId }` — qual dos mapas é a Cidade. Explícito, e não um id mágico `"city"`. */
   readonly city?: unknown;
 }
@@ -1333,6 +1342,54 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
+  // Os mundos (#829, OW-08, ADR 0060): o schema fecha a forma do arquivo; o que ele não vê — o
+  // mapa existir e ser importado, e o templo cair num tile andável do recorte — é conferido aqui,
+  // no boot. O templo é coordenada ABSOLUTA do Tibia, e o chão é local: traduzir pelo
+  // `source.region` é o que `absoluteToLocal` faz. Templo em parede é o personagem que nasce, ou
+  // volta ao morrer, preso — e quebra AQUI, como o `entryPoint` da Cidade, e não no jogador.
+  const worldData = parseAll('world', raw.worlds ?? [], worldSchema, problems);
+  const worlds = new Map<string, World>();
+  for (const world of worldData.values()) {
+    const where = `world "${world.id}"`;
+    // A existência se confere contra a DEFINIÇÃO, como as referências abaixo: um mapa que não
+    // montou já gerou o próprio problema, e repeti-lo aqui como "inexistente" seria ruído.
+    if (!mapData.has(world.map)) {
+      problems.push(`${where}: map "${world.map}" não existe no conteúdo`);
+      continue;
+    }
+    const map = maps.get(world.map);
+    if (map === undefined) continue;
+    if (map.source === undefined) {
+      problems.push(
+        `${where}: o mapa "${map.id}" não tem source.region — só um mapa importado do OTBM tem a ` +
+          'origem que traduz a coordenada absoluta do templo para um tile',
+      );
+      continue;
+    }
+    const townIds = new Set<string>();
+    for (const town of world.towns) {
+      const at = `${where}, cidade "${town.id}"`;
+      if (townIds.has(town.id)) problems.push(`${at}: id de cidade duplicado`);
+      townIds.add(town.id);
+      const { x, y, z } = town.temple;
+      const local = absoluteToLocal(map, town.temple);
+      if (local === undefined) {
+        const region = map.source.region;
+        problems.push(
+          `${at}: templo (${x},${y},${z}) cai fora do recorte do mapa "${map.id}" ` +
+            `(x ${region.x[0]}..${region.x[1]}, y ${region.y[0]}..${region.y[1]}, ` +
+            `z ${region.z[0]}..${region.z[1]})`,
+        );
+      } else if (isBlocked(map, local.x, local.y, local.z)) {
+        problems.push(
+          `${at}: templo (${x},${y},${z}), no tile (${local.x},${local.y},${local.z}) do mapa ` +
+            `"${map.id}", está em parede ou num andar sem chão — ninguém andaria dali`,
+        );
+      }
+    }
+    worlds.set(world.id, world);
+  }
+
   const routes = new Map<string, Route>();
   for (const data of routeData.values()) {
     const map = maps.get(data.mapId);
@@ -1580,6 +1637,7 @@ export function buildContent(raw: RawContent): Content {
     ...(boosted === undefined ? {} : { boosted }),
     maps,
     routes,
+    worlds,
     openValues,
     ...(city === undefined ? {} : { city }),
     ...(citySettings === undefined ? {} : { citySettings }),

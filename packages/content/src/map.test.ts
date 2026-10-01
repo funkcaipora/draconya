@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRoute, buildTilemap, isBlocked, validateRoute } from './map.js';
+import { absoluteToLocal, buildRoute, buildTilemap, isBlocked, localToAbsolute, validateRoute } from './map.js';
 import type { RouteData, TilemapInput } from './schemas.js';
 
 const mapData: TilemapInput = {
@@ -49,6 +49,51 @@ describe('tilemap', () => {
     const irregular = buildTilemap({ id: 'x', z: 7, grid: ['.....', '..'] });
     expect(isBlocked(irregular, 4, 1)).toBe(true);
     expect(isBlocked(irregular, 1, 1)).toBe(false);
+  });
+});
+
+describe('coordenada absoluta do Tibia ↔ local do recorte (#829, ADR 0060 d.3.b)', () => {
+  // x 32275–32281, y 32153–32156, z 6–7: um recorte pequeno no canto de Thais.
+  const imported = buildTilemap({
+    id: 'recorte', z: 7,
+    floors: {
+      '6': { grid: ['.......', '.......', '.......', '.......'] },
+      '7': { grid: ['.......', '.......', '.......', '.......'] },
+    },
+    source: {
+      file: 'otservbr.otbm', sha256: 'a'.repeat(64),
+      region: { x: [32275, 32281], y: [32153, 32156], z: [6, 7] },
+    },
+  });
+
+  it('perde a origem do recorte em x e y e mantém o andar', () => {
+    expect(absoluteToLocal(imported, { x: 32277, y: 32155, z: 7 })).toEqual({ x: 2, y: 2, z: 7 });
+  });
+
+  it('as bordas de dentro valem e um passo além não', () => {
+    expect(absoluteToLocal(imported, { x: 32275, y: 32153, z: 6 })).toEqual({ x: 0, y: 0, z: 6 });
+    expect(absoluteToLocal(imported, { x: 32281, y: 32156, z: 7 })).toEqual({ x: 6, y: 3, z: 7 });
+    for (const outside of [
+      { x: 32274, y: 32155, z: 7 }, { x: 32282, y: 32155, z: 7 },
+      { x: 32277, y: 32152, z: 7 }, { x: 32277, y: 32157, z: 7 },
+      { x: 32277, y: 32155, z: 5 }, { x: 32277, y: 32155, z: 8 },
+    ]) {
+      expect(absoluteToLocal(imported, outside), JSON.stringify(outside)).toBeUndefined();
+    }
+  });
+
+  it('o inverso devolve a coordenada absoluta, e a ida e a volta fecham', () => {
+    expect(localToAbsolute(imported, { x: 2, y: 2, z: 7 })).toEqual({ x: 32277, y: 32155, z: 7 });
+    const at = { x: 32279, y: 32154, z: 6 };
+    const local = absoluteToLocal(imported, at);
+    if (local === undefined) throw new Error('o ponto cabe no recorte');
+    expect(localToAbsolute(imported, local)).toEqual(at);
+  });
+
+  it('mapa sem `source` não tem origem: nenhuma das duas traduz', () => {
+    // Um mapa autorado à mão não é um pedaço do mapa do Tibia — "absoluto" não quer dizer nada nele.
+    expect(absoluteToLocal(map, { x: 1, y: 1, z: 7 })).toBeUndefined();
+    expect(localToAbsolute(map, { x: 1, y: 1, z: 7 })).toBeUndefined();
   });
 });
 
