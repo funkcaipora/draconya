@@ -435,6 +435,10 @@ O AFK mora na hunt idle.
 - O `jobs` e o ticket liquidam os pendentes de cada personagem em ordem de versão.
 - Todo campo absoluto (`ledger.ts:228-261, 303-324`, mais os novos de posição e vitais) só é escrito quando a versão do extrato é maior que `characters.durable_version`, que sobe junto.
 - Os deltas (XP, gold, item) continuam protegidos por `UNIQUE(session_id, seq)`.
+- A guarda descarta o extrato mais velho por inteiro, e só é correta com duas coisas juntas (revisão do #823):
+  - Todo extrato versionado é o estado absoluto inteiro, o de estado da Cidade inclusive, com o estoque vazio explícito.
+  - O personagem liquida completo e em ordem, pelo índice e não pelo `SCAN`, e o primeiro extrato que falha segura os seguintes. O dado torto desiste da espera depois de cinco varreduras seguidas e vai ao log.
+- O contador do hospedeiro sobrevive ao `release` como piso por dez minutos. O ticket lê a versão no `api` e não vê o extrato que um `release` concorrente ainda grava.
 
 **f. Vitais.** Vida, mana e condições passam a persistir (`characters.health/mana/conditions`) e a viajar no ticket. Ausentes, o personagem nasce cheio, como hoje.
 

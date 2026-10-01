@@ -357,11 +357,33 @@ ticket (`InitialCharacter.durableVersion = max(characters.durable_version, maior
 pendente)`, lido pelo `api` DEPOIS de liquidar) e sobe a cada extrato gravado, de qualquer sessão
 do personagem neste nó — a `seq` é por sessão e recomeça. O `jobs` (`writeReceipts`) agrupa os
 extratos por personagem e liquida em ordem de versão; todo campo ABSOLUTO (ammo, alma, estoques,
-comida, charms, bênçãos, postura, equipamento, layout, overlays, storages, stamina, skills) só é
-escrito quando `receipt.durableVersion > characters.durable_version`, e a coluna sobe na MESMA
-transação. Os deltas (XP, gold, `acquired`, `removedInstances`) e o que é monotônico por natureza
-(Bestiário pelo máximo, vocação por `coalesce`, promoção por `OR`) entram SEMPRE: seguem sob
-`UNIQUE (session_id, seq)`. Seis armadilhas:
+comida, charms, familiar, treino, bênçãos, postura, equipamento, layout, overlays, storages,
+stamina, skills) só é escrito quando `receipt.durableVersion > characters.durable_version`, e a
+coluna sobe na MESMA transação. Os deltas (XP, gold, `acquired`, `removedInstances`) e o que é
+monotônico por natureza (Bestiário e Bosstiary pelo máximo, magias aprendidas pela união, vocação
+por `coalesce`, promoção por `OR`) entram SEMPRE: seguem sob `UNIQUE (session_id, seq)`.
+
+**A guarda decide por EXTRATO, não por campo — e só é correta porque valem DUAS regras juntas.**
+Quebrar qualquer uma devolve o defeito de um extrato parcial mais novo apagando o que só o mais
+velho carregava (o de hunt traz skills, stamina, comida, storages e o estoque; o de estado da
+Cidade, antes do #823, não trazia):
+
+1. **Todo extrato versionado é o estado absoluto INTEIRO** (ADR 0060 d.10d). `#persistReceipt` e
+   `#saveDurableReceipt` levam o mesmo conjunto de campos, inclusive `supplyStock` e
+   `ammunitionStock` VAZIOS (`{}` é "esgotado"; omitir deixa a poção usada voltar). Campo novo de
+   estado absoluto entra nos DOIS, e `host.test.ts` ("estado absoluto INTEIRO") pega o esquecimento.
+2. **O personagem liquida COMPLETO e em ordem, e o que falha segura os seguintes.** A varredura usa
+   o `SCAN` só para saber QUAIS personagens têm pendência (`pending()` corta em 200 pela ordem do
+   hash, e pode entregar o mais novo sem o mais velho): `completeGroups` busca o grupo de cada um
+   pelo índice por versão (`pendingFor`, os 50 mais antigos). Depois, o primeiro extrato que falha
+   interrompe o personagem naquela varredura (`writeReceipts`) — um que falha já trancava o ticket
+   (503 `progress-not-settled`), então isso não tranca nada novo. A exceção é o que NUNCA liquida:
+   depois de `STUCK_RECEIPT_AFTER` (5) varreduras seguidas (`LedgerSweepOptions.failures`, que o
+   ciclo do `jobs` mantém) ele deixa de segurar os seguintes e vai ao log; quando liquidar, entra só
+   com os deltas. É degradação explícita — antes da emenda o `jobs` seguia adiante a cada falha, e a
+   guarda de versão perdia em silêncio o que só o extrato atrasado carregava.
+
+Sete armadilhas:
 
 - **A versão sai de forma SÍNCRONA, antes do primeiro `await` do extrato** (`#claimDurableVersion`):
   é a ordem das chamadas que ela preserva, e dois extratos do mesmo personagem em voo ao mesmo
@@ -382,12 +404,18 @@ transação. Os deltas (XP, gold, `acquired`, `removedInstances`) e o que é mon
   nas duas, ou some no caminho de volta e todo extrato vira "sem versão" sem erro nenhum
   (`receipts.test.ts` e `tickets.test.ts` pegam).
 - **A guarda protege ESTADO, não item.** `acquired` e `removedInstances` são deltas, e um extrato
-  atrasado processado ANTES do mais novo em chamadas separadas ressuscitaria um item já vendido
-  (o `DELETE` não achou nada, o `INSERT` depois o recria). Dentro de UMA liquidação isso não
-  acontece — a ordem por versão resolve —, e a janela entre duas (a varredura deixar o extrato
-  mais velho para o próximo ciclo, pelo teto de 200 do `SCAN`) é estreita; fechá-la de vez é
-  liquidar por personagem pelo índice, e fica para quem reescrever a varredura para o checkpoint
-  do mundo (OW-17, #838).
+  atrasado processado ANTES do mais novo ressuscitaria um item já vendido (o `DELETE` não achou
+  nada, o `INSERT` depois o recria). O que fecha a janela é a segunda regra acima: o grupo do
+  personagem sai completo e em ordem, e o que falha segura os seguintes — o teto de 200 do `SCAN`
+  não deixa mais o mais velho para outro ciclo. Só a desistência de `STUCK_RECEIPT_AFTER` a reabre,
+  e é explícita.
+- **O contador sobrevive ao `release` como piso** (`#retiredVersions`, `#retireDurableVersion`). O
+  ticket lê a versão no `api` ao ser emitido e não vê o extrato que um `release` concorrente
+  (`#collectResting`, logout em outra aba) ainda vai gravar, `c+1`; a sessão nova adotaria `c` e o
+  primeiro extrato dela seria TAMBÉM `c+1`, descartado como atrasado. A adoção faz `max` com o piso
+  que o nó soltou, guardado `RETIRED_VERSION_TTL_MS` (10 min) e podado do mais antigo. É por nó: o
+  ticket é preso ao nó que hospedava, então quem o consome é quem soltou; só o nó que cai com um
+  ticket vivo perde o piso, e aí o seguinte extrato — também o estado inteiro — corrige.
 - **`upgrade-existing-schema.sql` NÃO ganha esta coluna:** ele é o upgrade único do schema
   anterior à FUN-11 e nenhuma migração posterior (0001–0026) o toca; a `durable_version` entra
   pela migração `0027_823-durable-version.sql`, que roda depois dele.
