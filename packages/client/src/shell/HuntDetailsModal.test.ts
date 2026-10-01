@@ -62,6 +62,27 @@ beforeEach(() => {
   hud.set(() => ({ ...INITIAL_HUD, catalogue }));
 });
 
+describe('o nível de hazard fixo da caçada (M44-14, #632)', () => {
+  const zone = { id: 'gardens', name: 'Gnomprona Gardens', minLevel: 1, maxLevel: 12 };
+  const hazardHunt: HuntListing = { ...huntWithDesc, id: 'gardens-hunt', hazardZoneId: 'gardens' };
+
+  it('mostra a zona e o nível escolhido na Cidade; sem zona na hunt, nada de hazard', async () => {
+    hud.set((state) => ({
+      ...state,
+      catalogue: { ...catalogue, hunts: [hazardHunt, huntWithDesc], hazardZones: [zone] },
+      huntId: 'gardens-hunt',
+      hazard: { maxLevel: { gardens: 5 }, currentLevel: { gardens: 3 } },
+    }));
+    const html = await render({ open: true });
+    expect(html).toContain('Hazard · Gnomprona Gardens');
+    expect(html).toContain('Nível 3');
+    expect(html).not.toContain('party: o menor');
+
+    hud.set((state) => ({ ...state, huntId: 'rat-cellars' }));
+    expect(await render({ open: true })).not.toContain('Hazard');
+  });
+});
+
 describe('HuntDetailsModal (#325, #349, SV-05, SV-13)', () => {
   it('RF-01: hunt with two monsters in catalogue shows name, health and XP for both', async () => {
     hud.set((state) => ({ ...state, huntId: 'rat-cellars', difficulty: 'bold' }));

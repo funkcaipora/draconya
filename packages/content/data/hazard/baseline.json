@@ -1,0 +1,26 @@
+{
+  "id": "baseline",
+  "criticalIntervalMs": 2000,
+  "criticalChance": 750,
+  "criticalMultiplier": 25,
+  "damageMultiplier": 200,
+  "defenseMultiplier": 0,
+  "dodgeMultiplier": 85,
+  "expBonusMultiplier": 2,
+  "lootBonusMultiplier": 2,
+  "podDropMultiplier": 87,
+  "plunderSpawnMultiplier": 25,
+  "zones": {
+    "gnomprona-gardens": {
+      "name": "Gnomprona Gardens",
+      "minLevel": 1,
+      "maxLevel": 12,
+      "crit": true,
+      "dodge": true,
+      "damageBoost": true,
+      "defenseBoost": true,
+      "levelUpMonsterId": "the-primal-menace",
+      "plunderMonsterId": "plunder-patriarch"
+    }
+  }
+}

@@ -852,7 +852,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 639
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "fungosaurus",

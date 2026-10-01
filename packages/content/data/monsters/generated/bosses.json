@@ -239,7 +239,8 @@
           "count": 2
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "armenius-creature",
@@ -428,7 +429,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/armenius.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "bazir",
@@ -1016,7 +1018,8 @@
           "count": 1
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "bibby-bloodbath",
@@ -1228,7 +1231,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 900
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "big-boss-trolliver",
@@ -1346,7 +1350,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 432
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "black-knight",
@@ -1553,7 +1558,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 46
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "brain-parasite",
@@ -1910,7 +1916,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 2366
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "chikhaton",
@@ -2031,7 +2038,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 647
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "clubarc-the-plunderer",
@@ -2215,7 +2223,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/clubarc_the_plunderer.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "dharalion",
@@ -2457,7 +2466,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 203
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "diblis-the-fair",
@@ -2646,7 +2656,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 477
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "diseased-bill",
@@ -2873,7 +2884,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 485
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "diseased-dan",
@@ -3099,7 +3111,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 486
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "diseased-fred",
@@ -3326,7 +3339,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 484
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "ekatrix",
@@ -3541,7 +3555,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 1140
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "elvira-hammerthrust",
@@ -3703,7 +3718,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 858
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "general-murius",
@@ -3923,7 +3939,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 207
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "glitterscale",
@@ -4055,7 +4072,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 670
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "grandfather-tridian",
@@ -4256,7 +4274,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 431
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "groam",
@@ -4395,7 +4414,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 736
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "guard-captain-quaid",
@@ -4673,7 +4693,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 1791
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "hairman-the-huge",
@@ -4787,7 +4808,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 425
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "incredibly-old-witch",
@@ -5464,7 +5486,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/izcandar_champion_of_summer.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "izcandar-champion-of-winter",
@@ -5789,7 +5812,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/izcandar_champion_of_winter.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "jesse-the-wicked",
@@ -6022,7 +6046,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/kraknaknork's_demon.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "mad-mage",
@@ -6318,7 +6343,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 703
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "mad-technomancer",
@@ -6494,7 +6520,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/mad_technomancer.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "morik-the-gladiator",
@@ -6657,7 +6684,8 @@
           "count": 2
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "mornenion",
@@ -7290,7 +7318,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 2118
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "munster",
@@ -7390,7 +7419,8 @@
           "count": 2
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "mutated-visco",
@@ -7649,7 +7679,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/visco.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "pythius-the-rotten",
@@ -7878,7 +7909,8 @@
           "count": 2
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "raxias",
@@ -8030,7 +8062,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 1624
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "renegade-orc",
@@ -8182,7 +8215,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/renegade_orc.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "robby-the-reckless",
@@ -8500,7 +8534,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 435
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "smuggler-baron-silvertoe",
@@ -8664,7 +8699,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 436
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "splasher",
@@ -8926,7 +8962,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/splasher.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "sugar-daddy",
@@ -9185,7 +9222,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 2562
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "sugar-mommy",
@@ -9371,7 +9409,8 @@
     "bosstiary": {
       "rarity": "bane",
       "raceId": 2580
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "teleskor",
@@ -9472,7 +9511,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/teleskor.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-abomination",
@@ -9762,7 +9802,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 373
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-blightfather",
@@ -9869,7 +9910,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 638
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-book-of-death",
@@ -10291,7 +10333,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 2055
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-collector",
@@ -10439,7 +10482,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/the_collector.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-evil-eye",
@@ -10783,7 +10827,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 210
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-first-dragon",
@@ -11011,7 +11056,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 1368
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-frog-prince",
@@ -11102,7 +11148,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 420
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "the-rootkraken",
@@ -11250,7 +11297,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 2528
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "vemiath",
@@ -11546,7 +11594,8 @@
     "bosstiary": {
       "rarity": "archfoe",
       "raceId": 2365
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "warlord-ruzad",
@@ -11694,7 +11743,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 419
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "weakened-demon",
@@ -11775,7 +11825,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/bosses/weakened_demon.lua"
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "willi-wasp",
@@ -11885,7 +11936,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 955
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "zevelon-duskbringer",
@@ -12097,7 +12149,8 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 475
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "zoralurk",
@@ -12435,7 +12488,8 @@
           "count": 2
         }
       ]
-    }
+    },
+    "rewardBoss": true
   },
   {
     "id": "zushuka",
@@ -12794,6 +12848,7 @@
     "bosstiary": {
       "rarity": "nemesis",
       "raceId": 969
-    }
+    },
+    "rewardBoss": true
   }
 ]

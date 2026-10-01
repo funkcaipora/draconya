@@ -10,7 +10,7 @@ const CHARACTER: CharacterRecord = {
   id: 'p1', accountId: 'a1', name: 'Hero', vocation: null, promoted: false, level: 1, xp: 0, soul: 0, gold: 0,
   capacity: 400, premiumUntil: null, staminaMs: 86400000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
-  ammo: null, supplyStock: null, ammunitionStock: null, charms: null, bosstiary: null, learnedSpells: null,
+  ammo: null, supplyStock: null, ammunitionStock: null, charms: null, hazard: null, bosstiary: null, learnedSpells: null,
   familiar: null, training: null, fedMs: 0, blessings: 0, fightMode: 'attack',
   createdAt: new Date(),
 };
@@ -198,6 +198,31 @@ describe('POST /api/tickets', () => {
     }
     expect(await issuedWith('aggressive')).not.toHaveProperty('fightMode');
     expect(await issuedWith(null)).not.toHaveProperty('fightMode');
+  });
+
+  it('o Hazard da linha entra no ticket; nulo ou corrompido, fica de fora (M44-14, #632)', async () => {
+    // Mesmo caminho dos Charms: o nível escolhido na Cidade vai no ticket e vale fixado na hunt
+    // (ADR 0052 d.5). A linha é `jsonb` sem CHECK: um registro torto cai fora, sem trancar o login.
+    const issuedWith = async (hazard: unknown) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, hazard })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    const registry = { maxLevel: { gardens: 4 }, currentLevel: { gardens: 3 }, version: 1 };
+    expect(await issuedWith(registry)).toMatchObject({ hazard: registry });
+    expect(await issuedWith(null)).not.toHaveProperty('hazard');
+    expect(await issuedWith({ maxLevel: { gardens: -1 }, currentLevel: {}, version: 1 }))
+      .not.toHaveProperty('hazard');
+    expect(await issuedWith('4')).not.toHaveProperty('hazard');
   });
 
   it('os abates da linha entram no ticket; nulos ou corrompidos, ficam de fora (FUN-113)', async () => {

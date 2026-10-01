@@ -126,6 +126,30 @@ Três escolhas que o texto do Canary não dá pronto:
   `session-state.sessionType` já é uma string livre, então `'world'` passa — os dois contratos
   seguem como estão, e os testes do protocolo o prendem.
 
+### Um canal de gold por sessão (OW-04, ADR 0060 d.10c)
+
+O hospedeiro deixou de perguntar "este ruleset é shard?" para decidir o caminho do gold, do
+snapshot, da saída e do campo de visão. Cada pergunta tem um predicado
+(`packages/server/src/game/ruleset-traits.ts`: `leavesOnExit`, `creditsAggregates`,
+`keepsSnapshot`, `usesAreaOfInterest`, `offersCityServices`), e a tabela de quem lê qual está em
+`packages/server/AGENTS.md`. **Nada muda para o jogador**: a Cidade e a hunt não declaram
+`progress`, e para elas cada predicado responde o que `shared` respondia.
+
+O que ficou escrito é a regra do gold, que vale para todo serviço que move gold fora do loot
+(vender, aprender magia, remover Charm, bênção, promoção, compra):
+
+- a sessão que **credita por agregado** (a hunt, e o mundo quando existir) move o gold pelo
+  agregado e pelo `goldDelta`, juntos, e liquida o `goldDelta` depois de gravar o extrato;
+- a que **não credita** (a Cidade) manda o `goldDelta` como agregado do extrato de estado — o
+  agregado dela é cumulativo, e somar nele re-creditaria a venda no logout seguinte;
+- nunca as duas coisas. O que o jogador vê: **vender duas vezes na praça, com dois logouts no meio,
+  credita cada venda uma vez só**; e, no mundo, 100 de loot + 50 de venda dão 150 no ledger, com ou
+  sem checkpoint no meio.
+
+O ramo do mundo (sair por extrato de delta, transição, drenagem) já existe no hospedeiro e é
+exercitado em teste com um ruleset de mentira; falta o ruleset real (OW-13/OW-18) e o checkpoint
+com timer (OW-16).
+
 ### Desconectar não tira ninguém da praça na hora
 
 A carência de repouso (FUN-52) vale por **personagem**, não pela sessão: cinco minutos sem ninguém
