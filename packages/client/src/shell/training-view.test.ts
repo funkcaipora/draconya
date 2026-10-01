@@ -15,6 +15,12 @@ const rules: TrainingRules = {
     { skillId: 'sword', name: 'Espada', kind: 'attacks' },
     { skillId: 'magic', name: 'Magic Level', kind: 'mana' },
   ],
+  // Toda skill que o Treino toca: as do livro e a que só uma exercise weapon treina (o exercise shield).
+  skills: [
+    { skillId: 'sword', name: 'Espada', kind: 'attacks' },
+    { skillId: 'magic', name: 'Magic Level', kind: 'mana' },
+    { skillId: 'shielding', name: 'Escudo', kind: 'attacks' },
+  ],
 };
 
 const weapon = (id: string, skillId: string, charges: number, buyPrice?: number): ItemDefinition => ({
@@ -51,6 +57,14 @@ describe('a loja de exercise weapons', () => {
   it('uma skill fora do livro vai para o fim, sem quebrar a ordem', () => {
     const odd = [...items, weapon('exercise-fist', 'fist', 500, 1)];
     expect(shopWeapons(odd, rules).at(-1)?.itemId).toBe('exercise-fist');
+  });
+
+  it('o exercise shield (skill fora do livro, MAS conhecida do Treino) vem depois do livro e antes das desconhecidas', () => {
+    const withShield = [...items, weapon('exercise-shield', 'shielding', 500, 347_222), weapon('exercise-fist', 'fist', 500, 1)];
+    expect(shopWeapons(withShield, rules).map((row) => row.itemId)).toEqual([
+      'exercise-sword', 'durable-exercise-sword', 'lasting-exercise-sword', 'exercise-rod',
+      'exercise-shield', 'exercise-fist',
+    ]);
   });
 
   it('habilita o botão quando o gold cobre o preço — a decisão de verdade é do servidor', () => {
@@ -101,10 +115,24 @@ describe('o que as cargas rendem', () => {
     expect(chargeYield(500, 'sword', undefined)).toBeNull();
   });
 
-  it('o nome da skill é o do livro; sem ele, o próprio id — nunca um nome inventado', () => {
+  it('o nome da skill é o do conteúdo; sem ele, o próprio id — nunca um nome inventado', () => {
     expect(skillNameOf(rules, 'sword')).toBe('Espada');
     expect(skillNameOf(rules, 'fist')).toBe('fist');
     expect(skillNameOf(undefined, 'sword')).toBe('sword');
+  });
+
+  it('o exercise shield treina o shielding, que o livro NÃO oferece: o nome vem das skills do Treino, não do livro', () => {
+    // Mutação que mata: ler o nome de `offlineSkills` — o escudo apareceria como "shielding".
+    expect(rules.offlineSkills.some((entry) => entry.skillId === 'shielding')).toBe(false);
+    expect(skillNameOf(rules, 'shielding')).toBe('Escudo');
+    expect(chargeYield(500, 'shielding', rules)).toEqual({ unit: 'tries', amount: 3_500 });
+  });
+
+  it('o tipo do rendimento é o do GOLPE: a rod rende mana mesmo quando o livro não oferece o magic level', () => {
+    const withoutBook: TrainingRules = {
+      ...rules, offlineSkills: [{ skillId: 'sword', name: 'Espada', kind: 'attacks' }],
+    };
+    expect(chargeYield(500, 'magic', withoutBook)).toEqual({ unit: 'mana', amount: 300_000 });
   });
 });
 

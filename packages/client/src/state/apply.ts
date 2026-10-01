@@ -49,6 +49,18 @@ const REASON = {
   // O encerramento coletivo (#432, ADR 0032 d.14): todos os presentes aprovaram.
   'party-vote': 'A party encerrou a caçada',
 } as const;
+
+/**
+ * Por que o TREINO acabou. As frases da hunt não servem: "Você saiu da hunt" a quem parou o treino
+ * na Cidade, ou "Concluído" para uma arma que acabou, não dizem o que aconteceu. `manual-exit` é o
+ * `leave-hunt` (o jogador parou) e `completed` é a arma esgotada ou perdida da mochila — as duas
+ * saídas que o ruleset do Treino produz; o resto (manutenção) é o de sempre.
+ */
+const TRAINING_REASON: Partial<Record<keyof typeof REASON, string>> = {
+  'manual-exit': 'Você saiu do treino',
+  completed: 'A exercise weapon acabou',
+  drain: REASON.drain,
+};
 import { missileDuration } from '../world/effects.js';
 import {
   addEffect, addFloatingText, addMissile, applyTileUpdate, clearTransients, enterInstance,
@@ -446,7 +458,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           level: 'warning',
           // O Treino não rende XP, gold nem abate: o extrato dele é o tempo e o porquê (#631).
           text: state.analyzer.sessionType === 'training'
-            ? `Treino: ${REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
+            ? `Treino: ${TRAINING_REASON[message.reason] ?? REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
             : `${REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
               + ` · ${aggregates.xpGained} XP · ${aggregates.goldGained - aggregates.goldSpent} gold`
               + ` · ${aggregates.kills} abate(s)`,

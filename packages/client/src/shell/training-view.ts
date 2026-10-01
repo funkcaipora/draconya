@@ -36,9 +36,13 @@ export interface ShopWeapon {
   readonly price: number;
 }
 
-/** O nome da skill do livro: o do conteúdo, ou o id quando o livro não a traz (nunca inventado). */
+/**
+ * O nome de uma skill que o Treino toca: o do conteúdo (`catalogue.training.skills`, que cobre as
+ * do livro E as que só uma exercise weapon treina, como o shielding do exercise shield), ou o id
+ * quando o servidor não a traz (nunca inventado).
+ */
 export function skillNameOf(rules: TrainingRules | undefined, skillId: string): string {
-  return rules?.offlineSkills.find((entry) => entry.skillId === skillId)?.name ?? skillId;
+  return rules?.skills.find((entry) => entry.skillId === skillId)?.name ?? skillId;
 }
 
 /**
@@ -75,7 +79,7 @@ export function shopWeapons(
   items: readonly ItemDefinition[] | undefined, rules: TrainingRules | undefined,
 ): ShopWeapon[] {
   if (items === undefined) return [];
-  const order = new Map((rules?.offlineSkills ?? []).map((entry, index) => [entry.skillId, index] as const));
+  const order = new Map((rules?.skills ?? []).map((entry, index) => [entry.skillId, index] as const));
   const rows = items.flatMap((item) => {
     if (item.exercise === undefined || item.buyPrice === undefined) return [];
     return [{
@@ -94,13 +98,14 @@ export function shopWeapons(
 /**
  * O que `charges` cargas rendem no boneco: `tries` para as skills por ataque e `manaSpent` para o
  * magic level (`perCharge`, do catálogo — o servidor já aplicou o `rate` do boneco). A skill é
- * `mana` quando o livro a marca assim.
+ * `mana` quando o catálogo a marca assim: o tipo do GOLPE (`skills`), que o servidor lê do ganho da
+ * skill, e não o do livro — uma rod rende mana mesmo que o livro não ofereça o magic level.
  */
 export function chargeYield(
   charges: number, skillId: string, rules: TrainingRules | undefined,
 ): { readonly unit: 'tries' | 'mana'; readonly amount: number } | null {
   if (rules === undefined) return null;
-  const isMana = rules.offlineSkills.find((entry) => entry.skillId === skillId)?.kind === 'mana';
+  const isMana = rules.skills.find((entry) => entry.skillId === skillId)?.kind === 'mana';
   return isMana
     ? { unit: 'mana', amount: charges * rules.perCharge.manaSpent }
     : { unit: 'tries', amount: charges * rules.perCharge.tries };

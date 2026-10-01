@@ -1322,6 +1322,10 @@ describe('o Treino (#631, ADR 0059)', () => {
       perCharge: { tries: 7, manaSpent: 600 }, bankCapMs: 43_200_000, graceMs: 600_000,
       spendCapMs: { free: 21_600_000, premium: 43_200_000 },
       offlineSkills: [{ skillId: 'sword', name: 'Espada', kind: 'attacks' }],
+      skills: [
+        { skillId: 'sword', name: 'Espada', kind: 'attacks' },
+        { skillId: 'shielding', name: 'Escudo', kind: 'attacks' },
+      ],
     };
     applyMessage({ ...base, training } as unknown as S2CMessage, 0);
     expect(hud.get().catalogue?.training).toEqual(training);
@@ -1377,8 +1381,19 @@ describe('o Treino (#631, ADR 0059)', () => {
       notableEvents: [],
     }, 0);
     const line = hud.get().systemMessages.at(-1);
-    expect(line?.text).toBe('Treino: Concluído · 16 min');
+    // A arma acabou: não é "Concluído" (a frase da hunt), é o que de fato aconteceu.
+    expect(line?.text).toBe('Treino: A exercise weapon acabou · 16 min');
     expect(line?.text).not.toContain('XP');
+
+    // E parar o treino na Cidade não é "sair da hunt": o jogador está lendo isto em pé na praça.
+    applyMessage({
+      type: 'session-ended', reason: 'manual-exit',
+      aggregates: { durationMs: 180_000, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+    const manual = hud.get().systemMessages.at(-1);
+    expect(manual?.text).toBe('Treino: Você saiu do treino · 3 min');
+    expect(manual?.text).not.toContain('hunt');
   });
 });
 

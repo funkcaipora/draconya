@@ -20,6 +20,11 @@ const rules: TrainingRules = {
     { skillId: 'sword', name: 'Espada', kind: 'attacks' },
     { skillId: 'magic', name: 'Magic Level', kind: 'mana' },
   ],
+  skills: [
+    { skillId: 'sword', name: 'Espada', kind: 'attacks' },
+    { skillId: 'magic', name: 'Magic Level', kind: 'mana' },
+    { skillId: 'shielding', name: 'Escudo', kind: 'attacks' },
+  ],
 };
 const weapon = (id: string, name: string, skillId: string, charges: number, buyPrice: number): ItemDefinition => ({
   id, name, appearanceId: 100, weight: 10, slot: null, twoHanded: false, exercise: { skillId, charges }, buyPrice,
@@ -102,6 +107,19 @@ describe('TrainingModal (#631)', () => {
     html = await render();
     expect(html).toContain('Gold insuficiente');
     expect(html).toContain('disabled');
+  });
+
+  it('o exercise shield aparece com o nome da skill do conteúdo (Escudo), e não com o id cru (shielding)', async () => {
+    const shield = weapon('exercise-shield', 'exercise shield', 'shielding', 500, 347_222);
+    hud.set((state) => ({
+      ...state, catalogue: catalogue({ items: [...items, shield] }), gold: 347_222,
+      training: register({ weapons: [{ instanceId: 's1', itemId: 'exercise-shield', charges: 500 }] }),
+    }));
+    const html = await render();
+    expect(html).toContain('Escudo · 500');
+    expect(html).not.toContain('shielding');
+    // O escudo rende tries, como toda skill por golpe: 500 × 7.
+    expect(html).toContain('Rende 3.500 tries');
   });
 
   it('a fiação: cada botão manda a intenção certa, e treinar fecha o modal', async () => {
