@@ -867,10 +867,10 @@ numa fila só.
   | combate | d | 122,8 → 121,3 µs | 11,9 → 11,7 s | 94,0 → 94,1 KiB | 18,8 KiB | 6.041 |
 
   O custo por tick fica a +0,1% a +2,2% no frio (média ~+0,9%) e a −1,2% a +1,0% no combate (média
-  ~+0,1%), dentro do ruído de uma máquina disputada; a memória por sessão varia em ~0,1 KiB, até 0,4 KiB para menos
-  (o par de campos novos do `Schedule`, mais o ruído do GC); o snapshot e os abates são IDÊNTICOS em todas as oito medidas. Quem
-  mexer em `schedule.ts` de novo repete o par contra a `tibia-parity` do momento, não contra estes
-  valores.
+  ~+0,1%), dentro do ruído de uma máquina disputada. A memória por sessão varia em ~0,1 KiB, até
+  0,4 KiB para menos (o par de campos novos do `Schedule`, mais o ruído do GC). O snapshot e os
+  abates são IDÊNTICOS em todas as oito medidas. Quem mexer em `schedule.ts` de novo repete o par
+  contra a `tibia-parity` do momento, não contra estes valores.
 
 **`tieBreak`: `'insertion'` (default) ou `'stable'`.** A ordem do mesmo `(dueAtMs, priority)` era a
 da inserção (`seq`). `'stable'` ordena por `(dueAtMs, priority, subject, kind, seq)` — comparando
