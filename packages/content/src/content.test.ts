@@ -5,6 +5,7 @@ import {
   buildContent, compileElementHealing, compileMonster, compileReflect, computeVersion, ContentError, placeholderAppearances,
 } from './content.js';
 import type { RawContent } from './content.js';
+import { absoluteToLocal, isBlocked } from './map.js';
 import {
   CONDITION_IMMUNITIES, DAMAGE_OVER_TIME_CONDITION_IMMUNITY, factionValue, MONSTER_FACTIONS, monsterSchema,
   NEUTRAL_RATES, ratesSchema, wallSetOf,
@@ -1744,6 +1745,122 @@ describe('ponto de entrada da Cidade (FUN-60)', () => {
       .toThrow(/não tem entryPoint/);
     expect(() => buildContent(base({ hunts: [], maps: [sala], city: { mapId: 'nowhere', stepDurationMs: 500 } })))
       .toThrow(/mapa inexistente "nowhere"/);
+  });
+});
+
+describe('mundos (#829, OW-08, ADR 0060)', () => {
+  // Um recorte importado: x 100–106, y 200–204, z 6–7. No andar 7 o tile local (3,2) é parede e o
+  // (3,1) é chão; o templo é coordenada ABSOLUTA, e o chão que o confere é local.
+  const region = {
+    x: [100, 106] as [number, number], y: [200, 204] as [number, number], z: [6, 7] as [number, number],
+  };
+  const vila = {
+    id: 'vila', z: 7,
+    floors: {
+      '6': { grid: ['#######', '#.....#', '#.....#', '#.....#', '#######'] },
+      '7': { grid: ['#######', '#.....#', '#..#..#', '#.....#', '#######'] },
+    },
+    source: { file: 'otservbr.otbm', sha256: 'a'.repeat(64), region },
+  };
+  const world = (over: Record<string, unknown> = {}) => ({
+    id: 'main', name: 'Draconya', worldType: 'no-pvp', map: 'vila',
+    towns: [{ id: 'vila', name: 'Vila', temple: { x: 103, y: 201, z: 7 } }],
+    capacity: 200, ...over,
+  });
+  /** Sem hunt: com um mapa presente a referência cruzada passa a ser checada — ruído aqui. */
+  const build = (worlds: readonly unknown[], maps: readonly unknown[] = [vila]) =>
+    buildContent(base({ hunts: [], maps, worlds }));
+
+  it('monta o mundo indexado por id, com tipo, mapa, cidades e teto', () => {
+    const content = build([world()]);
+    expect(content.worlds.get('main')).toEqual(world());
+    expect(content.worlds.size).toBe(1);
+  });
+
+  it('o templo absoluto vira o tile local pelo `source.region` e cai em chão livre', () => {
+    const content = build([world()]);
+    const map = content.maps.get('vila');
+    const temple = content.worlds.get('main')?.towns[0]?.temple;
+    if (map === undefined || temple === undefined) throw new Error('fixture sem mapa ou templo');
+    expect(absoluteToLocal(map, temple)).toEqual({ x: 3, y: 1, z: 7 });
+    expect(isBlocked(map, 3, 1, 7)).toBe(false);
+  });
+
+  it('conteúdo sem `worlds` tem zero mundos: a fixture que só fala de hunt monta como antes', () => {
+    expect(buildContent(base()).worlds.size).toBe(0);
+  });
+
+  it('aceita várias cidades, cada uma com o templo no próprio recorte', () => {
+    const content = build([world({
+      towns: [
+        { id: 'vila', name: 'Vila', temple: { x: 103, y: 201, z: 7 } },
+        { id: 'porao', name: 'Porão', temple: { x: 101, y: 203, z: 6 } },
+      ],
+    })]);
+    expect(content.worlds.get('main')?.towns.map((t) => t.id)).toEqual(['vila', 'porao']);
+  });
+
+  it('recusa um worldType desconhecido, inclusive os do Canary que o motor não implementa', () => {
+    // `retro-pvp` é o default do Canary (`config.lua.dist:33`) e existe lá — o Draconya só tem o
+    // `no-pvp`, e aceitar o resto seria um mundo que promete PvP sem haver dano entre jogadores.
+    for (const worldType of ['retro-pvp', 'pvp', 'expert-pvp', 'pvp-enforced', 'open-pvp', '']) {
+      expect(() => build([world({ worldType })]), worldType).toThrow(/world "main": worldType/);
+    }
+  });
+
+  it('recusa mapa inexistente e mapa que não foi importado do OTBM', () => {
+    expect(() => build([world({ map: 'nowhere' })])).toThrow(/world "main": map "nowhere" não existe/);
+    const sala = { id: 'vila', z: 7, grid: ['#####', '#...#', '#####'] };
+    expect(() => build([world()], [sala])).toThrow(/mapa "vila" não tem source\.region/);
+  });
+
+  it('recusa o templo fora do recorte, em cada um dos três eixos', () => {
+    // As bordas de dentro (x 100 e 106, y 200 e 204, z 6 e 7) valem; um passo além, não.
+    for (const temple of [
+      { x: 99, y: 201, z: 7 }, { x: 107, y: 201, z: 7 },
+      { x: 103, y: 199, z: 7 }, { x: 103, y: 205, z: 7 },
+      { x: 103, y: 201, z: 5 }, { x: 103, y: 201, z: 8 },
+    ]) {
+      expect(() => build([world({ towns: [{ id: 'vila', name: 'Vila', temple }] })]), JSON.stringify(temple))
+        .toThrow(/cidade "vila": templo \(\d+,\d+,\d+\) cai fora do recorte do mapa "vila"/);
+    }
+  });
+
+  it('recusa o templo em parede, ou no andar que o mapa não tem', () => {
+    // (103,202,7) é o tile local (3,2) do andar 7: a parede do meio.
+    expect(() => build([world({ towns: [{ id: 'vila', name: 'Vila', temple: { x: 103, y: 202, z: 7 } }] })]))
+      .toThrow(/templo \(103,202,7\), no tile \(3,2,7\) do mapa "vila", está em parede/);
+    // A região declara z 5–7 mas o mapa só tem os andares 6 e 7: o 5 está no recorte e sem chão.
+    const fundo = { ...vila, source: { ...vila.source, region: { ...region, z: [5, 7] as [number, number] } } };
+    expect(() => build([world({ towns: [{ id: 'vila', name: 'Vila', temple: { x: 103, y: 201, z: 5 } }] })], [fundo]))
+      .toThrow(/está em parede ou num andar sem chão/);
+  });
+
+  it('recusa cidade com id repetido e mundo com id repetido', () => {
+    const town = { id: 'vila', name: 'Vila', temple: { x: 103, y: 201, z: 7 } };
+    expect(() => build([world({ towns: [town, town] })])).toThrow(/cidade "vila": id de cidade duplicado/);
+    expect(() => build([world(), world({ name: 'Outro' })])).toThrow(/world "main" duplicado/);
+  });
+
+  it('o mundo entra na versão do conteúdo: mudar o teto muda a versão', () => {
+    const versionOf = (worlds: readonly unknown[]): string => build(worlds).version;
+    expect(versionOf([world()])).toBe(versionOf([world()]));
+    expect(versionOf([world()])).not.toBe(versionOf([world({ capacity: 201 })]));
+    expect(versionOf([world()])).not.toBe(versionOf([]));
+  });
+
+  it('um mapa que não monta não vira também problema do mundo: só a causa é reportada', () => {
+    // O mapa passa no schema e quebra ao montar (o andar padrão 9 não está em `floors`): a causa
+    // é dele, e repeti-la como "mundo sem mapa" seria sintoma em cima de causa.
+    const quebrado = { ...vila, z: 9 };
+    let message = '';
+    try {
+      build([world()], [quebrado]);
+    } catch (error) {
+      message = error instanceof ContentError ? error.message : String(error);
+    }
+    expect(message).toMatch(/o andar padrão 9 não está em floors/);
+    expect(message).not.toMatch(/world "main"/);
   });
 });
 
