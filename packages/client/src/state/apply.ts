@@ -8,7 +8,10 @@
 // mundo. `creature-*` é sempre mundo — e é por isso que dezenas de deltas por segundo não
 // tocam o React.
 
-import type { OutfitColors, S2CMessage, SkillProgress as ProtocolSkillProgress } from '@draconya/protocol';
+import type {
+  CreatureLight, CreatureVoices, MonsterRace, OutfitColors, S2CMessage,
+  SkillProgress as ProtocolSkillProgress,
+} from '@draconya/protocol';
 import { appendCapped, hud, slotKey, type PlayerSkills, type SkillProgress, type SlotState } from './hud.js';
 import { aimTracker } from './aim.js';
 import { targetTracker } from './target.js';
@@ -86,6 +89,27 @@ function colorsOf(
   creature: { readonly colors?: OutfitColors | undefined },
 ): Pick<Creature, 'colors'> {
   return creature.colors === undefined ? {} : { colors: creature.colors };
+}
+
+/**
+ * A apresentação do monstro (#620) — addons, raça, luz e falas —, SÓ o que o servidor mandou.
+ *
+ * O mesmo motivo de `colorsOf`: o tipo do protocolo admite `undefined` e o do store não
+ * (`exactOptionalPropertyTypes`), e "o servidor não disse" tem que chegar ao desenho como a
+ * FALTA do campo — é o viewport quem aplica o neutro (sem addon, `blood`, sem luz, mudo).
+ */
+function presentationOf(creature: {
+  readonly addons?: number | undefined;
+  readonly race?: MonsterRace | undefined;
+  readonly light?: CreatureLight | undefined;
+  readonly voices?: CreatureVoices | undefined;
+}): Pick<Creature, 'addons' | 'race' | 'light' | 'voices'> {
+  return {
+    ...(creature.addons === undefined ? {} : { addons: creature.addons }),
+    ...(creature.race === undefined ? {} : { race: creature.race }),
+    ...(creature.light === undefined ? {} : { light: creature.light }),
+    ...(creature.voices === undefined ? {} : { voices: creature.voices }),
+  };
 }
 
 /**
@@ -180,6 +204,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         appearanceId: message.appearanceId,
         ...colorsOf(message),
         ...objectOf(message),
+        ...presentationOf(message),
         name: message.name,
         health: message.health,
         maxHealth: message.maxHealth,
@@ -221,12 +246,16 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
     case 'creature-update': {
       const creature = world.creatures.get(message.id);
       if (creature === undefined) return;
-      const { colors: _colors, object: _object, ...rest } = creature;
+      // Cores, objeto e addons são parte do que a condição troca (`Outfit_t`): saem junto da
+      // aparência velha, e só os que a mensagem traz voltam. Raça, luz e falas (#620) são da
+      // criatura, não do outfit, e ficam.
+      const { colors: _colors, object: _object, addons: _addons, ...rest } = creature;
       world.creatures.set(message.id, {
         ...rest,
         appearanceId: message.appearanceId,
         ...colorsOf(message),
         ...objectOf(message),
+        ...(message.addons === undefined ? {} : { addons: message.addons }),
       });
       return;
     }
@@ -556,6 +585,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           appearanceId: creature.appearanceId,
           ...colorsOf(creature),
           ...objectOf(creature),
+          ...presentationOf(creature),
           name: creature.name,
           health: creature.health,
           maxHealth: creature.maxHealth,
@@ -748,6 +778,15 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           level: 'warning', text: message.reason ?? '', atMs: nowMs,
         }),
       }));
+      return;
+
+    // `logout-refused` e `world-full` (OW-11, #832, ADR 0060 d.7 e d.2b): contratos do MUNDO, que
+    // nenhum servidor emite ainda — quem os produz é a saída do `sim` e a entrada pelo repouso
+    // (OW-14, OW-21), e quem os mostra é a sessão `world` do cliente (OW-23). Ficam como NÃO
+    // aplicados, e de propósito: o `satisfies never` abaixo existe para que mensagem nova não seja
+    // ignorada por esquecimento, e aqui a omissão é a decisão, declarada.
+    case 'logout-refused':
+    case 'world-full':
       return;
 
     default:

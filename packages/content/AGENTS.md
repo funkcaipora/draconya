@@ -45,17 +45,19 @@ entidade (a forma do `monsterSchema` mais `bestiary` e `outfitId`) em três dest
 (`entries`) e `appearances/baseline.json` (`monsters`). De caminho, valida `loot.items` contra o
 catálogo de itens REAL (`data/items` — o que `load.ts` de fato carrega hoje) e remove a linha cujo
 item não existe, ou que pede pilha de item que não empilha — contada, nunca em silêncio, em
-`docs/reference/catalog/monsters-promotion-report.md`. Rat, Rotworm, Dragon e Dragon Lord nunca
-são promovidos POR ESTE SCRIPT (`HAND_AUTHORED_MONSTER_IDS`, `scripts/catalog/promote-monsters.ts`)
+`docs/reference/catalog/monsters-promotion-report.md`. Rat, Rotworm, Dragon, Dragon Lord e Dragon Lord
+Hatchling nunca são promovidos POR ESTE SCRIPT (`HAND_AUTHORED_MONSTER_IDS`, `scripts/catalog/promote-monsters.ts`)
 — o #581 os regenerou uma única vez, direto em `generated/<fatia>.json` (Rat em `mammals.json`,
-Rotworm em `vermins.json`, Dragon e Dragon Lord em `dragons.json`). O #581 tinha dado aos dois um
+Rotworm em `vermins.json`, os três dragões em `dragons.json`). O #581 tinha dado aos dois um
 override próprio (`data/monsters/overrides/rat.json`/`rotworm.json`) para o `blockable: true`
 temporário que Rat Cellars e Rotworm Caves ainda exigiam com o modelo antigo de pull; o #586
 (M36-05) converteu as duas hunts para os spawns reais do Canary e apagou os dois arquivos — Rat e
 Rotworm caem no `blockable: false` do próprio Canary, como o resto do bestiário. `pnpm
-catalog:promote-monsters` (`preserveHandAuthored`) NUNCA sobrescreve essas quatro entradas numa
-reimportação futura — elas só mudam de novo por decisão deliberada, como o #581. `load.ts` não lê
-`staging/`, e nada do jogo deve ler.
+catalog:promote-monsters` (`preserveHandAuthored`) NUNCA sobrescreve essas cinco entradas numa
+reimportação futura — elas só mudam de novo por decisão deliberada, como o #581. **A apresentação
+(`outfit`, `voices`, `light`, `race`, #620) é a exceção:** o `promote-monsters` a renova nas
+cinco entradas hand-authored também (`PRESENTATION_FIELDS`, `withPresentation`) — a regra do #581 protege os números de
+combate, não a fala do rato. `load.ts` não lê `staging/`, e nada do jogo deve ler.
 
 **Os familiares de vocação (#599)**: `familiars/` deixou de ser pulada — o leitor gera os quatro
 (`data/monsters/generated/familiars.json`; o do Monk sai pela linha explícita `OUT_OF_CUT_MONSTERS`,
@@ -210,9 +212,24 @@ nunca aqui.
 Huntera); a hunt anda pela fórmula do Tibia com `progression.startingSpeed`/`speedPerLevel` e
 `monster.speed`.
 
+**Zonas por tile** (#830, OW-09, ADR 0060 d.8, que reverte o ADR 0025 d.9). `floors[z].zones` é a
+quarta camada por andar, na forma de `speed` e `sight` — uma string por linha, um caractere por
+tile —, lida de `TILE_FLAGS` do OTBM. A paleta é FIXA (`ZONE_PALETTE`, em `map.ts`; não por mapa,
+como `speedPalette` é): `.` normal, `p` PZ, `n` no-pvp, `a` arena (`PVPZONE`), `l` só no-logout, e
+`P`/`N`/`A` a zona mais no-logout. Em memória, `Floor.zones` é `Uint8Array | null` com a soma dos
+bits do OTBM (`ZONE_FLAG`: PZ 1, no-pvp 4, no-logout 8, arena 16) e `zoneFlagsAt(map, x, y, z)`
+lê um tile — `0`, normal, quando a camada falta, o tile está fora do mapa ou o andar não existe.
+Ausente é `null` e tudo é normal: **as hunts não mudam**, e hoje só `thais.json` a tem. O valor já
+vem normalizado como o Canary carrega o mapa (PZ, no-pvp e arena exclusivos; no-logout soma; casa é
+PZ), então o `sim` aplica a precedência de `Tile::getZoneType` e nunca precisa re-normalizar. É dado,
+sem regra: o que PZ, no-pvp e no-logout proíbem é do `sim` (OW-10, OW-27). Caractere fora da
+paleta derruba o boot, como velocidade fora de `speedPalette`. `pnpm map:import --id <id>
+--zones-only` acrescenta só a camada a um mapa já importado — sem pacote de arte, geometria
+intacta —, e `--check` a confere mesmo onde a geometria sai `absent`.
+
 **Mapa importado: o que é gerado e o que é autorado** (FUN-118, FUN-120, ADR 0025). Um mapa com
-`source` veio do OTBM real por `pnpm map:import`: `floors` (grade e velocidade), `speedPalette`
-e `source` são GERADOS, e `pnpm map:import --check` — que o `pnpm check` roda — reprova a grade
+`source` veio do OTBM real por `pnpm map:import`: `floors` (grade, velocidade, visão e zonas),
+`speedPalette` e `source` são GERADOS, e `pnpm map:import --check` — que o `pnpm check` roda — reprova a grade
 editada à mão, porque ela é a geometria do arquivo de origem e não uma opinião. O que se autora
 no JSON é `entryPoint` e `floorChanges`; reimportar preserva os dois. Mapa importado NÃO tem
 linha em `appearances.maps`: a arte dele é a pilha por tile em `things/<versão>/maps/<id>.json`,
@@ -242,6 +259,34 @@ Confira antes de subir o servidor:
 ```
 pnpm content:check
 ```
+
+## O mundo (#829, OW-08, ADR 0060)
+
+`data/worlds/<id>.json` — um arquivo por mundo — diz o que um mundo **é**: `{ id, name, worldType,
+map, towns: [{ id, name, temple }], capacity }`. `Content.worlds` é um mapa por id, vazio no
+conteúdo de teste sem mundo aberto; o conteúdo real tem o `main` (tipo `no-pvp`, mapa `thais`,
+teto 200), e `load.test.ts` prende. Quem lê é a topologia do `sim` (OW-13) e as colunas de mundo
+em `characters` (OW-15); os spawns entram à parte (OW-25).
+
+- **`worldType` é um vocabulário FECHADO** (`WORLD_TYPES`), como `COMBAT_PROFILES`: hoje só
+  `no-pvp`. O Canary aceita também `retro-pvp`/`pvp`/`expert-pvp`/`pvp-enforced`
+  (`canary/config.lua.dist:28-33`), mas o `sim` não tem dano entre jogadores — aceitar um deles
+  num arquivo seria subir um mundo que promete o que o motor não faz. Tipo novo entra por ADR.
+- **O templo é coordenada ABSOLUTA do Tibia**, a mesma de `characters.world_x/y/z` (ADR 0060
+  d.3.b), e o mapa do recorte é LOCAL. `absoluteToLocal`/`localToAbsolute` (`map.ts`) traduzem pela
+  origem de `source.region`: `x` e `y` perdem ou ganham a origem, `z` não muda (os andares do
+  recorte são chaveados pelo `z` absoluto). Só mapa IMPORTADO tem `source`, e por isso só ele
+  serve a um mundo. Não compare coordenada de mundo com `entryPoint` ou `floorChanges` sem
+  traduzir: em Thais o erro é de 32275 em x e 32153 em y, e não aparece em teste que usa só o mapa local.
+- **`buildContent` confere o que o schema não vê:** o `map` existe e tem `source`; o templo cai
+  dentro do recorte nos três eixos e num tile que não é parede (`isBlocked`, a regra do
+  `entryPoint` da Cidade); id de cidade e de mundo únicos. Quebra no boot, não no personagem que
+  nasce preso.
+- **Entra em `computeVersion`** como todo o `RawContent` (invariante 7): mudar o teto muda a
+  versão que a sessão congela.
+- **`capacity` só se guarda aqui.** O teto vale só na entrada vinda do repouso (ADR 0060 d.2.b) e
+  quem o aplica é a admissão (OW-18/OW-20); `CITY_SHARD_CAPACITY` continua sendo o da Cidade.
+- Sem arte (invariante 6): `worldSchema` é `strictObject`.
 
 ## Invariantes locais
 
@@ -315,6 +360,14 @@ MUDA, e muda é válida: exigir o outro lado obrigaria cada magia nova a nascer 
 nascer com número, que é a ordem errada. Por isso o placeholder emite as três seções vazias, e
 por isso `load.test.ts` — e não `buildContent` — é quem prende que todo spell do repositório
 tem efeito hoje.
+
+**`hits.byRace` é o efeito do golpe FÍSICO por raça do alvo** (#620, `Game::combatGetTypeInfo`):
+uma linha por `MonsterRace` (`blood`/`venom`/`undead`/`fire`/`energy`/`ink`/`chocolate`/`candy`),
+cada uma um id de efeito que o pacote tem. É opcional e o host cai em `hits.melee` para a raça sem
+linha — a tabela de antes da #620 (só `melee`) continua válida. O `monster.race`, o
+`monster.outfit` (cores e addons), as `voices` e a `light` do monstro são campos do `monsterSchema`,
+todos opcionais, todos APRESENTAÇÃO: `sim` e combate não os leem, e o que não é arte neles são
+índices (cor 0–132, luz 0–215, máscara de addons 0–3), nunca um id de desenho (invariante 6).
 
 **`appearances.abilities` é a única seção sem conferência dos dois lados** (CMB-06). As chaves
 dela são SEMÂNTICAS e compartilhadas (`spit`, `fire-impact`) — a ability de monstro aponta
@@ -673,6 +726,15 @@ entre arquivos resolvem.
   o MESMO `absorbpercent*`: o schema recusa os dois no mesmo tipo. O reflexo compila no boot
   (`compileReflect`, tabela completa por tipo, ausente quando nada reflete) — é a forma que o
   reflexo de monstro (#683) reusa.
+- **`item.elementalBond` e `item.bonuses.magicShieldCapacity` são DADO sem consumidor no `sim`**
+  (#627, M44-09) — de propósito, e não por esquecimento. No Canary (47dfd51) o bond só troca o
+  tipo de dano da magia de `VOCATION_MONK_CIP` (`combat.cpp:159-174`) e os 32 itens são todos
+  arma `fist` (fora do corte: Monk e DT-01); a capacidade só aparece na descrição do item e na
+  Cyclopedia, e `magic_shield.lua` monta o balde sem consultá-la. Ligar qualquer um dos dois ao
+  combate seria comportamento que o Canary não tem (ADR 0037 d.6). O bond é só `kind: 'weapon'`
+  (`buildContent` recusa o resto) e a capacidade só em item com `slot`; o catálogo real tem zero
+  itens com bond e exatamente quatro com capacidade (`load.test.ts` prende as duas contagens).
+  Ver `docs/product/items.md`, "Atributos raros".
 - **O monstro tem schema de mitigação PRÓPRIO** (#683): `monsterMitigationSchema` aceita
   resistência em `[-2, 1)` (o `minElementalResistance` do Canary); o `mitigationSchema` do item
   continua `[-1, 1)`. Os dois são `mitigationSchemaWith(piso)` — alargar o compartilhado mudaria o
@@ -698,6 +760,15 @@ entre arquivos resolvem.
   recusa qualquer outro valor: não é escolha do conteúdo. Nunca como self-buff de defesa
   (`DEFENSE_SELF_CONDITION_KINDS`). O `haste` de magia ganhou `pacifies: true` (Swift Foot,
   `swift_foot.lua`: acelera e pacifica pelos mesmos 10 s).
+- **`monster.faction`/`enemyFactions` são o `Faction_t` do Canary** (#619, M44-01): dez nomes em
+  `MONSTER_FACTIONS`, **na ordem do enum — o índice É o valor numérico** (`factionValue`), porque o
+  `sim` soma `valor × 100` à distância no desempate de alvo (o jogador = 1 antes de qualquer monstro
+  inimigo). `faction` ausente é `default`; `enemyFactions` só vale para quem tem facção
+  (`isEnemyFaction` só é consultado com `getFaction() != FACTION_DEFAULT`), e `player` na lista é o
+  que faz o monstro caçar o jogador — as três da Lion não o listam e o ignoram. Os nomes não são os
+  identificadores colados do Lua (`FACTION_LIONUSURPERS` → `lion-usurpers`); o importador traduz e
+  bloqueia uma constante desconhecida. Nenhum campo tem default preenchido: ausência é o monstro de
+  sempre.
 - **A condição `outfit` referencia CONTEÚDO, nunca arte** (#621, M44-03, ADR 0041 d.1):
   `outfitLookSchema` é `{ monsterId } | { itemId } | { objectKey }` (`strictObject` — um
   `outfitId`/`appearanceId` escrito ali é recusado no boot), e quem resolve para o id do pacote é o

@@ -95,6 +95,37 @@ um campo para as duas perguntas. O ADR 0060 torna a Cidade o primeiro mundo — 
   sempre cresceu). É o que permite ao mundo aparar a lista de eventos notáveis sem que a hunt
   perceba.
 
+### O mundo no protocolo (OW-11, ADR 0060 d.2b, d.7 e d.8)
+
+O protocolo ganha os contratos de que o mundo precisa. **Nenhum servidor os emite ainda** — quem
+os produz são o `canLogout` e a saída no `sim` (OW-10, OW-14), a entrada pelo repouso (OW-21), o
+portão no-pvp (OW-27) e o cliente que os mostra (OW-23). Os quatro contratos são opcionais ou
+novos, para o deploy em ondas: um nó `game` anterior continua falando com um cliente novo, e o
+inverso também.
+
+| Mensagem | Opcode | O que diz |
+|---|---|---|
+| `logout-refused { reason }` (S2C) | 49 | O `logout` passou por `canLogout` e a resposta é não. `reason`: `'no-logout-tile'` (`RETURNVALUE_YOUCANNOTLOGOUTHERE`) ou `'in-fight'` (`RETURNVALUE_YOUMAYNOTLOGOUTDURINGAFIGHT`, só fora da PZ) — `canary/src/server/network/protocol/protocolgame.cpp:1151-1162`. O pedido (`logout`, C2S 8) não mudou. |
+| `world-full { position, retryAfterMs, huntAvailable }` (S2C) | 50 | A entrada vinda do repouso bateu no teto do mundo. `position` é o lugar na fila, de 1 em diante; `retryAfterMs`, uma DURAÇÃO medida no instante do envio (o Canary manda segundos num byte, 5 a 120 s, `waitlist.cpp:53-67`); `huntAvailable` diz se a hunt idle está ao alcance (d.6b). Quem volta de uma instância nunca a recebe. |
+| `player-stats.zone` e `player-stats.inFight` | — | A zona do tile (`'normal' \| 'protection' \| 'no-pvp' \| 'pvp' \| 'no-logout'`, o `ZoneType_t` do Canary) e o `CONDITION_INFIGHT`, para os ícones de PZ e de luta do HUD. |
+| `target-cancel.reason` | — | `'player-protected'` (`RETURNVALUE_YOUMAYNOTATTACKTHISPLAYER`, `combat.cpp:551-556`) ou `'protection-zone'` (`RETURNVALUE_ACTIONNOTPERMITTEDINPROTECTIONZONE`, `combat.cpp:326-345`). |
+
+Três escolhas que o texto do Canary não dá pronto:
+
+- **`zone` e `inFight` são opcionais e SEM `default`**, ao contrário dos campos vizinhos de
+  `player-stats`. Ausente quer dizer "este nó não informa" — uma hunt, ou um nó anterior —, e um
+  `default` mandaria o HUD apagar um ícone que talvez devesse estar aceso. É também por isso que
+  toda hunt continua mandando o `player-stats` de hoje, byte a byte.
+- **`zone` não diz se dá para deslogar.** O `NOLOGOUT` soma às outras flags
+  (`canary/src/io/iomap.cpp:165-177`) e a precedência o esconde atrás de PZ e no-pvp
+  (`canary/src/items/tile.hpp:188-199`): um tile de PZ com no-logout reporta `'protection'`. Quem
+  responde "posso sair aqui?" é o `logout-refused`. E `'pvp'` está no vocabulário por ser parte do
+  `ZoneType_t`, mas o servidor não o emite no primeiro corte (o tile de arena é `'no-pvp'`, ADR 0060
+  d.8).
+- **A morte no mundo não ganhou mensagem.** Reaproveita `session-ended` com `reason: 'death'`, e o
+  `session-state.sessionType` já é uma string livre, então `'world'` passa — os dois contratos
+  seguem como estão, e os testes do protocolo o prendem.
+
 ### Desconectar não tira ninguém da praça na hora
 
 A carência de repouso (FUN-52) vale por **personagem**, não pela sessão: cinco minutos sem ninguém
@@ -140,6 +171,41 @@ entrada e as escadas:
   prende que toda escada tem a volta.
 - **O templo não tem escada para cima**, e a do porão dele leva ao andar 8, que fica fora do
   recorte: pisar nela hoje é pisar num tile comum.
+
+### Zonas por tile (#830, OW-09, ADR 0060)
+
+`thais.json` carrega, por andar, a camada `zones`: o que é protect zone, no-pvp, no-logout e
+arena em cada tile, lido de `TILE_FLAGS` do OTBM — a base de `canLogout`, do portão de combate e
+dos serviços em PZ do mundo (OW-10, OW-27). **É só dado**: nada na Cidade de hoje a consulta, e a
+Cidade continua sendo protect zone por construção (ADR 0004) até o mundo existir.
+
+O que o recorte tem (z4–z7, medido sobre o OTBM por `pnpm map:import --id thais --zones-only`):
+
+| andar | PZ | PZ + no-logout | só no-logout |
+|---|---|---|---|
+| z4 | 230 | 0 | 0 |
+| z5 | 844 | 3 | 0 |
+| z6 | 3.328 | 10 | 0 |
+| z7 | 3.762 | 1 | 2 |
+
+Thais não tem no-pvp nem arena. O templo é PZ — o tile de entrada, `(94, 88, 7)`, e a coluna que
+desce dele até `(94, 96, 7)`; do `(94, 97, 7)` em diante é rua, normal. Os tiles de casa são PZ
+(`House::addTile`, `canary/src/map/house/house.cpp:26-28`), e já traziam a flag no arquivo.
+
+**A forma.** Um caractere por tile, na mesma forma de `speed` e `sight`, com a paleta fixa
+`ZONE_PALETTE` (`.` normal, `p` PZ, `n` no-pvp, `a` arena, `l` só no-logout, `P`/`N`/`A` a zona
+mais no-logout). Em memória, `Floor.zones` guarda a soma dos bits do OTBM (PZ 1, no-pvp 4,
+no-logout 8, arena 16), já normalizada como o Canary: PZ, no-pvp e arena são exclusivos, no-logout
+soma (`canary/src/io/iomap.cpp:165-177`). A precedência de quem consulta é a de
+`Tile::getZoneType` — PZ, no-pvp, arena, no-logout, normal (`canary/src/items/tile.hpp:188-199`) —
+e é do `sim`. Arena é tratada como no-pvp no primeiro corte: divergência registrada no ADR 0060 d.8.
+
+**O que não muda.** Os outros recortes (Rat Cellars, Rotworm Caves, Darashia Dragon Lair e os que
+vieram depois) não têm a camada: `Floor.zones` é `null`, tudo é normal, e as hunts ficam como
+estão. A geometria de Thais — bloqueio, velocidade, visão, escadas — também ficou byte a byte; o
+diff do arquivo é só acréscimo. A versão global de conteúdo mudou, como em toda mudança de
+conteúdo: a hunt em voo no deploy é creditada e descartada pelo caminho de sempre (ADR 0010,
+ADR 0018).
 
 O servidor **diz qual mapa desenhar**: `instance-enter { instanceId, map }` sai no
 `session-attach` e em toda transição, ANTES do `session-state`, e `session-state.world.mapId` é o

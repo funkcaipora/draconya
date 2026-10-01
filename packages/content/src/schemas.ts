@@ -30,6 +30,23 @@ export const DAMAGE_TYPES = [
 export type DamageType = (typeof DAMAGE_TYPES)[number];
 
 /**
+ * As raças de monstro do Canary (`RaceType_t`, `creatures_definitions.hpp`; `monster.race` no
+ * Lua, lido por `MonsterType:race`, `monster_type_functions.cpp`). A raça decide de que COR e com
+ * que EFEITO o golpe físico que atinge o monstro se desenha (`Game::combatGetTypeInfo`,
+ * `game.cpp`): sangue vermelho, veneno verde, morto-vivo cinza, fogo laranja, energia roxa, tinta,
+ * chocolate e doce. **Só apresentação** (#620) — nenhum sistema de combate a lê. O protocolo
+ * repete a lista (`MonsterRace`, `protocol/types.ts`): é a base da pilha e não importa `content`,
+ * e `schemas.test.ts` confere que as duas são o mesmo conjunto.
+ */
+export const MONSTER_RACES = [
+  'venom', 'blood', 'undead', 'fire', 'energy', 'ink', 'chocolate', 'candy',
+] as const;
+export type MonsterRace = (typeof MONSTER_RACES)[number];
+
+/** A raça do monstro que o Canary não declara: `MonsterType::info.race = RACE_BLOOD` (`monsters.hpp`). */
+export const DEFAULT_MONSTER_RACE: MonsterRace = 'blood';
+
+/**
  * Os elementos que têm MAGIC LEVEL ESPECIALIZADO no Canary (#680): as oito chaves
  * `<elemento>magiclevelpoints` de `item_parse.cpp:915-941`. `healing` é o da cura; `drown`,
  * `lifedrain`, `manadrain` e `arcane` não têm chave lá, e por isso não têm aqui.
@@ -38,6 +55,16 @@ export const SPECIALIZED_MAGIC_ELEMENTS = [
   'physical', 'energy', 'earth', 'fire', 'ice', 'holy', 'death', 'healing',
 ] as const;
 export type SpecializedMagicElement = (typeof SPECIALIZED_MAGIC_ELEMENTS)[number];
+
+/**
+ * Os três valores que o `elementalbond` de `items.xml` aceita: `ItemParse::parseElementalBond`
+ * (`item_parse.cpp:764-778`, Canary 47dfd51) só reconhece `energy`, `earth` e `physical` — qualquer
+ * outro texto deixa o bond em `COMBAT_NONE`. O `fire`/`ice` que `Combat::monkEffectByElementalBond`
+ * (`combat.cpp:1105-1141`) também trata nunca sai do parser: são variantes de efeito de um bond que
+ * o XML não consegue declarar, e não entram aqui.
+ */
+export const ELEMENTAL_BOND_TYPES = ['physical', 'earth', 'energy'] as const;
+export type ElementalBondType = (typeof ELEMENTAL_BOND_TYPES)[number];
 
 /**
  * Proveniência de uma entidade GERADA pelo importador de catálogo (ADR 0038 decisão 2): de qual
@@ -327,6 +354,14 @@ export const appearancesSchema = z.object({
    */
   hits: z.object({
     melee: appearanceId.optional(),
+    /**
+     * O efeito do golpe FÍSICO por RAÇA do alvo (#620, `Game::combatGetTypeInfo` do Canary):
+     * sangue para `blood`, gota de veneno para `venom`, o "hit area" cinza para `undead`/`ink`…
+     * O host o escolhe pela `race` do monstro atingido no lugar do `melee`, que continua sendo o
+     * efeito quando a raça não tem linha (e o do jogador atingido, que é `blood`). Raça sem linha
+     * nem `melee` é golpe sem efeito — o `CONST_ME_NONE` do Canary.
+     */
+    byRace: z.partialRecord(z.enum(MONSTER_RACES), appearanceId).optional(),
   }).default({}),
   /**
    * `chave semântica → { missile, effect }` para as abilities de monstro (CMB-06). A ability
@@ -998,6 +1033,22 @@ export const itemSchema = z.strictObject({
     }).refine((r) => r.healthGain > 0 || r.manaGain > 0, 'regeneração sem ganho').optional(),
     /** Condições que o item suprime enquanto vestido (`suppress*` do Canary). */
     suppress: z.array(z.enum(SUPPRESSIBLE_CONDITIONS)).min(1).optional(),
+    /**
+     * A CAPACIDADE DE MAGIC SHIELD do item (#627, M44-09): o `magicshieldCapacityflat` e o
+     * `magicshieldCapacitypercent` do `items.xml` (4 itens — eldritch folio/tome, cocoa e creamy
+     * grimoire), os dois inteiros de `Abilities` (`items.hpp:50-51`), somados pelos equipados
+     * (`Player::getMagicShieldCapacityFlat`/`Percent`, `player.cpp:7633-7681`). É o número
+     * DECLARADO pelo Canary e nada mais: no checkout 47dfd51 ele só é LIDO pela descrição do item
+     * (`item.cpp:134-141`, `:2727-2735`) e pelo pacote de defesa da Cyclopedia
+     * (`protocolgame.cpp:5661-5663`) — `magic_shield.lua` e `ConditionManaShield` montam o
+     * escudo SEM consultá-lo, e nenhum script de `data/` chama o getter. Por isso o `sim` não o lê
+     * (ver `docs/product/items.md`, "Atributos raros"): aplicá-lo ao escudo seria
+     * comportamento que o Canary não tem.
+     */
+    magicShieldCapacity: z.strictObject({
+      flat: z.number().int(),
+      percent: z.number().int(),
+    }).refine((c) => c.flat !== 0 || c.percent !== 0, 'capacidade de magic shield sem valor').optional(),
   }).optional(),
   /**
    * Quantos imbuements a peça aceita (ADR 0046, #604) — o `imbuementslot` do Canary
@@ -1035,6 +1086,22 @@ export const itemSchema = z.strictObject({
    * própria de dano (`WeaponMelee::useWeapon`, `weapons.cpp:531-589`). Soma entre os equipados.
    */
   cleavePercent: z.number().int().positive().max(100).optional(),
+  /**
+   * O `elementalbond` do Canary (#627, M44-09; `ItemType::elementalBond`, `items.hpp:296`) — 32
+   * itens em `items.xml`, e TODOS são arma `weapontype="fist"` (sais, katars, bôs e nunchakus).
+   * 30 pedem Monk; `traditional sai` pede Knight (e para o Knight o bond é mudo); e
+   * `transcendent bo` (`items.xml:84976-84998`) não tem script nem vocação, então um Monk o
+   * equipa e o bond dele dispara. É o tipo de dano que TROCA o da magia do Monk quando a arma
+   * está na mão, e são DOIS pontos de leitura com portões diferentes: `Combat::getCombatDamage`
+   * (`combat.cpp:159-174`) só troca o tipo para `VOCATION_MONK_CIP`, magia INSTANTÂNEA e que não
+   * cure; `Combat::sendCombatEffect` (`combat.cpp:1143-1159`) recolore o efeito visual só com o
+   * Monk e uma arma de bond na mão — sem o portão de instantânea/cura. Para qualquer outra
+   * vocação o bond é um atributo mudo. O Monk está fora do corte (ADR 0038 d.5) e a família
+   * `fist` não é declarável (DT-01), então nenhum item do catálogo o carrega hoje e nenhuma
+   * vocação o lê: o campo existe para o importador não perder o dado e para o dia em que o corte
+   * mudar. Só em `kind: 'weapon'` (`buildContent`).
+   */
+  elementalBond: z.enum(ELEMENTAL_BOND_TYPES).optional(),
   /**
    * O item PROTEGE quem o veste da perda de item na morte (#571, ADR 0042 decisão 4) — o
    * Amulet of Loss (`ITEM_AMULETOFLOSS`, id 3057, `src/utils/utils_definitions.hpp:638` do
@@ -2445,6 +2512,29 @@ export const MONSTER_CLASSES = [
 export type MonsterClass = (typeof MONSTER_CLASSES)[number];
 
 /**
+ * As facções do Canary (`Faction_t`, `src/game/game_definitions.hpp:44-53`, conferido em
+ * 47dfd51), na ORDEM do enum: o índice de cada nome É o valor numérico da facção, e o valor
+ * importa — o Canary soma `faction × 100` à distância e `faction × 100 000` à vida/dano ao
+ * ranquear alvos (`Monster::searchTargetImmediate`, `monster_targeting.cpp`), então quem tem a
+ * facção de número MENOR ganha o desempate de "mais perto". `factionValue` devolve o número.
+ *
+ * `default` (0) é o monstro sem facção — o bestiário quase inteiro — e `player` (1) é a do
+ * jogador e de tudo que ele invoca; nenhum monstro DECLARA `faction: 'player'`, mas as listas
+ * `enemyFactions` de quase todos o citam (é o que faz o monstro de facção atacar o jogador).
+ * Identificador em inglês; nomes com hífen no lugar do `FACTION_LIONUSURPERS` colado do Canary.
+ */
+export const MONSTER_FACTIONS = [
+  'default', 'player', 'lion', 'lion-usurpers', 'marid', 'efreet', 'deepling', 'deathling',
+  'anuma', 'fafnar',
+] as const;
+export type MonsterFaction = (typeof MONSTER_FACTIONS)[number];
+
+/** O valor numérico de uma facção no enum do Canary — o índice em `MONSTER_FACTIONS`. */
+export function factionValue(faction: MonsterFaction): number {
+  return MONSTER_FACTIONS.indexOf(faction);
+}
+
+/**
  * As três raridades do Bosstiary do Canary (`BosstiaryRarity_t`, `src/io/io_bosstiary.hpp`, #629):
  * `RARITY_BANE` (0), `RARITY_ARCHFOE` (1) e `RARITY_NEMESIS` (2) — em ordem crescente de raridade,
  * a mesma que o `monster.bosstiary.bossRace` de cada boss declara. O vocabulário é FECHADO: o
@@ -2619,6 +2709,64 @@ export const monsterSummonsSchema = z.strictObject({
   entries: z.array(monsterSummonEntrySchema).min(1),
 });
 export type MonsterSummons = z.infer<typeof monsterSummonsSchema>;
+
+/** Um índice na paleta de 133 cores do outfit (a mesma faixa de `OutfitColors` do protocolo). */
+const outfitPaletteIndex = z.number().int().min(0).max(132);
+
+/**
+ * O que veste o monstro além do desenho (#620, `monster.outfit` do Canary: `lookHead`, `lookBody`,
+ * `lookLegs`, `lookFeet`, `lookAddons`): as quatro cores do template e os addons. **São índices e
+ * máscaras, nunca arte** (invariante 6) — o id do desenho (`lookType`) é `outfitId`, e vive na
+ * tabela de aparências. Cor `0` é o branco da paleta, o neutro: um outfit de duas camadas com o
+ * template todo em 0 se desenha como a base crua, e é o que a maioria dos monstros declara.
+ * `addons` é a máscara de bits do Tibia: 1 = primeiro addon, 2 = segundo, 3 = os dois (o
+ * bestiário inteiro do Canary usa só 0–3, conferido em 2026-09-30).
+ */
+export const monsterOutfitSchema = z.strictObject({
+  head: outfitPaletteIndex,
+  body: outfitPaletteIndex,
+  legs: outfitPaletteIndex,
+  feet: outfitPaletteIndex,
+  addons: z.number().int().min(0).max(3).default(0),
+});
+export type MonsterOutfit = z.infer<typeof monsterOutfitSchema>;
+
+/** Sem `outfit` declarado o monstro veste cor 0 em tudo e nenhum addon — o `Outfit_t` zerado do Canary. */
+export const NEUTRAL_MONSTER_OUTFIT: MonsterOutfit = { head: 0, body: 0, legs: 0, feet: 0, addons: 0 };
+
+/** Uma fala de monstro: o texto e se é grito (`TALKTYPE_MONSTER_YELL`) em vez de fala. */
+export const monsterVoiceLineSchema = z.strictObject({
+  text: z.string().min(1),
+  yell: z.boolean().default(false),
+});
+
+/**
+ * As falas periódicas de um monstro (#620; `monster.voices` do Canary, `registerMonsterType.voices`
+ * em `register_monster_type.lua`, `Monster::onThinkYell`, `monster.cpp`). A cada `intervalMs` o
+ * monstro rola `chance` (percentual INTEIRO 0–100, a mesma escala do Lua — o Canary compara
+ * `chance >= uniform_random(1, 100)`) e, se passar, diz UMA das `lines` sorteada. **O sorteio é da
+ * APRESENTAÇÃO**: o cliente o faz, nunca o `Rng` da sessão — a fala não muda resultado nenhum
+ * (invariante 3) e o `sim` nem a conhece. O Canary calcula um intervalo e uma chance só por
+ * monstro (o `addVoice` de cada linha sobrescreve os dois), e por isso o bloco os tem uma vez.
+ */
+export const monsterVoicesSchema = z.strictObject({
+  intervalMs: z.number().int().positive(),
+  chance: z.number().int().min(1).max(100),
+  lines: z.array(monsterVoiceLineSchema).min(1),
+});
+export type MonsterVoices = z.infer<typeof monsterVoicesSchema>;
+
+/**
+ * A luz que o monstro carrega (#620; `monster.light` do Canary → `MonsterType::light(color, level)`,
+ * `LightInfo`). `level` é o alcance em tiles e `color` o índice na paleta de 216 cores do Tibia
+ * (`c = r·36 + g·6 + b`, a mesma do automapa) — dado do cliente de referência, não arte. Só os 102
+ * monstros do Canary com nível maior que 0 declaram; ausente é sem luz.
+ */
+export const monsterLightSchema = z.strictObject({
+  level: z.number().int().min(1).max(255),
+  color: z.number().int().min(0).max(215),
+});
+export type MonsterLight = z.infer<typeof monsterLightSchema>;
 
 export const monsterSchema = z.strictObject({
   id: z.string().min(1),
@@ -2884,6 +3032,29 @@ export const monsterSchema = z.strictObject({
    */
   corpseTtlMs: z.number().int().positive().optional(),
   /**
+   * As cores e os addons com que o outfit dele é pintado (#620, `monster.outfit.look*` do Canary).
+   * Ausente é o neutro (`NEUTRAL_MONSTER_OUTFIT`, tudo 0) — o que o Canary faz sem declarar, e o
+   * importador só escreve o campo quando algo difere. É APRESENTAÇÃO: o `sim` nunca lê, e o `id`
+   * do desenho continua na tabela de aparências. Ver `monsterOutfitSchema`. **Sem `.default()` de
+   * propósito:** o default no schema tornaria o campo obrigatório no tipo `Monster`, e cada
+   * literal de monstro de teste, de bench e de fixture teria de repeti-lo — quem lê aplica o
+   * neutro (`monster.outfit ?? NEUTRAL_MONSTER_OUTFIT`).
+   */
+  outfit: monsterOutfitSchema.optional(),
+  /**
+   * As falas periódicas (#620, `monster.voices`). Ausente é mudo. O sorteio é do cliente — ver
+   * `monsterVoicesSchema`.
+   */
+  voices: monsterVoicesSchema.optional(),
+  /** A luz que ele carrega (#620, `monster.light`). Ausente é sem luz. Ver `monsterLightSchema`. */
+  light: monsterLightSchema.optional(),
+  /**
+   * A raça — cor e efeito do golpe físico que o atinge (#620, `monster.race`). Ausente é
+   * `blood`, o `RACE_BLOOD` que o Canary assume (`DEFAULT_MONSTER_RACE`; quem lê aplica, pela
+   * mesma razão de `outfit`). Só apresentação.
+   */
+  race: z.enum(MONSTER_RACES).optional(),
+  /**
    * As JANELAS do cadáver em que a Animate Dead Rune o aceita (#600, ADR 0057 d.6): `fromMs`
    * inclusive, `untilMs` exclusivo, em milissegundos desde a morte — o mesmo relógio de
    * `corpseTtlMs`. O Canary (`animate_dead_rune.lua`) exige que o item do TOPO do tile seja
@@ -2931,6 +3102,24 @@ export const monsterSchema = z.strictObject({
    * sorteiam. Ausente é o comportamento de sempre — ver `monsterTargetStrategySchema`.
    */
   targetStrategy: monsterTargetStrategySchema.optional(),
+  /**
+   * A facção do monstro (#619, Canary `monster.faction`, `MonsterType::info.faction`,
+   * `monsters.hpp:134`) — ver `MONSTER_FACTIONS`. Ausente é `default`, o monstro sem facção: só
+   * ataca jogador e invocação de jogador, e nenhum outro monstro o ataca, como sempre. Com
+   * facção, quem ele considera alvo passa a ser decidido por `enemyFactions` (abaixo), e uma
+   * invocação sua herda a facção do mestre (`Monster::getFaction`).
+   */
+  faction: z.enum(MONSTER_FACTIONS).optional(),
+  /**
+   * As facções INIMIGAS deste monstro (#619, Canary `monster.enemyFactions`,
+   * `MonsterType::info.enemyFactions`, `monsters.hpp:135`): só quem é de uma dessas facções é
+   * alvo dele (`Monster::isTarget`) e só a esses o golpe dele acerta (`Combat::canDoCombat`).
+   * `player` na lista é o que faz o monstro de facção caçar jogador — quase todo monstro de
+   * facção do Canary o declara; as três da Lion (`lion-knight`/`-archer`/`-warlock`) só nomeiam
+   * `lion-usurpers` e portanto ignoram o jogador. Ausente é nenhuma inimiga (o que, para um
+   * monstro COM facção, é não atacar ninguém).
+   */
+  enemyFactions: z.array(z.enum(MONSTER_FACTIONS)).optional(),
   /**
    * O HP em que o monstro passa a fugir (#518, TFS `runonhealth`, referência §15-19): abaixo ou
    * igual a este valor, ele se afasta do alvo em vez de aproximar, não dá golpe corpo a corpo,
@@ -5534,6 +5723,70 @@ export type LootRoll = NonNullable<LootTable['gold']>;
 export type Hunt = z.infer<typeof huntSchema>;
 export type Vocation = z.infer<typeof vocationSchema>;
 
+// --- mundo (#829, OW-08, ADR 0060) ---------------------------------------------------------
+
+/**
+ * Os tipos de mundo que o motor sabe ser. É o `worldType` do Canary, que aceita "expert-pvp",
+ * "retro-pvp", "pvp", "no-pvp" e "pvp-enforced" (`canary/config.lua.dist:28-33`) — mas o
+ * Draconya só implementa o `no-pvp` (ADR 0060 d.1): não existe dano entre jogadores no `sim`, e
+ * aceitar `retro-pvp` num arquivo de conteúdo seria um mundo que promete o que o motor não faz.
+ * Vocabulário FECHADO, como `COMBAT_PROFILES` (ADR 0031): um tipo novo entra por ADR e por esta
+ * lista, nunca por um valor que passou em silêncio.
+ */
+export const WORLD_TYPES = ['no-pvp'] as const;
+export type WorldType = (typeof WORLD_TYPES)[number];
+
+/**
+ * Uma coordenada ABSOLUTA do mapa do Tibia (a do `otservbr.otbm`), e não a local de um recorte.
+ * É a mesma que `characters.world_x/y/z` guardará (ADR 0060 d.3.b): o que liga as duas é
+ * `source.region` do mapa (`absoluteToLocal`, em `map.ts`). O andar `z` é de 0 (céu) a 15
+ * (subsolo mais fundo), o do protocolo do Tibia.
+ */
+const absolutePoint = z.strictObject({
+  x: z.number().int().nonnegative(),
+  y: z.number().int().nonnegative(),
+  z: z.number().int().min(0).max(15),
+});
+
+/**
+ * Uma cidade do mundo: id, nome e templo (`canary/src/map/town.hpp`, `Town`). O Canary a guarda
+ * com um id numérico; aqui o id é o slug, como todo id de conteúdo. O templo é para onde o
+ * personagem volta ao morrer e onde nasce sem posição salva (ADR 0060 d.4 e d.9).
+ */
+const worldTownSchema = z.strictObject({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  temple: absolutePoint,
+});
+
+/**
+ * Um mundo (`data/worlds/<id>.json`, ADR 0060 d.1 e d.2): o `Game` único do Canary, que no
+ * Draconya é uma sessão compartilhada num processo `game`. É o conteúdo de que a topologia (OW-13)
+ * e as colunas de `characters` (OW-15) precisam antes de existir. Os spawns entram à parte (OW-25).
+ *
+ * Só dado, sem arte (invariante 6): o `strictObject` recusa `appearanceId` e qualquer chave que
+ * ninguém lê. A coerência com o mapa — o templo cair num tile andável do recorte — não cabe a um
+ * schema, que só vê este arquivo: `buildContent` a confere.
+ */
+export const worldSchema = z.strictObject({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** O tipo do mundo, no conteúdo e não no código: `worldType` do Canary. Ver `WORLD_TYPES`. */
+  worldType: z.enum(WORLD_TYPES),
+  /** O mapa sobre o qual o mundo roda — um `data/maps/<id>.json` importado do OTBM. */
+  map: z.string().min(1),
+  /** Ao menos uma: sem cidade não há templo, e sem templo ninguém tem onde nascer nem morrer. */
+  towns: z.array(worldTownSchema).min(1),
+  /**
+   * O teto de gente no mundo (ADR 0060 d.2.b): vale só na entrada, vindo do repouso; quem volta
+   * de uma instância sempre entra. Começa em 200, o `CITY_SHARD_CAPACITY` de hoje.
+   */
+  capacity: z.number().int().positive(),
+});
+
+export type World = z.infer<typeof worldSchema>;
+export type WorldTown = World['towns'][number];
+
 // --- mapa e rota (FUN-9) -------------------------------------------------------------------
 
 const point = z.object({
@@ -5567,6 +5820,15 @@ const floorSchema = z.object({
    * não reimportado com a camada nova).
    */
   sight: z.array(z.string().min(1)).optional(),
+  /**
+   * Zonas do tile (#830, OW-09, ADR 0060 d.8): protect zone, no-pvp, no-logout e arena, lidas do
+   * `OTBM_ATTR_TILE_FLAGS` de cada tile — um caractere por tile, na mesma forma de `speed` e
+   * `sight`, resolvido pela paleta FIXA `ZONE_PALETTE` (`./map.ts`; `.` é o tile normal). Fixa e
+   * não por mapa, como `speedPalette`, porque são só oito estados e o significado é o do Canary,
+   * nunca uma escolha do mapa. Ausente: nenhum tile deste andar tem zona (tudo normal) — o mapa
+   * autorado à mão e o recorte ainda não reimportado com a camada, e as hunts não mudam.
+   */
+  zones: z.array(z.string().min(1)).optional(),
 });
 
 export const tilemapSchema = z.object({

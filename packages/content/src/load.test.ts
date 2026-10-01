@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync,
 } from 'node:fs';
@@ -6,7 +7,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from './load.js';
-import { floorChangeAt, isBlocked } from './map.js';
+import {
+  absoluteToLocal, floorChangeAt, isBlocked, localToAbsolute, ZONE_FLAG, zoneFlagsAt,
+} from './map.js';
 import { BOT_CATEGORIES, manaCostDisplayOf, NEUTRAL_RATES } from './schemas.js';
 
 const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
@@ -300,6 +303,50 @@ describe('loadContent', () => {
     // e descer de (75,73,6) chega em (75,74,7).
     expect(floorChangeAt(city, 75, 73, 7)).toEqual({ x: 75, y: 72, z: 6 });
     expect(floorChangeAt(city, 75, 73, 6)).toEqual({ x: 75, y: 74, z: 7 });
+  });
+
+  it('Thais traz as zonas do OTBM: o templo é PZ, a rua é normal, e há no-logout (#830, OW-09)', () => {
+    const city = loadContent(DATA).city;
+    if (city === undefined) throw new Error('o conteúdo real não tem Cidade');
+    // O tile do templo (32369, 32241, 7 → local 94, 88, 7): onde se nasce, e PZ.
+    expect(zoneFlagsAt(city, 94, 88, 7)).toBe(ZONE_FLAG.protection);
+    // A PZ do templo desce em coluna até o local (94, 96); do (94, 97) em diante é rua — o
+    // limite é uma coluna de tiles, e prender os dois lados dele prende a direção do deslocamento.
+    expect(zoneFlagsAt(city, 94, 96, 7)).toBe(ZONE_FLAG.protection);
+    expect(zoneFlagsAt(city, 94, 97, 7)).toBe(0);
+    expect(zoneFlagsAt(city, 94, 102, 7)).toBe(0);
+    // No-logout SOZINHO (dois tiles de z7) e no-logout somado à PZ (um tile do andar de cima do
+    // templo): a soma de bits que o Canary guarda, não uma zona por tile.
+    expect(zoneFlagsAt(city, 77, 56, 7)).toBe(ZONE_FLAG.noLogout);
+    expect(zoneFlagsAt(city, 94, 93, 6)).toBe(ZONE_FLAG.protection | ZONE_FLAG.noLogout);
+    // Thais não tem no-pvp nem arena: a camada só traz o que o OTBM trouxe.
+    const floors = [...city.floors.values()];
+    for (const floor of floors) {
+      expect(floor.zones, `z${floor.z} sem a camada`).not.toBeNull();
+      for (const value of floor.zones ?? []) {
+        expect(value & (ZONE_FLAG.noPvp | ZONE_FLAG.pvpZone)).toBe(0);
+      }
+    }
+  });
+
+  it('Thais ganhou `zones` SEM mexer na geometria: bloqueio, velocidade, visão e escadas byte a byte (#830)', () => {
+    // A impressão digital é do thais.json de antes da #830 (tibia-parity 85c3f32f), SEM a camada
+    // nova: o JSON do arquivo, andar a andar, com `zones` tirado. Se ela mudar, alguém regenerou
+    // a geometria — com outro pacote de arte, ou editando à mão —, e a mudança merece uma
+    // explicação própria no commit que a faz (atualize o hash junto dela, nunca antes).
+    const raw = JSON.parse(readFileSync(join(DATA, 'maps', 'thais.json'), 'utf8')) as {
+      floors: Record<string, { zones?: unknown }>;
+    };
+    for (const floor of Object.values(raw.floors)) delete floor.zones;
+    const fingerprint = createHash('sha256').update(JSON.stringify(raw)).digest('hex');
+    expect(fingerprint).toBe('f8ebc5c5fccef7970b28f5231c1d1e002514404e76c9a1904b3d956e17729303');
+  });
+
+  it('o recorte de hunt sem `zones` carrega com `zones = null` — a Rat Cellars não muda (#830)', () => {
+    const map = loadContent(DATA).maps.get('rat-cellars');
+    if (map === undefined) throw new Error('o conteúdo real não tem a rat-cellars');
+    for (const floor of map.floors.values()) expect(floor.zones).toBeNull();
+    expect(zoneFlagsAt(map, 10, 10, map.z)).toBe(0);
   });
 
   it('nenhuma vocação está em aberto: os ganhos por level são os do Tibia (ADR 0026, decisão 5)', () => {
@@ -726,6 +773,26 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     }
   });
 
+  it('os 4 spellbooks do Canary com capacidade de magic shield a carregam no catálogo real (#627, M44-09)', () => {
+    // `magicshieldCapacityflat`/`percent` do items.xml (47dfd51) — o dado declarado, sem consumidor
+    // no `sim` (o Canary só o lê para descrição de item e Cyclopedia; ver `itemSchema`).
+    const { items } = loadContent(DATA);
+    const capacity = (id: string) => items.get(id)?.bonuses?.magicShieldCapacity;
+    expect(capacity('eldritch-folio')).toEqual({ flat: 80, percent: 8 });
+    expect(capacity('eldritch-tome')).toEqual({ flat: 80, percent: 8 });
+    expect(capacity('cocoa-grimoire')).toEqual({ flat: 150, percent: 3 });
+    expect(capacity('creamy-grimoire')).toEqual({ flat: 150, percent: 3 });
+    // E só esses quatro: mais um item com o campo seria um importador lendo o que não devia.
+    const withCapacity = [...items.values()].filter((item) => item.bonuses?.magicShieldCapacity !== undefined);
+    expect(withCapacity.map((item) => item.id).sort())
+      .toEqual(['cocoa-grimoire', 'creamy-grimoire', 'eldritch-folio', 'eldritch-tome']);
+  });
+
+  it('nenhum item do catálogo real carrega elementalBond: os 32 do Canary são arma fist, fora do corte (#627)', () => {
+    const { items } = loadContent(DATA);
+    expect([...items.values()].filter((item) => item.elementalBond !== undefined)).toEqual([]);
+  });
+
   it('data/supplies voltou a existir, e a poção não é mais item (ADR 0026 d.3)', () => {
     expect(existsSync(join(DATA, 'supplies'))).toBe(true);
     const content = loadContent(DATA);
@@ -777,6 +844,83 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     // Se este teste reprovou: o id saiu do arquivo da entidade na FUN-94 e vive em
     // `data/appearances/baseline.json`, uma linha por id de conteúdo.
     expect(ofensores).toEqual([]);
+  });
+});
+
+describe('o mundo do conteúdo real (#829, OW-08, ADR 0060)', () => {
+  it('o `main` é Thais pacífica: no-pvp, mapa thais, uma cidade, templo no tile andável e teto 200', () => {
+    // Apagar `worlds/` de `load.ts` deixa o servidor sem mundo e sem aviso — esta é a mutação que
+    // o teste mata. O formato é o do issue: { id, name, worldType, map, towns, capacity }.
+    const content = loadContent(DATA);
+    const world = content.worlds.get('main');
+    if (world === undefined) throw new Error('o conteúdo real não tem o mundo "main"');
+    expect(world).toEqual({
+      id: 'main', name: 'Draconya', worldType: 'no-pvp', map: 'thais',
+      towns: [{ id: 'thais', name: 'Thais', temple: { x: 32369, y: 32241, z: 7 } }],
+      capacity: 200,
+    });
+    expect(content.worlds.size).toBe(1);
+  });
+
+  it('o templo de Thais cai num tile andável do recorte, traduzido pelo `source.region`', () => {
+    const content = loadContent(DATA);
+    const world = content.worlds.get('main');
+    const map = content.maps.get(world?.map ?? '');
+    const temple = world?.towns[0]?.temple;
+    if (map === undefined || temple === undefined) throw new Error('mundo sem mapa ou sem templo');
+    // x 32275 + 94 = 32369 e y 32153 + 88 = 32241: o templo é o `entryPoint` que a Cidade já usa.
+    const local = absoluteToLocal(map, temple);
+    expect(local).toEqual({ x: 94, y: 88, z: 7 });
+    expect(local).toEqual(map.entryPoint);
+    expect(isBlocked(map, 94, 88, 7)).toBe(false);
+    // O que o recorte diz de si é o que traduz: a origem é a de `source.region`, e a volta fecha.
+    expect(map.source?.region.x[0]).toBe(32275);
+    expect(map.source?.region.y[0]).toBe(32153);
+    expect(localToAbsolute(map, { x: 94, y: 88, z: 7 })).toEqual(temple);
+  });
+
+  it('o mundo roda sobre o mesmo mapa da Cidade, que hoje é o do primeiro mundo (ADR 0060 d.3.a)', () => {
+    const content = loadContent(DATA);
+    expect(content.worlds.get('main')?.map).toBe(content.city?.id);
+  });
+
+  it('o mundo não leva arte: só ids de conteúdo, e `worlds/` passa nas varreduras de arte', () => {
+    // As duas varreduras abaixo já percorrem `data/` inteiro, `worlds/` incluso; aqui se prende
+    // que o arquivo existe e só tem as chaves do schema, sem `appearanceId` nem caminho de imagem.
+    const text = readFileSync(join(DATA, 'worlds', 'main.json'), 'utf8');
+    expect(Object.keys(JSON.parse(text) as object).sort())
+      .toEqual(['capacity', 'id', 'map', 'name', 'towns', 'worldType']);
+    expect(text).not.toMatch(/appearanceId|outfitId|\.(png|jpe?g|gif|webp|bmp|spr|dat)\b/i);
+  });
+
+  it('um worldType desconhecido no arquivo derruba o boot', () => {
+    // `retro-pvp` é um valor real do Canary (`config.lua.dist:33`) que o motor não implementa.
+    const copy = mkdtempSync(join(tmpdir(), 'draconya-content-'));
+    try {
+      cpSync(DATA, copy, { recursive: true });
+      const file = join(copy, 'worlds', 'main.json');
+      const text = readFileSync(file, 'utf8');
+      expect(text).toMatch(/"worldType": "no-pvp"/);
+      writeFileSync(file, text.replace('"worldType": "no-pvp"', '"worldType": "retro-pvp"'));
+      expect(() => loadContent(copy)).toThrow(/world "main": worldType/);
+    } finally {
+      rmSync(copy, { recursive: true, force: true });
+    }
+  });
+
+  it('o templo em parede, no arquivo, derruba o boot: quebra no servidor e não no personagem', () => {
+    const copy = mkdtempSync(join(tmpdir(), 'draconya-content-'));
+    try {
+      cpSync(DATA, copy, { recursive: true });
+      const file = join(copy, 'worlds', 'main.json');
+      const text = readFileSync(file, 'utf8');
+      // (32283, 32153, 7) é o tile local (8,0) do andar 7 de Thais: parede, na borda de cima.
+      expect(text).toContain('"x": 32369, "y": 32241');
+      writeFileSync(file, text.replace('"x": 32369, "y": 32241', '"x": 32283, "y": 32153'));
+      expect(() => loadContent(copy)).toThrow(/templo \(32283,32153,7\), no tile \(8,0,7\) do mapa "thais"/);
+    } finally {
+      rmSync(copy, { recursive: true, force: true });
+    }
   });
 });
 
@@ -1727,6 +1871,61 @@ describe('a perda de item na morte do conteúdo real (#571, ADR 0042 decisão 4)
     // E é o ÚNICO colar que protege: qualquer outro com a flag seria uma proteção não declarada.
     const protectors = [...items.values()].filter((item) => item.protectsOnDeath).map((item) => item.id);
     expect(protectors).toEqual(['amulet-of-loss']);
+  });
+});
+
+describe('a apresentação do monstro no conteúdo real (#620, M44-02)', () => {
+  // Números do Canary (`data-otservbr-global/monster/*`, conferidos em 2026-09-30): os campos
+  // `monster.outfit.look*`, `monster.voices`, `monster.light` e `monster.race` são apresentação —
+  // nenhum deles entra em combate, e nenhum é arte.
+  const content = loadContent(DATA);
+  const { monsters } = content;
+  const { appearances } = content;
+  if (appearances === undefined) throw new Error('o conteúdo real não carregou a tabela de aparências');
+
+  it('o Rat fala, e o Dragon grita — `voices` do Canary, com intervalo 5000 ms e chance 10', () => {
+    expect(monsters.get('rat')?.voices).toEqual({
+      intervalMs: 5000, chance: 10, lines: [{ text: 'Meep!', yell: false }],
+    });
+    const dragon = monsters.get('dragon')?.voices;
+    expect(dragon?.lines.map((line) => line.text)).toEqual(['FCHHHHH', 'GROOAAARRR']);
+    expect(dragon?.lines.every((line) => line.yell)).toBe(true);
+    // O Rotworm não declara fala com linha: mudo.
+    expect(monsters.get('rotworm')?.voices).toBeUndefined();
+  });
+
+  it('o Fire Elemental brilha (nível 4, cor 208) e queima; o Dark Magician traz as cores e o addon do Canary', () => {
+    expect(monsters.get('fire-elemental')).toMatchObject({ light: { level: 4, color: 208 }, race: 'fire' });
+    expect(monsters.get('dark-magician')?.outfit).toEqual({ head: 58, body: 95, legs: 51, feet: 131, addons: 2 });
+    // O `lookType` é o `outfitId` da tabela de aparências, nunca um campo do monstro (invariante 6).
+    expect(monsters.get('dark-magician')?.outfitId).toBe(appearances.monsters['dark-magician']);
+  });
+
+  it('o monstro comum não paga nada: sem `outfit`, `light`, `race` — o default do Canary é `blood` e cor 0', () => {
+    const rotworm = monsters.get('rotworm');
+    for (const field of ['outfit', 'light', 'race'] as const) expect(rotworm?.[field], field).toBeUndefined();
+  });
+
+  it('as contagens do catálogo: 238 com cores/addons, 567 com falas, 59 com luz e 412 com raça que não é `blood`', () => {
+    // Uma reimportação que mude isto sem querer (um leitor que passou a ler outra coisa) reprova
+    // aqui — `pnpm catalog:import monsters` é o único que as muda, e o relatório as conta.
+    const all = [...monsters.values()];
+    expect(all.filter((monster) => monster.outfit !== undefined)).toHaveLength(238);
+    expect(all.filter((monster) => monster.voices !== undefined)).toHaveLength(567);
+    expect(all.filter((monster) => monster.light !== undefined)).toHaveLength(59);
+    const races = new Map<string, number>();
+    for (const monster of all) if (monster.race !== undefined) races.set(monster.race, (races.get(monster.race) ?? 0) + 1);
+    expect(Object.fromEntries(races)).toEqual({ undead: 232, venom: 127, fire: 42, ink: 9, candy: 1, chocolate: 1 });
+  });
+
+  it('o efeito do golpe físico tem uma linha por raça, com os ids do Canary (`CONST_ME_*`)', () => {
+    // `Game::combatGetTypeInfo`: sangue 1, veneno 17, hit area 10 (morto-vivo e tinta), energia 12,
+    // cacau 270 e xarope 269; fogo reusa o sangue. Mutação que mata: uma raça sem linha — o golpe
+    // nela cairia em `hits.melee` sem ninguém notar.
+    expect(appearances.hits.byRace).toEqual({
+      blood: 1, venom: 17, undead: 10, fire: 1, energy: 12, ink: 10, chocolate: 270, candy: 269,
+    });
+    expect(appearances.hits.melee).toBe(1);
   });
 });
 

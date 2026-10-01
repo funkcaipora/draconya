@@ -16,6 +16,7 @@ import { Contribution } from '../death.js';
 import type { ContributionState } from '../death.js';
 import type { CooldownState } from '../cooldown.js';
 import type { Rng } from '../rng.js';
+import { FACTION_PLAYER, NEAREST_FACTION_WEIGHT } from './faction.js';
 import { rankTarget, type TargetRankCandidate } from './target-strategy.js';
 import { boundedPath, cheapestPath, isExactly } from '../route/pathfind.js';
 import {
@@ -214,6 +215,15 @@ export interface Prey {
    * (`visibility-think`) que o larga, como o `Creature::onThink` do Canary.
    */
   readonly invisible?: boolean;
+  /**
+   * O valor de `Faction_t` do candidato (#619, `Creature::getFaction`): só o desempate lê — a
+   * busca do mais perto soma `faction × 100` à distância, e as por vida e por dano `× 100 000`
+   * (ver `faction.ts`). Ausente é `FACTION_PLAYER` (1): `CharacterRuntime` e a invocação de
+   * personagem — a lista que `chooseTarget` sempre recebeu — não dizem nada, e o desempate fica
+   * uniforme entre eles. Só o monstro de facção que vira candidato de OUTRO monstro carrega o
+   * próprio valor.
+   */
+  readonly faction?: number;
 }
 
 /**
@@ -522,6 +532,7 @@ export function chooseTarget(
           candidates.push({
             id: candidate.id, distance: d, health: candidate.health,
             damage: monster.contribution.damageBy(candidate.id),
+            ...(candidate.faction === undefined ? {} : { faction: candidate.faction }),
           });
         }
         if (candidates.length > 0) return rankTarget(strategy, candidates, rng);
@@ -534,8 +545,14 @@ export function chooseTarget(
   // `TARGETSEARCH_NEAREST` fixo — `monster.cpp:1736`): só o mais perto, zero sorteio, zero
   // alocação nova, e o `targetStrategy` do conteúdo NUNCA é consultado aqui — a estratégia
   // ponderada só entra no ramo estreito acima.
+  //
+  // O desempate por FACÇÃO (#619, `searchTargetImmediate`/`MonsterTargetRanker::rank`): a
+  // distância comparada é `d + faction × 100`, então um candidato de facção MENOR ganha de um de
+  // facção maior por mais longe que esteja — o jogador (1) antes de qualquer monstro inimigo. Com
+  // todos os candidatos na mesma facção (o caso de toda hunt sem facção: só personagens e
+  // invocações de personagem) o somando é uma constante, e a escolha é a de sempre.
   let closest: Prey | null = null;
-  let closestDistance = Number.POSITIVE_INFINITY;
+  let closestKey = Number.POSITIVE_INFINITY;
   for (const candidate of prey) {
     if (!candidate.alive) continue;
     if (candidate.invisible && !seesInvisible(definition)) continue;
@@ -545,13 +562,15 @@ export function chooseTarget(
     // através do chão.
     if (!sameFloor(monster.position.z, candidate.position.z)) continue;
     const d = distance(monster.position, candidate.position);
-    if (d > definition.aggroRadius || d >= closestDistance) continue;
+    if (d > definition.aggroRadius) continue;
+    const key = d + (candidate.faction ?? FACTION_PLAYER) * NEAREST_FACTION_WEIGHT;
+    if (key >= closestKey) continue;
     // Quem está além do leash não é candidato: desistir do alvo que passou dele não vale se a
     // aquisição logo o pegasse de volta (o alvo retido está sempre dentro do `aggroRadius`
     // depois do corte por visão acima, então sem isto o leash nunca soltaria ninguém).
     if (leash !== 0 && distance(monster.home, candidate.position) > leash) continue;
     closest = candidate;
-    closestDistance = d;
+    closestKey = key;
   }
   return closest?.id ?? null;
 }
@@ -560,19 +579,21 @@ export function chooseTarget(
  * O candidato mais perto (Chebyshev), com o mesmo desempate FIXO do Canary que a aquisição de
  * `chooseTarget` já usa: o primeiro da lista que bate o recorde fica — comparação ESTRITA,
  * nunca sorteada (#645, `searchTargetImmediate`, `TARGETSEARCH_NEAREST`, `monster.cpp:944-964`).
- * Draconya não modela facção, então o offset de facção do Canary (`getFaction() * 100`) nunca
- * entra — é sempre zero para todo mundo. `candidates` já vem filtrado por quem chama (vivo,
- * mesmo andar, dentro do raio) — usada pelo vencimento de `targetChange` em `hunt.ts`, que
- * precisa da MESMA regra de desempate sem duplicá-la.
+ * O offset de facção (#619, `getFaction() * 100`) entra na distância comparada, como na
+ * aquisição: sem `faction` no candidato vale `FACTION_PLAYER`, uniforme para toda a lista de
+ * sempre. `candidates` já vem filtrado por quem chama (vivo, mesmo andar, dentro do raio) —
+ * usada pelo vencimento de `targetChange` em `hunt.ts`, que precisa da MESMA regra de
+ * desempate sem duplicá-la.
  */
 export function nearestPrey(origin: GridPoint, candidates: readonly Prey[]): Prey | null {
   let closest: Prey | null = null;
-  let closestDistance = Number.POSITIVE_INFINITY;
+  let closestKey = Number.POSITIVE_INFINITY;
   for (const candidate of candidates) {
-    const d = distance(origin, candidate.position);
-    if (d >= closestDistance) continue;
+    const key = distance(origin, candidate.position)
+      + (candidate.faction ?? FACTION_PLAYER) * NEAREST_FACTION_WEIGHT;
+    if (key >= closestKey) continue;
     closest = candidate;
-    closestDistance = d;
+    closestKey = key;
   }
   return closest;
 }
@@ -998,6 +1019,17 @@ export function decideUnengagedMove(
   if (isSummon && target === null && typeof monster.masterId !== 'string') return { kind: 'still' };
 
   if (monster.walkingBack) {
+    // O monstro de FACÇÃO não volta ao spawn com jogador à vista (#619, Canary `Monster::
+    // doWalkBack`: `totalPlayersOnScreen > 0` desliga `isWalkingBack` e não dá passo). O contador
+    // é de quem NÃO é invocação, tem facção (`countsAsPlayerOnScreenTarget`) e enxerga um jogador
+    // na lista de alvos — vivo e dentro da visão, o mesmo `anyInView` da lista vazia acima. Serve
+    // à volta que já estava ligada (`walkingBack` persiste, ver acima) quando o jogador reaparece.
+    if (!isSummon && definition.faction !== undefined && definition.faction !== 'default'
+      && anyInView(monster, participants, definition.aggroRadius)) {
+      monster.walkingBack = false;
+      monster.walkBackByPath = false;
+      return { kind: 'walk-back', to: null };
+    }
     const to = sameFloor(monster.position.z, monster.home.z)
       ? nextWalkBackStep(monster, blocked, pathBlocked)
       : null;

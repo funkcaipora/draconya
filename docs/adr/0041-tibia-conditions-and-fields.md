@@ -172,6 +172,24 @@ três escolhas merecem registro porque não são as que o plano do endgame supun
 (`rooted`, `feared`, `pacified`). É vocabulário autoral: a ponte do Lua
 (`luaMonsterTypeConditionImmunities`) não os nomeia, e nenhum monstro do bestiário os declara.
 
+## Emenda — 2026-09-30 (#826, ADR 0060 d.8): o campo tem dono
+
+O campo de tile desta decisão atingia todo participante sobre ele, e a parede (Magic Wall, Wild
+Growth) bloqueava toda criatura. Isso ficou diferente do Canary no que o no-pvp muda: o campo
+lançado por jogador, num mundo no-pvp, vira a variante que não fere jogador, e a parede vira a
+variante segura (`canary/src/creatures/combat/combat.cpp:1207-1218`, `2594-2640`;
+`condition.cpp:2015-2020`; `tile.cpp:864-876`). Como o Draconya é no-pvp em toda sessão, a
+correção vale já, inclusive para a hunt de party — onde o fire field de um membro queimava a
+própria party.
+
+`TileFieldState.owner` (`{ kind: 'character' | 'monster', id }`) registra quem lançou; sem ele o
+campo é de mapa e segue pegando todo mundo, e o snapshot de antes restaura assim. O campo de
+personagem — ou de invocação de personagem, que o Canary trata como o jogador — não fere
+personagem nem invocação de personagem (o lançador incluso); a parede de personagem segue
+barrando monstro, mas cede ao passo de qualquer personagem, que a remove. Fica de fora o crédito
+do dano do campo ao dono (a condição do campo segue com o id do campo como origem), que é o
+crédito do Canary do ADR 0060 (OW-28).
+
 Nenhum invariante muda de texto.
 
 ## Emenda — 2026-09-30 (#621): a condição `outfit` — referência por conteúdo, fusão por prazo, ataque não agressivo
@@ -217,7 +235,7 @@ M44-03) fixou o **como**, e cinco escolhas merecem registro porque não são ób
    `manualTargetSchema`). Sem parâmetro válido, `not-illusionable` ANTES de mana, gold ou cooldown.
 
 A apresentação segue o padrão do ADR 0031 (CMB-07): o `sim` emite `creature-look-changed` (quem
-vestiu o quê), o hospedeiro o resolve em `creature-update` (S2C 49, broadcast como `creature-health`;
+vestiu o quê), o hospedeiro o resolve em `creature-update` (S2C 51, broadcast como `creature-health`;
 `object: true` separa o registro de objeto) e o mesmo `#lookFor` alimenta `creature-appear` e
 `session-state` — o estado mora na condição, nunca num campo de apresentação (invariante 3).
 

@@ -62,6 +62,20 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Gokgoooook",
+          "yell": false
+        },
+        {
+          "text": "Cluck Cluck",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -205,6 +219,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Gokgoooook",
+          "yell": false
+        },
+        {
+          "text": "Cluck Cluck",
+          "yell": false
+        },
+        {
+          "text": "I will fill MY cushion with YOUR hair! CLUCK!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -367,6 +399,20 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Cluck Cluck",
+          "yell": false
+        },
+        {
+          "text": "Gokgoooook",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -524,6 +570,32 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "ISHH THAT THE BESHHT YOU HAVE TO OFFERRR, TIBIANSHH?",
+          "yell": true
+        },
+        {
+          "text": "YOU ARRRRRE DOOMED!",
+          "yell": true
+        },
+        {
+          "text": "I SHHMELL FEEAARRR!",
+          "yell": true
+        },
+        {
+          "text": "MY SHHEED IS FEARRR AND MY HARRRVEST ISHH YOURRR SHHOUL!",
+          "yell": true
+        },
+        {
+          "text": "Your shhoooul will be mineee!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -710,6 +782,16 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grrrrrr",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -987,6 +1069,23 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 85,
+      "body": 1,
+      "legs": 85,
+      "feet": 105,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Kreeee. Kreeeee.",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1140,6 +1239,16 @@
     "runOnHealth": 10,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Rrrawk! Rrrrawk!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1209,6 +1318,64 @@
     "runOnHealth": 25,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You advanshed, you advanshed!",
+          "yell": false
+        },
+        {
+          "text": "Neeewbiiieee!",
+          "yell": false
+        },
+        {
+          "text": "Screeech!",
+          "yell": false
+        },
+        {
+          "text": "Hunterrr ish PK!",
+          "yell": false
+        },
+        {
+          "text": "BR? PL? SWE?",
+          "yell": true
+        },
+        {
+          "text": "Hope you die and loooosh it!",
+          "yell": false
+        },
+        {
+          "text": "You powerrrrrrabuserrrrr!",
+          "yell": false
+        },
+        {
+          "text": "You are corrrrupt! Corrrrupt!",
+          "yell": false
+        },
+        {
+          "text": "Tarrrrp?",
+          "yell": false
+        },
+        {
+          "text": "Blesshhh my stake! Screeech!",
+          "yell": false
+        },
+        {
+          "text": "Leeave orrr hunted!!",
+          "yell": false
+        },
+        {
+          "text": "Shhtop whining! Rraaah!",
+          "yell": false
+        },
+        {
+          "text": "I'm heeerrre! Screeeech!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1369,6 +1536,24 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Coooo! Cooo!",
+          "yell": false
+        },
+        {
+          "text": "Coo! Coooo! Coo! Cooo!",
+          "yell": false
+        },
+        {
+          "text": "Coo! Coo! Coooo!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1519,6 +1704,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Carrah! Carrah!",
+          "yell": false
+        },
+        {
+          "text": "Gruuuh Gruuuh.",
+          "yell": false
+        },
+        {
+          "text": "CRAAAHHH!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1622,6 +1825,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Carrah! Carrah!",
+          "yell": false
+        },
+        {
+          "text": "Gruuuh Gruuuh.",
+          "yell": false
+        },
+        {
+          "text": "CRAAAHHH!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,

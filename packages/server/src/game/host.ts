@@ -19,8 +19,10 @@ import type {
   PartyEvent, PresenceEvent, Receipt, Session, SessionSnapshot, SessionType, WorldPoint,
 } from '@draconya/sim';
 import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
-import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
-import { ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
+import type {
+  ActiveConditionKind, C2SMessage, MonsterRace, OutfitColors, S2CMessage, S2CProps,
+} from '@draconya/protocol';
+import { DEFAULT_MONSTER_RACE, ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
 import type {
   Ammunition, Appearances, Blessing, BotConfigV2, Charm, Item, ItemSlot, Monster, OutfitLook,
   RemovedBotSlot, Skill, Spell, Training, Vocation,
@@ -48,6 +50,7 @@ import type { InitialCharacter, PartyTicket } from '../tickets.js';
 import { AreaOfInterest } from './aoi.js';
 import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
 import { findPersonText } from './find-text.js';
+import { hitEffectOf, isPhysicalHit, monsterLookOf } from './monster-look.js';
 import { REFUSAL_TEXT, TransitionError, refuseTransition } from './transitions.js';
 import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
 
@@ -1122,6 +1125,15 @@ interface HostedSession {
    * é do servidor — o `sim` não conhece protocolo, e o cliente não pode inventar número.
    */
   readonly creatureIds: Map<string, number>;
+  /**
+   * A raça (#620) de cada MONSTRO que não é `blood`, pela mesma chave de `creatureIds` (o
+   * `subject`). Só a apresentação lê — a cor e o efeito do golpe físico que o atinge. Guardada
+   * aqui, e não consultada no ruleset na hora do golpe, porque o abate REMOVE o monstro do
+   * ruleset antes de o golpe que o matou ser apresentado, e é justamente o golpe mais comum de
+   * uma hunt. Só entra quem difere do default: o monstro comum e o jogador não pagam entrada, e
+   * a ausência é `blood`. Sai junto de `creatureIds`, no `creature-disappear`.
+   */
+  readonly raceBySubject: Map<string, MonsterRace>;
   /**
    * O próximo id numérico a distribuir. MONOTÔNICO, nunca `size + 1` (FUN-103).
    *
@@ -3564,6 +3576,7 @@ export class SessionHost {
     let message: S2CMessage;
     if (event.kind === 'creature-appeared') {
       const definition = this.#options.monsterCatalog?.get(event.monsterId);
+      this.#rememberRace(hosted, key, definition);
       message = {
         type: 'creature-appear',
         id: this.#creatureId(hosted, key),
@@ -3572,6 +3585,9 @@ export class SessionHost {
         name: definition?.name ?? event.monsterId,
         health: event.health,
         maxHealth: event.maxHealth,
+        // A apresentação (#620): cores e addons, raça, luz e falas — só o que o cliente desenha, e
+        // nada que o `sim` leia.
+        ...monsterLookOf(definition),
         // A invocação do JOGADOR (#598, M38-01, ADR 0057 decisão 4): o cliente marca "sua
         // invocação". Ausente para todo o resto, inclusive invocação de MONSTRO (#546).
         ...(event.masterId === undefined ? {} : { masterId: event.masterId }),
@@ -3593,12 +3609,24 @@ export class SessionHost {
       // O número NÃO é reaproveitado (ver `nextCreatureId`); só a chave sai do mapa, senão
       // ele cresce um item por respawn até o fim da hunt.
       hosted.creatureIds.delete(key);
+      hosted.raceBySubject.delete(key);
     } else {
       const id = hosted.creatureIds.get(key);
       if (id === undefined) return;
       message = { type: 'creature-health', id, health: event.health, maxHealth: event.maxHealth };
     }
     for (const viewer of hosted.viewers) viewer.send(message);
+  }
+
+  /**
+   * Guarda a raça do monstro `key` (#620) quando ela difere de `blood` — ver `raceBySubject`. Chamado
+   * nos dois lugares em que o host aprende que um monstro existe: o `creature-appeared` e o
+   * `session-state` de quem reanexa (uma hunt retomada de snapshot nunca emitiu o primeiro).
+   */
+  #rememberRace(hosted: HostedSession, key: string, definition: Monster | undefined): void {
+    const race = definition?.race;
+    if (race === undefined || race === DEFAULT_MONSTER_RACE) hosted.raceBySubject.delete(key);
+    else hosted.raceBySubject.set(key, race);
   }
 
   /**
@@ -3611,7 +3639,8 @@ export class SessionHost {
    *
    * O `sim` diz O QUE aconteceu; a tabela de aparências diz o que DESENHAR (invariante 6):
    *
-   *   creature-hit     → o número, e o sangue do corpo a corpo (`hits.melee`) — só quando
+   *   creature-hit     → o número, e o efeito do golpe FÍSICO (`hits.byRace` pela raça do alvo,
+   *                      `hits.melee` sem ela; #620) — de corpo a corpo OU de magia, e só quando
    *                      saiu vida: golpe absorvido inteiro mostra "0", como no Tibia, mas não
    *                      sangra, porque sangue é o que a armadura acabou de impedir;
    *   creature-healed  → o número em verde. O efeito da cura NÃO sai daqui: ele é do
@@ -3650,8 +3679,16 @@ export class SessionHost {
           type: 'creature-hit', id, amount: event.amount, kind: event.source,
           ...(event.damageType === undefined ? {} : { damageType: event.damageType }),
         });
-        const blood = appearances?.hits.melee;
-        if (event.source === 'melee' && event.amount > 0 && blood !== undefined) {
+        // O efeito do golpe físico segue a RAÇA de quem o levou (#620, `combatGetTypeInfo` do
+        // Canary): sangue, gota de veneno, "hit area" cinza… Só a apresentação lê a raça.
+        // O gatilho é o ELEMENTO do golpe, e não a origem: `Game::sendEffects` roda em todo dano
+        // com valor, de corpo a corpo, de magia ou de runa, e só `COMBAT_PHYSICALDAMAGE` cai no
+        // `switch` da raça — o mesmo critério que colore o número no cliente (`isPhysicalHit`).
+        const blood = appearances === undefined || event.amount <= 0
+          || !isPhysicalHit(event.source, event.damageType)
+          ? undefined
+          : hitEffectOf(appearances.hits, hosted.raceBySubject.get(String(event.creatureId)));
+        if (blood !== undefined) {
           messages.push({ type: 'effect', position: event.position, effectId: blood });
         }
         break;
@@ -4704,7 +4741,7 @@ export class SessionHost {
     // ids de criatura de quem já estava lá.
     const existing = this.#sessions.get(next.id);
     const successor: HostedSession = existing ?? {
-      session: next, viewers: new Set(), creatureIds: new Map(), nextCreatureId: 1,
+      session: next, viewers: new Set(), creatureIds: new Map(), raceBySubject: new Map(), nextCreatureId: 1,
       aoi: this.#interestManaged(next) ? new AreaOfInterest() : null,
       lastAdvancedAtMs: this.#now(),
       credited: new Set(),
@@ -5280,6 +5317,7 @@ export class SessionHost {
     for (const monster of ruleset.monsters ?? []) {
       if (!monster.alive) continue;
       const definition = this.#options.monsterCatalog?.get(monster.monsterId);
+      this.#rememberRace(hosted, monster.subject, definition);
       creatures.push({
         id: this.#creatureId(hosted, monster.subject),
         // O andar do MONSTRO (#519, hunt multiandar), nunca o padrão da instância: numa hunt de
@@ -5292,6 +5330,9 @@ export class SessionHost {
         name: definition?.name ?? monster.monsterId,
         health: monster.health,
         maxHealth: definition?.health ?? monster.health,
+        // A apresentação (#620), pelo MESMO espalhamento do `creature-appear`: quem reanexa no
+        // meio vê o monstro pintado, com luz e falas, sem esperar um segundo aparecimento.
+        ...monsterLookOf(definition),
         // A invocação do JOGADOR (#598) — o mesmo espalhamento do `creature-appear`, para quem
         // reanexa no meio ver a invocação já marcada, sem esperar um segundo aparecimento.
         ...(typeof monster.masterId === 'string' ? { masterId: monster.masterId } : {}),
@@ -5559,6 +5600,7 @@ export class SessionHost {
       session,
       viewers: new Set(),
       creatureIds: new Map(),
+      raceBySubject: new Map(),
       nextCreatureId: 1,
       // Só o shard tem AOI (FUN-33): numa hunt de um personagem ela seria índice para nada.
       aoi: this.#interestManaged(session) ? new AreaOfInterest() : null,

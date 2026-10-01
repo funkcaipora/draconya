@@ -83,6 +83,23 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 85,
+      "body": 1,
+      "legs": 85,
+      "feet": 105,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "The Moon Goddess is ashamed of you!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -264,6 +281,24 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Crush the intruders!",
+          "yell": false
+        },
+        {
+          "text": "You're so little!",
+          "yell": false
+        },
+        {
+          "text": "Human flesh -  delicious!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -367,6 +402,32 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Human, uh whil dyh!",
+          "yell": false
+        },
+        {
+          "text": "Youh ah trak!",
+          "yell": false
+        },
+        {
+          "text": "Let da mashing begin!",
+          "yell": false
+        },
+        {
+          "text": "Toks utat.",
+          "yell": false
+        },
+        {
+          "text": "Il lorstok human!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -503,6 +564,28 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Fee! Fie! Foe! Fum!",
+          "yell": false
+        },
+        {
+          "text": "Luttl pest!",
+          "yell": false
+        },
+        {
+          "text": "Me makking you pulp!",
+          "yell": false
+        },
+        {
+          "text": "Humy tasy! Hum hum!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -670,6 +753,24 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Outis emoi g' onoma.",
+          "yell": false
+        },
+        {
+          "text": "Whack da humy!",
+          "yell": false
+        },
+        {
+          "text": "Ai humy phary ty kaynon",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -825,6 +926,36 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hmm Humansoup!",
+          "yell": false
+        },
+        {
+          "text": "Stand still ya tasy snack!",
+          "yell": false
+        },
+        {
+          "text": "Joh Thun!",
+          "yell": false
+        },
+        {
+          "text": "Hörre Sjan Flan!",
+          "yell": false
+        },
+        {
+          "text": "Bröre Smöde!",
+          "yell": false
+        },
+        {
+          "text": "Forle Bramma",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -982,6 +1113,32 @@
     },
     "staticAttack": 0.6,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ymirs Mjalle!",
+          "yell": false
+        },
+        {
+          "text": "No run so much, must stay fat!",
+          "yell": false
+        },
+        {
+          "text": "Hï¿½rre Sjan Flan!",
+          "yell": false
+        },
+        {
+          "text": "Damned fast food.",
+          "yell": false
+        },
+        {
+          "text": "Come kiss the cook!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1137,6 +1294,23 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 85,
+      "body": 1,
+      "legs": 85,
+      "feet": 105,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "SMAASH!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1333,6 +1507,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You so juicy!",
+          "yell": false
+        },
+        {
+          "text": "Smash you face in!!!",
+          "yell": false
+        },
+        {
+          "text": "You stop! You lunch!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1508,6 +1700,11 @@
       "random": 0
     },
     "staticAttack": 0.7,
+    "faction": "anuma",
+    "enemyFactions": [
+      "player",
+      "fafnar"
+    ],
     "corpseTtlMs": 670000,
     "corpseAnimatable": [
       {
@@ -1669,6 +1866,11 @@
       "random": 0
     },
     "staticAttack": 0.7,
+    "faction": "anuma",
+    "enemyFactions": [
+      "player",
+      "fafnar"
+    ],
     "corpseTtlMs": 670000,
     "corpseAnimatable": [
       {
@@ -1888,6 +2090,11 @@
       "random": 0
     },
     "staticAttack": 0.7,
+    "faction": "anuma",
+    "enemyFactions": [
+      "player",
+      "fafnar"
+    ],
     "corpseTtlMs": 670000,
     "corpseAnimatable": [
       {
@@ -2051,6 +2258,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You tasty!",
+          "yell": false
+        },
+        {
+          "text": "Must! Chop! Food! Raahh!",
+          "yell": false
+        },
+        {
+          "text": "UGGA UGGA!!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2276,6 +2501,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Stay here, soul food!",
+          "yell": false
+        },
+        {
+          "text": "You more delicate than clomp!",
+          "yell": false
+        },
+        {
+          "text": "The spirits hunger!",
+          "yell": false
+        },
+        {
+          "text": "A sacrifice for Great Hunger!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2455,6 +2702,27 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 94,
+      "body": 1,
+      "legs": 80,
+      "feet": 94,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Crushing! Smashing! Ripping! Yeah!!",
+          "yell": false
+        },
+        {
+          "text": "It's clobberin time!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,

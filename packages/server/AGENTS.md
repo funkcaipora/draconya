@@ -487,7 +487,14 @@ acabaram e o 0 é o do desenvolvimento local.
 lida pelo `api` na emissão do ticket e adotada pelo `SessionHost` no `prepare` — o mesmo caminho
 do `name`, e pela mesma razão: é dado do personagem que só a APRESENTAÇÃO lê. O `sim` não
 conhece cor, e o snapshot não a carrega; quem a repete é `creature-appear` e a lista de
-criaturas do `session-state`, só para personagem — monstro é uma camada só e nunca traz o campo.
+criaturas do `session-state`. **O monstro também a traz desde o #620**, mas do CONTEÚDO
+(`monster.outfit`, o neutro 0/0/0/0 quando ausente) e nunca da tabela de personagens: ver
+`game/monster-look.ts` — o que o host manda sobre a apresentação do monstro (cores, addons, raça,
+luz e falas), só lido da definição do catálogo fixado na sessão e sem que o `sim` leia nada.
+`raceBySubject` (no `HostedSession`) guarda a raça dos monstros que não são `blood` até o
+`creature-disappear`: o abate tira o monstro do ruleset antes de o golpe fatal ser apresentado, e a
+raça é o que escolhe o efeito do golpe FÍSICO (`appearances.hits.byRace`), de corpo a corpo ou de
+magia — o gatilho é o elemento (`isPhysicalHit`), como o `Game::sendEffects` do Canary, e não a origem.
 
 Três coisas que seguem disso:
 
@@ -508,7 +515,7 @@ Três coisas que seguem disso:
 
 O `sim` emite `creature-look-changed { creatureId, look | null }` — QUEM vestiu o quê, como
 `{ monsterId } | { itemId } | { objectKey }`, nunca um id de arte (invariante 6) — e o hospedeiro o
-traduz em `creature-update` (S2C 49): `monsterId` → `outfitId` do `monsterCatalog`, `itemId` →
+traduz em `creature-update` (S2C 51): `monsterId` → `outfitId` do `monsterCatalog`, `itemId` →
 `appearanceId` do `itemCatalog`, `objectKey` → `appearances.looks`; `object: true` marca o registro
 de OBJETO (a criatura virou uma coisa). Quem mexe aqui precisa saber quatro coisas:
 
@@ -523,7 +530,10 @@ de OBJETO (a criatura virou uma coisa). Quem mexe aqui precisa saber quatro cois
   `sim` do mesmo jeito.
 - **A volta manda a aparência própria, não "a original"**: o cliente não guarda a aparência
   anterior para voltar a ela, e o `creature-update` do personagem que volta leva as `colors` do
-  ticket de novo (um outfit de monstro não tem cor).
+  ticket de novo. **As cores e os addons do monstro (#620) são parte do outfit**: `#lookFor` os
+  devolve do monstro dono (`monsterOutfitOf`) e do monstro imitado (`#resolveLook`), e o
+  `session-state` espalha só a `monsterPresentationOf` (raça, luz e falas) depois dele — o
+  `monsterLookOf` inteiro trocaria as cores do outfit emprestado pelas do dono.
 - **`use-slot`/`use-item`/`use-item-on` aceitam `target: { instanceId }`** (a Chameleon Rune): o
   host só traduz para `UseSlotTarget { kind: 'item' }` (`#resolveUseSlotTarget`); se a instância
   existe e é do personagem é do `sim` (`not-illusionable`, "Não é possível."). O catálogo marca o

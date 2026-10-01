@@ -1,7 +1,8 @@
 // Tilemap e rota em memória. PURO — a leitura de disco continua em `./load.ts`.
 //
 // Desde a FUN-119 (ADR 0025) o mapa tem ANDARES: cada um com o bitmap de bloqueio e, quando
-// importado, a velocidade de chão por tile; e `floorChanges` liga um tile a outro andar.
+// importado, a velocidade de chão por tile, o bloqueio de visão e as zonas (PZ, no-pvp, no-logout,
+// arena — #830); e `floorChanges` liga um tile a outro andar.
 
 import type {
   Point, RouteData, TilemapData, TilemapInput, TilemapInteractable,
@@ -13,6 +14,69 @@ import type {
  * `speed`) e para o tile bloqueado, que ninguém pisa.
  */
 export const DEFAULT_GROUND_SPEED = 150;
+
+/**
+ * Os bits de zona de um tile (#830, OW-09, ADR 0060 d.8) — os MESMOS de `OTBM_ATTR_TILE_FLAGS`
+ * (`canary/src/io/io_definitions.hpp:73-76`), e `scripts/import-map.test.ts` prende a igualdade
+ * com `TILE_FLAG` do leitor de OTBM. O valor de um tile em `Floor.zones` é a soma destes bits, já
+ * NORMALIZADA como o Canary carrega o mapa (`canary/src/io/iomap.cpp:165-177`): `protection`,
+ * `noPvp` e `pvpZone` são exclusivos entre si — o primeiro que o arquivo traz vence, nesta
+ * ordem —, e `noLogout` soma por cima de qualquer um dos quatro estados (incluindo o normal).
+ *
+ * A PRECEDÊNCIA de quem consulta é outra coisa e é do `sim` (OW-10): `Tile::getZoneType`
+ * (`canary/src/items/tile.hpp:188-199`) lê PZ, depois no-pvp, depois arena, depois no-logout,
+ * depois normal. O arquivo guarda os bits; não escolhe um tipo.
+ */
+export const ZONE_FLAG = {
+  protection: 1 << 0,
+  noPvp: 1 << 2,
+  noLogout: 1 << 3,
+  pvpZone: 1 << 4,
+} as const;
+
+/**
+ * A paleta da camada `zones` — um caractere por valor possível depois da normalização de
+ * `ZONE_FLAG`. Letra minúscula é a zona sozinha, maiúscula é a zona MAIS `noLogout`:
+ *
+ * | char | valor | significado                                   |
+ * |------|-------|-----------------------------------------------|
+ * | `.`  | 0     | normal                                        |
+ * | `p`  | 1     | protect zone (PZ)                             |
+ * | `n`  | 4     | no-pvp                                        |
+ * | `a`  | 16    | arena (`PVPZONE`) — no-pvp no primeiro corte  |
+ * | `l`  | 8     | só no-logout                                  |
+ * | `P`  | 9     | PZ + no-logout                                |
+ * | `N`  | 12    | no-pvp + no-logout                            |
+ * | `A`  | 24    | arena + no-logout                             |
+ *
+ * `l` é a exceção da regra das maiúsculas: no-logout sozinho não tem zona para maiusculizar.
+ * Fixa e documentada aqui, nunca por mapa (como `speedPalette` é): o significado é o do Canary.
+ */
+export const ZONE_PALETTE: Readonly<Record<string, number>> = {
+  '.': 0,
+  p: ZONE_FLAG.protection,
+  n: ZONE_FLAG.noPvp,
+  a: ZONE_FLAG.pvpZone,
+  l: ZONE_FLAG.noLogout,
+  P: ZONE_FLAG.protection | ZONE_FLAG.noLogout,
+  N: ZONE_FLAG.noPvp | ZONE_FLAG.noLogout,
+  A: ZONE_FLAG.pvpZone | ZONE_FLAG.noLogout,
+};
+
+const ZONE_CHAR_BY_VALUE: ReadonlyMap<number, string> = new Map(
+  Object.entries(ZONE_PALETTE).map(([char, value]) => [value, char]),
+);
+
+/**
+ * O caractere da camada `zones` para um valor já normalizado. Lança em combinação que o Canary
+ * nunca produz (dois bits exclusivos juntos, bit desconhecido): quem escreve a camada passa por
+ * aqui, e um valor fora da paleta nunca chega ao arquivo.
+ */
+export function zoneChar(value: number): string {
+  const char = ZONE_CHAR_BY_VALUE.get(value);
+  if (char === undefined) throw new Error(`zona ${value} não está em ZONE_PALETTE`);
+  return char;
+}
 
 export interface Floor {
   readonly z: number;
@@ -35,6 +99,14 @@ export interface Floor {
    * (`unpass` vs. `unsight`), por isso duas grades separadas, nunca uma derivada da outra.
    */
   readonly blocksSight: Uint8Array | null;
+  /**
+   * Zonas do tile (#830, OW-09, ADR 0060 d.8): a soma de `ZONE_FLAG`, um byte por tile, indexado
+   * por `y * width + x` — os mesmos bits do OTBM. `null` quando o mapa não declara a camada
+   * `zones` deste andar: todo tile é normal, o mesmo "sem dado, sem restrição" de `speed` e
+   * `blocksSight` ausentes, e nenhuma hunt muda. Só dado: quem decide o que PZ, no-pvp e
+   * no-logout proíbem é o `sim` (OW-10, OW-27).
+   */
+  readonly zones: Uint8Array | null;
 }
 
 export interface Tilemap {
@@ -110,6 +182,7 @@ export const tileKey = (x: number, y: number, z: number): number =>
 export function buildTilemap(data: TilemapInput): Tilemap {
   const floorData: Array<[number, {
     grid: readonly string[]; speed?: readonly string[] | undefined; sight?: readonly string[] | undefined;
+    zones?: readonly string[] | undefined;
   }]> = [];
   if (data.grid !== undefined) floorData.push([data.z, { grid: data.grid }]);
   for (const [z, floor] of Object.entries(data.floors ?? {})) floorData.push([Number(z), floor]);
@@ -158,7 +231,27 @@ export function buildTilemap(data: TilemapInput): Tilemap {
         }
       }
     }
-    floors.set(z, { z, blocked, speed, blocksSight });
+    let zones: Uint8Array | null = null;
+    if (floor.zones !== undefined) {
+      zones = new Uint8Array(width * height);
+      for (let y = 0; y < height; y++) {
+        const row = floor.zones[y] ?? '';
+        for (let x = 0; x < width; x++) {
+          const char = row[x];
+          // Linha mais curta que a largura é normal no resto — o inverso de `grid`, que
+          // bloqueia —, porque zona é restrição OPCIONAL e fora do desenhado não há nada a dizer.
+          if (char === undefined) continue;
+          const value = ZONE_PALETTE[char];
+          if (value === undefined) {
+            throw new Error(
+              `mapa "${data.id}", andar ${z}: zona "${char}" em (${x},${y}) não está em ZONE_PALETTE`,
+            );
+          }
+          zones[y * width + x] = value;
+        }
+      }
+    }
+    floors.set(z, { z, blocked, speed, blocksSight, zones });
   }
 
   const base = floors.get(data.z);
@@ -196,6 +289,37 @@ export function buildTilemap(data: TilemapInput): Tilemap {
   };
 }
 
+/**
+ * Coordenada ABSOLUTA do Tibia (a do `otservbr.otbm`) → coordenada LOCAL do mapa importado, pelo
+ * `source.region` (#829, ADR 0060 d.3.b): `x` e `y` perdem a origem do recorte, e `z` não muda —
+ * os andares do mapa são chaveados pelo `z` absoluto (`scripts/import-map.ts`, `importRegion`).
+ * É o inverso do que o importador faz com o `entryPoint`.
+ *
+ * `undefined` quando o mapa não foi importado (sem `source`, portanto sem origem) ou quando a
+ * coordenada cai fora da região em qualquer dos três eixos: o chamador decide o que é isso, e
+ * não existe um ponto "mais perto" que se possa adivinhar.
+ */
+export function absoluteToLocal(map: Pick<Tilemap, 'source'>, at: Point): Point | undefined {
+  const region = map.source?.region;
+  if (region === undefined) return undefined;
+  if (at.x < region.x[0] || at.x > region.x[1]) return undefined;
+  if (at.y < region.y[0] || at.y > region.y[1]) return undefined;
+  if (at.z < region.z[0] || at.z > region.z[1]) return undefined;
+  return { x: at.x - region.x[0], y: at.y - region.y[0], z: at.z };
+}
+
+/**
+ * O inverso de `absoluteToLocal`: coordenada local do mapa importado → absoluta do Tibia. É o que
+ * se persiste (`characters.world_x/y/z`, ADR 0060 d.3.b) e o que o protocolo do mundo carrega.
+ * `undefined` sem `source`; não confere se o ponto cabe na grade — quem pergunta por um tile
+ * andável usa `isBlocked`.
+ */
+export function localToAbsolute(map: Pick<Tilemap, 'source'>, at: Point): Point | undefined {
+  const region = map.source?.region;
+  if (region === undefined) return undefined;
+  return { x: at.x + region.x[0], y: at.y + region.y[0], z: at.z };
+}
+
 /** Bloqueado, fora do mapa, ou num andar que o mapa não tem. `z` ausente é o andar padrão. */
 export function isBlocked(map: Tilemap, x: number, y: number, z: number = map.z): boolean {
   if (x < 0 || y < 0 || x >= map.width || y >= map.height) return true;
@@ -210,6 +334,19 @@ export function groundSpeed(map: Tilemap, x: number, y: number, z: number = map.
   const floor = map.floors.get(z);
   if (floor === undefined || floor.speed === null) return DEFAULT_GROUND_SPEED;
   return floor.speed[y * map.width + x] ?? DEFAULT_GROUND_SPEED;
+}
+
+/**
+ * Os bits de zona do tile (`ZONE_FLAG`), ou `0` — normal — quando o mapa não declara a camada
+ * `zones` do andar, o andar não existe ou o tile está fora do mapa. `z` ausente é o andar padrão.
+ * Fora do mapa é normal e não bloqueado de propósito: bloqueio é de `isBlocked`, e zona é só o
+ * que o Canary guardou no tile.
+ */
+export function zoneFlagsAt(map: Tilemap, x: number, y: number, z: number = map.z): number {
+  if (x < 0 || y < 0 || x >= map.width || y >= map.height) return 0;
+  const zones = map.floors.get(z)?.zones;
+  if (zones === undefined || zones === null) return 0;
+  return zones[y * map.width + x] ?? 0;
 }
 
 /** Para onde pisar neste tile leva, ou `null` quando ele é um tile comum. */

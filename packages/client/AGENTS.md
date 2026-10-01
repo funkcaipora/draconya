@@ -252,10 +252,19 @@ pnpm tsx scripts/make-sheet-fixture.ts
   protocolo carrega em `creature-appear` e em cada criatura do `session-state`; o store guarda
   o campo só quando ele veio, tipado pelo PROTOCOLO e não por `assets/outfit.ts` — o store não
   depende da camada de arte. `DEFAULT_OUTFIT_COLORS` (`world/outfit-colors.ts`) é a RESERVA
-  para quem chegou sem: um nó `game` anterior num deploy em rolagem, um personagem que nunca
-  escolheu, ou monstro, que nunca traz. Reserva e não "sem pintar" porque um template que sobra
-  sem multiplicar é um boneco de cores primárias na tela; e para monstro passar cores é
-  inofensivo, o pacote devolve a base como está. O que era de antes continua: câmera do tamanho
+  para quem chegou sem: um nó `game` anterior num deploy em rolagem, ou um personagem que nunca
+  escolheu — o monstro traz as dele desde o #620. Reserva e não "sem pintar" porque um template
+  que sobra sem multiplicar é um boneco de cores primárias na tela; e para um monstro de uma
+  camada passar cores é inofensivo, o pacote devolve a base como está. **A apresentação do
+  monstro (#620)** — `Creature.addons`/`race`/`light`/`voices`, todos opcionais e todos só
+  desenho: os **addons** são linhas do padrão do outfit compostas por cima do base no
+  `OutfitComposer` (`compositeOver`, `AssetPack.outfit(…, addons)`); a **luz** é um clarão aditivo
+  (`world/creature-light.ts`, no `effects`); a **fala** é sorteada AQUI, por um relógio por monstro
+  (`world/speech.ts`), com o `random` do cliente e nunca o `Rng` da sessão — e que só anda com o
+  monstro ACORDADO (o herói no quadrado de 11 tiles dele) e só aparece a quem a fala CHEGA (`say` a
+  8 × 6 no mesmo andar, `yell` a 18 × 14), os dois portões do Canary; a **raça** é
+  fotografada no número flutuante quando o golpe chega e escolhe a cor do físico
+  (`floatingTextColor`). O que era de antes continua: câmera do tamanho
   do canvas, camadas, ordem de desenho por `y`, pool e interpolação, e três janelas de câmera em
   `camera.ts` — visível (0), render (`RENDER_OVERSCAN_TILES` = 3, o que o viewport pinta) e
   prefetch (`PREFETCH_TILES` = 5, o que o viewport aquece) — porque a textura de uma coluna
@@ -448,9 +457,12 @@ pnpm tsx scripts/make-sheet-fixture.ts
   vazio. A RC-06 (#319) substituiu o painel fixo pelo `CharacterModal` tabulado, aberto por
   `open.character` — o antigo `CharacterPanel.tsx` saiu do repositório no mesmo commit.
 - **A aparência emprestada (#621, M44-03) é SUBSTITUIÇÃO, não mutação.** `creature-update` troca
-  `appearanceId`/`colors`/`object` de uma criatura que o store já tem — os três são `readonly`, então
-  o case cria um objeto novo a partir do antigo (posição e passo em curso ficam) —, e criatura
-  desconhecida é ignorada (interesse, ou ainda não anunciada), como `creature-health`. `object`
+  `appearanceId`/`colors`/`object`/`addons` de uma criatura que o store já tem — todos `readonly`,
+  então o case cria um objeto novo a partir do antigo (posição e passo em curso ficam), apaga os
+  quatro e só devolve os que a mensagem traz: as cores e os addons (#620) são parte do outfit que a
+  condição troca, e mantê-los sobre a aparência nova pintaria o outfit do outro com o addon do dono.
+  Raça, luz e falas (#620) são da CRIATURA e atravessam a troca. Criatura desconhecida é ignorada
+  (interesse, ou ainda não anunciada), como `creature-health`. `object`
   (`true`) é a criatura que virou um OBJETO (`lookTypeEx`): o viewport a desenha com
   `objectTexture(id, OBJECT_LOOK_CELL)` — o quadro do tile, parado — e aquece a folha com
   `warmObjects`, num conjunto PRÓPRIO (`warmedObjectLooks`: o outfit 1 e o objeto 1 são coisas

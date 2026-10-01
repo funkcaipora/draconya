@@ -46,6 +46,27 @@
     "runOnHealth": 55,
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "outfit": {
+      "head": 95,
+      "body": 93,
+      "legs": 38,
+      "feet": 59,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You won't pass me.",
+          "yell": false
+        },
+        {
+          "text": "I have travelled far to fight here.",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -174,7 +195,18 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "faction": "lion",
+    "enemyFactions": [
+      "lion-usurpers"
+    ],
     "corpseTtlMs": 1810000,
+    "outfit": {
+      "head": 0,
+      "body": 78,
+      "legs": 57,
+      "feet": 57,
+      "addons": 2
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -486,7 +518,19 @@
       "random": 0
     },
     "staticAttack": 0.7,
+    "faction": "lion-usurpers",
+    "enemyFactions": [
+      "player",
+      "lion"
+    ],
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 57,
+      "body": 78,
+      "legs": 76,
+      "feet": 76,
+      "addons": 1
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -624,7 +668,18 @@
       "random": 0
     },
     "staticAttack": 0.7,
+    "faction": "lion",
+    "enemyFactions": [
+      "lion-usurpers"
+    ],
     "corpseTtlMs": 1810000,
+    "outfit": {
+      "head": 0,
+      "body": 78,
+      "legs": 96,
+      "feet": 76,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1176,6 +1231,33 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Your soul will be mine!",
+          "yell": false
+        },
+        {
+          "text": "CHAMEK ATH UTHUL ARAK!",
+          "yell": true
+        },
+        {
+          "text": "I SMELL FEEEEAAAAAR!",
+          "yell": true
+        },
+        {
+          "text": "Your resistance is futile!",
+          "yell": false
+        },
+        {
+          "text": "MUHAHAHA",
+          "yell": true
+        }
+      ]
+    },
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -1271,6 +1353,7 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1883,6 +1966,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2740,6 +2824,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -2850,6 +2935,20 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 1260000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Snarl!",
+          "yell": false
+        },
+        {
+          "text": "SNIFF!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 600000,
@@ -3156,6 +3255,32 @@
     },
     "staticAttack": 0.85,
     "corpseTtlMs": 370000,
+    "outfit": {
+      "head": 3,
+      "body": 9,
+      "legs": 77,
+      "feet": 77,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Flee as long as you can!",
+          "yell": false
+        },
+        {
+          "text": "Annihilon's might will crush you all!",
+          "yell": false
+        },
+        {
+          "text": "I am coming for you!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3323,6 +3448,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 300000,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3470,6 +3596,25 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Puny warmblood.",
+          "yell": false
+        },
+        {
+          "text": "You will pay for imprisoning me here.",
+          "yell": false
+        },
+        {
+          "text": "You're not cool.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3557,6 +3702,24 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hicks!",
+          "yell": false
+        },
+        {
+          "text": "Stand still! Both of you! hicks",
+          "yell": false
+        },
+        {
+          "text": "This victory will earn me a casket of beer.",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3611,6 +3774,7 @@
     },
     "staticAttack": 0.95,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3848,6 +4012,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Borborygmus... borborygmus...",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -3986,6 +4160,24 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Prepare yourself!",
+          "yell": false
+        },
+        {
+          "text": "You are not loved by this world!",
+          "yell": false
+        },
+        {
+          "text": "Pain and suffering!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4124,6 +4316,24 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "DO NOT LEAVE THIS WORLD AS A WIMP!",
+          "yell": false
+        },
+        {
+          "text": "PAIN PURIFIES! PAIN PURIFIES!",
+          "yell": false
+        },
+        {
+          "text": "PROVE YOUR WORTH, BLEED!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4185,6 +4395,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Mash'n!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4509,6 +4729,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You are not clever enough to defeat me!",
+          "yell": false
+        },
+        {
+          "text": "The slyness of foxes will deceive the unwary!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4748,6 +4982,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 510000,
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -4942,6 +5177,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You will DIE!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -5064,6 +5309,7 @@
     "runOnHealth": 2,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5173,6 +5419,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -5278,6 +5525,13 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 95,
+      "body": 42,
+      "legs": 19,
+      "feet": 57,
+      "addons": 0
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5444,6 +5698,33 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Since you didn't eat your spinach Bogey comes to get you!",
+          "yell": false
+        },
+        {
+          "text": "Too bad you did not eat your lunch, now I have to punish you!",
+          "yell": false
+        },
+        {
+          "text": "Even if you beat me, I'll hide in your closet until you one day drop your guard!",
+          "yell": false
+        },
+        {
+          "text": "You better had believe in me!",
+          "yell": false
+        },
+        {
+          "text": "I'll take you into the darkness ... forever!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -5590,6 +5871,7 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5874,6 +6156,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 1810000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Bones are just sticks. They break easily.",
+          "yell": false
+        },
+        {
+          "text": "Decay!",
+          "yell": false
+        },
+        {
+          "text": "I'll make you crawl, too!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -6054,6 +6354,7 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -6328,6 +6629,10 @@
     "runOnHealth": 60,
     "staticAttack": 0.6,
     "corpseTtlMs": 660000,
+    "light": {
+      "level": 4,
+      "color": 215
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -6576,6 +6881,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -6727,6 +7033,7 @@
     "runOnHealth": 1,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -6835,6 +7142,10 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 470000,
+    "light": {
+      "level": 4,
+      "color": 206
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -7039,6 +7350,7 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -7178,6 +7490,7 @@
     "runOnHealth": 1,
     "staticAttack": 0.85,
     "corpseTtlMs": 510000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -7284,6 +7597,7 @@
     },
     "staticAttack": 0.5,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -7378,6 +7692,31 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "outfit": {
+      "head": 77,
+      "body": 61,
+      "legs": 40,
+      "feet": 114,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Flee, coward!",
+          "yell": false
+        },
+        {
+          "text": "You will lose!",
+          "yell": false
+        },
+        {
+          "text": "Yeehaawh",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7488,6 +7827,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -7645,6 +7985,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7894,6 +8235,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 19,
+      "body": 0,
+      "legs": 83,
+      "feet": 20,
+      "addons": 1
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -8039,6 +8388,23 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 98,
+      "body": 96,
+      "legs": 39,
+      "feet": 38,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Death to the unbelievers!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -8164,6 +8530,23 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 95,
+      "body": 19,
+      "legs": 57,
+      "feet": 76,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "No one will stop us!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -8295,6 +8678,23 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 19,
+      "body": 77,
+      "legs": 3,
+      "feet": 20,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "The Secrets are ours alone!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -8390,6 +8790,25 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Death where are you?",
+          "yell": false
+        },
+        {
+          "text": "Slay me, end my curse.",
+          "yell": false
+        },
+        {
+          "text": "Freee meeee!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8450,6 +8869,25 @@
     "runOnHealth": 800,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Forgive Meeeee!",
+          "yell": false
+        },
+        {
+          "text": "Mouuuurn meeee!",
+          "yell": false
+        },
+        {
+          "text": "Help meee!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8546,6 +8984,35 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "outfit": {
+      "head": 78,
+      "body": 95,
+      "legs": 95,
+      "feet": 95,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "FIGHT LIKE A BARBARIAN!",
+          "yell": true
+        },
+        {
+          "text": "VICTORY IS MINE!",
+          "yell": true
+        },
+        {
+          "text": "I AM your father!",
+          "yell": false
+        },
+        {
+          "text": "To be the man you have to beat the man!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8626,6 +9093,13 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 95,
+      "body": 95,
+      "legs": 95,
+      "feet": 95,
+      "addons": 1
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8706,6 +9180,13 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 95,
+      "body": 95,
+      "legs": 95,
+      "feet": 95,
+      "addons": 3
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8799,6 +9280,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8879,6 +9361,13 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 95,
+      "body": 95,
+      "legs": 95,
+      "feet": 95,
+      "addons": 1
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -8959,6 +9448,13 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 95,
+      "body": 95,
+      "legs": 95,
+      "feet": 95,
+      "addons": 3
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -9054,6 +9550,7 @@
     "runOnHealth": 250,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -9234,6 +9731,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -9353,6 +9851,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -9517,6 +10016,13 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 0,
+      "body": 0,
+      "legs": 0,
+      "feet": 0,
+      "addons": 3
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -9720,6 +10226,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -9921,6 +10428,29 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "YOU FOOLS WILL PAY!",
+          "yell": true
+        },
+        {
+          "text": "YOU ALL WILL DIE!",
+          "yell": true
+        },
+        {
+          "text": "DEATH, DESTRUCTION!",
+          "yell": true
+        },
+        {
+          "text": "I will eat your soul!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -10095,6 +10625,32 @@
     "runOnHealth": 2000,
     "staticAttack": 0.5,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Deeestructiooon!",
+          "yell": false
+        },
+        {
+          "text": "Maaahhhrrr!",
+          "yell": false
+        },
+        {
+          "text": "I am carnage incarnate!",
+          "yell": false
+        },
+        {
+          "text": "I've seen the light! And it was all engulfing fire!",
+          "yell": false
+        },
+        {
+          "text": "Taaake... this!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -10545,6 +11101,20 @@
     "runOnHealth": 300,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I WILL SET THE WORLD ON FIRE!",
+          "yell": true
+        },
+        {
+          "text": "I WILL PROTECT MY BROOD!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -10673,6 +11243,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -10905,6 +11476,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -11060,6 +11632,7 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -11161,6 +11734,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I want my power back!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -11249,6 +11832,13 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 69,
+      "body": 66,
+      "legs": 69,
+      "feet": 66,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -11472,6 +12062,29 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You can't escape death forever",
+          "yell": false
+        },
+        {
+          "text": "Come closer to learn the final lesson",
+          "yell": false
+        },
+        {
+          "text": "Undeath will shatter my shackles.",
+          "yell": false
+        },
+        {
+          "text": "You don't need this magic anymore.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -11712,6 +12325,13 @@
       "random": 10
     },
     "staticAttack": 0.95,
+    "outfit": {
+      "head": 115,
+      "body": 60,
+      "legs": 19,
+      "feet": 58,
+      "addons": 2
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -11958,6 +12578,29 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "DEATH CAN'T STOP MY HUNGER!",
+          "yell": true
+        },
+        {
+          "text": "YOU ARE ALL DOOMED!",
+          "yell": true
+        },
+        {
+          "text": "Your new name is breakfast.",
+          "yell": false
+        },
+        {
+          "text": "I'm bad to the bone.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -12152,6 +12795,7 @@
     },
     "runOnHealth": 250,
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -12487,6 +13131,13 @@
     "runOnHealth": 366,
     "staticAttack": 0.9,
     "corpseTtlMs": 370000,
+    "outfit": {
+      "head": 5,
+      "body": 5,
+      "legs": 8,
+      "feet": 8,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -12726,6 +13377,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 570000,
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -12869,6 +13521,28 @@
     "runOnHealth": 100,
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "FCHHHHHHHH",
+          "yell": true
+        },
+        {
+          "text": "GROOOOAAAAAAAAR",
+          "yell": true
+        },
+        {
+          "text": "DIRTY LITTLE HUMANS",
+          "yell": true
+        },
+        {
+          "text": "YOU CAN'T KEEP ME HERE FOREVER",
+          "yell": true
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -12995,6 +13669,7 @@
     },
     "staticAttack": 0.85,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -13197,6 +13872,25 @@
       "random": 0
     },
     "staticAttack": 0.8,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Fear for your soul!",
+          "yell": false
+        },
+        {
+          "text": "I will harvest your soul!",
+          "yell": false
+        },
+        {
+          "text": "You have been chosen for a harvest!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -13413,6 +14107,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 8,
+      "body": 8,
+      "legs": 19,
+      "feet": 79,
+      "addons": 3
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -13605,6 +14307,7 @@
     "runOnHealth": 1,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -13922,6 +14625,7 @@
       "random": 10
     },
     "staticAttack": 0.98,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -14080,6 +14784,7 @@
       "random": 10
     },
     "staticAttack": 0.98,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -14238,6 +14943,7 @@
       "random": 10
     },
     "staticAttack": 0.98,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -14396,6 +15102,7 @@
       "random": 10
     },
     "staticAttack": 0.98,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -14558,6 +15265,11 @@
     "runOnHealth": 1,
     "staticAttack": 0.85,
     "corpseTtlMs": 510000,
+    "light": {
+      "level": 4,
+      "color": 203
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -14644,6 +15356,7 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -14765,6 +15478,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -15012,6 +15726,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Fcccccchhhhhh",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -15228,6 +15952,33 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You won't stop my masterplan to flood the world market with fake Bonelord language dictionaries!",
+          "yell": false
+        },
+        {
+          "text": "My calculations tell me you'll die!",
+          "yell": false
+        },
+        {
+          "text": "You can't stop me!",
+          "yell": false
+        },
+        {
+          "text": "Beware! My evil monolog is coming!",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 3,
+      "color": 180
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -15576,6 +16327,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 0,
+      "body": 2,
+      "legs": 95,
+      "feet": 97,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -15711,6 +16469,7 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -15996,6 +16755,7 @@
     },
     "runOnHealth": 200,
     "staticAttack": 0.9,
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -16118,6 +16878,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 70000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -16358,6 +17119,11 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 510000,
+    "light": {
+      "level": 5,
+      "color": 212
+    },
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -16563,6 +17329,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 510000,
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -16635,6 +17402,7 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -16694,6 +17462,16 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grrr",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -16791,6 +17569,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -16910,6 +17689,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -17085,6 +17865,7 @@
     "runOnHealth": 366,
     "staticAttack": 0.9,
     "corpseTtlMs": 60000,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -17378,6 +18159,13 @@
     "runOnHealth": 400,
     "staticAttack": 0.9,
     "corpseTtlMs": 570000,
+    "outfit": {
+      "head": 19,
+      "body": 11,
+      "legs": 0,
+      "feet": 0,
+      "addons": 3
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -17638,6 +18426,13 @@
     },
     "staticAttack": 0.98,
     "corpseTtlMs": 600000,
+    "outfit": {
+      "head": 78,
+      "body": 113,
+      "legs": 94,
+      "feet": 18,
+      "addons": 3
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -17740,6 +18535,14 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 57,
+      "body": 57,
+      "legs": 57,
+      "feet": 57,
+      "addons": 0
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -17884,6 +18687,7 @@
     },
     "runOnHealth": 200,
     "staticAttack": 0.9,
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -17938,6 +18742,7 @@
     "staticAttack": 0.95,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -18147,6 +18952,28 @@
     "runOnHealth": 10000,
     "staticAttack": 0.5,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I'm feeling grrrreat!",
+          "yell": false
+        },
+        {
+          "text": "I've seen the light! And it was all engulfing fire!",
+          "yell": false
+        },
+        {
+          "text": "No more Mr. Nicegnome!",
+          "yell": false
+        },
+        {
+          "text": "Taste the power of the dark side!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -18259,6 +19086,31 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "outfit": {
+      "head": 9,
+      "body": 7,
+      "legs": 10,
+      "feet": 85,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I am like the merciless northwind.",
+          "yell": false
+        },
+        {
+          "text": "Snow will be your death shroud.",
+          "yell": false
+        },
+        {
+          "text": "Feel the wrath of father chyll!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -18439,6 +19291,27 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 3600000,
+    "outfit": {
+      "head": 114,
+      "body": 79,
+      "legs": 62,
+      "feet": 94,
+      "addons": 2
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Money, money, money!",
+          "yell": false
+        },
+        {
+          "text": "You can't ever be rich enough!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -18778,6 +19651,28 @@
     },
     "staticAttack": 0.85,
     "corpseTtlMs": 180000,
+    "outfit": {
+      "head": 52,
+      "body": 99,
+      "legs": 52,
+      "feet": 91,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Latrivan, you fool!",
+          "yell": false
+        },
+        {
+          "text": "We are the right hand and the left hand of the seven!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "fire",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -19228,6 +20123,13 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 94,
+      "body": 81,
+      "legs": 10,
+      "feet": 0,
+      "addons": 1
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -19421,6 +20323,7 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 1810000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -19663,6 +20566,13 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 57,
+      "body": 96,
+      "legs": 96,
+      "feet": 105,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -19916,6 +20826,27 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 610000,
+    "outfit": {
+      "head": 57,
+      "body": 96,
+      "legs": 23,
+      "feet": 105,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Witness the might of The Order of the Falcon!",
+          "yell": false
+        },
+        {
+          "text": "Suffer, for you are disobedient!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -20085,6 +21016,27 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 57,
+      "body": 96,
+      "legs": 76,
+      "feet": 105,
+      "addons": 2
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Flinch even once, and I will crush every fiber within you!",
+          "yell": false
+        },
+        {
+          "text": "The Falcon reigns supreme!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -20311,6 +21263,13 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 21,
+      "body": 96,
+      "legs": 21,
+      "feet": 105,
+      "addons": 1
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -20377,6 +21336,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -20495,6 +21455,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 460000,
+    "outfit": {
+      "head": 0,
+      "body": 82,
+      "legs": 0,
+      "feet": 0,
+      "addons": 1
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -20587,6 +21555,16 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Don't run, You're burning off precious fat.",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -20725,6 +21703,14 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 0,
+      "body": 91,
+      "legs": 0,
+      "feet": 0,
+      "addons": 1
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -20848,6 +21834,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Surrender and I'll end it quick.",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -21176,6 +22172,43 @@
     },
     "staticAttack": 0.85,
     "corpseTtlMs": 370000,
+    "outfit": {
+      "head": 19,
+      "body": 77,
+      "legs": 3,
+      "feet": 80,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I'll sacrifice yours souls to seven!",
+          "yell": false
+        },
+        {
+          "text": "I'm bad news for you mortals!",
+          "yell": false
+        },
+        {
+          "text": "No man can defeat me!",
+          "yell": false
+        },
+        {
+          "text": "Your puny skills are no match for me.",
+          "yell": false
+        },
+        {
+          "text": "I smell your fear.",
+          "yell": false
+        },
+        {
+          "text": "Delicious!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -21332,6 +22365,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -21587,6 +22621,17 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I might be dead but I'm not gone!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -21870,6 +22915,14 @@
     "runOnHealth": 350,
     "staticAttack": 0.9,
     "corpseTtlMs": 370000,
+    "outfit": {
+      "head": 0,
+      "body": 9,
+      "legs": 0,
+      "feet": 0,
+      "addons": 0
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -22022,6 +23075,11 @@
     "runOnHealth": 1,
     "staticAttack": 0.85,
     "corpseTtlMs": 510000,
+    "light": {
+      "level": 4,
+      "color": 143
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -22138,6 +23196,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -22252,6 +23311,11 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "light": {
+      "level": 5,
+      "color": 212
+    },
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -22368,6 +23432,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -22585,6 +23650,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 460000,
+    "outfit": {
+      "head": 0,
+      "body": 0,
+      "legs": 0,
+      "feet": 94,
+      "addons": 0
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -22898,6 +23971,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 370000,
+    "outfit": {
+      "head": 19,
+      "body": 95,
+      "legs": 76,
+      "feet": 38,
+      "addons": 2
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -23049,6 +24129,17 @@
     "runOnHealth": 1,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "*STOMP STOMP*",
+          "yell": true
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -23170,6 +24261,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -23527,6 +24619,20 @@
     "runOnHealth": 60,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "DIE!! KENH!!",
+          "yell": true
+        },
+        {
+          "text": "QJELL AFAR GOU JEY!!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -23829,6 +24935,13 @@
     "runOnHealth": 800,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 56,
+      "body": 113,
+      "legs": 19,
+      "feet": 95,
+      "addons": 3
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -24093,6 +25206,10 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "light": {
+      "level": 3,
+      "color": 206
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -24356,6 +25473,25 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Feel the power of death unleashed!",
+          "yell": false
+        },
+        {
+          "text": "I will rule again and my realm of death will span the world!",
+          "yell": false
+        },
+        {
+          "text": "My lich-knights will conquer this world for me!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -24463,6 +25599,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -24843,6 +25980,36 @@
     },
     "staticAttack": 0.85,
     "corpseTtlMs": 180000,
+    "outfit": {
+      "head": 118,
+      "body": 33,
+      "legs": 118,
+      "feet": 91,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I might reward you for killing my brother ~ with a swift death!",
+          "yell": true
+        },
+        {
+          "text": "Colateral damage is so fun!",
+          "yell": false
+        },
+        {
+          "text": "Golgordan you fool!",
+          "yell": false
+        },
+        {
+          "text": "We are the brothers of fear!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "fire",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -24997,6 +26164,7 @@
     },
     "staticAttack": 0.98,
     "corpseTtlMs": 10000,
+    "race": "fire",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -25086,6 +26254,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "fire",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -25138,6 +26307,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -25256,6 +26426,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 460000,
+    "outfit": {
+      "head": 0,
+      "body": 57,
+      "legs": 0,
+      "feet": 0,
+      "addons": 1
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -25468,6 +26646,20 @@
     "runOnHealth": 600,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "CHHHRRRR",
+          "yell": true
+        },
+        {
+          "text": "HISSSS",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -25592,6 +26784,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "race": "ink",
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -25818,6 +27011,28 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "NOOOO! NOW YOU HERETICS WILL FACE MY GODLY WRATH!",
+          "yell": true
+        },
+        {
+          "text": "RAAARRRR! I WILL DEVOL YOU!",
+          "yell": true
+        },
+        {
+          "text": "I WILL MAKE YOU ZHEE!",
+          "yell": true
+        }
+      ]
+    },
+    "light": {
+      "level": 4,
+      "color": 113
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -25873,6 +27088,27 @@
     },
     "staticAttack": 0.95,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "outfit": {
+      "head": 10,
+      "body": 32,
+      "legs": 15,
+      "feet": 7,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Are we there yet?",
+          "yell": false
+        },
+        {
+          "text": "Think I saw a nice gem back there, I need to...",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -26035,6 +27271,20 @@
     "runOnHealth": 5,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Grrrrrr",
+          "yell": false
+        },
+        {
+          "text": "GROARRR!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -26234,6 +27484,7 @@
     "runOnHealth": 5,
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -26328,6 +27579,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Zzzzzzt",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -26592,6 +27853,25 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "IIEEH!! Iiih iih ih iiih!!!",
+          "yell": true
+        },
+        {
+          "text": "Iiiieeeh iiiieh iiieeh!",
+          "yell": true
+        },
+        {
+          "text": "Bsssmm bssmm bsssmmm",
+          "yell": true
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -26788,6 +28068,11 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "light": {
+      "level": 5,
+      "color": 107
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -27084,6 +28369,36 @@
     "runOnHealth": 1200,
     "staticAttack": 0.85,
     "corpseTtlMs": 180000,
+    "outfit": {
+      "head": 77,
+      "body": 78,
+      "legs": 80,
+      "feet": 79,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I am going to play with yourself!",
+          "yell": false
+        },
+        {
+          "text": "Feel my wrath!",
+          "yell": false
+        },
+        {
+          "text": "No one matches my battle prowess!",
+          "yell": false
+        },
+        {
+          "text": "You will all die!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "fire",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -27230,6 +28545,14 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 95,
+      "body": 0,
+      "legs": 0,
+      "feet": 95,
+      "addons": 3
+    },
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -27344,6 +28667,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -27487,6 +28811,14 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 0,
+      "body": 81,
+      "legs": 0,
+      "feet": 0,
+      "addons": 1
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -27576,6 +28908,13 @@
       "random": 10
     },
     "staticAttack": 0.95,
+    "outfit": {
+      "head": 19,
+      "body": 94,
+      "legs": 41,
+      "feet": 57,
+      "addons": 0
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -27741,6 +29080,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "RAAAARGH! I'M MASHING YE TO DUST BOOM!",
+          "yell": true
+        },
+        {
+          "text": "BOOOM!",
+          "yell": true
+        },
+        {
+          "text": "BOOOOM!!!",
+          "yell": true
+        },
+        {
+          "text": "BOOOOOM!!!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -27909,6 +29270,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 2110000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "HATE! HATE! KILL! KILL!",
+          "yell": true
+        },
+        {
+          "text": "GRRAAARRRHH!",
+          "yell": true
+        },
+        {
+          "text": "GRRRR!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -28077,6 +29456,21 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Bling.",
+          "yell": false
+        },
+        {
+          "text": "Clank.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -28407,6 +29801,32 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I have a contract here which you should sign!",
+          "yell": false
+        },
+        {
+          "text": "I sence so much potential in you. It's almost a shame I have to kill you.",
+          "yell": false
+        },
+        {
+          "text": "Yes, slay me for the loot I might have. Give in to your greed.",
+          "yell": false
+        },
+        {
+          "text": "Wealth, Power, it is all at your fingertips. All you have to do is a bit blackmailing and bullying.",
+          "yell": false
+        },
+        {
+          "text": "Come on. being a bit evil won't hurt you.",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -28530,6 +29950,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 460000,
+    "outfit": {
+      "head": 0,
+      "body": 93,
+      "legs": 0,
+      "feet": 0,
+      "addons": 1
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -28731,6 +30159,7 @@
     },
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -28858,6 +30287,7 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -28964,6 +30394,7 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -29084,6 +30515,16 @@
       "random": 10
     },
     "staticAttack": 0.95,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Yooooouuuuu...",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -29216,6 +30657,31 @@
       "random": 10
     },
     "staticAttack": 0.95,
+    "outfit": {
+      "head": 58,
+      "body": 40,
+      "legs": 60,
+      "feet": 116,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I spotted you!",
+          "yell": false
+        },
+        {
+          "text": "Let me show you your destiny!",
+          "yell": false
+        },
+        {
+          "text": "There is no escape now, friend.",
+          "yell": false
+        }
+      ]
+    },
     "manaCost": 390,
     "source": {
       "engine": "canary",
@@ -29352,6 +30818,24 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 2110000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "NO ARMY ME STOPPING! GRARR!",
+          "yell": true
+        },
+        {
+          "text": "ME DESTROY CITY! GROAR!",
+          "yell": true
+        },
+        {
+          "text": "WHARR! MUST ... KIDNAP WOMEN!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -29616,6 +31100,37 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Vengeance!",
+          "yell": false
+        },
+        {
+          "text": "You will make a fine trophy.",
+          "yell": false
+        },
+        {
+          "text": "Come and fight me, cowards!",
+          "yell": false
+        },
+        {
+          "text": "I am the supreme warrior!",
+          "yell": false
+        },
+        {
+          "text": "Let me hear the music of battle.",
+          "yell": false
+        },
+        {
+          "text": "Another one to bite the dust!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -29797,6 +31312,11 @@
     "runOnHealth": 10,
     "staticAttack": 1,
     "corpseTtlMs": 610000,
+    "light": {
+      "level": 3,
+      "color": 206
+    },
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -29868,6 +31388,25 @@
     "runOnHealth": 2000,
     "staticAttack": 0.5,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I kept my axe sharp, especially for you!",
+          "yell": false
+        },
+        {
+          "text": "Time for a little torturing practice!",
+          "yell": false
+        },
+        {
+          "text": "Scream for me!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -30088,6 +31627,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 60000,
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -30231,6 +31771,14 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 0,
+      "body": 0,
+      "legs": 94,
+      "feet": 0,
+      "addons": 3
+    },
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -30433,6 +31981,13 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 95,
+      "body": 121,
+      "legs": 94,
+      "feet": 1,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -30961,6 +32516,7 @@
     },
     "runOnHealth": 500,
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -31014,6 +32570,32 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I'll extinguish you warmbloods.",
+          "yell": false
+        },
+        {
+          "text": "REVENGE!",
+          "yell": true
+        },
+        {
+          "text": "Far too hot.",
+          "yell": false
+        },
+        {
+          "text": "DISGUSTING WARMBLOODS!",
+          "yell": true
+        },
+        {
+          "text": "Revenge is sweetest when served cold.",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -31258,6 +32840,20 @@
     "runOnHealth": 60,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "QJELL KEJH!!",
+          "yell": true
+        },
+        {
+          "text": "JN OBU!!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -31485,6 +33081,33 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Now chhhou shhhee me ... Now chhhou don't.",
+          "yell": false
+        },
+        {
+          "text": "Chhhhou are marked ashhh my prey.",
+          "yell": false
+        },
+        {
+          "text": "Catchhhh me if chhhou can.",
+          "yell": false
+        },
+        {
+          "text": "Die!",
+          "yell": false
+        },
+        {
+          "text": "Psssst, I am over chhhere.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -31766,6 +33389,16 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You unorcish scum will die!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -31879,6 +33512,16 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Orc powaaa!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -32063,6 +33706,20 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ocrus will rule!",
+          "yell": false
+        },
+        {
+          "text": "I'll kill you slow and painful.",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -32205,6 +33862,7 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -32361,6 +34019,17 @@
     "runOnHealth": 1,
     "staticAttack": 0.85,
     "corpseTtlMs": 510000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "BZZZZZZZZZZ",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -32585,6 +34254,27 @@
     "runOnHealth": 50,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 95,
+      "body": 42,
+      "legs": 21,
+      "feet": 20,
+      "addons": 1
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Krikik krikik!",
+          "yell": false
+        },
+        {
+          "text": "Shzzzp shzzzp shzzp!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -32698,6 +34388,7 @@
     "runOnHealth": 2,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -32886,6 +34577,7 @@
       "random": 10
     },
     "staticAttack": 0.85,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -32998,6 +34690,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -33227,6 +34920,7 @@
     "runOnHealth": 5000,
     "staticAttack": 0.98,
     "corpseTtlMs": 960000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 300000,
@@ -33355,6 +35049,25 @@
       "random": 20
     },
     "staticAttack": 0.9,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I have a head start.",
+          "yell": false
+        },
+        {
+          "text": "Look into my eyes! No, the other ones!",
+          "yell": false
+        },
+        {
+          "text": "The mirrors can't contain the night!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -33443,6 +35156,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -33645,6 +35359,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "There is nothing here for you and you will die alone.",
+          "yell": false
+        },
+        {
+          "text": "You will obey and you will kneel and you will BOW TO US.",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -33811,6 +35539,56 @@
     "runOnHealth": 2000,
     "staticAttack": 0.9,
     "corpseTtlMs": 370000,
+    "outfit": {
+      "head": 77,
+      "body": 78,
+      "legs": 94,
+      "feet": 55,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "DIE!",
+          "yell": true
+        },
+        {
+          "text": "All VOCATIONS must DIE!",
+          "yell": false
+        },
+        {
+          "text": "GET OVER HERE!",
+          "yell": true
+        },
+        {
+          "text": "CRUSH THEM ALL!",
+          "yell": true
+        },
+        {
+          "text": "VARIPHOR WILL RULE!",
+          "yell": true
+        },
+        {
+          "text": "They used you fools to escape and they left ME behind!!??",
+          "yell": false
+        },
+        {
+          "text": "NOT EVEN AEONS OF IMPRISONMENT WILL STOP ME!",
+          "yell": true
+        },
+        {
+          "text": "EVEN WITH ALL THAT TIME IN THE PRISON THAT WEAKENED ME, YOU ARE NO MATCH TO ME!",
+          "yell": true
+        },
+        {
+          "text": "THEY WILL ALL PAY!",
+          "yell": true
+        }
+      ]
+    },
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -33921,6 +35699,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 0,
+      "body": 0,
+      "legs": 0,
+      "feet": 0,
+      "addons": 1
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -33975,6 +35761,7 @@
     "runOnHealth": 2,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -34244,6 +36031,37 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "It's a kind of magic.",
+          "yell": false
+        },
+        {
+          "text": "Abrah Kadabrah!",
+          "yell": false
+        },
+        {
+          "text": "Nothing hidden in my wrappings.",
+          "yell": false
+        },
+        {
+          "text": "It's not a trick, it's Rahemos.",
+          "yell": false
+        },
+        {
+          "text": "Meet my friend from hell!",
+          "yell": false
+        },
+        {
+          "text": "I will make you believe in magic.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -34601,6 +36419,14 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 77,
+      "body": 80,
+      "legs": 85,
+      "feet": 94,
+      "addons": 0
+    },
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -34648,6 +36474,7 @@
     "runOnHealth": 2,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -34749,6 +36576,21 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 310000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Ting-a-ling.",
+          "yell": false
+        },
+        {
+          "text": "Free ... finally.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -35267,6 +37109,7 @@
     },
     "runOnHealth": 85,
     "staticAttack": 0.8,
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -35347,6 +37190,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "manaCost": 580,
     "source": {
       "engine": "canary",
@@ -35520,6 +37364,14 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 0,
+      "body": 95,
+      "legs": 0,
+      "feet": 0,
+      "addons": 1
+    },
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -35698,6 +37550,14 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 79,
+      "body": 94,
+      "legs": 57,
+      "feet": 0,
+      "addons": 3
+    },
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -35808,6 +37668,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 0,
+      "body": 38,
+      "legs": 91,
+      "feet": 0,
+      "addons": 0
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -35920,6 +37788,7 @@
     },
     "runOnHealth": 1,
     "staticAttack": 0.85,
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -36103,6 +37972,7 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -36144,6 +38014,14 @@
     },
     "staticAttack": 0.98,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "outfit": {
+      "head": 9,
+      "body": 19,
+      "legs": 9,
+      "feet": 85,
+      "addons": 0
+    },
+    "race": "fire",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -36254,6 +38132,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -36303,6 +38182,7 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -36495,6 +38375,7 @@
       "random": 10
     },
     "staticAttack": 0.85,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -36605,6 +38486,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 370000,
+    "outfit": {
+      "head": 9,
+      "body": 0,
+      "legs": 9,
+      "feet": 85,
+      "addons": 0
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -36806,6 +38695,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -36940,6 +38830,21 @@
     "runOnHealth": 1,
     "staticAttack": 0.85,
     "corpseTtlMs": 510000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "BLUB BLUB",
+          "yell": true
+        },
+        {
+          "text": "SWASHHH",
+          "yell": true
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -37156,6 +39061,29 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Another little gladiator!",
+          "yell": false
+        },
+        {
+          "text": "Come into my embrace.",
+          "yell": false
+        },
+        {
+          "text": "You are too soft for a fight.",
+          "yell": false
+        },
+        {
+          "text": "You'll be history soon enough.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -37370,6 +39298,28 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Galthen... is that you? ",
+          "yell": false
+        },
+        {
+          "text": " Where... have you been all that time? ",
+          "yell": false
+        },
+        {
+          "text": " What...? How dare you? Give me that back! ",
+          "yell": false
+        },
+        {
+          "text": " Aaaaaaah!!!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -37588,6 +39538,27 @@
     "runOnHealth": 50,
     "staticAttack": 0.9,
     "corpseTtlMs": 60000,
+    "outfit": {
+      "head": 0,
+      "body": 10,
+      "legs": 38,
+      "feet": 57,
+      "addons": 2
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Krik Krik!",
+          "yell": false
+        },
+        {
+          "text": "Psh psh psh!!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -37764,6 +39735,7 @@
     "runOnHealth": 366,
     "staticAttack": 0.9,
     "corpseTtlMs": 60000,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -37903,6 +39875,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -38236,6 +40209,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -38405,6 +40379,14 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 19,
+      "body": 76,
+      "legs": 114,
+      "feet": 76,
+      "addons": 3
+    },
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -38546,6 +40528,7 @@
     },
     "staticAttack": 0.5,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -38768,6 +40751,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 57,
+      "body": 81,
+      "legs": 3,
+      "feet": 93,
+      "addons": 1
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -38947,6 +40938,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 101,
+      "body": 79,
+      "legs": 0,
+      "feet": 0,
+      "addons": 2
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -39122,6 +41121,21 @@
     "runOnHealth": 1,
     "staticAttack": 0.85,
     "corpseTtlMs": 510000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "BLUUUUB",
+          "yell": true
+        },
+        {
+          "text": "SPLISH SPLASH",
+          "yell": true
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -39182,6 +41196,7 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -39321,6 +41336,24 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "AHHH ZHE POWER...",
+          "yell": true
+        },
+        {
+          "text": "ZHE TIME OF ZHE SNAKE HAZ COME!",
+          "yell": true
+        }
+      ]
+    },
+    "light": {
+      "level": 4,
+      "color": 24
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -39544,6 +41577,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -39783,6 +41817,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 510000,
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -39881,6 +41916,7 @@
       "random": 10
     },
     "staticAttack": 0.95,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -39932,6 +41968,25 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Show your strength ... or perish.",
+          "yell": false
+        },
+        {
+          "text": "You're so soft and vulnerable.",
+          "yell": false
+        },
+        {
+          "text": "When the dust settles there will only be one.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -40047,6 +42102,7 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -40216,6 +42272,24 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Feel the heat.",
+          "yell": false
+        },
+        {
+          "text": "I will turn you into ashes.",
+          "yell": false
+        }
+      ]
+    },
+    "light": {
+      "level": 5,
+      "color": 206
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -40380,6 +42454,14 @@
     "runOnHealth": 1,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 0,
+      "body": 0,
+      "legs": 0,
+      "feet": 0,
+      "addons": 3
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -40556,6 +42638,7 @@
     "runOnHealth": 366,
     "staticAttack": 0.9,
     "corpseTtlMs": 60000,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -40715,6 +42798,25 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Power up!",
+          "yell": false
+        },
+        {
+          "text": "Shocked to meet you.",
+          "yell": false
+        },
+        {
+          "text": "You should be more positive!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -40812,6 +42914,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -40921,6 +43024,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -41030,6 +43134,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -41139,6 +43244,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -41248,6 +43354,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -41357,6 +43464,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -41406,6 +43514,7 @@
     },
     "staticAttack": 0.95,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -41558,6 +43667,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "HUAHAHA!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -41613,6 +43732,7 @@
     },
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -41701,6 +43821,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -41910,6 +44031,11 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "light": {
+      "level": 2,
+      "color": 66
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -41961,6 +44087,7 @@
       "chance": 0.2
     },
     "staticAttack": 0.95,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -42108,6 +44235,43 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "outfit": {
+      "head": 80,
+      "body": 61,
+      "legs": 43,
+      "feet": 5,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "No mommy NO, Leave me alone!",
+          "yell": false
+        },
+        {
+          "text": "Not that tower again!",
+          "yell": false
+        },
+        {
+          "text": "The cat has grown some horns!",
+          "yell": false
+        },
+        {
+          "text": "What was I doing here again?",
+          "yell": false
+        },
+        {
+          "text": "Are we there soon mommy?",
+          "yell": false
+        },
+        {
+          "text": "Ah madness I embrace you!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -42151,6 +44315,14 @@
     },
     "staticAttack": 0.95,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "outfit": {
+      "head": 94,
+      "body": 94,
+      "legs": 94,
+      "feet": 94,
+      "addons": 0
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -42471,6 +44643,16 @@
     "runOnHealth": 60,
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "JAU QJELL, JAKHN JEH KENH!!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -42784,6 +44966,24 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 0,
+      "body": 21,
+      "legs": 19,
+      "feet": 3,
+      "addons": 2
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You are a failure.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -43004,6 +45204,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 570000,
+    "outfit": {
+      "head": 24,
+      "body": 119,
+      "legs": 19,
+      "feet": 95,
+      "addons": 3
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -43141,6 +45348,16 @@
       "random": 10
     },
     "staticAttack": 0.95,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "CHHRRR!",
+          "yell": true
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -43276,6 +45493,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "DEESTRUCTIOON!",
+          "yell": true
+        },
+        {
+          "text": "Blood! Carnage! Muhahaha!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -43607,6 +45838,16 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Krrrk!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -43733,6 +45974,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 114,
+      "body": 113,
+      "legs": 76,
+      "feet": 79,
+      "addons": 3
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -44020,6 +46269,17 @@
     },
     "staticAttack": 0.6,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Screeech!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -44217,6 +46477,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -44531,6 +46792,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Shluush!",
+          "yell": false
+        },
+        {
+          "text": "Sluuurp!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -44743,6 +47018,20 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I hope you like my voice!",
+          "yell": false
+        },
+        {
+          "text": "Let us dance the dance of death.",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -44982,6 +47271,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 620000,
+    "outfit": {
+      "head": 9,
+      "body": 0,
+      "legs": 86,
+      "feet": 79,
+      "addons": 3
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -45357,6 +47654,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "SzzzSzzz!",
+          "yell": false
+        },
+        {
+          "text": "Chhhhhh!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -45526,6 +47837,7 @@
       "random": 10
     },
     "staticAttack": 0.98,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -45800,6 +48112,31 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "corpseTtlMs": 3610000,
+    "outfit": {
+      "head": 81,
+      "body": 121,
+      "legs": 121,
+      "feet": 121,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You've killed my only friend!",
+          "yell": false
+        },
+        {
+          "text": "You will pay for this!",
+          "yell": false
+        },
+        {
+          "text": "NOOOOO!",
+          "yell": true
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -46010,6 +48347,16 @@
       "random": 10
     },
     "staticAttack": 0.95,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "CREEEAK!",
+          "yell": true
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -46302,6 +48649,7 @@
     "runOnHealth": 1,
     "staticAttack": 0.95,
     "corpseTtlMs": 460000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -46536,6 +48884,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Chhhhhhh!",
+          "yell": false
+        },
+        {
+          "text": "SzzzzSzzz! SzzzzSzzz!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -46685,6 +49047,35 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "outfit": {
+      "head": 19,
+      "body": 20,
+      "legs": 59,
+      "feet": 2,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "If you think I am too old to fight then you're wrong.",
+          "yell": false
+        },
+        {
+          "text": "I've forgotten more things than you have ever learned!",
+          "yell": false
+        },
+        {
+          "text": "Let me teach you a few things youngster!",
+          "yell": false
+        },
+        {
+          "text": "I'll teach you respect for the old!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -46753,6 +49144,20 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Hugah!",
+          "yell": false
+        },
+        {
+          "text": "Ungh! Ungh!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -47111,6 +49516,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 510000,
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -47329,6 +49735,7 @@
     },
     "runOnHealth": 275,
     "staticAttack": 0.8,
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -47441,6 +49848,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 620000,
+    "outfit": {
+      "head": 0,
+      "body": 57,
+      "legs": 90,
+      "feet": 79,
+      "addons": 2
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -47783,6 +50198,28 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Didn't you leave your house door open?",
+          "yell": false
+        },
+        {
+          "text": "Oops, your shoelaces are open!",
+          "yell": false
+        },
+        {
+          "text": "Look! It's Ferumbras behind you!",
+          "yell": false
+        },
+        {
+          "text": "Stop! I give up!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -48050,6 +50487,17 @@
     "runOnHealth": 275,
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I bring you deathhhh, mortalssss",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -48192,6 +50640,21 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "NO ONE WILL BEAT ME",
+          "yell": true
+        },
+        {
+          "text": "I am the test that you won't pass!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "fire",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -48770,6 +51233,7 @@
     "runOnHealth": 1,
     "staticAttack": 0.95,
     "corpseTtlMs": 660000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -48896,6 +51360,24 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I won't let you escape!",
+          "yell": false
+        },
+        {
+          "text": "I'LL GET YOU ALL!",
+          "yell": true
+        },
+        {
+          "text": "I'll crush you beneath my feet!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -49015,6 +51497,14 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 94,
+      "body": 38,
+      "legs": 94,
+      "feet": 76,
+      "addons": 3
+    },
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -49220,6 +51710,17 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "CRRRK!",
+          "yell": true
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -49348,6 +51849,17 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "CREEEAK!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -49464,6 +51976,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 660000,
+    "outfit": {
+      "head": 94,
+      "body": 79,
+      "legs": 79,
+      "feet": 79,
+      "addons": 3
+    },
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -49660,6 +52180,24 @@
     "runOnHealth": 2500,
     "staticAttack": 0.9,
     "corpseTtlMs": 370000,
+    "outfit": {
+      "head": 77,
+      "body": 132,
+      "legs": 21,
+      "feet": 20,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "STOMP! SHAKE! SHATTERER!!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -49882,6 +52420,27 @@
     },
     "runOnHealth": 15,
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 81,
+      "body": 121,
+      "legs": 121,
+      "feet": 121,
+      "addons": 3
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Together we are unstoppable!",
+          "yell": false
+        },
+        {
+          "text": "You will fall before our might!",
+          "yell": false
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -50079,6 +52638,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 370000,
+    "outfit": {
+      "head": 81,
+      "body": 100,
+      "legs": 0,
+      "feet": 0,
+      "addons": 0
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -50285,6 +52852,7 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 600000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -50595,6 +53163,7 @@
     "runOnHealth": 1,
     "staticAttack": 0.95,
     "corpseTtlMs": 460000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -50745,6 +53314,17 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "1... 2... 2... Uh, can't concentrate.",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -50928,6 +53508,7 @@
     },
     "runOnHealth": 15,
     "staticAttack": 0.9,
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -50986,6 +53567,7 @@
     },
     "runOnHealth": 15,
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -51072,6 +53654,21 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Haaahhh",
+          "yell": false
+        },
+        {
+          "text": "Grrglll",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -51266,6 +53863,28 @@
     "runOnHealth": 300,
     "staticAttack": 0.9,
     "corpseTtlMs": 400000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Take a ride with me.",
+          "yell": false
+        },
+        {
+          "text": "Pffffrrrrrrrrrrrr.",
+          "yell": false
+        },
+        {
+          "text": "Close your eyes... I have something for you.",
+          "yell": false
+        },
+        {
+          "text": "I will make you scream.",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -51356,6 +53975,13 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "outfit": {
+      "head": 112,
+      "body": 109,
+      "legs": 109,
+      "feet": 95,
+      "addons": 0
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -51574,6 +54200,17 @@
     "runOnHealth": 1,
     "staticAttack": 0.8,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "*STOMP STOMP*",
+          "yell": true
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -51932,6 +54569,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 460000,
+    "outfit": {
+      "head": 0,
+      "body": 95,
+      "legs": 0,
+      "feet": 0,
+      "addons": 0
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -52391,6 +55036,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -52580,6 +55226,20 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I teach you that even heroes can die!",
+          "yell": false
+        },
+        {
+          "text": "You will die begging like the others did!",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -52840,6 +55500,7 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -53193,6 +55854,36 @@
     },
     "staticAttack": 0.85,
     "corpseTtlMs": 370000,
+    "outfit": {
+      "head": 0,
+      "body": 57,
+      "legs": 0,
+      "feet": 80,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You can't run or hide forever!",
+          "yell": false
+        },
+        {
+          "text": "I'm the executioner of the Seven!",
+          "yell": false
+        },
+        {
+          "text": "The final punishment awaits you!",
+          "yell": false
+        },
+        {
+          "text": "The judgement is guilty! The sentence is death!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -53323,6 +56014,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "fire",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -53487,6 +56179,33 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Come my maidens, we have visitors!",
+          "yell": false
+        },
+        {
+          "text": "Are you enjoying my music?",
+          "yell": false
+        },
+        {
+          "text": "If music is the food of death, drop dead.",
+          "yell": false
+        },
+        {
+          "text": "Chakka Chakka!",
+          "yell": false
+        },
+        {
+          "text": "Heheheheee!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -53609,6 +56328,7 @@
       "random": 10
     },
     "staticAttack": 0.95,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -53798,6 +56518,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 460000,
+    "outfit": {
+      "head": 0,
+      "body": 98,
+      "legs": 0,
+      "feet": 94,
+      "addons": 0
+    },
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -53919,6 +56647,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 670000,
+    "race": "undead",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -53975,6 +56704,7 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 510000,
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -54069,6 +56799,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -54197,6 +56928,7 @@
     },
     "runOnHealth": 200,
     "staticAttack": 0.9,
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -54330,6 +57062,29 @@
     },
     "staticAttack": 0.95,
     "corpseTtlMs": 5000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You are lost.",
+          "yell": false
+        },
+        {
+          "text": "Come my little morsel.",
+          "yell": false
+        },
+        {
+          "text": "So tasty!",
+          "yell": false
+        },
+        {
+          "text": "I'll get you!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -54383,6 +57138,7 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 300000,
+    "race": "undead",
     "manaCost": 100,
     "source": {
       "engine": "canary",
@@ -54481,6 +57237,7 @@
     },
     "runOnHealth": 20,
     "staticAttack": 0.9,
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -54569,6 +57326,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "race": "venom",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -54701,6 +57459,7 @@
     },
     "staticAttack": 0.7,
     "corpseTtlMs": 460000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -54877,6 +57636,29 @@
     "runOnHealth": 366,
     "staticAttack": 0.9,
     "corpseTtlMs": 60000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "YOU DON'T EVEN UNDERSTAND WHOM YOU ARE SERVING!",
+          "yell": true
+        },
+        {
+          "text": "FLEE AND NEVER RETURN!",
+          "yell": true
+        },
+        {
+          "text": "YOU HAVE BEEN USED AND FOOLED!",
+          "yell": true
+        },
+        {
+          "text": "I WILL STOP YOU ONCE AND FOR ALL!",
+          "yell": true
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -55088,6 +57870,14 @@
     },
     "staticAttack": 0.9,
     "corpseTtlMs": 610000,
+    "outfit": {
+      "head": 3,
+      "body": 16,
+      "legs": 75,
+      "feet": 79,
+      "addons": 2
+    },
+    "race": "fire",
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -55153,6 +57943,40 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 670000,
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "Welcome to Yalahar, outsider.",
+          "yell": false
+        },
+        {
+          "text": "Hail Yalahar.",
+          "yell": false
+        },
+        {
+          "text": "You can learn a lot from us.",
+          "yell": false
+        },
+        {
+          "text": "Our wisdom and knowledge are unequalled in this world.",
+          "yell": false
+        },
+        {
+          "text": "That knowledge would overburden your fragile mind.",
+          "yell": false
+        },
+        {
+          "text": "I wouldn't expect you to understand.",
+          "yell": false
+        },
+        {
+          "text": "One day Yalahar will return to its former glory.",
+          "yell": false
+        }
+      ]
+    },
     "corpseAnimatable": [
       {
         "fromMs": 10000,
@@ -55323,6 +58147,7 @@
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
     "corpseTtlMs": 60000,
+    "race": "venom",
     "corpseAnimatable": [
       {
         "fromMs": 0,
@@ -55835,6 +58660,24 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 16,
+      "body": 12,
+      "legs": 73,
+      "feet": 55,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I AM ZAMULOSH!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -55937,6 +58780,24 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "outfit": {
+      "head": 16,
+      "body": 12,
+      "legs": 73,
+      "feet": 55,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "I AM ZAMULOSH!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "undead",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -56272,6 +59133,40 @@
     "runOnHealth": 4500,
     "staticAttack": 0.85,
     "corpseTtlMs": 180000,
+    "outfit": {
+      "head": 3,
+      "body": 18,
+      "legs": 19,
+      "feet": 91,
+      "addons": 0
+    },
+    "voices": {
+      "intervalMs": 5000,
+      "chance": 10,
+      "lines": [
+        {
+          "text": "You will run out of resources soon enough!",
+          "yell": false
+        },
+        {
+          "text": "One little mistake and you're all are mine!",
+          "yell": false
+        },
+        {
+          "text": "I sense your strength fading!",
+          "yell": false
+        },
+        {
+          "text": "I know you will show a weakness!",
+          "yell": false
+        },
+        {
+          "text": "Your fear will make you prone to mistakes!",
+          "yell": false
+        }
+      ]
+    },
+    "race": "fire",
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
