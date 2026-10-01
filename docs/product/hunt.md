@@ -537,9 +537,9 @@ CIDADE, o nível de hazard de 1 a 12 que o personagem desbloqueou; o nível fica
 liga os estágios do `combat-v4` (reforço e crítico do monstro, esquiva do monstro, XP, loot extra,
 Plunder Patriarch). O sistema inteiro — fórmulas, parâmetros, persistência e o que ficou de fora —
 está em [`hazard.md`](./hazard.md). A hunt da zona é o recorte real da componente central dos
-Jardins de Gnomprona (151×141, andar 14, rota de 1.828 tiles) com os 73 pontos de spawn que o
-catálogo resolve hoje (Hulking Prehemoth e Stalking Stalk); as outras 13 espécies do Canary são
-relatadas por `pnpm catalog:spawns` e entram quando o catálogo as tiver.
+Jardins de Gnomprona (151×141, andar 14, rota de 1.828 tiles) com os 135 pontos de spawn que o
+catálogo resolve hoje (Hulking Prehemoth, Stalking Stalk e Gore Horn); as outras 12 espécies do
+Canary são relatadas por `pnpm catalog:spawns` e entram quando o catálogo as tiver.
 
 ## O ruleset, e por que ele é o molde dos outros cinco
 

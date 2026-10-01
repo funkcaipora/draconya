@@ -3,9 +3,10 @@
 **Status:** parcial — o mecanismo inteiro do Canary existe (nível por zona, crítico e reforço do
 monstro, esquiva do monstro, XP, rolagens extras de loot, subida de nível, Plunder Patriarch, o
 portão do chefe de recompensa, o teto do mana shield) e a
-Gnomprona Gardens, a única zona que o Canary marca, é jogável com as duas espécies que o catálogo
-resolve hoje. Faltam o casulo (Hazard Pods, sem item no chão), o chefe que sobe o nível (The
-Primal Menace, fora do catálogo) e 13 das 15 espécies do jardim (dependem do #579 e do #622).
+Gnomprona Gardens, a única zona que o Canary marca, é jogável com as três espécies que o catálogo
+resolve hoje (Hulking Prehemoth, Stalking Stalk e Gore Horn). Faltam o casulo (Hazard Pods, sem
+item no chão), o chefe que sobe o nível (The Primal Menace, fora do catálogo) e 12 das 15 espécies
+do jardim (dependem do #579 e do #622).
 **PRD:** — (sistema do Tibia 13.x, ADR 0037; sem seção no PRD)
 **Épico:** E3 · milestone M44 (`M44-14`, #632)
 **ADRs:** [0052](../adr/0052-endgame-progression-state-and-city-services-through-the-owning-session.md)
@@ -161,9 +162,9 @@ Só as que NÃO são regra de caçada (ADR 0037 d.6 não admite divergência de 
 ## Em aberto
 
 Nada herdado do PRD. As pendências são de dependência: o casulo (item no chão), o chefe que sobe
-o nível (catálogo de monstros com magia de nome próprio, #579), e as 13 espécies da zona que o
-catálogo ainda não resolve (Gore Horn, Gorerilla, Emerald Tortoise, Sabretooth, Sulphur Spouter,
-Undertaker, Nighthunter, Sulphider, Mantosaurus, Mercurial Menace, Noxious Ripptor, Headpecker,
-Shrieking Cry-Stal — magias de nome próprio, corrente de energia e as condições `root`/`fear` do
-#622). Rodar `pnpm catalog:spawns --map gnomprona-gardens` quando elas entrarem os acrescenta ao
-mapa.
+o nível (catálogo de monstros com magia de nome próprio, #579), e as 12 espécies da zona que o
+catálogo ainda não resolve (Gorerilla, Emerald Tortoise, Sabretooth, Sulphur Spouter, Undertaker,
+Nighthunter, Sulphider, Mantosaurus, Mercurial Menace, Noxious Ripptor, Headpecker, Shrieking
+Cry-Stal — magias de nome próprio e corrente de energia). O Gore Horn entrou com as condições
+`root`/`fear` do #622, e `pnpm catalog:spawns --map gnomprona-gardens` acrescentou os 62 pontos
+dele; rodar o mesmo comando quando as outras entrarem os acrescenta ao mapa.
