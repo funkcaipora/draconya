@@ -90,7 +90,7 @@ a OW-13 passou por cada armadilha acima:
 | `onEmpty` | a sessão acaba | nada |
 | `onLeaderGone` | o mais antigo assume | nada |
 | `onCharacterDied` | solo encerra; party solta o morto | **sempre** solta o morto com o extrato (`host.depart`); o resto da morte é a OW-32 |
-| `onExitFinished` | idem, para a saída concluída | **sempre** solta quem concluiu; a saída do Canary é a OW-14 |
+| `onExitFinished` | idem, para a saída concluída | **sempre** solta quem concluiu; a saída do Canary (o `logout` e o x-log) não passa por aqui: é `WorldRuleset#requestLogout` e `#presenceLost` (OW-14) |
 | `startsInstanceSchedules` | com o primeiro corredor | nunca |
 | `placeOnEnter` | o primeiro na rota, o segundo no livre mais próximo | a âncora absoluta, senão o templo, a pé |
 | `runsRouteWalker`, `runsExitRules`, `burnsStaminaByTime` | sim | não |

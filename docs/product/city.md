@@ -317,10 +317,12 @@ repete; os totais de mensagens passam a ser os dela.
 ### Custo do leque de saída (OW-07, #828)
 
 Até aqui o bench só contava mensagem. O ADR 0060 aposta que o que cede primeiro quando o mundo
-enche é o **leque de saída** — cada passo vira uma mensagem por vizinho, codificada uma vez por
-destinatário em `viewer.ts` — e não a CPU do `sim`. O OW-22 vai mexer nesse leque, e precisa de um
-antes para comparar: `pnpm bench:city` agora reporta, por cenário, a **CPU por ciclo** (p50 e p99),
-os **bytes por visualizador por segundo** e a **fila máxima por flush**.
+enche é o **leque de saída** — cada passo vira uma mensagem por vizinho, codificada (até o OW-22)
+uma vez por destinatário em `viewer.ts` — e não a CPU do `sim`. O OW-22 mexeu nesse leque, e
+precisava de um antes para comparar — as tabelas desta seção são ele; o depois está em
+[O leque barato](#o-leque-barato-ow-22-845). `pnpm bench:city` passou a reportar, por cenário, a
+**CPU por ciclo** (p50 e p99), os **bytes por visualizador por segundo** e a **fila máxima por
+flush**.
 
 **Como se mede.**
 
@@ -404,6 +406,144 @@ os visualizadores derrubados por esse teto; diferente de zero, a linha não mede
 - `pnpm bench:city` com `AOI=both` roda também o grupo de controle (a sessão inteira); `MAP=square`
   roda a praça sintética; `FORMAT=markdown` imprime a tabela pronta para esta página.
 
+### O leque barato (OW-22, #845)
+
+A linha de base acima apontava o culpado: o leque. Cada passo era uma mensagem por vizinho,
+**codificada uma vez por vizinho** (`JSON.stringify`, `TextEncoder`, xorshift, tudo de novo sobre os
+mesmos bytes) e **entregue por uma varredura de todos os visualizadores da sessão** a cada
+destinatário (`#sendToViewersOf`). A OW-22 troca as duas coisas, e põe o andar na AOI.
+
+**1. Visualizadores indexados por personagem.** `HostedSession.viewers` deixou de ser um `Set` e
+virou um `ViewerSet` (`game/viewer-set.ts`): o conjunto mais um índice `characterId → Set<Viewer>`,
+mantido por `add` e `delete` — os únicos dois caminhos de entrada e saída, então nenhum lado fica
+para trás. `#sendToViewersOf` e `#watchers` custavam a sessão inteira por chamada (um passo era
+`vizinhos × visualizadores` comparações; `#presentStats`, o quadrado da população por ciclo); agora
+custam as abas do personagem. A ordem de entrega não muda: a de anexação, que era a de filtrar o
+conjunto.
+
+**2. Serializar uma vez.** O `EncodeCache` (`game/viewer.ts`) guarda o frame de cada **objeto** de
+mensagem durante o flush; o hospedeiro já entregava a mesma referência a todo destinatário, então a
+identidade do objeto é a chave — sem hash, sem comparar conteúdo. O cache só entra na sessão com mais
+de um visualizador (a hunt fria de um dono e uma aba não tem com quem dividir o frame) e é esvaziado
+a cada sessão, mesmo se um `send` lançar. Para o cache pegar, o que era montado por destinatário
+passou a ser montado uma vez: o `creature-appear` de quem chega, o `creature-disappear` de quem sai e
+o `party-state`. `packBatch` (`protocol`) junta os pedaços já codificados num **buffer só**, e não
+mais num corpo intermediário copiado para dentro do frame; os pedaços podem ser o mesmo
+`Uint8Array` para vários visualizadores e ele nunca os modifica. **O que vai no fio não mudou**: a
+chave de ofuscação de cada frame sai de `Math.random`, e com ele fixo os frames saem iguais byte a
+byte com e sem o cache — preso por teste (`encodeOnce: false` é o controle) e conferido contra a
+`origin/tibia-parity` antes da mudança, com o hash SHA-256 de todos os frames de cada personagem
+igual em três cenários (templo de 60, espalhados de 60, templo de 40 sem AOI).
+
+**3. O andar na AOI.** A chave de célula ganhou a **faixa de andar**, pela regra de
+`Spectators::getSpectators` (`canary/src/map/spectators.cpp:125-139`; constantes em
+`canary/src/map/map_const.hpp:17-19`):
+
+| o espectador está no andar | ele alcança os andares |
+|---|---|
+| 0 a 5 | 0 a 7 |
+| 6 | 0 a 8 |
+| 7 | 0 a 9 |
+| 8 a 15 (subsolo) | dois para cada lado, presos em 0 e 15 |
+
+Dois personagens em andares que a regra não liga não se enxergam, por perto que estejam em x e y: do
+7 não se vê o 10, e o 5 não vê o 8. A relação é **simétrica** — preso por teste nos 16 × 16 pares —,
+porque a AOI decide quem avisa quem nos dois sentidos (o `canSee` de `creature.cpp:68-87` é
+assimétrico, mas decide o que um cliente desenha). A chave tem uma faixa só para toda a superfície (os
+oito andares se veem) e uma por andar de subsolo; trocar de andar **sempre reavalia**, mesmo com x e y
+na mesma célula — a escada leva um tile adiante, e a regra é por andar. A histerese de distância é a
+de hoje (entra a uma célula, sai passando de três); o andar não tem faixa morta, porque é a regra que
+muda, não a distância. O alcance em x e y continua o da célula: o `canSee` desloca a caixa um tile por
+andar (a perspectiva do cliente) e a AOI não, com folga de sobra para os andares que o recorte tem. Um
+ponto sem `z` vale o andar 7.
+
+**A Thais não tem como mudar de comportamento por isso**: o recorte é z 4 a 7, todo superfície, e a
+regra liga todos os pares. Os vizinhos por jogador abaixo são os mesmos da linha de base, nas seis
+linhas. A regra aparece no subsolo, que o recorte não tem — hoje é coberta por teste (a escada de
+um mapa de teste com os andares 7, 9 e 10) e entra em uso real quando o recorte cresce para o z 8,
+com os esgotos e as escadas da OW-38 e da OW-40 (M50, passo 3 de `docs/open-world-plan.md` §2); o
+tráfego de dois andares aparece ali, e não só no mundo inteiro (M51), que é a geometria por setor.
+
+#### Medido
+
+Mesma máquina, mesmo comando (`pnpm bench:city`), três variantes alternadas no tempo: a
+`origin/tibia-parity` antes da issue (duas rodadas), a árvore da issue **com a codificação única
+desligada** — o grupo de controle, `ENCODE=each`, que mede o índice, os objetos únicos e o `packBatch`
+sozinhos — e a árvore da issue como o jogo a roda (três rodadas). Cada linha é a melhor de 2 rodadas
+internas (`REPEAT=2`) e, entre as rodadas externas, a de menor p50 de CPU.
+
+**Máquina:** Apple M2, 8 núcleos, `darwin arm64`, Node 24.14.1, 8 GiB — a máquina de desenvolvimento,
+**com outros processos rodando** (carga de 3,4 a 7 durante a medição). A comparação é nas mesmas
+condições, e o valor absoluto vale como teto (ADR 0013); a medição no destino continua por fazer.
+
+Todo mundo no templo, como na hora do login:
+
+| jogadores | vizinhos | CPU p50 antes | só o índice (controle) | com a codificação única | flush p50 antes → depois | CPU p99 antes → depois |
+|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 98,7 | 5.889 µs | 5.713 µs | **733 µs** (8,0×) | 3.917 → 524 µs | 16.084 → 3.734 µs |
+| 200 | 181,5 | 11.266 µs | 9.088 µs | **1.202 µs** (9,4×) | 6.408 → 817 µs | 24.460 → 3.762 µs |
+| 500 | 293,8 | 79.936 µs | 35.886 µs | **5.167 µs** (15,5×) | 25.153 → 3.000 µs | 173.736 → 43.384 µs |
+
+As pessoas espalhadas pelas ruas:
+
+| jogadores | vizinhos | CPU p50 antes | só o índice (controle) | com a codificação única | flush p50 antes → depois | CPU p99 antes → depois |
+|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 7,8 | 1.599 µs | 1.515 µs | **422 µs** (3,8×) | 1.041 → 266 µs | 4.267 → 2.067 µs |
+| 200 | 16,0 | 6.914 µs | 5.712 µs | **1.632 µs** (4,2×) | 3.905 → 1.024 µs | 18.319 → 4.068 µs |
+| 500 | 37,9 | 66.861 µs | 32.287 µs | **7.886 µs** (8,5×) | 21.538 → 4.392 µs | 86.662 → 29.601 µs |
+
+E os bytes — os que foram para o fio e os que a CPU precisou serializar:
+
+| cenário | B/vis/s no fio, antes e depois | B cod/vis/s antes (controle) | B cod/vis/s depois |
+|---|---:|---:|---:|
+| templo, 100 | 21.735 | 20.772 | **209** |
+| templo, 200 | 16.822 | 16.072 | **90** |
+| templo, 500 | 26.547 | 25.401 | **99** |
+| espalhados, 100 | 5.478 | 5.206 | **603** |
+| espalhados, 200 | 10.552 | 10.068 | **600** |
+| espalhados, 500 | 23.601 | 22.578 | **633** |
+
+**Como ler.**
+
+- **O fio é o mesmo, e a CPU deixa de crescer com a multidão.** `B/vis/s`, `msg/vis/s`, vizinhos e
+  fila máxima são idênticos nas seis linhas, antes e depois — é a mesma conversa com o cliente. O
+  que caiu é o que o servidor faz para ela: de ~80 ms por ciclo para ~5 ms com 500 no templo (15,5×),
+  de ~67 ms para ~8 ms com 500 espalhados (8,5×). Dividindo a CPU p50 pelas mensagens entregues por
+  ciclo (jogadores × msg/vis/s ÷ 10), o custo por mensagem entregue era de 2,6 a 3,2 µs com 100 e 200
+  pessoas e subia para 5,5 a 5,8 µs com 500 — a assinatura do leque que cresce com a população — e
+  agora fica entre 0,3 e 0,75 µs nas seis linhas, sem subir com a população: no templo, 0,32 · 0,34 ·
+  0,38 µs para 100 · 200 · 500.
+- **Cada peça paga o seu.** O controle isola o índice, os objetos únicos e o `packBatch`: com 500 no
+  templo ele sozinho tira o ciclo de 80 para 36 ms, quase todo da varredura de `#sendToViewersOf` (a
+  parte dos `walk`, que era de uns 55 ms, cai para uns 3). A codificação única leva o resto, de 36
+  para 5 ms: o `flush` do controle, de 33 ms, vira 3. Com 100 pessoas o índice quase não aparece
+  (5,9 → 5,7 ms), porque a varredura de cem é barata; é a codificação, repetida cem vezes por passo,
+  que pesa ali.
+- **Os bytes serializados caem pelo número de destinatários.** Cada mensagem passa a ser codificada
+  uma vez por ciclo e não uma por vizinho: 21 KB/s por visualizador no templo de 100 viram 0,2 KB/s —
+  cem vezes menos, os 98,7 vizinhos. No templo de 500, de 25 KB/s para 0,1 KB/s. Espalhados, onde cada
+  mensagem tem poucos destinatários, de 5 a 22 KB/s para 0,6 KB/s. O que sobra por visualizador é o
+  envelope do lote — copiar os pedaços e embaralhá-los com a chave do lote —, proporcional aos bytes
+  **entregues**, e é por isso que `flush` não vai a zero.
+- **O p99 de CPU não é a latência do ciclo.** Com 500 no templo o p99 ainda é de 43 ms, para um p50
+  de 5. É CPU de **processo**: `process.cpuUsage()` soma as threads auxiliares do coletor de lixo (a
+  scavenge é paralela), e um diagnóstico pontual com a parede de cada ciclo mostrou os oito piores
+  ciclos com 11 a 30 ms de parede para 43 a 89 ms de CPU. Mesmo lido como teto, o p99 passou de 100 a
+  174 ms (a linha de base, nas duas rodadas, conforme a carga da máquina) para 43 a 57 ms (as três
+  rodadas da árvore nova): abaixo do ciclo de 100 ms com folga, onde antes não havia.
+- **Fila e quedas:** a fila máxima por flush é a mesma (77 no templo de 500, contra o teto de 512) e
+  nenhuma linha derrubou visualizador.
+
+**O que esta medição não cobre.** O que a linha de base já não cobria (passo em zigue-zague, só
+movimento de jogador, uma cópia só) e, de novo, **o andar**: a Thais do recorte não tem subsolo, então
+a regra de andares não mexe em nenhum número acima — o que ela faz é provado por teste, não pelo
+bench. E o que a OW-33 e a OW-34 ainda vão mudar: a AOI continua só conhecendo jogador, e monstro,
+golpe e efeito do mundo ainda não passam por ela.
+
+`pnpm bench:city` ganhou a coluna `B cod/vis/s` e `ENCODE=each` (o grupo de controle, na mesma
+execução e na mesma hora, que é a comparação limpa da CPU quando a máquina está ocupada); o relatório
+e um teste do CI cobrem as duas.
+
 ## Regras
 
 - Protect zone: nada causa dano, ninguém morre (ADR 0004, §37).
@@ -423,6 +563,9 @@ os visualizadores derrubados por esse teto; diferente de zero, a linha não mede
 - Repouso é por personagem.
 - Cada passo vai para quem tem o tile no campo de visão, nunca para a sessão inteira.
 - O campo é simétrico e tem dois limiares: entra a uma célula, sai passando de três.
+- O campo respeita o andar, como o Canary (OW-22): quem está em andar que o Canary não deixa ver — do
+  7 não se vê o 10; do subsolo, só dois para cada lado — não recebe o passo, por perto que esteja.
+- A mesma mensagem para vários visualizadores é codificada uma vez por ciclo (OW-22).
 - Teto de 200 por cópia; encheu, abre a próxima. Ninguém é recusado.
 - `say` de canal `local` alcança o campo de visão.
 

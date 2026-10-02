@@ -25,6 +25,10 @@ Persistência, diretório de sessão e roteamento.
   que fale de stamina lê o instante da PRÓPRIA LINHA**, nunca `Date.now()`: medido nesta
   máquina, o Postgres está ~35 ms à frente, e um insert que volta mais rápido que isso faz a
   guarda recusar corretamente e reprovar um teste que não fala de relógio nenhum.
+  **Todo campo ABSOLUTO do extrato é guardado por `characters.durable_version`** (#823, OW-02):
+  o `jobs` só o escreve quando a versão do extrato é maior que a da coluna, e extrato atrasado
+  entra só com os deltas — a guarda de instante de stamina e skills deixou de ser a única ordem
+  (ver "Ordem e versão durável" mais abaixo).
   **`characters.gold` é PROJEÇÃO, não fonte** (FUN-57). A verdade é a soma do ledger; a coluna
   existe para não somar linhas a cada leitura, e é escrita na mesma transação da linha. O que
   a reconstrói **não é `SUM(delta)`**: o crédito tem piso de zero (`Math.max(0, …)` em
@@ -112,6 +116,32 @@ alguém olha, nunca QUEM.
 Saída é **um frame por ciclo**, em lote, nunca um `send` por evento — é o que sustenta a
 projeção de 0,5–1,5 KB/s por jogador. As exceções são `welcome` e `pong`, que saem na hora:
 `pong` que espera o ciclo mede a fila, não a rede.
+
+**A mesma mensagem para N visualizadores é codificada UMA vez por ciclo** (OW-22, ADR 0060 d.11).
+O `EncodeCache` (`game/viewer.ts`) guarda o frame de cada OBJETO de mensagem, e o
+`SessionHost.flush` o passa a `Viewer.flush` nas sessões com mais de um visualizador — a hunt fria
+de um visualizador só não paga a inserção no mapa. A chave é a **identidade do objeto**, não o
+conteúdo, e é daí que sai a regra de quem escreve um caminho de saída:
+
+- **Monte a mensagem UMA vez, fora do laço de destinatários**, e entregue a mesma referência a
+  todos (`const message = {...}; for (const v of ...) v.send(message)`). Montá-la dentro do laço
+  (`v.send({ type: 'x', ...dados })`) funciona, produz os mesmos bytes e desliga o cache em
+  silêncio: é o tipo de regressão que nenhum teste de conteúdo vê, e só o `bench:city` (coluna
+  `B cod/vis/s`) e o teste `o mesmo passo para vários vizinhos é codificado UMA vez` pegam.
+- **Não mute uma mensagem depois de entregá-la a um visualizador.** O cache vive até o fim do
+  flush; mutar entre dois flushes é inofensivo (`clear()` fecha o ciclo), mutar entre duas entregas
+  do mesmo ciclo manda conteúdos diferentes por engano.
+- O lote de cada visualizador continua sendo montado por visualizador (`packBatch`): cada um recebe
+  um conjunto diferente de mensagens, e o envelope de lote tem chave de ofuscação própria. O fio
+  não muda byte a byte — com `Math.random` fixo, os frames saem iguais com e sem o cache
+  (`encodeOnce: false` é o controle, e o `bench:city` com `ENCODE=each` o mede).
+
+**Os visualizadores de uma sessão são um `ViewerSet`** (`game/viewer-set.ts`): o conjunto mais um
+índice `characterId → Set<Viewer>`. `viewers.of(id)` e `viewers.countOf(id)` substituem o filtro
+`for (v of viewers) if (v.characterId === id)` — numa praça de trezentos, o passo de cada um era
+`vizinhos × visualizadores` comparações. O índice só se mantém consistente porque `add` e `delete`
+são os dois únicos pontos de entrada: não existe jeito de mexer num lado e esquecer o outro. Quem
+solta visualizadores enquanto percorre copia antes (`[...viewers.of(id)]`).
 
 ## Reanexar devolve estado, nunca replay (FUN-32)
 
@@ -274,11 +304,16 @@ sobre estado QUENTE, o `CharacterRuntime` em memória, que continua tendo dono �
 Postgres é durável, e o extrato só existe depois que a sessão dona acabou: não há dono para
 disputar.
 
-Desde o #194 (ADR 0027) a chave é `receipt:{sessionId}:{characterId}` — **um extrato por
-membro**: a party é uma sessão com N donos, e quatro extratos da mesma sessão não podem se
-sobrescrever. A chave antiga `receipt:{sessionId}` e a entrada de índice com o `sessionId` cru
-continuam LIDAS e apagadas por um deploy (extrato em voo de um nó anterior), e a tolerância sai
-numa issue de limpeza depois. No hospedeiro, `hosted.credited` é um `Set` por personagem,
+Desde o #823 (OW-02, ADR 0060 decisão 10e) a chave é `receipt:{sessionId}:{characterId}:{seq}` —
+**um extrato por (sessão, personagem, `seq`)**. Até o #194 (ADR 0027) ela era por sessão, e o #194
+a fez por membro, porque a party é uma sessão com N donos; mas o MESMO par ainda gravava vários
+extratos (Cidade → hunt → Cidade, e o checkpoint do mundo gera vários por par), e o `SET` do
+segundo SOBRESCREVIA o primeiro. As chaves antigas `receipt:{sessionId}:{characterId}` e
+`receipt:{sessionId}` e o SET de índice antigo continuam LIDAS por um deploy (extrato em voo de um
+nó anterior), e a tolerância sai numa issue de limpeza depois. **`remove(sessionId, characterId,
+seq)` só apaga uma chave antiga quando ela carrega o mesmo `characterId` e o mesmo `seq`**
+(`REMOVE_RECEIPT`, em Lua): a chave do #194 guardava UM extrato por par, e apagá-la às cegas
+levaria junto um de outro `seq` que ninguém liquidou. No hospedeiro, `hosted.credited` é um `Set` por personagem,
 preenchido **só após confirmar a gravação no Redis** (#267), não ao iniciar a tentativa.
 `hosted.receiptSaves` compartilha a promessa em voo: drenagem e `release` concorrentes aguardam
 a mesma gravação, inclusive sua falha. Falha libera a tentativa para retry, mantendo sessão e
@@ -327,24 +362,96 @@ membro da party (`member-left`), `#settleDepartures` faz o mesmo por ele. Quatro
   passam por aqui e seguem encerrando direto — nenhuma carrega a intenção de sair.
 
 Para achar o extrato daquele personagem sem varrer o keyspace inteiro a cada login, o
-`ReceiptStore` mantém `receipts:char:{characterId}` ao lado (guardando a chave inteira). **Os dois
-prefixos são distintos de propósito:** nomear o índice `receipt:char:{id}` o poria dentro do
-`MATCH` do `SCAN` da varredura, e um SET no lugar de um extrato sai do `MGET` como nada — a
-varredura pararia de ver um extrato por ciclo, sem erro em lugar nenhum.
+`ReceiptStore` mantém `receipts:char:v2:{characterId}` ao lado: um ZSET com a chave inteira como
+membro e a `durableVersion` como score (0 para o extrato sem versão). **Os dois prefixos são
+distintos de propósito:** nomear o índice `receipt:...` o poria dentro do `MATCH` do `SCAN` da
+varredura, e um ZSET no lugar de um extrato sai do `MGET` como nada — a varredura pararia de ver
+um extrato por ciclo, sem erro em lugar nenhum. `pendingFor` devolve os MAIS ANTIGOS primeiro
+(`ZRANGE 0 49`), com o que um nó anterior deixou no SET antigo à frente; o teto corta pelos mais
+antigos, para um extrato novo nunca passar na frente de um velho.
 
 A liquidação síncrona tem teto de 50 extratos por chamada — cada um é uma transação no
 Postgres, e isto roda no caminho de uma requisição. Encostar nele significa que a varredura está
 parada há um bom tempo, e aí o certo é o login continuar rápido e o resto sair no próximo.
 
-Extrato gravado por um nó `game` antigo, durante deploy em rolagem, não tem entrada de índice:
-aquele personagem volta a esperar a varredura. Degradação, não perda.
+Extrato gravado por um nó `game` anterior ao #194, durante deploy em rolagem, não tem entrada de
+índice: aquele personagem volta a esperar a varredura. Degradação, não perda.
+
+**Ordem e versão durável (#823, OW-02, ADR 0060 decisão 10e).** `SessionReceipt.durableVersion` é
+um contador POR PERSONAGEM, mantido pelo hospedeiro (`#durableVersionByCharacter`): nasce no
+ticket (`InitialCharacter.durableVersion = max(characters.durable_version, maior versão ainda
+pendente)`, lido pelo `api` DEPOIS de liquidar) e sobe a cada extrato gravado, de qualquer sessão
+do personagem neste nó — a `seq` é por sessão e recomeça. O `jobs` (`writeReceipts`) agrupa os
+extratos por personagem e liquida em ordem de versão; todo campo ABSOLUTO (ammo, alma, estoques,
+comida, charms, familiar, treino, bênçãos, postura, equipamento, layout, overlays, storages,
+stamina, skills) só é escrito quando `receipt.durableVersion > characters.durable_version`, e a
+coluna sobe na MESMA transação. Os deltas (XP, gold, `acquired`, `removedInstances`) e o que é
+monotônico por natureza (Bestiário e Bosstiary pelo máximo, magias aprendidas pela união, vocação
+por `coalesce`, promoção por `OR`) entram SEMPRE: seguem sob `UNIQUE (session_id, seq)`.
+
+**A guarda decide por EXTRATO, não por campo — e só é correta porque valem DUAS regras juntas.**
+Quebrar qualquer uma devolve o defeito de um extrato parcial mais novo apagando o que só o mais
+velho carregava (o de hunt traz skills, stamina, comida, storages e o estoque; o de estado da
+Cidade, antes do #823, não trazia):
+
+1. **Todo extrato versionado é o estado absoluto INTEIRO** (ADR 0060 d.10d). `#persistReceipt` e
+   `#saveDurableReceipt` levam o mesmo conjunto de campos, inclusive `supplyStock` e
+   `ammunitionStock` VAZIOS (`{}` é "esgotado"; omitir deixa a poção usada voltar). Campo novo de
+   estado absoluto entra nos DOIS, e `host.test.ts` ("estado absoluto INTEIRO") pega o esquecimento.
+2. **O personagem liquida COMPLETO e em ordem, e o que falha segura os seguintes.** A varredura usa
+   o `SCAN` só para saber QUAIS personagens têm pendência (`pending()` corta em 200 pela ordem do
+   hash, e pode entregar o mais novo sem o mais velho): `completeGroups` busca o grupo de cada um
+   pelo índice por versão (`pendingFor`, os 50 mais antigos). Depois, o primeiro extrato que falha
+   interrompe o personagem naquela varredura (`writeReceipts`) — um que falha já trancava o ticket
+   (503 `progress-not-settled`), então isso não tranca nada novo. A exceção é o que NUNCA liquida:
+   depois de `STUCK_RECEIPT_AFTER` (5) varreduras seguidas (`LedgerSweepOptions.failures`, que o
+   ciclo do `jobs` mantém) ele deixa de segurar os seguintes e vai ao log; quando liquidar, entra só
+   com os deltas. É degradação explícita — antes da emenda o `jobs` seguia adiante a cada falha, e a
+   guarda de versão perdia em silêncio o que só o extrato atrasado carregava.
+
+Sete armadilhas:
+
+- **A versão sai de forma SÍNCRONA, antes do primeiro `await` do extrato** (`#claimDurableVersion`):
+  é a ordem das chamadas que ela preserva, e dois extratos do mesmo personagem em voo ao mesmo
+  tempo não podem pegar o mesmo número. A tentativa repetida (#267) leva a MESMA versão
+  (`#claimedVersions`, por `characterId|sessionId|seq`, limpa na confirmação e no `release`) — é o
+  mesmo extrato.
+- **A adoção do ticket é `max` com o contador que o nó já tem** (`#adoptDurableVersion`). A Cidade
+  que `#leaveForParty` esvazia grava um extrato DEPOIS de o ticket da party ter sido emitido;
+  adotar só o número do ticket repetiria a versão dele, e o ledger trataria o extrato da hunt como
+  atrasado e descartaria os absolutos dela. `host.test.ts` ("o ticket de party depois da Cidade")
+  é quem pega.
+- **Ticket SEM versão (`api` anterior) grava extratos SEM versão — nunca uma inventada.** Começar
+  o contador em 0 faria a sessão gravar `1, 2…` contra uma coluna que pode estar em 5, e todo
+  absoluto seria descartado em silêncio. O extrato sem versão segue a regra de antes (escreve os
+  absolutos) e não mexe na coluna; o `groupByCharacter` o intercala com os versionados pelo
+  relógio em que foi gravado, nunca à frente de um mais velho.
+- **`parseReceipt` e `parseInitialCharacter` são listas de PERMISSÃO:** o campo novo precisa entrar
+  nas duas, ou some no caminho de volta e todo extrato vira "sem versão" sem erro nenhum
+  (`receipts.test.ts` e `tickets.test.ts` pegam).
+- **A guarda protege ESTADO, não item.** `acquired` e `removedInstances` são deltas, e um extrato
+  atrasado processado ANTES do mais novo ressuscitaria um item já vendido (o `DELETE` não achou
+  nada, o `INSERT` depois o recria). O que fecha a janela é a segunda regra acima: o grupo do
+  personagem sai completo e em ordem, e o que falha segura os seguintes — o teto de 200 do `SCAN`
+  não deixa mais o mais velho para outro ciclo. Só a desistência de `STUCK_RECEIPT_AFTER` a reabre,
+  e é explícita.
+- **O contador sobrevive ao `release` como piso** (`#retiredVersions`, `#retireDurableVersion`). O
+  ticket lê a versão no `api` ao ser emitido e não vê o extrato que um `release` concorrente
+  (`#collectResting`, logout em outra aba) ainda vai gravar, `c+1`; a sessão nova adotaria `c` e o
+  primeiro extrato dela seria TAMBÉM `c+1`, descartado como atrasado. A adoção faz `max` com o piso
+  que o nó soltou, guardado `RETIRED_VERSION_TTL_MS` (10 min) e podado do mais antigo. É por nó: o
+  ticket é preso ao nó que hospedava, então quem o consome é quem soltou; só o nó que cai com um
+  ticket vivo perde o piso, e aí o seguinte extrato — também o estado inteiro — corrige.
+- **`upgrade-existing-schema.sql` NÃO ganha esta coluna:** ele é o upgrade único do schema
+  anterior à FUN-11 e nenhuma migração posterior (0001–0027) o toca; a `durable_version` entra
+  pela migração `0028_823-durable-version.sql`, que roda depois dele.
 
 `GET /api/characters` e `POST /api/characters/:id/select` liquidam pelo mesmo caminho antes de
 ler (FUN-66). **Ali falhar NÃO recusa a resposta:** a lista sai com o valor atrasado e o erro
 vai ao log. A tela de personagens é como se chega a qualquer lugar, e um 503 nela trancaria a
 conta inteira por uma falha de ledger — o valor ali só é exibido, nada é criado a partir dele.
 Na lista, liquida-se DEPOIS de listar (os ids só se conhecem listando) e relê-se só quando algo
-foi escrito; sem pendência é um `SMEMBERS` por personagem e nenhuma consulta a mais.
+foi escrito; sem pendência é uma ida ao Redis por personagem (`ZRANGE` + `SMEMBERS` do índice antigo, em pipeline) e nenhuma consulta a mais.
 
 ## Métricas do nó de jogo (FUN-47)
 
@@ -1007,6 +1114,15 @@ quatro e cinco segundos cada, e o grupo do Postgres termina antes de o outro com
   a partir de um tile em que a criatura nunca esteve, para ele.
 - **A AOI só existe no shard.** Numa hunt de um personagem ela seria índice para nada, no caminho
   quente das 5.000 instâncias que a FUN-46 mediu.
+- **A célula da AOI carrega o ANDAR** (OW-22). Dois personagens em andares que o Canary não deixa
+  ver um ao outro não se enxergam, por perto que estejam em x e y: da superfície se veem os andares
+  0 a 7 (o 6 alcança até o 8, o 7 até o 9), do subsolo dois para cada lado (`Spectators::getSpectators`,
+  `canary/src/map/spectators.cpp:125-139`; `floorRange` e `floorsSee` em `game/aoi.ts`). A relação é
+  simétrica (preso por teste nos 16 × 16 pares), a chave de célula tem uma faixa por andar de
+  subsolo e uma só para a superfície, e trocar de andar SEMPRE reavalia — a escada leva um tile
+  adiante, e na mesma célula a regra continua sendo por andar. O alcance em x e y continua o da
+  célula: o `canSee` do Canary desloca a caixa um tile por andar (a perspectiva do cliente) e a AOI
+  não — folga de sobra para os andares que o recorte tem. Um ponto sem `z` vale o andar 7.
 - **`sentStats` guarda o que foi ENTREGUE, nunca o que foi calculado** (FUN-109). O
   `player-stats` ao vivo sai da comparação campo a campo entre os vitais de agora e os últimos
   que algum visualizador recebeu — no `session-attach` e no ciclo com visualizador. Sem
@@ -1125,19 +1241,26 @@ fornece os dois. Ver ADR 0017 para a ordem Postgres → Redis e separação entr
   no `release` não chegaria ao ticket do membro; por isso `#requestSetHazardLevel` chama
   `#saveHazardChoice` logo depois de uma escolha que MUDOU o nível (ADR 0052, emenda 2026-09-30).
   **Três armadilhas.** (1) **Esse extrato NUNCA é o `#saveDurableReceipt`**: o `ReceiptStore` guarda
-  UM extrato por `(sessionId, characterId)` (a chave não leva o `seq` até o #823 entrar), a Cidade é
-  uma sessão compartilhada, e o extrato de estado inteiro leva valor que só sai uma vez
-  (`goldDelta`, `removedInstances`, zerados por `settleGoldDelta`/`drainRemovedInstances`) — um
-  segundo extrato na mesma chave antes da varredura (até 10 s) o sobrescreveria e a compra de uma
-  bênção sairia de graça. O de hazard leva só o registro, com agregados zerados, e vai no fluxo
-  próprio `<sessionId>:hazard` (`HAZARD_RECEIPT_STREAM`): sobrescrever outro DELE é inofensivo
-  (absoluto, última escrita vence), e ele nunca encosta no extrato do personagem. (2) **Nada se
+  UM extrato por `(sessionId, characterId)` até o #823 (PR #896) — desde então a chave leva o `seq`
+  e o extrato não é mais sobrescrito, mas o fluxo próprio ficou: a Cidade é uma sessão
+  compartilhada, e o extrato de estado inteiro leva valor que só sai uma vez (`goldDelta`,
+  `removedInstances`, zerados por `settleGoldDelta`/`drainRemovedInstances`), que não pode ser
+  arrastado para o de hazard. O de hazard leva só o registro, com agregados zerados, e vai no fluxo
+  próprio `<sessionId>:hazard` (`HAZARD_RECEIPT_STREAM`), que nunca encosta no extrato do
+  personagem. **Ele CLAMA a versão durável do personagem** (`#claimDurableVersion`, síncrono antes
+  do `await`) como todo extrato: sem versão iria para o score 0 do índice do `ReceiptStore`, à
+  frente de todo extrato versionado pendente — que carrega o registro de ANTES e desfaria a
+  escolha. O custo conhecido: ele é versionado mas NÃO é o estado inteiro, então se um extrato
+  mais velho do mesmo personagem ainda estiver pendente por falha de Redis (o de uma hunt que
+  acabou de terminar, retentado com a MESMA versão), a coluna sobe para a do hazard e o retry cai
+  como atrasado — janela estreita (Redis fora E escolha de hazard antes do retry), e é o lado
+  seguro frente ao score 0. (2) **Nada se
   liquida nem se "limpa" nele**: se o Redis falha, `#markDirty` deixa o registro para o extrato do
   logout; se der certo, o logout não o repete. (3) **A zona resolve por propriedade PRÓPRIA**
   (`Object.hasOwn`): `zones` é um objeto comum, e `zones['constructor']` não é zona. Escolher o nível
   em que já estava não grava nada (`HazardProgress.revision`). `#presentHazard` reenvia `hazard`
   quando a hunt sobe o teto (compara `revision`, um inteiro). Um serviço de Cidade novo que a party
-  leia pelo ticket precisa da mesma coisa — e do mesmo cuidado com a chave. Quando o #823 (extrato
-  por `seq` e versão durável, PR #896) entrar, `hazard` precisa entrar na lista dos campos
-  ABSOLUTOS que ele guarda por versão: `applyProgression` o escreve sem guarda hoje.
+  leia pelo ticket precisa da mesma coisa — e do mesmo cuidado com o fluxo. `hazard` é um dos campos
+  ABSOLUTOS que o #823 guarda por versão durável: `applyProgression` só o escreve quando a versão do
+  extrato é maior que `characters.durable_version` (`!absolute`), como `charms` e `training`.
 

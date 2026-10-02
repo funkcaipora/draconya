@@ -48,7 +48,8 @@ import type { BoxedItem } from '../loot-box.js';
 import type { Logger } from '../log.js';
 import type { InitialCharacter, PartyTicket } from '../tickets.js';
 import { AreaOfInterest } from './aoi.js';
-import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
+import { EncodeCache, Viewer, type EncodeStats, type ViewerOptions, type ViewerSocket } from './viewer.js';
+import { ViewerSet } from './viewer-set.js';
 import { findPersonText } from './find-text.js';
 import { hitEffectOf, isPhysicalHit, monsterLookOf, monsterOutfitOf, monsterPresentationOf } from './monster-look.js';
 import { REFUSAL_TEXT, TransitionError, refuseTransition } from './transitions.js';
@@ -258,6 +259,15 @@ export interface SessionHostOptions {
    * ela, a praça volta a mandar tudo para todos: caro, e visivelmente correto.
    */
   readonly areaOfInterest?: boolean;
+  /**
+   * Serializar uma vez por ciclo a mesma mensagem entregue a vários visualizadores (OW-22). Padrão:
+   * sim. Desligado, cada visualizador codifica a sua cópia no flush, como antes.
+   *
+   * Existe desligável pela mesma razão de `areaOfInterest`: é o GRUPO DE CONTROLE da medição —
+   * `pnpm bench:city` com `ENCODE=each` mede a CPU sem o cache no mesmo processo e na mesma hora —
+   * e é o que prova, em teste, que o fio é o mesmo byte a byte com e sem ele.
+   */
+  readonly encodeOnce?: boolean;
   /**
    * O catálogo do que existe: hunts (FUN-79) e vocabulário do bot (FUN-89).
    *
@@ -993,7 +1003,11 @@ export type BotConfigLoadResult =
 
 interface HostedSession {
   readonly session: Session;
-  readonly viewers: Set<Viewer>;
+  /**
+   * Os visualizadores, com o índice por personagem (OW-22): `viewers.of(id)` e `viewers.countOf(id)`
+   * no lugar de varrer a sessão inteira filtrando por `characterId`.
+   */
+  readonly viewers: ViewerSet;
   /**
    * Quando esta sessão foi avançada pela última vez, no relógio monotônico DESTE processo.
    *
@@ -1244,6 +1258,13 @@ const SLOT_STATE_INTERVAL_MS = 500;
  */
 const RESTING_GRACE_MS = 5 * 60_000;
 
+/**
+ * Quanto tempo o nó guarda a versão durável de um personagem que soltou (#823,
+ * `#retiredVersions`). O ticket vale 30 s; dez minutos cobrem qualquer atraso entre emitir e
+ * conectar com folga, e a poda mantém o mapa do tamanho de quem saiu há pouco.
+ */
+const RETIRED_VERSION_TTL_MS = 10 * 60_000;
+
 const DIRECTION_DX = { north: 0, east: 1, south: 0, west: -1 } as const;
 const DIRECTION_DY = { north: -1, east: 0, south: 1, west: 0 } as const;
 
@@ -1256,6 +1277,10 @@ export class SessionHost {
 
   /** Por sessão. O índice por personagem existe porque uma sessão terá vários (guild war). */
   readonly #sessions = new Map<string, HostedSession>();
+  /** O cache de codificação do flush (OW-22): um por nó, esvaziado a cada sessão. */
+  readonly #encodeCache = new EncodeCache();
+  /** O controle (`encodeOnce: false`): codifica por visualizador, mas conta como o cache. */
+  readonly #encodeEach = new EncodeCache({ memoize: false });
   readonly #sessionIdByCharacter = new Map<string, string>();
   readonly #accountIdByCharacter = new Map<string, string>();
   /** Nome de exibição, do ticket. Só o chat lê; o `sim` não conhece nome (FUN-58). */
@@ -1267,6 +1292,42 @@ export class SessionHost {
    * entra quando a sessão é preparada, vive até `release`; ausente é Free, o lado seguro.
    */
   readonly #premiumByCharacter = new Map<string, boolean>();
+  /**
+   * O contador da versão durável, por personagem (#823, OW-02, ADR 0060 decisão 10e): a ORDEM
+   * entre os extratos de um personagem, que a `seq` (por sessão) não dá — Cidade → hunt → Cidade
+   * cruza três sessões. Nasce do ticket (`InitialCharacter.durableVersion`, que já é maior que
+   * qualquer extrato pendente) e sobe a cada extrato gravado (`#claimDurableVersion`), de
+   * QUALQUER sessão do personagem neste nó: é por isso que mora aqui, e não no `HostedSession`.
+   * Vive até `release`. AUSENTE é ticket de um `api` anterior (deploy em rolagem): o extrato sai
+   * sem versão, e o ledger o liquida pela regra de antes — o lado seguro, já que uma versão
+   * inventada aqui (1, 2…) seria menor que a coluna e descartaria os absolutos em silêncio.
+   */
+  readonly #durableVersionByCharacter = new Map<string, number>();
+  /**
+   * A maior versão que o nó gravou de um personagem que ele SOLTOU (`release`), e quando (#823).
+   *
+   * O contador some com o `release`, mas o TICKET da próxima sessão pode ter sido emitido ANTES
+   * dele — e o `api` lê a versão na emissão, sem como ver um extrato que o `release` ainda vai
+   * gravar. O caso real: o ticket sai com a versão `c` de um personagem em repouso na Cidade, e
+   * antes de o websocket conectar o `#collectResting` (ou um logout em outra aba) o solta e grava o
+   * extrato de estado `c+1`. A sessão nova adotaria `c` e o PRIMEIRO extrato dela também seria
+   * `c+1`: o ledger o trataria como atrasado e descartaria os absolutos dele (equipamento, skills,
+   * stamina…) em silêncio. Por isso a adoção também faz `max` com este piso.
+   *
+   * Vale para o MESMO nó, que é onde a corrida mora: o ticket é preso ao nó que hospedava o
+   * personagem, então quem o consome é quem soltou. Vive `RETIRED_VERSION_TTL_MS` — bem mais que
+   * os 30 s do ticket — e é podado do mais antigo (a ordem de inserção é a do tempo), para não
+   * crescer com cada personagem que já passou por aqui. Ficam de fora o nó que cai com o ticket
+   * vivo (o contador morre com ele) e um `api` sem versão no ticket; o extrato da sessão nova é
+   * então o único prejudicado, e o seguinte a corrige — todo extrato versionado é o estado inteiro.
+   */
+  readonly #retiredVersions = new Map<string, { readonly version: number; readonly atMs: number }>();
+  /**
+   * As versões já tomadas por um extrato cuja gravação AINDA NÃO foi confirmada (#823): a
+   * chave é `characterId|sessionId|seq`. Falhou ou a resposta se perdeu, a tentativa seguinte
+   * (#267) encontra aqui a mesma versão. Sai na confirmação, e em `release`.
+   */
+  readonly #claimedVersions = new Map<string, number>();
   /**
    * As cores do outfit, do ticket (FUN-104). Só `creature-appear` e `session-state` leem; o
    * `sim` não conhece cor, e o snapshot não a carrega — é apresentação, não simulação. Como o
@@ -1335,6 +1396,21 @@ export class SessionHost {
     return this.#sessions.size;
   }
 
+  /**
+   * O que o flush já codificou e reaproveitou, desde que o nó subiu (OW-22): contadores que só
+   * sobem. Existe para MEDIR — o `bench:city` lê antes e depois da janela e subtrai —, e é o que
+   * separa "bytes entregues" de "bytes serializados" na conta do leque de saída.
+   */
+  get encodeStats(): EncodeStats {
+    const once = this.#encodeCache.stats;
+    const each = this.#encodeEach.stats;
+    return {
+      encoded: once.encoded + each.encoded,
+      reused: once.reused + each.reused,
+      encodedBytes: once.encodedBytes + each.encodedBytes,
+    };
+  }
+
   get viewerCount(): number {
     let total = 0;
     for (const hosted of this.#sessions.values()) total += hosted.viewers.size;
@@ -1351,7 +1427,7 @@ export class SessionHost {
   get connectedCharacterCount(): number {
     const characters = new Set<string>();
     for (const hosted of this.#sessions.values()) {
-      for (const viewer of hosted.viewers) characters.add(viewer.characterId);
+      for (const characterId of hosted.viewers.characterIds()) characters.add(characterId);
     }
     return characters.size;
   }
@@ -1562,6 +1638,8 @@ export class SessionHost {
     this.#premiumByCharacter.set(characterId, member?.initialCharacter.premium ?? false);
     // Registro sob lease ANTES do local: registro recusado não pode deixar rastro.
     await this.#register(characterId, hosted.session, accountId);
+    // A versão durável de quem chega (#823): o piso que o `/join` leu depois de liquidar.
+    this.#adoptDurableVersion(characterId, member?.initialCharacter ?? initialCharacter);
     // Nome e cores ANTES de `#createLocal`, como no caminho da party nova (FUN-104).
     if (initialCharacter?.name !== undefined) this.#nameByCharacter.set(characterId, initialCharacter.name);
     if (initialCharacter?.outfitColors !== undefined) {
@@ -1714,6 +1792,10 @@ export class SessionHost {
     this.#nameByCharacter.delete(characterId);
     this.#colorsByCharacter.delete(characterId);
     this.#premiumByCharacter.delete(characterId);
+    this.#retireDurableVersion(characterId);
+    for (const claim of this.#claimedVersions.keys()) {
+      if (claim.startsWith(`${characterId}|`)) this.#claimedVersions.delete(claim);
+    }
     this.#botByCharacter.delete(characterId);
     this.#restingSince.delete(characterId);
 
@@ -2866,6 +2948,12 @@ export class SessionHost {
       return;
     }
     hosted.session.ledgerSeq += 1;
+    // A versão durável (#823), SÍNCRONA e antes do `await`, como em `#saveDurableReceipt`: o índice
+    // do `ReceiptStore` ordena por ela, e um extrato sem versão iria para o score 0 — à FRENTE de
+    // todo extrato versionado pendente do personagem, que carrega o registro de ANTES e o
+    // sobrescreveria, desfazendo a escolha que acabou de ser feita. Com a versão, o `jobs` também
+    // descarta este extrato se um mais novo já foi aplicado.
+    const durableVersion = this.#claimDurableVersion(characterId);
     try {
       await receipts.save({
         sessionId: `${hosted.session.id}${HAZARD_RECEIPT_STREAM}`,
@@ -2873,6 +2961,7 @@ export class SessionHost {
         accountId,
         reason: 'manual-exit',
         seq: hosted.session.ledgerSeq,
+        ...(durableVersion === undefined ? {} : { durableVersion }),
         aggregates: EMPTY_AGGREGATES,
         notableEvents: [],
         hazard: owner.hazard.getState(),
@@ -3607,6 +3696,14 @@ export class SessionHost {
           // ciclo é síncrono — fica na fila e sai logo depois dele (#194).
           hosted.departures.push(event);
           continue;
+        case 'departure-requested':
+        case 'logout-refused':
+          // A saída do MUNDO (OW-14, #835): só a sessão `world` os emite, e o hospedeiro ainda não
+          // a hospeda (o `WorldShard` é a OW-18, atrás de `OPEN_WORLD`). Quem os lê é a presença
+          // no hospedeiro (OW-19): `departure-requested` é gameplay e vale SEM visualizador — o
+          // x-log é justamente o caso em que não há —, então o ramo sem visualizador acima também
+          // vai ganhar o caso dele; `logout-refused` vira a mensagem do protocolo para quem pediu.
+          continue;
         case 'equipment-changed':
           // O `sim` mudou o corpo sozinho (o colar esgotou, o anel venceu): o cliente só sabe
           // pelo `inventory`, e a mensagem é a MESMA de sempre (opcode 16, sem campo novo).
@@ -4090,9 +4187,7 @@ export class SessionHost {
         notableEvents: hosted.session.notableEventsFor(character.id, since).map((event) => ({ ...event })),
         ...(party === undefined ? {} : { party }),
       };
-      for (const viewer of hosted.viewers) {
-        if (viewer.characterId === character.id) viewer.send(message);
-      }
+      this.#sendToViewersOf(hosted, character.id, message);
     }
   }
 
@@ -4436,7 +4531,9 @@ export class SessionHost {
     if (party === undefined) return;
     if (hosted.sentParty !== null && sameParty(hosted.sentParty, party)) return;
     hosted.sentParty = party;
-    for (const viewer of hosted.viewers) viewer.send({ type: 'party-state', ...party });
+    // Um objeto só para a sessão inteira: o cache de codificação do flush o serializa uma vez.
+    const message: S2CMessage = { type: 'party-state', ...party };
+    for (const viewer of hosted.viewers) viewer.send(message);
   }
 
   /**
@@ -4556,9 +4653,9 @@ export class SessionHost {
 
   /** Manda para todos os visualizadores de UM personagem. Abas contam separado. */
   #sendToViewersOf(hosted: HostedSession, characterId: string, message: S2CMessage): void {
-    for (const viewer of hosted.viewers) {
-      if (viewer.characterId === characterId) viewer.send(message);
-    }
+    // Pelo índice (OW-22): o custo é o número de abas DELE, e não o de visualizadores da sessão —
+    // numa praça de trezentos, o passo de um jogador era `vizinhos × visualizadores` comparações.
+    for (const viewer of hosted.viewers.of(characterId)) viewer.send(message);
   }
 
   /**
@@ -4573,18 +4670,29 @@ export class SessionHost {
     subject: string,
     change: { readonly appeared: readonly string[]; readonly vanished: readonly string[] },
   ): void {
-    for (const other of change.appeared) {
-      this.#sendToViewersOf(hosted, other, this.#appearance(hosted, subject));
-      this.#sendToViewersOf(hosted, subject, this.#appearance(hosted, other));
+    // O `creature-appear` de quem se moveu é UM objeto para todos que passaram a vê-lo: o cache de
+    // codificação do flush o serializa uma vez (OW-22), e na hora do login numa praça cheia é o
+    // anúncio que mais se repete. Montado ANTES do laço e só se alguém o vê, o que mantém a ordem
+    // em que os ids de criatura são atribuídos (`#creatureId`): o dele primeiro, e depois o de
+    // cada um que apareceu, como quando era montado a cada volta.
+    if (change.appeared.length > 0) {
+      const own = this.#appearance(hosted, subject);
+      for (const other of change.appeared) {
+        this.#sendToViewersOf(hosted, other, own);
+        this.#sendToViewersOf(hosted, subject, this.#appearance(hosted, other));
+      }
     }
+    // Idem para o sumiço de quem se moveu: um objeto só para todos que deixaram de vê-lo (OW-22),
+    // e quem sai da praça cheia é o `leave`, que devolve a vizinhança inteira em `vanished`.
+    const gone = hosted.creatureIds.get(subject);
+    const goneMessage: S2CMessage | undefined = gone === undefined
+      ? undefined
+      : { type: 'creature-disappear', id: gone };
     for (const other of change.vanished) {
       // O id numérico NÃO é reciclado aqui: sumir de vista não é sair da sessão, e um id novo
       // no reaparecimento deixaria o sprite antigo parado para sempre na tela do cliente.
-      const gone = hosted.creatureIds.get(subject);
       const theirs = hosted.creatureIds.get(other);
-      if (gone !== undefined) {
-        this.#sendToViewersOf(hosted, other, { type: 'creature-disappear', id: gone });
-      }
+      if (goneMessage !== undefined) this.#sendToViewersOf(hosted, other, goneMessage);
       if (theirs !== undefined) {
         this.#sendToViewersOf(hosted, subject, { type: 'creature-disappear', id: theirs });
       }
@@ -4764,8 +4872,7 @@ export class SessionHost {
     this.#settling.add(characterId);
     try {
       await this.#saveReceipt(characterId, hosted, receipt, departed);
-      for (const viewer of hosted.viewers) {
-        if (viewer.characterId !== characterId) continue;
+      for (const viewer of hosted.viewers.of(characterId)) {
         viewer.send({
           type: 'session-ended',
           reason: receipt.reason,
@@ -4884,8 +4991,7 @@ export class SessionHost {
       }
       if (receipt !== null) {
         await this.#saveReceipt(characterId, hosted, receipt, departed);
-        for (const viewer of hosted.viewers) {
-          if (viewer.characterId !== characterId) continue;
+        for (const viewer of hosted.viewers.of(characterId)) {
           viewer.send({
             type: 'session-ended',
             reason: receipt.reason,
@@ -4924,7 +5030,7 @@ export class SessionHost {
     //
     // Só os DELE: num shard os outros continuam na sessão anterior, e levá-los junto seria
     // arrastar a praça inteira para dentro da hunt de um jogador.
-    const following = [...hosted.viewers].filter((v) => v.characterId === characterId);
+    const following = [...hosted.viewers.of(characterId)];
     for (const viewer of following) {
       hosted.viewers.delete(viewer);
       hosted.session.detach(viewer.id);
@@ -4948,7 +5054,7 @@ export class SessionHost {
     // ids de criatura de quem já estava lá.
     const existing = this.#sessions.get(next.id);
     const successor: HostedSession = existing ?? {
-      session: next, viewers: new Set(), creatureIds: new Map(), raceBySubject: new Map(), nextCreatureId: 1,
+      session: next, viewers: new ViewerSet(), creatureIds: new Map(), raceBySubject: new Map(), nextCreatureId: 1,
       aoi: this.#interestManaged(next) ? new AreaOfInterest() : null,
       lastAdvancedAtMs: this.#now(),
       credited: new Set(),
@@ -5079,8 +5185,7 @@ export class SessionHost {
     closeCode?: number,
     closeReason?: string,
   ): void {
-    for (const viewer of [...hosted.viewers]) {
-      if (viewer.characterId !== characterId) continue;
+    for (const viewer of [...hosted.viewers.of(characterId)]) {
       if (closeCode !== undefined) viewer.close(closeCode, closeReason ?? '');
       hosted.viewers.delete(viewer);
       hosted.session.detach(viewer.id);
@@ -5089,23 +5194,38 @@ export class SessionHost {
 
   /** Quantos visualizadores estão olhando ESTE personagem. Abas contam separado. */
   #watchers(hosted: HostedSession, characterId: string): number {
-    let count = 0;
-    for (const viewer of hosted.viewers) if (viewer.characterId === characterId) count += 1;
-    return count;
+    return hosted.viewers.countOf(characterId);
   }
 
-  /** Manda o acumulado e derruba quem não está drenando. */
+  /**
+   * Manda o acumulado e derruba quem não está drenando.
+   *
+   * **Serializar uma vez** (OW-22): a mesma mensagem entregue a vários visualizadores é codificada
+   * uma vez por ciclo, pelo `EncodeCache`. Só onde há mais de um visualizador — a hunt de um dono e
+   * uma aba só (as 5.000 instâncias frias) não tem com quem dividir o frame, e pagaria uma
+   * inserção no mapa por mensagem para nada. O cache é esvaziado a cada sessão: mensagem é objeto
+   * da sessão, e nenhum frame sobrevive ao flush que o produziu.
+   */
   flush(): void {
     for (const hosted of this.#sessions.values()) {
-      for (const viewer of hosted.viewers) {
-        viewer.flush();
-        if (!viewer.dead) continue;
-        this.#logger.warn(
-          { characterId: viewer.characterId },
-          'Dropping viewer that stopped draining',
-        );
-        viewer.close(1013, 'backpressure');
-        this.detach(viewer);
+      const cache = this.#options.encodeOnce === false
+        ? this.#encodeEach
+        : hosted.viewers.size > 1 ? this.#encodeCache : undefined;
+      try {
+        for (const viewer of hosted.viewers) {
+          viewer.flush(cache);
+          if (!viewer.dead) continue;
+          this.#logger.warn(
+            { characterId: viewer.characterId },
+            'Dropping viewer that stopped draining',
+          );
+          viewer.close(1013, 'backpressure');
+          this.detach(viewer);
+        }
+      } finally {
+        // Mesmo que um `send` lance (socket que o uWS já fechou): um frame velho no cache seria
+        // mandado no ciclo seguinte no lugar do conteúdo de então.
+        cache?.clear();
       }
     }
   }
@@ -5162,8 +5282,7 @@ export class SessionHost {
           const receipt = receiptOf(hosted, characterId);
           if (receipt === null) throw new Error(`no receipt for ${characterId} in ${sessionId}`);
           await this.#saveReceipt(characterId, hosted, receipt);
-          for (const viewer of hosted.viewers) {
-            if (viewer.characterId !== characterId) continue;
+          for (const viewer of hosted.viewers.of(characterId)) {
             viewer.sendNow({
               type: 'session-ended',
               reason: receipt.reason,
@@ -5268,12 +5387,19 @@ export class SessionHost {
     if (owner !== undefined && hosted.session.ruleset.type === 'training') {
       holdStamina(owner, this.#wallNow());
     }
+    // A versão sai ANTES do primeiro `await`, e de forma síncrona: é a ordem das CHAMADAS que
+    // vale, e dois extratos do mesmo personagem em voo ao mesmo tempo não podem pegar o mesmo
+    // número. E a tentativa repetida (#267) leva a MESMA versão da que falhou — é o mesmo extrato,
+    // e "resposta perdida" precisa repetir exatamente o que já pode ter sido gravado (#823).
+    const claim = `${characterId}|${receipt.sessionId}|${receipt.seq}`;
+    const durableVersion = this.#claimDurableVersion(characterId, claim);
     await receipts.save({
       sessionId: receipt.sessionId,
       characterId,
       accountId,
       reason: receipt.reason,
       seq: receipt.seq,
+      ...(durableVersion === undefined ? {} : { durableVersion }),
       aggregates: receipt.aggregates,
       notableEvents: receipt.notableEvents,
       // As instâncias vendidas/descartadas nesta hunt (#724, ADR 0048 d.8): o `jobs` as apaga
@@ -5365,6 +5491,9 @@ export class SessionHost {
       // sempre entra na mochila — não sobra nada para carregar aqui.
       ...(owner === undefined ? {} : { acquired: acquiredBy(owner, receipt.sessionId) }),
     });
+
+    // Gravado: a versão deste extrato não precisa mais ser lembrada para a próxima tentativa.
+    this.#claimedVersions.delete(claim);
 
     // O extrato agora é durável no Redis e será a fonte que o ledger aplica no Postgres.
     // Enquanto ele está pendente, a Cidade continua com o MESMO `CharacterRuntime` da hunt;
@@ -5479,12 +5608,15 @@ export class SessionHost {
     if (receipts === undefined || accountId === undefined || owner === undefined) return;
     if (!hosted.dirty.has(characterId)) return;
     hosted.session.ledgerSeq += 1;
+    // Síncrona, antes do `await`, como em `#persistReceipt` (#823).
+    const durableVersion = this.#claimDurableVersion(characterId);
     await receipts.save({
       sessionId: hosted.session.id,
       characterId,
       accountId,
       reason,
       seq: hosted.session.ledgerSeq,
+      ...(durableVersion === undefined ? {} : { durableVersion }),
       // A Cidade não credita progresso (ADR 0023) — mas #724/ADR 0048 d.8 abriu a primeira
       // exceção: vender na praça move gold pelo MESMO ledger que a hunt usa. `goldDelta` é o
       // delta AINDA NÃO liquidado (zero em todo extrato que só mexeu em vocação/equipamento,
@@ -5496,6 +5628,19 @@ export class SessionHost {
         goldSpent: Math.max(-owner.goldDelta, 0),
       },
       notableEvents: [],
+      // O ESTADO ABSOLUTO INTEIRO, como `#persistReceipt` (#823, ADR 0060 decisão 10d): o ledger só
+      // escreve um absoluto quando o extrato é mais novo que o que a coluna já viu, e descarta o
+      // mais velho por INTEIRO. Um extrato de estado que não levasse skills, stamina, comida e
+      // storages — e o estoque quando vazio — apagaria, ao chegar na frente, o que só o extrato
+      // de hunt anterior carregava: o treino da hunt, a stamina gasta, as poções usadas. Todos
+      // vêm do mesmo `CharacterRuntime` que a hunt acabou de encerrar (a Cidade o recebe por
+      // `shard.admit`), então são o estado de verdade, nunca um valor antigo.
+      ...(owner.staminaMs === undefined || owner.staminaMs === null
+        ? {}
+        : { staminaMs: owner.staminaMs, staminaUpdatedAtMs: owner.staminaUpdatedAtMs }),
+      skills: owner.skills.getState(),
+      storages: Object.fromEntries(owner.storages),
+      fedMs: owner.fedMs,
       ...(owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       // A promoção (#566, ADR 0042 decisão 1): AUSENTE/`false` nunca é gravado — `promoted` só
       // sobe no ledger (`characters.promoted OR receipt.promoted`), nunca desce.
@@ -5522,9 +5667,12 @@ export class SessionHost {
       // `supplyStock`/`ammunitionStock` do mesmo jeito que o loot da hunt credita — ABSOLUTO,
       // como `ammo` (`receipts.ts`). Sem isto, a carga conjurada na praça sumia no logout: o
       // shard nunca grava as duas fora deste extrato de estado durável.
-      ...(owner.supplyStock.size === 0 ? {} : { supplyStock: Object.fromEntries(owner.supplyStock) }),
-      ...(owner.ammunitionStock.size === 0
-        ? {} : { ammunitionStock: Object.fromEntries(owner.ammunitionStock) }),
+      //
+      // SEMPRE, inclusive vazio (#823): `{}` é "esgotado", e omitir a chave deixaria o ledger
+      // sem o que dizer — o estoque antigo do Postgres, que uma hunt anterior ainda pendente
+      // esvaziou, voltaria na ordem inversa. A mesma regra do extrato de hunt.
+      supplyStock: Object.fromEntries(owner.supplyStock),
+      ammunitionStock: Object.fromEntries(owner.ammunitionStock),
       // Alma (#593): escolher a vocação na praça enche a alma pela primeira vez
       // (`CharacterRuntime.chooseVocation`), e sem este campo o shard perderia esse enchimento
       // no logout — o mesmo buraco que a vocação e o equipamento já tapavam antes do #154.
@@ -5750,12 +5898,100 @@ export class SessionHost {
     };
   }
 
+  /**
+   * Adota a versão durável do ticket como PISO do contador do personagem (#823). `max` com o que
+   * o nó já tem: a Cidade que ele deixa para a party (`#leaveForParty`) grava um extrato DEPOIS de
+   * o ticket da party ter sido emitido, e adotar só o número do ticket repetiria a versão dele —
+   * o ledger trataria o segundo como atrasado e descartaria os absolutos da hunt. Devolve se o
+   * contador NASCEU agora, para quem falhar poder desfazer (`#createAndRegister`).
+   */
+  #adoptDurableVersion(characterId: string, initial: InitialCharacter | undefined): boolean {
+    const fromTicket = initial?.durableVersion;
+    if (fromTicket === undefined) return false;
+    const current = this.#durableVersionByCharacter.get(characterId);
+    // O piso do que este nó soltou (`#retiredVersions`): o ticket pode ter sido emitido antes do
+    // `release` que gravou um extrato de versão maior.
+    const retired = this.#retiredVersions.get(characterId)?.version ?? 0;
+    this.#durableVersionByCharacter.set(characterId, Math.max(current ?? 0, retired, fromTicket));
+    return current === undefined;
+  }
+
+  /**
+   * Solta o contador do personagem em `release`, guardando a versão que ele tinha como piso da
+   * próxima adoção (`#retiredVersions`) e podando o que já passou do prazo.
+   */
+  #retireDurableVersion(characterId: string): void {
+    const version = this.#durableVersionByCharacter.get(characterId);
+    this.#durableVersionByCharacter.delete(characterId);
+    const now = this.#now();
+    // A ordem de inserção é a do tempo: para no primeiro que ainda vale.
+    for (const [id, retired] of this.#retiredVersions) {
+      if (now - retired.atMs <= RETIRED_VERSION_TTL_MS) break;
+      this.#retiredVersions.delete(id);
+    }
+    if (version === undefined) return;
+    // `delete` antes de `set`: regravar uma chave existente a manteria na posição ANTIGA da
+    // ordem de inserção, e a poda de cima pararia no lugar errado.
+    this.#retiredVersions.delete(characterId);
+    this.#retiredVersions.set(characterId, { version, atMs: now });
+  }
+
+  /**
+   * A próxima versão durável do personagem, ou `undefined` se o nó não tem contador dele (ticket
+   * de um `api` anterior — o extrato sai sem versão, ver `#durableVersionByCharacter`).
+   *
+   * SÍNCRONA de propósito: quem chama a usa antes do primeiro `await` do extrato, e é a ordem das
+   * chamadas que a versão preserva. Estado do próprio host, não da simulação (invariante 9): a
+   * versão ordena o que o `jobs` escreve, e nada dela volta para o `sim`.
+   */
+  #claimDurableVersion(characterId: string, claim?: string): number | undefined {
+    const current = this.#durableVersionByCharacter.get(characterId);
+    if (current === undefined) return undefined;
+    // `claim` identifica UM extrato (personagem|sessão|seq): quem já tomou a versão e não
+    // confirmou a gravação a recebe de volta, em vez de gastar outra.
+    const claimed = claim === undefined ? undefined : this.#claimedVersions.get(claim);
+    if (claimed !== undefined) return claimed;
+    const next = current + 1;
+    this.#durableVersionByCharacter.set(characterId, next);
+    if (claim !== undefined) this.#claimedVersions.set(claim, next);
+    return next;
+  }
+
   #hostedSession(characterId: string): HostedSession | undefined {
     const sessionId = this.#sessionIdByCharacter.get(characterId);
     return sessionId === undefined ? undefined : this.#sessions.get(sessionId);
   }
 
+  /**
+   * O contador de versão durável nasce AQUI, antes de tudo (#823, OW-02): `#resume` pode creditar
+   * um snapshot irrestaurável, e esse extrato já é versionado. Se hospedar falhar, o contador
+   * que esta chamada criou some — registro recusado não pode deixar rastro, como nome e cores.
+   * O de quem já estava no nó (a Cidade que `#leaveForParty` esvazia) fica: é dele, e `max` com o
+   * do ticket já o preservou.
+   */
   async #createAndRegister(
+    characterId: string,
+    initialCharacter: InitialCharacter | undefined,
+    accountId: string | undefined,
+    party?: PartyTicket,
+  ): Promise<void> {
+    const born: string[] = [];
+    if (this.#adoptDurableVersion(characterId, initialCharacter)) born.push(characterId);
+    // Cada membro da party traz a versão DELE no bloco do ticket (`/start` a leu depois de
+    // liquidar cada um). Quem chega num ticket de ENTRADA não passa por aqui (`#admitLateJoiner`).
+    for (const member of party?.members ?? []) {
+      if (member.characterId === characterId) continue;
+      if (this.#adoptDurableVersion(member.characterId, member.initialCharacter)) born.push(member.characterId);
+    }
+    try {
+      await this.#createAndRegisterSession(characterId, initialCharacter, accountId, party);
+    } catch (error) {
+      for (const id of born) this.#durableVersionByCharacter.delete(id);
+      throw error;
+    }
+  }
+
+  async #createAndRegisterSession(
     characterId: string,
     initialCharacter: InitialCharacter | undefined,
     accountId: string | undefined,
@@ -5914,7 +6150,14 @@ export class SessionHost {
     const receipts = this.#options.receipts;
     if (receipts === undefined || accountId === undefined) return;
     try {
-      await settleSnapshotAsReceipt(snapshot, { characterId, accountId, receipts, nowMs: this.#wallNow() });
+      // O extrato do snapshot também é versionado (#823): sem isso ele entraria no ledger À
+      // FRENTE dos checkpoints que a sessão morta já deixou pendentes, e o último deles — mais
+      // velho que o snapshot — desfaria o estado dele.
+      const durableVersion = this.#claimDurableVersion(characterId);
+      await settleSnapshotAsReceipt(snapshot, {
+        characterId, accountId, receipts, nowMs: this.#wallNow(),
+        ...(durableVersion === undefined ? {} : { durableVersion }),
+      });
     } catch (error) {
       // Falhar aqui perde o crédito, e é por isso que o snapshot NÃO é apagado em seguida
       // quando isto lança: a próxima conexão tenta de novo.
@@ -5934,7 +6177,7 @@ export class SessionHost {
     const existing = this.#sessions.get(session.id);
     const hosted: HostedSession = existing ?? {
       session,
-      viewers: new Set(),
+      viewers: new ViewerSet(),
       creatureIds: new Map(),
       raceBySubject: new Map(),
       nextCreatureId: 1,

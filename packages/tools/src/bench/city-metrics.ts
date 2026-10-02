@@ -7,9 +7,10 @@
 // razoável.
 //
 // O que se mede é o CUSTO DO LEQUE de saída da praça compartilhada: cada passo de um jogador vira
-// uma mensagem para cada vizinho, codificada uma vez por destinatário (`Viewer.send`/`flush`). O
-// ADR 0060 aposta que esse leque, e não a CPU do `sim`, é o que cede primeiro quando o mundo
-// enche; antes de mexer nele (OW-22) é preciso a linha de base.
+// uma mensagem para cada vizinho. O ADR 0060 aposta que esse leque, e não a CPU do `sim`, é o que
+// cede primeiro quando o mundo enche. A linha de base (OW-07) codificava cada mensagem uma vez por
+// destinatário; o OW-22 a codifica uma vez por ciclo, e a coluna `B cod/vis/s` é o que separa os
+// dois números — bytes ENTREGUES (o fio, que não muda) e bytes SERIALIZADOS (a CPU, que cai).
 
 /** A janela de percentis que o relatório publica. */
 export interface Distribution {
@@ -40,6 +41,12 @@ export interface RunInput {
   readonly cycleMs: number;
   /** Bytes escritos no socket: o frame, sem o cabeçalho do WebSocket (o uWS não comprime). */
   readonly bytes: number;
+  /**
+   * Bytes que o hospedeiro SERIALIZOU na janela (`SessionHost.encodeStats`, OW-22): os frames que o
+   * cache de codificação produziu, e não os que entregou. Sem o cache — a linha de base do OW-07 —
+   * seria igual aos bytes de mensagem entregues, porque cada destinatário codificava a sua cópia.
+   */
+  readonly encodedBytes: number;
   /** Mensagens que couberam nesses frames, contadas pelo próprio visualizador. */
   readonly messages: number;
   /** Quadros escritos: um por visualizador por ciclo em que havia o que mandar. */
@@ -58,6 +65,8 @@ export interface RunSummary {
   /** A maior fila de cada flush, em distribuição: o `max` é o que se compara ao teto. */
   readonly queue: Distribution;
   readonly bytesPerViewerPerSecond: number;
+  /** Bytes serializados por visualizador por segundo: o que a CPU codificou, e não o que foi ao fio. */
+  readonly encodedBytesPerViewerPerSecond: number;
   readonly messagesPerViewerPerSecond: number;
   readonly framesPerViewerPerSecond: number;
   /** Bytes por quadro escrito: o quanto o envelope de lote pesa na média. */
@@ -99,7 +108,7 @@ export function distribution(values: readonly number[]): Distribution {
 }
 
 export function summarize(input: RunInput): RunSummary {
-  const { samples, viewers, cycleMs, bytes, messages, frames, drops } = input;
+  const { samples, viewers, cycleMs, bytes, encodedBytes, messages, frames, drops } = input;
   const elapsedSeconds = (samples.length * cycleMs) / 1000;
   // Sem tempo ou sem visualizador não há taxa: 0, e não `Infinity`.
   const perViewerSecond = (total: number): number => (
@@ -114,6 +123,7 @@ export function summarize(input: RunInput): RunSummary {
     flushUs: distribution(samples.map((sample) => sample.flushUs)),
     queue: distribution(samples.map((sample) => sample.queueMax)),
     bytesPerViewerPerSecond: perViewerSecond(bytes),
+    encodedBytesPerViewerPerSecond: perViewerSecond(encodedBytes),
     messagesPerViewerPerSecond: perViewerSecond(messages),
     framesPerViewerPerSecond: perViewerSecond(frames),
     bytesPerFrame: frames === 0 ? 0 : bytes / frames,

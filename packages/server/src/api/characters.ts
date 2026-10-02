@@ -83,8 +83,8 @@ export function registerCharacterRoutes(
 
     let characters = await repository.listCharacters(principal.accountId);
     // Liquidar DEPOIS de listar, porque os ids só se conhecem listando. Reler só quando alguma
-    // coisa foi de fato escrita: no caso comum — nada pendente — isto é um `SMEMBERS` por
-    // personagem e nenhuma consulta a mais ao Postgres.
+    // coisa foi de fato escrita: no caso comum — nada pendente — isto é uma ida ao Redis por
+    // personagem (o índice, #823) e nenhuma consulta a mais ao Postgres.
     let settled = false;
     for (const character of characters) {
       if (await settle(character.id, request.log)) settled = true;

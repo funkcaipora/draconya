@@ -2,10 +2,11 @@
 
 **Status:** parcial — existem o **mundo como conteúdo** (OW-08, #829: `data/worlds/main.json` com
 tipo, mapa, cidade, templo e teto, validado no boot), a **regra de zona e de saída** do `sim`
-(OW-10, #831: `zoneAt`, `hasZoneFlag` e `canLogout`) e a **sessão do mundo** (OW-13, #834:
-`createWorldSession`, a topologia de mundo e a entrada na posição salva ou no templo). Nada hospeda
-a sessão ainda — o hospedeiro a constrói na OW-18, atrás de `OPEN_WORLD` — e a presença, a
-durabilidade e a apresentação ainda não saíram do papel.
+(OW-10, #831: `zoneAt`, `hasZoneFlag` e `canLogout`), a **sessão do mundo** (OW-13, #834:
+`createWorldSession`, a topologia de mundo e a entrada na posição salva ou no templo) e a **saída do
+Tibia no `sim`** (OW-14, #835: o `logout` por `canLogout` e a perda de conexão, que tenta sair aos
+60 s). Nada hospeda a sessão ainda — o hospedeiro a constrói na OW-18, atrás de `OPEN_WORLD` — e a
+presença no hospedeiro, a durabilidade e a apresentação ainda não saíram do papel.
 **PRD:** — (o PRD descreve a Cidade como praça social; o mundo aberto nasceu depois dele)
 **Épico:** E19 · Mundo aberto (M47–M51)
 **Referência técnica:** [ADR 0060](../adr/0060-tibia-open-world-without-pvp.md) (mundo aberto do
@@ -16,9 +17,10 @@ Tibia sem PvP), [`docs/open-world-plan.md`](../open-world-plan.md) (marcos e ord
 O Draconya é o mundo aberto do Tibia, tipo `no-pvp`, e a hunt idle é o adicional instanciado (ADR
 0060 d.1). Um **mundo** é, no Canary, o `Game` único: aqui, uma sessão compartilhada num processo
 `game`, à qual o personagem pertence (`characters.world_id`, OW-15). Este documento cresce com
-cada peça do plano que sai do papel; hoje existem três: o que o mundo **é** como dado, a regra de
-zona do `sim` — onde o personagem pode sair — e a sessão do mundo, que é o motor da hunt com a
-topologia de mundo.
+cada peça do plano que sai do papel; hoje existem quatro: o que o mundo **é** como dado, a regra de
+zona do `sim` — onde o personagem pode sair —, a sessão do mundo, que é o motor da hunt com a
+topologia de mundo, e a saída do Tibia, que usa a regra de zona para o `logout` e para o personagem
+que perdeu a conexão.
 
 ## O mundo como conteúdo (OW-08, #829)
 
@@ -87,10 +89,10 @@ Os spawns do Canary entram à parte (OW-25), e a topologia (OW-13) e as colunas 
 ## Zona por tile e `canLogout` (OW-10, #831)
 
 `packages/sim/src/zones.ts` lê a camada `zones` do mapa (OW-09, ver [a Cidade](city.md)) e a
-transforma na regra do Tibia. São funções **puras e só de leitura**: nada do `sim` as chama hoje, a
-Cidade segue protect zone por construção (ADR 0004) e as hunts não consultam zona. Quem as usa vem
-depois — o `logout` e o x-log (OW-14), a entrada do mundo numa hunt idle (OW-20) e o portão de
-combate no-pvp (OW-27).
+transforma na regra do Tibia. São funções **puras e só de leitura**: a Cidade segue protect zone por
+construção (ADR 0004) e as hunts não consultam zona. Quem as usa é a saída do mundo — o `logout` e o
+x-log (OW-14, abaixo) —, e virão a entrada do mundo numa hunt idle (OW-20) e o portão de combate
+no-pvp (OW-27).
 
 - **`zoneAt(map, point)`** devolve o tipo da zona do tile — `'protection'`, `'nopvp'`, `'pvp'`,
   `'nologout'` ou `'normal'` — com a precedência de `Tile::getZoneType`: PZ, depois no-pvp, depois
@@ -132,8 +134,8 @@ combate no-pvp (OW-27).
   quem caiu numa posição inválida sem saída.
 - **Pura de verdade**: recebe `nowMs` como parâmetro, não lê relógio de parede, não escreve no
   personagem (invariante 9) nem sorteia. O mesmo estado dá o mesmo veredicto a 1 Hz e a 10 Hz.
-  Quem age sobre o veredicto — encerrar a sessão, mandar `logout-refused` (OW-11), reagendar o
-  x-log para quando a janela de luta vence — é o ruleset do mundo.
+  Quem age sobre o veredicto — emitir `departure-requested` ou `logout-refused`, reagendar o x-log
+  para quando a janela de luta vence — é o ruleset do mundo (OW-14, abaixo).
 
 ## A sessão do mundo (OW-13, #834)
 
@@ -167,7 +169,7 @@ Cada pergunta da `SessionTopology` (a tabela da instância está em
 | Pergunta | No mundo | Estado |
 |---|---|---|
 | `onEmpty` | nada: o mundo existe antes de haver alguém nele | final |
-| `onCharacterDied`, `onExitFinished` | **só quem saiu sai**, com o extrato dele (`member-left`, o mesmo caminho do membro de uma party); nunca `session.end` | a morte do Canary (vida e mana cheias, templo, tela de relogin, proteção de login) é a **OW-32**; a saída pelo `canLogout`, a OW-14 |
+| `onCharacterDied`, `onExitFinished` | **só quem saiu sai**, com o extrato dele (`member-left`, o mesmo caminho do membro de uma party); nunca `session.end` | a morte do Canary (vida e mana cheias, templo, tela de relogin, proteção de login) é a **OW-32**; a saída pelo `canLogout` (o `logout` e o x-log) não passa por estas perguntas: é a OW-14, abaixo |
 | `leaderOf`, `onLeaderGone` | **não há líder**: `undefined` e nada a trocar | final |
 | `runsRouteWalker`, `runsExitRules` | não: o personagem anda quando o jogador pede e fica onde está quando ninguém pede; a regra de saída do bot é da hunt idle | final |
 | `startsInstanceSchedules` | não: o spawn do mundo nasce com o mundo, sem ninguém — nunca com o primeiro a entrar | o spawn é da **OW-25/OW-31** |
@@ -261,6 +263,10 @@ máquina de destino. `createWorldSession({ limits })` os troca campo a campo.
 - **Quem hospeda.** Nada cria o mundo: o `WorldShard` atrás de `OPEN_WORLD` é a OW-18, e a tabela
   de transições (`game/transitions.ts`) tem a entrada `world: []` só porque o `Record<SessionType,
   …>` o exige. Com a flag desligada — o default — o hospedeiro é o de hoje.
+- **Quem lê a saída.** `departure-requested` e `logout-refused` saem do `sim`, e o hospedeiro hoje os
+  ignora (`#presentMoves` os descarta): ler o primeiro **sem visualizador** — gravar o checkpoint e
+  soltar o personagem para o repouso — e traduzir o segundo na mensagem `logout-refused` é a OW-19, que
+  também entrega `presence-lost` e `presence-restored`.
 - **A fila estável.** O ADR 0060 d.5c quer a fila do mundo ordenada por `(dueAtMs, priority,
   subject, kind, seq)` (`tieBreak: 'stable'`, OW-06, #827). `createWorldSession` é onde ela se
   pede, e a OW-06 ainda não pousou: até lá a fila do mundo desempata por inserção, como a da
@@ -271,6 +277,92 @@ máquina de destino. `createWorldSession({ limits })` os troca campo a campo.
 - **O evento notável.** A entrada grava `entered-world` (o dono no detalhe, como `entered-city`); o
   texto dele no cliente é da OW-23 — até lá ele sai cru, como todo tipo que o cliente não conhece.
 
+## A saída do Tibia (OW-14, #835)
+
+No Tibia não se foge de uma luta fechando o navegador: o `logout` só passa onde `canLogout` deixa, e o
+personagem sem conexão não some — fica parado, vulnerável, e sai depois, **se `canLogout` deixar**.
+A OW-14 põe isso no `sim`, em `WorldRuleset` (`packages/sim/src/rulesets/world.ts`) e em
+`packages/sim/src/world-exit.ts`. O `sim` **decide e emite**; tirar o personagem da sessão com o
+checkpoint e soltá-lo para o repouso é I/O, do hospedeiro (OW-19).
+
+### O `logout`
+
+`WorldRuleset#requestLogout(session, characterId)` passa o pedido por `canLogout` (a tabela de "Zona
+por tile e `canLogout`", acima) e resulta em **um** de dois eventos de domínio — nunca nos dois, e
+nunca em nenhum:
+
+| Veredicto | Evento |
+|---|---|
+| `ok` (na PZ, ou fora dela e fora de luta) | `departure-requested { characterId, reason: 'logout', worldPosition }` |
+| recusa | `logout-refused { characterId, reason }`, com `'no-logout-tile'` ou `'in-fight'` — os do `logout-refused` do protocolo (OW-11); o personagem não muda |
+
+`worldPosition` é a coordenada **absoluta** do tile de agora — a âncora do próximo login
+(`player.cpp:12332-12336`) —, lida no instante da decisão. Devolve o veredicto para quem quer
+responder na hora, e `null` (sem evento) para quem não está na sessão ou já morreu: a morte tem a
+saída dela (OW-32). O veredicto é o mesmo a 1 Hz e a 10 Hz, porque `canLogout` lê o relógio lógico.
+
+**`departure-requested` é um pedido.** O personagem continua na sessão até o hospedeiro gravar o
+checkpoint (`Session.checkpoint`) e chamar `Session.leave`: o extrato inteiro precisa existir antes de
+ele sair. É **gameplay, não apresentação** — o hospedeiro o lê sem visualizador, como o `member-left`.
+
+### A perda de conexão
+
+`presenceLost(session, characterId)` e `presenceRestored(session, characterId)` são **intenções de
+servidor** (ADR 0060 d.7): o protocolo não tem opcode para elas e o cliente nunca as manda
+(invariante 4). Quem as entrega, no instante lógico em que a conexão caiu ou voltou, é o hospedeiro
+(OW-19) — inclusive `presence-lost` na chegada de quem entra no mundo sem visualizador.
+
+**`presence-lost`** deixa o personagem **só**, e não o tira (`Player::sendPing`,
+`canary/src/creatures/players/player.cpp:2321-2338`):
+
+1. **O alvo é solto na hora** (`setAttackedCreature(nullptr)`, `player.cpp:2323-2325`): o alvo que o
+   jogador escolheu, o candidato do auto-target e a caminhada até um alvo.
+2. **Toda automação para.** O bot (todos os grupos da barra de ações) e as automações da barra
+   (`swap-ring` e as outras), a eleição de alvo da política, a caminhada manual, o follow e a
+   postura `follow`/`keep-distance`. O herói **também deixa de bater no monstro ao lado**: o golpe automático no
+   melhor ao alcance é o bot escolhendo, e a resposta do dono é que, sem o jogador, toda automação
+   para. Nada para o que o jogo faz **com** o personagem: regeneração, condições, o medo que o faz
+   andar e, claro, o que os monstros fazem com ele — ele fica vulnerável.
+3. **Agenda a tentativa de saída em +60 s** (`XLOG_DELAY_MS`, o `noPongTime >= 60000` de
+   `player.cpp:2327`), no relógio lógico.
+
+**A tentativa de saída** (`xlog-attempt`) decide pelo estado de **agora**:
+
+| Em `canLogout`, agora | O que acontece |
+|---|---|
+| passa (PZ, ou fora de luta) | `departure-requested { reason: 'xlog', worldPosition }` |
+| `'in-fight'` | reagenda para `lastCombatActionAtMs + IN_FIGHT_WINDOW_MS` — o primeiro instante em que a luta deixa de valer. Se algum monstro bater de novo nesse meio tempo, o carimbo anda e a tentativa seguinte reagenda outra vez: **o personagem sai 60 s depois do último golpe**, e enquanto houver monstro em cima dele não sai |
+| `'no-logout-tile'` | **desiste** e não reagenda: o Canary faz `shouldForceLogout = false` (`player.cpp:2335-2337`), e sem dono o personagem não anda, então o tile não muda. O teto é o idle kick (OW-47) |
+
+É a combinação que o ADR 0060 d.7 escolheu: o Canary tenta **uma** vez e deixa o idle kick resolver,
+o TFS derruba mesmo em luta; o Draconya fica com o `canLogout` do Canary e o "sai quando a luta
+acaba" do Tibia. Um evento por vez, nunca uma varredura (invariante 2).
+
+**`presence-restored`** cancela a tentativa e devolve o controle: reelege o alvo e acorda o bot e as
+automações de onde estavam, no instante lógico atual. **Reanexar antes dos 60 s cancela a saída**; cair
+de novo depois recomeça a contagem do zero. Os dois são idempotentes: um segundo `presence-lost` de
+quem já está sem conexão **não** reinicia os 60 s (senão cada reconexão que falha empurraria a saída),
+e um `presence-restored` de quem nunca caiu não faz nada.
+
+### O motivo da saída
+
+`WorldDepartureReason` é `'logout' | 'xlog' | 'death' | 'idle-kick'`: o motivo da **saída do mundo**,
+que o hospedeiro traduz no `EndReason` do checkpoint que grava. A OW-14 emite os dois primeiros; a
+morte (`'death'`, templo e tela de relogin) é a OW-32 e o `'idle-kick'` é a OW-47 — a união os traz
+desde já para o hospedeiro tratar os quatro. A saída do mundo tira o personagem da party de mundo
+quando ela existir (OW-43): é o `onLeave`, o mesmo de qualquer saída.
+
+### O que prende a invariante 3
+
+- Nenhum resultado depende de `attached`: o hospedeiro entrega a intenção, e a linha do tempo — os
+  instantes de cada tentativa, os eventos de domínio, o estado final — é a **mesma a 1 Hz e a 10 Hz**
+  (`world-presence.test.ts` compara o roteiro inteiro, com luta, nos dois ritmos).
+- A suspensão **não** entra no snapshot: o mundo não tem snapshot (ADR 0060 d.10a). Quem chega ao
+  mundo sem visualizador recebe `presence-lost` na chegada, e quem sai ou volta pelo mesmo id começa
+  sem suspensão.
+- A instância não muda: o conjunto de suspensos é `null` em toda hunt (só nasce na primeira queda de
+  um mundo), lido pelas sete guardas do caminho quente (`HuntRuleset#isSuspended`).
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor | Onde mora |
@@ -280,16 +372,26 @@ máquina de destino. `createWorldSession({ limits })` os troca campo a campo.
 | Templo de Thais | `(32369, 32241, 7)`, absoluto | `packages/content/data/worlds/main.json`, `towns[].temple` |
 | Teto de gente | 200 | `packages/content/data/worlds/main.json`, `capacity` — o `CITY_SHARD_CAPACITY` (`packages/server/src/game/sessions.ts`) continua sendo o da Cidade até a admissão do mundo (OW-18) |
 | Janela de luta que trava a saída | 60 s desde o último golpe dado ou recebido, fora da PZ | `packages/sim/src/combat/in-fight.ts`, `IN_FIGHT_WINDOW_MS` (o `pzLocked` do Canary) |
+| Espera do x-log, desde a perda de conexão | 60 s, no relógio lógico (o `noPongTime >= 60000` do Canary) | `packages/sim/src/world-exit.ts`, `XLOG_DELAY_MS` |
 | Taxa de atualização do mundo | 10 Hz, com ou sem visualizador | `packages/sim/src/rulesets/world.ts`, `WORLD_HZ` |
 | Tetos da sessão do mundo | 65.536 eventos por avanço, 8.192 eventos de domínio pendentes, 64 notáveis por personagem (ponto de partida; o `bench:world` fixa) | `packages/sim/src/rulesets/world.ts`, `WORLD_SESSION_LIMITS` |
 | Tiles visitados ao colocar quem entra | 1.089 (o quadrado de 33, o da Cidade) | `packages/sim/src/rulesets/topology.ts`, `WORLD_ENTRY_TILES` |
 
 ## Em aberto
 
-- A presença, a durabilidade e a apresentação (OW-14 a OW-20): ver o
-  [plano](../open-world-plan.md). É aí que `canLogout` ganha chamador, e que a sessão de mundo
-  ganha quem a hospede.
+- A presença no hospedeiro, a durabilidade e a apresentação (OW-15 a OW-20): ver o
+  [plano](../open-world-plan.md). É aí que a sessão de mundo ganha quem a hospede, que o
+  `departure-requested` vira checkpoint e repouso, e que o `logout-refused` chega ao cliente.
+- O `requestExit` que o `WorldRuleset` herda da hunt (a OW-13 o testa) **não é a saída do mundo**:
+  ele conclui por `onExitFinished` depois de `exitDelayMs` e da janela de luta, mas não olha o tile —
+  um tile de no-logout não o recusa. O hospedeiro do mundo (OW-19) deve rotear o `logout` por
+  `requestLogout`, e nunca por ele.
+- O x-log num **tile de no-logout** não tem saída além do idle kick (OW-47): o personagem não anda
+  sem dono. Se o dono quiser que o x-log insista, é uma decisão nova — o Canary desiste.
 - O teto de 200 é o ponto de partida; o `bench:world` o fixa (ADR 0060 d.11).
+- O leque de saída barato (OW-22) saiu: codificar uma vez, visualizadores por personagem e AOI com
+  andar — ver [Cidade](city.md#o-leque-barato-ow-22-845). Falta a AOI v2 para criaturas (OW-33) e
+  para combate, efeitos, campos, cadáveres e tiles (OW-34): hoje a AOI só conhece jogador.
 
 ## Divergências do PRD
 

@@ -40,6 +40,7 @@ export * from './area.js';
 export * from './conditions.js';
 export * from './fields.js';
 export * from './zones.js';
+export * from './world-exit.js';
 export * from './targeting.js';
 export * from './combat/damage.js';
 export * from './combat/outcome.js';

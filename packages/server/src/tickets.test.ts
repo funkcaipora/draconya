@@ -548,6 +548,34 @@ describe.runIf(available)('session ticket', () => {
     }
   });
 
+  it('carries the durable version floor, and drops a value it cannot trust (#823)', async () => {
+    // O piso do contador do hospedeiro: sem ele no ticket o `game` não versiona os extratos, e o
+    // ledger os trata pela regra de antes. `0` é versão válida; negativo, fracionário ou texto
+    // viram AUSENTES — nunca ticket recusado — porque ausente é o lado seguro.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+    for (const durableVersion of [0, 7]) {
+      const issued = await tickets.issue('a1', 'p1', { level: 1, xp: 0, durableVersion });
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1')).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0, durableVersion },
+      });
+      await tickets.revoke(issued.value.ticket, 'a1', 'p1');
+    }
+    for (const torto of [-1, 1.5, '3']) {
+      const issued = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, durableVersion: torto } as unknown as InitialCharacter,
+      );
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1')).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0 },
+      });
+      await tickets.revoke(issued.value.ticket, 'a1', 'p1');
+    }
+  });
+
   it('carries the offline training record, and drops one it cannot trust (#631, ADR 0059 d.3)', async () => {
     // O banco e a skill do livro entram na sessão: o banco CRESCE com o tempo de hunt, e sem o
     // registro de entrada a primeira hunt do dia sobrescreveria a linha com um banco zerado. A
