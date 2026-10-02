@@ -27,6 +27,7 @@
 //  17  game/host-directory.test.ts
 //  19  api/party-social.test.ts
 //  25  jobs/world-vitals.postgres.test.ts (#836, OW-15)
+//  28  game/world-checkpoint.postgres.test.ts (#837, OW-16; 26 e 27 ficam livres para as issues vizinhas)
 //
 // A infraestrutura de teste sobe o Redis com **32 bancos** (`--databases 32`, no CI e no
 // compose local): o padrão de 16 (0 a 15) tornava `SELECT 16` um `ERR DB index is out of

@@ -16,7 +16,7 @@ import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import type {
   Aggregates, CombatEvent, EndReason, FindResult, FollowState, GridPoint, ManualActionResult, MemberLeft,
-  PartyEvent, PresenceEvent, Receipt, Session, SessionSnapshot, SessionType, WorldPoint,
+  PartyEvent, Point, PresenceEvent, Receipt, Session, SessionSnapshot, SessionType, WorldPoint,
 } from '@draconya/sim';
 import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type {
@@ -45,7 +45,7 @@ import { overlaysOfState, settleSnapshotAsReceipt } from '../snapshot-settlement
 import { carryRestoredConditions, receiptWorldStateOf } from '../world-state.js';
 import type { WorldState } from '../world-state.js';
 import type { SnapshotStore } from '../snapshots.js';
-import type { ReceiptStore } from '../receipts.js';
+import type { ReceiptReason, ReceiptStore } from '../receipts.js';
 import type { BoxedItem } from '../loot-box.js';
 import type { Logger } from '../log.js';
 import type { InitialCharacter, PartyTicket } from '../tickets.js';
@@ -56,8 +56,12 @@ import { findPersonText } from './find-text.js';
 import { hitEffectOf, isPhysicalHit, monsterLookOf, monsterOutfitOf, monsterPresentationOf } from './monster-look.js';
 import { REFUSAL_TEXT, TransitionError, refuseTransition } from './transitions.js';
 import {
-  creditsAggregates, keepsSnapshot, leavesOnExit, offersCityServices, usesAreaOfInterest,
+  checkpointsProgress, creditsAggregates, keepsSnapshot, leavesOnExit, offersCityServices, usesAreaOfInterest,
 } from './ruleset-traits.js';
+import {
+  CheckpointState, WORLD_CHECKPOINT_MS, hasActivity, markOf, sameMark, worldPositionOf,
+} from './world-checkpoint.js';
+import type { PendingLine } from './world-checkpoint.js';
 import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
 
 /** Cria a sessão de um personagem que ainda não tem uma. */
@@ -286,6 +290,14 @@ export interface SessionHostOptions {
    * default — é o extrato de antes, byte a byte: o `game` nunca escreve as colunas novas.
    */
   readonly openWorld?: boolean;
+  /**
+   * A cadência do checkpoint do mundo, em milissegundos (#837, OW-16, ADR 0060 d.10d): de quanto em
+   * quanto tempo o hospedeiro grava o lote com o extrato de todo personagem sujo de uma sessão
+   * `checkpointed`. Ausente é `WORLD_CHECKPOINT_MS` (60 s). Só importa para a sessão que declara
+   * `progress: 'checkpointed'` — o mundo —; com a flag `OPEN_WORLD` desligada nenhuma existe, e o
+   * timer não encontra o que gravar.
+   */
+  readonly worldCheckpointMs?: number;
 }
 
 const EMPTY_ITEMS: ReadonlyMap<string, Item> = new Map();
@@ -1011,6 +1023,13 @@ export type BotConfigLoadResult =
   | { readonly ok: true; readonly config: BotConfigV2; readonly removed: readonly RemovedBotSlot[] }
   | { readonly ok: false; readonly reason: string };
 
+/** Quem acabou de sair de uma sessão `checkpointed`, com o extrato que o `sim` emitiu (#837, OW-16). */
+interface CheckpointDeparture {
+  readonly characterId: string;
+  readonly receipt: Receipt;
+  readonly departed: CharacterRuntime | undefined;
+}
+
 interface HostedSession {
   readonly session: Session;
   /**
@@ -1055,6 +1074,12 @@ interface HostedSession {
    * um extrato zerado por logout de praça seria uma linha de ledger por pessoa que fecha o jogo.
    */
   readonly dirty: Set<string>;
+  /**
+   * O checkpoint desta sessão (#837, OW-16): o que o último lote gravou de cada personagem, os
+   * extratos que não pousaram e a fila dos lotes. `null` em toda sessão que não é `checkpointed` — a
+   * hunt e a Cidade não pagam nada por ele.
+   */
+  readonly checkpoint: CheckpointState | null;
   /**
    * Quantos itens esta sessão já entregou, na última vez que o inventário foi mandado.
    *
@@ -1394,6 +1419,7 @@ export class SessionHost {
   #cycleTimer: NodeJS.Timeout | null = null;
   #renewTimer: NodeJS.Timeout | null = null;
   #snapshotTimer: NodeJS.Timeout | null = null;
+  #checkpointTimer: NodeJS.Timeout | null = null;
   #playerCountTimer: NodeJS.Timeout | null = null;
   #lastPlayerCount: number | undefined = undefined;
 
@@ -4959,6 +4985,11 @@ export class SessionHost {
     hosted: HostedSession,
     request: TransitionRequest,
   ): Promise<void> {
+    // No mundo a âncora de saída é a posição de AGORA, e ela é lida ANTES de construir o destino
+    // (#837, OW-16): o construtor leva o MESMO `CharacterRuntime` para a sessão nova, e depois disso o
+    // `position` dele já é o de lá — a âncora seria o lugar onde ele COMEÇA a hunt, não onde saiu.
+    this.#anchorWorldPosition(hosted, characterId);
+
     // Construir ANTES de encerrar: se o destino não existe — hunt que saiu do conteúdo,
     // dificuldade que a hunt não define — o personagem fica exatamente onde estava, em vez de
     // ficar sem sessão porque a antiga já tinha sido fechada.
@@ -4984,7 +5015,9 @@ export class SessionHost {
     // fica sem o que fazer: quem já saiu não é participante.
     if (leavesOnExit(hosted.session.ruleset)) {
       if (creditsAggregates(hosted.session.ruleset)) {
-        await this.#leaveWithReceipt(characterId, hosted, 'manual-exit');
+        // A transição ANTECIPA o lote inteiro, como a saída (`#saveReceipt`, #837): o extrato de quem
+        // vai para a hunt sai junto do checkpoint de todo outro personagem sujo do mundo.
+        await this.#leaveWithReceipt(characterId, hosted, 'manual-exit', true);
       } else if (hosted.dirty.has(characterId)) {
         await this.#saveDurableReceipt(characterId, hosted, 'manual-exit');
       }
@@ -5075,6 +5108,7 @@ export class SessionHost {
       exitSaves: new Map(),
       departures: [],
       dirty: new Set(),
+      checkpoint: checkpointsProgress(next.ruleset) ? new CheckpointState() : null,
       sentItemsLooted: next.aggregates.itemsLooted,
       sentStats: new Map(),
       sentTarget: new Map(),
@@ -5102,6 +5136,7 @@ export class SessionHost {
     // não faz falta: o `#sendState` logo abaixo leva a cena inteira (`instance-enter` e
     // `session-state`, que substitui tudo), e um `appear` antes dela seria apagado pela troca.
     this.#announceArrival(successor, characterId);
+    this.#markArrival(successor, characterId);
 
     for (const viewer of following) {
       successor.viewers.add(viewer);
@@ -5247,6 +5282,12 @@ export class SessionHost {
     this.#cycleTimer = setInterval(() => this.cycle(), CYCLE_MS);
     this.#renewTimer = setInterval(() => void this.#renewLeases(), RENEW_INTERVAL_MS);
     this.#snapshotTimer = setInterval(() => void this.saveAll(), SNAPSHOT_INTERVAL_MS);
+    // O checkpoint do mundo (#837, OW-16) tem timer PRÓPRIO: é outra cadência (60 s, não 10) e outro
+    // mecanismo — o snapshot guarda a sessão inteira para ela ser retomada, o checkpoint grava o
+    // progresso de cada personagem para o ledger.
+    this.#checkpointTimer = setInterval(
+      () => void this.checkpointWorlds(), this.#options.worldCheckpointMs ?? WORLD_CHECKPOINT_MS,
+    );
     this.#playerCountTimer = setInterval(() => void this.#publishPlayerCount(), PLAYER_COUNT_INTERVAL_MS);
   }
 
@@ -5254,10 +5295,12 @@ export class SessionHost {
     if (this.#cycleTimer) clearInterval(this.#cycleTimer);
     if (this.#renewTimer) clearInterval(this.#renewTimer);
     if (this.#snapshotTimer) clearInterval(this.#snapshotTimer);
+    if (this.#checkpointTimer) clearInterval(this.#checkpointTimer);
     if (this.#playerCountTimer) clearInterval(this.#playerCountTimer);
     this.#cycleTimer = null;
     this.#renewTimer = null;
     this.#snapshotTimer = null;
+    this.#checkpointTimer = null;
     this.#playerCountTimer = null;
   }
 
@@ -5344,8 +5387,15 @@ export class SessionHost {
     // O voo fica registrado em `exitSaves`: quem sair do mesmo personagem enquanto este extrato
     // ainda não pousou acha o personagem fora e não tem extrato próprio a gravar, e tem de esperar
     // este antes de soltar o que é dele — a drenagem não pode contar uma saída que ainda não gravou.
+    //
+    // **No mundo a saída vai dentro do lote** (#837, OW-16, ADR 0060 d.10d): o extrato de quem sai é a
+    // linha dele, e ela leva junto o extrato de todo outro personagem sujo — a saída ANTECIPA o lote
+    // inteiro, não só a linha de quem sai. Num lote só, num `MULTI` só, para uma queda logo depois da
+    // saída não devolver este personagem a um instante e os outros a outro.
     if (leavesOnExit(hosted.session.ruleset)) {
-      const saving = this.#persistReceipt(characterId, hosted, receipt, receipts, accountId, departed);
+      const saving = hosted.checkpoint === null
+        ? this.#persistReceipt(characterId, hosted, receipt, receipts, accountId, departed)
+        : this.#saveCheckpointBatch(hosted, [{ characterId, receipt, departed }], true);
       const inFlight = hosted.exitSaves.get(characterId) ?? new Set<Promise<void>>();
       inFlight.add(saving);
       hosted.exitSaves.set(characterId, inFlight);
@@ -5385,6 +5435,27 @@ export class SessionHost {
     accountId: string,
     departed?: CharacterRuntime,
   ): Promise<void> {
+    const line = this.#receiptLine(characterId, hosted, receipt, accountId, departed);
+    await receipts.save(line.receipt);
+    this.#settleLine(line);
+  }
+
+  /**
+   * Monta o extrato que vai ao Redis — o `Receipt` do `sim` mais o estado absoluto INTEIRO do dono —,
+   * tomando a versão durável dele. Extraído de `#persistReceipt` (#837, OW-16) para o lote do mundo
+   * montar vários antes de gravar um só: o conteúdo de um extrato é o mesmo, grave-se um ou cem.
+   *
+   * SÍNCRONO, e de propósito: a versão sai ANTES de qualquer `await`, e é a ordem das CHAMADAS que ela
+   * preserva. `reason` só é passado pelo checkpoint periódico (`'checkpoint'`); o resto leva o do `sim`.
+   */
+  #receiptLine(
+    characterId: string,
+    hosted: HostedSession,
+    receipt: Receipt,
+    accountId: string,
+    departed?: CharacterRuntime,
+    reason: ReceiptReason = receipt.reason,
+  ): PendingLine {
     // O `seq` vem do `sim` (#187): é alocado quando o extrato é emitido, um por participante —
     // metade da chave de idempotência do ledger (invariante 10), e o que impede uma drenagem
     // repetida por retry de creditar duas vezes.
@@ -5406,108 +5477,119 @@ export class SessionHost {
     // e "resposta perdida" precisa repetir exatamente o que já pode ter sido gravado (#823).
     const claim = `${characterId}|${receipt.sessionId}|${receipt.seq}`;
     const durableVersion = this.#claimDurableVersion(characterId, claim);
-    await receipts.save({
-      sessionId: receipt.sessionId,
-      characterId,
-      accountId,
-      reason: receipt.reason,
-      seq: receipt.seq,
-      ...(durableVersion === undefined ? {} : { durableVersion }),
-      aggregates: receipt.aggregates,
-      notableEvents: receipt.notableEvents,
-      // As instâncias vendidas/descartadas nesta hunt (#724, ADR 0048 d.8): o `jobs` as apaga
-      // na MESMA transação da linha de ledger. Drenado por `#receiptFor` (invariante 9/10).
-      ...(receipt.removedInstances.length === 0 ? {} : { removedInstances: receipt.removedInstances }),
-      ...(owner?.staminaMs === undefined || owner.staminaMs === null
-        ? {}
-        : { staminaMs: owner.staminaMs, staminaUpdatedAtMs: owner.staminaUpdatedAtMs }),
-      // As skills do dono também (FUN-75). Sem elas, o que ele praticou na hunt nunca chegaria
-      // ao banco — e a hunt seguinte começaria do zero de novo, sem nada explicando.
-      ...(owner === undefined ? {} : { skills: owner.skills.getState() }),
-      // E o Bestiário (FUN-113), pela mesma razão: abate que não chega ao banco é abate que
-      // some no próximo logout, e o marco 10 000 nunca chegaria.
-      ...(owner === undefined ? {} : { bestiary: owner.bestiary.getState() }),
-      // E o Bosstiary (#629, ADR 0052 d.1), pela mesma razão: abate de boss que não chega ao
-      // banco é abate que some no próximo logout, e o nível 3 nunca fecharia.
-      ...(owner === undefined ? {} : { bosstiary: owner.bosstiary.getState() }),
-      // E a economia de Charms (M39-02, #602, ADR 0052 d.1): ABSOLUTA como `ammo` — sem ela
-      // aqui, um `charm-unlock`/`charm-assign` aceito na Cidade sumiria a cada logout.
-      ...(owner === undefined ? {} : { charms: owner.charms.getState() }),
-      // E as magias aprendidas (#624, ADR 0058 d.1, ADR 0052 d.1): ABSOLUTAS como `charms`, e a
-      // hunt também as leva porque `learn-spell` é aceito nela — sem o campo aqui, uma magia
-      // comprada no meio da hunt sumiria no fim dela, e o gold gasto não. SÓ quando o registro é
-      // a verdade do personagem (`recorded`): uma sessão retomada de um snapshot anterior à issue
-      // não sabe o que ele aprendeu, e gravar o vazio apagaria a concessão da migração 0024.
-      ...(owner === undefined || !owner.learnedSpells.recorded
-        ? {} : { learnedSpells: owner.learnedSpells.getState() }),
-      // O familiar (M38-02, #599, ADR 0057 d.3): ABSOLUTO como `charms`, e omitido quando vazio —
-      // o personagem que nunca invocou não escreve a coluna. Sem isto o cooldown de 30 min não
-      // sobreviveria à saída da hunt: o ticket seguinte o leria como nunca lançado.
-      ...(owner === undefined || isEmptyFamiliarState(owner.familiar) ? {} : { familiar: owner.familiar }),
-      // E o registro do Treino (#631, ADR 0059 d.3): ABSOLUTO como `charms` — o banco que a sessão
-      // acabou de encher (`onEnd` de hunt e de treino) e a skill do livro.
-      ...(owner === undefined ? {} : { training: owner.training.getState() }),
-      // E o Hazard (M44-14, #632, ADR 0052 d.1): o nível escolhido e o teto, ABSOLUTOS como os
-      // Charms. Só quando há o que guardar — quem nunca tocou no hazard não escreve a coluna.
-      ...(owner === undefined || owner.hazard.isEmpty ? {} : { hazard: owner.hazard.getState() }),
-      // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
-      // login se ficasse só na sessão.
-      ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
-      // E o estoque de supply/munição do loot (#520): sem isto, uma Strong Health Potion caída
-      // do Dragon sumiria a cada logout, mesmo sem ser gasta. Ao contrário de `ammo`/`skills`/
-      // `bestiary` (só crescem), este estoque É consumido dentro da sessão — drenar as 3 últimas
-      // poções até zero é um resultado real, não "nunca teve estoque". Por isso NÃO se olha
-      // `.size === 0` aqui: gatear por tamanho omitiria a chave do extrato quando a sessão zera o
-      // Map, o `ledger` interpretaria a ausência como "não mexe na coluna", e as 3 poções do
-      // Postgres ressuscitariam no próximo login (achado [blocker] da revisão da #536) — inclui
-      // sempre que o personagem participou, e um `{}` vazio É o valor correto para "drenado".
-      ...(owner === undefined ? {} : { supplyStock: Object.fromEntries(owner.supplyStock) }),
-      ...(owner === undefined ? {} : { ammunitionStock: Object.fromEntries(owner.ammunitionStock) }),
-      // E os storages (#731, ADR 0050 d.6 T2): a semente do motor de quest. Pela MESMA razão do
-      // supplyStock — não é monotônico como Bestiário/skills (um script de quest pode voltar um
-      // storage a -1) —, NÃO se olha `.size === 0`: um storage apagado NESTA sessão é resultado
-      // real, e omitir a chave deixaria o valor antigo do Postgres ressuscitar no próximo login.
-      ...(owner === undefined ? {} : { storages: Object.fromEntries(owner.storages) }),
-      // Comida ativa (#726, ADR 0049 decisão 5): mesma regra do estoque acima — DRENA dentro da
-      // sessão, e `fedMs` zerado é um resultado real, não "nunca comeu"; sempre incluído quando
-      // o personagem participou.
-      ...(owner === undefined ? {} : { fedMs: owner.fedMs }),
-      // As bênçãos (#570, ADR 0052): mesma regra do `fedMs` acima — sempre incluído quando o
-      // personagem participou, nunca gatead por `=== 0` (a morte zera dentro da MESMA sessão,
-      // e omitir a chave faria a bênção antiga do Postgres ressuscitar no próximo login).
-      ...(owner === undefined ? {} : { blessings: owner.blessings }),
-      // E a postura de luta (#550, M30-03): ABSOLUTA e última-escrita-vence, sempre incluída quando
-      // o personagem participou — nunca gateada pelo default: voltar à ofensiva NESTA sessão é uma
-      // escolha real, e omitir a chave deixaria a postura antiga do Postgres ressuscitar no login.
-      ...(owner === undefined ? {} : { fightMode: owner.fightMode }),
-      // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
-      ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
-      // E os pontos de alma (#593): ABSOLUTO, última-escrita-vence — nunca fundido por máximo,
-      // porque alma DESCE (gasta na conjuração). Sempre que a sessão teve dono, mesmo sem
-      // vocação: `0` é o valor de verdade de quem não escolheu, não "sem informação".
-      ...(owner === undefined ? {} : { soul: owner.soul }),
-      // E a promoção (#566, ADR 0042 decisão 1): só pode ter sido obtida na Cidade, antes desta
-      // hunt começar — repetir `true` aqui é redundante com o que já está no banco, mas mantém
-      // o mesmo caminho que qualquer outro campo absoluto do extrato usa.
-      ...(owner?.promoted ? { promoted: true } : {}),
-      // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
-      // onde ele está, e é só isso que precisa atravessar.
-      ...(owner === undefined ? {} : { equipment: equipmentOf(owner) }),
-      // E onde cada item está dentro dos containers (#160).
-      ...(owner === undefined ? {} : { layout: layoutOfState(owner.inventory.getState()) }),
-      // E o estado por instância (#604, ADR 0046): o imbuement aplicado ou vencido na sessão.
-      ...(owner === undefined ? {} : { overlays: overlaysOfState(owner.inventory.getState()) }),
-      // O que caiu nesta sessão (FUN-88): o que coube vira linha de `item_instance`. O que não
-      // coube por capacidade fica no cadáver do monstro (ADR 0048) — a Caixa de Loot saiu, e com
-      // ela o campo `lootBox` do extrato: o grant de vocação/kit e a liquidação de bolsa
-      // (`chooseVocation`, `#grantKitPiece`, `#settle`, em `sim`) usam `forceAdd` e o item
-      // sempre entra na mochila — não sobra nada para carregar aqui.
-      ...(owner === undefined ? {} : { acquired: acquiredBy(owner, receipt.sessionId) }),
-      // O mundo e os vitais do dono (#836, OW-15, ADR 0060 d.10.f), SÓ com `OPEN_WORLD`: a âncora, a
-      // cidade, a vida, a mana e as condições que faltavam. ABSOLUTOS, como o resto do estado acima.
-      ...(owner === undefined ? {} : this.#worldStateOf(owner)),
-    });
+    return {
+      claim,
+      owner,
+      receipt: {
+        sessionId: receipt.sessionId,
+        characterId,
+        accountId,
+        reason,
+        seq: receipt.seq,
+        ...(durableVersion === undefined ? {} : { durableVersion }),
+        aggregates: receipt.aggregates,
+        notableEvents: receipt.notableEvents,
+        // As instâncias vendidas/descartadas nesta hunt (#724, ADR 0048 d.8): o `jobs` as apaga
+        // na MESMA transação da linha de ledger. Drenado por `#receiptFor` (invariante 9/10).
+        ...(receipt.removedInstances.length === 0 ? {} : { removedInstances: receipt.removedInstances }),
+        ...(owner?.staminaMs === undefined || owner.staminaMs === null
+          ? {}
+          : { staminaMs: owner.staminaMs, staminaUpdatedAtMs: owner.staminaUpdatedAtMs }),
+        // As skills do dono também (FUN-75). Sem elas, o que ele praticou na hunt nunca chegaria
+        // ao banco — e a hunt seguinte começaria do zero de novo, sem nada explicando.
+        ...(owner === undefined ? {} : { skills: owner.skills.getState() }),
+        // E o Bestiário (FUN-113), pela mesma razão: abate que não chega ao banco é abate que
+        // some no próximo logout, e o marco 10 000 nunca chegaria.
+        ...(owner === undefined ? {} : { bestiary: owner.bestiary.getState() }),
+        // E o Bosstiary (#629, ADR 0052 d.1), pela mesma razão: abate de boss que não chega ao
+        // banco é abate que some no próximo logout, e o nível 3 nunca fecharia.
+        ...(owner === undefined ? {} : { bosstiary: owner.bosstiary.getState() }),
+        // E a economia de Charms (M39-02, #602, ADR 0052 d.1): ABSOLUTA como `ammo` — sem ela
+        // aqui, um `charm-unlock`/`charm-assign` aceito na Cidade sumiria a cada logout.
+        ...(owner === undefined ? {} : { charms: owner.charms.getState() }),
+        // E as magias aprendidas (#624, ADR 0058 d.1, ADR 0052 d.1): ABSOLUTAS como `charms`, e a
+        // hunt também as leva porque `learn-spell` é aceito nela — sem o campo aqui, uma magia
+        // comprada no meio da hunt sumiria no fim dela, e o gold gasto não. SÓ quando o registro é
+        // a verdade do personagem (`recorded`): uma sessão retomada de um snapshot anterior à issue
+        // não sabe o que ele aprendeu, e gravar o vazio apagaria a concessão da migração 0024.
+        ...(owner === undefined || !owner.learnedSpells.recorded
+          ? {} : { learnedSpells: owner.learnedSpells.getState() }),
+        // O familiar (M38-02, #599, ADR 0057 d.3): ABSOLUTO como `charms`, e omitido quando vazio —
+        // o personagem que nunca invocou não escreve a coluna. Sem isto o cooldown de 30 min não
+        // sobreviveria à saída da hunt: o ticket seguinte o leria como nunca lançado.
+        ...(owner === undefined || isEmptyFamiliarState(owner.familiar) ? {} : { familiar: owner.familiar }),
+        // E o registro do Treino (#631, ADR 0059 d.3): ABSOLUTO como `charms` — o banco que a sessão
+        // acabou de encher (`onEnd` de hunt e de treino) e a skill do livro.
+        ...(owner === undefined ? {} : { training: owner.training.getState() }),
+        // E o Hazard (M44-14, #632, ADR 0052 d.1): o nível escolhido e o teto, ABSOLUTOS como os
+        // Charms. Só quando há o que guardar — quem nunca tocou no hazard não escreve a coluna.
+        ...(owner === undefined || owner.hazard.isEmpty ? {} : { hazard: owner.hazard.getState() }),
+        // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
+        // login se ficasse só na sessão.
+        ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
+        // E o estoque de supply/munição do loot (#520): sem isto, uma Strong Health Potion caída
+        // do Dragon sumiria a cada logout, mesmo sem ser gasta. Ao contrário de `ammo`/`skills`/
+        // `bestiary` (só crescem), este estoque É consumido dentro da sessão — drenar as 3 últimas
+        // poções até zero é um resultado real, não "nunca teve estoque". Por isso NÃO se olha
+        // `.size === 0` aqui: gatear por tamanho omitiria a chave do extrato quando a sessão zera o
+        // Map, o `ledger` interpretaria a ausência como "não mexe na coluna", e as 3 poções do
+        // Postgres ressuscitariam no próximo login (achado [blocker] da revisão da #536) — inclui
+        // sempre que o personagem participou, e um `{}` vazio É o valor correto para "drenado".
+        ...(owner === undefined ? {} : { supplyStock: Object.fromEntries(owner.supplyStock) }),
+        ...(owner === undefined ? {} : { ammunitionStock: Object.fromEntries(owner.ammunitionStock) }),
+        // E os storages (#731, ADR 0050 d.6 T2): a semente do motor de quest. Pela MESMA razão do
+        // supplyStock — não é monotônico como Bestiário/skills (um script de quest pode voltar um
+        // storage a -1) —, NÃO se olha `.size === 0`: um storage apagado NESTA sessão é resultado
+        // real, e omitir a chave deixaria o valor antigo do Postgres ressuscitar no próximo login.
+        ...(owner === undefined ? {} : { storages: Object.fromEntries(owner.storages) }),
+        // Comida ativa (#726, ADR 0049 decisão 5): mesma regra do estoque acima — DRENA dentro da
+        // sessão, e `fedMs` zerado é um resultado real, não "nunca comeu"; sempre incluído quando
+        // o personagem participou.
+        ...(owner === undefined ? {} : { fedMs: owner.fedMs }),
+        // As bênçãos (#570, ADR 0052): mesma regra do `fedMs` acima — sempre incluído quando o
+        // personagem participou, nunca gatead por `=== 0` (a morte zera dentro da MESMA sessão,
+        // e omitir a chave faria a bênção antiga do Postgres ressuscitar no próximo login).
+        ...(owner === undefined ? {} : { blessings: owner.blessings }),
+        // E a postura de luta (#550, M30-03): ABSOLUTA e última-escrita-vence, sempre incluída quando
+        // o personagem participou — nunca gateada pelo default: voltar à ofensiva NESTA sessão é uma
+        // escolha real, e omitir a chave deixaria a postura antiga do Postgres ressuscitar no login.
+        ...(owner === undefined ? {} : { fightMode: owner.fightMode }),
+        // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
+        ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
+        // E os pontos de alma (#593): ABSOLUTO, última-escrita-vence — nunca fundido por máximo,
+        // porque alma DESCE (gasta na conjuração). Sempre que a sessão teve dono, mesmo sem
+        // vocação: `0` é o valor de verdade de quem não escolheu, não "sem informação".
+        ...(owner === undefined ? {} : { soul: owner.soul }),
+        // E a promoção (#566, ADR 0042 decisão 1): só pode ter sido obtida na Cidade, antes desta
+        // hunt começar — repetir `true` aqui é redundante com o que já está no banco, mas mantém
+        // o mesmo caminho que qualquer outro campo absoluto do extrato usa.
+        ...(owner?.promoted ? { promoted: true } : {}),
+        // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
+        // onde ele está, e é só isso que precisa atravessar.
+        ...(owner === undefined ? {} : { equipment: equipmentOf(owner) }),
+        // E onde cada item está dentro dos containers (#160).
+        ...(owner === undefined ? {} : { layout: layoutOfState(owner.inventory.getState()) }),
+        // E o estado por instância (#604, ADR 0046): o imbuement aplicado ou vencido na sessão.
+        ...(owner === undefined ? {} : { overlays: overlaysOfState(owner.inventory.getState()) }),
+        // O que caiu nesta sessão (FUN-88): o que coube vira linha de `item_instance`. O que não
+        // coube por capacidade fica no cadáver do monstro (ADR 0048) — a Caixa de Loot saiu, e com
+        // ela o campo `lootBox` do extrato: o grant de vocação/kit e a liquidação de bolsa
+        // (`chooseVocation`, `#grantKitPiece`, `#settle`, em `sim`) usam `forceAdd` e o item
+        // sempre entra na mochila — não sobra nada para carregar aqui.
+        ...(owner === undefined ? {} : { acquired: acquiredBy(owner, receipt.sessionId) }),
+        // O mundo e os vitais do dono (#836, OW-15, ADR 0060 d.10.f), SÓ com `OPEN_WORLD`: a âncora, a
+        // cidade, a vida, a mana e as condições que faltavam. ABSOLUTOS, como o resto do estado acima.
+        ...(owner === undefined ? {} : this.#worldStateOf(owner)),
+      },
+    };
+  }
 
+  /**
+   * O extrato JÁ está durável no Redis: a versão dele não precisa mais ser lembrada para a próxima
+   * tentativa, e o delta de gold que ele levou entra na base do personagem — `settleGoldDelta`, o canal
+   * ÚNICO de gold (ADR 0060 d.10c).
+   */
+  #settleLine({ claim, owner }: PendingLine): void {
     // Gravado: a versão deste extrato não precisa mais ser lembrada para a próxima tentativa.
     this.#claimedVersions.delete(claim);
 
@@ -5516,9 +5598,187 @@ export class SessionHost {
     // deixar o delta nele faz o ticket que acabou de liquidar o ledger reencontrar uma base
     // antiga mais uma variação que já entrou no banco. Incorporar o delta à base aqui conserva o
     // saldo disponível e deixa a próxima sessão começar do mesmo número que a linha durável.
+    //
+    // No mundo o personagem CONTINUA ganhando durante o `await` do lote, e o que ele ganhou depois de
+    // o extrato ser montado entra na base também. Não perde nada: o saldo é `gold + goldDelta`, o
+    // mesmo dos dois lados da conta, e o agregado desse ganho vai no extrato seguinte — que é o que o
+    // ledger credita. O delta existe para o saldo, não para o crédito.
     if (owner !== undefined && owner.goldDelta !== 0) {
       owner.settleGoldDelta();
     }
+  }
+
+  // --- o checkpoint do mundo (#837, OW-16, ADR 0060 decisão 10d) --------------------------------
+
+  /**
+   * Grava, agora, o lote de checkpoint de toda sessão `checkpointed` deste nó: o que o timer faz a
+   * cada `worldCheckpointMs` (60 s), e o que um teste ou uma operação chamam sem esperar o relógio.
+   *
+   * Um lote por sessão: o extrato de todo personagem SUJO — moveu, mudou de vida, mana ou condição,
+   * rendeu algo, ou mexeu em estado durável —, gravado num `MULTI` só. Quem está parado na PZ, sem
+   * ter rendido nada, não gera linha: a linha dele seria o mesmo estado que o banco já tem. Sem
+   * nenhum sujo não há `MULTI`, nem Redis.
+   *
+   * Roda no mundo com ou sem visualizador (invariante 3): o que decide quem entra no lote é o
+   * personagem e a sessão, nunca quem está olhando. Falha de uma sessão não derruba o laço — os
+   * extratos dela ficam em `unsaved` e vão na frente do próximo lote.
+   */
+  async checkpointWorlds(): Promise<void> {
+    for (const hosted of [...this.#sessions.values()]) {
+      const state = hosted.checkpoint;
+      if (state === null || hosted.session.ended !== null) continue;
+      // Um lote ainda em voo (o Redis está lento): o próximo ciclo pega o que sobrar. Empilhar lotes
+      // sobre ele só os faria disputar o mesmo conjunto de extratos.
+      if (state.queued > 0) continue;
+      try {
+        await this.#saveCheckpointBatch(hosted, [], true);
+      } catch (error) {
+        // Os extratos NÃO se perderam: ficam em `unsaved`, com o mesmo `seq` e a mesma versão.
+        this.#logger.error(
+          { err: error, sessionId: hosted.session.id },
+          'Failed to save a world checkpoint; keeping it for the next one',
+        );
+      }
+    }
+  }
+
+  /**
+   * Enfileira UM lote de checkpoint da sessão e devolve a promessa de ele estar durável. Os lotes de
+   * uma sessão rodam um de cada vez (`CheckpointState.tail`): o seguinte só é MONTADO depois que o
+   * anterior terminou, então o que falhou já voltou para `unsaved` e vai nele, e a saída de um
+   * personagem espera, por construção, o lote em voo que pode levar o crédito dele.
+   *
+   * `departures` são os extratos de quem acabou de sair (`leave`, ou `member-left`), já emitidos pelo
+   * `sim`. `everyone` diz se o lote leva também o extrato de todo outro personagem sujo — o timer e a
+   * saída sim; o retry de um extrato que ficou para trás, não.
+   */
+  #saveCheckpointBatch(
+    hosted: HostedSession, departures: readonly CheckpointDeparture[], everyone: boolean,
+  ): Promise<void> {
+    const state = hosted.checkpoint;
+    if (state === null) {
+      return Promise.reject(new Error(`session ${hosted.session.id} does not save by checkpoint`));
+    }
+    state.queued += 1;
+    const run = state.tail.then(() => this.#writeCheckpointBatch(hosted, state, departures, everyone));
+    state.tail = run.then(() => undefined, () => undefined);
+    return run.finally(() => { state.queued -= 1; });
+  }
+
+  async #writeCheckpointBatch(
+    hosted: HostedSession, state: CheckpointState, departures: readonly CheckpointDeparture[], everyone: boolean,
+  ): Promise<void> {
+    const receipts = this.#options.receipts;
+    // Sem a loja não há para onde gravar, e nada é tirado da sessão: `Session.checkpoint` zera o que
+    // o extrato leva, e fazê-lo sem gravar perderia o crédito. É o que `#saveReceipt` já faz.
+    if (receipts === undefined) return;
+    const lines = this.#buildCheckpoint(hosted, state, departures, everyone);
+    if (lines.length === 0) return;
+    try {
+      await receipts.saveBatch(lines.map((line) => line.receipt));
+    } catch (error) {
+      // O que `leave` e `checkpoint` emitiram já foi zerado na sessão: se estes extratos só existissem
+      // na pilha desta função, o crédito sumiria com ela.
+      state.unsaved = lines;
+      throw error;
+    }
+    // O gold depois de gravar, extrato a extrato — o canal único (ADR 0060 d.10c).
+    for (const line of lines) this.#settleLine(line);
+    this.#logger.debug({ sessionId: hosted.session.id, lines: lines.length }, 'World checkpoint saved');
+  }
+
+  /**
+   * Monta, SINCRONAMENTE, os extratos do lote — a ordem das chamadas é o que as versões duráveis
+   * preservam —: primeiro o que um lote anterior não conseguiu gravar (é o mais velho), depois o de
+   * quem acabou de sair, depois o checkpoint de cada personagem ainda presente que está sujo.
+   *
+   * O de quem sai é SEMPRE gravado (toda saída grava o checkpoint, ADR 0060 d.7); o dos que ficam, só
+   * se sujos. Cada extrato novo toma o `seq` da sessão e a versão do personagem, e o que ele leva já
+   * saiu dos agregados dele.
+   */
+  #buildCheckpoint(
+    hosted: HostedSession, state: CheckpointState, departures: readonly CheckpointDeparture[], everyone: boolean,
+  ): PendingLine[] {
+    const lines = state.unsaved;
+    state.unsaved = [];
+    for (const { characterId, receipt, departed } of departures) {
+      state.marks.delete(characterId);
+      const accountId = this.#accountIdByCharacter.get(characterId);
+      if (accountId === undefined) continue;
+      // O extrato de saída leva o estado absoluto INTEIRO: não sobra marca de `dirty` para um extrato
+      // de estado que ninguém grava.
+      hosted.dirty.delete(characterId);
+      lines.push(this.#receiptLine(characterId, hosted, receipt, accountId, departed));
+    }
+    if (!everyone) return lines;
+    const ruleset = hosted.session.ruleset;
+    for (const owner of hosted.session.participants) {
+      const accountId = this.#accountIdByCharacter.get(owner.id);
+      if (accountId === undefined) continue;
+      const position = worldPositionOf(ruleset, owner);
+      if (!this.#isDirty(hosted, state, owner, position)) continue;
+      // A âncora é a posição de AGORA, lida antes de o extrato ser montado — é ela que o login seguinte
+      // usa, e o dono da sessão é quem a escreve (invariante 9, `CharacterRuntime.worldPosition`).
+      if (position !== undefined) owner.worldPosition = position;
+      // O `sim` pede um motivo de `EndReason` porque devolve um `Receipt`; o checkpoint não termina
+      // nada, e o que vai para a linha é `'checkpoint'`.
+      const receipt = hosted.session.checkpoint(owner.id, 'manual-exit');
+      if (receipt === null) continue;
+      hosted.dirty.delete(owner.id);
+      state.marks.set(owner.id, markOf(owner, position));
+      lines.push(this.#receiptLine(owner.id, hosted, receipt, accountId, owner, 'checkpoint'));
+    }
+    return lines;
+  }
+
+  /**
+   * O personagem mudou algo que o banco ainda não tem (#837, OW-16)? Moveu, mudou de vida, mana ou
+   * condição, rendeu algo (os agregados, uma instância vendida) ou mexeu em estado
+   * durável por uma intenção (`dirty`: equipar, comprar, escolher). Parado na PZ, sem render nada, não.
+   *
+   * Sem marca é sujo: o personagem que o lote nunca viu é gravado, e a marca nasce.
+   */
+  #isDirty(
+    hosted: HostedSession, state: CheckpointState, owner: CharacterRuntime, position: Point | undefined,
+  ): boolean {
+    if (hosted.dirty.has(owner.id)) return true;
+    const mark = state.marks.get(owner.id);
+    if (mark === undefined) return true;
+    // O gold NÃO entra aqui: no mundo todo gold anda pelo agregado E pelo `goldDelta` juntos
+    // (`#mirrorGold`), e o `goldDelta` só é liquidado depois de gravar — um lote que falhou o deixaria
+    // "sujo" para sempre, gravando um extrato vazio a cada minuto. O agregado é o sinal certo: zera
+    // quando o extrato é emitido, não quando pousa.
+    if (owner.removedInstances.length > 0) return true;
+    if (hasActivity(hosted.session.aggregatesOf(owner.id))) return true;
+    return !sameMark(mark, markOf(owner, position));
+  }
+
+  /**
+   * Grava em `CharacterRuntime.worldPosition` a coordenada absoluta onde o personagem está AGORA — a
+   * âncora que o extrato leva e o login seguinte usa (ADR 0060 d.3.b). É a leitura que tem de vir
+   * ANTES de o personagem ser movido: numa transição o destino é construído antes de a origem
+   * encerrar, e depois disso o `position` já é o de lá. Sessão que não é do mundo, ou ruleset que não
+   * sabe a posição absoluta, não faz nada.
+   */
+  #anchorWorldPosition(hosted: HostedSession, characterId: string): void {
+    if (hosted.checkpoint === null) return;
+    const owner = hosted.session.participants.find((participant) => participant.id === characterId);
+    if (owner === undefined) return;
+    const position = worldPositionOf(hosted.session.ruleset, owner);
+    if (position !== undefined) owner.worldPosition = position;
+  }
+
+  /**
+   * O personagem chegou à sessão `checkpointed`: o estado com que chegou É o que a linha dele guarda
+   * (veio do ticket, ou de uma sessão que acabou de gravar o extrato dele), e é a base contra a qual o
+   * lote decide se ele mexeu em algo. Sem isto o primeiro lote gravaria todo mundo.
+   */
+  #markArrival(hosted: HostedSession, characterId: string): void {
+    const state = hosted.checkpoint;
+    if (state === null) return;
+    const owner = hosted.session.participants.find((participant) => participant.id === characterId);
+    if (owner === undefined) return;
+    state.marks.set(characterId, markOf(owner, worldPositionOf(hosted.session.ruleset, owner)));
   }
 
   /**
@@ -5551,11 +5811,24 @@ export class SessionHost {
    * Grava o dono que `leave` devolveu (`departed`): ele já não está em `participants`, como o
    * membro de uma party que sai por dentro do `sim` (#194). O `goldDelta` dele é liquidado por
    * `#persistReceipt` depois de gravar — o canal único de gold.
+   *
+   * **No mundo** (#837, OW-16) a saída grava a posição de agora como âncora ANTES de o personagem sair
+   * (`#anchorWorldPosition`) — o login seguinte volta ao tile de onde se saiu — e o extrato vai dentro
+   * do lote de checkpoint inteiro (`#saveReceipt`). `anchored` é de quem já a gravou: a transição o faz
+   * antes de construir o destino, e depois dele o `position` já é o de lá.
    */
-  async #leaveWithReceipt(characterId: string, hosted: HostedSession, reason: EndReason): Promise<void> {
+  async #leaveWithReceipt(
+    characterId: string, hosted: HostedSession, reason: EndReason, anchored = false,
+  ): Promise<void> {
+    if (!anchored) this.#anchorWorldPosition(hosted, characterId);
     const departure = hosted.session.leave(characterId, reason);
     if (departure === null) {
       await this.#awaitExitSaves(hosted, characterId);
+      // Um lote anterior pode ter falhado DEPOIS de `leave` tirar o personagem — e o extrato dele só
+      // existe em `unsaved`. Soltar o personagem (o `release` que vem logo depois) sem gravá-lo perderia
+      // o que ele rendeu, e a sessão do mundo pode nem sobrar para o timer tentar de novo. Só o que
+      // ficou para trás: o lote inteiro é do timer e da saída de quem de fato sai.
+      if (hosted.checkpoint !== null) await this.#saveCheckpointBatch(hosted, [], false);
       return;
     }
     // O que estava pendente de estado vai INTEIRO neste extrato (`#persistReceipt` leva todos os
@@ -6229,6 +6502,7 @@ export class SessionHost {
       exitSaves: new Map(),
       departures: [],
       dirty: new Set(),
+      checkpoint: checkpointsProgress(session.ruleset) ? new CheckpointState() : null,
       sentItemsLooted: session.aggregates.itemsLooted,
       sentStats: new Map(),
       sentTarget: new Map(),
@@ -6262,6 +6536,7 @@ export class SessionHost {
     // Vale também para o PRIMEIRO a chegar, que não avisa ninguém: é ele entrando no índice de
     // células, e sem isso quem chegasse depois não teria como encontrá-lo.
     this.#announceArrival(hosted, characterId);
+    this.#markArrival(hosted, characterId);
 
     this.#logger.info(
       { characterId, sessionId: session.id, type: session.ruleset.type },

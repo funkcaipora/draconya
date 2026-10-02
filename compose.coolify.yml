@@ -47,6 +47,10 @@ services:
       # com `0` o jogo é o de hoje. Ligar (`OPEN_WORLD=1`) vale para os três papéis de uma vez, e
       # este compose os roda juntos; ver docs/runtime-configuration.md.
       OPEN_WORLD: ${OPEN_WORLD:-0}
+      # De quanto em quanto tempo (ms) o `game` grava o checkpoint do mundo — o lote com o extrato de todo
+      # personagem sujo, num `MULTI` só (ADR 0060 d.10d). Só vale com `OPEN_WORLD=1`; ver
+      # docs/runtime-configuration.md.
+      WORLD_CHECKPOINT_MS: ${WORLD_CHECKPOINT_MS:-60000}
       LOG_LEVEL: info
     depends_on:
       postgres: { condition: service_healthy }
