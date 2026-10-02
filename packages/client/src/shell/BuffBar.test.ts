@@ -1,7 +1,7 @@
 import { createElement, type ReactElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { BuffBar } from './BuffBar.js';
+import { BuffBar, statusBadgesOf } from './BuffBar.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 
 async function render(element: ReactElement): Promise<string> {
@@ -74,5 +74,56 @@ describe('a barra de condições ativas BuffBar (#348, SV-12)', () => {
     }));
     const html = await render(createElement(BuffBar));
     expect(html).not.toContain('ui-badge-haste');
+  });
+});
+
+describe('os ícones de zona e de luta do mundo (OW-23, #846)', () => {
+  it('na PZ acende a zona de proteção, com o selo sagrado', async () => {
+    hud.set((state) => ({ ...state, zone: 'protection', inFight: false }));
+    const html = await render(createElement(BuffBar));
+    expect(html).toContain('ui-badge-holy');
+    expect(html).toContain('Zona de proteção');
+    expect(html).not.toContain('Em luta');
+  });
+
+  it('em luta fora da PZ acende "Em luta", com o selo de sangue', async () => {
+    hud.set((state) => ({ ...state, zone: 'normal', inFight: true }));
+    const html = await render(createElement(BuffBar));
+    expect(html).toContain('ui-badge-blood');
+    expect(html).toContain('Em luta');
+    expect(html).not.toContain('Zona de proteção');
+  });
+
+  it('dentro da PZ a luta APAGA: o Canary tira as espadas quando o personagem pisa a zona protegida', async () => {
+    hud.set((state) => ({ ...state, zone: 'protection', inFight: true }));
+    const html = await render(createElement(BuffBar));
+    // Mutação que mata: acender os dois — o jogador leria "em luta" dentro de uma zona onde a luta não o prende.
+    expect(html).toContain('Zona de proteção');
+    expect(html).not.toContain('Em luta');
+  });
+
+  it('o servidor que não diz (null) não acende nada, e a barra some inteira', async () => {
+    hud.set((state) => ({ ...state, zone: null, inFight: null }));
+    expect(await render(createElement(BuffBar))).toBe('');
+  });
+
+  it('no-pvp e no-logout não têm ícone: só a PZ tem o pombo', () => {
+    expect(statusBadgesOf('no-pvp', false)).toEqual([]);
+    expect(statusBadgesOf('no-logout', false)).toEqual([]);
+    expect(statusBadgesOf('normal', false)).toEqual([]);
+    expect(statusBadgesOf('protection', null).map((badge) => badge.id)).toEqual(['protection-zone']);
+    expect(statusBadgesOf('normal', true).map((badge) => badge.id)).toEqual(['in-fight']);
+  });
+
+  it('os ícones ficam na mesma fileira das condições, antes delas', async () => {
+    hud.set((state) => ({
+      ...state,
+      zone: 'protection',
+      conditions: [{ kind: 'haste', remainingMs: 60_000 }],
+      conditionsReceivedAtMs: performance.now(),
+    }));
+    const html = await render(createElement(BuffBar));
+    expect(html.indexOf('Zona de proteção')).toBeGreaterThan(-1);
+    expect(html.indexOf('Haste')).toBeGreaterThan(html.indexOf('Zona de proteção'));
   });
 });

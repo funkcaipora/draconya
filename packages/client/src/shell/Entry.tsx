@@ -12,13 +12,20 @@ import type { ReactNode } from 'react';
 import { useStoreSlice } from '../state/useSlice.js';
 import { account } from '../account/store.js';
 import type { AccountState } from '../account/store.js';
-import { create, devLogin, NO_SERVER_MESSAGE, play, refresh, signOut, tryLogin } from '../account/actions.js';
+import {
+  create, devLogin, loadEntryOptions, NO_SERVER_MESSAGE, play, refresh, signOut, tryLogin,
+} from '../account/actions.js';
 import { Button } from './ui/Button.js';
-import type { CharacterSummary } from '../account/api.js';
+import { Select } from './ui/Select.js';
+import type { CharacterSummary, EntryHunt, EntryOptions } from '../account/api.js';
 
 /** Onde o personagem está agora, em palavras. O diretório manda (FUN-30). */
 const STATE_TEXT: Record<string, string> = {
   city: 'na cidade',
+  // O mundo aberto (#846, OW-23): `'world'` é quem está na sessão do mundo, e `'offline'` é o repouso — o
+  // personagem sem sessão, que com `OPEN_WORLD` ligado a lista de personagens reporta assim (OW-15).
+  world: 'no mundo',
+  offline: 'em repouso',
   hunt: 'numa hunt',
   training: 'treinando',
   quest: 'numa quest',
@@ -39,6 +46,50 @@ const VOCATION_NAME: Record<string, string> = {
   druid: 'Druida',
   sorcerer: 'Feiticeiro',
 };
+
+/**
+ * O que a escolha de personagem oferece ao entrar (#846, OW-23, ADR 0060 d.6b). PURA e exportada, pelo mesmo
+ * motivo de `entryReadiness`: o clique não dispara em teste (`prerender`), a decisão sim.
+ *
+ * - `'single'` — o botão único de sempre: servidor sem mundo aberto (ou que não respondeu), sem nenhuma hunt a
+ *   oferecer, ou personagem que JÁ tem sessão (a hunt que ele estava jogando, o mundo): quem tem sessão a
+ *   reencontra, e o `entry` do ticket seria ignorado — oferecer "Caçar (idle)" a ele prometeria o que o servidor
+ *   não faz.
+ * - `'menu'` — "Entrar no mundo" ou "Caçar (idle)", com as hunts que o servidor aceita no `entry`.
+ */
+export type EntryMenu =
+  | { readonly kind: 'single' }
+  | { readonly kind: 'menu'; readonly hunts: readonly EntryHunt[] };
+
+export function entryMenuOf(
+  options: EntryOptions | null, character: Pick<CharacterSummary, 'sessionId'> | undefined,
+): EntryMenu {
+  if (options === null || !options.openWorld || options.hunts.length === 0) return { kind: 'single' };
+  if (character === undefined || character.sessionId !== null) return { kind: 'single' };
+  return { kind: 'menu', hunts: options.hunts };
+}
+
+/**
+ * A hunt que o seletor oferece de saída: a de maior level recomendado que o personagem ainda alcança — o
+ * conselho da lista do jogo, que "level recomendado é conselho, não trava" —, ou a mais fácil quando nenhuma
+ * cabe. A ordem do servidor desempata (a primeira vence). PURA.
+ */
+export function defaultHuntFor(hunts: readonly EntryHunt[], level: number): EntryHunt | null {
+  let best: EntryHunt | null = null;
+  for (const hunt of hunts) {
+    if (best === null) { best = hunt; continue; }
+    const bestReachable = best.recommendedLevel <= level;
+    const reachable = hunt.recommendedLevel <= level;
+    if (reachable && (!bestReachable || hunt.recommendedLevel > best.recommendedLevel)) best = hunt;
+    else if (!reachable && !bestReachable && hunt.recommendedLevel < best.recommendedLevel) best = hunt;
+  }
+  return best;
+}
+
+/** O rótulo de uma hunt no seletor: o nome e o level recomendado, como a lista do jogo. */
+export function huntOptionLabel(hunt: EntryHunt): string {
+  return `${hunt.name} · level ${String(hunt.recommendedLevel)}+`;
+}
 
 /** Os três estados visuais do indicador do cabeçalho, e a cor de cada um em tokens.css. */
 export interface EntryReadiness {
@@ -66,13 +117,13 @@ export function entryReadiness(state: Pick<AccountState, 'phase' | 'error'>): En
   return { tone: 'ok', label: 'Pronto para entrar' };
 }
 
-function EntryShell({
+export function EntryShell({
   children,
   screen,
   readiness,
 }: {
   children: ReactNode;
-  screen: 'login' | 'select';
+  screen: 'login' | 'select' | 'queue';
   readiness: EntryReadiness;
 }) {
   return (
@@ -95,7 +146,7 @@ function EntryShell({
   );
 }
 
-function Brand({ emblem = true, compact = false }: { emblem?: boolean; compact?: boolean }) {
+export function Brand({ emblem = true, compact = false }: { emblem?: boolean; compact?: boolean }) {
   return (
     <div className="entry-brand">
       {emblem && (
@@ -108,11 +159,11 @@ function Brand({ emblem = true, compact = false }: { emblem?: boolean; compact?:
   );
 }
 
-function EntryCard({ children }: { children: ReactNode }) {
+export function EntryCard({ children }: { children: ReactNode }) {
   return <div className="entry-card">{children}</div>;
 }
 
-function Heading({ kicker, title, sub }: { kicker: string; title: string; sub?: string }) {
+export function Heading({ kicker, title, sub }: { kicker: string; title: string; sub?: string }) {
   return (
     <div className="entry-heading">
       <span className="entry-kicker">{kicker}</span>
@@ -280,6 +331,59 @@ function CreateForm({ busy, onDone }: { busy: boolean; onDone: () => void }) {
   );
 }
 
+/**
+ * "Entrar no mundo" ou "Caçar (idle)" (#846, OW-23, ADR 0060 d.6b): as duas portas do personagem em repouso. O
+ * mundo é o Tibia compartilhado, com presença exigida; a hunt idle é a sessão privada que roda com o navegador
+ * fechado e não passa pelo mundo — nem pela fila dele.
+ */
+export function EntryMenuPanel({
+  hunts, level, busy, choosingHunt, huntId, onToggleHunt, onPickHunt, onWorld, onHunt,
+}: {
+  hunts: readonly EntryHunt[];
+  level: number;
+  busy: boolean;
+  choosingHunt: boolean;
+  huntId: string | null;
+  onToggleHunt: () => void;
+  onPickHunt: (id: string) => void;
+  onWorld: () => void;
+  onHunt: (id: string) => void;
+}) {
+  const chosen = hunts.find((hunt) => hunt.id === huntId) ?? defaultHuntFor(hunts, level);
+  return (
+    <div className="entry-door-menu">
+      <div className="entry-door-buttons">
+        <Button variant="gold" size="lg" className="entry-enter-button" disabled={busy} onClick={onWorld}>
+          ENTRAR NO MUNDO <span aria-hidden="true">→</span>
+        </Button>
+        <Button variant="secondary" size="lg" className="entry-enter-button" disabled={busy}
+          onClick={onToggleHunt}>
+          CAÇAR (IDLE)
+        </Button>
+      </div>
+      <p className="entry-select-hint">
+        O mundo é compartilhado e exige você presente. A caçada idle continua rodando com o navegador fechado.
+      </p>
+      {choosingHunt && chosen !== null && (
+        <div className="entry-hunt-choice">
+          <Select
+            label="Caçada"
+            ariaLabel="Caçada idle"
+            size="md"
+            inline
+            value={chosen.id}
+            options={hunts.map((hunt) => ({ value: hunt.id, label: huntOptionLabel(hunt) }))}
+            onChange={onPickHunt}
+          />
+          <Button variant="primary" size="lg" disabled={busy} onClick={() => { onHunt(chosen.id); }}>
+            CAÇAR <span aria-hidden="true">→</span>
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CharacterGrid({ state }: { state: AccountState }) {
   const [creating, setCreating] = useState(false);
   // Seleção LOCAL, sem efeito colateral (R1-16) — nada aqui manda intenção nenhuma; `null` até o
@@ -287,6 +391,13 @@ function CharacterGrid({ state }: { state: AccountState }) {
   // se nada estiver marcado ainda.
   const [selected, setSelected] = useState<string | null>(null);
   const hasCharacters = state.characters.length > 0;
+  // O menu do mundo aberto (#846, OW-23): carregado uma vez, ao mostrar a escolha de personagem. Sem resposta o
+  // botão único de sempre continua valendo.
+  useEffect(() => { void loadEntryOptions(); }, []);
+  const selectedCharacter = state.characters.find((character) => character.id === selected);
+  const menu = entryMenuOf(state.entryOptions, selectedCharacter);
+  const [choosingHunt, setChoosingHunt] = useState(false);
+  const [huntId, setHuntId] = useState<string | null>(null);
 
   return (
     <>
@@ -329,7 +440,23 @@ function CharacterGrid({ state }: { state: AccountState }) {
           </button>
         </div>
 
-        {hasCharacters && (
+        {hasCharacters && menu.kind === 'menu' && selectedCharacter !== undefined && (
+          <EntryMenuPanel
+            hunts={menu.hunts}
+            level={selectedCharacter.level}
+            busy={state.busy}
+            choosingHunt={choosingHunt}
+            huntId={huntId}
+            onToggleHunt={() => { setChoosingHunt((value) => !value); }}
+            onPickHunt={setHuntId}
+            // A intenção só sai daqui — nunca do clique no cartão (invariante 4): o mundo, ou a hunt idle
+            // direta, que o `api` confere contra o conteúdo e o `game` cria como primeira sessão.
+            onWorld={() => { void play(selectedCharacter.id, 'world'); }}
+            onHunt={(id) => { void play(selectedCharacter.id, { hunt: id }); }}
+          />
+        )}
+
+        {hasCharacters && !(menu.kind === 'menu' && selectedCharacter !== undefined) && (
           <div className="entry-select-footer">
             <p className="entry-select-hint">Selecione um personagem para continuar.</p>
             <Button

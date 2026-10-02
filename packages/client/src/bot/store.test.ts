@@ -3,7 +3,7 @@ import { BOT_SET_COUNT, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION } from '@draco
 import type { BotAutomation, BotConfigV2, BotSlot } from '@draconya/content';
 import {
   INITIAL_BOT, SAVE_DEBOUNCE_MS, bot, botResult, draftFrom, edit, emptyDraft, loadConfig,
-  putAutomation, removeAutomation, setActiveSet, setConfigSender, setExitHpBelowPercent, setExitRule,
+  putAutomation, removeAutomation, resetBot, setActiveSet, setConfigSender, setExitHpBelowPercent, setExitRule,
   setFollow, setIgnore, setLootFilter, setLure, setPosture, setPrioritize, setSlot, setSlotAuto,
   setTargetingPolicy, toggleAutoSellItem, toggleAutomation, toggleLootItem, toConfig,
 } from './store.js';
@@ -168,6 +168,47 @@ describe('a configuração em vigor chega do servidor (FUN-111)', () => {
     loadConfig(config());
     expect(bot.get().draft.sets[0]?.slots[0]?.do).toEqual({ kind: 'spell', spellId: 'heal' });
     expect(bot.get().save).toBe('pending');
+  });
+});
+
+describe('sair do jogo esquece o rascunho (resetBot, #846)', () => {
+  const sent: BotConfigV2[] = [];
+  beforeEach(() => {
+    sent.length = 0;
+    vi.useFakeTimers();
+    setConfigSender((config) => { sent.push(config); return true; });
+  });
+  afterEach(() => {
+    setConfigSender(null);
+    vi.useRealTimers();
+  });
+
+  it('um rascunho tocado e recusado NÃO sobrevive: a próxima configuração em vigor o substitui', () => {
+    edit(() => withSet(0, 0, slot('heal')));
+    botResult(false, 'conjunto 1, slot 1: tecla repetida');
+    // Antes: `loadConfig` preservava o rascunho recusado do personagem anterior para o seguinte.
+    resetBot();
+    expect(bot.get()).toEqual(INITIAL_BOT);
+
+    loadConfig({ ...toConfig(emptyDraft()), activeSet: 2 });
+
+    expect(bot.get().draft.activeSet).toBe(2);
+    expect(bot.get().draft.sets[0]?.slots[0]).toBeNull();
+    expect(bot.get().save).toBe('saved');
+    expect(bot.get().touched).toBe(false);
+  });
+
+  it('o `bot-config` agendado no debounce é cancelado: nada sai, e o rascunho não vira "recusado" depois', () => {
+    // O interruptor clicado e "Sair do jogo" dentro dos 300 ms: o temporizador dispararia depois de a casca
+    // desmontar (`setConfigSender(null)`), marcaria `refused` e deixaria o rascunho tocado para o próximo.
+    setActiveSet(3);
+    resetBot();
+    setConfigSender(null);
+
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS * 2);
+
+    expect(sent).toHaveLength(0);
+    expect(bot.get()).toEqual(INITIAL_BOT);
   });
 });
 

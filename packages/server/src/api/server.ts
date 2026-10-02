@@ -15,6 +15,8 @@ import { createTicketHandler, type TicketRouteDependencies } from './tickets.js'
 import { registerPartyRoutes } from './party.js';
 import type { PartyRouteDependencies } from './party.js';
 import { registerFriendRoutes } from './friends.js';
+import { registerEntryOptionsRoute } from './entry-options.js';
+import type { EntryOptionsDependencies } from './entry-options.js';
 
 export interface ApiDependencies extends Partial<TicketRouteDependencies> {
   readonly auth?: AuthService;
@@ -36,6 +38,11 @@ export interface ApiDependencies extends Partial<TicketRouteDependencies> {
   readonly party?: PartyRouteDependencies['party'];
   readonly partyLimits?: PartyRouteDependencies['limits'];
   readonly matchmakingLevelRange?: number;
+  /**
+   * As hunts que o menu de entrada oferece (#846, OW-23), do conteúdo fixado no boot. Ausente: a rota
+   * `GET /api/entry-options` não existe, e o cliente cai no botão único de entrada.
+   */
+  readonly entryHunts?: EntryOptionsDependencies['hunts'];
 }
 
 export function createApi(
@@ -137,6 +144,15 @@ export function buildApi(
       ...(dependencies.startingKit === undefined ? {} : { startingKit: dependencies.startingKit }),
       // Com a flag ligada o repouso é `'offline'` na lista de personagens (#836, OW-15).
       openWorld: configuration.OPEN_WORLD,
+    });
+  }
+
+  // O que o menu de entrada pergunta antes do primeiro ticket (#846, OW-23): a flag e as hunts idle diretas.
+  if (auth !== undefined && dependencies.entryHunts !== undefined) {
+    registerEntryOptionsRoute(app, {
+      authenticate: auth.authenticate.bind(auth),
+      openWorld: configuration.OPEN_WORLD,
+      hunts: dependencies.entryHunts,
     });
   }
 

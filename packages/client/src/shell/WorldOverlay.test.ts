@@ -1,7 +1,7 @@
 import { createElement, type ReactElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { WorldOverlay } from './WorldOverlay.js';
+import { WorldOverlay, worldZoneLine } from './WorldOverlay.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue, PartyView } from '../state/hud.js';
 import { world } from '../state/world.js';
@@ -186,5 +186,45 @@ describe('WorldOverlay (#327, #348, RC-14, SV-12)', () => {
 
     expect(html).not.toContain('Cauteloso');
     expect(html).toContain('0 criaturas no alcance');
+  });
+});
+
+describe('WorldOverlay no mundo aberto (OW-23, #846)', () => {
+  it('diz que é o mundo, não a praça nem uma caçada, e conta quem está à vista', async () => {
+    world.selfId = 1;
+    world.creatures.set(1, creature(1, { name: 'você' }));
+    world.creatures.set(2, creature(2, { name: 'Outro jogador' }));
+    world.creatures.set(3, creature(3, { name: 'Wolf' }));
+
+    const html = await render(createElement(WorldOverlay, { hunting: false, world: true }));
+
+    expect(html).toContain('Mundo aberto');
+    expect(html).toContain('2 criaturas no alcance');
+    // Mutação que mata: cair no ramo `!hunting` — o mundo, onde se ganha XP, diria "a praça não credita nada".
+    expect(html).not.toContain('a praça não credita nada');
+    expect(html).not.toContain('Cidade · zona protegida');
+  });
+
+  it('escreve a zona que o servidor disse: proteção e sem-logout; o resto não vira linha', async () => {
+    hud.set((state) => ({ ...state, zone: 'protection' }));
+    expect(await render(createElement(WorldOverlay, { hunting: false, world: true }))).toContain('zona de proteção');
+
+    hud.set((state) => ({ ...state, zone: 'no-logout' }));
+    expect(await render(createElement(WorldOverlay, { hunting: false, world: true })))
+      .toContain('não se pode sair daqui');
+
+    for (const zone of ['normal', 'no-pvp', 'pvp', null] as const) {
+      hud.set((state) => ({ ...state, zone }));
+      const html = await render(createElement(WorldOverlay, { hunting: false, world: true }));
+      expect(html).not.toContain('zona de proteção');
+      expect(html).not.toContain('não se pode sair daqui');
+    }
+  });
+
+  it('worldZoneLine é pura: só o que o jogador precisa para agir', () => {
+    expect(worldZoneLine('protection')).toBe('zona de proteção');
+    expect(worldZoneLine('no-logout')).toBe('não se pode sair daqui');
+    expect(worldZoneLine('no-pvp')).toBeNull();
+    expect(worldZoneLine(null)).toBeNull();
   });
 });

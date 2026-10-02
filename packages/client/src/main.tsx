@@ -6,9 +6,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Shell } from './shell/Shell.js';
 import { Entry } from './shell/Entry.js';
+import { WorldQueue } from './shell/WorldQueue.js';
 import { WorldExplorer, worldExplorerEnabled } from './shell/WorldExplorer.js';
 import { useConnection } from './shell/useConnection.js';
-import { useStoreSlice } from './state/useSlice.js';
+import { useHudSlice, useStoreSlice } from './state/useSlice.js';
 import { account } from './account/store.js';
 import './shell/shell.css';
 
@@ -36,9 +37,14 @@ function isWorldExplorer(): boolean {
 
 function App() {
   const chosen = useStoreSlice(account, (state) => state.playing);
+  const entry = useStoreSlice(account, (state) => state.entry);
   const characterId = characterFromUrl() ?? chosen;
-  useConnection(characterId);
-  return characterId === null ? <Entry /> : <Shell />;
+  useConnection(characterId, entry);
+  // Na fila do mundo cheio (#846, OW-23) não há sessão para desenhar: a tela é a da fila, até a sessão começar
+  // (`session-state` zera `worldQueue`) ou o jogador sair dela.
+  const queued = useHudSlice((state) => state.worldQueue !== null);
+  if (characterId === null) return <Entry />;
+  return queued ? <WorldQueue /> : <Shell />;
 }
 
 const root = document.getElementById('root');

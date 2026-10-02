@@ -475,6 +475,45 @@ pnpm tsx scripts/make-sheet-fixture.ts
   O `ActionConfigModal` mostra o seletor de monstro (`illusionMonsters`, `catalogue.monsters[]
   .illusionable`) só para a magia de efeito `illusion`, e bloqueia o Salvar sem `monsterId`.
 
+## O mundo aberto no cliente (#846, OW-23, ADR 0060)
+
+O mundo é a sessão `'world'` (`sessionType` do `session-state`), atrás de `OPEN_WORLD` no servidor. **Com a flag
+desligada nada disto aparece**: o botão único de entrada, a faixa de pills da Cidade e o ticket são os de antes.
+Produto: `docs/product/open-world.md`, "O cliente do mundo".
+
+- **`'world'` NÃO é uma hunt.** `isHunting('world')` é `false` (`shell/is-hunting.ts`), e `isWorld` o diz à parte: a
+  casca (`Shell`) liga a faixa do mundo ("Caçar (idle)" + "Sair do jogo", `HuntActions`), o overlay de área
+  (`WorldOverlay`) e o título "Analisador" — sem "Sair da caçada", party loot nem regras de saída. Um tipo de sessão
+  novo entra nessas funções, e não num `!== 'city'` espalhado: foi assim que o `'world'` quase virou caçada.
+- **A zona e a luta são `hud.zone` e `hud.inFight`, e `null` quer dizer "o servidor não diz".** Vêm do
+  `player-stats` (OW-11) e o `session-state` os zera. Nunca se default-a para `'normal'` ou `false`: o ícone só some
+  porque o servidor disse que não há. As regras dos selos (`statusBadgesOf`, `BuffBar`) são as do Canary — a luta
+  apaga dentro da PZ —, e a PZ é só `'protection'`. **Nenhum servidor os emite ainda**: em jogo os selos não acendem.
+  A `.buff-bar` (onde moram os selos e as condições) nasce DEPOIS da coluna esquerda (`left: calc(var(--sidebar-w) +
+  12px)`): com `12px` ela ficava por baixo da coluna opaca, e o selo que o jogador mais precisa ver sumia.
+- **O logout recusado é `hud.exitRefusal`** (`{ reason, atMs }`, o relógio de `applyMessage`): o aviso sobre o mundo
+  (`ExitRefusalNotice`) some sozinho e uma linha entra no registro do chat. As frases moram em `state/exit-refusal.ts`
+  — a de sair e a de entrar numa caçada, que é o MESMO veredicto do `canLogout` (ADR 0060 d.6a). O `HuntsModal` no mundo
+  não fecha ao enviar: fecha quando a sessão muda, e mostra a recusa no rodapé (`entryRefusalText`, que compara o
+  instante da recusa com o do pedido — a de antes é de outra tentativa).
+- **"Sair do jogo" é o `logout`, e o servidor fecha com `1000` + `logout`** (`LOGOUT_CLOSE`, `net/connection.ts`): o
+  cliente então NÃO reconecta — `onLeft` leva à escolha de personagem (`leaveGame`, que zera o HUD e o rascunho do
+  bot — `resetBot`, com o `bot-config` agendado — e recarrega a lista: `loadConfig` preserva o rascunho tocado e não
+  salvo, e o personagem seguinte herdaria a barra do anterior). Qualquer outro fechamento é queda. Trocar isso por "todo fechamento reconecta" faz o logout nunca sair.
+- **A entrada tem duas portas** (`Entry.tsx`, `entryMenuOf`): `play(id, 'world' | { hunt })` guarda o `entry` em
+  `account.entry`, e `useConnection(characterId, entry)` o manda no pedido de ticket — **sem o campo quando é o
+  mundo**, para o pedido de antes sair byte a byte. O menu só existe com `GET /api/entry-options` dizendo
+  `openWorld` (a lista de hunts não viaja pelo socket antes da sessão); sem resposta, ou para o personagem que já tem
+  sessão, é o botão único. Quem decide a hunt é o servidor (`unknown-hunt`); a tela só pede. **O `entry` só vai
+  até a primeira sessão existir** (`sessionStarted` em `createConnection`, ligado pelo primeiro `session-state`):
+  depois dele toda volta pede o mundo. O servidor honra o `entry` de quem NÃO TEM sessão, e quem a teve e a perdeu
+  (a hunt acabou, a Cidade foi recolhida sem visualizador) também não tem — repeti-lo numa reconexão começaria uma
+  caçada que ninguém pediu. A fila (`world-full`) não é sessão: ali o `entry` continua sendo pedido.
+- **A fila é `hud.worldQueue`** (`world-full`, substituída a cada tentativa e zerada pelo `session-state`), e
+  `WorldQueue` toma o lugar do `Shell` enquanto ela existe (`main.tsx`). **A volta é no `retryAfterMs`**
+  (`scheduleQueueRetry`), com a conexão em `queued`: usar o recuo de queda voltaria antes do prazo da fila e
+  devolveria o personagem ao fim dela. "Caçar agora" troca o `entry` e recria a conexão.
+
 ## O Treino (#631, ADR 0059)
 
 O pill "Treino" (ao lado de "Escolher caçada", só na Cidade e só com `catalogue.training`) abre o

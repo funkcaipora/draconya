@@ -57,7 +57,8 @@ import { BuffBar } from './BuffBar.js';
 import { PlayerVitalsOverlay } from './PlayerVitalsOverlay.js';
 import type { WindowId } from './TopBar.js';
 import { chatBadgeTier } from './chat-badge.js';
-import { isHunting } from './is-hunting.js';
+import { isHunting, isWorld } from './is-hunting.js';
+import { ExitRefusalNotice } from './ExitRefusalNotice.js';
 import { TrainingModal } from './TrainingModal.js';
 
 /**
@@ -130,6 +131,10 @@ export function Shell() {
   // onde está (#259, o mesmo cálculo que o menu de hunts de antes já fazia).
   const sessionType = useHudSlice((state) => state.analyzer.sessionType);
   const hunting = isHunting(sessionType);
+  // O mundo aberto (#846, OW-23, ADR 0060) NÃO é uma caçada: não tem "Sair da caçada", party loot nem regras
+  // de saída (`isHunting` é falso), mas é uma sessão que se joga — o HUD de combate está ligado, o analisador
+  // é por personagem e a faixa de pills diz "Caçar (idle)" e "Sair do jogo".
+  const inWorld = isWorld(sessionType);
   // O Treino (#631, ADR 0059) é uma sessão privada que não caça: o pill dele mostra as cargas e o
   // "Parar treino"; na Cidade o pill abre a tela de Treino.
   const training = sessionType === 'training';
@@ -166,10 +171,13 @@ export function Shell() {
               Pixi de forma imperativa. */}
           <PlayerVitalsOverlay />
         </div>
-        <WorldOverlay hunting={hunting} training={training} />
+        <WorldOverlay hunting={hunting} training={training} world={inWorld} />
         {/* Condições ativas sobre o mundo (#348, SV-12): existe sozinha — devolve `null` sem
             nenhuma em `hud.conditions`. */}
         <BuffBar />
+        {/* "Você não pode sair durante uma luta." (#846, OW-23): o veredicto do `canLogout`, sobre o mundo. Se o
+            `HuntsModal` está aberto ele já diz a mesma coisa no rodapé — o aviso se cala. */}
+        <ExitRefusalNotice suppressed={open.hunts} />
         <TopBar open={open} toggle={toggle} chatBadge={chatBadge} />
         <div className="windows windows-left" aria-label="janelas à esquerda">
           {/* Skills é FIXO à esquerda (#317): sempre montado, sem `open.*` — minimiza pelo próprio
@@ -250,6 +258,7 @@ export function Shell() {
         <HuntActions
           hunting={hunting}
           training={training}
+          world={inWorld}
           onChoose={() => { toggle('hunts'); }}
           onTraining={() => { setTrainingOpen(true); }}
         />
@@ -266,6 +275,7 @@ export function Shell() {
         {open.hunts && (
           <HuntsModal
             hunting={hunting}
+            world={inWorld}
             onClose={() => { toggle('hunts'); }}
             onFindParty={(huntId) => {
               setOpen((state) => ({ ...state, hunts: false }));

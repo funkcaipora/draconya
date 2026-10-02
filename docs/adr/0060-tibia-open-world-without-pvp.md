@@ -870,3 +870,41 @@ pode passar do prazo da fila (OW-23); o ticket ainda não leva `world_id`, e a f
 **Efeito no que esta decisão escreveu:** nenhum. As decisões 2b e 6b continuam valendo; esta emenda só registra
 que a fila é a do Canary por inteiro (premium e a regra de não furar, inclusive), onde ela mora, e o que o
 `entry` do ticket é e não é.
+
+## Emenda — 2026-10-02 (#846, OW-23): o cliente do mundo — a rota do menu, o que o fechamento do socket quer dizer e o canal da recusa
+
+A decisão 6b manda o menu oferecer o mundo ou uma hunt idle, a 2b manda a fila mostrar a posição, e a 7 manda
+`logout` passar por `canLogout`. A OW-23 as pôs na tela (`docs/product/open-world.md`, "O cliente do mundo") e
+fechou seis detalhes que as decisões deixavam abertos:
+
+- **O menu precisa de uma rota, e ela é a única peça de `server` da issue.** O catálogo de hunts só chega pelo
+  socket (`catalogue`, depois do `welcome`), e o menu decide o PRIMEIRO ticket — antes de qualquer socket. `GET
+  /api/entry-options` (autenticada, só leitura) devolve `{ openWorld, hunts: [{ id, name, recommendedLevel }] }`; com
+  a flag desligada as hunts vão vazias, e o cliente cai no botão único. A alternativa — uma variável de build do
+  cliente espelhando a flag — diverge do servidor sem ninguém ver, e carregar a lista de hunts no cliente viola a
+  versão de conteúdo fixada (invariante 7). Quem confere a hunt pedida continua sendo o `POST /api/tickets`.
+- **O mundo não é uma hunt para a casca.** `isHunting('world')` é falso, e a casca o trata à parte: faixa com
+  "Caçar (idle)" e "Sair do jogo", overlay de área, analisador "por personagem". Sem isso o `!== 'city'` de antes o
+  trataria como caçada, com "Sair da caçada" (que o servidor recusa no mundo) e party loot.
+- **"Sair do jogo" existe só no mundo, e o fechamento `1000` + `logout` quer dizer "o personagem saiu".** Sem um
+  `logout` na tela o `logout-refused` seria inalcançável e o roteiro da OW-24 ("logout a 10 HP e relogin") não teria
+  como começar. O servidor já fecha todo visualizador com esse código e esse motivo (`SessionHost.release`); o
+  cliente, ao vê-los, NÃO reconecta — volta à escolha de personagem. Qualquer outro fechamento (a drenagem, o
+  `session-moved`) continua sendo queda. É um contrato implícito do `release`: mudar o código ou o motivo exige mudar
+  `LOGOUT_CLOSE` no cliente.
+- **A fila volta no prazo que o servidor mandou, não no recuo de uma queda.** O `world-full` traz `retryAfterMs`, e o
+  prazo do lugar é a espera mais 15 s (OW-21): o recuo exponencial voltaria antes (e o ticket novo seria uma tentativa
+  que a fila recusa) ou depois (e devolveria o personagem ao fim). O cliente soma até 500 ms — nunca antes — e a
+  conexão fica em `queued`, que não conta como falha.
+- **O canal da recusa de entrar numa hunt a partir do mundo é suposto, e a OW-20 o confirma.** A decisão 6a diz que
+  essa entrada só passa onde o Tibia deixaria deslogar, e `logout-refused` é o veredicto do `canLogout`. O cliente lê
+  como recusa da entrada o `logout-refused` que chega DEPOIS do pedido, e também a linha de aviso do sistema mais
+  recente depois dele: a OW-20 pode responder por qualquer um dos dois. O `HuntsModal` no mundo não fecha ao enviar —
+  fecha quando a sessão muda.
+- **Os ícones dependem de um emissor que ainda não existe.** O cliente lê `player-stats.zone` e `inFight` com as
+  regras do Canary (a PZ é só `'protection'`; a luta apaga dentro dela; ausente é "o servidor não diz", nunca "normal,
+  sem luta"), mas nenhuma issue do M48 os produz: em jogo os selos não acendem até alguém os emitir no hospedeiro.
+
+**Efeito no que esta decisão escreveu:** nenhum. As decisões 2b, 6b e 7 continuam valendo; esta emenda só registra
+a rota que o menu exige, o que o cliente faz com cada fechamento de socket e com a fila, e o que a OW-20 e o emissor
+da zona ainda devem.

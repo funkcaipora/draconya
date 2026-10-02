@@ -81,6 +81,7 @@ repouso pode ir embora.
 | POST | `/api/characters` | cria personagem |
 | POST | `/api/characters/:id/select` | seleciona/consulta personagem da própria conta |
 | DELETE | `/api/characters/:id` | soft delete se não estiver ativo |
+| GET | `/api/entry-options` | o menu de entrada (OW-23): se o servidor tem o mundo aberto e as hunts idle que o ticket aceita no `entry`; `hunts` vazio com `OPEN_WORLD` desligado |
 
 ## Parâmetros
 
