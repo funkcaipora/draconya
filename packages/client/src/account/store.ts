@@ -7,7 +7,7 @@
 // Ela também vive num momento diferente: aqui ainda não há sessão de jogo nenhuma.
 
 import { createStore } from '../state/hud.js';
-import type { CharacterSummary, Identity } from './api.js';
+import type { CharacterSummary, EntryOptions, Identity, TicketEntry } from './api.js';
 
 export type AccountPhase =
   /** Ainda perguntando ao servidor quem é. */
@@ -27,6 +27,16 @@ export interface AccountState {
    * É o que troca a tela de entrada pelo jogo — e o que a URL fazia sozinha antes desta issue.
    */
   readonly playing: string | null;
+  /**
+   * Por onde a primeira sessão de `playing` nasce (#846, OW-23): o mundo ou uma hunt idle direta. Vai no
+   * `entry` do pedido de ticket. `'world'` é o default — e o pedido de antes do mundo aberto, byte a byte.
+   */
+  readonly entry: TicketEntry;
+  /**
+   * O que este servidor oferece na entrada (#846): a flag do mundo aberto e as hunts diretas. `null` até
+   * carregar, ou quando o servidor não responde — e a tela mostra então o botão único de sempre.
+   */
+  readonly entryOptions: EntryOptions | null;
   /** A última recusa da API, em palavras. `null` quando não há nada a dizer. */
   readonly error: string | null;
   /** Uma chamada em curso: a tela desabilita o que não pode ser clicado duas vezes. */
@@ -38,6 +48,8 @@ export const INITIAL_ACCOUNT: AccountState = {
   identity: null,
   characters: [],
   playing: null,
+  entry: 'world',
+  entryOptions: null,
   error: null,
   busy: false,
 };

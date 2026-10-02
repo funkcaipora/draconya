@@ -1,4 +1,5 @@
 import { decodeC2S, encodeS2C } from '@draconya/protocol';
+import type { TicketEntry } from '../account/api.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import { world } from '../state/world.js';
@@ -28,16 +29,22 @@ class FakeSocket implements SocketLike {
   }
 }
 
-function harness(overrides: { requestTicket?: () => Promise<string> } = {}) {
+function harness(
+  overrides: { requestTicket?: () => Promise<string>; entry?: TicketEntry; onLeft?: () => void } = {},
+) {
   const sockets: FakeSocket[] = [];
   const urls: string[] = [];
+  const entries: TicketEntry[] = [];
   let requestTicketCalls = 0;
   const pending: Array<{ fn: () => void; delayMs: number }> = [];
   const connection = createConnection({
     apiUrl: 'http://api',
     characterId: 'c1',
-    requestTicket: async () => {
+    ...(overrides.entry === undefined ? {} : { entry: overrides.entry }),
+    ...(overrides.onLeft === undefined ? {} : { onLeft: overrides.onLeft }),
+    requestTicket: async (_apiUrl, _characterId, entry) => {
       requestTicketCalls += 1;
+      entries.push(entry);
       return overrides.requestTicket === undefined ? 'ws://node/?ticket=t' : overrides.requestTicket();
     },
     openSocket: (url) => {
@@ -60,7 +67,7 @@ function harness(overrides: { requestTicket?: () => Promise<string> } = {}) {
     const due = pending.splice(0, pending.length);
     for (const entry of due) entry.fn();
   };
-  return { connection, sockets, urls, requestTicketCalls: () => requestTicketCalls, pending, runPending };
+  return { connection, sockets, urls, entries, requestTicketCalls: () => requestTicketCalls, pending, runPending };
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -277,5 +284,178 @@ describe('o ticket oferecido por fora (#197)', () => {
     offerWsUrl('ws://party/?ticket=p');
     expect(takeWsUrl()).toBe('ws://party/?ticket=p');
     expect(takeWsUrl()).toBeNull();
+  });
+});
+
+describe('o mundo aberto na conexão (OW-23, #846)', () => {
+  const worldFull = (over: { position?: number; retryAfterMs?: number; huntAvailable?: boolean } = {}) => ({
+    data: encodeS2C({
+      type: 'world-full', position: 3, retryAfterMs: 10_000, huntAvailable: true, ...over,
+    }).buffer.slice(0),
+  });
+
+  describe('por onde a primeira sessão nasce (entry)', () => {
+    it('pede o ticket com o mundo, que é o default — a conexão de sempre', async () => {
+      const { connection, entries } = harness();
+      connection.start();
+      await flush();
+      expect(entries).toEqual(['world']);
+    });
+
+    it('pede o ticket com a hunt idle quando o jogador a escolheu, em toda reconexão', async () => {
+      const { connection, sockets, entries, runPending } = harness({ entry: { hunt: 'rat-cellars' } });
+      connection.start();
+      await flush();
+      sockets[0]?.onclose?.({});
+      runPending();
+      await flush();
+      // O servidor só respeita o `entry` de quem não tem sessão: repeti-lo numa reconexão é inofensivo, e
+      // calar na segunda faria a hunt escolhida virar o mundo se a primeira sessão ainda não existisse.
+      expect(entries).toEqual([{ hunt: 'rat-cellars' }, { hunt: 'rat-cellars' }]);
+    });
+  });
+
+  describe('o corpo do pedido de ticket', () => {
+    const body = async (entry: TicketEntry | undefined): Promise<unknown> => {
+      const fetchMock = vi.fn(async () => Response.json({ wsUrl: 'ws://node/?ticket=t' }));
+      vi.stubGlobal('fetch', fetchMock);
+      const connection = createConnection({
+        apiUrl: 'http://api', characterId: 'c1', ...(entry === undefined ? {} : { entry }),
+        openSocket: () => new FakeSocket(), schedule: () => () => undefined, random: () => 1,
+      });
+      connection.start();
+      await flush();
+      connection.stop();
+      vi.unstubAllGlobals();
+      const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
+      return JSON.parse(init.body as string);
+    };
+
+    it('o mundo vai SEM `entry`: o pedido é byte a byte o de antes do mundo aberto', async () => {
+      // Mutação que mata: mandar `entry: 'world'` sempre — um `api` anterior (deploy em rolagem) ou um
+      // proxy que valida o corpo veria um campo que não conhece.
+      expect(await body(undefined)).toEqual({ characterId: 'c1' });
+      expect(await body('world')).toEqual({ characterId: 'c1' });
+    });
+
+    it('a hunt idle direta vai no `entry`', async () => {
+      expect(await body({ hunt: 'rotworm-caves' })).toEqual({
+        characterId: 'c1', entry: { hunt: 'rotworm-caves' },
+      });
+    });
+  });
+
+  describe('a fila do mundo cheio (world-full)', () => {
+    it('volta no prazo que o SERVIDOR mandou, e não no recuo de uma queda', async () => {
+      const { connection, sockets, pending } = harness();
+      connection.start();
+      await flush();
+      sockets[0]?.onopen?.({});
+      sockets[0]?.onmessage?.(worldFull({ position: 3, retryAfterMs: 10_000 }));
+      sockets[0]?.onclose?.({ code: 4001 });
+
+      // Mutação que mata: cair no `scheduleRetry` de sempre — o recuo de 500 ms voltaria ANTES do prazo da
+      // fila (10 s) e o ticket novo seria uma tentativa que a fila recusa, a cada meio segundo.
+      expect(pending).toHaveLength(1);
+      // `random: () => 1` → a folga inteira de 500 ms: nunca ANTES do prazo, só um pouco depois.
+      expect(pending[0]?.delayMs).toBe(10_500);
+      expect(hud.get().connection).toBe('queued');
+      expect(hud.get().worldQueue).toMatchObject({ position: 3, retryAfterMs: 10_000, huntAvailable: true });
+    });
+
+    it('a espera na fila não é falha: o recuo exponencial não anda', async () => {
+      const { connection, sockets, pending, runPending } = harness();
+      connection.start();
+      await flush();
+      sockets[0]?.onopen?.({});
+      sockets[0]?.onmessage?.(worldFull({ retryAfterMs: 5_000 }));
+      sockets[0]?.onclose?.({ code: 4001 });
+      runPending();
+      await flush();
+      // A segunda tentativa também encontra o mundo cheio, na posição de agora.
+      sockets[1]?.onopen?.({});
+      sockets[1]?.onmessage?.(worldFull({ position: 2, retryAfterMs: 5_000 }));
+      sockets[1]?.onclose?.({ code: 4001 });
+
+      expect(pending[0]?.delayMs).toBe(5_500);
+      expect(hud.get().worldQueue).toMatchObject({ position: 2 });
+    });
+
+    it('um fechamento SEM world-full volta ao recuo de sempre, mesmo depois de uma fila', async () => {
+      // O `world-full` é local ao socket que o recebeu: um valor de antes não pode agendar a volta de outra queda.
+      const { connection, sockets, pending, runPending } = harness();
+      connection.start();
+      await flush();
+      sockets[0]?.onopen?.({});
+      sockets[0]?.onmessage?.(worldFull({ retryAfterMs: 30_000 }));
+      sockets[0]?.onclose?.({ code: 4001 });
+      runPending();
+      await flush();
+      sockets[1]?.onopen?.({});
+      sockets[1]?.onclose?.({});
+
+      expect(pending[0]?.delayMs).toBe(500);
+      expect(hud.get().connection).toBe('reconnecting');
+    });
+
+    it('parar durante a espera cancela a volta', async () => {
+      const { connection, sockets, pending } = harness();
+      connection.start();
+      await flush();
+      sockets[0]?.onopen?.({});
+      sockets[0]?.onmessage?.(worldFull());
+      sockets[0]?.onclose?.({ code: 4001 });
+      expect(pending).toHaveLength(1);
+
+      connection.stop();
+
+      expect(pending).toHaveLength(0);
+      expect(hud.get().connection).toBe('idle');
+    });
+  });
+
+  describe('o logout aceito', () => {
+    it('o servidor fechou com 1000/logout: NÃO reconecta, avisa que o personagem saiu e fica parado', async () => {
+      const onLeft = vi.fn();
+      const { connection, sockets, pending } = harness({ onLeft });
+      connection.start();
+      await flush();
+      sockets[0]?.onopen?.({});
+
+      sockets[0]?.onclose?.({ code: 1000, reason: 'logout' });
+
+      // Mutação que mata: tratar o fechamento como queda — o cliente reconectaria e recriaria a sessão que o
+      // jogador acabou de deixar, e "Sair do jogo" nunca sairia.
+      expect(onLeft).toHaveBeenCalledTimes(1);
+      expect(pending).toHaveLength(0);
+      expect(hud.get().connection).toBe('idle');
+    });
+
+    it('qualquer outro fechamento continua sendo queda e reconecta (a drenagem, o nó que caiu)', async () => {
+      const onLeft = vi.fn();
+      const { connection, sockets, pending } = harness({ onLeft });
+      connection.start();
+      await flush();
+      sockets[0]?.onopen?.({});
+
+      sockets[0]?.onclose?.({ code: 1001, reason: 'drain' });
+
+      expect(onLeft).not.toHaveBeenCalled();
+      expect(pending).toHaveLength(1);
+      expect(hud.get().connection).toBe('reconnecting');
+    });
+
+    it('o 1000 de outro motivo (session-moved) também reconecta — só o logout é "saiu"', async () => {
+      const onLeft = vi.fn();
+      const { connection, sockets, pending } = harness({ onLeft });
+      connection.start();
+      await flush();
+      sockets[0]?.onopen?.({});
+
+      sockets[0]?.onclose?.({ code: 1000, reason: 'session-moved' });
+
+      expect(onLeft).not.toHaveBeenCalled();
+      expect(pending).toHaveLength(1);
+    });
   });
 });

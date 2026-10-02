@@ -192,4 +192,67 @@ it('always mounts the player vitals overlay inside the world stage (#328, RC-15)
     expect(source).toContain('setConfigSender');
     expect(source).toContain("type: 'bot-config'");
   });
+
+  // OW-23 (#846, ADR 0060): o mundo aberto é a sessão `'world'`, e NÃO é uma caçada — mas é uma sessão que se joga.
+  describe('o mundo aberto (OW-23, #846)', () => {
+    const aggregates: Aggregates = {
+      durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0,
+    };
+    const inWorld = () => hud.set((state) => ({
+      ...state,
+      analyzer: { sessionType: 'world', aggregates, notableEvents: [], receivedAtMs: 0, ended: false, party: undefined },
+      party: { leaderId: 'me', mode: 'shared', members: [] },
+      partyBag: { gold: 1, items: [], weight: 0, capacity: 10 },
+    }));
+
+    it('trata o `world` à parte: a faixa de pills é a do mundo, e não a de caçada', async () => {
+      inWorld();
+      const html = await render();
+      expect(html).toContain('Caçar (idle)');
+      expect(html).toContain('Sair do jogo');
+      // Mutação que mata: `isHunting('world') === true` — a casca ofereceria "Sair da caçada" (que o servidor
+      // recusa no mundo), os detalhes de uma caçada que não há e a janela de party loot.
+      expect(html).not.toContain('Sair da caçada');
+      expect(html).not.toContain('Detalhes da caçada');
+      expect(html).not.toContain('vendido e dividido ao fim');
+    });
+
+    it('liga o HUD de combate e o analisador por personagem, que não se chama "de caçada"', async () => {
+      inWorld();
+      const html = await render();
+      // O HUD de combate é fixo: a coluna da Batalha, as vitais e a barra de ações montam como sempre.
+      expect(html).toContain('ui-panel-title">Batalha');
+      expect(html).toContain('class="vitals"');
+      // O analisador do personagem (a sessão do mundo manda só o que é dele) mostra-se, e o título diz o que é.
+      expect(html).toContain('ui-floating-window--analyzer');
+      expect(html).toContain('ui-panel-title">Analisador<');
+      expect(html).not.toContain('Analisador de caçada');
+    });
+
+    it('diz a área no overlay do mundo, e não "a praça não credita nada"', async () => {
+      inWorld();
+      const html = await render();
+      expect(html).toContain('Mundo aberto');
+      expect(html).not.toContain('a praça não credita nada');
+    });
+
+    it('acende os ícones de PZ e de luta que o servidor disse, e o aviso de logout recusado', async () => {
+      inWorld();
+      hud.set((state) => ({
+        ...state, zone: 'normal', inFight: true, exitRefusal: { reason: 'in-fight', atMs: performance.now() },
+      }));
+      const html = await render();
+      expect(html).toContain('Em luta');
+      expect(html).toContain('Você não pode sair durante uma luta.');
+    });
+
+    it('a Cidade e a hunt seguem como eram: sem "Sair do jogo" nem "Mundo aberto"', async () => {
+      for (const sessionType of ['city', 'hunt']) {
+        hud.set((state) => ({ ...state, analyzer: { ...state.analyzer, sessionType } }));
+        const html = await render();
+        expect(html).not.toContain('Sair do jogo');
+        expect(html).not.toContain('Mundo aberto');
+      }
+    });
+  });
 });

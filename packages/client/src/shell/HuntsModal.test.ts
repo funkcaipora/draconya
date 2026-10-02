@@ -3,9 +3,10 @@ import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  HuntsModal, attemptEnter, enterHuntMessage, filterHunts, findPartyDecision, hazardChoiceOf,
+  HuntsModal, attemptEnter, enterHuntMessage, entryRefusalText, filterHunts, findPartyDecision, hazardChoiceOf,
   hazardLevelMessage, resolveSelection,
 } from './HuntsModal.js';
+import type { EntryAttempt } from './HuntsModal.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue, HuntListing } from '../state/hud.js';
 import { INITIAL_PARTY, party } from '../party/store.js';
@@ -325,5 +326,67 @@ describe('o seletor de Hazard (M44-14, #632)', () => {
     const html = await render({ hunting: false });
     expect(html).not.toContain('Nível de hazard');
     expect(html).not.toContain('Zona de hazard');
+  });
+});
+
+describe('HuntsModal a partir do mundo aberto (OW-23, #846)', () => {
+  const attempt: EntryAttempt = { atMs: 1_000, fromSessionType: 'world' };
+
+  async function renderWorld(): Promise<string> {
+    const { prelude } = await prerender(createElement(HuntsModal, { hunting: false, world: true, onClose: () => {} }));
+    return new Response(prelude).text();
+  }
+
+  it('diz que caçar (idle) tira o personagem do mundo, só onde ele poderia deslogar', async () => {
+    const html = await renderWorld();
+    expect(html).toContain('Caçar (idle) tira você do mundo');
+    expect(html).not.toContain('Level recomendado é conselho, não trava');
+  });
+
+  it('antes de qualquer pedido não há recusa na tela', async () => {
+    hud.set((state) => ({ ...state, exitRefusal: { reason: 'in-fight', atMs: 5_000 } }));
+    // Uma recusa de logout de ANTES do pedido (não há pedido) não pode aparecer num modal recém-aberto.
+    expect(await renderWorld()).not.toContain('Você não pode entrar numa caçada');
+  });
+
+  describe('entryRefusalText', () => {
+    it('sem pedido não há recusa a mostrar', () => {
+      expect(entryRefusalText(null, { reason: 'in-fight', atMs: 2_000 }, [])).toBeNull();
+    });
+
+    it('o `logout-refused` DEPOIS do pedido é o veredicto do canLogout sobre a entrada — em luta', () => {
+      expect(entryRefusalText(attempt, { reason: 'in-fight', atMs: 1_500 }, []))
+        .toBe('Você não pode entrar numa caçada durante uma luta.');
+    });
+
+    it('e no tile que proíbe sair', () => {
+      expect(entryRefusalText(attempt, { reason: 'no-logout-tile', atMs: 1_000 }, []))
+        .toBe('Você não pode entrar numa caçada daqui.');
+    });
+
+    it('a recusa de ANTES do pedido é de outra tentativa e não vale', () => {
+      // Mutação que mata: não comparar o instante — o aviso da recusa antiga reapareceria a cada novo pedido,
+      // mesmo quando o servidor aceitou.
+      expect(entryRefusalText(attempt, { reason: 'in-fight', atMs: 999 }, [])).toBeNull();
+    });
+
+    it('qualquer outra recusa do servidor chega como aviso do sistema, e a mais recente depois do pedido vale', () => {
+      const lines = [
+        { level: 'warning' as const, text: 'velha', atMs: 500 },
+        { level: 'info' as const, text: 'só informação', atMs: 1_800 },
+        { level: 'error' as const, text: 'Não foi possível mudar de atividade.', atMs: 1_900 },
+      ];
+      expect(entryRefusalText(attempt, null, lines)).toBe('Não foi possível mudar de atividade.');
+    });
+
+    it('o `logout-refused` vence a linha que ele mesmo escreveu no registro (a frase é a de ENTRAR)', () => {
+      const lines = [{ level: 'warning' as const, text: 'Você não pode sair durante uma luta.', atMs: 1_500 }];
+      expect(entryRefusalText(attempt, { reason: 'in-fight', atMs: 1_500 }, lines))
+        .toBe('Você não pode entrar numa caçada durante uma luta.');
+    });
+
+    it('sem nada depois do pedido o servidor ainda não respondeu', () => {
+      expect(entryRefusalText(attempt, null, [{ level: 'warning', text: 'antes', atMs: 10 }])).toBeNull();
+    });
   });
 });

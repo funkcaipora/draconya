@@ -5,6 +5,7 @@ const LABEL = {
   connecting: 'conectando',
   connected: 'conectado',
   reconnecting: 'reconectando',
+  queued: 'na fila',
   failed: 'falhou',
 } as const;
 

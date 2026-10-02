@@ -7,7 +7,7 @@
 // devolveria o problema que o ADR 0007 evita: o painel de inventário re-renderizando porque a
 // mana mexeu.
 
-import type { FightModeName, S2CProps } from '@draconya/protocol';
+import type { FightModeName, LogoutRefusedReason, S2CProps, ZoneKind } from '@draconya/protocol';
 
 export type ActiveCondition = S2CProps<'active-conditions'>['conditions'][number];
 
@@ -18,6 +18,11 @@ export type ConnectionStatus =
   | 'connected'
   /** Caiu e vai voltar sozinho — reconectar é REANEXAR, não logar de novo. */
   | 'reconnecting'
+  /**
+   * O mundo estava cheio e o personagem espera na fila (#846, OW-23): o servidor disse QUANDO voltar, e a
+   * conexão volta nesse instante. Não é falha — a tela é a da fila, não a de um socket caído.
+   */
+  | 'queued'
   /** Desistiu, ou o servidor recusou de um jeito que tentar de novo não resolve. */
   | 'failed';
 
@@ -205,6 +210,29 @@ export interface ExitPendingView {
 export type PartySummary = NonNullable<S2CProps<'analyzer'>['party']>;
 
 /**
+ * A fila do mundo cheio (#846, OW-23, ADR 0060 d.2b): o `world-full` mais recente, e o INSTANTE LOCAL em que
+ * ele chegou — `retryAfterMs` é uma DURAÇÃO medida no servidor, e é o carimbo que faz a contagem andar
+ * (`performance.now()`, o relógio de `applyMessage`, como `ExitPendingView.receivedAtMs`).
+ */
+export interface WorldQueueView {
+  readonly position: number;
+  readonly retryAfterMs: number;
+  /** A hunt idle está ao alcance de quem não coube (ADR 0060 d.6b): a tela oferece "caçar agora". */
+  readonly huntAvailable: boolean;
+  readonly receivedAtMs: number;
+}
+
+/**
+ * A recusa de sair do mundo (#846, OW-23, ADR 0060 d.7): o `logout-refused` mais recente e o instante local
+ * em que chegou. É o veredicto do `canLogout` — o MESMO que o servidor aplica à entrada numa hunt idle a partir
+ * do mundo (ADR 0060 d.6a) —, e a tela só o mostra: quem decidiu foi o `sim` (invariante 4).
+ */
+export interface ExitRefusalView {
+  readonly reason: LogoutRefusedReason;
+  readonly atMs: number;
+}
+
+/**
  * O que o personagem carrega e veste (§21.5, FUN-90).
  *
  * `null` até chegar. Uma mochila que abre vazia mente: "ainda não sei" e "não tem nada" são
@@ -306,6 +334,21 @@ export interface HudState {
    * do Canary, o que o servidor considera para quem nunca escolheu.
    */
   readonly fightMode: FightModeName;
+  /**
+   * A zona do tile em que o personagem está e se ele está em luta (#846, OW-23; `player-stats`, OW-11): os dois
+   * ícones do HUD do mundo. **`null` é "este servidor não diz"** — um nó anterior, ou uma sessão sem zona,
+   * como toda hunt —, e é diferente de `'normal'` e de `false`: o ícone só some porque o servidor disse que não
+   * há, nunca porque ninguém falou. Substituídos a cada `player-stats` e zerados no `session-state`.
+   */
+  readonly zone: ZoneKind | null;
+  readonly inFight: boolean | null;
+  /**
+   * A fila do mundo cheio (#846, OW-23). `null` é "não estou na fila": zerada quando uma sessão começa
+   * (`session-state`) e a cada mundo que respondeu `world-full` ela é SUBSTITUÍDA, não somada.
+   */
+  readonly worldQueue: WorldQueueView | null;
+  /** A última recusa de sair do mundo (#846). `null` até haver uma; o aviso na tela some sozinho por tempo. */
+  readonly exitRefusal: ExitRefusalView | null;
 
   /** Ida e volta medida pelo `ping`/`pong`, ou `null` enquanto não houve nenhum. */
   readonly latencyMs: number | null;
@@ -470,6 +513,10 @@ export const INITIAL_HUD: HudState = {
   vocationId: null,
   promoted: false,
   fightMode: 'attack',
+  zone: null,
+  inFight: null,
+  worldQueue: null,
+  exitRefusal: null,
   latencyMs: null,
   connection: 'idle',
   onlinePlayers: null,

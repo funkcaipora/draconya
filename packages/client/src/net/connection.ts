@@ -11,15 +11,40 @@
 import { decodeS2C, encodeC2S, type C2SMessage } from '@draconya/protocol';
 import { applyMessage } from '../state/apply.js';
 import { hud, type ConnectionStatus } from '../state/hud.js';
+import type { TicketEntry } from '../account/api.js';
 import { backoffDelayMs } from './backoff.js';
 import { takeWsUrl } from './pending-ticket.js';
+
+/**
+ * O fim de um socket, no que o cliente lê (#846, OW-23): o `CloseEvent` do navegador traz `code` e `reason`, e
+ * o duplo de teste pode mandar nada. Tudo opcional — quem não sabe o motivo do fechamento reconecta, como
+ * sempre.
+ */
+export interface CloseInfo {
+  readonly code?: number;
+  readonly reason?: string;
+}
+
+/**
+ * O fechamento que o SERVIDOR faz de propósito quando o personagem saiu do jogo: o `logout` aceito (o
+ * `release` do hospedeiro fecha todo visualizador com `1000` e este motivo, `host.ts`). Reconectar depois dele
+ * recriaria a sessão que o jogador acabou de deixar — o cliente volta à escolha de personagem.
+ */
+export const LOGOUT_CLOSE = { code: 1000, reason: 'logout' } as const;
+
+/**
+ * Folga somada ao `retryAfterMs` da fila (#846): a conta é da fila, e voltar ANTES dela — o ticket novo leva
+ * alguns milissegundos para sair — devolveria o personagem ao fim. Voltar um pouco depois não custa nada (o prazo
+ * dele é a espera mais 15 s) e espalha quem tinha a mesma posição.
+ */
+export const QUEUE_RETRY_JITTER_MS = 500;
 
 /** O pedaço do WebSocket que isto usa. Estreito de propósito: o teste implementa à mão. */
 export interface SocketLike {
   binaryType: string;
   onopen: ((event: unknown) => void) | null;
   onmessage: ((event: { data: unknown }) => void) | null;
-  onclose: ((event: unknown) => void) | null;
+  onclose: ((event: CloseInfo) => void) | null;
   onerror: ((event: unknown) => void) | null;
   send(data: ArrayBufferView): void;
   close(): void;
@@ -29,9 +54,20 @@ export interface ConnectionOptions {
   readonly apiUrl: string;
   readonly characterId: string;
   readonly openSocket?: (url: string) => SocketLike;
-  readonly requestTicket?: (apiUrl: string, characterId: string) => Promise<string>;
+  /**
+   * Por onde a primeira sessão do personagem nasce (#846, OW-23): `'world'` (o default) ou `{ hunt }`. Vai no
+   * pedido de ticket de CADA conexão — o servidor só o respeita para quem não tem sessão, então repeti-lo numa
+   * reconexão é inofensivo.
+   */
+  readonly entry?: TicketEntry;
+  readonly requestTicket?: (apiUrl: string, characterId: string, entry: TicketEntry) => Promise<string>;
   readonly schedule?: (fn: () => void, delayMs: number) => () => void;
   readonly random?: () => number;
+  /**
+   * O personagem saiu do jogo por decisão do servidor (`LOGOUT_CLOSE`): a conexão PARA e avisa, e quem a criou
+   * leva o jogador de volta à escolha de personagem. Ausente, o fechamento cai no caminho de sempre.
+   */
+  readonly onLeft?: () => void;
 }
 
 export interface Connection {
@@ -49,13 +85,17 @@ export interface Connection {
   readonly status: ConnectionStatus;
 }
 
-async function defaultRequestTicket(apiUrl: string, characterId: string): Promise<string> {
+async function defaultRequestTicket(
+  apiUrl: string, characterId: string, entry: TicketEntry,
+): Promise<string> {
   const response = await fetch(`${apiUrl}/api/tickets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     // A sessão HTTP é cookie httpOnly noutra origem; sem isto ela não vai junto.
     credentials: 'include',
-    body: JSON.stringify({ characterId }),
+    // `entry` só sai quando NÃO é o mundo: o pedido padrão é byte a byte o de antes do mundo aberto, e um `api`
+    // anterior nunca vê um campo que não conhece (#846, OW-23).
+    body: JSON.stringify(entry === 'world' ? { characterId } : { characterId, entry }),
   });
   if (!response.ok) throw new Error(`ticket refused with HTTP ${response.status}`);
   const body = (await response.json()) as { wsUrl?: unknown };
@@ -72,6 +112,7 @@ export function createConnection(options: ConnectionOptions): Connection {
     return () => clearTimeout(id);
   });
   const random = options.random ?? Math.random;
+  const entry = options.entry ?? 'world';
 
   let socket: SocketLike | null = null;
   let cancelRetry: (() => void) | null = null;
@@ -95,6 +136,21 @@ export function createConnection(options: ConnectionOptions): Connection {
     }, delay);
   }
 
+  /**
+   * A volta de quem está na fila do mundo cheio (#846, OW-23): no instante que o SERVIDOR mandou
+   * (`retryAfterMs`), e não no recuo de uma queda. O recuo exponencial é para falha; a fila não falhou — o
+   * mundo respondeu "espere N segundos", e voltar muito depois do prazo (espera mais 15 s) devolveria o
+   * personagem ao fim dela. `attempt` não anda: esperar na fila não é tentativa que deu errado.
+   */
+  function scheduleQueueRetry(retryAfterMs: number): void {
+    if (!running) return;
+    setStatus('queued');
+    cancelRetry = schedule(() => {
+      cancelRetry = null;
+      void connect();
+    }, retryAfterMs + random() * QUEUE_RETRY_JITTER_MS);
+  }
+
   async function connect(): Promise<void> {
     if (!running) return;
     setStatus(attempt === 0 ? 'connecting' : 'reconnecting');
@@ -110,7 +166,7 @@ export function createConnection(options: ConnectionOptions): Connection {
       wsUrl = offered;
     } else {
       try {
-        wsUrl = await requestTicket(options.apiUrl, options.characterId);
+        wsUrl = await requestTicket(options.apiUrl, options.characterId, entry);
       } catch {
         // Ticket recusado pode ser transitório (nó reiniciando) ou definitivo (sem sessão).
         // Tentar de novo com espera é o comportamento certo para os dois: o definitivo vira
@@ -124,6 +180,9 @@ export function createConnection(options: ConnectionOptions): Connection {
     const next = openSocket(wsUrl);
     next.binaryType = 'arraybuffer';
     socket = next;
+    // O `world-full` que ESTE socket recebeu (#846): o servidor o manda e fecha, e o fechamento decide o quando
+    // da volta. Local ao socket — um valor de uma conexão anterior não pode agendar a volta de outra.
+    let queueRetryAfterMs: number | null = null;
 
     next.onopen = () => {
       attempt = 0;
@@ -142,11 +201,27 @@ export function createConnection(options: ConnectionOptions): Connection {
       const nowMs = performance.now();
       // Em bloco. Ao voltar de aba de fundo chega um lote inteiro de uma vez, e tentar
       // animar dez minutos de eventos é o erro que o AGENTS.md do pacote nomeia.
-      for (const message of decoded) applyMessage(message, nowMs);
+      for (const message of decoded) {
+        applyMessage(message, nowMs);
+        if (message.type === 'world-full') queueRetryAfterMs = message.retryAfterMs;
+      }
     };
 
-    next.onclose = () => {
+    next.onclose = (event) => {
       socket = null;
+      // O servidor fechou porque o personagem SAIU (logout aceito): nada a reanexar.
+      if (event.code === LOGOUT_CLOSE.code && event.reason === LOGOUT_CLOSE.reason) {
+        running = false;
+        cancelRetry?.();
+        cancelRetry = null;
+        setStatus('idle');
+        options.onLeft?.();
+        return;
+      }
+      if (queueRetryAfterMs !== null) {
+        scheduleQueueRetry(queueRetryAfterMs);
+        return;
+      }
       scheduleRetry();
     };
     next.onerror = () => {

@@ -29,6 +29,31 @@ export interface CharacterSummary {
   readonly sessionId: string | null;
 }
 
+/**
+ * Onde a PRIMEIRA sessão do personagem nasce (#846, OW-23; `POST /api/tickets { entry }`, OW-21): `'world'` é o
+ * mundo — o default, e o pedido de sempre — e `{ hunt }` é uma hunt idle direta, sem passar pelo mundo. É
+ * INTENÇÃO (invariante 4): o servidor confere a hunt contra o conteúdo, e só a respeita com `OPEN_WORLD` e para
+ * quem não tem sessão.
+ */
+export type TicketEntry = 'world' | { readonly hunt: string };
+
+/** Uma hunt como o menu de entrada a oferece: o id que vai no ticket, o nome e o conselho de level. */
+export interface EntryHunt {
+  readonly id: string;
+  readonly name: string;
+  readonly recommendedLevel: number;
+}
+
+/**
+ * O que o menu de entrada precisa saber antes de existir sessão (`GET /api/entry-options`): se este servidor
+ * tem o mundo aberto e quais hunts idle se pode pedir direto. `openWorld: false` é o jogo de hoje — o botão
+ * único de entrar —, com a lista vazia.
+ */
+export interface EntryOptions {
+  readonly openWorld: boolean;
+  readonly hunts: readonly EntryHunt[];
+}
+
 export interface Identity {
   readonly accountId: string;
   readonly email: string | null;
@@ -89,6 +114,23 @@ export async function whoAmI(): Promise<Identity | null> {
 
 export async function listCharacters(): Promise<readonly CharacterSummary[]> {
   return (await call<{ characters: readonly CharacterSummary[] }>('/api/characters')).characters;
+}
+
+/**
+ * O menu de entrada deste servidor, ou `null` quando ele não responde (um `api` anterior ao mundo aberto não
+ * tem a rota — 404 —, e um erro de rede é a mesma coisa para a tela). `null` é "não há menu": a tela cai no
+ * botão único de sempre, em vez de travar a entrada por causa de um enfeite.
+ */
+export async function fetchEntryOptions(): Promise<EntryOptions | null> {
+  try {
+    const response = await fetch(`${API_URL}/api/entry-options`, { credentials: 'include' });
+    if (!response.ok) return null;
+    const body = (await response.json()) as Partial<EntryOptions>;
+    if (typeof body.openWorld !== 'boolean' || !Array.isArray(body.hunts)) return null;
+    return { openWorld: body.openWorld, hunts: body.hunts };
+  } catch {
+    return null;
+  }
 }
 
 export async function createCharacter(name: string): Promise<CharacterSummary> {
