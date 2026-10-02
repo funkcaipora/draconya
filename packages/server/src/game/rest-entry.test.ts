@@ -179,10 +179,19 @@ describe.runIf(available)('o mundo cheio vira fila (#842, OW-21)', () => {
     expect(n.host.sessionCount).toBe(sessions);
     expect(n.host.sessionFor('b')).toBeUndefined();
     expect(saved).not.toHaveBeenCalled();
-    // E o contador de versão durável que o ticket trouxe não ficou para trás: quando `b` entra, a sessão o
-    // adota do ticket de agora, e a anterior não deixou piso nenhum.
+    // E o contador de versão durável que o ticket trouxe não ficou para trás: as três recusas trouxeram o piso 7,
+    // e o ticket da entrada de verdade traz um piso MENOR (3, o que o `api` leu da linha agora). Se a recusa
+    // tivesse deixado o 7 no nó, `max(7, 3)` o manteria e o primeiro extrato de `b` sairia como versão 8; sem
+    // rastro, a sessão adota o 3 e o extrato é o 4. Mutação que mata: tirar a poda de `born` em `#createAndRegister`.
     await n.host.release('a', 1000, 'logout');
-    expect(await n.prepare('b', { durableVersion: 7 })).toEqual({ created: true });
+    expect(await n.prepare('b', { durableVersion: 3 })).toEqual({ created: true });
+    await n.host.release('b', 2000, 'logout');
+    // A saída do mundo grava em LOTE (`saveBatch`): cada chamada leva uma lista de extratos.
+    const versions = saved.mock.calls
+      .flatMap((call) => (call as unknown as [ReadonlyArray<{ characterId: string; durableVersion?: number }>])[0])
+      .filter((receipt) => receipt.characterId === 'b')
+      .map((receipt) => receipt.durableVersion);
+    expect(versions).toEqual([4]);
   });
 
   it('o mundo com vaga e SEM fila entra direto, e a fila nem nasce no Redis', async () => {
